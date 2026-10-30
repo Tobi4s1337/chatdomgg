@@ -58,7 +58,7 @@ after main has stopped editing them. The integrator alone calls those modules fr
   Separate zoom intent from occlusion. Finish continuous wheel first person, self-visibility, level horizon,
   time-based follow and resize framing. · evidence: newly inserted occluder first-frame and corner/post/roof
   tests at both aspects; looked real street and tight-space view; no clipped first-person wall approach.
-- [ ] **WC06 — Adopt Predict and collision revisions without a second protocol.** Within the effective narrow
+- [x] **WC06 — Adopt Predict and collision revisions without a second protocol.** Within the effective narrow
   client grant, bind the improved shared step, all PLAYER_FIELDS, input pulses and collision revisions through
   the existing real Colyseus adapter. Preserve its auth/reconnect/transport lifecycle. Stage exactly Predict's
   due input count, adopt the frozen safe revision transition/reset policy and document render/takeover order.

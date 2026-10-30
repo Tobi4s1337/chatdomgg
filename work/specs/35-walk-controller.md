@@ -299,3 +299,15 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
   two steps of lag; the avatar eases only down a step (it just swept down through air, so it is never drawn in a
   solid) and is drawn at its real height up a step, where any lag would sink its feet into the tread. Jumps and
   falls pass through. The local pose needs `grounded` from the reconciler state (WC06 hunk) to bind it.
+- **2026-10-30 — WC06 Predict and collision revisions in the realm client.** `connectRealm` takes a
+  `CollisionWorld | RealmCollision` (`world(revision) → CollisionWorld | null`, exactly that revision or nothing),
+  a client-side seam for realm wiring's producer, not a shared or protocol change; a plain world is a one-revision
+  source and keeps main's fail-at-connect check. The reconciler's step runs `stepPlayer` only when the input's
+  revision equals the walker's and that world is here; otherwise prediction holds and the room's walk is drawn
+  (the room refuses the same inputs). Each staged input carries the room's current revision. On adoption the
+  client calls the SDK's `reconciler.reset()` (reseed from the room's safe placement, void inputs sent before it,
+  clear the latched jump) instead of replaying old inputs against replaced solids, and listens for the room's
+  `revision` broadcast to fetch the world early (it also silences the SDK's unregistered-message warning).
+  `snap: 2` m (above sprint × patch, 1.4 m) draws a placement at once instead of gliding it through walls.
+  The local yaw is drawn from the exact predicted byte, since smoothing a wrapping byte spun the citizen the long
+  way. `predicted` (full `PlayerState`) and `predicting` are exposed for step easing and evidence.
