@@ -2,6 +2,7 @@ import { VOXEL_METRES, VoxelBlueprintSchema, type Vec3 } from '@chatdom/shared';
 import type { WindowHouse } from '@chatdom/render';
 import { terrainHeight, settlementTerrainWorkspaceBytes, type KingdomLayout, type SettlementPlan } from '@chatdom/world';
 import { buildLightVolume, MAX_LIGHT_VOLUME_CELLS, type LightEmitter, type LightVolume } from '@chatdom/voxel';
+import { MATERIALS } from '@chatdom/content/materials';
 
 export const LIGHT_FIELD_SIZE: Vec3 = [128, 32, 128];
 export const LIGHT_FIELD_CELL = 0.5;
@@ -67,8 +68,16 @@ export type LightFieldResponse = { readonly kind: 'ready' }
   | { readonly kind: 'volume'; readonly revision: number; readonly volume: SurfaceLightVolume; readonly occupancyBuilds: number; readonly solveMs: number }
   | { readonly kind: 'error'; readonly revision: number | null; readonly message: string };
 
-interface WorldBox { readonly min: Vec3; readonly max: Vec3; readonly solid: boolean }
-interface LightHouse { readonly min: Vec3; readonly max: Vec3; readonly boxes: readonly WorldBox[] }
+/** `solid` here means "blocks light": glass is walked against but passes light like the air it fills. */
+interface WorldBox { readonly min: Vec3; readonly max: Vec3; readonly solid: boolean; readonly glass: boolean }
+interface LightHouse { readonly min: Vec3; readonly max: Vec3; readonly boxes: readonly WorldBox[]; readonly glazed: readonly number[] }
+
+const blocksLight = new Uint8Array(65536).fill(1), passesAsGlass = new Uint8Array(65536);
+blocksLight[0] = 0;
+for (const material of MATERIALS.materials) {
+  blocksLight[material.id] = Number(material.blocksLight);
+  passesAsGlass[material.id] = Number(material.id !== 0 && !material.blocksLight);
+}
 
 const cornerConnected = Uint8Array.from({ length: 256 }, (_, mask) => {
   if (!mask) return 0;
@@ -163,11 +172,39 @@ export function compileLightHouses(houses: readonly WindowHouse[]): readonly Lig
         max: a.map((value, axis) => Math.max(value, b[axis]!) + house.position[axis]!) as unknown as Vec3,
       };
     };
-    return {
-      ...transformed([0, 0, 0], blueprint.size),
-      boxes: blueprint.boxes.map(box => ({ ...transformed(box.from, box.to), solid: box.material !== 0 })),
-    };
+    const boxes = blueprint.boxes.map(box => ({ ...transformed(box.from, box.to), solid: blocksLight[box.material] === 1, glass: passesAsGlass[box.material] === 1 }));
+    // A glazed opening is its glass and every air carve that meets that glass (the reveal through the wall).
+    const glazed = boxes.flatMap((box, index) => !box.solid && (box.glass || boxes.some(other => other.glass && touches(box, other))) ? [index] : []);
+    return { ...transformed([0, 0, 0], blueprint.size), boxes, glazed };
   });
+}
+
+function touches(a: WorldBox, b: WorldBox): boolean {
+  return a.min.every((value, axis) => value < b.max[axis]! && a.max[axis]! > b.min[axis]!);
+}
+
+/**
+ * Half-metre cells cannot hold a 0.375 m wall and the window in it apart. A cell that a glazed opening reaches
+ * is open only if no light blocker survives anywhere inside it once every box has painted in order. Build cells
+ * lie on the house's 0.125 m lattice, so one sample at each build-cell centre decides the cell exactly.
+ */
+function glazedCellOpen(house: LightHouse, candidates: readonly WorldBox[], min: Vec3, cellSize: number): boolean {
+  const step = VOXEL_METRES.build;
+  const local = candidates.filter(box => box.min.every((value, axis) => value < min[axis]! + cellSize && box.max[axis]! > min[axis]!));
+  if (!local.some(box => !box.solid)) return false;
+  // Every build cell with any volume in this cell, including ones straddling its faces.
+  const first = min.map((value, axis) => Math.floor((value - house.min[axis]!) / step + 1e-6));
+  const last = min.map((value, axis) => Math.ceil((value + cellSize - house.min[axis]!) / step - 1e-6));
+  for (let k = first[2]!; k < last[2]!; k++) for (let j = first[1]!; j < last[1]!; j++) for (let i = first[0]!; i < last[0]!; i++) {
+    const x = house.min[0] + (i + 0.5) * step, y = house.min[1] + (j + 0.5) * step, z = house.min[2] + (k + 0.5) * step;
+    for (let b = local.length - 1; b >= 0; b--) {
+      const box = local[b]!;
+      if (x < box.min[0] || x >= box.max[0] || y < box.min[1] || y >= box.max[1] || z < box.min[2] || z >= box.max[2]) continue;
+      if (box.solid) return false;
+      break;
+    }
+  }
+  return true;
 }
 
 function overlaps(min: Vec3, max: Vec3, origin: Vec3, config: LightFieldConfig): boolean {
@@ -215,6 +252,20 @@ export function createLightFieldSolver(layout: LightFieldLayout, houses: readonl
         for (let z = from[2]!; z < to[2]!; z++) for (let y = from[1]!; y < to[1]!; y++) {
           const row = sx * (y + sy * z);
           scratch.fill(box.solid ? 1 : 0, row + from[0]!, row + to[0]!);
+        }
+      }
+      // Unglazed partial carves keep the conservative rule above; glazed openings resolve exactly.
+      if (cellSize <= 0.5) for (const index of house.glazed) {
+        const opening = house.boxes[index]!;
+        if (!overlaps(opening.min, opening.max, origin, config)) continue;
+        const candidates = house.boxes.filter(box => touches(box, { min: opening.min.map(v => v - cellSize) as unknown as Vec3, max: opening.max.map(v => v + cellSize) as unknown as Vec3, solid: false, glass: false }));
+        const from = opening.min.map((value, axis) => Math.max(0, Math.floor((value - origin[axis]!) / cellSize)));
+        const to = opening.max.map((value, axis) => Math.min(size[axis]!, Math.ceil((value - origin[axis]!) / cellSize)));
+        for (let z = from[2]!; z < to[2]!; z++) for (let y = from[1]!; y < to[1]!; y++) for (let x = from[0]!; x < to[0]!; x++) {
+          const index = x + sx * (y + sy * z);
+          if (scratch[index] !== 1) continue;
+          const min: Vec3 = [origin[0] + x * cellSize, origin[1] + y * cellSize, origin[2] + z * cellSize];
+          scratch[index] = glazedCellOpen(house, candidates, min, cellSize) ? 0 : 2;
         }
       }
       const from = house.min.map((value, axis) => Math.max(0, Math.floor((value - origin[axis]!) / cellSize)));
