@@ -5,3 +5,7 @@ KL03: createSimulatedEvening in lights/simulated-evening.ts (+ lights/index.ts b
 2026-10-31 worker-count clarification: this secondary worker finishes its CURRENT task and parks; return its work to the primary lane lead. Only the primary worker starts subsequent tasks. Preserve in-progress edits; no dropped work or fresh parallel task.
 
 follow-up: KL04 Capture and inspect reciprocal actual-town glass views, including sunlit floor and warm field; verify mullioned windows and complete the task evidence. Review: typecheck and 98 changed-file tests passed; no screenshot reviewed.
+
+2026-10-30 main look: fresh integrated town dusk at 390x844 still reads as an unlit grey castle beneath the beacon. In the castle light pass, make the great-hall front openings visibly warm and spill that warmth onto the entrance court; keep the beacon separate. Source: shots/kingdom/town-dusk@390x844.png.
+
+2026-10-31 founder efficiency decision: Continue the live-evening lane with ONE worker; take one task at a time. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.

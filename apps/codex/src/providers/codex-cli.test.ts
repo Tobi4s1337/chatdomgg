@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { access, lstat, mkdtemp, readlink, rm, writeFile } from 'node:fs/promises';
+import { access, lstat, mkdtemp, readFile, readlink, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -59,6 +59,32 @@ describe('isolated Codex CLI process', () => {
     await expect(pending).resolves.toBe('{"plan":{}}');
     await expect(access(cwd)).rejects.toThrow();
     await expect(access(authHome)).rejects.toThrow();
+  });
+
+  it('attaches private PNG evidence to a separate judge model without granting image or filesystem tools', async () => {
+    const child = fakeChild();
+    const bytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]);
+    const pending = runCodexDraft({ prompt: 'Review only this evidence.', schema: {},
+      signal: new AbortController().signal, model: 'gpt-6-luna', effort: 'low',
+      image: `data:image/png;base64,${bytes.toString('base64')}` });
+    await childStarted();
+    const [, args] = vi.mocked(spawn).mock.calls[0]!;
+    expect(args).toEqual(expect.arrayContaining(['gpt-6-luna', 'model_reasoning_effort="low"', 'tools.view_image=false']));
+    const imagePath = args![args!.indexOf('--image') + 1]!;
+    expect(await readFile(imagePath)).toEqual(bytes);
+    expect((await lstat(imagePath)).mode & 0o777).toBe(0o600);
+    expect(args![args!.indexOf('--image') + 2]).toBe('--output-schema');
+    child.stdout.write('{"outcome":"hold"}'); child.emit('close', 0);
+    await expect(pending).resolves.toBe('{"outcome":"hold"}');
+    await expect(access(imagePath)).rejects.toThrow();
+  });
+
+  it('refuses file paths and non-PNG evidence before spawning', async () => {
+    await expect(runCodexDraft({ prompt: 'judge', schema: {}, signal: new AbortController().signal,
+      image: '/etc/passwd' })).rejects.toThrow('bounded PNG');
+    await expect(runCodexDraft({ prompt: 'judge', schema: {}, signal: new AbortController().signal,
+      image: 'data:image/png;base64,bm90LWEtcG5n' })).rejects.toThrow('Invalid PNG');
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it('kills an interrupted child and never returns its diagnostics', async () => {

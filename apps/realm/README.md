@@ -8,8 +8,9 @@ The Colyseus server that hosts each kingdom's shared walk, and the kingdom's one
 `PostgresRealmRepository` implements the frozen `RealmRepository` from `@chatdom/shared/realm`.
 
 - **One writer per kingdom.** `acquire` takes a 15 s lease on database time with a fresh 256-bit epoch. A live lease
-  refuses a second writer (`RealmLeaseHeldError`). The holder renews every 5 s. On its own monotonic clock it stops
-  2 s before the database would fence it. An expired epoch can never write again (`RealmWriterFencedError`), even if
+  refuses a second writer (`RealmLeaseHeldError`). On its own monotonic clock the holder stops 2 s before the
+  database would fence it, and renews three times inside that 13 s window (every ~4.3 s), so one slow renewal never
+  costs the lease. An independent watchdog closes the kingdom at the deadline even while a renewal is stalled. An expired epoch can never write again (`RealmWriterFencedError`), even if
   its process resumes.
 - **One indivisible commit.** `execute` locks the kingdom row, checks the epoch and the expected sequence, and decides
   with the world reducer at database time. One transaction then writes the fact (canonical JSON + SHA-256), the
@@ -110,7 +111,8 @@ people.
 - **Bootstrap** retains the public row prefix independently of private state that may be ahead. Each row updates
   the home/attachment/crowd projection and `throughCursor` before its delivery. A first Forge commit publishes its
   allocated home, later Forge commits replace the same socket, and a queued build changes that home only when its
-  own public row arrives. Bootstrap contains current views and no past ritual.
+  own public row arrives. On restart, immutable allocation bases and public rows are folded only through the durable
+  delivered cursor; undelivered rows remain for redelivery. Bootstrap contains current views and no past ritual.
 
 ### Delivery cursor for the browser lane
 
@@ -126,6 +128,69 @@ The client keeps this per kingdom connection. It must be followed exactly, becau
 
 `deliveryCursor` in `postgres.integration.test.ts` is this rule as executable reference.
 
+## Seats and reconnect (`src/auth/seats.ts`)
+
+Spec 34 R8: a reconnect is a checked lease on one seat. `RealmSeats` is the policy and `kingdom-room.ts` the
+Colyseus adapter around it.
+
+- **One seat per person per room.** A fresh authenticated entry by someone who already has a seat replaces it.
+  The newest window wins: the old socket closes with 4409 (or its grace is cancelled), its reconnect token dies, and
+  the new walker starts where the old one stood when that pose is safe and supported in the current collision
+  world. A mid-jump or otherwise unsafe pose uses a validated arrival instead. Nobody gets a second avatar, and
+  nobody is locked out by a forgotten tab.
+- **Drop.** A socket that drops (1001, 1005, 1006, a reload, a lost network) stops movement at once: queued input is
+  cleared, velocity zeroed, and nothing moves the walker until it reconnects. The seat is held for 30 s, or until
+  the session ends if that is sooner. A seat the server ended gets no grace.
+- **Session checks.** Every seat, connected or dropped, has its entry checked against the session store once a second
+  (3 s timeout per question). `false` ends the seat (4401). An unanswered check holds walking without closing; after
+  15 s without an answer the seat ends with 4503. Session expiry ends the seat without asking.
+- **Reconnect** resumes only the same seat, only while it is still this person's, and only after `current` answers
+  `true` during the handshake. Colyseus keeps its own input sequence and acknowledgement epoch; there is no
+  application sequence.
+- **Writer epochs.** Seats live in one room, which lives under one writer lease. A process restart starts new rooms
+  under a new epoch, so every old token is refused and the person enters again with a fresh ticket. An in-process
+  lease loss closes the room through main's `RealmRoomEffects.close` (4003). The dropped seats' graces end with it.
+
+### Browser contract
+
+The browser source belongs to the browser lane; this is what it must do. `connectRealm` in
+`apps/web/src/realm/client.ts` already does steps 1–3.
+
+1. **Storage.** Keep the reconnect token in `sessionStorage`, so it is per tab. The key is `[endpoint, kingdomId,
+   resumeScope]`, where `resumeScope` comes from `GET /api/realm/session`. The value is `room.reconnectionToken`,
+   exactly as the SDK gives it: `k:<kingdomId>:<token>`. Never split, log or send it anywhere. The patched SDK splits
+   it at the last colon on both reconnect paths. Never store a ticket.
+2. **Rotation.** The token changes on every join and every reconnect. Save it after `joinOrCreate`/`reconnect`
+   resolves, and after automatic reconnects in a microtask queued from `room.onReconnect` (the SDK assigns the new
+   token after that callback returns). An older token is refused (524).
+3. **Reload.** Try `client.reconnect(saved, KingdomRoomState)` first. If it rejects, delete the key and enter fresh
+   with a new ticket. The rejection codes are:
+
+   | Code | Meaning |
+   |---|---|
+   | 524 | token invalid or expired: rotated, grace over, seat ended or replaced |
+   | 522 | `room "k:…" has been disposed`: the server restarted, or the writer moved, and nobody has entered since |
+   | 4401 / 4409 / 4410 / 4503 | refused during the handshake by the seat check (meanings below); the socket then closes with 4003 |
+
+4. **Lost network.** The SDK reconnects on its own after 1001, 1005, 1006 and 4010 (`room.onDrop`). It does so only
+   if the room was joined at least 5 s earlier, and tries 15 times with backoff up to 5 s. Show "Reconnecting…" from
+   `onDrop` until `onReconnect` or `onLeave`.
+5. **`room.onLeave(code, reason)`** ends the room. The `reason` is a person-readable sentence that is safe to show.
+
+   | Code | What happened | What the browser does |
+   |---|---|---|
+   | 4000 | the person left | clear this tab's key |
+   | 4001 | the realm process is shutting down | clear the key; enter fresh after a short backoff (1–5 s) |
+   | 4002 | protocol violation (message rate, invalid intent) | clear the key; offer Walk again |
+   | 4003 | reconnect failed, or the kingdom's writer moved | clear the key; enter fresh with a new ticket |
+   | 4401 | session ended: signed out, revoked, moderated or expired | clear every key for this `resumeScope`; read the session; if anonymous, show Walk (sign-in) |
+   | 4409 | the same person walked in from another window | clear this tab's key; show "Walking in another window" with a Walk-here button; never rejoin automatically |
+   | 4503 | the session store did not answer for 15 s | clear the key; enter fresh after a pause (5–15 s) |
+
+   4410 only appears as a reconnect refusal ("this seat has ended"): enter fresh.
+6. **Signout.** After `POST /api/realm/signout`, clear every key for that `resumeScope`. The server ends the seat
+   within about a second, whether it is connected or waiting out its grace.
+7. Walker ids are per entry. Use them only as keys for this room session; never persist or show them.
 ## Homes and founded layouts (`src/allocation/`)
 
 `AllocationService` is the only way a citizen home comes to exist (spec 34 R6). It shares the realm's Postgres schema.
@@ -201,6 +266,7 @@ does not run migrations of its own.
 | `realm_guests` | people kept as guests in a kingdom (`three-homes` or `kingdom-full`) |
 | `realm_ingress_inbox` | authenticated observations accepted before any writer decides them (`0004`) |
 | `realm_outbox_cursors` | per-kingdom durable delivery cursor, moved only by the current epoch (`0004`) |
+| `realm_entries` | one row per consumed ticket; its random id is the walker's room id and the session-check key (`0005`) |
 
 ## Running locally
 
@@ -232,8 +298,92 @@ Every startup failure exits with status 1 and one secret-free line:
 | wrong credentials | `The realm database refused the configured credentials.` |
 | live mode | `Live realm entry requires the verified Twitch session service…` |
 
-Database limits (`REALM_DATABASE_LIMITS`): 8 pooled connections, 3 s connect, 5 s statement, 6 s query and 10 s
-idle-in-transaction timeouts. The last one ends a stalled lock holder so its lease can move on.
+Database limits are listed in the next section.
+
+## Limits, readiness and diagnostics (`src/limits/`, `src/diagnostics/`)
+
+Every queue, socket and wait has a finite ceiling (spec 34 R9). `REALM_LIMITS` in `src/limits/` is the one
+catalogue. Values owned by another module are referenced there, never copied.
+
+| Ceiling | Value | What happens past it |
+|---|---|---|
+| Incoming protocol frames per client | 90/s (Colyseus counts from the second frame of each window) | The sender is closed with 4002. Its walker is removed, and **no reconnect seat** is kept, so the next entry needs a fresh ticket. |
+| Walking integration | 30 Hz, one input per walker per tick | Extra inputs wait in the queue below and never add a step. An empty tick moves nobody. |
+| Input queue per walker | 8 | Colyseus drops the oldest input. Dropped inputs are never integrated. |
+| Inbound WebSocket frame | 16 KiB | uWS closes the socket before buffering the frame. The largest legitimate intent is under 1 KiB. |
+| Outbound buffer per socket | 1 MiB, `closeOnBackpressureLimit` | uWS drops the send and closes the socket (1006), so the decoder is never left stale. The room keeps a 30 s seat; the client reconnects and receives full state. |
+| Walkers plus reconnect seats | 300 | Colyseus refuses the join. Seats in their grace period count. |
+| Reconnect grace | 30 s | The seat ends and the walker leaves. |
+| Session recheck | every 1 s, 3 s answer limit | An unanswered check holds walking; 15 s without confirmation ends the seat with 4503. Expiry/revocation ends it with 4401. |
+| Actions in flight per person | 1 | The next intent gets an immediate `held` receipt (`Your previous request is still being confirmed…`). Nothing is queued. |
+| Action reply | 8 s | The walker gets an `unavailable` receipt and should reconnect to check. The slot frees only when the work itself settles. |
+| Writer queue per kingdom | 64 commands | `RealmBusyError` (`realm.busy`) at once. |
+| Unstarted command wait | 10 s | `RealmBusyError`. The command never ran, so the caller may retry it unchanged. |
+| Outbox dispatch batch | 256 rows | The next batch is read after the transport takes this one. A failure redelivers it after 1 s. |
+| Transient relay | 40/s per kingdom | The message is dropped and counted, never queued. |
+| Ingress body / inbox | 8 MiB / 4,096 waiting per kingdom | 413 / 503 `Send it again`. |
+| Database pool | 8 connections; 3 s connect, 5 s statement, 6 s query, 10 s idle-in-transaction | The statement fails with a secret-free description; a stalled lock holder is cut off so its lease can move on. |
+| Shutdown | 5 s for queued commits, 5 s for the last delivery | The process snapshots only if drained, then releases only its own lease. |
+
+**Readiness.** `RealmReadiness` probes its dependencies every 2 s, each with a 1.5 s answer limit: the database
+(`SELECT 1`), sessions (`realm_sessions`, live entry only) and writer leases. The writer probe fails when an open
+kingdom is no longer current, or has less than a third of its lease window left, meaning two renewals in a row did
+not land. After two consecutive misses a dependency is **held**:
+
+- `holdEntry` refuses new arrivals with 503 `The kingdom is not taking new arrivals while <reason>. Nothing was
+  changed; try again shortly.` This happens before a ticket is burned or an avatar exists.
+- Kingdoms refuse new owned commands at once with `RealmHeldError` (`realm.held`) instead of queueing them behind a
+  store that is not answering. Ingress rows stay in the inbox, and pending deeds stay pending until recovery.
+- People already inside keep walking: walking needs no store.
+
+The hold lifts on the first good probe.
+
+**Routes** (on the realm port, no CORS):
+
+- `GET /healthz` answers `200 { version, alive: true, uptimeMs }` while the process answers. Restart only on this.
+- `GET /readyz` answers 200 when every dependency is ready, otherwise 503. The body gives `ready` and `held` (the
+  reason), plus each dependency's `ready`, `reason`, `latencyMs` and `failures`. Under `limits`, it gives the
+  measured high-water marks beside their ceilings (input queue, actions per walker, socket backpressure bytes,
+  pending commands, outbox batch, database connections and waiting), refusals (dropped sends, held/late actions,
+  busy/held/expired commands, dropped transient messages), closes by `phase:reason`, writer closures by category and
+  each open kingdom's delivery cursor.
+
+Nothing in either body is a secret: they hold counts, byte sizes and fixed reason categories. Close reasons are the
+code's meaning (`left`, `connection-lost`, `frame-too-large`, `protocol-or-rate`, `entry-ended`, `server-shutdown`,
+…), never the message that went with the code.
+
+**Transport and room composition** (the integrator recipe; `main.ts` does exactly this):
+
+```ts
+const diagnostics = new RealmDiagnostics();
+const readiness = new RealmReadiness([databaseProbe(pool), authProbe(pool) /* live entry */, writerProbe(() => services.kingdoms.values())]);
+const held = () => readiness.held();
+const services = createDurableRealmServices({
+  repository, outbox, auth: holdEntry(authenticator, held), hold: held, kingdom, log,
+  attach: kingdom => {
+    const forget = kingdom.onClosed(reason => diagnostics.writerClosed(kingdom, reason));
+    const detach = ingress.attach(kingdom);
+    return () => { forget(); detach(); };
+  },
+});
+const { server, transport } = createRealmServer(services, diagnostics); // uWS caps + `dropped` + room observer
+diagnostics.watch({ pool });
+mountDiagnosticsRoutes(transport.app, readiness, diagnostics, () => services.kingdoms.values());
+await readiness.start();
+// Colyseus keeps ONE onShutdown callback: stop readiness and diagnostics there, then ingress, then the pool.
+server.onShutdown(async () => { readiness.stop(); diagnostics.stop(); await ingress.stop(); await pool.end(); });
+```
+
+`createKingdomRoom(services, observer)` takes the observer as an optional second argument (it defaults to a no-op).
+The frozen ports are unchanged.
+
+**Browser behaviour** (for the web lane):
+
+- Close 4002 means the client was closed for its frame rate or an invalid message. Do not auto-reconnect; request a
+  fresh ticket.
+- Close 1006 after a stall means the socket fell 1 MiB behind. Reconnect with the saved token: full state arrives,
+  then apply the delivery cursor rule above.
+- A `held` receipt means wait for the earlier receipt.
 
 ## Tests
 
@@ -259,6 +409,14 @@ missing. It migrates a random `realm_test_*` schema and drops only that schema. 
 
   Throughout there is one coal, one credit fact, overlap is never counted twice, and the public payload holds no
   person ID, right, session, secret or chat.
+
+R8 has two halves. `src/auth/seats.test.ts` checks the seat policy with no database: replacement, the 30 s grace
+bounded by the session, revocation during the grace, expiry, and the unanswered-store hold. The reconnect harness
+runs inside the sign-in suite (`apps/api/src/realm-auth/auth.integration.test.ts`), which already holds real
+sessions. It starts this server's durable composition through `src/auth/reconnect-harness.ts` and drives the real SDK
+on `k:424243`. It covers: a reload through explicit reconnect, a lost network through automatic reconnect, rotated
+and refused tokens, a second window, signout during the grace, expiry while connected, and a restart that refuses
+every old token (automatic reconnect ends in 4003, a saved token in 522) before an authenticated fresh entry.
 
 Vitest caches transformed modules in `node_modules/.vitest-cache`, and that cache does not notice a new migration
 file behind `import.meta.glob`. After adding a migration, run `pnpm exec vitest --clearCache` once, or the suite will
