@@ -35,7 +35,7 @@ function config(overrides: Partial<HeraldConfig> = {}): HeraldConfig {
     channelLogin: BROADCASTER.login, channelLoginDefaulted: false, readerLogin: READER.login, redirectUri: null,
     credentials: { clientId: CLIENT_ID, clientSecret: new Secret(SECRET) }, conduitId: null, problems: [],
     dataDir: '/simulated/data', kingdom: { seed: 'tobi4s_', tier: 'hamlet', firstYear: 2026, year: 2026 },
-    secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env', ...overrides,
+    port: 5194, secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env', ...overrides,
   };
 }
 
@@ -207,6 +207,33 @@ describe('chat into presence', () => {
     expect(published).not.toContain(PEOPLE.juniper.id);
     expect(published).not.toContain('#00FF7F');
     expect(r.runtime.health().ingest.counters).toMatchObject({ chatSubmitted: 1, streamChanges: 1 });
+  });
+
+  it('times each applied message from its Twitch stamp to the frame that shows it, as numbers only', async () => {
+    const store = new GatedStore();
+    const r = await started({ store });
+    r.live();
+    // Run past the ingest's start, so a message stamped two seconds ago is not from before it.
+    await r.settle(5_000);
+    let open!: () => void;
+    store.gate = new Promise(resolve => (open = resolve));
+    const stamped = Date.now() - 2_000;
+    r.say(PEOPLE.juniper, 'simulated-message-1', {}, { timestamp: iso(stamped) });
+    const received = Date.now();
+    r.say(PEOPLE.rook, 'simulated-message-2');
+    r.eventsub.deliver('channel.chat.message_delete', { ...broadcasterFields, target_user_id: PEOPLE.rook.id, target_user_name: 'Rook', target_user_login: 'rook', message_id: 'simulated-message-2' });
+    await r.settle(300);
+    open();
+    await r.settle();
+    const latency = r.runtime.health().ingest.latency;
+    // The withdrawn message never applied, so it is not timed.
+    expect(latency.samples).toBe(1);
+    expect(latency.last).toMatchObject({ occurredAt: stamped, receivedAt: received });
+    expect(latency.twitchMs).toEqual({ median: 2_000, max: 2_000 });
+    expect(latency.heraldMs!.median).toBeGreaterThanOrEqual(300);
+    const shown = r.frames.find(frame => frame.sequence === latency.last!.sequence)!;
+    expect(shown.windows.filter(window => window.present).map(window => window.publicName)).toEqual(['Juniper']);
+    expect(JSON.stringify(latency)).not.toMatch(/777000|simulated-message|Juniper/);
   });
 
   it('strips unsafe characters from names and leaves a nameless author unnamed', async () => {

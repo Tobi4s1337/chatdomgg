@@ -246,6 +246,11 @@ export class PresenceSource {
     this.#publish();
   }
 
+  /** The current frame's sequence, or null before the first projection. */
+  get sequence(): number | null {
+    return this.#current?.frame.sequence ?? null;
+  }
+
   subscribe(listener: SourceListener): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);

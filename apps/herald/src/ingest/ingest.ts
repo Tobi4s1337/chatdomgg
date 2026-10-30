@@ -15,6 +15,8 @@ const TOMBSTONE_CAPACITY = 20_000;
 const AUTHOR_CLEAR_CAPACITY = 10_000;
 /** Activity in the source queue at once. Beyond this, new chat is dropped and counted (cleanup never is). */
 const PENDING_LIMIT = 2_048;
+/** Recent chat timings kept for the latency summary on health. */
+const TIMING_SAMPLES = 64;
 /**
  * A message stamped up to this far after our own receipt is accepted at its receipt time (it certainly
  * existed by then); further ahead is a clock we cannot trust and is rejected as future.
@@ -51,8 +53,37 @@ export interface IngestCounters {
   authorizationRevokes: number;
 }
 
+/** One chat act's timing, numbers only: when Twitch stamped it, when it reached us and when its frame went out. */
+export interface ChatTiming {
+  /** Twitch's `message_timestamp`, or our receipt when that runs up to five seconds ahead. */
+  readonly occurredAt: number;
+  readonly receivedAt: number;
+  /** When the act applied; the frame projected in that same step is the one reflecting it. */
+  readonly appliedAt: number;
+  /** That frame's sequence, or null when no frame existed yet. */
+  readonly sequence: number | null;
+}
+
+/** Twitch-to-Herald and Herald-to-frame delay over the last 64 applied chat acts. */
+export interface ChatLatency {
+  readonly samples: number;
+  readonly last: ChatTiming | null;
+  readonly twitchMs: { readonly median: number; readonly max: number } | null;
+  readonly heraldMs: { readonly median: number; readonly max: number } | null;
+}
+
+export interface IngestHealth {
+  readonly counters: Readonly<IngestCounters>;
+  readonly pending: number;
+  readonly lastChatAt: number | null;
+  readonly evictions: number;
+  readonly latency: ChatLatency;
+}
+
 interface PendingActivity {
   readonly authorId: string;
+  readonly occurredAt: number;
+  readonly receivedAt: number;
   canceled: boolean;
 }
 
@@ -98,6 +129,8 @@ export class ChatIngest {
   };
   #roomClearedAt = -1;
   #lastChatAt: number | null = null;
+  readonly #timings: ChatTiming[] = [];
+  #timed = 0;
 
   constructor(options: IngestOptions) {
     this.#options = options;
@@ -107,10 +140,16 @@ export class ChatIngest {
   }
 
   /** Redacted counters and bounded cache sizes; never IDs or names. */
-  health(): { readonly counters: Readonly<IngestCounters>; readonly pending: number; readonly lastChatAt: number | null; readonly evictions: number } {
+  health(): IngestHealth {
     return {
       counters: { ...this.#counters }, pending: this.#pending.size, lastChatAt: this.#lastChatAt,
       evictions: this.#deliveries.evicted + this.#messages.evicted + this.#deleted.evicted + this.#authorClears.evicted,
+      latency: {
+        samples: this.#timed,
+        last: this.#timings.at(-1) ?? null,
+        twitchMs: spread(this.#timings.map(timing => timing.receivedAt - timing.occurredAt)),
+        heraldMs: spread(this.#timings.map(timing => timing.appliedAt - timing.receivedAt)),
+      },
     };
   }
 
@@ -215,7 +254,7 @@ export class ChatIngest {
     const observation: Observation = { kind: 'chat', messageId: event.message_id, at, author: { id: event.chatter_user_id, displayName: event.chatter_user_name } };
     const input = this.#input(observation);
     if (!input) return;
-    const pending: PendingActivity = { authorId: event.chatter_user_id, canceled: false };
+    const pending: PendingActivity = { authorId: event.chatter_user_id, occurredAt: at, receivedAt, canceled: false };
     this.#pending.set(event.message_id, pending);
     this.#counters.chatSubmitted++;
     this.#lastChatAt = receivedAt;
@@ -225,6 +264,10 @@ export class ChatIngest {
   #settled(messageId: string, pending: PendingActivity, result: SubmitResult): void {
     if (this.#pending.get(messageId) === pending) this.#pending.delete(messageId);
     if (result === 'canceled') this.#counters.canceled++;
+    if (result !== 'applied') return;
+    this.#timings.push({ occurredAt: pending.occurredAt, receivedAt: pending.receivedAt, appliedAt: this.#now(), sequence: this.#options.source.sequence });
+    if (this.#timings.length > TIMING_SAMPLES) this.#timings.shift();
+    this.#timed++;
   }
 
   #delete(raw: unknown, receivedAt: number): void {
@@ -327,4 +370,10 @@ export class ChatIngest {
       return null;
     }
   }
+}
+
+function spread(values: readonly number[]): { readonly median: number; readonly max: number } | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return { median: sorted[Math.floor((sorted.length - 1) / 2)]!, max: sorted[sorted.length - 1]! };
 }

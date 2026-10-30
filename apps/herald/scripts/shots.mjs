@@ -1,21 +1,31 @@
-// Herald's screenshot pass. Plays each SIMULATED replay scenario (and, with --live, the real source for the
-// configured channel) on 127.0.0.1:5194, opens main's kingdom page through its one presence adapter and
-// `/presence-data` proxy, checks what the kingdom claims against Herald's own health, and captures the
-// standard sizes into shots/herald/. It never writes to Twitch; --live only reads, like `dev`.
+// Herald's screenshot pass. Plays each SIMULATED replay scenario on 127.0.0.1:<herald port> (and, with --live,
+// shows the real source for the configured channel), opens main's kingdom page through its one presence adapter
+// and `/presence-data` proxy, checks what the kingdom claims against Herald's own health, and captures the
+// standard sizes into shots/herald/. It never writes to Twitch; --live only reads.
 //
-//   pnpm --filter @chatdom/herald shots -- [--base-url http://127.0.0.1:5190] [--scenarios evening,quiet,...]
-//                                         [--live] [--tier town|hamlet] [--seed willowmere] [--hour 21.5]
+//   pnpm --filter @chatdom/herald shots -- [--base-url http://127.0.0.1:5190 | --web-dist ../web/dist [--web-port 5197]]
+//                                         [--herald-port 5196] [--scenarios evening,quiet,...]
+//                                         [--live [--live-port 5194]] [--tier town|hamlet] [--seed willowmere] [--hour 21.5]
+//
+// The herald port defaults to HERALD_PORT, else 5194. A checkout running beside the kingdom's own Herald (which
+// serves 5194) passes another port and --web-dist: the script then serves that web build itself, with a
+// `/presence-data` proxy to whichever Herald the current run reads, instead of main's preview (fixed on 5194).
+// --live first looks for a real Herald already serving on the live port (default 5194) and only reads it: it
+// never starts, stops or restarts that process, and never runs a second real source that would contend for the
+// conduit shard. Only when nothing serves there does it start `dev` itself on the herald port.
 //
 // `restart` plays the SIMULATED evening twice over one scratch binding table (a temporary directory, never
 // Herald's real data directory), listing connected people in reverse order the second time, and requires the
 // public frames to put every lit window and name on the same slot. A control run without the table must
 // move them, or the comparison would prove nothing.
 //
-// The base URL must serve main's web build with its `/presence-data` → 127.0.0.1:5194 proxy.
+// A --base-url must serve main's web build with its `/presence-data` → 127.0.0.1:5194 proxy.
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { createServer, request } from 'node:http';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath, URLSearchParams } from 'node:url';
 import { chromium } from '@playwright/test';
@@ -23,8 +33,6 @@ import { chromium } from '@playwright/test';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HERALD = resolve(HERE, '..');
 const OUT = resolve(HERALD, '../../shots/herald');
-const HEALTH = 'http://127.0.0.1:5194/health';
-const STREAM = 'http://127.0.0.1:5194/presence-data/stream';
 const SCENARIOS = ['evening', 'quiet', 'offline', 'stale', 'unavailable', 'restart'];
 /** Synthetic talkers in the replay (apps/herald/src/source/simulation.ts); no other name may appear. */
 const SYNTHETIC_NAMES = new Set(['Juniper', 'MossLantern', 'quietbaker', 'Wrenfield', 'tallowmoth']);
@@ -34,7 +42,11 @@ const option = (name, fallback) => {
   const index = args.indexOf(name);
   return index >= 0 && args[index + 1] !== undefined ? args[index + 1] : fallback;
 };
-const base = option('--base-url', 'http://127.0.0.1:5190').replace(/\/$/, '');
+const heraldPort = Number(option('--herald-port', process.env.HERALD_PORT || '5194'));
+const livePort = Number(option('--live-port', '5194'));
+const webDist = option('--web-dist', null);
+const webPort = Number(option('--web-port', '0'));
+const externalBase = option('--base-url', webDist ? null : 'http://127.0.0.1:5190');
 const tier = option('--tier', 'town');
 const seed = option('--seed', 'willowmere');
 const hour = Number(option('--hour', '21.5'));
@@ -43,9 +55,50 @@ const hour = Number(option('--hour', '21.5'));
 const firstYear = option('--first-year', tier === 'hamlet' ? '2025' : '2022');
 const scenarios = option('--scenarios', SCENARIOS.join(',')).split(',').filter(Boolean);
 const live = args.includes('--live');
-if (!['town', 'hamlet'].includes(tier) || !Number.isFinite(hour) || scenarios.some(name => !SCENARIOS.includes(name))) {
-  process.stderr.write('Usage: shots [--base-url <url>] [--scenarios evening,quiet,offline,stale,unavailable,restart] [--live] [--tier town|hamlet] [--seed <seed>] [--hour <h>]\n');
+const isPort = port => Number.isInteger(port) && port >= 1024 && port <= 65535;
+if (!['town', 'hamlet'].includes(tier) || !Number.isFinite(hour) || scenarios.some(name => !SCENARIOS.includes(name))
+  || !isPort(heraldPort) || !isPort(livePort) || (webPort !== 0 && !isPort(webPort)) || (webDist && externalBase)) {
+  process.stderr.write('Usage: shots [--base-url <url> | --web-dist <dir> [--web-port <port>]] [--herald-port <port>] [--scenarios evening,quiet,offline,stale,unavailable,restart] [--live [--live-port <port>]] [--tier town|hamlet] [--seed <seed>] [--hour <h>]\n');
   process.exit(2);
+}
+if (externalBase && heraldPort !== 5194) {
+  // Main's preview proxies /presence-data to 5194 only; replays on another port would never reach its page.
+  process.stderr.write('shots: --base-url pages read Herald on 5194; with another --herald-port pass --web-dist instead\n');
+  process.exit(2);
+}
+
+/** The Herald port the current run reads; the built-in web server proxies `/presence-data` there. */
+let target = heraldPort;
+const heraldUrl = path => `http://127.0.0.1:${target}${path}`;
+
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.ktx2': 'image/ktx2', '.glb': 'model/gltf-binary', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg' };
+
+/** A loopback server for a built web app: static files with an SPA fallback, and `/presence-data` streamed through. */
+async function serveWeb(dir, port) {
+  const root = resolve(dir);
+  const server = createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+    if (url.pathname.startsWith('/presence-data/') || url.pathname === '/presence-data') {
+      const upstream = request({ host: '127.0.0.1', port: target, path: `${url.pathname}${url.search}`, method: req.method, headers: { accept: req.headers.accept ?? '*/*' } }, answer => {
+        res.writeHead(answer.statusCode ?? 502, answer.headers);
+        answer.pipe(res);
+      });
+      upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
+      req.on('close', () => upstream.destroy());
+      upstream.end();
+      return;
+    }
+    void (async () => {
+      let file = resolve(root, `.${decodeURIComponent(url.pathname)}`);
+      if (file !== root && !file.startsWith(`${root}${sep}`)) file = join(root, 'index.html');
+      const found = await stat(file).catch(() => null);
+      if (!found || found.isDirectory()) file = join(root, 'index.html');
+      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
+      createReadStream(file).on('error', () => res.end()).pipe(res);
+    })();
+  });
+  await new Promise((done, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', done); });
+  return { server, base: `http://127.0.0.1:${server.address().port}` };
 }
 
 /** What each run must show, judged from Herald's health first and then from the page. */
@@ -77,7 +130,7 @@ const timeoutSignal = ms => globalThis.AbortSignal.timeout(ms);
 
 async function health() {
   try {
-    const response = await fetch(HEALTH, { signal: timeoutSignal(2_000) });
+    const response = await fetch(heraldUrl('/health'), { signal: timeoutSignal(2_000) });
     return response.ok ? (await response.json()).source : null;
   } catch {
     return null;
@@ -89,7 +142,7 @@ async function currentFrame() {
   const controller = new globalThis.AbortController();
   const signal = globalThis.AbortSignal.any([controller.signal, timeoutSignal(10_000)]);
   try {
-    const response = await fetch(STREAM, { signal });
+    const response = await fetch(heraldUrl('/presence-data/stream'), { signal });
     if (!response.ok || !response.body) throw new Error(`presence stream answered ${response.status}`);
     const decoder = new globalThis.TextDecoder();
     let buffered = '';
@@ -121,11 +174,22 @@ async function until(test, timeoutMs, what) {
 
 /** Starts Herald (replay or dev) and resolves once its health answers. Output is kept, never printed raw. */
 async function startHerald(run, scratch) {
-  if (await health()) throw new Error('something already answers on 127.0.0.1:5194; stop it first');
+  if (run.mode === 'dev') {
+    // A real Herald already serving (the kingdom's own) is only read, never started, stopped or contended with.
+    target = livePort;
+    const serving = await health();
+    if (serving?.origin === 'live') {
+      process.stdout.write(`live: reading the real Herald already serving on ${livePort}; it is left running\n`);
+      return { async stop() {} };
+    }
+    if (serving) throw new Error(`127.0.0.1:${livePort} answers, but not as a real Herald source`);
+  }
+  target = heraldPort;
+  if (await health()) throw new Error(`something already answers on 127.0.0.1:${heraldPort}; stop it first`);
   const command = run.mode === 'replay'
     ? ['replay', '--scenario', run.scenario, ...(run.arrival ? ['--arrival', run.arrival] : []), ...(run.bindings ? ['--bindings', scratch] : [])]
     : ['dev'];
-  const env = { ...process.env, HERALD_KINGDOM_SEED: seed, HERALD_KINGDOM_TIER: tier, HERALD_KINGDOM_FIRST_YEAR: firstYear, HERALD_KINGDOM_YEAR: '2026' };
+  const env = { ...process.env, HERALD_PORT: String(heraldPort), HERALD_KINGDOM_SEED: seed, HERALD_KINGDOM_TIER: tier, HERALD_KINGDOM_FIRST_YEAR: firstYear, HERALD_KINGDOM_YEAR: '2026' };
   const child = spawn(process.execPath, ['dist/herald.mjs', ...command], { cwd: HERALD, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let exited = null;
   child.on('exit', code => { exited = code ?? 1; });
@@ -220,7 +284,8 @@ async function shoot(browser, run, path, sizes) {
       }));
       const problems = expectPage(run, source ?? { available: false }, { ...state, errors });
       const file = join(OUT, `${run.file}-${tier}${path === '/stream' ? '-stream' : ''}@${width}x${height}.png`);
-      await page.screenshot({ path: file });
+      // SwiftShader on a shared host can take well over Playwright's 30 s default for one frame.
+      await page.screenshot({ path: file, timeout: 120_000 });
       results.push({
         file: file.slice(OUT.length + 1), ribbon: state.ribbon, adapterLabel: state.label, litWindows: state.activeWindows,
         namedLabels: state.names.length, source: summary(source), problems,
@@ -243,6 +308,9 @@ function summary(source) {
 }
 
 await mkdir(OUT, { recursive: true });
+const web = webDist ? await serveWeb(webDist, webPort) : null;
+const base = (web?.base ?? externalBase).replace(/\/$/, '');
+if (web) process.stdout.write(`serving ${webDist} on ${base} · /presence-data → the Herald each run reads\n`);
 const scratch = await mkdtemp(join(tmpdir(), 'herald-shots-bindings-'));
 const seatings = {};
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
@@ -287,6 +355,7 @@ try {
   }
 } finally {
   await browser.close();
+  if (web) await new Promise(done => { web.server.closeAllConnections(); web.server.close(done); });
   await rm(scratch, { recursive: true, force: true });
   await writeFile(join(OUT, `report-${tier}.json`), `${JSON.stringify(report, null, 2)}\n`);
 }
