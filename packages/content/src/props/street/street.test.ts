@@ -233,6 +233,8 @@ describe('garden-edge join fixtures', () => {
           expect(reserved.has(column)).toBe(false);
           reserved.add(column);
           expect(wz).toBeGreaterThanOrEqual(0);
+          // Planting stays inside the two gardens: behind the street edge, between the side runs.
+          expect(wz < 32 && wx >= -12 && wx < 72, `${item.assetId} at ${column}`).toBe(true);
           for (let y = 0; y < 12; y++) expect(world.has(key(wx, y, wz))).toBe(false);
           expect(wx >= 20 && wx < 40 && wz > 10).toBe(false);
         }
