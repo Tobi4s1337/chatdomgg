@@ -6,7 +6,7 @@ The source contracts remain `KingdomPresenceFrame` and `SettlementPlan`; these l
 ## Prior art
 
 Study: [crowd animation](crowd-animation.md), with a read-only Luna/low reference pass over
-`/tmp/chatdom-refs/crowdbake/src/demo/crowd-sim.js`. The reference has no established code licence, so this is independently written code.
+the upstream `crowdbake` file `src/demo/crowd-sim.js`. The reference has no established code licence, so this is independently written code.
 
 - Take stride as metres per cycle, not an animation speed guessed separately from motion. The reference's
   `crowd-sim.js:423–443` chooses gait from velocity; its README `117–134` explains speed/stride playback. Ours evaluates phase from total travelled distance, including route redirects and departure.
