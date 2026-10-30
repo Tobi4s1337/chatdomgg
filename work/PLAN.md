@@ -320,70 +320,52 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Current handoff state — 2026-10-30
+## 10. Current handoff — 2026-10-30
 
-**Active: rebuild the settlement composition.** Founder GPU review accepts light, hills, lake and beacon;
-rejects the repeated suburb rows and undersized castle. Build genuinely winding land-following streets,
-a market at their meeting, and a larger castle above the town. Finish the one-window/name → town ripple →
-beacon moment. Walking avatars and build mode remain the next brief. No final art acceptance or wave film yet.
+**Town closed. Next: citizens walking the streets and building a house block by block.**
+Founder direction: depth goes into silhouette, motion, light, the moment and contracts other people consume.
+Invisible correctness gets one useful test. Do not reopen terrain/light/budget proof work for this scene;
+fix visible bugs as they arise. No audit or record-keeping commits. Keep this handoff to one page.
 
-### Pushed and demonstrated
+**Landed:** `b720a50` replaces the parallel street layout with contour lanes and connected approaches,
+a market with well/stalls, and the twelve-module castle on its rise. The same generator makes the current
+24-home hamlet and 240-home town. Homes face their streets; dusk starts lived-in, with the labelled
+SIMULATED presence adapter driving their windows. Replay still goes dark → Juniper → town ripple → beacon.
+The camera now shows more warm facades; the phone keeps the complete castle silhouette in frame.
+Workers mesh the real content with AO, terrain and light share one surface, and the actual presence fields
+light the whole inhabited domain. Existing real Herald wiring remains one source-adapter swap.
 
-- Latest main includes `565c8db` four-turn content placement, `3a080db` compound beacon proof, `0a0da9c` individual distant-window audit and `335a2c5` all-tier, all-turn Hearth light tests and `7602378` presence consumer preparation, after `ad16d78` checkpoint and `ba345e4` three-field budget proof, after `fb6aed6` worker-domain handoff and `370ba78` inhabited light bounds, after `adf27ab` castle/cardinal consumers, `de0c5db` shoreline correction, `c17e0d5` rendered live readiness, `a088e76` complete content integration, `7d7a9cc` capture queue, `818244b` street-camera/terrain culling, `2d8b55b` natural ground and recessed-window projection. Every milestone is pushed; history is never rewritten.
-- Small identity/event, Atlas, world/voxel and presence contracts are frozen with fixtures. Herald spec03 and content specs04–06/PRDs/worktrees exist. Presence is the citizen's own warm window, one person/one designated pane, named nearby; beacon is the kingdom's light. SIMULATED labels remain visible. The strict public SSE adapter accepts its configured live or simulated origin with freshness/epoch/sequence guards.
-- Existing engine: worker meshing with AO/sky, grounded rolling terrain, 24-home hamlet/240-home town, immutable full tenure reservations, reviewed Hearth tiers and passive street props, reversible LOD/pane fades, actual near/far/beacon occluded light, cached directional shadows, groves, terrain-clipped water, sky/fog/time and credited procedural sound. The current production layout still has the rejected parallel rows.
-- Last full integrated `pnpm verify`: 858 tests in44 files, typecheck/lint/build and19 standard shots (12kingdom,6stream,panel). Main viewed all current matrices in `work/evidence/content-final/`; lane assets validated15Hearth/20props. Subsequent shoreline step passed864 tests including6new castle-module tests, source checks/build and two serial dusk captures; it does not certify the new town.
-- `c17e0d5`: no-time opening shows240 SIMULATED residents and advertises ready only after a rendered frame with all3 light uploads. Explicit replay resets0 →1, actual propagated light, Juniper visible. Browser/worker errors empty. Proof: `work/evidence/kingdom/live-ready/report.json`. Never require a continuously live queue to become idle before ready.
-- `de0c5db`: subdued bank/shallow bed and depth-faded reflection remove the bright lake outline. Main viewed1440×900 A/B plus390×844. Evidence: `work/evidence/kingdom/shoreline/`. Open-water reflection and accepted dusk light remain.
-- Runtime proof in `work/reviews/kingdom-runtime.md` / committed evidence covers actual context loss, worker construction/runtime failures, stale/live/offline/disconnected Herald frames, source withdrawal and cached shadow updates. No real Twitch chat ingest success or real-GPU timing is claimed. CPU camera-clearance proof is in `work/evidence/content-final/camera-sweep.json`; regenerate after changing geography/camera.
+**Acceptance:** `pnpm verify` passed (957 tests plus standard captures). Main opened the final dusk shots
+at 1440×900 and390×844: `work/evidence/kingdom/winding-town/`. The exact ordinary URL
+`/?tier=town&hour=19.5` on5190 opened with no browser/worker errors; replay to0/1/240 also passed.
+No real-GPU frame timing is claimed. Founder will time it on RTX5080. Further scene proof/captures are closed
+by the founder's latest brief. The visual generator's current fixtures work; automatic next-year extension
+still needs work when growth becomes a consumer. Do not claim that broader persistence contract frozen.
 
-### Current work and next integration
+**New lanes ready:** each has its spec, PRD, empty progress log, local branch and sibling worktree.
 
-- Proposed consumer contract: `work/specs/02b-settlement-plan.md`; pinned read-only architecture study: `work/references/settlement-streets.md`. Main accepted direction, not an untested typed freeze. Astra xhigh owns the uncommitted settlement generator, routing and terrain files plus their fixtures. Legacy running layout stays until the new plan is tested and main migrates consumers.
-- New plan: immutable founding geography independent of population/year; canonical48 reserved sites per quarter before activation; actual connected roads/courts/frontage approaches/market; all4 cardinal home turns; exact helper transforms; local grading; revision included in terrain cache identity. No jittered row substitution or global refit that moves existing homes.
-- Cardinal transforms and the small castle placement group are tested for their first consumers. Castle module dimensions are pinned: existing32×31×32m keep;12×24×12 towers;16×18×10 open gatehouse;12/20/24×10×3 curtains. Compound64×48m, foundation20m, market~9m, actual keep beacon50.5m. Terra high authored `packages/content/src/core/castle-modules.ts`;9 tests cover schema/palette/dimensions, all occupied components grounded,4×6m gate, shallow keep steps,8 actual tower/wall joins and the full outer-gate→court route. Main's3 castle placement tests resolve the actual compound and beacon; shared transforms have2 all-turn tests. A new `content:render --collection core --scene castle` bench consumes the same constructor/placement helper as the kingdom will. Main viewed all6 front/side/back desktop/phone renders, plus full desktop front; measured100,250 full-detail triangles/12 bench draws. Evidence: `work/evidence/kingdom/castle-compound/`. Focused24 tests, typecheck, source lint and build pass; the prior broad run passed871 tests with only the uncommitted generator probe excluded. This freezes the small placement/castle group, not the new settlement generator or its final silhouette in terrain.
-- Main rejected the first generated layout after inspecting its actual overhead plot: six-house star courts repeated as suburban pods. Astra replaced that with roads first and individual street-facing reservations, with occasional small greens. An initial road-first town returned but spread444×396m. An attempt to compact it exposed trapped future-quarter routes; the architect is reserving a permanent civic spine and connected quarter networks before fitting frontage lots. Both layouts must succeed and fit the light domain before acceptance. The street-plan generator remains unaccepted and uncommitted. Main has not switched the running scene.
-- Main owns migration of settlement content/props, terrain worker/material/cache, scene/castle/beacon/shadows/groves/cameras, presence scenario, field domain/coverage and camera harness. `inhabitedLightBounds` now computes the full active reservations plus16m spill and the light worker accepts explicit bounds; the old scene retains its prior domain until migration. A real 240-home regression proves expanded decorative terrain no longer forces 4m cells when this domain is supplied. Individual new-layout emitters and the combined three-field budget remain unverified. Use one placed castle module list for geometry, occlusion, shadows and actual beacon anchor. Retain .125m build scale; no visual-only castle scaling.
-- Astra high review found terrain bounds416×432m force the old far field to4m and suppress66/240 isolated emitters. Derive the new light domain from active full reservations plus spill instead of decorative lake/collar terrain. Prove each designated frontage independently, then all240 together, and include near+far+beacon under12MiB. Do not borrow neighbour light or relax budgets. Mandatory ground overlaps must agree; graph reachability alone is insufficient without full1.5m rendered entrance corridors/grades.
-- Next: finish/review additive contract fixtures, freeze that small group, migrate consumers, inspect winding-town dusk before broad captures. Then updated noon/dusk/night desktop/phone plus standard surfaces, actual camera clearance, short wave capture and final green verify/commit/push. Scene remains the active goal until the moment and full evidence land.
+| Lane | Spec | Owns |
+| --- | --- | --- |
+| `panel-stream` | `work/specs/07-panel-stream.md` | Twitch panel and stream presentation; renderer stays main-owned |
+| `wardrobe-body` | `work/specs/08-wardrobe-body.md` | Body/hair/wardrobe content and posed avatar bench |
+| `forge-pieces` | `work/specs/09-forge-pieces.md` | Three construction families and assembled-piece bench |
+| `civic-props` | `work/specs/10-civic-props.md` | Market/castle/public furniture in Hearth and Tide |
+| `sound` | `work/specs/11-sound.md` | Procedural/permissive foley, walking/building cues and browser mix |
 
-### Team and host
+Branches are `lane/<name>`; worktrees are `../worktrees/<name>`. Five Sol/high spec agents wrote these;
+main reviewed and supplied their first-consumer hooks. The team starts the workers. Main merges them.
+Shared avatar parts use the0.0625m lattice and16-bone chibi rig with sockets; Forge pieces carry a separate
+connector/door sidecar without changing build blueprints. Both have one focused boundary fixture.
+The material registry now includes skin/hair/fabric swatches. Optional web route hooks admit the new benches
+and surfaces as their modules arrive. Panel/audio package entries and the workspace lockfile are prepared;
+civic/Forge collection hooks are installed. Never let a lane edit shared contracts or the lockfile.
 
-- `lane/street-props`: SP03 `ab8cea5`, merged `583c30b`; accepted complete. `lane/homes-hearth`: HH03 `ea77d88`, HH04 `50a2f34`, merged `d7b31a3`; accepted complete. Both worktrees fast-forwarded to `a088e76` with frozen installs. Main selects all5 Hearth tiers; stable address/window tests pass. Review: `work/reviews/2026-10-30-content-final.md`.
-- `lane/atlas`: A01/A02 `0a3ba03` merged `082232a`; Surveyor lockfile unblock is done, lane may continue. Atlas team owns later work. `lane/herald`: H01 merged; real/simulated adapter seam fixed in `7b8e2eb` and its PRD. H02/H03 and Tide work remain team-owned; inspect worktree status before any next merge, never copy unfinished files.
-- Capture scripts acquire the same machine-wide flock before preview/Chrome, including external-base-url paths.6subprocess tests and an actual two-worktree queued-runner probe passed: `work/evidence/content-final/capture-queue.json`. Finished Hearth/street worktrees have the helper. Other/old worktrees need `7d7a9cc` or newer; already-running old scripts cannot lock retroactively.
-- Keep captures lean, serial and CPU-bounded on the shared host (`taskset -c 0,1 nice -n15`). Vitest maxWorkers2. SwiftShader produces behavior/pixels, never meaningful FPS. Default `pnpm verify` retains19shots; targeted filters allow only needed views during look iterations.
-- Owned preview5190 serves built readiness/shoreline changes (`/?tier=town&hour=19.5`), not future streets. Recheck it before reporting availability. Capture previews allocate free ports; env can pin them. Team-reserved Atlas5193, Herald5194, optional callback5195; existing Postgres/Valkey/Surveyor belong to the host/team and remain untouched. Do not kill unrelated processes.
-- Secrets stay ignored. New committed paths are repo-relative. Historical checkpoints (including superseded pauses, counts and preview sessions) are preserved in [the checkpoint archive](history/kingdom-checkpoints-2026-10-30.md), not current instructions.
+**Existing team:** Atlas and Herald remain team-owned. Hearth homes and street props are integrated; Tide
+continues separately. Herald real-channel delivery is not claimed by a SIMULATED preview. The panel's missing
+server authority must remain an honest unavailable state, never client-asserted identity or fake success.
 
-- Latest milestone `370ba78` passed45 light-field tests and scoped lint. Typecheck of the committed source passed with the architect’s uncommitted generator files excluded; global typecheck passed with those files present on the subsequent check. Full `pnpm verify` remains required after generator integration.
-
-- `ba345e4` adds the beacon field to the existing actual current-town near/far workspace test; all three together remain under12MiB. `fb6aed6` verifies the explicit domain survives the worker handoff and produces an accepted volume. These are current-layout proofs only; repeat them with the new castle and settlement after integration.
-
-- `7602378` allows the existing labelled SIMULATED presence producer to consume the new settlement home shape; its15 existing tests and current-worktree typecheck pass. This is an adapter preparation only: no new layout or real chat is active in the scene.
-
-- The current town now has an isolated-source proof for every one of its240 designated windows at the inhabited two-metre field resolution, including the current castle as an occluder. Each source independently visits light cells; neighbours cannot mask a suppressed source. All five Hearth tiers, three families and four cardinal turns also pass near-field light/removal. The future settlement and compound still require this proof with their own geometry.
-
-- The actual twelve-module castle and authored beacon anchor now pass an occluded beacon solve and the combined near/far/beacon12MiB guard alongside the existing town, with removal and occupancy reuse. The conservative cap cell projects the emitter into real air above it. This uses the old town terrain: repeat against the new settlement before acceptance. All88 field tests and current-worktree typecheck pass.
-
-- `565c8db` extracts `placeSettlementContent(plots, ground)` for the new plan consumer. Actual facade and prop grounding pass at all four turns; the current scene still uses its old ground sampler. Latest broad run passed921 tests excluding only the unfinished generator probe. Global lint currently reports two unused variables in the in-progress generator; the architect has been notified. Full `pnpm verify`, final screenshots and wave film remain outstanding.
-
-- Entrance audit found a garden shrub overlapping the 1.5m direct approach for off-centre Hearth doors. Prop placement now leaves the full authored Hearth/Tide door corridor clear across five tiers, three variants and four turns; current-town reservation and field tests pass. Main looked at serial dusk desktop/phone captures under `work/evidence/kingdom/entrance-clearance/`. The future settlement must additionally check props against all neighbouring lots and public corridors.
-
-- Independent CPU-only `packages/testing/settlement-audit.mjs` and its adversarial self-tests are uncommitted alongside the draft generator. The latest draft gets to quarter2025 with39/48 frontages; adding a year changes that to41/48, a stability warning. Audit remains red and does not replace rendered-ground, actual-light or visual acceptance. The architect is still revising the road-first allocation.
-
-- Name visibility now uses the same nearby physical blockers as local light, including the current castle and street props; previously it checked homes alone. Focused visibility/presence tests, scoped lint and typecheck pass; the actual future compound also blocks sight through a wall while admitting a ray through its gate. The independent draft audit now catches approaches through their own lot, positive-area market/lot overlaps, swept paved roads crossing reservations, unjoined non-collinear crossings and collinear road overlaps; fifteen self-tests pass. Its SVG distinguishes quarters, active and reserved sites, approaches and growth ports. Rounded joins use a conservative circumscribed approximation; same-edge crossings, verges, endpoint caps, actual rendered contact and light remain separate requirements. These audit files and the generator remain uncommitted until they work together.
-
-- The next draft generates the 24-home hamlet and 240-home town within the two-metre field budget (town active bounds354×325m including spill; generation415ms; serialized plan850,382 bytes), but main rejects it. The independent audit finds each own approach's paving clips its reservation, and adding 2027 fails at20/48 sites. Main inspected `work/evidence/kingdom/settlement-review/rejected-grid.png`: the long parallel rows and rectangular crosshatch still read as the suburb the founder rejected. Redesign the connected street topology, not just its waviness; preserve reservation dimensions, growth stability and the light budget. The image is a plan diagnostic, not final visual evidence. The draft has not been installed or frozen.
-
-- Follow-up on that rejected draft: entrances now leave their frontage perpendicularly and the audit's round-join test no longer mistakes straight samples for caps. The current hamlet/town pass its necessary checks, while 2027 still fails20/48; the street grid remains rejected. A new immutable irregular topology is under design. The witness is bounded by the actual322×293m lot envelope plus16m spill, not354×325m of lot space; diagonal roads consume substantially more cardinal frontage, so capacity must be demonstrated with actual placements.
-
-- Preliminary ground sampling on that draft took34.3ms for10,656 representative queries after preparation. An actual-content contact probe found a worst7.74cm base mismatch on a Tide flower pot extending outside the nominal frontage apron. Exact building-pad contact alone is insufficient: reconcile prop supports with the rendered1m triangles, neighboring lots and public grades when migrating. The replacement street network and this contact check are still in progress.
-
-- The horizon can now consume an explicit settlement ground sampler while preserving the existing detailed seam and triangle-contact sampler. All eight horizon tests, scoped lint and typecheck pass; the running scene still uses its existing ground until the new plan is accepted.
-
-- The terrain worker exposes its existing exact1m triangle-contact calculation for an explicit ground sampler, so new-plan props and camera checks can use the same float-rounded surface. Both diagonal-side contact tests, scoped lint and typecheck pass. The irregular patch planner has a first executable prototype; its initial search exceeds10s and is being measured before optimization.
-
-- The first irregular patch prototype is separate, uncommitted work in `packages/world/src/settlement/patch-prototype.ts`. Removing accidental repeated route oversampling and indexing local collisions reduced its hamlet generation from63.7s to1.32s. Its first town attempt failed at15/48 sites in quarter2025; a rerun after optimization is pending. Main inspected the full quarter-colored hamlet diagnostic: the crosshatch is gone, but identical small frontage groups still repeat. The independent audit finds50 collinear road overlaps and27 crossings without junctions in that snapshot; fix the graph, packing and composition before migration. The SVG diagnostic now includes dormant plots outside render bounds; sixteen self-tests pass.
-
-- The next patch revision consumes directional ports transactionally and removes the50 overlapping road segments. Main's independent rerun finds9 crossings without junctions in the hamlet; the optimized town still fails quarter2025 at21/48 sites. Main inspected `shots/kingdom/settlement-audit/patch-revised.png`: repeated paired groups remain. The prototype is not accepted or installed; continue with real junctions and individually fitted frontage on connectors and runs.
+**Host and next integration:** main preview5190 serves the built town. Atlas5193/Herald5194 remain reserved;
+manual lane previews choose a free5170–5199 port. Captures use the shared lock and stay lean/serial. The host's
+Postgres/Valkey/Surveyor and other services are untouched. `.env` stays ignored. Main's next work is avatar
+motion/street navigation and tactile block placement, using the new content boundaries; no more scene-proof
+chores. Sound sources remain CC0/permissive plus procedural, with credits merged into `THIRD_PARTY.md`.
