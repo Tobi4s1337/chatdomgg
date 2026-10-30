@@ -170,7 +170,7 @@ export async function createEmoteStage(input: EmoteStageInput): Promise<EmoteSta
       mesh({ asset: plazaAsset() }, 'plaza'),
       mesh({ blueprint: composite }, 'statue'),
       mesh({ blueprint: banner.blueprint }, 'banner'),
-      createCitizen(pool, skin, assembleLook(findReviewLook('citizen-a')), REST_POSE, 1),
+      createCitizen(pool, skin, assembleLook(findReviewLook('citizen-a')).parts, REST_POSE, 1),
     ]);
     citizen = person;
     if (input.isDisposed()) { release(); return null; }
