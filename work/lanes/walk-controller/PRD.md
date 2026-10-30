@@ -29,7 +29,7 @@ after main has stopped editing them. The integrator alone calls those modules fr
 
 ## Tasks
 
-- [ ] **WC01 — Put the player camera on a real citizen early.** Create the owned controller entry/lifecycle,
+- [x] **WC01 — Put the player camera on a real citizen early.** Create the owned controller entry/lifecycle,
   separate input/camera modules and exact integrator recipe using actual frozen realm render poses. Deliver a
   first camera-relative WASD and shoulder view with free cursor, film offset and dispose/reset behavior. Add a
   compact capture script and README with truthful ready/error checks and the actual entry URL. Ask integrator

@@ -2,7 +2,7 @@ import { WALK_BUTTON, type CollisionWorld, type PlayerState, type WalkInput } fr
 import { recoverBody, slideOrStep, stepDown, supported, sweepVertical } from './collide';
 
 export {
-  bodyStuck, embeddedSolids, CONTACT_EPSILON, RECOVERY_REACH, SLIDE_PASSES, STEP_GRAZE, STEP_HEIGHT, STEP_LANDING,
+  bodyStuck, embeddedSolids, supported, CONTACT_EPSILON, RECOVERY_REACH, SLIDE_PASSES, STEP_GRAZE, STEP_HEIGHT, STEP_LANDING,
   STEP_PROGRESS, SUPPORT_PROBE,
 } from './collide';
 

@@ -32,7 +32,7 @@ independent content work. Keep discoveries in Backlog without picking them up.
   supported canopy and finished roof contact. Record profiles, finite geometry choices, budgets and hinge/clearance
   conventions in the owned README. Capture the changed pieces and finished cottage; fix weak seams or silhouette.
   · evidence: test + partial validation + looked-at Hearth sheet/cottage
-- [ ] **FP03 — Tide is an architectural family of its own** · Author all fifteen Tidewake forms and its leaf,
+- [x] **FP03 — Tide is an architectural family of its own** · Author all fifteen Tidewake forms and its leaf,
   with swept slate roof, braced timber, ledged windows and wind-shaped chimney. Build the same useful room/porch
   from Tide definitions; match its own profiles and common measures without recoloring Hearth geometry. Review
   the contact sheet and assembly in greyscale/thumbnail judgment as well as color. · evidence: test + partial validation + looked-at Tide sheet/cottage
