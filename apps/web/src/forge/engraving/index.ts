@@ -27,16 +27,23 @@ export function createCodexEngraving(parent: THREE.Object3D): {
   plaque.lineTo(-16.5, 27.75);
   plaque.closePath();
   const islands: THREE.Shape[] = [];
-  for (const mark of marks) {
-    const cut = new THREE.Path();
-    cut.curves = mark.curves.map((curve) => curve.clone());
-    plaque.holes.push(cut);
-    // A closed counter inside a mark remains iron, connected to the backing behind the cut.
-    for (const counter of mark.holes) {
-      const island = new THREE.Shape();
-      island.curves = counter.curves.map((curve) => curve.clone());
-      islands.push(island);
+  const contains = (shape:THREE.Shape, point:THREE.Vector2) => {
+    const polygon=shape.getPoints(32);let inside=false;
+    for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){
+      const a=polygon[i]!,b=polygon[j]!;
+      if((a.y>point.y)!==(b.y>point.y)&&point.x<(b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x)inside=!inside;
     }
+    return inside;
+  };
+  // The cloud's counter is an island of iron. Cut the actual terminal paths into
+  // that island as well; a solid counter would cover >_ despite faithful SVG paths.
+  for(const mark of marks)for(const counter of mark.holes){
+    const island=new THREE.Shape();island.curves=counter.curves.map(curve=>curve.clone());islands.push(island);
+  }
+  for(const mark of marks){
+    const cut=new THREE.Path();cut.curves=mark.curves.map(curve=>curve.clone());
+    const island=islands.find(candidate=>contains(candidate,mark.getPoints(12)[0]!));
+    (island??plaque).holes.push(cut);
   }
   const depth = 1.25;
   const metalGeometry = new THREE.ExtrudeGeometry([plaque, ...islands], {
@@ -57,7 +64,7 @@ export function createCodexEngraving(parent: THREE.Object3D): {
       float key = max(0.0, dot(n, normalize(vec3(-.45,.75,1.0))));
       float edge = pow(1.0 - abs(n.z), 2.0);
       float sweep = exp(-pow((vPos.x + vPos.y * .35 - sin(uTime * .85) * 14.0) * .18, 2.0)) * uShaping;
-      vec3 iron = vec3(.105,.112,.115) + vec3(.16,.17,.17) * key + vec3(.08,.075,.067) * edge;
+      vec3 iron = vec3(.008,.009,.010) + vec3(.018,.020,.022) * key + vec3(.025,.023,.021) * edge;
       iron += vec3(.19,.075,.023) * uHeat * (.16 + edge * .55 + sweep * .25);
       gl_FragColor = vec4(iron, 1.0);
       #include <tonemapping_fragment>

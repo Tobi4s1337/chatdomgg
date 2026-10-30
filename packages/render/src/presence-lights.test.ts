@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { VOXEL_FIXTURE } from '@chatdom/shared/world-fixtures';
+import { KingdomIdSchema } from '@chatdom/shared';
 import { createWindowLights, windowLodCentre } from './presence-lights';
 
 describe('window LOD placement', () => {
+  it('lights witnessed offline chat independently of the beacon and clears stale evidence', () => {
+    const windows = createWindowLights(new THREE.Scene(), [{ slot: 0, blueprint: VOXEL_FIXTURE, position: [0, 0, 0], yaw: 0 }]);
+    const frame = { version: 1 as const, kingdomId: KingdomIdSchema.parse('129634568'), epoch: 'real-chat', sequence: 1,
+      asOf: 1000, origin: 'live' as const, streamLive: false, connection: 'offline' as const,
+      windows: [{ slot: 0, present: true, publicName: 'Tobi4s_', since: 0 }] };
+    windows.setFrame(frame);
+    expect(windows.getSources()[0]).toMatchObject({ strength: 1, name: 'Tobi4s_' });
+    windows.setFrame({ ...frame, sequence: 2, connection: 'stale' });
+    windows.update(1, 23);
+    expect(windows.getSources()[0]).toMatchObject({ strength: 0, name: null });
+    windows.dispose();
+  });
   it('renders one designated presence window per home, with an inspection opt-in for all anchors', () => {
     const blueprint = { ...VOXEL_FIXTURE, windows: [0, 1, 2].map(i => ({ ...VOXEL_FIXTURE.windows[0]!, id: `window-${i}` })) };
     const house = { slot: 0, blueprint, position: [0, 0, 0] as [number, number, number], yaw: 0 };

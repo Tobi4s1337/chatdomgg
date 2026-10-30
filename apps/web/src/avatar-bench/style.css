@@ -20,6 +20,7 @@
 .avatar-controls [aria-pressed='true'],.avatar-controls [aria-current='true']{background:linear-gradient(#e2b863,#c4923f);color:#2a1d14;border-color:#f0cf86}
 .avatar-stats{margin:0;font-size:13px;line-height:1.6;color:#efe3c8}
 .avatar-stats small{color:#bfae92;font-size:11px}
+.avatar-motion{margin:0;font-size:12px;line-height:1.5;color:#c9b48e}
 .avatar-looks{display:flex;flex-direction:column;gap:4px;margin-top:2px}
 .avatar-looks a{display:flex;gap:10px;align-items:baseline;padding:6px 10px;color:#e8dbbf;text-decoration:none;font-size:13px;border-radius:3px;border:1px solid transparent}
 .avatar-looks a span{min-width:74px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#b89a68}

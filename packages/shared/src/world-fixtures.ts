@@ -6,6 +6,7 @@ export const WORLD_FIXTURE_TIME = 1_798_320_000_000;
 export const WORLD_FIXTURE_KINGDOM = KingdomIdSchema.parse('900000000000000001');
 export const WORLD_FIXTURE_PERSON = PersonIdSchema.parse('900000000000000002');
 export const PRESENCE_FIXTURES = {
+  lost: PresenceInputSchema.parse({version:1,id:'sim:loss:1',kingdomId:WORLD_FIXTURE_KINGDOM,observedAt:WORLD_FIXTURE_TIME,origin:'simulated',kind:'source-lost',sources:['chat','chatters','stream'],reason:'revoked'}),
   stream: PresenceInputSchema.parse({version:1,id:'sim:stream:1',kingdomId:WORLD_FIXTURE_KINGDOM,observedAt:WORLD_FIXTURE_TIME,origin:'simulated',kind:'stream',live:true,sessionId:'sim:night:1'}),
   arrival: PresenceInputSchema.parse({version:1,id:'sim:arrival:1',kingdomId:WORLD_FIXTURE_KINGDOM,observedAt:WORLD_FIXTURE_TIME,origin:'simulated',kind:'observe',source:'chat',coverage:'activity',people:[{personId:WORLD_FIXTURE_PERSON,disclosure:'named',displayName:'Juniper'}]}),
   public: KingdomPresenceFrameSchema.parse({version:1,kingdomId:WORLD_FIXTURE_KINGDOM,epoch:'sim:1',sequence:1,asOf:WORLD_FIXTURE_TIME,origin:'simulated',streamLive:true,connection:'fresh',windows:[{slot:0,present:true,publicName:'Juniper',since:WORLD_FIXTURE_TIME}]}),
