@@ -5,7 +5,7 @@ import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, planLocalFo
 describe('words become retained house attachments',()=>{
   it('assembles three connected parts against actual roofs/fronts in each native kit without changing the source',()=>{
     const signatures=new Set<string>();
-    for(const home of [createTideHome('house',0),createTideHome('house',1),createTideHome('house',2),createHearthHome('house',0)]){const sockets=findForgeSockets(home);expect(sockets.length,home.id+':'+sockets.map(s=>s.kind).join(',')).toBe(3);for(const socket of sockets){const plan=planLocalForge(socket.kind==='chimney'?'dragon chimney':socket.kind==='lantern'?'moon lantern':'owl weathervane');checkForge(assembleForge(plan,forgeStyleKit(home.styleId as 'hearth'|'tide'),socket),home);}}
+    for(const home of [createTideHome('house',0),createTideHome('house',1),createTideHome('house',2),createHearthHome('house',0),createHearthHome('house',1),createHearthHome('house',2)]){const sockets=findForgeSockets(home);expect(sockets.length,home.id+':'+sockets.map(s=>s.kind).join(',')).toBe(3);for(const socket of sockets){const plan=planLocalForge(socket.kind==='chimney'?'dragon chimney':socket.kind==='lantern'?'moon lantern':'owl weathervane');checkForge(assembleForge(plan,forgeStyleKit(home.styleId as 'hearth'|'tide'),socket),home);}}
     for(const family of ['hearth','tide','grove'] as const){
       const home=createHome('house',family,0),before=JSON.stringify(home),sockets=findForgeSockets(home);
       expect(sockets.map(s=>s.kind)).toEqual(['chimney','weathervane','lantern']);
