@@ -249,3 +249,25 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
   uses drag; optional pointer lock remains available. Do not bind Q/E orbit from the older Tech example.
 - **2026-10-30 — Focus the demonstration.** A few actual walking frames and meaningful movement/occlusion flows
   are required. A new proof project or a repeated large screenshot matrix is not the deliverable.
+- **2026-10-30 — WC02 solver: vertical first, then swept horizontal time of impact (tie-order change for main's
+  review).** Main's Y sweep stays first, so floor seams never read as walls. X and Z are no longer separate axis
+  sweeps: `slideHorizontal` (`packages/world/src/movement/collide.ts`) finds the whole body's earliest contact over
+  the diagonal travel, snaps the blocked axis to the solid's face and lets the other axis keep only its own
+  remaining travel (never re-normalized, so a wall slide cannot gain speed). One solid blocks the axis that entered
+  last, X before Z on an exact tie; solids met at the same instant block together. Separate X-then-Z sweeps made a
+  convex corner resolve differently for mirrored approaches; the swept version is mirror-symmetric, tested, and
+  independent of `query` order. Each pass blocks an axis or finishes, so `SLIDE_PASSES = 3` always terminates,
+  zero-time inside-corner hits included. `CONTACT_EPSILON = 1e-9` m: faces closer than that touch, never overlap.
+- **2026-10-30 — WC02 support and determinism.** `grounded` is read at the end of the tick (`vy <= 0` and a solid
+  top within `SUPPORT_PROBE = 1e-6` m under the footprint), so walking off a ledge is airborne at once and a jump
+  is only accepted from real support. `Math.hypot` became `Math.sqrt` of exact sums: sqrt is correctly rounded
+  everywhere, hypot is not specified to be, and Node and browsers must agree bit for bit. `distance` adds the
+  horizontal displacement of the slide only.
+- **2026-10-30 — WC02 overlap recovery and its seam.** Before moving, a body inside solids by more than the contact
+  tolerance is pushed out along one of six axis directions, just far enough to clear every solid it is inside,
+  within `RECOVERY_REACH = 1` m, and only if the swept path touches no solid it was not already inside (no push
+  through a neighbouring wall). Shortest valid push wins; ties go up, -X, +X, -Z, +Z, down. The push is not walked
+  distance. If nothing qualifies the step zeroes velocity and holds the body still, deterministically on both ends.
+  `PlayerStep` stays void; `@chatdom/world/movement` exports `bodyStuck(state, world)` and `embeddedSolids` so the
+  room can see the case. The frozen room never asks for a placement after a step, and `RealmRoomHandle` has no
+  recovery request port, so that is recorded as a `needs:` for main/realm-server rather than a new return type.
