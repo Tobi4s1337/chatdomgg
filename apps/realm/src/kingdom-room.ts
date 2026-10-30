@@ -5,6 +5,7 @@ import { KingdomRoomState, WalkerSchema, WalkInputSchema, RealmJoinSchema, Realm
   WALK_HZ, REALM_PATCH_MS, REALM_MESSAGE_LIMIT, sanitizeWalkInput, type RealmPrincipal } from '@chatdom/shared/realm';
 import { stepPlayer, bodyStuck, embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmRoomHandle, RealmRoomServices } from './ports';
+import { RealmSeats, RealmSeatRefusedError, REALM_SESSION_CHECK_MS } from './auth/seats';
 
 /** Colyseus adapter only. Durable rules live in world; transports cannot award or publish. */
 export function createKingdomRoom(services: RealmRoomServices) {
@@ -23,7 +24,8 @@ export function createKingdomRoom(services: RealmRoomServices) {
     private unbind: (() => void)[] = [];
     private walking = new Map<string, boolean>();
     private world!: RealmRoomHandle['world'];
-    private authChecks = new Set<string>();
+    /** One seat per person; reconnects and session checks go through it (spec 34 R8). */
+    private seats!: RealmSeats;
 
     static async onAuth(_token: string, options: unknown) {
       const parsed = RealmJoinSchema.safeParse(options);
@@ -38,6 +40,7 @@ export function createKingdomRoom(services: RealmRoomServices) {
       this.state.origin = this.handle.origin; this.state.layoutRevision = this.handle.layoutRevision;
       this.state.collisionRevision = this.handle.world.revision; this.state.factSequence = this.handle.sequence;
       this.world = this.handle.world;
+      this.seats = new RealmSeats({ auth: services.auth, close: (id, code, reason) => this.clients.getById(id)?.leave(code, reason) });
       const readWalker = (id: string) => { const p = this.state.walkers.get(id); return p ? { x:p.x,y:p.y,z:p.z,vx:p.vx,vy:p.vy,vz:p.vz,grounded:p.grounded,yaw:p.yaw,distance:p.distance,collisionRevision:p.collisionRevision } : null; };
       const safePose = (world: RealmRoomHandle['world'], position: readonly [number, number, number]) => {
         const body = { x: position[0], y: position[1], z: position[2] };
@@ -88,7 +91,8 @@ export function createKingdomRoom(services: RealmRoomServices) {
         if (!parsed.success) { client.leave(4002, 'Invalid intent'); return; }
         try {
         const p = this.state.walkers.get(client.sessionId), auth = client.auth;
-        if (!p || !auth || !await services.auth.current(auth, Date.now()) || !this.accepting) { client.leave(4003, 'Entry expired'); return; }
+if (!p || !auth || !await services.auth.current(auth, Date.now())) { this.seats.end(client.sessionId, 'session-ended'); return; }
+        if (!this.accepting) { client.leave(4003, 'Kingdom connection ended; reconnect to check your work.'); return; }
         // The domain implementation serializes/commits; a socket never supplies actor or position.
         const receipt = await this.handle.intent({ principal: auth, walkerId: client.sessionId,
           position: [p.x, p.y, p.z], collisionRevision: p.collisionRevision, current:()=>readWalker(client.sessionId) }, parsed.data);
@@ -101,8 +105,8 @@ export function createKingdomRoom(services: RealmRoomServices) {
         if(!this.accepting)return;
         for (const [sid, p] of this.state.walkers) {
           const connected = this.clients.getById(sid);
-          if (!connected?.auth || connected.auth.expiresAt <= Date.now()) { this.inputs.get(sid).clear(); p.vx = 0; p.vz = 0; if(connected)connected.leave(4003,'Entry expired');continue; }
-          if(this.walking.get(sid)===false){this.inputs.get(sid).clear();p.vx=0;p.vz=0;continue;}
+          if (!connected?.auth || connected.auth.expiresAt <= Date.now()) { this.inputs.get(sid).clear(); p.vx = 0; p.vz = 0; if(connected)this.seats.end(sid,'session-ended');continue; }
+          if(this.walking.get(sid)===false||this.seats.held(sid)){this.inputs.get(sid).clear();p.vx=0;p.vz=0;continue;}
           const input = this.inputs.get(sid).next();
           // Default skip policy: empty ticks don't create movement that the acknowledged input never ran.
           if (input) stepPlayer(p, input, ctx.dt, this.world);
@@ -112,25 +116,21 @@ export function createKingdomRoom(services: RealmRoomServices) {
           }
         }
       }, WALK_HZ);
-      this.clock.setInterval(()=>{
-        for(const client of this.clients){
-          if(!client.auth||this.authChecks.has(client.sessionId))continue;
-          this.authChecks.add(client.sessionId);
-          const timeout=this.clock.setTimeout(()=>client.leave(4003,'Entry unavailable'),3000);
-          void services.auth.current(client.auth,Date.now()).then(current=>{if(!current)client.leave(4003,'Entry expired');},()=>client.leave(4003,'Entry unavailable')).finally(()=>{timeout.clear();this.authChecks.delete(client.sessionId);});
-        }
-      },1000);
+      // Connected and dropped seats alike: a revoked session cannot wait out its grace.
+      this.clock.setInterval(()=>this.seats.check(),REALM_SESSION_CHECK_MS);
     }
     async onJoin(client: Client<{ auth: RealmPrincipal }>) {
       const auth = client.auth;
       if (!this.accepting) throw new ServerError(503,'The kingdom writer is unavailable');
       if (!auth || auth.kingdomId !== this.state.kingdomId || auth.origin !== this.state.origin) throw new ServerError(403, 'Wrong kingdom entry');
-      if (!await services.auth.current(auth,Date.now()) || !this.accepting)throw new ServerError(403,'Entry expired');
-      if (this.control.has(auth.personId)) throw new ServerError(409, 'This citizen already walks here');
-      const position = this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
+if (!await services.auth.current(auth,Date.now()) || !this.accepting) throw new ServerError(403,'Entry expired');
+      const previous = this.seats.seatOf(auth.personId), carried = previous ? this.state.walkers.get(previous) : undefined;
+      const resume = carried && carried.collisionRevision === this.world.revision ? carried : undefined;
+      const position = resume ? [resume.x, resume.y, resume.z] as const : this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
       if (!position.every(Number.isFinite) || embeddedSolids(body,this.world).length || !supported(body,this.world)) throw new ServerError(503,'The kingdom gate has no safe arrival yet');
+      this.seats.seat(auth, client.sessionId);
       const walker = new WalkerSchema({ name: auth.publicName, look: auth.look, district: 'court', x: position[0], y: position[1], z: position[2],
-        vx: 0, vy: 0, vz: 0, grounded: true, yaw: 0, distance: 0, collisionRevision: this.state.collisionRevision });
+        vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
       this.state.walkers.set(client.sessionId, walker);
       this.district.add(walker);
       client.view = this.district;
@@ -142,13 +142,24 @@ export function createKingdomRoom(services: RealmRoomServices) {
       this.handle.lifecycle('drop',client.auth,client.sessionId,Date.now());
       this.inputs.get(client.sessionId).clear();
       const p = this.state.walkers.get(client.sessionId); if (p) { p.vx = 0; p.vz = 0; }
-      if(client.auth.expiresAt<=Date.now())return;
+      // No grace for a seat the server ended, a replaced seat or a spent session: Colyseus calls onLeave next.
+      const seconds = this.seats.dropped(client.sessionId);
+      if (!seconds) return;
+      const reconnection = this.allowReconnection(client, seconds);
+      // A room that is disposing, or a client that never finished joining, gets a plain rejected promise instead.
+      this.seats.awaiting(client.sessionId, () => { if (typeof reconnection.reject === 'function') reconnection.reject(new Error('seat ended')); });
       try {
-        await this.allowReconnection(client, 30);
-      } catch { /* Colyseus invokes onLeave when the reconnect grace expires. */ }
+        await reconnection;
+      } catch { /* Colyseus invokes onLeave when the grace expires or the seat ends. */ }
     }
     async onReconnect(client: Client<{ auth: RealmPrincipal }>) {
-      if(!this.accepting||!client.auth||!await services.auth.current(client.auth,Date.now())||!this.accepting)throw new ServerError(403,'Entry expired');
+if (!this.accepting || !client.auth) throw new ServerError(403,'Entry expired');
+      try {
+        await this.seats.reconnected(client.sessionId);
+      } catch (error) {
+        throw new ServerError(error instanceof RealmSeatRefusedError ? error.code : 4410, error instanceof RealmSeatRefusedError ? error.message : 'This seat has ended. Walk in again to continue.');
+      }
+      if (!this.accepting) throw new ServerError(403,'Entry expired');
       this.handle.lifecycle('reconnect',client.auth,client.sessionId,Date.now());
     }
     onLeave(client: Client<{ auth: RealmPrincipal }>) {
@@ -157,7 +168,8 @@ export function createKingdomRoom(services: RealmRoomServices) {
       const p = this.state.walkers.get(client.sessionId);
       if (p) { this.district.remove(p); this.state.walkers.delete(client.sessionId); }
       if (client.auth && this.control.get(client.auth.personId) === client.sessionId) this.control.delete(client.auth.personId);
+      this.seats.left(client.sessionId);
     }
-    async onDispose() { for (const unbind of this.unbind) unbind(); await this.handle?.dispose(); }
+    async onDispose() { this.seats?.dispose(); for (const unbind of this.unbind) unbind(); await this.handle?.dispose(); }
   };
 }

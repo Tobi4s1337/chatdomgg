@@ -6,7 +6,7 @@ import pg from 'pg';
 import { createRemoteJWKSet } from 'jose';
 import {
   REALM_AUTH_ROUTES, RealmApiErrorSchema, RealmSessionReplySchema, RealmSignoutReplySchema, RealmTicketReplySchema,
-  type RealmJoin, type RealmPrincipal,
+  KingdomRoomState, kingdomRoomId, type RealmJoin, type RealmPrincipal, type WalkInput,
 } from '@chatdom/shared/realm';
 import { KingdomIdSchema } from '@chatdom/shared';
 import { migrateRealmSchema } from '../../../realm/src/persistence/migrate';
@@ -14,6 +14,8 @@ import { createRealmAuthenticator } from '../../../realm/src/auth/authenticator'
 import { createRealmServer } from '../../../realm/src/server';
 import { REFERENCE_KINGDOM, referenceServices } from '../../../realm/src/reference';
 import { connectRealm, type RealmClient } from '../../../web/src/realm/client';
+import { HARNESS_WORLD, RealmSdkClient, seatedWalkers, severWalker, startHarnessRealm, type HarnessRealm } from '../../../realm/src/auth/reconnect-harness';
+import { REALM_RECONNECT_GRACE_MS, REALM_SEAT_ENDINGS } from '../../../realm/src/auth/seats';
 import { createRealmAuthHttp } from './http';
 import { createRealmAuthService, type RealmAuthService } from './service';
 import { createSimulatedOidcProvider } from './simulated-provider';
@@ -282,11 +284,12 @@ describe.skipIf(!enabled)('realm sign-in and entry tickets (Postgres)', () => {
     expect(wren.cookies.has('chatdom_session')).toBe(false);
     expect(await wren.session()).toEqual({ version: 1, status: 'anonymous' });
     await rejects(unused);
-    // The room's periodic session check closes the signed-out connection. (Ending its seat without the reconnect
-    // grace is the lifecycle adapter's job; reconnecting with the dead session is refused by `current`.)
+    // The room's periodic session check ends the signed-out seat with 4401 and no reconnect grace (R8).
     let wrenClosed: number | null = null;
     wrenWalks.room.onLeave(code => { wrenClosed = code; });
-    await waitFor(() => wrenClosed !== null || !wrenWalks.room.connection.isOpen, 'the room to close the signed-out connection');
+    await waitFor(() => wrenClosed !== null, 'the room to close the signed-out connection');
+    expect(wrenClosed).toBe(REALM_SEAT_ENDINGS['session-ended'].code);
+    await waitFor(() => tamsinWalks.room.state.walkers.size === 1, 'the signed-out seat to end at once');
     expect(tamsinWalks.room.connection.isOpen).toBe(true);
 
     // Internal revocation (moderation) reaches every session of the person at once.
@@ -301,6 +304,140 @@ describe.skipIf(!enabled)('realm sign-in and entry tickets (Postgres)', () => {
     expect(dump).not.toContain(reply.join.ticket);
     expect(dump).not.toContain(unused.ticket);
   }, 30_000);
+
+  it('R8: reconnect returns the same person through both SDK paths; revocation, expiry, a second window and a restart end the seat', async () => {
+    // The R5 court shares this process's matchmaker; stop it so the durable realm below is the only one.
+    await realmShutdown?.(); realmShutdown = undefined;
+    const kingdomId = KingdomIdSchema.parse('424243'), roomId = kingdomRoomId(kingdomId);
+    expect(roomId).toBe('k:424243');
+    const port = await freePort(), connectionString = process.env.DATABASE_URL!;
+    let realm: HarnessRealm | undefined = await startHarnessRealm({ connectionString, schema, port });
+    const endpoint = realm.endpoint, walkers: RealmClient[] = [];
+    /** One browser tab: its own sessionStorage, the account's resume scope, and a count of tickets it had to ask for. */
+    const tab = (browser: Browser) => {
+      const values = new Map<string, string>();
+      const storage: Storage = { get length() { return values.size; }, key: i => [...values.keys()][i] ?? null, getItem: key => values.get(key) ?? null,
+        setItem: (key, value) => { values.set(key, value); }, removeItem: key => { values.delete(key); }, clear: () => values.clear() };
+      let tickets = 0;
+      return {
+        storage, get tickets() { return tickets; }, token: () => [...values.values()][0],
+        async walk() {
+          const session = await browser.session();
+          if (session.status !== 'authenticated') throw new Error('signed out');
+          const client = await connectRealm(endpoint, { kingdomId, resumeScope: session.resumeScope, ticket: () => { tickets++; return browser.join(kingdomId); } }, HARNESS_WORLD, storage);
+          walkers.push(client);
+          return client;
+        },
+      };
+    };
+    const left = (client: RealmClient) => new Promise<number>(resolve => client.room.onLeave(code => resolve(code)));
+    const refusal = (token: string) => new RealmSdkClient(endpoint).reconnect(token, KingdomRoomState).then(() => null, (error: { code: number }) => error.code);
+    try {
+      const oko = new Browser(origin), bram = new Browser(origin);
+      await oko.signIn('990100003'); await bram.signIn('990100004');
+      const okoTab = tab(oko), bramTab = tab(bram);
+      const first = await okoTab.walk(), watcher = await bramTab.walk();
+      await waitFor(() => watcher.room.state.walkers.size === 2, 'both walkers');
+      const okoId = first.selfId, epoch = watcher.room.state.writerEpoch;
+      expect(first.room.roomId).toBe(roomId);
+      const issuedToken = okoTab.token()!;
+      expect(issuedToken.startsWith(`${roomId}:`)).toBe(true);
+
+      // A reload: buffered input never runs after the drop, and the seat waits, unmoving, for its own reconnect.
+      const step = 4 / 30, startX = watcher.room.state.walkers.get(okoId)!.x;
+      const input = first.room.input<WalkInput>({ mode: 'reliable' });
+      for (let n = 0; n < 8; n++) { Object.assign(input.data, { moveX: 127, moveZ: 0, buttons: 0, yaw: 64, collisionRevision: 1 }); input.send(); }
+      first.room.reconnection.enabled = false;
+      await first.room.leave(false);
+      await new Promise(resolve => setTimeout(resolve, 600));
+      const held = watcher.room.state.walkers.get(okoId)!;
+      const heldX = held.x;
+      expect(heldX - startX).toBeLessThan(4 * step);
+      await new Promise(resolve => setTimeout(resolve, 1_200));
+      expect(watcher.room.state.walkers.get(okoId)!.x).toBe(heldX);
+      expect(seatedWalkers(roomId)).toContain(okoId);
+
+      // Explicit SDK reconnect through the saved `k:<kingdomId>:<token>`: the same person and walker, no new ticket, a rotated token.
+      const reloaded = await okoTab.walk(), joinedAt = Date.now();
+      expect(reloaded.selfId).toBe(okoId);
+      expect(okoTab.tickets).toBe(1);
+      const rotated = okoTab.token()!;
+      expect(rotated).toBe(reloaded.room.reconnectionToken);
+      expect(rotated).not.toBe(issuedToken);
+      expect(await refusal(issuedToken)).toBe(524);
+
+      // Automatic SDK reconnect after a lost network (1006), once the SDK's 5 s minimum uptime has passed.
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, joinedAt + 5_300 - Date.now())));
+      const back = new Promise<void>(resolve => reloaded.room.onReconnect(() => resolve()));
+      let dropCode = 0;
+      reloaded.room.onDrop(code => { dropCode = code; });
+      expect(severWalker(roomId, okoId)).toBe(true);
+      await back;
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(dropCode).toBe(1006);
+      expect(reloaded.room.sessionId).toBe(okoId);
+      expect(okoTab.token()).toBe(reloaded.room.reconnectionToken);
+      expect(okoTab.token()).not.toBe(rotated);
+      expect(okoTab.tickets).toBe(1);
+
+      // A second window of the same person takes the seat where it stands; the first closes with 4409 and stays closed.
+      const before = watcher.room.state.walkers.get(okoId)!;
+      const place = { x: before.x, z: before.z };
+      const firstClosed = left(reloaded);
+      const secondTab = tab(oko), second = await secondTab.walk();
+      expect(await firstClosed).toBe(REALM_SEAT_ENDINGS.replaced.code);
+      await waitFor(() => !watcher.room.state.walkers.has(okoId), 'the replaced seat to end');
+      expect(second.selfId).not.toBe(okoId);
+      expect(watcher.room.state.walkers.size).toBe(2);
+      expect(watcher.room.state.walkers.get(second.selfId)).toMatchObject(place);
+      expect(await refusal(okoTab.token()!)).toBe(524);
+
+      // Signing out while the seat waits out its grace ends it at the next session check, not 30 s later.
+      second.room.reconnection.enabled = false;
+      await second.room.leave(false);
+      const savedToken = secondTab.token()!;
+      const signedOutAt = Date.now();
+      await oko.request(REALM_AUTH_ROUTES.signout, { method: 'POST', csrf: await oko.csrf(), body: {} });
+      await waitFor(() => !watcher.room.state.walkers.has(second.selfId), 'the revoked seat to end');
+      expect(Date.now() - signedOutAt).toBeLessThan(REALM_RECONNECT_GRACE_MS / 6);
+      expect(await refusal(savedToken)).toBe(524);
+      await expect(secondTab.walk()).rejects.toThrow('signed out');
+
+      // A session that expires while connected closes with 4401, without grace; its tab then needs a new sign-in.
+      await oko.signIn('990100003');
+      const okoAgainTab = tab(oko), okoAgain = await okoAgainTab.walk();
+      await waitFor(() => okoAgain.room.state.walkers.size === 2, 'Oko back beside Bram');
+      const bramClosed = left(watcher);
+      await pool.query("update realm_sessions set expires_at = now() - interval '1 second' where person_id = '990100004' and revoked_at is null");
+      expect(await bramClosed).toBe(REALM_SEAT_ENDINGS['session-ended'].code);
+      await waitFor(() => okoAgain.room.state.walkers.size === 1, 'the expired seat to end at once');
+      await expect(bramTab.walk()).rejects.toThrow('signed out');
+
+      // A restart is a new writer epoch: no old seat survives it. Bram's socket is lost just before (automatic
+      // reconnect ends in 4003); Oko is closed by the shutdown (4001) and the saved token falls back to a fresh ticket.
+      await bram.signIn('990100004');
+      const bramAgain = await tab(bram).walk();
+      await waitFor(() => okoAgain.room.state.walkers.size === 2, 'Bram back');
+      await new Promise(resolve => setTimeout(resolve, 5_300));
+      const bramEnd = left(bramAgain), okoEnd = left(okoAgain);
+      const okoSaved = okoAgainTab.token()!;
+      expect(severWalker(roomId, bramAgain.selfId)).toBe(true);
+      await realm.close();
+      expect(await okoEnd).toBe(4001);
+      realm = await startHarnessRealm({ connectionString, schema, port });
+      expect(await bramEnd).toBe(4003);
+      expect(await refusal(okoSaved)).toBe(522);
+      const fresh = await okoAgainTab.walk();
+      expect(okoAgainTab.tickets).toBe(2);
+      expect(fresh.room.roomId).toBe(roomId);
+      expect(fresh.room.state.writerEpoch).not.toBe(epoch);
+      await waitFor(() => fresh.room.state.walkers.size === 1, 'only the fresh walker');
+      expect(seatedWalkers(roomId)).toEqual([fresh.selfId]);
+    } finally {
+      for (const client of walkers) client.dispose();
+      await realm?.close();
+    }
+  }, 60_000);
 
   function serviceOptions() {
     return { pool, keys: createRemoteJWKSet(new URL(service.provider.jwksUri)), redirectUri: `${origin}${REALM_AUTH_ROUTES.callback}` };

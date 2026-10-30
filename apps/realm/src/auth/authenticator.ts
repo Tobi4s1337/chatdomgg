@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { ServerError } from '@colyseus/core';
 import type { Pool } from 'pg';
 import { KingdomIdSchema, PersonIdSchema } from '@chatdom/shared';
@@ -29,6 +29,10 @@ interface ConsumedTicket {
  * The realm's half of entry. A ticket is burned by the first presentation, whatever happens next, so a leaked or
  * mistargeted ticket can never be retried. Identity comes only from the session row the API created after verified
  * sign-in; nothing in the join chooses a person. Database failure refuses entry and never grants it.
+ *
+ * The principal's `sessionId` is a fresh entry id (`realm_entries`), not the Chatdom session id. Colyseus adopts it as
+ * the walker's room id, which every client in the room sees; a per-entry id keeps the session id private and gives
+ * each window its own seat id. `current` resolves the entry back to its session on every check.
  */
 export function createRealmAuthenticator({ pool, origin }: RealmAuthenticatorOptions): RealmAuthenticator {
   return {
@@ -56,19 +60,26 @@ export function createRealmAuthenticator({ pool, origin }: RealmAuthenticatorOpt
       if (!row || !row.ticket_live || row.kingdom_id !== parsed.data.kingdomId || row.protocol !== parsed.data.protocol) throw new ServerError(403, EXPIRED_TICKET);
       if (row.origin !== origin || row.session_origin !== origin || row.person_origin !== origin) throw new ServerError(403, 'This realm does not accept that kind of entry');
       if (row.revoked || !row.session_live || row.session_person !== row.person_id) throw new ServerError(403, ENDED_SESSION);
+      const entryId = randomUUID();
+      try {
+        await pool.query('insert into realm_entries (entry_id, session_id, person_id, kingdom_id, origin) values ($1, $2, $3, $4, $5)',
+          [entryId, row.session_id, row.person_id, row.kingdom_id, origin]);
+      } catch {
+        throw new ServerError(503, 'Kingdom entry is unavailable right now. Nothing has changed; try again shortly.');
+      }
       return {
         personId: PersonIdSchema.parse(row.person_id), kingdomId: KingdomIdSchema.parse(row.kingdom_id),
-        sessionId: row.session_id, expiresAt: Number(row.session_expires_ms), origin,
+        sessionId: entryId, expiresAt: Number(row.session_expires_ms), origin,
         publicName: row.public_name ?? REALM_ANONYMOUS_PRESENTATION.publicName, look: REALM_ANONYMOUS_PRESENTATION.look,
       };
     },
     async current(principal: RealmPrincipal, now: number): Promise<boolean> {
       if (principal.origin !== origin || !UUID.test(principal.sessionId) || !Number.isFinite(now)) return false;
       const result = await pool.query(`
-        select 1 from realm_sessions s join realm_persons p on p.person_id = s.person_id
-        where s.session_id = $1 and s.person_id = $2 and s.origin = $3 and p.origin = $3
+        select 1 from realm_entries e join realm_sessions s on s.session_id = e.session_id join realm_persons p on p.person_id = s.person_id
+        where e.entry_id = $1 and e.person_id = $2 and e.kingdom_id = $5 and e.origin = $3 and s.person_id = $2 and s.origin = $3 and p.origin = $3
           and s.revoked_at is null and s.expires_at > greatest(now(), to_timestamp($4::double precision / 1000))`,
-      [principal.sessionId, principal.personId, origin, now]);
+      [principal.sessionId, principal.personId, origin, now, principal.kingdomId]);
       return result.rowCount === 1;
     },
   };
