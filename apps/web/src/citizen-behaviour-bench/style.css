@@ -17,6 +17,10 @@
 .behaviour-timeline .look,.behaviour-legend .look{background:#8fa3c9}
 .behaviour-timeline .pose,.behaviour-legend .pose{background:#e8bd62}
 .behaviour-timeline .settle,.behaviour-legend .settle{background:#a98c63}
+.behaviour-timeline .rest,.behaviour-legend .rest{background:#7d6448}
+.behaviour-timeline .walk,.behaviour-legend .walk{background:#8fa3c9}
+.behaviour-timeline .pause,.behaviour-legend .pause{background:#e8bd62}
+.behaviour-timeline .wait,.behaviour-legend .wait{background:#c9765f}
 .behaviour-timeline .cut{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:#e2725b}
 .behaviour-timeline b{position:absolute;top:-5px;bottom:-5px;width:3px;margin-left:-1.5px;background:#f6ead0;border-radius:1px;box-shadow:0 0 0 1px #2a1f1c}
 .behaviour-legend{margin:-4px 0 0;font-size:11px;letter-spacing:.06em;color:#c9b48e;display:flex;align-items:center;gap:6px}

@@ -38,26 +38,60 @@ export interface NeighbourStreet {
   frameAt(atMs: number, departures?: ReadonlyMap<number, number>): KingdomPresenceFrame | null;
 }
 
+/**
+ * The SIMULATED 240-slot town for the street composition: a real five-quarter generated town whose
+ * every home is occupied, arriving over two minutes. It sits inside main's existing representation
+ * budget for this town (one body per home); it makes no claim about rendering a larger audience.
+ */
+export const TOWN_FIXTURE = {
+  seed: 'hearthwick',
+  kingdomId: KingdomIdSchema.parse('1'),
+  epoch: 'simulated:citizen-behaviour:town',
+  origin: 'simulated' as const,
+  startMs: 1_900_000_000_000,
+  arrivalSpanMs: 120_000,
+} as const;
+
+export function createTownStreets(): NeighbourStreet {
+  const fixture = TOWN_FIXTURE;
+  const plan = generateSettlementPlan({ seed: fixture.seed, tier: 'town', firstYear: 2022, year: 2026 });
+  const slots = plan.homes.map(home => home.slot).sort((a, b) => a - b);
+  const names = ['Juniper', 'Moss', 'Rue', 'Sable', 'Rowan', 'Wren', 'Hazel', 'Bramble', 'Pip', 'Clover', 'Fern', 'Robin'];
+  // A stable, interleaved arrival order: the town fills from everywhere at once, not quarter by quarter.
+  const arrivals = slots.map((slot, index) => ({ slot, atMs: Math.round((((index * 97) % slots.length) / slots.length) * fixture.arrivalSpanMs),
+    publicName: index % 20 === 0 ? `SIMULATED ${names[(index / 20) % names.length]}` : null })).sort((a, b) => a.atMs - b.atMs || a.slot - b.slot);
+  return { plan, slots, frameAt: framesFor({ ...fixture, arrivals }) };
+}
+
+/** Cumulative frames for a fixture; an unchanged frame is the same object, so callers can skip re-applying it. */
+function framesFor(fixture: { readonly kingdomId: KingdomPresenceFrame['kingdomId']; readonly epoch: string; readonly origin: 'simulated'; readonly startMs: number;
+  readonly arrivals: readonly { readonly slot: number; readonly atMs: number; readonly publicName: string | null }[] }): NeighbourStreet['frameAt'] {
+  let cached: { key: string; frame: KingdomPresenceFrame } | null = null;
+  return (atMs, departures = new Map()) => {
+    const arrived = fixture.arrivals.filter(arrival => fixture.startMs + arrival.atMs <= atMs);
+    if (!arrived.length) return null;
+    let sequence = 0, asOf: number = fixture.startMs;
+    const left = new Set<number>();
+    for (const arrival of arrived) {
+      const since = fixture.startMs + arrival.atMs, leftAt = departures.get(arrival.slot);
+      sequence++; asOf = Math.max(asOf, since);
+      if (leftAt !== undefined && leftAt <= atMs && leftAt >= since) { sequence++; asOf = Math.max(asOf, leftAt); left.add(arrival.slot); }
+    }
+    const key = `${sequence}:${asOf}:${[...left].join(',')}`;
+    if (cached?.key === key) return cached.frame;
+    const windows = arrived.map(arrival => left.has(arrival.slot)
+      ? { slot: arrival.slot, present: false, publicName: null, since: fixture.startMs + arrival.atMs }
+      : { slot: arrival.slot, present: true, publicName: arrival.publicName, since: fixture.startMs + arrival.atMs });
+    const frame: KingdomPresenceFrame = { version: 1, kingdomId: fixture.kingdomId, epoch: fixture.epoch, sequence, asOf, origin: fixture.origin,
+      streamLive: true, connection: 'fresh', windows };
+    cached = { key, frame }; return frame;
+  };
+}
+
 export function createNeighbourStreet(): NeighbourStreet {
   const fixture = NEIGHBOUR_FIXTURE;
   const plan = generateSettlementPlan({ seed: fixture.seed, tier: 'hamlet', firstYear: 2025, year: 2026 });
   const slots = fixture.arrivals.map(arrival => arrival.slot);
   for (const slot of slots) if (!plan.homes.some(home => home.slot === slot)) throw new Error(`Fixture slot ${slot} has no home`);
-  const frameAt = (atMs: number, departures: ReadonlyMap<number, number> = new Map()): KingdomPresenceFrame | null => {
-    const arrived = fixture.arrivals.filter(arrival => fixture.startMs + arrival.atMs <= atMs);
-    if (!arrived.length) return null;
-    let sequence = 0, asOf: number = fixture.startMs;
-    const windows = arrived.map(arrival => {
-      const since = fixture.startMs + arrival.atMs, leftAt = departures.get(arrival.slot);
-      sequence++; asOf = Math.max(asOf, since);
-      if (leftAt !== undefined && leftAt <= atMs && leftAt >= since) {
-        sequence++; asOf = Math.max(asOf, leftAt);
-        return { slot: arrival.slot, present: false, publicName: null, since };
-      }
-      return { slot: arrival.slot, present: true, publicName: arrival.publicName, since };
-    });
-    return { version: 1, kingdomId: fixture.kingdomId, epoch: fixture.epoch, sequence, asOf, origin: fixture.origin,
-      streamLive: true, connection: 'fresh', windows };
-  };
-  return { plan, slots, frameAt };
+  return { plan, slots, frameAt: framesFor(fixture) };
 }

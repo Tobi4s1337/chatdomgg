@@ -1,10 +1,13 @@
 import type { Vec3 } from '@chatdom/shared';
 import { randomUnit, seedHash } from '../layout';
 import type { CitizenMotionSample } from '../citizens/types';
+import type { CitizenGoalRequest } from '../citizens/types';
 import { neighbourPairs } from './neighbours';
+import { createRoutines } from './routines';
 import { BEHAVIOUR_TUNING as T } from './tuning';
 import type {
-  CitizenBehaviourInput, CitizenBehaviours, CitizenBehaviourStep, CitizenEncounter, CitizenOverlay,
+  CitizenBehaviourInput, CitizenBehaviours, CitizenBehaviourStep, CitizenEncounter, CitizenGoalAnswer, CitizenOverlay,
+  CitizenRoutineTransition, CitizenRoutineView,
 } from './types';
 
 interface Encounter {
@@ -64,8 +67,9 @@ const gestureAt = (gesture: 'nod' | 'wave', poseAtMs: number, poseEndMs: number,
 
 /**
  * Local ambient presentation for main's supplied citizens. It owns no route, body, identity,
- * relationship or record: it notices people already present and returns small overlays in the
- * renderer's existing vocabulary. All choices are seeded by kingdom, epoch, slots and step time.
+ * relationship or record: it walks people through gentle street routines by asking main for
+ * approved destinations, notices neighbours, and returns small overlays in the renderer's existing
+ * vocabulary. All choices are seeded by kingdom, epoch, slots and step time.
  */
 export function createCitizenBehaviours(): CitizenBehaviours {
   let source: string | null = null, lastAtMs: number | null = null;
@@ -76,10 +80,11 @@ export function createCitizenBehaviours(): CitizenBehaviours {
   let contacts = new Map<number, Contact>();
   let seedBase = '';
   const unit = (...parts: (string | number)[]): number => randomUnit(seedHash(`${seedBase}:${parts.join(':')}`));
+  const routines = createRoutines(unit);
 
   const reset = (): void => {
     source = null; lastAtMs = null; ambient = new Set(); seedBase = '';
-    actors.clear(); encounters.clear(); contacts = new Map();
+    actors.clear(); encounters.clear(); contacts = new Map(); routines.clear();
   };
   const dropTransient = (): void => {
     encounters.clear(); contacts = new Map();
@@ -87,20 +92,23 @@ export function createCitizenBehaviours(): CitizenBehaviours {
   };
   const uniqueEncounters = (): Encounter[] => [...new Set(encounters.values())].sort((p, q) => p.greeter - q.greeter);
 
-  /** The look a participant shows at `atMs`, from live samples when available. */
-  function encounterOverlay(encounter: Encounter, slot: number, self: CitizenMotionSample, partner: CitizenMotionSample | undefined, atMs: number): CitizenOverlay {
+  /**
+   * The look a participant shows at `atMs`, from live samples when available. A greeting turns the
+   * head away from whatever routine look it finds (`base`) and hands it back the same way.
+   */
+  function encounterOverlay(encounter: Encounter, slot: number, self: CitizenMotionSample, partner: CitizenMotionSample | undefined, atMs: number, base: number): CitizenOverlay {
     if (slot === encounter.greeter) {
       const weight = envelope(atMs, encounter.startMs, encounter.poseAtMs, encounter.lookOutAtMs, encounter.greeterEndMs);
       const target = partner?.position ?? encounter.recipientAt;
-      return { lookYaw: relativeYaw(self, target) * weight, ...gestureAt(encounter.gesture, encounter.poseAtMs, encounter.poseEndMs, atMs) };
+      return { lookYaw: base + (relativeYaw(self, target) - base) * weight, ...gestureAt(encounter.gesture, encounter.poseAtMs, encounter.poseEndMs, atMs) };
     }
     const glance = encounter.glance;
-    if (!glance) return NONE;
+    if (!glance) return { ...NONE, lookYaw: base };
     const weight = envelope(atMs, glance.atMs, glance.atMs + T.glance.inMs, glance.outAtMs, glance.endMs);
-    return { gesture: 'none', time: 0, lookYaw: relativeYaw(self, partner?.position ?? encounter.greeterAt) * weight };
+    return { gesture: 'none', time: 0, lookYaw: base + (relativeYaw(self, partner?.position ?? encounter.greeterAt) - base) * weight };
   }
-  function releaseOverlay(release: Release, atMs: number): CitizenOverlay {
-    const lookYaw = release.fromYaw * (1 - ease((atMs - release.startMs) / T.look.releaseMs));
+  function releaseOverlay(release: Release, atMs: number, base: number): CitizenOverlay {
+    const lookYaw = release.fromYaw + (base - release.fromYaw) * ease((atMs - release.startMs) / T.look.releaseMs);
     return { lookYaw, ...(release.tail ? gestureAt(release.tail.gesture, release.tail.poseAtMs, release.tail.poseEndMs, atMs) : { gesture: 'none' as const, time: 0 }) };
   }
   /** End one encounter early; the surviving people ease back to rest instead of snapping. */
@@ -110,7 +118,7 @@ export function createCitizenBehaviours(): CitizenBehaviours {
       const actor = actors.get(slot), self = survivors.get(slot);
       if (!actor || !self || !ambient.has(slot)) continue;
       const partner = survivors.get(slot === encounter.greeter ? encounter.recipient : encounter.greeter);
-      const shown = encounterOverlay(encounter, slot, self, partner, atMs);
+      const shown = encounterOverlay(encounter, slot, self, partner, atMs, routines.yaw(slot, atMs));
       const tail = slot === encounter.greeter && atMs >= encounter.poseAtMs && atMs < encounter.poseEndMs
         ? { gesture: encounter.gesture, poseAtMs: encounter.poseAtMs, poseEndMs: encounter.poseEndMs } : null;
       if (Math.abs(shown.lookYaw) > 1e-4 || tail) actor.release = { fromYaw: shown.lookYaw, startMs: atMs, tail };
@@ -124,11 +132,11 @@ export function createCitizenBehaviours(): CitizenBehaviours {
     for (const sample of samples) {
       const slot = sample.slot, actor = actors.get(slot);
       if (!actor || !ambient.has(slot) || sample.state === 'leaving') continue;
-      const encounter = encounters.get(slot);
-      let overlay: CitizenOverlay | undefined;
-      if (encounter) overlay = encounterOverlay(encounter, slot, sample, bySlot.get(slot === encounter.greeter ? encounter.recipient : encounter.greeter), atMs);
-      else if (actor.release) overlay = releaseOverlay(actor.release, atMs);
-      if (overlay && (overlay.gesture !== 'none' || Math.abs(overlay.lookYaw) > 1e-4)) overlays.set(slot, overlay);
+      const encounter = encounters.get(slot), base = routines.yaw(slot, atMs);
+      let overlay: CitizenOverlay = { ...NONE, lookYaw: base };
+      if (encounter) overlay = encounterOverlay(encounter, slot, sample, bySlot.get(slot === encounter.greeter ? encounter.recipient : encounter.greeter), atMs, base);
+      else if (actor.release) overlay = releaseOverlay(actor.release, atMs, base);
+      if (overlay.gesture !== 'none' || Math.abs(overlay.lookYaw) > 1e-4) overlays.set(slot, overlay);
     }
     return overlays;
   }
@@ -138,9 +146,14 @@ export function createCitizenBehaviours(): CitizenBehaviours {
     if (!Number.isFinite(atMs)) throw new Error('Citizen behaviour needs a finite kingdom clock');
     const key = `${input.kingdomId}\u0000${input.epoch}\u0000${input.origin}`;
     // A new kingdom, epoch or origin, or a backward clock, is a different story: start clean.
+    let jumped = false;
     if (key !== source || (lastAtMs !== null && atMs < lastAtMs)) { reset(); source = key; seedBase = `${input.kingdomId}:${input.epoch}:${input.origin}`; }
-    else if (lastAtMs !== null && atMs - lastAtMs > T.maxGapMs) dropTransient();
+    else if (lastAtMs !== null && atMs - lastAtMs > T.maxGapMs) { dropTransient(); jumped = true; }
     lastAtMs = atMs; ambient = input.ambientSlots;
+    const transitions: CitizenRoutineTransition[] = [], routineStep = { atMs, emit: (transition: CitizenRoutineTransition) => { transitions.push(transition); } };
+    const homeOf = (slot: number) => input.destinationsFor(slot).find(destination => destination.kind === 'home');
+    const answers = new Map<number, CitizenGoalAnswer[]>();
+    for (const item of input.answers ?? []) { const list = answers.get(item.request.slot); if (list) list.push(item); else answers.set(item.request.slot, [item]); }
 
     // Only present, arriving or resting people take part. A departing body is never kept for a gesture.
     const present_ = new Map<number, CitizenMotionSample>();
@@ -150,17 +163,25 @@ export function createCitizenBehaviours(): CitizenBehaviours {
       const encounter = encounters.get(slot);
       if (encounter) interrupt(encounter, present_, atMs);
       for (const other of actor.cooldowns.keys()) actors.get(other)?.cooldowns.delete(slot);
-      actors.delete(slot);
+      actors.delete(slot); routines.drop(slot);
     }
     for (const [slot, sample] of present_) {
       let actor = actors.get(slot);
-      if (!actor) { actor = { seenSince: atMs, standingSince: null, readyAtMs: -Infinity, cooldowns: new Map(), release: null }; actors.set(slot, actor); }
+      if (!actor) {
+        actor = { seenSince: atMs, standingSince: null, readyAtMs: -Infinity, cooldowns: new Map(), release: null }; actors.set(slot, actor);
+        routines.create(slot, sample, atMs, homeOf(slot));
+      }
       const standing = sample.goalReached && sample.speed === 0 && (sample.state === 'home' || sample.state === 'idle');
       actor.standingSince = standing ? actor.standingSince ?? atMs : null;
       for (const [other, until] of actor.cooldowns) if (until <= atMs) actor.cooldowns.delete(other);
       if (actor.release && atMs - actor.release.startMs >= T.look.releaseMs && (!actor.release.tail || atMs >= actor.release.tail.poseEndMs)) actor.release = null;
-      // Control takeover: a walker or monarch is never posed; looking at them remains allowed.
-      if (!ambient.has(slot)) actor.release = null;
+      // Control takeover: a walker or monarch is never posed or sent anywhere; looking at them remains allowed.
+      if (!ambient.has(slot)) { actor.release = null; routines.hold(slot, routineStep); continue; }
+      if (routines.held(slot)) routines.resume(slot, sample, homeOf(slot), routineStep);
+      else if (jumped) routines.resettle(slot, sample, atMs, homeOf(slot));
+      // Main's answers first, then actual arrival: a pause begins only on an arrival sample.
+      routines.answer(slot, sample, answers.get(slot), homeOf(slot), input.destinationsFor(slot), routineStep);
+      routines.arrival(slot, sample, homeOf(slot), input.destinationsFor(slot), routineStep);
     }
     for (const encounter of uniqueEncounters()) {
       const greeter = present_.get(encounter.greeter), recipient = present_.get(encounter.recipient);
@@ -238,7 +259,18 @@ export function createCitizenBehaviours(): CitizenBehaviours {
       actors.get(contact.a)!.cooldowns.set(contact.b, until); actors.get(contact.b)!.cooldowns.set(contact.a, until);
       started.push(view(encounter));
     }
-    return { atMs, overlays: present(input.samples, atMs), encounters: uniqueEncounters().map(view), started };
+    // Departures last, so nobody leaves in the middle of a greeting decided this step.
+    const goals: CitizenGoalRequest[] = [];
+    for (const [slot, sample] of present_) {
+      if (goals.length >= T.routine.maxGoalsPerStep) break;
+      if (!ambient.has(slot)) continue;
+      const busy = encounters.has(slot) || Boolean(actors.get(slot)!.release?.tail && atMs < actors.get(slot)!.release!.tail!.poseEndMs);
+      const goal = routines.due(slot, sample, homeOf(slot), input.destinationsFor(slot), busy, routineStep);
+      if (goal) goals.push(goal);
+    }
+    const routineViews: CitizenRoutineView[] = [];
+    for (const slot of present_.keys()) { const item = routines.view(slot); if (item) routineViews.push(item); }
+    return { atMs, overlays: present(input.samples, atMs), encounters: uniqueEncounters().map(view), started, goals, transitions, routines: routineViews };
   }
 
   const view = (encounter: Encounter): CitizenEncounter => ({ greeter: encounter.greeter, recipient: encounter.recipient, gesture: encounter.gesture,
@@ -250,7 +282,8 @@ export function createCitizenBehaviours(): CitizenBehaviours {
     get stats() {
       let cooldowns = 0, releases = 0;
       for (const actor of actors.values()) { cooldowns += actor.cooldowns.size; if (actor.release) releases++; }
-      return { actors: actors.size, contacts: contacts.size, cooldowns: cooldowns / 2, encounters: new Set(encounters.values()).size, releases };
+      return { actors: actors.size, contacts: contacts.size, cooldowns: cooldowns / 2, encounters: new Set(encounters.values()).size, releases,
+        claims: routines.claims, pending: routines.pending };
     },
   };
 }

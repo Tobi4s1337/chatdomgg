@@ -14,7 +14,11 @@ import { terrainBatches } from '../kingdom/terrain-batches';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from '../kingdom/terrain-worker';
 import { toCitizenSample, type BehaviourFrame } from './loop';
 
-export type BenchView = 'doorstep' | 'close' | 'street';
+/**
+ * `doorstep`/`close` hold a greeting; `follow` keeps one person through a routine; `market` holds the
+ * square around a visitor; `street` is a wide look down the street; `aerial` takes in a whole town.
+ */
+export type BenchView = 'doorstep' | 'close' | 'street' | 'follow' | 'market' | 'aerial';
 /** Two people the doorstep camera should hold: the one who notices, and the one noticed. */
 export interface BenchFocus {
   readonly slot: number;
@@ -134,13 +138,40 @@ export async function createBehaviourStage(canvas: HTMLCanvasElement, plan: Sett
     streetCentre.y = terrainHeight(plan, streetCentre.x, streetCentre.z);
     const eye = new THREE.Vector3(), target = new THREE.Vector3(), anchor = new THREE.Vector3(), follow = new THREE.Vector3(), look = new THREE.Vector3();
     let hour = options.hour, view: BenchView = 'doorstep', focus: BenchFocus | null = null, litKey = '', lastField = -Infinity;
-    const blocked = (x: number, z: number): boolean => plan.reservations.some(({ lot }) => x > lot.minX - .6 && x < lot.maxX + .6 && z > lot.minZ - .6 && z < lot.maxZ + .6);
+    const blocked = (x: number, z: number, margin = .6): boolean => plan.reservations.some(({ lot }) => x > lot.minX - margin && x < lot.maxX + margin && z > lot.minZ - margin && z < lot.maxZ + margin);
+    const townSpan = Math.max(plan.bounds.maxX - plan.bounds.minX, plan.bounds.maxZ - plan.bounds.minZ);
     function place(): void {
       const portrait = canvas.clientWidth < canvas.clientHeight;
-      if (view === 'street' || !focus) {
+      if (view === 'aerial') {
+        // The whole inhabited town from above its edge, castle behind: windows read as people.
+        const homesCentre = new THREE.Vector3(doors.reduce((s, p) => s + p[0], 0) / doors.length, 0, doors.reduce((s, p) => s + p[2], 0) / doors.length);
+        homesCentre.y = terrainHeight(plan, homesCentre.x, homesCentre.z);
+        camera.fov = portrait ? 64 : 42;
+        target.copy(homesCentre);
+        eye.copy(homesCentre).add(new THREE.Vector3(townSpan * .08, townSpan * (portrait ? .42 : .3), townSpan * (portrait ? .2 : .38)));
+        anchor.set(0, 0, 0);
+      } else if (view === 'market' && focus) {
+        // Over the visitor's shoulder into the square: the person, and what they are watching.
+        const subject = new THREE.Vector3(...focus.subject), centre = new THREE.Vector3(...focus.other);
+        const away = Math.atan2(subject.x - centre.x, subject.z - centre.z), side = portrait ? .3 : .55;
+        let azimuth = away + side;
+        for (const turn of [side, -side, side * 1.6, -side * 1.6]) {
+          const a = away + turn, x = subject.x + Math.sin(a) * 8, z = subject.z + Math.cos(a) * 8;
+          if (!blocked(x, z)) { azimuth = a; break; }
+        }
+        // High and back enough that the square's stalls share the frame with the person watching them.
+        const distance = portrait ? 7.4 : 8.6;
+        camera.fov = portrait ? 62 : 48;
+        eye.set(subject.x + Math.sin(azimuth) * distance, 0, subject.z + Math.cos(azimuth) * distance);
+        eye.y = Math.max(terrainHeight(plan, eye.x, eye.z), subject.y) + (portrait ? 4.6 : 4.2);
+        target.copy(subject).lerp(centre, portrait ? .38 : .5); target.y = subject.y + .6;
+        anchor.copy(subject);
+      } else if (view === 'street' || !focus) {
         camera.fov = portrait ? 62 : 46;
-        target.copy(streetCentre).add(new THREE.Vector3(-8, 1, 0));
-        eye.copy(streetCentre).add(portrait ? new THREE.Vector3(26, 30, -6) : new THREE.Vector3(30, 20, -24));
+        const centre = focus ? new THREE.Vector3(...focus.subject) : streetCentre;
+        target.copy(centre).add(new THREE.Vector3(focus ? 0 : -8, 1, 0));
+        eye.copy(centre).add(portrait ? new THREE.Vector3(26, 30, -6) : new THREE.Vector3(30, 20, -24));
+        anchor.set(0, 0, 0);
       } else {
         // The camera travels with the noticer, so it is placed relative to them. The other person
         // moves relative to that camera; keep their whole passage clear of the lens.
@@ -167,6 +198,8 @@ export async function createBehaviourStage(canvas: HTMLCanvasElement, plan: Sett
             if (passer.distanceTo(lens) < radius * .55) score -= .6;
           }
           for (let t = .2; t <= 1; t += .2) if (blocked(middle.x + direction.x * radius * t, middle.z + direction.y * radius * t)) score -= 3;
+          // A wall beside the lens fills the frame's edge even when the sight line is clear.
+          if (view === 'follow' && blocked(x, z, 2.4)) score -= 2;
           if (terrainHeight(plan, x, z) > middle.y + 1.2) score -= 3;
           if (score > best) { best = score; azimuth = a; }
         }
@@ -202,7 +235,7 @@ export async function createBehaviourStage(canvas: HTMLCanvasElement, plan: Sett
       draw(nowMs: number, elapsedSeconds: number, frame: KingdomPresenceFrame | null, current: BehaviourFrame, settle: boolean): void {
         const grade = getEnvironment(hour);
         clay.setEnvironment(grade); ground.setEnvironment(grade); avatar.setEnvironment({ ...grade, ambientIntensity: Math.max(.65, grade.ambientIntensity) });
-        const subject = view !== 'street' && focus ? current.samples.find(sample => sample.slot === focus!.slot) : undefined;
+        const subject = view !== 'street' && view !== 'aerial' && focus ? current.samples.find(sample => sample.slot === focus!.slot) : undefined;
         follow.set(0, 0, 0);
         if (subject) follow.set(subject.position[0], subject.position[1], subject.position[2]).sub(anchor);
         camera.position.copy(eye).add(follow); look.copy(target).add(follow); camera.lookAt(look); camera.updateMatrixWorld();

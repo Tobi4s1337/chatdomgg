@@ -1,7 +1,11 @@
 /* global URLSearchParams:readonly */
-// Captures the citizen-behaviour bench: the first doorstep-street encounter at web sizes, a midday
-// grounding frame, and timed contact sheets (look → gesture → settle; walker takeover; departure).
-//   node apps/web/src/citizen-behaviour-bench/capture.mjs --base-url http://127.0.0.1:5196
+// Captures the citizen-behaviour bench on the real motion and renderer:
+//   greeting — the first doorstep-street encounter at web sizes, a midday grounding frame and timed sheets
+//              (look → gesture → settle; walker takeover; departure);
+//   routine  — street, market and home frames at web sizes, a midday grounding frame, one timed routine
+//              sheet through a complete stroll, and the closed-market branch;
+//   town     — the 240-slot town at dusk, from above and in a lane.
+//   node apps/web/src/citizen-behaviour-bench/capture.mjs --base-url http://127.0.0.1:5196 [--only greeting,routine,town]
 // Without --base-url it starts its own preview (port from CHATDOM_BEHAVIOUR_PORT, default any free port).
 import { chromium } from '@playwright/test';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -11,6 +15,7 @@ import { startCapturePreview, closeCapturePreview } from '../../../../packages/t
 
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
+const only = new Set((option('--only') ?? 'greeting,routine,town').split(','));
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${root}shots/citizen-behaviour`;
 const escape = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
@@ -25,10 +30,10 @@ try {
   const errors = [];
   const open = async (query, width, height) => {
     const page = await browser.newPage({ viewport: { width, height } });
-    page.on('pageerror', error => errors.push(`${query}: ${error.message}`));
-    page.on('console', message => { if (message.type() === 'error') errors.push(`${query}: ${message.text()}`); });
+    page.on('pageerror', error => errors.push(`${JSON.stringify(query)}: ${error.message}`));
+    page.on('console', message => { if (message.type() === 'error') errors.push(`${JSON.stringify(query)}: ${message.text()}`); });
     await page.goto(`${base}/-/citizen-behaviour?${new URLSearchParams(query)}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.__chatdomReady === true || typeof window.__chatdomBehaviourError === 'string', {}, { timeout: 300_000 });
+    await page.waitForFunction(() => window.__chatdomReady === true || typeof window.__chatdomBehaviourError === 'string', {}, { timeout: 900_000 });
     const failure = await page.evaluate(() => window.__chatdomBehaviourError);
     if (failure) throw new Error(`${JSON.stringify(query)}: ${failure}`);
     if (errors.length) throw new Error(errors.join('\n'));
@@ -36,41 +41,32 @@ try {
   };
   const seek = async (page, seconds) => {
     await page.evaluate(t => window.__chatdomBehaviourSeek(t), seconds);
-    await page.waitForFunction(() => window.__chatdomReady === true, {}, { timeout: 300_000 });
+    await page.waitForFunction(() => window.__chatdomReady === true, {}, { timeout: 900_000 });
     if (errors.length) throw new Error(errors.join('\n'));
     const report = await page.evaluate(() => window.__chatdomBehaviour);
     if (!report.lightSettled) console.warn(`[capture] window light still refining at ${seconds.toFixed(2)} s`);
     return report;
   };
-
-  // Read the story's real encounter times from the bench itself.
-  const probe = await open({ t: '0', frame: 'still' }, 320, 240);
-  const { encounter } = await probe.evaluate(() => window.__chatdomBehaviour);
-  await probe.close();
-  console.log(`[capture] encounter: slot ${encounter.greeter} ${encounter.gesture}s to slot ${encounter.recipient}, ${encounter.start.toFixed(1)}–${encounter.end.toFixed(1)} s`);
-
-  // Representative full frames.
-  const nodDeepest = encounter.pose + Math.PI / 6;
-  for (const [width, height] of [[1440, 900], [390, 844]]) for (const hour of width === 1440 ? ['19', '12'] : ['19']) {
-    const page = await open({ t: String(nodDeepest), hour, view: 'doorstep' }, width, height);
-    const report = await page.evaluate(() => window.__chatdomBehaviour);
-    if (!report.overlays.some(o => o.slot === encounter.greeter && o.gesture === encounter.gesture)) throw new Error('The greeting gesture is not visible at its own pose time.');
-    await page.screenshot({ path: `${output}/doorstep-${hour === '12' ? 'midday' : 'dusk'}@${width}x${height}.png` });
+  const report = page => page.evaluate(() => window.__chatdomBehaviour);
+  const frame = async (name, query, width, height, check) => {
+    const page = await open(query, width, height);
+    const current = await report(page);
+    check?.(current);
+    await page.screenshot({ path: `${output}/${name}@${width}x${height}.png` });
     await page.close();
-    console.log(`[capture] doorstep ${hour}:00 ${width}×${height}`);
-  }
+    console.log(`[capture] ${name}@${width}x${height}`);
+    return current;
+  };
 
-  // Timed contact sheets on the close camera: one still page, sought through the story.
-  const sheet = async (name, scenario, frames, title) => {
-    const page = await open({ t: String(frames[0].t), view: 'close', frame: 'still', scenario }, 560, 420);
+  /** A timed contact sheet on one still page, sought forward through the story. */
+  const sheet = async (name, query, frames, title, detail) => {
+    const page = await open({ ...query, t: String(frames[0].t), frame: 'still' }, 560, 420);
     const tiles = [];
-    for (const frame of frames) {
-      const report = await seek(page, frame.t);
-      const path = `${output}/${name}-${frame.t.toFixed(2)}.png`;
+    for (const item of frames) {
+      const current = await seek(page, item.t);
+      const path = `${output}/${name}-${item.t.toFixed(2)}.png`;
       await page.screenshot({ path });
-      const greeter = report.overlays.find(o => o.slot === encounter.greeter), recipient = report.overlays.find(o => o.slot === encounter.recipient);
-      tiles.push({ ...frame, data: (await readFile(path)).toString('base64'),
-        detail: `noticer ${greeter ? `${greeter.gesture} · yaw ${greeter.lookYaw.toFixed(2)}` : 'at rest'} · other ${recipient ? `yaw ${recipient.lookYaw.toFixed(2)}` : 'at rest'}` });
+      tiles.push({ ...item, data: (await readFile(path)).toString('base64'), detail: detail(current) });
     }
     await page.close();
     const columns = 4, tile = 560 / 1.4, rows = Math.ceil(tiles.length / columns), width = columns * tile + (columns + 1) * 10;
@@ -79,19 +75,80 @@ try {
     await composer.setContent(html); await composer.screenshot({ path: `${output}/${name}-sheet.png`, fullPage: true }); await composer.close();
     console.log(`[capture] ${name}-sheet.png`);
   };
-  const e = encounter, lookEnd = e.poseEnd + (e.end - e.poseEnd) * .4;
-  await sheet('greeting', 'encounter', [
-    { t: e.start - .6, label: 'walking' }, { t: e.start + (e.pose - e.start) * .5, label: 'head turns' }, { t: e.pose + .05, label: 'gesture begins' },
-    { t: nodDeepest, label: 'deepest' }, { t: e.poseEnd - .08, label: 'gesture ends' }, { t: lookEnd, label: 'holds the look' },
-    { t: e.end - .2, label: 'settling' }, { t: e.end + .4, label: 'at ease' },
-  ], `${e.gesture} · look, pose, settle`);
-  const cut = e.pose + .3;
-  await sheet('takeover', 'takeover', [
-    { t: cut - .1, label: 'mid-gesture' }, { t: cut + .1, label: 'walker control' }, { t: cut + .3, label: 'glance easing' }, { t: cut + .6, label: 'released' },
-  ], 'walker takeover');
-  await sheet('departure', 'departure', [
-    { t: cut - .1, label: 'mid-gesture' }, { t: cut + .15, label: 'neighbour left' }, { t: e.poseEnd + .05, label: 'dip finished' }, { t: e.poseEnd + .6, label: 'settled' },
-  ], 'neighbour leaves');
+
+  if (only.has('greeting')) {
+    // Read the story's real encounter times from the bench itself.
+    const probe = await open({ t: '0', frame: 'still' }, 320, 240);
+    const { encounter } = await report(probe);
+    await probe.close();
+    console.log(`[capture] encounter: slot ${encounter.greeter} ${encounter.gesture}s to slot ${encounter.recipient}, ${encounter.start.toFixed(1)}–${encounter.end.toFixed(1)} s`);
+    const visible = current => { if (!current.overlays.some(o => o.slot === encounter.greeter && o.gesture === encounter.gesture)) throw new Error('The greeting gesture is not visible at its own pose time.'); };
+    const deepest = encounter.pose + Math.PI / 6;
+    for (const [width, height] of [[1440, 900], [390, 844]]) for (const hour of width === 1440 ? ['19', '12'] : ['19']) {
+      await frame(`doorstep-${hour === '12' ? 'midday' : 'dusk'}`, { t: String(deepest), hour, view: 'doorstep' }, width, height, visible);
+    }
+    const greeting = current => {
+      const greeter = current.overlays.find(o => o.slot === encounter.greeter), recipient = current.overlays.find(o => o.slot === encounter.recipient);
+      return `noticer ${greeter ? `${greeter.gesture} · yaw ${greeter.lookYaw.toFixed(2)}` : 'at rest'} · other ${recipient ? `yaw ${recipient.lookYaw.toFixed(2)}` : 'at rest'}`;
+    };
+    const e = encounter, lookEnd = e.poseEnd + (e.end - e.poseEnd) * .4;
+    await sheet('greeting', { view: 'close', scenario: 'encounter' }, [
+      { t: e.start - .6, label: 'walking' }, { t: e.start + (e.pose - e.start) * .5, label: 'head turns' }, { t: e.pose + .05, label: 'gesture begins' },
+      { t: deepest, label: 'deepest' }, { t: e.poseEnd - .08, label: 'gesture ends' }, { t: lookEnd, label: 'holds the look' },
+      { t: e.end - .2, label: 'settling' }, { t: e.end + .4, label: 'at ease' },
+    ], `${e.gesture} · look, pose, settle`, greeting);
+    const cut = e.pose + .3;
+    await sheet('takeover', { view: 'close', scenario: 'takeover' }, [
+      { t: cut - .1, label: 'mid-gesture' }, { t: cut + .1, label: 'walker control' }, { t: cut + .3, label: 'glance easing' }, { t: cut + .6, label: 'released' },
+    ], 'walker takeover', greeting);
+    await sheet('departure', { view: 'close', scenario: 'departure' }, [
+      { t: cut - .1, label: 'mid-gesture' }, { t: cut + .15, label: 'neighbour left' }, { t: e.poseEnd + .05, label: 'dip finished' }, { t: e.poseEnd + .6, label: 'settled' },
+    ], 'neighbour leaves', greeting);
+  }
+
+  if (only.has('routine')) {
+    const beatsOf = async scenario => {
+      const page = await open({ t: '0', frame: 'still', scenario }, 320, 240);
+      const { routine } = await report(page);
+      await page.close();
+      console.log(`[capture] ${scenario}: slot ${routine.slot} · ${routine.beats.map(b => `${b.kind} ${b.from.toFixed(1)}–${b.to.toFixed(1)}`).join(' · ')}`);
+      return routine;
+    };
+    const describe = current => current.subject
+      ? `${current.subject.routine} · ${current.subject.activity}${Math.abs(current.subject.lookYaw) > .02 ? ` · head ${current.subject.lookYaw.toFixed(2)}` : ''}${current.subject.gesture !== 'none' ? ` · ${current.subject.gesture}` : ''}`
+      : 'held';
+    const stroll = await beatsOf('stroll'), market = await beatsOf('market'), closed = await beatsOf('closed');
+    const beat = (routine, kind, index = 0) => routine.beats.filter(b => b.kind === kind)[index];
+    // A look holds from ~1.0–2.0 s after an arrival; these frames sit inside it.
+    const strollStop = beat(stroll, 'pause'), marketStop = beat(market, 'pause'), marketHome = beat(market, 'rest', 1);
+    const pausing = kind => current => { if (current.subject?.activity !== kind) throw new Error(`Expected the subject ${kind}, saw ${JSON.stringify(current.subject)}`); };
+    for (const [width, height] of [[1440, 900], [390, 844]]) {
+      await frame('street-stroll-dusk', { scenario: 'stroll', t: String(strollStop.from + 1.6), view: 'follow' }, width, height, pausing('pausing'));
+      await frame('market-dusk', { scenario: 'market', t: String(marketStop.from + 1.7), view: 'market' }, width, height, pausing('pausing'));
+      await frame('home-dusk', { scenario: 'market', t: String(marketHome.from + 1.9), view: 'follow' }, width, height, pausing('resting'));
+    }
+    await frame('street-wide-dusk', { scenario: 'stroll', t: String(strollStop.from + 1.6), view: 'street' }, 1440, 900);
+    await frame('street-stroll-midday', { scenario: 'stroll', t: String(beat(stroll, 'walk').from + 3), view: 'follow', hour: '12' }, 1440, 900);
+    // One complete routine, timed: the doorstep, out, a pause with a look, back, the doorstep again.
+    const out = beat(stroll, 'walk', 0), back = beat(stroll, 'walk', 1), home = beat(stroll, 'rest', 1);
+    await sheet('routine', { scenario: 'stroll', view: 'follow' }, [
+      { t: beat(stroll, 'rest').from + .5, label: 'resting at the door' }, { t: out.from + .5, label: 'sets off' },
+      { t: (out.from + out.to) / 2, label: 'strolling' }, { t: strollStop.from + .25, label: 'arrives · settles' },
+      { t: strollStop.from + 1.6, label: 'looks along the lane' }, { t: back.from + .6, label: 'turns for home' },
+      { t: home.from + .3, label: 'home · window warm' }, { t: home.from + 1.9, label: 'settled at the door' },
+    ], `one stroll, ${(home.from - out.from).toFixed(0)} s door to door`, describe);
+    const refused = beat(closed, 'wait'), instead = beat(closed, 'pause');
+    await sheet('closed', { scenario: 'closed', view: 'follow' }, [
+      { t: refused.from + .4, label: 'route refused' }, { t: (refused.from + refused.to) / 2, label: 'resting where they stand' },
+      { t: instead.from + 1.6, label: 'a stroll instead' }, { t: beat(closed, 'rest', 1).from + .4, label: 'home again' },
+    ], 'the market closed (simulated reserved action)', describe);
+  }
+
+  if (only.has('town')) {
+    // 240 simulated neighbours, settled into their evening: arrivals end at 120 s.
+    for (const [width, height] of [[1440, 900], [390, 844]]) await frame('town-above-dusk', { scenario: 'town', t: '150', view: 'aerial' }, width, height);
+    await frame('town-lane-dusk', { scenario: 'town', t: '150', view: 'follow' }, 1440, 900);
+  }
 } finally {
   await browser?.close();
   if (server) await closeCapturePreview(server);

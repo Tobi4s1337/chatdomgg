@@ -74,6 +74,64 @@ export const BEHAVIOUR_TUNING = {
     walkingLimit: .8,
     /** Eased return to rest when a look is interrupted by removal or departure. */
     releaseMs: 420,
+    /** A routine look turns in with an ease-out-back of this constant: 1.5 overshoots by 8 % and settles. */
+    overshootBack: 1.5,
+  },
+
+  /**
+   * The street routines: a doorstep, a short stroll, an occasional market visit and the way home.
+   * Destinations are only main's approved nodes for the slot; every pause starts at actual arrival.
+   */
+  routine: {
+    /** Rest on the doorstep after each homecoming before anything else is considered. */
+    homeRestMs: [12_000, 28_000] as const,
+    /** Between one excursion opportunity and the next, whether or not the last one was taken. */
+    opportunityMs: [25_000, 55_000] as const,
+    /** At an opportunity: stay home, a stroll, or the market. Chosen once per opportunity. */
+    stayChance: .22,
+    marketChance: .24,
+    /**
+     * Stroll patterns. A band is metres of the person's own walk from their door to an approved
+     * street place they have actually passed; routing and reachability stay main's. `second`
+     * adds one more known place, at least `loopApartMetres` from the first.
+     */
+    strolls: [
+      { id: 'door-to-door', weight: 3, near: [5, 16] as const, pauseMs: [2_200, 4_200] as const, second: null },
+      { id: 'lane-end', weight: 3, near: [16, 42] as const, pauseMs: [3_000, 6_000] as const, second: null },
+      { id: 'loop', weight: 2, near: [6, 24] as const, pauseMs: [2_400, 4_600] as const, second: [12, 42] as const },
+    ],
+    loopApartMetres: 6,
+    /**
+     * With little known ground in a band, a stroll may try an approved place next to ground they
+     * know (straight-line metres). The walk teaches its real length; a long way round is not repeated.
+     * Someone with no known ground first walks to the nearest approved place within `doorstepMetres`.
+     */
+    explore: { chance: .35, againChance: .7, knownBelow: 3, reachMetres: 12, afterTrips: 2, doorstepMetres: 10 },
+    /** A walk passes an approved place when the body comes this close; lanes are walked up to 1.1 m off centre. */
+    passMetres: 1.4,
+    /** The market is watched, not used: a walk, a look and a pause. */
+    marketPauseMs: [4_000, 9_000] as const,
+    /** Nobody leaves the instant they arrive at a stop or the door. */
+    firstLookAfterMs: [450, 1_100] as const,
+    /** A stop's look along the street. */
+    streetLook: { yaw: [.4, .78] as const, inMs: [560, 820] as const, holdMs: [700, 1_600] as const, outMs: [640, 900] as const },
+    /** At the market: a look across one side of the bustle, then the other. */
+    marketLook: { yaw: [.5, .95] as const, inMs: [700, 1_000] as const, holdMs: [900, 1_900] as const, outMs: [800, 1_100] as const, gapMs: [500, 1_200] as const },
+    /** Coming home: one glance back toward the lane before settling at the door. */
+    doorstepLook: { chance: .7, yaw: [.55, .9] as const, inMs: [700, 950] as const, holdMs: [1_000, 2_200] as const, outMs: [900, 1_200] as const },
+    /** A long rest may hold one quiet glance in its middle. */
+    restLookChance: .45,
+    /** A rejected goal leaves the person resting where they legally are; retries back off to this. */
+    retryMs: [2_500, 5_000] as const,
+    maxRetryMs: 30_000,
+    /** Out-of-order or unanswered requests are retried at most this often before backing off. */
+    quickRetries: 2,
+    /** A market that refused a route is not asked again for this long. */
+    marketRefusalMs: 120_000,
+    /** A request with no answer for this many steps is treated as lost. */
+    answerSteps: 3,
+    /** Requests per policy step, across everyone; later slots wait a step. Bounds caller work. */
+    maxGoalsPerStep: 8,
   },
 
   /**
