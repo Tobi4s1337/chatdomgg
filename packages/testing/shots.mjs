@@ -30,6 +30,7 @@ try {
     await page.waitForFunction(isKingdom => (window.__chatdomReady === true && (!isKingdom || (window.__chatdomKingdom?.stats.ready && window.__chatdomKingdom.stats.fieldUploads > 0 && window.__chatdomKingdom.stats.fieldSettled))) || !!document.querySelector('.kingdom-gate button'), kingdom, { timeout: 240_000 });
     if (await page.locator('.kingdom-gate button').count()) throw new Error(`${name}: kingdom error gate: ${await page.locator('.kingdom-gate').innerText()}${errors.length ? `\n${errors.join('\n')}` : ''}`);
     if (kingdom && await page.locator('[data-chatdom-kingdom]').count() !== 1) throw new Error('Kingdom screenshot requires the real kingdom root');
+    if (path === '/panel' && await page.locator('[data-chatdom-panel][data-view="kingdom"][data-source="simulated"]').count() !== 1) throw new Error('Panel screenshot requires its simulated kingdom view, not a connection state');
     if (area === 'atlas' && await page.locator('[data-chatdom-atlas]').count() !== 1) throw new Error('Atlas screenshot requires the real Atlas root');
     if (area === 'atlas') {
       const atlas = page.locator('[data-chatdom-atlas]');

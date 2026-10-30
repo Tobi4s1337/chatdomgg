@@ -36,7 +36,7 @@ export function createKingdomForge(options:Options){
     if(mesh.chunks.reduce((n,c)=>n+c.mesh.indices.length/3,0)>40000)throw new Error('This part needs a simpler finish.');
     const geometry=geometryFromChunks(mesh.chunks,'build'),designId=`${result.kit.id}-${homeFingerprint(result.blueprint)}`;
     const lineage=[...placed.values()].map(p=>p.receipt).concat([...kept.values()]).find(p=>p.provenance?.designId===designId)?.provenance;
-    return {result,geometry,bounds:buildBounds(result.blueprint),destination:point(socket.origin,home),home,id:`local-${crypto.randomUUID()}`,committed:false,provenance:lineage??{source:'simulated' as const,makerId:'simulated-juniper',makerName:'Juniper',kingdomKey:options.seed,kingdomName:options.kingdomName,firstForgedAt:Date.now(),designId} };
+    return {result,geometry,bounds:buildBounds(result.blueprint),destination:point(socket.origin,home),home,id:`local-${Array.from(crypto.getRandomValues(new Uint8Array(16)),n=>n.toString(16).padStart(2,'0')).join('')}`,committed:false,provenance:lineage??{source:'simulated' as const,makerId:'simulated-juniper',makerName:'Juniper',kingdomKey:options.seed,kingdomName:options.kingdomName,firstForgedAt:Date.now(),designId} };
   }
   function install(work:NonNullable<typeof current>){
     // Recheck host at arrival; an edit while the piece flies cannot attach to an obsolete roof.
