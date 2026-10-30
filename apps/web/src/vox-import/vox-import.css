@@ -1,0 +1,33 @@
+.vox-import{font-family:Georgia,serif;color:#493424;width:300px;max-width:calc(100vw - 20px)}
+.vox-import button,.vox-import label{font:inherit;color:inherit;touch-action:manipulation}
+.vox-import svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.vox-import-tab{display:flex;align-items:center;gap:10px;padding:8px 14px 8px 10px;cursor:pointer;text-align:left;background:linear-gradient(125deg,#fff9e2,#e6d3a9);border:3px solid #705039;border-radius:11px;box-shadow:0 0 0 1px #c4a270,inset 0 0 0 1px #fff6d4,0 8px 22px #19142060;transition:transform .12s,background .15s}
+.vox-import-tab:hover{background:linear-gradient(125deg,#fffbe9,#efdfb8)}.vox-import-tab:active{transform:translateY(1px)}.vox-import-tab:focus-visible,.vox-import button:focus-visible,.vox-import-pick:focus-within{outline:2px solid #8d4e31;outline-offset:3px}
+.vox-import-tab span{display:flex;flex-direction:column;gap:2px}.vox-import-tab b{font-weight:normal;font-size:14px}.vox-import-tab small{font-family:system-ui,sans-serif;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#93714f}
+.vox-import-mark{width:26px;height:26px;color:#7b4f33;stroke-width:1.5}
+.vox-import.open{padding:14px 15px 12px;max-height:calc(100dvh - 190px);overflow:auto;overscroll-behavior:contain;background:linear-gradient(125deg,rgba(255,250,225,.97),rgba(227,209,170,.98));border:5px solid #705039;border-radius:15px;box-shadow:0 0 0 1px #c4a270,inset 0 0 0 1px #fff6d4,0 12px 35px #19142070;scrollbar-width:thin;scrollbar-color:#a98b62 transparent}
+.vox-import-head{display:flex;align-items:center;gap:10px}.vox-import-head>div{flex:1;min-width:0}.vox-import-head p{margin:0 0 3px;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:#8d7050}.vox-import-head h3{margin:0;font-size:19px;font-weight:normal}
+.vox-import-close{width:30px;height:30px;padding:4px;border:0;background:transparent;color:#866a4b;cursor:pointer;border-radius:6px}.vox-import-close:hover{background:#fff4d3}.vox-import-close svg{width:20px;height:20px}
+.vox-import-pick{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;margin:13px 0 10px;padding:10px;cursor:pointer;border:1px solid #b69a69;border-radius:7px;background:linear-gradient(#fbefd0,#e6d2a8);box-shadow:0 2px 0 #b29362;font-size:14px;transition:background .15s,transform .12s}
+.vox-import-pick:hover{background:#fff7dd}.vox-import-pick:active{transform:translateY(1px);box-shadow:none}.vox-import-pick.busy{cursor:progress;opacity:.7}
+.vox-import-pick input{position:absolute;inset:0;opacity:0;cursor:inherit;width:100%;height:100%}.vox-import-pick svg{width:20px;height:20px;color:#7b4f33}
+.vox-import-file{display:flex;align-items:baseline;gap:8px;margin:0 0 9px;font-size:13px}.vox-import-file span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic}.vox-import-file small{font-family:system-ui,sans-serif;font-size:10px;color:#8b7456;white-space:nowrap}
+.vox-import-models{margin:0 0 9px;padding:0;border:0;display:grid;gap:5px}.vox-import-models legend{padding:0;margin-bottom:6px;font-size:11px;color:#7c644a}
+.vox-import-models label{display:flex;align-items:baseline;gap:7px;padding:7px 9px;border:1px solid #c7ad7e;border-radius:6px;background:#fbf1d6;cursor:pointer;font-size:13px}.vox-import-models label:hover{background:#fff7e1}
+.vox-import-models label.selected{background:linear-gradient(#80553c,#63452f);color:#fff0c6;border-color:#66462e}.vox-import-models label.selected small{color:#ecd5a6}.vox-import-models label.empty{opacity:.5;cursor:default}
+.vox-import-models input{position:absolute;opacity:0;pointer-events:none}.vox-import-models label:focus-within{outline:2px solid #8d4e31;outline-offset:2px}.vox-import-models small{margin-left:auto;font-family:system-ui,sans-serif;font-size:10px;color:#8b7456}
+.vox-import-note{margin:0 0 8px;padding:7px 9px 7px 11px;font-size:11.5px;line-height:1.45;color:#5d4631;background:#f6e6c1;border-left:3px solid #b98a4b;border-radius:3px}.vox-import-note.quiet{background:none;border-left-color:#d4bc90;color:#7c644a}
+.vox-import-error{display:grid;gap:4px;margin:0 0 10px;padding:9px 11px;border-radius:6px;background:#f6dccb;border:1px solid #c98d71;color:#6b2f1f;font-size:12px;line-height:1.4}.vox-import-error b{font-weight:normal;font-size:13px}.vox-import-error small{font-family:system-ui,sans-serif;font-size:10px;color:#8a5a45}
+.vox-import-summary{margin:2px 0 8px}.vox-import-summary dl{display:grid;grid-template-columns:auto 1fr auto;gap:6px;margin:0 0 10px}.vox-import-summary dl>div{padding:6px 8px;background:#fbf1d6;border:1px solid #d7c096;border-radius:6px;min-width:0}
+.vox-import-summary dt{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#8d7050;margin-bottom:2px}.vox-import-summary dd{margin:0;font-family:system-ui,sans-serif;font-size:12px;font-variant-numeric:tabular-nums;color:#3f2c1e}.vox-import-summary dd small{display:block;font-size:9.5px;color:#8b7456;margin-top:1px}
+.vox-import-swatches{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 10px}.vox-import-swatches li{display:flex;align-items:center;gap:4px;font-size:11px;color:#6c543c}
+.vox-import-swatches .from{display:flex}.vox-import-swatches .from i{width:9px;height:18px;border-radius:2px;margin-right:1px;box-shadow:inset 0 0 0 1px #3d2b2230}
+.vox-import-swatches .to{position:relative;width:20px;height:20px;margin-left:9px;border-radius:4px;background:var(--swatch);box-shadow:inset 0 1px 1px #ffffff60,inset 0 -2px 1px #392b2135,0 0 0 1px #6e523a}
+.vox-import-swatches .to::before{content:'';position:absolute;left:-9px;top:9px;width:6px;border-top:1px solid #9b7f5c}
+.vox-import-foot{margin:8px 0 0;font-family:system-ui,sans-serif;font-size:9px;letter-spacing:.1em;color:#a15133}
+@media(max-width:600px){
+  .vox-import.open{padding:11px 12px 10px;border-width:4px;border-radius:12px;max-height:calc(100dvh - 520px);min-height:150px}
+  .vox-import-head p{display:none}.vox-import-head h3{font-size:17px}.vox-import-pick{margin:9px 0 8px;padding:8px}
+  .vox-import-tab{padding:6px 11px 6px 8px}.vox-import-tab b{font-size:13px}
+}
+@media(prefers-reduced-motion:reduce){.vox-import-tab,.vox-import-pick{transition:none}}

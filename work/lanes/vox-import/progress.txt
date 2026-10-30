@@ -1,0 +1,2 @@
+VI01: Implemented bounded .vox parsing, palette matching and selected-object preview; pnpm typecheck, lint, focused vitest and build pass. Viewed shots/vox-import/preview@1440x900.png and preview@390x844.png; malformed-file recovery captured at both sizes.
+follow-up: VI02 On phone the open import and build panels obscure most of the preview; make the transformed object visible while keeping controls usable.

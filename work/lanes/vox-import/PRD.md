@@ -16,7 +16,7 @@ spend the remaining care on actual geometry, transform controls and editability.
 
 ## Tasks
 
-- [ ] **VI01 — Read a real object into an honest preview** · evidence: test + shot. Implement bounded byte
+- [x] **VI01 — Read a real object into an honest preview** · evidence: test + shot. Implement bounded byte
   parsing, actual palettes and asymmetric original fixture, then connect file selection and model choice to
   main's preview hook. A real selected object is visible by this task. Add the single boundary test covering
   valid and malformed bytes. Unsupported scene/material behavior is stated before insertion.
