@@ -65,3 +65,11 @@ original synthesis authored here. Phrases played through `playKingdomPhrase` (th
 | [jose](https://github.com/panva/jose) | 6.2.14 · MIT | Pinned for the realm-server lane’s Twitch OIDC verification; no provider credentials in browser bundles. |
 
 The reference court and shared player integrator are authored here. Collision and camera research is recorded in `work/references/walking-voxel-worlds.md`; that note does not itself adapt upstream implementation.
+
+## MagicaVoxel import
+
+The fallback palette in `packages/vox-import/src/palette.ts` is adapted from ephtracy's
+[MagicaVoxel file format](https://github.com/ephtracy/voxel-model/blob/3bff8feaa7d94a6237f2c07dc4ca3c3d268ef06c/MagicaVoxel-file-format-vox.txt),
+commit `3bff8feaa7d94a6237f2c07dc4ca3c3d268ef06c`, under MIT, copyright (c) 2026 ephtracy.
+The full notice is retained in [packages/vox-import/THIRD_PARTY.md](packages/vox-import/THIRD_PARTY.md).
+The parser, palette matching, placement tool and lantern-cottage review fixture are authored in this repository.
