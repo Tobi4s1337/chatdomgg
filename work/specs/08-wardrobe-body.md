@@ -28,7 +28,7 @@ engine, animation behaviour and the later wardrobe product flow; the content mus
 - `packages/shared/src/avatar.ts` now exports the separate `AvatarPartBlueprintSchema`, part type,
   `AVATAR_RIG`, `AVATAR_SOCKETS`, `AVATAR_PART_LIMITS` and `AVATAR_LOOK_LIMITS` described below. Main's
   optional `/-/avatars` route hook expects a default component from `apps/web/src/avatar-bench/index.tsx`.
-  There is no production walking avatar engine yet; the lane bench previews posed content on this frozen rig.
+  The walking consumer is `apps/web/src/citizens/index.ts`; the lane bench consumes the same rig and the main-owned cape renderer.
 - `work/references/crowd-animation.md` already records attachment/pose sharing and silhouette/LOD concerns.
   No external character asset or animation data is imported by this lane.
 
@@ -51,8 +51,8 @@ engine, animation behaviour and the later wardrobe product flow; the content mus
    and paired twists. Show textured hair as substantial readable masses; no noisy single-voxel confetti or
    texture pasted onto a generic cap. Long hair uses only main's frozen head attachment frame. Skin and hair
    are freely selectable content, never rewards or subscription benefits.
-4. **R4 — Twelve common wardrobe forms.** Deliver the forms below, each composed of rigid parts bound to the
-   frozen joints/sockets. Whole outfits remain recipes for combinations, never replacement skins. Torso or
+4. **R4 — Twelve common wardrobe forms.** Deliver the forms below. Bodies and ordinary garments use rigid parts bound to the
+   frozen joints/sockets; capes and cloaks use the separate thin-cloth boundary below. Whole outfits remain recipes for combinations, never replacement skins. Torso or
    leg clothing may contain multiple parts to follow the body; the source does not make the chest drive feet.
 
    | Area | Required forms |
@@ -84,8 +84,8 @@ engine, animation behaviour and the later wardrobe product flow; the content mus
    skirts must follow seated/stepping legs; capes and long hair must clear the body in the reviewed static poses.
    Their motion and spring/body-capsule response belong to main's next avatar-engine brief. No joint gaps,
    exposed accidental skin, z-fighting, foot penetration or cape passing through the torso in the review poses.
-7. **R7 — Content stays bounded and deterministic.** All geometry is authored in TypeScript/data with ordered
-   integer voxel boxes at 0.0625 m; no image generation, network, clock, unseeded randomness or renderer import
+7. **R7 — Content stays bounded and deterministic.** Rigid geometry is authored in TypeScript/data with ordered
+   integer voxel boxes at 0.0625 m; capes use bounded metre-based cloth descriptors; no image generation, network, clock, unseeded randomness or renderer import
    in the content factory. Stable semantic IDs and materials come from main's frozen contract/registry.
    Do not reuse the build-only `BLUEPRINTS` collection or smuggle additional fields into it. Validate each
    generated part's bounds, palette, attachment and source/padded-cell limits. Publish actual occupied cells,
@@ -105,6 +105,25 @@ engine, animation behaviour and the later wardrobe product flow; the content mus
    animated shimmer; actual springs/shimmer remain main's subsequent avatar-engine acceptance.
 
 ## Contracts
+
+### Main-owned cape boundary
+
+`AvatarCapeBlueprintSchema` from `@chatdom/shared` describes a zero-thickness cloth sheet at the frozen `back`
+socket. It is not a `VoxelAsset` and must never go through the voxel mesher. Author `shape` (straight/flared/tapered),
+`width`, `length`, `hem` (straight/rounded/notched), `trimWidth`, shoulder `mount.height/back`, and registry material
+IDs in `colours.cloth/lining/trim`. Dimensions and mount offsets are metres. The strict schema is authoritative for
+bounds; no arbitrary vertex payload, physics constants, shader strings, reward or identity fields belong in content.
+
+Optional `shimmer` carries exactly six registered material swatches and a strength. Tier one/two resolve their
+gold/rose trims through palette IDs; tier three supplies the registered rainbow swatches. Lapsed variants use the
+muted palette and subdued shimmer. The descriptor conveys appearance only, never ownership or eligibility.
+
+Export `createCape(id, fit): AvatarCapeBlueprint` beside the existing factories. Every cape/cloak/back mantle uses
+that factory; `createWearableParts` for it returns only rigid fasteners if present, never a thick drape. The review
+bench imports main’s `createCitizenCapeRenderer` and feeds the posed `back` matrix, real speed, distance, heading
+and clock. Main owns locomotion response, wind, lift, settling, culling, lighting and colour shimmer. Do not fork it.
+The runtime `CitizenLook.cape` accepts this descriptor alongside the ordinary `parts` collection. Review body fit,
+hem silhouette and colours on the real moving sheet; an attractive static voxel cloak is no longer acceptance.
 
 ### Main-owned avatar boundary
 
@@ -290,3 +309,8 @@ not permission to replace missing behavior with a simulated success.
 - **2026-10-30 — Visual depth and one seam test.** Invest evidence in rendered silhouettes, assembled garments,
   pose-fit sheets and the actual motion consumer. Keep one asymmetric attachment/scale regression test and full
   catalogue validation; no repetitive tests for reversible voxel choices.
+
+- **2026-10-30 — Founder: capes are cloth, not voxels.** A cape is a thin smooth sheet hanging from shoulders,
+  swaying in wind, lifting with a walk/hurry and settling at rest. This overrides earlier rigid-cloak wording.
+  Main owns the runtime and freezes `AvatarCapeBlueprintSchema`; the lane authors shapes, hems, palette and
+  active/lapsed shimmer data and migrates WB01’s block cloak through WB01C. No added glow or paid brightness.

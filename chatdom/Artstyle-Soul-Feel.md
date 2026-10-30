@@ -625,3 +625,7 @@ neutral tone map, batched drawing and a quality governor. The rest is built on t
   with a colour shimmer like the Super Mario star (§7).
 
 - **2026-10-30: windows are presence.** Citizen windows light while present, with names up close; the castle beacon represents the whole kingdom. Sound uses credited CC0/permissive libraries plus procedural audio, no silent actions.
+
+- **2026-10-30: founder cape decision.** Capes and cloaks are thin smooth cloth sheets, not voxel geometry.
+  They hang from the shoulders, sway and lift when walking, catch wind, flap when hurrying and settle at rest.
+  Wardrobe data describes shape, length, colours, hem and tier shimmer; the citizen runtime owns cloth motion.
