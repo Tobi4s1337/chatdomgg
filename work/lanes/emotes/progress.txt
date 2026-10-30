@@ -1,0 +1,4 @@
+review: E01 The required rendered statue and banner/motif bench and viewed front/side web and phone captures are missing; typecheck fails in packages/emotes, and the scoped test erases the contrasting single-cell feature (another test timed out).
+review: E01 The required statue and banner bench and viewed captures are absent; the scoped test fails because speckle cleanup removes a contrasting single-cell feature, and another test times out.
+needs: E01 shared capture lock was busy; capture on port 5198 waited without acquiring it, so required front/side web and phone views remain unverified. Scoped tests, typecheck, scoped lint and build passed on review.
+done: E01 deterministic compiler and simulated statue/banner bench; scoped tests, typecheck, lint and build passed; front, side and banner web/phone captures viewed under shots/emotes.
