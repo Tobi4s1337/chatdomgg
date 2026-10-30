@@ -39,6 +39,19 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@22.19.15)(vite@8.3.5(@types/node@22.19.15))
 
+  apps/surveyor:
+    dependencies:
+      '@chatdom/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      vite:
+        specifier: 8.3.5
+        version: 8.3.5(@types/node@22.19.15)
+
   apps/web:
     dependencies:
       '@chatdom/shared':

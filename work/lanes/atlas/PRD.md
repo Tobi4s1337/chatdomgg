@@ -1,7 +1,7 @@
 # Lane atlas
 
 Spec: `work/specs/01-atlas.md` · Branch: `lane/atlas` · Worker: Codex Sol, high; Terra high for visual subwork.
-Status: **ready 2026-10-30**. Spec and first-consumer interchange frozen; later producer seams require main’s freeze when reached.
+Status: **A01/A02 reviewed and committed by main; A03 is next.** Spec and first-consumer interchange frozen; later producer seams require main’s freeze when reached.
 
 Scope: `apps/web/src/atlas/**`, `apps/surveyor/**`, this PRD, `progress.txt`, the Atlas spec and
 `work/references/atlas-cartography.md`. Everything else is read-only. You are not alone in the codebase: preserve
@@ -24,14 +24,14 @@ only its applicable acceptance checks must pass to tick it. All Spec 01 rules re
 If a step expands beyond one coherent worker iteration, ask main to split it rather than hiding unfinished work.
 The first visible result is A02. A task blocked by a future shared seam records `needs:`; it never invents authority.
 
-- [ ] **A01 — Read a real Surveyor snapshot without changing its source** · evidence: test + import log.
+- [x] **A01 — Read a real Surveyor snapshot without changing its source** · evidence: test + import log.
   Add the new `@chatdom/surveyor` manifest and read-only HTTP/SQLite snapshot adapter. Validate status/raid inputs
   with shared schemas; export actual channel/category/raid observations to its own `ATLAS_DATA_DIR` with source
   dates and coverage. Implement `atlas:import`, `atlas:check`, and `atlas:serve` on 5193 as specified, initially for
   this snapshot. Missing inventories fail clearly; never manufacture channels or write source SQL. Prove a real
   import, consistent transaction, bounded errors and atomic preservation of the last good snapshot. R1, R11, R16.
 
-- [ ] **A02 — Show the first real survey map on laptop and phone** · evidence: shot + real-data flow.
+- [x] **A02 — Show the first real survey map on laptop and phone** · evidence: shot + real-data flow.
   Export the Solid Atlas component with exactly one `[data-chatdom-atlas]` root and meaningful ready signal.
   Draw a composed Pixi map from A01's actual channels: immutable labelled survey-preview land, language regions,
   ink coasts, watercolour, licensed town stamps/shields, actual channel selection and an observed-date legend.
@@ -132,3 +132,10 @@ any task above. There are no invented future features to implement from this lis
   rendering and integration into large steps. Main split them into fifteen bounded outcomes without dropping
   any spec rule; the first visible map remains task 2. The previous six-task identifiers had no completed work
   or worker commits. The shared interchange freeze is unchanged. Future producer seams freeze at their consumer.
+
+- **2026-10-30 — Main resolves integration ownership.** Tobias explicitly authorized main to commit the completed
+  A01/A02 together on this lane, with main supplying the Surveyor lockfile importer. This supersedes the review
+  loop's separate-commit objection for these already interwoven tasks. Frozen offline install, typecheck, lint,
+  363 tests and build now pass. Main inspected the real-data desktop/phone shots and added the asset credits.
+  A01/A02 are complete within their specified scope; A03–A15 remain. Lane workers still do not own the root lockfile:
+  report a new manifest need once, then main supplies its importer instead of repeating an unchanged review loop.
