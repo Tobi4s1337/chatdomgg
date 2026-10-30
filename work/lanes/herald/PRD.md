@@ -82,3 +82,7 @@ contract permits fresh direct chat/panel/walker presence while the broadcast is 
 still clear, Chatters/beacon/rewards still require live. Rebase the H05 expectations onto this distinction and
 use `pnpm shots --area herald`; capture owns its lock and must use a free development service port or coordinate
 with main rather than replacing the live 5194 source. No chat text/Forge commands belong to this presence path.
+
+Main Forge integration (2026-10-30): the optional private creation handoff in `src/forge/commands.ts` is separate
+from presence. H05 continues against default `dev` with no Forge sink. Preserve the accepted broadcast generation
+and cancellation hooks when integrating main; do not add identity, words or entitlement to public presence.

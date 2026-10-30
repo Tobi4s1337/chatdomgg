@@ -405,3 +405,14 @@ lane is the first real presence producer on a frozen contract; it does not silen
   before mutating the tracker. Root `pnpm shots --area herald` delegates before locking; the Herald runner
   owns one host capture lock, preserves its configured layout in both surfaces and never replaces an existing
   process on 5194. H05 continues on the lane; main owns the live 5194 source after the founder's handover.
+
+- **2026-10-30 — Main private Forge handoff.** An optional injected `ForgeCommandApplication` may receive an
+  explicitly addressed `!forge` creation wish (1–240 characters) after delivery/age/dedupe/moderation checks and
+  the durable presence binding. It receives server identity and a presentation-slot hint, never ownership.
+  Ordinary chat still leaves no text behind, and no wish enters the presence frame, health output or public
+  stage. This is the creation-input exception in Safety §5, not a chat-history/bubble feed. The authority alone
+  selects the actual owned home and native kit. Commands capture the accepted broadcast generation at receipt;
+  admission rechecks age after the binding write. Accepted push/poll stream changes invalidate work before queued
+  projection publication. Deletes, user/room clears, lost coverage and shutdown cancel the handoff. Aborted work
+  continues to occupy its bounded capacity until its sink settles. The ordinary `dev` command installs no Forge
+  application; main must bind actual eligibility/commit authority and both judges before activating it.

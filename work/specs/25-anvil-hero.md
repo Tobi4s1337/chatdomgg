@@ -127,7 +127,7 @@ captures fail on console/page/shader errors. Keep controls outside the object fr
 
 Write only `packages/content/src/anvil-hero/**`, `apps/web/src/forge/anvil-hero/**`, this spec and
 `work/lanes/anvil-hero/{PRD.md,progress.txt}`. Owned folders include tests, bench, capture script and concise README.
-Ignored outputs: `shots/anvil-hero/**`, `/tmp/chatdom-anvil-hero/**`.
+Ignored outputs: `shots/anvil-hero/**`; clean temporary support files outside the checkout.
 Everything else is read-only, especially engraving and its SVG, `forge-motifs`, `forge-ornaments`, `emitters`,
 ritual/refusal presentation, renderer, shared contracts, package exports, routing, root manifests and runtime.
 You are not alone; preserve others' work. If splitting artisans, one owns the new content folder and one the new

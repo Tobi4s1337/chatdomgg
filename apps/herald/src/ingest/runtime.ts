@@ -52,6 +52,7 @@ export interface DeliveryRuntimeOptions {
   readonly log?: (line: string) => void;
   /** Where pushed `stream.online`/`stream.offline` go (the live source's stream tracker). */
   readonly stream?: IngestOptions['stream'];
+  readonly forge?: IngestOptions['forge'];
   /**
    * Reads current state again (Get Streams, Chatters) whenever coverage is restored. Twitch does not replay
    * a gap, so the source publishes again only after this has settled.
@@ -143,6 +144,7 @@ export class DeliveryRuntime {
       },
       onSubscriptionRevoked: (type, status) => this.#revoked(type, status),
       ...(options.stream ? { stream: options.stream } : {}),
+      ...(options.forge ? { forge: options.forge } : {}),
       ...(options.now ? { now: options.now } : {}),
     });
   }
@@ -210,7 +212,7 @@ export class DeliveryRuntime {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
     this.#shard.stop();
-    this.#ingest.clear();
+    this.#ingest.dispose();
     this.#covered = false;
     this.#resumed = false;
   }
