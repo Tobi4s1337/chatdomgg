@@ -23,7 +23,7 @@ Missing live approval is pending, never a fake name approval or a reason to inst
 
 ## Tasks
 
-- [ ] **FW01 — Hand integration the actual founded town early** · evidence: artifact/log. Load the exact adopted
+- [x] **FW01 — Hand integration the actual founded town early** · evidence: artifact/log. Load the exact adopted
   plan through AllocationService and assemble/validate/serialize the public `RealmFoundedScene` with accepted
   native home/castle/prop/tree factories and actual committed approved home/attachment overrides. Preserve
   plot IDs, slots, origins, cardinal frames and ordered carvings; no regenerating or copying private state.
