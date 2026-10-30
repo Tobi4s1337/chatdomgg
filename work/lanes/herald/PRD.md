@@ -18,7 +18,7 @@ continue an independent task, never invent the missing authority. Never pick fro
 
 ## Tasks
 
-- [ ] **H01 — Know exactly which real reads are authorized** · evidence: tests + redacted auth check.
+- [x] **H01 — Know exactly which real reads are authorized** · evidence: tests + redacted auth check.
   Add `@chatdom/herald`/`@chatdom/twitch` package manifests within scope and the narrow typed read client. Implement
   `check:auth`, in-process external-env loading, Get Users, app token acquisition/validation and Get Authorization
   By User. Implement the minimal interactive `authorize` helper with existing registered redirect, CSRF, expected
