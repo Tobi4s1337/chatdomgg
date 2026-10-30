@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MATERIALS, type StyleKey } from '@chatdom/content';
-import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, forgeTitle, forgeWords, planLocalForge, forgeRitualFrame, createForgeRefusalGate, homeFingerprint, type AssembledForge } from '@chatdom/forge';
+import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, forgeTitle, planLocalForge, forgeRitualFrame, createForgeRefusalGate, homeFingerprint, type AssembledForge } from '@chatdom/forge';
 import { ForgePlacementSchema, type ForgePlacement, type ForgePhase, type HousePartPlan } from '@chatdom/shared';
 import { geometryFromChunks, type VoxelRenderState, type WindowHouse } from '@chatdom/render';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
@@ -8,10 +8,11 @@ import { buildBounds } from '../build/composition';
 import { createForgeRitualView } from './ritual-view';
 import { createForgeEmitters } from './emitters';
 import { playForgeSound, renderForgeRitualAudio } from './sound';
+import {requestForgeRun,ForgeRunStopped} from './run-client';
 import type { createKingdomSound } from '../kingdom/sound';
 
-export interface ForgeStatus {open:boolean;busy:boolean;phase:ForgePhase|'idle'|'preparing'|'refusal';title:string;message:string;privateError:string|null;maker:string|null;placed:number;kept:number;family:StyleKey}
-interface Options {scene:THREE.Scene;camera:THREE.PerspectiveCamera;canvas:HTMLCanvasElement;pool:VoxelWorkerPool;material:VoxelRenderState;anvil:THREE.Vector3;home:()=>WindowHouse;source:'simulated'|'herald';seed:string;kingdomName:string;family:StyleKey;sound:ReturnType<typeof createKingdomSound>;onStatus?:(status:ForgeStatus)=>void;registerShadow?:(mesh:THREE.Mesh)=>()=>void}
+export interface ForgeStatus {open:boolean;busy:boolean;phase:ForgePhase|'idle'|'preparing'|'refusal';title:string;message:string;privateError:string|null;maker:string|null;placed:number;kept:number;family:StyleKey;plaque:string|null;runtime:'codex'|'fixture'}
+interface Options {scene:THREE.Scene;camera:THREE.PerspectiveCamera;canvas:HTMLCanvasElement;pool:VoxelWorkerPool;material:VoxelRenderState;anvil:THREE.Vector3;home:()=>WindowHouse;source:'simulated'|'herald';seed:string;kingdomName:string;family:StyleKey;sound:ReturnType<typeof createKingdomSound>;onStatus?:(status:ForgeStatus)=>void;onArrival?:(home:WindowHouse)=>void;registerShadow?:(mesh:THREE.Mesh)=>()=>void}
 type Placed={mesh:THREE.Mesh;result:AssembledForge;receipt:ForgePlacement;emitter:THREE.Vector3;unshadow?:()=>void};
 export function createKingdomForge(options:Options){
   const pieceMaterial=new THREE.ShaderMaterial({glslVersion:options.material.material.glslVersion,uniforms:options.material.material.uniforms,vertexShader:options.material.material.vertexShader,fragmentShader:options.material.material.fragmentShader.replace('vec3 colour=base*edge*light*ao;','vec3 colour=base*edge*(light+vec3(.32,.25,.17))*ao;if(vMaterial==14u)colour+=vec3(1.6,.65,.12)*uNight;')});
@@ -19,71 +20,81 @@ export function createKingdomForge(options:Options){
   view.root.position.copy(options.anvil);view.root.visible=false;
   const placed=new Map<string,Placed>(),kept=new Map<string,ForgePlacement>();
   let open=false,preparing=false,disposed=false,revision=0,now=0,start=0,fixed:number|null=null,lastPhase='',lastStatus='',privateError:string|null=null,refusalUntil=0;
-  let current:{result:AssembledForge;geometry:THREE.BufferGeometry;bounds:THREE.Box3;destination:THREE.Vector3;home:WindowHouse;id:string;committed:boolean;provenance:NonNullable<ForgePlacement['provenance']>}|null=null;
+  let current:{result:AssembledForge;geometry:THREE.BufferGeometry;bounds:THREE.Box3;destination:THREE.Vector3;home:WindowHouse;id:string;committed:boolean;approval:ForgePlacement['approval'];provenance:NonNullable<ForgePlacement['provenance']>}|null=null;
   let observedHome=options.home().blueprint;
-  const family=options.family;
+  const family=options.family,fixture=new URLSearchParams(location.search).get('forgeFixture')==='1',runAbort=new AbortController();
+  let waitingStage='',runStarted=0,pendingReceipt:ForgePlacement|null=null;
   const storageKey=`chatdom:forge:simulated:${options.seed}:${options.home().slot}`;
   const point=(p:readonly number[],home:WindowHouse)=>new THREE.Vector3(...p as [number,number,number]).multiplyScalar(.125).applyAxisAngle(new THREE.Vector3(0,1,0),home.yaw).add(new THREE.Vector3(...home.position));
   const elapsed=()=>fixed??Math.max(0,(now-start)/1000);
-  function status():ForgeStatus{const frame=current?forgeRitualFrame(current.id,elapsed()):null;return {open,busy:preparing||!!current&&!current.committed,phase:preparing?'preparing':now<refusalUntil?'refusal':frame?.phase??'idle',title:now<refusalUntil?'The bellows need a breather':current?forgeTitle(current.result.plan):'What shall we make?',message:current?.committed?'Made here. At home here.':preparing?'Finding a place in your home…':frame?({words:'Words find their shape',blueprint:'A wish, drawn in light',pour:'The metal remembers',seal:'Fit for this home',strike:'',cool:'The colours of your kingdom',flight:'A gift for your home',landed:'Made here. At home here.'}[frame.phase]):'One small wish. Something that belongs to you.',privateError,maker:current?.committed?`First forged by ${current.provenance.makerName} · ${current.provenance.kingdomName}`:null,placed:placed.size,kept:kept.size,family};}
+  function status():ForgeStatus{const frame=current?forgeRitualFrame(current.id,elapsed()):null;return {open,busy:preparing||!!current&&!current.committed,phase:preparing?'preparing':now<refusalUntil?'refusal':frame?.phase??'idle',title:now<refusalUntil?'The bellows need a breather':preparing?'Words in the fire':current?(current.approval?.title??forgeTitle(current.result.plan)):'What shall we make?',message:preparing?({'judging-words':'The runes circle the fire…',drafting:'The smith is listening to your wish…',assembling:'A shape is finding its place…','judging-piece':'The seal is weighing this new shape…'}[waitingStage]??'The runes circle the fire…'):current?.committed?'Made here. At home here.':frame?({words:'Words find their shape',blueprint:'A wish, drawn in light',pour:'The metal remembers',seal:'Fit for this home',strike:'',cool:'The colours of your kingdom',flight:'A gift for your home',landed:'Made here. At home here.'}[frame.phase]):'One small wish. Something that belongs to you.',privateError,maker:current?.committed&&!preparing?`First forged by ${current.provenance.makerName} · ${current.provenance.kingdomName}`:null,placed:placed.size,kept:kept.size,family,plaque:current?.approval?.plaque??null,runtime:fixture?'fixture':'codex'};}
   function publishStatus(){const value=status(),key=JSON.stringify(value);if(key!==lastStatus){lastStatus=key;options.onStatus?.(value);}}
-  function save(){try{localStorage.setItem(storageKey,JSON.stringify({version:1,attached:[...placed.values()].map(p=>p.receipt),kept:[...kept.values()]}));}catch{privateError='This browser could not keep the piece after you leave.';}}
+  function save(){try{localStorage.setItem(storageKey,JSON.stringify({version:1,attached:[...placed.values()].map(p=>p.receipt),kept:[...kept.values()],pending:pendingReceipt}));}catch{privateError='This browser could not keep the piece after you leave.';}}
   async function make(plan:HousePartPlan,selected:StyleKey){
     const home=options.home(),socket=findForgeSockets(home.blueprint).find(s=>s.kind===plan.kind);if(!socket)throw new Error('Your home needs a clear place for this part.');
     const result=assembleForge(plan,forgeStyleKit(selected),socket);checkForge(result,home.blueprint);
     const mesh=await options.pool.submit({kind:'blueprint',blueprint:result.blueprint,materials:MATERIALS.materials,materialRevision:MATERIALS.revision,revision:++revision});
     if(disposed||mesh?.kind!=='asset')throw new Error('The anvil has gone cold.');
+    if(socket.hostFingerprint!==homeFingerprint(options.home().blueprint))throw new Error('Your house changed while the smith was working. Your previous pieces are safe.');
     if(mesh.chunks.reduce((n,c)=>n+c.mesh.indices.length/3,0)>40000)throw new Error('This part needs a simpler finish.');
     const geometry=geometryFromChunks(mesh.chunks,'build'),designId=`${result.kit.id}-${homeFingerprint(result.blueprint)}`;
     const lineage=[...placed.values()].map(p=>p.receipt).concat([...kept.values()]).find(p=>p.provenance?.designId===designId)?.provenance;
-    return {result,geometry,bounds:buildBounds(result.blueprint),destination:point(socket.origin,home),home,id:`local-${crypto.randomUUID()}`,committed:false,provenance:lineage??{source:'simulated' as const,makerId:'simulated-juniper',makerName:'Juniper',kingdomKey:options.seed,kingdomName:options.kingdomName,firstForgedAt:Date.now(),designId} };
+    return {result,geometry,bounds:buildBounds(result.blueprint),destination:point(socket.origin,home),home,id:`local-${Array.from(crypto.getRandomValues(new Uint8Array(16)),n=>n.toString(16).padStart(2,'0')).join('')}`,committed:false,approval:undefined as ForgePlacement['approval'],provenance:lineage??{source:'simulated' as const,makerId:'simulated-juniper',makerName:'Juniper',kingdomKey:options.seed,kingdomName:options.kingdomName,firstForgedAt:Date.now(),designId} };
+  }
+  function receiptFor(work:NonNullable<typeof current>):ForgePlacement{
+    return {version:1,id:work.id,hostId:work.home.blueprint.id,hostFingerprint:homeFingerprint(work.home.blueprint),socketId:work.result.socket.id,kitId:work.result.kit.id,kitRevision:work.result.kit.revision,plan:work.result.plan,origin:work.result.socket.origin,provenance:work.provenance,...(work.approval?{approval:work.approval}:{})};
   }
   function install(work:NonNullable<typeof current>){
     // Recheck host at arrival; an edit while the piece flies cannot attach to an obsolete roof.
     checkForge(work.result,options.home().blueprint);
     const id=work.result.socket.id,old=placed.get(id);if(old){kept.set(old.receipt.id,old.receipt);old.unshadow?.();options.scene.remove(old.mesh);old.mesh.geometry.dispose();}
     const mesh=new THREE.Mesh(work.geometry,pieceMaterial);mesh.position.copy(work.destination);mesh.rotation.y=work.home.yaw;mesh.frustumCulled=false;options.scene.add(mesh);mesh.updateMatrixWorld(true);
-    const receipt:ForgePlacement={version:1,id:work.id,hostId:work.home.blueprint.id,hostFingerprint:homeFingerprint(work.home.blueprint),socketId:id,kitId:work.result.kit.id,kitRevision:work.result.kit.revision,plan:work.result.plan,origin:work.result.socket.origin,provenance:work.provenance};
+    const receipt=receiptFor(work);
     const emitter=point(work.result.emitter.map((n,i)=>n+work.result.socket.origin[i]!),work.home);
-    const entry:Placed={mesh,result:work.result,receipt,emitter};const unshadow=options.registerShadow?.(mesh);if(unshadow)entry.unshadow=unshadow;placed.set(id,entry);kept.delete(work.id);work.committed=true;save();
+    const entry:Placed={mesh,result:work.result,receipt,emitter};const unshadow=options.registerShadow?.(mesh);if(unshadow)entry.unshadow=unshadow;placed.set(id,entry);kept.delete(work.id);work.committed=true;if(pendingReceipt?.id===work.id)pendingReceipt=null;save();
   }
   async function submit(words:string){
     if(preparing||current&&!current.committed||options.source!=='simulated'||disposed)return false;
-    options.sound.unlock();privateError=null;open=true;preparing=true;fixed=null;publishStatus();
+    void options.sound.unlock().then(ready=>{if(ready&&!disposed&&preparing)playForgeSound(options.sound,'words');});privateError=null;open=true;preparing=true;fixed=null;runStarted=now;waitingStage='judging-words';view.beginWords();publishStatus();
     try{
-      const plan=planLocalForge(words),work=await make(plan,family);
-      if(current&&!current.committed)current.geometry.dispose();current=work;view.setPiece(work.geometry,work.bounds,forgeWords(plan));start=now;lastPhase='';preparing=false;publishStatus();return true;
-    }catch(error){preparing=false;if(current?.committed)current=null;privateError=error instanceof Error?error.message:'The forge needs another wish.';
+      let plan:HousePartPlan,approval:ForgePlacement['approval'];
+      if(fixture)plan=planLocalForge(words);else{const home=options.home().blueprint,approved=await requestForgeRun({words,family,home},stage=>{waitingStage=stage;publishStatus();},runAbort.signal);
+        if(disposed)return false;if(approved.hostFingerprint!==homeFingerprint(options.home().blueprint))throw new Error('Your house changed while the smith was working. Your previous pieces are safe.');plan=approved.draft.plan;approval={runId:approved.runId,title:approved.draft.title,plaque:approved.draft.plaque};}
+      const work=await make(plan,family);work.approval=approval;pendingReceipt=receiptFor(work);save();
+      if(current&&!current.committed)current.geometry.dispose();current=work;view.setPiece(work.geometry,work.bounds);start=now-(fixture?0:3000);lastPhase='';preparing=false;publishStatus();return true;
+    }catch(error){if(disposed||runAbort.signal.aborted)return false;preparing=false;if(current?.committed)current=null;privateError=error instanceof Error?error.message:'The forge needs another wish.';
       // No request words, name, ID or reason enter the public soot beat.
-      if(refusals.beat(now)){refusalUntil=now+2600;playForgeSound(options.sound.output(),'refusal');}publishStatus();return false;
+      if((fixture||error instanceof ForgeRunStopped&&error.outcome==='refuse')&&refusals.beat(now)){refusalUntil=now+2600;playForgeSound(options.sound,'refusal');}publishStatus();return false;
     }
   }
   async function prepare(){
     if(options.source!=='simulated')return;
     let data:unknown;try{data=JSON.parse(localStorage.getItem(storageKey)??'[]');}catch{return;}
-    const envelope=data as {version?:number;attached?:unknown[];kept?:unknown[]};
+    const envelope=data as {version?:number;attached?:unknown[];kept?:unknown[];pending?:unknown};
     const attached=Array.isArray(data)?data:envelope?.version===1&&Array.isArray(envelope.attached)?envelope.attached:[];
     if(!Array.isArray(data)&&Array.isArray(envelope?.kept))for(const raw of envelope.kept.slice(0,256)){const parsed=ForgePlacementSchema.safeParse(raw);if(parsed.success)kept.set(parsed.data.id,parsed.data);}
     if(attached.length>3)return;
+    if(envelope?.pending){const parsed=ForgePlacementSchema.safeParse(envelope.pending);if(parsed.success){const at=attached.findIndex(raw=>(raw as ForgePlacement)?.socketId===parsed.data.socketId);if(at>=0)attached.splice(at,1);attached.push(parsed.data);}}
     for(const raw of attached){try{const receipt=ForgePlacementSchema.parse(raw),home=options.home();if(receipt.hostFingerprint!==homeFingerprint(home.blueprint)){kept.set(receipt.id,receipt);continue;}
       const style=receipt.kitId.replace('-native','') as StyleKey;if(!['hearth','tide','grove'].includes(style))continue;
-      const work=await make(receipt.plan,style);work.id=receipt.id;if(receipt.provenance)work.provenance=receipt.provenance;if(disposed){work.geometry.dispose();return;}install(work);
+      const work=await make(receipt.plan,style);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;if(disposed){work.geometry.dispose();return;}install(work);
     }catch{const parsed=ForgePlacementSchema.safeParse(raw);if(parsed.success)kept.set(parsed.data.id,parsed.data);}}
     save();
   }
   function clearStale(){for(const [id,item] of placed)if(item.receipt.hostFingerprint!==homeFingerprint(options.home().blueprint)){kept.set(item.receipt.id,item.receipt);item.unshadow?.();item.mesh.geometry.dispose();options.scene.remove(item.mesh);placed.delete(id);if(current?.result.socket.id===id)current=null;privateError='Your forged pieces are kept safely while the house changes.';save();}}
   function update(timeMs:number,target:THREE.Vector3,hidden:boolean){
-    now=timeMs;if(observedHome!==options.home().blueprint){observedHome=options.home().blueprint;clearStale();revision++;}view.root.visible=open&&!hidden;for(const item of placed.values())item.mesh.visible=!hidden;
+    now=timeMs;if(observedHome!==options.home().blueprint){observedHome=options.home().blueprint;clearStale();revision++;}view.root.visible=!hidden;for(const item of placed.values())item.mesh.visible=!hidden;
     const frame=current?forgeRitualFrame(current.id,elapsed()):null;
-    view.update(open?frame:null);
-    if(frame&&frame.phase!==lastPhase){playForgeSound(options.sound.output(),frame.phase);lastPhase=frame.phase;}
+    const waiting=preparing?{ritualId:'pending',phase:'words' as const,elapsed:(now-runStarted)/1000,phaseProgress:0,duration:21,source:'simulated' as const}:null;
+    view.update(open?(waiting??frame):null, preparing?waitingStage==='drafting':!!frame&&frame.elapsed<5);
+    if(frame&&frame.phase!==lastPhase){playForgeSound(options.sound,frame.phase);lastPhase=frame.phase;}
     if(current&&frame){
       if(frame.phase==='flight'){
         const t=THREE.MathUtils.smootherstep(frame.phaseProgress,0,1),from=options.anvil.clone().add(new THREE.Vector3(-current.bounds.getCenter(new THREE.Vector3()).x,1.6-current.bounds.min.y,-current.bounds.getCenter(new THREE.Vector3()).z));
         const world=from.lerp(current.destination,t);world.y+=Math.sin(Math.PI*t)*Math.min(28,10+options.anvil.distanceTo(current.destination)*.15);
         view.piece.position.copy(view.root.worldToLocal(world));view.piece.rotation.y=current.home.yaw*t;view.piece.visible=true;
       }
-      if(frame.phase==='landed'&&!current.committed){try{install(current);}catch(error){privateError=String(error);current.geometry.dispose();current=null;}view.piece.visible=false;}
+      if(frame.phase==='landed'&&!current.committed){try{install(current);options.onArrival?.(current.home);}catch(error){privateError=String(error);current.geometry.dispose();current=null;}view.piece.visible=false;}
       if(frame.phase==='landed')view.piece.visible=false;
     }
     const landed=[...placed.values()].filter(p=>p.result.emitterKind).map(p=>({position:p.emitter,kind:p.result.emitterKind!}));
@@ -100,11 +111,13 @@ export function createKingdomForge(options:Options){
     const fit=radius/Math.sin(Math.min(halfFov,Math.atan(Math.tan(halfFov)*aspect)))*1.12;
     const stageEye=stageTarget.clone().add(new THREE.Vector3(7,3.6,11).normalize().multiplyScalar(Math.max(10,fit)));
     let look=stageTarget,eye=stageEye;
-    if(current&&frame&&(frame.phase==='flight'||frame.phase==='landed')){
+    if(!preparing&&current&&frame&&(frame.phase==='flight'||frame.phase==='landed')){
       const centre=current.bounds.getCenter(new THREE.Vector3()).applyAxisAngle(new THREE.Vector3(0,1,0),current.home.yaw).add(current.destination);
-      const homeEye=centre.clone().add(new THREE.Vector3(current.result.plan.kind==='lantern'?5:-6,current.result.plan.kind==='lantern'?2.8:4,10).applyAxisAngle(new THREE.Vector3(0,1,0),current.home.yaw));
+      // Read the sleeping face and its nose-smoke, then let the warm doorway
+      // and neighbouring eaves frame it. Hold this shot until the maker leaves.
+      const homeEye=centre.clone().add(new THREE.Vector3(current.result.plan.kind==='lantern'?4.2:-4.5,current.result.plan.kind==='lantern'?1.8:2.6,6.4).applyAxisAngle(new THREE.Vector3(0,1,0),current.home.yaw));
       if(frame.phase==='flight'){
-        const t=THREE.MathUtils.smootherstep(frame.phaseProgress,0,1),world=view.piece.getWorldPosition(new THREE.Vector3()).add(current.bounds.getCenter(new THREE.Vector3()));
+        const t=THREE.MathUtils.smootherstep(frame.phaseProgress,0,1),world=view.piece.localToWorld(current.bounds.getCenter(new THREE.Vector3()));
         look=stageTarget.clone().lerp(world,Math.min(1,t*4));eye=look.clone().add(stageEye.clone().sub(stageTarget).lerp(homeEye.clone().sub(centre),t));
       }else{look=centre;eye=homeEye;}
     }
@@ -116,13 +129,13 @@ export function createKingdomForge(options:Options){
   async function refit(){
     if(preparing||current&&!current.committed)return;const receipt=[...kept.values()].at(-1);if(!receipt)return;
     preparing=true;privateError=null;publishStatus();
-    try{const work=await make(receipt.plan,receipt.kitId.replace('-native','') as StyleKey);work.id=receipt.id;if(receipt.provenance)work.provenance=receipt.provenance;install(work);current=work;view.setPiece(work.geometry,work.bounds,forgeWords(work.result.plan));fixed=21;options.sound.cue('wood');}
+    try{const work=await make(receipt.plan,receipt.kitId.replace('-native','') as StyleKey);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;install(work);current=work;view.setPiece(work.geometry,work.bounds);fixed=21;options.sound.cue('wood');}
     catch{privateError='This piece is kept safely. The house still needs a clear socket for it.';}finally{preparing=false;publishStatus();}
   }
   return {prepare,submit,update,status,refit,captureAudio:()=>{if(options.source!=='simulated')throw new Error('Offline audio is only available in the local simulation.');return renderForgeRitualAudio();},get renderRevision(){return open||placed.size?(fixed??now)+revision:revision;},get placements(){return [...placed.values()].map(p=>p.receipt);},
     open(){if(options.source!=='simulated')return;clearStale();open=true;options.sound.unlock();options.sound.cue('wood');publishStatus();},
     close(){if(preparing||current&&!current.committed)return;open=false;options.camera.clearViewOffset();publishStatus();},
     seek(seconds:number){if(options.source!=='simulated'||!current)return;fixed=Math.max(0,seconds);revision++;},
-    dispose(){disposed=true;for(const p of placed.values()){p.unshadow?.();p.mesh.geometry.dispose();options.scene.remove(p.mesh);}if(current&&!current.committed)current.geometry.dispose();view.dispose();emitters.dispose();pieceMaterial.dispose();},
+    dispose(){disposed=true;runAbort.abort();for(const p of placed.values()){p.unshadow?.();p.mesh.geometry.dispose();options.scene.remove(p.mesh);}if(current&&!current.committed)current.geometry.dispose();view.dispose();emitters.dispose();pieceMaterial.dispose();},
   };
 }

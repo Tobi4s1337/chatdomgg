@@ -293,3 +293,115 @@ lane is the first real presence producer on a frozen contract; it does not silen
   configured account blocks its capabilities until Get Authorization By User first shows the grant gone and then
   shows a new one. Helix admission keeps 100 points of the shared client bucket in reserve for the Surveyor. The
   consent callback answers with a 303 to a result page, so the code does not stay in the address bar or history.
+- **2026-10-30 — H02 lane choices (herald worker).** Real ingest and SIMULATED replay both produce one narrow
+  `Observation` type (chat author ID + display name, Chatters IDs, stream state, user clear) with no field that
+  could hold text; one mapper turns it into `PresenceInput`, namespacing input IDs per key family (`chat:`,
+  `sweep:`, `stream:`, `clear:`) so delivery, message and stream keys never collide. Display names lose control
+  and bidi override/isolate characters; a name with nothing left keeps its author unnamed. The binding table is
+  `<HERALD_DATA_DIR>/presence/<kingdomId>.json` (default `~/.local/share/chatdom/herald`; refused inside the
+  repository), `[personId, slot]` pairs only, mode 0600 in a 0700 directory, written temp+fsync+rename+dir-fsync
+  under a lock file `<pid> <start> <nonce>` created atomically (hard link of a finished file); a second store in
+  the same process is refused, a lock is stale only when its PID is gone, reused (different `/proc` start time)
+  or this PID from an earlier run, and every write first re-reads the lock to prove it still belongs to it; corrupt, foreign, insecure or unwritable tables stop the source rather than move a slot.
+  SIMULATED sources keep bindings in memory, so synthetic people never reach a real data directory. The presentation
+  layout comes from `HERALD_KINGDOM_SEED/TIER/FIRST_YEAR/YEAR`, defaulting to a hamlet seeded by the channel login
+  and founded in a fixed 2026 so slot numbers keep naming the same homes next year. Frames are re-projected on every
+  applied input and on a 1 s expiry tick; the sequence advances only when `streamLive`, `connection` or windows
+  change. SSE events are bare `data:` frames with `retry: 2000` and 15 s comment keepalives; a subscriber holds at
+  most one unsent frame (newer replaces older) and is disconnected after 10 s continuously backed up; 32
+  subscribers at most. An unavailable source answers 503 and closes open streams. Health is `GET /health` on
+  5194, outside the proxied `/presence-data` prefix. When the input queue (2,048) is full, activity observations
+  are dropped and counted; removals and stream changes always queue.
+- **2026-10-30 — H03 lane choices (herald worker).** All Helix calls share one `HelixSession` (single-flight 401
+  renewal, the shared request budget). Writes never wait out a 429: on conduit or subscription creation it means a
+  client limit (`limit_reached`), not pacing; 410 is `gone`. Provisioning and the runtime touch only
+  `HERALD_CONDUIT_ID`: its existence and shape through Get Conduit Shards (404 means missing or another client's,
+  never a fallback to some other conduit) and its subscriptions through the `conduit_id` filter; Get Conduits is
+  never called. `--create-development-conduit` creates one single-shard conduit only when none is configured or the
+  configured one is gone (Twitch deletes a conduit 72 hours after its last shard went down), and records the ID in
+  the nonsecret settings file (atomic rewrite, 0600). A 409 is accepted only when a fresh listing of this conduit
+  shows the matching enabled subscription; an identical one elsewhere is `conflict` and left untouched. Only this
+  conduit's own disabled copies of planned subscriptions are deleted before recreating. Chat subscriptions are
+  never requested before Get Authorization By User shows their grants, so a missing grant is reported without a
+  403 probe. Publishing requires `channel.chat.message`, the three cleanup types and `user.authorization.revoke`
+  enabled; `stream.online`/`offline` are wanted but not required, because H04's Get Streams reconciliation also
+  observes stream state. The shard re-assigns its session on every welcome, including after a controlled handover
+  (idempotent); the attach deadline is welcome + 10 s, the welcome timeout 15 s, the watchdog keepalive + 3 s;
+  backoff takes a random point in the upper half of 1 s × 2ⁿ, capped at 60 s; reconnect URLs are followed only on
+  the configured scheme and host. A gap is recorded only for delivery Herald had and lost. Every 60 s (and after
+  each attach, revocation or grant change) Get Conduit Shards must show shard 0 enabled on our session, else the
+  shard is repaired. Event time is `message_timestamp`: up to 5 s after our receipt it is taken at receipt time
+  (the message existed by then, and the reducer ignores future observations), further ahead is rejected as
+  future, older than the presence lease is expired, and before this ingest started is pre-start. Dedupe keys and
+  tombstones (message IDs, per-author clear times, the room clear time) live ten minutes in bounded maps with
+  counted evictions. Delete, user clear and room clear cancel activity still waiting in the source queue through a
+  guard asked right before it applies, including after its binding write. A room clear never changes presence.
+  Messages a shared chat brings in from another channel are guests, not citizens (`chatdom/Twitch.md` §9), and
+  light nothing. Delivery health is on local `/health` as `source.delivery`: shard state, coverage by type, gaps
+  and counters, never IDs, names or bodies.
+- **2026-10-30 — H04 lane choices (herald worker).** Pushed `stream.online`/`offline` and polled Get Streams both
+  enter one `StreamTracker`, the only path from stream state to the source. Get Streams is asked at startup, every
+  minute and after every return of chat coverage (Twitch does not replay a gap). The source publishes again only
+  once that read has settled, so the first frame after a gap already carries the current state. Get Streams is
+  cached and can trail EventSub, so for 120 s after a pushed change a contradicting answer is set aside as lag.
+  Broadcasts that ended stay ended (bounded list of 64 IDs); a real restart brings its own `stream.online`. A
+  listed non-`live` type (an error) and a failed request change nothing. The last observation keeps its time and
+  the reducer's 180 s stream lease turns it stale; minute polls while offline keep the beacon `offline`, not `stale`.
+  Health keeps `live`/`offline`/`unknown` and whether the state was `recovered` after a gap. Get Streams parsing drops
+  title, game and viewer count. Get Chatters parsing keeps only user IDs and the cursor, never logins or names. A
+  sweep runs only while a fresh live broadcast is observed and the broadcaster's grant holds. It uses
+  `first=1000`, at most 60 pages and 45 s, and dedupes by ID. It is `complete` only when Twitch returns a last page
+  without a cursor. Page cap, deadline, a cursor seen before, a failed page or a 429 that resets past the deadline
+  make it partial: a partial sweep refreshes only the people it saw, and one that saw nobody submits nothing. Its
+  observation time is when the first page was asked for, so departures never outrun the evidence. A sweep never
+  overlaps the next minute; the skipped minute is counted. A refused sweep (401/403) asks the authority to recheck
+  the grant. Chatters people get durable slots through the same binding table as chat authors and stay unnamed.
+- **2026-10-30 — H02 freshness and captures (herald worker).** Main's adapter expires a frame one presence lease
+  (90 s) after its `asOf` and ignores a frame whose sequence does not rise, so a steady kingdom (quiet people
+  re-observed each minute, a resting offline beacon) would read as a lost connection. The source therefore projects
+  an unchanged frame again with a new sequence and `asOf` once it is 30 s old (`FRESHNESS_REFRESH_MS`), only while
+  available. The sequence still never advances without a new projection. Until main adds `pnpm shots --area herald`,
+  `pnpm --filter @chatdom/herald shots -- --base-url <main preview>` is the lane's capture script: it starts each
+  SIMULATED replay (and with `--live` the real `dev` source) on 5194 with the layout main's scene renders (seed,
+  tier, first year 2025 for a hamlet and 2022 for a town, year 2026), waits on Herald's local health for the
+  scenario's state, opens `/?source=herald[&presenceOrigin=simulated]` and `/stream`, fails when the ribbon, lit
+  windows or names contradict that health, and writes `shots/herald/simulated-<scenario>@…` / `live@…` plus a
+  `report.json` of conditions and counts only. Main can call it from its own shots area unchanged.
+- **2026-10-30 — H02 real source (herald worker).** With tobi4s_'s four grants recorded, `dev` runs the real source
+  end to end: shard attached, seven subscriptions enabled, Get Streams settled, frames published. The capture
+  script checks a real source against main's ribbon wording for its frame (`fresh` LIVE CHAT, `offline` STREAM
+  RESTING, `stale` CONNECTION LOST), refuses lit windows while it is not fresh or beyond the frame's present
+  count, and waits for the first published frame before shooting. Main's scene now lays out homes with
+  `generateSettlementPlan`; its slots equal `generateKingdom`'s for the hamlet 2025, town 2022 and hamlet 2026
+  layouts at seed `willowmere`, so Herald keeps binding to `generateKingdom` until the lane is merged with main.
+- **2026-10-30 — H03 real-read evidence (founder).** Writing chat needs `user:write:chat`, which this lane never
+  requests, so Herald cannot produce its own test message. H03's real proof is the live provisioning against
+  `tobi4s_`: the owned conduit, shard 0 attached, all seven subscriptions enabled with the granted scopes and the
+  authorized `dev` source publishing through `/presence-data/stream`, together with green protocol tests. The first
+  real chat line arrives only when someone types in `tobi4s_`. It is recorded later as a redacted timestamp with
+  counts. It is not a blocker for H03.
+- **2026-10-30 — Handover gap (herald worker, H03 follow-up).** If the old EventSub socket closes before the
+  reconnect target is welcomed, nothing is delivered until the new session is attached. The shard therefore detaches
+  at once (`handover_gap`, gap open from the close), keeps the pending target, and reports the gap when that target
+  attaches (or when it fails and a fresh session repairs the shard). The runtime closes SSE on the detach and, on
+  re-attach, reconciles Get Streams before publishing again, exactly as after ordinary loss.
+- **2026-10-30 — H04 evidence (herald worker).** `check:auth -- --observe` reads Get Streams once and runs one
+  bounded Chatters sweep with the same code `dev` uses, printing conditions and counts only; it feeds nothing into
+  presence, so it may run while the channel is offline (a running source still sweeps only while live). The lane
+  capture script's `restart` run plays the SIMULATED evening twice over a scratch binding table in a temporary
+  directory (`replay --bindings <dir>`, refused for Herald's real data directory), with sweep order reversed the
+  second time, and requires each public frame to seat every lit window and name on the same slot. A control run
+  without the table must seat them differently, so the comparison can fail.
+
+- **2026-10-30 — Main integration, H01–H04.** Herald and the web now both use `generateSettlementPlan` with
+  identical seed/tier/founding years; the public URL may pin kingdom and focus slot, never person identity.
+  Live motion uses the wall clock even when a fixture `time` is present. Presence and broadcast are distinct:
+  a witnessed chat/panel/walker observation after an observed offline transition may warm its own window for
+  the ordinary lease; Chatters cannot. Repeated offline polls preserve that transition time. Stale evidence
+  still clears all lights and names. The castle, Chatters sweeps and minute credits still require fresh live
+  broadcast evidence. The frame schema and reducer/browser fixtures freeze this distinction. Message text
+  remains outside this contract; H05 does not add bubbles or a Forge-command endpoint implicitly.
+  Main also fences late Chatters/verification replies after revocation and rejects reordered stream evidence
+  before mutating the tracker. Root `pnpm shots --area herald` delegates before locking; the Herald runner
+  owns one host capture lock, preserves its configured layout in both surfaces and never replaces an existing
+  process on 5194. H05 continues on the lane; main owns the live 5194 source after the founder's handover.

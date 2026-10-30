@@ -46,7 +46,8 @@ export const KingdomPresenceFrameSchema = z.strictObject({
 }).superRefine((frame, ctx) => {
   if (new Set(frame.windows.map(w => w.slot)).size !== frame.windows.length) ctx.addIssue({ code: 'custom', message: 'Duplicate window slot' });
   if (frame.windows.some(w => w.since > frame.asOf || (!w.present && w.publicName !== null))) ctx.addIssue({ code: 'custom', message: 'Invalid window time or absent name' });
-  if ((!frame.streamLive || frame.connection !== 'fresh') && frame.windows.some(w => w.present)) ctx.addIssue({ code: 'custom', message: 'Stale/offline frames cannot claim presence' });
+  if (frame.streamLive !== (frame.connection === 'fresh')) ctx.addIssue({code:'custom',message:'Broadcast state and connection must agree'});
+  if (frame.connection === 'stale' && frame.windows.some(w => w.present)) ctx.addIssue({ code: 'custom', message: 'Stale frames cannot claim presence' });
 });
 export type KingdomPresenceFrame = z.infer<typeof KingdomPresenceFrameSchema>;
 /** Both simulation and Herald implement this, supplying full public projections.

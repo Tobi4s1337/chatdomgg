@@ -1,6 +1,7 @@
 import {expect,it} from 'vitest';
 import {AvatarPartBlueprintSchema,AVATAR_RIG,AVATAR_SOCKETS} from './avatar';
 import {ForgePieceDefinitionSchema} from './forge-pieces';
+import {ForgePlacementSchema} from './forge';
 it('anchors a chibi head and grip in avatar cells without accepting build data',()=>{
   const positions=new Map<string,number[]>();
   for(const bone of AVATAR_RIG){const parent=bone.parent?positions.get(bone.parent)!:[0,0,0];positions.set(bone.id,bone.offset.map((n,i)=>n+parent[i]!));}
@@ -18,4 +19,12 @@ it('keeps Forge connector and hinged-door metadata outside the strict blueprint'
   expect(ForgePieceDefinitionSchema.parse(piece)).toEqual(piece);
   expect(ForgePieceDefinitionSchema.safeParse({...piece,connectors:[piece.connectors[0],piece.connectors[0]]}).success).toBe(false);
   expect(ForgePieceDefinitionSchema.safeParse({...piece,kind:'wall'}).success).toBe(false);
+});
+
+it('retains judged wording with a placement without requiring it on legacy pieces',()=>{
+ const legacy={version:1,id:'local-one',hostId:'fixture-home',hostFingerprint:'home-one',socketId:'roof-chimney',kitId:'tide-native',kitRevision:1,plan:{version:1,kind:'chimney',motif:'sleeping-dragon'},origin:[0,0,0]};
+ const receipt={...legacy,approval:{runId:'forge-one',title:'The drowsy keeper',plaque:'A little warmth, kept for the street.'}};
+ expect(ForgePlacementSchema.parse(JSON.parse(JSON.stringify(receipt)))).toEqual(receipt);
+ expect(ForgePlacementSchema.parse(legacy)).toEqual(legacy);
+ expect(ForgePlacementSchema.safeParse({...receipt,approval:{...receipt.approval,privateReason:'not public'}}).success).toBe(false);
 });
