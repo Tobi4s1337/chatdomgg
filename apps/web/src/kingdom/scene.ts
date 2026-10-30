@@ -15,6 +15,7 @@ import { createHorizonSurface } from './horizon';
 import { createSunShadows } from '@chatdom/render';
 import { beaconStrength } from './beacon';
 import { createSettlementContent } from './settlement-content';
+import { terrainBatches } from './terrain-batches';
 
 export type CameraName='hero'|'window';
 export interface NameLabel {name:string;x:number;y:number;slot:number}
@@ -61,8 +62,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const portrait=()=>canvas.clientWidth<canvas.clientHeight;
   let heroFov=53;
   function setHero(){
-    if(options.tier==='hamlet'){heroEye.set(portrait()?52:75,portrait()?45:35,145);heroTarget.set(0,11,-2);camera.fov=portrait()?55:46;}
-    else {heroEye.set(portrait()?-60:-150,portrait()?47:42,portrait()?285:235);heroTarget.set(0,14,portrait()?25:50);camera.fov=portrait()?57:48;}
+    if(options.tier==='hamlet'){heroEye.set(portrait()?65:100,85,150);heroTarget.set(0,35,0);camera.fov=portrait()?58:50;}
+    else {heroEye.set(portrait()?-75:210,portrait()?85:110,portrait()?285:310);heroTarget.set(0,portrait()?17:20,portrait()?60:50);camera.fov=portrait()?57:48;}
     heroFov=camera.fov;camera.updateProjectionMatrix();
   }
   const sunShadows=own(createSunShadows(renderer,{bounds:new THREE.Box3(new THREE.Vector3(layout.bounds.minX-40,-8,layout.bounds.minZ-70),new THREE.Vector3(layout.bounds.maxX+40,60,layout.bounds.maxZ+20)),resolution:portrait()?1024:2048}));
@@ -181,12 +182,12 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(loaded&&beacon>.9&&!beaconCue){sound.cue('beacon');beaconCue=true;}
     if(autoCamera){
       // Rise inside the street before withdrawing over the opposite roofs.
-      const lift=THREE.MathUtils.smootherstep(time,3.5,6),pull=THREE.MathUtils.smootherstep(time,6,15);
-      camera.position.copy(homeEye);camera.position.y=THREE.MathUtils.lerp(homeEye.y,Math.max(22,heroEye.y),lift);camera.position.lerp(heroEye,pull);
-      target.lerpVectors(homeTarget,heroTarget,THREE.MathUtils.smootherstep(time,4,13));
+      const lift=THREE.MathUtils.smootherstep(time,3.5,7.5),pull=THREE.MathUtils.smootherstep(time,6,18);
+      camera.position.copy(homeEye);camera.position.y=THREE.MathUtils.lerp(homeEye.y,Math.max(22,homeEye.y),lift);camera.position.lerp(heroEye,pull);
+      target.lerpVectors(homeTarget,heroTarget,THREE.MathUtils.smootherstep(time,5.5,18));
     }
     else if(camName==='window'){camera.position.copy(homeEye);target.copy(homeTarget);}else{camera.position.copy(heroEye);target.copy(heroTarget);}
-    const wantedFov=autoCamera?THREE.MathUtils.lerp(64,heroFov,THREE.MathUtils.smootherstep(time,4,13)):camName==='window'?64:heroFov;
+    const wantedFov=autoCamera?THREE.MathUtils.lerp(64,heroFov,THREE.MathUtils.smootherstep(time,5.5,18)):camName==='window'?64:heroFov;
     if(Math.abs(camera.fov-wantedFov)>.001){camera.fov=wantedFov;camera.updateProjectionMatrix();}
     camera.lookAt(target);camera.updateMatrixWorld();updateInstances(fixedTime&&autoCamera?time*1000:now);
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
@@ -215,7 +216,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const placements=b===castle?[{position:castleOrigin,yaw:0}]:treeIndex>=0?treePlaces[treeIndex]!:[...houses,...props].filter(h=>h.blueprint.id===b.id);
     instance(b,result.chunks,placements,factor);options.onProgress(b===castle?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
   }));
-  tasks.push(loadTerrain(layout,()=>{}, {signal:abort.signal}).then(({chunks,origin})=>{if(disposed)return;const geometry=geometryFromChunks(chunks,'terrain');geometry.boundingBox!.expandByScalar(TERRAIN_SURFACE_BOUNDS_PADDING);geometry.boundingSphere=geometry.boundingBox!.getBoundingSphere(new THREE.Sphere());geometries.push(geometry);const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;}));
+  tasks.push(loadTerrain(layout,()=>{}, {signal:abort.signal}).then(({chunks,origin})=>{
+    if(disposed)return;
+    for(const tile of terrainBatches(chunks)){
+      const geometry=geometryFromChunks(tile,'terrain');geometry.boundingBox!.expandByScalar(TERRAIN_SURFACE_BOUNDS_PADDING);geometry.boundingSphere=geometry.boundingBox!.getBoundingSphere(new THREE.Sphere());geometries.push(geometry);
+      const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
+    }
+  }));
   function dispose(){if(disposed)return;disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
