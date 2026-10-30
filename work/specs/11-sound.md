@@ -227,3 +227,51 @@ and walking/building feedback without predicting those systems.
 - **2026-10-30 — Runnable first.** Task 1 delivers an audible real control/light pair and actual browser unlock,
   followed by the ceremony palette, material actions, then the complete mix demonstration. No dummy success or
   empty final-cue registrations are needed to get an early listening result.
+- **2026-10-30 — SO01 lane decisions.** Selected recordings ship as mono 16-bit WAV (Safari's Ogg Vorbis decoding
+  is not guaranteed and WAV has no encoder padding; 6 files, 124 KB). Unknown cue/material/surface values and
+  families not finished yet throw; non-finite `pan`/`distance` make `cue` return false; a non-finite volume
+  throws. Every `unlock()` calls `resume()` synchronously in its own gesture, because Chrome parks a gesture-less
+  resume indefinitely: the wait is bounded at 2.5 s (answer `false`, still `locked`), and a parked resume that
+  resolves later still makes the instance ready. Mute and suspension stop ringing voices so nothing returns on
+  unmute or resume. Additive lane-local exports beside the frozen types: `inspectKingdomAudio` (bench/check
+  diagnostics), `renderKingdomAudio` (offline render through the same families, mixer and mix path),
+  `FINISHED_FAMILIES` and the value arrays. The bench serves at `/src/audio-bench/index.html` and through the
+  `/-/audio` route main already registered.
+- **2026-10-30 — SO02 lane decisions.** The ceremony shares one D major pentatonic palette, the same three glass
+  panes and the same wick: `wave` is five small window lights travelling across the stereo field, with wandering
+  (not climbing) phrases over a gathering D3 undertone; `beacon` is a recorded wooden beam (the torch into the
+  brazier), a procedural whoomph and sparks, then a six-note chord entering bottom-up under one filter that opens
+  to the crest (~1.1 s) and closes, faded out by 4.95 s. No recorded fire or bell exists in the chosen packs; a
+  tolling bell (`impactBell_heavy`) was rejected as the status sound the beacon must not be. Brass is a tuned
+  `impactMetal_light` tap plus an original lever ring and mount; parchment is a sliced RPG Audio `bookFlip` with an
+  original slide and settle. New selected files are peak-normalised to −1 dBFS (per-file gain recorded). Budget
+  tiers are now whole-mix ceilings that reserve room above them (step 28, build 36, ceremony 40, beacon 58, control
+  64 sources) instead of voice stealing, so the beacon and a control always fit beside a full ceremony without
+  cutting anything. Shared noise sources carry every wick burst of a wave, keeping it at 19–20 sources.
+- **2026-10-30 — SO03 lane decisions.** Each surface lives in `src/cues/materials/<surface>.ts` with its own
+  recordings and resonance; the palm, fingertips, lift, grains and weight are shared (`handling.ts`) so all six
+  sound like one person building. 29 new Kenney CC0 files (Impact Sounds footsteps on wood, concrete and carpet,
+  medium wood/soft/metal/glass impacts; RPG Audio dirt footsteps and three cloth slices); stone has no separate
+  block recording worth shipping (`impactMining` rings like a pick), so its step is played slower and heavier as
+  the block. Metal and glass are tuned into the D major pentatonic palette and hand-damped. `remove` leads with the
+  material and keeps the lift as a soft breath, never a whoosh or a smash. Each material family has a dB fader,
+  set by measured momentary loudness across all six surfaces (steps ≈ −39 LUFS, cloth −42; choose −40; lift −38;
+  set −33 to −35 at volume 0.65). Budget: step ceiling 28 sources, build 34 (was 36); footsteps give way, faded over
+  20 ms, to building cues and to footsteps at least 3 dB nearer, within a per-tier fade allowance (step 6 voices /
+  12 sources, build 2 / 6) that keeps both at or below the ceremony's 14 voices / 40 sources, so the beacon and
+  control reserve holds; fading voices always count against 16 / 64. Coalescing is placement-aware (a call 3 dB
+  nearer is not a duplicate). Distance also low-passes: 18 kHz / (1 + d / 6 m), floor 1.2 kHz. The shipped SO01/SO02
+  files peak at about −4 dBFS, not the −1 dBFS SO02 recorded (ffmpeg's integer mono fold adds −3 dB); SO03 folds
+  explicitly and verifies −1 dBFS. `check` runs `src/budget.test.ts` against a counting fake context.
+- **2026-10-30 — SO04 lane decisions (with main's interruption review).** Everything before the master that holds
+  sound (room convolution, filters, compressor state) is a renewable front: mute or volume 0 fades it out with the
+  master and every voice over 30 ms and builds a fresh one; a browser suspension stops every voice and cuts the front
+  while nothing renders. Live and offline both release a retired front by a silent render-time marker. Main's Forge
+  bridge is additive and lane-local, outside the frozen interface: `playKingdomPhrase(audio, phrase, options)` plays a
+  consumer-authored `KingdomPhrase` (synthesis tools of one voice only, never the context, master or recordings) in
+  the ceremony or beacon tier, bounded to 24 sources over 6 s and 2 s ahead (larger throws), answering like `cue()`;
+  `renderKingdomAudio` accepts phrase and `interrupt` steps; `noteHz` is exported for the palette. `demo` runs an
+  in-process Vite dev server on the first free port in 5170–5199. Headless Chrome does not enforce autoplay, so it
+  demonstrates refusal with a SIMULATED parked and rejected `resume()`, and suspension with the real context's
+  `suspend()`. The offline render is seeded so the reviewed WAV is reproducible. In the stress burst, the street wave
+  is held back (the ceremony ceiling is full with the beacon and the crowd); controls and the beacon always play.

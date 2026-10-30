@@ -17,7 +17,8 @@
     "check:services": "node --env-file=.env scripts/check-services.mjs",
     "content:validate": "node scripts/content-validate.mjs",
     "content:render": "node packages/testing/content-render.mjs",
-    "shots:moments": "node packages/testing/moments.mjs"
+    "shots:moments": "node packages/testing/moments.mjs",
+    "realm:smoke": "node packages/testing/realm-reference.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

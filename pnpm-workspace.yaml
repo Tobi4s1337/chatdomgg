@@ -1,5 +1,15 @@
 packages:
   - apps/*
   - packages/*
+
 onlyBuiltDependencies:
   - esbuild
+
+overrides:
+  '@colyseus/core': 0.18.23
+  '@colyseus/schema': 5.0.42
+  '@colyseus/sdk': 0.18.8
+
+patchedDependencies:
+  '@colyseus/sdk@0.18.8': patches/@colyseus__sdk@0.18.8.patch
+  '@colyseus/uwebsockets-transport@0.18.4': patches/@colyseus__uwebsockets-transport@0.18.4.patch

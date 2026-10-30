@@ -8,6 +8,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 5190 --strictPort"
   },
   "dependencies": {
+    "@chatdom/ui": "workspace:*",
     "@chatdom/content": "workspace:*",
     "@chatdom/render": "workspace:*",
     "@chatdom/shared": "workspace:*",
@@ -17,7 +18,9 @@
     "solid-js": "1.9.18",
     "three": "0.186.1",
     "@chatdom/vox-import": "workspace:*",
-    "@chatdom/forge": "workspace:*"
+    "@chatdom/forge": "workspace:*",
+    "@chatdom/audio": "workspace:*",
+    "@colyseus/sdk": "0.18.8"
   },
   "devDependencies": {
     "@types/three": "0.186.0",
