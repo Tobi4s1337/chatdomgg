@@ -3,6 +3,7 @@ import { acquireCaptureLock } from './capture-lock.mjs';
 import { startCapturePreview, closeCapturePreview } from './preview.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { encodeMomentClips } from './encode-moments.mjs';
 const lookOnly=process.argv.includes('--look-only');
 let base=process.env.CHATDOM_MOMENTS_URL,server;
 const release=await acquireCaptureLock();let browser;
@@ -52,6 +53,6 @@ try {
   report.checks.push('Private authored house publishes as a labelled local street preview');
   await page.reload();await ready();
   assert.ok(await page.evaluate(()=>!!window.__chatdomKingdom.build.streetHome));
-  report.checks.push('Published local home survives reload');assert.deepEqual(report.errors,[]);report.result='passed';
+  report.checks.push('Published local home survives reload');assert.deepEqual(report.errors,[]);if(!lookOnly)await encodeMomentClips();report.result='passed';
 } catch(error){report.result='failed';report.failure=String(error);throw error;}
 finally {await browser?.close();if(server)await closeCapturePreview(server);await release();await mkdir('shots/moments',{recursive:true});await writeFile('shots/moments/report.json',JSON.stringify(report,null,2));console.log(report);}
