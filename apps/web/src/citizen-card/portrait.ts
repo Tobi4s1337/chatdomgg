@@ -39,7 +39,8 @@ export async function paintPortraits(requests: readonly PortraitRequest[], optio
   const looks: CitizenLook[] = ids.map(id => {
     const review = REVIEW_LOOKS.find(look => look.id === id);
     if (!review) throw new Error(`There is no authored look called “${id}”.`);
-    return { id, parts: assembleLook(review).map(blueprint => ({ blueprint, asset: compileAvatarPart(blueprint, 1) })) };
+    const { parts, cape } = assembleLook(review);
+    return { id, parts: parts.map(blueprint => ({ blueprint, asset: compileAvatarPart(blueprint, 1) })), ...(cape ? { cape } : {}) };
   });
   const environment = getEnvironment(options.hour ?? 18);
   const canvas = document.createElement('canvas');

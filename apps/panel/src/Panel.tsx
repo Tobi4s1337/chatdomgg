@@ -4,19 +4,26 @@
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
 import { selectAdapter } from './adapters/select';
 import type { Connection, Earned, Home, Light, LightChoice, PanelAdapter, PanelSnapshot, Picture } from './model';
-import { BackGlyph, HomeGlyph, PanelDefs, Seal, Shutters, TavernGlyph, TonightGlyph, WindowGlyph } from './ui/art';
+import { ActSlip } from './ui/act';
+import { BackGlyph, ForgeGlyph, HomeGlyph, PanelDefs, Seal, Shutters, TavernGlyph, TonightGlyph, WindowGlyph } from './ui/art';
+import { ForgeSheet, RaisingMeter, TavernSheet } from './ui/places';
+import { ShelfSheet } from './ui/shelf';
 import './panel.css';
+import './places.css';
 
-type Drawer = 'home' | 'tonight' | 'tavern' | 'light';
+type Drawer = 'home' | 'tonight' | 'tavern' | 'forge' | 'light' | 'shelf';
+/** A drawer opened from inside another goes back to it, not to the first view. */
+const PARENT: Partial<Record<Drawer, Drawer>> = { shelf: 'tonight' };
 type ReadyWindow = Window & { __chatdomReady?: boolean };
 
 /** How long the confirmed window takes to kindle: panes one by one, then the glow settles. */
 const KINDLE_MS = 2600;
 
-const DRAWERS: readonly { id: Exclude<Drawer, 'light'>; label: string; glyph: () => JSX.Element }[] = [
+const DRAWERS: readonly { id: Exclude<Drawer, 'light' | 'shelf'>; label: string; glyph: () => JSX.Element }[] = [
   { id: 'home', label: 'Home', glyph: HomeGlyph },
   { id: 'tonight', label: 'Tonight', glyph: TonightGlyph },
   { id: 'tavern', label: 'Tavern', glyph: TavernGlyph },
+  { id: 'forge', label: 'Forge', glyph: ForgeGlyph },
 ];
 
 export default function Panel(props: { adapter?: PanelAdapter }) {
@@ -35,21 +42,36 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
     }
     setSnap(next);
   });
-  let opener: HTMLElement | null = null, drawerEl: HTMLElement | undefined, lightEl: HTMLElement | undefined, pictureEl: HTMLImageElement | undefined, disposed = false;
+  let drawerEl: HTMLElement | undefined, lightEl: HTMLElement | undefined, actEl: HTMLElement | undefined, pictureEl: HTMLImageElement | undefined, disposed = false;
+  // Who opened each drawer, so Back returns focus there. A nested drawer keeps its parent's opener.
+  const openers = new Map<Drawer, HTMLElement | null>();
 
   const open = (next: Drawer, from: EventTarget | null) => {
-    opener = from instanceof HTMLElement ? from : null;
+    if (drawer() !== PARENT[next]) openers.clear();
+    openers.set(next, from instanceof HTMLElement ? from : null);
     setDrawer(current => current === next ? null : next);
+    // Every drawer opens at its head; the page element is shared, so its scroll would carry over.
+    const page = drawerEl?.querySelector<HTMLElement>('.cp-drawer-page');
+    if (page) page.scrollTop = 0;
     queueMicrotask(() => drawerEl?.querySelector<HTMLElement>('[data-autofocus]')?.focus());
   };
   const close = () => {
-    setDrawer(null);
-    const back = opener;
-    opener = null;
+    const current = drawer();
+    const back = current ? openers.get(current) ?? null : null;
+    const parent = current ? PARENT[current] : undefined;
+    if (current) openers.delete(current);
+    setDrawer(parent ?? null);
+    const page = drawerEl?.querySelector<HTMLElement>('.cp-drawer-page');
+    if (page) page.scrollTop = 0;
     // A chosen light replaces the button that opened the drawer; focus then rests on the window's status.
-    queueMicrotask(() => (back?.isConnected ? back : lightEl)?.focus());
+    // The parent drawer redraws its page, so its signpost is found again by what it opens.
+    queueMicrotask(() => (back?.isConnected ? back
+      : parent ? drawerEl?.querySelector<HTMLElement>(`[data-opens="${current}"]`) ?? drawerEl?.querySelector<HTMLElement>('[data-autofocus]')
+      : lightEl)?.focus());
   };
   const choose = (choice: LightChoice) => { adapter.requestLight(choice); close(); };
+  // The tapped button gives way to the kingdom's answer; focus waits on the act, where the answer is read out.
+  const act = (option: string) => { adapter.requestAct(option); queueMicrotask(() => actEl?.focus()); };
   const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && drawer()) { event.preventDefault(); close(); } };
 
   onMount(() => {
@@ -101,21 +123,27 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
     <main class="cp-main" aria-hidden={drawer() ? 'true' : undefined} inert={drawer() ? true : undefined}>
       <PictureFrame picture={snap().picture} connection={snap().connection} ref={element => { pictureEl = element; }} />
       <LightAction snap={snap()} kindling={kindling()} ref={element => { lightEl = element; }} onChoose={event => open('light', event.currentTarget)} onHome={event => open('home', event.currentTarget)} />
-      <TonightSlip snap={snap()} />
+      <Show when={snap().act} fallback={<TonightSlip snap={snap()} />}>{current =>
+        <div class="cp-act-wrap" ref={element => { actEl = element; }} tabindex="-1">
+          <ActSlip snap={snap()} act={current()} onAct={act} onLight={event => open('light', event.currentTarget)} />
+        </div>}
+      </Show>
     </main>
 
     <Show when={drawer()}>{current =>
       <section class="cp-drawer" ref={element => { drawerEl = element; }} role="dialog" aria-modal="false" aria-labelledby="cp-drawer-title" data-drawer={current()}>
         <div class="cp-drawer-head">
-          <button class="cp-back" type="button" onClick={close} data-autofocus><BackGlyph /><span>The kingdom</span></button>
+          <button class="cp-back" type="button" onClick={close} data-autofocus><BackGlyph /><span>{PARENT[current()] === 'tonight' ? 'Tonight' : 'The kingdom'}</span></button>
           <h2 id="cp-drawer-title" class="cp-drawer-title">{drawerTitle(current(), snap())}</h2>
         </div>
         <div class="cp-drawer-page" tabindex="-1">
           <Switch>
             <Match when={current() === 'light'}><LightChoiceSheet snap={snap()} onChoose={choose} /></Match>
             <Match when={current() === 'home'}><HomeSheet snap={snap()} onLight={event => open('light', event.currentTarget)} /></Match>
-            <Match when={current() === 'tonight'}><TonightSheet snap={snap()} /></Match>
-            <Match when={current() === 'tavern'}><TavernSheet snap={snap()} /></Match>
+            <Match when={current() === 'tonight'}><TonightSheet snap={snap()} onShelf={event => open('shelf', event.currentTarget)} /></Match>
+            <Match when={current() === 'tavern'}><TavernSheet snap={snap()} empty={reason => <Empty text={reason} detail="When it does, its tables and who sits at them show here." />} /></Match>
+            <Match when={current() === 'forge'}><ForgeSheet snap={snap()} empty={reason => <Empty text={reason} detail="When it does, its fire, its anvils and your coals show here." />} /></Match>
+            <Match when={current() === 'shelf'}><ShelfSheet snap={snap()} onUse={sku => adapter.requestProduct(sku)} /></Match>
           </Switch>
         </div>
       </section>}
@@ -123,7 +151,7 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
 
     <nav class="cp-nav" aria-label="Panel">
       <For each={DRAWERS}>{item =>
-        <button type="button" class="cp-tab" aria-pressed={drawer() === item.id} onClick={event => open(item.id, event.currentTarget)}>
+        <button type="button" class="cp-tab" aria-pressed={drawer() === item.id || PARENT[drawer() ?? 'home'] === item.id} onClick={event => open(item.id, event.currentTarget)}>
           {item.glyph()}<span>{item.label}</span>
         </button>}
       </For>
@@ -143,7 +171,7 @@ function connectionMotto(connection: Connection): string {
 function drawerTitle(drawer: Drawer, snap: PanelSnapshot): string {
   if (drawer === 'home' && snap.home.kind === 'guest') return 'Your light here';
   if (drawer === 'tonight' && snap.stream === 'resting') return 'Last night';
-  return { light: 'Light your window', home: 'Your home', tonight: 'Tonight', tavern: 'The tavern' }[drawer];
+  return { light: 'Light your window', home: 'Your home', tonight: 'Tonight', tavern: 'The tavern', forge: 'The forge', shelf: 'The shelf' }[drawer];
 }
 
 
@@ -365,7 +393,7 @@ function History(props: { items: readonly Earned[]; label: string }) {
   </Show>;
 }
 
-function TonightSheet(props: { snap: PanelSnapshot }) {
+function TonightSheet(props: { snap: PanelSnapshot; onShelf: Click }) {
   return <Show when={props.snap.tonight.kind === 'supplied' ? props.snap.tonight : null} fallback={<Empty text={(props.snap.tonight as { reason: string }).reason} />}>{tonight =>
     <div class="cp-sheet">
       <Show when={tonight().chapter}>{chapter =>
@@ -381,24 +409,13 @@ function TonightSheet(props: { snap: PanelSnapshot }) {
       <ol class="cp-moments">
         <For each={tonight().moments}>{moment => <li><time>{moment.at}</time><span>{moment.text}</span></li>}</For>
       </ol>
-      <Show when={tonight().raising}>{raising =>
-        <div class="cp-raising">
-          <p class="cp-label">Raised together</p>
-          <p class="cp-body"><strong>{raising().building}</strong> · {Math.round(raising().progress * 100)}% raised</p>
-          <div class="cp-meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(raising().progress * 100)} aria-label={`${raising().building} raised`}><i style={{ width: `${raising().progress * 100}%` }} /></div>
-          <p class="cp-body muted">{raising().next}</p>
-        </div>}
+      <Show when={tonight().raising}>{raising => <RaisingMeter raising={raising()} />}</Show>
+      <Show when={props.snap.shelf.kind === 'offered'}>
+        <button type="button" class="cp-signpost" data-opens="shelf" onClick={props.onShelf}>
+          <span><strong>The shelf</strong><small>Moments for the whole kingdom, with Bits</small></span>
+          <BackGlyph />
+        </button>
       </Show>
-    </div>}
-  </Show>;
-}
-
-function TavernSheet(props: { snap: PanelSnapshot }) {
-  return <Show when={props.snap.tavern.kind === 'supplied' ? props.snap.tavern : null} fallback={<Empty text={(props.snap.tavern as { reason: string }).reason} />}>{tavern =>
-    <div class="cp-sheet">
-      <div class="cp-plaque"><span class="cp-rivet" aria-hidden="true" /><span class="cp-rivet" aria-hidden="true" /><p class="cp-plaque-name">{tavern().place}</p><p class="cp-plaque-street">{tavern().table}</p></div>
-      <p class="cp-body">{tavern().watching}</p>
-      <p class="cp-body muted">You can follow the table from here. Seats are taken inside the kingdom.</p>
     </div>}
   </Show>;
 }
