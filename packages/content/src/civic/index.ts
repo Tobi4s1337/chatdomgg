@@ -2,9 +2,11 @@ import type { VoxelBlueprint } from '@chatdom/shared';
 import { STYLES } from '../materials';
 import { ceremonialGateway, footbridge } from './crossing';
 import { CIVIC_KITS, type Boxes, type CivicStyle } from './kit';
+import { giftCart, marketStores } from './market';
 
 export { FOOTBRIDGE, GATEWAY, footbridgeDeckTop } from './crossing';
 export { CIVIC_SHIELD, type CivicStyle } from './kit';
+export { GIFT_CART, MARKET_STORES } from './market';
 
 /** The ten civic forms in collection order; the two largest silhouettes come first (spec 10, R1). */
 export const CIVIC_FORMS = [
@@ -31,7 +33,7 @@ export const CIVIC_MANIFEST: readonly {
 
 /** Forms whose models are finished. The rest arrive in later tasks; there is no stand-in geometry for them. */
 const BUILDERS: Partial<Record<CivicForm, (kit: (typeof CIVIC_KITS)[CivicStyle]) => Boxes>> = {
-  footbridge, 'ceremonial-gateway': ceremonialGateway,
+  footbridge, 'ceremonial-gateway': ceremonialGateway, 'gift-cart': giftCart, 'market-stores': marketStores,
 };
 
 /** Builds one civic model in the Hearth or Tide treatment. Unknown or unfinished input fails explicitly. */

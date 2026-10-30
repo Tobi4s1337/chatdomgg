@@ -23,7 +23,7 @@ runs `pnpm verify` at integration. Do not claim geometry delivers runtime seatin
   subset `BLUEPRINTS`. Build footbridge and ceremonial gateway in Hearth/Tide, largest silhouette first. Give
   bridge real ramps/landings and the arch its full open passage. Prove support/clearance with production occupancy.
   Render all four from three dusk angles and inspect the sheets; no placeholder forms for later tasks.
-- [ ] **CP02 — The existing market gains carts and prepared stores** · evidence: four more models + kit sheets.
+- [x] **CP02 — The existing market gains carts and prepared stores** · evidence: four more models + kit sheets.
   Add gift-cart and market-stores in both kits. Shape crates, barrel, basket and goods as crafted readable voxels;
   keep cart wheel/handle contacts and the market's negative space. Compare with read-only core stalls/well so the
   new forms add variety. Render/review new assets with existing forms and record occupied bounds/costs.

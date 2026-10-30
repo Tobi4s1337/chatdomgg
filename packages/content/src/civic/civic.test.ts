@@ -4,7 +4,7 @@ import { VoxelBlueprintSchema, type VoxelAsset, type VoxelBlueprint } from '@cha
 import { meshVoxelChunk, prepareAssetChunks, rasterizeBlueprint } from '../../../voxel/src/index';
 import { MAT, MATERIALS, STYLES } from '../materials';
 import {
-  BLUEPRINTS, CIVIC_FORMS, CIVIC_MANIFEST, FOOTBRIDGE, GATEWAY, createCivicProp, footbridgeDeckTop,
+  BLUEPRINTS, CIVIC_FORMS, CIVIC_MANIFEST, FOOTBRIDGE, GATEWAY, GIFT_CART, MARKET_STORES, createCivicProp, footbridgeDeckTop,
   type CivicForm, type CivicStyle,
 } from './index';
 import { CIVIC_KITS } from './kit';
@@ -161,5 +161,73 @@ describe.each(STYLE_ORDER)('%s crossing and gateway', style => {
       // The field is recessed: nothing stands in front of it.
       expect(at(24, 52, proud)).toBe(0);
     }
+  });
+});
+
+describe.each(STYLE_ORDER)('%s market furniture', style => {
+  it('gift cart: spoked wheels on the ground, clear of the boards, a level bed and a free grip', () => {
+    const { at } = voxels(createCivicProp('gift-cart', style));
+    const [ax, ay] = GIFT_CART.axle, r = GIFT_CART.radius;
+    for (const [z0] of GIFT_CART.wheels) {
+      const z = z0 + 1;
+      // The iron-dark tyre carries the wheel on the ground under the axle, and the hub sits on the axle line.
+      for (const x of [ax - 2, ax - 1, ax, ax + 1]) expect(at(x, 0, z), `tyre ${x}`).toBe(MAT.darkStone);
+      expect(at(ax, ay, z)).not.toBe(0);
+      // Between the spokes the wheel is open, inside the felloe.
+      for (const [dx, dy] of [[3, 1], [-4, 1], [1, 3], [1, -4], [-4, -2]] as const) expect(at(ax + dx, ay + dy, z), `spoke gap ${dx},${dy}`).toBe(0);
+      expect(at(ax + r - 2, ay, z)).not.toBe(0);
+    }
+    // Above the hub, each wheel turns in open air beside the boards.
+    for (const z of [3, 20]) for (let x = ax - r; x < ax + r; x++) for (let y = ay + 2; y < ay + r; y++) {
+      expect(at(x, y, z), `wheel clearance ${x},${y},${z}`).toBe(0);
+    }
+    // The bed floor is one level plane from the handle end to the tail, carried by the axle and the two legs.
+    const { from, to } = GIFT_CART.bed;
+    for (let x = from[0]; x < to[0]; x++) for (let z = from[2]; z < to[2]; z++) expect(at(x, to[1] - 1, z), `bed ${x},${z}`).not.toBe(0);
+    for (const z of [6, 16]) for (let y = 0; y < from[1]; y++) expect(at(GIFT_CART.legs[0], y, z)).not.toBe(0);
+    // The grip spans wider than the bed and nothing crowds the hands below or above it.
+    const [g0, g1] = GIFT_CART.grip;
+    for (let x = g0; x < g1; x++) {
+      for (let z = 4; z < 20; z++) expect(at(x, 10, z), `grip ${x},${z}`).not.toBe(0);
+      for (let z = 0; z < 24; z++) {
+        for (let y = 0; y < 10; y++) expect(at(x, y, z), `under grip ${x},${y},${z}`).toBe(0);
+        for (let y = 12; y < 32; y++) expect(at(x, y, z), `over grip ${x},${y},${z}`).toBe(0);
+      }
+    }
+    // A pennant in the kit's field flies above the load.
+    let pennant = 0;
+    for (let x = 0; x < 32; x++) for (let y = 23; y < 30; y++) for (let z = 0; z < 24; z++) if (at(x, y, z) === CIVIC_KITS[style].field) pennant++;
+    expect(pennant).toBeGreaterThan(30);
+  });
+
+  it('market stores: a bellied cask, a keg on cradles with a let-in head, and produce heaped over the rim', () => {
+    const { at } = voxels(createCivicProp('market-stores', style));
+    const { cask, keg, open } = MARKET_STORES;
+    const [cx, , cz] = cask.from;
+    // Faceted, not cubic: the belly's corners are cut, and the belly stands wider than both chimes.
+    expect(at(cx, 5, cz)).toBe(0);
+    expect(at(cx, 5, cz + 3)).not.toBe(0);
+    expect(at(cx, 0, cz + 3)).toBe(0);
+    expect(at(cx, cask.to[1] - 1, cz + 3)).toBe(0);
+    expect(at(cx + 3, cask.to[1] - 1, cz + 3)).toBe(0);
+    expect(at(cx + 3, cask.to[1] - 2, cz + 3)).not.toBe(0);
+    // The keg lies in two cradles with air under its round between them; its head sits one cell inside the chime.
+    const [kx, , kz] = keg.from, [KX, KY, KZ] = keg.to, mid = Math.floor((kz + KZ) / 2);
+    expect(at(kx + 2, 0, mid)).toBe(0);
+    expect(at(kx + 2, 1, mid)).not.toBe(0);
+    expect(at(kx, 0, mid)).toBe(0);
+    expect(at(kx, 1, mid)).toBe(0);
+    expect(at(kx + 3, 3, KZ - 1)).toBe(0);
+    expect(at(kx + 3, 3, KZ - 2)).not.toBe(0);
+    expect(at(KX - 1, KY - 1, mid)).toBe(0);
+    // Produce rises over the open crate's rim, and its joints never open onto the goods inside.
+    let crown = 0;
+    for (let x = open.from[0]; x < open.to[0]; x++) for (let z = open.from[2]; z < open.to[2]; z++) {
+      for (let y = open.to[1]; y < 16; y++) if (at(x, y, z)) crown = Math.max(crown, y + 1);
+    }
+    expect(crown).toBeGreaterThanOrEqual(open.to[1] + 2);
+    const inner = at(open.from[0] + 2, open.from[1] + 2, open.from[2] + 1);
+    expect(inner).not.toBe(0);
+    expect([MAT.cloth, MAT.leaf]).not.toContain(inner);
   });
 });
