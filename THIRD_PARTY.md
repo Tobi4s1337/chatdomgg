@@ -1,7 +1,7 @@
 # Third-party sources
 
 All runtime/build dependencies retain their distributed license notices. Exact versions are in pnpm-lock.yaml.
-The Atlas ships the credited art and fonts below. No sampled third-party sound has been shipped. Future sound sources must be CC0 or permissive, credited here with their individual licenses; procedural sounds are authored in this repository.
+The Atlas ships the credited art and fonts below. Kingdom sound combines licensed CC0 recordings and original procedural instruments; see Kingdom audio below. Future sound sources must be CC0 or permissive, credited here with their individual licenses; procedural sounds are authored in this repository.
 
 | Package | Version | License | Source |
 |---|---|---|---|
@@ -24,7 +24,7 @@ The Atlas ships the credited art and fonts below. No sampled third-party sound h
 
 Reference research is indexed in work/references/. No source from those external repositories was copied into product code. Crowdbake has no verified reuse license and is ideas only. Any future adaptation requires a source header and its own entry here, including upstream notices and separate asset rights.
 
-Kingdom and Forge sounds in `apps/web/src/kingdom/sound.ts` and `apps/web/src/forge/sound.ts` are original procedural Web Audio synthesis (oscillators, envelopes and a compressor), authored in this repository. They contain no sampled recordings. Atmosphere, water and voxel shaders are original implementations informed by the credited reference notes.
+Kingdom sound uses the credited CC0 sources and original synthesis below. Forge phrases are original procedural instruments routed through that same mix. Atmosphere, water and voxel shaders are original implementations informed by the credited reference notes.
 
 ## Atlas art and fonts
 
@@ -35,3 +35,19 @@ Kingdom and Forge sounds in `apps/web/src/kingdom/sound.ts` and `apps/web/src/fo
 | The Alegreya Project Authors | Subset variable Roman/Italic WOFF2, Latin/Cyrillic/Greek | SIL OFL 1.1; [pinned source](https://github.com/google/fonts/tree/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/alegreya). Full license notice accompanies the fonts; exact inputs, Unicode coverage and subsetting recipe are in the asset inventory. |
 
 Atlas heraldry and charge paths are authored here. No game-icons.net charges or prototype texture atlas were imported.
+
+
+## Kingdom audio
+
+The kingdom's sounds (`@chatdom/audio`) combine 44 selected recordings with original Web Audio synthesis authored in
+this repository. Every recording is one layer of a cue, never a whole cue. Per-file inventory (original and shipped
+names, edits, gains, sizes and where each is used): [packages/audio/THIRD_PARTY.md](packages/audio/THIRD_PARTY.md).
+
+| Source | Shipped | License and provenance |
+|---|---|---|
+| Kenney Vleugels, [Impact Sounds](https://kenney.nl/assets/impact-sounds) 1.0 | 35 mono 16-bit WAV files in `packages/audio/src/assets/kenney/` (621,782 bytes): light wood, glass and metal taps, medium wood, soft, metal, glass and plank impacts, wood, concrete and carpet footsteps | CC0 1.0, per the archive's `License.txt`, kept beside the files. `kenney_impact-sounds.zip`, downloaded 2026-10-30, SHA-256 `029d734af1582474edf3a694d1b0cebc97c1c152f2f39fa34d4c2bafc5de77f8`. Decoded from Ogg Vorbis, folded to mono, gain-adjusted, sliced or trimmed as recorded in the inventory. |
+| Kenney Vleugels, [RPG Audio](https://kenney.nl/assets/rpg-audio) | 9 mono 16-bit WAV files in the same folder (195,588 bytes): three book page turns, three dirt footsteps, three cloth slices | CC0 1.0, per the archive's `License.txt`, kept beside the files. `kenney_rpg-audio.zip`, downloaded 2026-10-30, SHA-256 `6dbeaf8544da958d8f2adcb4a4a4b76c1ade34a05f8ab9edccd327da7375f38b`. Edited as recorded in the inventory. |
+
+Credit is optional under CC0; Chatdom credits these anyway. Everything else in the kingdom's sound (the resonances,
+glows, wick and fire, the beacon chord, the D major pentatonic palette, the room impulse, the mix and the budget) is
+original synthesis authored here. Phrases played through `playKingdomPhrase` (the Forge's) can only use synthesis.
