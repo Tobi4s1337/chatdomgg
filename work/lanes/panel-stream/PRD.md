@@ -8,12 +8,12 @@ alone in the repository: preserve others' edits, never change shared contracts/r
 record exact `needs:` for main instead. Main supplies the route hooks listed in the spec before lane start.
 Run one unchecked task per Ralph iteration, in order. Do not take work from Backlog.
 
-Every task is done when `pnpm typecheck && pnpm lint && pnpm test && pnpm build` is green, its relevant captures
+Every task is done when `pnpm typecheck && pnpm lint && pnpm build` plus its one focused adapter test once introduced is green, its relevant captures
 are taken and opened with `view_image`, its box is ticked, one progress line records decisions/doubts/evidence,
 and one conventional commit is on the lane branch. No push. Main reviews/merges and runs `pnpm verify`.
 Use one useful adapter behavior test and the shared lane browser review flow, not a new audit/test framework.
-Root lockfile changes go through main. Start panel preview only on port 5195; web uses main's 5190. Record any
-server you start. No production deploy, Extension submission or real Twitch content write.
+Root lockfile changes go through main. Use a free port in 5170–5199 for a manual lane preview; never reuse main's 5190. The shared capture
+helper allocates a free port and queues through its machine-wide lock. Record any server you start. No production deploy, Extension submission or real Twitch content write.
 
 ## Tasks
 

@@ -256,7 +256,12 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
-  try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');await renderer.compileAsync(scene,camera);if(disposed)throw new Error('Scene closed while compiling');}catch(error){dispose();throw error;}
+  // These meshes already render progressively under the gate. Do not put a
+  // second compileAsync barrier between those successful draws and opening:
+  // KHR_parallel_shader_compile is an optional driver completion hint, and can
+  // remain pending even while the scene draws. The first fully loaded render
+  // and actual light uploads below are the readiness boundary on every GPU.
+  try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');}catch(error){dispose();throw error;}
   loaded=true;lastFrame=performance.now();options.onProgress('The first light could be yours',1);
   return {layout,debug,sound,
     setHour(value:number){targetHour=value;sound.cue('wood');},
