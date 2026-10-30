@@ -175,7 +175,7 @@ describe('roster reconciliation', () => {
 });
 
 describe('stream liveness and moderation', () => {
-  it('offline and stale streams have no lights, names or minute credits', () => {
+  it('a stream ending clears its old lights and stale evidence never grants minute credits', () => {
     let state = applyPresence(awake(), observe(1, [named()]), 1);
     const offline = applyPresence(state, stream(2, null), 2);
     expect(projectPresence(offline, bindings, 2, 1)).toMatchObject({ connection: 'offline', streamLive: false });
@@ -354,4 +354,22 @@ describe('bounded replay handling and minute sampling', () => {
     expect(presenceTick(next, 60_000).credit?.personIds).toHaveLength(50_000);
     expect(KingdomPresenceFrameSchema.safeParse(frame).success).toBe(true);
   });
+});
+
+it('keeps a witnessed offline message warm through stream polls without relighting the castle or minting minutes',()=>{
+ let state=applyPresence(awake(),observe(100,[named(alice)]),100);
+ state=applyPresence(state,observe(200,[anonymous(bob)],'chatters'),200);
+ state=applyPresence(state,stream(1_000,null),1_000);
+ expect(projectPresence(state,bindings,1_000,1).windows.every(w=>!w.present)).toBe(true);
+ state=applyPresence(state,observe(2_000,[named(alice,'Alice is still here')]),2_000);
+ state=applyPresence(state,stream(60_000,null),60_000);
+ const frame=projectPresence(state,bindings,60_000,2);
+ expect(KingdomPresenceFrameSchema.parse(frame)).toEqual(frame);
+ expect(frame).toMatchObject({streamLive:false,connection:'offline'});
+ expect(frame.windows.filter(w=>w.present)).toEqual([{slot:2,present:true,publicName:'Alice is still here',since:2_000}]);
+ expect(presenceTick(state,60_000).credit).toBeNull();
+ expect(windowFor(state,92_000).present).toBe(false);
+ const stale=projectPresence(state,bindings,60_000+STREAM_LEASE_MS,3);
+ expect(stale).toMatchObject({connection:'stale',streamLive:false});
+ expect(stale.windows.every(w=>!w.present)).toBe(true);
 });

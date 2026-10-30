@@ -112,7 +112,7 @@ describe('authoritative worker light geometry', () => {
     const removed = solver.solve({ ...request, revision: 2, emitters: [] });
     expect(removed.volume.visited).toBe(0);
     expect(removed.occupancyBuilds).toBe(1);
-  });
+  }, 20_000); // The shared CPU host may be rendering another lane; this is not a timing assertion.
 
   it('projects each of the 240 inhabited town windows independently into the distant field', () => {
     const town = generateKingdom({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });

@@ -5,3 +5,6 @@ export * from './budget';
 export * from './app-token';
 export * from './helix';
 export * from './oauth';
+export * from './eventsub/admin';
+export * from './eventsub/frames';
+export * from './eventsub/shard';

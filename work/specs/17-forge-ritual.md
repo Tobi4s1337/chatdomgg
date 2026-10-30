@@ -18,6 +18,11 @@ and remain honest when a future observed run waits at a gate.
 
 ## Current state
 
+- **2026-10-30 provider amendment:** words/plan/result now use isolated authenticated Codex CLI runs, per
+  founder instruction, without local API keys. Judges remain separate from drafting; pending authentication,
+  model work and independent image checks hold the observed stage. Status configuration never advances the
+  ritual. Preserve cold/hold beats rather than success timers. See `apps/codex/src/providers/README.md`.
+
 - `packages/shared/src/forge.ts` defines `ForgePhase`, `ForgeRitualFrame`, `ForgePublicBeat`, the strict finite
   house-part plan and style-kit/placement types. These are public observations, not permission to mint a part.
 - `packages/forge/src/ritual.ts` defines `FORGE_RITUAL_SECONDS = 21`, `forgeRitualFrame()` and the core refusal

@@ -56,6 +56,11 @@ try {
     const prop = collection === 'street-props';
     const allowed = new Set([MAT.air, kit.wall, kit.roof, kit.trim, kit.stone, MAT.glass, MAT.earth, MAT.bark, MAT.leaf, MAT.moss, MAT.petal, MAT.blueFlower]);
     if (civic || attached) for (const key of ['brass','cloth','cream','darkStone','thatch']) allowed.add(MAT[key]);
+    // Reviewed place collections need their physical brass, cloth and mixed masonry roles.
+    // This grant does not relax any other collection or admit arbitrary registered colours.
+    if (collection === 'places-water' || collection === 'places-high') {
+      for (const key of ['brass','cloth','cream','darkStone','thatch','goldLeaf','terracotta','forgeCopper']) allowed.add(MAT[key]);
+    }
     if (prop) { allowed.delete(kit.wall); allowed.delete(kit.roof); allowed.delete(MAT.glass); }
     for (const box of b.boxes) {
       if (!registered.has(box.material)) fail(`${b.id}: unregistered material ${box.material}`);

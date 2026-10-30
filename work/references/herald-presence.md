@@ -46,6 +46,13 @@ were made to a real channel. The app keys named in AGENTS.md are not evidence of
   the authorization it just established. [Refresh documentation](https://dev.twitch.tv/docs/authentication/refresh-tokens/)
   distinguishes user refresh from app tokens: app tokens are obtained anew, not refreshed. No user token store is
   needed for the chosen app-token-only runtime.
+- [Get EventSub Subscriptions](https://dev.twitch.tv/docs/api/reference/#get-eventsub-subscriptions) accepts a
+  `conduit_id` filter (added 2026-04-17; filters are mutually exclusive), so Herald lists only its own conduit's
+  subscriptions and never the client's whole list. [Get Conduit Shards](https://dev.twitch.tv/docs/api/reference/#get-conduit-shards)
+  answers 404 for a conduit that does not exist or belongs to another client, which is how the configured conduit is
+  checked without Get Conduits. On Create Conduits and Create EventSub Subscription a 429 means a limit (five
+  conduits; three subscriptions per type and condition), not request pacing. A 409 body names the existing
+  subscription, but Herald never reads error bodies: it confirms by listing its conduit instead.
 - [Rate limits](https://dev.twitch.tv/docs/api/guide/#twitch-rate-limits): honor returned remaining/reset headers
   and 429, bound concurrency/retries, and coordinate the shared app budget with the Surveyor. Never assume the
   sample bucket size is available exclusively to Herald.

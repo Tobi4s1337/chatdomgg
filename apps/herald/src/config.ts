@@ -1,9 +1,12 @@
 import { TwitchLoginSchema } from '@chatdom/shared';
-import { Secret } from '@chatdom/twitch';
+import { EventSubIdSchema, Secret } from '@chatdom/twitch';
+import type { KingdomConfig } from '@chatdom/world';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { parseEnv } from 'node:util';
+import { kingdomFromSettings } from './source/kingdom';
+import { HERALD_PORT } from './source/server';
 
 /** The only channel this lane reads for real acceptance. */
 export const DEFAULT_CHANNEL_LOGIN = 'tobi4s_';
@@ -21,6 +24,17 @@ export interface HeraldConfig {
   readonly readerLogin: string | null;
   readonly redirectUri: URL | null;
   readonly credentials: { readonly clientId: string; readonly clientSecret: Secret } | null;
+  /** The explicitly provisioned development conduit. Herald never picks another one. */
+  readonly conduitId: string | null;
+  /** Where the private presence binding table lives: outside the repository, owner-only. */
+  readonly dataDir: string;
+  /**
+   * The loopback port `dev` and `replay` serve on (`HERALD_PORT`, default 5194, the one main's preview proxies).
+   * A second checkout running beside the kingdom's own Herald picks another.
+   */
+  readonly port: number;
+  /** The presentation layout whose home slots windows bind to; must match main's preview. */
+  readonly kingdom: KingdomConfig;
   readonly problems: readonly ConfigProblem[];
   readonly secretsFile: string;
   readonly settingsFile: string;
@@ -31,6 +45,8 @@ export interface ConfigSources {
   readonly home?: string;
   readonly readText?: (path: string) => Promise<string>;
   readonly fileMode?: (path: string) => Promise<number>;
+  /** Current UTC year, for how far the presentation kingdom has grown. */
+  readonly year?: number;
 }
 
 /**
@@ -85,6 +101,30 @@ export async function loadConfig(sources: ConfigSources = {}): Promise<HeraldCon
     if (redirectUri === null) problems.push({ key: 'HERALD_REDIRECT_URI', issue: 'invalid' });
   }
 
+  const rawConduit = setting('HERALD_CONDUIT_ID');
+  let conduitId: string | null = null;
+  if (rawConduit !== null) {
+    if (EventSubIdSchema.safeParse(rawConduit).success) conduitId = rawConduit;
+    else problems.push({ key: 'HERALD_CONDUIT_ID', issue: 'invalid' });
+  }
+
+  const rawDataDir = setting('HERALD_DATA_DIR');
+  let dataDir = join(home, '.local', 'share', 'chatdom', 'herald');
+  if (rawDataDir !== null) {
+    if (isAbsolute(rawDataDir)) dataDir = rawDataDir;
+    else problems.push({ key: 'HERALD_DATA_DIR', issue: 'invalid' });
+  }
+  const rawPort = setting('HERALD_PORT');
+  let port = HERALD_PORT;
+  if (rawPort !== null) {
+    const value = /^\d{1,5}$/.test(rawPort) ? Number(rawPort) : NaN;
+    // Unprivileged, and never the consent helper's callback port.
+    if (value >= 1024 && value <= 65535 && value !== AUTHORIZE_CALLBACK_PORT) port = value;
+    else problems.push({ key: 'HERALD_PORT', issue: 'invalid' });
+  }
+  const kingdom = kingdomFromSettings(setting, channelLogin, sources.year ?? new Date().getUTCFullYear());
+  problems.push(...kingdom.problems);
+
   const secretsFile = env.HERALD_TWITCH_ENV_FILE ?? join(home, '.config', 'chatdom', 'atlas.env');
   let credentials: HeraldConfig['credentials'] = null;
   try {
@@ -101,7 +141,7 @@ export async function loadConfig(sources: ConfigSources = {}): Promise<HeraldCon
     problems.push({ key: 'HERALD_TWITCH_ENV_FILE', issue: isMissingFile(error) ? 'missing' : 'unreadable' });
   }
 
-  return { channelLogin, channelLoginDefaulted: rawChannel === null, readerLogin, redirectUri, credentials, problems, secretsFile, settingsFile };
+  return { channelLogin, channelLoginDefaulted: rawChannel === null, readerLogin, redirectUri, credentials, conduitId, dataDir, port, kingdom: kingdom.config, problems, secretsFile, settingsFile };
 }
 
 /** A redirect URI Twitch could have registered: absolute https, or http on a loopback host. No query or fragment. */
