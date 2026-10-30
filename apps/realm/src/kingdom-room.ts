@@ -2,18 +2,25 @@ import { Room, ServerError, type Client } from '@colyseus/core';
 import { StateView } from '@colyseus/schema';
 import { KingdomIdSchema } from '@chatdom/shared';
 import { KingdomRoomState, WalkerSchema, WalkInputSchema, RealmJoinSchema, RealmIntentSchema, kingdomRoomId,
-  WALK_HZ, REALM_PATCH_MS, REALM_MESSAGE_LIMIT, sanitizeWalkInput, type RealmPrincipal } from '@chatdom/shared/realm';
+  sanitizeWalkInput, type RealmPrincipal, type RealmReceipt } from '@chatdom/shared/realm';
 import { stepPlayer, bodyStuck, embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmRoomHandle, RealmRoomServices } from './ports';
+import { REALM_ROOM_LIMITS as LIMITS, within } from './limits';
+import type { RealmRoomObserver } from './diagnostics';
 
-/** Colyseus adapter only. Durable rules live in world; transports cannot award or publish. */
-export function createKingdomRoom(services: RealmRoomServices) {
+const UNOBSERVED: RealmRoomObserver = { inputDepth() {}, actionStarted() {}, actionRefused() {}, closed() {} };
+/** Colyseus closes a sender past `maxMessagesPerSecond` (and the room ends invalid input) with this code. */
+const PROTOCOL_CLOSE = 4002;
+class ActionLate extends Error {}
+
+/** Colyseus adapter only. Durable rules live in world; transports cannot award or publish. Every ceiling is in `limits/`. */
+export function createKingdomRoom(services: RealmRoomServices, observer: RealmRoomObserver = UNOBSERVED) {
   return class KingdomRoom extends Room<{ state: KingdomRoomState; input: InstanceType<typeof WalkInputSchema>; client: Client<{ auth: RealmPrincipal }> }> {
     state = new KingdomRoomState();
-    maxClients = 300;
-    maxMessagesPerSecond = REALM_MESSAGE_LIMIT;
-    patchRate = REALM_PATCH_MS;
-    inputs = this.defineInput(WalkInputSchema, { bufferMaxSize: 8, sanitize: sanitizeWalkInput });
+    maxClients = LIMITS.maxClients;
+    maxMessagesPerSecond = LIMITS.messagesPerSecond;
+    patchRate = LIMITS.patchMs;
+    inputs = this.defineInput(WalkInputSchema, { bufferMaxSize: LIMITS.inputBuffer, sanitize: sanitizeWalkInput });
     private handle!: RealmRoomHandle;
     private accepting = true;
     private recoveryRequests = new Map<string, number>();
@@ -24,6 +31,8 @@ export function createKingdomRoom(services: RealmRoomServices) {
     private walking = new Map<string, boolean>();
     private world!: RealmRoomHandle['world'];
     private authChecks = new Set<string>();
+    /** Actions in flight per walker session; bounded by `LIMITS.actionsPerWalker`. */
+    private actions = new Map<string, number>();
 
     static async onAuth(_token: string, options: unknown) {
       const parsed = RealmJoinSchema.safeParse(options);
@@ -74,27 +83,46 @@ export function createKingdomRoom(services: RealmRoomServices) {
       this.onMessage('bootstrap', client => { if(this.accepting&&client.auth)client.send('bootstrap',this.handle.bootstrap(client.auth)); });
       this.unbind.push(this.handle.subscribe(delivery => {
         if (!this.accepting) return;
-        this.state.factSequence = delivery.sequence;
+        // Delivery is at-least-once: a redelivered row never moves the public sequence backwards.
+        this.state.factSequence = Math.max(this.state.factSequence, delivery.sequence);
         this.broadcast('world', delivery);
       }), this.handle.bindTransient(message => { if(this.accepting)this.broadcast('transient', message); }, (personId, message) => {
         if(!this.accepting)return;
         const sid = this.control.get(personId), client = sid ? this.clients.getById(sid) : undefined;
         client?.send('private', message);
       }));
-      this.onMessage('intent', async (client, raw) => {
+      this.onMessage('intent', (client, raw) => {
         if(!this.accepting){client.leave(4003,'Kingdom connection ended; reconnect to check your work.');return;}
         const parsed = RealmIntentSchema.safeParse(raw);
-        if (!parsed.success) { client.leave(4002, 'Invalid intent'); return; }
-        try {
-        const p = this.state.walkers.get(client.sessionId), auth = client.auth;
-        if (!p || !auth || !await services.auth.current(auth, Date.now()) || !this.accepting) { client.leave(4003, 'Entry expired'); return; }
-        // The domain implementation serializes/commits; a socket never supplies actor or position.
-        const receipt = await this.handle.intent({ principal: auth, walkerId: client.sessionId,
-          position: [p.x, p.y, p.z], collisionRevision: p.collisionRevision, current:()=>readWalker(client.sessionId) }, parsed.data);
-        if(this.accepting)client.send('private', { type: 'receipt', receipt });
-        } catch {
-          if(this.accepting)client.send('private',{type:'receipt',receipt:{version:1,id:parsed.data.id,status:'unavailable',message:'The kingdom could not confirm this request. Reconnect to check its result.'}});
+        if (!parsed.success) { client.leave(PROTOCOL_CLOSE, 'Invalid intent'); return; }
+        const id = parsed.data.id, sid = client.sessionId, inFlight = this.actions.get(sid) ?? 0;
+        const answer = (receipt: RealmReceipt) => { if (this.accepting) client.send('private', { type: 'receipt', receipt }); };
+        // A finite cost per person: one action at a time. More are answered at once, never queued as promises.
+        if (inFlight >= LIMITS.actionsPerWalker) {
+          observer.actionRefused('busy');
+          answer({ version: 1, id, status: 'held', message: 'Your previous request is still being confirmed. Wait for its receipt, then try again.' });
+          return;
         }
+        this.actions.set(sid, inFlight + 1);
+        observer.actionStarted(inFlight + 1);
+        const work = (async (): Promise<RealmReceipt | null> => {
+          const p = this.state.walkers.get(sid), auth = client.auth;
+          if (!p || !auth || !await services.auth.current(auth, Date.now()) || !this.accepting) { client.leave(4003, 'Entry expired'); return null; }
+          // The domain implementation serializes/commits; a socket never supplies actor or position.
+          return this.handle.intent({ principal: auth, walkerId: sid,
+            position: [p.x, p.y, p.z], collisionRevision: p.collisionRevision, current:()=>readWalker(sid) }, parsed.data);
+        })();
+        // The slot frees when the work itself settles, so a stalled store holds this person's next action instead of stacking it.
+        void work.then(() => {}, () => {}).finally(() => {
+          const left = (this.actions.get(sid) ?? 1) - 1;
+          if (left > 0) this.actions.set(sid, left); else this.actions.delete(sid);
+        });
+        void within(work, LIMITS.actionReplyMs, () => new ActionLate()).then(receipt => { if (receipt) answer(receipt); }, error => {
+          if (error instanceof ActionLate) {
+            observer.actionRefused('late');
+            answer({ version: 1, id, status: 'unavailable', message: 'The kingdom has not confirmed this request yet. Reconnect to check its result before trying again.' });
+          } else answer({ version: 1, id, status: 'unavailable', message: 'The kingdom could not confirm this request. Reconnect to check its result.' });
+        });
       });
       this.setFixedTimestep(ctx => {
         if(!this.accepting)return;
@@ -102,7 +130,10 @@ export function createKingdomRoom(services: RealmRoomServices) {
           const connected = this.clients.getById(sid);
           if (!connected?.auth || connected.auth.expiresAt <= Date.now()) { this.inputs.get(sid).clear(); p.vx = 0; p.vz = 0; if(connected)connected.leave(4003,'Entry expired');continue; }
           if(this.walking.get(sid)===false){this.inputs.get(sid).clear();p.vx=0;p.vz=0;continue;}
-          const input = this.inputs.get(sid).next();
+          const queued = this.inputs.get(sid);
+          observer.inputDepth(queued.size);
+          // One integration per walker per tick, whatever arrived: a flood cannot buy distance.
+          const input = queued.next();
           // Default skip policy: empty ticks don't create movement that the acknowledged input never ran.
           if (input) stepPlayer(p, input, ctx.dt, this.world);
           if (bodyStuck(p,this.world) && this.recoveryRequests.get(sid)!==this.world.revision) {
@@ -110,15 +141,15 @@ export function createKingdomRoom(services: RealmRoomServices) {
             try{this.handle.recoverWalker(sid,this.world.revision);}catch{connected.leave(4003,'The kingdom could not find a safe place. Reconnect to continue.');}
           }
         }
-      }, WALK_HZ);
+      }, LIMITS.walkHz);
       this.clock.setInterval(()=>{
         for(const client of this.clients){
           if(!client.auth||this.authChecks.has(client.sessionId))continue;
           this.authChecks.add(client.sessionId);
-          const timeout=this.clock.setTimeout(()=>client.leave(4003,'Entry unavailable'),3000);
+          const timeout=this.clock.setTimeout(()=>client.leave(4003,'Entry unavailable'),LIMITS.authCheckTimeoutMs);
           void services.auth.current(client.auth,Date.now()).then(current=>{if(!current)client.leave(4003,'Entry expired');},()=>client.leave(4003,'Entry unavailable')).finally(()=>{timeout.clear();this.authChecks.delete(client.sessionId);});
         }
-      },1000);
+      },LIMITS.authCheckMs);
     }
     async onJoin(client: Client<{ auth: RealmPrincipal }>) {
       const auth = client.auth;
@@ -136,21 +167,25 @@ export function createKingdomRoom(services: RealmRoomServices) {
       this.control.set(auth.personId, client.sessionId);
       this.handle.lifecycle('join',auth,client.sessionId,Date.now());
     }
-    async onDrop(client: Client<{ auth: RealmPrincipal }>) {
+    async onDrop(client: Client<{ auth: RealmPrincipal }>, code?: number) {
+      observer.closed('drop', code);
       if(!client.auth||!this.accepting)return;
       this.handle.lifecycle('drop',client.auth,client.sessionId,Date.now());
       this.inputs.get(client.sessionId).clear();
       const p = this.state.walkers.get(client.sessionId); if (p) { p.vx = 0; p.vz = 0; }
-      if(client.auth.expiresAt<=Date.now())return;
+      // A rate or protocol closure is enforcement: no seat is kept, so the next entry needs a fresh ticket.
+      if(client.auth.expiresAt<=Date.now()||code===PROTOCOL_CLOSE)return;
       try {
-        await this.allowReconnection(client, 30);
+        await this.allowReconnection(client, LIMITS.reconnectGraceSeconds);
       } catch { /* Colyseus invokes onLeave when the reconnect grace expires. */ }
     }
     async onReconnect(client: Client<{ auth: RealmPrincipal }>) {
       if(!this.accepting||!client.auth||!await services.auth.current(client.auth,Date.now())||!this.accepting)throw new ServerError(403,'Entry expired');
       this.handle.lifecycle('reconnect',client.auth,client.sessionId,Date.now());
     }
-    onLeave(client: Client<{ auth: RealmPrincipal }>) {
+    onLeave(client: Client<{ auth: RealmPrincipal }>, code?: number) {
+      observer.closed('leave', code);
+      this.actions.delete(client.sessionId);
       if(client.auth)this.handle.lifecycle('leave',client.auth,client.sessionId,Date.now());
       this.walking.delete(client.sessionId);this.recoveryRequests.delete(client.sessionId);
       const p = this.state.walkers.get(client.sessionId);

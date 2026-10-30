@@ -51,7 +51,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   inside the durable write transaction. Focused R6 test races one person into four kingdoms and restarts during
   allocation: at most three citizen deeds, castle excluded, guest retained, occupied plot transforms unchanged
   and old layout cannot be overwritten by a regenerated plan. No fixture ownership in live paths.
-- [ ] **RS04 — Ingress cannot vanish and committed public delivery can resume** · evidence: test. Implement
+- [x] **RS04 — Ingress cannot vanish and committed public delivery can resume** · evidence: test. Implement
   authenticated capability/evidence-checked ingress in `src/ingress/` and committed ordered delivery in
   `src/outbox/`. Implement `loadIngress`/`executeIngress`: persist source dedupe, private checkpoint and all
   capability-tagged facts plus public presence outbox in one transaction. Closed evidenced interval unions survive
@@ -70,7 +70,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   pinned SDK parser and uWS colon-path patches; do not parse tokens in application code or rename rooms to hide a failure.
   Document tab-scoped account/kingdom token storage, rotation timing and exact errors for the browser lane;
   browser source files remain read-only. Never add application input sequence/ack state.
-- [ ] **RS06 — Slow or abusive clients have finite costs** · evidence: test/log. Implement configuration and
+- [x] **RS06 — Slow or abusive clients have finite costs** · evidence: test/log. Implement configuration and
   readiness diagnostics in `src/limits/` and `src/diagnostics/`: 90 frames/s, existing bounded input queue,
   one integration per tick, 16 KiB incoming frames for bounded build operations, 1 MiB backpressure with closure, bounded action/work/DB/outbox
   queues and timeouts. Focused R9 test combines input flood with controlled slow socket/storage: distance cannot
