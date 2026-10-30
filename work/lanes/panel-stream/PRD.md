@@ -36,13 +36,13 @@ helper allocates a free port and queues through its machine-wide lock. Record an
   resting Ballad/Chronicle if supplied and missing-data states. Add the single meaningful adapter behavior test:
   production unshared/unavailable never confirms or dispatches; explicit simulated named/unnamed can demonstrate
   confirmation and always keeps its source. · evidence: behavior test and panel state contact sheet at 318×496.
-- [ ] **PS04 — The panel has a place at the tavern and in tonight's shared moment.** Finish Tavern watching/seating
+- [x] **PS04 — The panel has a place at the tavern and in tonight's shared moment.** Finish Tavern watching/seating
   information, Forge signpost with live/coals/anvils limits, communal building meter, contextual crowd act with
   pending/ended/rate-limit states and fixed Bits shelf demonstration. No UGC input, real joined seat, private
   prompt echo, points spending, paid standing or fake purchase. Production shelf stays hidden without verified
   delivery support. Walk in is secondary and clearly leaves Twitch for the existing entry gate. · evidence:
   Tavern/Forge/act/shelf fixture captures, mobile drawer focus/back flow and real unavailable action check.
-- [ ] **PS05 — Stream framing tells the night without asking the streamer to tend it.** Complete calm/show and
+- [x] **PS05 — Stream framing tells the night without asking the streamer to tend it.** Complete calm/show and
   starting/break/ending presentation, motivated supported-camera cuts, eight-second hold, shutters/return,
   optional safe rectangle and sparse public name climax. Exercise fixture moments without inventing live events.
   Keep debug/count/preview controls out of output. Preserve quiet output; preview says broadcast mix unavailable
@@ -59,4 +59,6 @@ helper allocates a free port and queues through its machine-wide lock. Record an
 ## Backlog
 
 Ideas found while working go here as one line each. Do not pick them without a new brief.
-- A supported close "street" camera in the renderer would let the bottom strip look down a lit street into depth instead of cropping the window shot (main-owned scene.ts).
+- A supported close "street" camera in the renderer would let the bottom strip look down a lit street into depth instead of cropping the window shot (main-owned scene.ts). PS05 now uses the existing `citizen` camera for the strip's street beat; a walking street camera would still be richer.
+- A silent running-clock option in the renderer (start the simulated night at t=0 without `play()`'s sound unlock) would let the starting seam replay the fixture's arrivals instead of joining at t=30 (main-owned scene.ts).
+- Supplied "night so far" moments (an Earlier tonight replay, pool scaffold progress) would give the break tour more than the town, a window and a street once their runtimes exist.

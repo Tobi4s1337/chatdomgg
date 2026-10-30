@@ -1,0 +1,39 @@
+diff --git a/build/uWebSocketsTransport.cjs b/build/uWebSocketsTransport.cjs
+index 4df1293591a5e516636cbca0cd18adea81e53c8a..a1ae83d32a9b4af754736890868809f2837388ad 100644
+--- a/build/uWebSocketsTransport.cjs
++++ b/build/uWebSocketsTransport.cjs
+@@ -317,7 +317,7 @@ var uWebSocketsTransport = class extends import_core.Transport {
+     const url = rawClient.url;
+     const searchParams = rawClient.searchParams;
+     const sessionId = searchParams.sessionId;
+-    const processAndRoomId = url.match(/\/[a-zA-Z0-9_\-]+\/([a-zA-Z0-9_\-]+)$/);
++    const processAndRoomId = url.match(/\/[a-zA-Z0-9_\-]+\/([a-zA-Z0-9_\-:]+)$/);
+     const roomId = processAndRoomId && processAndRoomId[1];
+     if (!sessionId && !roomId) {
+       const timeout = setTimeout(() => {
+diff --git a/build/uWebSocketsTransport.mjs b/build/uWebSocketsTransport.mjs
+index 28ced114f4a07104697d27aa7e1d55d4e2b26875..557b1536fcf256b3d4024ee8913bf7b6e00a690e 100644
+--- a/build/uWebSocketsTransport.mjs
++++ b/build/uWebSocketsTransport.mjs
+@@ -282,7 +282,7 @@ var uWebSocketsTransport = class extends Transport {
+     const url = rawClient.url;
+     const searchParams = rawClient.searchParams;
+     const sessionId = searchParams.sessionId;
+-    const processAndRoomId = url.match(/\/[a-zA-Z0-9_\-]+\/([a-zA-Z0-9_\-]+)$/);
++    const processAndRoomId = url.match(/\/[a-zA-Z0-9_\-]+\/([a-zA-Z0-9_\-:]+)$/);
+     const roomId = processAndRoomId && processAndRoomId[1];
+     if (!sessionId && !roomId) {
+       const timeout = setTimeout(() => {
+diff --git a/src/uWebSocketsTransport.ts b/src/uWebSocketsTransport.ts
+index 8964f795ba2ba41793906929d277291164d0d933..1cccccc7aefe77639f9d105fb4715688ddc0b969 100644
+--- a/src/uWebSocketsTransport.ts
++++ b/src/uWebSocketsTransport.ts
+@@ -412,7 +412,7 @@ export class uWebSocketsTransport extends Transport {
+     const searchParams = rawClient.searchParams;
+ 
+     const sessionId = searchParams.sessionId as string;
+-    const processAndRoomId = url.match(/\/[a-zA-Z0-9_\-]+\/([a-zA-Z0-9_\-]+)$/);
++    const processAndRoomId = url.match(/\/[a-zA-Z0-9_\-]+\/([a-zA-Z0-9_\-:]+)$/);
+     const roomId = processAndRoomId && processAndRoomId[1];
+ 
+     // If sessionId is not provided, allow ping-pong utility.

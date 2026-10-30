@@ -21,13 +21,13 @@ substitute for contracts. Record discoveries under Backlog without silently expa
 
 ## Tasks
 
-- [ ] **BT01 — A small Hearth home you can start shaping** · Author the complete gabled hut with supported
+- [x] **BT01 — A small Hearth home you can start shaping** · Author the complete gabled hut with supported
   floor, hollow room, clear threshold, finished roof and real window; export only this finished entry initially.
   Build `/-/templates` and its scoped capture adapter using production voxel/render modules and main's route hook.
   Render desktop/phone and three angles immediately. Demonstrate actual main draft insertion and one edited cell
   followed by undo; no static-mesh success. Establish one meaningful executed-cell route/bounds test and measure
   the hut's actual remaining tier capacity. · evidence: partial validation + insertion test + looked-at hut/sheet
-- [ ] **BT02 — Hearth teaches three plans at every size** · Complete gable, corner and courtyard across all five
+- [x] **BT02 — Hearth teaches three plans at every size** · Complete gable, corner and courtyard across all five
   tiers, with connected usable interiors and a truly open court. Add honest titles/hints and finite selectors;
   preserve window IDs where retained. Record dimensions, room feet/threshold fixtures and palette in the owned
   README. Check real locked-rear bounds and all matching tier policies; review larger roofs and compact hut
