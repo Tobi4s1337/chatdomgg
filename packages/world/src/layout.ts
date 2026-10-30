@@ -1,3 +1,5 @@
+import type { SettlementPlan } from './settlement/types';
+import { settlementTerrainHeight } from './settlement/terrain';
 import { HOME_DEPTH_METRES, type HomeTier, type Vec3 } from '@chatdom/shared';
 
 export type KingdomTier = 'hamlet' | 'town';
@@ -88,7 +90,11 @@ function settlementGrade(layout:KingdomLayout,quarters:readonly TenureQuarter[],
   }
   return last.elevation;
 }
-export function terrainHeight(layout: KingdomLayout,x:number,z:number):number {
+export function terrainHeight(layout: KingdomLayout | SettlementPlan,x:number,z:number):number {
+  if ('version' in layout && layout.version === 2) return settlementTerrainHeight(layout,x,z);
+  return legacyTerrainHeight(layout as KingdomLayout,x,z);
+}
+function legacyTerrainHeight(layout: KingdomLayout,x:number,z:number):number {
   const {buckets,quarters,seed,phase}=prepareTerrain(layout);
   let influence=0,weightedElevation=0;
   for(const pad of buckets.get(`${Math.floor(x/PAD_BUCKET)},${Math.floor(z/PAD_BUCKET)}`)??[]){

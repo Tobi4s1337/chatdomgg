@@ -1,10 +1,19 @@
-import { createHome, createHearthHome, createStreetProp, type StreetPropForm } from '@chatdom/content';
+import { createHome, createHearthHome, createStreetProp, createMarketWell, createMarketStall, type StreetPropForm } from '@chatdom/content';
 import type { WindowHouse } from '@chatdom/render';
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
-import { homeOrigin, terrainHeight, transformCardinalPoint, type KingdomLayout, type SettlementHome } from '@chatdom/world';
+import { homeOrigin, terrainHeight, transformCardinalPoint, type KingdomLayout, type SettlementHome, type SettlementPlan } from '@chatdom/world';
 
 export interface Dressing { readonly blueprint: VoxelBlueprint; readonly position: Vec3; readonly yaw: number }
 type ContentPlot = Pick<SettlementHome, 'slot' | 'position' | 'rotation' | 'tier' | 'style' | 'variant' | 'ordinal'>;
+
+/** Civic furnishings leave the main meeting of the streets open. */
+export function placeMarketContent(market:SettlementPlan['market']):Dressing[] {
+  return [
+    {blueprint:createMarketWell(),position:[8,market.elevation,16],yaw:0},
+    {blueprint:createMarketStall(0),position:[-14,market.elevation,0],yaw:0},
+    {blueprint:createMarketStall(1),position:[-14,market.elevation,17],yaw:0},
+  ];
+}
 
 /** Installed, reviewed Hearth families cover every tier; other styles retain
  * their authored core kit until their own content lanes are accepted. */
@@ -33,13 +42,13 @@ export function placeSettlementContent(plots: readonly ContentPlot[], ground: (x
     };
     // Keep the union of the authored door approaches clear, including the
     // off-centre Hearth and Tide entrances. Small ornaments sit at the edges.
-    add(plot.ordinal % 2 ? 'flower-pot' : 'leafy-shrub', -.375, .125);
-    add(plot.ordinal % 3 ? 'flower-trough' : 'rock-cluster', 6, .125);
+    add('flower-pot', 0, .125);
+    add(plot.ordinal % 5 === 0 ? 'leafy-shrub' : plot.ordinal % 3 ? 'flower-trough' : 'rock-cluster', 6, .125);
     // A short joined fence or wall on selected gardens; opening stays generous.
     if (plot.ordinal % 4 === 0) {
       const kind = plot.ordinal % 8 === 0 ? 'wall' : 'fence';
       add(`${kind}-straight`, 5.625, 1.75);
-      add(`${kind}-end`, 7.625, 1.75);
+      add(`${kind}-end`, 7.5, 1.75);
     }
   }
   return { houses, props };
