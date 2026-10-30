@@ -17,7 +17,7 @@ Do not add per-voxel tests. Missing required main inputs get a `needs:` line; wo
 
 ## Tasks
 
-- [ ] **WB01 — Put a recognisable citizen on the real avatar bench.** Consume the frozen part type, canonical
+- [x] **WB01 — Put a recognisable citizen on the real avatar bench.** Consume the frozen part type, canonical
   rig/palette and main route hook. Build the balanced body with neutral garb, one considered hairstyle and a
   cloak, then show it at `/-/avatars` through the real avatar-scale voxel material/mesh path. Add the owned
   deterministic capture script and visibly labelled SIMULATED fixtures. Capture front/side/back at dusk and
