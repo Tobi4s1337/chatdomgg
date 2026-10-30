@@ -17,7 +17,7 @@ server you start. No production deploy, Extension submission or real Twitch cont
 
 ## Tasks
 
-- [ ] **PS01 — A quiet viewer can see the kingdom under the video.** Build the static Extension entries and
+- [x] **PS01 — A quiet viewer can see the kingdom under the video.** Build the static Extension entries and
   exported `Panel`, relative assets and Helper boot. Capture our existing kingdom renderer into a small fixture
   picture, then create the complete visible 318×496 carved frame: crest/name, obvious SIMULATED source, picture,
   window action, useful tonight summary and one-drawer navigation. Bare production without Helper/data gets an
