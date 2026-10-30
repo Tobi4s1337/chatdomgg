@@ -1,0 +1,14 @@
+{
+  "name": "@chatdom/twitch",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/fake-twitch.ts"
+  },
+  "dependencies": {
+    "@chatdom/shared": "workspace:*",
+    "zod": "4.6.7"
+  }
+}
