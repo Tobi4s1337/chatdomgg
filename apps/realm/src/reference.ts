@@ -21,6 +21,7 @@ export function referenceServices(): RealmRoomServices & { issue(): { ticket: st
       async authenticate(join) {
         const principal = tickets.get(join.ticket);
         if (!principal || principal.expiresAt <= Date.now() || join.kingdomId !== REFERENCE_KINGDOM) throw new ServerError(403, 'Reference entry expired');
+        tickets.delete(join.ticket);
         return principal;
       },
       async current(principal, now) { const stored=sessions.get(principal.sessionId);return !!(stored&&stored.personId===principal.personId&&stored.kingdomId===principal.kingdomId&&stored.expiresAt>now&&principal.origin==='simulated'); },

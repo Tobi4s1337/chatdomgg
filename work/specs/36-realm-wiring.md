@@ -205,11 +205,14 @@ a competing writer per Herald call. The registry is a service capability, never 
 Production browser entry consumes `REALM_AUTH_ROUTES`: session `/api/realm/session`, start
 `/api/realm/auth/start`, callback `/api/realm/auth/callback`, ticket `/api/realm/ticket`, and signout
 `/api/realm/signout`. Parse the frozen strict DTOs from `packages/shared/src/realm/auth.ts`; the authenticated
-session reply supplies expiry/CSRF, the ticket request contains version/kingdom/protocol, and the issued reply
+session reply supplies expiry/CSRF/`resumeScope`, the ticket request contains version/kingdom/protocol, and the issued reply
 contains the validated join and expiry. Cookies/tickets stay private and responses are no-store. Use realm-
 server's founded manifest data separately; auth DTOs never establish allocation. Do not infer other routes from
 development endpoints or import API service internals. A ticket authorizes entry, not a home, trust, coal or
-review verdict. The reference-session route remains explicitly simulated.
+review verdict. Construct `RealmEntry { kingdomId, resumeScope, ticket() }` for `connectRealm`: the lazy factory
+requests a fresh single-use ticket only when reconnect cannot restore the seat. Never persist/reuse join tickets
+or key reconnect storage by them. A new API session/account has a different scope; signout disposes the client
+and clears its reconnect state. The reference-session route remains explicitly simulated.
 
 Web factories belong at `apps/web/src/realm/adapters/index.ts`; the Herald service factory at
 `apps/herald/src/realm-sink/index.ts`. Central entrypoints need only imports, configured ports and lifecycle calls,

@@ -190,7 +190,7 @@ Use `REALM_AUTH_ROUTES` and the exact schemas/types in `packages/shared/src/real
 
 | Route | Request | Success |
 |---|---|---|
-| `GET /api/realm/session` | Chatdom cookie | `{ version: 1, status: 'anonymous' }` or `{ version: 1, status: 'authenticated', expiresAt: number, csrfToken: string }` |
+| `GET /api/realm/session` | Chatdom cookie | `{ version: 1, status: 'anonymous' }` or `{ version: 1, status: 'authenticated', expiresAt: number, resumeScope: string, csrfToken: string }` |
 | `GET /api/realm/auth/start` | `returnTo` is a validated local kingdom path | HTTP 302 to Twitch, with server-bound one-use state/nonce |
 | `GET /api/realm/auth/callback` | OIDC callback parameters | HTTP 303 to the stored validated local path, with the Chatdom cookie |
 | `POST /api/realm/ticket` | Cookie, `X-CSRF-Token`, JSON `{ version: 1, kingdomId: KingdomId, protocol: 1 }` | `{ version: 1, status: 'issued', join: RealmJoin, expiresAt: number }` |
@@ -203,6 +203,11 @@ with a nonempty message of at most 240 characters,
 with HTTP 401/403/503 respectively. Validation errors are HTTP 400 with `refused`. JSON responses and redirects
 that contain auth material use `Cache-Control: no-store`. Session replies expose no identity/auth handles;
 `csrfToken` authorizes same-session requests only and is not a room ticket. The cookie is the API credential.
+`resumeScope` is a random opaque 16–128 character browser storage partition, stable for this Chatdom session
+and changed on a new session/account. It is neither a credential nor a person/session handle and grants nothing.
+The client keys tab-scoped reconnect storage by endpoint, kingdom and this scope, never by a single-use ticket.
+It tries reconnect first and requests a fresh ticket only for fresh entry or expired reconnection. Signout clears
+the scope's reconnect storage; session revocation also invalidates its server-side seat.
 The realm endpoint is trusted configuration, never an arbitrary URL in the ticket request.
 
 An explicit user Walk action sends anonymous viewers to `auth/start`; after callback, the browser reads the

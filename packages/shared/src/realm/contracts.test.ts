@@ -3,6 +3,7 @@ import { Encoder, Decoder } from '@colyseus/schema';
 import { RealmIntentSchema, RealmJoinSchema, kingdomRoomId } from './messages';
 import { KingdomRoomState, WalkerSchema } from './schema';
 import { sanitizeWalkInput } from './movement';
+import { RealmSessionReplySchema } from './auth';
 
 describe('realm wire boundary v1', () => {
   it('preserves large string kingdom IDs, denies claimed authority and transmits only the public schema', () => {
@@ -11,6 +12,9 @@ describe('realm wire boundary v1', () => {
     const join = { kingdomId:'129634568',ticket:'opaque-session-ticket',protocol:1 };
     expect(RealmJoinSchema.safeParse(join).success).toBe(true);
     expect(RealmJoinSchema.safeParse({...join,personId:'123'}).success).toBe(false);
+    const session={version:1,status:'authenticated',expiresAt:1000,resumeScope:'opaque-browser-scope',csrfToken:'a'.repeat(32)};
+    expect(RealmSessionReplySchema.safeParse(session).success).toBe(true);
+    expect(RealmSessionReplySchema.safeParse({...session,personId:'123'}).success).toBe(false);
     expect(RealmIntentSchema.safeParse({version:1,id:'wish:1',type:'forge.wish',words:'a sleeping dragon'}).success).toBe(true);
     expect(RealmIntentSchema.safeParse({version:1,id:'wish:1',type:'forge.wish',words:'dragon',ownerId:'123',coal:3}).success).toBe(false);
     const state=new KingdomRoomState({kingdomId:join.kingdomId,writerEpoch:'epoch:1',origin:'simulated',layoutRevision:'layout:1',collisionRevision:1,factSequence:0});

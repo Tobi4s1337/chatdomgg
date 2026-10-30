@@ -9,7 +9,9 @@ export const REALM_AUTH_ROUTES = {
 } as const;
 export const RealmSessionReplySchema = z.discriminatedUnion('status', [
   z.strictObject({ version: z.literal(1), status: z.literal('anonymous') }),
-  z.strictObject({ version: z.literal(1), status: z.literal('authenticated'), expiresAt: EpochMsSchema, csrfToken: z.string().min(32).max(256) }),
+  z.strictObject({ version: z.literal(1), status: z.literal('authenticated'), expiresAt: EpochMsSchema,
+    /** Opaque browser storage partition, stable for this Chatdom session. Never an auth credential or person ID. */
+    resumeScope: z.string().min(16).max(128), csrfToken: z.string().min(32).max(256) }),
 ]);
 export const RealmTicketRequestSchema = z.strictObject({ version: z.literal(1), kingdomId: KingdomIdSchema, protocol: z.literal(1) });
 export const RealmTicketReplySchema = z.strictObject({ version: z.literal(1), status: z.literal('issued'), join: RealmJoinSchema, expiresAt: EpochMsSchema });

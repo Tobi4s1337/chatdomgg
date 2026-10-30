@@ -106,7 +106,10 @@ delivery, lifecycle and disposal. `RealmRoomEffects` reads/places walkers, permi
 committed geometry/collision revisions with safe poses. Awaited admission rechecks `RealmIntentContext.current()`.
 Only sitting suppresses walking; an interior still permits walking to its exit.
 
-`apps/web/src/realm/client.ts:connectRealm` consumes a real join plus the matching collision world. It uses SDK
+`apps/web/src/realm/client.ts:connectRealm` consumes `RealmEntry { kingdomId, resumeScope, ticket() }` plus the
+matching collision world. Entry tries the saved reconnect token first; only fresh entry calls the factory for
+a new single-use ticket. The API's opaque session scope partitions storage without exposing an identity or
+credential. Tickets are never persisted or used as storage keys. It uses SDK
 Predict for local reconciliation and 250 ms remote interpolation, with an 80 ms local correction time constant.
 Tick, stage the returned input count, then read render poses. Reload tokens are tab-scoped and rotated after SDK
 reconnect completes. Authentication, presence and durable action decisions never run in the renderer.

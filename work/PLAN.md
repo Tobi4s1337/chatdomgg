@@ -354,7 +354,8 @@ scene/worker/content/camera call sites; exact installation recipes are part of l
 
 **Reference running:** preview 5190, explicit SIMULATED realm 5191; `/-/realm` renders only connected browser
 walkers. WASD/Shift/Space use the same pure step on server and client, with Colyseus reconciliation/interpolation.
-Reload retains the same walker. Versions: Colyseus 0.18.10/core 0.18.23/schema 5.0.42/SDK 0.18.8/uWS 0.18.4.
+Reload retains the same walker. Entry uses the API's stable opaque `resumeScope` and a lazy fresh-ticket factory;
+single-use tickets never become reconnect storage keys. Versions: Colyseus 0.18.10/core 0.18.23/schema 5.0.42/SDK 0.18.8/uWS 0.18.4.
 Two pnpm patches fix colon room IDs in SDK reconnect parsing and uWS room URLs. 30 Hz input, 5 Hz patches,
 90 inbound frames/s, 16 KiB payload, 1 MiB backpressure with closure. Node 22 remains sufficient. Production
 startup fails closed until real services exist. API has a pinned manifest, not a fake auth server. Use spec 33's

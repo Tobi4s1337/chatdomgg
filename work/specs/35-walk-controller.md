@@ -28,7 +28,8 @@ only moving a box around a physics bench.
 - `packages/world/src/realm/reference.ts` exports `REFERENCE_BLOCKS` and `REFERENCE_WORLD`, an explicitly
   SIMULATED court. It is not founded kingdom geometry and is read-only for this lane.
 - `apps/web/src/realm/client.ts` and `apps/web/src/realm-reference/**` implement the real Colyseus boundary
-  under spec 33. `connectRealm(endpoint, join, world, storage?)` returns a `RealmClient`; its
+  under spec 33. `connectRealm(endpoint, entry, world, storage?)` returns a `RealmClient`; `RealmEntry` supplies
+  kingdom ID, the API session's stable `resumeScope` and a lazy single-use `ticket()` factory. Its
   `tick(now, input)` stages Predict's due fixed inputs and returns render poses. Its jump edge is latched until
   the first due send. Main demonstrated three real SDK clients and three Playwright browsers moving and
   reloading, with full `pnpm verify` green. The WC06 movement/Predict/input-staging grant below is effective;
