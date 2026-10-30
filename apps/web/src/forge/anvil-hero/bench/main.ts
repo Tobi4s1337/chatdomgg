@@ -163,7 +163,7 @@ async function main() {
       // Three-quarter from the mark's side and the heel: cheek, hardy hole and the horn's whole length.
       const target = heroBox.getCenter(new THREE.Vector3()).setY(.82);
       const direction = new THREE.Vector3(-.62, .62, 1).normalize();
-      cameraDistance = fitDistance(heroBox, target, direction, vfov, hfov, camera.aspect < 1 ? .9 : .78);
+      cameraDistance = fitDistance(heroBox, target, direction, vfov, hfov, camera.aspect < 1 ? .94 : .9);
       camera.position.copy(target).addScaledVector(direction, cameraDistance);
       camera.lookAt(target);
     } else {
