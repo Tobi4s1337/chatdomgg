@@ -16,7 +16,7 @@ export interface BuildSessionOptions {
   onPublish(blueprint: VoxelBlueprint): void | Promise<void>;
   /** Runs after the accepted local candidate and private draft have been saved. */
   onPublished?(): void;
-  onMesh?(mesh: THREE.Mesh): void;
+  onMesh?(mesh: THREE.Mesh, source: VoxelBlueprint): void;
   onLeave(): void;
   sound?: ReturnType<typeof createKingdomSound>;
 }
@@ -98,7 +98,7 @@ export function createBuildSession(options: BuildSessionOptions) {
     if (options.source !== 'SIMULATED') return;
     const blueprint: VoxelBlueprint = { version: 1, id: `draft:${policy.plotId}`, styleId: policy.styleId, kind: 'home', lattice: 'build', size: [...policy.size], boxes: [], windows: anchors };
     const slot = options.slot ?? 0;
-    windows = createWindowLights(options.scene, [{ slot, blueprint, position: options.position, yaw: options.yaw }]);
+    windows = createWindowLights(options.scene, [{ slot, blueprint, position: options.position, yaw: options.yaw }], { allWindows: true });
     windows.setFrame({ version: 1, kingdomId: KingdomIdSchema.parse('1'), epoch: 'simulated-build', sequence: revision, asOf: 1000, origin: 'simulated', streamLive: true, connection: 'fresh', windows: [{ slot, present: true, publicName: options.ownerName, since: 0 }] });
   }
   function requestMesh() {
@@ -113,7 +113,7 @@ export function createBuildSession(options: BuildSessionOptions) {
         const geometry = geometryFromChunks(result.chunks, 'build');
         mesh.geometry.dispose(); mesh.geometry = geometry; meshedRevision = revision;
         if (!previewOpen) installWindows(compiled.windows, revision);
-        options.onMesh?.(mesh);
+        options.onMesh?.(mesh, draft.toRawBlueprint());
       } catch (error) { fail(error); }
       finally { meshing = false; if (meshRequested && !disposed) requestMesh(); }
     })();
