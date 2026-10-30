@@ -132,7 +132,7 @@ export function createKingdomForge(options:Options){
     try{const work=await make(receipt.plan,receipt.kitId.replace('-native','') as StyleKey);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;install(work);current=work;view.setPiece(work.geometry,work.bounds);fixed=21;options.sound.cue('wood');}
     catch{privateError='This piece is kept safely. The house still needs a clear socket for it.';}finally{preparing=false;publishStatus();}
   }
-  return {prepare,submit,update,status,refit,captureAudio:()=>{if(options.source!=='simulated')throw new Error('Offline audio is only available in the local simulation.');return renderForgeRitualAudio();},get renderRevision(){return open||placed.size?(fixed??now)+revision:revision;},get placements(){return [...placed.values()].map(p=>p.receipt);},
+  return {prepare,submit,update,status,refit,setEnvironment:view.setEnvironment,captureAudio:()=>{if(options.source!=='simulated')throw new Error('Offline audio is only available in the local simulation.');return renderForgeRitualAudio();},get renderRevision(){return open||placed.size?(fixed??now)+revision:revision;},get placements(){return [...placed.values()].map(p=>p.receipt);},
     open(){if(options.source!=='simulated')return;clearStale();open=true;options.sound.unlock();options.sound.cue('wood');publishStatus();},
     close(){if(preparing||current&&!current.committed)return;open=false;options.camera.clearViewOffset();publishStatus();},
     seek(seconds:number){if(options.source!=='simulated'||!current)return;fixed=Math.max(0,seconds);revision++;},
