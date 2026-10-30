@@ -64,6 +64,18 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  packages/voxel:
+    dependencies:
+      '@chatdom/shared':
+        specifier: workspace:*
+        version: link:../shared
+
+  packages/world:
+    dependencies:
+      '@chatdom/shared':
+        specifier: workspace:*
+        version: link:../shared
+
 packages:
 
   '@babel/code-frame@7.29.7':

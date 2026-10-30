@@ -320,13 +320,17 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Handoff state — 2026-10-30 scaffold
+## 10. Handoff state — 2026-10-30 kingdom core in progress
 
-- Node 22.23.4 / pnpm 10.17.0 workspace; Solid/Vite web development bench; TypeScript, ESLint, Vitest and Chrome screenshots wired through `pnpm verify`.
-- First consumer boundaries: `packages/shared` identity/event primitives, observed Surveyor DTOs and Atlas edition/alignment/codec contracts. Frozen after Astra high review and 22 passing tests; advanced integrations remain unfrozen.
-- Atlas spec and fifteen bounded Ralph tasks are in `work/specs/01-atlas.md` and `work/lanes/atlas/`. Branch `lane/atlas` and worktree `/root/chatdomgg-harness/worktrees/atlas` exist with dependencies installed; progress is empty and the team can start A01. Whole scope retained; missing downstream producer contracts become `needs:` when reached.
-- Reference studies: voxel AO/light, sky/fog/time, Ultra-Water, crowd animation and map camera/cartography. Techniques and limitations recorded; no external product source copied. No GPU performance evidence yet.
-- Founder decisions resolved: citizen windows are presence, named nearby; castle beacon is kingdom light. Sound uses credited CC0/permissive sources plus procedural work. No silent actions.
-- Next main work: small tested world/voxel contract when that consumer starts, then the real dusk kingdom with windows coming on. Do not freeze the other groups pre-emptively.
-- Infrastructure: Postgres 18, Valkey and Surveyor passed `pnpm check:services` read-only. Secrets stay in ignored `.env`. Existing services untouched.
-- Screenshot runner owns temporary port 5189; web dev 5170; preview 5190; Atlas service reserved 5193. See final evidence/review for active preview and exact checks.
+- Scaffold and Atlas interchange remain green. Atlas is out with the team on `lane/atlas`, worktree `../worktrees/atlas`; main does not edit its owned implementation.
+- First world/voxel consumer contracts are frozen in `packages/shared/src/voxel.ts` and `presence.ts`, with hostile fixtures. Astra high independently reviewed allocation limits, anonymous disclosure, permanent moderation, worker snapshot ownership and clock/replay behavior; findings fixed and regression-tested.
+- Pure `packages/world` presence reducer, minute eligibility sampler, privacy projection and stable presentation-slot allocator are implemented. `PresenceFeed` is the one public source seam. An opaque producer epoch permits honest SSE restart; real chat identities remain server-side.
+- `packages/voxel` implements packed chunks, eight-byte vertices, baked AO and whole-asset sky, a bounded wall-blocked light volume and actual module workers with immutable jobs/cancellation/stale-result rejection. These are tested core algorithms, not yet a completed visual kingdom.
+- Herald spec `work/specs/03-herald-presence.md` and five-task PRD are ready; main is committing the freeze and creating `lane/herald` / `../worktrees/herald` now. The team can begin authorization/source work while main integrates the public adapter and scene. No Twitch grants or real chat success claimed.
+- Main's active work: generated hamlet/town and immutable tenure corridors; batched voxel rendering; sky/fog/time; window texture plus local light field; labelled simulation and the first-window → arrival-wave → beacon moment. Fixed-camera shots and capture are still outstanding. Avatars walking and build mode belong to the next brief.
+- Content handoff drafts exist for `homes-hearth`, `homes-tide` and `street-props`. Their blueprint/material contracts are frozen; main is adding the actual validator and render bench before marking those lanes ready and creating their worktrees. Core starter models are separate from these lane-owned batches.
+- Look target studied: `f-lanternmere` dusk/night/hero frames. Aim for clearer neighbourhoods, a stronger castle silhouette, softened terrain, street warmth and restrained glow. Prototype and external source are references; no wholesale copies.
+- Known cost: the castle's full voxel preparation still takes several CPU seconds. Progressive/cached preparation and batched rendering must be demonstrated; no device FPS claim is made from this host.
+- Founder decisions: presence is the citizen's own warm window, named nearby; castle beacon is the kingdom light. Sound is procedural/permissively sourced and credited. Small consumer-driven freezes, no future catalogue guessed.
+- Ports: web dev 5170, screenshot runner 5189 (owned temporary), preview 5190, Atlas reserved 5193, Herald reserved 5194, optional registered auth callback 5195. Infrastructure secrets remain in ignored env files; existing services untouched.
+- All new build-memory paths are repo-relative. Final evidence and exact running-preview state will replace this in-progress handoff when the scene is demonstrated.

@@ -1,0 +1,1 @@
+{"name":"@chatdom/voxel","private":true,"version":"0.0.0","type":"module","exports":{".":"./src/index.ts","./worker":"./src/worker.ts"},"dependencies":{"@chatdom/shared":"workspace:*"}}
