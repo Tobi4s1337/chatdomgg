@@ -328,7 +328,12 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Current handoff — 2026-10-30
+## 10. Current handoff — 2026-10-31
+
+**Working rule:** One worker per live-evening lane: realm (including founded-world), interactions, Forge ritual,
+anvil, kingdom light, crowd behaviour and panel/stream. All others park after their current task; reviewed work
+still integrates. No new lanes. Short integration looks, typecheck + changed tests, one visual shot; full evening
+checks at milestones. Accepted work stays accepted unless broken.
 
 **Main / composition:** `7356e9f` mounts room walkers in exact founded kingdom scenes; `c60f529` supplies the
 connected SIMULATED market fixture. Refresh `integration/kingdom-queue` from main before accepting producer
@@ -344,7 +349,8 @@ inventing a principal. Placement context fences late input and resets self/peer/
 `engine.attachWalk` binds an already drawn scene. Recipe: `apps/web/src/kingdom/README.md`. Exact adopted plan,
 placements and asset hashes replace regeneration/legacy scatter/local saved parts. Scene mismatch holds walking
 and requests remount; the camera yields to walking and nearby names follow rendered people. The 5190 default
-still opens the spectator until actual entry/producer adapters compose. Spec 38 owns scene assembly/collision,
+still opens the spectator until actual entry/producer adapters compose; wiring needs a checked scene/manifest/
+collision bundle and current public cursors. Producer also needs approved public kingdom naming, not URL names. Spec 38 owns scene assembly/collision,
 provider/furnishing and HTTP reads; FW01/FW02 and RW03 received precise mount needs. Temporary bounded market
 collision lives only in testing, blocks unknown space and supplies no live-home authority. No branch-poll loop.
 
@@ -360,11 +366,13 @@ remains with WC; first-look owns spectator-button copy, kingdom-light owns castl
 keys/direct paid calls. Real contact sheets attach privately. Auth-file status is configuration, not approval.
 An owl run approved in 14s; subsequent HTTP owl review rejected subject fidelity, dragon held, crescent lantern
 rejected. Main viewed all sheets and sent forge-pieces concrete crescent-silhouette and owl-face fixes; do not
-weaken judges or claim calibration. RW05 gets this factory for durable room attachment. Managed 5195 still serves
-the old build: team restart needed, host service bus unavailable here. Herald 5194 is untouched.
+weaken judges or claim calibration. RW05 gets this factory for durable room attachment. Managed 5195 now serves the Codex judge backend, confirmed through the 5190 proxy (200, configured); Herald
+5194 is untouched. The coordinator now takes provenance from required `KingdomForgeAuthority.origin`, so real
+model calls in a simulated room stay SIMULATED. Missing origin stops before reserve/providers. Wiring received
+the contract handoff; no persisted reservation change.
 
-**Evidence / next:** Full `pnpm verify` green: 1518 tests, real Postgres, typecheck/lint/build and one serial phone
-dusk shot, looked at. Earlier three actual town browsers passed WASD/touch/stops/takeover; final looked market
+**Evidence / next:** Current change: typecheck/lint, all 1518 tests and builds passed; canceled the queued capture under the new
+focused-check rule (backend-only change). Earlier phone dusk shot was looked at. Earlier three actual town browsers passed WASD/touch/stops/takeover; final looked market
 shots at 1440×900/390×844 use one renderer/three SDK clients, explicitly LOOK-only. Streets remain sparse/underlit.
 Next: actual founded collision/session entry, room-backed Herald/build/Forge, RW06 publication adoption,
 interactions/interiors, 300 walkers and plaza→pier. Real tobi4s_ window/provider proof remains open; realm goal is
