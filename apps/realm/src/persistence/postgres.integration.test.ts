@@ -3,16 +3,18 @@ import { createServer as createNetServer } from 'node:net';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from '@colyseus/sdk';
-import { KingdomIdSchema, PersonIdSchema, type KingdomId } from '@chatdom/shared';
+import { KingdomIdSchema, PersonIdSchema, type KingdomId, type PresenceInput } from '@chatdom/shared';
 import { VOXEL_FIXTURE } from '@chatdom/shared/world-fixtures';
 import { KingdomRoomState, type ForgeAttachment, type RealmBootstrap, type RealmCapability, type RealmDomainCommand, type RealmForgeReservation,
   type RealmOwnedHome, type RealmPublicDelivery, type RealmWriterLease } from '@chatdom/shared/realm';
 import { decideRealm } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import { createRealmServer } from '../server';
+import { PostgresOutboxStore } from '../outbox';
+import { RealmIngress, presenceTransition } from '../ingress';
 import { REFERENCE_KINGDOM, referenceServices } from '../reference';
 import { PostgresRealmRepository, RealmCommitUncertainError, RealmLeaseHeldError, RealmWriterFencedError, assertRealmSchema, createDurableRealmServices,
-  createRealmPool, migrateRealmSchema, type RealmDatabase } from './index';
+  createRealmPool, digestOf, migrateRealmSchema, type RealmDatabase } from './index';
 
 /**
  * Spec 34 R1/R2 against real Postgres. Runs only with REALM_DATABASE_TESTS=1 and then fails, never skips, without
@@ -121,8 +123,8 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
   it('a committed fact survives a room restart and returns through bootstrap', async () => {
     const services = () => {
       const reference = referenceServices();
-      const repository = new PostgresRealmRepository(pool(), { origin: 'simulated' });
-      return { reference, durable: createDurableRealmServices({ repository, auth: reference.auth,
+      const db = pool(), repository = new PostgresRealmRepository(db, { origin: 'simulated' });
+      return { reference, durable: createDurableRealmServices({ repository, outbox: new PostgresOutboxStore(db), auth: reference.auth,
         kingdom: () => ({ world: REFERENCE_WORLD, layoutRevision: 'reference-court-v1', spawn: (_p, n) => [n * 3 - 6, 0, 7] }) }) };
     };
 
@@ -163,6 +165,139 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     await waitUntil(() => !second.durable.kingdoms.has(REFERENCE_KINGDOM));
     await secondServer.close();
   }, 30_000);
+
+  it('ingress cannot vanish and committed public delivery resumes: one result, the same event id, one coal', async () => {
+    const kingdomId = KingdomIdSchema.parse(String(810_000_000 + randomBytes(3).readUIntBE(0, 3)));
+    const person = PersonIdSchema.parse(String(710_000_000 + randomBytes(3).readUIntBE(0, 3)));
+    const guest = PersonIdSchema.parse(String(720_000_000 + randomBytes(3).readUIntBE(0, 3)));
+    const secret = randomBytes(24).toString('hex'), bearer = `Bearer ${secret}`;
+    const db = pools[0]!, rows = async (sql: string) => (await db.query(sql, [kingdomId])).rows;
+    const realm = (target: RealmDatabase) => {
+      const repository = new PostgresRealmRepository(target, { origin: 'live', leaseMs: 3_000 });
+      const ingress = new RealmIngress(target, 'live', { herald: secret });
+      const services = createDurableRealmServices({ repository, outbox: new PostgresOutboxStore(target), attach: kingdom => ingress.attach(kingdom),
+        auth: { authenticate: () => Promise.reject(new Error('no entry in this test')), current: () => Promise.resolve(false) },
+        kingdom: () => ({ world: REFERENCE_WORLD, layoutRevision: 'founded:1', spawn: () => [0, 0, 7] }) });
+      ingress.use(services);
+      return { ingress, services };
+    };
+    const observe = (id: string, at: number, extra: object) => ({ version: 1, id, kingdomId, observedAt: at, origin: 'live', ...extra });
+    const sweep = (id: string, at: number, ids: readonly string[]) => observe(id, at, { kind: 'observe', source: 'chatters', coverage: 'complete', people: ids.map(personId => ({ personId, disclosure: 'anonymous' })) });
+    const said = (id: string, at: number) => observe(id, at, { kind: 'observe', source: 'chat', coverage: 'activity', people: [{ personId: guest, disclosure: 'named', displayName: 'Quill' }] });
+    const send = (target: RealmIngress, observation: object) => target.accept(bearer, { version: 1, observation });
+
+    // Process A owns the kingdom. It dies the instant its transport takes a chosen frame, before acknowledging it.
+    const a = faulty(pool()), first = realm(a.db);
+    const hold = await first.services.retain(kingdomId), kingdom = hold.kingdom;
+    const seenA: RealmPublicDelivery[] = [];
+    let dieAt = Infinity;
+    kingdom.subscribe(d => { seenA.push(d); if (d.message.type === 'presence' && d.message.frame.sequence === dieAt) a.die(); });
+    const frames = (list: RealmPublicDelivery[]) => list.flatMap(d => d.message.type === 'presence' ? [d.message.frame] : []);
+    const frameAt = async (list: RealmPublicDelivery[], revision: number) => { await waitUntil(() => frames(list).some(f => f.sequence === revision)); };
+
+    const home = { ...ownedHome(kingdomId, person), slot: 3 };
+    expect(await kingdom.execute('install-1', { type: 'home.installAllocated', home }, 'allocation')).toMatchObject({ status: 'committed' });
+    expect(await kingdom.execute('rights-1', { type: 'citizen.rights', personId: person, rights: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'opaque-safety' } }, 'moderation')).toMatchObject({ status: 'committed' });
+
+    // The stream went live eleven minutes before this writer heard of it; the night starts then, not at this heartbeat.
+    const start = await dbNow(db) - 660_000;
+    expect(await send(first.ingress, observe('stream:night-1.a', start, { kind: 'stream', live: true, sessionId: 'session:night-1' }))).toMatchObject({ http: 202, body: { status: 'accepted' } });
+    expect(await send(first.ingress, observe('stream:night-1.b', await dbNow(db) - 20, { kind: 'stream', live: true, sessionId: 'session:night-1' }))).toMatchObject({ http: 202 });
+    await frameAt(seenA, 2);
+    expect(kingdom.privateState.stream).toMatchObject({ sessionId: 'session:night-1', startedAt: start });
+    // Earlier evidence of this night, committed by the same reducer: 599 of the 600 seconds a coal needs.
+    expect(await kingdom.execute('seed-coverage', { type: 'presence.confirmInterval', personId: person, streamSessionId: 'session:night-1', from: start + 1_000, through: start + 600_000, evidenceReceipt: 'herald:earlier' }, 'presence'))
+      .toMatchObject({ status: 'committed' });
+
+    // The gate: no secret, a browser-shaped domain command and a field outside the strict schema all fail before storage.
+    expect(await first.ingress.accept('Bearer wrong-secret-wrong-secret-wrong-secret', { version: 1, observation: sweep('sweep:x', await dbNow(db), [person]) })).toMatchObject({ http: 401 });
+    expect(await first.ingress.accept(bearer, { version: 1, command: { type: 'coal.creditQualifiedNight', personId: person } })).toMatchObject({ http: 400 });
+    expect(await send(first.ingress, { ...said('chat:x', await dbNow(db)), text: 'raw chat words' })).toMatchObject({ http: 400 });
+    expect(await send(first.ingress, observe('walk:x', await dbNow(db), { kind: 'observe', source: 'walker', coverage: 'activity', people: [{ personId: person, disclosure: 'anonymous' }] }))).toMatchObject({ http: 400 });
+
+    // Two sources see the guest across the same span; Chatters sees the citizen too.
+    const t1 = await dbNow(db) - 20;
+    expect(await send(first.ingress, sweep('sweep:1', t1, [person, guest]))).toMatchObject({ http: 202 });
+    expect(await send(first.ingress, said('chat:1', t1))).toMatchObject({ http: 202 });
+    await frameAt(seenA, 4);
+    await new Promise(r => setTimeout(r, 1_200));
+    const t2 = await dbNow(db) - 20;
+    expect(await send(first.ingress, said('chat:2', t2))).toMatchObject({ http: 202 });
+    await frameAt(seenA, 5);
+
+    // This sweep closes the citizen's tenth minute: interval, credit and frame commit together. The transport takes the
+    // frame and the process dies right there: no acknowledgement, no inbox settlement, no retry.
+    dieAt = 6;
+    const closing = sweep('sweep:2', t2, [person, guest]);
+    expect(await send(first.ingress, closing)).toMatchObject({ http: 202, body: { status: 'accepted' } });
+    await frameAt(seenA, 6);
+    const delivered = seenA.find(d => d.message.type === 'presence' && d.message.frame.sequence === 6)!;
+    await waitUntil(() => a.refusedAcknowledgements > 0);
+    expect(kingdom.privateState.coals[person]).toBe(1);
+    const lit = frames(seenA).at(-1)!;
+    expect(lit).toMatchObject({ kingdomId, epoch: `realm:${kingdomId}`, streamLive: true, connection: 'fresh' });
+    expect(lit.windows).toEqual([expect.objectContaining({ slot: 3, present: true, publicName: null })]);
+
+    // A's lease runs out; B takes the kingdom over and resumes delivery from the durable cursor: the unacknowledged
+    // frame again, with the same event id and sequence.
+    await waitUntil(async () => (await dbNow(db)) > Number((await rows('SELECT lease_expires_ms FROM realm_kingdoms WHERE kingdom_id = $1'))[0].lease_expires_ms));
+    const second = realm(pool());
+    const back = await second.services.retain(kingdomId), resumed = back.kingdom;
+    expect(resumed.writerEpoch).not.toBe(kingdom.writerEpoch);
+    const seenB: RealmPublicDelivery[] = [];
+    resumed.subscribe(d => { seenB.push(d); });
+    await waitUntil(() => seenB.length > 0);
+    // Herald never heard its 202 and sends the same sweep again: durable already, so nothing new is accepted.
+    expect(await send(second.ingress, closing)).toMatchObject({ http: 202, body: { status: 'duplicate' } });
+    expect(await send(second.ingress, { ...closing, people: [] })).toMatchObject({ http: 409 });
+    expect(seenB[0]).toMatchObject({ eventId: delivered.eventId, sequence: delivered.sequence, message: delivered.message, writerEpoch: resumed.writerEpoch });
+    expect(seenB.filter(d => d.eventId === delivered.eventId)).toHaveLength(1);
+    await waitUntil(() => resumed.delivery.delivered === resumed.delivery.committed);
+
+    // A fresh join installs the current crowd at throughSequence; the browser rule then ignores the redelivery.
+    const bootstrap = resumed.bootstrap({ personId: person, kingdomId, sessionId: 'not-used', expiresAt: 0, origin: 'live', publicName: 'Citizen', look: 'neutral' });
+    expect(bootstrap.throughSequence).toBe(resumed.sequence);
+    expect(bootstrap.current).toEqual([{ type: 'presence', frame: lit }]);
+    const browser = deliveryCursor(bootstrap);
+    expect(seenB.filter(browser.accept)).toEqual([]);
+
+    // A lost executeIngress reply, retried by the writer itself: the stored receipt, nothing applied twice.
+    const receipt = (await rows(`SELECT status, sequence, checkpoint_revision FROM realm_ingress_receipts WHERE kingdom_id = $1 AND observation_id = 'sweep:2'`))[0];
+    expect(receipt).toMatchObject({ status: 'committed', checkpoint_revision: '6' });
+    expect(await resumed.ingest({ source: 'herald', digest: digestOf(closing), receivedAt: t2, observation: closing as PresenceInput },
+      presenceTransition({ service: 'herald', observation: closing as PresenceInput, writerEpoch: resumed.writerEpoch }))).toEqual({ status: 'committed', sequence: Number(receipt.sequence), at: expect.any(Number) });
+
+    // Under the new writer the guest's run starts again: the outage is never coverage, and two sources never count twice.
+    const t3 = await dbNow(db) - 20;
+    expect(await send(second.ingress, said('chat:3', t3))).toMatchObject({ http: 202 });
+    await new Promise(r => setTimeout(r, 400));
+    const t4 = await dbNow(db) - 20;
+    expect(await send(second.ingress, said('chat:4', t4))).toMatchObject({ http: 202, body: { status: 'accepted' } });
+    expect(await send(second.ingress, sweep('sweep:3', t4, [person, guest]))).toMatchObject({ http: 202 });
+    await waitUntil(async () => (await rows('SELECT count(*) AS n FROM realm_ingress_inbox WHERE kingdom_id = $1 AND settled_ms IS NULL'))[0].n === '0');
+    await waitUntil(() => frames(seenB).some(f => f.sequence === 9));
+    expect(resumed.privateState.qualification[`${guest}:session:night-1`]).toEqual({ coveredMs: (t2 - t1) + (t4 - t3), intervals: [[t1, t2], [t3, t4]] });
+    expect(resumed.privateState.qualification[`${person}:session:night-1`]?.coveredMs).toBeGreaterThanOrEqual(600_000);
+    expect(resumed.privateState.coals[person]).toBe(1);
+    expect(resumed.privateState.coals[guest]).toBeUndefined();
+
+    // One applied result per observation, one coal, one credit fact; every row settled and every delivery acknowledged.
+    expect(await rows(`SELECT observation_id FROM realm_ingress_receipts WHERE kingdom_id = $1 AND observation_id = 'sweep:2'`)).toHaveLength(1);
+    expect(await rows('SELECT delta, balance, reason FROM realm_coal_ledger WHERE kingdom_id = $1')).toEqual([{ delta: 1, balance: 1, reason: 'coal.creditQualifiedNight' }]);
+    expect(await rows(`SELECT seq FROM realm_facts WHERE kingdom_id = $1 AND fact LIKE '%"coal.creditQualifiedNight"%'`)).toHaveLength(1);
+    expect(await rows(`SELECT observation_id FROM realm_ingress_inbox WHERE kingdom_id = $1 AND (settled_status <> 'committed' OR settled_ms IS NULL)`)).toEqual([]);
+    const outbox = await rows('SELECT id, event_id, message FROM realm_outbox WHERE kingdom_id = $1 ORDER BY id');
+    expect(outbox.map(r => r.event_id)).toEqual([...new Set(outbox.map(r => r.event_id))]);
+    expect((await rows('SELECT delivered_id FROM realm_outbox_cursors WHERE kingdom_id = $1'))[0].delivered_id).toBe(outbox.at(-1).id);
+    // The public payload names nobody's account and carries no rights, sessions, secrets or chat.
+    const published = JSON.stringify(outbox.map(r => r.message)) + JSON.stringify(seenB) + JSON.stringify(bootstrap);
+    for (const secretish of [person, guest, 'opaque-safety', 'session:night-1', secret, 'Quill', 'raw chat words', 'sweep:', 'herald:', 'allocation:1']) expect(published).not.toContain(secretish);
+
+    await back.release();
+    await second.ingress.stop();
+    await first.ingress.stop();
+    await hold.release().catch(() => {});
+  }, 60_000);
 });
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -190,6 +325,51 @@ function interruptible(target: pg.Pool) {
     }) as RealmDatabase['connect'],
   };
   return { db, loseNextCommitReply: () => { armed = true; } };
+}
+
+/** A pool whose process can die: from then on nothing reaches the database. Counts the delivery acknowledgements it refused. */
+function faulty(target: pg.Pool) {
+  let dead = false, refused = 0;
+  const check = (sql: unknown) => {
+    const text = typeof sql === 'string' ? sql : (sql as { text?: string } | undefined)?.text ?? '';
+    if (!dead) return;
+    if (/UPDATE realm_outbox_cursors/.test(text)) refused++;
+    throw new Error('Connection terminated unexpectedly');
+  };
+  const db: RealmDatabase = {
+    query: (async (...args: unknown[]) => { check(args[0]); return (target.query as (...a: unknown[]) => Promise<unknown>)(...args); }) as RealmDatabase['query'],
+    connect: (async () => {
+      if (dead) throw new Error('Connection terminated unexpectedly');
+      const client = await target.connect();
+      return new Proxy(client, {
+        get(object, property) {
+          if (property === 'query') return async (...args: unknown[]) => { check(args[0]); return (object.query as (...a: unknown[]) => Promise<unknown>)(...args); };
+          const value = Reflect.get(object, property, object);
+          return typeof value === 'function' ? value.bind(object) : value;
+        },
+      });
+    }) as RealmDatabase['connect'],
+  };
+  return { db, die: () => { dead = true; }, get refusedAcknowledgements() { return refused; } };
+}
+
+/**
+ * The browser's delivery rule (README: delivery cursor), as the web lane implements it: install bootstrap, then accept
+ * fact-derived messages only above throughSequence and presence frames only above the installed frame, deduped by id.
+ */
+function deliveryCursor(bootstrap: RealmBootstrap) {
+  let through = bootstrap.throughSequence;
+  let frame = Math.max(-1, ...bootstrap.current.flatMap(m => m.type === 'presence' ? [m.frame.sequence] : []));
+  const seen = new Set<string>();
+  return {
+    accept(delivery: RealmPublicDelivery): boolean {
+      if (delivery.writerEpoch !== bootstrap.writerEpoch || seen.has(delivery.eventId)) return false;
+      if (delivery.message.type === 'presence' ? delivery.message.frame.sequence <= frame : delivery.sequence <= through) return false;
+      seen.add(delivery.eventId);
+      if (delivery.message.type === 'presence') frame = delivery.message.frame.sequence; else through = delivery.sequence;
+      return true;
+    },
+  };
 }
 
 async function dbNow(db: pg.Pool) {

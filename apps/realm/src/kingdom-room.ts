@@ -60,7 +60,8 @@ export function createKingdomRoom(services: RealmRoomServices) {
       }));
       this.onMessage('bootstrap', client => { if(client.auth)client.send('bootstrap',this.handle.bootstrap(client.auth)); });
       this.unbind.push(this.handle.subscribe(delivery => {
-        this.state.factSequence = delivery.sequence;
+        // Delivery is at-least-once: a redelivered row never moves the public sequence backwards.
+        this.state.factSequence = Math.max(this.state.factSequence, delivery.sequence);
         this.broadcast('world', delivery);
       }), this.handle.bindTransient(message => this.broadcast('transient', message), (personId, message) => {
         const sid = this.control.get(personId), client = sid ? this.clients.getById(sid) : undefined;

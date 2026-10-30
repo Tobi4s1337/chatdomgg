@@ -2,12 +2,13 @@ import { performance } from 'node:perf_hooks';
 import { ServerError } from '@colyseus/core';
 import type { KingdomId, PersonId, EventCause } from '@chatdom/shared';
 import type { CollisionWorld, RealmAuthenticator, RealmBootstrap, RealmCapability, RealmDomainCommand, RealmIngressCheckpoint, RealmIngressTransition,
-  RealmIntent, RealmPrincipal, RealmPrivateState, RealmPublicDelivery, RealmPublicMessage, RealmReceipt, RealmRepository,
-  RealmStoredOutcome, RealmWriterLease } from '@chatdom/shared/realm';
+  RealmIntent, RealmPrincipal, RealmPrivateMessage, RealmPrivateState, RealmPublicDelivery, RealmReceipt, RealmRepository,
+  RealmStoredOutcome, RealmTransientMessage, RealmWriterLease } from '@chatdom/shared/realm';
 import { decideRealm } from '@chatdom/world/realm';
 import type { RealmIntentContext, RealmRoomEffects, RealmRoomHandle, RealmRoomServices } from '../ports';
 import { RealmCommitUncertainError, RealmLeaseHeldError, RealmWriterFencedError, describeStorageFailure } from './database';
 import { REALM_BASE_ANVILS, type PostgresRealmRepository, type RealmOutboxRow } from './postgres-repository';
+import { OutboxDispatcher, PublicProjection, TransientRelay, type RealmOutboxStore } from '../outbox';
 
 /** Commands waiting for the kingdom's single writer. A full queue is an explicit hold, never an unbounded promise. */
 export const REALM_PENDING_COMMANDS = 64;
@@ -27,7 +28,9 @@ export interface RealmCommandMeta {
   readonly occurredAt?: number; readonly receivedAt?: number;
   readonly actor?: PersonId | null; readonly cause?: EventCause;
 }
-export type DurableRepository = RealmRepository & Pick<PostgresRealmRepository, 'readOutbox' | 'publishedPlots' | 'latestPresence' | 'committedState' | 'snapshot' | 'leaseMs'>;
+export type DurableRepository = RealmRepository & Pick<PostgresRealmRepository, 'publishedPlots' | 'latestPresence' | 'committedState' | 'snapshot' | 'leaseMs'>;
+export type RealmLifecycleEvent = Parameters<RealmRoomHandle['lifecycle']>[0];
+export type RealmLifecycleListener = (event: RealmLifecycleEvent, principal: RealmPrincipal, walkerId: string, now: number) => void;
 
 export class RealmBusyError extends Error {
   readonly code = 'realm.busy';
@@ -50,37 +53,47 @@ export class DurableKingdom implements RealmRoomHandle {
   private queue: Promise<unknown> = Promise.resolve();
   private pending = 0;
   private arrivals = 0;
-  private cursor: number;
-  private pumping: Promise<void> = Promise.resolve();
-  private latestPresence: RealmPublicMessage | null;
-  private readonly published: Set<string>;
+  /** Database clock minus local clock, measured when the lease was last taken or renewed. */
+  private clockOffset: number;
+  private readonly projection: PublicProjection;
+  private readonly dispatcher: OutboxDispatcher;
+  private readonly relay = new TransientRelay();
   private readonly walkers = new Set<string>();
   private readonly effects = new Set<RealmRoomEffects>();
-  private readonly listeners = new Set<(message: RealmPublicDelivery) => void>();
+  private readonly lifecycles = new Set<RealmLifecycleListener>();
   private readonly closed = new Set<(reason: string) => void>();
 
-  static async open(repository: DurableRepository, kingdomId: KingdomId, options: DurableKingdomOptions): Promise<DurableKingdom> {
-    const started = performance.now();
+  static async open(repository: DurableRepository, outbox: RealmOutboxStore, kingdomId: KingdomId, options: DurableKingdomOptions): Promise<DurableKingdom> {
+    const started = performance.now(), wall = Date.now();
     const lease = await repository.acquire(kingdomId);
     try {
       const state = await repository.load(lease);
+      const delivered = await outbox.open(lease);
+      // The projection is read after the state, inside the same lease: no other writer can add rows in between.
       const { plots, cursor } = await repository.publishedPlots(kingdomId);
       const recent = await repository.latestPresence(kingdomId);
-      return new DurableKingdom(repository, lease, state, options, plots, cursor, recent, started);
+      return new DurableKingdom(repository, outbox, lease, state, options, new PublicProjection({ plots, cursor, presence: recent }), delivered, started, wall);
     } catch (error) {
       await repository.release(lease).catch(() => {});
       throw error;
     }
   }
 
-  private constructor(private readonly repository: DurableRepository, lease: RealmWriterLease, state: RealmPrivateState,
-    private readonly options: DurableKingdomOptions, published: Set<string>, cursor: number, presence: RealmPublicMessage | null, started: number) {
+  private constructor(private readonly repository: DurableRepository, private readonly outbox: RealmOutboxStore, lease: RealmWriterLease, state: RealmPrivateState,
+    private readonly options: DurableKingdomOptions, projection: PublicProjection, delivered: number, started: number, wall: number) {
     this.lease = lease; this.state = state; this.origin = state.origin; this.writerEpoch = lease.epoch;
-    this.published = published; this.cursor = cursor; this.latestPresence = presence;
+    this.projection = projection;
+    this.clockOffset = lease.expiresAt - repository.leaseMs - wall;
     this.deadline = started + repository.leaseMs - LEASE_MARGIN_MS;
+    this.dispatcher = new OutboxDispatcher({
+      kingdomId: lease.kingdomId, writerEpoch: lease.epoch, delivered,
+      read: (after, limit) => this.outbox.read(this.kingdomId, after, limit),
+      acknowledge: through => this.outbox.acknowledge(this.lease, through),
+      current: () => this.current, fenced: () => this.close('fenced'), log: line => this.log(line),
+    });
     this.renewal = setInterval(() => void this.renew(), Math.floor(repository.leaseMs / 3));
     this.renewal.unref?.();
-    this.log(`opened ${state.origin} kingdom ${state.kingdomId} at fact ${state.sequence}`);
+    this.log(`opened ${state.origin} kingdom ${state.kingdomId} at fact ${state.sequence}${delivered < projection.cursor ? `, redelivering outbox rows after ${delivered}` : ''}`);
   }
 
   get kingdomId(): KingdomId { return this.lease.kingdomId; }
@@ -91,6 +104,10 @@ export class DurableKingdom implements RealmRoomHandle {
   get privateState(): RealmPrivateState { return this.state; }
   /** True only while this process holds an unexpired lease by its own conservative clock. */
   get current(): boolean { return this.open && performance.now() < this.deadline; }
+  /** Estimated database time, for stamping in-process observations on the clock that will judge them. */
+  databaseNow(): number { return Date.now() + this.clockOffset; }
+  /** Durable delivery cursor and counters, for diagnostics. */
+  get delivery() { return { delivered: this.dispatcher.cursor, committed: this.projection.cursor, deliveries: this.dispatcher.deliveries, redeliveries: this.dispatcher.redeliveries, droppedTransient: this.relay.dropped }; }
 
   /**
    * Trusted internal command. Serialized behind this kingdom's writer, decided by the world reducer at database time,
@@ -131,18 +148,15 @@ export class DurableKingdom implements RealmRoomHandle {
     return { version: 1, id: intent.id, status: 'unavailable', message: 'This server does not take building, forging or seat requests. Nothing in your kingdom was changed.' };
   }
 
+  /**
+   * Synchronous checkpoint. The committed state and the public rows it produced are adopted in one step (`refresh`),
+   * so `current` holds every public change at or below `throughSequence`. The client buffers deltas while installing
+   * it, then applies only deliveries newer than this (see README: delivery cursor).
+   */
   bootstrap(principal: RealmPrincipal): RealmBootstrap {
     void principal;
-    const current: RealmPublicMessage[] = [];
-    if (this.latestPresence) current.push(this.latestPresence);
-    for (const plot of [...this.published].sort()) {
-      const home = this.state.homes[plot];
-      if (!home) continue;
-      current.push({ type: 'home', plotId: home.id, revision: home.revision, assetHash: home.digest,
-        attachments: Object.values(home.attachments).flatMap(id => this.state.attachments[id] ? [this.state.attachments[id].attachment] : []) });
-    }
     return { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, throughSequence: this.state.sequence,
-      layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, current };
+      layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, current: this.projection.current(this.state) };
   }
 
   bindRoom(effects: RealmRoomEffects): () => void {
@@ -150,22 +164,35 @@ export class DurableKingdom implements RealmRoomHandle {
     return () => { this.effects.delete(effects); };
   }
 
-  lifecycle(event: 'join' | 'drop' | 'reconnect' | 'leave', _principal: RealmPrincipal, walkerId: string): void {
-    if (event === 'leave') { this.walkers.delete(walkerId); return; }
-    this.walkers.add(walkerId);
-    if (!this.current) for (const effects of this.effects) effects.allowWalking(walkerId, false);
+  lifecycle(event: RealmLifecycleEvent, principal: RealmPrincipal, walkerId: string, now: number): void {
+    if (event === 'leave') this.walkers.delete(walkerId);
+    else {
+      this.walkers.add(walkerId);
+      if (!this.current) for (const effects of this.effects) effects.allowWalking(walkerId, false);
+    }
+    // Walker presence is observed by ingress from these authenticated events; a listener failure never blocks the room.
+    for (const listener of this.lifecycles) { try { listener(event, principal, walkerId, now); } catch (error) { this.log(`lifecycle listener failed: ${(error as Error).name}`); } }
   }
 
+  onLifecycle(listener: RealmLifecycleListener): () => void {
+    this.lifecycles.add(listener);
+    return () => { this.lifecycles.delete(listener); };
+  }
+
+  /** Committed public deliveries, at least once, in commit order. A new subscriber first receives any unacknowledged rows. */
   subscribe(deliver: (message: RealmPublicDelivery) => void): () => void {
     if (!this.current) return () => {};
-    this.listeners.add(deliver);
-    return () => { this.listeners.delete(deliver); };
+    return this.dispatcher.subscribe(deliver);
   }
 
-  bindTransient(): () => void {
-    // Transient chat and seats are composed by the wiring lane; this durable handle never stores them.
-    return () => {};
+  bindTransient(send: (message: RealmTransientMessage) => void, owner: (personId: string, message: RealmPrivateMessage) => void): () => void {
+    return this.relay.bind(send, owner);
   }
+
+  /** Relays ephemeral speech/seats to the rooms present now. Never stored or replayed. */
+  transient(message: RealmTransientMessage): boolean { return this.current && this.relay.transient(message); }
+  /** A private reply to one person present in this kingdom. */
+  toOwner(personId: string, message: RealmPrivateMessage): boolean { return this.current && this.relay.owner(personId, message); }
 
   onClosed(listener: (reason: string) => void): () => void {
     this.closed.add(listener);
@@ -176,7 +203,8 @@ export class DurableKingdom implements RealmRoomHandle {
   async dispose(): Promise<void> {
     clearInterval(this.renewal);
     const drained = await Promise.race([this.queue.then(() => true, () => true), delay(DISPOSE_WAIT_MS).then(() => false)]);
-    await this.pumping.catch(() => {});
+    // Hand over what committed; anything unacknowledged stays behind the durable cursor for the next writer.
+    if (this.current) await Promise.race([this.dispatcher.kick(), delay(DISPOSE_WAIT_MS)]);
     if (this.current && drained) {
       try { await this.repository.snapshot(this.lease); } catch (error) { this.log(`snapshot on close failed: ${describeStorageFailure(error)}`); }
     }
@@ -213,33 +241,27 @@ export class DurableKingdom implements RealmRoomHandle {
     return result;
   }
 
-  /** Adopt the committed state, then deliver what that commit published. A refresh failure never un-commits work. */
+  /**
+   * Adopt the committed state together with the public rows it produced, then hand those rows to the dispatcher.
+   * A refresh failure never un-commits work: the old consistent pair stays until the next refresh succeeds.
+   */
   private async refresh() {
-    const cached = this.repository.committedState(this.lease);
-    if (cached) this.state = cached;
-    else {
-      try { this.state = await this.repository.load(this.lease); }
-      catch (error) { if (error instanceof RealmWriterFencedError) this.close('fenced'); else this.log(`state refresh failed: ${describeStorageFailure(error)}`); }
-    }
-    this.pumping = this.pumping.then(() => this.pump());
-    await this.pumping;
-  }
-
-  /** Delivers committed outbox rows in commit order, then advances the in-memory cursor. */
-  private async pump(): Promise<void> {
-    for (;;) {
-      if (!this.current) return;
-      let rows: RealmOutboxRow[];
-      try { rows = await this.repository.readOutbox(this.kingdomId, this.cursor, 256); }
-      catch (error) { this.log(`outbox read failed: ${describeStorageFailure(error)}`); return; }
-      if (rows.length === 0) return;
-      for (const row of rows) {
-        if (row.plotId) this.published.add(row.plotId);
-        if (row.message.type === 'presence') this.latestPresence = row.message;
-        const delivery: RealmPublicDelivery = { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, sequence: row.sequence, eventId: row.eventId, message: row.message };
-        for (const listener of this.listeners) { try { listener(delivery); } catch (error) { this.log(`delivery listener failed: ${(error as Error).name}`); } }
-        this.cursor = row.id;
+    let committed = this.repository.committedState(this.lease);
+    const after = this.projection.cursor;
+    try {
+      committed ??= await this.repository.load(this.lease);
+      const rows: RealmOutboxRow[] = [];
+      for (let page = await this.outbox.read(this.kingdomId, after, 1_024); page.length; page = await this.outbox.read(this.kingdomId, rows.at(-1)!.id, 1_024)) {
+        rows.push(...page);
+        if (page.length < 1_024) break;
       }
+      // One synchronous step: bootstrap never pairs a state with rows from another commit.
+      this.state = committed;
+      this.projection.adopt(rows);
+      await this.dispatcher.offer(after, rows);
+    } catch (error) {
+      if (error instanceof RealmWriterFencedError) this.close('fenced');
+      else this.log(`state refresh failed: ${describeStorageFailure(error)}`);
     }
   }
 
@@ -247,8 +269,10 @@ export class DurableKingdom implements RealmRoomHandle {
     if (!this.open) return;
     const started = performance.now();
     try {
+      const wall = Date.now();
       this.lease = await this.repository.renew(this.lease);
       this.deadline = started + this.repository.leaseMs - LEASE_MARGIN_MS;
+      this.clockOffset = this.lease.expiresAt - this.repository.leaseMs - wall;
     } catch (error) {
       if (error instanceof RealmWriterFencedError) this.close('fenced');
       else if (performance.now() >= this.deadline) this.close('lease expired while the database was unreachable');
@@ -260,7 +284,8 @@ export class DurableKingdom implements RealmRoomHandle {
     if (!this.open) return;
     this.open = false;
     clearInterval(this.renewal);
-    this.listeners.clear();
+    this.dispatcher.stop();
+    this.relay.clear();
     for (const walker of this.walkers) for (const effects of this.effects) effects.allowWalking(walker, false);
     if (reason !== 'disposed') this.log(`writer authority closed for kingdom ${this.kingdomId}: ${reason}`);
     for (const listener of this.closed) listener(reason);
@@ -271,34 +296,112 @@ export class DurableKingdom implements RealmRoomHandle {
 
 const delay = (ms: number) => new Promise<void>(resolve => { const t = setTimeout(resolve, ms); t.unref?.(); });
 
+/** A trusted in-process share of one open kingdom. The writer lease is released when the last hold is. */
+export interface DurableKingdomHold { readonly kingdom: DurableKingdom; release(): Promise<void> }
+export interface DurableRealmServices extends RealmRoomServices {
+  readonly kingdoms: ReadonlyMap<KingdomId, DurableKingdom>;
+  /** Holds a kingdom's writer without a room, e.g. while ingress observes a live night nobody is walking in. */
+  retain(kingdomId: KingdomId): Promise<DurableKingdomHold>;
+}
+
 /**
  * Durable `RealmRoomServices`: the injected authenticator plus kingdoms opened under exclusive Postgres writer leases.
- * The registry is an in-process service capability for trusted callers, never a browser-facing URL.
+ * One process opens a kingdom once; its room and in-process services (ingress) share it through counted holds, and the
+ * last release disposes it. A second room for the same kingdom in this process is refused. `attach` wires per-kingdom
+ * services (ingress drain, walker presence) when a kingdom opens and detaches them when it closes. The registry is an
+ * in-process capability for trusted callers, never a browser-facing URL.
  */
 export function createDurableRealmServices(input: {
   readonly repository: DurableRepository;
+  readonly outbox: RealmOutboxStore;
   readonly auth: RealmAuthenticator;
   readonly kingdom: (kingdomId: KingdomId) => DurableKingdomOptions;
+  readonly attach?: (kingdom: DurableKingdom) => () => void;
   readonly log?: (line: string) => void;
-}): RealmRoomServices & { readonly kingdoms: ReadonlyMap<KingdomId, DurableKingdom> } {
-  const kingdoms = new Map<KingdomId, DurableKingdom>();
+}): DurableRealmServices {
+  interface Entry { readonly kingdom: DurableKingdom; holds: number; room: boolean; detach: () => void }
+  const entries = new Map<KingdomId, Entry>(), kingdoms = new Map<KingdomId, DurableKingdom>();
+  const opening = new Map<KingdomId, Promise<Entry>>(), closing = new Map<KingdomId, Promise<void>>();
+  const forget = (kingdomId: KingdomId, entry: Entry) => {
+    if (entries.get(kingdomId) !== entry) return;
+    entries.delete(kingdomId); kingdoms.delete(kingdomId);
+  };
+
+  async function openEntry(kingdomId: KingdomId): Promise<Entry> {
+    await closing.get(kingdomId);
+    let kingdom: DurableKingdom;
+    try {
+      kingdom = await DurableKingdom.open(input.repository, input.outbox, kingdomId, { ...input.kingdom(kingdomId), ...(input.log ? { log: input.log } : {}) });
+    } catch (error) {
+      if (error instanceof RealmLeaseHeldError) throw new ServerError(409, 'Another server holds this kingdom right now. Try again in a moment.');
+      input.log?.(`[realm] kingdom ${kingdomId} did not open: ${describeStorageFailure(error)}`);
+      throw new ServerError(503, 'The kingdom could not be opened from storage. Nothing was changed.');
+    }
+    const entry: Entry = { kingdom, holds: 0, room: false, detach: () => {} };
+    entries.set(kingdomId, entry); kingdoms.set(kingdomId, kingdom);
+    kingdom.onClosed(() => forget(kingdomId, entry));
+    try { entry.detach = input.attach?.(kingdom) ?? entry.detach; }
+    catch (error) { input.log?.(`[realm] kingdom ${kingdomId} services did not attach: ${(error as Error).name}`); }
+    return entry;
+  }
+
+  async function acquire(kingdomId: KingdomId, room: boolean): Promise<DurableKingdomHold> {
+    for (;;) {
+      let entry = entries.get(kingdomId);
+      if (!entry?.kingdom.current) {
+        let pending = opening.get(kingdomId);
+        if (!pending) { pending = openEntry(kingdomId).finally(() => opening.delete(kingdomId)); opening.set(kingdomId, pending); }
+        entry = await pending;
+      }
+      // A release may have closed it while we waited; take the next one instead.
+      if (entries.get(kingdomId) !== entry || !entry.kingdom.current) continue;
+      if (room && entry.room) throw new ServerError(409, 'This kingdom is already open on this server.');
+      const held = entry;
+      held.holds++;
+      if (room) held.room = true;
+      let released = false;
+      return {
+        kingdom: held.kingdom,
+        async release() {
+          if (released) return;
+          released = true;
+          held.holds--;
+          if (room) held.room = false;
+          if (held.holds > 0) return;
+          forget(kingdomId, held);
+          held.detach();
+          const done = held.kingdom.dispose().finally(() => { if (closing.get(kingdomId) === done) closing.delete(kingdomId); });
+          closing.set(kingdomId, done);
+          await done;
+        },
+      };
+    }
+  }
+
   return {
     auth: input.auth,
     kingdoms,
-    async open(kingdomId) {
-      const prior = kingdoms.get(kingdomId);
-      if (prior?.current) throw new ServerError(409, 'This kingdom is already open on this server.');
-      let kingdom: DurableKingdom;
-      try {
-        kingdom = await DurableKingdom.open(input.repository, kingdomId, { ...input.kingdom(kingdomId), ...(input.log ? { log: input.log } : {}) });
-      } catch (error) {
-        if (error instanceof RealmLeaseHeldError) throw new ServerError(409, 'Another server holds this kingdom right now. Try again in a moment.');
-        input.log?.(`[realm] kingdom ${kingdomId} did not open: ${describeStorageFailure(error)}`);
-        throw new ServerError(503, 'The kingdom could not be opened from storage. Nothing was changed.');
-      }
-      kingdoms.set(kingdomId, kingdom);
-      kingdom.onClosed(() => { if (kingdoms.get(kingdomId) === kingdom) kingdoms.delete(kingdomId); });
-      return kingdom;
-    },
+    retain: kingdomId => acquire(kingdomId, false),
+    async open(kingdomId) { return new HeldRoomHandle(await acquire(kingdomId, true)); },
   };
+}
+
+/** The room's view of a shared kingdom: everything delegates, and dispose releases only the room's hold. */
+class HeldRoomHandle implements RealmRoomHandle {
+  constructor(private readonly hold: DurableKingdomHold) {}
+  private get k() { return this.hold.kingdom; }
+  get kingdomId() { return this.k.kingdomId; }
+  get origin() { return this.k.origin; }
+  get writerEpoch() { return this.k.writerEpoch; }
+  get layoutRevision() { return this.k.layoutRevision; }
+  get world() { return this.k.world; }
+  get sequence() { return this.k.sequence; }
+  spawn(principal: RealmPrincipal) { return this.k.spawn(principal); }
+  intent(context: RealmIntentContext, intent: RealmIntent) { return this.k.intent(context, intent); }
+  bootstrap(principal: RealmPrincipal) { return this.k.bootstrap(principal); }
+  bindRoom(effects: RealmRoomEffects) { return this.k.bindRoom(effects); }
+  lifecycle(event: RealmLifecycleEvent, principal: RealmPrincipal, walkerId: string, now: number) { this.k.lifecycle(event, principal, walkerId, now); }
+  subscribe(deliver: (message: RealmPublicDelivery) => void) { return this.k.subscribe(deliver); }
+  bindTransient(send: (message: RealmTransientMessage) => void, owner: (personId: string, message: RealmPrivateMessage) => void) { return this.k.bindTransient(send, owner); }
+  dispose() { return this.hold.release(); }
 }
