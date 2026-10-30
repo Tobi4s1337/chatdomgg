@@ -229,9 +229,9 @@ try {
   await desktop.page.bringToFront();
   await desktop.page.getByRole('button', { name: 'Above the streets', exact: true }).click();
   await desktop.page.waitForFunction(() => window.__chatdomWalk.owner === 'released');
-  await desktop.page.getByRole('button', { name: 'Walk with everyone', exact: true }).click();
+  await desktop.page.getByRole('button', { name: 'Walk the street', exact: true }).click();
   await desktop.page.waitForFunction(() => window.__chatdomWalk.owner === 'walking');
-  report.checks.push({ name: 'overview releases the walk camera; Walk with everyone resumes it', passed: true });
+  report.checks.push({ name: 'overview releases the walk camera; Walk the street resumes it', passed: true });
   // Keep the real third citizen ahead in the street view, with its full scene at fewer pixels for capture.
   await third.page.setViewportSize({ width: 160, height: 120 });
   await mkdir(values.out, { recursive: true });
