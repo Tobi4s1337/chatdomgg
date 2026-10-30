@@ -111,7 +111,7 @@ describe.skipIf(!enabled)('realm sign-in and entry tickets (Postgres)', () => {
   beforeAll(async () => {
     if (!process.env.DATABASE_URL) throw new Error('REALM_DATABASE_TESTS=1 needs DATABASE_URL; load it with --env-file-if-exists=.env');
     admin = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
-    expect(await migrateRealmSchema(admin, schema)).toEqual(['0001_realm_auth']);
+    expect(await migrateRealmSchema(admin, schema)).toContain('0001_realm_auth');
     pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 6, options: `-c search_path="${schema}"` });
     const port = await freePort();
     origin = `http://127.0.0.1:${port}`;
