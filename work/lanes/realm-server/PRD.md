@@ -35,7 +35,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   injection and run a durable local room on 5191 by the end of this task. Focused R1/R2 test uses two competing
   writers, stale-epoch retry and lost COMMIT reply; prove one spend/fact/outcome after `lookup`/reload. Document
   local start/migrate commands and connection-safe failure. No live fallback to main's simulated memory adapter.
-- [ ] **RS02 — Twitch sign-in issues a checked room ticket** · evidence: test/log. Implement OIDC code/state/
+- [x] **RS02 — Twitch sign-in issues a checked room ticket** · evidence: test/log. Implement OIDC code/state/
   nonce verification, claimed person identity, hashed expiring/revocable Chatdom sessions, protected logout and
   opaque single-use kingdom tickets under `apps/api/src/realm-auth/`. Implement `RealmAuthenticator` under
   realm `src/auth/` using the same database. API runs on 5192 using main's scaffold. Focused R4/R5 tests use
