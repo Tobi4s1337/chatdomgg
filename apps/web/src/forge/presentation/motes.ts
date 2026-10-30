@@ -1,17 +1,18 @@
 import * as THREE from 'three';
 
-/** Tiny square motes (voxel-native, not soft sprites). Positions are rewritten in place each frame. */
-export function createMotes(capacity: number) {
+/** Tiny square motes (voxel-native, not soft sprites). Positions are rewritten in place each frame. Additive
+ * motes are sparks and embers; normally blended ones are dust and steam. */
+export function createMotes(capacity: number, name = 'forge-motes', options: { size?: number; additive?: boolean } = {}) {
   const positions = new Float32Array(capacity * 3), colours = new Float32Array(capacity * 4);
   const geometry = new THREE.BufferGeometry();
   const position = new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage);
   const colour = new THREE.BufferAttribute(colours, 4).setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('position', position); geometry.setAttribute('color', colour);
   geometry.setDrawRange(0, 0);
-  const material = new THREE.PointsMaterial({ size: .05, sizeAttenuation: true, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-  material.name = 'forge-motes';
+  const material = new THREE.PointsMaterial({ size: options.size ?? .05, sizeAttenuation: true, vertexColors: true, transparent: true, depthWrite: false, blending: options.additive === false ? THREE.NormalBlending : THREE.AdditiveBlending });
+  material.name = name;
   const points = new THREE.Points(geometry, material);
-  points.name = 'forge-motes'; points.frustumCulled = false; points.renderOrder = 4; points.visible = false;
+  points.name = name; points.frustumCulled = false; points.renderOrder = 4; points.visible = false;
   let used = 0;
   return {
     points, capacity,

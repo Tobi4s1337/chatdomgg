@@ -1,4 +1,5 @@
 import type { StyleKey } from '@chatdom/content';
+import { FORGE_RITUAL_SECONDS } from '@chatdom/forge';
 import type { HousePartPlan } from '@chatdom/shared';
 
 export type BenchPart = HousePartPlan['kind'];
@@ -20,8 +21,8 @@ export const BENCH_WISHES: Record<BenchPart, string> = {
   weathervane: '!forge an owl weathervane',
 };
 
-/** The stages this presentation finishes so far: words and blueprint. */
-export const BUILT_UNTIL = 5;
+/** The whole simulated ceremony, words to landed. */
+export const RITUAL_SECONDS = FORGE_RITUAL_SECONDS;
 
 const pick = <T extends string>(params: URLSearchParams, name: string, allowed: readonly T[], fallback: T): T => {
   const raw = params.get(name);
@@ -49,7 +50,7 @@ export function parseRitualBench(search: string): RitualBenchState {
     family: pick(params, 'family', ['hearth', 'tide', 'grove'] as const, 'hearth'),
     hour,
     t: seconds(params, 't', 3600),
-    gate: seconds(params, 'gate', BUILT_UNTIL),
+    gate: seconds(params, 'gate', RITUAL_SECONDS),
     motion: pick(params, 'motion', ['system', 'reduce', 'full'] as const, 'system'),
   };
 }
