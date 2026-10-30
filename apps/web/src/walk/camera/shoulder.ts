@@ -48,6 +48,26 @@ export const SHOULDER = {
   heightRate: 12,
   /** The eased camera height never trails the body by more than this. */
   heightLag: .45,
+  /** The local citizen fades between these eye-to-head distances, so first person never looks out through a skull. */
+  selfFade: [.5, 1.25],
+  /**
+   * When a solid has pulled the boom in, the street matters more than the citizen: the fade starts further out,
+   * so a camera backed against a wall looks past a faint figure rather than at the back of a giant head. It
+   * blends in over the first metres the solid took away, so a wheeled-in view (the walker's own choice) keeps
+   * the over-the-shoulder citizen and a wall arriving or leaving never pops the body.
+   */
+  pulledFade: [1.5, 2.4],
+  /**
+   * The citizen renderer fades with a screen-door pattern: a few per cent of a body this close reads as dirt
+   * on the lens, so below this the citizen is simply not drawn.
+   */
+  fadeFloor: .05,
+  pulledBlend: [.25, 1.5],
+  /**
+   * A fade follows a camera pulled in at once, but comes back at this rate per second: a boom springing out
+   * of a corner travels most of a metre in its first frame, and the body should return, not flash on.
+   */
+  appearRate: 10,
 } as const;
 
 export type Vec3 = readonly [number, number, number];
@@ -61,7 +81,10 @@ export interface ShoulderPose {
   readonly fov: number;
   /** Fraction of the half-width the image is shifted; the aim column sits at NDC x = -shift. */
   readonly shift: number;
-  /** Opacity for the local citizen: it fades out as the eye nears the head and returns on zoom out. */
+  /**
+   * Opacity for the local citizen: it fades out as the eye nears the head and returns on zoom out. From
+   * `apply`, a boom a solid has pulled in fades it from further away (`selfFade`).
+   */
   readonly selfOpacity: number;
 }
 
@@ -76,6 +99,18 @@ export function framingFor(aspect: number): { fov: number; screenX: number; scre
   const lerp = (a: number, b: number) => a + (b - a) * t;
   const { portrait: p, landscape: l } = SHOULDER;
   return { fov: lerp(p.fov, l.fov), screenX: lerp(p.screenX, l.screenX), screenY: lerp(p.screenY, l.screenY) };
+}
+
+/**
+ * Opacity of the local citizen for an eye `eyeToHead` metres from the head, when a solid has cut the boom
+ * `pulledIn` metres short of where the wheel left it (0: nothing in the way).
+ */
+export function selfFade(eyeToHead: number, pulledIn = 0): number {
+  const k = smoothstep(SHOULDER.pulledBlend[0], SHOULDER.pulledBlend[1], Number.isFinite(pulledIn) ? pulledIn : 0);
+  const near = SHOULDER.selfFade[0] + (SHOULDER.pulledFade[0] - SHOULDER.selfFade[0]) * k;
+  const far = SHOULDER.selfFade[1] + (SHOULDER.pulledFade[1] - SHOULDER.selfFade[1]) * k;
+  const opacity = smoothstep(near, far, eyeToHead);
+  return opacity < SHOULDER.fadeFloor ? 0 : opacity;
 }
 
 /** Pure camera placement for feet at `feet`, the given view and aspect. */
@@ -94,7 +129,7 @@ export function shoulderPose(feet: Vec3, view: ShoulderView, aspect: number): Sh
   // Fade by how close the eye actually is to the head.
   const ex = eye[0] - feet[0], ey = eye[1] - feet[1] - SHOULDER.eyeHeight, ez = eye[2] - feet[2];
   const shift = -frame.screenX * smoothstep(SHOULDER.blendNear, SHOULDER.blendFar, d);
-  return { pivot, eye, direction, fov: frame.fov, shift, selfOpacity: smoothstep(.5, 1.25, Math.sqrt(ex * ex + ey * ey + ez * ez)) };
+  return { pivot, eye, direction, fov: frame.fov, shift, selfOpacity: selfFade(Math.sqrt(ex * ex + ey * ey + ez * ez)) };
 }
 
 /** The `filmOffset` (millimetres of film) that shifts the image by `shift` of its half-width. */
@@ -137,6 +172,8 @@ export function createShoulderRig(heading = 0): ShoulderRig {
   let distance: number = SHOULDER.distance, idle = Infinity, followY: number | null = null, lastStep = 0;
   // `drawn` is the boom on screen; `tracking` means it follows the zoom directly (no solid in the way last frame).
   let drawn: number = SHOULDER.distance, tracking = true, clearance: number | null = null;
+  // The citizen's opacity as last drawn; null takes the next frame's value as it is (entry, handback).
+  let shown: number | null = null;
   const desired = () => SHOULDER.maxDistance * zoomT * zoomT;
   const look = new THREE.Vector3();
   return {
@@ -211,19 +248,29 @@ export function createShoulderRig(heading = 0): ShoulderRig {
       camera.position.set(...pose.eye);
       camera.up.set(0, 1, 0);
       camera.lookAt(look.set(pose.eye[0] + pose.direction[0], pose.eye[1] + pose.direction[1], pose.eye[2] + pose.direction[2]));
+      // Build and the Forge compose with a view offset. The near-plane footprint above assumes the plain
+      // frustum, so a view offset left behind by any earlier owner would let the drawn frustum reach a wall.
+      if (camera.view?.enabled) camera.clearViewOffset();
       const changedFov = Math.abs(camera.fov - pose.fov) > 1e-6 || Math.abs(camera.aspect - aspect) > 1e-6;
       camera.fov = pose.fov; camera.aspect = aspect;
       const film = filmOffsetFor(camera, pose.shift, aspect);
       if (changedFov || Math.abs(camera.filmOffset - film) > 1e-6) { camera.filmOffset = film; camera.updateProjectionMatrix(); }
       camera.updateMatrixWorld();
-      return pose;
+      const ex = pose.eye[0] - feet[0], ey = pose.eye[1] - feet[1] - SHOULDER.eyeHeight, ez = pose.eye[2] - feet[2];
+      const target = selfFade(Math.sqrt(ex * ex + ey * ey + ez * ez), Math.max(0, distance - drawn));
+      if (shown === null || target <= shown) shown = target;
+      else {
+        shown += (target - shown) * (1 - Math.exp(-SHOULDER.appearRate * lastStep));
+        if (target - shown < 1e-3) shown = target;
+      }
+      return { ...pose, selfOpacity: shown };
     },
     reset(value) {
       yaw = wrapAngle(value); pitch = SHOULDER.pitch; idle = Infinity; followY = null;
       zoomT = Math.sqrt(SHOULDER.distance / SHOULDER.maxDistance); distance = SHOULDER.distance;
-      drawn = distance; tracking = true; clearance = null;
+      drawn = distance; tracking = true; clearance = null; shown = null;
     },
     // The next apply still sweeps the boom, so a camera handed back in a tight spot is pulled in on its first frame.
-    settle() { followY = null; distance = desired(); drawn = distance; tracking = true; idle = Infinity; },
+    settle() { followY = null; distance = desired(); drawn = distance; tracking = true; idle = Infinity; shown = null; },
   };
 }
