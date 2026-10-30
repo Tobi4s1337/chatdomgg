@@ -47,7 +47,7 @@ after main has stopped editing them. The integrator alone calls those modules fr
   sprint and grounded jump, document chosen constants and smooth rendered step height separately. No airborne
   climbing or repeated held jump. · evidence: exact-height/too-high/ceiling/grazing/narrow-landing tests; keyboard
   walk/sprint/one-jump route with matching gait distance and safe feet in the real kingdom.
-- [ ] **WC04 — Keep every input under control.** Complete keyboard event ownership, camera-relative byte
+- [x] **WC04 — Keep every input under control.** Complete keyboard event ownership, camera-relative byte
   quantization, jump pulse, drag orbit, optional labelled lock, wheel and phone thumb/orbit/pinch input.
   E remains reserved for interactions; never bind it to camera orbit.
   Filter lock deltas exactly as spec R8; recover rejection/re-lock cleanly. Clear held/pending/capture state on

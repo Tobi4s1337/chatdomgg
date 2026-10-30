@@ -1,5 +1,5 @@
 /**
- * Free-cursor camera input: drag to orbit, wheel to zoom. Nothing here is needed to walk, and a short press
+ * Free-cursor camera input (mouse and pen): drag to orbit, wheel to zoom. Nothing here is needed to walk, and a short press
  * stays a click for the interaction owner (under 8 px and under 300 ms). A press that became an orbit drag
  * swallows its trailing click so a camera turn never also opens a door.
  */
@@ -32,6 +32,8 @@ export interface WalkPointer {
   takeZoom(): number;
   readonly dragging: boolean;
   setEnabled(enabled: boolean): void;
+  /** While mouse look holds the pointer, presses never start a drag. Switching either way drops a drag. */
+  setLocked(locked: boolean): void;
   clear(): void;
   dispose(): void;
 }
@@ -49,7 +51,7 @@ export function wheelPixels(event: WheelEventLike): number {
 
 export function createWalkPointer(surface: PointerSurface, keyboard: EventTarget): WalkPointer {
   let press: { id: number; x: number; y: number; lastX: number; lastY: number; dragging: boolean } | null = null;
-  let orbitX = 0, orbitY = 0, zoom = 0, enabled = true, swallowClick = false;
+  let orbitX = 0, orbitY = 0, zoom = 0, enabled = true, locked = false, swallowClick = false;
   const end = () => {
     if (!press) return;
     if (press.dragging) { swallowClick = true; if (surface.hasPointerCapture?.(press.id)) surface.releasePointerCapture?.(press.id); }
@@ -59,7 +61,8 @@ export function createWalkPointer(surface: PointerSurface, keyboard: EventTarget
   const down = (raw: Event) => {
     const event = raw as unknown as PointerEventLike;
     swallowClick = false;
-    if (!enabled || press || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    // Touch belongs to touch.ts (stick, orbit, pinch); this is mouse and pen.
+    if (!enabled || locked || press || event.pointerType === 'touch' || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return;
     press = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY, dragging: false };
   };
   const move = (raw: Event) => {
@@ -100,6 +103,7 @@ export function createWalkPointer(surface: PointerSurface, keyboard: EventTarget
     takeZoom() { const delta = zoom; zoom = 0; return delta; },
     get dragging() { return press?.dragging ?? false; },
     setEnabled(value) { enabled = value; if (!value) clear(); },
+    setLocked(value) { if (value !== locked) { locked = value; end(); orbitX = 0; orbitY = 0; } },
     clear,
     dispose() {
       clear(); enabled = false;

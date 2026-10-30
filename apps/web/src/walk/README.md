@@ -21,15 +21,21 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
   `CollisionWorld` from realm wiring (spec 36) before `connectRealm` can join the kingdom's own room. The
   reference court (`connectReferenceRealm`, `REALM_SIMULATED=1`) is SIMULATED and is not the kingdom.
 - Camera collision (near-plane boom sweep against the solid world) is WC05. Until then the shoulder camera
-  can pass through a wall it backs into. Pointer lock, touch movement and pinch are WC04.
+  can pass through a wall it backs into.
 
 ## Modules
 
 | Export | File | What it does |
 |---|---|---|
 | `createWalkController(options)` | `index.ts` | Lifecycle: input, realm tick, camera, takeover |
-| `createWalkKeys(keyboard, page?)` | `input/keyboard.ts` | WASD/arrows, Shift, one jump per Space press, release on blur, hidden page, chat focus and Cmd |
-| `createWalkPointer(surface, keyboard)` | `input/pointer.ts` | Drag orbit after 8 px, wheel with line/page modes, swallows only the click that ended a drag |
+| `createWalkKeys(keyboard, page?)` | `input/keyboard.ts` | WASD/arrows, Shift, one jump per Space press, release on blur, hidden page, chat focus, context menu and Cmd |
+| `isEditableTarget(t)`, `isKeyboardControl(t)` | `input/keyboard.ts` | Fields keep every key; a keyboard-focused control keeps Space and arrows |
+| `createWalkPointer(surface, keyboard)` | `input/pointer.ts` | Mouse/pen drag orbit after 8 px, wheel with line/page modes, swallows only the click that ended a drag; no drags while locked |
+| `createWalkLook(surface, doc, keyboard, clock?)` | `input/look.ts` | Optional mouse look: V locks, Escape/V/blur/menu frees; R8 delta filter; refused lock → labelled drag fallback, cleared by the next lock |
+| `filterLookDelta(dx, dy, sinceLockMs)`, `LOOK` | `input/look.ts` | The R8 filter itself (120 ms settle, >250 px discarded, ±100 px clamp) and the look constants |
+| `createWalkTouch(surface, keyboard)` | `input/touch.ts` | Phone: floating left-thumb stick (push past the rim to sprint), one-finger orbit, two-finger pinch zoom |
+| `stickRegion(x, y, w, h)`, `stickIntent(dx, dy)`, `TOUCH` | `input/touch.ts` | Which part of the surface is the stick, thumb offset to intent, and the touch constants |
+| `createWalkHud(container, onJump)`, `restingStick(w, h)` | `input/hud.ts` | The mouse-look plaque, the phone stick and the jump button, drawn in the given container |
 | `isClickPress(dx, dy, ms)`, `CLICK_SLOP_PX`, `CLICK_MS` | `input/pointer.ts` | The click-versus-drag rule for the interaction owner (under 8 px and under 300 ms) |
 | `walkDirection(forward, right, heading)` | `input/direction.ts` | Camera-relative intent to world-relative signed bytes; diagonals never faster |
 | `facingByte(moveX, moveZ)`, `headingFromByte(yaw)` | `input/direction.ts` | Yaw byte for the actual walk direction, and back to renderer radians |
@@ -48,6 +54,10 @@ interface WalkControllerOptions {
   realm: WalkRealm;                   // a connected RealmClient satisfies it unchanged
   keyboard?: EventTarget;             // default window
   page?: { hidden: boolean } & EventTarget;  // default document
+  lockDocument?: LockDocument;        // pointer-lock state and locked mousemove; default document
+  hud?: HTMLElement;                  // where the look plaque, stick and jump button are drawn (the kingdom root)
+  coarse?: boolean;                   // show phone controls before the first touch; default matchMedia('(pointer: coarse)')
+  clock?: () => number;               // ms for the lock settle window; default performance.now
   heading?: number;                   // entry heading; default: the way the citizen already faces
 }
 interface WalkController {
@@ -70,8 +80,41 @@ held).
 
 `WalkDebug` is what the capture reads: `ready` (the camera stands on the connected citizen), `owner`, `selfId`,
 `self` (rendered pose), `authority` (room state for the local walker), `peers` (others as drawn, at most 4 Hz),
-`input` (the last `WalkInput` sent), `camera` (`yaw`, `pitch`, `distance`, `desiredDistance`, `fov`,
-`filmOffset`, `shift`), `screen` (citizen body centre in CSS px), `viewport` and `selfOpacity`.
+`input` (the last `WalkInput` sent), `look` (`free`, `requesting`, `locked` or `fallback`), `stick` (the phone
+stick under the thumb, or null), `camera` (`yaw`, `pitch`, `distance`, `desiredDistance`, `fov`, `filmOffset`,
+`shift`), `screen` (citizen body centre in CSS px), `viewport` and `selfOpacity`.
+
+When the room has `onLeave`/`onDrop` signals (a Colyseus room does), the controller listens to them itself: a
+dropped or closed connection lets go of held keys, a pending jump, the stick, any drag and the pointer lock.
+
+## Input ownership
+
+| Input | Owner while walking | Never |
+|---|---|---|
+| W A S D, arrows, Shift, Space | walking (physical codes, so AZERTY/Dvorak keep the shape) | in a text field, select or contenteditable; with Ctrl/Cmd/Alt; during IME composition; Space/arrows on a keyboard-focused control (its focus ring is showing) |
+| V | mouse look on/off | in fields, with modifiers, on repeat, while released |
+| Escape | frees a mouse-look cursor (the browser does too) | otherwise untouched: menus keep it |
+| E | the interaction owner | walking never reads it |
+| Left mouse/pen on the world | drag orbit once it travels 8 px; a shorter, quicker press stays a click (`isClickPress`) | while locked; the click that ended a drag is swallowed, nothing else |
+| Wheel on the world | boom distance, line/page modes, ±240 px per event | over UI: the listener is on the world surface only |
+| Touch on the world | lower-left (`stickRegion`: x < 46 %, y > 34 %) is the stick; elsewhere one finger orbits, two pinch | taps (< 8 px) stay clicks; UI above the surface keeps its own touches |
+| Jump button | a tap jumps on touch-down; keyboard activation also jumps | never takes focus from the world |
+
+Everything held or pending is cleared on window blur, a hidden page, a native context menu, `release()`, a
+dropped connection and `dispose()`. A mouse released outside the window ends its drag on the next move.
+
+**Mouse look.** Free cursor by default. V asks for pointer lock with raw movement where the platform offers it
+(and plainly where it does not). Locked movement ignores the first 120 ms, discards any event with either axis
+over 250 px, clamps the rest to ±100 px and is gathered until the next frame; it turns 0.0024 rad per pixel at
+any window size. If the browser refuses (Chrome does for about a second after Escape, and sandboxed frames
+always do), the plaque says so and drag orbit carries on; the next successful lock clears it. A fast flick never
+switches to fallback. `release()` frees the cursor at once, and `resume()` never re-locks on its own.
+
+**Phone.** The stick appears under the thumb wherever it lands in the stick region (kept a whole ring inside
+the edges), with a 16 % dead zone; pushing past 1.3 × the 52 px rim sprints and lights the ring. A finger
+elsewhere orbits from the first pixel it travelled; a second orbit finger pinches (3 wheel px per px of
+spread). The resting stick and the jump button sit at 66 % of the height (54 % on a short landscape screen).
+Their labels fade once used. The surface's `touch-action` is set to `none` while the controller lives.
 
 ## Integration recipe (integrator)
 
@@ -84,10 +127,11 @@ edit them. Entry URL proposed for the binding: **`/?walk=1`** on the kingdom pag
 2. **Create** after the scene has loaded (camera, canvas and citizen renderer exist):
    ```ts
    import { createWalkController } from '../walk';
-   const walk = createWalkController({ camera, surface: canvas, realm });
+   const walk = createWalkController({ camera, surface: canvas, realm, hud: kingdomRoot });
    walk.resize(canvas.clientWidth, canvas.clientHeight);
    ```
-   Draw walkers with a `createCitizenRenderer` (or the crowd's) and give the local one
+   `kingdomRoot` is the `[data-chatdom-kingdom]` element; the plaque and phone controls are drawn inside it
+   (`z-index: 2`, below the gate). Draw walkers with a `createCitizenRenderer` (or the crowd's) and give the local one
    `opacity: walk.selfOpacity`.
 3. **Each frame**, in `render(now)`, before the existing camera block:
    ```ts
@@ -108,7 +152,8 @@ edit them. Entry URL proposed for the binding: **`/?walk=1`** on the kingdom pag
    - Build enter, Forge open, `setCamera`/`play`/`seek`/`capture`, or `pose(eye, …)`: `walk.release()`.
    - Build exit, Forge close, `pose(null)`, or the walking view chosen again: `walk.resume()`.
    - A menu that needs the keyboard or pointer: `release()` while open, `resume()` when it closes.
-   - Realm disconnect (`room.onLeave`): `release()`, then reconnect or show the gate.
+   - Realm disconnect: the controller already lets go of every held input on `room.onLeave`/`onDrop`; the
+     integrator calls `release()` while the gate is shown and `resume()` once walking again.
 6. **Dispose** with the scene: `walk.dispose()` then `realm.dispose()`.
 7. **Test hook**, beside `__chatdomKingdom` in `index.tsx`: `window.__chatdomWalk = walk.debug`.
 

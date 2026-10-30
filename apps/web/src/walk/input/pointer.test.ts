@@ -82,16 +82,34 @@ describe('free-cursor camera input', () => {
     expect(input.takeOrbit().dx).toBe(0);
   });
 
-  it('ignores secondary buttons and a second finger', () => {
+  it('ignores secondary buttons, leaves touch to the phone controls, and drags with a pen', () => {
     const { target } = surface(), input = createWalkPointer(target, new EventTarget());
     pointer(target, 'pointerdown', { x: 0, y: 0, button: 2 });
     pointer(target, 'pointermove', { x: 40, y: 0, buttons: 2 });
     expect(input.takeOrbit().dx).toBe(0);
     pointer(target, 'pointerdown', { id: 7, type: 'touch', x: 0, y: 0 });
-    pointer(target, 'pointerdown', { id: 8, type: 'touch', primary: false, x: 50, y: 0 });
-    pointer(target, 'pointermove', { id: 8, type: 'touch', x: 90, y: 0 });
-    pointer(target, 'pointermove', { id: 7, type: 'touch', x: 20, y: 0 });
+    pointer(target, 'pointermove', { id: 7, type: 'touch', x: 40, y: 0 });
+    expect([input.dragging, input.takeOrbit().dx]).toEqual([false, 0]);
+    pointer(target, 'pointerdown', { id: 9, type: 'pen', x: 0, y: 0 });
+    pointer(target, 'pointermove', { id: 9, type: 'pen', x: 20, y: 0 });
     expect(input.takeOrbit().dx).toBe(20);
+  });
+
+  it('never drags while mouse look holds the pointer, and switching drops a drag', () => {
+    const { target, captured } = surface(), input = createWalkPointer(target, new EventTarget());
+    pointer(target, 'pointerdown', { x: 0, y: 0 });
+    pointer(target, 'pointermove', { x: 30, y: 0 });
+    input.setLocked(true);
+    expect([input.dragging, captured.size, input.takeOrbit().dx]).toEqual([false, 0, 0]);
+    pointer(target, 'pointerdown', { x: 0, y: 0 });
+    pointer(target, 'pointermove', { x: 30, y: 0 });
+    expect([input.dragging, input.takeOrbit().dx]).toEqual([false, 0]);
+    // The lock refused or let go: the bounded drag is back.
+    input.setLocked(false);
+    pointer(target, 'pointerup', { x: 30, y: 0, buttons: 0 });
+    pointer(target, 'pointerdown', { x: 0, y: 0 });
+    pointer(target, 'pointermove', { x: 30, y: 0 });
+    expect(input.takeOrbit().dx).toBe(30);
   });
 
   it('reads wheel lines and pages, bounds a single flick, and only scrolls the world', () => {
