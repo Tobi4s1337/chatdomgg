@@ -12,10 +12,10 @@ import type { ForgeStatus } from '../forge/scene';
 import { parseKingdomPresentationParams } from '../stream/params';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
-export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;walk?:KingdomWalkBinding}={}) {
+export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
   const query=new URLSearchParams(location.search),tier=props.founded?.plan.config.tier??(query.get('tier')==='hamlet'?'hamlet':'town');
   const presentation=parseKingdomPresentationParams(query,tier);
-  const realm=query.get('realm'),realmFamily=realm==='hearth'?'hearth':realm==='grove'?'grove':'tide',realmName=realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere';
+  const realm=query.get('realm'),realmFamily=realm==='hearth'?'hearth':realm==='grove'?'grove':'tide',realmName=props.kingdomName??(realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere');
   const rawHour=Number(query.get('hour')??19.5),rawTime=Number(query.get('time'));
   const initialHour=Number.isFinite(rawHour)?((rawHour%24)+24)%24:19.5,initialTime=query.has('time')&&Number.isFinite(rawTime)?Math.max(0,Math.min(3600,rawTime)):null;
   const [ready,setReady]=createSignal(false),[progress,setProgress]=createSignal(0),[phase,setPhase]=createSignal('Unfolding the valley');

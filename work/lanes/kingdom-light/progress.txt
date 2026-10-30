@@ -2,3 +2,5 @@
 2026-10-30 main look: fresh integrated town dusk at 390x844 still reads as an unlit grey castle beneath the beacon. In the castle light pass, make the great-hall front openings visibly warm and spill that warmth onto the entrance court; keep the beacon separate. Source: shots/kingdom/town-dusk@390x844.png.
 
 2026-10-31 founder efficiency decision: Continue the live-evening lane with ONE worker; take one task at a time. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
+
+2026-10-31 main phone walk review: entry now draws the actual town from shoulder height (shots/kingdom/entry-dusk@390x844.png). The broad street surfaces still read cold while tiny distant windows glow. Concrete next existing street-light task: let nearby lit windows/lamps warm a readable patch of pavement and the facing wall at walking eye height; judge that view, not only the aerial. No new lighting scope or reopening accepted work requested.

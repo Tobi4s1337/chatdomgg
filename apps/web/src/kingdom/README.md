@@ -3,6 +3,17 @@
 Main owns composition here. Entry/public-state adapters stay in the realm-wiring lane; immutable scene and
 collision production stay in realm-server-world. This is the existing dusk kingdom, not another court renderer.
 
+The root `/?walk=1` now mounts `KingdomEntry` from `../kingdom-entry`. Its `KingdomEntrySource` returns one
+checked connection bundle: scene, manifest, collision, client, room presence feed, approved public kingdom name
+and disposal. Entry owns cancellation, retry and geometry-remount lifetime; it disposes the drawn kingdom before
+the network connection. Wiring supplies this source, rather than installing the older scene patch recipe.
+
+Until that producer lands, `/?walk=1&source=simulated` explicitly selects the existing market fixture behind this
+same boundary. Run `node scripts/kingdom-entry-preview.mjs --simulated` from the repo root on owned port 5187;
+the web preview proxies HTTP/WebSocket at `/realm-data`. It is memory-only, uses synthetic people and only knows
+the open market floor; outside ground blocks. The notice says so. It cannot grant live identity or publish a home,
+and the live entry never falls back to it. It is an entry stand-in, not plaza-to-pier or glassy-controller evidence.
+
 `Kingdom` accepts `{ founded?: RealmFoundedScene, presenceFeed?: PresenceFeed, walk?: KingdomWalkBinding }`.
 The entry adapter fetches the current manifest, verifies the exact scene bytes/hash and producer validation,
 compiles that same scene's collision world, then connects using the actual session/ticket adapter. Render
