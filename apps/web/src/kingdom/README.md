@@ -3,7 +3,8 @@
 Main owns composition here. Entry/public-state adapters stay in the realm-wiring lane; immutable scene and
 collision production stay in realm-server-world. This is the existing dusk kingdom, not another court renderer.
 
-The root `/?walk=1` now mounts `KingdomEntry` from `../kingdom-entry`. Its `KingdomEntrySource` returns one
+The spectator’s **Walk the street** button opens `/?walk=1`; an attached walker resumes in place after an
+overview. The citizen camera preset remains available to stream/capture consumers. The root `/?walk=1` mounts `KingdomEntry` from `../kingdom-entry`. Its `KingdomEntrySource` returns one
 checked connection bundle: scene, manifest, collision, client, room presence feed, approved public kingdom name
 and disposal. Entry owns cancellation, retry and geometry-remount lifetime; it disposes the drawn kingdom before
 the network connection. Wiring supplies this source, rather than installing the older scene patch recipe.

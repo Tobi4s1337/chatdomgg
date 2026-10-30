@@ -344,7 +344,8 @@ unfinished WB02/BT04 remains with its owners.
 
 **Walking entry:** Main mounts exact `RealmFoundedScene`, room presence and `KingdomWalkBinding`; no regenerated
 layout or local saved build/Forge in founded mode. `KingdomEntry` owns checked-source acquisition, automatic
-walking, retry/remount and disposal (presentation before network). Wiring replaces its source with the actual
+walking, retry/remount and disposal (presentation before network). Walk the street enters that route or resumes
+an attached citizen after an overview; stream camera presets remain separate. Wiring replaces its source with the actual
 session/scene/compiler adapter; `apps/web/src/kingdom/README.md` has the recipe. The old throughSequence/scene
 patch recipe is obsolete. Producer supplies approved public naming, never a presentation URL's invented name.
 
@@ -365,7 +366,8 @@ Codex backend through the 5190 proxy; Herald 5194 untouched. Earlier genuine owl
 remain inconsistent. Forge-pieces got concrete crescent/face feedback. RW05 still binds durable attachment.
 
 **Evidence / next:** Typecheck, focused lint, five relevant tests and web build pass. One-browser entry smoke
-passed automatic walking/readiness, WASD, camera return and live refusal without a simulated fallback. Viewed
+passed the spectator button → room walking/readiness, WASD, overview → resumed walking and live refusal
+without a simulated fallback. WC07 has this actual route for its remaining checks. Viewed
 `shots/kingdom/entry-dusk@390x844.png`: 240 warm windows, but street surfaces remain cold and the idle stick
 overlaps the avatar (light/WC feedback sent). Actual founded geometry/session, room Herald/build/Forge,
 publication adoption, interactions, 300 walkers, plaza→pier and the real tobi4s_ window remain open.
