@@ -330,47 +330,44 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Brief now:** make this one walkable world. Main has frozen the realm boundary and demonstrated its thin
-three-client consumer; the team builds persistence, full walking, existing-system wiring and interactions.
-This is not yet the finished kingdom walk. The previous seven look/place lanes (26–32) remain active and
-retain their ownership map in `work/lanes/kingdom-look-owners.md`. Main does not build their art or merge
-individual branches; judge only the ready `lane/integrator` candidate Tobias announces.
+**Brief:** the four realm lanes are running. Main temporarily took integration back with two Sol high agents,
+merging reviewed branches sequentially onto `integration/kingdom-queue`, inspecting the composed result and
+fast-forwarding main. Continue prioritising ready realm work. The seven look/place lanes retain the ownership
+and composition checklist in `work/lanes/kingdom-look-owners.md`; main judges their work rather than building it.
 
-**Core landed:** spec 33 and `@chatdom/shared/realm` contain actual schema/messages/auth DTOs, `k:<channelId>`,
-private commands/facts/repository/ingress contracts, promoted `KingdomForgeAuthority` and interaction leases.
-`packages/world` owns the pure movement step and private decide/apply/project reducer. A proposed fact becomes
-truth only after the fenced Postgres transaction commits; public fields are selected explicitly. Coal derives
-from ten evidenced minutes with an owned home, once per stream night, cap three including reserves. Forge binds
-rights, stream, home digest/revision and attempt; consume/attach/provenance/outbox are one commit. Uncertain
-replies require outcome lookup. Global home cap and founded allocation are transactional server work.
+**Accepted queue:** vox-import, panel-stream, forge-refusals, crowd-behaviour, build-templates, wardrobe-body,
+herald, forge-ritual, forge-pieces, citizen-card, build-tools and anvil-hero. Actual kingdom mounts now consume
+fitted capes, neighbourhood routines, the hero anvil with the preserved official engraving, rune/blueprint
+stages and nameless soot/sulk refusal. Old overlapping effects were removed. Build mode mounts fitted `.vox`
+imports and the starting-shape chooser; insertion replaces the real private draft in one undoable operation.
+Stream night direction and panel places are composed. Fixed the citizen card's visible collapsed-layout bug.
+WB02 and BT04 source WIP remain with their producers; presentation ownership does not transfer over unfinished work.
 
-**Four ready lanes:** spec 34 `realm-server` (nine tasks), 35 `walk-controller` (eight), 36 `realm-wiring` (nine),
-37 `interactions` (six), each with PRD, empty progress log, local `lane/<name>` and sibling worktree. Persistence/
-auth, movement/input/camera and target selection can start together. Wiring's adapters start on the frozen
-ports; durable acceptance waits for the real producers. Each PRD names disjoint workers and dependencies.
-Server owns narrow room district/lifecycle/rate/recovery hunks; walking owns narrow client Predict/revision/input
-hunks. Main retains shared types, domain rules and auth/join/reconnect client code. Integrator alone composes
-scene/worker/content/camera call sites; exact installation recipes are part of lane delivery.
+**Realm accepted:** RS01 durable Postgres authority, RS02 checked OIDC sessions/one-use room tickets (source
+`38f81ee`), and WC01/WC02 movement/input/shoulder camera. Dev and preview proxy `/api` to 5192. Main closed the
+current authority seams: independent writer-deadline shutdown stops the room; stuck bodies request supported,
+clear recovery at the current collision revision without releasing interaction locks; public bootstrap uses
+`throughCursor`, independent of domain fact sequence, so presence-only deliveries survive overlap. Specs
+33/34/36 and consumer PRDs match the code. Committed/unchanged command outcomes are terminal; identical rejected
+requests can be reconsidered against changed authority. Ingress receipts remain terminal.
 
-**Reference running:** preview 5190, explicit SIMULATED realm 5191; `/-/realm` renders only connected browser
-walkers. WASD/Shift/Space use the same pure step on server and client, with Colyseus reconciliation/interpolation.
-Reload retains the same walker. Entry uses the API's stable opaque `resumeScope` and a lazy fresh-ticket factory;
-single-use tickets never become reconnect storage keys. Versions: Colyseus 0.18.10/core 0.18.23/schema 5.0.42/SDK 0.18.8/uWS 0.18.4.
-Two pnpm patches fix colon room IDs in SDK reconnect parsing and uWS room URLs. 30 Hz input, 5 Hz patches,
-90 inbound frames/s, 16 KiB payload, 1 MiB backpressure with closure. Node 22 remains sufficient. Production
-startup fails closed until real services exist. API has a pinned manifest, not a fake auth server. Use spec 33's
-start commands and `pnpm realm:smoke`; do not stop unrelated services. Herald5194/spell5195 were not rechecked.
+**Honest limits / next:** the controller is mounted on the connected, explicitly SIMULATED `/-/realm` court.
+Actual kingdom walking still needs realm-wiring's founded `RealmEntry` and immutable collision world. The card
+has a labelled fixture host; Tidewake Forge parts have a working assembly consumer, not the live plan grammar.
+Do not count either as a finished moment. Continue the four realm PRDs: founded allocation, live sign-in,
+300 walkers, districts, interiors/seats and room-backed Herald/build/Forge. Live startup remains closed until
+its real producers exist; a real Twitch callback round-trip remains unproven. The whole realm goal stays active.
 
-**Acceptance still owed by lanes:** Postgres restart/fencing, actual Twitch sign-in/deeds, four district views
-and 300 distinct input clients; supported 0.5 m step, lower-left shoulder/first-person camera and real terrain
-collision; doors/seats; room-backed Herald/build/Forge and genuine judged chat wish. Geometry uses a persisted
-founded revision, never URL layout or a presentation slot as ownership. Ordinary chat stays ephemeral. Neither
-the reference court nor model fixtures pass these production/visual checks. Previous Forge work remains at
-its coordinator seam; both independent gates and a real home/live/coal state must succeed, with no bypass.
+**Sent back by eye:** vox-import VI03 must keep the complete fitted object visible above phone details;
+first-look needs a closer idle Forge camera so horn/hardy hole/mark read on phone; anvil AH02 needs worn dark
+iron and restrained edge light. Concrete fixes are in candidate and source progress logs. Other accepted work
+is not held for polish. The castle/ground/light still need their existing look lanes to reach the genre bar.
 
-**Evidence / doubts:** full `pnpm verify --area kingdom --tier town --hour dusk --size phone` passed typecheck,
-lint, 1,278 tests/85 files, build and one serial dusk shot. Actual uWS/SDK movement/reload and three isolated
-Playwright browsers passed. Main inspected `shots/realm/three-walkers@1440x900.png`, `@390x844.png` and the dusk
-phone shot; `shots/realm/smoke.json` records the browser check. Captures remain lean, serial and machine-locked.
-The court proves transport, not the gasp. The largest risk remains isolated benches instead of the actual warm,
-walkable kingdom; the four lanes' final acceptance must use the composed streets, places, homes and horizon.
+**Evidence / running:** final `pnpm verify --area kingdom --tier town --hour dusk --size phone` passed typecheck,
+lint, 1,421 tests (four opt-in skips), workspace build and locked capture. Separate assembled checks actually ran
+both Postgres suites: seven focused tests passed; earlier movement/realm checks passed 53 tests. Main inspected
+street/Forge/build/import/templates at 1440×900 and 390×844, stream 1920×1080, panel 318×496, corrected card at both
+sizes, Tidewake assembly and final dusk. Template insertion/byte-exact Undo passed at both sizes; no browser
+errors. Selected frames: `shots/integration/`; standard shot: `shots/kingdom/town-dusk@390x844.png` (ignored artifacts).
+Main serves its preview on 5190. Existing 5191/5192 services responded and were left with their workers;
+Herald 5194/spell 5195 were not restarted. Captures remain serial, machine-locked, with main priority.
