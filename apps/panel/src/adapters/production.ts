@@ -9,6 +9,7 @@ import type { Connection, Light, PanelAdapter, PanelSnapshot } from '../model';
 export const HELPER_PATIENCE_MS = 12_000;
 
 export const UNLIT_FROM_PANEL = 'Your window cannot be lit from the panel yet. Chat still counts.';
+export const SHARED_NOT_CONFIRMED = 'Twitch connected; the kingdom has not confirmed your light.';
 
 function connectionFor(status: HelperStatus, patient: boolean): Connection {
   if (status.kind === 'absent') return { kind: 'outside-twitch' };
@@ -16,11 +17,17 @@ function connectionFor(status: HelperStatus, patient: boolean): Connection {
   return { kind: 'kingdom-unavailable' };
 }
 
+/**
+ * Only the kingdom could confirm a light, and it cannot be reached. What Twitch says
+ * about sharing changes the words, never the outcome. While no kingdom could answer,
+ * the panel does not ask the viewer to share their identity at all: that would be a
+ * request for something it cannot use.
+ */
 function lightFor(status: HelperStatus): Light {
   if (status.kind === 'absent') return { kind: 'outside-twitch' };
-  if (status.kind === 'authorized' && !status.loggedIn) return { kind: 'logged-out' };
-  // Logged in, shared or not: only the kingdom could confirm a light, and it cannot be reached.
-  return { kind: 'unavailable', reason: UNLIT_FROM_PANEL };
+  if (status.kind === 'waiting') return { kind: 'unavailable', twitch: 'unknown' };
+  if (!status.loggedIn) return { kind: 'logged-out' };
+  return { kind: 'unavailable', twitch: status.shared ? 'shared' : 'unshared' };
 }
 
 function snapshotFor(status: HelperStatus, patient: boolean): PanelSnapshot {

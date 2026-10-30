@@ -11,6 +11,10 @@ export function PanelDefs() {
     <radialGradient id="cp-glow" cx="50%" cy="62%" r="62%">
       <stop offset="0" stop-color="#fff0c4" /><stop offset=".45" stop-color="#ffc66e" /><stop offset="1" stop-color="#d47a2c" />
     </radialGradient>
+    <radialGradient id="cp-ember" cx="50%" cy="80%" r="75%">
+      <stop offset="0" stop-color="#d9873a" /><stop offset=".6" stop-color="#7a3c1e" /><stop offset="1" stop-color="#2b1f2c" />
+    </radialGradient>
+    <clipPath id="cp-pane-clip" clipPathUnits="userSpaceOnUse"><path d="M10 38.5V17.5a10 10 0 0 1 20 0v21Z" /></clipPath>
     <filter id="cp-deckle" x="-4%" y="-8%" width="108%" height="116%">
       <feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="4" />
       <feDisplacementMap in="SourceGraphic" scale="3.2" />
@@ -42,12 +46,20 @@ export function Seal(props: { blank?: boolean }) {
   </svg>;
 }
 
-/** An arched four-pane window. Lit, it glows with someone home. */
-export function WindowGlyph(props: { lit: boolean; pending?: boolean }) {
-  return <svg class="cp-window-glyph" classList={{ lit: props.lit, pending: !!props.pending }} viewBox="0 0 40 44" aria-hidden="true">
+/**
+ * An arched four-pane window. Lit, it glows with someone home. Kindling, its panes
+ * catch one after another; an ember is a window resting or unconfirmed, warm but low.
+ */
+export function WindowGlyph(props: { lit: boolean; pending?: boolean; ember?: boolean; kindling?: boolean }) {
+  return <svg class="cp-window-glyph" classList={{ lit: props.lit, pending: !!props.pending, ember: !!props.ember, kindling: !!props.kindling }} viewBox="0 0 40 44" aria-hidden="true">
     <path class="frame" d="M7 41V17a13 13 0 0 1 26 0v24Z" />
     <path class="pane" d="M10 38.5V17.5a10 10 0 0 1 20 0v21Z" />
-    <path class="pane-lit" d="M10 38.5V17.5a10 10 0 0 1 20 0v21Z" />
+    <g class="panes-lit" clip-path="url(#cp-pane-clip)">
+      <rect class="pane-lit" x="10" y="7" width="10" height="17" />
+      <rect class="pane-lit" x="20" y="7" width="10" height="17" />
+      <rect class="pane-lit" x="10" y="24" width="10" height="15" />
+      <rect class="pane-lit" x="20" y="24" width="10" height="15" />
+    </g>
     <path class="mullion" d="M20 8v31M10 24h20" />
     <path class="sill" d="M4.5 41.5h31" />
   </svg>;

@@ -3,10 +3,12 @@
 // renderer draws them in headless Chrome, and this script records exactly how.
 //
 //   pnpm --filter @chatdom/web build
-//   node apps/panel/scripts/capture-fixture.mjs [--base-url http://127.0.0.1:5190]
+//   node apps/panel/scripts/capture-fixture.mjs [--base-url http://127.0.0.1:5190] [--only resting,window]
+//
+// `--only` re-renders the named pictures and keeps the others, each with the revision it came from.
 import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
@@ -24,8 +26,23 @@ const SHOTS = [
   // Phones held upright: the renderer frames a portrait canvas with its own hero camera.
   { id: 'portrait', camera: 'hero', hour: 20.7, width: 600, height: 760, alt: 'Willowmere at dusk, the castle above the lit streets' },
   { id: 'window', camera: 'window', hour: 20.4, width: 560, height: 360, alt: 'Close to one home in Willowmere, its window lit at dusk' },
+  // Between streams the panel shows the kingdom resting in the afternoon, never the live dusk.
+  { id: 'resting', camera: 'hero', hour: 16.6, width: 640, height: 400, alt: 'Willowmere resting in the afternoon sun, the castle above quiet streets' },
 ];
 const SEED = 'willowmere', TIER = 'town', TIME = 30;
+const only = option('--only')?.split(',');
+if (only?.some(id => !SHOTS.some(shot => shot.id === id))) throw new Error(`--only takes ${SHOTS.map(shot => shot.id).join(', ')}`);
+
+/** The provenance already written, so a partial render keeps the pictures it did not touch. */
+async function previous() {
+  try {
+    const text = await readFile(join(assets, 'provenance.ts'), 'utf8');
+    const record = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+    // Older records kept one revision for every picture.
+    for (const picture of Object.values(record.pictures)) { picture.sourceRevision ??= record.sourceRevision; picture.capturedOn ??= record.capturedOn; }
+    return record.pictures;
+  } catch { return {}; }
+}
 
 let server, browser, release;
 const scratch = await mkdtemp(join(tmpdir(), 'chatdom-panel-fixture-'));
@@ -34,8 +51,15 @@ try {
   let base = option('--base-url');
   if (!base) ({ server, base } = await startCapturePreview());
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-  const pictures = {};
+  let revision = 'unknown';
+  try { revision = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { /* outside a checkout */ }
+  const kept = await previous(), pictures = {};
   for (const shot of SHOTS) {
+    if (only && !only.includes(shot.id)) {
+      if (!kept[shot.id]) throw new Error(`${shot.id} has never been rendered; include it in --only`);
+      pictures[shot.id] = kept[shot.id];
+      continue;
+    }
     const page = await browser.newPage({ viewport: { width: shot.width, height: shot.height }, deviceScaleFactor: 1 });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -58,15 +82,13 @@ try {
     execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', png, '-c:v', 'libwebp', '-quality', '84', '-compression_level', '6', webp]);
     const bytes = (await stat(webp)).size;
     pictures[shot.id] = {
-      file: `willowmere-${shot.id}.webp`, width: shot.width, height: shot.height, bytes, alt: shot.alt,
+      file: `willowmere-${shot.id}.webp`, width: shot.width, height: shot.height, bytes, alt: shot.alt, sourceRevision: revision, capturedOn: new Date().toISOString().slice(0, 10),
       render: { route: path, seed: SEED, tier: TIER, hour: shot.hour, time: TIME, camera: shot.camera, renderer: 'apps/web/src/kingdom/scene.ts', presence: 'simulated' },
     };
     console.log(`Wrote ${webp} (${Math.round(bytes / 1024)} KB)`);
     await page.close();
   }
-  let revision = 'unknown';
-  try { revision = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { /* outside a checkout */ }
-  const provenance = { origin: 'simulated', capturedOn: new Date().toISOString().slice(0, 10), sourceRevision: revision, pictures };
+  const provenance = { origin: 'simulated', capturedOn: new Date().toISOString().slice(0, 10), pictures };
   const source = `// Written by apps/panel/scripts/capture-fixture.mjs. Do not edit by hand: re-render instead.\n// These stills come from our kingdom renderer showing the SIMULATED Willowmere night.\nexport const FIXTURE_PROVENANCE = ${JSON.stringify(provenance, null, 2)} as const;\n`;
   await writeFile(join(assets, 'provenance.ts'), source);
   console.log('Wrote provenance.ts');

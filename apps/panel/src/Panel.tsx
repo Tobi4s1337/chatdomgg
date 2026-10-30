@@ -3,12 +3,15 @@
 // never a second game client.
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
 import { selectAdapter } from './adapters/select';
-import type { Connection, LightChoice, PanelAdapter, PanelSnapshot, Picture } from './model';
+import type { Connection, Earned, Home, Light, LightChoice, PanelAdapter, PanelSnapshot, Picture } from './model';
 import { BackGlyph, HomeGlyph, PanelDefs, Seal, Shutters, TavernGlyph, TonightGlyph, WindowGlyph } from './ui/art';
 import './panel.css';
 
 type Drawer = 'home' | 'tonight' | 'tavern' | 'light';
 type ReadyWindow = Window & { __chatdomReady?: boolean };
+
+/** How long the confirmed window takes to kindle: panes one by one, then the glow settles. */
+const KINDLE_MS = 2600;
 
 const DRAWERS: readonly { id: Exclude<Drawer, 'light'>; label: string; glyph: () => JSX.Element }[] = [
   { id: 'home', label: 'Home', glyph: HomeGlyph },
@@ -21,7 +24,17 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
   const [snap, setSnap] = createSignal<PanelSnapshot>(adapter.get());
   const [drawer, setDrawer] = createSignal<Drawer | null>(null);
   const [ready, setReady] = createSignal(false);
-  const unsubscribe = adapter.subscribe(setSnap);
+  // The moment a pending light is confirmed, the window kindles once. Never for an unavailable answer.
+  const [kindling, setKindling] = createSignal(false);
+  let kindleTimer: ReturnType<typeof setTimeout> | undefined;
+  const unsubscribe = adapter.subscribe(next => {
+    if (next.light.kind === 'lit' && snap().light.kind === 'pending') {
+      setKindling(true);
+      clearTimeout(kindleTimer);
+      kindleTimer = setTimeout(() => setKindling(false), KINDLE_MS);
+    }
+    setSnap(next);
+  });
   let opener: HTMLElement | null = null, drawerEl: HTMLElement | undefined, lightEl: HTMLElement | undefined, pictureEl: HTMLImageElement | undefined, disposed = false;
 
   const open = (next: Drawer, from: EventTarget | null) => {
@@ -59,6 +72,7 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
   });
   onCleanup(() => {
     disposed = true;
+    clearTimeout(kindleTimer);
     unsubscribe();
     adapter.dispose();
     window.removeEventListener('keydown', onKey);
@@ -70,7 +84,7 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
   const motto = () => snap().kingdom?.motto ?? connectionMotto(snap().connection);
 
   return <div class="cp" data-chatdom-panel data-source={snap().source.kind} data-connection={snap().connection.kind}
-    data-light={snap().light.kind} data-drawer={drawer() ?? 'none'} data-ready={ready() ? 'true' : 'false'}
+    data-light={snap().light.kind} data-stream={snap().stream} data-home={snap().home.kind} data-drawer={drawer() ?? 'none'} data-ready={ready() ? 'true' : 'false'}
     data-view={snap().picture.kind === 'still' ? 'kingdom' : 'connection'}>
     <PanelDefs />
     <header class="cp-head">
@@ -86,7 +100,7 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
 
     <main class="cp-main" aria-hidden={drawer() ? 'true' : undefined} inert={drawer() ? true : undefined}>
       <PictureFrame picture={snap().picture} connection={snap().connection} ref={element => { pictureEl = element; }} />
-      <LightAction snap={snap()} ref={element => { lightEl = element; }} onChoose={event => open('light', event.currentTarget)} onHome={event => open('home', event.currentTarget)} />
+      <LightAction snap={snap()} kindling={kindling()} ref={element => { lightEl = element; }} onChoose={event => open('light', event.currentTarget)} onHome={event => open('home', event.currentTarget)} />
       <TonightSlip snap={snap()} />
     </main>
 
@@ -94,12 +108,12 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
       <section class="cp-drawer" ref={element => { drawerEl = element; }} role="dialog" aria-modal="false" aria-labelledby="cp-drawer-title" data-drawer={current()}>
         <div class="cp-drawer-head">
           <button class="cp-back" type="button" onClick={close} data-autofocus><BackGlyph /><span>The kingdom</span></button>
-          <h2 id="cp-drawer-title" class="cp-drawer-title">{drawerTitle(current())}</h2>
+          <h2 id="cp-drawer-title" class="cp-drawer-title">{drawerTitle(current(), snap())}</h2>
         </div>
         <div class="cp-drawer-page" tabindex="-1">
           <Switch>
             <Match when={current() === 'light'}><LightChoiceSheet snap={snap()} onChoose={choose} /></Match>
-            <Match when={current() === 'home'}><HomeSheet snap={snap()} /></Match>
+            <Match when={current() === 'home'}><HomeSheet snap={snap()} onLight={event => open('light', event.currentTarget)} /></Match>
             <Match when={current() === 'tonight'}><TonightSheet snap={snap()} /></Match>
             <Match when={current() === 'tavern'}><TavernSheet snap={snap()} /></Match>
           </Switch>
@@ -122,22 +136,33 @@ function connectionMotto(connection: Connection): string {
     case 'outside-twitch': return 'Opens on Twitch';
     case 'knocking': return 'Knocking at the gate';
     case 'no-answer': return 'No answer yet';
-    default: return 'Not shared yet';
+    default: return 'Not reached yet';
   }
 }
 
-function drawerTitle(drawer: Drawer): string {
+function drawerTitle(drawer: Drawer, snap: PanelSnapshot): string {
+  if (drawer === 'home' && snap.home.kind === 'guest') return 'Your light here';
+  if (drawer === 'tonight' && snap.stream === 'resting') return 'Last night';
   return { light: 'Light your window', home: 'Your home', tonight: 'Tonight', tavern: 'The tavern' }[drawer];
 }
 
+
+type Lit = Extract<Light, { kind: 'lit' }>;
+type Still = Extract<Picture, { kind: 'still' }>;
+type Click = (event: MouseEvent & { currentTarget: HTMLButtonElement }) => void;
+
 function PictureFrame(props: { picture: Picture; connection: Connection; ref: (element: HTMLImageElement) => void }) {
-  return <figure class="cp-picture">
+  const lost = () => props.connection.kind === 'lost' ? props.connection : null;
+  return <figure class="cp-picture" classList={{ stale: !!lost() }}>
     <Show when={props.picture.kind === 'still' ? props.picture : null} fallback={<ClosedShutters connection={props.connection} />}>{still =>
       <>
         <picture>
           <Show when={still().portrait}>{portrait => <source media="(min-width: 340px) and (max-aspect-ratio: 4/5)" srcset={portrait().url} width={portrait().width} height={portrait().height} />}</Show>
           <img ref={props.ref} src={still().url} alt={still().alt} width={still().width} height={still().height} decoding="async" />
         </picture>
+        <Show when={lost()}>{gone =>
+          <p class="cp-stale" role="status"><strong>Out of reach</strong><span>Picture from {gone().asOf}</span></p>}
+        </Show>
         <figcaption class="cp-picture-caption">{still().provenance.caption}</figcaption>
       </>}
     </Show>
@@ -150,6 +175,7 @@ function ClosedShutters(props: { connection: Connection }) {
       case 'outside-twitch': return { title: 'The shutters open on Twitch', body: 'This panel lives under a channel’s video. Open it there to see the kingdom.' };
       case 'knocking': return { title: 'Knocking at the gate', body: 'Waiting for Twitch to open the panel.' };
       case 'no-answer': return { title: 'Twitch has not answered', body: 'The panel could not reach Twitch. Reload to knock again.' };
+      case 'lost': return { title: 'The kingdom is out of reach', body: `Nothing has arrived since ${props.connection.asOf}.` };
       default: return { title: 'The shutters are closed', body: 'Twitch is connected, but this kingdom is not sharing its picture with the panel yet.' };
     }
   };
@@ -168,61 +194,81 @@ function ClosedShutters(props: { connection: Connection }) {
   </div>;
 }
 
-function LightAction(props: { snap: PanelSnapshot; ref: (element: HTMLElement) => void; onChoose: (event: MouseEvent & { currentTarget: HTMLButtonElement }) => void; onHome: (event: MouseEvent & { currentTarget: HTMLButtonElement }) => void }) {
+/** The words on the window plate for every state that is not a button. */
+function lightNote(snap: PanelSnapshot): { title: string; detail: string; glyph: 'dark' | 'pending' | 'ember' } | null {
+  const light = snap.light, simulated = snap.source.kind === 'simulated';
+  switch (light.kind) {
+    case 'pending': return light.step === 'sharing'
+      ? { title: 'Asking Twitch who you are…', detail: simulated ? 'Simulated: Twitch’s own prompt would open here.' : 'Answer Twitch’s prompt to go on.', glyph: 'pending' }
+      : { title: 'Lighting your window…', detail: 'Waiting for the kingdom to answer.', glyph: 'pending' };
+    case 'logged-out': return { title: 'Log in to light your window', detail: 'On Twitch. Your window is free, always.', glyph: 'dark' };
+    case 'outside-twitch': return { title: 'Your window lights from Twitch', detail: 'Open this panel under the channel’s video.', glyph: 'dark' };
+    case 'out-of-reach': return { title: 'The kingdom is out of reach', detail: `Your light is unconfirmed since ${light.asOf}.`, glyph: 'ember' };
+    case 'unavailable': return light.twitch === 'shared'
+      ? { title: 'Twitch connected', detail: 'The kingdom has not confirmed your light. Chat still counts.', glyph: 'dark' }
+      : { title: 'Your window cannot be lit from the panel yet', detail: 'Chat still counts.', glyph: 'dark' };
+    default: return null;
+  }
+}
+
+function LightAction(props: { snap: PanelSnapshot; kindling: boolean; ref: (element: HTMLElement) => void; onChoose: Click; onHome: Click }) {
   const light = () => props.snap.light;
-  const home = () => props.snap.home.kind === 'supplied' ? props.snap.home : null;
+  const home = () => props.snap.home;
+  const homeName = () => { const h = home(); return h.kind === 'citizen' || h.kind === 'guest' ? h.displayName : null; };
+  const street = () => { const h = home(); return h.kind === 'citizen' ? h.street : null; };
+  const lit = () => light().kind === 'lit' ? light() as Lit : null;
   return <div class="cp-light" data-state={light().kind} ref={props.ref} tabindex="-1">
-    <Switch>
+    <Switch fallback={<Show when={lightNote(props.snap)}>{note =>
+      <div class="cp-light-note" role={light().kind === 'pending' ? 'status' : undefined} classList={{ ember: note().glyph === 'ember' }}>
+        <WindowGlyph lit={false} pending={note().glyph === 'pending'} ember={note().glyph === 'ember'} />
+        <span class="cp-light-words"><strong>{note().title}</strong><small>{note().detail}</small></span>
+      </div>}
+    </Show>}>
       <Match when={light().kind === 'unshared'}>
         <button type="button" class="cp-light-button" onClick={props.onChoose}>
           <WindowGlyph lit={false} />
           <span class="cp-light-words"><strong>Light your window</strong><small>With your name, or unnamed. Always free.</small></span>
         </button>
       </Match>
-      <Match when={light().kind === 'pending'}>
-        <div class="cp-light-note" role="status">
-          <WindowGlyph lit={false} pending />
-          <span class="cp-light-words"><strong>Lighting your window…</strong><small>Waiting for the kingdom to answer.</small></span>
-        </div>
+      <Match when={light().kind === 'refused'}>
+        <button type="button" class="cp-light-button" onClick={props.onChoose}>
+          <WindowGlyph lit={false} />
+          <span class="cp-light-words"><strong>Light your window</strong><small>You kept who you are private. Ask again any time.</small></span>
+        </button>
       </Match>
-      <Match when={light().kind === 'lit' ? light() as Extract<PanelSnapshot['light'], { kind: 'lit' }> : null}>{lit =>
-        <button type="button" class="cp-light-button lit" onClick={props.onHome}>
-          <WindowGlyph lit />
+      <Match when={lit()}>{current =>
+        <button type="button" class="cp-light-button lit" classList={{ kindling: props.kindling, guest: current().as === 'guest' }} onClick={props.onHome}>
+          <WindowGlyph lit kindling={props.kindling} />
           <span class="cp-light-words">
-            <strong>Your window is lit</strong>
-            <small>{lit().choice === 'named' ? home()?.displayName ?? 'With your name' : 'Unnamed'} · {home()?.street ?? 'Home'}</small>
+            <strong>{current().as === 'guest' ? 'Your light burns here' : 'Your window is lit'}</strong>
+            <small>{current().as === 'guest'
+              ? `As a guest${homeName() ? ` · ${homeName()}` : ''}`
+              : `${current().choice === 'named' ? homeName() ?? 'With your name' : 'Unnamed'} · ${street() ?? 'Your home'}`}</small>
           </span>
+          <Show when={props.kindling}><span class="cp-kindle" aria-hidden="true"><i /><i /><i /></span></Show>
         </button>}
       </Match>
-      <Match when={light().kind === 'logged-out'}>
-        <div class="cp-light-note">
-          <WindowGlyph lit={false} />
-          <span class="cp-light-words"><strong>Log in to Twitch to light your window</strong><small>Your window is free, and always will be.</small></span>
-        </div>
-      </Match>
-      <Match when={light().kind === 'outside-twitch'}>
-        <div class="cp-light-note">
-          <WindowGlyph lit={false} />
-          <span class="cp-light-words"><strong>Your window lights from Twitch</strong><small>Open this panel under the channel’s video.</small></span>
-        </div>
-      </Match>
-      <Match when={light().kind === 'unavailable'}>
-        <div class="cp-light-note">
-          <WindowGlyph lit={false} />
-          <span class="cp-light-words"><strong>Your window cannot be lit from the panel yet</strong><small>Chat still counts.</small></span>
-        </div>
+      <Match when={light().kind === 'resting'}>
+        <button type="button" class="cp-light-button resting" onClick={props.onHome}>
+          <WindowGlyph lit={false} ember />
+          <span class="cp-light-words"><strong>Your window is resting</strong><small>It lights again with the next stream.</small></span>
+        </button>
       </Match>
     </Switch>
   </div>;
 }
 
 function TonightSlip(props: { snap: PanelSnapshot }) {
-  return <section class="cp-slip" aria-label="Tonight">
-    <p class="cp-label">{props.snap.stream === 'resting' ? 'Last night' : 'Tonight'}</p>
+  const label = () => {
+    if (props.snap.connection.kind === 'lost') return `Tonight, as of ${props.snap.connection.asOf}`;
+    return props.snap.stream === 'resting' ? 'Last night' : 'Tonight';
+  };
+  return <section class="cp-slip" aria-label={label()}>
+    <p class="cp-label">{label()}</p>
     <Show when={props.snap.tonight.kind === 'supplied' ? props.snap.tonight : null} fallback={<p class="cp-slip-text muted">{(props.snap.tonight as { reason: string }).reason} Chat still counts on stream.</p>}>
       {tonight => <>
         <p class="cp-slip-text">{tonight().summary}</p>
-        <ol class="cp-moments cp-slip-more" aria-label="Tonight’s moments">
+        <ol class="cp-moments cp-slip-more" aria-label="Moments">
           <For each={tonight().moments.slice(-3)}>{moment => <li><time>{moment.at}</time><span>{moment.text}</span></li>}</For>
         </ol>
       </>}
@@ -245,30 +291,93 @@ function LightChoiceSheet(props: { snap: PanelSnapshot; onChoose: (choice: Light
       </button>
     </div>
     <p class="cp-fine">{simulated()
-      ? 'Simulated: nothing is shared with Twitch or sent to a kingdom.'
-      : 'Twitch will ask to share your identity with Chatdom first.'}</p>
+      ? 'Simulated: Twitch is not asked and nothing is sent to a kingdom.'
+      : 'Twitch asks you to share who you are with Chatdom first.'}</p>
   </div>;
 }
 
-function HomeSheet(props: { snap: PanelSnapshot }) {
-  return <Show when={props.snap.home.kind === 'supplied' ? props.snap.home : null} fallback={<Empty text={(props.snap.home as { reason: string }).reason} />}>{home =>
-    <div class="cp-sheet">
-      <Show when={home().picture.kind === 'still' ? home().picture as Extract<Picture, { kind: 'still' }> : null}>{still =>
-        <figure class="cp-home-picture"><img src={still().url} alt={still().alt} width={still().width} height={still().height} /><figcaption class="cp-picture-caption">{still().provenance.caption}</figcaption></figure>}
-      </Show>
-      <div class="cp-plaque">
-        <p class="cp-plaque-name">{props.snap.light.kind === 'lit' && props.snap.light.choice === 'unnamed' ? 'An unnamed window' : home().displayName ?? 'Your home'}</p>
-        <p class="cp-plaque-street">{home().street}</p>
-      </div>
-      <p class="cp-body">{home().description}</p>
-      <p class="cp-body muted">{props.snap.light.kind === 'lit' ? 'Your window is lit for as long as you are here.' : 'Your window is dark until you light it.'}</p>
-    </div>}
+function windowWords(snap: PanelSnapshot): string {
+  const light = snap.light;
+  switch (light.kind) {
+    case 'lit': return 'Lit while you watch';
+    case 'resting': return 'Resting until the next stream';
+    case 'out-of-reach': return `Unconfirmed since ${light.asOf}`;
+    case 'pending': return 'Being lit';
+    default: return 'Dark until you light it';
+  }
+}
+
+function HomeSheet(props: { snap: PanelSnapshot; onLight: Click }) {
+  const home = () => props.snap.home;
+  const citizen = () => home().kind === 'citizen' ? home() as Extract<Home, { kind: 'citizen' }> : null;
+  const guest = () => home().kind === 'guest' ? home() as Extract<Home, { kind: 'guest' }> : null;
+  const canLight = () => props.snap.light.kind === 'unshared' || props.snap.light.kind === 'refused';
+  return <Switch fallback={
+    <Empty text={(home() as { reason: string }).reason} detail={canLight() ? 'Chat still counts: speaking in chat lights your window on stream.' : undefined}>
+      <Show when={canLight()}><button type="button" class="cp-inline-action" onClick={props.onLight}>Light your window</button></Show>
+    </Empty>}>
+    <Match when={citizen()}>{h =>
+      <div class="cp-sheet">
+        <Show when={h().picture.kind === 'still' ? h().picture as Still : null}>{still =>
+          <figure class="cp-home-picture" classList={{ dim: props.snap.light.kind !== 'lit' }}>
+            <img src={still().url} alt={still().alt} width={still().width} height={still().height} />
+            <figcaption class="cp-picture-caption">{still().provenance.caption}</figcaption>
+          </figure>}
+        </Show>
+        <div class="cp-plaque">
+          <span class="cp-rivet" aria-hidden="true" /><span class="cp-rivet" aria-hidden="true" />
+          <p class="cp-plaque-name" classList={{ long: (h().displayName ?? '').length > 16 }}>{h().displayName ?? 'Your home'}</p>
+          <p class="cp-plaque-street">{h().street}</p>
+        </div>
+        <p class="cp-place">{h().place}</p>
+        <dl class="cp-ledger">
+          <div><dt>Window</dt><dd>{windowWords(props.snap)}</dd></div>
+          <div><dt>Name</dt><dd>{h().displayName ? 'Shown by your window' : 'Unnamed to the town'}</dd></div>
+          <div><dt>Lived here</dt><dd classList={{ muted: h().tenure.kind === 'unknown' }}>{h().tenure.kind === 'known' ? `Since ${(h().tenure as { since: string }).since}` : 'Not known yet'}</dd></div>
+        </dl>
+        <p class="cp-body">{h().description}</p>
+        <History items={h().history} label="Earned here" />
+      </div>}
+    </Match>
+    <Match when={guest()}>{g =>
+      <div class="cp-sheet">
+        <div class="cp-plaque guest">
+          <span class="cp-rivet" aria-hidden="true" /><span class="cp-rivet" aria-hidden="true" />
+          <p class="cp-plaque-name">{g().displayName ?? 'A guest’s light'}</p>
+          <p class="cp-plaque-street">A guest in {props.snap.kingdom?.name ?? 'this kingdom'}</p>
+        </div>
+        <p class="cp-body">You already keep three homes, so here your light burns as a guest’s. Your presence still counts.</p>
+        <p class="cp-body muted">What you do here is kept. If you ever free a place, your history will be waiting.</p>
+        <History items={g().history} label="Kept here" />
+      </div>}
+    </Match>
+  </Switch>;
+}
+
+function History(props: { items: readonly Earned[]; label: string }) {
+  return <Show when={props.items.length > 0}>
+    <section class="cp-history" aria-label={props.label}>
+      <p class="cp-label">{props.label}</p>
+      <ul>
+        <For each={props.items}>{item => <li><span>{item.text}</span><Show when={item.at}>{at => <time>{at()}</time>}</Show></li>}</For>
+      </ul>
+    </section>
   </Show>;
 }
 
 function TonightSheet(props: { snap: PanelSnapshot }) {
   return <Show when={props.snap.tonight.kind === 'supplied' ? props.snap.tonight : null} fallback={<Empty text={(props.snap.tonight as { reason: string }).reason} />}>{tonight =>
     <div class="cp-sheet">
+      <Show when={tonight().chapter}>{chapter =>
+        <header class="cp-chapter"><p class="cp-label">{tonight().night === 'last-night' ? 'Last night’s chapter' : 'Tonight’s chapter'}</p><p class="cp-chapter-title">{chapter()}</p></header>}
+      </Show>
+      <Show when={tonight().ballad}>{ballad =>
+        <figure class="cp-ballad">
+          <figcaption><span class="cp-ballad-title">{ballad().title}</span><span class="cp-ballad-sung">{ballad().sung}</span></figcaption>
+          <blockquote><For each={ballad().lines}>{line => <p>{line}</p>}</For></blockquote>
+        </figure>}
+      </Show>
+      <Show when={tonight().ballad}><p class="cp-label">The night’s moments</p></Show>
       <ol class="cp-moments">
         <For each={tonight().moments}>{moment => <li><time>{moment.at}</time><span>{moment.text}</span></li>}</For>
       </ol>
@@ -287,17 +396,18 @@ function TonightSheet(props: { snap: PanelSnapshot }) {
 function TavernSheet(props: { snap: PanelSnapshot }) {
   return <Show when={props.snap.tavern.kind === 'supplied' ? props.snap.tavern : null} fallback={<Empty text={(props.snap.tavern as { reason: string }).reason} />}>{tavern =>
     <div class="cp-sheet">
-      <div class="cp-plaque"><p class="cp-plaque-name">{tavern().place}</p><p class="cp-plaque-street">{tavern().table}</p></div>
+      <div class="cp-plaque"><span class="cp-rivet" aria-hidden="true" /><span class="cp-rivet" aria-hidden="true" /><p class="cp-plaque-name">{tavern().place}</p><p class="cp-plaque-street">{tavern().table}</p></div>
       <p class="cp-body">{tavern().watching}</p>
       <p class="cp-body muted">You can follow the table from here. Seats are taken inside the kingdom.</p>
     </div>}
   </Show>;
 }
 
-function Empty(props: { text: string }) {
+function Empty(props: { text: string; detail?: string | undefined; children?: JSX.Element }) {
   return <div class="cp-sheet cp-empty">
     <WindowGlyph lit={false} />
     <p class="cp-body">{props.text}</p>
-    <p class="cp-body muted">Chat still counts: speaking in chat lights your window on stream.</p>
+    {props.children}
+    <p class="cp-body muted">{props.detail ?? 'Chat still counts: speaking in chat lights your window on stream.'}</p>
   </div>;
 }

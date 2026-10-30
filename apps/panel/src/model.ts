@@ -19,7 +19,9 @@ export type Connection =
   /** The Helper has not answered for a long while. */
   | { readonly kind: 'no-answer' }
   /** Twitch authorized the view; no kingdom service exists for the panel to read. */
-  | { readonly kind: 'kingdom-unavailable' };
+  | { readonly kind: 'kingdom-unavailable' }
+  /** The kingdom stopped answering. What is shown is as it was at `asOf`, and says so. */
+  | { readonly kind: 'lost'; readonly asOf: string };
 
 export interface Kingdom {
   readonly name: string;
@@ -47,6 +49,9 @@ export type Picture =
 
 export type LightChoice = 'named' | 'unnamed';
 
+/** How far a light request has come: Twitch shares who you are, then the kingdom answers. */
+export type LightStep = 'sharing' | 'confirming';
+
 /**
  * The viewer's window. Only an authority may produce `lit`: the SIMULATED fixture
  * (which says so) or, one day, the kingdom's own server. Twitch identity, opaque
@@ -56,9 +61,20 @@ export type Light =
   | { readonly kind: 'outside-twitch' }
   | { readonly kind: 'logged-out' }
   | { readonly kind: 'unshared' }
-  | { readonly kind: 'pending'; readonly choice: LightChoice }
-  | { readonly kind: 'lit'; readonly choice: LightChoice; readonly by: 'simulation' }
-  | { readonly kind: 'unavailable'; readonly reason: string };
+  /** The viewer kept their identity private when Twitch asked. They may ask again. */
+  | { readonly kind: 'refused' }
+  | { readonly kind: 'pending'; readonly choice: LightChoice; readonly step: LightStep }
+  /** Confirmed present. `as: 'guest'` when the person already keeps three homes elsewhere. */
+  | { readonly kind: 'lit'; readonly choice: LightChoice; readonly as: 'citizen' | 'guest'; readonly by: 'simulation' }
+  /** The stream is resting: no window is lit from the panel until it returns. */
+  | { readonly kind: 'resting'; readonly choice: LightChoice | null }
+  /** The kingdom stopped answering; the light's state is unknown, not assumed. */
+  | { readonly kind: 'out-of-reach'; readonly asOf: string }
+  /**
+   * No kingdom service can confirm a light. `twitch` is what Twitch's Helper says about
+   * identity sharing, as display evidence only: shared still is not lit.
+   */
+  | { readonly kind: 'unavailable'; readonly twitch: 'unknown' | 'unshared' | 'shared' };
 
 export interface Moment {
   readonly id: string;
@@ -74,12 +90,49 @@ export interface Raising {
   readonly next: string;
 }
 
+/** The Voice of the Realm's verse for a night that has ended. Only ever supplied, never composed here. */
+export interface Ballad {
+  readonly title: string;
+  readonly lines: readonly string[];
+  /** When it was sung, e.g. "Sung at 11:04 pm, as the kingdom rested". */
+  readonly sung: string;
+}
+
 export type Tonight =
-  | { readonly kind: 'supplied'; readonly summary: string; readonly moments: readonly Moment[]; readonly raising: Raising | null }
+  | {
+    readonly kind: 'supplied';
+    /** A live stream's night, or the last one while the kingdom rests. */
+    readonly night: 'tonight' | 'last-night';
+    /** The night's chapter title in the Chronicle, when it has one. */
+    readonly chapter: string | null;
+    readonly summary: string;
+    readonly moments: readonly Moment[];
+    readonly raising: Raising | null;
+    readonly ballad: Ballad | null;
+  }
   | { readonly kind: 'unavailable'; readonly reason: string };
 
+/** How long someone has lived here. Unknown stays unknown: a window slot proves nothing. */
+export type Tenure = { readonly kind: 'known'; readonly since: string } | { readonly kind: 'unknown' };
+
+/** One earned line of a home's history, e.g. "Helped raise the well-house". */
+export interface Earned { readonly id: string; readonly text: string; readonly at: string | null }
+
 export type Home =
-  | { readonly kind: 'supplied'; readonly street: string; readonly description: string; readonly displayName: string | null; readonly picture: Picture }
+  | {
+    readonly kind: 'citizen';
+    readonly street: string;
+    /** Where on the street, in words: "Third house on the left, two doors from the lane". */
+    readonly place: string;
+    readonly description: string;
+    /** Null while the viewer has chosen to stay unnamed to the town. */
+    readonly displayName: string | null;
+    readonly picture: Picture;
+    readonly tenure: Tenure;
+    readonly history: readonly Earned[];
+  }
+  /** Three homes are already kept elsewhere: here the light burns as a guest's. */
+  | { readonly kind: 'guest'; readonly displayName: string | null; readonly history: readonly Earned[] }
   | { readonly kind: 'unknown'; readonly reason: string };
 
 export type Tavern =

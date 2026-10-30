@@ -5,10 +5,11 @@
 // their window is lit. Tokens stay inside this closure, in memory; they are never
 // put in state, URLs, storage or logs.
 
-interface HelperAuthorized { channelId: string; clientId: string; token: string; helixToken: string; userId: string }
+export interface HelperAuthorized { channelId: string; clientId: string; token: string; helixToken: string; userId: string }
 interface HelperViewer { readonly isLinked: boolean; readonly role: string; onChanged(callback: () => void): void }
 interface HelperContext { theme?: 'light' | 'dark'; mode?: 'viewer' | 'dashboard' | 'config' }
-interface HelperExt {
+/** The part of `window.Twitch.ext` the panel uses. */
+export interface HelperExt {
   onAuthorized(callback: (auth: HelperAuthorized) => void): void;
   onContext(callback: (context: HelperContext, changed: readonly string[]) => void): void;
   onVisibilityChanged?(callback: (visible: boolean) => void): void;
@@ -36,27 +37,27 @@ function findHelper(): HelperExt | undefined {
   return twitch?.ext;
 }
 
-let shared: HelperBridge | undefined;
-
-/** One bridge per page: the Helper's callbacks cannot be unregistered. */
-export function connectHelper(): HelperBridge {
-  if (shared) return shared;
-  const ext = findHelper();
+/**
+ * Wraps one Helper. Twitch calls `onAuthorized` again whenever it refreshes the token
+ * and after the viewer shares or revokes their identity; the latest call always wins,
+ * and the previous token is dropped. Exported for the adapter test.
+ */
+export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
   const listeners = new Set<(status: HelperStatus) => void>();
   let current: HelperStatus = ext ? { kind: 'waiting' } : { kind: 'absent' };
   let token: string | null = null;
   const emit = (next: HelperStatus) => { current = next; for (const listener of listeners) listener(next); };
   if (ext) {
-    const read = (auth: HelperAuthorized) => {
-      token = auth.token;
-      emit({ kind: 'authorized', loggedIn: auth.userId.startsWith('U'), shared: ext.viewer?.isLinked === true, role: ext.viewer?.role ?? 'viewer' });
-    };
     let last: HelperAuthorized | undefined;
-    // Twitch refreshes the token by calling this again; the latest one always wins.
-    ext.onAuthorized(auth => { last = auth; read(auth); });
-    ext.viewer?.onChanged(() => { if (last) read(last); });
+    const read = () => {
+      if (!last) return;
+      // An `A…` opaque ID is a logged-out viewer and a `U…` one is logged in. Neither is a Chatdom person.
+      emit({ kind: 'authorized', loggedIn: last.userId.startsWith('U'), shared: ext.viewer?.isLinked === true, role: ext.viewer?.role ?? 'viewer' });
+    };
+    ext.onAuthorized(auth => { last = auth; token = auth.token; read(); });
+    ext.viewer?.onChanged(read);
   }
-  shared = {
+  return {
     status: () => current,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     token: () => token,
@@ -66,5 +67,12 @@ export function connectHelper(): HelperBridge {
       return true;
     },
   };
+}
+
+let shared: HelperBridge | undefined;
+
+/** One bridge per page: the Helper's callbacks cannot be unregistered. */
+export function connectHelper(): HelperBridge {
+  shared ??= bridgeHelper(findHelper());
   return shared;
 }

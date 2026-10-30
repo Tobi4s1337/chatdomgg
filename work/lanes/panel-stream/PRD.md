@@ -30,7 +30,7 @@ helper allocates a free port and queues through its machine-wide lock. Record an
   truthful loading/resting/lost-source treatment. Preserve current readiness/debug capture compatibility.
   Implement visibility disposal/remount and cancellation while constructing. No copied renderer or new camera
   contract. · evidence: stage 1920×1080/1280×720, window 480×270, strip 1280×180, plus hide/show browser check.
-- [ ] **PS03 — Lighting a window has consent, identity limits and a real answer.** Finish the adapter state
+- [x] **PS03 — Lighting a window has consent, identity limits and a real answer.** Finish the adapter state
   model and named/unnamed consent flow, Helper token refresh handling, logged-out/unshared/guest states, fixture
   confirmation animation and honest unavailable production outcome. Add home plaque and factual Tonight drawer,
   resting Ballad/Chronicle if supplied and missing-data states. Add the single meaningful adapter behavior test:

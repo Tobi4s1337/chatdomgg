@@ -9,6 +9,7 @@
 // --panel-url it serves apps/panel/dist under a nested, versioned path, the way
 // Twitch's CDN serves an Extension zip, so relative assets are really exercised.
 import { chromium } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdir, readdir, readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -29,6 +30,8 @@ const HELPER = 'https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js';
 // plain browser (no Helper), the other a logged-in viewer whose panel Twitch authorized.
 const NO_HELPER = '';
 const AUTHORIZED_HELPER = `window.Twitch={ext:{onAuthorized(cb){setTimeout(()=>cb({channelId:'1',clientId:'look',token:'look-token',helixToken:'look-helix',userId:'ULOOK'}),40)},onContext(){},onVisibilityChanged(){},viewer:{isLinked:false,role:'viewer',onChanged(){}},actions:{requestIdShare(){}}}};`;
+// A viewer who already shared their identity, whose token Twitch then refreshes. Any request to share again is recorded.
+const SHARED_HELPER = `window.__shareAsked=0;window.Twitch={ext:{onAuthorized(cb){setTimeout(()=>cb({channelId:'1',clientId:'look',token:'look-token',helixToken:'look-helix',userId:'ULOOK'}),40);setTimeout(()=>cb({channelId:'1',clientId:'look',token:'look-token-refreshed',helixToken:'look-helix-2',userId:'ULOOK'}),400)},onContext(){},onVisibilityChanged(){},viewer:{isLinked:true,role:'viewer',onChanged(){}},actions:{requestIdShare(){window.__shareAsked++}}}};`;
 
 async function budget() {
   let bytes = 0;
@@ -88,7 +91,7 @@ try {
     await page.evaluate(() => document.fonts.ready);
     return { page, errors, missing };
   };
-  const check = async (name, { page, errors, missing }) => {
+  const check = async (name, { page, errors, missing }, { settle = true } = {}) => {
     const { width, height } = page.viewportSize();
     const layout = await page.evaluate(() => {
       const scroller = document.scrollingElement;
@@ -110,8 +113,18 @@ try {
     await page.waitForFunction(() => [...document.images].every(image => image.complete && image.naturalWidth > 0));
     const path = join(out, `${name}@${width}x${height}.png`);
     // Finished transitions: a capture shows the settled state, not a tab halfway through its fade.
-    await page.screenshot({ path, animations: 'disabled' });
+    // `settle: false` keeps a moment in motion, like the window kindling.
+    await page.screenshot({ path, animations: settle ? 'disabled' : 'allow' });
     console.log(`Captured ${path}`);
+    return path;
+  };
+  // Many same-sized captures on one sheet, in rows, for a single look.
+  const contactSheet = (name, paths, columns, [cellW, cellH] = [318, 496]) => {
+    const layout = paths.map((_, i) => `${(i % columns) * cellW}_${Math.floor(i / columns) * cellH}`).join('|');
+    const path = join(out, `${name}.png`);
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...paths.flatMap(file => ['-i', file]),
+      '-filter_complex', `xstack=inputs=${paths.length}:layout=${layout}:fill=#120c08`, '-frames:v', '1', path]);
+    console.log(`Contact sheet ${path}`);
   };
   const expect = async (page, name, selector, attribute, value) => {
     const actual = await page.locator(selector).first().getAttribute(attribute);
@@ -294,9 +307,18 @@ try {
       await view.page.locator('.cp-choice').first().click();
       await expect(view.page, 'panel-light-pending', '[data-chatdom-panel]', 'data-light', 'pending');
       if (!(await view.page.evaluate(() => document.activeElement?.classList.contains('cp-light')))) failures.push('panel-light: focus did not rest on the window after choosing');
-      await view.page.waitForSelector('[data-light="lit"]', { timeout: 5000 });
-      await view.page.waitForTimeout(1000);
-      await check('panel-lit-named', view);
+      // The simulated journey, step by step: Twitch shares who you are, the kingdom answers, the window kindles.
+      const kindle = [await check('panel-light-sharing', view)];
+      await view.page.waitForSelector('.cp-light-note .cp-light-words strong:text("Lighting your window")', { timeout: 5000 });
+      kindle.push(await check('panel-light-confirming', view));
+      await view.page.waitForSelector('[data-light="lit"] .cp-light-button.kindling', { timeout: 5000 });
+      await view.page.waitForTimeout(650);
+      kindle.push(await check('panel-light-kindling', view, { settle: false }));
+      await view.page.waitForTimeout(450);
+      kindle.push(await check('panel-light-kindled', view, { settle: false }));
+      await view.page.waitForFunction(() => !document.querySelector('.kindling'), null, { timeout: 5000 });
+      kindle.push(await check('panel-lit-named', view));
+      contactSheet('panel-light-sequence@318x496', kindle, kindle.length);
       // One drawer at a time, and back returns focus to the tab that opened it.
       const tab = view.page.locator('.cp-tab', { hasText: 'Tonight' });
       await tab.click();
@@ -314,6 +336,51 @@ try {
     ['panel-unnamed', async () => {
       const view = await open({ url: `${base}/panel?source=simulated&state=unnamed`, width: 318, height: 496 });
       await check('panel-unnamed', view);
+      await view.page.close();
+    }],
+    // Every fixture state at the panel's real size, on one sheet: the first view and the drawer that explains it.
+    ['panel-states', async () => {
+      const states = [
+        ['logged-out', 'logged-out', null], ['unshared', 'unshared', 'home'], ['refused', 'refused', null],
+        ['named', 'lit', 'home'], ['unnamed', 'lit', 'home'], ['guest', 'lit', 'home'],
+        ['resting', 'resting', 'tonight'], ['disconnected', 'out-of-reach', 'home'], ['missing', 'unshared', 'tonight'],
+      ];
+      const shots = [];
+      for (const [state, light, drawer] of states) {
+        const view = await open({ url: `${base}/panel?source=simulated&state=${state}`, width: 318, height: 496 });
+        await expect(view.page, `panel-state-${state}`, '[data-chatdom-panel]', 'data-light', light);
+        if (!(await view.page.locator('.cp-tag.simulated').innerText()).toUpperCase().includes('SIMULATED')) failures.push(`panel-state-${state}: SIMULATED mark missing`);
+        shots.push(await check(`panel-state-${state}`, view));
+        if (drawer) {
+          await view.page.locator('.cp-tab', { hasText: drawer === 'home' ? 'Home' : 'Tonight' }).click();
+          await view.page.waitForTimeout(300);
+          shots.push(await check(`panel-state-${state}-${drawer}`, view));
+        }
+        if (state === 'unshared') {
+          // A home that is not known yet offers the way forward: lighting the window opens the choice.
+          await view.page.locator('.cp-empty .cp-inline-action', { hasText: 'Light your window' }).click();
+          await expect(view.page, 'panel-state-unshared', '[data-chatdom-panel]', 'data-drawer', 'light');
+        }
+        if (state === 'guest' && !(await view.page.locator('.cp-plaque.guest').count())) failures.push('panel-state-guest: the guest plaque is missing');
+        if (state === 'resting' && !(await view.page.locator('.cp-ballad blockquote p').count())) failures.push('panel-state-resting: the supplied Ballad is missing');
+        if (state === 'disconnected' && !(await view.page.locator('.cp-picture.stale .cp-stale').count())) failures.push('panel-state-disconnected: a stale picture must say so');
+        await view.page.close();
+      }
+      contactSheet('panel-states@318x496', shots, 5);
+    }],
+    // A viewer who already shared their identity, after Twitch refreshed the token: connected, never lit, never asked again.
+    ['ext-panel-shared', async () => {
+      const view = await open({ url: `${panelBase}panel.html?anchor=panel&platform=web&mode=viewer&state=released`, width: 318, height: 496, helper: SHARED_HELPER });
+      await view.page.waitForTimeout(800);
+      await expect(view.page, 'ext-panel-shared', '[data-chatdom-panel]', 'data-light', 'unavailable');
+      if (!(await view.page.locator('.cp-light-note').innerText()).includes('Twitch connected')) failures.push('ext-panel-shared: expected "Twitch connected"');
+      if (await view.page.locator('.cp-light-button').count()) failures.push('ext-panel-shared: an unconfirmable light must not be offered as a button');
+      if (await view.page.evaluate(() => document.documentElement.outerHTML.includes('look-token') || window.location.href.includes('look-token') || JSON.stringify({ ...window.localStorage, ...window.sessionStorage }).includes('look-token'))) failures.push('ext-panel-shared: a Helper token reached the page, URL or storage');
+      if (await view.page.evaluate(() => window.__shareAsked) !== 0) failures.push('ext-panel-shared: asked Twitch to share identity with no kingdom to answer');
+      await view.page.locator('.cp-tab', { hasText: 'Home' }).click();
+      await check('ext-panel-shared', view);
+      await view.page.locator('.cp-back').click();
+      await check('ext-panel-shared-first', view);
       await view.page.close();
     }],
     // Production, bare: a plain browser without the Helper. Honest, designed, never the fixture.

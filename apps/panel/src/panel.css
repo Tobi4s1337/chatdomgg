@@ -87,7 +87,57 @@ html.cp-config-document, html.cp-config-document body { height: auto; min-height
 .cp-window-glyph.lit .pane-lit { opacity: 1; }
 .cp-window-glyph.lit { filter: drop-shadow(0 0 5px #ffb75bb0) drop-shadow(0 0 12px #ff9d3a55); }
 .cp-window-glyph.pending .pane-lit { animation: cp-kindle 1.1s ease-in-out infinite alternate; }
+.cp-window-glyph.pending .pane-lit:nth-child(2n) { animation-delay: .35s; }
 @keyframes cp-kindle { from { opacity: .08; } to { opacity: .5; } }
+/* Resting or unconfirmed: the room is warm, the light is low. */
+.cp-window-glyph.ember .pane { fill: url(#cp-ember); opacity: .75; }
+.cp-window-glyph.ember { filter: drop-shadow(0 0 4px #d9873a40); }
+
+/* The confirmed window kindles once: pane by pane, a bloom through the plate, three motes rising. */
+.cp-window-glyph.kindling .pane-lit { animation: cp-pane-catch .55s cubic-bezier(.3, .7, .4, 1) both; }
+.cp-window-glyph.kindling .pane-lit:nth-child(1) { animation-delay: .1s; }
+.cp-window-glyph.kindling .pane-lit:nth-child(2) { animation-delay: .32s; }
+.cp-window-glyph.kindling .pane-lit:nth-child(3) { animation-delay: .54s; }
+.cp-window-glyph.kindling .pane-lit:nth-child(4) { animation-delay: .76s; }
+.cp-window-glyph.kindling { animation: cp-glyph-bloom 2.2s ease-out both; }
+@keyframes cp-pane-catch { 0% { opacity: 0; } 45% { opacity: 1; filter: brightness(1.7); } 100% { opacity: 1; filter: none; } }
+@keyframes cp-glyph-bloom {
+  0% { filter: none; }
+  50% { filter: drop-shadow(0 0 7px #ffd48ae0) drop-shadow(0 0 22px #ff9d3a99); }
+  100% { filter: drop-shadow(0 0 5px #ffb75bb0) drop-shadow(0 0 12px #ff9d3a55); }
+}
+.cp-light-button.lit, .cp-light-button.resting { position: relative; overflow: hidden; }
+.cp-light-button.kindling::after { content: ''; position: absolute; left: 28px; top: 50%; width: 220px; height: 220px; margin: -110px 0 0 -110px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, #ffe7b0f0, #ffc56a99 26%, #ffb04a33 46%, transparent 66%); mix-blend-mode: multiply; animation: cp-plate-bloom 2.1s .45s ease-out both; }
+.cp-light-button.kindling::before { content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(ellipse 120px 60px at 28px 50%, #fff3cf, #ffd88a99 40%, transparent 75%); animation: cp-plate-warm 2.2s .45s ease-out both; }
+.cp-light-button.kindling { animation: cp-plate-glow 2.4s .4s ease-out both; }
+.cp-light-button.kindling > * { position: relative; z-index: 1; }
+@keyframes cp-plate-bloom { 0% { opacity: 0; transform: scale(.2); } 30% { opacity: .55; } 100% { opacity: 0; transform: scale(1.6); } }
+@keyframes cp-plate-warm { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes cp-plate-glow {
+  0%, 100% { box-shadow: inset 0 1px 0 #fff6dc88, inset 0 -3px 0 #b49264, 0 0 0 1px #24170e, 0 2px 0 1px #120b07, 0 4px 8px #000a; }
+  35% { box-shadow: inset 0 1px 0 #fff6dc88, inset 0 -3px 0 #b49264, 0 0 0 1px #6b4520, 0 2px 0 1px #120b07, 0 0 18px 3px #ffb54a88; }
+}
+.cp-light-button.kindling .cp-light-words { animation: cp-words-in .7s .8s ease-out both; }
+@keyframes cp-words-in { from { opacity: 0; transform: translateX(-4px); } }
+.cp-light-button .cp-kindle { position: absolute; z-index: 2; left: 22px; top: 6px; width: 14px; height: 24px; pointer-events: none; }
+.cp-kindle i { position: absolute; bottom: 0; width: 3.5px; height: 3.5px; border-radius: 50%; background: #ffe2a0; box-shadow: 0 0 4px 1px #ffb24d; opacity: 0; animation: cp-mote 1.5s ease-out both; }
+.cp-kindle i:nth-child(1) { left: 2px; animation-delay: .9s; }
+.cp-kindle i:nth-child(2) { left: 7px; animation-delay: 1.15s; }
+.cp-kindle i:nth-child(3) { left: 11px; animation-delay: 1.35s; }
+@keyframes cp-mote { 0% { opacity: 0; transform: translate(0, 4px); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--drift, 2px), -26px) scale(.5); } }
+.cp-kindle i:nth-child(2) { --drift: -3px; }
+.cp-light-button.guest { background: radial-gradient(circle at 26px 50%, #ffcf7c55, transparent 70px), url('./assets/parchment.svg') 0 0 / 300px, #ebdcbc; }
+.cp-light-button.resting { background: radial-gradient(circle at 26px 60%, #d9873a2a, transparent 60px), url('./assets/parchment.svg') 0 0 / 300px, #e2d2ae; }
+.cp-light-note.ember { box-shadow: inset 0 1px 4px #000c, inset 0 0 0 1px #0007, inset 30px 0 30px -20px #d9873a22, 0 1px 0 #7a5a3a66; }
+
+/* A picture that is no longer arriving keeps its place, faded, and says when it is from. */
+.cp-picture.stale img { filter: saturate(.4) brightness(.72) sepia(.18); }
+.cp-stale { position: absolute; z-index: 2; left: 8px; top: 8px; margin: 0; padding: 5px 9px 5px 8px; display: grid; gap: 1px; color: var(--ink); border-radius: 2px;
+  background: url('./assets/parchment.svg') 0 0 / 300px, var(--parch); box-shadow: 0 0 0 1px #20140c, 0 2px 4px #000a; transform: rotate(-1deg); }
+.cp-stale strong { font: 400 13px/1.05 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: var(--ink-red); }
+.cp-stale span { font: italic 400 11.5px/1.1 Alegreya, Georgia, serif; color: var(--ink-soft); }
 
 /* Tonight: a slip of parchment tucked under the window. */
 .cp-slip { position: relative; flex: none; min-height: 74px; padding: 8px 12px 9px; color: var(--ink); }
@@ -119,7 +169,9 @@ html.cp-config-document, html.cp-config-document body { height: auto; min-height
 .cp-back { display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 8px 0 2px; border: 0; background: none; cursor: pointer; font: 400 13.5px/1 'IM Fell English', Georgia, serif; color: var(--ink-red); }
 .cp-back .cp-glyph { width: 20px; height: 20px; stroke-width: 1.6; }
 .cp .cp-drawer-title { margin: 0; font: 400 17px/1 'IM Fell English', Georgia, serif; letter-spacing: 0; color: #2e1e13; text-align: right; }
-.cp-drawer-page { flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; padding: 10px 12px 12px; scrollbar-width: thin; scrollbar-color: #a8885a transparent; }
+.cp-drawer-page { flex: 1 1 auto; overflow: auto; overscroll-behavior: contain; padding: 10px 12px 22px;
+  /* The page fades at its foot, so a longer drawer reads as one that scrolls, not one that was cut. */
+  mask-image: linear-gradient(#000 calc(100% - 18px), transparent); -webkit-mask-image: linear-gradient(#000 calc(100% - 18px), transparent); scrollbar-width: thin; scrollbar-color: #a8885a transparent; }
 .cp-drawer-page:focus { outline: none; }
 
 .cp-sheet { display: flex; flex-direction: column; gap: 8px; }
@@ -137,10 +189,39 @@ html.cp-config-document, html.cp-config-document body { height: auto; min-height
 
 .cp-home-picture { position: relative; margin: 2px 2px 0; height: 116px; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 1px #20140c, 0 0 0 3px #a98250, 0 0 0 4px #3b2717; }
 .cp-home-picture img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 40% 62%; }
-.cp-plaque { margin: 4px 0 0; padding: 7px 12px 8px; text-align: center; border-radius: 3px;
+.cp-home-picture.dim img { filter: brightness(.72) saturate(.65); }
+.cp-plaque { position: relative; margin: 4px 0 0; padding: 7px 24px 8px; text-align: center; border-radius: 3px;
   background: linear-gradient(170deg, #f4d89e, #c79a59 45%, #a77a40 70%, #d8b072); box-shadow: inset 0 1px 0 #fff2c9, inset 0 -1px 0 #6d4c25, 0 0 0 1px #4f361c, 0 2px 3px #0006; }
+.cp-plaque.guest { background: linear-gradient(170deg, #ece6da, #b9b2a5 45%, #958e82 70%, #d3ccbe); box-shadow: inset 0 1px 0 #fffaf0, inset 0 -1px 0 #5e584f, 0 0 0 1px #3d3830, 0 2px 3px #0006; }
+.cp-rivet { position: absolute; top: 50%; left: 9px; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff1c8, #9b7038 55%, #4a3015); box-shadow: 0 1px 0 #fff3cf88; }
+.cp-rivet + .cp-rivet { left: auto; right: 9px; }
+.cp-plaque.guest .cp-rivet { background: radial-gradient(circle at 35% 30%, #ffffff, #8c867b 55%, #3f3a33); }
 .cp-plaque-name { margin: 0; font: 400 18px/1.1 'IM Fell English', Georgia, serif; color: #2a190c; text-shadow: 0 1px 0 #f9e3b388; overflow-wrap: anywhere; }
+.cp-plaque-name.long { font-size: 16px; }
 .cp-plaque-street { margin: 2px 0 0; font: 400 12px/1.1 'IM Fell English SC', Georgia, serif; letter-spacing: .08em; color: #4c3218; }
+.cp-plaque.guest .cp-plaque-name, .cp-plaque.guest .cp-plaque-street { color: #2c2924; text-shadow: 0 1px 0 #ffffff77; }
+.cp-place { margin: -2px 0 0; text-align: center; font: italic 400 12.5px/1.3 Alegreya, Georgia, serif; color: var(--ink-soft); }
+.cp-ledger { margin: 0; display: grid; border-top: 1px solid #a8885a66; }
+.cp-ledger div { display: grid; grid-template-columns: 76px 1fr; gap: 8px; align-items: baseline; padding: 5px 0; border-bottom: 1px dotted #a8885a88; }
+.cp-ledger dt { font: 400 12px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: var(--ink-red); }
+.cp-ledger dd { margin: 0; font-size: 13px; line-height: 1.3; color: #3b2a1e; }
+.cp-history ul { margin: 2px 0 0; padding: 0; list-style: none; display: grid; gap: 5px; }
+.cp-history li { position: relative; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding-left: 14px; font-size: 13px; line-height: 1.3; color: #3b2a1e; }
+.cp-history li::before { content: ''; position: absolute; left: 1px; top: .5em; width: 6px; height: 6px; transform: rotate(45deg); background: linear-gradient(135deg, #f1d59e, #a5773e); box-shadow: 0 0 0 1px #6d4c25; }
+.cp-history time { flex: none; font: italic 400 12px/1.3 Alegreya, Georgia, serif; color: var(--ink-soft); white-space: nowrap; }
+
+.cp-chapter { text-align: center; padding-bottom: 2px; }
+.cp-chapter .cp-label { margin: 0; }
+.cp-chapter-title { margin: 2px 0 0; font: 400 21px/1.1 'IM Fell English', Georgia, serif; color: #2e1e13; }
+.cp-ballad { margin: 0 0 4px; padding: 10px 12px 11px; border-radius: 3px; background: #f6ead0aa; box-shadow: inset 0 0 0 1px #a8885a55, inset 0 0 18px #c9a46a33; }
+.cp-ballad figcaption { display: grid; gap: 1px; margin-bottom: 7px; text-align: center; }
+.cp-ballad-title { font: 400 15px/1.15 'IM Fell English', Georgia, serif; color: var(--ink-red); }
+.cp-ballad-sung { font: italic 400 11.5px/1.2 Alegreya, Georgia, serif; color: var(--ink-soft); }
+.cp-ballad blockquote { margin: 0; display: grid; gap: 4px; }
+/* Long lines wrap under a hanging indent, so a turned line never reads as a new one. */
+.cp-ballad blockquote p { margin: 0; padding-left: 1.4em; text-indent: -1.4em; font: italic 400 12.5px/1.32 Alegreya, Georgia, serif; color: #3b2a1e; }
+.cp-ballad blockquote p:first-child::first-letter { font: 400 22px/1 'IM Fell English', Georgia, serif; color: var(--ink-red); font-style: normal; }
 
 .cp-moments { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
 .cp-moments li { display: grid; grid-template-columns: 50px 1fr; gap: 8px; font-size: 13px; line-height: 1.3; color: #3b2a1e; }
@@ -151,6 +232,7 @@ html.cp-config-document, html.cp-config-document body { height: auto; min-height
 
 .cp-empty { align-items: center; text-align: center; padding: 18px 8px; }
 .cp-empty .cp-window-glyph { width: 30px; height: 34px; margin-bottom: 4px; }
+.cp-empty .cp-inline-action { min-height: 36px; margin: 0; }
 
 /* Streamer views: the same frame, with a page that can grow. */
 .cp-config { position: relative; min-height: 100vh; }
@@ -186,6 +268,11 @@ html.cp-config-document, html.cp-config-document body { height: auto; min-height
   .cp-choice small { font-size: 13px; }
   .cp-home-picture { height: auto; aspect-ratio: 16 / 10; }
   .cp-moments li { font-size: 14px; grid-template-columns: 58px 1fr; }
+  .cp-ledger dd, .cp-history li, .cp-ballad blockquote p { font-size: 14.5px; }
+  .cp-ledger div { grid-template-columns: 90px 1fr; }
+  .cp-place { font-size: 14px; }
+  .cp-empty .cp-inline-action { min-height: 44px; font-size: 16px; }
+  .cp-stale { left: 10px; top: 10px; }
 }
 /* Phones on their side: the picture beside the words. */
 @media (min-width: 600px) and (max-height: 520px) {
@@ -202,4 +289,5 @@ html.cp-config-document, html.cp-config-document body { height: auto; min-height
 @media (prefers-reduced-motion: reduce) {
   .cp *, .cp *::before, .cp *::after { animation: none !important; transition: none !important; }
   .cp-window-glyph.pending .pane-lit { opacity: .3; }
+  .cp-kindle, .cp-light-button.kindling::after { display: none; }
 }
