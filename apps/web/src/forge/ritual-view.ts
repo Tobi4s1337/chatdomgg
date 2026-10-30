@@ -3,9 +3,12 @@ import type { VoxelRenderState } from '@chatdom/render';
 import type { ForgeRitualFrame } from '@chatdom/shared';
 import { createCodexEngraving } from './engraving';
 import { createAnvilHero } from './anvil-hero';
+import { createForgePresentation, type ForgePresentation } from './presentation';
 
 /** The stage owns its decorative resources; the voxel geometry and lighting textures remain with their callers. */
 export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderState) {
+  const effects = new THREE.Group(); scene.add(effects);
+  let presentation: ForgePresentation | undefined, presenting = false;
   const root = new THREE.Group();
   scene.add(root);
   const geometries = new Set<THREE.BufferGeometry>();
@@ -83,7 +86,8 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     const clusters=['ᚠᚨᛃ','ᚱᛉᚷ','ᛗᛚᚲ','ᚢᛈᛇ','ᛟᛒᚹ','ᚺᛋᚦ','ᚲᚾᛖ','ᛃᚷᛏ'];
     clusters.forEach((glyphs,i)=>{const sprite=makeText(glyphs,'#e9c78e');sprite.userData.angle=i*Math.PI*2/clusters.length;wordsGroup.add(sprite);});
   }
-  function setPiece(geometry: THREE.BufferGeometry, bounds: THREE.Box3) {
+  function setPiece(geometry: THREE.BufferGeometry, bounds: THREE.Box3, landing?: THREE.Vector3) {
+    presentation?.dispose(); presentation=undefined; presenting=false;
     piece.geometry = geometry; pieceBounds = bounds.clone();
     piece.rotation.set(0, 0, 0); piece.scale.set(1, 1, 1);
     const center = bounds.getCenter(new THREE.Vector3());
@@ -112,8 +116,14 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
       blueprint.add(new THREE.LineSegments(edges, cyan));
     }
     beginWords();
+    // This mesh is the host-owned presentation clone; the attached home mesh remains separate.
+    root.updateWorldMatrix(true,true);
+    const anvil=root.localToWorld(new THREE.Vector3(0,1.43,0));
+    presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:(landing??anvil).toArray(),piece});
   }
   function update(frame: ForgeRitualFrame | null, shaping = false) {
+    const early=frame?.phase==='words'||frame?.phase==='blueprint';
+    if(!early&&presenting){presentation?.update(null);presenting=false;}
     const orbitTime=frame?.elapsed??0;
     const t = frame?.phase==='words'?Math.min(2.99,orbitTime):orbitTime;
     const active = frame !== null;
@@ -135,9 +145,10 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     stamp.visible = active && t >= 11 && t < 15.5 && frame.source === 'simulated';
     piece.visible = active && t >= 5;
     ritualMaterial.uniforms.uForgeReveal!.value = t < 5 ? -1 : t < 11 ? THREE.MathUtils.lerp(pieceBounds.min.y, pieceBounds.max.y + .01, (t - 5) / 6) : pieceBounds.max.y + 1;
+    if(early&&presentation){presentation.update(frame);presenting=true;blueprint.visible=false;wordsGroup.visible=false;}
     ritualMaterial.uniforms.uForgeHeat!.value = t < 5 ? 0 : t < 11 ? .55 : t < 12.7 ? 1 : Math.max(0, 1 - (t - 12.7) / 2.8);
   }
-  function dispose() { engraving.dispose(); hero.dispose(); scene.remove(root); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); }
+  function dispose() { presentation?.dispose();scene.remove(effects);engraving.dispose(); hero.dispose(); scene.remove(root); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); }
   update(null);
   return { root, piece, setPiece, beginWords, update, dispose, setEnvironment: hero.setEnvironment };
 }
