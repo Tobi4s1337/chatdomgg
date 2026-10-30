@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./materials": "./src/materials.ts",
     "./avatars": "./src/avatars/index.ts",
-    "./forge-motifs": "./src/forge-motifs/index.ts"
+    "./forge-motifs": "./src/forge-motifs/index.ts",
+    "./forge-ornaments": "./src/forge-ornaments/index.ts"
   },
   "dependencies": {
     "@chatdom/shared": "workspace:*"
