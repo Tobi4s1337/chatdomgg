@@ -1,5 +1,5 @@
 /** Versioned independently of prompts: records can be replayed against this question set. */
-export const FORGE_JUDGE_POLICY_VERSION = 'house-part-floor-2026-10-30-v2';
+export const FORGE_JUDGE_POLICY_VERSION = 'house-part-floor-codex-cli-2026-10-30-v3';
 export const FORGE_JUDGE_THRESHOLDS = { passBelow: 0.12, refuseAbove: 0.85 } as const;
 
 export const FORGE_FLOOR = `Chatdom is a storybook fantasy kingdom shown on Twitch to audiences aged 13 and up.

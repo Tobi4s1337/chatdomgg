@@ -1,5 +1,5 @@
 import { inspect } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AppTokenSession, type AppTokenEvent } from './app-token';
 import { RequestBudget } from './budget';
 import { isTwitchFailure, TwitchRequestError } from './errors';
@@ -7,7 +7,7 @@ import { HelixReader } from './helix';
 import { buildAuthorizeUrl, confirmGrant } from './oauth';
 import { Secret } from './secret';
 import { FakeTwitch } from './testing/fake-twitch';
-import type { FetchLike } from './transport';
+import { MAX_BODY_BYTES, send, type FetchLike } from './transport';
 
 const CLIENT_ID = 'simulatedclient0000000000000001';
 const SECRET = 'simulated-client-secret-value-0001';
@@ -195,6 +195,63 @@ describe('HelixReader', () => {
   });
 });
 
+describe('response bodies', () => {
+  const request = { operation: 'op', method: 'GET' as const, url: new URL('https://api.twitch.tv/helix/streams') };
+
+  it('stops reading a streamed body at the cap instead of buffering all of it', async () => {
+    const chunk = new Uint8Array(256 * 1024).fill(0x20);
+    let pulled = 0;
+    let cancelled = false;
+    // An endless body with no declared length: only reading as it streams can stop it.
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const failure = await failureOf(send(async () => new Response(body, { status: 200 }), request));
+    expect(failure.kind).toBe('invalid_response');
+    expect(cancelled).toBe(true);
+    expect(pulled * chunk.byteLength).toBeLessThanOrEqual(MAX_BODY_BYTES + 2 * chunk.byteLength);
+  });
+
+  it('refuses a declared oversize body before reading it', async () => {
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({ pull(controller) { pulled += 1; controller.enqueue(new Uint8Array(1)); } });
+    const response = new Response(body, { status: 200, headers: { 'content-length': String(MAX_BODY_BYTES + 1) } });
+    expect((await failureOf(send(async () => response, request))).kind).toBe('invalid_response');
+    expect(pulled).toBeLessThanOrEqual(1);
+  });
+
+  it('reassembles multi-byte characters split across chunks', async () => {
+    const value = { data: [{ user_name: 'Wrennaé\u{1F3F0}' }] };
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    const split = bytes.indexOf(0xf0) + 2;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, split));
+        controller.enqueue(bytes.slice(split));
+        controller.close();
+      },
+    });
+    const result = await send(async () => new Response(body, { status: 200 }), request);
+    expect(result.body).toEqual(value);
+  });
+
+  it('a body that stalls past the timeout fails as a timeout', async () => {
+    const stalled: FetchLike = async (_url, init) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"data":['));
+        init.signal?.addEventListener('abort', () => controller.error(new Error('aborted')));
+      },
+    }), { status: 200 });
+    expect((await failureOf(send(stalled, { ...request, timeoutMs: 30 }))).kind).toBe('timeout');
+  });
+});
+
 describe('RequestBudget', () => {
   it('bounds concurrency and fails fast past the queue cap', async () => {
     const budget = new RequestBudget({ maxConcurrent: 2, maxQueued: 1 });
@@ -230,6 +287,52 @@ describe('RequestBudget', () => {
     const waiting = failureOf(budget.run('op', Date.now() + 10_000, controller.signal, async () => undefined));
     controller.abort();
     expect((await waiting).kind).toBe('aborted');
+    expect(budget.snapshot.queued).toBe(0);
+    release();
+    await first;
+  });
+
+  it('a waiter whose deadline passes in the queue leaves it and is never sent', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const budget = new RequestBudget({ maxConcurrent: 1 });
+      let release = () => undefined as void;
+      const first = budget.run('op', Date.now() + 60_000, undefined, () => new Promise<void>(resolve => { release = resolve; }));
+      let sent = 0;
+      const late = failureOf(budget.run('op', Date.now() + 2_000, undefined, async () => void sent++));
+      const patient = budget.run('op', Date.now() + 60_000, undefined, async () => void sent++);
+      expect(budget.snapshot.queued).toBe(2);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect((await late).kind).toBe('timeout');
+      expect(budget.snapshot.queued).toBe(1);
+      release();
+      await first;
+      await patient;
+      expect(sent).toBe(1);
+      // The admitted waiter's deadline timer was cancelled with its admission: nothing is left running.
+      expect(vi.getTimerCount()).toBe(0);
+      expect(budget.snapshot).toMatchObject({ active: 0, queued: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a request whose deadline passed while it waited for points is not sent', async () => {
+    let clock = 0;
+    const budget = new RequestBudget({ reservePoints: 100, now: () => clock, sleep: async ms => { clock += ms + 5; } });
+    budget.observe(new Headers({ 'ratelimit-remaining': '0', 'ratelimit-reset': '10' }), 200);
+    let sent = 0;
+    // The reset (10 s) fits the 10 s deadline, but the wake-up lands just after it.
+    expect((await failureOf(budget.run('op', 10_000, undefined, async () => void sent++))).kind).toBe('timeout');
+    expect(sent).toBe(0);
+    expect(budget.snapshot.active).toBe(0);
+  });
+
+  it('a waiter that arrives with no time left fails at once', async () => {
+    const budget = new RequestBudget({ maxConcurrent: 1 });
+    let release = () => undefined as void;
+    const first = budget.run('op', Date.now() + 10_000, undefined, () => new Promise<void>(resolve => { release = resolve; }));
+    expect((await failureOf(budget.run('op', Date.now() - 1, undefined, async () => undefined))).kind).toBe('timeout');
     expect(budget.snapshot.queued).toBe(0);
     release();
     await first;

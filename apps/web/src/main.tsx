@@ -20,7 +20,10 @@ const lanePaths: Record<string, string> = {
   '/-/avatars': './avatar-bench/index.tsx', '/-/forge': './forge-bench/index.tsx', '/-/audio': './audio-bench/index.tsx',
 };
 const loadLane = laneViews[lanePaths[window.location.pathname] ?? ''];
-if (loadLane) {
+if (window.location.pathname === '/-/realm') {
+  const { default: RealmReference } = await import('./realm-reference');
+  render(() => <RealmReference />, root);
+} else if (loadLane) {
   const module = await loadLane();
   render(() => <module.default />, root);
 } else if (window.location.pathname==='/-/content') {

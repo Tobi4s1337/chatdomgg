@@ -1,0 +1,70 @@
+{
+  "started": "2026-10-30T19:45:00.966Z",
+  "realm": "127.0.0.1:5188 (SIMULATED reference services, memory only)",
+  "page": "http://127.0.0.1:5189/-/realm",
+  "steps": {
+    "slowWalk": {
+      "inputsPerFrame": {
+        "3": 9,
+        "4": 5,
+        "5": 9
+      },
+      "jumpBitsWhileSpaceHeld": 1,
+      "from": {
+        "x": -4,
+        "y": 0,
+        "z": 7,
+        "vx": 0,
+        "vy": 0,
+        "vz": 0,
+        "grounded": true,
+        "yaw": 0,
+        "distance": 0,
+        "collisionRevision": 1
+      },
+      "room": {
+        "x": -4,
+        "y": 0,
+        "z": 17.233333333333313,
+        "vx": 0,
+        "vy": 0,
+        "vz": 0,
+        "grounded": true,
+        "yaw": 0,
+        "distance": 10.233333333333313,
+        "collisionRevision": 1
+      },
+      "predictedEqualsRoom": true,
+      "phoneHoldsRoomPosition": true
+    },
+    "publishedWall": {
+      "wallFaceX": 4.22,
+      "roomX": 4.22,
+      "furthestDrawnOrPredicted": 4.22,
+      "framesHeld": "15/15",
+      "predicting": false,
+      "placementDrawnAtOnce": true,
+      "predictedEqualsRoom": true
+    },
+    "predictedWall": {
+      "roomX": 4.22,
+      "furthestPredicted": 4.22,
+      "framesPredicting": "15/15",
+      "predictedEqualsRoom": true
+    },
+    "placement": {
+      "from": 4.22,
+      "to": 7.5,
+      "frames": 5,
+      "drawnAtOnce": true,
+      "predictedEqualsRoom": true
+    },
+    "desktopWalkers": 3,
+    "phoneWalkers": 3
+  },
+  "shots": [
+    "shots/walk/wc06/court-after-revision@1440x900.png",
+    "shots/walk/wc06/court-after-revision@390x844.png"
+  ],
+  "ok": true
+}

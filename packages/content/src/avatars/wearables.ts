@@ -1,7 +1,7 @@
 import type { AvatarPartBlueprint } from '@chatdom/shared';
-import { MAT } from '../materials';
 import { BODY_FAMILIES, bodyContour, type BodyFamily } from './body';
-import { GARB, KIT_ACCENTS, type Subscription, type WearableStyle } from './palette';
+import { capeColours } from './capes';
+import { GARB, type Subscription, type WearableStyle } from './palette';
 import { Sculpt } from './sculpt';
 
 /** Body areas a wearable occupies; one piece per area in a look. */
@@ -24,47 +24,24 @@ export interface WearableFit {
   readonly subscription?: Subscription;
 }
 
-/** Each common form's dyed cloth per kingdom: Hearth leans warm, Tide leans sea-cool. */
-const CLOTH: Record<CommonWearableId, Record<WearableStyle, number>> = {
-  shortCloak: { hearth: MAT.fabricRed, tide: MAT.fabricBlue },
-};
-
 /**
- * Short cloak: falls from a rolled collar to mid-thigh, two cells thick against the back, widening
- * below the waist into soft vertical folds. One continuous rolled hem in the kingdom's light cloth
- * dips at the centre; two cords meet at a small brass clasp under the chin.
+ * Short cloak, rigid half: the cloak itself is cloth (`createCape('shortCloak', fit)`). What stays a voxel
+ * part is what holds it on, two cords in the cloak's own colour that run along the collar line and meet
+ * at a small brass clasp under the chin. They ride the chest bone, so a bow or turn carries them.
  */
 function shortCloak(fit: WearableFit): Sculpt {
   const c = bodyContour(fit.body);
-  const cloth = CLOTH.shortCloak[fit.style], hem = KIT_ACCENTS[fit.style].cloth;
-  const back = c.chest.back;
+  const cord = capeColours('shortCloak', fit.style).cloth;
   const s = new Sculpt();
-  // Two cells thick against the shoulder blades, widening a cell below the waist.
-  for (let y = 7; y < 16; y++) {
-    const half = y < 11 ? c.chest.half + 2 : c.chest.half + 1;
-    s.box([-half, y, back - 2], [half, y + 1, back], cloth);
-  }
-  // Folds: from the shoulder blades down, every other pair of columns stands a cell proud.
-  for (let x = -c.chest.half - 2; x < c.chest.half + 2; x++) {
-    if (Math.floor((x + 8) / 2) % 2 !== 0) continue;
-    const top = Math.abs(x + .5) < 3 ? 13 : 11;
-    s.box([x, 8, back - 3], [x + 1, top, back - 2], cloth);
-  }
-  // Hem: one continuous rolled band in the kingdom's light cloth, dipping at the centre.
-  const hemHalf = c.chest.half + 2;
-  s.box([-hemHalf, 7, back - 3], [hemHalf, 8, back], hem);
-  s.box([-2, 6, back - 3], [2, 7, back], hem);
-  // Rolled collar behind the head and over the shoulder blades.
-  s.rounded([-c.chest.half - 1, 15, back - 3], [c.chest.half + 1, 17, back], cloth, 1, [true, true, false, true, true, false]);
-  s.box([-c.chest.half, 16, back - 1], [c.chest.half, 17, back], 0);
-  // Cords meet at a small brass clasp under the chin.
-  for (const x of [-3, -2, 1, 2]) s.set(x, 15, c.chest.front, cloth);
-  s.box([-1, 15, c.chest.front], [1, 16, c.chest.front + 1], GARB.clasp);
+  const z = c.chest.front;
+  // The chest's rounded corners stop the cords a cell short of the shoulder edge.
+  s.box([-c.chest.half + 1, 15, z], [c.chest.half - 1, 16, z + 1], cord);
+  s.box([-1, 14, z], [1, 16, z + 1], GARB.clasp);
   return s;
 }
 
 const FORMS: Record<WearableId, (fit: WearableFit) => Sculpt> = { shortCloak };
-const ATTACH: Record<WearableId, AvatarPartBlueprint['attachment']> = { shortCloak: 'back' };
+const ATTACH: Record<WearableId, AvatarPartBlueprint['attachment']> = { shortCloak: 'chest' };
 
 export function createWearableParts(id: WearableId, fit: WearableFit): readonly AvatarPartBlueprint[] {
   const build = FORMS[id];
@@ -72,5 +49,5 @@ export function createWearableParts(id: WearableId, fit: WearableFit): readonly 
   if (!BODY_FAMILIES.includes(fit.body)) throw new Error(`Unknown body family ${String(fit.body)}.`);
   if (fit.style !== 'hearth' && fit.style !== 'tide') throw new Error(`Unknown kingdom style ${String(fit.style)}.`);
   if (fit.subscription !== undefined) throw new Error(`${id} has no subscription state.`);
-  return [build(fit).toPart(`wear.${id}.${fit.style}.${fit.body}`, ATTACH[id], 'garment')];
+  return [build(fit).toPart(`wear.${id}.clasp.${fit.style}.${fit.body}`, ATTACH[id], 'accessory')];
 }

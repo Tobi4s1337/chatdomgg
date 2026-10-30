@@ -36,7 +36,7 @@ export interface ForgeHouseSocket {
   supports: [number,number,number][];
   hostId:string; hostFingerprint:string; clearanceHeight:number;
 }
-export const ForgePlacementSchema=z.strictObject({version:z.literal(1),id:TokenSchema,hostId:TokenSchema,hostFingerprint:TokenSchema,socketId:TokenSchema,kitId:TokenSchema,kitRevision:z.number().int().positive(),plan:HousePartPlanSchema,origin:Cell3Schema,provenance:z.strictObject({source:z.literal('simulated'),makerId:TokenSchema,makerName:z.string().min(1).max(64),kingdomKey:TokenSchema,kingdomName:z.string().min(1).max(64),firstForgedAt:z.number().int().nonnegative(),designId:TokenSchema}).optional()});
+export const ForgePlacementSchema=z.strictObject({version:z.literal(1),id:TokenSchema,hostId:TokenSchema,hostFingerprint:TokenSchema,socketId:TokenSchema,kitId:TokenSchema,kitRevision:z.number().int().positive(),plan:HousePartPlanSchema,origin:Cell3Schema,approval:ForgeDraftSchema.omit({plan:true}).extend({runId:TokenSchema}).optional(),provenance:z.strictObject({source:z.literal('simulated'),makerId:TokenSchema,makerName:z.string().min(1).max(64),kingdomKey:TokenSchema,kingdomName:z.string().min(1).max(64),firstForgedAt:z.number().int().nonnegative(),designId:TokenSchema}).optional()});
 export type ForgePlacement=z.infer<typeof ForgePlacementSchema>;
 export const FORGE_PHASES=['words','blueprint','pour','seal','strike','cool','flight','landed'] as const;
 export type ForgePhase=typeof FORGE_PHASES[number];

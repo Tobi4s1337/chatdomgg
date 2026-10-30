@@ -22,7 +22,7 @@ The Atlas ships the credited art and fonts below. Kingdom sound combines license
 | zod | 4.6.7 | MIT | [package](https://www.npmjs.com/package/zod) |
 | vitest | 5.0.5 | MIT | [package](https://www.npmjs.com/package/vitest) |
 
-Reference research is indexed in work/references/. No source from those external repositories was copied into product code. Crowdbake has no verified reuse license and is ideas only. Any future adaptation requires a source header and its own entry here, including upstream notices and separate asset rights.
+Reference research is indexed in work/references/. The realm compatibility patches below modify pinned dependency source; other reference studies inform original implementations. Crowdbake has no verified reuse license and is ideas only. Any future adaptation requires a source header and its own entry here, including upstream notices and separate asset rights.
 
 Kingdom sound uses the credited CC0 sources and original synthesis below. Forge phrases are original procedural instruments routed through that same mix. Atmosphere, water and voxel shaders are original implementations informed by the credited reference notes.
 
@@ -35,6 +35,8 @@ Kingdom sound uses the credited CC0 sources and original synthesis below. Forge 
 | The Alegreya Project Authors | Subset variable Roman/Italic WOFF2, Latin/Cyrillic/Greek | SIL OFL 1.1; [pinned source](https://github.com/google/fonts/tree/6157dfaa640ca5738b4d1a7070fe389c3036d7fc/ofl/alegreya). Full license notice accompanies the fonts; exact inputs, Unicode coverage and subsetting recipe are in the asset inventory. |
 
 Atlas heraldry and charge paths are authored here. No game-icons.net charges or prototype texture atlas were imported.
+
+- **Codex mark (OpenAI)** — official monochrome SVG, unchanged, from OpenAI's VS Code extension `openai.chatgpt` version `26.51021.22027`, asset `extension/webview/assets/codex_new-f14177b03534.svg`. [Official distribution](https://openai.gallerycdn.vsassets.io/extensions/openai/chatgpt/26.51021.22027/1792788319200/Microsoft.VisualStudio.Services.VSIXPackage); [brand guidelines](https://openai.com/brand/). Copyright and trademark OpenAI. Used as the forge's physical engraving for the Codex service; original paths and proportions are retained, with metal depth and heat light only.
 
 
 ## Kingdom audio
@@ -51,3 +53,23 @@ names, edits, gains, sizes and where each is used): [packages/audio/THIRD_PARTY.
 Credit is optional under CC0; Chatdom credits these anyway. Everything else in the kingdom's sound (the resonances,
 glows, wick and fire, the beacon chord, the D major pentatonic palette, the room impulse, the mix and the budget) is
 original synthesis authored here. Phrases played through `playKingdomPhrase` (the Forge's) can only use synthesis.
+
+## Realm networking
+
+| Source | Version/license | Treatment |
+|---|---|---|
+| [Colyseus core and SDK](https://github.com/colyseus/colyseus) | colyseus 0.18.10, core 0.18.23, SDK 0.18.8 · MIT, Endel Dreyer | Used directly for rooms, schema synchronization, Predict and reconnection. `patches/@colyseus__sdk@0.18.8.patch` changes reconnect-token parsing to the final colon so `k:<channelId>` IDs work; original distributed license retained. |
+| [Colyseus schema](https://github.com/colyseus/schema) | 5.0.42 · MIT, Endel Dreyer | Schema builders and shared district views; original license retained. |
+| [Colyseus uWS transport](https://github.com/colyseus/colyseus/tree/master/packages/transport/uwebsockets-transport) | 0.18.4 · MIT, Endel Dreyer | `patches/@colyseus__uwebsockets-transport@0.18.4.patch` permits colons in the room path. Its distributed license is retained. uWebSockets.js v20.52.0 retains its Apache-2.0 notices. |
+| [uwebsockets-express](https://www.npmjs.com/package/uwebsockets-express) | 2.0.4 · MIT | Transport peer dependency, original notices retained. |
+| [jose](https://github.com/panva/jose) | 6.2.14 · MIT | Pinned for the realm-server lane’s Twitch OIDC verification; no provider credentials in browser bundles. |
+
+The reference court and shared player integrator are authored here. Collision and camera research is recorded in `work/references/walking-voxel-worlds.md`; that note does not itself adapt upstream implementation.
+
+## MagicaVoxel import
+
+The fallback palette in `packages/vox-import/src/palette.ts` is adapted from ephtracy's
+[MagicaVoxel file format](https://github.com/ephtracy/voxel-model/blob/3bff8feaa7d94a6237f2c07dc4ca3c3d268ef06c/MagicaVoxel-file-format-vox.txt),
+commit `3bff8feaa7d94a6237f2c07dc4ca3c3d268ef06c`, under MIT, copyright (c) 2026 ephtracy.
+The full notice is retained in [packages/vox-import/THIRD_PARTY.md](packages/vox-import/THIRD_PARTY.md).
+The parser, palette matching, placement tool and lantern-cottage review fixture are authored in this repository.

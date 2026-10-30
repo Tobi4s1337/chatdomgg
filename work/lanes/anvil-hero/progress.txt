@@ -1,0 +1,112 @@
+
+Note from Tobias, art direction for the anvil and the dragon (use it as the bar for AH01-AH04; spec 25 still decides scope):
+# The anvil and the sleeping dragon: art brief
+
+Units: 1 cell = 0.125 m, h = half a cell (used for edges and cuts). The horn points +X and the mark faces +Z. The
+work surface is at 1.43 m, nothing goes above 1.50 m and the radius stays within 1.5 m.
+
+## Anvil
+
+**Proportions** (18 cells long):
+- **Block:** stone, 12 × 9 × 4 cells, sunk 1 h into the cobbles. The top tilts 1 h, the edges are chamfered 1 h, one
+  corner is chipped, and there is a stain ring under the feet.
+- **Feet:** 11 × 6 cells and 1.5 tall, with arches of air on the sides (4 × 1) and ends (2 × 1).
+- **Waist:** 6 × 3 cells at its narrowest, hourglass in profile. Its flat +Z cheek carries the mark.
+- **Face plate:** 2 cells thick and 4 wide, overhanging the waist by 1 h. The heel and face run 11 cells, then a
+  2-cell step drops 1 h.
+- **Horn:** 5 cells, 3 × 3 at the root and 1 h at the tip. The top is flat and the belly is one rising curve. Never a
+  cone.
+- **Hardy hole:** 1 × 1 cell, 1 cell from the heel, open right through with dark inner walls. A 1 h pritchel hole
+  sits 1.5 cells inboard.
+
+**Silhouettes:**
+- **Side:** a flat top, the step, the horn drooping to its point, the hourglass waist, arched feet and a wider
+  block.
+- **End:** a T (wide face, thin waist, flared feet) with the horn tip as a dot.
+
+**Materials:**
+- Near-black, cool blue-grey iron, matched to the engraving's metal so the plaque vanishes.
+- Bright steel wear on three places only: the front face edge nearest the horn, the bruised heel corners and the
+  horn tip.
+- Rust only in the waist hollow and on the feet, and about six hammer dents.
+- Matte stone that never glows.
+
+**Mark:** the cloud with `>_` from `engraving/codex.svg`, exact. The knot in `/tmp/codex-official-icon.png` is a
+different mark.
+- At a uniform scale of about 0.9 the cloud is about 0.24 m.
+- Centre it on the +Z cheek at y 0.94 m, with the plaque flush with the iron.
+- A 1 h chamfered frame makes it read as stamped.
+- The cut is 1.5 cm deep.
+
+**Runes:** the shared Forge set, cut 1.5 cm deep, with 2 cm strokes.
+- Seven glyphs of 1 × 1.25 cells across the +Z face plate, centred over the mark.
+- Five on −Z, three shrinking along each horn flank, and one under the hardy hole.
+- Order them by distance from the mark.
+
+**Glow** (on the cut beds only, 1.0 = hottest, bloom never wider than the cut):
+
+| State | Mark | Runes | Iron |
+|---|---|---|---|
+| Cold | umber #2e221c, 0 | 0 | edge sheen |
+| Waking | ember #7a2e12, 0.2, breathing at 2.4 s | 0 | — |
+| Shaping | #ff8a3d, 0.6, a fuse running round the outline | ignite outward from the mark, 0.12 s apart; #ffb15c core, #c2461a edge | — |
+| Pour | #ffc070, 0.85 | steady, ±8% flicker | face edges #5a2a18, 0.2 |
+| Strike | #ffe6b0, 1.0 for 0.15 s, with orange edges | same | — |
+| Cooling (5 s) | cools last | #ffb347 → #ff6a1f → #c2301a → #6b1f12; horn first | — |
+| Quiet (dusk) | ember 0.03 for 20 s, then dark | 0 | lilac and gold rim on the worn edges |
+
+## Dragon chimney
+
+The envelope is 24 × 16 × 18 cells, with the mount at [12,0,9] and the nostril emitter at [0,2,9].
+
+**Why the current one fails:**
+- It is one value, in its roof's own material (Tide is slate on slate).
+- Its wings are upright fins, taller than the stack.
+- Its head is a box with no neck dip, and the 1-cell horns and tail vanish.
+
+**Pose: asleep like a cat.**
+- The crooked stack rises to 13–14 cells with a lip and a dark open mouth. It is the tallest shape.
+- The body coils around the base of the stack at 0–6 cells, with a shoulder hump at 7.
+- The neck dips to 3, then the long wedge head rests on two crossed paws.
+- The horns sweep back to 8 cells, 2 cells thick at the root.
+- One wing folds flat along the far flank as a triangle that peaks at 9.
+- The tail wraps the front, and its spade tip curls over the nose.
+
+**Reading at 30 m** (about 35 px on a phone):
+- A serrated spine of five plates, shrinking toward the tail.
+- Horns are the brightest small shape.
+- The back sits two value steps off its kit's roof:
+  - Hearth: brick, with limestone for belly and horns.
+  - Tide: darkStone, with slate plates and a cream belly.
+  - Grove: moss, with a cream belly and goldLeaf horns.
+- A light belly band edges the coil where it meets the roof.
+- Air shows under the chin, between the paws and inside the tail loop.
+- It must pass in greyscale.
+
+**Motion** (this needs a seam from main):
+- Smoke breathes on a 4.5 s cycle, and the ribs swell 1.5% with it.
+- The tail tip twitches about every 20 s.
+- At the strike, one lid opens to a warm slit for 1.5 s, a long exhale lets out a triple puff,
+  then it settles.
+
+## Gasp, not fine
+
+- Near-black iron with one living ember inside the exact mark.
+- Heat that visibly flows out into the runes, then drains in order.
+- Real weight.
+- A dragon you read in one second, tucked in like a cat.
+
+## Five common failures
+
+1. **The badge:** the mark is proud, shows a seam or a value change, or is redrawn.
+2. **Glow everywhere:** white-hot cuts, runes lit when cold, a halo, or heat in the stone.
+3. **The blob:** the dragon matches its roof, has fin wings and no neck dip, and its horns vanish.
+4. **Noise for craft:** speckle everywhere, or perfect boxes and a cone horn.
+5. **The toy anvil:** a short horn, no arches, a decal hole, a puny block, or a giant logo.
+
+AH01: typecheck, lint, scoped Vitest, build and capture passed; inspected cold close and square shots at both sizes in shots/anvil-hero/ (port 5170). Hero 1,840 triangles; SwiftShader timing is not device performance. Unsupported heat and dragon views are rejected.
+follow-up: AH02 The empty cheek recess and blocky edge wear need the intended engraving and refinement; judge contrast in the real dusk renderer.
+
+follow-up: AH02 Main looked at the actual kingdom Forge at 1440×900 and390×844: the cold body reads as uniformly grey metal. Bring it toward worn near-black iron, with restrained narrow edge highlights, so the cheek and body belong to the same metal and the hot cuts can carry the moment. Keep the official mark exact. — 2026-10-30
+
+2026-10-31 founder efficiency decision: Continue the live-evening lane with ONE worker; take one task at a time. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
