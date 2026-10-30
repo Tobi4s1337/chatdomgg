@@ -4,7 +4,7 @@ import {
   composeForgeFixture, createForgePiece, findMates, mateConnectors, placeConnector, placeSpace, poseLeafBox, rasterize,
   FORGE_PIECES, FORGE_PROFILES, FORGE_REVIEW, REVIEW_LOT, type ForgeReviewFixture, type PlacedConnector,
 } from './index';
-import { normalVector, type Space } from './grammar';
+import { normalVector, turnPoint, type QuarterTurn, type Space } from './grammar';
 
 const [SX, SY, SZ] = REVIEW_LOT;
 const index = (x: number, y: number, z: number) => x + SX * (y + SY * z);
@@ -75,10 +75,13 @@ function forEachCell(box: Space, visit: (x: number, y: number, z: number) => voi
   for (let z = box.from[2]; z < box.to[2]; z++) for (let y = box.from[1]; y < box.to[1]; y++) for (let x = box.from[0]; x < box.to[0]; x++) visit(x, y, z);
 }
 
-/** Section cells of a mate, read from connector `from`, on its own side (-1) or its partner's side (+1). */
-function sectionCells(from: PlacedConnector, side: -1 | 1, section: readonly { u: readonly [number, number]; v: readonly [number, number] }[]) {
+/**
+ * Section cells of a mate, read from connector `from`, on its own side (-1) or its partner's side (+1). Up/down
+ * sections are read in the reading piece's own turned x/z axes.
+ */
+function sectionCells(from: PlacedConnector, turn: QuarterTurn, side: -1 | 1, section: readonly { u: readonly [number, number]; v: readonly [number, number] }[]) {
   const n = normalVector(from.normal), vertical = n[1] !== 0;
-  const U = vertical ? [1, 0, 0] : [n[2], 0, -n[0]], V = vertical ? [0, 0, 1] : [0, 1, 0];
+  const U = vertical ? turnPoint([1, 0, 0], turn) : [n[2], 0, -n[0]], V = vertical ? turnPoint([0, 0, 1], turn) : [0, 1, 0];
   const cells: [number, number, number][] = [];
   for (const { u, v } of section) for (let a = u[0]; a < u[1]; a++) for (let b = v[0]; b < v[1]; b++) {
     cells.push([0, 1, 2].map(k => Math.floor(from.point[k]! + (a + 0.5) * U[k]! + (b + 0.5) * V[k]! + side * 0.5 * n[k]!)) as [number, number, number]);
@@ -91,6 +94,8 @@ const REQUIRED: Record<string, readonly string[]> = {
   wall: ['west', 'east', 'foot-west', 'foot-east'], door: ['west', 'east', 'foot-west', 'foot-east'], window: ['west', 'east', 'foot-west', 'foot-east'],
   'wall-corner': ['east', 'north', 'foot-east', 'foot-north'], 'roof-slope': ['west', 'east', 'seat', 'crest'],
   'roof-ridge': ['west', 'east', 'seat'], 'roof-gable': ['foot-west', 'foot-east', 'apex'], 'roof-verge': ['slope-west', 'slope-east', 'ridge'],
+  'shutter-pair': ['mount'], 'porch-deck': ['floor'], 'porch-post': ['foot', 'beam', 'head'], trim: ['west', 'east', 'top'],
+  'porch-canopy': ['wall', 'post-west', 'post-east', 'beam'], chimney: ['seat'],
 };
 
 describe.each(FORGE_REVIEW.map(f => [f.familyId, f] as const))('%s review cottage', (family, fixture) => {
@@ -126,7 +131,8 @@ describe.each(FORGE_REVIEW.map(f => [f.familyId, f] as const))('%s review cottag
       const twins = (normal: string) => new Set(placed.filter(c => c.profile === a.profile && c.normal === normal && c.point.every((v, i) => v === a.point[i])).map(c => c.instance));
       const holds = (reader: PlacedConnector, other: PlacedConnector) => [-1, 1].every(side => {
         const owners = twins(side < 0 ? reader.normal : other.normal);
-        return sectionCells(reader, side as -1 | 1, profile.section).every(cell => owners.has(ownerOf(...cell) ?? ''));
+        const turn = fixture.instances.find(i => i.id === reader.instance)!.quarterTurns;
+        return sectionCells(reader, turn, side as -1 | 1, profile.section).every(cell => owners.has(ownerOf(...cell) ?? ''));
       });
       if (!(holds(a, b) || (profile.chiral && holds(b, a)))) cracks.push(`${a.instance}/${a.id}↔${b.instance}/${b.id}`);
     }

@@ -27,7 +27,7 @@ independent content work. Keep discoveries in Backlog without picking them up.
   expose readiness and measured state so captures cannot silently show a stale fixture. Capture the production
   three-angle component sheet and shell at desktop/phone sizes immediately; inspect threshold and roof closures.
   Do not spend this task on an empty catalog or a private rendering engine. · evidence: test + partial validation + looked-at sheet/shell
-- [ ] **FP02 — Hearth has a cared-for doorstep and crooked chimney** · Finish Hearth shutters, porch deck/post/
+- [x] **FP02 — Hearth has a cared-for doorstep and crooked chimney** · Finish Hearth shutters, porch deck/post/
   canopy, chimney and trim. Complete its fifteen-form fixture with clear entrance, shutter/window clearance,
   supported canopy and finished roof contact. Record profiles, finite geometry choices, budgets and hinge/clearance
   conventions in the owned README. Capture the changed pieces and finished cottage; fix weak seams or silhouette.

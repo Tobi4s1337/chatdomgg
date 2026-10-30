@@ -10,7 +10,7 @@ optional finishes, numeric inputs or free-form material choices.
 
 | Family | Finished forms |
 |---|---|
-| `hearthfold` | floor, wall, wall-corner, door (+ leaf), window, roof-slope, roof-ridge, roof-gable, roof-verge |
+| `hearthfold` | all fifteen: floor, wall, wall-corner, door (+ leaf), window, shutter-pair, roof-slope, roof-ridge, roof-gable, roof-verge, porch-deck, porch-post, porch-canopy, chimney, trim |
 | `tidewake` | none yet |
 | `grovebough` | none yet |
 
@@ -50,38 +50,73 @@ four cells high and a two-cell timber wall plate. All measures are fixed in `HEA
   `[2,0,−13]..[15,20,1]`; threshold `[8, 0, 2]`.
 - **Window:** an 8 × 10 light, glass one cell in from the inner face (`centre [8,13,2]`, facing south), a timber
   frame and cross, a timber lintel and a limestone sill one cell past the face. The reveal and four cells beyond the
-  face stay clear across the rectangle (clearance `[4,8,2]..[12,18,8]`). Windows are unlit content anchors.
+  face stay clear across the rectangle (clearance `[4,8,2]..[12,18,8]`). Windows are unlit content anchors. A
+  `shutters` mount sits at `[8, 7, 4]` (bottom centre of the reveal, on the face plane).
+- **Shutters:** two 5 × 12 panelled leaves (back boards, a proud frame of stiles and rails round two sunk panels,
+  brass straps at the hinge stile), fixed open flat on the face either side of the reveal. The piece's origin is
+  window cell `(−2, 7, 4)`, so the leaves cover window x −2..3 and 13..18 one cell proud of the face and bear on
+  the bay's two face posts and the sill ends; they reach two cells over the neighbouring bays without touching
+  them. They never enter the light rectangle (x 4..12) or its clearance and close nothing: open shutters only.
+- **Porch deck:** a 16 × 2 × 12 doorstep module on the floor-tile grid: limestone bed, timber boards flush with
+  the floor top (y 2, the door threshold), a 2-deep limestone kerb and a 2-deep step at y 1, so the approach drops
+  1 then 1. Modules sit side by side into a terrace; it mates a floor tile's street edge (`floor`). Post seats sit
+  at x 7 and 9, z 7 (`seat-7`, `seat-9`).
+- **Porch post:** a 2 × 2 timber post, 24 tall from the deck top, on a 4 × 2 × 4 limestone foot, with a stepped
+  knee under the beam on its +X side. The right-hand post of a pair is the same piece turned twice, never mirrored.
+- **Trim:** a 16-long, 2-deep, 3-tall timber beam under a 4-deep cap board. Its ends frame into post faces (the
+  porch bressummer, bottom at post height 21); its feet also meet the wall-head joints so it can cope a free wall run.
+- **Porch canopy:** a 20 × 23 × 12 gabled hood in the main roof's 3:2 courses (2 timber under 3 terracotta, five
+  a side), 10 deep plus a 2-deep verge band one cell proud above and below, a ridge roll and a small finial. A
+  16 × 2 timber ledger bears on the door bay's wall plate (`canopy` on the door, `[8, 22, 4]`), the first courses
+  on the post heads and a king-post truss on the beam cap. Its eaves sit 2 above the door head plate; it belongs
+  under a gable (the door bay under a gable end), never under a side eave, which hangs into its space.
+- **Chimney:** 8 × 24 × 8. A 6 × 6 limestone stack steps onto three roof courses (5, 6, 7), a proud limestone
+  drip course marks the set-off, the upper 4 × 4 stack leans one cell along the ridge and a terracotta lid on four
+  piers caps the open 2 × 2 flue, whose dark mouth shows between the piers. It seats at the slope's `chimney`
+  connector `[8, 23, 7]` (mid-bay, the top of course 6) and stands 8 cells clear of the ridge roll.
 
 ### Profiles
 
 Equal profile IDs mate when their transformed points coincide and their normals oppose (`mateConnectors`). The
 section is the whole mating cross-section, in cells either side of the connector plane: for horizontal normals `u`
-runs along up × normal and `v` up from the point; for up/down normals sections are squares about the point.
+runs along up × normal and `v` up from the point; for up/down normals `u` and `v` are the reading piece's own
+turned x and z.
 
 | Profile | Where | Section |
 |---|---|---|
 | `hearthfold-wall-side` | bay and corner-arm ends, foot centreline | foot and plate solid across 4; middle 2 solid full height |
 | `hearthfold-wall-foot` | post feet (down), floor seats at 7/9 along each edge, 2 in (up) | 2 × 2 |
 | `hearthfold-wall-head` | plate top at bay ends and arm ends (up), slope seat and gable feet (down) | 4 × 4 |
-| `hearthfold-floor-edge` | floor tile edge midpoints | 16 × 2 |
+| `hearthfold-floor-edge` | floor tile edge midpoints, porch deck back edge | 16 × 2 |
 | `hearthfold-roof-section` | slope eave-tip ends, verge (covers) | ten 2 × 5 courses rising 3; chiral |
 | `hearthfold-ridge-seat` | slope crest (up), ridge (down) | 4 × 4 |
 | `hearthfold-ridge-section` | ridge ends, verge apex | roll 4 wide (2 at the crown) with 2-wide saddles |
 | `hearthfold-gable-apex` | gable top (up), slope underside at the crest (down) | 4 × 4 |
+| `hearthfold-shutter-mount` | window face (south), shutter pair (north) | the two face posts, 1 × 12 each, behind the leaves |
+| `hearthfold-porch-foot` | deck seats (up), post foot (down) | 4 × 4 |
+| `hearthfold-beam-end` | post inner face (east), trim ends | beam 2 × 3 |
+| `hearthfold-porch-head` | post head (up), hood eave bearings (down) | 2 × 2 |
+| `hearthfold-beam-top` | trim cap (up), hood truss (down) | 2 × 2 |
+| `hearthfold-canopy-ledger` | door bay plate over the door (south), hood ledger (north) | 16 × 2 |
+| `hearthfold-chimney-seat` | slope course 6 (up), chimney base (down) | 6 along the ridge × 2; chiral, read from the slope |
 
 ## Review cottages
 
 `FORGE_REVIEW` holds one bench-only assembly per finished family: instance IDs, piece IDs, integer positions,
 quarter turns and the entrance focus. Composed windows are named `<instanceId>-<windowId>`. The Hearthfold cottage
 stands gable to the street on a 32 × 48 footprint (x 16..48, z 68..116) inside the hut's active depth (z 64..128):
-six floor tiles, four corners, a door, two windows, three walls, three bays of roof each side, three ridge
-segments, two gables and two verges.
+six floor tiles, four corners, a door, two shuttered windows, three walls, three bays of roof each side, three
+ridge segments, two gables and two verges, a chimney at the back of the west slope (it faces the review camera),
+and a porch: two deck modules make a 32 × 12 terrace to the lot edge, two posts 18 apart (x 22..24 and 40..42)
+frame the 12-wide door with a trim beam between them, and the gabled hood (x 22..42) joins the wall plate over
+the door. The hood stays 3 cells under the main verge, its truss and beam leave 20 cells of headroom over the
+deck, and the posts, feet and knees stay outside the door's width. Forty-six instances use all fifteen forms.
 
 `forge.test.ts` rasterizes the real definitions with the published turns and checks: no shared cells and nothing
 behind the hut depth; every wall, roof and end connector mated, with each mate's documented section solid on both
 sides and owned by the mating pieces; ground support with the leaf open and closed; a sealed room with the door
-shut; a supported passage from the street through the open door, with rises of at most two cells; glass and two
-clear outward cells for every window; clearance boxes clear; and the leaf inside its swing reservation through
+shut; a supported passage from the street over the deck and step through the open door, with rises of at most
+two cells and 20 cells of headroom; glass and two clear outward cells for every window (shutters included); clearance boxes clear; and the leaf inside its swing reservation through
 the whole quarter turn.
 
 ## Review route and captures
@@ -125,6 +160,12 @@ build). Component sheets land in `shots/content/forge-pieces/style-<kit>/`.
 | roof-ridge | 4 | 480 | 306 |
 | roof-gable | 13 | 1,132 | 366 |
 | roof-verge | 25 | 664 | 638 |
+| shutter-pair | 16 | 196 | 296 |
+| porch-deck | 3 | 352 | 128 |
+| porch-post | 4 | 132 | 124 |
+| porch-canopy | 51 | 1,616 | 1,584 |
+| chimney | 13 | 564 | 528 |
+| trim | 2 | 160 | 66 |
 | door-leaf | 4 | 240 | 56 |
 
-Each component renders in one measured draw. The composed cottage meshes to 7,930 triangles with the door open (7,304 closed) in one draw; the window view adds the two draws of the presence layer.
+Each component renders in one measured draw. The composed fifteen-form cottage meshes to 13,010 triangles with the door open (12,898 closed) in one draw; the window view adds the two draws of the presence layer.

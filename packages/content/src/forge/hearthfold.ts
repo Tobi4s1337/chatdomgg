@@ -18,6 +18,14 @@ export const HEARTHFOLD = {
   roof: { rise: 3, run: 2, slab: 5, courses: 10, halfSpan: 16, overhang: 4, seat: 6, ridgeBase: 29, verge: 2 },
   window: { width: 8, height: 10, centre: [8, 13, 2] as const },
   door: { opening: [2, 14] as const, height: 20, hinge: [2, 0, 0] as const },
+  /** Open shutter leaves lie flat on the wall face, 5 × 12 each, hinged at the reveal edges. */
+  shutter: { leaf: 5, height: 12, mount: [8, 7, 4] as const },
+  /** Doorstep: 16-wide terrace modules on the floor-tile grid, 10 deep plus a one-cell step 2 deep. */
+  deck: { depth: 10, step: 2, kerb: 2, seats: [7, 9] as const, seatDepth: 7 },
+  /** Porch post: 2 × 2 timber on a 4 × 4 limestone foot, 24 tall from the deck top to the hood. */
+  post: { height: 24, beamSeat: 21 },
+  /** Hood: a 20-wide gabled porch roof in the main roof's 3:2 courses, five a side, 10 deep plus a 2-deep verge. */
+  hood: { width: 20, courses: 5, depth: 10, verge: 2, truss: 6 },
 } as const;
 const R = HEARTHFOLD.roof;
 /** Underside of roof course j, counted from the eave (j = 0) to the crest (j = 9), in slope-local cells. */
@@ -28,6 +36,9 @@ const P = {
   wallSide: 'hearthfold-wall-side', wallFoot: 'hearthfold-wall-foot', wallHead: 'hearthfold-wall-head',
   floorEdge: 'hearthfold-floor-edge', roofSection: 'hearthfold-roof-section', ridgeSeat: 'hearthfold-ridge-seat',
   ridgeSection: 'hearthfold-ridge-section', gableApex: 'hearthfold-gable-apex',
+  shutterMount: 'hearthfold-shutter-mount', porchFoot: 'hearthfold-porch-foot', beamEnd: 'hearthfold-beam-end',
+  porchHead: 'hearthfold-porch-head', beamTop: 'hearthfold-beam-top', canopyLedger: 'hearthfold-canopy-ledger',
+  chimneySeat: 'hearthfold-chimney-seat',
 } as const;
 
 /** The whole mating cross-section of each profile (see ForgeProfile for the reading frame). */
@@ -43,6 +54,15 @@ export const HEARTHFOLD_PROFILES: readonly ForgeProfile[] = [
   { id: P.ridgeSection, chiral: false, summary: 'Ridge roll end: a 4-wide roll over the crest, rounded to 2 at its top, with 2-wide saddles down each slope.',
     section: [{ u: [-4, -2], v: [0, 4] }, { u: [2, 4], v: [0, 4] }, { u: [-2, 2], v: [3, 6] }, { u: [-1, 1], v: [6, 7] }] },
   { id: P.gableApex, chiral: false, summary: 'Gable apex under the crest underside, 4×4 across the gable thickness.', section: [{ u: [-2, 2], v: [-2, 2] }] },
+  { id: P.shutterMount, chiral: false, summary: 'Open shutter leaves bearing on the window bay\'s two face posts, point at the bottom centre of the reveal on the face plane. Each strip is the post behind a leaf, 12 tall.',
+    section: [{ u: [-8, -7], v: [0, 12] }, { u: [7, 8], v: [0, 12] }] },
+  { id: P.porchFoot, chiral: false, summary: 'A porch post\'s 4×4 limestone foot standing on a deck top.', section: [{ u: [-2, 2], v: [-2, 2] }] },
+  { id: P.beamEnd, chiral: false, summary: 'A 2-deep, 3-tall beam framed into a post face, point at the bottom centre of the beam end.', section: [{ u: [-1, 1], v: [0, 3] }] },
+  { id: P.porchHead, chiral: false, summary: 'A 2×2 post head carrying the porch hood\'s first course.', section: [{ u: [-1, 1], v: [-1, 1] }] },
+  { id: P.beamTop, chiral: false, summary: 'Beam cap under the hood truss\'s king post and sole plate, 2×2 about the beam centre.', section: [{ u: [-1, 1], v: [-1, 1] }] },
+  { id: P.canopyLedger, chiral: false, summary: 'A 16-long, 2-tall timber ledger against a wall plate, point at its bottom centre on the wall face.', section: [{ u: [-8, 8], v: [0, 2] }] },
+  { id: P.chimneySeat, chiral: true, summary: 'A chimney bearing on the middle of three roof courses: 6 along the slope by the 2-wide course top, read in the slope\'s own axes. Its flashing steps onto the course above and below.',
+    section: [{ u: [-3, 3], v: [-1, 1] }] },
 ];
 
 /** Limestone foot, panel set back one cell from the face, a one-cell post at each end and the wall plate. */
@@ -103,7 +123,7 @@ function window(): ForgePieceDefinition {
     .box(4, 8, 1, 12, 18, 2, MAT.glass)
     .box(7, 8, 1, 9, 18, 2, K.trim).box(4, 12, 1, 12, 13, 2, K.trim);
   const x0 = centre[0] - width / 2, y0 = centre[1] - height / 2;
-  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'window', connectors: bayConnectors(),
+  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'window', connectors: [...bayConnectors(), connector('shutters', P.shutterMount, [...HEARTHFOLD.shutter.mount], 'south')],
     blueprint: s.blueprint(STYLE, [{ id: 'glass', centre: [...centre], width, height, facing: 'south' }]),
     // The deep reveal and four cells past the face stay open across the whole light rectangle.
     clearanceBoxes: [space([x0, y0, centre[2]], [x0 + width, y0 + height, T + 4])] });
@@ -127,7 +147,9 @@ function door(): ForgePieceDefinition {
     .air(x0, 0, 0, x1, h, T)
     // A one-cell rebate in the latch post's inner face lets the leaf's corner clear it; the rest of the post is the stop.
     .air(x1, 0, 0, x1 + 1, h, 1);
-  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'door', blueprint: s.blueprint(STYLE), connectors: bayConnectors(),
+  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'door', blueprint: s.blueprint(STYLE),
+    // A porch hood's ledger bears on the wall plate above the door head.
+    connectors: [...bayConnectors(), connector('canopy', P.canopyLedger, [8, 22, T], 'south')],
     // Swing reservation for the 12×1 leaf turning inward about its hinge (radius just over 12 cells).
     clearanceBoxes: [space([x0, 0, -13], [x1 + 1, h, 1])],
     door: { leaf: leaf(), hinge: [...HEARTHFOLD.door.hinge], openQuarterTurns: 1, passage: space([x0 + 1, 0, -12], [x1, h, T]), threshold: [8, 0, 2] } });
@@ -149,6 +171,8 @@ function slope(): ForgePieceDefinition {
     connector('west', P.roofSection, [0, 0, depth], 'west'), connector('east', P.roofSection, [BAY, 0, depth], 'east'),
     connector('seat', P.wallHead, [8, R.seat, 14], 'down'), connector('crest', P.ridgeSeat, [8, crest, 0], 'up'),
     connector('gable-west', P.gableApex, [2, under(R.courses - 1), 0], 'down'), connector('gable-east', P.gableApex, [14, under(R.courses - 1), 0], 'down'),
+    // A chimney seats on the top of course 6 at mid-bay, stepping onto courses 5 and 7.
+    connector('chimney', P.chimneySeat, [8, under(6) + R.slab, R.halfSpan + R.overhang - R.run * 6 - 1], 'up'),
   ] });
 }
 
@@ -191,6 +215,110 @@ function verge(): ForgePieceDefinition {
   ] });
 }
 
+function shutters(): ForgePieceDefinition {
+  // Two panelled leaves opened flat against the face either side of the reveal, two cells past the bay on each
+  // side. Local origin is window cell (-2, 7, 4): the leaves bear on the bay's face posts and the sill.
+  const { leaf: w, height: h } = HEARTHFOLD.shutter;
+  const s = new Shape(id('shutter-pair'), [16 + 4, h, 2]);
+  for (const [x0, hinge] of [[0, w - 2], [20 - w, 20 - w]] as const) {
+    // Back boards, then a proud frame of stiles and rails around two sunk panels, and brass straps at the hinge.
+    s.box(x0, 0, 0, x0 + w, h, 1, K.trim)
+      .box(x0, 0, 1, x0 + 1, h, 2, K.trim).box(x0 + w - 1, 0, 1, x0 + w, h, 2, K.trim)
+      .box(x0 + 1, 0, 1, x0 + w - 1, 2, 2, K.trim).box(x0 + 1, 6, 1, x0 + w - 1, 7, 2, K.trim).box(x0 + 1, h - 1, 1, x0 + w - 1, h, 2, K.trim);
+    for (const y of [3, h - 3]) s.box(hinge, y, 1, hinge + 2, y + 1, 2, MAT.brass);
+  }
+  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'window', blueprint: s.blueprint(STYLE), clearanceBoxes: [], connectors: [
+    connector('mount', P.shutterMount, [10, 0, 0], 'north'),
+  ] });
+}
+
+function deck(): ForgePieceDefinition {
+  // One 16-wide doorstep module on the floor-tile grid: a limestone bed, a timber board field flush with the floor
+  // top, a limestone kerb and a one-cell step down to the street. Modules sit side by side into a terrace.
+  const { depth, step, kerb, seats, seatDepth } = HEARTHFOLD.deck;
+  const s = new Shape(id('porch-deck'), [BAY, 2, depth + step])
+    .box(0, 0, 0, BAY, 2, depth, K.stone)
+    .box(0, 1, 0, BAY, 2, depth - kerb, K.trim)
+    .box(0, 0, depth, BAY, 1, depth + step, K.stone);
+  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'porch', blueprint: s.blueprint(STYLE), clearanceBoxes: [], connectors: [
+    connector('floor', P.floorEdge, [8, 0, 0], 'north'),
+    ...seats.map(x => connector(`seat-${x}`, P.porchFoot, [x, 2, seatDepth], 'up')),
+  ] });
+}
+
+function post(): ForgePieceDefinition {
+  // A 2×2 timber post on a 4×4 limestone foot, with a stepped knee under the beam it carries toward +X.
+  const { height, beamSeat } = HEARTHFOLD.post;
+  const s = new Shape(id('porch-post'), [5, height, 4])
+    .box(0, 0, 0, 4, 2, 4, K.stone)
+    .box(1, 2, 1, 3, height, 3, K.trim)
+    .box(3, beamSeat - 4, 1, 4, beamSeat, 3, K.trim).box(4, beamSeat - 2, 1, 5, beamSeat, 3, K.trim);
+  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'porch', blueprint: s.blueprint(STYLE), clearanceBoxes: [], connectors: [
+    connector('foot', P.porchFoot, [2, 0, 2], 'down'), connector('beam', P.beamEnd, [3, beamSeat, 2], 'east'),
+    connector('head', P.porchHead, [2, height, 2], 'up'),
+  ] });
+}
+
+function trim(): ForgePieceDefinition {
+  // A 16-long, 2-deep timber beam with a 4-deep cap board: a porch bressummer between posts, or a coping on a
+  // wall run where its feet meet the wall-head joints.
+  const s = new Shape(id('trim'), [BAY, 4, T])
+    .box(0, 0, 1, BAY, 3, 3, K.trim)
+    .box(0, 3, 0, BAY, 4, T, K.trim);
+  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'trim', blueprint: s.blueprint(STYLE), clearanceBoxes: [], connectors: [
+    connector('west', P.beamEnd, [0, 0, 2], 'west'), connector('east', P.beamEnd, [BAY, 0, 2], 'east'),
+    connector('top', P.beamTop, [8, 4, 2], 'up'),
+    connector('head-west', P.wallHead, [0, 0, 2], 'down'), connector('head-east', P.wallHead, [BAY, 0, 2], 'down'),
+  ] });
+}
+
+function canopy(): ForgePieceDefinition {
+  // A small gabled hood in the main roof's 3:2 courses (2 timber under 3 terracotta), local y 2 at its eaves. Its
+  // ledger bears on the wall plate over the door, the first courses on the post heads, and a king-post truss on
+  // the beam; a verge band finishes the street end. It sits under a gable verge, never under an eave.
+  const { width, courses, depth, verge, truss } = HEARTHFOLD.hood;
+  const s = new Shape(id('porch-canopy'), [width, 23, depth + verge]);
+  const span = (j: number): [number, number][] => [[R.run * j, R.run * j + R.run], [width - R.run * j - R.run, width - R.run * j]];
+  const under = (j: number) => 2 + R.rise * j;
+  for (let j = 0; j < courses; j++) for (const [x0, x1] of span(j)) {
+    s.box(x0, under(j), 0, x1, under(j) + 2, depth, K.trim).box(x0, under(j) + 2, 0, x1, under(j) + R.slab, depth, K.roof)
+      .box(x0, under(j) - 1, depth, x1, under(j) + R.slab + 1, depth + verge, K.roof);
+  }
+  // Against the wall: the ledger, then plaster up to each course.
+  s.box(2, 0, 0, width - 2, 2, 1, K.trim);
+  for (let j = 1; j < courses; j++) for (const [x0, x1] of span(j)) s.box(x0, 2, 0, x1, under(j), 1, K.wall);
+  // The open front: a sole plate on the beam, plaster set back one cell and a king post under the crest.
+  s.box(2, 3, truss, width - 2, 4, truss + 2, K.trim);
+  for (let j = 1; j < courses; j++) for (const [x0, x1] of span(j)) s.box(x0, 4, truss, x1, under(j), truss + 1, K.wall);
+  s.box(width / 2 - 1, 4, truss, width / 2 + 1, under(courses - 1), truss + 2, K.trim);
+  // Ridge roll in front of the main verge, and a small finial over the street end.
+  const crest = under(courses - 1) + R.slab;
+  s.box(width / 2 - 1, crest, verge, width / 2 + 1, crest + 2, depth, K.roof)
+    .box(width / 2 - 1, crest + 1, depth, width / 2 + 1, crest + 4, depth + verge, K.roof);
+  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'porch', blueprint: s.blueprint(STYLE), clearanceBoxes: [], connectors: [
+    connector('wall', P.canopyLedger, [width / 2, 0, 0], 'north'),
+    connector('post-west', P.porchHead, [1, 2, truss + 1], 'down'), connector('post-east', P.porchHead, [width - 1, 2, truss + 1], 'down'),
+    connector('beam', P.beamTop, [width / 2, 3, truss + 1], 'down'),
+  ] });
+}
+
+function chimney(): ForgePieceDefinition {
+  // Local x runs along the ridge, +Z down the slope, y 0 the top of course 5. A 6×6 limestone stack steps onto three
+  // courses, a proud limestone drip course marks the set-off, and the upper stack leans one cell along the ridge before a
+  // lid on four piers caps the open flue.
+  const s = new Shape(id('chimney'), [8, 24, 8])
+    .box(1, 0, 5, 7, 13, 7, K.stone).box(1, 3, 3, 7, 13, 5, K.stone).box(1, 6, 1, 7, 13, 3, K.stone)
+    .box(0, 13, 0, 8, 14, 8, K.stone)
+    .box(2, 14, 1, 6, 17, 5, K.stone).box(3, 17, 1, 7, 20, 5, K.stone)
+    .air(4, 16, 2, 6, 20, 4);
+  for (const [x, z] of [[3, 1], [6, 1], [3, 4], [6, 4]] as const) s.box(x, 20, z, x + 1, 22, z + 1, K.stone);
+  s.box(2, 22, 0, 8, 23, 6, K.roof).box(3, 23, 1, 7, 24, 5, K.roof);
+  return definePiece({ id: s.id, familyId: 'hearthfold', kind: 'chimney', blueprint: s.blueprint(STYLE), clearanceBoxes: [], connectors: [
+    connector('seat', P.chimneySeat, [4, 3, 4], 'down'),
+  ] });
+}
+
 export const HEARTHFOLD_PIECES: Partial<Record<ForgeForm, () => ForgePieceDefinition>> = {
-  floor, wall, 'wall-corner': corner, door, window, 'roof-slope': slope, 'roof-ridge': ridge, 'roof-gable': gable, 'roof-verge': verge,
+  floor, wall, 'wall-corner': corner, door, window, 'shutter-pair': shutters, 'roof-slope': slope, 'roof-ridge': ridge, 'roof-gable': gable,
+  'roof-verge': verge, 'porch-deck': deck, 'porch-post': post, 'porch-canopy': canopy, chimney, trim,
 };

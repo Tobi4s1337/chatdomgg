@@ -7,7 +7,9 @@ const at = (id: string, form: string, position: readonly [number, number, number
 /**
  * Hearthfold cottage, gable to the street: a 32 × 48-cell footprint at x 16..48, z 68..116 of the hut's active depth
  * (z 64..128). Two by three floor tiles, a ring of four corners and six bays, and a 3:2 course roof whose ridge runs
- * toward the street. The door sits under the front gable; windows look east and west from the front bays.
+ * toward the street. The door sits under the front gable; shuttered windows look east and west from the front bays.
+ * Two deck modules make a doorstep terrace to the lot edge, two posts and a beam carry a gabled hood whose ledger
+ * bears on the plate over the door, and a crooked chimney rises from the back of the west slope.
  */
 const hearthfold: ForgeReviewFixture = {
   familyId: 'hearthfold',
@@ -33,6 +35,15 @@ const hearthfold: ForgeReviewFixture = {
     at('gable-north', 'roof-gable', [44, 26, 72], 2),
     at('verge-south', 'roof-verge', [11, 19, 116], 0),
     at('verge-north', 'roof-verge', [53, 19, 68], 2),
+    at('shutters-east', 'shutter-pair', [48, 9, 110], 1),
+    at('shutters-west', 'shutter-pair', [16, 9, 90], 3),
+    at('deck-west', 'porch-deck', [16, 0, 116], 0),
+    at('deck-east', 'porch-deck', [32, 0, 116], 0),
+    at('post-west', 'porch-post', [21, 2, 121], 0),
+    at('post-east', 'porch-post', [43, 2, 125], 2),
+    at('beam', 'trim', [24, 23, 121], 0),
+    at('canopy', 'porch-canopy', [22, 24, 116], 0),
+    at('chimney', 'chimney', [29, 40, 72], 3),
   ],
 };
 
