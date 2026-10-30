@@ -61,8 +61,11 @@ describe('a starting shape becomes the citizen’s own voxels', () => {
       const choice = FINISHED_CHOICES.find(c => blueprint.id.endsWith(`${c.style}-${c.form}-${c.tier}`))!;
       const draft = new BuildDraft(reviewPolicy(choice.style, choice.tier));
       expect(() => draft.insertBlueprint(blueprint, [0, 0, 0]), blueprint.id).not.toThrow();
+      expect(draft.voxelCount, blueprint.id).toBeLessThan(HOME_BUILD_LIMITS[choice.tier].maxVoxels);
+      // The bench's carve finds a plain wall block beside every shape's door.
+      expect(draft.get(reviewEditCell(draft, choice)), blueprint.id).toBe(STYLES[choice.style].wall);
     }
-  });
+  }, 300_000);
 });
 
 describe('review selectors', () => {

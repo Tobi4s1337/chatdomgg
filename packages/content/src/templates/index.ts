@@ -1,6 +1,6 @@
 import { HomeTierSchema, type HomeTier, type VoxelBlueprint } from '@chatdom/shared';
 import { STYLES, type StyleKey } from '../materials';
-import { hearthGable } from './hearth';
+import { hearthCorner, hearthCourtyard, hearthGable } from './hearth';
 import { BUILD_TEMPLATE_FORMS, templateId, type BuildTemplateForm, type BuiltTemplate, type TemplateReview } from './plan';
 
 export { BUILD_TEMPLATE_FORMS, templateId, activeRear, RESERVE, type BuildTemplateForm, type TemplateReview } from './plan';
@@ -13,7 +13,10 @@ export const BUILD_TEMPLATE_TIERS: readonly HomeTier[] = HomeTierSchema.options;
 type Builder = (tier: HomeTier) => BuiltTemplate;
 /** Finished shapes only. A missing entry throws instead of standing in with another plan. */
 const BUILDERS: Partial<Record<StyleKey, Partial<Record<BuildTemplateForm, { build: Builder; tiers: readonly HomeTier[] }>>>> = {
-  hearth: { gable: { build: hearthGable, tiers: ['hut'] } },
+  hearth: {
+    gable: { build: hearthGable, tiers: HomeTierSchema.options }, corner: { build: hearthCorner, tiers: HomeTierSchema.options },
+    courtyard: { build: hearthCourtyard, tiers: HomeTierSchema.options },
+  },
 };
 
 function known(style: unknown, form: unknown, tier: unknown): { style: StyleKey; form: BuildTemplateForm; tier: HomeTier } {

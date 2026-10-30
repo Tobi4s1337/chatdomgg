@@ -74,8 +74,10 @@ export function reviewEditCell(draft: BuildDraft, choice: TemplateChoice): Vec3 
   const wall = STYLES[choice.style].wall;
   const [tx, feet] = review.threshold, y = feet + 12;
   const { size } = draft.policy;
-  for (const dx of [10, -10, 11, -11, 12, -12, 13, -13, 14, -14]) {
+  // Nearest first, either side of the door, past its jambs and the corner posts of a turning plan.
+  for (const dx of Array.from({ length: 15 }, (_, i) => [10 + i, -10 - i]).flat()) {
     const x = tx + dx;
+    if (x < 0 || x >= size[0]) continue;
     for (let z = size[2] - 1; z >= draft.policy.editableFrom[2]; z--) {
       const material = draft.get([x, y, z]);
       if (!material) continue;

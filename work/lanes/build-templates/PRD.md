@@ -27,7 +27,7 @@ substitute for contracts. Record discoveries under Backlog without silently expa
   Render desktop/phone and three angles immediately. Demonstrate actual main draft insertion and one edited cell
   followed by undo; no static-mesh success. Establish one meaningful executed-cell route/bounds test and measure
   the hut's actual remaining tier capacity. · evidence: partial validation + insertion test + looked-at hut/sheet
-- [ ] **BT02 — Hearth teaches three plans at every size** · Complete gable, corner and courtyard across all five
+- [x] **BT02 — Hearth teaches three plans at every size** · Complete gable, corner and courtyard across all five
   tiers, with connected usable interiors and a truly open court. Add honest titles/hints and finite selectors;
   preserve window IDs where retained. Record dimensions, room feet/threshold fixtures and palette in the owned
   README. Check real locked-rear bounds and all matching tier policies; review larger roofs and compact hut
