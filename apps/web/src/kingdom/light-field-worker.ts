@@ -8,7 +8,7 @@ export const LIGHT_FIELD_CELL = 0.5;
 export const LIGHT_FIELD_CELLS = 128 * 32 * 128;
 export const LIGHT_FIELD_BUDGET = 6 * 1024 * 1024;
 
-export interface LightFieldOptions { readonly mode?: 'local' | 'kingdom' | 'beacon'; readonly position?: Vec3 }
+export interface LightFieldOptions { readonly mode?: 'local' | 'kingdom' | 'beacon'; readonly position?: Vec3; readonly bounds?: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number } }
 export interface LightFieldConfig {
   readonly mode: 'local' | 'kingdom' | 'beacon';
   readonly size: Vec3;
@@ -33,7 +33,7 @@ export function resolveLightFieldConfig(layout: KingdomLayout, options: LightFie
       origin: [Math.floor(options.position[0] / 2) * 2 - 32, Math.floor(options.position[1] / 2) * 2 - 40, Math.floor(options.position[2] / 2) * 2 - 32] };
   }
   if (mode !== 'kingdom') throw new Error('Unknown light field mode');
-  const { minX, maxX, minZ, maxZ } = layout.bounds;
+  const { minX, maxX, minZ, maxZ } = options.bounds ?? layout.bounds;
   if (![minX, maxX, minZ, maxZ].every(Number.isFinite) || minX >= maxX || minZ >= maxZ) throw new Error('Invalid kingdom light bounds');
   let cellSize = 2;
   for (;;) {

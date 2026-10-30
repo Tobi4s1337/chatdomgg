@@ -110,7 +110,7 @@ export function createLightField(
   };
   worker.onerror = event => { event.preventDefault(); fail(new Error(event.message || 'Light field worker failed')); };
   worker.onmessageerror = () => fail(new Error('Light field response could not be decoded'));
-  post({ kind: 'init', layout, houses, options: { mode: config.mode, ...(options.position ? { position: [...options.position] as Vec3 } : {}) } });
+  post({ kind: 'init', layout, houses, options: { mode: config.mode, ...(options.position ? { position: [...options.position] as Vec3 } : {}), ...(options.bounds ? { bounds: { ...options.bounds } } : {}) } });
 
   return {
     update(centre, sources) {
