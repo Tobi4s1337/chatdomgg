@@ -49,8 +49,9 @@ export default function RealmReference() {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: colour, roughness: 1 }));
       mesh.position.set(x, y, z); scene.add(mesh); objects.push(mesh);
     };
-    box(0, -.3, 0, 36, .6, 36, '#656a58');
-    box(0, -.08, 3, 18, .16, 20, '#817d6d');
+    // Keep backing surfaces below the paving: sub-millimetre separation flickers on portrait cameras.
+    box(0, -.32, 0, 36, .6, 36, '#656a58');
+    box(0, -.10, 3, 18, .16, 20, '#817d6d');
     // Slightly varied stones make the court read as a laid surface without
     // adding collision geometry or changing the shared ground datum.
     const pavingGeometry = new THREE.BoxGeometry(.95, .025, .95);
