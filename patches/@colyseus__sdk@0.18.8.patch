@@ -1,0 +1,84 @@
+diff --git a/build/Client.cjs b/build/Client.cjs
+index eee23a37201b0cb429e0e6623b2a446f8e6a5ba4..e6bf814d62c31d872550d0838f893afb6e197023 100644
+--- a/build/Client.cjs
++++ b/build/Client.cjs
+@@ -130,7 +130,9 @@ class ColyseusSDK {
+             if (typeof (reconnectionToken) === "string" && typeof (rootSchema) === "string") {
+                 throw new Error("DEPRECATED: .reconnect() now only accepts 'reconnectionToken' as argument.\nYou can get this token from previously connected `room.reconnectionToken`");
+             }
+-            const [roomId, token] = reconnectionToken.split(":");
++            const separator = reconnectionToken.lastIndexOf(":");
++        const roomId = reconnectionToken.slice(0, separator);
++        const token = reconnectionToken.slice(separator + 1);
+             if (!roomId || !token) {
+                 throw new Error("Invalid reconnection token format.\nThe format should be roomId:reconnectionToken");
+             }
+diff --git a/build/Client.mjs b/build/Client.mjs
+index 7ff8569b061a8086c50ec2a84ac05ed40849f4c9..a96e21ec72944fceb379fc73c8b2d380a2d9f87e 100644
+--- a/build/Client.mjs
++++ b/build/Client.mjs
+@@ -128,7 +128,9 @@ class ColyseusSDK {
+         if (typeof (reconnectionToken) === "string" && typeof (rootSchema) === "string") {
+             throw new Error("DEPRECATED: .reconnect() now only accepts 'reconnectionToken' as argument.\nYou can get this token from previously connected `room.reconnectionToken`");
+         }
+-        const [roomId, token] = reconnectionToken.split(":");
++        const separator = reconnectionToken.lastIndexOf(":");
++        const roomId = reconnectionToken.slice(0, separator);
++        const token = reconnectionToken.slice(separator + 1);
+         if (!roomId || !token) {
+             throw new Error("Invalid reconnection token format.\nThe format should be roomId:reconnectionToken");
+         }
+diff --git a/build/Room.cjs b/build/Room.cjs
+index 5d9a16b41557336f99b2da73d3167571a4e60053..88f090889e640014cb5c33e29c0bad14c4ade353 100644
+--- a/build/Room.cjs
++++ b/build/Room.cjs
+@@ -518,7 +518,7 @@ class Room {
+             try {
+                 console.info(`[Colyseus reconnection]: ${String.fromCodePoint(0x1F504)} Re-establishing sessionId '${this.sessionId}' with roomId '${this.roomId}'... (attempt ${this.reconnection.retryCount} of ${this.reconnection.maxRetries})`); // 🔄
+                 this.connection.reconnect({
+-                    reconnectionToken: this.reconnectionToken.split(":")[1],
++                    reconnectionToken: this.reconnectionToken.slice(this.reconnectionToken.lastIndexOf(":") + 1),
+                     skipHandshake: true, // we already applied the handshake on first join
+                 });
+             }
+diff --git a/build/Room.mjs b/build/Room.mjs
+index 5adc457a0a1066073f252ab34ec95d29c66c0b62..0e762c0cae7f0d196a9b5610acd469377f734386 100644
+--- a/build/Room.mjs
++++ b/build/Room.mjs
+@@ -715,7 +715,7 @@ class Room {
+             try {
+                 console.info(`[Colyseus reconnection]: ${String.fromCodePoint(0x1F504)} Re-establishing sessionId '${this.sessionId}' with roomId '${this.roomId}'... (attempt ${this.reconnection.retryCount} of ${this.reconnection.maxRetries})`); // 🔄
+                 this.connection.reconnect({
+-                    reconnectionToken: this.reconnectionToken.split(":")[1],
++                    reconnectionToken: this.reconnectionToken.slice(this.reconnectionToken.lastIndexOf(":") + 1),
+                     skipHandshake: true, // we already applied the handshake on first join
+                 });
+             }
+diff --git a/src/Client.ts b/src/Client.ts
+index b225b1c0cd347eafcfaa9a727912c1d5dc7e8458..353942496da192af42b15841850917266ab270f2 100644
+--- a/src/Client.ts
++++ b/src/Client.ts
+@@ -298,7 +298,9 @@ export class ColyseusSDK<ServerType extends SDKTypes = any, UserData = any> {
+         if (typeof (reconnectionToken) === "string" && typeof (rootSchema) === "string") {
+             throw new Error("DEPRECATED: .reconnect() now only accepts 'reconnectionToken' as argument.\nYou can get this token from previously connected `room.reconnectionToken`");
+         }
+-        const [roomId, token] = reconnectionToken.split(":");
++        const separator = reconnectionToken.lastIndexOf(":");
++        const roomId = reconnectionToken.slice(0, separator);
++        const token = reconnectionToken.slice(separator + 1);
+ 		if (!roomId || !token) {
+ 			throw new Error("Invalid reconnection token format.\nThe format should be roomId:reconnectionToken");
+ 		}
+diff --git a/src/Room.ts b/src/Room.ts
+index f8464fd5748b96bef7c64947a8f79cf2c520aecc..76b9de1059290a5ea75c891ebf6bb6896a4fa317 100644
+--- a/src/Room.ts
++++ b/src/Room.ts
+@@ -872,7 +872,7 @@ export class Room<
+             try {
+                 console.info(`[Colyseus reconnection]: ${String.fromCodePoint(0x1F504)} Re-establishing sessionId '${this.sessionId}' with roomId '${this.roomId}'... (attempt ${this.reconnection.retryCount} of ${this.reconnection.maxRetries})`); // 🔄
+                 this.connection.reconnect({
+-                    reconnectionToken: this.reconnectionToken.split(":")[1],
++                    reconnectionToken: this.reconnectionToken.slice(this.reconnectionToken.lastIndexOf(":") + 1),
+                     skipHandshake: true, // we already applied the handshake on first join
+                 });
+ 

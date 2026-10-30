@@ -7,7 +7,7 @@ const release=await acquireCaptureLock();let browser,server;const errors=[],chec
 try{
  const preview=await startCapturePreview();server=preview.server;browser=await chromium.launch({channel:'chrome',headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--no-sandbox']});
  const page=await browser.newPage({viewport:{width:1440,height:900}});page.on('pageerror',e=>errors.push(e.message));await mkdir('shots/forge',{recursive:true});
- await page.goto(`${preview.base}/?tier=town&hour=19.5&time=60&forge=1&realm=hearth`);await page.waitForFunction(()=>window.__chatdomReady&&window.__chatdomKingdom?.forge,null,{timeout:240000});
+ await page.goto(`${preview.base}/?tier=town&hour=19.5&time=60&forge=1&forgeFixture=1&realm=hearth`);await page.waitForFunction(()=>window.__chatdomReady&&window.__chatdomKingdom?.forge,null,{timeout:240000});
  await page.fill('#forge-wish','!forge a chimney shaped like a sleeping dragon');await page.click('.forge-submit');await page.waitForFunction(()=>window.__chatdomKingdom.forge.status().phase!=='preparing'&&(window.__chatdomKingdom.forge.status().privateError!==null||window.__chatdomKingdom.forge.status().phase!=='idle'),null,{timeout:30000});
  assert.equal(await page.evaluate(()=>window.__chatdomKingdom.forge.status().privateError),null);
  await page.evaluate(()=>window.__chatdomKingdom.forge.seek(20));await page.waitForFunction(()=>window.__chatdomKingdom.forge.placements.length===1);

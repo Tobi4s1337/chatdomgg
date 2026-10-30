@@ -41,7 +41,7 @@ continue an independent task, never invent the missing authority. Never pick fro
   account verification and token discard; no runtime user token store. Report exact missing grants/registration
   without exposing values. Test wrong user/client/scopes, denial, 401 single-flight and redaction. R2–R4, R14.
 
-- [ ] **H02 — Publish one honest source through the frozen presence path** · evidence: source tests + first shots.
+- [x] **H02 — Publish one honest source through the frozen presence path** · evidence: source tests + first shots.
   Implement source composition around main's reducer/public projection and persistent private `PresenceBinding`
   table; expose
   `/presence-data/stream` SSE and local redacted health on 5194. Add `dev`, `replay`, `check:source` scripts and
@@ -49,7 +49,7 @@ continue an independent task, never invent the missing authority. Never pick fro
   Main wires its single adapter/proxy; jointly capture desktop/phone/stream simulated and unavailable states and
   inspect them. No private person IDs, Chatters names or raw inputs on SSE. R1, R9–R10, R13–R14.
 
-- [ ] **H03 — Receive real chat once and remove it when Twitch does** · evidence: protocol tests + real log.
+- [x] **H03 — Receive real chat once and remove it when Twitch does** · evidence: protocol tests + real log.
   Implement `provision:source` to explicitly provision/reuse only the configured owned development conduit,
   attach one outgoing shard and create the seven
   exact subscriptions. Validate conditions/version and required cleanup coverage, map chat/clear/delete/revoke into
@@ -58,7 +58,7 @@ continue an independent task, never invent the missing authority. Never pick fro
   subscription reconciliation, dedupe, backoff and shutdown. Demonstrate a real `tobi4s_` message through SSE once
   grants exist; keep only redacted timestamps/counts. Missing grant leaves real integration incomplete. R2–R7, R10.
 
-- [ ] **H04 — Quiet chat users and the castle follow observed state** · evidence: sweep/stream tests + shots.
+- [x] **H04 — Quiet chat users and the castle follow observed state** · evidence: sweep/stream tests + shots.
   Implement bounded complete Chatters sweeps every minute and Get Streams startup/gap/minute reconciliation.
   Preserve prior freshness under partial pages or 429; expire evidence through the shared reducer and keep
   offline/unknown/recovered distinct. Join real named/unnamed presence through the same durable slot mapping;
@@ -76,3 +76,13 @@ continue an independent task, never invent the missing authority. Never pick fro
 
 Worker discoveries go here with evidence. They do not authorize outbound Twitch actions, scope expansion or a
 second presence adapter.
+
+Main integration note (2026-10-30): H01–H04 feed the winding settlement on main. The amended public presence
+contract permits fresh direct chat/panel/walker presence while the broadcast is observed offline; stale frames
+still clear, Chatters/beacon/rewards still require live. Rebase the H05 expectations onto this distinction and
+use `pnpm shots --area herald`; capture owns its lock and must use a free development service port or coordinate
+with main rather than replacing the live 5194 source. No chat text/Forge commands belong to this presence path.
+
+Main Forge integration (2026-10-30): the optional private creation handoff in `src/forge/commands.ts` is separate
+from presence. H05 continues against default `dev` with no Forge sink. Preserve the accepted broadcast generation
+and cancellation hooks when integrating main; do not add identity, words or entitlement to public presence.

@@ -154,6 +154,11 @@ export class HeraldAuthority {
     return this.#report;
   }
 
+  /** Changes when previously authorized work must be discarded, even if a fresh grant follows. */
+  get generation(): number {
+    return this.#generation;
+  }
+
   available(capability: Capability): boolean {
     return this.#report?.capabilities.find(status => status.capability === capability)?.available ?? false;
   }

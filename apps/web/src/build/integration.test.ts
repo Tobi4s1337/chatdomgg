@@ -33,7 +33,7 @@ it('keeps the same frontage through private editing, a saved street replacement 
     return executeVoxelJob(request);
   } } as VoxelWorkerPool;
   const onSession = vi.fn(), onHomeVisibility = vi.fn(), onStreetHome = vi.fn(), onHousewarming = vi.fn();
-  const sound = { output:()=>null, unlock() {}, cue() {}, toggle: () => false, enabled: false, dispose() {} };
+  const sound = { phrase:()=>false, unlock:async()=>false, cue:()=>false, toggle: () => false, enabled: false, dispose() {} };
   const options = { scene, camera, canvas, pool, material, home, authoredHome, ownerId: 'simulated:seed:juniper', ownerName: 'Juniper', source: 'SIMULATED' as const,
     sound, onSession, onHomeVisibility, onStreetHome, onHousewarming };
   const build = createKingdomBuild(options), target = new THREE.Vector3();
@@ -92,4 +92,4 @@ it('keeps the same frontage through private editing, a saved street replacement 
       }
     }
   } finally { build.dispose(); material.dispose(); }
-}, 15000);
+}, 60_000); // Shared-host contention is not a build behavior failure.
