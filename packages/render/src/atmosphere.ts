@@ -17,14 +17,14 @@ type Grade = Omit<Environment, 'sunDirection'> & { hour: number };
 // These are deliberately authored as a sequence, rather than a physical latitude/clock.
 // The live kingdom can hold dusk for as long as its story needs it.
 const grades: Grade[] = [
-  { hour: 0, zenith: '#171d48', horizon: '#454267', fog: '#505474', ambient: '#7484bb', sun: '#aebde6', sunIntensity: 0.13, ambientIntensity: 0.55, night: 1 },
+  { hour: 0, zenith: '#151e54', horizon: '#3c416e', fog: '#505474', ambient: '#7484bb', sun: '#aebde6', sunIntensity: 0.13, ambientIntensity: 0.55, night: 1 },
   { hour: 5, zenith: '#302d59', horizon: '#a87787', fog: '#827d96', ambient: '#a49bbf', sun: '#e6ad96', sunIntensity: 0.28, ambientIntensity: 0.65, night: 0.65 },
   { hour: 7, zenith: '#8e9fc0', horizon: '#efd0a8', fog: '#c3b9b4', ambient: '#c5cbe0', sun: '#ffddb1', sunIntensity: 0.95, ambientIntensity: 0.85, night: 0.04 },
   { hour: 12, zenith: '#6595c1', horizon: '#d3e0df', fog: '#b5c9d3', ambient: '#d4e1ea', sun: '#fff1d5', sunIntensity: 1.3, ambientIntensity: 0.95, night: 0 },
   { hour: 16, zenith: '#8098bb', horizon: '#edc498', fog: '#cbbab0', ambient: '#d2c8d1', sun: '#ffcf92', sunIntensity: 1.12, ambientIntensity: 0.86, night: 0 },
-  { hour: 19, zenith: '#46578d', horizon: '#b68fa9', fog: '#777f9e', ambient: '#98a5c8', sun: '#ffc58b', sunIntensity: 0.95, ambientIntensity: 0.62, night: 0.22 },
-  { hour: 21, zenith: '#252f62', horizon: '#655d86', fog: '#565e80', ambient: '#8494c0', sun: '#c3c8e2', sunIntensity: 0.32, ambientIntensity: 0.53, night: 0.78 },
-  { hour: 24, zenith: '#171d48', horizon: '#454267', fog: '#505474', ambient: '#7484bb', sun: '#aebde6', sunIntensity: 0.13, ambientIntensity: 0.55, night: 1 },
+  { hour: 19, zenith: '#48528c', horizon: '#bd9285', fog: '#555d7b', ambient: '#929fc4', sun: '#ffc58b', sunIntensity: 0.65, ambientIntensity: 0.45, night: 0.22 },
+  { hour: 21, zenith: '#252f62', horizon: '#6c6082', fog: '#414966', ambient: '#8494c0', sun: '#c3c8e2', sunIntensity: 0.32, ambientIntensity: 0.38, night: 0.78 },
+  { hour: 24, zenith: '#151e54', horizon: '#3c416e', fog: '#505474', ambient: '#7484bb', sun: '#aebde6', sunIntensity: 0.13, ambientIntensity: 0.55, night: 1 },
 ];
 
 const blendColor = (a: string, b: string, t: number): string =>
@@ -72,7 +72,7 @@ const skyFragment = /* glsl */ `
   void main() {
     vec3 d = normalize(vDirection);
     float altitude = max(d.y, 0.0);
-    vec3 color = mix(uHorizon, uZenith, pow(smoothstep(0.0, 1.0, altitude), 0.62));
+    vec3 color = mix(uHorizon, uZenith, pow(smoothstep(0.0, 0.55, altitude), 0.62));
     float towardSun = max(dot(d, uSunDirection), 0.0);
     color += uSunColor * pow(towardSun, 12.0) * (1.0-uNight) * 0.11;
     float sun = smoothstep(0.9991, 0.9995, towardSun) * smoothstep(-0.04, 0.08, uSunDirection.y) * (1.0-uNight);
@@ -82,25 +82,25 @@ const skyFragment = /* glsl */ `
     float moon = smoothstep(0.9991, 0.99945, moonDot) * uNight;
     color += vec3(0.20, 0.22, 0.30) * pow(max(moonDot, 0.0), 240.0) * uNight;
     color = mix(color, vec3(0.72, 0.74, 0.72), moon * 0.88);
-    // Broad, low-contrast broken brush strokes. Projection fades at the horizon,
-    // preventing an infinitely stretched line and keeping the skyline readable.
+    // Broken, restrained strokes leave the skyline and beacon room to breathe.
+    // Projection fades at the horizon rather than stretching into a stripe.
     vec2 cloudUV = d.xz / max(d.y + 0.32, 0.32);
-    cloudUV *= vec2(2.5, 4.8);
+    cloudUV *= vec2(7.5, 14.0);
     cloudUV.x += uTime * 0.003;
-    float cloud = noise(cloudUV) * 0.65 + noise(cloudUV * 2.03 + 8.7) * 0.25 + noise(cloudUV * 4.1) * 0.10;
-    cloud = smoothstep(0.48, 0.65, cloud) * smoothstep(0.025, 0.18, d.y) * (1.0-smoothstep(0.70, 1.0, d.y));
-    vec3 cloudColor = mix(mix(uHorizon, vec3(0.9, 0.84, 0.79), 0.46), vec3(0.25, 0.27, 0.40), uNight);
-    color = mix(color, cloudColor, cloud * mix(0.48, 0.28, uNight));
+    float cloud = noise(cloudUV) * 0.54 + noise(cloudUV * 2.03 + 8.7) * 0.30 + noise(cloudUV * 4.1) * 0.16;
+    cloud = smoothstep(0.58, 0.71, cloud) * smoothstep(0.045, 0.20, d.y) * (1.0-smoothstep(0.70, 1.0, d.y));
+    vec3 cloudColor = mix(mix(uZenith, uHorizon, 0.38), vec3(0.20, 0.22, 0.37), uNight);
+    color = mix(color, cloudColor, cloud * mix(0.24, 0.14, uNight));
     // Light catches the underside of the clouds where the beacon reaches them.
     // This is angular and soft, so it remains a patch of sky rather than a wedge.
-    float beaconCloud = exp(-pow(acos(clamp(dot(d, uBeaconDirection), -1.0, 1.0)) / 0.16, 2.0));
-    color += vec3(0.32, 0.13, 0.045) * beaconCloud * cloud * uBeaconStrength;
+    float beaconCloud = exp(-pow(acos(clamp(dot(d, uBeaconDirection), -1.0, 1.0)) / 0.11, 2.0));
+    color += vec3(0.22, 0.08, 0.018) * beaconCloud * (0.12 + cloud * 0.88) * uBeaconStrength;
     // Sparse pinpricks anchored to sky direction; no time-dependent shimmer.
     vec2 starUV = vec2(atan(d.z, d.x) * 34.0, asin(clamp(d.y, -1.0, 1.0)) * 34.0);
     vec2 cell = floor(starUV), local = fract(starUV);
     float chance = hash(cell);
     vec2 point = vec2(hash(cell + 17.1), hash(cell + 31.7)) * 0.7 + 0.15;
-    float star = (1.0-smoothstep(0.015, 0.065, length(local-point))) * step(0.982, chance);
+    float star = (1.0-smoothstep(0.02, 0.085, length(local-point))) * step(0.94, chance);
     color += vec3(0.64, 0.70, 0.85) * star * uNight * smoothstep(0.04, 0.25, d.y) * (1.0-cloud*0.8) * 0.65;
     gl_FragColor = vec4(color, 1.0);
     #include <tonemapping_fragment>
@@ -119,9 +119,9 @@ const shaftFragment = /* glsl */ `
     float x = abs(vUv.x * 2.0 - 1.0);
     float height = vUv.y;
     float envelope = smoothstep(0.0, 0.045, height) * (1.0-smoothstep(0.65, 1.0, height));
-    float core = exp(-x*x*90.0) * (1.0-smoothstep(0.12, 0.83, height));
-    float veil = exp(-x*x*12.0) * (0.9 + 0.1*sin(height*10.0-uTime*0.25));
-    float alpha = envelope * (core*0.40 + veil*0.13) * uStrength;
+    float core = exp(-x*x*34.0) * (1.0-smoothstep(0.10, 0.85, height));
+    float veil = exp(-x*x*9.0) * (0.9 + 0.1*sin(height*10.0-uTime*0.25));
+    float alpha = envelope * (core*0.48 + veil*0.16) * uStrength;
     vec3 color = mix(vec3(0.95, 0.42, 0.12), vec3(1.0, 0.72, 0.33), core);
     gl_FragColor = vec4(color, alpha);
     #include <tonemapping_fragment>
@@ -171,6 +171,14 @@ export function createAtmosphere(scene: THREE.Scene): {
   const halo = new THREE.Mesh(haloGeometry, haloMaterial);
   halo.renderOrder = 1;
   scene.add(halo);
+  // A small warm source at the tower gives the column somewhere to begin.
+  const baseMaterial = new THREE.ShaderMaterial({
+    uniforms: { uStrength: { value: 0 } }, vertexShader: shaftVertex, fragmentShader: haloFragment,
+    transparent: true, depthWrite: false, blending: THREE.NormalBlending,
+  });
+  const base = new THREE.Mesh(haloGeometry, baseMaterial);
+  base.renderOrder = 3;
+  scene.add(base);
   return {
     update(hour, elapsedSeconds, camera, beaconPosition, beaconStrength) {
       const grade = getEnvironment(hour);
@@ -187,7 +195,7 @@ export function createAtmosphere(scene: THREE.Scene): {
       skyMaterial.uniforms.uBeaconStrength!.value = strength;
       shaft.visible = strength > 0.001;
       shaft.position.copy(beaconPosition).y += height * 0.5;
-      shaft.scale.set(6 + strength * 7, height, 1);
+      shaft.scale.set(10 + strength * 12, height, 1);
       // Keep the column vertical while presenting its soft profile to the camera.
       shaft.lookAt(camera.position.x, shaft.position.y, camera.position.z);
       halo.visible = strength > 0.001;
@@ -195,12 +203,17 @@ export function createAtmosphere(scene: THREE.Scene): {
       halo.quaternion.copy(camera.quaternion);
       halo.scale.setScalar(10 + strength * 18);
       haloMaterial.uniforms.uStrength!.value = strength;
+      base.visible = strength > 0.001;
+      base.position.copy(beaconPosition).y += 0.6;
+      base.quaternion.copy(camera.quaternion);
+      base.scale.setScalar(7 + strength * 4);
+      baseMaterial.uniforms.uStrength!.value = strength * 2.5;
       shaftMaterial.uniforms.uStrength!.value = strength;
       shaftMaterial.uniforms.uTime!.value = Number.isFinite(elapsedSeconds) ? elapsedSeconds : 0;
     },
     dispose() {
-      scene.remove(sky, shaft, halo);
-      skyGeometry.dispose(); skyMaterial.dispose(); shaftGeometry.dispose(); shaftMaterial.dispose(); haloGeometry.dispose(); haloMaterial.dispose();
+      scene.remove(sky, shaft, halo, base);
+      skyGeometry.dispose(); skyMaterial.dispose(); shaftGeometry.dispose(); shaftMaterial.dispose(); haloGeometry.dispose(); haloMaterial.dispose(); baseMaterial.dispose();
     },
   };
 }

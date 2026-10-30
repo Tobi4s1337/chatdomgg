@@ -54,17 +54,24 @@ export function terrainHeight(layout: KingdomLayout,x:number,z:number):number {
   const seed=seedHash(layout.config.seed)%1000;
   const castleHill=12*Math.exp(-(x*x/2500+(z+46)*(z+46)/2800));
   const base=1.2+castleHill+1.1*Math.sin(x*.033+seed)*Math.cos(z*.027)+.5*Math.sin((x+z)*.073);
-  let h=base;
-  // Smooth foundations are authored terrain, not floating houses or stepped dirt plinths.
+  let influence=0, weightedElevation=0, firstStreet=Infinity, lastStreet=-Infinity;
+  for(const quarter of layout.quarters){firstStreet=Math.min(firstStreet,quarter.streetZ);lastStreet=Math.max(lastStreet,quarter.streetZ);}
+  // Reserved plateaus end 20 m from each street. Adjacent streets are 42 m apart, so their
+  // inner feathers have exactly 2 m to meet. Complementary smoothsteps sum to one there;
+  // a neighbour can never lower a reserved lot. The exposed outer edges retain a 6 m skirt.
   for(const quarter of layout.quarters) {
     const width=layout.config.tier==='hamlet'?44:124;
-    const weight=(1-smoothstep(width,width+15,Math.abs(x)))*(1-smoothstep(20,26,Math.abs(z-quarter.streetZ)));
-    h=h*(1-weight)+quarter.elevation*weight;
+    const towardNeighbour=z<quarter.streetZ?quarter.streetZ>firstStreet:quarter.streetZ<lastStreet;
+    const weight=(1-smoothstep(width,width+15,Math.abs(x)))*(1-smoothstep(20,towardNeighbour?22:26,Math.abs(z-quarter.streetZ)));
+    influence+=weight;weightedElevation+=weight*quarter.elevation;
   }
-  const castleWeight=(1-smoothstep(19,30,Math.abs(x)))*(1-smoothstep(20,30,Math.abs(z+46)));
+  let h=base*(1-influence)+weightedElevation;
+  // The front of the castle's feather ends where the oldest quarter's reserved lots begin.
+  const castleWeight=(1-smoothstep(19,30,Math.abs(x)))*(1-smoothstep(20,26,Math.abs(z+46)));
   h=h*(1-castleWeight)+13*castleWeight;
   const lake=layout.lake,d=Math.sqrt(((x-lake.x)/lake.radiusX)**2+((z-lake.z)/lake.radiusZ)**2);
-  const shore=1-smoothstep(.83,1.25,d); h=h*(1-shore)-2.8*shore;
+  const angle=Math.atan2((z-lake.z)/lake.radiusZ,(x-lake.x)/lake.radiusX);
+  const shore=1-smoothstep(.83,1.25,d/(1+.06*Math.sin(angle*3)+.035*Math.cos(angle*5))); h=h*(1-shore)-2.8*shore;
   return h;
 }
 

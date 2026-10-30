@@ -196,3 +196,5 @@ The shell and window metadata are complete static assets, ready for their real c
   declared porch/hood support columns must be unbroken, and each family pair must differ broadly (IoU < 0.8) in
   at least two of street/side/plan projections and be near-identical (≥ 0.9) in none. Two side-gabled families
   cannot differ much from the street alone; bramblecross's steeper cross gable rides over its calmer range ridge.
+
+- **2026-10-30 — Presence consumer:** the first ordered window anchor is the citizen’s designated presence window. Keep it stable across tiers. The authoring bench lights all anchors for inspection; the kingdom lights that one anchor per citizen.
