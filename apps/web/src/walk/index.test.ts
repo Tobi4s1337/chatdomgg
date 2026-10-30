@@ -1,8 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { WALK_BUTTON, type WalkInput } from '@chatdom/shared/realm';
 import type { RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkRealm } from './index';
+
+const hudInput = vi.hoisted(() => ({ jump: undefined as (() => void) | undefined }));
+vi.mock('./input/hud', async importOriginal => ({
+  ...await importOriginal<typeof import('./input/hud')>(),
+  createWalkHud: (_container: HTMLElement, jump: () => void) => {
+    hudInput.jump = jump;
+    return { update() {}, dispose() { hudInput.jump = undefined; } };
+  },
+}));
 
 function signal() {
   const listeners = new Set<(code: number) => void>();
@@ -33,7 +42,7 @@ function realm(at: { x: number; y: number; z: number; yaw: number }) {
 function key(target: EventTarget, type: 'keydown' | 'keyup', code: string, repeat = false) {
   target.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { code, repeat, ctrlKey: false, metaKey: false, altKey: false }));
 }
-function setup(width = 1440, height = 900, heading?: number) {
+function setup(width = 1440, height = 900, heading?: number, withHud = false) {
   const keyboard = new EventTarget(), page = Object.assign(new EventTarget(), { hidden: false });
   const lockDocument = Object.assign(new EventTarget(), {
     pointerLockElement: null as unknown,
@@ -47,7 +56,7 @@ function setup(width = 1440, height = 900, heading?: number) {
   const camera = new THREE.PerspectiveCamera(52, width / height, .15, 2200);
   const world = realm({ x: 2, y: 0, z: 9, yaw: 128 });
   const clock = { now: 0 };
-  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }) });
+  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }), ...(withHud ? { hud: {} as HTMLElement } : {}) });
   const touch = (type: string, id: number, x: number, y: number) =>
     surface.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { pointerId: id, pointerType: 'touch', isPrimary: id === 1, button: 0, buttons: 1, clientX: x, clientY: y }));
   const mouse = (movementX: number, movementY: number) => lockDocument.dispatchEvent(Object.assign(new Event('mousemove'), { movementX, movementY }));
@@ -236,5 +245,19 @@ describe('the walk controller', () => {
     key(keyboard, 'keydown', 'KeyW');
     expect(controller.frame(16)).toEqual([]);
     expect(sent).toHaveLength(1);
+  });
+
+  it.each(['blur', 'contextmenu'])('drops a queued phone jump and every held input on %s', event => {
+    const { controller, keyboard, touch, lockDocument, sent } = setup(390, 844, undefined, true);
+    controller.frame(0);
+    key(keyboard, 'keydown', 'KeyW');
+    key(keyboard, 'keydown', 'KeyV');
+    touch('pointerdown', 1, 90, 700); touch('pointermove', 1, 90, 600);
+    hudInput.jump!();
+    keyboard.dispatchEvent(new Event(event, { cancelable: true }));
+    controller.frame(16);
+    expect(sent.at(-1)).toMatchObject({ moveX: 0, moveZ: 0, buttons: 0 });
+    expect([controller.debug.look, controller.debug.stick, lockDocument.pointerLockElement]).toEqual(['free', null, null]);
+    controller.dispose();
   });
 });
