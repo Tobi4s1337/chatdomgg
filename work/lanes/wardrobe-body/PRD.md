@@ -23,7 +23,7 @@ Do not add per-voxel tests. Missing required main inputs get a `needs:` line; wo
   deterministic capture script and visibly labelled SIMULATED fixtures. Capture front/side/back at dusk and
   web desktop/mobile sheets. The first task ends with an actual rendered citizen, not a validator-only core.
   · evidence: three-angle images and opened 1440×900/390×844 sheets; schema/budget report.
-- [ ] **WB01C — Replace the block cloaks with cloth.** Before further back garments, migrate the first short
+- [x] **WB01C — Replace the block cloaks with cloth.** Before further back garments, migrate the first short
   cloak and bench to `AvatarCapeBlueprintSchema`. Export `createCape(id, fit)` from the owned catalogue;
   `createWearableParts` supplies only any rigid clasps/fasteners for these forms. Use main's real
   `createCitizenCapeRenderer` on the bench and main's back socket pose; do not write another cloth solver.
