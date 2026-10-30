@@ -144,7 +144,8 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       // A bank follows continuous rendered height, rather than the material ID of
       // a whole one-metre triangle poking through the water's edge.
       if(uTerrain>.5&&vWorld.y<uShoreLevel+.7&&vWorld.x>uShoreBounds.x&&vWorld.x<uShoreBounds.y&&vWorld.z>uShoreBounds.z&&vWorld.z<uShoreBounds.w){
-        base=mix(uTerrainSoil,uTerrainGrass,smoothstep(uShoreLevel-.05,uShoreLevel+.7,vWorld.y));kind=2.;
+        vec3 bank=mix(uTerrainSoil,uTerrainGrass,.8)*.82;
+        base=mix(bank,uTerrainGrass,smoothstep(uShoreLevel-.05,uShoreLevel+.4,vWorld.y));kind=2.;
       }
       float detail=1.-smoothstep(.12,.55,max(length(dFdx(uv)),length(dFdy(uv))));
       float variation=hash(floor(vWorld*8.+n*.03));base*=1.+(.03*variation-.015)*detail;
