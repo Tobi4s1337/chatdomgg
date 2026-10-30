@@ -1,9 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { generateKingdom } from '@chatdom/world';
+import { generateKingdom, homeFrame, transformCardinalPoint } from '@chatdom/world';
 import { HOME_DEPTH_METRES, HomeTierSchema } from '@chatdom/shared';
-import { createSettlementContent } from './settlement-content';
+import { createSettlementContent, placeSettlementContent } from './settlement-content';
 
 describe('installed kingdom content', () => {
+  it('aligns actual home fronts and grounds garden props for all four cardinal turns', () => {
+    for (const rotation of [0, 1, 2, 3] as const) {
+      const plot = { slot: 7, ordinal: 0, position: [10,8,20] as const, rotation, tier: 'house' as const, style: 'hearth' as const, variant: 0 };
+      const ground = (x: number, z: number) => 0.1 * x + 0.2 * z;
+      const { houses, props } = placeSettlementContent([plot], ground);
+      const house = houses[0]!;
+      const front = transformCardinalPoint(house.position, rotation, [4, 0, house.blueprint.size[2] * .125]);
+      expect(front).toEqual(homeFrame(plot).front);
+      expect(house.slot).toBe(7);
+      expect(props.length).toBeGreaterThan(0);
+      for (const prop of props) {
+        const centre = transformCardinalPoint(prop.position, rotation, [prop.blueprint.size[0] / 16, 0, prop.blueprint.size[2] / 16]);
+        expect(prop.position[1]).toBeCloseTo(ground(centre[0], centre[2]));
+      }
+    }
+  });
   it.each(['hamlet', 'town'] as const)('places reviewed Hearth homes and passive garden edges in the %s', tier => {
     const layout = generateKingdom({ seed: 'willowmere', tier, firstYear: tier === 'town' ? 2022 : 2025, year: 2026 });
     const { houses, props } = createSettlementContent(layout);
