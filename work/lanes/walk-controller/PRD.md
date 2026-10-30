@@ -42,12 +42,12 @@ after main has stopped editing them. The integrator alone calls those modules fr
   an insufficient recovery seam becomes `needs:`, never a new return type. Keep distance tied to actual
   horizontal travel. · evidence: meaningful
   deterministic recording, thin-wall/corner/embedded/mismatch tests; observed real supplied wall collision.
-- [ ] **WC03 — Walk half-metre steps and jump once.** Add supported .5 m auto-step trials with headroom,
+- [x] **WC03 — Walk half-metre steps and jump once.** Add supported .5 m auto-step trials with headroom,
   horizontal progress and final support checks; retain slide on rejection. Tune shared acceleration/quick stops,
   sprint and grounded jump, document chosen constants and smooth rendered step height separately. No airborne
   climbing or repeated held jump. · evidence: exact-height/too-high/ceiling/grazing/narrow-landing tests; keyboard
   walk/sprint/one-jump route with matching gait distance and safe feet in the real kingdom.
-- [ ] **WC04 — Keep every input under control.** Complete keyboard event ownership, camera-relative byte
+- [x] **WC04 — Keep every input under control.** Complete keyboard event ownership, camera-relative byte
   quantization, jump pulse, drag orbit, optional labelled lock, wheel and phone thumb/orbit/pinch input.
   E remains reserved for interactions; never bind it to camera orbit.
   Filter lock deltas exactly as spec R8; recover rejection/re-lock cleanly. Clear held/pending/capture state on
@@ -80,3 +80,6 @@ after main has stopped editing them. The integrator alone calls those modules fr
 ## Backlog
 
 The worker records discoveries here and never selects them without a new brief.
+
+- The reference court (`/-/realm`, read-only) draws every walker's shadow at floor height, so a citizen on its
+  .5 m block casts it on the paving, and clips the self name label at the right edge at 1440×900.

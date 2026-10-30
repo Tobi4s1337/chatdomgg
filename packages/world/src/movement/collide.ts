@@ -162,6 +162,104 @@ export function slideHorizontal(s: PlayerState, dx: number, dz: number, world: C
   return result;
 }
 
+/** Highest obstacle a grounded walker climbs without jumping: one terrain voxel. */
+export const STEP_HEIGHT = WALK_BODY.stepHeight;
+/**
+ * A step is only climbed when the intended direction carries into it: the component across the obstacle's face
+ * must be at least 1/`STEP_GRAZE` of the component along it (about 14 degrees). Skimming a ledge slides past it.
+ */
+export const STEP_GRAZE = 4;
+/**
+ * The tread must carry the body's centre this far past the obstacle face, at most one step below the landing and
+ * with no taller solid there. A rail or kerb with a drop or a wall right behind it is not a landing.
+ */
+export const STEP_LANDING = .2;
+/** A climb must gain this much more travel along the intended path than the ordinary slide, per metre of travel. */
+export const STEP_PROGRESS = 1e-3;
+
+/**
+ * Lowest rise that clears every low obstacle on the horizontal path from the current position: the highest solid
+ * top above the feet and within `STEP_HEIGHT`, among solids the swept body actually meets this tick. 0 if none.
+ */
+function stepRise(s: PlayerState, dx: number, dz: number, world: CollisionWorld): number {
+  const a = bodyBounds(s);
+  const swept: Bounds = {
+    min: [a.min[0] + Math.min(0, dx), s.y, a.min[2] + Math.min(0, dz)],
+    max: [a.max[0] + Math.max(0, dx), s.y + STEP_HEIGHT, a.max[2] + Math.max(0, dz)],
+  };
+  let top = s.y;
+  for (const b of world.query(swept)) {
+    const t = b.max[1]!;
+    if (t <= s.y + CONTACT_EPSILON || t > s.y + STEP_HEIGHT + CONTACT_EPSILON || t <= top) continue;
+    const wx = axisWindow(a, b, 0, dx), wz = wx && axisWindow(a, b, 2, dz);
+    if (!wx || !wz || Math.max(wx[0], wz[0]) >= Math.min(wx[1], wz[1], 1)) continue;
+    top = t;
+  }
+  return top - s.y;
+}
+
+/**
+ * The tread test at (x, z): a solid top no lower than one step under the landing height `y`, and nothing that
+ * rises above `y` at that point.
+ */
+function treadAt(x: number, y: number, z: number, world: CollisionWorld): boolean {
+  let tread = false;
+  for (const b of world.query({ min: [x, y - STEP_HEIGHT, z], max: [x, y + CONTACT_EPSILON, z] })) {
+    if (x < b.min[0]! || x > b.max[0]! || z < b.min[2]! || z > b.max[2]!) continue;
+    if (b.max[1]! > y + CONTACT_EPSILON) return false;
+    if (b.max[1]! >= y - STEP_HEIGHT - CONTACT_EPSILON) tread = true;
+  }
+  return tread;
+}
+
+/**
+ * Grounded horizontal move with a supported auto-step. The ordinary slide runs first. Only when it was blocked,
+ * and the intended direction (`ix`, `iz`, the walker's target velocity) pushes into the blocked face rather than
+ * grazing it, a trial runs from the original position: rise exactly to the lowest height that clears the low
+ * obstacles on the path (headroom swept, as far as a ceiling allows), replay the whole horizontal travel, settle
+ * down onto support, then require more progress along the path than the slide and a tread for the body's centre
+ * past the face. A long catch-up tick may carry the body over a thin sill entirely; it then settles beyond it.
+ * Every move is a full-body sweep, so the committed body is never inside a solid. A rejected trial leaves the
+ * ordinary slide untouched.
+ */
+export function slideOrStep(s: PlayerState, dx: number, dz: number, ix: number, iz: number, world: CollisionWorld): SlideResult {
+  const x0 = s.x, y0 = s.y, z0 = s.z;
+  const slide = slideHorizontal(s, dx, dz, world);
+  if (!slide.blockedX && !slide.blockedZ || ix * dx + iz * dz <= 0) return slide;
+  const climbX = slide.blockedX && ix !== 0 && Math.abs(ix) * STEP_GRAZE >= Math.abs(iz);
+  const climbZ = slide.blockedZ && iz !== 0 && Math.abs(iz) * STEP_GRAZE >= Math.abs(ix);
+  if (!climbX && !climbZ) return slide;
+  const trial: PlayerState = { ...s, x: x0, y: y0, z: z0 };
+  const rise = stepRise(trial, dx, dz, world);
+  if (rise <= 0) return slide;
+  // A ceiling may cut the rise short; the replayed travel then only clears what fits under it.
+  sweepVertical(trial, rise, world);
+  const climbed = slideHorizontal(trial, dx, dz, world);
+  sweepVertical(trial, y0 - trial.y, world);
+  // Settling never goes below the start, and the rise never exceeds `STEP_HEIGHT`: only support is left to check.
+  if (!supported(trial, world)) return slide;
+  const travel = Math.sqrt(dx * dx + dz * dz);
+  const gained = (trial.x - x0) * dx + (trial.z - z0) * dz - ((s.x - x0) * dx + (s.z - z0) * dz);
+  if (!(gained > STEP_PROGRESS * travel * travel)) return slide;
+  const reach = WALK_BODY.radius + STEP_LANDING;
+  const px = s.x + (slide.blockedX ? (dx > 0 ? reach : -reach) : 0), pz = s.z + (slide.blockedZ ? (dz > 0 ? reach : -reach) : 0);
+  if (!treadAt(px, trial.y, pz, world)) return slide;
+  s.x = trial.x; s.y = trial.y; s.z = trial.z;
+  return climbed;
+}
+
+/**
+ * Keeps a walker on the ground down a step: a body that was supported, is not rising and has walked off an edge
+ * drops straight onto support within `STEP_HEIGHT` below. A deeper drop is a fall and the body stays put to fall.
+ */
+export function stepDown(s: PlayerState, world: CollisionWorld): boolean {
+  const y = s.y;
+  sweepVertical(s, -STEP_HEIGHT, world);
+  if (supported(s, world)) return true;
+  s.y = y;
+  return false;
+}
+
 /** A solid top within `SUPPORT_PROBE` below the feet, overlapping the footprint, carries the body. */
 export function supported(s: Pick<PlayerState, 'x' | 'y' | 'z'>, world: CollisionWorld): boolean {
   const a = bodyBounds(s);

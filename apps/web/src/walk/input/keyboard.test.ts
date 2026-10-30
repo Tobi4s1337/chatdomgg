@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createWalkKeys, isEditableTarget } from './keyboard';
+import { createWalkKeys, isEditableTarget, isKeyboardControl } from './keyboard';
 
 type KeyInit = { code: string; repeat?: boolean; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; target?: unknown };
 function key(target: EventTarget, type: 'keydown' | 'keyup', init: KeyInit): Event {
@@ -65,7 +65,40 @@ describe('walking keys', () => {
     expect(isEditableTarget(null)).toBe(false);
   });
 
-  it('never leaves a key stuck after blur, a hidden page, a chat box, Cmd or a menu', () => {
+  it('leaves Space and arrows to a keyboard-focused control, but walks and jumps past a clicked button', () => {
+    const keyboard = new EventTarget(), keys = createWalkKeys(keyboard);
+    const control = (tagName: string, focusVisible: boolean, attrs: Record<string, string> = {}) => ({
+      tagName, getAttribute: (name: string) => attrs[name] ?? null, hasAttribute: (name: string) => name in attrs,
+      matches: (selector: string) => selector === ':focus-visible' && focusVisible,
+    });
+    const tabbed = control('BUTTON', true);
+    const space = key(keyboard, 'keydown', { code: 'Space', target: tabbed });
+    key(keyboard, 'keydown', { code: 'ArrowUp', target: control('DIV', true, { role: 'slider' }) });
+    expect([space.defaultPrevented, keys.takeJump(), keys.forward]).toEqual([false, false, 0]);
+    key(keyboard, 'keyup', { code: 'Space' }); key(keyboard, 'keyup', { code: 'ArrowUp' });
+    // W walks even with a focused control: no control uses letters.
+    key(keyboard, 'keydown', { code: 'KeyW', target: tabbed });
+    expect(keys.forward).toBe(1);
+    key(keyboard, 'keyup', { code: 'KeyW' });
+    // The time-of-day button someone just clicked keeps focus without a ring: Space is a jump, not a second click.
+    const clicked = key(keyboard, 'keydown', { code: 'Space', target: control('BUTTON', false) });
+    expect([clicked.defaultPrevented, keys.takeJump()]).toEqual([true, true]);
+    key(keyboard, 'keyup', { code: 'Space' });
+    key(keyboard, 'keydown', { code: 'ArrowLeft', target: control('A', false, { href: '/map' }) });
+    expect(keys.right).toBe(-1);
+    expect(isKeyboardControl(control('A', true))).toBe(false);
+    expect(isKeyboardControl(control('DIV', true))).toBe(false);
+    expect(isKeyboardControl(control('SUMMARY', true))).toBe(true);
+  });
+
+  it('leaves keys to an IME that is composing', () => {
+    const keyboard = new EventTarget(), keys = createWalkKeys(keyboard);
+    const event = Object.assign(new Event('keydown', { cancelable: true }), { code: 'KeyW', repeat: false, ctrlKey: false, metaKey: false, altKey: false, isComposing: true });
+    keyboard.dispatchEvent(event);
+    expect([keys.forward, event.defaultPrevented]).toEqual([0, false]);
+  });
+
+  it('never leaves a key stuck after blur, a hidden page, a chat box, a context menu, Cmd or a menu', () => {
     const keyboard = new EventTarget(), doc = page(), keys = createWalkKeys(keyboard, doc);
     const hold = () => { key(keyboard, 'keydown', { code: 'KeyW' }); key(keyboard, 'keydown', { code: 'ShiftLeft' }); key(keyboard, 'keydown', { code: 'Space' }); };
     const released = () => keys.forward === 0 && !keys.sprint && !keys.takeJump();
@@ -77,6 +110,11 @@ describe('walking keys', () => {
     keyboard.dispatchEvent(focus); expect(released()).toBe(true);
     // macOS drops the keyup of W when it is released while Cmd is held.
     hold(); key(keyboard, 'keyup', { code: 'MetaLeft' }); expect(keys.forward).toBe(0);
+    // A native context menu swallows keyups; one the page handles itself does not.
+    hold(); keyboard.dispatchEvent(new Event('contextmenu', { cancelable: true })); expect(released()).toBe(true);
+    const handled = new Event('contextmenu', { cancelable: true }); handled.preventDefault();
+    key(keyboard, 'keydown', { code: 'KeyW' }); keyboard.dispatchEvent(handled); expect(keys.forward).toBe(1);
+    key(keyboard, 'keyup', { code: 'KeyW' });
     hold(); keys.setEnabled(false); expect(released()).toBe(true);
     key(keyboard, 'keydown', { code: 'KeyD' }); expect(keys.right).toBe(0);
     keys.setEnabled(true); key(keyboard, 'keydown', { code: 'KeyD' }); expect(keys.right).toBe(1);
