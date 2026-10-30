@@ -5,6 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 const args = process.argv.slice(2);
 const deferShaderHint = args.includes('--defer-shader-hint');
+const holdLightWorkers = args.includes('--hold-light-workers');
 const baseIndex = args.indexOf('--base-url');
 if (baseIndex >= 0 && (!args[baseIndex + 1] || args[baseIndex + 1].startsWith('--'))) throw new Error('--base-url requires a URL');
 let base = baseIndex < 0 ? undefined : args[baseIndex + 1].replace(/\/$/, '');
@@ -30,13 +31,16 @@ try {
       return parameter === 0x91b1 ? false : getProgramParameter.call(this, program, parameter);
     };
   });
-  await page.addInitScript(() => {
+  await page.addInitScript(holdLightWorkers => {
     const NativeWorker = window.Worker;
     window.__liveWorkerErrors = [];
+    const held = []; let released = !holdLightWorkers;
+    window.__releaseLightWork = () => { released = true; for (const send of held.splice(0)) send(); };
     window.Worker = class extends NativeWorker {
-      constructor(...args) { super(...args); this.addEventListener('error', event => window.__liveWorkerErrors.push({ url: String(args[0]), message: event.message })); this.addEventListener('messageerror', () => window.__liveWorkerErrors.push({ url: String(args[0]), message: 'messageerror' })); }
+      constructor(...args) { super(...args); this.lightField = String(args[0]).includes('light-field-worker'); this.addEventListener('error', event => window.__liveWorkerErrors.push({ url: String(args[0]), message: event.message })); this.addEventListener('messageerror', () => window.__liveWorkerErrors.push({ url: String(args[0]), message: 'messageerror' })); }
+      postMessage(...args) { if (this.lightField && !released) held.push(() => super.postMessage(...args)); else super.postMessage(...args); }
     };
-  });
+  }, holdLightWorkers);
   const start = Date.now();
   await page.goto(`${base}/?tier=town&hour=19.5`, { waitUntil: 'domcontentloaded', timeout: 240_000 });
   let last = '', lastPrint = 0, state;
@@ -46,16 +50,18 @@ try {
     const key = JSON.stringify([state.flag, state.stats?.ready, state.gate]);
     if (key !== last || elapsedMs - lastPrint >= 10_000) { report.timeline.push({ elapsedMs, ...state }); console.log(JSON.stringify(report.timeline.at(-1))); last = key; lastPrint = elapsedMs; }
     report.workerErrors = state.workerErrors;
-    // A live feed may keep advancing the light-worker queue. Opening the page
-    // requires a rendered scene and the first upload from all three fields;
-    // queue idleness is only needed below for deterministic replay assertions.
+    // The place opens after its first full frame. Light preparation refines it
+    // independently, and is checked separately after the gate has cleared.
     if ((state.flag && state.stats?.ready) || state.gate?.includes('Try the gate again')) break;
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
   report.readyElapsedMs = Date.now() - start;
   assert.ok(state?.flag && state.stats?.ready, `Live page did not open within 240s or entered error state: ${JSON.stringify(state)}`);
   assert.equal(state.gate, null, `Readiness gate remains: ${state.gate}`);
-  const stats = state.stats;
+  report.checks.push({ name: 'gate opens independently of light preparation', stats: state.stats });
+  if (holdLightWorkers) { assert.equal(state.stats.fieldUploads, 0); await page.evaluate(() => window.__releaseLightWork()); }
+  await page.waitForFunction(() => window.__chatdomKingdom.stats.lightingReady, null, { timeout: 180_000 });
+  const stats = await page.evaluate(() => ({ ...window.__chatdomKingdom.stats }));
   assert.ok(stats?.ready && stats.drawCalls > 0 && stats.triangles > 0 && stats.fieldUploads >= 3 && stats.fieldBytes > 0, `Ready without rendered scene and all fields: ${JSON.stringify(stats)}`);
   assert.equal(stats.homes, 240, 'Town should render 240 homes');
   assert.equal(stats.activeWindows, 240, 'Default live presentation should show the simulated crowd');
@@ -76,6 +82,7 @@ try {
   report.result = 'passed';
   console.log(JSON.stringify(report, null, 2));
 } catch (error) {
+  report.diagnostics = await page?.evaluate(() => window.__chatdomKingdom?.inspect?.()).catch(() => null);
   report.result = 'failed'; report.failure = error.stack ?? String(error); throw error;
 } finally {
   try { await page?.close(); } finally {

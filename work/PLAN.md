@@ -322,50 +322,50 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Town closed. Next: citizens walking the streets and building a house block by block.**
-Founder direction: depth goes into silhouette, motion, light, the moment and contracts other people consume.
-Invisible correctness gets one useful test. Do not reopen terrain/light/budget proof work for this scene;
-fix visible bugs as they arise. No audit or record-keeping commits. Keep this handoff to one page.
+**Town closed. Active work: citizens walking home, then private voxel building and housewarming.**
+Depth belongs in silhouette, motion, light, the moment and consumed contracts. One useful boundary test;
+lean serial captures. No more town terrain/light/budget proofs or record-only commits.
 
-**Landed:** `b720a50` replaces the parallel street layout with contour lanes and connected approaches,
-a market with well/stalls, and the twelve-module castle on its rise. The same generator makes the current
-24-home hamlet and 240-home town. Homes face their streets; dusk starts lived-in, with the labelled
-SIMULATED presence adapter driving their windows. Replay still goes dark → Juniper → town ripple → beacon.
-The camera now shows more warm facades; the phone keeps the complete castle silhouette in frame.
-Workers mesh the real content with AO, terrain and light share one surface, and the actual presence fields
-light the whole inhabited domain. Existing real Herald wiring remains one source-adapter swap.
+**Live gate takes priority.** `5c04787` removed the indefinite shader-completion barrier, but the founder's
+Chrome149/RTX5080 still waited at the subsequent first-light gate. Opening now requires the loaded scene's
+successful render; independent light refinement starts during loading and cannot hold that gate. `lightingReady`
+remains separate for captures. `window.__chatdomKingdom.inspect()` reads worker progress/upload bytes and render
+markers independently of the animation stats. No click is required. The revised preview is on5190; founder GPU
+confirmation is pending. `34867cd` replaces the slow horizon proof sweep with three representative tests
+(~0.74s test time), so lane reviews can pick it up now.
 
-**Acceptance:** `pnpm verify` passed (957 tests plus standard captures). Main opened the final dusk shots
-at 1440×900 and390×844: `work/evidence/kingdom/winding-town/`. The exact ordinary URL
-`/?tier=town&hour=19.5` on5190 opened with no browser/worker errors; replay to0/1/240 also passed.
-No real-GPU frame timing is claimed. Founder will time it on RTX5080. Further scene proof/captures are closed
-by the founder's latest brief. The visual generator's current fixtures work; automatic next-year extension
-still needs work when growth becomes a consumer. Do not claim that broader persistence contract frozen.
+**Gate evidence:** isolated from unfinished citizens in `../worktrees/gate-fix`. The no-time town opened even
+with all light-worker messages held and shader hints pending; releasing the workers produced all three fields
+and replay0/1/240 passed. `pnpm verify --hour dusk` passed954 tests plus seven serial standard-size captures;
+main inspected its town dusk image. The earlier full matrix passed at the shader-barrier fix. Software timing
+is not a GPU measurement. No new wave film or further town composition work is needed.
 
-**New lanes ready:** each has its spec, PRD, empty progress log, local branch and sibling worktree.
+**Uncommitted main work (preserve it):** `packages/shared/src/build.ts` and `citizen-chat.ts`;
+`packages/world/src/citizens/` (actual street routes, seekable walks, approved-node goals, arrival-light timestamp)
+and `build/` (draft operations/history, save format, shaping and honest publication boundary);
+`apps/web/src/citizens/` (part instancing/gait), `kingdom/citizen-scene.ts` and partial scene/UI integration;
+`apps/web/src/build/` (worker mesh, pointer tools, private local save, palette and tool UI). Focused CPU scenarios,
+typecheck and scoped lint passed; integrated visual acceptance has NOT happened. The build session still needs
+main scene/camera/house-replacement/housewarming wiring. LIVE draft persistence/moderation is unavailable;
+local publication must say SIMULATED. Keep that limitation explicit.
 
-| Lane | Spec | Owns |
-| --- | --- | --- |
-| `panel-stream` | `work/specs/07-panel-stream.md` | Twitch panel and stream presentation; renderer stays main-owned |
-| `wardrobe-body` | `work/specs/08-wardrobe-body.md` | Body/hair/wardrobe content and posed avatar bench |
-| `forge-pieces` | `work/specs/09-forge-pieces.md` | Three construction families and assembled-piece bench |
-| `civic-props` | `work/specs/10-civic-props.md` | Market/castle/public furniture in Hearth and Tide |
-| `sound` | `work/specs/11-sound.md` | Procedural/permissive foley, walking/building cues and browser mix |
+**Wardrobe:** WB01 is now committed on `lane/wardrobe-body` (`000d8eb`, then main merge `faa2ba0`), clean when
+checked. Review/merge it before the street look. Its factories/compile API fit the frozen rig; root needs the
+package export. Its17-part articulated legs require adapting the fallback renderer's rigid-leg foot correction.
+Use its authored citizen rather than growing the temporary core look into a second wardrobe library.
 
-Branches are `lane/<name>`; worktrees are `../worktrees/<name>`. Five Sol/high spec agents wrote these;
-main reviewed and supplied their first-consumer hooks. The team starts the workers. Main merges them.
-Shared avatar parts use the0.0625m lattice and16-bone chibi rig with sockets; Forge pieces carry a separate
-connector/door sidecar without changing build blueprints. Both have one focused boundary fixture.
-The material registry now includes skin/hair/fabric swatches. Optional web route hooks admit the new benches
-and surfaces as their modules arrive. Panel/audio package entries and the workspace lockfile are prepared;
-civic/Forge collection hooks are installed. Never let a lane edit shared contracts or the lockfile.
+**New draft handoffs:** specs13–16 and PRDs exist for `build-tools`, `build-templates`, `vox-import` and
+`crowd-behaviour`; no branches/worktrees yet. Finish their actual consumer hooks, review and freeze, commit with
+working core, then create `lane/<name>` and `../worktrees/<name>`. Sol/high wrote them. Build UI optional tools/import
+hooks exist; main still owns catalogue/bench routes, import package/lock entry, cue/policy/pose adapters. References
+are `work/references/build-shaping.md`, `citizen-motion.md`, `vox-import.md`. Do not claim drafts ready early.
 
-**Existing team:** Atlas and Herald remain team-owned. Hearth homes and street props are integrated; Tide
-continues separately. Herald real-channel delivery is not claimed by a SIMULATED preview. The panel's missing
-server authority must remain an honest unavailable state, never client-asserted identity or fake success.
+**Existing team:** specs07–11 and branch/worktrees exist for panel-stream, wardrobe-body, forge-pieces,
+civic-props and sound. Atlas/Herald remain team-owned; Hearth/street props integrated, Tide separate. Preserve
+active lane edits. Source remains labelled SIMULATED until the actual adapter supplies live evidence.
 
-**Host and next integration:** main preview5190 serves the built town. Atlas5193/Herald5194 remain reserved;
-manual lane previews choose a free5170–5199 port. Captures use the shared lock and stay lean/serial. The host's
-Postgres/Valkey/Surveyor and other services are untouched. `.env` stays ignored. Main's next work is avatar
-motion/street navigation and tactile block placement, using the new content boundaries; no more scene-proof
-chores. Sound sources remain CC0/permissive plus procedural, with credits merged into `THIRD_PARTY.md`.
+**Host:** main5190 currently serves the isolated gate-fix build, with no unfinished citizens. The unserved
+citizen build is in a temporary output directory. Atlas5193/Herald5194 reserved; manual previews use a free5170–5199
+port. Shared capture lock and two-CPU runs keep the host lean. Postgres/Valkey/Surveyor untouched; `.env` ignored.
+Next: confirm opening on the5080, then connect/review citizens and build mode, two looked-at moments, short walking
+and building captures, smoke + verify, commit/push. Keep this section to one page.
