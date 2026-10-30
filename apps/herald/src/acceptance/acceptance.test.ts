@@ -84,7 +84,7 @@ function config(r: Rig): HeraldConfig {
   return {
     channelLogin: BROADCASTER.login, channelLoginDefaulted: false, readerLogin: READER.login, redirectUri: null,
     credentials: { clientId: CLIENT_ID, clientSecret: new Secret(SECRET) }, conduitId: r.conduitId, problems: [],
-    dataDir: r.dataDir, kingdom: LAYOUT, secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env',
+    dataDir: r.dataDir, kingdom: LAYOUT, port: 5194, secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env',
   };
 }
 
@@ -112,7 +112,8 @@ async function until(predicate: () => boolean | Promise<boolean>, limitMs = 180_
     await realPause(1);
   }
   const r = rigs.at(-1);
-  if (r?.handle) process.stderr.write(`UNTIL ${JSON.stringify((await health(r)).source.counters)} ${JSON.stringify((await health(r)).source.delivery?.ingest)} ${JSON.stringify((await health(r)).source.frame)} sockets=${r.eventsub.openSockets.length} server=${JSON.stringify((await health(r)).server)} raw=${r.readers.map(x => x.raw.length)}\n${r.log.slice(-8).join('\n')}\nframes=${r.readers.map(x => x.frames.length + ':' + JSON.stringify(x.frames.at(-1)?.windows.filter(w => w.publicName)))}\n`);
+  // Redacted health and the last log lines say where the composition stood when the wait ran out.
+  if (r?.handle) process.stderr.write(`condition not reached\n${(await get(r.handle.server.port, HEALTH_PATH)).body}\n${r.log.slice(-8).join('\n')}\n`);
   throw new Error('condition not reached');
 }
 
@@ -145,7 +146,10 @@ interface Health {
     readonly observed?: { readonly chatters: { readonly condition: string; readonly last: null | { readonly end: string; readonly people: number; readonly pages: number } } };
     readonly delivery?: {
       readonly covered: boolean;
-      readonly ingest: { readonly counters: Record<string, number> };
+      readonly ingest: {
+        readonly counters: Record<string, number>;
+        readonly latency: { readonly samples: number; readonly last: null | { readonly occurredAt: number; readonly receivedAt: number; readonly appliedAt: number; readonly sequence: number | null } };
+      };
     };
   };
   readonly server: { readonly stalledDisconnects: number; readonly refused: number };
@@ -184,16 +188,10 @@ function say(r: Rig, person: { id: string; name: string }, messageId: string, me
 }
 
 async function publishing(r: Rig): Promise<void> {
-  try {
-    await until(async () => {
-      const h = await health(r);
-      return h.source.available && h.source.frame !== null && h.source.frame.connection === 'fresh';
-    });
-  } catch (error) {
-    process.stderr.write(`CALLS ${JSON.stringify(r.fake.calls.slice(0, 30))}\n`);
-    process.stderr.write(`DEBUG ${JSON.stringify(await health(r))}\n${r.log.join('\n')}\n`);
-    throw error;
-  }
+  await until(async () => {
+    const h = await health(r);
+    return h.source.available && h.source.frame !== null && h.source.frame.connection === 'fresh';
+  });
 }
 
 /** Every file under a directory, as path and text. */
@@ -280,6 +278,12 @@ describe('the dev composition under SIMULATED Twitch', { timeout: 60_000 }, () =
     say(r, TALKERS.juniper, 'simulated-message-1');
     const spoken = await frameWhere(reader, frame => named(frame).length === 1);
     expect(named(spoken).map(window => window.publicName)).toEqual(['Juniper']);
+    // Health times it from Twitch's stamp to the frame that first showed it, and that frame is the one read here.
+    const timing = (await health(r)).source.delivery!.ingest.latency;
+    expect(timing.samples).toBe(1);
+    expect(timing.last!.sequence).toBeLessThanOrEqual(spoken.sequence);
+    expect(reader.frames.find(frame => frame.sequence === timing.last!.sequence)?.windows.some(window => window.publicName === 'Juniper')).toBe(true);
+    expect(timing.last!.appliedAt).toBeGreaterThanOrEqual(timing.last!.receivedAt);
     // Hostile names lose their bidi override but keep the visible characters, as plain data.
     say(r, TALKERS.hostile, 'simulated-message-2');
     const both = await frameWhere(reader, frame => named(frame).length === 2);

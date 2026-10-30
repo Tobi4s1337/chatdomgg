@@ -15,7 +15,7 @@ seams rather than expanding scope. The five tasks are an execution order for the
 
 ## Tasks
 
-- [ ] **AH01 — A recognisable iron anvil in dusk light.** Implement the real factory and an early complete
+- [x] **AH01 — A recognisable iron anvil in dusk light.** Implement the real factory and an early complete
   horn/body/waist/feet on a worn stone block, with an open hardy hole. Add the standalone honest bench and scoped
   capture command; expose only implemented views until their geometry exists and fail unsupported requests
   visibly. Demonstrate cold anvil close and street views at both sizes. · evidence: looked shots + green commands

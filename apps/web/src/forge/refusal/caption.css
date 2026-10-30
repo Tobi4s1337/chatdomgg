@@ -1,0 +1,4 @@
+/* The forge's mood line: a small parchment slip pinned under the shot, inked, never an alert. */
+.forge-mood-line{display:inline-block;box-sizing:border-box;max-width:min(30em,calc(100vw - 32px));padding:.5em 1.15em .56em;border-radius:3px 5px 4px 6px;background:radial-gradient(120% 140% at 50% 0%,#f1e1bd 0%,#e4cfa3 62%,#d2b885 100%);color:#3a2c1f;font:italic 400 clamp(16px,1.15vw + 7px,26px)/1.3 Georgia,'Iowan Old Style',serif;letter-spacing:.01em;text-align:center;text-wrap:balance;overflow-wrap:anywhere;box-shadow:0 0 0 1px #8d6b3f,0 0 0 3px #3b2e2299,0 3px 0 3px #1c171399,0 10px 26px #10121c55;pointer-events:none;will-change:opacity,transform}
+.forge-mood-line::before,.forge-mood-line::after{content:'';display:inline-block;width:.32em;height:.32em;margin:0 .62em .16em;border-radius:50%;vertical-align:middle;background:radial-gradient(circle at 35% 30%,#f2d08e,#a8793f 60%,#5b4125);box-shadow:0 1px 0 #f6e2b54d}
+.forge-mood-line[hidden]{display:none}

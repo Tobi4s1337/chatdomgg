@@ -21,7 +21,7 @@ function config(overrides: Partial<HeraldConfig> = {}): HeraldConfig {
     channelLogin: 'tobi4s_', channelLoginDefaulted: true, readerLogin: READER.login, redirectUri: new URL(REDIRECT),
     credentials: { clientId: CLIENT_ID, clientSecret: new Secret(SECRET) }, conduitId: null, problems: [],
     dataDir: '/simulated/data', kingdom: { seed: 'tobi4s_', tier: 'hamlet', firstYear: 2026, year: 2026 },
-    secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env', ...overrides,
+    port: 5194, secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env', ...overrides,
   };
 }
 
@@ -81,6 +81,15 @@ describe('loadConfig', () => {
       { key: 'HERALD_TWITCH_ENV_FILE', issue: 'readable_by_others' },
       { key: 'TWITCH_CLIENT_SECRET', issue: 'missing' },
     ]));
+  });
+
+  it('serves on 5194 unless HERALD_PORT names another unprivileged port, and refuses nonsense', async () => {
+    expect((await loadConfig({ env: {}, ...files({}) })).port).toBe(5194);
+    expect((await loadConfig({ env: { HERALD_PORT: '5196' }, ...files({}) })).port).toBe(5196);
+    for (const raw of ['80', '5195', '70000', '51 96', 'next']) {
+      const loaded = await loadConfig({ env: { HERALD_PORT: raw }, ...files({}) });
+      expect(loaded.problems).toContainEqual({ key: 'HERALD_PORT', issue: 'invalid' });
+    }
   });
 
   it('reports an absent secrets file', async () => {
