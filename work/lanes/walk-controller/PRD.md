@@ -29,14 +29,14 @@ after main has stopped editing them. The integrator alone calls those modules fr
 
 ## Tasks
 
-- [ ] **WC01 — Put the player camera on a real citizen early.** Create the owned controller entry/lifecycle,
+- [x] **WC01 — Put the player camera on a real citizen early.** Create the owned controller entry/lifecycle,
   separate input/camera modules and exact integrator recipe using actual frozen realm render poses. Deliver a
   first camera-relative WASD and shoulder view with free cursor, film offset and dispose/reset behavior. Add a
   compact capture script and README with truthful ready/error checks and the actual entry URL. Ask integrator
   to bind it to the kingdom; record an explicit integration need if unavailable. Do not add a fake kingdom route
   or claim the reference court is the final surface. · evidence: first looked desktop/phone walking pose after
   binding, or clearly marked pending binding plus working module tests; exact integration recipe.
-- [ ] **WC02 — Make sweep and slide dependable.** Extend the exact shared step with bounded collision travel,
+- [x] **WC02 — Make sweep and slide dependable.** Extend the exact shared step with bounded collision travel,
   deterministic simultaneous contacts and support handling. Prevent thin-wall tunnelling, corner snag loops and
   diagonal speed gain. Add bounded embedded-body recovery and use the frozen adapter's recovery policy;
   an insufficient recovery seam becomes `needs:`, never a new return type. Keep distance tied to actual

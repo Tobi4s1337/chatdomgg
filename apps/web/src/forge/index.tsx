@@ -6,7 +6,7 @@ export function ForgePanel(props:{status:ForgeStatus;submit:(words:string)=>Prom
   const [words,setWords]=createSignal('!forge a chimney shaped like a sleeping dragon');
   const wishes=['a chimney shaped like a sleeping dragon','a crescent moon lantern','an owl weathervane'];
   async function submit(event:SubmitEvent){event.preventDefault();const request=words();setWords('');await props.submit(request);}
-  return <section class="forge-panel" aria-label="The Forge">
+  return <section class="forge-panel" aria-label="The Forge" style={{display:props.status.phase==='refusal'?'none':undefined}}>
     <div class="forge-panel-top"><span class="forge-eyebrow">THE FORGE · SIMULATED</span><button disabled={props.status.busy} onClick={props.close} aria-label="Leave the Forge">×</button></div>
     <h2>{props.status.title}</h2><p class="forge-message" role="status">{props.status.message}</p>
     <Show when={!props.status.busy} fallback={<div class="forge-ritual-caption"><span>✦</span> A wish is becoming part of the kingdom.</div>}>

@@ -15,13 +15,17 @@ export interface HelperExt {
   onVisibilityChanged?(callback: (visible: boolean) => void): void;
   readonly viewer?: HelperViewer;
   readonly actions?: { requestIdShare(): void };
+  readonly features?: { readonly isBitsEnabled?: boolean; onChanged?(callback: (changed: readonly string[]) => void): void };
 }
 
 export type HelperStatus =
   | { readonly kind: 'absent' }
   | { readonly kind: 'waiting' }
-  /** `loggedIn` comes from the opaque ID's prefix; `shared` from the Helper's viewer. Both are unverified. */
-  | { readonly kind: 'authorized'; readonly loggedIn: boolean; readonly shared: boolean; readonly role: string };
+  /**
+   * `loggedIn` comes from the opaque ID's prefix; `shared` from the Helper's viewer; `bits` from
+   * Twitch's feature flags. All are unverified display evidence.
+   */
+  | { readonly kind: 'authorized'; readonly loggedIn: boolean; readonly shared: boolean; readonly role: string; readonly bits: boolean };
 
 export interface HelperBridge {
   status(): HelperStatus;
@@ -52,10 +56,12 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
     const read = () => {
       if (!last) return;
       // An `A…` opaque ID is a logged-out viewer and a `U…` one is logged in. Neither is a Chatdom person.
-      emit({ kind: 'authorized', loggedIn: last.userId.startsWith('U'), shared: ext.viewer?.isLinked === true, role: ext.viewer?.role ?? 'viewer' });
+      emit({ kind: 'authorized', loggedIn: last.userId.startsWith('U'), shared: ext.viewer?.isLinked === true, role: ext.viewer?.role ?? 'viewer', bits: ext.features?.isBitsEnabled === true });
     };
     ext.onAuthorized(auth => { last = auth; token = auth.token; read(); });
     ext.viewer?.onChanged(read);
+    // Twitch's feature flags arrive after the first authorization and may change during a stream.
+    ext.features?.onChanged?.(read);
   }
   return {
     status: () => current,

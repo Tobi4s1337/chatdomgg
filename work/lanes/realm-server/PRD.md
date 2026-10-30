@@ -35,7 +35,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   injection and run a durable local room on 5191 by the end of this task. Focused R1/R2 test uses two competing
   writers, stale-epoch retry and lost COMMIT reply; prove one spend/fact/outcome after `lookup`/reload. Document
   local start/migrate commands and connection-safe failure. No live fallback to main's simulated memory adapter.
-- [ ] **RS02 — Twitch sign-in issues a checked room ticket** · evidence: test/log. Implement OIDC code/state/
+- [x] **RS02 — Twitch sign-in issues a checked room ticket** · evidence: test/log. Implement OIDC code/state/
   nonce verification, claimed person identity, hashed expiring/revocable Chatdom sessions, protected logout and
   opaque single-use kingdom tickets under `apps/api/src/realm-auth/`. Implement `RealmAuthenticator` under
   realm `src/auth/` using the same database. API runs on 5192 using main's scaffold. Focused R4/R5 tests use
@@ -56,7 +56,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   `src/outbox/`. Implement `loadIngress`/`executeIngress`: persist source dedupe, private checkpoint and all
   capability-tagged facts plus public presence outbox in one transaction. Closed evidenced interval unions survive
   restart without doubling overlap or inventing coverage gaps; qualified-night credit needs actual ten-minute
-  coverage and a current owned home. Implement typed synchronous bootstrap at `throughSequence`, existing
+  coverage and a current owned home. Implement typed synchronous bootstrap at `throughCursor` (public prefix, including presence without a new domain fact), existing
   `lifecycle` and `bindRoom` effects, plus separate transient/owner delivery. Keep stable event IDs, current
   projection restoration and explicit at-least-once retry. Focused R7 test interrupts after commit/before delivery
   acknowledgement, then resumes: one applied ingress result, same public event ID, no replayed economic change,

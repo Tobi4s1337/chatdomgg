@@ -138,10 +138,10 @@ Scenes remain owned by main and the team integrator; the lane delivers adapters 
    committed result stays committed even after cancellation; an unknown result stays privately pending/recovery-
    needed. Never call it cold/refunded/unpublished on the strength of the coordinator's catch path. Reload/reconnect
    restores the committed snapshot without another coal charge or ceremony. Install `RealmBootstrap.current`
-   as present approved state through `throughSequence`; it is never a sequence of historical rituals. Subscribe
+   as present approved state through `throughCursor`; it is never a sequence of historical rituals. Subscribe
    and buffer incoming durable deliveries before requesting bootstrap, validate kingdom/epoch/layout/collision
-   revision, install the checkpoint, discard buffered entries at or below its sequence, then apply only newer
-   ordered/deduplicated entries. A delivery gap under the server's cursor contract or writer-epoch change holds
+   revision, install the checkpoint, discard buffered entries at or below its cursor, then apply only newer
+   ordered/deduplicated entries. Presence deliveries can advance `cursor` without changing domain `sequence`. A delivery gap under the server's cursor contract or writer-epoch change holds
    effects and requests resync; private domain facts can legitimately make public fact sequences noncontiguous,
    so a skipped private sequence alone is not evidence of a lost public event. Transient speech,
    seats and private replies do not become historical domain facts. Bootstrap contains only public views.
@@ -183,7 +183,7 @@ Scenes remain owned by main and the team integrator; the lane delivers adapters 
 | Forge | Shared `KingdomForgeAuthority`, attempt/reservation/native home/attachment/outcome; existing `createKingdomForgeApplication` and `ForgeProviders`; Herald `ForgeCommandSink`/cancellation lease |
 | Build | Existing `BuildDraft`, `BuildPublicationCandidate`, `BuildPublicationReviewer`, `BuildPublicationDecision`; room intent validation and authority; no new public approval endpoint |
 | Presence | Private `PresenceInputSchema`; existing world presence reducer, `presenceTick`, projection; public `KingdomPresenceFrame` inside `RealmPublicDelivery` |
-| Client observations | `RealmBootstrap` current public state through `throughSequence`; durable `RealmPublicMessage` / `RealmPublicDelivery`, validated by kingdom/epoch/sequence/event ID; separate `RealmTransientMessage` chat/remove/clear and `CitizenChatCueSchema`; asset hashes fetched through realm-server's approved asset route |
+| Client observations | `RealmBootstrap` current public state through `throughCursor`; durable `RealmPublicMessage` / `RealmPublicDelivery`, validated by kingdom/epoch/cursor/event ID; separate `RealmTransientMessage` chat/remove/clear and `CitizenChatCueSchema`; asset hashes fetched through realm-server's approved asset route |
 
 Export `createRealmWiring(options)` from `apps/realm/src/wiring/index.ts`. Its programmatic result supplies
 `services: RealmRoomServices` for `createKingdomRoom(services)`, a trusted private ingress registry resolving the

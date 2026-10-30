@@ -65,7 +65,7 @@ continue an independent task, never invent the missing authority. Never pick fro
   never identify a quiet user publicly or infer viewing from viewer count. Demonstrate stable slots after restart,
   unnamed projection, offline beacon and stale-source states with main's view. R7–R9, R11–R12.
 
-- [ ] **H05 — Demonstrate the source under interruption and real load shapes** · evidence: acceptance + shots.
+- [x] **H05 — Demonstrate the source under interruption and real load shapes** · evidence: acceptance + shots.
   Finish synthetic 50,000-identity, overload, repeated cursor, reconnect overlap, stalled SSE, deletion-before-
   delivery, restart and revocation scenarios; inspect logs/output/disk for real chat text or secrets. Run complete
   acceptance and `pnpm verify` with main's integration. Open the standard screenshot set and record actual real
