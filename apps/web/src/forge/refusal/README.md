@@ -6,7 +6,9 @@ cough, a sulk and a clean settle at the anvil, with one line from the shared poo
 ## Input
 
 Only `{ kind: 'refusal', variant: 0 | 1 | 2 }` from `ForgePublicBeat`. The variant selects the line and nothing
-else; every variant has the same movement, length and bounds. Anything else passed to `play()` is ignored.
+else; every variant has the same movement, length and bounds. Anything else passed to `play()` is ignored,
+including a refusal beat with any extra field riding along (a maker, a prompt, a reason): the adapter does not
+take a richer object and strip it.
 
 | Variant | Line |
 |---|---|
@@ -24,7 +26,7 @@ import { createForgeRefusalPresentation, FORGE_MOOD_CAPTION_CLASS, FORGE_MOOD_DU
 import './refusal/caption.css';
 
 // caption: a dedicated empty node with class FORGE_MOOD_CAPTION_CLASS, already placed in the forge shot.
-const mood = createForgeRefusalPresentation({ root, anvil: [x, workSurfaceY, z], caption });
+const mood = createForgeRefusalPresentation({ root, anvil: [x, workSurfaceY, z], caption }); // motion: 'auto'
 mood.play(beat);              // an admitted, delayed public beat; ignored while one is active
 mood.update(secondsSincePlay); // every frame, from the host's clock; any value, any order
 mood.dispose();               // idempotent; removes only the adapter's own group and clears the caption
@@ -33,8 +35,12 @@ mood.dispose();               // idempotent; removes only the adapter's own grou
 - `root` has an identity world transform. The adapter adds one group (`forge-mood`) to it and removes only that.
 - `anvil` is the anvil's work surface in world metres. On main's ritual stage that is the stage origin plus
   `y = 1.45`.
-- Call `update()` past `FORGE_MOOD_DURATION` (or with an invalid value) to end the beat; it hides every owned
-  effect and empties the caption. A new `play()` is accepted only after that.
+- `update()` derives the whole pose from the supplied second, so skipped frames, a seek or a tab return land on
+  the right pose and never cough twice. Negative seconds clamp to zero. Past `FORGE_MOOD_DURATION`, or any sample
+  that is no time at all (NaN, ±Infinity, not a number), ends the beat: every owned effect hides and the caption
+  empties. A `play()` while a beat is active is ignored, never queued; a new one is accepted only after the end.
+- `motion` defaults to `'auto'`: the viewer's `prefers-reduced-motion` is read once when a beat is admitted, so a
+  beat never changes style halfway and no listener is held. `'full'` and `'reduced'` are for review benches.
 - Before `play()`: clear identity UI and any accepted-request context from the shot. The adapter cannot know
   whether a name is on screen; anonymity of the shot is the host's precondition.
 
@@ -50,6 +56,13 @@ mood.dispose();               // idempotent; removes only the adapter's own grou
 | 2.95–3.3 | The line fades out |
 | 3.0–3.5 | Settle: the embers sink into the anvil and fade |
 | 3.6 | Duration. Nothing owned remains visible |
+
+## Reduced motion
+
+Same clock, same line, same fade. The puff appears where the full cough comes to rest, without travel, wobble or
+spin, and crumbles there on the same seconds. The embers stay on their spots: they still dim on the cough, sulk
+low, brighten on recovery and shrink away at the settle, but they don't draw in, scatter, droop or hop. The
+mid-sulk sigh is left out (it is all travel) and the caption fades without its rise.
 
 ## Budget
 

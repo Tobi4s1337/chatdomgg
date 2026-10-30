@@ -14,6 +14,8 @@ import './style.css';
 /** What a capture can check. It describes the shot only; a public beat has nothing else to report. */
 export interface ForgeRefusalBenchReport extends ForgeRefusalBenchState {
   phase: string;
+  /** Whether the viewer asked for reduced motion; with `motion=auto` the adapter follows it. */
+  prefersReduced: boolean;
   caption: { text: string; hidden: boolean; overflow: boolean };
   draws: number;
   triangles: number;
@@ -70,7 +72,7 @@ export default function ForgeRefusalBench() {
       const root = new THREE.Group();
       scene.add(root);
       const geometries: THREE.BufferGeometry[] = [];
-      const mood = createForgeRefusalPresentation({ root, anvil: ANVIL, caption });
+      const mood = createForgeRefusalPresentation({ root, anvil: ANVIL, caption, motion: input.motion });
       let frameRequest = 0, started = 0;
       dispose = () => {
         cancelAnimationFrame(frameRequest);
@@ -97,7 +99,7 @@ export default function ForgeRefusalBench() {
         renderer.getContext().finish();
         const box = caption.getBoundingClientRect();
         window.__chatdomForgeRefusal = {
-          ...input, at: t, phase: t === null ? 'idle' : forgeMoodPhase(t),
+          ...input, at: t, phase: t === null ? 'idle' : forgeMoodPhase(t), prefersReduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
           caption: { text: caption.textContent ?? '', hidden: caption.hidden, overflow: !caption.hidden && (box.left < 0 || box.right > window.innerWidth || box.top < 0 || box.bottom > window.innerHeight || caption.scrollWidth > caption.clientWidth + 1) },
           draws: renderer.info.render.calls, triangles: renderer.info.render.triangles, width: host.clientWidth, height: host.clientHeight,
         };
@@ -134,6 +136,8 @@ export default function ForgeRefusalBench() {
       preview = () => {
         if (disposed || playing()) return;
         setPlaying(true);
+        // A fixed review frame leaves its sampled beat active; end it so the preview is admitted from zero.
+        mood.update(FORGE_MOOD_DURATION);
         mood.play(beat);
         started = performance.now();
         frameRequest = requestAnimationFrame(tick);
@@ -166,7 +170,7 @@ export default function ForgeRefusalBench() {
     <div ref={element => { host = element; }} class="frb-stage" />
     <header class="frb-head">
       <span>CHATDOM · THE FORGE’S MOOD</span>
-      <small>SIMULATED · public beat preview · {String(input.hour).padStart(2, '0')}:00</small>
+      <small>SIMULATED · public beat preview · {String(input.hour).padStart(2, '0')}:00{input.motion === 'reduced' ? ' · reduced motion' : ''}</small>
     </header>
     <div class="frb-caption-slot"><p ref={element => { caption = element; }} class={FORGE_MOOD_CAPTION_CLASS} /></div>
     <aside class="frb-card" aria-label="Preview controls">

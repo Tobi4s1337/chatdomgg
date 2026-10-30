@@ -5,6 +5,8 @@ import { FORGE_MOOD_COUGH_AT, FORGE_MOOD_SIGH_AT, emberLevel, emberMotion, hash,
 export const FORGE_MOOD_SOOT = 24;
 export const FORGE_MOOD_EMBERS = 14;
 const COUGH_CUBES = 20;
+// Where the reduced-motion puff sits for its whole life: roughly where the full cough comes to rest.
+const PUFF_REST_TRAVEL = 0.62, PUFF_REST_SPREAD = 0.9;
 
 // Grey-brown clay soot, never black: it has to read against a dusk sky as a soft lump of a cough.
 const SOOT_TONES = ['#7a7068', '#6b625b', '#847970', '#625a54', '#74695f'];
@@ -122,20 +124,31 @@ export function createForgeMoodLayers(anvil: readonly [number, number, number]) 
     mesh.setMatrixAt(i, matrix.compose(position, quaternion, scale));
   };
 
-  /** Sets every owned instance from elapsed seconds alone. */
-  function pose(t: number) {
+  /**
+   * Sets every owned instance from elapsed seconds alone. Reduced motion keeps the same clock,
+   * the same puff and the same ember dip, but nothing travels, wobbles, spins or hops.
+   */
+  function pose(t: number, reduced: boolean) {
     group.visible = true;
     // The soot: a tiny tickle at the anvil, one burst, a lingering lump that crumbles away.
     for (let i = 0; i < COUGH_CUBES; i++) {
       const tau = t - FORGE_MOOD_COUGH_AT - 0.05 * hash(i + 1.1);
+      const fade = 1 - smooth(sootFade[i]!, sootFade[i]! + 0.42, t);
       let size = 0;
-      if (tau >= 0) {
-        const travel = 0.82 * (1 - Math.exp(-tau * 6.5)) + 0.16 * tau, spread = 0.22 + 0.78 * (1 - Math.exp(-tau * 7)) + 0.1 * tau;
+      if (reduced) {
+        // The puff simply appears where it would come to rest, and crumbles there.
+        if (tau >= 0) {
+          position.copy(origin).addScaledVector(direction, PUFF_REST_TRAVEL).addScaledVector(sootOffset[i]!, PUFF_REST_SPREAD);
+          size = sootSize[i]! * 0.86 * smooth(0, 0.2, tau) * fade;
+          rotation.set((hash(i + 2.1) - 0.5) * 0.5, hash(i + 2.2) * 1.6, (hash(i + 2.3) - 0.5) * 0.5);
+        }
+      } else if (tau >= 0) {
+        const travel = 0.56 * (1 - Math.exp(-tau * 6.5)) + 0.12 * tau, spread = 0.22 + 0.7 * (1 - Math.exp(-tau * 7)) + 0.1 * tau;
         position.copy(origin).addScaledVector(direction, travel).addScaledVector(sootOffset[i]!, spread);
         position.x += Math.sin(t * 1.3 + i * 2.1) * 0.025;
         position.y += Math.sin(t * 1.1 + i * 1.7) * 0.02;
         const pop = 0.3 + 0.7 * smooth(0, 0.1, tau) + 0.14 * smooth(0.05, 0.14, tau) * (1 - smooth(0.14, 0.4, tau));
-        size = sootSize[i]! * pop * (1 - smooth(sootFade[i]!, sootFade[i]! + 0.42, t));
+        size = sootSize[i]! * pop * fade;
         const spin = 1 - Math.exp(-tau * 2.2);
         // Mostly upright cubes read as one voxel puff; a little tilt keeps it soft.
         rotation.set((hash(i + 2.1) - 0.5) * 0.5 + sootSpin[i]!.x * spin, hash(i + 2.2) * 1.6 + sootSpin[i]!.y * spin, (hash(i + 2.3) - 0.5) * 0.5 + sootSpin[i]!.z * spin);
@@ -149,11 +162,12 @@ export function createForgeMoodLayers(anvil: readonly [number, number, number]) 
       }
       place(soot, i, size);
     }
-    // The sigh: a few crumbs rise slowly, curl and fade halfway through the sulk.
+    // The sigh: a few crumbs rise slowly, curl and fade halfway through the sulk. It is all travel,
+    // so reduced motion leaves it out.
     for (let j = 0; j < FORGE_MOOD_SOOT - COUGH_CUBES; j++) {
       const i = COUGH_CUBES + j, tau = t - FORGE_MOOD_SIGH_AT - 0.07 * j;
       let size = 0;
-      if (tau >= 0) {
+      if (!reduced && tau >= 0) {
         position.copy(origin).add(away.set(0.03 * j - 0.04 + 0.07 * Math.sin(tau * 2.4 + j), 0.05 + 0.4 * (1 - Math.exp(-tau * 2.1)), 0.02 * j));
         size = sootSize[i]! * smooth(0, 0.12, tau) * (1 - smooth(0.42, 0.78, tau));
         rotation.set(j + tau * 1.4, j * 2 + tau, 0.5 * j);
@@ -163,17 +177,20 @@ export function createForgeMoodLayers(anvil: readonly [number, number, number]) 
     soot.instanceMatrix.needsUpdate = true;
 
     // The fire: a little intake, a startled drop, a droop, then a hop back to itself.
-    const level = emberLevel(t), motion = emberMotion(t);
+    const level = emberLevel(t), motion = emberMotion(t), still = reduced ? 0 : 1;
     for (let i = 0; i < FORGE_MOOD_EMBERS; i++) {
       const home = emberHome[i]!, h = hash(i + 4.1);
-      const bob = Math.sin(t * (1.6 + h) + h * 9) * 0.035 * (1 - 0.7 * motion.droop);
-      position.copy(home).lerp(origin, 0.32 * motion.draw);
-      away.copy(home).sub(origin).normalize();
-      position.addScaledVector(away, 0.17 * motion.scatter).addScaledVector(direction, 0.05 * motion.scatter);
-      position.y += bob - motion.droop * (0.05 + 0.3 * (home.y - anchor.y)) + motion.hop * (0.08 + 0.05 * h) - motion.sink * (home.y - anchor.y) * 0.85;
-      rotation.set(h * 5 + t * (0.4 + h), h * 3, h * 7 + t * 0.3);
+      position.copy(home);
+      if (!reduced) {
+        const bob = Math.sin(t * (1.6 + h) + h * 9) * 0.035 * (1 - 0.7 * motion.droop);
+        position.lerp(origin, 0.32 * motion.draw);
+        away.copy(home).sub(origin).normalize();
+        position.addScaledVector(away, 0.17 * motion.scatter).addScaledVector(direction, 0.05 * motion.scatter);
+        position.y += bob - motion.droop * (0.05 + 0.3 * (home.y - anchor.y)) + motion.hop * (0.08 + 0.05 * h) - motion.sink * (home.y - anchor.y) * 0.85;
+      }
+      rotation.set(h * 5 + t * (0.4 + h) * still, h * 3, h * 7 + t * 0.3 * still);
       place(embers, i, level < 0.01 ? 0 : emberSize[i]! * (0.45 + 0.55 * Math.min(1, level)) * (1 - 0.55 * motion.sink));
-      const flicker = 0.86 + 0.14 * Math.sin(t * (6 + 3 * h) + h * 20);
+      const flicker = reduced ? 0.95 + 0.05 * Math.sin(t * 2.4 + h * 20) : 0.86 + 0.14 * Math.sin(t * (6 + 3 * h) + h * 20);
       ember.copy(dim).lerp(hot, Math.min(1, level)).multiplyScalar((0.55 + 1.35 * Math.min(level, 1.3)) * flicker);
       emberTint.setXYZ(i, ember.r, ember.g, ember.b);
     }

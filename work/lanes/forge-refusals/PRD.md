@@ -19,7 +19,7 @@ host capture lock before preview/browser and capture serially. Main reviews/merg
   finished anticipation/cough/settle with one fixed generic caption, dedicated caption node and deterministic
   elapsed-time sampling. Keep the viewport free of citizen/request context; capture and inspect immediately.
   Do not pretend the preview button ran moderation or a live refusal selection window.
-- [ ] **FF02 — Give the sulk its pause, kindness and clean recovery** · evidence: temporal sheet + sequence regression.
+- [x] **FF02 — Give the sulk its pause, kindness and clean recovery** · evidence: temporal sheet + sequence regression.
   Finish the full short beat and all three supplied phrase variants with identical movement/duration. Add
   reduced-motion output, active-play suppression, invalid/seek/clear behavior, bounded pooled resources and
   idempotent disposal. One focused sequence test proves no queued/repeated cough, stale caption, borrowed-asset

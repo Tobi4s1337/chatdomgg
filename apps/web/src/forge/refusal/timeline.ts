@@ -23,6 +23,9 @@ export const FORGE_MOOD_SIGH_AT = 1.5;
 const CAPTION_IN: readonly [number, number] = [0.38, 0.66];
 const CAPTION_OUT: readonly [number, number] = [2.95, 3.3];
 
+/** `auto` follows the viewer's `prefers-reduced-motion`; a review bench may force either choice. */
+export type ForgeMoodMotion = 'auto' | 'full' | 'reduced';
+
 export type ForgeMoodPhase = keyof typeof FORGE_MOOD_PHASES | 'settled';
 
 export const clamp01 = (n: number) => n < 0 ? 0 : n > 1 ? 1 : n;
@@ -63,9 +66,12 @@ export function emberMotion(t: number) {
   return { draw, scatter, droop, hop, sink };
 }
 
-/** Caption presentation: opacity, a few pixels of rise, and whether it should be shown at all. */
-export function captionPose(t: number) {
+/**
+ * Caption presentation: opacity, a few pixels of rise, and whether it should be shown at all.
+ * Reduced motion keeps the same fade on the same clock and drops the rise.
+ */
+export function captionPose(t: number, reduced = false) {
   if (!(t >= CAPTION_IN[0] && t < CAPTION_OUT[1])) return { visible: false, opacity: 0, rise: 0 };
   const fadeIn = smooth(CAPTION_IN[0], CAPTION_IN[1], t), fadeOut = smooth(CAPTION_OUT[0], CAPTION_OUT[1], t);
-  return { visible: true, opacity: fadeIn * (1 - fadeOut), rise: (1 - fadeIn) * 6 - fadeOut * 4 };
+  return { visible: true, opacity: fadeIn * (1 - fadeOut), rise: reduced ? 0 : (1 - fadeIn) * 6 - fadeOut * 4 };
 }
