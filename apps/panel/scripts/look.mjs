@@ -3,7 +3,7 @@
 // payload over budget. Build first (`pnpm build`), then:
 //
 //   node apps/panel/scripts/look.mjs [--base-url http://127.0.0.1:5190] [--panel-url http://127.0.0.1:5195/nested/]
-//                                    [--only <name prefix>]
+//                                    [--only <name prefix>[,<prefix>…]]
 //
 // Without --base-url it serves this checkout's apps/web build on a free port. Without
 // --panel-url it serves apps/panel/dist under a nested, versioned path, the way
@@ -122,11 +122,12 @@ try {
     return path;
   };
   // Many same-sized captures on one sheet, in rows, for a single look.
-  const contactSheet = (name, paths, columns, [cellW, cellH] = [318, 496]) => {
+  const contactSheet = (name, paths, columns, [cellW, cellH] = [318, 496], scaled = false) => {
     const layout = paths.map((_, i) => `${(i % columns) * cellW}_${Math.floor(i / columns) * cellH}`).join('|');
     const path = join(out, `${name}.png`);
+    const scale = scaled ? `${paths.map((_, i) => `[${i}:v]scale=${cellW}:${cellH}[c${i}]`).join(';')};${paths.map((_, i) => `[c${i}]`).join('')}` : '';
     execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...paths.flatMap(file => ['-i', file]),
-      '-filter_complex', `xstack=inputs=${paths.length}:layout=${layout}:fill=#120c08`, '-frames:v', '1', path]);
+      '-filter_complex', `${scale}xstack=inputs=${paths.length}:layout=${layout}:fill=#120c08`, '-frames:v', '1', path]);
     console.log(`Contact sheet ${path}`);
   };
   const expect = async (page, name, selector, attribute, value) => {
@@ -162,12 +163,14 @@ try {
     return key === 'stats' ? { ...s.stats, phase: s.phase, layout: s.layout, source: s.source, canvases: document.querySelectorAll('.stream-canvas').length, ready: window.__chatdomReady === true, handle: !!window.__chatdomKingdom } : s[key];
   }, key);
   const checkStream = async (name, { page, errors, missing }, { clean = true } = {}) => {
+    // A capture under SwiftShader can outlast a beat; the director's clock waits for it, the scene does not.
+    await page.evaluate(() => window.__chatdomStream?.hold?.(true));
     const { width, height } = page.viewportSize();
     const found = await page.evaluate(() => {
       const output = document.querySelector('[data-chatdom-stream]');
       const visible = el => { const box = el.getBoundingClientRect(), style = window.getComputedStyle(el); return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.opacity !== '0'; };
       const curtain = document.querySelector('.stream-curtain');
-      const words = [...output.querySelectorAll('.stream-signature, .stream-mark, .stream-curtain')].filter(el => visible(el) && !(el === curtain && curtain.classList.contains('open'))).map(el => el.innerText).join(' ');
+      const words = [...output.querySelectorAll('.stream-signature, .stream-seam, .stream-name, .stream-mark, .stream-curtain')].filter(el => visible(el) && !(el === curtain && curtain.classList.contains('open'))).map(el => el.innerText).join(' ');
       return {
         scrollW: document.scrollingElement.scrollWidth, scrollH: document.scrollingElement.scrollHeight,
         controls: document.querySelectorAll('.stream-bench, .stream-output button:not(.stream-gate button)').length,
@@ -183,8 +186,32 @@ try {
     if (missing.length) failures.push(`${name}: ${missing.join(' | ')}`);
     const path = join(out, `${name}@${width}x${height}.png`);
     await page.screenshot({ path, animations: 'disabled', timeout: 120_000 });
+    await page.evaluate(() => window.__chatdomStream?.hold?.(false));
     console.log(`Captured ${path}`);
     return found;
+  };
+  // The stream stays quiet: no broadcast mix exists, so nothing may open an audio context.
+  const QUIET = () => {
+    window.__audioContexts = 0;
+    for (const key of ['AudioContext', 'webkitAudioContext']) {
+      const Real = window[key];
+      if (Real) window[key] = class extends Real { constructor(...args) { super(...args); window.__audioContexts++; } };
+    }
+  };
+  const director = page => page.evaluate(() => window.__chatdomStream.director);
+  // Wait until the director has opened a given shot (its shutters fully open) after `cuts` earlier cuts.
+  const shotOpens = (page, shot, cuts, timeout = 240_000) => page.waitForFunction(([shot, cuts]) => {
+    const d = window.__chatdomStream.director;
+    return d.cuts.length > cuts && d.cuts.at(-1).shot === shot && d.curtain === 'open';
+  }, [shot, cuts], { timeout, polling: 100 });
+  const holdsKept = async (page, name) => {
+    const { cuts } = await director(page);
+    for (let i = 1; i < cuts.length; i++) if (cuts[i].at - cuts[i - 1].at < 8000) failures.push(`${name}: cut after ${((cuts[i].at - cuts[i - 1].at) / 1000).toFixed(1)} s, under the eight-second hold`);
+    return cuts;
+  };
+  const quiet = async (page, name) => {
+    const contexts = await page.evaluate(() => window.__audioContexts);
+    if (contexts !== 0) failures.push(`${name}: the stream opened ${contexts} audio context(s)`);
   };
   const simulatedMark = async (page, name) => {
     const text = await page.locator('.source-ribbon').innerText().catch(() => '');
@@ -216,6 +243,136 @@ try {
       await checkStream('stream-strip', view);
       await view.page.close();
     }],
+    // Calm holds one shot and drifts; it never cuts.
+    ['stream-calm', async () => {
+      const view = await openStream({ path: `/stream?${STREAM}`, width: 1280, height: 720, init: QUIET });
+      await view.page.waitForTimeout(12_000);
+      const state = await director(view.page);
+      if (state.cuts.length || state.shot !== 'hero') failures.push(`stream-calm: calm cut away (${JSON.stringify(state)})`);
+      if (!await view.page.locator('.stream-output.drifting').count()) failures.push('stream-calm: the held picture does not drift');
+      if (await view.page.locator('.stream-name').count()) failures.push('stream-calm: calm showed a name');
+      await quiet(view.page, 'stream-calm');
+      await view.page.close();
+    }],
+    // Show: motivated cuts behind shutters, each shot held at least eight seconds, one public name at the window.
+    ['stream-show', async () => {
+      const view = await openStream({ path: `/stream?${STREAM}&mood=show`, width: 1920, height: 1080, init: QUIET });
+      const { page } = view;
+      await expect(page, 'stream-show', '[data-chatdom-stream]', 'data-mood', 'show');
+      await checkStream('stream-show-town', view);
+      await page.waitForSelector('[data-curtain=shut]', { timeout: 120_000 });
+      await checkStream('stream-show-shutter', view);
+      await shotOpens(page, 'window', 0);
+      await page.waitForSelector('.stream-name.shown', { timeout: 30_000 }).catch(() => failures.push('stream-show: no name at the window climax'));
+      await page.waitForTimeout(900);
+      const name = await page.locator('.stream-name').innerText().catch(() => '');
+      if (!name.trim()) failures.push('stream-show: the climax name is empty');
+      await simulatedMark(page, 'stream-show');
+      await checkStream('stream-show-window', view);
+      await page.waitForSelector('.stream-name:not(.shown)', { timeout: 30_000 }).catch(() => failures.push('stream-show: the name stayed past its climax'));
+      await shotOpens(page, 'citizen', 1);
+      await page.waitForTimeout(1200);
+      await checkStream('stream-show-street', view);
+      // The same director at the smaller broadcast size: back to the town, then the window again.
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await shotOpens(page, 'hero', 2);
+      await page.waitForTimeout(1500);
+      await checkStream('stream-show-town', view);
+      await shotOpens(page, 'window', 3);
+      await page.waitForSelector('.stream-name.shown', { timeout: 30_000 }).catch(() => failures.push('stream-show 720: no name at the window climax'));
+      await page.waitForTimeout(900);
+      await checkStream('stream-show-window', view);
+      await holdsKept(page, 'stream-show');
+      await quiet(page, 'stream-show');
+      await page.close();
+    }],
+    // The seams: starting turns the sky to dusk from the street, a break tours, ending settles on the night town.
+    ['stream-seams', async () => {
+      const shots = [];
+      for (const seam of ['starting', 'break', 'ending']) {
+        const view = await openStream({ path: `/stream?${STREAM}&seam=${seam}&mood=show`, width: 1280, height: 720, init: QUIET });
+        await expect(view.page, `stream-seam-${seam}`, '[data-chatdom-stream]', 'data-seam', seam);
+        const card = await view.page.locator('.stream-seam').innerText().catch(() => '');
+        if (!card.trim()) failures.push(`stream-seam-${seam}: no seam card`);
+        if (/\d|countdown/i.test(card)) failures.push(`stream-seam-${seam}: the card counts ("${card}")`);
+        const state = await director(view.page);
+        const first = { starting: 'citizen', break: 'hero', ending: 'hero' }[seam];
+        if (state.shot !== first) failures.push(`stream-seam-${seam}: opened on ${state.shot}, expected ${first}`);
+        if (seam === 'ending') {
+          await view.page.waitForTimeout(10_000);
+          const later = await director(view.page);
+          if (later.cuts.length || !(later.hour > 19.5)) failures.push(`stream-seam-ending: expected a held town settling into night (${JSON.stringify(later)})`);
+        }
+        if (seam === 'starting') {
+          const before = (await director(view.page)).hour;
+          if (!(before < 19)) failures.push(`stream-seam-starting: the sky should begin before dusk (hour ${before})`);
+        }
+        await simulatedMark(view.page, `stream-seam-${seam}`);
+        shots.push(await checkStream(`stream-seam-${seam}`, view).then(() => join(out, `stream-seam-${seam}@1280x720.png`)));
+        await quiet(view.page, `stream-seam-${seam}`);
+        await view.page.close();
+      }
+      contactSheet('stream-seams@1280x720', shots, 2, [640, 360], true);
+    }],
+    // The small shapes in show: slower cuts between close shots only; the name is the only words but the mark.
+    ['stream-small-show', async () => {
+      const corner = await openStream({ path: `/stream?${STREAM}&layout=window&mood=show`, width: 480, height: 270, init: QUIET });
+      await corner.page.waitForSelector('.stream-name.shown', { timeout: 30_000 }).catch(() => failures.push('stream-window-show: no name at the window climax'));
+      await corner.page.waitForTimeout(900);
+      await checkStream('stream-window-name', corner);
+      await shotOpens(corner.page, 'citizen', 0);
+      await corner.page.waitForTimeout(1200);
+      await simulatedMark(corner.page, 'stream-window-show');
+      await checkStream('stream-window-street', corner);
+      if ((await director(corner.page)).beats.includes('hero')) failures.push('stream-window-show: a whole-town shot in the corner');
+      await corner.page.close();
+      // The strip under reduced motion: the cut still happens, without shutters.
+      const strip = await openStream({ path: `/stream?${STREAM}&layout=strip&mood=show`, width: 1280, height: 180, init: QUIET });
+      await strip.page.emulateMedia({ reducedMotion: 'reduce' });
+      await strip.page.evaluate(() => {
+        window.__curtains = new Set();
+        new window.MutationObserver(() => window.__curtains.add(document.querySelector('[data-chatdom-stream]').dataset.curtain))
+          .observe(document.querySelector('[data-chatdom-stream]'), { attributes: true, attributeFilter: ['data-curtain'] });
+      });
+      await checkStream('stream-strip-name', strip);
+      await shotOpens(strip.page, 'citizen', 0);
+      await strip.page.waitForTimeout(1200);
+      if ((await strip.page.evaluate(() => [...window.__curtains])).some(state => state !== 'open')) failures.push('stream-strip-show: reduced motion still closed the shutters');
+      await checkStream('stream-strip-street', strip);
+      await strip.page.close();
+    }],
+    // A kept-clear rectangle: the kingdom and its words fit the chosen part; the rest of the source is transparent.
+    ['stream-safe', async () => {
+      const view = await openStream({ path: `/stream?${STREAM}&mood=show&safe=chat`, width: 1920, height: 1080, init: QUIET });
+      const box = await view.page.locator('[data-chatdom-stream]').boundingBox();
+      if (Math.abs(box.width - 1920 * .74) > 2 || box.x !== 0 || box.height !== 1080) failures.push(`stream-safe: the kingdom sits at ${JSON.stringify(box)}`);
+      await shotOpens(view.page, 'window', 0);
+      await view.page.waitForSelector('.stream-name.shown', { timeout: 30_000 }).catch(() => {});
+      const outside = await view.page.evaluate(() => {
+        const area = document.querySelector('[data-chatdom-stream]').getBoundingClientRect();
+        return [...document.querySelectorAll('.stream-signature, .stream-name, .stream-mark, .stream-canvas')].filter(el => {
+          const b = el.getBoundingClientRect();
+          return b.width && (b.left < area.left - .5 || b.right > area.right + .5 || b.top < area.top - .5 || b.bottom > area.bottom + .5);
+        }).map(el => el.className.baseVal ?? el.className);
+      });
+      if (outside.length) failures.push(`stream-safe: outside the kept rectangle ${JSON.stringify(outside)}`);
+      const path = join(out, 'stream-safe@1920x1080.png');
+      await view.page.screenshot({ path, animations: 'disabled', omitBackground: true, timeout: 120_000 });
+      console.log(`Captured ${path}`);
+      await checkStream('stream-safe-check', view);
+      await view.page.close();
+      const preview = await openStream({ path: `/stream?${STREAM}&preview=1&safe=chat`, width: 1440, height: 900 });
+      if (!(await preview.page.locator('.stream-bench-sound').innerText()).includes('Broadcast mix unavailable')) failures.push('stream-preview-safe: the preview must say the broadcast mix is unavailable');
+      if (!(await preview.page.locator('.stream-bench-foot code').innerText()).includes('safe=chat')) failures.push('stream-preview-safe: the browser-source path lost the kept-clear choice');
+      await checkStream('stream-preview-safe', preview, { clean: false });
+      await preview.page.locator('.stream-bench-choice button', { hasText: 'Show' }).click();
+      await preview.page.locator('.stream-bench-choice button', { hasText: 'Starting' }).click();
+      await preview.page.waitForTimeout(3000);
+      await expect(preview.page, 'stream-preview-safe', '[data-chatdom-stream]', 'data-seam', 'starting');
+      if (!(await preview.page.locator('.stream-bench-foot code').innerText()).includes('seam=starting')) failures.push('stream-preview-safe: the path lost the seam');
+      await checkStream('stream-preview-starting', preview, { clean: false });
+      await preview.page.close();
+    }],
     // The curtain while the renderer builds: the kingdom's name and crest, never a blank source.
     ['stream-waking', async () => {
       const view = await openStream({ path: `/stream?${STREAM}`, width: 1280, height: 720, wait: false });
@@ -227,9 +384,14 @@ try {
     }],
     // The real source with no kingdom service behind it: the town stands, unlit, and says so.
     ['stream-live-lost', async () => {
-      const view = await openStream({ path: '/stream?seed=willowmere&tier=town&hour=19.5&time=30', width: 1280, height: 720, tolerate: /presence-data|EventSource|Failed to load resource/ });
+      const view = await openStream({ path: '/stream?seed=willowmere&tier=town&hour=19.5&time=30&mood=show', width: 1280, height: 720, tolerate: /presence-data|EventSource|Failed to load resource/ });
       await view.page.waitForFunction(() => window.__chatdomStream.source === 'lost', null, { timeout: 60_000 });
       if (await view.page.locator('.source-ribbon').innerText().then(text => text.includes('SIMULATED'))) failures.push('stream-live-lost: a real source must never say SIMULATED');
+      // Show with a lost source: no subject for a close shot and no name to place, so the town holds.
+      await view.page.waitForTimeout(20_000);
+      const state = await director(view.page);
+      if (state.cuts.length || state.shot !== 'hero' || state.name) failures.push(`stream-live-lost: a stale source cut or named someone (${JSON.stringify(state)})`);
+      if (await view.page.locator('.stream-name').count()) failures.push('stream-live-lost: a personal label on a stale projection');
       await checkStream('stream-live-lost', view);
       await view.page.close();
     }],
@@ -600,7 +762,7 @@ try {
     }],
   ];
   for (const [name, run] of cases) {
-    if (only && !name.startsWith(only)) continue;
+    if (only && !only.split(',').some(prefix => name.startsWith(prefix))) continue;
     console.log(`— ${name}`);
     await run();
   }
