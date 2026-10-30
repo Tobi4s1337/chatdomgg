@@ -36,6 +36,8 @@ Kingdom sound uses the credited CC0 sources and original synthesis below. Forge 
 
 Atlas heraldry and charge paths are authored here. No game-icons.net charges or prototype texture atlas were imported.
 
+- **Codex mark (OpenAI)** — official monochrome SVG, unchanged, from OpenAI's VS Code extension `openai.chatgpt` version `26.51021.22027`, asset `extension/webview/assets/codex_new-f14177b03534.svg`. [Official distribution](https://openai.gallerycdn.vsassets.io/extensions/openai/chatgpt/26.51021.22027/1792788319200/Microsoft.VisualStudio.Services.VSIXPackage); [brand guidelines](https://openai.com/brand/). Copyright and trademark OpenAI. Used as the forge's physical engraving for the Codex service; original paths and proportions are retained, with metal depth and heat light only.
+
 
 ## Kingdom audio
 

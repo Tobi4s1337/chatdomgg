@@ -120,7 +120,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     onHomeVisibility:hidden=>{buildHidden=hidden;windows.setHidden(simulation.firstSlot,hidden);refreshOwnHomeShadow();instancesDirty=true;lastLightFrameKey='';lastField=-Infinity;sunShadows.invalidate();},
     onStreetHome:replacement=>{if(disposed)return;for(const list of [houses,blockers,nearBlockers]){const i=list.findIndex(h=>h.slot===simulation.firstSlot);if(i>=0)list[i]=replacement??first;}field.replaceHouses(nearBlockers);farField.replaceHouses(blockers);beaconField.replaceHouses(blockers);lastField=-Infinity;},registerShadow:mesh=>sunShadows.register(mesh),
   }));
-  const forge=own(createKingdomForge({scene,camera,canvas,pool,material:clay,anvil:new THREE.Vector3(0,layout.market.elevation,8),home:()=>build.streetHome??first,source:options.source,seed:`${options.seed}:${options.tier}`,kingdomName:options.realmName??'Willowmere',family:options.forgeFamily??'tide',sound,onStatus:status=>options.onForge?.(status),registerShadow:mesh=>sunShadows.register(mesh)}));
+  const forge=own(createKingdomForge({scene,camera,canvas,pool,material:clay,anvil:new THREE.Vector3(0,layout.market.elevation,8),home:()=>build.streetHome??first,source:options.source,seed:`${options.seed}:${options.tier}`,kingdomName:options.realmName??'Willowmere',family:options.forgeFamily??'tide',sound,onArrival:home=>{
+    if(options.source!=='simulated'||!frame)return;
+    const at=simulation.epochMs+time*1000,near=frame.windows.filter(w=>w.present).map(w=>({window:w,house:houses.find(h=>h.slot===w.slot)})).filter(p=>p.house&&p.house.slot!==home.slot).sort((a,b)=>Math.hypot(a.house!.position[0]-home.position[0],a.house!.position[2]-home.position[2])-Math.hypot(b.house!.position[0]-home.position[0],b.house!.position[2]-home.position[2])).slice(0,2);
+    near.forEach(({window},i)=>crowd.receiveChat({version:1,id:`simulated-forge-${Math.floor(at)}-${i}`,kingdomId:frame!.kingdomId,epoch:frame!.epoch,origin:'simulated',slot:window.slot,asOf:Math.floor(at),expiresAt:Math.floor(at+9000),parts:[{kind:'text',text:i?'It belongs here. ✨':'Oh, look at that!'}]}));
+  },onStatus:status=>options.onForge?.(status),registerShadow:mesh=>sunShadows.register(mesh)}));
   function refreshOwnHomeShadow(){
     if(disposed)return;
     const batch=batches.get(first.blueprint.id),mesh=batch?.levels.get(1);if(!batch||!mesh)return;
