@@ -34,7 +34,7 @@ integrator composition. Capture work is serial under the shared lock even when c
 
 ## Tasks
 
-- [ ] **IN01 — One real target and one real pending response.** Document concrete local signatures against
+- [x] **IN01 — One real target and one real pending response.** Document concrete local signatures against
   main's actual shared seam (`applied` receipt, nullable requestId on private interaction delivery and trusted
   supported/unoccupied approach context), plus actual `apps/realm/src/ports.ts` intent/current, lifecycle,
   bindRoom/RealmRoomEffects and bootstrap/delivery hooks. Coordinate E/input/camera priority with

@@ -319,3 +319,8 @@ responsibilities consumed here. Their absence blocks the corresponding integrate
   including movement/reload and three Playwright browsers passed. Actual room lifecycle/bindRoom effects are
   the integration seam. Start after main commits the handoff and creates lane/interactions and its worktree;
   these checks establish the shared consumer boundary, not already-built interaction handlers or the final tour.
+- **2026-10-30 — IN01: a seated body stays on its approach.** `sit`/`tavern` place the authoritative feet on the
+  seat's authored approach (registry- and context-proved supported and clear) and stop walking; the pose on the
+  log/chair is presentation from the same anchor (`rest`, `facing`). The room never holds a body overlapping solid
+  wood, so stand, drop, revision adoption and recovery all start from a safe standing place. `forge` confirms reach
+  only (no lease, no fact). Local signatures are frozen in `apps/web/src/interactions/README.md`.
