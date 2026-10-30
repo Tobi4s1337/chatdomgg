@@ -5,9 +5,9 @@ describe('anvil bench inputs', () => {
   it('defaults to the cold close anvil at dusk', () => {
     expect(parseBench('')).toEqual({ view: 'anvil-close', style: 'hearth', hour: 19, heat: 0, time: 0 });
     expect(parseBench('?view=anvil-square&style=grove&hour=7&heat=0&time=4.25')).toEqual({ view: 'anvil-square', style: 'grove', hour: 7, heat: 0, time: 4.25 });
+    expect(parseBench('?view=dragon-square&style=tide')).toEqual({ view: 'dragon-square', style: 'tide', hour: 19, heat: 0, time: 0 });
   });
   it('refuses what it cannot honestly show', () => {
-    expect(() => parseBench('?view=dragon-close')).toThrow(/not carved yet/);
     expect(() => parseBench('?view=front')).toThrow(/Unknown view/);
     expect(() => parseBench('?style=marble')).toThrow(/Unknown style/);
     expect(() => parseBench('?hour=24')).toThrow(/hour/);

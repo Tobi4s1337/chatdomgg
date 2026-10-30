@@ -32,6 +32,9 @@ export const GRID_SIZE: readonly [number, number, number] = [40, 24, 20];
 
 export const BLOCK = { x: [-15, 9] as Span, z: [-9, 9] as Span, rows: [-1, 7] as Span };
 export const FEET = { x: [-14, 8] as Span, z: [-6, 6] as Span, rows: [7, 10] as Span };
+/** The side arch spans these columns; the end arch is this many h either side of the centre line. */
+export const FOOT_ARCH_X: Span = [-7, 1];
+export const FOOT_ARCH_HALF_Z = 2;
 export const PLATE = { x: [-14, 8] as Span, z: [-4, 4] as Span, rows: [19, 23] as Span };
 export const STEP = { x: [8, 12] as Span, z: [-3, 3] as Span, top: 21 };
 export const HORN = { x: [12, 22] as Span, rootHalf: 3, rootBottom: 16, top: 21 };
@@ -44,7 +47,7 @@ export const MARK_WINDOW = { x: [-6, 0] as Span, rows: [12, 18] as Span };
 
 /** Waist rows: [left edge, right edge, z half-width]. The right edge widens into the belly. */
 const WAIST: Readonly<Record<number, readonly [number, number, number]>> = {
-  10: [-13, 7, 4], 11: [-11, 5, 3], 12: [-10, 4, 3], 13: [-9, 3, 3], 14: [-9, 3, 3],
+  10: [-12, 6, 4], 11: [-11, 5, 3], 12: [-10, 4, 3], 13: [-9, 3, 3], 14: [-9, 3, 3],
   15: [-9, 3, 3], 16: [-9, 3, 3], 17: [-10, 3, 3], 18: [-10, 3, 3],
 };
 
@@ -65,19 +68,23 @@ function hornHalf(x: number): number {
 function hornTop(x: number): number { return x >= HORN.x[1] - 3 ? HORN.top - 1 : HORN.top; }
 
 const within = (v: number, s: Span) => v >= s[0] && v < s[1];
+/** A fixed, well-mixed 0..1 value per cell: placement of scale and rust, never random per run. */
+function cellHash(x: number, row: number, z: number): number {
+  let h = Math.imul(x + 101, 73856093) ^ Math.imul(row + 211, 19349663) ^ Math.imul(z + 307, 83492791);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
 
 /** Is the iron cell at (x,row,z) solid, before holes, chips and wear. */
 export function ironCell(x: number, row: number, z: number): boolean {
   const zc = z + .5, ax = Math.abs(zc);
   if (row >= FEET.rows[0] && row < FEET.rows[1]) {
     if (!within(x, FEET.x) || !within(z, FEET.z)) return false;
-    // The top course of the feet steps in, so the base reads as a flare, not a slab.
-    if (row === FEET.rows[1] - 1 && (x === FEET.x[0] || x === FEET.x[1] - 1 || ax > 5)) return false;
-    // Arches of air: 8 h on the long sides and 4 h on the ends, 2 h tall, leaving four feet.
-    if (row < FEET.rows[1] - 1) {
-      if (x >= -7 && x < 1 && ax > 3) return false;
-      if (ax < 2 && (x < -11 || x >= 5)) return false;
-    }
+    // The top course of the feet loses its outer corners: four broad feet, chamfered, not a stair.
+    if (row === FEET.rows[1] - 1 && (x === FEET.x[0] || x === FEET.x[1] - 1) && ax > 5) return false;
+    // Arches of air right through: 8 h under each long side and 4 h under each end, 2 h tall.
+    // What stands is four corner feet, and the street light shows between them from every side.
+    if (row < FEET.rows[1] - 1 && (within(x, FOOT_ARCH_X) || ax < FOOT_ARCH_HALF_Z)) return false;
     return true;
   }
   if (row >= PLATE.rows[0] && row < PLATE.rows[1]) {
@@ -140,22 +147,37 @@ export function sculptAnvilStage(): AnvilSculpt {
   // The front face edge nearest the horn takes the most work: bright steel along its arris.
   for (let z = PLATE.z[0]; z < PLATE.z[1]; z++) set(PLATE.x[1] - 1, FACE_ROW, z, steel);
   for (let z = STEP.z[0]; z < STEP.z[1]; z++) set(STEP.x[0], STEP.top, z, steel);
-  // The horn tip, polished by every bent ring.
-  for (let x = HORN.x[1] - 2; x < HORN.x[1]; x++) for (let row = 16; row <= HORN.top; row++) for (let z = -2; z < 2; z++) if (get(x, row, z)) set(x, row, z, steel);
+  // The horn tip, polished by every bent ring: its last columns' top and point, not its belly.
+  for (let x = HORN.x[1] - 4; x < HORN.x[1]; x++) for (let z = -2; z < 2; z++) {
+    let row = HORN.top;
+    while (row > 0 && !get(x, row, z)) row--;
+    if (get(x, row, z)) set(x, row, z, steel);
+    if (x === HORN.x[1] - 1 && get(x, row - 1, z)) set(x, row - 1, z, steel);
+  }
   // Six hammer dents across the face, where a missed blow bruised it.
   for (const [x, z] of [[-5, 1], [-2, -2], [1, 2], [3, -1], [-9, -3], [5, 1]] as const) set(x, FACE_ROW, z, dent);
-  // Rust sits only where nothing polishes it: the foot soles and the hollow of the waist,
-  // never the mark's cheek.
-  for (let x = FEET.x[0]; x < FEET.x[1]; x++) for (let z = FEET.z[0]; z < FEET.z[1]; z++) if (get(x, FEET.rows[0], z) === iron) set(x, FEET.rows[0], z, rust);
-  for (let row = 13; row <= 15; row++) for (let x = MIN[0]; x < MIN[0] + nx; x++) for (let z = -3; z < CHEEK_Z - 1; z++) {
-    if (get(x, row, z) !== iron || x >= 3) continue;
-    const exposed = !get(x - 1, row, z) || !get(x, row, z - 1);
-    if (exposed) set(x, row, z, rust);
+  // Rust sits only where nothing polishes it: creeping up from the foot soles and the inside of
+  // the arches, and in the waist hollow under the heel. Patches, never a painted stripe; never
+  // on the mark's cheek.
+  for (let row = FEET.rows[0]; row < FEET.rows[1]; row++) for (let x = FEET.x[0]; x < FEET.x[1]; x++) for (let z = FEET.z[0]; z < FEET.z[1]; z++) {
+    if (get(x, row, z) !== iron) continue;
+    // Patches a few cells across: the hash is taken per 3 h clump, then thinned at its edges.
+    const clump = cellHash(Math.floor(x / 3), row, Math.floor(z / 3)), reach = row === FEET.rows[0] ? .55 : row === FEET.rows[0] + 1 ? .25 : 0;
+    if (clump < reach && cellHash(x, row, z) < .8) set(x, row, z, rust);
   }
-  // A ring of scale and soot one h wide round the feet, where hot scale has fallen for years.
-  for (let x = FEET.x[0] - 1; x <= FEET.x[1]; x++) for (let z = FEET.z[0] - 1; z <= FEET.z[1]; z++) {
-    const row = BLOCK.rows[1] - 1;
-    if (get(x, row, z) === stone && !get(x, row + 1, z)) set(x, row, z, stain);
+  for (let row = 12; row <= 17; row++) for (let x = MIN[0]; x < -5; x++) for (let z = -3; z < CHEEK_Z - 1; z++) {
+    if (get(x, row, z) !== iron || get(x - 1, row, z)) continue;
+    if (cellHash(x, row, z) < (row >= 13 && row <= 16 ? .45 : .2)) set(x, row, z, rust);
+  }
+  // Scale and soot round each foot and under the arches, where hot scale has fallen for years;
+  // a second ring of it in a few drifts.
+  const blockTop = BLOCK.rows[1] - 1;
+  for (let x = FEET.x[0] - 2; x <= FEET.x[1] + 1; x++) for (let z = FEET.z[0] - 2; z <= FEET.z[1] + 1; z++) {
+    if (get(x, blockTop, z) !== stone || get(x, blockTop + 1, z)) continue;
+    let near = 9;
+    for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) if (get(x + dx, blockTop + 1, z + dz)) near = Math.min(near, Math.max(Math.abs(dx), Math.abs(dz)));
+    const under = within(x, FEET.x) && within(z, FEET.z);
+    if (near === 1 || under || (near === 2 && cellHash(Math.floor(x / 3), blockTop, Math.floor(z / 3)) < .45)) set(x, blockTop, z, stain);
   }
   return { size: [nx, ny, nz], voxels };
 }

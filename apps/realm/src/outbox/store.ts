@@ -1,7 +1,9 @@
 import type { KingdomId } from '@chatdom/shared';
-import type { RealmPublicMessage, RealmWriterLease } from '@chatdom/shared/realm';
-import { RealmWriterFencedError, type RealmDatabase } from '../persistence/database';
+import type { RealmFact, RealmPublicMessage, RealmWriterLease } from '@chatdom/shared/realm';
+import { RealmRecoveryError, RealmWriterFencedError, type RealmDatabase } from '../persistence/database';
+import { sha256Hex } from '../persistence/codec';
 import type { RealmOutboxRow } from '../persistence/postgres-repository';
+import { PublicProjection, type PublicPrefix, type RealmPublicHome, type RealmPublicPresence } from './projection';
 
 const NOW_MS = 'floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint';
 /** Rows one dispatch pass reads and hands to the transport before acknowledging them. */
@@ -14,6 +16,11 @@ export interface RealmOutboxStore {
   open(lease: RealmWriterLease): Promise<number>;
   /** Records delivery through `throughId`. Only the current unexpired epoch may move it, and only forward. */
   acknowledge(lease: RealmWriterLease, throughId: number): Promise<void>;
+  /**
+   * The public views rows at or below `throughId` left standing, plus the newest committed row id. `sequence` is the
+   * domain sequence of the newest row in the prefix (0 for none); the caller knows any later fact-only sequence.
+   */
+  prefix(kingdomId: KingdomId, throughId: number): Promise<Omit<PublicPrefix, 'cursor'> & { readonly committed: number }>;
 }
 
 export class PostgresOutboxStore implements RealmOutboxStore {
@@ -24,6 +31,46 @@ export class PostgresOutboxStore implements RealmOutboxStore {
       'SELECT id, sequence, event_id, plot_id, message FROM realm_outbox WHERE kingdom_id = $1 AND id > $2 ORDER BY id LIMIT $3',
       [kingdomId, afterId, Math.min(Math.max(1, limit), 1_024)]);
     return rows.rows.map(r => ({ id: Number(r.id), sequence: Number(r.sequence), eventId: r.event_id, plotId: r.plot_id, message: JSON.parse(r.message) as RealmPublicMessage }));
+  }
+
+  async prefix(kingdomId: KingdomId, throughId: number) {
+    // A first Forge publishes its allocated home without a preceding home row. Read immutable allocation
+    // bases, then fold only public home/Forge rows through the delivered cursor; current private builds may be ahead.
+    const allocations = await this.db.query<{ fact: string; digest: string }>(`SELECT f.fact, f.digest FROM realm_deeds d
+      JOIN realm_facts f ON f.kingdom_id = d.kingdom_id AND f.seq = d.installed_seq
+      WHERE d.kingdom_id = $1 AND d.status = 'installed' ORDER BY d.installed_seq`, [kingdomId]);
+    const bases: RealmPublicHome[] = allocations.rows.map(row => {
+      if (sha256Hex(row.fact) !== row.digest) throw new RealmRecoveryError(kingdomId, 'allocation fact fails its digest');
+      const fact = JSON.parse(row.fact) as RealmFact;
+      if (fact.version !== 1 || fact.kingdomId !== kingdomId || fact.body.type !== 'home.installAllocated') throw new RealmRecoveryError(kingdomId, 'invalid allocated home fact');
+      const home = fact.body.home;
+      return { type: 'home', plotId: home.id, revision: home.revision, assetHash: home.digest, attachments: [] };
+    });
+    const projection = new PublicProjection({ bases, homes: [], presence: null, cursor: 0, sequence: 0 });
+    let after = 0;
+    while (after < throughId) {
+      const found = await this.db.query<{ id: string; sequence: string; event_id: string; plot_id: string | null; message: string }>(
+        `SELECT id, sequence, event_id, plot_id, message FROM realm_outbox
+         WHERE kingdom_id = $1 AND id > $2 AND id <= $3 AND kind IN ('home', 'forge') ORDER BY id LIMIT $4`,
+        [kingdomId, after, throughId, OUTBOX_DISPATCH_BATCH]);
+      const rows = found.rows.map(r => ({ id: Number(r.id), sequence: Number(r.sequence), eventId: r.event_id, plotId: r.plot_id, message: JSON.parse(r.message) as RealmPublicMessage }));
+      const prefix = rows.filter(row => row.id <= throughId);
+      projection.adopt(prefix);
+      if (!prefix.length) break;
+      after = prefix.at(-1)!.id;
+    }
+    const presence = await this.db.query<{ message: string }>(`SELECT message FROM realm_outbox
+      WHERE kingdom_id = $1 AND kind = 'presence' AND id <= $2 ORDER BY id DESC LIMIT 1`, [kingdomId, throughId]);
+    const bounds = await this.db.query<{ sequence: string | null; committed: string | null }>(`SELECT
+      (SELECT sequence FROM realm_outbox WHERE kingdom_id = $1 AND id <= $2 ORDER BY id DESC LIMIT 1) AS sequence,
+      (SELECT max(id) FROM realm_outbox WHERE kingdom_id = $1) AS committed`, [kingdomId, throughId]);
+    return {
+      homes: projection.current().filter((message): message is RealmPublicHome => message.type === 'home'),
+      bases,
+      presence: presence.rows[0] ? JSON.parse(presence.rows[0].message) as RealmPublicPresence : null,
+      sequence: Number(bounds.rows[0]?.sequence ?? 0),
+      committed: Number(bounds.rows[0]?.committed ?? 0),
+    };
   }
 
   async open(lease: RealmWriterLease): Promise<number> {

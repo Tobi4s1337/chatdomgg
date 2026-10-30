@@ -23,11 +23,11 @@ function signal() {
 }
 function realm(at: { x: number; y: number; z: number; yaw: number }) {
   const sent: WalkInput[] = [];
-  const self = { ...at, speed: 0 };
+  const self = { ...at, speed: 0, placement: 0 };
   const onLeave = signal(), onDrop = signal();
   const fake: WalkRealm = {
     selfId: 'me',
-    room: { onLeave, onDrop, state: { collisionRevision: 7, walkers: { get: id => id === 'me' ? { x: self.x, y: self.y, z: self.z, yaw: self.yaw } : undefined } } },
+    room: { onLeave, onDrop, state: { collisionRevision: 7, walkers: { get: id => id === 'me' ? { x: self.x, y: self.y, z: self.z, yaw: self.yaw, placement: self.placement } : undefined } } },
     tick(_now, input) {
       sent.push({ ...input });
       const poses: RealmWalkerPose[] = [
@@ -142,6 +142,53 @@ describe('the walk controller', () => {
     key(keyboard, 'keydown', 'KeyW');
     controller.frame(48);
     expect(sent.at(-1)).toMatchObject({ moveZ: -127 });
+  });
+
+  it('comes back from a Forge or build camera to the normal walking view and walks on the first frame', () => {
+    const solids: SolidBox[] = [{ min: [-20, -1, -20], max: [20, 0, 20] }];
+    const { controller, keyboard, camera, sent } = setup(1440, 900, undefined, { revision: 7, query: () => solids });
+    controller.frame(0);
+    const entry = { position: camera.position.clone(), fov: camera.fov, filmOffset: camera.filmOffset };
+    key(keyboard, 'keydown', 'KeyW'); key(keyboard, 'keydown', 'Space');
+    controller.frame(16);
+    controller.release();
+    // The Forge composes its own shot with a view offset and fov; walking leaves both alone while it owns them.
+    camera.position.set(0, 3, 8); camera.fov = 43;
+    camera.setViewOffset(1440, 900, -105, 15, 1440, 900);
+    const escape = Object.assign(new Event('keydown', { cancelable: true }), { code: 'Escape', repeat: false, ctrlKey: false, metaKey: false, altKey: false });
+    keyboard.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(false);
+    controller.frame(32);
+    expect([camera.position.toArray(), camera.fov, camera.view?.enabled]).toEqual([[0, 3, 8], 43, true]);
+    expect(controller.selfOpacity).toBe(1);
+    // Its close forgot the view offset. The first walking frame is the ordinary view all the same.
+    controller.resume();
+    controller.frame(48);
+    expect(camera.view?.enabled ?? false).toBe(false);
+    expect(camera.position.distanceTo(entry.position)).toBeLessThan(.05);
+    expect([camera.fov, camera.filmOffset]).toEqual([entry.fov, entry.filmOffset]);
+    expect(controller.debug.screen!.x).toBeLessThan(1440 * .4);
+    // W and Space are still down from before the Forge opened: the key's own repeat walks on at once,
+    // and the held Space never becomes a second jump.
+    key(keyboard, 'keydown', 'KeyW', true); key(keyboard, 'keydown', 'Space', true);
+    controller.frame(64);
+    expect(sent.at(-1)).toMatchObject({ moveZ: -127, buttons: 0 });
+  });
+
+  it('hands a first-person walker back to another camera whole, and takes first person back at once', () => {
+    const { controller, surface } = setup();
+    controller.frame(0);
+    for (let n = 1; n <= 120; n++) {
+      surface.dispatchEvent(Object.assign(new Event('wheel', { cancelable: true }), { deltaY: -240, deltaMode: 0 }));
+      controller.frame(n * 16);
+    }
+    expect([controller.debug.camera.distance, controller.selfOpacity]).toEqual([0, 0]);
+    // The director or the Forge looks at the citizen: it must be drawn.
+    controller.release();
+    expect(controller.selfOpacity).toBe(1);
+    controller.resume();
+    controller.frame(2000);
+    expect([controller.debug.camera.distance, controller.selfOpacity]).toEqual([0, 0]);
   });
 
   it('follows the given entry heading and resets to it', () => {
@@ -295,6 +342,13 @@ describe('the walk controller', () => {
     expect(controller.frame(32).find(p => p.self)!.y).toBe(0);
     self.y = predicted.y = .2; predicted.grounded = false;
     expect(controller.frame(48).find(p => p.self)!.y).toBe(.2);
+    self.x = predicted.x = 2; self.y = predicted.y = .5; predicted.grounded = true;
+    controller.frame(64);
+    self.y = predicted.y = 0;
+    expect(controller.frame(80).find(p => p.self)!.y).toBeGreaterThan(0);
+    // A relocation at identical feet height must also drop residual body and camera stair easing.
+    self.placement++;
+    expect(controller.frame(96).find(p => p.self)!.y).toBe(0);
     controller.dispose();
   });
 

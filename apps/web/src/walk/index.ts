@@ -16,8 +16,8 @@ export type { ShoulderPose, ShoulderRig, ShoulderView } from './camera/shoulder'
 export { clearBoom, nearFootprint, OCCLUSION, overlapsSolid, RECOVER_RATE, sweepHit } from './camera/occlusion';
 export type { BoomPoint, Clearance, Footprint } from './camera/occlusion';
 export { facingByte, headingFromByte, walkDirection } from './input/direction';
-export { createWalkHud, restingStick } from './input/hud';
-export type { WalkHud, WalkHudState } from './input/hud';
+export { createWalkHud, restingStick, THUMB, thumbSlots } from './input/hud';
+export type { ThumbSlot, WalkHud, WalkHudState } from './input/hud';
 export { createWalkKeys, isEditableTarget, isKeyboardControl } from './input/keyboard';
 export { createWalkLook, filterLookDelta, LOOK } from './input/look';
 export type { LockDocument, LockSurface, LookMode, WalkLook } from './input/look';
@@ -37,7 +37,7 @@ export interface WalkRealm {
   readonly room: {
     readonly state: {
       readonly collisionRevision: number;
-      readonly walkers: { get(id: string): { readonly x: number; readonly y: number; readonly z: number; readonly yaw: number } | undefined };
+      readonly walkers: { get(id: string): { readonly x: number; readonly y: number; readonly z: number; readonly yaw: number; readonly placement?: number } | undefined };
     };
     /** Leaving or a dropped connection lets go of everything held, so nothing walks on after a reconnect. */
     readonly onLeave?: RoomSignal;
@@ -144,6 +144,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   const rig = createShoulderRig(options.heading ?? 0);
   const stepEase = createStepEase();
   let stepRevision: number | null = null;
+  let stepPlacement: number | undefined;
   const supplied = options.collision;
   let solids: CollisionWorld | null = typeof supplied === 'function' ? null : supplied ?? null;
   const collision = () => {
@@ -170,7 +171,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   };
   const setOwner = (value: WalkOwner) => { owner = value; debug.owner = value; showHud(); };
   /** Blur, hidden page, menu, disconnect: nothing held, nothing pending, no capture, cursor given back. */
-  const drop = () => { keys.clear(); pointer.clear(); touch.clear(); look.exit(); touchJump = false; jumpedLastFrame = false; realm.clearInput?.(); };
+  const drop = () => { keys.clear(); pointer.clear(); touch.clear(); look.exit(); touchJump = false; jumpedLastFrame = false; realm.clearInput?.(); stepEase.reset(); rig.settle(); };
   const hidden = () => { if (page.hidden) drop(); };
   const contextmenu = (event: Event) => { if (!event.defaultPrevented) drop(); };
   const disconnected = () => drop();
@@ -232,7 +233,9 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
       let bodyY = self.y, cameraY: number | undefined;
       const predicted = realm.predicted;
       if (predicted) {
-        if (predicted.collisionRevision !== stepRevision) { stepEase.reset(); stepRevision = predicted.collisionRevision; }
+        if (predicted.collisionRevision !== stepRevision || authority?.placement !== stepPlacement) {
+          stepEase.reset(); rig.settle(); stepRevision = predicted.collisionRevision; stepPlacement = authority?.placement;
+        }
         const eased = stepEase.update(predicted.y, predicted.grounded, dt);
         bodyY += eased.body - predicted.y;
         cameraY = self.y + eased.camera - predicted.y;

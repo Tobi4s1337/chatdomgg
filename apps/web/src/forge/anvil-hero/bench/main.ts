@@ -3,7 +3,9 @@ import { MATERIALS, MAT, createHome, createHearthHome, createMarketStall, create
 import { createAtmosphere, createSunShadows, createVoxelMaterial, createWindowLights, geometryFromChunks, getEnvironment, type WindowHouse } from '@chatdom/render';
 import { KingdomPresenceFrameSchema, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import { VoxelWorkerPool } from '@chatdom/voxel';
+import { createForgeEmitters } from '../../emitters';
 import { createAnvilHero } from '../index';
+import { aimDragon, createForgedPieceMaterial, placeRoofDragon } from './dragon-scene';
 import { BENCH_STYLES, BUILT_VIEWS, parseBench, type BenchState, type BenchStyle } from './params';
 
 export interface AnvilBenchReport extends BenchState {
@@ -14,6 +16,8 @@ export interface AnvilBenchReport extends BenchState {
   triangles: number;
   draws: number;
   cameraDistance: number;
+  /** Dragon views: which side of the host's ridge the chimney socket chose, and the mounted piece's boxes. */
+  dragon: { side: 'street' | 'lane'; boxes: number } | null;
 }
 
 declare global {
@@ -43,7 +47,9 @@ function slab(id: string, size: number, material: number, styleId: BenchStyle): 
   return { version: 1, id, styleId: STYLES[styleId].id, kind: 'civic', lattice: 'build', size: [size, 1, size], boxes: [{ from: [0, 0, 0], to: [size, 1, size], material }], windows: [] };
 }
 
-interface Placed { blueprint: VoxelBlueprint; position: Vec3; yaw: number; lattice: 'build' | 'terrain' }
+interface Placed { blueprint: VoxelBlueprint; position: Vec3; yaw: number; lattice: 'build' | 'terrain'; forged?: boolean }
+/** The home across the square that carries the forged dragon chimney in the dragon views. */
+const DRAGON_HOST = 3;
 
 /** The market square around the anvil, in metres. The anvil stands at the origin. */
 function square(style: BenchStyle): Placed[] {
@@ -89,8 +95,9 @@ async function main() {
   window.__chatdomReady = false;
   const state = parseBench(window.location.search);
   renderNav(state);
-  element('title').textContent = state.view === 'anvil-close' ? 'The anvil, close' : 'The anvil, from across the square';
-  element('caption').textContent = `${STYLE_NAMES[state.style]} · ${String(state.hour).padStart(2, '0')}:00 · ${state.heat > 0 ? `SIMULATED heat ${state.heat}` : 'cold iron'} · lit windows SIMULATED`;
+  const dragonView = state.view === 'dragon-close' || state.view === 'dragon-square';
+  element('title').textContent = { 'anvil-close': 'The anvil, close', 'anvil-square': 'The anvil, from across the square', 'dragon-close': 'The sleeping dragon chimney, close', 'dragon-square': 'The sleeping dragon chimney, from the square' }[state.view];
+  element('caption').textContent = `${STYLE_NAMES[state.style]} · ${String(state.hour).padStart(2, '0')}:00 · ${dragonView ? 'smoke SIMULATED · a forged piece, no owner' : state.heat > 0 ? `SIMULATED heat ${state.heat}` : 'cold iron'} · lit windows SIMULATED`;
   const host = element<HTMLDivElement>('stage');
   const grade = getEnvironment(state.hour);
   document.body.style.background = `linear-gradient(180deg, ${grade.zenith} 0%, ${grade.horizon} 78%, ${grade.fog} 100%)`;
@@ -111,7 +118,7 @@ async function main() {
 
   const scene = new THREE.Scene();
   const portrait = host.clientWidth < host.clientHeight;
-  const camera = new THREE.PerspectiveCamera(state.view === 'anvil-close' ? 34 : portrait ? 58 : 42, host.clientWidth / host.clientHeight, .1, 600);
+  const camera = new THREE.PerspectiveCamera(state.view === 'anvil-close' ? 34 : state.view === 'dragon-close' ? (portrait ? 52 : 40) : portrait ? 58 : 42, host.clientWidth / host.clientHeight, .1, 600);
   const atmosphere = createAtmosphere(scene);
   const clay = createVoxelMaterial(MATERIALS, 'build'), meadow = createVoxelMaterial(MATERIALS, 'terrain');
   clay.setEnvironment(grade); meadow.setEnvironment(grade);
@@ -131,6 +138,12 @@ async function main() {
 
   const geometries: THREE.BufferGeometry[] = [];
   const placed = square(state.style);
+  // The dragon views put the real chimney assembly on a real home, drawn as the kingdom draws forged pieces.
+  const dragon = dragonView ? placeRoofDragon(state.style, placed[DRAGON_HOST]!) : null;
+  if (dragon) placed.push({ ...dragon.piece, yaw: 0, lattice: 'build', forged: true });
+  const forged = dragon ? createForgedPieceMaterial(clay.material) : null;
+  if (dragon?.side === 'lane') element('title').textContent = `The sleeping dragon chimney, ${state.view === 'dragon-close' ? 'close' : 'from the lane'} behind the house`;
+  const emitters = dragon ? createForgeEmitters(scene) : null;
   const results = await Promise.all(placed.map((p, i) => pool.submit({ kind: 'blueprint', blueprint: p.blueprint, revision: i + 1, materials: MATERIALS.materials, materialRevision: MATERIALS.revision })));
   let triangles = stage.geometry.index!.count / 3;
   const houses: WindowHouse[] = [];
@@ -140,7 +153,7 @@ async function main() {
     const geometry = geometryFromChunks(result.chunks, p.lattice);
     geometries.push(geometry);
     triangles += result.chunks.reduce((n, c) => n + c.mesh.indices.length / 3, 0);
-    const mesh = new THREE.Mesh(geometry, p.lattice === 'terrain' ? meadow.material : clay.material);
+    const mesh = new THREE.Mesh(geometry, p.lattice === 'terrain' ? meadow.material : p.forged && forged ? forged : clay.material);
     mesh.position.set(...p.position); mesh.rotation.y = p.yaw; mesh.frustumCulled = false;
     scene.add(mesh);
     if (p.lattice === 'build' && p.blueprint.kind !== 'civic') shadows.register(mesh);
@@ -159,11 +172,13 @@ async function main() {
     renderer.setSize(width, height);
     camera.aspect = width / height;
     const vfov = THREE.MathUtils.degToRad(camera.fov), hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
-    if (state.view === 'anvil-close') {
+    if (dragon) {
+      cameraDistance = aimDragon(camera, state.view, dragon, portrait);
+    } else if (state.view === 'anvil-close') {
       // Three-quarter from the mark's side and the heel: cheek, hardy hole and the horn's whole length.
       const target = heroBox.getCenter(new THREE.Vector3()).setY(.82);
       const direction = new THREE.Vector3(-.62, .62, 1).normalize();
-      cameraDistance = fitDistance(heroBox, target, direction, vfov, hfov, camera.aspect < 1 ? .9 : .78);
+      cameraDistance = fitDistance(heroBox, target, direction, vfov, hfov, camera.aspect < 1 ? .94 : .9);
       camera.position.copy(target).addScaledVector(direction, cameraDistance);
       camera.lookAt(target);
     } else {
@@ -178,9 +193,11 @@ async function main() {
     aim();
     atmosphere.update(state.hour, state.time, camera, new THREE.Vector3(0, 60, -200), 0);
     shadows.updateSunDirection(grade.sunDirection);
+    // The existing chimney smoke, seeked to the bench time; no sparks, no ritual.
+    emitters?.update({ time: state.time, anvil: new THREE.Vector3(0, 1.6, 0), activity: 0, landed: dragon ? [{ position: dragon.emitter, kind: 'smoke' }] : [] });
     renderer.render(scene, camera);
     renderer.getContext().finish();
-    window.__chatdomAnvilHero = { ...state, width: host.clientWidth, height: host.clientHeight, heroTriangles: stage.geometry.index!.count / 3, heroCastMs: Math.round(heroCastMs), triangles, draws: renderer.info.render.calls, cameraDistance: Math.round(cameraDistance * 100) / 100 };
+    window.__chatdomAnvilHero = { ...state, width: host.clientWidth, height: host.clientHeight, heroTriangles: stage.geometry.index!.count / 3, heroCastMs: Math.round(heroCastMs), triangles, draws: renderer.info.render.calls, cameraDistance: Math.round(cameraDistance * 100) / 100, dragon: dragon ? { side: dragon.side, boxes: dragon.piece.blueprint.boxes.length } : null };
   };
   aim();
   await renderer.compileAsync(scene, camera);
@@ -189,7 +206,7 @@ async function main() {
   frame();
   window.addEventListener('resize', () => { window.__chatdomReady = false; frame(); window.__chatdomReady = true; });
   window.addEventListener('pagehide', () => {
-    hero.dispose(); windows.dispose(); shadows.dispose(); atmosphere.dispose(); pool.dispose();
+    hero.dispose(); emitters?.dispose(); forged?.dispose(); windows.dispose(); shadows.dispose(); atmosphere.dispose(); pool.dispose();
     geometries.forEach(g => g.dispose()); clay.dispose(); meadow.dispose(); renderer.dispose();
   }, { once: true });
   element('status').hidden = true;
