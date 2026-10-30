@@ -20,6 +20,7 @@ export function windowLodCentre(centre: Vec3, facing: VoxelBlueprint['windows'][
 /** Windows are independent of the voxel mesh. A single texture carries presence for every plot. */
 export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHouse[], options: { allWindows?: boolean } = {}): {
   setFrame(frame: KingdomPresenceFrame): void;
+  setHidden(slot:number,hidden:boolean):void;
   setLod(slot: number, factor: LodFactor): void;
   setDetail(slot: number, from: LodFactor, to: LodFactor, progress: number): void;
   update(elapsedSeconds: number, hour: number): void;
@@ -36,6 +37,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   const states = new Map<number, SlotState>();
+  const hiddenSlots=new Set<number>();
   const sources: WindowSource[] = [];
   const slots: number[] = [];
   const transforms: THREE.Matrix4[] = [];
@@ -168,8 +170,8 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
         halos.setMatrixAt(index * 2 + layer, new THREE.Matrix4().compose(centre.clone().addScaledVector(placement.normal, 0.04), placement.rotation, new THREE.Vector3(placement.width * 2.4, placement.height * 2.2, 1)));
       }
       // Complementary masks use the same screen threshold as the voxel meshes.
-      const outgoing = from === to ? 1 : -1 - amount;
-      const incoming = from === to ? 0 : amount;
+      const outgoing = hiddenSlots.has(slot)?0:from === to ? 1 : -1 - amount;
+      const incoming = hiddenSlots.has(slot)?0:from === to ? 0 : amount;
       paneFade.setX(index * 2, outgoing); paneFade.setX(index * 2 + 1, incoming);
       haloFade.setX(index * 2, outgoing); haloFade.setX(index * 2 + 1, incoming);
     }
@@ -182,7 +184,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
     namedSlots.clear();
     for (const source of sources) {
       const state = states.get(source.slot)!;
-      source.strength = state.value;
+      source.strength = hiddenSlots.has(source.slot)?0:state.value;
       source.name = !namedSlots.has(source.slot) && state.value > 0 ? state.name : null;
       namedSlots.add(source.slot);
     }
@@ -192,11 +194,18 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       setDetail(slot, factor, factor, 1);
     },
     setDetail,
+    setHidden(slot,hidden){
+      if(hiddenSlots.has(slot)===hidden)return;
+      if(hidden)hiddenSlots.add(slot);else hiddenSlots.delete(slot);
+      const detail=slotDetails.get(slot);if(detail){slotDetails.set(slot,{...detail,progress:-1});setDetail(slot,detail.from,detail.to,detail.progress);}sync();
+    },
     setFrame(frame) {
       const incoming = new Map(frame.windows.map(window => [window.slot, window]));
       for (const [slot, state] of states) {
         const window = incoming.get(slot);
-        const present = Boolean(frame.streamLive && frame.connection === 'fresh' && window?.present);
+        // A witnessed chat act may light a home while its broadcast rests.
+        // The castle's beacon follows stream state separately.
+        const present = Boolean(frame.connection !== 'stale' && window?.present);
         const target = present ? 1 : 0;
         // A recovered snapshot may describe a transition already in progress or finished.
         const age = window ? Math.min(1, Math.max(0, (frame.asOf - window.since) / 700)) : 1;

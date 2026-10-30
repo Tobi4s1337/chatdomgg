@@ -2,7 +2,7 @@ import type { FetchLike } from '../transport';
 
 /**
  * A SIMULATED Twitch identity and Helix service for tests: client-credentials and code grants, token
- * validation, Get Users and Get Authorization By User. It answers in Twitch's documented shapes and
+ * validation, Get Users, Get Authorization By User, Get Streams and Get Chatters. It answers in Twitch's documented shapes and
  * nothing it holds is a real account, token or chat body.
  */
 export interface FakeUser {
@@ -36,6 +36,21 @@ interface ScriptedFailure {
   readonly headers: Readonly<Record<string, string>>;
 }
 
+/** A SIMULATED broadcast as Get Streams reports it. */
+export interface FakeStream {
+  readonly id: string;
+  readonly type: string;
+  readonly startedAt: string;
+}
+
+export interface FakeRequest {
+  readonly method: string;
+  readonly route: string;
+  readonly url: URL;
+  readonly headers: Headers;
+  readonly body: string | null;
+}
+
 export interface FakeCall {
   readonly method: string;
   readonly path: string;
@@ -54,6 +69,12 @@ export class FakeTwitch {
   validateUserOverride: { readonly userId: string; readonly login: string } | null = null;
   /** Extra Helix `data` fields to prove parsing strips them. */
   readonly extraUserFields: Record<string, unknown> = { profile_image_url: 'https://example.invalid/avatar.png', email: 'simulated@example.invalid' };
+  /** SIMULATED broadcasts by user ID. A user with no entry is offline. */
+  readonly streams = new Map<string, FakeStream>();
+  /** SIMULATED connected chat users by broadcaster ID, in the order Get Chatters pages them. */
+  readonly chatters = new Map<string, readonly string[]>();
+  /** When set, the page at this index answers with the cursor it was asked for (a cursor that never advances). */
+  chattersRepeatCursorAt: number | null = null;
   readonly #secret: string;
   readonly #users: FakeUser[];
   readonly #tokens = new Map<string, IssuedToken>();
@@ -87,9 +108,32 @@ export class FakeTwitch {
       case 'GET id.twitch.tv/oauth2/validate': return this.#validate(method, route, headers);
       case 'GET api.twitch.tv/helix/users': return this.#getUsers(method, route, headers, url.searchParams);
       case 'GET api.twitch.tv/helix/authorization/users': return this.#getAuthorization(method, route, headers, url.searchParams);
-      default: return this.#reply(method, route, 404, { status: 404, message: 'Not Found' });
+      case 'GET api.twitch.tv/helix/streams': return this.#getStreams(method, route, headers, url.searchParams);
+      case 'GET api.twitch.tv/helix/chat/chatters': return this.#getChatters(method, route, headers, url.searchParams);
+      default: {
+        const extended = this.extension?.({ method, route, url, headers, body: typeof init.body === 'string' ? init.body : null });
+        return extended ?? this.#reply(method, route, 404, { status: 404, message: 'Not Found' });
+      }
     }
   };
+
+  /** Further SIMULATED Helix routes (EventSub administration), answered before the 404 fallback. */
+  extension: ((request: FakeRequest) => Response | null) | null = null;
+
+  /** Whether a request carries a live app token for this client, as app-token-only endpoints require. */
+  isAppRequest(headers: Headers): boolean {
+    const token = this.#bearer(headers, 'Bearer');
+    return token !== null && token.kind === 'app' && headers.get('client-id') === token.clientId;
+  }
+
+  /** Records and answers a request in Twitch's shape, with rate-limit headers. */
+  respond(method: string, route: string, status: number, body: unknown, headers: Readonly<Record<string, string>> = {}): Response {
+    if (status === 204) {
+      this.calls.push({ method, path: route, status });
+      return new Response(null, { status });
+    }
+    return this.#reply(method, route, status, body, headers);
+  }
 
   /** Make the next `times` requests to `host+path` fail with `status`. */
   fail(method: string, path: string, status: number, times = 1, headers: Readonly<Record<string, string>> = {}): void {
@@ -184,6 +228,44 @@ export class FakeTwitch {
     return this.#reply(method, route, 200, { data });
   }
 
+  #getStreams(method: string, route: string, headers: Headers, query: URLSearchParams): Response {
+    if (!this.#helixAuthorized(headers)) return this.#reply(method, route, 401, { status: 401, message: 'Invalid OAuth token' });
+    const data = query.getAll('user_id').flatMap(userId => {
+      const stream = this.streams.get(userId);
+      const user = this.#users.find(u => u.id === userId);
+      if (!stream) return [];
+      return [{
+        id: stream.id, user_id: userId, user_login: user?.login ?? '', user_name: user?.displayName ?? '', game_id: '509658',
+        game_name: 'Just Chatting', type: stream.type, title: 'SIMULATED title that must not be read', tags: [], viewer_count: 4_321,
+        started_at: stream.startedAt, language: 'en', thumbnail_url: 'https://example.invalid/{width}x{height}.jpg', is_mature: false,
+      }];
+    });
+    return this.#reply(method, route, 200, { data, pagination: {} });
+  }
+
+  /** App token with the moderator's prior `moderator:read:chatters` grant, as Twitch documents it. */
+  #getChatters(method: string, route: string, headers: Headers, query: URLSearchParams): Response {
+    const token = this.#bearer(headers, 'Bearer');
+    if (!token || headers.get('client-id') !== token.clientId) return this.#reply(method, route, 401, { status: 401, message: 'Invalid OAuth token' });
+    const broadcasterId = query.get('broadcaster_id') ?? '';
+    const moderatorId = query.get('moderator_id') ?? '';
+    const scopes = token.kind === 'app' ? this.grants.get(moderatorId) : token.userId === moderatorId ? new Set(token.scopes) : undefined;
+    if (!scopes?.has('moderator:read:chatters')) return this.#reply(method, route, 401, { status: 401, message: 'Missing scope: moderator:read:chatters' });
+    if (moderatorId !== broadcasterId) return this.#reply(method, route, 403, { status: 403, message: 'The user is not one of the broadcaster\'s moderators' });
+    const first = Number(query.get('first') ?? '100');
+    if (!Number.isInteger(first) || first < 1 || first > 1000) return this.#reply(method, route, 400, { status: 400, message: 'Invalid first' });
+    const after = query.get('after');
+    const offset = after === null ? 0 : Number(/^simulated-cursor-(\d+)$/.exec(after)?.[1] ?? Number.NaN);
+    if (!Number.isInteger(offset)) return this.#reply(method, route, 400, { status: 400, message: 'Invalid cursor' });
+    const everyone = this.chatters.get(broadcasterId) ?? [];
+    const page = everyone.slice(offset, offset + first);
+    const pageIndex = Math.floor(offset / first);
+    const more = offset + first < everyone.length;
+    const cursor = this.chattersRepeatCursorAt === pageIndex && after !== null ? after : more ? `simulated-cursor-${offset + first}` : null;
+    const data = page.map(userId => ({ user_id: userId, user_login: `simulated_${userId}`, user_name: `Simulated${userId}` }));
+    return this.#reply(method, route, 200, { data, pagination: cursor ? { cursor } : {}, total: everyone.length });
+  }
+
   #helixAuthorized(headers: Headers): boolean {
     const token = this.#bearer(headers, 'Bearer');
     return token !== null && headers.get('client-id') === token.clientId;
@@ -206,3 +288,5 @@ export class FakeTwitch {
     });
   }
 }
+
+export * from './fake-eventsub';
