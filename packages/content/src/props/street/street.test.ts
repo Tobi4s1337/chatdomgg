@@ -38,9 +38,13 @@ function grounded(cells: ReadonlySet<string>): boolean {
   return seen.size === cells.size;
 }
 
-describe('street edge kit blueprints', () => {
-  it('lists finished forms only, Hearth then Tide, in the contract order', () => {
-    const expected = ['hearth', 'tide'].flatMap(style => STRUCTURAL.map(form => `street-${style}-${form}`));
+const BLOOM = { hearth: MAT.petal, tide: MAT.blueFlower } as const;
+const ofForm = (form: StreetPropForm, style: 'hearth' | 'tide' = 'hearth') => occupancy(createStreetProp(form, style));
+const count = (cells: Map<string, number>, material: number) => [...cells.values()].filter(m => m === material).length;
+
+describe('street kit blueprints', () => {
+  it('lists all twenty, Hearth then Tide, in the contract order', () => {
+    const expected = ['hearth', 'tide'].flatMap(style => STREET_PROP_FORMS.map(form => `street-${style}-${form}`));
     expect(BLUEPRINTS.map(b => b.id)).toEqual(expected);
   });
 
@@ -51,29 +55,38 @@ describe('street edge kit blueprints', () => {
     expect(b).toMatchObject({ version: 1, kind: 'prop', lattice: 'build', windows: [] });
     expect(b.size).toEqual(STREET_PROP_SIZES[form]);
     const kit = STYLES[style];
-    const allowed = new Set<number>([MAT.air, kit.trim, kit.stone, MAT.earth, MAT.bark, MAT.leaf, MAT.moss, MAT.petal, MAT.blueFlower]);
+    const allowed = new Set<number>([MAT.air, kit.trim, kit.stone, MAT.earth, MAT.bark, MAT.leaf, MAT.moss, BLOOM[style]]);
     expect(b.boxes.every(box => allowed.has(box.material))).toBe(true);
     expect(b.boxes.length).toBeLessThanOrEqual(512);
+    const solids = b.boxes.filter(box => box.material !== MAT.air).map(box => JSON.stringify(box));
+    expect(new Set(solids).size).toBe(solids.length);
     const cells = occupancy(b);
     expect(cells.size).toBeGreaterThan(0);
     expect(grounded(new Set(cells.keys()))).toBe(true);
-    // Structure is the kit's trim and stone; accents stay a small share of the surface.
-    const accent = [...cells.values()].filter(m => m !== kit.trim && m !== kit.stone).length;
-    expect(accent / cells.size).toBeLessThan(0.05);
+    // Flowers stay an accent everywhere: never a carpet.
+    expect(count(cells, BLOOM[style]) / cells.size).toBeLessThan(0.04);
+    if ((STRUCTURAL as readonly string[]).includes(form)) {
+      // Structure is the kit's trim and stone; accents stay a small share of the surface.
+      const accent = [...cells.values()].filter(m => m !== kit.trim && m !== kit.stone).length;
+      expect(accent / cells.size).toBeLessThan(0.05);
+    } else {
+      // Plants and stones carry no timber: containers and stones are the kit's stone, the rest is growing.
+      expect(count(cells, kit.trim)).toBe(0);
+    }
     expect(JSON.stringify(createStreetProp(form, style))).toBe(JSON.stringify(b));
   });
 
-  it('keeps the two kits the same form in their own structural materials', () => {
-    for (const form of STRUCTURAL) {
-      const hearth = occupancy(createStreetProp(form, 'hearth')), tide = occupancy(createStreetProp(form, 'tide'));
+  it('keeps the two kits the same form in their own structural materials and flower', () => {
+    const swap = new Map<number, number>([[STYLES.hearth.trim, STYLES.tide.trim], [STYLES.hearth.stone, STYLES.tide.stone], [MAT.petal, MAT.blueFlower]]);
+    for (const form of STREET_PROP_FORMS) {
+      const hearth = ofForm(form, 'hearth'), tide = ofForm(form, 'tide');
       expect([...tide.keys()]).toEqual([...hearth.keys()]);
-      const swap = new Map<number, number>([[STYLES.hearth.trim, STYLES.tide.trim], [STYLES.hearth.stone, STYLES.tide.stone]]);
       for (const [k, m] of hearth) expect(tide.get(k)).toBe(swap.get(m) ?? m);
     }
   });
 
   it('leans the line post along the run while its rails stay on the shared centre line', () => {
-    const cells = occupancy(createStreetProp('fence-straight', 'hearth'));
+    const cells = ofForm('fence-straight');
     const post = (y: number) => Array.from({ length: 16 }, (_, x) => x).filter(x => cells.get(key(x, y, 0)) === STYLES.hearth.trim);
     expect(post(2)).toEqual([7, 8, 9]);
     expect(post(10)).toEqual([8, 9, 10]);
@@ -82,14 +95,96 @@ describe('street edge kit blueprints', () => {
     }
   });
 
-  it('fails explicitly for unknown, unfinished or foreign-kit requests', () => {
+  it('fails explicitly for unknown forms or foreign kits', () => {
     expect(() => createStreetProp('garden-gate' as StreetPropForm, 'hearth')).toThrow('Unknown street prop form');
     expect(() => createStreetProp('fence-straight', 'grove' as 'hearth')).toThrow('hearth and tide');
-    for (const form of STREET_PROP_FORMS.filter(f => !(STRUCTURAL as readonly string[]).includes(f))) {
-      expect(() => createStreetProp(form, 'tide')).toThrow('not part of the finished street kit');
-    }
   });
 });
+
+describe('containers', () => {
+  const footprint = (cells: Map<string, number>, y: number) => new Set([...cells.keys()].map(parse).filter(c => c[1] === y).map(([x, , z]) => `${x},${z}`));
+  const stone = STYLES.hearth.stone;
+
+  it.each([['flower-pot', 5, 6], ['flower-trough', 4, 5]] as const)('%s holds earth below a lip that oversails its body', (form, earthY, lipTop) => {
+    const cells = ofForm(form);
+    const earth = [...cells].filter(([, m]) => m === MAT.earth).map(([k]) => parse(k));
+    expect(earth.length).toBeGreaterThan(8);
+    expect(new Set(earth.map(c => c[1]))).toEqual(new Set([earthY]));
+    // The lip is a closed stone ring around the earth at both of its courses.
+    for (const [x, , z] of earth) for (const y of [earthY, lipTop]) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      let n = 1;
+      while (cells.get(key(x + dx * n, y, z + dz * n)) !== stone) { expect(n, `${form} ring ${x},${y},${z}`).toBeLessThan(16); n++; }
+    }
+    // A real cavity: open air sits directly over some of the earth inside the lip, below its top course.
+    const open = earth.filter(([x, y, z]) => !cells.has(key(x, y + 1, z)));
+    expect(open.length).toBeGreaterThanOrEqual(3);
+    // The lip oversails the body by a cell on every side: it reads as a rim, not a straight-sided box.
+    const extent = (y: number) => {
+      const cs = [...footprint(cells, y)].map(c => c.split(',').map(Number) as [number, number]).filter(([x, z]) => cells.get(key(x, y, z)) === stone);
+      return [Math.min(...cs.map(c => c[0])), Math.max(...cs.map(c => c[0])), Math.min(...cs.map(c => c[1])), Math.max(...cs.map(c => c[1]))] as const;
+    };
+    const [lx0, lx1, lz0, lz1] = extent(lipTop), [bx0, bx1, bz0, bz1] = extent(earthY - 2);
+    expect([bx0 - lx0, lx1 - bx1, bz0 - lz0, lz1 - bz1]).toEqual([1, 1, 1, 1]);
+  });
+
+  it('keeps every flower in foliage, never on a bare stalk or loose', () => {
+    for (const form of ['flower-pot', 'flower-trough', 'leafy-shrub'] as const) {
+      const cells = ofForm(form);
+      const blooms = [...cells].filter(([, m]) => m === MAT.petal).map(([k]) => parse(k));
+      expect(blooms.length).toBeGreaterThan(0);
+      for (const [x, y, z] of blooms) {
+        const below = cells.get(key(x, y - 1, z));
+        expect(below === MAT.leaf || below === MAT.petal, `${form} bloom ${x},${y},${z}`).toBe(true);
+      }
+    }
+  });
+
+  it('keeps trough foliage off both ends so troughs meet end to end or against a wall', () => {
+    const cells = ofForm('flower-trough');
+    for (const [k, m] of cells) if (m === MAT.leaf || m === MAT.petal) expect(parse(k)[0] > 0 && parse(k)[0] < 15, k).toBe(true);
+    // Its trailing stem hangs from the front lip, in front of the inset body.
+    const hanging = [...cells].filter(([k, m]) => m === MAT.leaf && parse(k)[1] < 4).map(([k]) => parse(k));
+    expect(hanging.length).toBeGreaterThan(0);
+    for (const [, , z] of hanging) expect(z).toBe(5);
+  });
+});
+
+describe('stones and shrub', () => {
+  const top = (cells: Map<string, number>, x: number, z: number) => Math.max(-1, ...[...cells.keys()].map(parse).filter(c => c[0] === x && c[2] === z).map(c => c[1]));
+
+  it('makes the rock cluster one dominant stone and two lower neighbours, settled at their widest', () => {
+    const cells = ofForm('rock-cluster');
+    expect(top(cells, 5, 4)).toBe(6);
+    expect(top(cells, 10, 7)).toBeLessThanOrEqual(4);
+    expect(top(cells, 1, 8)).toBeLessThanOrEqual(2);
+    // The ground course is the widest, and the lean never perches a ledge more than a cell beyond the course below.
+    const courses = Array.from({ length: 7 }, (_, y) => footprint(cells, y));
+    for (const course of courses) expect(course.size).toBeLessThanOrEqual(courses[0]!.size);
+    for (let y = 1; y < 7; y++) for (const c of courses[y]!) {
+      const [x, z] = c.split(',').map(Number) as [number, number];
+      expect([[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => courses[y - 1]!.has(`${x + dx!},${z + dz!}`)), `${c} at ${y}`).toBe(true);
+    }
+    // Moss is a restrained accent in the shade and the joints, not a coat.
+    expect(count(cells, MAT.moss) / cells.size).toBeLessThan(0.15);
+    for (const [k, m] of cells) if (m === MAT.moss && parse(k)[1] > 0) expect(parse(k)[2]).toBeLessThan(3);
+  });
+
+  it('lifts the shrub canopy on a visible stem over three root flares', () => {
+    const cells = ofForm('leafy-shrub');
+    for (const [k, m] of cells) if (parse(k)[1] < 3) expect(m, k).toBe(MAT.bark);
+    const roots = [...cells].filter(([k, m]) => m === MAT.bark && parse(k)[1] === 0).map(([k]) => parse(k));
+    expect(roots.filter(([x, , z]) => x < 5 || x > 6 || z < 5 || z > 6).length).toBeGreaterThanOrEqual(5);
+    const leaves = count(cells, MAT.leaf);
+    expect(leaves / cells.size).toBeGreaterThan(0.85);
+    // An uneven crown, higher at the back right: a top-row column there has no mirror across the stem.
+    expect(top(cells, 8, 4)).toBe(11);
+    expect(top(cells, 3, 4)).toBeLessThan(11);
+  });
+});
+
+function footprint(cells: Map<string, number>, y: number) {
+  return new Set([...cells.keys()].map(parse).filter(c => c[1] === y).map(([x, , z]) => `${x},${z}`));
+}
 
 describe('garden-edge join fixtures', () => {
   const byId = new Map(BLUEPRINTS.map(b => [b.id, b]));

@@ -1,6 +1,7 @@
 import type { VoxelBlueprint } from '@chatdom/shared';
 import { STYLES } from '../../materials';
 import { fenceCorner, fenceEnd, fenceStraight, wallCorner, wallEnd, wallStraight, type StreetStyle } from './edges';
+import { flowerPot, flowerTrough, leafyShrub, rockCluster } from './plants';
 
 export { FENCE_PROFILE, WALL_PROFILE, type StreetStyle } from './edges';
 
@@ -20,23 +21,22 @@ export const STREET_PROP_SIZES: Readonly<Record<StreetPropForm, readonly [number
 };
 
 type Builder = (kit: (typeof STYLES)[StreetStyle]) => VoxelBlueprint['boxes'];
-const BUILDERS: Partial<Record<StreetPropForm, Builder>> = {
+const BUILDERS: Record<StreetPropForm, Builder> = {
   'fence-straight': fenceStraight, 'fence-corner': fenceCorner, 'fence-end': fenceEnd,
   'wall-straight': wallStraight, 'wall-corner': wallCorner, 'wall-end': wallEnd,
+  'flower-pot': flowerPot, 'flower-trough': flowerTrough, 'rock-cluster': rockCluster, 'leafy-shrub': leafyShrub,
 };
 
 /** Builds one passive street prop in a home kit's own trim, stone and natural accents. */
 export function createStreetProp(form: StreetPropForm, style: StreetStyle): VoxelBlueprint {
   if (!(STREET_PROP_FORMS as readonly string[]).includes(form)) throw new Error(`Unknown street prop form "${String(form)}". Choose ${STREET_PROP_FORMS.join(', ')}.`);
   if (!(STREET_STYLES as readonly string[]).includes(style)) throw new Error(`Street props are made in the hearth and tide kits, not "${String(style)}".`);
-  const build = BUILDERS[form];
-  if (!build) throw new Error(`Street prop ${form} is not part of the finished street kit yet.`);
   const kit = STYLES[style];
-  return { version: 1, id: `street-${style}-${form}`, styleId: kit.id, kind: 'prop', lattice: 'build', size: [...STREET_PROP_SIZES[form]], boxes: build(kit), windows: [] };
+  return { version: 1, id: `street-${style}-${form}`, styleId: kit.id, kind: 'prop', lattice: 'build', size: [...STREET_PROP_SIZES[form]], boxes: BUILDERS[form](kit), windows: [] };
 }
 
-/** Finished forms only, Hearth then Tide, each in listed form order. */
+/** All twenty street props, Hearth then Tide, each in listed form order. */
 export const BLUEPRINTS: readonly VoxelBlueprint[] = STREET_STYLES.flatMap(style =>
-  STREET_PROP_FORMS.filter(form => BUILDERS[form]).map(form => createStreetProp(form, style)));
+  STREET_PROP_FORMS.map(form => createStreetProp(form, style)));
 
 export { JOIN_FIXTURES } from './joins';

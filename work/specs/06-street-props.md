@@ -192,3 +192,8 @@ These ten passive forms can ship as complete content without a new interaction c
   first task; complete validation and authored join fixtures remain mandatory for final acceptance.
 
 - **2026-10-30 — Ready for the team.** Main reviewed the real core mixed-street desktop/phone views, doorway and clean SIMULATED window fixture. Validator checks all 51 baseline assets; six review-fixture tests pass. Capture previews allocate free ports for parallel worktrees. The actual lane assets remain this lane’s acceptance, not a claimed result of the tooling check.
+- **2026-10-30 — One flower per kit (SP02).** Hearth blooms in `petal` (heather pink), Tide in `blueFlower` (sea
+  blue). Both are registered accents, so each street keeps one restrained flower colour and the two neighbourhoods
+  differ without a new palette. Pots and troughs share the craft of a foot, a shadow groove and an oversailing lip.
+  Stones use upright sides and a domed shoulder rather than ellipsoid terraces. Flowers sit in the foliage, not on
+  stalks.
