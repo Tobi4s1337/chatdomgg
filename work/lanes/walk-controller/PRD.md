@@ -42,23 +42,23 @@ after main has stopped editing them. The integrator alone calls those modules fr
   an insufficient recovery seam becomes `needs:`, never a new return type. Keep distance tied to actual
   horizontal travel. · evidence: meaningful
   deterministic recording, thin-wall/corner/embedded/mismatch tests; observed real supplied wall collision.
-- [ ] **WC03 — Walk half-metre steps and jump once.** Add supported .5 m auto-step trials with headroom,
+- [x] **WC03 — Walk half-metre steps and jump once.** Add supported .5 m auto-step trials with headroom,
   horizontal progress and final support checks; retain slide on rejection. Tune shared acceleration/quick stops,
   sprint and grounded jump, document chosen constants and smooth rendered step height separately. No airborne
   climbing or repeated held jump. · evidence: exact-height/too-high/ceiling/grazing/narrow-landing tests; keyboard
   walk/sprint/one-jump route with matching gait distance and safe feet in the real kingdom.
-- [ ] **WC04 — Keep every input under control.** Complete keyboard event ownership, camera-relative byte
+- [x] **WC04 — Keep every input under control.** Complete keyboard event ownership, camera-relative byte
   quantization, jump pulse, drag orbit, optional labelled lock, wheel and phone thumb/orbit/pinch input.
   E remains reserved for interactions; never bind it to camera orbit.
   Filter lock deltas exactly as spec R8; recover rejection/re-lock cleanly. Clear held/pending/capture state on
   blur, hidden page, menu or disconnect. Preserve editable fields and click-versus-drag events for interaction.
   · evidence: pulse/held/repeat and slow-frame staging checks; warp/rejection/re-lock/blur/menu flow, usable touch.
-- [ ] **WC05 — Keep the camera out of the kingdom's solids.** Complete the conservative near-plane/shoulder
+- [x] **WC05 — Keep the camera out of the kingdom's solids.** Complete the conservative near-plane/shoulder
   collision sweep, immediate pull-in and .35 s outward recovery against the supplied complete CollisionWorld.
   Separate zoom intent from occlusion. Finish continuous wheel first person, self-visibility, level horizon,
   time-based follow and resize framing. · evidence: newly inserted occluder first-frame and corner/post/roof
   tests at both aspects; looked real street and tight-space view; no clipped first-person wall approach.
-- [ ] **WC06 — Adopt Predict and collision revisions without a second protocol.** Within the effective narrow
+- [x] **WC06 — Adopt Predict and collision revisions without a second protocol.** Within the effective narrow
   client grant, bind the improved shared step, all PLAYER_FIELDS, input pulses and collision revisions through
   the existing real Colyseus adapter. Preserve its auth/reconnect/transport lifecycle. Stage exactly Predict's
   due input count, adopt the frozen safe revision transition/reset policy and document render/takeover order.
@@ -80,3 +80,7 @@ after main has stopped editing them. The integrator alone calls those modules fr
 ## Backlog
 
 The worker records discoveries here and never selects them without a new brief.
+- Pulled in by a wall behind, let the camera also rise and pitch down a little (over-the-head) so the close view shows more street; needs a real-GPU feel check first (from WC05).
+
+- The reference court (`/-/realm`, read-only) draws every walker's shadow at floor height, so a citizen on its
+  .5 m block casts it on the paving, and clips the self name label at the right edge at 1440×900.

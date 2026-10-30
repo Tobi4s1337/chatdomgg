@@ -6,6 +6,7 @@ import type { RealmDecision, RealmDomainCommand, RealmFact, RealmIngressCheckpoi
 import type { PresenceInput } from '@chatdom/shared';
 import { applyRealmFact, createRealmState, decideRealm } from '@chatdom/world/realm';
 import { canonicalJson, digestOf, sha256Hex } from './codec';
+import { verifyAllocation } from '../allocation/guard';
 import { RealmCommitUncertainError, RealmLeaseHeldError, RealmRecoveryError, RealmStorageUnavailableError, RealmWriterFencedError, type RealmDatabase } from './database';
 
 /** Writer lease length. The holder renews at a third of this; an expired lease can never write again. */
@@ -18,7 +19,7 @@ export const REALM_BASE_ANVILS = 2;
 const NOW_MS = 'floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint';
 
 type Tx = pg.PoolClient;
-/** Extra durable constraints checked inside the commit, before anything is written (allocation receipts, …). */
+/** Extra durable constraints checked inside the commit, before the fact row is written. */
 export type RealmCommitGuard = (tx: Tx, fact: RealmFact, prior: RealmPrivateState) => Promise<'ok' | 'conflict'>;
 
 export interface PostgresRealmRepositoryOptions {
@@ -56,7 +57,8 @@ export class PostgresRealmRepository implements RealmRepository {
     this.leaseMs = bounded(options.leaseMs ?? REALM_LEASE_MS, 1_000, 120_000, 'leaseMs');
     this.snapshotEvery = bounded(options.snapshotEvery ?? REALM_SNAPSHOT_EVERY, 1, 100_000, 'snapshotEvery');
     this.anvilCapacity = bounded(options.anvilCapacity ?? REALM_BASE_ANVILS, 1, 64, 'anvilCapacity');
-    this.guards = [claimDesign, ...(options.guards ?? [])];
+    // Always on: a design exists once, and a home is installed only against its pending deed (no fixture ownership).
+    this.guards = [claimDesign, verifyAllocation, ...(options.guards ?? [])];
   }
 
   async acquire(kingdomId: KingdomId): Promise<RealmWriterLease> {
