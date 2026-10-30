@@ -278,7 +278,13 @@ const delay = (ms: number) => new Promise<void>(resolve => { const t = setTimeou
 export function createDurableRealmServices(input: {
   readonly repository: DurableRepository;
   readonly auth: RealmAuthenticator;
-  readonly kingdom: (kingdomId: KingdomId) => DurableKingdomOptions;
+  /** World, layout revision and arrivals for a kingdom (a live kingdom reads its adopted founded layout here). */
+  readonly kingdom: (kingdomId: KingdomId) => DurableKingdomOptions | Promise<DurableKingdomOptions>;
+  /**
+   * Trusted work after the lease is held and before the first walker enters, such as installing deeds left pending
+   * by an interrupted allocation. Its failure is logged; it never fails the open or skips the lease.
+   */
+  readonly afterOpen?: (kingdom: DurableKingdom) => Promise<unknown>;
   readonly log?: (line: string) => void;
 }): RealmRoomServices & { readonly kingdoms: ReadonlyMap<KingdomId, DurableKingdom> } {
   const kingdoms = new Map<KingdomId, DurableKingdom>();
@@ -290,7 +296,8 @@ export function createDurableRealmServices(input: {
       if (prior?.current) throw new ServerError(409, 'This kingdom is already open on this server.');
       let kingdom: DurableKingdom;
       try {
-        kingdom = await DurableKingdom.open(input.repository, kingdomId, { ...input.kingdom(kingdomId), ...(input.log ? { log: input.log } : {}) });
+        const options = await input.kingdom(kingdomId);
+        kingdom = await DurableKingdom.open(input.repository, kingdomId, { ...options, ...(input.log ? { log: input.log } : {}) });
       } catch (error) {
         if (error instanceof RealmLeaseHeldError) throw new ServerError(409, 'Another server holds this kingdom right now. Try again in a moment.');
         input.log?.(`[realm] kingdom ${kingdomId} did not open: ${describeStorageFailure(error)}`);
@@ -298,6 +305,10 @@ export function createDurableRealmServices(input: {
       }
       kingdoms.set(kingdomId, kingdom);
       kingdom.onClosed(() => { if (kingdoms.get(kingdomId) === kingdom) kingdoms.delete(kingdomId); });
+      if (input.afterOpen) {
+        try { await input.afterOpen(kingdom); }
+        catch (error) { input.log?.(`[realm] kingdom ${kingdomId} opened, but its open-time recovery did not finish: ${describeStorageFailure(error)}`); }
+      }
       return kingdom;
     },
   };
