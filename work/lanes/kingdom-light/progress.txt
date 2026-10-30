@@ -1,0 +1,11 @@
+
+2026-10-30 handoff: Main look, 28e27fe: fresh integrated phone dusk shows an unlit grey castle beneath the beacon. In the castle light pass, make the great-hall front openings visibly warm and spill warmth onto the entrance court; keep the beacon separate. Evidence: shots/kingdom/town-dusk@390x844.png.
+
+2026-10-31 founder efficiency decision: Continue the live-evening lane with ONE worker; take one task at a time. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
+
+2026-10-31 main phone walk review: entry now draws the actual town from shoulder height (shots/kingdom/entry-dusk@390x844.png). The broad street surfaces still read cold while tiny distant windows glow. Concrete next existing street-light task: let nearby lit windows/lamps warm a readable patch of pavement and the facing wall at walking eye height; judge that view, not only the aerial. No new lighting scope or reopening accepted work requested.
+
+2026-10-31 founder critical-path takeover: Main is merging reviewed w2/w3 lighting/glass now and owns composition/conflict resolution. Primary uncommitted grade work remains yours. One worker, independent current task only.
+Note from Tobias (Sat 01:10, applies to every task from here): the world needs much more love and ambition. Even our first voxel diorama had more warmth than today's kingdom. Handcrafted density and life (flowers and gardens, lanterns, washing lines, carts, chimney smoke, birds and fireflies, reeds, ripples, fish jumping, light spilling on cobbles, signs, wear and moss, little stories in every street), ambient motion so it never looks frozen, and mood (sky, fog, the dusk gradient, warm against cool light). Interactions with the depth chatdom/World-Tree and Artstyle-Soul-Feel promise, so walking around rewards you. The bar for every visual change: would a streamer stop and say "look at this"? Never clean-but-empty.
+
+follow-up: KL02 Record the integration recipe and capture and inspect the required real-town noon and dusk evidence.
