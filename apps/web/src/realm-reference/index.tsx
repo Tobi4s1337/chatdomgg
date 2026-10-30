@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { MATERIALS } from '@chatdom/content';
 import { createVoxelMaterial, getEnvironment } from '@chatdom/render';
 import type { WalkInput } from '@chatdom/shared/realm';
+import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import { connectReferenceRealm, type RealmClient, type RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkController, type WalkDebug } from '../walk';
@@ -114,7 +115,9 @@ export default function RealmReference() {
       if (cancelled) { connected.dispose(); return; }
       client = connected; debug.client = connected;
       // The existing reference smoke hook can supply explicit input; the same real client still ticks once.
-      walk=createWalkController({camera,surface:renderer.domElement,hud:host,realm:{selfId:connected.selfId,room:connected.room,
+      walk=createWalkController({camera,surface:renderer.domElement,hud:host,collision:REFERENCE_WORLD,realm:{selfId:connected.selfId,room:connected.room,
+        get predicted(){return connected.predicted;},
+        clearInput:()=>connected.clearInput(),
         tick:(now,input)=>connected.tick(now,{...input,...override})}});
       window.__chatdomWalk=walk.debug;
       resize();

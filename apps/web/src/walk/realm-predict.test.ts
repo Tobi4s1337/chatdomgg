@@ -94,6 +94,21 @@ describe('the realm client predicts with the room', () => {
   // would make; the client must refuse it rather than predict through the new wall.
   const source: RealmCollision = { world: revision => published.has(revision) ? [REFERENCE_WORLD, REVISION_2][revision - 1] ?? null : REFERENCE_WORLD };
 
+  it('cancels a jump sampled before an input takeover when no fixed input was due yet', async () => {
+    const client = await connectRealm(endpoint, entry('walk-predict-takeover'), source); clients.push(client);
+    const { sent } = recordSends(client);
+    const now = performance.now();
+    client.tick(now, IDLE);
+    client.tick(now + 1, { ...IDLE, buttons: 2 });
+    expect(sent).toHaveLength(0);
+    client.clearInput();
+    await pause(40);
+    client.tick(performance.now(), IDLE);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every(input => (input.buttons & 2) === 0)).toBe(true);
+    client.dispose();
+  });
+
   it('stages exactly the due fixed inputs on slow frames, one jump per press, and agrees with the room in every field', async () => {
     a = await connectRealm(endpoint, entry('walk-predict-scope-a'), source); clients.push(a);
     b = await connectRealm(endpoint, entry('walk-predict-scope-b'), REFERENCE_WORLD); clients.push(b);

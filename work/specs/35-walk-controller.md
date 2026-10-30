@@ -234,6 +234,16 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
 
 ## Decisions
 
+- **2026-10-30 — Integrated WC05/WC06 presentation seam.** The reference consumer supplies `REFERENCE_WORLD`
+  and forwards the real client's `predicted` getter and `clearInput()`. The controller derives step offsets from
+  exact predicted feet/support, applies them only to returned render poses and an independent camera-height
+  target, and keeps camera collision anchored to the uneased feet. Body easing is cancelled when subsequent
+  horizontal travel puts it under a lintel; jump/placement/revision/takeover clears residual offsets. A client
+  jump waiting for its first due fixed input is cleared along with controller input on blur/menu/reset/dispose.
+  Looking upward under a ceiling flush with the body crown exposed an unsafe zero-boom near-plane fallback on
+  portrait; the camera root now lowers within the body envelope to keep the near footprint below the crown,
+  without changing the near distance, FOV or authoritative movement. Actual kingdom acceptance remains pending.
+
 - **2026-10-30 — Executable boundary frozen and client scope transferred.** Main demonstrated the real reference
   room/client with three SDK clients and three Playwright browsers moving/reloading; full verification passed.
   The lane extends the shared solver without changing its signature and owns the explicitly granted WC06

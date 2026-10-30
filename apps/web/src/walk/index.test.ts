@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { WALK_BUTTON, type CollisionWorld, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
+import { WALK_BUTTON, type CollisionWorld, type PlayerState, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
 import type { RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkRealm } from './index';
 
@@ -279,8 +279,28 @@ describe('the walk controller', () => {
     expect(controller.debug.camera.clearance).toBeNull();
   });
 
+  it('eases a predicted step down without moving collision feet or drawing the head into the next lintel', () => {
+    const lintel: SolidBox = { min: [2.5, 1.8, 8], max: [4, 3, 10] };
+    const collision: CollisionWorld = { revision: 7, query: () => [lintel] };
+    const { controller, fake, self } = setup(390, 844, undefined, collision);
+    self.y = .5;
+    const predicted: PlayerState = { x: self.x, y: .5, z: self.z, vx: 0, vy: 0, vz: 0, grounded: true, yaw: self.yaw, distance: 0, collisionRevision: 7 };
+    Object.defineProperty(fake, 'predicted', { value: predicted });
+    controller.frame(0);
+    self.y = predicted.y = 0;
+    expect(controller.frame(16).find(p => p.self)!.y).toBeGreaterThan(0);
+    expect(predicted.y).toBe(0);
+    // The next step of horizontal travel is under a lintel that clears the real body, but not its easing.
+    self.x = predicted.x = 3;
+    expect(controller.frame(32).find(p => p.self)!.y).toBe(0);
+    self.y = predicted.y = .2; predicted.grounded = false;
+    expect(controller.frame(48).find(p => p.self)!.y).toBe(.2);
+    controller.dispose();
+  });
+
   it.each(['blur', 'contextmenu'])('drops a queued phone jump and every held input on %s', event => {
-    const { controller, keyboard, touch, lockDocument, sent } = setup(390, 844, undefined, true);
+    const { controller, keyboard, touch, lockDocument, sent, fake } = setup(390, 844, undefined, true);
+    const clearInput = vi.fn(); Object.assign(fake, { clearInput });
     controller.frame(0);
     key(keyboard, 'keydown', 'KeyW');
     key(keyboard, 'keydown', 'KeyV');
@@ -290,6 +310,7 @@ describe('the walk controller', () => {
     controller.frame(16);
     expect(sent.at(-1)).toMatchObject({ moveX: 0, moveZ: 0, buttons: 0 });
     expect([controller.debug.look, controller.debug.stick, lockDocument.pointerLockElement]).toEqual(['free', null, null]);
+    expect(clearInput).toHaveBeenCalledOnce();
     controller.dispose();
   });
 });

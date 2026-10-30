@@ -39,6 +39,8 @@ export interface RealmClient {
    * prediction and is drawn where the room puts it, and never walks through solids it cannot see.
    */
   readonly predicting: boolean;
+  /** Discard a jump sampled before blur, a menu or another input owner took over. */
+  clearInput(): void;
   dispose(): void;
 }
 /** A correction bigger than this is a placement, not an error: drawn at once, never glided through walls. */
@@ -109,10 +111,11 @@ export async function connectRealm(endpoint: string, entry: RealmEntry, collisio
   const offRevision = room.onMessage('revision', (message: { collisionRevision?: unknown }) => {
     if (typeof message?.collisionRevision === 'number') worldAt(message.collisionRevision);
   });
-  const dropped = () => { jumpPending = false; };
+  const dropped = () => { jumpPending = false; jumpDown = false; };
   room.onDrop(dropped);
   return {
     selfId: room.sessionId, room, predicted,
+    clearInput: dropped,
     get predicting() { return !disposed && predicted.collisionRevision === room.state.collisionRevision && worldAt(predicted.collisionRevision) !== null; },
     tick(now, sample) {
       if (disposed) return [];

@@ -39,7 +39,7 @@ export function createStepEase(): StepEase {
       if (grounded && lastGrounded && dy !== 0 && Math.abs(dy) <= WALK_BODY.stepHeight + 1e-6) {
         body = Math.max(0, body - dy);
         camera = Math.max(-STEP_EASE.cameraLag, Math.min(STEP_EASE.cameraLag, camera - dy));
-      }
+      } else if (!grounded || !lastGrounded || Math.abs(dy) > WALK_BODY.stepHeight + 1e-6) { body = 0; camera = 0; }
       lastY = y; lastGrounded = grounded;
       const t = Number.isFinite(dtSeconds) && dtSeconds > 0 ? dtSeconds : 0;
       body *= Math.exp(-t / STEP_EASE.bodySeconds);
