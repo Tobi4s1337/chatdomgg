@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAT } from '@chatdom/content';
 import { cornerAccessibility, haloIndex, unpackVoxelVertex, type AssetChunkMesh } from '@chatdom/voxel';
 import { generateKingdom, terrainHeight, type KingdomLayout } from '@chatdom/world';
-import { buildTerrain, prepareTerrainField, sampleRenderedTerrainHeight, terrainChunkRequest,
+import { buildTerrain, prepareTerrainField, sampleRenderedTerrainHeight, sampleTerrainTriangles, terrainChunkRequest,
   TERRAIN_SURFACE_BOUNDS_PADDING, type TerrainWorkerResponse } from './terrain-worker';
 import { createSettlementContent } from './settlement-content';
 
@@ -26,6 +26,12 @@ function invariant(condition: boolean, message: string): asserts condition {
 }
 
 describe('conforming terrain surface', () => {
+  it('samples either rendered triangle from a supplied ground field', () => {
+    const ground = (x: number, z: number): number => (x + 2) * (z + 3);
+    expect(sampleTerrainTriangles(ground, -1.75, -2.25)).toBeCloseTo(.25, 12);
+    expect(sampleTerrainTriangles(ground, -1.25, -2.75)).toBeCloseTo(.25, 12);
+    expect(() => sampleTerrainTriangles(ground, Infinity, 0)).toThrow('finite coordinates');
+  });
   it.each(['hamlet','town'] as const)('keeps the current capture seed inside the existing %s height budgets',tier=>{
     const layout=generateKingdom({seed:'willowmere',tier,firstYear:tier==='hamlet'?2025:2022,year:2026});
     const field=prepareTerrainField(layout),width=field.chunkCounts[0]*16+1;
