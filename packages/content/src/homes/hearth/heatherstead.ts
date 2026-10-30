@@ -1,6 +1,6 @@
 import type { HomeTier } from '@chatdom/shared';
 import { MAT } from '../../materials';
-import { homeId, unfinished, type HearthHome } from './family';
+import { homeId, type HearthHome } from './family';
 import { BASE, FLOOR, KIT, Plan, WALL, base, chimney, doorway, gables, hollow, passage, rearLimit, roof, studs, trough, walls, window, type Face, type Wing } from './grammar';
 
 /**
@@ -9,6 +9,12 @@ import { BASE, FLOOR, KIT, Plan, WALL, base, chimney, doorway, gables, hollow, p
  * builds a second, narrower and lower range behind the outshut: the catslide falls into a valley against its slope,
  * so the side reads as one long ridge, a long sweep and a quieter ridge behind. It stands to the east, keeping a
  * broad garden behind the catslide, and a timber bay turns its east gable to the light.
+ *
+ * The manor lays a third long ridge across the back of the lot, parallel to the other two: a rear range whose
+ * north face takes up the street front's measure, a wall dormer over a mullioned light at the same place as the
+ * front's east dormer. The hall runs that range on to the west lot line, so the meadow side becomes a second long
+ * front with both dormers answering the street's, encloses the garden behind the catslide as a court, and sets a
+ * timber bay between them.
  */
 const RANGE: Wing = { x0: 4, x1: 60, z0: 84, z1: 116, wallTop: 34, ridge: 'x', eave: 4, verge: 3, tread: 2, rise: 2, thickness: 4 };
 const DOOR_X = 16;
@@ -17,6 +23,12 @@ const PORCH = { x0: 6, x1: 40, z0: 116, z1: 126, posts: [6, 22, 37] } as const;
 const BACK: Wing = { x0: 24, x1: 56, z0: 44, z1: 68, wallTop: 26, ridge: 'x', eave: 4, verge: 3, tread: 2, rise: 2, thickness: 4 };
 /** The bay projects six cells from the back range's east gable: a full timber-framed light under a lean-to. */
 const BAY = { x0: BACK.x1, x1: BACK.x1 + 6, z0: 46, z1: 60, top: 21 } as const;
+/** The rear range: the manor's east part, then the hall's full length. Its walls stand clear of the back range's. */
+const REAR: Wing = { x0: 30, x1: 58, z0: 22, z1: 44, wallTop: 28, ridge: 'x', eave: 3, verge: 3, tread: 2, rise: 2, thickness: 4 };
+const REAR_FULL: Wing = { ...REAR, x0: 4 };
+/** The north bay projects six cells from the rear range between the two rear dormers. */
+const NORTH_BAY = { x0: 24, x1: 36, z0: REAR.z0 - 6, z1: REAR.z0, top: 21 } as const;
+const TIERS: readonly HomeTier[] = ['hut', 'cottage', 'house', 'manor', 'hall'];
 
 const street = { facing: 'south', plane: RANGE.z1 } as const satisfies Face;
 const westGable = { facing: 'west', plane: RANGE.x0 } as const satisfies Face;
@@ -37,6 +49,31 @@ function dormer(p: Plan, c: number): void {
   p.put(w.x0 - 1, w.wallTop - 2, w.z1 - 1, w.x1 + 1, w.wallTop, w.z1 + 1, KIT.trim);
   gables(p, w);
   roof(p, w);
+}
+
+/** The same wall dormer turned to the meadow, rising from the rear range's north wall. */
+function rearDormer(p: Plan, host: Wing, c: number): void {
+  const w: Wing = { x0: c - 6, x1: c + 6, z0: host.z0, z1: host.z0 + 15, wallTop: host.wallTop + 10, ridge: 'z', eave: 1, verge: 1, tread: 1, rise: 1, thickness: 2, gables: [true, false], cap: false };
+  p.carve(w.x0, host.wallTop - 4, host.z0 - 4, w.x1, w.wallTop + 4, host.z0);
+  p.put(w.x0, host.wallTop - 2, w.z0, w.x1, w.wallTop, w.z0 + WALL, KIT.wall);
+  p.put(w.x0, host.wallTop - 2, w.z0, w.x0 + 2, w.wallTop, w.z1, KIT.wall);
+  p.put(w.x1 - 2, host.wallTop - 2, w.z0, w.x1, w.wallTop, w.z1, KIT.wall);
+  p.carve(w.x0 + 2, host.wallTop, w.z0 + WALL, w.x1 - 2, w.wallTop, w.z1);
+  p.put(w.x0 - 1, w.wallTop - 2, w.z0 - 1, w.x1 + 1, w.wallTop, w.z0 + 1, KIT.trim);
+  gables(p, w);
+  roof(p, w);
+}
+
+/** A timber bay on the meadow side, its lean-to roof stepping out from under the rear range's wall plate. */
+function northBay(p: Plan): void {
+  const { x0, x1, z0, z1, top } = NORTH_BAY;
+  p.put(x0 - 1, 0, z0 - 1, x1 + 1, BASE, z1 + 1, KIT.stone);
+  p.put(x0, BASE, z0, x1, top, z1, KIT.wall);
+  for (const x of [x0, x1 - 2]) p.put(x, BASE, z0 - 1, x + 2, top, z0 + 1, KIT.trim);
+  p.carve(x0 + 2, FLOOR, z0 + 2, x1 - 2, top - 1, z1 + WALL);
+  p.put(x0 + 2, FLOOR - 1, z0 + 2, x1 - 2, FLOOR, z1 + WALL, KIT.trim);
+  for (let j = 0; j < 4; j++) p.put(x0 - 1, top + 3 - j, z1 - 2 * j - 2, x1 + 1, top + 6 - j, z1 - 2 * j, KIT.roof);
+  p.put(x0 - 1, top, z0 - 2, x1 + 1, top + 3, z0 - 1, KIT.trim);
 }
 
 /** A lean-to porch roof two steps below the main eave, on three posts over a flush limestone floor. */
@@ -93,7 +130,7 @@ function bay(p: Plan): void {
 }
 
 export function heatherstead(tier: HomeTier): HearthHome {
-  if (tier !== 'hut' && tier !== 'cottage' && tier !== 'house') return unfinished('heatherstead', tier);
+  const level = TIERS.indexOf(tier);
   const p = new Plan(homeId('heatherstead', tier), rearLimit(tier));
   base(p, RANGE);
   walls(p, RANGE);
@@ -102,8 +139,8 @@ export function heatherstead(tier: HomeTier): HearthHome {
   studs(p, eastGable, 90, 112, 32, 11);
   hollow(p, RANGE);
   gables(p, RANGE);
-  if (tier !== 'hut') outshut(p);
-  if (tier === 'house') {
+  if (level >= 1) outshut(p);
+  if (level >= 2) {
     // The back range is raised after the outshut so its walls take over the catslide's foot.
     base(p, BACK);
     walls(p, BACK);
@@ -114,9 +151,25 @@ export function heatherstead(tier: HomeTier): HearthHome {
     gables(p, BACK);
   }
   roof(p, RANGE);
-  if (tier === 'house') {
+  if (level >= 2) {
     roof(p, BACK);
     bay(p);
+  }
+  const rear = level >= 4 ? REAR_FULL : REAR;
+  if (level >= 3) {
+    // The rear range is raised after the back range's roof, so its hollow takes out the eave that reached in.
+    base(p, rear);
+    walls(p, rear);
+    studs(p, { facing: 'north', plane: rear.z0 }, rear.x0 + 5, rear.x1 - 3, 26, 12);
+    studs(p, { facing: 'east', plane: rear.x1 }, rear.z0 + 3, rear.z1 - 3, 26, 9);
+    studs(p, { facing: 'west', plane: rear.x0 }, rear.z0 + 3, rear.z1 - 3, 26, 9);
+    if (level >= 4) northBay(p);
+    hollow(p, rear);
+    gables(p, rear);
+    roof(p, rear);
+    passage(p, 'z', 38, 50, rear.z1 - WALL, BACK.z0 + WALL, FLOOR + 19);
+    rearDormer(p, rear, 50);
+    if (level >= 4) rearDormer(p, rear, 16);
   }
   porch(p);
   for (const c of DORMERS) dormer(p, c);
@@ -132,11 +185,11 @@ export function heatherstead(tier: HomeTier): HearthHome {
   window(p, 'west-settle', westGable, { u0: 104, u1: 112, y0: 8, y1: 20 });
   chimney(p, 5, 13, 90, 102, 8, 60, 'none');
 
-  if (tier !== 'hut') {
+  if (level >= 1) {
     window(p, 'outshut-east', { facing: 'east', plane: RANGE.x1 }, { u0: 70, u1: 78, y0: 8, y1: 18 });
     window(p, 'outshut-west', westGable, { u0: 70, u1: 78, y0: 8, y1: 18 });
   }
-  if (tier === 'house') {
+  if (level >= 2) {
     passage(p, 'z', 32, 44, BACK.z1 - WALL, 69, FLOOR + 19);
     window(p, 'back-west', { facing: 'west', plane: BACK.x0 }, { u0: 58, u1: 64, y0: 8, y1: 20 });
     window(p, 'back-bay', { facing: 'east', plane: BAY.x1 }, { u0: BAY.z0 + 2, u1: BAY.z1 - 2, y0: 6, y1: 18 }, { mullion: true });
@@ -150,9 +203,27 @@ export function heatherstead(tier: HomeTier): HearthHome {
     p.put(x, 1, z, x + 3, 1 + h, z + 3, MAT.leaf);
     p.put(x + 1, 1 + h, z, x + 2, 2 + h, z + 3, MAT.blueFlower);
   }
+  if (level >= 3) {
+    const meadow = { facing: 'north', plane: rear.z0 } as const satisfies Face;
+    window(p, 'rear-east', meadow, { u0: 46, u1: 54, y0: 8, y1: 20 }, { mullion: true });
+    trough(p, meadow, 45, 55, 7, MAT.blueFlower);
+    window(p, 'rear-dormer-east', meadow, { u0: 47, u1: 53, y0: 28, y1: 36 });
+    window(p, 'rear-hall', meadow, { u0: 38, u1: 42, y0: 8, y1: 20 });
+    window(p, 'rear-gable', { facing: 'east', plane: rear.x1 }, { u0: 28, u1: 38, y0: 8, y1: 20 }, { mullion: true });
+  }
+  if (level >= 4) {
+    const meadow = { facing: 'north', plane: rear.z0 } as const satisfies Face;
+    window(p, 'rear-west', meadow, { u0: 12, u1: 20, y0: 8, y1: 20 }, { mullion: true });
+    trough(p, meadow, 11, 21, 7, MAT.petal);
+    window(p, 'rear-dormer-west', meadow, { u0: 13, u1: 19, y0: 28, y1: 36 });
+    window(p, 'rear-bay', { facing: 'north', plane: NORTH_BAY.z0 }, { u0: NORTH_BAY.x0 + 2, u1: NORTH_BAY.x1 - 2, y0: 6, y1: 18 }, { mullion: true });
+    window(p, 'rear-west-gable', { facing: 'west', plane: rear.x0 }, { u0: 28, u1: 38, y0: 8, y1: 20 }, { mullion: true });
+  }
   const supports = PORCH.posts.map(x => [x + 1, 123, 0, 24] as const);
   const rooms: (readonly [number, number, number])[] = [[32, 2, 100]];
-  if (tier !== 'hut') rooms.push([32, 2, 74]);
-  if (tier === 'house') rooms.push([40, 2, 54], [56, 2, 53]);
-  return { blueprint: p.blueprint(), entrance, rooms, supports };
+  if (level >= 1) rooms.push([32, 2, 74]);
+  if (level >= 2) rooms.push([40, 2, 54], [56, 2, 53]);
+  if (level >= 3) rooms.push([44, 2, 30]);
+  if (level >= 4) rooms.push([12, 2, 30], [30, 2, 18]);
+  return { blueprint: p.blueprint(), entrance, exits: [], rooms, supports };
 }
