@@ -118,7 +118,169 @@ try {
     if (actual !== value) failures.push(`${name}: expected ${selector} ${attribute}=${value}, got ${actual}`);
   };
 
+  // The stream view: the real renderer under SwiftShader, so each construction is slow.
+  // Fixed `time` keeps captures deterministic; `hour=19.5` is the dusk the stage is made for.
+  const STREAM = 'source=simulated&seed=willowmere&tier=town&hour=19.5&time=30';
+  const streamReady = page => page.waitForFunction(() => window.__chatdomReady === true && window.__chatdomKingdom?.stats.ready
+    && window.__chatdomKingdom.stats.fieldSettled, null, { timeout: 400_000 });
+  const openStream = async ({ path, width, height, wait = true, init, tolerate = /$^/ }) => {
+    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+    const errors = [], missing = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', message => { if (message.type() === 'error' && !tolerate.test(message.text())) errors.push(message.text()); });
+    page.on('response', response => { if (response.status() >= 400 && !tolerate.test(response.url())) missing.push(`${response.status()} ${response.url()}`); });
+    if (init) await page.addInitScript(init);
+    await page.goto(`${base}${path}`);
+    if (wait) await streamReady(page);
+    await page.evaluate(() => document.fonts.ready);
+    return { page, errors, missing };
+  };
+  const stream = async (page, key) => page.evaluate(key => {
+    const s = window.__chatdomStream;
+    return key === 'stats' ? { ...s.stats, phase: s.phase, layout: s.layout, source: s.source, canvases: document.querySelectorAll('.stream-canvas').length, ready: window.__chatdomReady === true, handle: !!window.__chatdomKingdom } : s[key];
+  }, key);
+  const checkStream = async (name, { page, errors, missing }, { clean = true } = {}) => {
+    const { width, height } = page.viewportSize();
+    const found = await page.evaluate(() => {
+      const output = document.querySelector('[data-chatdom-stream]');
+      const visible = el => { const box = el.getBoundingClientRect(), style = window.getComputedStyle(el); return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.opacity !== '0'; };
+      const curtain = document.querySelector('.stream-curtain');
+      const words = [...output.querySelectorAll('.stream-signature, .stream-mark, .stream-curtain')].filter(el => visible(el) && !(el === curtain && curtain.classList.contains('open'))).map(el => el.innerText).join(' ');
+      return {
+        scrollW: document.scrollingElement.scrollWidth, scrollH: document.scrollingElement.scrollHeight,
+        controls: document.querySelectorAll('.stream-bench, .stream-output button:not(.stream-gate button)').length,
+        roots: document.querySelectorAll('[data-chatdom-kingdom]').length, words,
+      };
+    });
+    if (found.roots !== 1) failures.push(`${name}: expected one kingdom root, found ${found.roots}`);
+    if (found.scrollW > width || found.scrollH > height) failures.push(`${name}: page scrolls (${found.scrollW}x${found.scrollH})`);
+    if (clean && found.controls) failures.push(`${name}: preview controls in the output`);
+    // No viewer, light or seat counts and no debug numbers ever reach a broadcast frame.
+    if (/\d/.test(found.words)) failures.push(`${name}: numbers on stream: "${found.words}"`);
+    if (errors.length) failures.push(`${name}: ${errors.join(' | ')}`);
+    if (missing.length) failures.push(`${name}: ${missing.join(' | ')}`);
+    const path = join(out, `${name}@${width}x${height}.png`);
+    await page.screenshot({ path, animations: 'disabled', timeout: 120_000 });
+    console.log(`Captured ${path}`);
+    return found;
+  };
+  const simulatedMark = async (page, name) => {
+    const text = await page.locator('.source-ribbon').innerText().catch(() => '');
+    if (!text.includes('SIMULATED')) failures.push(`${name}: fixture output lost its SIMULATED mark ("${text}")`);
+  };
+  const streamCases = [
+    ['stream-stage', async () => {
+      const view = await openStream({ path: `/stream?${STREAM}`, width: 1920, height: 1080 });
+      await expect(view.page, 'stream-stage', '[data-chatdom-stream]', 'data-layout', 'stage');
+      await simulatedMark(view.page, 'stream-stage');
+      await checkStream('stream-stage', view);
+      await view.page.setViewportSize({ width: 1280, height: 720 });
+      await view.page.evaluate(() => new Promise(done => window.requestAnimationFrame(() => window.requestAnimationFrame(done))));
+      await streamReady(view.page);
+      await view.page.waitForTimeout(1500);
+      await checkStream('stream-stage', view);
+      await view.page.close();
+    }],
+    ['stream-window', async () => {
+      const view = await openStream({ path: `/stream?${STREAM}&layout=window`, width: 480, height: 270 });
+      await simulatedMark(view.page, 'stream-window');
+      if ((await stream(view.page, 'stats')).handle && await view.page.evaluate(() => window.__chatdomKingdom.stats.camera) !== 'window') failures.push('stream-window: the corner must hold the window shot');
+      await checkStream('stream-window', view);
+      await view.page.close();
+    }],
+    ['stream-strip', async () => {
+      const view = await openStream({ path: `/stream?${STREAM}&layout=strip`, width: 1280, height: 180 });
+      await simulatedMark(view.page, 'stream-strip');
+      await checkStream('stream-strip', view);
+      await view.page.close();
+    }],
+    // The curtain while the renderer builds: the kingdom's name and crest, never a blank source.
+    ['stream-waking', async () => {
+      const view = await openStream({ path: `/stream?${STREAM}`, width: 1280, height: 720, wait: false });
+      await view.page.waitForTimeout(1500);
+      if (await stream(view.page, 'phase') !== 'waking') failures.push('stream-waking: expected the waking curtain');
+      if (await view.page.evaluate(() => window.__chatdomReady === true)) failures.push('stream-waking: ready before the renderer');
+      await checkStream('stream-waking', view);
+      await view.page.close();
+    }],
+    // The real source with no kingdom service behind it: the town stands, unlit, and says so.
+    ['stream-live-lost', async () => {
+      const view = await openStream({ path: '/stream?seed=willowmere&tier=town&hour=19.5&time=30', width: 1280, height: 720, tolerate: /presence-data|EventSource|Failed to load resource/ });
+      await view.page.waitForFunction(() => window.__chatdomStream.source === 'lost', null, { timeout: 60_000 });
+      if (await view.page.locator('.source-ribbon').innerText().then(text => text.includes('SIMULATED'))) failures.push('stream-live-lost: a real source must never say SIMULATED');
+      await checkStream('stream-live-lost', view);
+      await view.page.close();
+    }],
+    // WebGL refused: a calm gate that is never reported ready, then a retry that opens the town.
+    ['stream-failed', async () => {
+      const refuse = () => {
+        const real = window.HTMLCanvasElement.prototype.getContext;
+        window.__refuseWebgl = true;
+        window.HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return window.__refuseWebgl && /webgl/.test(kind) ? null : real.call(this, kind, ...rest); };
+      };
+      const view = await openStream({ path: `/stream?${STREAM}&layout=window`, width: 480, height: 270, wait: false, init: refuse, tolerate: /WebGL|could not open|THREE/ });
+      await view.page.waitForSelector('[data-phase=failed] .kingdom-gate button', { timeout: 60_000 });
+      if (await view.page.evaluate(() => window.__chatdomReady === true)) failures.push('stream-failed: a failure gate reported ready');
+      await checkStream('stream-failed', view, { clean: false });
+      await view.page.setViewportSize({ width: 1280, height: 720 });
+      await checkStream('stream-failed', view, { clean: false });
+      await view.page.evaluate(() => { window.__refuseWebgl = false; });
+      await view.page.locator('.kingdom-gate button').click();
+      await streamReady(view.page);
+      const stats = await stream(view.page, 'stats');
+      if (stats.alive !== 1 || stats.canvases !== 1) failures.push(`stream-failed: retry left ${JSON.stringify(stats)}`);
+      await view.page.close();
+    }],
+    // Hide during construction and after readiness, through OBS's event and the document's.
+    ['stream-visibility', async () => {
+      const view = await openStream({ path: `/stream?${STREAM}&layout=window`, width: 480, height: 270, wait: false });
+      const { page } = view;
+      const obs = visible => page.evaluate(visible => window.dispatchEvent(new window.CustomEvent('obsSourceVisibleChanged', { detail: { visible } })), visible);
+      const documentVisible = visible => page.evaluate(visible => {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visible ? 'visible' : 'hidden' });
+        document.dispatchEvent(new window.Event('visibilitychange'));
+      }, visible);
+      const expectStats = async (step, wanted) => {
+        const stats = await stream(page, 'stats');
+        for (const [key, value] of Object.entries(wanted)) if (stats[key] !== value) failures.push(`stream-visibility ${step}: ${key}=${stats[key]}, expected ${value} (${JSON.stringify(stats)})`);
+      };
+      await page.waitForTimeout(800);
+      await obs(false);
+      await expectStats('hidden while building', { phase: 'hidden', mounts: 1, alive: 0, cancelled: 1, canvases: 0, ready: false, handle: false });
+      await page.waitForTimeout(1500);
+      await obs(true);
+      await expectStats('shown again', { mounts: 2, alive: 1, canvases: 1 });
+      await streamReady(page);
+      await expectStats('ready', { phase: 'ready', alive: 1, canvases: 1, ready: true, handle: true, source: 'simulated' });
+      await documentVisible(false);
+      await expectStats('hidden after ready', { phase: 'hidden', alive: 0, disposed: 2, canvases: 0, ready: false, handle: false });
+      await documentVisible(true);
+      await streamReady(page);
+      await expectStats('reconstructed', { phase: 'ready', mounts: 3, alive: 1, disposed: 2, canvases: 1, ready: true, source: 'simulated' });
+      await simulatedMark(page, 'stream-visibility');
+      await checkStream('stream-visibility', view);
+      await page.close();
+    }],
+    // The local preview: controls beside the frame, and the selection survives a hidden source.
+    ['stream-preview', async () => {
+      const view = await openStream({ path: `/stream?${STREAM}&preview=1`, width: 1440, height: 900 });
+      await checkStream('stream-preview-stage', view, { clean: false });
+      await view.page.locator('.stream-bench-layouts button', { hasText: 'Corner window' }).click();
+      await view.page.evaluate(() => window.dispatchEvent(new window.CustomEvent('obsSourceVisibleChanged', { detail: { visible: false } })));
+      await view.page.evaluate(() => window.dispatchEvent(new window.CustomEvent('obsSourceVisibleChanged', { detail: { visible: true } })));
+      await streamReady(view.page);
+      await expect(view.page, 'stream-preview', '[data-chatdom-stream]', 'data-layout', 'window');
+      if (await view.page.evaluate(() => window.__chatdomKingdom.stats.camera) !== 'window') failures.push('stream-preview: the remounted scene lost the chosen window shot');
+      await checkStream('stream-preview-window', view, { clean: false });
+      await view.page.locator('.stream-bench-layouts button', { hasText: 'Bottom street' }).click();
+      await view.page.waitForTimeout(2500);
+      await checkStream('stream-preview-strip', view, { clean: false });
+      await view.page.close();
+    }],
+  ];
+
   const cases = [
+    ...streamCases,
     // The hero: the simulated night, mounted in the web app.
     ['panel-hero', async () => {
       const view = await open({ url: `${base}/panel?source=simulated`, width: 318, height: 496 });

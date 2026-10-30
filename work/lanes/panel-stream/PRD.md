@@ -24,7 +24,7 @@ helper allocates a free port and queues through its machine-wide lock. Record an
   honest designed connection state. Establish `__chatdomReady` and the lane `scripts/look.mjs` capture entry.
   Keep first render useful, without implementing backend assumptions. · evidence: panel hero at 318×496 and
   mobile at 390×844, opened at actual size; green commands; bundle payload ≤1 MB with no three.js in panel.
-- [ ] **PS02 — The kingdom has a stage, a corner window and a bottom street.** Build `apps/web/src/stream/index.tsx`
+- [x] **PS02 — The kingdom has a stage, a corner window and a bottom street.** Build `apps/web/src/stream/index.tsx`
   around the existing `createKingdomScene`, with clean output and optional preview. Author separate stage,
   corner and strip framing with thin crafted edges, correct source marks, supported hero/window shots and
   truthful loading/resting/lost-source treatment. Preserve current readiness/debug capture compatibility.
@@ -59,3 +59,4 @@ helper allocates a free port and queues through its machine-wide lock. Record an
 ## Backlog
 
 Ideas found while working go here as one line each. Do not pick them without a new brief.
+- A supported close "street" camera in the renderer would let the bottom strip look down a lit street into depth instead of cropping the window shot (main-owned scene.ts).
