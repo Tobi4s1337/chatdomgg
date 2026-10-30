@@ -315,6 +315,11 @@ experiences have shipped.
 
 ## Decisions
 
+- **2026-10-30 — Founded geometry producer split (spec 38).** `realm-server` retains allocation/adoption,
+  Postgres, auth, reconnect, limits, districts, load and recovery. `realm-server-world` owns only the missing
+  public scene/immutable asset producer, browser-safe collision compiler, founded provider and HomeFurnisher
+  in its disjoint spec 38 folders. Consume its actual exports when delivered; main/integrator owns bootstrap
+  composition. Do not independently implement a second geometry producer in allocation or walking.
 - **2026-10-30 — Frozen after main acceptance.** Shared declarations, reducer, reference room, typed ports and
   auth DTOs exist as recorded above. Main reports full `pnpm verify` green, real uWS with three SDK clients/reload
   and three-browser Playwright entry passing. This spec and PRD are frozen; team starts the lane once main

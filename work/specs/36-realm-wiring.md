@@ -75,9 +75,9 @@ Scenes remain owned by main and the team integrator; the lane delivers adapters 
    demo citizen or automatic rights/coal grant. Check current authentication/revocation, live session where
    required, ownership and rights after awaits and again at the commit boundary. Visitors and newcomers do not
    gain free-word rights from subscriptions, walking, a presentation binding or possession of an API key.
-3. **R3 — One founded layout.** Use realm-server's persisted founded manifest and immutable layout/collision
+3. **R3 — One founded layout.** Use `realm-server-world` (spec 38) over realm-server's persisted adopted layout and immutable layout/collision
    revision to map plot IDs, slots, transforms and native homes. Never regenerate live allocation from the current
-   date, client seed/tier query or Herald defaults. The first production consumer uses realm-server's actual
+   date, client seed/tier query or Herald defaults. The first production consumer uses spec 38's actual
    immutable founded collision world at its persisted layout revision, never the reference court or a renderer-
    generated flat plane. A layout mismatch fails closed with a recoverable private state.
    An approved home replacement must enter the server's revision/asset/collision publication path before clients

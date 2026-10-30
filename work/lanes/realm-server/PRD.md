@@ -29,6 +29,10 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
 
 ## Tasks
 
+Founded scene/collision/furnisher volume is assigned to `realm-server-world` (spec 38), which can work in
+parallel. This lane retains allocation/adoption and RS05–09. Main has frozen the public scene receipt and
+state-aware opening loader; compose the delivered producer rather than implementing it twice.
+
 - [x] **RS01 — A committed fact survives a room restart** · evidence: test/log. Implement additive migrations
   and the actual `RealmRepository` in `src/persistence/`, with fenced DB-time writer leases, expected sequence,
   command digest/outcomes and atomic private fact/state/ledger/outbox commit. Wire through the frozen startup

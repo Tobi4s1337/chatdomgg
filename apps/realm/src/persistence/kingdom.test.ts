@@ -6,7 +6,7 @@ import type { RealmOwnedHome, RealmPrincipal, RealmPublicDelivery, RealmWriterLe
 import { createRealmState } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { RealmRoomEffects } from '../ports';
-import { DurableKingdom, type DurableRepository } from './kingdom';
+import { createDurableRealmServices, type DurableKingdom, type DurableKingdomHold, type DurableRepository } from './kingdom';
 import type { RealmOutboxStore } from '../outbox';
 import type { RealmOutboxRow } from './postgres-repository';
 
@@ -30,21 +30,34 @@ it('keeps bootstrap at the delivered prefix and closes on the deadline despite a
   const principal: RealmPrincipal = { personId, kingdomId, origin: 'simulated', sessionId: 'session:1', expiresAt: 99_000, publicName: 'Juniper', look: 'hearth' };
   const renewal = deferred<RealmWriterLease>(), firstRows = deferred<RealmOutboxRow[]>(), lateRows = deferred<RealmOutboxRow[]>();
   const firstRead = deferred<void>(), secondRead = deferred<void>();
+  const openingOrder: string[] = [];
   let reads = 0;
   const repository: DurableRepository = {
-    leaseMs: 15_000, acquire: async () => lease, renew: vi.fn(() => renewal.promise), load: async () => initial,
-    publishedPlots: async () => ({ plots: new Set([home.id]), cursor: 10 }), latestPresence: async () => null,
+    leaseMs: 15_000, acquire: async () => { openingOrder.push('acquire'); return lease; }, renew: vi.fn(() => renewal.promise),
+    load: async held => { expect(held).toBe(lease); openingOrder.push('load'); return initial; },
+    publishedPlots: async () => { openingOrder.push('projection'); return { plots: new Set([home.id]), cursor: 10 }; }, latestPresence: async () => null,
     committedState: () => privateAhead, execute: async () => ({ status: 'committed', sequence: 3, at: 0 }),
     lookup: async () => null, loadIngress: async () => null, executeIngress: async () => ({ status: 'unchanged', reason: 'unused' }),
     snapshot: async () => 3, release: async () => {},
   };
   const outbox: RealmOutboxStore = {
-    open: async () => 10, acknowledge: async () => {},
+    open: async held => { expect(held).toBe(lease); openingOrder.push('outbox'); return 10; }, acknowledge: async () => {},
     read: async () => { if (++reads <= 2) { firstRead.resolve(); return firstRows.promise; } secondRead.resolve(); return lateRows.promise; },
   };
   let kingdom: DurableKingdom | undefined;
+  let hold: DurableKingdomHold | undefined;
   try {
-    kingdom = await DurableKingdom.open(repository, outbox, kingdomId, { world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] });
+    const services = createDurableRealmServices({ repository, outbox,
+      auth: { authenticate: async () => principal, current: async () => true },
+      kingdom: async (id, state) => {
+        expect(id).toBe(kingdomId); expect(state).toBe(initial);
+        expect(state.homes[home.id]!.blueprint).toBe(VOXEL_FIXTURE);
+        openingOrder.push('geometry');
+        return { world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] };
+      },
+    });
+    hold = await services.retain(kingdomId); kingdom = hold.kingdom;
+    expect(openingOrder).toEqual(['acquire', 'load', 'geometry', 'outbox', 'projection']);
     const effects: RealmRoomEffects = { close: vi.fn(), readWalker: () => ({ x: 0, y: 0, z: 6, vx: 0, vy: 0, vz: 0, grounded: true, yaw: 0, distance: 0, collisionRevision: 1 }),
       placeWalker: vi.fn(() => true), allowWalking: vi.fn(), adoptWorld: vi.fn() };
     kingdom.bindRoom(effects); kingdom.lifecycle('join', principal, 'walker:1', 0);
@@ -74,7 +87,7 @@ it('keeps bootstrap at the delivered prefix and closes on the deadline despite a
     expect(kingdom.bootstrap(principal)).toMatchObject({ throughSequence: 2, throughCursor: 11, current: [{ type: 'home', revision: 'home:2' }] });
   } finally {
     firstRows.resolve([]); lateRows.resolve([]); renewal.resolve(lease);
-    await kingdom?.dispose();
+    await hold?.release();
     clock.mockRestore(); vi.useRealTimers();
   }
 });

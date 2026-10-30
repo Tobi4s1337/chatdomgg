@@ -67,16 +67,22 @@ export class DurableKingdom implements RealmRoomHandle {
   private readonly lifecycles = new Set<RealmLifecycleListener>();
   private readonly closed = new Set<(reason: string) => void>();
 
-  static async open(repository: DurableRepository, outbox: RealmOutboxStore, kingdomId: KingdomId, options: DurableKingdomOptions): Promise<DurableKingdom> {
+  static async open(repository: DurableRepository, outbox: RealmOutboxStore, kingdomId: KingdomId,
+    options: DurableKingdomOptions | ((state: RealmPrivateState) => DurableKingdomOptions | Promise<DurableKingdomOptions>)): Promise<DurableKingdom> {
     const started = performance.now(), wall = Date.now();
     const lease = await repository.acquire(kingdomId);
     try {
       const state = await repository.load(lease);
+      // Founded geometry reads this writer's committed state, including approved home replacements. Never
+      // resolve it before acquiring the lease, or acquire a second writer inside the geometry loader.
+      const resolved = typeof options === 'function' ? await options(state) : options;
+      if (performance.now() >= started + repository.leaseMs - LEASE_MARGIN_MS) throw new RealmWriterFencedError(kingdomId);
       const delivered = await outbox.open(lease);
       // The projection is read after the state, inside the same lease: no other writer can add rows in between.
       const { plots, cursor } = await repository.publishedPlots(kingdomId);
       const recent = await repository.latestPresence(kingdomId);
-      return new DurableKingdom(repository, outbox, lease, state, options, new PublicProjection({ plots, cursor, presence: recent, state }), delivered, started, wall);
+      if (performance.now() >= started + repository.leaseMs - LEASE_MARGIN_MS) throw new RealmWriterFencedError(kingdomId);
+      return new DurableKingdom(repository, outbox, lease, state, resolved, new PublicProjection({ plots, cursor, presence: recent, state }), delivered, started, wall);
     } catch (error) {
       await repository.release(lease).catch(() => {});
       throw error;
@@ -351,8 +357,9 @@ export function createDurableRealmServices(input: {
   readonly repository: DurableRepository;
   readonly outbox: RealmOutboxStore;
   readonly auth: RealmAuthenticator;
-  /** World, layout revision and arrivals for a kingdom (a live kingdom reads its adopted founded layout here). */
-  readonly kingdom: (kingdomId: KingdomId) => DurableKingdomOptions | Promise<DurableKingdomOptions>;
+  /** Resolve adopted geometry from committed state after writer acquisition/load, before public bootstrap.
+   * The loader must finish within the opening lease's safe window; it never acquires another writer. */
+  readonly kingdom: (kingdomId: KingdomId, state: RealmPrivateState) => DurableKingdomOptions | Promise<DurableKingdomOptions>;
   /**
    * Trusted work after the lease is held and before the first walker enters, such as installing deeds left pending
    * by an interrupted allocation. Its failure is logged; it never fails the open or skips the lease.
@@ -373,8 +380,10 @@ export function createDurableRealmServices(input: {
     await closing.get(kingdomId);
     let kingdom: DurableKingdom;
     try {
-      const options = await input.kingdom(kingdomId);
-      kingdom = await DurableKingdom.open(input.repository, input.outbox, kingdomId, { ...options, ...(input.log ? { log: input.log } : {}) });
+      kingdom = await DurableKingdom.open(input.repository, input.outbox, kingdomId, async state => {
+        const options = await input.kingdom(kingdomId, state);
+        return { ...options, ...(input.log ? { log: input.log } : {}) };
+      });
     } catch (error) {
       if (error instanceof RealmLeaseHeldError) throw new ServerError(409, 'Another server holds this kingdom right now. Try again in a moment.');
       input.log?.(`[realm] kingdom ${kingdomId} did not open: ${describeStorageFailure(error)}`);

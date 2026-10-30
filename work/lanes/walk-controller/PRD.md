@@ -11,7 +11,7 @@ Read `AGENTS.md`, `$ralph-lane`, `$chatdom-vision`, `$look`, spec 33 and both ci
 actual shared step and real room/client; three SDK clients and three Playwright browsers moved/reloaded and
 full verification passed. Main grants WC06's movement/Predict/collision-revision/input-staging client hunks now;
 auth/join/reconnect/storage remain read-only. Scene composition belongs to the integrator; realm wiring
-owns complete production collision data. No scene.ts edits, adjacent-owner hunks, shared changes, custom netcode
+mounts complete production collision data from `realm-server-world` (spec 38). No scene.ts edits, adjacent-owner hunks, shared changes, custom netcode
 or replacement town. Preserve other owners' changes. A missing seam is `needs:` while independent work proceeds.
 
 Every task is done when `pnpm typecheck`, `pnpm lint`,

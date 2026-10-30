@@ -330,49 +330,45 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Brief:** main temporarily owns integration with two Sol high agents. Reviewed commits enter
-`integration/kingdom-queue` sequentially; main judges and fast-forwards. Ready realm work goes first.
-The ownership/composition checklist remains `work/lanes/kingdom-look-owners.md`. Do not build handed-off lanes
-or overwrite their unfinished source work. The complete multiplayer kingdom goal remains active.
+**Integration:** main temporarily owns the queue through Sol high reviewers and
+`integration/kingdom-queue`; ready realm work goes first. Follow `work/lanes/kingdom-look-owners.md`.
+The earlier twelve-lane queue is accepted: vox-import, panel-stream, forge-refusals, crowd-behaviour,
+build-templates, wardrobe-body, herald, forge-ritual, forge-pieces, citizen-card, build-tools and anvil-hero.
+WB02/BT04 unfinished source work stays with its producers. Never overwrite source WIP or compose a second writer.
 
-**Accepted queue:** vox-import, panel-stream, forge-refusals, crowd-behaviour, build-templates, wardrobe-body,
-herald, forge-ritual, forge-pieces, citizen-card, build-tools and anvil-hero. Actual kingdom mounts consume fitted
-capes, neighbourhood routines, hero anvil/official engraving, rune/blueprint stages and nameless refusal; old
-competing effects are removed. Build mode uses fitted imports and starting shapes in its real undoable draft.
-Stream/panel composition and the collapsed citizen-card layout are fixed. WB02/BT04 unfinished work stays with
-its producers; presentation ownership never transfers over unaccepted work.
+**Realm accepted:** RS01–RS05 and WC01–WC06. Postgres authority, allocation/adoption, durable ingress/outbox,
+OIDC tickets, checked seats/reconnect/revocation, sweep/step/jump, input, shoulder/collision camera and prediction
+are in. Latest sources: WC05 `acb51ca`, WC06 `fe106e0`, RS05 `b6f6b54`. Composition preserves writer-deadline
+closure, supported recovery without unlocking seats, terminal outcomes and public cursor checkpoints. Fixed
+first/replacement Forge parts missing from bootstrap, focus/menu jumps, ceiling/lintel clipping, paving flicker,
+and a second tab refusing entry when the old citizen was mid-jump. Realm entries no longer expose session IDs.
 
-**Realm accepted:** RS01–RS04: durable Postgres authority, checked OIDC sessions/one-use tickets, immutable
-founded-layout adoption and three-home allocation, authenticated durable presence inbox and ordered resumable
-public delivery. Deed installation is checked against its pending allocation in the fact transaction; interrupted
-installations can recover. Room and trusted ingress share one counted writer hold. WC01–WC04: sweep/slide,
-half-metre auto-step, acceleration/braking, jump, shoulder camera, keyboard/mouse/touch input and honest lock
-fallback. Exact new sources: RS03 `50ac378`, RS04 `8dfdb36`, walking `8ad19b6`.
+**New core contracts:** `source-lost` withdraws only affected Herald evidence, preserves independent visitors,
+fences old/equal observations through persisted cutoffs and discards open qualification runs without inventing
+time. Stream loss becomes stale and shortens the same domain night lease, never fake offline. Specs 34/36 and
+RW02 match; the lane must replace its competing plain-JSON `presence-v1` codec/writer with accepted durable ingress.
+Founded manifest receipt/routes and public scene types are in shared/world. The geometry callback now runs
+**after** writer acquisition and committed-state load, with deadline checks before admission.
 
-**Composition fixes:** preserve independent lease-deadline closure, supported recovery without unlocking seats,
-terminal committed/unchanged outcomes, and `cursor`/`throughCursor` independent of fact sequence. Bootstrap
-stays at its public prefix. It now retains a newly forged part, including first publication and socket replacement,
-without leaking a later private build or replaying its ritual. Blur/context menus clear queued touch jumps and
-held controls. The reference mounts the real input HUD, clear of its heading.
+**Ready:** spec 38 and `realm-server-world` are the missing scene/collision/furnisher producer split from
+realm-server. Its own branch/worktree follows this accepted handoff; FW01 scene assembly and FW02 pure indexed
+collision compilation can run independently. Use exact adopted plans, approved overrides and native lattice
+units; shared byte hashes/revisions bind both clients and authority. Existing content/forge/voxel dependencies
+are registered; main adds the collision subpath only when its implementation exists. RS05–09 stay with
+realm-server; wiring consumes/mounts this producer; walking consumes its immutable collision world.
 
-**Next / honest limits:** the connected controller is still on the explicitly SIMULATED `/-/realm` court.
-Actual `/?walk=1` needs realm-wiring's verified `RealmEntry`, founded world and complete immutable collision data.
-Wiring/interactions work remains with the team; do not accept a second authority. WC05 camera collision and
-WC06 predicted grounded/step easing remain unfinished. Continue live startup/furnishing, room-backed Herald,
-build/Forge, real places/seats/interiors, the 300-walker run and the three-browser kingdom tour. A real Twitch
-callback and real chat lighting the same window in all clients remain unproven. Citizen-card fixture and Tidewake
-assembly are staged consumers, not finished live bindings.
+**Next / honest limits:** actual `/?walk=1` is still unbound; the connected controller remains on the labelled
+SIMULATED `/-/realm` court. Producer cold entry must prepare a real public checkpoint through the existing
+registry before a browser joins: no manifest/join deadlock or fabricated principal. Main still owns any missing
+public-read seam, coherent post-publication world/getter/bootstrap adoption and an explicit placement signal
+for same-revision recoveries under 2 m. Continue room-backed Herald/build/Forge, real interactions/interiors,
+300 walkers, the three-browser town tour and plaza→pier. Real Twitch callback/chat window proof remains open.
+The staged card/Tidewake assembly are not live bindings. The whole goal remains active.
 
-**Sent back by eye:** walking must hide/replace the old phone preset bar or reposition it so stick/E/Jump remain
-unobstructed. Existing feedback stands: VI03 keeps the complete import above phone details; first-look moves the
-idle Forge camera closer; AH02 needs worn dark iron with restrained edges. No new lane rejected. The grey castle,
-flat ground and sparse dusk warmth still await their existing look lanes; the reference court is not the genre bar.
-
-**Evidence / running:** assembled `pnpm verify --area kingdom --tier town --hour dusk --size phone` passed:
-1,460 tests, six opt-in skips, typecheck, lint, workspace build and locked capture. Separate real Postgres checks
-passed allocation, ingress/restart, authority and auth; focused walking/realm checks passed 90 tests. Main looked
-at fresh reference HUD shots at both sizes and the fresh dusk phone shot, plus producer step/touch evidence.
-Real keyboard movement passed with no browser errors. Artifacts: `shots/realm/input-hud@…png`,
-`shots/realm/input-look.json`, `shots/kingdom/town-dusk@390x844.png`; earlier looks remain `shots/integration/`.
-Main preview is 5190. Existing worker services 5191/5192 were left untouched; temporary owned look services
-5184/5185 stopped. Captures remain serial, machine-locked, with main priority.
+**Look / evidence:** final full verify passed 1,494 tests, one intentional reminder skip, real Postgres suites,
+typecheck, lint, build and serial dusk capture. Frozen install and affected checks also pass. Main looked at
+fresh camera desktop/phone, corrected phone paving and final dusk; keyboard movement had no browser errors.
+Artifacts: `shots/realm/walk-camera@…png`, `walk-camera-route.json`, `shots/kingdom/town-dusk@390x844.png`.
+Sent back: fade the local head earlier under wall pull-in so it does not obscure the phone street. Prior import,
+idle Forge camera and dark-iron feedback stands; castle/ground/light need their existing look lanes. Main preview
+is 5190; worker 5191/5192 were untouched. Owned temporary 5184/5185 stopped; captures stay serial and locked.
