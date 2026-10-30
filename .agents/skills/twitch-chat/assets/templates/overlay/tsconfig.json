@@ -1,0 +1,15 @@
+{
+  // Builds the browser part of the overlay: dist/overlay/chat-overlay.js + render-model.js
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "rootDir": "..",
+    "outDir": "./dist",
+    "skipLibCheck": true,
+    "types": []
+  },
+  "files": ["chat-overlay.ts", "render-model.ts"]
+}

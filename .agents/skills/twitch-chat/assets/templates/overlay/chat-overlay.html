@@ -1,0 +1,54 @@
+<!doctype html>
+<!--
+  Chat overlay for an OBS Browser Source.
+  1. Build: npx tsc -p overlay/tsconfig.json   (emits overlay/dist/overlay/chat-overlay.js + render-model.js)
+  2. Serve: node overlay/overlay-relay.ts        (serves dist/ + the /ws relay on OVERLAY_PORT, default 8131)
+  3. OBS: Browser Source -> URL http://localhost:8131/?fade=30&hideCommands=1 , width 400-500, height 600-900.
+     OBS browser sources have a transparent background by default; keep body background transparent.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat Overlay</title>
+  <!-- Strict CSP: only our own script; images from Twitch CDNs (+ https for GIF fragment URLs). -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src https: data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; script-src 'self'" />
+  <style>
+    :root {
+      --font: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --size: 22px;
+      --bg: rgba(14, 14, 16, 0.55);
+      --fg: #efeff1;
+      --emote: 1.75em; /* rendered height; request scale=2.0 or 3.0 for crisp emotes */
+    }
+    html, body { margin: 0; background: transparent; overflow: hidden; }
+    body { font: 600 var(--size)/1.35 var(--font); color: var(--fg); }
+    #chat {
+      position: fixed; inset: auto 0 0 0; padding: 8px;
+      display: flex; flex-direction: column; justify-content: flex-end; gap: 6px;
+    }
+    .msg {
+      background: var(--bg); border-radius: 10px; padding: 6px 10px;
+      overflow-wrap: anywhere; text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
+      animation: in .25s ease-out both;
+    }
+    .msg.out { animation: out .5s ease-in both; }
+    .msg.highlighted { outline: 2px solid #9146ff; }
+    .badge { height: 1em; vertical-align: -0.1em; margin-right: 4px; }
+    .name { font-weight: 800; }
+    .emote { height: var(--emote); vertical-align: middle; margin: -0.35em 1px; }
+    .gif { max-height: 5em; max-width: 100%; vertical-align: middle; border-radius: 6px; }
+    .mention { font-weight: 800; }
+    .mention.highlight { background: #9146ff; color: #fff; border-radius: 4px; padding: 0 3px; }
+    .cheer { font-weight: 800; margin-right: 2px; }
+    @keyframes in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes out { to { opacity: 0; transform: translateX(-12px); } }
+    @media (prefers-reduced-motion: reduce) { .msg, .msg.out { animation: none; } }
+  </style>
+</head>
+<body>
+  <div id="chat" aria-live="polite"></div>
+  <script type="module" src="./chat-overlay.js"></script>
+</body>
+</html>

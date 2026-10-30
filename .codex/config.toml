@@ -1,0 +1,25 @@
+# Codex project config for Chatdom (loads for trusted projects). No secrets in here:
+# the Exa and Replicate MCP servers come from the user config (~/.codex/config.toml).
+
+web_search = "live"
+mcp_optional_startup_grace_ms = 0
+
+# Long contexts get worse past ~300k tokens. Compact before that, even on the 475k-window models
+# (Codex caps this at 90% of each model's window, so the 258k models compact earlier).
+model_auto_compact_token_limit = 320000
+
+[features]
+memories = false
+
+# Sub-agents: room for wide fan-outs (children; the V2 runtime counts the root too).
+[agents]
+max_concurrent_threads_per_session = 7
+
+[features.multi_agent_v2]
+max_concurrent_threads_per_session = 8
+
+# Browser for interactive UI checks. Screenshots for evidence come from the repo's own scripts ($look).
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@0.0.83", "--headless", "--browser", "chrome", "--no-sandbox", "--viewport-size", "1440,900"]
+startup_timeout_sec = 30

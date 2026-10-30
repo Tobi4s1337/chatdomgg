@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Policy 2.9: the Extension Helper must be the FIRST script, loaded from Twitch's CDN (never bundled/self-hosted). -->
+    <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+    <title>Poll – configuration</title>
+  </head>
+  <body class="page-config">
+    <main>
+      <h1>Poll setup</h1>
+      <form id="config-form">
+        <label>Question <input id="question" name="question" maxlength="120" required placeholder="Which boss next?" /></label>
+        <fieldset>
+          <legend>Options (2–4)</legend>
+          <input name="option" maxlength="40" required placeholder="Option 1" />
+          <input name="option" maxlength="40" required placeholder="Option 2" />
+          <input name="option" maxlength="40" placeholder="Option 3 (optional)" />
+          <input name="option" maxlength="40" placeholder="Option 4 (optional)" />
+        </fieldset>
+        <button type="submit">Save</button>
+        <p id="status" class="status" role="status"></p>
+      </form>
+    </main>
+    <!-- No inline scripts (CSP). Vite turns this into ./assets/config-[hash].js -->
+    <script type="module" src="./src/config.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Policy 2.9: the Extension Helper must be the FIRST script, loaded from Twitch's CDN (never bundled/self-hosted). -->
+    <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+    <title>Poll – overlay</title>
+  </head>
+  <body class="anchor-overlay">
+    <!-- Overlay iframe covers the whole player and is transparent: keep UI small, in a corner, collapsible. -->
+    <aside id="overlay" class="overlay-card" hidden>
+      <h2 id="question">Poll</h2>
+      <ol id="options" class="options"></ol>
+      <button id="minimize" class="link">Hide</button>
+    </aside>
+    <!-- No inline scripts (CSP). Vite turns this into ./assets/video_overlay-[hash].js -->
+    <script type="module" src="./src/video_overlay.ts"></script>
+  </body>
+</html>

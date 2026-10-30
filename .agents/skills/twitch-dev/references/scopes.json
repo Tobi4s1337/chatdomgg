@@ -1,0 +1,1919 @@
+[
+ {
+  "scope": "analytics:read:extensions",
+  "section": "api",
+  "description": "View analytics data for the Twitch Extensions owned by the authenticated account.",
+  "api": [
+   {
+    "name": "Get Extension Analytics",
+    "anchor": "get-extension-analytics"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "analytics:read:games",
+  "section": "api",
+  "description": "View analytics data for the games owned by the authenticated account.",
+  "api": [
+   {
+    "name": "Get Game Analytics",
+    "anchor": "get-game-analytics"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "bits:read",
+  "section": "api",
+  "description": "View Bits-related products and redemptions for a channel.",
+  "api": [
+   {
+    "name": "Get Bits Leaderboard",
+    "anchor": "get-bits-leaderboard"
+   },
+   {
+    "name": "Get Custom Power-up",
+    "anchor": "get-custom-power-up"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Bits Use",
+    "anchor": "channelbitsuse"
+   },
+   {
+    "name": "Channel Cheer",
+    "anchor": "channelcheer"
+   },
+   {
+    "name": "Channel Custom Power-ups Redemption Add",
+    "anchor": "channelcustom_power_up_redemptionadd"
+   }
+  ]
+ },
+ {
+  "scope": "channel:bot",
+  "section": "api",
+  "description": "Joins your channel’s chatroom as a bot user, and perform chat-related actions as that user.",
+  "api": [
+   {
+    "name": "Send Chat Message",
+    "anchor": "send-chat-message"
+   },
+   {
+    "name": "Send Chat Announcement",
+    "anchor": "send-chat-announcement",
+    "extra": true
+   },
+   {
+    "name": "Send a Shoutout",
+    "anchor": "send-a-shoutout",
+    "extra": true
+   },
+   {
+    "name": "Get Pinned Chat Message",
+    "anchor": "get-pinned-chat-message",
+    "extra": true
+   },
+   {
+    "name": "Pin Chat Message",
+    "anchor": "pin-chat-message",
+    "extra": true
+   },
+   {
+    "name": "Update Pinned Chat Message",
+    "anchor": "update-pinned-chat-message",
+    "extra": true
+   },
+   {
+    "name": "Unpin Chat Message",
+    "anchor": "unpin-chat-message",
+    "extra": true
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Chat Clear",
+    "anchor": "channelchatclear"
+   },
+   {
+    "name": "Channel Chat Clear User Messages",
+    "anchor": "channelchatclear_user_messages"
+   },
+   {
+    "name": "Channel Chat Message",
+    "anchor": "channelchatmessage"
+   },
+   {
+    "name": "Channel Chat Message Delete",
+    "anchor": "channelchatmessage_delete"
+   },
+   {
+    "name": "Channel Chat Notification",
+    "anchor": "channelchatnotification"
+   },
+   {
+    "name": "Channel Chat Settings Update",
+    "anchor": "channelchat_settingsupdate"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:ads",
+  "section": "api",
+  "description": "Manage ads schedule on a channel.",
+  "api": [
+   {
+    "name": "Snooze Next Ad",
+    "anchor": "snooze-next-ad"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:read:ads",
+  "section": "api",
+  "description": "Read the ads schedule and details on your channel.",
+  "api": [
+   {
+    "name": "Get Ad Schedule",
+    "anchor": "get-ad-schedule"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Ad Break Begin",
+    "anchor": "channelad_breakbegin"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:broadcast",
+  "section": "api",
+  "description": "Manage a channel’s broadcast configuration, including updating channel configuration and managing stream markers and stream tags.",
+  "api": [
+   {
+    "name": "Modify Channel Information",
+    "anchor": "modify-channel-information"
+   },
+   {
+    "name": "Create Stream Marker",
+    "anchor": "create-stream-marker"
+   },
+   {
+    "name": "Replace Stream Tags",
+    "anchor": "replace-stream-tags"
+   },
+   {
+    "name": "Get Stream Markers",
+    "anchor": "get-stream-markers",
+    "extra": true
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:read:charity",
+  "section": "api",
+  "description": "Read charity campaign details and user donations on your channel.",
+  "api": [
+   {
+    "name": "Get Charity Campaign",
+    "anchor": "get-charity-campaign"
+   },
+   {
+    "name": "Get Charity Campaign Donations",
+    "anchor": "get-charity-campaign-donations"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Charity Donation",
+    "anchor": "channelcharity_campaigndonate"
+   },
+   {
+    "name": "Charity Campaign Start",
+    "anchor": "channelcharity_campaignstart"
+   },
+   {
+    "name": "Charity Campaign Progress",
+    "anchor": "channelcharity_campaignprogress"
+   },
+   {
+    "name": "Charity Campaign Stop",
+    "anchor": "channelcharity_campaignstop"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:clips",
+  "section": "api",
+  "description": "Manage Clips for a channel.",
+  "api": [
+   {
+    "name": "Create Clip From VOD",
+    "anchor": "create-clip-from-vod"
+   },
+   {
+    "name": "Get Clips Download",
+    "anchor": "get-clips-download"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:edit:commercial",
+  "section": "api",
+  "description": "Run commercials on a channel.",
+  "api": [
+   {
+    "name": "Start Commercial",
+    "anchor": "start-commercial"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:read:editors",
+  "section": "api",
+  "description": "View a list of users with the editor role for a channel.",
+  "api": [
+   {
+    "name": "Get Channel Editors",
+    "anchor": "get-channel-editors"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:manage:extensions",
+  "section": "api",
+  "description": "Manage a channel’s Extension configuration, including activating Extensions.",
+  "api": [
+   {
+    "name": "Get User Active Extensions",
+    "anchor": "get-user-active-extensions"
+   },
+   {
+    "name": "Update User Extensions",
+    "anchor": "update-user-extensions"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:read:goals",
+  "section": "api",
+  "description": "View Creator Goals for a channel.",
+  "api": [
+   {
+    "name": "Get Creator Goals",
+    "anchor": "get-creator-goals"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Goal Begin",
+    "anchor": "channelgoalbegin"
+   },
+   {
+    "name": "Goal Progress",
+    "anchor": "channelgoalprogress"
+   },
+   {
+    "name": "Goal End",
+    "anchor": "channelgoalend"
+   }
+  ]
+ },
+ {
+  "scope": "channel:read:guest_star",
+  "section": "api",
+  "description": "Read Guest Star details for your channel.",
+  "api": [
+   {
+    "name": "Get Channel Guest Star Settings",
+    "anchor": "get-channel-guest-star-settings"
+   },
+   {
+    "name": "Get Guest Star Session",
+    "anchor": "get-guest-star-session"
+   },
+   {
+    "name": "Get Guest Star Invites",
+    "anchor": "get-guest-star-invites"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Guest Star Session Begin",
+    "anchor": "channelguest_star_sessionbegin"
+   },
+   {
+    "name": "Channel Guest Star Session End",
+    "anchor": "channelguest_star_sessionend"
+   },
+   {
+    "name": "Channel Guest Star Guest Update",
+    "anchor": "channelguest_star_guestupdate"
+   },
+   {
+    "name": "Channel Guest Star Settings Update",
+    "anchor": "channelguest_star_settingsupdate"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:guest_star",
+  "section": "api",
+  "description": "Manage Guest Star for your channel.",
+  "api": [
+   {
+    "name": "Update Channel Guest Star Settings",
+    "anchor": "update-channel-guest-star-settings"
+   },
+   {
+    "name": "Create Guest Star Session",
+    "anchor": "create-guest-star-session"
+   },
+   {
+    "name": "End Guest Star Session",
+    "anchor": "end-guest-star-session"
+   },
+   {
+    "name": "Send Guest Star Invite",
+    "anchor": "send-guest-star-invite"
+   },
+   {
+    "name": "Delete Guest Star Invite",
+    "anchor": "delete-guest-star-invite"
+   },
+   {
+    "name": "Assign Guest Star Slot",
+    "anchor": "assign-guest-star-slot"
+   },
+   {
+    "name": "Update Guest Star Slot",
+    "anchor": "update-guest-star-slot"
+   },
+   {
+    "name": "Delete Guest Star Slot",
+    "anchor": "delete-guest-star-slot"
+   },
+   {
+    "name": "Update Guest Star Slot Settings",
+    "anchor": "update-guest-star-slot-settings"
+   },
+   {
+    "name": "Get Channel Guest Star Settings",
+    "anchor": "get-channel-guest-star-settings",
+    "extra": true
+   },
+   {
+    "name": "Get Guest Star Session",
+    "anchor": "get-guest-star-session",
+    "extra": true
+   },
+   {
+    "name": "Get Guest Star Invites",
+    "anchor": "get-guest-star-invites",
+    "extra": true
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Guest Star Session Begin",
+    "anchor": "channelguest_star_sessionbegin"
+   },
+   {
+    "name": "Channel Guest Star Session End",
+    "anchor": "channelguest_star_sessionend"
+   },
+   {
+    "name": "Channel Guest Star Guest Update",
+    "anchor": "channelguest_star_guestupdate"
+   },
+   {
+    "name": "Channel Guest Star Settings Update",
+    "anchor": "channelguest_star_settingsupdate"
+   }
+  ]
+ },
+ {
+  "scope": "channel:read:hype_train",
+  "section": "api",
+  "description": "View Hype Train information for a channel.",
+  "api": [
+   {
+    "name": "Get Hype Train Status",
+    "anchor": "get-hype-train-status"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Hype Train Begin",
+    "anchor": "channelhype_trainbegin"
+   },
+   {
+    "name": "Hype Train Progress",
+    "anchor": "channelhype_trainprogress"
+   },
+   {
+    "name": "Hype Train End",
+    "anchor": "channelhype_trainend"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:moderators",
+  "section": "api",
+  "description": "Add or remove the moderator role from users in your channel.",
+  "api": [
+   {
+    "name": "Add Channel Moderator",
+    "anchor": "add-channel-moderator"
+   },
+   {
+    "name": "Remove Channel Moderator",
+    "anchor": "remove-channel-moderator"
+   },
+   {
+    "name": "Get Moderators",
+    "anchor": "get-moderators"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:read:polls",
+  "section": "api",
+  "description": "View a channel’s polls.",
+  "api": [
+   {
+    "name": "Get Polls",
+    "anchor": "get-polls"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Poll Begin",
+    "anchor": "channelpollbegin"
+   },
+   {
+    "name": "Channel Poll Progress",
+    "anchor": "channelpollprogress"
+   },
+   {
+    "name": "Channel Poll End",
+    "anchor": "channelpollend"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:polls",
+  "section": "api",
+  "description": "Manage a channel’s polls.",
+  "api": [
+   {
+    "name": "Get Polls",
+    "anchor": "get-polls"
+   },
+   {
+    "name": "Create Poll",
+    "anchor": "create-poll"
+   },
+   {
+    "name": "End Poll",
+    "anchor": "end-poll"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Poll Begin",
+    "anchor": "channelpollbegin"
+   },
+   {
+    "name": "Channel Poll Progress",
+    "anchor": "channelpollprogress"
+   },
+   {
+    "name": "Channel Poll End",
+    "anchor": "channelpollend"
+   }
+  ]
+ },
+ {
+  "scope": "channel:read:predictions",
+  "section": "api",
+  "description": "View a channel’s Channel Points Predictions.",
+  "api": [
+   {
+    "name": "Get Channel Points Predictions",
+    "anchor": "get-predictions"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Prediction Begin",
+    "anchor": "channelpredictionbegin"
+   },
+   {
+    "name": "Channel Prediction Progress",
+    "anchor": "channelpredictionprogress"
+   },
+   {
+    "name": "Channel Prediction Lock",
+    "anchor": "channelpredictionlock"
+   },
+   {
+    "name": "Channel Prediction End",
+    "anchor": "channelpredictionend"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:predictions",
+  "section": "api",
+  "description": "Manage of channel’s Channel Points Predictions",
+  "api": [
+   {
+    "name": "Get Channel Points Predictions",
+    "anchor": "get-predictions"
+   },
+   {
+    "name": "Create Channel Points Prediction",
+    "anchor": "create-prediction"
+   },
+   {
+    "name": "End Channel Points Prediction",
+    "anchor": "end-prediction"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Prediction Begin",
+    "anchor": "channelpredictionbegin"
+   },
+   {
+    "name": "Channel Prediction Progress",
+    "anchor": "channelpredictionprogress"
+   },
+   {
+    "name": "Channel Prediction Lock",
+    "anchor": "channelpredictionlock"
+   },
+   {
+    "name": "Channel Prediction End",
+    "anchor": "channelpredictionend"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:raids",
+  "section": "api",
+  "description": "Manage a channel raiding another channel.",
+  "api": [
+   {
+    "name": "Start a raid",
+    "anchor": "start-a-raid"
+   },
+   {
+    "name": "Cancel a raid",
+    "anchor": "cancel-a-raid"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:read:redemptions",
+  "section": "api",
+  "description": "View Channel Points custom rewards and their redemptions on a channel.",
+  "api": [
+   {
+    "name": "Get Custom Reward",
+    "anchor": "get-custom-reward"
+   },
+   {
+    "name": "Get Custom Reward Redemption",
+    "anchor": "get-custom-reward-redemption"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Points Automatic Reward Redemption",
+    "anchor": "channelchannel_points_automatic_reward_redemptionadd"
+   },
+   {
+    "name": "Channel Points Automatic Reward Redemption v2",
+    "anchor": "channelchannel_points_automatic_reward_redemptionadd-v2"
+   },
+   {
+    "name": "Channel Points Custom Reward Add",
+    "anchor": "channelchannel_points_custom_rewardadd"
+   },
+   {
+    "name": "Channel Points Custom Reward Update",
+    "anchor": "channelchannel_points_custom_rewardupdate"
+   },
+   {
+    "name": "Channel Points Custom Reward Remove",
+    "anchor": "channelchannel_points_custom_rewardremove"
+   },
+   {
+    "name": "Channel Points Custom Reward Redemption Add",
+    "anchor": "channelchannel_points_custom_reward_redemptionadd"
+   },
+   {
+    "name": "Channel Points Custom Reward Redemption Update",
+    "anchor": "channelchannel_points_custom_reward_redemptionupdate"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:redemptions",
+  "section": "api",
+  "description": "Manage Channel Points custom rewards and their redemptions on a channel.",
+  "api": [
+   {
+    "name": "Get Custom Reward",
+    "anchor": "get-custom-reward"
+   },
+   {
+    "name": "Get Custom Reward Redemption",
+    "anchor": "get-custom-reward-redemption"
+   },
+   {
+    "name": "Create Custom Rewards",
+    "anchor": "create-custom-rewards"
+   },
+   {
+    "name": "Delete Custom Reward",
+    "anchor": "delete-custom-reward"
+   },
+   {
+    "name": "Update Custom Reward",
+    "anchor": "update-custom-reward"
+   },
+   {
+    "name": "Update Redemption Status",
+    "anchor": "update-redemption-status"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Points Automatic Reward Redemption",
+    "anchor": "channelchannel_points_automatic_reward_redemptionadd"
+   },
+   {
+    "name": "Channel Points Custom Reward Add",
+    "anchor": "channelchannel_points_custom_rewardadd"
+   },
+   {
+    "name": "Channel Points Custom Reward Update",
+    "anchor": "channelchannel_points_custom_rewardupdate"
+   },
+   {
+    "name": "Channel Points Custom Reward Remove",
+    "anchor": "channelchannel_points_custom_rewardremove"
+   },
+   {
+    "name": "Channel Points Custom Reward Redemption Add",
+    "anchor": "channelchannel_points_custom_reward_redemptionadd"
+   },
+   {
+    "name": "Channel Points Custom Reward Redemption Update",
+    "anchor": "channelchannel_points_custom_reward_redemptionupdate"
+   },
+   {
+    "name": "channel.channel_points_automatic_reward_redemption.add V2",
+    "anchor": "channelchannel_points_automatic_reward_redemptionadd-v2",
+    "extra": true
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:schedule",
+  "section": "api",
+  "description": "Manage a channel’s stream schedule.",
+  "api": [
+   {
+    "name": "Update Channel Stream Schedule",
+    "anchor": "update-channel-stream-schedule"
+   },
+   {
+    "name": "Create Channel Stream Schedule Segment",
+    "anchor": "create-channel-stream-schedule-segment"
+   },
+   {
+    "name": "Update Channel Stream Schedule Segment",
+    "anchor": "update-channel-stream-schedule-segment"
+   },
+   {
+    "name": "Delete Channel Stream Schedule Segment",
+    "anchor": "delete-channel-stream-schedule-segment"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:read:stream_key",
+  "section": "api",
+  "description": "View an authorized user’s stream key.",
+  "api": [
+   {
+    "name": "Get Stream Key",
+    "anchor": "get-stream-key"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:read:subscriptions",
+  "section": "api",
+  "description": "View a list of all subscribers to a channel and check if a user is subscribed to a channel.",
+  "api": [
+   {
+    "name": "Get Broadcaster Subscriptions",
+    "anchor": "get-broadcaster-subscriptions"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Subscribe",
+    "anchor": "channelsubscribe"
+   },
+   {
+    "name": "Channel Subscription End",
+    "anchor": "channelsubscriptionend"
+   },
+   {
+    "name": "Channel Subscription Gift",
+    "anchor": "channelsubscriptiongift"
+   },
+   {
+    "name": "Channel Subscription Message",
+    "anchor": "channelsubscriptionmessage"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:videos",
+  "section": "api",
+  "description": "Manage a channel’s videos, including deleting videos.",
+  "api": [
+   {
+    "name": "Delete Videos",
+    "anchor": "delete-videos"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "channel:read:vips",
+  "section": "api",
+  "description": "Read the list of VIPs in your channel.",
+  "api": [
+   {
+    "name": "Get VIPs",
+    "anchor": "get-vips"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel VIP Add",
+    "anchor": "channelvipadd"
+   },
+   {
+    "name": "Channel VIP Remove",
+    "anchor": "channelvipremove"
+   }
+  ]
+ },
+ {
+  "scope": "channel:manage:vips",
+  "section": "api",
+  "description": "Add or remove the VIP role from users in your channel.",
+  "api": [
+   {
+    "name": "Get VIPs",
+    "anchor": "get-vips"
+   },
+   {
+    "name": "Add Channel VIP",
+    "anchor": "add-channel-vip"
+   },
+   {
+    "name": "Remove Channel VIP",
+    "anchor": "remove-channel-vip"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel VIP Add",
+    "anchor": "channelvipadd"
+   },
+   {
+    "name": "Channel VIP Remove",
+    "anchor": "channelvipremove"
+   }
+  ]
+ },
+ {
+  "scope": "channel:moderate",
+  "section": "api",
+  "description": "Perform moderation actions in a channel.",
+  "api": [],
+  "eventsub": [
+   {
+    "name": "Channel Ban",
+    "anchor": "channelban"
+   },
+   {
+    "name": "Channel Unban",
+    "anchor": "channelunban"
+   }
+  ]
+ },
+ {
+  "scope": "clips:edit",
+  "section": "api",
+  "description": "Manage Clips for a channel.",
+  "api": [
+   {
+    "name": "Create Clip",
+    "anchor": "create-clip"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "editor:manage:clips",
+  "section": "api",
+  "description": "Manage Clips as an editor.",
+  "api": [
+   {
+    "name": "Create Clip From VOD",
+    "anchor": "create-clip-from-vod"
+   },
+   {
+    "name": "Get Clips Download",
+    "anchor": "get-clips-download"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "moderation:read",
+  "section": "api",
+  "description": "View a channel’s moderation data including Moderators, Bans, Timeouts, and Automod settings.",
+  "api": [
+   {
+    "name": "Check AutoMod Status",
+    "anchor": "check-automod-status"
+   },
+   {
+    "name": "Get Banned Users",
+    "anchor": "get-banned-users"
+   },
+   {
+    "name": "Get Moderators",
+    "anchor": "get-moderators"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Moderator Add",
+    "anchor": "channelmoderatoradd"
+   },
+   {
+    "name": "Channel Moderator Remove",
+    "anchor": "channelmoderatorremove"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:announcements",
+  "section": "api",
+  "description": "Send announcements in channels where you have the moderator role.",
+  "api": [
+   {
+    "name": "Send Chat Announcement",
+    "anchor": "send-chat-announcement"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "moderator:manage:automod",
+  "section": "api",
+  "description": "Manage messages held for review by AutoMod in channels where you are a moderator.",
+  "api": [
+   {
+    "name": "Manage Held AutoMod Messages",
+    "anchor": "manage-held-automod-messages"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "AutoMod Message Hold",
+    "anchor": "automodmessagehold"
+   },
+   {
+    "name": "AutoMod Message Hold v2",
+    "anchor": "automodmessagehold-v2"
+   },
+   {
+    "name": "AutoMod Message Update",
+    "anchor": "automodmessageupdate"
+   },
+   {
+    "name": "AutoMod Message Update v2",
+    "anchor": "automodmessageupdate-v2"
+   },
+   {
+    "name": "AutoMod Terms Update",
+    "anchor": "automodtermsupdate"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:automod_settings",
+  "section": "api",
+  "description": "View a broadcaster’s AutoMod settings.",
+  "api": [
+   {
+    "name": "Get AutoMod Settings",
+    "anchor": "get-automod-settings"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "AutoMod Settings Update",
+    "anchor": "automodsettingsupdate"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:automod_settings",
+  "section": "api",
+  "description": "Manage a broadcaster’s AutoMod settings.",
+  "api": [
+   {
+    "name": "Update AutoMod Settings",
+    "anchor": "update-automod-settings"
+   },
+   {
+    "name": "Get AutoMod Settings",
+    "anchor": "get-automod-settings",
+    "extra": true
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "moderator:read:banned_users",
+  "section": "api",
+  "description": "Read the list of bans or unbans in channels where you have the moderator role.",
+  "api": [],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "Channel Moderate v2",
+    "anchor": "channelmoderate-v2"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:banned_users",
+  "section": "api",
+  "description": "Ban and unban users.",
+  "api": [
+   {
+    "name": "Get Banned Users",
+    "anchor": "get-banned-users"
+   },
+   {
+    "name": "Ban User",
+    "anchor": "ban-user"
+   },
+   {
+    "name": "Unban User",
+    "anchor": "unban-user"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "Channel Moderate v2",
+    "anchor": "channelmoderate-v2"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:blocked_terms",
+  "section": "api",
+  "description": "View a broadcaster’s list of blocked terms.",
+  "api": [
+   {
+    "name": "Get Blocked Terms",
+    "anchor": "get-blocked-terms"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "channel.moderate v2",
+    "anchor": "channelmoderate-v2",
+    "extra": true
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:blocked_terms",
+  "section": "api",
+  "description": "Manage a broadcaster’s list of blocked terms.",
+  "api": [
+   {
+    "name": "Get Blocked Terms",
+    "anchor": "get-blocked-terms"
+   },
+   {
+    "name": "Add Blocked Term",
+    "anchor": "add-blocked-term"
+   },
+   {
+    "name": "Remove Blocked Term",
+    "anchor": "remove-blocked-term"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "channel.moderate v2",
+    "anchor": "channelmoderate-v2",
+    "extra": true
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:chat_messages",
+  "section": "api",
+  "description": "Read deleted chat messages in channels where you have the moderator role and get pinned chat messages.",
+  "api": [
+   {
+    "name": "Get Pinned Chat Message",
+    "anchor": "get-pinned-chat-message"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "channel.moderate v2",
+    "anchor": "channelmoderate-v2",
+    "extra": true
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:chat_messages",
+  "section": "api",
+  "description": "Delete chat messages in channels where you have the moderator role and manage pinned chat messages.",
+  "api": [
+   {
+    "name": "Delete Chat Messages",
+    "anchor": "delete-chat-messages"
+   },
+   {
+    "name": "Pin Chat Message",
+    "anchor": "pin-chat-message"
+   },
+   {
+    "name": "Update Pinned Chat Message",
+    "anchor": "update-pinned-chat-message"
+   },
+   {
+    "name": "Unpin Chat Message",
+    "anchor": "unpin-chat-message"
+   },
+   {
+    "name": "Get Pinned Chat Message",
+    "anchor": "get-pinned-chat-message",
+    "extra": true
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "channel.moderate v2",
+    "anchor": "channelmoderate-v2",
+    "extra": true
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:chat_settings",
+  "section": "api",
+  "description": "View a broadcaster’s chat room settings.",
+  "api": [
+   {
+    "name": "Get Chat Settings",
+    "anchor": "get-chat-settings"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "channel.moderate v2",
+    "anchor": "channelmoderate-v2",
+    "extra": true
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:chat_settings",
+  "section": "api",
+  "description": "Manage a broadcaster’s chat room settings.",
+  "api": [
+   {
+    "name": "Update Chat Settings",
+    "anchor": "update-chat-settings"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "channel.moderate v2",
+    "anchor": "channelmoderate-v2",
+    "extra": true
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:chatters",
+  "section": "api",
+  "description": "View the chatters in a broadcaster’s chat room.",
+  "api": [
+   {
+    "name": "Get Chatters",
+    "anchor": "get-chatters"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "moderator:read:followers",
+  "section": "api",
+  "description": "Read the followers of a broadcaster.",
+  "api": [
+   {
+    "name": "Get Channel Followers",
+    "anchor": "get-channel-followers"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Follow",
+    "anchor": "channelfollow"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:guest_star",
+  "section": "api",
+  "description": "Read Guest Star details for channels where you are a Guest Star moderator.",
+  "api": [
+   {
+    "name": "Get Channel Guest Star Settings",
+    "anchor": "get-channel-guest-star-settings"
+   },
+   {
+    "name": "Get Guest Star Session",
+    "anchor": "get-guest-star-session"
+   },
+   {
+    "name": "Get Guest Star Invites",
+    "anchor": "get-guest-star-invites"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Guest Star Session Begin",
+    "anchor": "channelguest_star_sessionbegin"
+   },
+   {
+    "name": "Channel Guest Star Session End",
+    "anchor": "channelguest_star_sessionend"
+   },
+   {
+    "name": "Channel Guest Star Guest Update",
+    "anchor": "channelguest_star_guestupdate"
+   },
+   {
+    "name": "Channel Guest Star Settings Update",
+    "anchor": "channelguest_star_settingsupdate"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:guest_star",
+  "section": "api",
+  "description": "Manage Guest Star for channels where you are a Guest Star moderator.",
+  "api": [
+   {
+    "name": "Send Guest Star Invite",
+    "anchor": "send-guest-star-invite"
+   },
+   {
+    "name": "Delete Guest Star Invite",
+    "anchor": "delete-guest-star-invite"
+   },
+   {
+    "name": "Assign Guest Star Slot",
+    "anchor": "assign-guest-star-slot"
+   },
+   {
+    "name": "Update Guest Star Slot",
+    "anchor": "update-guest-star-slot"
+   },
+   {
+    "name": "Delete Guest Star Slot",
+    "anchor": "delete-guest-star-slot"
+   },
+   {
+    "name": "Update Guest Star Slot Settings",
+    "anchor": "update-guest-star-slot-settings"
+   },
+   {
+    "name": "Get Channel Guest Star Settings",
+    "anchor": "get-channel-guest-star-settings",
+    "extra": true
+   },
+   {
+    "name": "Get Guest Star Session",
+    "anchor": "get-guest-star-session",
+    "extra": true
+   },
+   {
+    "name": "Get Guest Star Invites",
+    "anchor": "get-guest-star-invites",
+    "extra": true
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Guest Star Session Begin",
+    "anchor": "channelguest_star_sessionbegin"
+   },
+   {
+    "name": "Channel Guest Star Session End",
+    "anchor": "channelguest_star_sessionend"
+   },
+   {
+    "name": "Channel Guest Star Guest Update",
+    "anchor": "channelguest_star_guestupdate"
+   },
+   {
+    "name": "Channel Guest Star Settings Update",
+    "anchor": "channelguest_star_settingsupdate"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:moderators",
+  "section": "api",
+  "description": "Read the list of moderators in channels where you have the moderator role.",
+  "api": [],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "Channel Moderate v2",
+    "anchor": "channelmoderate-v2"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:shield_mode",
+  "section": "api",
+  "description": "View a broadcaster’s Shield Mode status.",
+  "api": [
+   {
+    "name": "Get Shield Mode Status",
+    "anchor": "get-shield-mode-status"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Shield Mode Begin",
+    "anchor": "channelshield_modebegin"
+   },
+   {
+    "name": "Shield Mode End",
+    "anchor": "channelshield_modeend"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:shield_mode",
+  "section": "api",
+  "description": "Manage a broadcaster’s Shield Mode status.",
+  "api": [
+   {
+    "name": "Update Shield Mode Status",
+    "anchor": "update-shield-mode-status"
+   },
+   {
+    "name": "Get Shield Mode Status",
+    "anchor": "get-shield-mode-status",
+    "extra": true
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Shield Mode Begin",
+    "anchor": "channelshield_modebegin"
+   },
+   {
+    "name": "Shield Mode End",
+    "anchor": "channelshield_modeend"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:shoutouts",
+  "section": "api",
+  "description": "View a broadcaster’s shoutouts.",
+  "api": [],
+  "eventsub": [
+   {
+    "name": "Shoutout Create",
+    "anchor": "channelshoutoutcreate"
+   },
+   {
+    "name": "Shoutout Received",
+    "anchor": "channelshoutoutreceive"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:shoutouts",
+  "section": "api",
+  "description": "Manage a broadcaster’s shoutouts.",
+  "api": [
+   {
+    "name": "Send a Shoutout",
+    "anchor": "send-a-shoutout"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Shoutout Create",
+    "anchor": "channelshoutoutcreate"
+   },
+   {
+    "name": "Shoutout Received",
+    "anchor": "channelshoutoutreceive"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:suspicious_users",
+  "section": "api",
+  "description": "Read chat messages from suspicious users and see users flagged as suspicious in channels where the user has the moderator role.",
+  "api": [],
+  "eventsub": [
+   {
+    "name": "Channel Suspicious User Message",
+    "anchor": "channelsuspicious_usermessage"
+   },
+   {
+    "name": "Channel Suspicious User Update",
+    "anchor": "channelsuspicious_userupdate"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:suspicious_users",
+  "section": "api",
+  "description": "Manage suspicious user statuses in channels where the user has the moderator role.",
+  "api": [
+   {
+    "name": "Add suspicious status to chat user",
+    "anchor": "add-suspicious-status-to-chat-user"
+   },
+   {
+    "name": "Remove suspicious status from chat user",
+    "anchor": "remove-suspicious-status-from-chat-user"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "moderator:read:unban_requests",
+  "section": "api",
+  "description": "View a broadcaster’s unban requests.",
+  "api": [
+   {
+    "name": "Get Unban Requests",
+    "anchor": "get-unban-requests"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Unban Request Create",
+    "anchor": "channelunban_requestcreate"
+   },
+   {
+    "name": "Channel Unban Request Resolve",
+    "anchor": "channelunban_requestresolve"
+   },
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "channel.moderate v2",
+    "anchor": "channelmoderate-v2",
+    "extra": true
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:unban_requests",
+  "section": "api",
+  "description": "Manage a broadcaster’s unban requests.",
+  "api": [
+   {
+    "name": "Resolve Unban Requests",
+    "anchor": "resolve-unban-requests"
+   },
+   {
+    "name": "Get Unban Requests",
+    "anchor": "get-unban-requests",
+    "extra": true
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Unban Request Create",
+    "anchor": "channelunban_requestcreate"
+   },
+   {
+    "name": "Channel Unban Request Resolve",
+    "anchor": "channelunban_requestresolve"
+   },
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "channel.moderate v2",
+    "anchor": "channelmoderate-v2",
+    "extra": true
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:vips",
+  "section": "api",
+  "description": "Read the list of VIPs in channels where you have the moderator role.",
+  "api": [],
+  "eventsub": [
+   {
+    "name": "Channel Moderate",
+    "anchor": "channelmoderate"
+   },
+   {
+    "name": "Channel Moderate v2",
+    "anchor": "channelmoderate-v2"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:read:warnings",
+  "section": "api",
+  "description": "Read warnings in channels where you have the moderator role.",
+  "api": [],
+  "eventsub": [
+   {
+    "name": "Channel Moderate v2",
+    "anchor": "channelmoderate-v2"
+   },
+   {
+    "name": "Channel Warning Acknowledge",
+    "anchor": "channelwarningacknowledge"
+   },
+   {
+    "name": "Channel Warning Send",
+    "anchor": "channelwarningsend"
+   }
+  ]
+ },
+ {
+  "scope": "moderator:manage:warnings",
+  "section": "api",
+  "description": "Warn users in channels where you have the moderator role.",
+  "api": [
+   {
+    "name": "Warn Chat User",
+    "anchor": "warn-chat-user"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Moderate v2",
+    "anchor": "channelmoderate-v2"
+   },
+   {
+    "name": "Channel Warning Acknowledge",
+    "anchor": "channelwarningacknowledge"
+   },
+   {
+    "name": "Channel Warning Send",
+    "anchor": "channelwarningsend"
+   }
+  ]
+ },
+ {
+  "scope": "user:bot",
+  "section": "api",
+  "description": "Join a specified chat channel as your user and appear as a bot, and perform chat-related actions as your user.",
+  "api": [
+   {
+    "name": "Send Chat Message",
+    "anchor": "send-chat-message"
+   },
+   {
+    "name": "Send Chat Announcement",
+    "anchor": "send-chat-announcement",
+    "extra": true
+   },
+   {
+    "name": "Send a Shoutout",
+    "anchor": "send-a-shoutout",
+    "extra": true
+   },
+   {
+    "name": "Get Pinned Chat Message",
+    "anchor": "get-pinned-chat-message",
+    "extra": true
+   },
+   {
+    "name": "Pin Chat Message",
+    "anchor": "pin-chat-message",
+    "extra": true
+   },
+   {
+    "name": "Update Pinned Chat Message",
+    "anchor": "update-pinned-chat-message",
+    "extra": true
+   },
+   {
+    "name": "Unpin Chat Message",
+    "anchor": "unpin-chat-message",
+    "extra": true
+   },
+   {
+    "name": "Ban User",
+    "anchor": "ban-user",
+    "extra": true
+   },
+   {
+    "name": "Unban User",
+    "anchor": "unban-user",
+    "extra": true
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Channel Chat Clear",
+    "anchor": "channelchatclear"
+   },
+   {
+    "name": "Channel Chat Clear User Messages",
+    "anchor": "channelchatclear_user_messages"
+   },
+   {
+    "name": "Channel Chat Message",
+    "anchor": "channelchatmessage"
+   },
+   {
+    "name": "Channel Chat Message Delete",
+    "anchor": "channelchatmessage_delete"
+   },
+   {
+    "name": "Channel Chat Notification",
+    "anchor": "channelchatnotification"
+   },
+   {
+    "name": "Channel Chat Settings Update",
+    "anchor": "channelchat_settingsupdate"
+   },
+   {
+    "name": "Channel Chat User Message Hold",
+    "anchor": "channelchat_user_message_hold"
+   },
+   {
+    "name": "Channel Chat User Message Update",
+    "anchor": "channelchatuser_message_update"
+   }
+  ]
+ },
+ {
+  "scope": "user:edit",
+  "section": "api",
+  "description": "Manage a user object.",
+  "api": [
+   {
+    "name": "Update User",
+    "anchor": "update-user"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:edit:broadcast",
+  "section": "api",
+  "description": "View and edit a user’s broadcasting configuration, including Extension configurations.",
+  "api": [
+   {
+    "name": "Get User Extensions",
+    "anchor": "get-user-extensions"
+   },
+   {
+    "name": "Get User Active Extensions",
+    "anchor": "get-user-active-extensions"
+   },
+   {
+    "name": "Update User Extensions",
+    "anchor": "update-user-extensions"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:read:blocked_users",
+  "section": "api",
+  "description": "View the block list of a user.",
+  "api": [
+   {
+    "name": "Get User Block List",
+    "anchor": "get-user-block-list"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:manage:blocked_users",
+  "section": "api",
+  "description": "Manage the block list of a user.",
+  "api": [
+   {
+    "name": "Block User",
+    "anchor": "block-user"
+   },
+   {
+    "name": "Unblock User",
+    "anchor": "unblock-user"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:read:broadcast",
+  "section": "api",
+  "description": "View a user’s broadcasting configuration, including Extension configurations.",
+  "api": [
+   {
+    "name": "Get Stream Markers",
+    "anchor": "get-stream-markers"
+   },
+   {
+    "name": "Get User Extensions",
+    "anchor": "get-user-extensions"
+   },
+   {
+    "name": "Get User Active Extensions",
+    "anchor": "get-user-active-extensions"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:read:chat",
+  "section": "api",
+  "description": "Receive chatroom messages and informational notifications relating to a channel’s chatroom.",
+  "api": [],
+  "eventsub": [
+   {
+    "name": "Channel Chat Clear",
+    "anchor": "channelchatclear"
+   },
+   {
+    "name": "Channel Chat Clear User Messages",
+    "anchor": "channelchatclear_user_messages"
+   },
+   {
+    "name": "Channel Chat Message",
+    "anchor": "channelchatmessage"
+   },
+   {
+    "name": "Channel Chat Message Delete",
+    "anchor": "channelchatmessage_delete"
+   },
+   {
+    "name": "Channel Chat Notification",
+    "anchor": "channelchatnotification"
+   },
+   {
+    "name": "Channel Chat Settings Update",
+    "anchor": "channelchat_settingsupdate"
+   },
+   {
+    "name": "Channel Chat User Message Hold",
+    "anchor": "channelchatuser_message_hold"
+   },
+   {
+    "name": "Channel Chat User Message Update",
+    "anchor": "channelchatuser_message_update"
+   }
+  ]
+ },
+ {
+  "scope": "user:manage:chat_color",
+  "section": "api",
+  "description": "Update the color used for the user’s name in chat.",
+  "api": [
+   {
+    "name": "Update User Chat Color",
+    "anchor": "update-user-chat-color"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:read:email",
+  "section": "api",
+  "description": "View a user’s email address.",
+  "api": [
+   {
+    "name": "Get Users",
+    "anchor": "get-users",
+    "note": "optional"
+   },
+   {
+    "name": "Update User",
+    "anchor": "update-user",
+    "note": "optional"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "User Update",
+    "anchor": "userupdate",
+    "note": "optional"
+   }
+  ]
+ },
+ {
+  "scope": "user:read:emotes",
+  "section": "api",
+  "description": "View emotes available to a user",
+  "api": [
+   {
+    "name": "Get User Emotes",
+    "anchor": "get-user-emotes"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:read:follows",
+  "section": "api",
+  "description": "View the list of channels a user follows.",
+  "api": [
+   {
+    "name": "Get Followed Channels",
+    "anchor": "get-followed-channels"
+   },
+   {
+    "name": "Get Followed Streams",
+    "anchor": "get-followed-streams"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:read:moderated_channels",
+  "section": "api",
+  "description": "Read the list of channels you have moderator privileges in.",
+  "api": [
+   {
+    "name": "Get Moderated Channels",
+    "anchor": "get-moderated-channels"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:read:subscriptions",
+  "section": "api",
+  "description": "View if an authorized user is subscribed to specific channels.",
+  "api": [
+   {
+    "name": "Check User Subscription",
+    "anchor": "check-user-subscription"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "user:read:whispers",
+  "section": "api",
+  "description": "Receive whispers sent to your user.",
+  "api": [],
+  "eventsub": [
+   {
+    "name": "Whisper Received",
+    "anchor": "userwhispermessage"
+   }
+  ]
+ },
+ {
+  "scope": "user:manage:whispers",
+  "section": "api",
+  "description": "Receive whispers sent to your user, and send whispers on your user’s behalf.",
+  "api": [
+   {
+    "name": "Send Whisper",
+    "anchor": "send-whisper"
+   }
+  ],
+  "eventsub": [
+   {
+    "name": "Whisper Received",
+    "anchor": "userwhispermessage"
+   }
+  ]
+ },
+ {
+  "scope": "user:write:chat",
+  "section": "api",
+  "description": "Send chat messages to a chatroom.",
+  "api": [
+   {
+    "name": "Send Chat Message",
+    "anchor": "send-chat-message"
+   }
+  ],
+  "eventsub": []
+ },
+ {
+  "scope": "chat:edit",
+  "section": "irc",
+  "description": "Send chat messages to a chatroom using an IRC connection.",
+  "api": [],
+  "eventsub": []
+ },
+ {
+  "scope": "chat:read",
+  "section": "irc",
+  "description": "View chat messages sent in a chatroom using an IRC connection.",
+  "api": [],
+  "eventsub": []
+ },
+ {
+  "scope": "whispers:read",
+  "section": "pubsub",
+  "description": "Receive whisper messages for your user using PubSub.",
+  "api": [],
+  "eventsub": []
+ }
+]

@@ -1,0 +1,54 @@
+{
+  "text": "RAID TombRaid RAID twitchRaid RAID",
+  "fragments": [
+    {
+      "type": "text",
+      "text": "RAID ",
+      "cheermote": null,
+      "emote": null,
+      "mention": null
+    },
+    {
+      "type": "emote",
+      "text": "TombRaid",
+      "cheermote": null,
+      "emote": {
+        "id": "864205",
+        "emote_set_id": "0",
+        "owner_id": "0",
+        "format": [
+          "static"
+        ]
+      },
+      "mention": null
+    },
+    {
+      "type": "text",
+      "text": " RAID ",
+      "cheermote": null,
+      "emote": null,
+      "mention": null
+    },
+    {
+      "type": "emote",
+      "text": "twitchRaid",
+      "cheermote": null,
+      "emote": {
+        "id": "62836",
+        "emote_set_id": "0",
+        "owner_id": "0",
+        "format": [
+          "static"
+        ]
+      },
+      "mention": null
+    },
+    {
+      "type": "text",
+      "text": " RAID",
+      "cheermote": null,
+      "emote": null,
+      "mention": null
+    }
+  ]
+}

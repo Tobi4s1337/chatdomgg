@@ -1,0 +1,20 @@
+{
+  "name": "twitch-chat-templates",
+  "private": true,
+  "type": "module",
+  "description": "Copy-into-project templates from the twitch-chat skill. Node >= 22 (global fetch + WebSocket).",
+  "scripts": {
+    "bot": "node chatbot.ts",
+    "irc": "node irc-client.ts",
+    "overlay:build": "tsc -p overlay/tsconfig.json",
+    "overlay:serve": "node overlay/overlay-relay.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.9.0"
+  }
+}

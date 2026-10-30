@@ -1,0 +1,2673 @@
+[
+ {
+  "name": "Automod Message Hold",
+  "type": "automod.message.hold",
+  "version": "1",
+  "status": "GA",
+  "description": "A user is notified if a message is caught by automod for review.",
+  "anchor": "automodmessagehold",
+  "authorization": "Requires a user access token that includes the `moderator:manage:automod` scope. The ID in the `moderator_user_id` condition parameter must match the user ID in the access token. If app access token used, then additionally requires the `moderator:manage:automod` scope for the moderator. The moderator must be a moderator or broadcaster for the specified broadcaster.",
+  "scopes": [
+   "moderator:manage:automod"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "automod-message-hold-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the broadcaster (channel).",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the moderator.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "automod-message-hold-event",
+  "domain": "AutoMod"
+ },
+ {
+  "name": "Automod Message Hold V2",
+  "type": "automod.message.hold",
+  "version": "2",
+  "status": "GA",
+  "description": "A user is notified if a message is caught by automod for review. Only public blocked terms trigger notifications, not private ones.",
+  "anchor": "automodmessagehold-v2",
+  "authorization": "Requires a user access token that includes the `moderator:manage:automod` scope. The ID in the `moderator_user_id` condition parameter must match the user ID in the access token. If app access token used, then additionally requires the `moderator:manage:automod` scope for the moderator. The moderator must be a moderator or broadcaster for the specified broadcaster.",
+  "scopes": [
+   "moderator:manage:automod"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "automod-message-hold-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the broadcaster (channel).",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the moderator.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "automod-message-hold-event-v2",
+  "domain": "AutoMod"
+ },
+ {
+  "name": "Automod Message Update",
+  "type": "automod.message.update",
+  "version": "1",
+  "status": "GA",
+  "description": "A message in the automod queue had its status changed.",
+  "anchor": "automodmessageupdate",
+  "authorization": "Requires a user access token that includes the `moderator:manage:automod` scope. The ID in the `moderator_user_id` condition parameter must match the user ID in the access token. If app access token used, then additionally requires the `moderator:manage:automod` scope for the moderator. The moderator must be a moderator or broadcaster for the specified broadcaster.",
+  "scopes": [
+   "moderator:manage:automod"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "automod-message-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the broadcaster (channel). Maximum:1.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the moderator.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "automod-message-update-event",
+  "domain": "AutoMod"
+ },
+ {
+  "name": "Automod Message Update V2",
+  "type": "automod.message.update",
+  "version": "2",
+  "status": "GA",
+  "description": "A message in the automod queue had its status changed. Only public blocked terms trigger notifications, not private ones.",
+  "anchor": "automodmessageupdate-v2",
+  "authorization": "Requires a user access token that includes the `moderator:manage:automod` scope. The ID in the `moderator_user_id` condition parameter must match the user ID in the access token. If app access token used, then additionally requires the `moderator:manage:automod` scope for the moderator. The moderator must be a moderator or broadcaster for the specified broadcaster.",
+  "scopes": [
+   "moderator:manage:automod"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "automod-message-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the broadcaster (channel). Maximum:1.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the moderator.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "automod-message-update-event-v2",
+  "domain": "AutoMod"
+ },
+ {
+  "name": "Automod Settings Update",
+  "type": "automod.settings.update",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification is sent when a broadcaster’s automod settings are updated.",
+  "anchor": "automodsettingsupdate",
+  "authorization": "Requires a user access token that includes the `moderator:read:automod_settings` scope. The ID in the `moderator_user_id` condition parameter must match the user ID in the access token. If app access token used, then additionally requires the `moderator:read:automod_settings` scope for the moderator. The moderator must be a moderator or broadcaster for the specified broadcaster.",
+  "scopes": [
+   "moderator:read:automod_settings"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "automod-settings-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the broadcaster (channel). Maximum:1.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the moderator.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "automod-settings-update-event",
+  "domain": "AutoMod"
+ },
+ {
+  "name": "Automod Terms Update",
+  "type": "automod.terms.update",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification is sent when a broadcaster’s automod terms are updated. Changes to private terms are not sent.",
+  "anchor": "automodtermsupdate",
+  "authorization": "Requires a user access token that includes the `moderator:manage:automod` scope. The ID in the `moderator_user_id` condition parameter must match the user ID in the access token. If app access token used, then additionally requires the `moderator:manage:automod` scope for the moderator. The moderator must be a moderator or broadcaster for the specified broadcaster.",
+  "scopes": [
+   "moderator:manage:automod"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "automod-terms-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the broadcaster (channel). Maximum:1.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the moderator creating the subscription. Maximum:1",
+    "depth": 0
+   }
+  ],
+  "eventRef": "automod-terms-update-event",
+  "domain": "AutoMod"
+ },
+ {
+  "name": "Channel Bits Use",
+  "type": "channel.bits.use",
+  "version": "1",
+  "status": "GA (NEW)",
+  "description": "A notification is sent whenever Bits are used on a channel.",
+  "anchor": "channelbitsuse",
+  "authorization": "Requires a user access token that includes the bits:read scope.",
+  "scopes": [
+   "bits:read"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-bits-use-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The user ID of the channel broadcaster. Maximum: 1.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-bits-use-event",
+  "domain": "Bits & cheers"
+ },
+ {
+  "name": "Channel Update",
+  "type": "channel.update",
+  "version": "2",
+  "status": "GA",
+  "description": "A broadcaster updates their channel properties e.g., category, title, content classification labels, broadcast, or language.",
+  "anchor": "channelupdate",
+  "authorization": "No authorization required.",
+  "scopes": [],
+  "scopesOptional": true,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get updates for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-update-event",
+  "domain": "Channel (info, follows, raids, ads, shoutouts)"
+ },
+ {
+  "name": "Channel Follow",
+  "type": "channel.follow",
+  "version": "2",
+  "status": "GA",
+  "description": "A specified channel receives a follow.",
+  "anchor": "channelfollow",
+  "authorization": "Must have `moderator:read:followers` scope.",
+  "scopes": [
+   "moderator:read:followers"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-follow-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get follow notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the moderator of the channel you want to get follow notifications for. If you have authorization from the broadcaster rather than a moderator, specify the broadcaster’s user ID here.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-follow-event",
+  "domain": "Channel (info, follows, raids, ads, shoutouts)"
+ },
+ {
+  "name": "Channel Ad Break Begin",
+  "type": "channel.ad_break.begin",
+  "version": "1",
+  "status": "GA",
+  "description": "A midroll commercial break has started running.",
+  "anchor": "channelad_breakbegin",
+  "authorization": "Must have `channel:read:ads` scope.",
+  "scopes": [
+   "channel:read:ads"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-ad-break-begin-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the broadcaster that you want to get Channel Ad Break begin notifications for. Maximum: 1",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-ad-break-begin-event",
+  "domain": "Channel (info, follows, raids, ads, shoutouts)"
+ },
+ {
+  "name": "Channel Chat Clear",
+  "type": "channel.chat.clear",
+  "version": "1",
+  "status": "GA",
+  "description": "A moderator or bot has cleared all messages from the chat room.",
+  "anchor": "channelchatclear",
+  "authorization": "Requires `user:read:chat` scope from chatting user. If app access token used, then additionally requires `user:bot` scope from chatting user, and either `channel:bot` scope from broadcaster or moderator status.",
+  "scopes": [
+   "user:read:chat",
+   "user:bot",
+   "channel:bot"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-chat-clear-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "User ID of the channel to receive chat clear events for.",
+    "depth": 0
+   },
+   {
+    "name": "user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The user ID to read chat as.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-chat-clear-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Chat Clear User Messages",
+  "type": "channel.chat.clear_user_messages",
+  "version": "1",
+  "status": "GA",
+  "description": "A moderator or bot has cleared all messages from a specific user.",
+  "anchor": "channelchatclear_user_messages",
+  "authorization": "Requires `user:read:chat` scope from chatting user. If app access token used, then additionally requires `user:bot` scope from chatting user, and either `channel:bot` scope from broadcaster or moderator status.",
+  "scopes": [
+   "user:read:chat",
+   "user:bot",
+   "channel:bot"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-chat-clear-user-messages-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "User ID of the channel to receive chat clear user messages events for.",
+    "depth": 0
+   },
+   {
+    "name": "user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The user ID to read chat as.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-chat-clear-user-messages-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Chat Message",
+  "type": "channel.chat.message",
+  "version": "1",
+  "status": "GA",
+  "description": "Any user sends a message to a specific chat room.",
+  "anchor": "channelchatmessage",
+  "authorization": "Requires `user:read:chat` scope from the chatting user. If app access token used, then additionally requires `user:bot` scope from chatting user, and either `channel:bot` scope from broadcaster or moderator status.",
+  "scopes": [
+   "user:read:chat",
+   "user:bot",
+   "channel:bot"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-chat-message-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The User ID of the channel to receive chat message events for.",
+    "depth": 0
+   },
+   {
+    "name": "user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The User ID to read chat as.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-chat-message-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Chat Message Delete",
+  "type": "channel.chat.message_delete",
+  "version": "1",
+  "status": "GA",
+  "description": "A moderator has removed a specific message.",
+  "anchor": "channelchatmessage_delete",
+  "authorization": "Requires `user:read:chat` scope from chatting user. If app access token used, then additionally requires `user:bot` scope from chatting user, and either `channel:bot` scope from broadcaster or moderator status.",
+  "scopes": [
+   "user:read:chat",
+   "user:bot",
+   "channel:bot"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-chat-message-delete-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "User ID of the channel to receive chat message delete events for.",
+    "depth": 0
+   },
+   {
+    "name": "user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The user ID to read chat as.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-chat-message-delete-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Chat Notification",
+  "type": "channel.chat.notification",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification for when an event that appears in chat has occurred.",
+  "anchor": "channelchatnotification",
+  "authorization": "Requires `user:read:chat` scope from chatting user. If app access token used, then additionally requires `user:bot` scope from chatting user, and either `channel:bot` scope from broadcaster or moderator status.",
+  "scopes": [
+   "user:read:chat",
+   "user:bot",
+   "channel:bot"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-chat-notification-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "User ID of the channel to receive chat notification events for.",
+    "depth": 0
+   },
+   {
+    "name": "user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The user ID to read chat as.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-chat-notification-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Chat Settings Update",
+  "type": "channel.chat_settings.update",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification for when a broadcaster’s chat settings are updated.",
+  "anchor": "channelchat_settingsupdate",
+  "authorization": "Requires `user:read:chat` scope from chatting user. If app access token used, then additionally requires `user:bot` scope from chatting user, and either `channel:bot` scope from broadcaster or moderator status.",
+  "scopes": [
+   "user:read:chat",
+   "user:bot",
+   "channel:bot"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-chat-settings-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "User ID of the channel to receive chat settings update events for.",
+    "depth": 0
+   },
+   {
+    "name": "user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The user ID to read chat as.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-chat-settings-update-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Chat User Message Hold",
+  "type": "channel.chat.user_message_hold",
+  "version": "1",
+  "status": "GA",
+  "description": "A user is notified if their message is caught by automod.",
+  "anchor": "channelchatuser_message_hold",
+  "authorization": "Requires `user:read:chat` scope from chatting user. If app access token used, then additionally requires `user:bot` scope from chatting user.",
+  "scopes": [
+   "user:read:chat",
+   "user:bot"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-chat-user-message-hold-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the channel to receive chat message events for.",
+    "depth": 0
+   },
+   {
+    "name": "user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID to read chat as.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-chat-user-message-hold-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Chat User Message Update",
+  "type": "channel.chat.user_message_update",
+  "version": "1",
+  "status": "GA",
+  "description": "A user is notified if their message’s automod status is updated.",
+  "anchor": "channelchatuser_message_update",
+  "authorization": "Requires `user:read:chat` scope from chatting user. If app access token used, then additionally requires `user:bot` scope from chatting user.",
+  "scopes": [
+   "user:read:chat",
+   "user:bot"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-chat-user-message-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the channel to receive chat message events for.",
+    "depth": 0
+   },
+   {
+    "name": "user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID to read chat as.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-chat-user-message-update-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Shared Chat Session Begin",
+  "type": "channel.shared_chat.begin",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification when a channel becomes active in an active shared chat session.",
+  "anchor": "channelshared_chatbegin",
+  "authorization": "No authorization required.",
+  "scopes": [],
+  "scopesOptional": true,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-shared-chat-session-begin-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The User ID of the channel to receive shared chat session begin events for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-shared-chat-session-begin-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Shared Chat Session Update",
+  "type": "channel.shared_chat.update",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification when the active shared chat session the channel is in changes.",
+  "anchor": "channelshared_chatupdate",
+  "authorization": "No authorization required.",
+  "scopes": [],
+  "scopesOptional": true,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-shared-chat-session-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The User ID of the channel to receive shared chat session update events for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-shared-chat-session-update-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Shared Chat Session End",
+  "type": "channel.shared_chat.end",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification when a channel leaves a shared chat session or the session ends.",
+  "anchor": "channelshared_chatend",
+  "authorization": "No authorization required.",
+  "scopes": [],
+  "scopesOptional": true,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-shared-chat-session-end-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The User ID of the channel to receive shared chat session end events for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-shared-chat-session-end-event",
+  "domain": "Chat"
+ },
+ {
+  "name": "Channel Subscribe",
+  "type": "channel.subscribe",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification is sent when a specified channel receives a subscriber. This does not include resubscribes.",
+  "anchor": "channelsubscribe",
+  "authorization": "Must have `channel:read:subscriptions` scope.",
+  "scopes": [
+   "channel:read:subscriptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-subscribe-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get subscribe notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-subscribe-event",
+  "domain": "Subscriptions (subs, resubs, gift subs)"
+ },
+ {
+  "name": "Channel Subscription End",
+  "type": "channel.subscription.end",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification when a subscription to the specified channel ends.",
+  "anchor": "channelsubscriptionend",
+  "authorization": "Must have `channel:read:subscriptions` scope.",
+  "scopes": [
+   "channel:read:subscriptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-subscription-end-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get subscription end notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-subscription-end-event",
+  "domain": "Subscriptions (subs, resubs, gift subs)"
+ },
+ {
+  "name": "Channel Subscription Gift",
+  "type": "channel.subscription.gift",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification when a viewer gives a gift subscription to one or more users in the specified channel.",
+  "anchor": "channelsubscriptiongift",
+  "authorization": "Must have `channel:read:subscriptions` scope.",
+  "scopes": [
+   "channel:read:subscriptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-subscription-gift-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get subscription gift notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-subscription-gift-event",
+  "domain": "Subscriptions (subs, resubs, gift subs)"
+ },
+ {
+  "name": "Channel Subscription Message",
+  "type": "channel.subscription.message",
+  "version": "1",
+  "status": "GA",
+  "description": "A notification when a user sends a resubscription chat message in a specific channel.",
+  "anchor": "channelsubscriptionmessage",
+  "authorization": "Must have `channel:read:subscriptions` scope.",
+  "scopes": [
+   "channel:read:subscriptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-subscription-message-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get resubscription chat message notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-subscription-message-event",
+  "domain": "Subscriptions (subs, resubs, gift subs)"
+ },
+ {
+  "name": "Channel Cheer",
+  "type": "channel.cheer",
+  "version": "1",
+  "status": "GA",
+  "description": "A user cheers on the specified channel.",
+  "anchor": "channelcheer",
+  "authorization": "Must have `bits:read` scope.",
+  "scopes": [
+   "bits:read"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-cheer-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get cheer notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-cheer-event",
+  "domain": "Bits & cheers"
+ },
+ {
+  "name": "Channel Raid",
+  "type": "channel.raid",
+  "version": "1",
+  "status": "GA",
+  "description": "A broadcaster raids another broadcaster’s channel.",
+  "anchor": "channelraid",
+  "authorization": "No authorization required.",
+  "scopes": [],
+  "scopesOptional": true,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-raid-condition",
+  "condition": [
+   {
+    "name": "from_broadcaster_user_id",
+    "type": "string",
+    "required": "no",
+    "description": "The broadcaster user ID that created the channel raid you want to get notifications for. Use this parameter if you want to know when a specific broadcaster raids another broadcaster. The channel raid condition must include either `from_broadcaster_user_id` or `to_broadcaster_user_id`.",
+    "depth": 0
+   },
+   {
+    "name": "to_broadcaster_user_id",
+    "type": "string",
+    "required": "no",
+    "description": "The broadcaster user ID that received the channel raid you want to get notifications for. Use this parameter if you want to know when a specific broadcaster is raided by another broadcaster. The channel raid condition must include either `from_broadcaster_user_id` or `to_broadcaster_user_id`.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-raid-event",
+  "domain": "Channel (info, follows, raids, ads, shoutouts)"
+ },
+ {
+  "name": "Channel Ban",
+  "type": "channel.ban",
+  "version": "1",
+  "status": "GA",
+  "description": "A viewer is banned from the specified channel.",
+  "anchor": "channelban",
+  "authorization": "Must have `channel:moderate` scope.",
+  "scopes": [
+   "channel:moderate"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-ban-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get ban notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-ban-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Unban",
+  "type": "channel.unban",
+  "version": "1",
+  "status": "GA",
+  "description": "A viewer is unbanned from the specified channel.",
+  "anchor": "channelunban",
+  "authorization": "Must have `channel:moderate` scope.",
+  "scopes": [
+   "channel:moderate"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-unban-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get unban notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-unban-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Unban Request Create",
+  "type": "channel.unban_request.create",
+  "version": "1",
+  "status": "GA",
+  "description": "A user creates an unban request.",
+  "anchor": "channelunban_requestcreate",
+  "authorization": "Must have `moderator:read:unban_requests` or `moderator:manage:unban_requests` scope.",
+  "scopes": [
+   "moderator:read:unban_requests",
+   "moderator:manage:unban_requests"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-unban-request-create-condition",
+  "condition": [
+   {
+    "name": "moderator_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the user that has permission to moderate the broadcaster’s channel and has granted your app permission to subscribe to this subscription type.",
+    "depth": 0
+   },
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the broadcaster you want to get chat unban request notifications for. Maximum: 1.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-unban-request-create-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Unban Request Resolve",
+  "type": "channel.unban_request.resolve",
+  "version": "1",
+  "status": "GA",
+  "description": "An unban request has been resolved.",
+  "anchor": "channelunban_requestresolve",
+  "authorization": "Must have `moderator:read:unban_requests` or `moderator:manage:unban_requests` scope. If you use webhooks, the user in `moderator_id` must have granted your app (client ID) one of the above permissions prior to your app subscribing to this subscription type. To learn more, see the Authentication section of Create EventSub Subscription. If you use WebSockets, the ID in `moderator_id` must match the user ID in the user access token.",
+  "scopes": [
+   "moderator:read:unban_requests",
+   "moderator:manage:unban_requests"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-unban-request-resolve-condition",
+  "condition": [
+   {
+    "name": "moderator_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the user that has permission to moderate the broadcaster’s channel and has granted your app permission to subscribe to this subscription type.",
+    "depth": 0
+   },
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the broadcaster you want to get unban request resolution notifications for. Maximum: 1.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-unban-request-resolve-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Moderate",
+  "type": "channel.moderate",
+  "version": "1",
+  "status": "GA",
+  "description": "A moderator performs a moderation action in a channel.",
+  "anchor": "channelmoderate",
+  "authorization": "Must have all of the following scopes: • `moderator:read:blocked_terms` OR `moderator:manage:blocked_terms` • `moderator:read:chat_settings` OR `moderator:manage:chat_settings` • `moderator:read:unban_requests` OR `moderator:manage:unban_requests` • `moderator:read:banned_users` OR `moderator:manage:banned_users` • `moderator:read:chat_messages` OR `moderator:manage:chat_messages` • `moderator:read:moderators` • `moderator:read:vips`",
+  "scopes": [
+   "moderator:read:blocked_terms",
+   "moderator:manage:blocked_terms",
+   "moderator:read:chat_settings",
+   "moderator:manage:chat_settings",
+   "moderator:read:unban_requests",
+   "moderator:manage:unban_requests",
+   "moderator:read:banned_users",
+   "moderator:manage:banned_users",
+   "moderator:read:chat_messages",
+   "moderator:manage:chat_messages",
+   "moderator:read:moderators",
+   "moderator:read:vips"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-moderate-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID of the broadcaster.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID of the moderator.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-moderate-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Moderate V2",
+  "type": "channel.moderate",
+  "version": "2",
+  "status": "GA",
+  "description": "A moderator performs a moderation action in a channel. Includes warnings.",
+  "anchor": "channelmoderate-v2",
+  "authorization": "Must have all of the following scopes: • `moderator:read:blocked_terms` OR `moderator:manage:blocked_terms` • `moderator:read:chat_settings` OR `moderator:manage:chat_settings` • `moderator:read:unban_requests` OR `moderator:manage:unban_requests` • `moderator:read:banned_users` OR `moderator:manage:banned_users` • `moderator:read:chat_messages` OR `moderator:manage:chat_messages` • `moderator:read:warnings` OR `moderator:manage:warnings` • `moderator:read:moderators` • `moderator:read:vips`",
+  "scopes": [
+   "moderator:read:blocked_terms",
+   "moderator:manage:blocked_terms",
+   "moderator:read:chat_settings",
+   "moderator:manage:chat_settings",
+   "moderator:read:unban_requests",
+   "moderator:manage:unban_requests",
+   "moderator:read:banned_users",
+   "moderator:manage:banned_users",
+   "moderator:read:chat_messages",
+   "moderator:manage:chat_messages",
+   "moderator:read:warnings",
+   "moderator:manage:warnings",
+   "moderator:read:moderators",
+   "moderator:read:vips"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-moderate-v2-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID of the broadcaster.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID of the moderator.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-moderate-event-v2",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Moderator Add",
+  "type": "channel.moderator.add",
+  "version": "1",
+  "status": "GA",
+  "description": "Moderator privileges were added to a user on a specified channel.",
+  "anchor": "channelmoderatoradd",
+  "authorization": "Must have `moderation:read` scope.",
+  "scopes": [
+   "moderation:read"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-moderator-add-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get moderator addition notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-moderator-add-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Moderator Remove",
+  "type": "channel.moderator.remove",
+  "version": "1",
+  "status": "GA",
+  "description": "Moderator privileges were removed from a user on a specified channel.",
+  "anchor": "channelmoderatorremove",
+  "authorization": "Must have `moderation:read` scope.",
+  "scopes": [
+   "moderation:read"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-moderator-remove-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to get moderator removal notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-moderator-remove-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Guest Star Session Begin",
+  "type": "channel.guest_star_session.begin",
+  "version": "beta",
+  "status": "BETA",
+  "description": "The host began a new Guest Star session.",
+  "anchor": "channelguest_star_sessionbegin",
+  "authorization": "Must have `channel:read:guest_star`, `channel:manage:guest_star`, `moderator:read:guest_star` or `moderator:manage:guest_star` scope.",
+  "scopes": [
+   "channel:read:guest_star",
+   "channel:manage:guest_star",
+   "moderator:read:guest_star",
+   "moderator:manage:guest_star"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The broadcaster user ID for the channel you want to receive Guest Star session begin notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID of the moderator or broadcaster of the specified channel.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-guest-star-session-begin-event",
+  "domain": "Guest Star (BETA)"
+ },
+ {
+  "name": "Channel Guest Star Session End",
+  "type": "channel.guest_star_session.end",
+  "version": "beta",
+  "status": "BETA",
+  "description": "A running Guest Star session has ended.",
+  "anchor": "channelguest_star_sessionend",
+  "authorization": "Must have `channel:read:guest_star`, `channel:manage:guest_star`, `moderator:read:guest_star` or `moderator:manage:guest_star` scope.",
+  "scopes": [
+   "channel:read:guest_star",
+   "channel:manage:guest_star",
+   "moderator:read:guest_star",
+   "moderator:manage:guest_star"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The broadcaster user ID for the channel you want to receive Guest Star session end notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID of the moderator or broadcaster of the specified channel.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-guest-star-session-end-event",
+  "domain": "Guest Star (BETA)"
+ },
+ {
+  "name": "Channel Guest Star Guest Update",
+  "type": "channel.guest_star_guest.update",
+  "version": "beta",
+  "status": "BETA",
+  "description": "A guest or a slot is updated in an active Guest Star session.",
+  "anchor": "channelguest_star_guestupdate",
+  "authorization": "Must have `channel:read:guest_star`, `channel:manage:guest_star`, `moderator:read:guest_star` or `moderator:manage:guest_star` scope.",
+  "scopes": [
+   "channel:read:guest_star",
+   "channel:manage:guest_star",
+   "moderator:read:guest_star",
+   "moderator:manage:guest_star"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The broadcaster user ID for the channel you want to receive Guest Star guest update notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID of the moderator or broadcaster of the specified channel.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-guest-star-guest-update-event",
+  "domain": "Guest Star (BETA)"
+ },
+ {
+  "name": "Channel Guest Star Settings Update",
+  "type": "channel.guest_star_settings.update",
+  "version": "beta",
+  "status": "BETA",
+  "description": "The host preferences for Guest Star have been updated.",
+  "anchor": "channelguest_star_settingsupdate",
+  "authorization": "Must have `channel:read:guest_star`, `channel:manage:guest_star`, `moderator:read:guest_star` or `moderator:manage:guest_star` scope.",
+  "scopes": [
+   "channel:read:guest_star",
+   "channel:manage:guest_star",
+   "moderator:read:guest_star",
+   "moderator:manage:guest_star"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The broadcaster user ID for the channel you want to receive Guest Star settings update notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user ID of the moderator or broadcaster of the specified channel.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-guest-star-settings-update-event",
+  "domain": "Guest Star (BETA)"
+ },
+ {
+  "name": "Channel Points Automatic Reward Redemption Add",
+  "type": "channel.channel_points_automatic_reward_redemption.add",
+  "version": "1",
+  "status": "GA",
+  "description": "A viewer has redeemed an automatic channel points reward on the specified channel.",
+  "anchor": "channelchannel_points_automatic_reward_redemptionadd",
+  "authorization": "Must have `channel:read:redemptions` or `channel:manage:redemptions` scope.",
+  "scopes": [
+   "channel:read:redemptions",
+   "channel:manage:redemptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-points-automatic-reward-redemption-add-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to receive channel points reward add notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-points-automatic-reward-redemption-add-event",
+  "domain": "Channel Points"
+ },
+ {
+  "name": "Channel Points Automatic Reward Redemption Add V2",
+  "type": "channel.channel_points_automatic_reward_redemption.add",
+  "version": "2",
+  "status": "GA",
+  "description": "A viewer has redeemed an automatic channel points reward on the specified channel.",
+  "anchor": "channelchannel_points_automatic_reward_redemptionadd-v2",
+  "authorization": "Must have `channel:read:redemptions` or `channel:manage:redemptions` scope.",
+  "scopes": [
+   "channel:read:redemptions",
+   "channel:manage:redemptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-points-automatic-reward-redemption-add-v2-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to receive channel points reward add notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-points-automatic-reward-redemption-add-v2-event",
+  "domain": "Channel Points"
+ },
+ {
+  "name": "Channel Points Custom Reward Add",
+  "type": "channel.channel_points_custom_reward.add",
+  "version": "1",
+  "status": "GA",
+  "description": "A custom channel points reward has been created for the specified channel.",
+  "anchor": "channelchannel_points_custom_rewardadd",
+  "authorization": "Must have `channel:read:redemptions` or `channel:manage:redemptions` scope.",
+  "scopes": [
+   "channel:read:redemptions",
+   "channel:manage:redemptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-points-custom-reward-add-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to receive channel points custom reward add notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-points-custom-reward-add-event",
+  "domain": "Channel Points"
+ },
+ {
+  "name": "Channel Points Custom Reward Update",
+  "type": "channel.channel_points_custom_reward.update",
+  "version": "1",
+  "status": "GA",
+  "description": "A custom channel points reward has been updated for the specified channel.",
+  "anchor": "channelchannel_points_custom_rewardupdate",
+  "authorization": "Must have `channel:read:redemptions` or `channel:manage:redemptions` scope.",
+  "scopes": [
+   "channel:read:redemptions",
+   "channel:manage:redemptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-points-custom-reward-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to receive channel points custom reward update notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "reward_id",
+    "type": "string",
+    "required": "no",
+    "description": "Optional. Specify a reward id to only receive notifications for a specific reward.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-points-custom-reward-update-event",
+  "domain": "Channel Points"
+ },
+ {
+  "name": "Channel Points Custom Reward Remove",
+  "type": "channel.channel_points_custom_reward.remove",
+  "version": "1",
+  "status": "GA",
+  "description": "A custom channel points reward has been removed from the specified channel.",
+  "anchor": "channelchannel_points_custom_rewardremove",
+  "authorization": "Must have `channel:read:redemptions` or `channel:manage:redemptions` scope.",
+  "scopes": [
+   "channel:read:redemptions",
+   "channel:manage:redemptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-points-custom-reward-remove-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to receive channel points custom reward remove notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "reward_id",
+    "type": "string",
+    "required": "no",
+    "description": "Optional. Specify a reward id to only receive notifications for a specific reward.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-points-custom-reward-remove-event",
+  "domain": "Channel Points"
+ },
+ {
+  "name": "Channel Points Custom Reward Redemption Add",
+  "type": "channel.channel_points_custom_reward_redemption.add",
+  "version": "1",
+  "status": "GA",
+  "description": "A viewer has redeemed a custom channel points reward on the specified channel.",
+  "anchor": "channelchannel_points_custom_reward_redemptionadd",
+  "authorization": "Must have `channel:read:redemptions` or `channel:manage:redemptions` scope.",
+  "scopes": [
+   "channel:read:redemptions",
+   "channel:manage:redemptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-points-custom-reward-redemption-add-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to receive channel points custom reward redemption add notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "reward_id",
+    "type": "string",
+    "required": "no",
+    "description": "Optional. Specify a reward id to only receive notifications for a specific reward.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-points-custom-reward-redemption-add-event",
+  "domain": "Channel Points"
+ },
+ {
+  "name": "Channel Points Custom Reward Redemption Update",
+  "type": "channel.channel_points_custom_reward_redemption.update",
+  "version": "1",
+  "status": "GA",
+  "description": "A redemption of a channel points custom reward has been updated for the specified channel.",
+  "anchor": "channelchannel_points_custom_reward_redemptionupdate",
+  "authorization": "Must have `channel:read:redemptions` or `channel:manage:redemptions` scope.",
+  "scopes": [
+   "channel:read:redemptions",
+   "channel:manage:redemptions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-points-custom-reward-redemption-update-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to receive channel points custom reward redemption update notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "reward_id",
+    "type": "string",
+    "required": "no",
+    "description": "Optional. Specify a reward id to only receive notifications for a specific reward.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-points-custom-reward-redemption-update-event",
+  "domain": "Channel Points"
+ },
+ {
+  "name": "Channel Custom Power-ups Redemption Add",
+  "type": "channel.custom_power_up_redemption.add",
+  "version": "1",
+  "status": "GA (NEW)",
+  "description": "A viewer has redeemed a custom Power-up on the specified channel.",
+  "anchor": "channelcustom_power_up_redemptionadd",
+  "authorization": "Must have `bits:read` scope.",
+  "scopes": [
+   "bits:read"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-custom-power-up-redemption-add-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID for the channel you want to receive custom Power-up redemption add notifications for.",
+    "depth": 0
+   },
+   {
+    "name": "reward_id",
+    "type": "string",
+    "required": "no",
+    "description": "Optional. Specify a reward id to only receive notifications for a specific custom Power-up.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-custom-power-up-redemption-add-event",
+  "domain": "Power-ups"
+ },
+ {
+  "name": "Channel Poll Begin",
+  "type": "channel.poll.begin",
+  "version": "1",
+  "status": "GA",
+  "description": "A poll started on a specified channel.",
+  "anchor": "channelpollbegin",
+  "authorization": "Must have `channel:read:polls` or `channel:manage:polls` scope.",
+  "scopes": [
+   "channel:read:polls",
+   "channel:manage:polls"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-poll-begin-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID of the channel for which “poll begin” notifications will be received.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-poll-begin-event",
+  "domain": "Polls"
+ },
+ {
+  "name": "Channel Poll Progress",
+  "type": "channel.poll.progress",
+  "version": "1",
+  "status": "GA",
+  "description": "Users respond to a poll on a specified channel.",
+  "anchor": "channelpollprogress",
+  "authorization": "Must have `channel:read:polls` or `channel:manage:polls` scope.",
+  "scopes": [
+   "channel:read:polls",
+   "channel:manage:polls"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-poll-progress-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID of the channel for which “poll progress” notifications will be received.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-poll-progress-event",
+  "domain": "Polls"
+ },
+ {
+  "name": "Channel Poll End",
+  "type": "channel.poll.end",
+  "version": "1",
+  "status": "GA",
+  "description": "A poll ended on a specified channel.",
+  "anchor": "channelpollend",
+  "authorization": "Must have `channel:read:polls` or `channel:manage:polls` scope.",
+  "scopes": [
+   "channel:read:polls",
+   "channel:manage:polls"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-poll-end-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID of the channel for which “poll end” notifications will be received.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-poll-end-event",
+  "domain": "Polls"
+ },
+ {
+  "name": "Channel Prediction Begin",
+  "type": "channel.prediction.begin",
+  "version": "1",
+  "status": "GA",
+  "description": "A Prediction started on a specified channel.",
+  "anchor": "channelpredictionbegin",
+  "authorization": "Must have `channel:read:predictions` or `channel:manage:predictions` scope.",
+  "scopes": [
+   "channel:read:predictions",
+   "channel:manage:predictions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-prediction-begin-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID of the channel for which “prediction begin” notifications will be received.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-prediction-begin-event",
+  "domain": "Predictions"
+ },
+ {
+  "name": "Channel Prediction Progress",
+  "type": "channel.prediction.progress",
+  "version": "1",
+  "status": "GA",
+  "description": "Users participated in a Prediction on a specified channel.",
+  "anchor": "channelpredictionprogress",
+  "authorization": "Must have `channel:read:predictions` or `channel:manage:predictions` scope.",
+  "scopes": [
+   "channel:read:predictions",
+   "channel:manage:predictions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-prediction-progress-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID of the channel for which “prediction progress” notifications will be received.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-prediction-progress-event",
+  "domain": "Predictions"
+ },
+ {
+  "name": "Channel Prediction Lock",
+  "type": "channel.prediction.lock",
+  "version": "1",
+  "status": "GA",
+  "description": "A Prediction was locked on a specified channel.",
+  "anchor": "channelpredictionlock",
+  "authorization": "Must have `channel:read:predictions` or `channel:manage:predictions` scope.",
+  "scopes": [
+   "channel:read:predictions",
+   "channel:manage:predictions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-prediction-lock-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID of the channel for which “prediction lock” notifications will be received.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-prediction-lock-event",
+  "domain": "Predictions"
+ },
+ {
+  "name": "Channel Prediction End",
+  "type": "channel.prediction.end",
+  "version": "1",
+  "status": "GA",
+  "description": "A Prediction ended on a specified channel.",
+  "anchor": "channelpredictionend",
+  "authorization": "Must have `channel:read:predictions` or `channel:manage:predictions` scope.",
+  "scopes": [
+   "channel:read:predictions",
+   "channel:manage:predictions"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-prediction-end-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID of the channel for which “prediction end” notifications will be received.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-prediction-end-event",
+  "domain": "Predictions"
+ },
+ {
+  "name": "Channel Suspicious User Message",
+  "type": "channel.suspicious_user.message",
+  "version": "1",
+  "status": "GA (NEW)",
+  "description": "A chat message has been sent by a suspicious user.",
+  "anchor": "channelsuspicious_usermessage",
+  "authorization": "Requires the `moderator:read:suspicious_users` scope. If you use webhooks, the user in `moderator_user_id` must have granted your app (client ID) one of the above permissions prior to your app subscribing to this subscription type. To learn more, see the Authentication section of Create EventSub Subscription. If you use WebSockets, the ID in `moderator_user_id` must match the user ID in the user access token.",
+  "scopes": [
+   "moderator:read:suspicious_users"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-suspicious-user-message-condition",
+  "condition": [
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of a user that has permission to moderate the broadcaster’s channel and has granted your app permission to subscribe to this subscription type.",
+    "depth": 0
+   },
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "User ID of the channel to receive chat message events for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-suspicious-user-message-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Suspicious User Update",
+  "type": "channel.suspicious_user.update",
+  "version": "1",
+  "status": "GA (NEW)",
+  "description": "A suspicious user has been updated.",
+  "anchor": "channelsuspicious_userupdate",
+  "authorization": "Requires the `moderator:read:suspicious_users` scope. If you use webhooks, the user in moderator_user_id must have granted your app (client ID) one of the above permissions prior to your app subscribing to this subscription type. To learn more, see the Authentication section of Create EventSub Subscription. If you use WebSockets, the ID in `moderator_user_id` must match the user ID in the user access token.",
+  "scopes": [
+   "moderator:read:suspicious_users"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-suspicious-user-update-condition",
+  "condition": [
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of a user that has permission to moderate the broadcaster’s channel and has granted your app permission to subscribe to this subscription type.",
+    "depth": 0
+   },
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The broadcaster you want to get chat unban request notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-suspicious-user-update-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel VIP Add",
+  "type": "channel.vip.add",
+  "version": "1",
+  "status": "GA",
+  "description": "A VIP is added to the channel.",
+  "anchor": "channelvipadd",
+  "authorization": "Must have `channel:read:vips` or `channel:manage:vips` scope.",
+  "scopes": [
+   "channel:read:vips",
+   "channel:manage:vips"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-vip-add-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The User ID of the broadcaster (channel) Maximum: 1",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-vip-add-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel VIP Remove",
+  "type": "channel.vip.remove",
+  "version": "1",
+  "status": "GA",
+  "description": "A VIP is removed from the channel.",
+  "anchor": "channelvipremove",
+  "authorization": "Must have `channel:read:vips` or `channel:manage:vips` scope.",
+  "scopes": [
+   "channel:read:vips",
+   "channel:manage:vips"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-vip-remove-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The User ID of the broadcaster (channel) Maximum: 1",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-vip-remove-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Warning Acknowledgement",
+  "type": "channel.warning.acknowledge",
+  "version": "1",
+  "status": "GA",
+  "description": "A user acknowledges a warning. Broadcasters and moderators can see the warning’s details.",
+  "anchor": "channelwarningacknowledge",
+  "authorization": "Must have the `moderator:read:warnings` or `moderator:manage:warnings` scope.",
+  "scopes": [
+   "moderator:read:warnings",
+   "moderator:manage:warnings"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-warning-acknowledge-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The User ID of the broadcaster.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The User ID of the moderator.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-warning-acknowledge-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Channel Warning Send",
+  "type": "channel.warning.send",
+  "version": "1",
+  "status": "GA (NEW)",
+  "description": "A user is sent a warning. Broadcasters and moderators can see the warning’s details.",
+  "anchor": "channelwarningsend",
+  "authorization": "Must have the `moderator:read:warnings` or `moderator:manage:warnings` scope.",
+  "scopes": [
+   "moderator:read:warnings",
+   "moderator:manage:warnings"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "channel-warning-send-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The User ID of the broadcaster.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The User ID of the moderator.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "channel-warning-send-event",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Charity Donation",
+  "type": "channel.charity_campaign.donate",
+  "version": "1",
+  "status": "GA",
+  "description": "Sends an event notification when a user donates to the broadcaster’s charity campaign.",
+  "anchor": "channelcharity_campaigndonate",
+  "authorization": "Requires the channel:read:charity scope.",
+  "scopes": [
+   "channel:read:charity"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that you want to receive notifications about when users donate to their campaign.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "charity-donation-event",
+  "domain": "Charity"
+ },
+ {
+  "name": "Charity Campaign Start",
+  "type": "channel.charity_campaign.start",
+  "version": "1",
+  "status": "GA",
+  "description": "Sends an event notification when the broadcaster starts a charity campaign.",
+  "anchor": "channelcharity_campaignstart",
+  "authorization": "Requires the channel:read:charity scope.",
+  "scopes": [
+   "channel:read:charity"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that you want to receive notifications about when they start a charity campaign.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "charity-campaign-start-event",
+  "domain": "Charity"
+ },
+ {
+  "name": "Charity Campaign Progress",
+  "type": "channel.charity_campaign.progress",
+  "version": "1",
+  "status": "GA",
+  "description": "Sends an event notification when progress is made towards the campaign’s goal or when the broadcaster changes the fundraising goal.",
+  "anchor": "channelcharity_campaignprogress",
+  "authorization": "Requires the channel:read:charity scope.",
+  "scopes": [
+   "channel:read:charity"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that you want to receive notifications about when their campaign makes progress or is updated.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "charity-campaign-progress-event",
+  "domain": "Charity"
+ },
+ {
+  "name": "Charity Campaign Stop",
+  "type": "channel.charity_campaign.stop",
+  "version": "1",
+  "status": "GA",
+  "description": "Sends an event notification when the broadcaster stops a charity campaign.",
+  "anchor": "channelcharity_campaignstop",
+  "authorization": "Requires the channel:read:charity scope.",
+  "scopes": [
+   "channel:read:charity"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that you want to receive notifications about when they stop a charity campaign.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "charity-campaign-stop-event",
+  "domain": "Charity"
+ },
+ {
+  "name": "Conduit Shard Disabled",
+  "type": "conduit.shard.disabled",
+  "version": "1",
+  "status": "GA (NEW)",
+  "description": "Sends a notification when EventSub disables a shard due to the status of the underlying transport changing.",
+  "anchor": "conduitsharddisabled",
+  "authorization": "App access token where the client ID matches the client ID in the condition. If `conduit_id` is specified, the client must be the owner of the conduit.",
+  "scopes": [],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "conduit-shard-disabled-condition",
+  "condition": [
+   {
+    "name": "client_id",
+    "type": "string",
+    "required": "yes",
+    "description": "Your application’s client id. The provided client_id must match the client ID in the application access token.",
+    "depth": 0
+   },
+   {
+    "name": "conduit_id",
+    "type": "string",
+    "required": "no",
+    "description": "The conduit ID to receive events for. If omitted, events for all of this client’s conduits are sent.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "conduit-shard-disabled-event",
+  "domain": "Conduit"
+ },
+ {
+  "name": "Drop Entitlement Grant",
+  "type": "drop.entitlement.grant",
+  "version": "1",
+  "status": "GA",
+  "description": "An entitlement for a Drop is granted to a user.",
+  "anchor": "dropentitlementgrant",
+  "authorization": "App access token required. The client ID associated with the access token must be owned by a user who is part of the specified organization.",
+  "scopes": [],
+  "scopesOptional": false,
+  "transports": "webhook, conduit (NOT websocket)",
+  "notes": [
+   "NOTE This subscription type is only supported by webhooks and conduits, and cannot be used with WebSockets."
+  ],
+  "extraBody": [
+   "`is_batching_enabled` (string, yes): Needs to be true for this subscription type."
+  ],
+  "conditionRef": "drop-entitlement-grant-condition",
+  "condition": [
+   {
+    "name": "organization_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The organization ID of the organization that owns the game on the developer portal.",
+    "depth": 0
+   },
+   {
+    "name": "category_id",
+    "type": "string",
+    "required": "no",
+    "description": "The category (or game) ID of the game for which entitlement notifications will be received.",
+    "depth": 0
+   },
+   {
+    "name": "campaign_id",
+    "type": "string",
+    "required": "no",
+    "description": "The campaign ID for a specific campaign for which entitlement notifications will be received.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "drop-entitlement-grant-event",
+  "domain": "Drops"
+ },
+ {
+  "name": "Extension Bits Transaction Create",
+  "type": "extension.bits_transaction.create",
+  "version": "1",
+  "status": "GA",
+  "description": "A Bits transaction occurred for a specified Twitch Extension.",
+  "anchor": "extensionbits_transactioncreate",
+  "authorization": "The OAuth token client ID must match the Extension client ID.",
+  "scopes": [],
+  "scopesOptional": false,
+  "transports": "webhook, conduit (NOT websocket)",
+  "notes": [
+   "NOTE This subscription type is only supported by webhooks and conduits, and cannot be used with WebSockets."
+  ],
+  "extraBody": [],
+  "conditionRef": "extension-bits-transaction-create-condition",
+  "condition": [
+   {
+    "name": "extension_client_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The client ID of the extension.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "extension-bits-transaction-create-event",
+  "domain": "Extensions"
+ },
+ {
+  "name": "Goal Begin",
+  "type": "channel.goal.begin",
+  "version": "1",
+  "status": "GA",
+  "description": "Get notified when a broadcaster begins a goal.",
+  "anchor": "channelgoalbegin",
+  "authorization": "Requires a user OAuth access token with scope set to channel:read:goals.",
+  "scopes": [
+   "channel:read:goals"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [
+   "NOTE: It’s possible to receive the Begin event after receiving Progress events."
+  ],
+  "extraBody": [],
+  "conditionRef": "goals-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the broadcaster to get notified about. The ID must match the `user_id` in the OAuth access token.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "goals-event",
+  "domain": "Goals"
+ },
+ {
+  "name": "Goal Progress",
+  "type": "channel.goal.progress",
+  "version": "1",
+  "status": "GA",
+  "description": "Get notified when progress (either positive or negative) is made towards a broadcaster’s goal.",
+  "anchor": "channelgoalprogress",
+  "authorization": "Requires a user OAuth access token with scope set to channel:read:goals.",
+  "scopes": [
+   "channel:read:goals"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [
+   "NOTE: It’s possible to receive Progress events before receiving the Begin event."
+  ],
+  "extraBody": [],
+  "conditionRef": "goals-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the broadcaster to get notified about. The ID must match the `user_id` in the OAuth access token.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "goals-event",
+  "domain": "Goals"
+ },
+ {
+  "name": "Goal End",
+  "type": "channel.goal.end",
+  "version": "1",
+  "status": "GA",
+  "description": "Get notified when a broadcaster ends a goal.",
+  "anchor": "channelgoalend",
+  "authorization": "Requires a user OAuth access token with scope set to channel:read:goals.",
+  "scopes": [
+   "channel:read:goals"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "goals-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the broadcaster to get notified about. The ID must match the `user_id` in the OAuth access token.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "goals-event",
+  "domain": "Goals"
+ },
+ {
+  "name": "Hype Train Begin",
+  "type": "channel.hype_train.begin",
+  "version": "2",
+  "status": "GA",
+  "description": "A Hype Train begins on the specified channel.",
+  "anchor": "channelhype_trainbegin",
+  "authorization": "Must have `channel:read:hype_train` scope.",
+  "scopes": [
+   "channel:read:hype_train"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "hype-train-begin-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the broadcaster that you want to get Hype Train begin notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "hype-train-begin-event",
+  "domain": "Hype Train"
+ },
+ {
+  "name": "Hype Train Progress",
+  "type": "channel.hype_train.progress",
+  "version": "2",
+  "status": "GA",
+  "description": "A Hype Train makes progress on the specified channel.",
+  "anchor": "channelhype_trainprogress",
+  "authorization": "Must have `channel:read:hype_train` scope.",
+  "scopes": [
+   "channel:read:hype_train"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "hype-train-progress-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the broadcaster that you want to get Hype Train progress notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "hype-train-progress-event",
+  "domain": "Hype Train"
+ },
+ {
+  "name": "Hype Train End",
+  "type": "channel.hype_train.end",
+  "version": "2",
+  "status": "GA",
+  "description": "A Hype Train ends on the specified channel.",
+  "anchor": "channelhype_trainend",
+  "authorization": "Must have `channel:read:hype_train` scope.",
+  "scopes": [
+   "channel:read:hype_train"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "hype-train-end-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The ID of the broadcaster that you want to get Hype Train end notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "hype-train-end-event",
+  "domain": "Hype Train"
+ },
+ {
+  "name": "Shield Mode Begin",
+  "type": "channel.shield_mode.begin",
+  "version": "1",
+  "status": "GA",
+  "description": "Sends a notification when the broadcaster activates Shield Mode.",
+  "anchor": "channelshield_modebegin",
+  "authorization": "Requires the moderator:read:shield_mode or moderator:manage:shield_mode scope. If you use webhooks, the user in `moderator_id` must have granted your app (client ID) one of the above permissions prior to your app subscribing to this subscription type. To learn more, see the Authorization section of Create EventSub Subscription. If you use WebSockets, the ID in `moderator_id` must match the user ID in the user access token.",
+  "scopes": [
+   "moderator:read:shield_mode",
+   "moderator:manage:shield_mode"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that you want to receive notifications about when they activate Shield Mode.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster or one of the broadcaster’s moderators.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "shield-mode",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Shield Mode End",
+  "type": "channel.shield_mode.end",
+  "version": "1",
+  "status": "GA",
+  "description": "Sends a notification when the broadcaster deactivates Shield Mode.",
+  "anchor": "channelshield_modeend",
+  "authorization": "Requires the moderator:read:shield_mode or moderator:manage:shield_mode scope. If you use webhooks, the user in `moderator_id` must have granted your app (client ID) one of the above permissions prior to your app subscribing to this subscription type. To learn more, see the Authorization section of Create EventSub Subscription. If you use WebSockets, the ID in `moderator_id` must match the user ID in the user access token.",
+  "scopes": [
+   "moderator:read:shield_mode",
+   "moderator:manage:shield_mode"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that you want to receive notifications about when they deactivate Shield Mode.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster or one of the broadcaster’s moderators.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "shield-mode",
+  "domain": "Moderation (bans, mods, VIPs, warnings, unban requests, suspicious users, shield mode)"
+ },
+ {
+  "name": "Shoutout Create",
+  "type": "channel.shoutout.create",
+  "version": "1",
+  "status": "GA",
+  "description": "Sends a notification when the specified broadcaster sends a Shoutout.",
+  "anchor": "channelshoutoutcreate",
+  "authorization": "Requires the moderator:read:shoutouts or moderator:manage:shoutouts scope. If you use webhooks, the user in `moderator_user_id` must have granted your app (client ID) one of the above permissions prior to your app subscribing to this subscription type. To learn more, see the Authorization section of Create EventSub Subscription. If you use WebSockets, the ID in `moderator_user_id` must match the user ID in the user access token.",
+  "scopes": [
+   "moderator:read:shoutouts",
+   "moderator:manage:shoutouts"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that you want to receive notifications about when they send a Shoutout.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that gave the Shoutout or one of the broadcaster’s moderators.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "shoutout-create",
+  "domain": "Channel (info, follows, raids, ads, shoutouts)"
+ },
+ {
+  "name": "Shoutout Received",
+  "type": "channel.shoutout.receive",
+  "version": "1",
+  "status": "GA",
+  "description": "Sends a notification when the specified broadcaster receives a Shoutout.",
+  "anchor": "channelshoutoutreceive",
+  "authorization": "Requires the moderator:read:shoutouts or moderator:manage:shoutouts scope. If you use webhooks, the user in `moderator_user_id` must have granted your app (client ID) one of the above permissions prior to your app subscribing to this subscription type. To learn more, see the Authorization section of Create EventSub Subscription. If you use WebSockets, the ID in `moderator_user_id` must match the user ID in the user access token.",
+  "scopes": [
+   "moderator:read:shoutouts",
+   "moderator:manage:shoutouts"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [
+   "NOTE Sent only if Twitch posts the Shoutout to the broadcaster’s activity feed."
+  ],
+  "extraBody": [],
+  "conditionRef": null,
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that you want to receive notifications about when they receive a Shoutout.",
+    "depth": 0
+   },
+   {
+    "name": "moderator_user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The ID of the broadcaster that received the Shoutout or one of the broadcaster’s moderators.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "shoutout-received",
+  "domain": "Channel (info, follows, raids, ads, shoutouts)"
+ },
+ {
+  "name": "Stream Online",
+  "type": "stream.online",
+  "version": "1",
+  "status": "GA",
+  "description": "The specified broadcaster starts a stream.",
+  "anchor": "streamonline",
+  "authorization": "No authorization required.",
+  "scopes": [],
+  "scopesOptional": true,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "stream-online-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID you want to get stream online notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "stream-online-event",
+  "domain": "Stream"
+ },
+ {
+  "name": "Stream Offline",
+  "type": "stream.offline",
+  "version": "1",
+  "status": "GA",
+  "description": "The specified broadcaster stops a stream.",
+  "anchor": "streamoffline",
+  "authorization": "No authorization required.",
+  "scopes": [],
+  "scopesOptional": true,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "stream-offline-condition",
+  "condition": [
+   {
+    "name": "broadcaster_user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The broadcaster user ID you want to get stream offline notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "stream-offline-event",
+  "domain": "Stream"
+ },
+ {
+  "name": "User Authorization Grant",
+  "type": "user.authorization.grant",
+  "version": "1",
+  "status": "GA",
+  "description": "A user’s authorization has been granted to your client id.",
+  "anchor": "userauthorizationgrant",
+  "authorization": "Provided `client_id` must match the client id in the application access token.",
+  "scopes": [],
+  "scopesOptional": false,
+  "transports": "webhook, conduit (NOT websocket)",
+  "notes": [
+   "NOTE This subscription type is only supported by webhooks and conduits, and cannot be used with WebSockets."
+  ],
+  "extraBody": [],
+  "conditionRef": "user-authorization-grant-condition",
+  "condition": [
+   {
+    "name": "client_id",
+    "type": "string",
+    "required": "yes",
+    "description": "Your application’s client id. The provided `client_id` must match the client id in the application access token.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "user-authorization-grant-event",
+  "domain": "User & authorization"
+ },
+ {
+  "name": "User Authorization Revoke",
+  "type": "user.authorization.revoke",
+  "version": "1",
+  "status": "GA",
+  "description": "A user’s authorization has been revoked for your client id.",
+  "anchor": "userauthorizationrevoke",
+  "authorization": "Provided `client_id` must match the client id in the application access token.",
+  "scopes": [],
+  "scopesOptional": false,
+  "transports": "webhook, conduit (NOT websocket)",
+  "notes": [
+   "NOTE This subscription type is only supported by webhooks and conduits, and cannot be used with WebSockets."
+  ],
+  "extraBody": [],
+  "conditionRef": "user-authorization-revoke-condition",
+  "condition": [
+   {
+    "name": "client_id",
+    "type": "string",
+    "required": "yes",
+    "description": "Your application’s client id. The provided `client_id` must match the client id in the application access token.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "user-authorization-revoke-event",
+  "domain": "User & authorization"
+ },
+ {
+  "name": "User Update",
+  "type": "user.update",
+  "version": "1",
+  "status": "GA",
+  "description": "A user has updated their account.",
+  "anchor": "userupdate",
+  "authorization": "No authorization required. If you have the `user:read:email` scope, the notification will include `email` field.",
+  "scopes": [
+   "user:read:email"
+  ],
+  "scopesOptional": true,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "user-update-condition",
+  "condition": [
+   {
+    "name": "user_id",
+    "type": "string",
+    "required": "yes",
+    "description": "The user ID for the user you want update notifications for.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "user-update-event",
+  "domain": "User & authorization"
+ },
+ {
+  "name": "Whisper Received",
+  "type": "user.whisper.message",
+  "version": "1",
+  "status": "GA (NEW)",
+  "description": "A user receives a whisper.",
+  "anchor": "userwhispermessage",
+  "authorization": "Must have oauth scope `user:read:whispers` or `user:manage:whispers`.",
+  "scopes": [
+   "user:read:whispers",
+   "user:manage:whispers"
+  ],
+  "scopesOptional": false,
+  "transports": "webhook, websocket, conduit",
+  "notes": [],
+  "extraBody": [],
+  "conditionRef": "whisper-received-condition",
+  "condition": [
+   {
+    "name": "user_id",
+    "type": "String",
+    "required": "Yes",
+    "description": "The user_id of the person receiving whispers.",
+    "depth": 0
+   }
+  ],
+  "eventRef": "whisper-received-event",
+  "domain": "Whispers"
+ }
+]

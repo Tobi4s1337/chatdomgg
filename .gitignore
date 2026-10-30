@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.vite/
+coverage/
+playwright-report/
+test-results/
+.pnpm-store/
+*.tsbuildinfo
+.env*
+*.local
+.DS_Store
+# screenshots and renders are regenerated; evidence worth keeping goes to work/evidence/
+shots/
+film/out/
+*.log

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Policy 2.9: the Extension Helper must be the FIRST script, loaded from Twitch's CDN (never bundled/self-hosted). -->
+    <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+    <title>Poll – panel</title>
+  </head>
+  <body class="anchor-panel">
+    <main id="app" aria-live="polite">
+      <h1 id="question">Loading…</h1>
+      <ol id="options" class="options"></ol>
+      <p id="status" class="status"></p>
+      <button id="boost" class="boost" hidden>Use 100 Bits to boost your option</button>
+    </main>
+    <!-- No inline scripts (CSP). Vite turns this into ./assets/panel-[hash].js -->
+    <script type="module" src="./src/panel.ts"></script>
+  </body>
+</html>
