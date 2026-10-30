@@ -48,8 +48,52 @@ export class Plan {
       if (seen.has(key)) throw new Error(`${this.id}: duplicate solid box ${key}.`);
       seen.add(key);
     }
-    return { version: 1, id: this.id, styleId: KIT.id, kind: 'home', lattice: 'build', size: [...LOT], boxes: this.boxes, windows: this.windows };
+    return { version: 1, id: this.id, styleId: KIT.id, kind: 'home', lattice: 'build', size: [...LOT], boxes: settle(this.boxes), windows: this.windows };
   }
+}
+
+let scratch: Int16Array | undefined;
+
+/**
+ * Drops every operation that leaves no trace: a solid box whose cells are all covered again later (a corner post
+ * buried by the next wing's wall, studs on a face that a later tier builds against) and an air box that carves
+ * nothing that stays carved. Each cell's final value comes from the last box that changed it, and all of those
+ * are kept, so the result rasterizes identically with fewer boxes and no hidden geometry.
+ */
+export function settle(boxes: readonly Box[]): Box[] {
+  if (boxes.length > 0x7fff) throw new Error('Too many boxes to settle.');
+  // Only the region the boxes touch is rasterized: x across the lot, y to the highest box, z from the deepest.
+  const SX = LOT[0];
+  let SY = 0, Z0: number = LOT[2];
+  for (const { from, to } of boxes) { SY = Math.max(SY, to[1]); Z0 = Math.min(Z0, from[2]); }
+  const cells = SX * SY * (LOT[2] - Z0);
+  scratch ??= new Int16Array(LOT[0] * LOT[1] * LOT[2]);
+  const grid = scratch, air = new Uint8Array(boxes.length), kept = new Uint8Array(boxes.length);
+  boxes.forEach((box, k) => { air[k] = box.material === MAT.air ? 1 : 0; });
+  // Last to first: a solid box survives where no later box covers it.
+  grid.fill(0, 0, cells);
+  for (let k = boxes.length - 1; k >= 0; k--) {
+    const { from, to } = boxes[k]!;
+    let alive = 0;
+    for (let z = from[2]; z < to[2]; z++) for (let y = from[1]; y < to[1]; y++) {
+      const row = from[0] + SX * (y + SY * (z - Z0)), end = row + to[0] - from[0];
+      for (let i = row; i < end; i++) if (!grid[i]) { grid[i] = 1; alive = 1; }
+    }
+    if (!air[k]) kept[k] = alive;
+  }
+  // First to last over the surviving solids: a carve survives where it is the last to turn solid into air.
+  grid.fill(-1, 0, cells);
+  for (let k = 0; k < boxes.length; k++) {
+    if (!air[k] && !kept[k]) continue;
+    const { from, to } = boxes[k]!;
+    for (let z = from[2]; z < to[2]; z++) for (let y = from[1]; y < to[1]; y++) {
+      const row = from[0] + SX * (y + SY * (z - Z0)), end = row + to[0] - from[0];
+      if (!air[k]) for (let i = row; i < end; i++) grid[i] = k;
+      else for (let i = row; i < end; i++) { const o = grid[i]!; if (o >= 0 && !air[o]) grid[i] = k; }
+    }
+  }
+  for (let i = 0; i < cells; i++) { const o = grid[i]!; if (o >= 0 && air[o]) kept[o] = 1; }
+  return boxes.filter((_, k) => kept[k]);
 }
 
 /**

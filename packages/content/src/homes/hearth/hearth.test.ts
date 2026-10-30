@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { HOME_DEPTH_METRES, HomeTierSchema, VoxelBlueprintSchema, type HomeTier, type VoxelBlueprint } from '@chatdom/shared';
 import { MAT, STYLES } from '../../materials';
 import { FAMILIES, type HearthHome } from './family';
+import { settle } from './grammar';
 import { BLUEPRINTS, HOME_REVIEW, buildHearthHome, createHearthHome } from './index';
 
 const [SX, SY, SZ] = [64, 160, 128] as const;
@@ -93,8 +94,9 @@ describe('Hearth collection contract', () => {
     for (const b of BLUEPRINTS) {
       const variant = FAMILIES.indexOf(b.id.split('-')[2] as typeof FAMILIES[number]) as 0 | 1 | 2;
       const tier = HomeTierSchema.parse(b.id.split('-')[3]);
-      expect(JSON.stringify(createHearthHome(tier, variant))).toBe(JSON.stringify(b));
-      expect(JSON.stringify(createHearthHome(tier, variant))).toBe(JSON.stringify(createHearthHome(tier, variant)));
+      expect(createHearthHome(tier, variant)).toBe(b);
+      // A fresh construction reproduces the shipped blueprint exactly.
+      expect(JSON.stringify(buildHearthHome(tier, variant).blueprint)).toBe(JSON.stringify(b));
     }
   });
 
@@ -111,6 +113,40 @@ describe('Hearth collection contract', () => {
 
   it('uses only the Hearth kit and its restrained natural accents', () => {
     for (const b of BLUEPRINTS) for (const box of b.boxes) expect(PALETTE.has(box.material), `${b.id} material ${box.material}`).toBe(true);
+  });
+
+  it('stays within the shared limits and the lane home budgets', () => {
+    // packages/content/README.md: 2,000 source boxes and 1,000,000 occupied cells per lane home; 64 windows shared.
+    for (const b of BLUEPRINTS) {
+      const g = grids.get(b.id)!;
+      expect(b.boxes.length, b.id).toBeLessThanOrEqual(2000);
+      expect(b.windows.length, b.id).toBeLessThanOrEqual(64);
+      expect(g.cells.reduce((n, v) => n + (v ? 1 : 0), 0), b.id).toBeLessThanOrEqual(1_000_000);
+    }
+  });
+
+  it('ships no hidden geometry: every box leaves a trace in the finished home', () => {
+    for (const b of BLUEPRINTS) expect(settle(b.boxes).length, b.id).toBe(b.boxes.length);
+  });
+
+  it('settles a box list without changing a single cell', () => {
+    // Deterministic overlapping solids and carves, including boxes that are wholly buried or carve only air.
+    let seed = 7;
+    const next = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+    for (let trial = 0; trial < 6; trial++) {
+      const boxes: VoxelBlueprint['boxes'][number][] = [];
+      for (let k = 0; k < 120; k++) {
+        const from = [next(56), next(24), next(120)] as [number, number, number];
+        const to = [from[0] + 1 + next(8), from[1] + 1 + next(8), from[2] + 1 + next(8)] as [number, number, number];
+        boxes.push({ from, to, material: next(3) === 0 ? MAT.air : [KIT.wall, KIT.roof, KIT.trim][next(3)]! });
+      }
+      const settled = settle(boxes);
+      expect(settled.length).toBeLessThan(boxes.length);
+      const shape = { ...BLUEPRINTS[0]! };
+      const [a, c] = [rasterize({ ...shape, boxes: settled }).cells, rasterize({ ...shape, boxes }).cells];
+      expect(Buffer.compare(Buffer.from(a.buffer), Buffer.from(c.buffer))).toBe(0);
+      expect(settle(settled)).toEqual(settled);
+    }
   });
 });
 
@@ -223,6 +259,16 @@ describe.each(homes)('$family $tier', ({ home, tier }) => {
 
   it('places every window on real glass with a clear outward view to the lot edge', () => {
     expect(new Set(b.windows.map(w => w.id)).size).toBe(b.windows.length);
+    // No two anchors share glass: lighting one window never lights a neighbour's pane.
+    for (let i = 0; i < b.windows.length; i++) for (let j = i + 1; j < b.windows.length; j++) {
+      const [p, q] = [b.windows[i]!, b.windows[j]!];
+      if (p.facing !== q.facing) continue;
+      const along = p.facing === 'south' || p.facing === 'north' ? 0 : 2, normal = along === 0 ? 2 : 0;
+      const apart = p.centre[normal] !== q.centre[normal]
+        || Math.abs(p.centre[along] - q.centre[along]) >= (p.width + q.width) / 2
+        || Math.abs(p.centre[1] - q.centre[1]) >= (p.height + q.height) / 2;
+      expect(apart, `${b.id}: ${p.id} overlaps ${q.id}`).toBe(true);
+    }
     for (const w of b.windows) {
       const along = w.facing === 'south' || w.facing === 'north' ? 0 : 2, normal = along === 0 ? 2 : 0;
       const out = w.facing === 'south' || w.facing === 'east' ? 1 : -1;
@@ -252,7 +298,9 @@ describe('Hearth families grow without moving the address', () => {
       const [before, after] = [tiers[i - 1]!, tiers[i]!];
       expect(after.entrance).toEqual(before.entrance);
       expect(HOME_REVIEW[after.blueprint.id]).toEqual(HOME_REVIEW[before.blueprint.id]);
-      for (const w of before.blueprint.windows) expect(after.blueprint.windows).toContainEqual(w);
+      // Earlier anchors keep their order, so the first (the citizen's presence window) never changes.
+      expect(after.blueprint.windows.slice(0, before.blueprint.windows.length)).toEqual(before.blueprint.windows);
+      expect(after.blueprint.windows[0]!.facing).toBe('south');
       expect(after.blueprint.windows.length).toBeGreaterThan(before.blueprint.windows.length);
     }
   });

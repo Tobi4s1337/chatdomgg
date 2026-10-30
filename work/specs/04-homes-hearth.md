@@ -232,3 +232,16 @@ The shell and window metadata are complete static assets, ready for their real c
   on Heatherstead's manor range (the hall extends over it); a loft light in the chamber gable (it cut through the
   verge, which the weather test caught); upper-storey lights 8 cells tall under Emberfold's steep eave (the
   outward-view test caught them; they're now squat jetty lights); flower troughs on walls two cells off the lot line.
+
+- **2026-10-30 — Lane HH04: no hidden geometry, one build per home.** Ordered composition left 5–47 source boxes per
+  model that never reach the finished home: corner posts buried in a joining wing's wall, the lowest gable course
+  inside its own roof slab, studs on a face that a later tier builds against, and carves of already-empty space.
+  `Plan.blueprint()` now `settle`s the list. A reverse pass keeps solids that no later box covers. A forward pass
+  over the survivors keeps carves that are the last to turn solid into air. Every cell's last changer survives, so
+  the raster is identical (cells, triangles and windows unchanged; a seeded overlapping-box test proves equality and
+  idempotence), with 2–7% fewer boxes. Patching each case at source was rejected: it would spread join knowledge
+  through every family. `createHearthHome` now returns the fifteen blueprints built at module load. The kingdom calls
+  it once per plot, so a town no longer rebuilds a home for every house. The import costs about 47 ms for all
+  fifteen on this host, settling included. New all-family tests: README budgets (≤2,000 boxes, ≤1M cells,
+  ≤64 windows); every box leaves a trace; window anchors never share glass; earlier anchors keep their order, so
+  the first (presence) window stays the same south-facing pane at every tier.
