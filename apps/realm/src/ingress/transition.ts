@@ -71,6 +71,16 @@ export function presenceTransition({ service, observation, writerEpoch }: Presen
     }
 
     const touched = new Set<PersonId>();
+    if (observation.kind === 'source-lost' && presence !== before) {
+      // A loss witnesses no person: discard open evidence, never invent an interval ending at the cutoff.
+      for (const [key, run] of runs) if (observation.sources.includes('stream')
+        || observation.sources.some(source => source === run.source)) runs.delete(key);
+      if (observation.sources.includes('stream') && presence.stream && s.stream.sessionId === presence.stream.sessionId
+        && presence.stream.expiresAt < s.stream.liveUntil) {
+        propose({ type: 'stream.observe', sessionId: s.stream.sessionId, startedAt: s.stream.startedAt,
+          liveUntil: presence.stream.expiresAt }, commandId('source-lost', receipt));
+      }
+    }
     if (observation.kind === 'remove') for (const key of [...runs.keys()]) if (runs.get(key)!.personId === observation.personId) runs.delete(key);
     if (observation.kind === 'observe') {
       const source = observation.source, t = observation.observedAt;
@@ -82,7 +92,9 @@ export function presenceTransition({ service, observation, writerEpoch }: Presen
       for (const { personId } of observation.people) {
         const key = runKey(source, personId), run = runs.get(key);
         // Only an observation the presence reducer actually took counts (not held, restricted, reordered or expired).
-        const taken = presencePerson(presence, personId)?.sourceTimes[source] === t;
+        const person = presencePerson(presence, personId);
+        const taken = (presencePerson(before, personId)?.sourceTimes[source] ?? -1) < t
+          && person?.sourceTimes[source] === t && person.leases[source]?.observedAt === t;
         if (!taken || night === null || t < s.stream.startedAt || t > s.stream.liveUntil) { if (night === null) runs.delete(key); continue; }
         if (run && run.last >= t) continue;
         touched.add(personId);

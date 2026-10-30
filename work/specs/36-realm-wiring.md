@@ -337,6 +337,19 @@ changes. These boundaries reserve parallel ownership; they do not permit omittin
 
 ## Decisions
 
+- 2026-10-30 — First loss consumer: shared `PresenceInput` now accepts strict `source-lost` with unique,
+  nonempty `sources` from `chat|chatters|stream` and `reason: unavailable|revoked`. Herald alone may report it.
+  Emit a source-specific barrier on lost coverage; full broadcaster revocation names all three. Serialize it
+  before recovered observations, cancel the old generation, and retry its stable ID without an activity TTL.
+  This is neither a departure nor offline. World persists source cutoffs: older/equal evidence cannot relight;
+  independent panel/walker evidence survives. Stream loss makes the projection stale and shortens the existing
+  domain night lease without changing its identity. Open evidence runs are discarded, never closed at the loss;
+  earned intervals remain. A delayed barrier cannot retroactively retract already committed credit.
+  Consume accepted `DurableKingdom`, `RealmIngress` and `presenceTransition` from `apps/realm/src/ingress`.
+  Its compressed `presence-v1` checkpoint owns qualification too: delete the lane's competing plain-JSON codec
+  and writer, rather than assigning two formats the same codec name. Adapt sink deadlines to retain controls.
+  `revoked` removes affected current Twitch metadata; historical inbox/outbox redaction remains with the server
+  owner and must not be claimed complete by a current-state reducer change.
 - 2026-10-30: Main owns the pure domain decide/apply and shared authority/repository contracts; wiring binds
   existing systems into that one writer. The executable boundary is verified and frozen; start follows main's
   handoff commit and lane worktree creation this turn.

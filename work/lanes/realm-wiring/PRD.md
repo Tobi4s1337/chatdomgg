@@ -35,7 +35,10 @@ for a human message. Never pick Backlog without main instruction. Sub-agents nev
 - [ ] **RW02 — Verified Herald observations enter the room privately** · evidence: ingest-to-room tests + service recipe.
   Add only new `realm-sink/**` service adapter files. Forward validated private presence/stream/moderation input
   and cancellation guards with kingdom-scoped service authority. Use `loadIngress`/`executeIngress` and the
-  versioned shared-world presence codec so checkpoint, commands, outcome and public projection commit together.
+  accepted realm `presenceTransition`/compressed checkpoint so commands, outcome and public projection commit together.
+  Reuse `DurableKingdom`/`RealmIngress`, removing the competing writer/plain-JSON `presence-v1` codec.
+  Forward shared `source-lost` barriers before recovery observations, without an activity expiry; cancel the old
+  generation first. Distinguish source-specific gaps from full broadcaster revocation; use no fake offline input.
   Preserve coverage, partial rosters, recovered
   observations, dedupe and every cleanup race. Write exact additive hooks for accepted source/live/ingest files
   and shutdown; main/integrator applies them after H05. Exercise the same sink with real composition and labelled
