@@ -88,10 +88,13 @@ export function createWater(scene: THREE.Scene, options: WaterOptions): {
         float skyAltitude = clamp(reflected.y, 0.0, 1.0);
         vec3 sky = mix(uHorizon, uZenith, pow(smoothstep(0.0, 0.55, skyAltitude), 0.62));
         float fresnel = 0.18 + 0.64 * pow(1.0 - max(dot(viewDir, normal), 0.0), 5.0);
-        vec3 shallow = mix(vec3(0.12, 0.25, 0.24), vec3(0.035, 0.10, 0.14), uNight);
+        // The last shallow centimetres reveal the subdued bank. A bright
+        // shallow tint and full sky reflection here draw an artificial rim.
+        vec3 shallow = mix(vec3(0.065, 0.14, 0.135), vec3(0.018, 0.045, 0.055), uNight);
         vec3 bed = mix(vec3(0.065, 0.18, 0.20), vec3(0.018, 0.065, 0.105), uNight);
         vec3 colour = mix(shallow, bed, deep);
-        colour = mix(colour, sky, fresnel * mix(0.75, 0.5, uNight));
+        float reflectionDepth = smoothstep(0.025, 0.6, depth);
+        colour = mix(colour, sky, fresnel * mix(0.75, 0.5, uNight) * reflectionDepth);
         // Sunlight follows the actual reflected direction; it is restrained and fades at night.
         float sunDot = max(dot(normalize(reflected), normalize(uSunDirection)), 0.0);
         float sun = pow(sunDot, 48.0) * min(uSunIntensity, 1.0) * (1.0 - uNight);

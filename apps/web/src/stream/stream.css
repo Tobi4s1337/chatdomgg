@@ -1,0 +1,212 @@
+/* The kingdom on stream: a stage at dusk, a corner window and a bottom street. Thin walnut
+   and brass edges; the world stays dominant. Every class is prefixed `stream-`. */
+
+@font-face { font-family: 'IM Fell English'; font-style: normal; font-weight: 400; font-display: block; src: url('../atlas/assets/fonts/im-fell-english-regular.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: block; src: url('../atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: block; src: url('../atlas/assets/fonts/alegreya-roman-latin.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: block; src: url('../atlas/assets/fonts/alegreya-italic-latin.woff2') format('woff2'); }
+
+/* OBS composites the page over the scene: the page itself stays transparent. */
+html.stream-document, html.stream-document body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
+.stream-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.stream-output {
+  --edge: clamp(4px, .42cqmax, 8px); --brass: #c69a5c; --brass-hi: #f3d69c; --ink: #f4e4c4; --ink-soft: #dcc196;
+  --corner: calc(var(--edge) * 3.4);
+  position: absolute; inset: 0; overflow: hidden; isolation: isolate; box-sizing: border-box; container-type: size;
+  color: var(--ink); font: 400 16px/1.3 Alegreya, Georgia, serif; -webkit-font-smoothing: antialiased;
+  background: #1a1726;
+}
+.stream-output *, .stream-output *::before, .stream-output *::after { box-sizing: border-box; }
+
+/* The whole browser source. Outside a kept-clear rectangle it stays transparent for the streamer's own camera and chat. */
+.stream-sheet { position: fixed; inset: 0; overflow: hidden; }
+
+/* The picture. Each mount brings a fresh canvas into the lens; names ride in the same lens. */
+.stream-picture { position: absolute; inset: 0; overflow: hidden; container-type: size; }
+.stream-lens { position: absolute; inset: 0; transform-origin: 54% 46%; }
+.stream-canvas, .stream-names { position: absolute; left: 0; top: 0; display: block; width: 100%; height: 100%; }
+.stream-names { z-index: 1; pointer-events: none; }
+/* The street is a deliberate close view: the window shot rendered at a 16:9 picture, of
+   which the strip shows the band at the windows and doorsteps, rather than a squeezed town. */
+.layout-strip .stream-canvas, .layout-strip .stream-names { height: 28.125cqw; top: calc(50cqh - 28.125cqw * .62); }
+/* The street shot looks down the road: its band sits higher, at the walker, the windows and the way into depth. */
+.layout-strip[data-shot='citizen'] .stream-canvas, .layout-strip[data-shot='citizen'] .stream-names { top: calc(50cqh - 28.125cqw * .45); }
+/* Calm never cuts: a held picture breathes with a slow drift instead. Smaller shapes drift slower. */
+.drifting .stream-lens { animation: stream-drift 46s ease-in-out infinite alternate; }
+.layout-window.drifting .stream-lens, .layout-strip.drifting .stream-lens { animation-duration: 70s; }
+@keyframes stream-drift { from { transform: scale(1) translate(0, 0); } to { transform: scale(1.04) translate(-.7%, .35%); } }
+
+/* Light from the edges, never a panel over the town. */
+.stream-shade { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 95% at 50% 46%, transparent 58%, #0c0a1452 100%), linear-gradient(180deg, #120f1c3d, transparent 16%, transparent 78%, #0d0b1655); }
+.layout-window .stream-shade { background: radial-gradient(110% 100% at 50% 50%, transparent 55%, #0c0a1466 100%); }
+.layout-strip .stream-shade { background: linear-gradient(180deg, #0c0a1450, transparent 22%, transparent 76%, #0c0a1460), linear-gradient(90deg, #0c0a1440, transparent 8%, transparent 92%, #0c0a1440); }
+
+/* The frame: a walnut moulding with grain along its run, a brass bead inside it. */
+.stream-frame { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.stream-frame::before { content: ''; position: absolute; inset: 0; padding: var(--edge);
+  background:
+    repeating-linear-gradient(90deg, #ffffff07 0 1px, transparent 1px 5px, #00000014 5px 6px, transparent 6px 11px),
+    repeating-linear-gradient(0deg, #ffffff07 0 1px, transparent 1px 5px, #00000014 5px 6px, transparent 6px 11px),
+    linear-gradient(135deg, #5b3e29, #3a281b 40%, #4a3322 62%, #2d1f15);
+  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  box-shadow: inset 0 0 0 1px #0a0604; }
+.stream-frame::after { content: ''; position: absolute; inset: var(--edge);
+  box-shadow: inset 0 0 0 1px #f3d69c55, inset 0 0 0 2px #8d6537, inset 0 1px 0 2px #2a1b10, inset 0 0 calc(var(--edge) * 3) #0a07104d; }
+.stream-corner { position: absolute; width: var(--corner); height: var(--corner); filter: drop-shadow(0 1px 1px #000a); }
+.stream-corner.tl { left: calc(var(--edge) * .45); top: calc(var(--edge) * .45); }
+.stream-corner.tr { right: calc(var(--edge) * .45); top: calc(var(--edge) * .45); transform: scaleX(-1); }
+.stream-corner.bl { left: calc(var(--edge) * .45); bottom: calc(var(--edge) * .45); transform: scaleY(-1); }
+.stream-corner.br { right: calc(var(--edge) * .45); bottom: calc(var(--edge) * .45); transform: scale(-1); }
+
+/* The corner window is a cut-cornered casement; the street a beam along the bottom. */
+.layout-window { --edge: 6px; --corner: 20px; clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px); }
+.layout-strip { --edge: 5px; --corner: 17px; }
+.layout-strip .stream-frame::before { border-top: 2px solid #6e4d33; padding-top: calc(var(--edge) + 2px); }
+
+/* The kingdom signs its stage, small and low: the crest is the kingdom's own. */
+.stream-signature { position: absolute; z-index: 2; left: calc(var(--edge) + 2.1cqmin); bottom: calc(var(--edge) + 2.2cqmin); display: flex; align-items: center; gap: 1.1cqmin;
+  font: 400 3.1cqmin/1 'IM Fell English', Georgia, serif; letter-spacing: .01em; color: #f6e6c6; text-shadow: 0 1px 2px #0b0814, 0 0 18px #120d22b0; pointer-events: none; }
+.stream-crest { display: block; flex: none; width: 4.3cqmin; height: 5cqmin; filter: drop-shadow(0 1px 2px #000c); }
+
+/* Source: a parchment ribbon for the demonstration night, quiet ink for the real kingdom's losses. */
+.stream-mark { position: absolute; z-index: 4; right: calc(var(--edge) + 2.1cqmin); top: calc(var(--edge) + 2cqmin); display: flex; flex-direction: column; align-items: flex-end; gap: .45cqmin; pointer-events: none; }
+.stream-mark strong { display: block; padding: .75cqmin 1.25cqmin .75cqmin 1.9cqmin; font: 700 max(12px, 1.55cqmin)/1 Alegreya, Georgia, serif; letter-spacing: .16em; text-transform: uppercase; white-space: nowrap;
+  color: #7a1d12; background: linear-gradient(180deg, #f4e5c0, #e3cc9c); clip-path: polygon(1cqmin 0, 100% 0, 100% 100%, 1cqmin 100%, 0 50%); filter: drop-shadow(0 1px 0 #0008); }
+.stream-mark small { font: italic 400 max(13px, 1.6cqmin)/1.1 Alegreya, Georgia, serif; color: #ecd9b6; text-shadow: 0 1px 2px #0b0814, 0 0 10px #0b0814; }
+.stream-mark:not(.simulated) strong { color: #f1dcb4; background: linear-gradient(180deg, #3d2b20, #2a1d15); box-shadow: inset 0 0 0 1px #c69a5c66; letter-spacing: .1em; text-transform: none; font: 400 max(14px, 1.9cqmin)/1 'IM Fell English SC', Georgia, serif; }
+.stream-mark.lost strong::before, .stream-mark.resting strong::before, .stream-mark.connecting strong::before { content: ''; display: inline-block; width: .6cqmin; height: .6cqmin; margin: 0 1cqmin .25cqmin 0; transform: rotate(45deg); background: #8c7a66; }
+.stream-mark.resting strong::before { background: #c69a5c; }
+/* Small formats: the same mark, sized for a source scaled into a corner. */
+.layout-window .stream-mark { right: 12px; top: auto; bottom: 12px; }
+.layout-window .stream-mark strong { padding: 5px 8px 5px 13px; font-size: 12px; clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%); }
+.layout-window .stream-mark:not(.simulated) strong { font-size: 14px; }
+.layout-strip .stream-mark { right: 16px; top: 50%; transform: translateY(-50%); }
+.layout-strip .stream-mark strong { padding: 6px 10px 6px 16px; font-size: 13px; clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%); }
+.layout-strip .stream-mark:not(.simulated) strong { font-size: 15px; }
+.layout-window .stream-mark strong::before, .layout-strip .stream-mark strong::before { width: 5px !important; height: 5px !important; margin: 0 8px 2px 0 !important; }
+
+/* Shutters: show cuts behind two plank leaves that swing in from the frame and out again.
+   A thread of lamplight leaks where they meet. Calm dips through dusk instead. */
+.stream-shutters { position: absolute; inset: var(--edge); z-index: 2; pointer-events: none; perspective: 160cqmax; overflow: hidden; }
+.stream-leaf { position: absolute; top: 0; bottom: 0; width: 50.4%; backface-visibility: hidden; visibility: hidden;
+  background:
+    linear-gradient(var(--leak, 90deg), transparent calc(100% - 1.6cqmin), #f6b55a1f calc(100% - .9cqmin), #fbd18c66 calc(100% - 2px), #fde3b0),
+    repeating-linear-gradient(90deg, #ffffff14 0 1px, transparent 1px calc(12.5% - 4px), #0000002e calc(12.5% - 4px) calc(12.5% - 1.5px), #0a0603d0 calc(12.5% - 1.5px) 12.5%),
+    linear-gradient(90deg, #0000 0 12.5%, #ffffff0c 12.5% 25%, #0000001c 25% 37.5%, #0000 37.5% 50%, #ffffff0e 50% 62.5%, #00000022 62.5% 75%, #ffffff08 75% 87.5%, #00000012 87.5%),
+    repeating-linear-gradient(91deg, #ffffff07 0 1px, transparent 1px 3px, #0000001a 3px 4px, transparent 4px 7px, #ffffff05 7px 8px, transparent 8px 13px),
+    radial-gradient(120% 60% at 50% 50%, #5e452e00, #1a10094d),
+    linear-gradient(180deg, #5c432d, #4a3523 30%, #3e2c1d 62%, #2e2116);
+  box-shadow: inset 0 0 calc(var(--edge) * 5) #080604a0, inset 0 2.5cqmin 2cqmin -1.5cqmin #0a0604b0;
+  transition: transform var(--shut-close, 460ms) cubic-bezier(.55, .05, .7, .35), visibility 0s linear var(--shut-close, 460ms); }
+.stream-leaf.left { left: 0; transform-origin: 0 50%; transform: rotateY(-100deg); }
+.stream-leaf.right { right: 0; transform-origin: 100% 50%; transform: rotateY(100deg); --leak: 270deg; }
+.stream-shutters.shutter[data-state='closing'] .stream-leaf, .stream-shutters.shutter[data-state='shut'] .stream-leaf { visibility: visible; transform: rotateY(0); transition: transform var(--shut-close, 460ms) cubic-bezier(.55, .05, .7, .35), visibility 0s; }
+.stream-shutters.shutter[data-state='opening'] .stream-leaf { visibility: visible; transition: transform var(--shut-open, 720ms) cubic-bezier(.2, .7, .3, 1), visibility 0s linear var(--shut-open, 720ms); }
+/* Iron straps across the planks, hinged at the outer edge and nailed along their run. */
+.stream-strap { position: absolute; left: 0; right: 7%; height: max(6px, 2.3cqmin); border-radius: 0 999px 999px 0;
+  background: linear-gradient(180deg, #5a5048, #332c27 45%, #1b1613); box-shadow: inset 0 1px #ffffff1f, inset 0 -1px #00000080, 0 .3cqmin .5cqmin #000a; }
+.stream-strap.top { top: 16%; } .stream-strap.bottom { bottom: 16%; }
+.stream-leaf.right .stream-strap { left: 7%; right: 0; border-radius: 999px 0 0 999px; }
+/* The hinge knuckle at the frame and three nail heads. */
+.stream-strap::before { content: ''; position: absolute; top: -28%; bottom: -28%; left: 0; width: max(7px, 2.2cqmin); border-radius: 2px;
+  background: linear-gradient(90deg, #191411, #4b423b 45%, #1d1814); box-shadow: 0 .2cqmin .4cqmin #000b; }
+.stream-leaf.right .stream-strap::before { left: auto; right: 0; }
+.stream-strap::after { content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: radial-gradient(circle at 18% 50%, #a39684 0 .32cqmin, #2a241f .45cqmin, transparent .6cqmin),
+              radial-gradient(circle at 50% 50%, #a39684 0 .32cqmin, #2a241f .45cqmin, transparent .6cqmin),
+              radial-gradient(circle at 82% 50%, #a39684 0 .32cqmin, #2a241f .45cqmin, transparent .6cqmin); }
+.stream-latch { position: absolute; left: 1.4cqmin; top: 50%; width: max(5px, 1.6cqmin); height: max(12px, 5.2cqmin); margin-top: calc(max(12px, 5.2cqmin) / -2); border-radius: 3px;
+  background: linear-gradient(90deg, #6e604f, #3a322b 45%, #171310); box-shadow: inset 0 1px #ffffff24, 0 .3cqmin .6cqmin #000b; }
+.stream-latch::after { content: ''; position: absolute; left: 50%; top: 50%; width: 260%; height: 22%; transform: translate(-50%, -50%) translateX(-60%); border-radius: 2px;
+  background: linear-gradient(180deg, #5f5346, #231d19); box-shadow: 0 .2cqmin .4cqmin #000a; }
+.stream-dip { position: absolute; inset: 0; opacity: 0; background: radial-gradient(90% 80% at 50% 70%, #2a2236, #120f1c); transition: opacity var(--dip-open, 1500ms) ease-in-out; }
+.stream-shutters.dip[data-state='closing'] .stream-dip, .stream-shutters.dip[data-state='shut'] .stream-dip { opacity: .96; transition-duration: var(--dip-close, 1100ms); }
+@media (prefers-reduced-motion: reduce) { .stream-leaf, .stream-dip, .drifting .stream-lens { transition: none !important; animation: none !important; } }
+
+/* A seam's card sits where the signature does, larger: the streamer's own scene, never a countdown. */
+.stream-seam { position: absolute; z-index: 4; left: calc(var(--edge) + 2.6cqmin); bottom: calc(var(--edge) + 3cqmin); display: flex; align-items: center; gap: 2cqmin; max-width: 62cqw;
+  padding: 2cqmin 3.4cqmin 2.2cqmin 2.2cqmin; pointer-events: none;
+  background: linear-gradient(90deg, #120d1ccc, #120d1c99 70%, #120d1c00); border-left: 2px solid #c69a5c99; }
+.stream-seam .stream-crest.seam { width: 6.4cqmin; height: 7.5cqmin; }
+.stream-seam-eyebrow { margin: 0 0 .8cqmin; font: 400 2cqmin/1 'IM Fell English SC', Georgia, serif; letter-spacing: .14em; color: #d9bb86; }
+.stream-seam h2 { margin: 0; font: 400 5cqmin/1.04 'IM Fell English', Georgia, serif; color: #f8e9cb; text-shadow: 0 1px 2px #0b0814, 0 0 24px #f5b45a2e; text-wrap: balance; }
+.stream-seam-line { margin: 1cqmin 0 0; font: italic 400 2.3cqmin/1.25 Alegreya, Georgia, serif; color: #e6d2b0; text-shadow: 0 1px 2px #0b0814; }
+
+/* One name at a window's climax: a small hanging plate above its window. */
+.stream-name { position: absolute; display: flex; align-items: center; gap: .55em; padding: .42em .8em .42em .62em; white-space: nowrap;
+  font: 400 max(15px, 2.5cqmin)/1 'IM Fell English', Georgia, serif; color: #f8e9cb; letter-spacing: .01em;
+  background: linear-gradient(180deg, #3b2a1ef2, #24180fef); border: 1px solid #c69a5c99; border-radius: 3px; box-shadow: inset 0 1px #f3d69c33, 0 3px 10px #0009, 0 0 22px #f5a8452e;
+  opacity: 0; transform: translate(-50%, calc(-100% - 10px)) translateY(6px); transition: opacity .5s ease-in, transform .5s ease-in; }
+.stream-name::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 10px; height: 10px; margin-left: -5px; transform: rotate(45deg);
+  background: #24180f; border-right: 1px solid #c69a5c99; border-bottom: 1px solid #c69a5c99; }
+.stream-name.shown { opacity: 1; transform: translate(-50%, calc(-100% - 10px)); transition: opacity .7s ease-out, transform .9s cubic-bezier(.2, .7, .3, 1); }
+.stream-flame { width: .62em; height: .82em; flex: none; filter: drop-shadow(0 0 4px #f5a845aa); }
+.layout-window .stream-name, .layout-strip .stream-name { font-size: 15px; }
+@media (prefers-reduced-motion: reduce) { .stream-name { transition: none; transform: translate(-50%, calc(-100% - 10px)); } }
+
+/* Waking: dusk before the lamps, the crest and one line. It lifts when the renderer is ready. */
+.stream-curtain { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4cqmin;
+  background: radial-gradient(90% 70% at 50% 100%, #6b4648 0%, transparent 70%), linear-gradient(180deg, #171a2e, #262540 55%, #3b2f42);
+  transition: opacity 1.6s ease-in-out, visibility 0s linear 1.6s; }
+.stream-curtain.open { opacity: 0; visibility: hidden; }
+.stream-curtain .stream-crest.large { width: 9cqmin; height: 10.5cqmin; margin-bottom: 2.4cqmin; }
+.stream-curtain h2 { margin: 0 0 1cqmin; font: 400 5.2cqmin/1.05 'IM Fell English', Georgia, serif; color: #f6e6c6; text-shadow: 0 0 24px #f5b45a33; }
+.stream-curtain p { margin: 0; font: italic 400 2.2cqmin/1.3 Alegreya, Georgia, serif; color: #dcc8ab; }
+.stream-progress { width: 22cqmin; height: 2px; margin-top: 3cqmin; background: #e7c3931f; overflow: hidden; }
+.stream-progress i { display: block; width: 100%; height: 100%; background: linear-gradient(90deg, #a7783f, #f3d69c); transform-origin: left; transition: transform .5s ease-out; }
+.stream-gate { display: flex; flex-direction: column; align-items: center; }
+.stream-gate button { margin-top: 2.6cqmin; padding: 1.2cqmin 2.4cqmin; font: 400 2cqmin/1 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: #f1dcb4; cursor: pointer;
+  border: 1px solid #c69a5c99; border-radius: 3px; background: linear-gradient(#4a3424, #2f2118); box-shadow: inset 0 1px #f3d69c33, 0 2px 0 #120c08; }
+.stream-gate button:focus-visible { outline: 2px solid #f6b558; outline-offset: 3px; }
+/* The small shapes keep only the crest and the progress: almost no words in a corner. */
+.layout-window .stream-curtain h2, .layout-strip .stream-curtain h2 { font-size: 22px; }
+.layout-window .stream-curtain p, .layout-strip .stream-curtain p, .layout-window .stream-gate p, .layout-strip .stream-gate p { display: none; }
+.layout-window .stream-curtain .stream-crest.large { width: 34px; height: 40px; margin-bottom: 10px; }
+.layout-window .stream-progress { width: 120px; margin-top: 12px; }
+.layout-strip .stream-curtain { flex-direction: row; gap: 16px; }
+.layout-strip .stream-curtain .stream-crest.large { width: 30px; height: 35px; margin: 0; }
+.layout-strip .stream-curtain h2 { margin: 0; }
+.layout-strip .stream-progress { width: 120px; margin: 0 0 0 8px; }
+.layout-strip .stream-gate { flex-direction: row; gap: 16px; }
+.layout-strip .stream-gate button, .layout-window .stream-gate button { margin: 0; padding: 7px 12px; font-size: 13px; }
+.layout-window .stream-gate button { margin-top: 12px; }
+
+@media (prefers-reduced-motion: reduce) { .stream-curtain, .stream-progress i { transition: none; } }
+
+/* The preview bench: controls live here, outside the frame OBS captures. */
+html.stream-preview-document, html.stream-preview-document body { background: #17110c; }
+.stream-bench { position: fixed; inset: 0; display: grid; grid-template-rows: auto auto 1fr auto; gap: 16px; padding: 22px 28px; box-sizing: border-box; color: #f2e3c5; font: 400 14px/1.4 Alegreya, Georgia, serif;
+  background: radial-gradient(80% 60% at 50% 40%, #2a1e15, #120c08); }
+.stream-bench-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.stream-bench-eyebrow { margin: 0 0 4px; font: 400 13px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .12em; color: #d5ba8f; }
+.stream-bench-head h1 { margin: 0; font: 400 30px/1 'IM Fell English', Georgia, serif; }
+.stream-bench-layouts { display: flex; gap: 4px; padding: 3px; border: 1px solid #c69a5c55; border-radius: 4px; background: #0e0906aa; }
+.stream-bench-layouts button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 14px; font: 400 14px/1 Alegreya, Georgia, serif; color: #e8d3ae; cursor: pointer; border: 1px solid transparent; border-radius: 3px; background: transparent; }
+.stream-bench-layouts button[aria-pressed='true'] { color: #33231a; background: linear-gradient(#efd9ab, #cfb184); border-color: #e3c18d; box-shadow: inset 0 1px #fff5d799; }
+.stream-bench-layouts button:focus-visible { outline: 2px solid #f6b558; outline-offset: 2px; }
+.stream-shape-glyph { display: block; width: 22px; height: 14px; border: 1.5px solid currentColor; border-radius: 1px; position: relative; opacity: .85; }
+.stream-shape-glyph::after { content: ''; position: absolute; background: currentColor; }
+.stream-shape-glyph.stage::after { inset: 2px; opacity: .35; }
+.stream-shape-glyph.window::after { right: 1.5px; bottom: 1.5px; width: 8px; height: 5px; }
+.stream-shape-glyph.strip::after { left: 1.5px; right: 1.5px; bottom: 1.5px; height: 3px; }
+.stream-bench-holder { position: relative; min-height: 0; overflow: hidden; }
+/* Scaling does not shrink a layout box, so the sheet is centred absolutely and scaled about its middle. */
+.stream-bench-holder .stream-sheet { position: absolute; inset: auto; left: 50%; top: 50%; transform-origin: center; box-shadow: 0 18px 50px #000c; }
+/* The preview shows what a kept-clear rectangle leaves for the streamer: hatched, never part of the source. */
+.stream-bench-holder .stream-sheet.kept { background: repeating-linear-gradient(135deg, #2a1f17 0 10px, #21180f 10px 20px); }
+.stream-kept-note { position: absolute; right: 18px; bottom: 16px; max-width: 260px; margin: 0; text-align: right; font: italic 400 15px/1.3 Alegreya, Georgia, serif; color: #bfa47c; }
+.stream-sheet.kept .stream-output { box-shadow: 0 0 0 1px #0a0604, 0 10px 28px #0009; }
+.stream-bench-options { display: flex; gap: 14px 22px; flex-wrap: wrap; align-items: center; }
+.stream-bench-choice { display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid #c69a5c40; border-radius: 4px; background: #0e0906aa; }
+.stream-bench-choice > span { padding: 0 10px 0 8px; font: 400 13px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .1em; color: #d5ba8f; }
+.stream-bench-choice button { min-height: 34px; padding: 6px 12px; font: 400 14px/1 Alegreya, Georgia, serif; color: #e8d3ae; cursor: pointer; border: 1px solid transparent; border-radius: 3px; background: transparent; }
+.stream-bench-choice button[aria-pressed='true'] { color: #33231a; background: linear-gradient(#efd9ab, #cfb184); border-color: #e3c18d; box-shadow: inset 0 1px #fff5d799; }
+.stream-bench-choice button:focus-visible { outline: 2px solid #f6b558; outline-offset: 2px; }
+.stream-bench-sound strong { color: #f2e3c5; font-weight: 700; }
+.stream-bench-foot { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; color: #d5ba8f; }
+.stream-bench-foot p { margin: 0; }
+.stream-bench-foot code { font: 13px ui-monospace, monospace; color: #f2e3c5; }
+.stream-bench-simulated { font-weight: 700; letter-spacing: .04em; color: #f0b09c; }

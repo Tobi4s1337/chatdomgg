@@ -1,5 +1,9 @@
 export * from './materials';
 export * from './core';
+export { createCastleModule } from './core/castle-modules';
+export { createMarketWell, createMarketStall } from './core/market';
 export * from './catalogue';
 export { createHearthHome } from './homes/hearth';
 export { createStreetProp, STREET_PROP_FORMS, STREET_PROP_SIZES, type StreetPropForm, type StreetStyle } from './props/street';
+export { createTideHome } from './homes/tide';
+export { createCivicProp, CIVIC_FORMS, CIVIC_STYLES, FOOTBRIDGE, type CivicForm, type CivicStyle } from './civic';

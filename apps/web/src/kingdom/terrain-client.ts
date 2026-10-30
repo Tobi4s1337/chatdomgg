@@ -1,8 +1,7 @@
 /* global Worker:readonly */
 import type { Vec3 } from '@chatdom/shared';
 import type { AssetChunkMesh } from '@chatdom/voxel';
-import type { KingdomLayout } from '@chatdom/world';
-import type { TerrainProgress, TerrainWorkerRequest, TerrainWorkerResponse } from './terrain-worker';
+import type { TerrainLayout, TerrainProgress, TerrainWorkerRequest, TerrainWorkerResponse } from './terrain-worker';
 
 export type { TerrainProgress } from './terrain-worker';
 export interface TerrainResult { readonly chunks: AssetChunkMesh[]; readonly origin: Vec3 }
@@ -13,7 +12,7 @@ export interface TerrainLoadOptions {
 }
 
 /** Owns one cancellable terrain worker; completion, failure and abort all terminate it. */
-export function loadTerrain(layout: KingdomLayout, onProgress?: (progress: TerrainProgress) => void,
+export function loadTerrain(layout: TerrainLayout, onProgress?: (progress: TerrainProgress) => void,
   options: TerrainLoadOptions = {}): Promise<TerrainResult> {
   const timeoutMs = options.timeoutMs ?? 120_000;
   const signal = options.signal;

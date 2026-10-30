@@ -5,6 +5,7 @@ import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
 export interface ReviewInstance { assetId: string; position: Vec3; quarterTurns: 0 | 1 | 2 | 3 }
 export interface ReviewExports {
   HOME_REVIEW?: Record<string, { entrance: Vec3 }>;
+  CIVIC_REVIEW?: readonly { id: string; instances: readonly ReviewInstance[] }[];
   JOIN_FIXTURES?: readonly { id: string; instances: readonly ReviewInstance[] }[];
 }
 export interface BenchFixture {
@@ -13,11 +14,22 @@ export interface BenchFixture {
   focus?: Vec3;
   normal?: Vec3;
 }
-const entries = import.meta.glob<ReviewExports>(['../../../../packages/content/src/homes/*/index.ts', '../../../../packages/content/src/props/*/index.ts']);
+const entries = import.meta.glob<ReviewExports>(['../../../../packages/content/src/homes/*/index.ts', '../../../../packages/content/src/props/*/index.ts', '../../../../packages/content/src/civic/index.ts']);
 
 export async function loadBenchFixture(collection: string, assets: readonly VoxelBlueprint[], selected: VoxelBlueprint, mode: string): Promise<BenchFixture> {
   const single = { blueprint: selected, position: [0,0,0] as Vec3, yaw: 0 };
   if (mode === 'asset') return { id: selected.id, instances: [single] };
+  if (mode === 'castle') {
+    if (collection !== 'core') throw new Error('Castle review uses the authored core compound.');
+    const [{ createCastlePlan }, { createCastleContent }] = await Promise.all([
+      import('@chatdom/world'), import('../kingdom/castle-content'),
+    ]);
+    const { buildings } = createCastleContent(createCastlePlan());
+    return { id: 'castle', instances: buildings.map(part => ({
+      blueprint: part.blueprint, yaw: part.yaw,
+      position: part.position.map(value => value * 8) as unknown as Vec3,
+    })) };
+  }
   if (mode === 'windows') {
     const window = selected.windows[0];
     if (!window) throw new Error('Window review requires an authored window.');
@@ -38,10 +50,20 @@ export async function loadBenchFixture(collection: string, assets: readonly Voxe
     const variant=Number(selected.id.at(-1));
     return { id: `threshold-${selected.id}`, instances: [single], focus: [variant===1?18:variant===2?39:29,14,selected.size[2]-5], normal: [0,0,1] };
   }
-  const path = collection === 'street-props' ? '../../../../packages/content/src/props/street/index.ts' : `../../../../packages/content/src/homes/${collection.slice(6)}/index.ts`;
+  const path = collection === 'civic-props' ? '../../../../packages/content/src/civic/index.ts' : collection === 'street-props' ? '../../../../packages/content/src/props/street/index.ts' : `../../../../packages/content/src/homes/${collection.slice(6)}/index.ts`;
   const load=entries[path];
   if (!load) throw new Error(`No review fixture module for ${collection}.`);
   const review=await load();
+  if (collection === 'civic-props' && /^civic-square-(hearth|tide)$/.test(mode)) {
+    const fixture=review.CIVIC_REVIEW?.find(item=>item.id===mode);
+    if (!fixture?.instances.length) throw new Error(`Missing civic review ${mode}.`);
+    const instances=fixture.instances.map(item=>{
+      const blueprint=assets.find(asset=>asset.id===item.assetId);
+      if(!blueprint||item.position.some(value=>!Number.isInteger(value))||![0,1,2,3].includes(item.quarterTurns)) throw new Error(`Invalid civic instance ${item.assetId}.`);
+      return {blueprint,position:item.position,yaw:item.quarterTurns*Math.PI/2};
+    });
+    return {id:mode,instances};
+  }
   if (mode === 'threshold') {
     const entrance=review.HOME_REVIEW?.[selected.id]?.entrance;
     if (!entrance || entrance.length!==3 || entrance.some((v,i)=>!Number.isInteger(v)||v<0||v>selected.size[i]!)) throw new Error(`${selected.id}: HOME_REVIEW must declare an in-bounds entrance focus in build cells.`);

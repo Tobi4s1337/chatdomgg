@@ -3,8 +3,8 @@ import { failureForStatus, TwitchRequestError } from './errors';
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 export const DEFAULT_TIMEOUT_MS = 10_000;
-/** Twitch pages are small; a body beyond this is treated as malformed rather than buffered. */
-const MAX_BODY_CHARS = 4_000_000;
+/** Twitch pages are small; a body beyond this is treated as malformed and never buffered past the limit. */
+export const MAX_BODY_BYTES = 4_000_000;
 
 export interface HttpRequest {
   readonly operation: string;
@@ -57,19 +57,49 @@ export async function send(fetchImpl: FetchLike, request: HttpRequest): Promise<
     throw new TwitchRequestError(failureForStatus(response.status), request.operation, response.status, retryAt);
   }
 
-  let text: string;
-  try {
-    text = await response.text();
-  } catch {
-    throw abortFailure(request, timeout);
-  }
-  if (text.length > MAX_BODY_CHARS) throw new TwitchRequestError('invalid_response', request.operation, response.status);
+  const text = await readCapped(response, request, timeout);
   if (text.trim().length === 0) return { status: response.status, headers: response.headers, body: null };
   try {
     return { status: response.status, headers: response.headers, body: JSON.parse(text) as unknown };
   } catch {
     throw new TwitchRequestError('invalid_response', request.operation, response.status);
   }
+}
+
+/**
+ * Reads the body as it streams and stops at `MAX_BODY_BYTES`: a declared or actual oversize body is cancelled
+ * at once instead of being held in memory first and measured afterwards.
+ */
+async function readCapped(response: Response, request: HttpRequest, timeout: AbortSignal): Promise<string> {
+  const oversize = () => new TwitchRequestError('invalid_response', request.operation, response.status);
+  const declared = response.headers.get('content-length');
+  if (declared !== null && /^\d+$/.test(declared.trim()) && Number(declared.trim()) > MAX_BODY_BYTES) {
+    await response.body?.cancel().catch(() => undefined);
+    throw oversize();
+  }
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw oversize();
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof TwitchRequestError) throw error;
+    throw abortFailure(request, timeout);
+  } finally {
+    reader.releaseLock();
+  }
+  const decoder = new TextDecoder();
+  return chunks.map(chunk => decoder.decode(chunk, { stream: true })).join('') + decoder.decode();
 }
 
 function abortFailure(request: HttpRequest, timeout: AbortSignal): TwitchRequestError {

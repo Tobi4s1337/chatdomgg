@@ -37,10 +37,10 @@ flowchart TD
   Herald --> Ephemeral[Ephemeral chat and presence aggregation]
   Panel[Panel] --> API[API: identity, capabilities, sessions]
   Web[Walker and throne] --> API
-  API --> Rooms[Layer, Draft and Match rooms]
+  API --> Kingdom
+  API --> Rooms[Layer, Draft and Match adapters as consumers start]
   Inbox --> Kingdom[KingdomRoom: single writer]
   Ephemeral --> Kingdom
-  Ephemeral --> Rooms
   Rooms --> Kingdom
   Kingdom --> Facts[Postgres facts, ledger and snapshots]
   Kingdom --> Beats[Beats and approved public views]
@@ -70,11 +70,15 @@ immutable. The event log holds game facts, not retained Twitch chat or microphon
 `packages/shared` describes the boundaries; `packages/world` implements the authoritative domain rules. Renderers,
 Twitch adapters, Codex and games cannot mint rewards or invent facts. Clients request; the writer validates and
 commits; beats make the result visible. The Atlas consumes a public projection and never joins game rooms.
+Small kingdoms carry walkers in KingdomRoom itself: 30 Hz fixed simulation and 5 Hz patches, with Colyseus
+prediction/reconciliation. Only walkers have gameplay sockets; the rest of chat is represented by presence.
+The private domain log, public durable deliveries and transient speech/seats are distinct projections.
 
 ## 3. Contracts to freeze here
 
 The following are contract groups, not files already implemented. Main owns their schemas, examples, compatibility
-rules and tests. Freeze each small group when its first consumer starts; do not freeze all groups up front. World/voxel comes next after this first Atlas handoff.
+rules and tests. Freeze each small group when its first consumer starts; do not freeze all groups up front.
+Identity, Atlas, world/voxel, build/Forge and realm first-consumer boundaries now exist; specs name their exact exports.
 Frozen means versioned and tested, not unchangeable: main owns migrations and updates dependent lane briefs.
 
 | Contract | Lives in | What must be explicit | Unlocks |
@@ -90,7 +94,7 @@ Frozen means versioned and tested, not unchangeable: main owns migrations and up
 | Appearance and animation | `shared` + `anim` | Shared skeleton/part sockets; chibi proportion; face states; clip/action timing; stance and springs; appearance hash; person look versus local earned pieces; LODs; equal-brightness sub tint | Wardrobe, avatar content, crowds, voice |
 | Making and judgment | `shared` | Pass/soften/hold/refuse; input/result checks outside agent; verdict/model/question-set versions; approved asset lineage; stream pass distinct from world publish; appeal/veil/revert; derivative invalidation; private refusal versus nameless beat | Forge, Genesis, games, build publishing, Watch |
 | Realm/session/travel protocol | `shared` + authority in `world` | Room roles, seat leases/reconnects, layer membership, movement validation, rate/bandwidth caps, writer failover, cross-kingdom reservation and rollback, no forced travel, destination bans | Realtime clients, games, Raid Gate |
-| Games and voice | `shared`; semantics in `chalk` | Family/variant manifest, view classes, legal-move visibility, match commands/results, practice rewards, deadlines, spectator/stream views, miniature summary; invited seats, age/consent, LiveKit permission lifecycle | Tavern games, Taster, campfire, Royal Audience |
+| Games and voice | `shared`; lane-local semantics in `packages/games` | Family/variant manifest, view classes, legal-move visibility, match commands/results, practice rewards, deadlines, spectator/stream views, miniature summary; invited seats, age/consent, LiveKit permission lifecycle | Tavern games, Taster, campfire, Royal Audience |
 | Spells and founding | `shared` | HousePartPlan, Charter, family/Chalk plans, fact-cited Voice lines; deterministic tools; quotas/timeouts; two external gates; checked fallback; ritual progress as observations of work, never fake success | Codex runtime, Forge, Genesis, Voice |
 | Seasons, discovery and memory | `shared` + `world` | Common league brackets, versioned score sources, contribution caps, visitor garlands, crowns, wonder progress; Chronicle/card/still records with fact and asset dependencies; privacy and retraction | Seasons, Chronicle, Atlas rankings, share surfaces |
 
@@ -107,14 +111,17 @@ for recon. Sub-agents inside this checkout never run git. Lanes remain separate 
 
 ### World truth and realtime
 
-Build the pure reducer, seeded simulation, ledger, durable scheduler, identity and settlement rules, provenance,
-world lifecycle, and beats. Build the Postgres writer fencing/inbox/outbox/recovery foundation and the four room
-adapters: KingdomRoom, LayerRoom, MatchRoom and DraftRoom. Private data never enters broadcast schemas.
+Main owns the pure reducer, ledger/ownership rules, provenance, authority contracts and reference room/client.
+Spec 33 freezes the actual Colyseus schema, messages, immutable collision boundary and fenced repository ports.
+The `realm-server` lane builds Postgres fencing/inbox/outbox/recovery and authenticated entry; `realm-wiring`
+binds the existing systems to it. Only KingdomRoom is implemented now; LayerRoom, MatchRoom and DraftRoom
+keep clean authority seams until their own consumers start. Private data never enters broadcast schemas.
 
-Layers hold about 300 walkers, with a hard cap of 400 as the starting budget. Nearest-avatar interest views, royal
-layer first-come admission, friends following, mirrored ceremonial seats, crowd summaries and reconnects must all
-work without paid priority. Chatters are data, not one websocket each. Sleeping kingdoms cost no resident room;
-their durable inbox survives. Live broadcasts wake the kingdom; reruns do not earn presence.
+The small-kingdom consumer targets 300 walkers in one room, 30 Hz movement and 5 Hz patches. One StateView is
+shared per district interest set; measure the actual input/prediction path before claiming capacity. Larger
+kingdom layering, royal first-come admission, friends following, mirrored ceremonial seats and crowd summaries
+remain in the whole build without paid priority. Chatters are data, not one websocket each. Sleeping kingdoms
+cost no resident room; their durable inbox survives. Live broadcasts wake the kingdom; reruns do not earn presence.
 
 ### Voxel world, lighting, avatars and build mode
 
@@ -128,8 +135,9 @@ painterly interiors must deliver the crafted toy kingdom at dusk. The light fiel
 polish. Study external implementations before freezing these designs. Validate the rendering path in WebGL2/OBS
 before prescribing a shader API; do not assume a library promise is working code.
 
-Own the free-cursor controls, collision-safe follow/orbit/dollhouse cameras, touch and gamepad, action picking and
-local response. Own the chibi body/face builder, shared rig, layered distance-driven pose evaluator, capes/hair,
+Own the contracts and judge the free-cursor controls, collision-safe follow/orbit/dollhouse cameras, touch and
+gamepad, action picking and local response. Specs 35/37 hand walking and interactions to the team on the shared
+pure step; E is use, and wheel reaches first person. Own the chibi body/face builder, shared rig, layered distance-driven pose evaluator, capes/hair,
 wardrobe composition and crowd renderer. All avatars are people, with individual timing, not synchronised dolls.
 The tier-3 cape shimmers in palette colour, never extra glow. Content batches follow these contracts in lanes.
 
@@ -140,11 +148,11 @@ Every usable-looking asset works. Every build has support and an escape path; pu
 
 ### Forge grammar, Genesis and game-language authority
 
-Main freezes and proves the fixed-shape Forge grammar, deterministic assembler and beauty checks, the Charter/layout
-generator, and Chalk's total interpreter/view semantics and Taster verification core. These are core rules, not
-handed to a UI lane to improvise. Taster includes whole-family settings checks, fairness/termination and two-world
-trace/taint checks, including legal moves and phase conditions that could disclose private state.
-Implementation of the spell service, content library and games can then proceed independently.
+Main owns the fixed-shape Forge grammar, deterministic assembler and beauty checks, the Charter/layout generator
+and shared promotions. Spec 22 delegates the full Chalk interpreter, view semantics and Taster core to
+`lane/tavern-tables` in `packages/games`; main reviews those core rules before promoting their shared consumers.
+Taster includes whole-family settings checks, fairness/termination and two-world trace/taint checks, including
+legal moves and phase conditions that could disclose private state. The lane owns implementation, not only UI.
 
 The full Forge scope includes the decided worn-piece branch on avatar sockets. Main owns its grammar/contract;
 content and safety lanes own its authored pieces and dedicated golden set. House parts open first under the
@@ -173,7 +181,7 @@ Split broad responsibilities into small PRDs (normally 3–6 tasks) as their con
 | **Content library** | Separate assigned subfolders of `packages/content/**` | Kingdom style kits, biomes, starter homes, civic places, furniture/tools, plants/wild species, companions, great beasts/dragon, wardrobe/tenure/sub pieces, curated flags, Forge motifs, emote uses, clips and seasonal decorations | Asset/interaction/rig/Forge contracts; visual benches |
 | **Baker** | `apps/baker/**` | CVOX versions, plot/ward LODs and impostors, contact sheets, guarded publication, emote conversion, approved Atlas drawings from real geometry, derivatives and CDN invalidation | Voxel/assets/publication/judgment; main's render API |
 | **Spell runtime and Watch** | `apps/codex/**`, `apps/api/src/watch/**`, `apps/web/src/watch/**` | API-key Codex workers/tools, bounded spell recipes, warm latency/cost tests, two independent gates, golden sets/drift checks, holds/appeals/rechecks, global veil and stream-pass workflows | Spell/grammar/judgment/authority contracts; approved renderer/assembler tools |
-| **Games and tavern** | `packages/chalk/src/families/**`, `apps/taster/**`, `apps/web/src/games/**`, `apps/realm/src/matches/families/**` | Authored verified families; quiz/chalk/chess/dice/regatta and Dusk Court; four chat modes (one player/many/teams/seats); Tableware styles and miniatures; spectate/join/resume; prompt variants, promise checks, shelf, crown polish and travelling author credit; full new-rules path behind its evidence gate | Main's Chalk/Trestle/view/seat/result contracts; art library and Taster core |
+| **Games and tavern — Spec 22** | `packages/games/**` except `dusk-court/**`, `apps/taster/**`, `apps/web/src/tavern/**`, `apps/realm/src/matches/tavern/**`, `apps/codex/src/games/**` | Authored verified families; quiz/chalk/chess/dice/regatta and Dusk Court; four chat modes (one player/many/teams/seats); Tableware styles and miniatures; spectate/join/resume; prompt variants, promise checks, shelf, crown polish and travelling author credit; full new-rules path behind its evidence gate | Lane-local Chalk/view/result/Taster ports first; main promotes shared contracts and binds auth/store/transport |
 | **Voice** | `apps/api/src/voice/**`, `apps/realm/src/voice/**`, `apps/web/src/voice/**` | Campfire and Royal Audience invitation, 16+ consent, trust/seat verification, PTT, permission revocation, OBS listening/monitoring and limiter; text seats; no recording | Seats/moderation/capability protocol; LiveKit adapter |
 | **Throne** | `apps/web/src/throne/**`, `apps/api/src/throne/**` | Connect and live-founding controls; dock/tab/phone/Stream Deck; one-press royal acts with previews, suggestions capped at three, Busy, safe areas, stream pass, safety keys, cost display and lifecycle | Capabilities/confirmed action results/Genesis/director interfaces |
 | **Director and stream** | `apps/web/src/stream/**`, `apps/web/src/director/**` | Beat-driven shot grammar, occlusion checks, calm/show, stage/corner/strip and seams, shutters, preloads, live Genesis direction, selected auto-open with veto, missed-climax in-app replay, OBS loss/recovery and long soak | Main's camera/render/beat/public projection; replay contract |
@@ -306,7 +314,7 @@ Request infrastructure from the team when a concrete test needs it; do not subst
 | Per-kingdom runtime AI budget | Main + Tobias; warm Forge/Genesis/variant calls measured for latency, tokens and daily load; free kingdoms need fair capacity/degradation without selling coals |
 | Renderer/pins and real-device floor | Main; confirm WebGL2/OBS material path, installed versions and phone/Firefox/macOS OBS targets; current host is not the GPU mentioned in old measurements |
 | Pool contribution versus earned score | Main domain spec; settle ledger treatment, contribution breadth/caps and one league bracket table before seasons or pool rewards can ship |
-| General generated games | Main/Taster; implement the full bounded new-rules path, but preserve the founder's activation gate: at least 60 of 100 real prompts pass all checks; verified variants still fulfil table requests |
+| General generated games | Spec 22/Taster lane; implement the full bounded new-rules path, but preserve the founder's activation gate: at least 60 of 100 real prompts pass all checks; verified variants still fulfil table requests |
 | Voice/harassment/age/cross-kingdom moderation | Main safety spec and founder choices; Safety §7 is unfinished; explicitly design block/mute, consent, ban reach, appeals and failure policy before exposure |
 | Twitch data to AI and retention | Team obtains the written/legal answers already requested by the vision; design provider/data boundaries and deletion independently; never infer consent from a code path |
 | Day-long panel Bits outside Twitch | Twitch written answer; preserve configurable expiry/eligibility and exact receipts; no promise of approval or monetization eligibility yet |
@@ -320,131 +328,52 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Handoff state — 2026-10-30 active: lane integration before the dusk pass
+## 10. Current handoff — 2026-10-31
 
-- Pushed: `d73c342` froze the small shared/world/voxel consumer contracts and Herald spec; `095c967` recorded its verified worktree. `lane/herald` / `../worktrees/herald` are ready at that boundary. No real Twitch authorization or chat success is claimed. Atlas remains with its team at `lane/atlas` / `../worktrees/atlas`; main does not edit its implementation.
-- Content specs 04–06 and PRDs are now frozen: `homes-hearth` (15 homes), `homes-tide` (15 homes), `street-props` (20 records / ten forms in two kits). Main reviewed the production bench, actual validator, mixed desktop/phone fixtures, doorway and SIMULATED window on/off. All 51 core baselines validate; lane assets are deliberately absent and missing collections fail. Committed and pushed in `2c407d8`. Branches `lane/homes-hearth`, `lane/homes-tide`, `lane/street-props` and worktrees `../worktrees/homes-hearth`, `../worktrees/homes-tide`, `../worktrees/street-props` exist at that green commit, with frozen-lockfile dependencies installed. Worker startup belongs to the team.
-- Implemented kingdom: deterministic 24-home hamlet and 240-home town from one generator; immutable reserved tenure lots, roads/castle, worker meshing with baked AO/sky, conforming terrain, factor-2/4 render meshes, sky/fog/time, warm panes and real occluded R8 field. SIMULATED input goes through world presence; the strict public SSE adapter uses the same feed seam. Original procedural action sounds are credited in `THIRD_PARTY.md`.
-- Runtime evidence: 0 → 1 → 240 → 0 active windows without rebuilding geometry; nearby Juniper label; six real workers observed and all terminated on a context-loss event. Desktop town: 30 draws, 945,506 triangles, 4,850,692 light-field bytes. Full `pnpm verify` passed: typecheck, lint, 201 tests, build and 19 standard captures (twelve kingdom, six stream, one panel).
-- Screenshots: all twelve hamlet/town noon/dusk/night fixed-camera desktop/phone views exist under `shots/kingdom/`. Main has inspected representative desktop/phone/noon/night and close-window frames; the final full visual audit and wave capture are still required. The current world is functional but **does not yet meet the final art bar**: too regular a town layout, washed daylight/dusk, thin beacon and empty distant land. Improve those here; do not treat the handoff commit as completed kingdom acceptance.
-- Correctness fixes from Astra high review: retired producer epochs cannot restore withdrawn names; healthy offline remains “STREAM RESTING”; caller abort and construction failure clean resources; runtime rendering errors show a recovery gate. Greedy-displacement cracks were replaced by conforming worker topology. Ordered shell occlusion now prevents nearby names showing through houses. Pane speckle was traced to fractional slot texture addressing and fixed by rounding the slot index.
-- Remaining: finish composition/material/shadow/landscape look, detail transitions and distant light coverage; verify real WebGL context loss, failed/cancelled construction, source loss/reconnect and light removal in browser; inspect all final fixed shots, capture the arrival ripple, update exact evidence, commit/push green steps. Walking avatars and build mode remain the next brief. No real-device FPS claim is made from SwiftShader.
-- Ports: web dev 5170, preview 5190, Atlas reserved 5193, Herald reserved 5194, optional registered auth callback 5195. Capture previews now request an OS-assigned free port atomically; `CHATDOM_SHOT_PORT` / `CHATDOM_CONTENT_PORT` may pin one explicitly. Two simultaneous capture servers were verified to bind different ports. Existing infrastructure and secrets remain untouched.
-- Founder decisions remain: a citizen's own warm window is their presence light, named nearby; the castle beacon is the kingdom's light. Sound uses original procedural or credited permissive sources. Freeze small contract groups as their consumers start. New committed build-memory paths are repo-relative.
+**Working rule:** One worker per live-evening lane: realm (including founded-world), interactions, Forge ritual,
+anvil, kingdom light, crowd behaviour and panel/stream. All others park after their current task; reviewed work
+still integrates. No new lanes. Short integration looks, typecheck + changed tests, one visual shot; full evening
+checks at milestones. Accepted work stays accepted unless broken.
 
-### Active art pass after `2c407d8`
+**Main / composition:** `7356e9f` mounts room walkers in exact founded kingdom scenes; `c60f529` supplies the
+connected SIMULATED market fixture. Refresh `integration/kingdom-queue` from main before accepting producer
+work; realm comes first. Follow `work/lanes/kingdom-look-owners.md`, preserve source WIP and one writer. The
+older twelve-lane queue is accepted; unfinished WB02/BT04 remains with its owners.
 
-- Content lane worktrees are handed off; main will not author their owned batches. `256a7bd` records their setup and is pushed.
-- Current uncommitted pass lowers the hero/near cameras, groups baseline trees into groves, replaces the pale elliptical water with terrain-depth shoreline and analytic sky reflection, deepens dusk values and strengthens the beacon. Warmth now has a bounded kingdom-wide 2 m occluded volume alongside the 0.5 m near volume; tests cover all 240 street facades. Combined estimated light workspace is 9.13 MiB with a 12 MiB automated cap. Original occupancy remains authoritative; coarse side alleys can close.
-- Renderer now fades detail meshes over 0.4 s, reuses light textures, catches frame failures, disposes instance buffers, and advances presentation by elapsed time without slowing on a slow frame. These changes need integrated visual/runtime verification before the next commit. Final visual approval, wave capture and real-GPU timings are still outstanding.
-- Preview 5190 was restarted after its previous owned session had exited (143); current owned session is 58259. Capture helpers use free localhost ports. No unrelated process or service was touched.
+**Accepted authority:** RS01–06/WC01–06: fenced Postgres allocation, ingress/outbox, checked entry/reconnect,
+bounded inputs, shared movement and SDK prediction. Source-loss barriers fence stale presence. Wiring uses the
+accepted compressed checkpoint; `retain` + `preparePublicCheckpoint()` cold-opens its delivered prefix without
+inventing a principal. Placement context fences late input and resets self/peer/camera history.
 
-### Pause checkpoint — after the second composition capture
+**Mounted boundary:** `Kingdom` accepts `RealmFoundedScene`, room `PresenceFeed`, `KingdomWalkBinding`;
+`engine.attachWalk` binds an already drawn scene. Recipe: `apps/web/src/kingdom/README.md`. Exact adopted plan,
+placements and asset hashes replace regeneration/legacy scatter/local saved parts. Scene mismatch holds walking
+and requests remount; the camera yields to walking and nearby names follow rendered people. The 5190 default
+still opens the spectator until actual entry/producer adapters compose; wiring needs a checked scene/manifest/
+collision bundle and current public cursors. Producer also needs approved public kingdom naming, not URL names. Spec 38 owns scene assembly/collision,
+provider/furnishing and HTTP reads; FW01/FW02 and RW03 received precise mount needs. Temporary bounded market
+collision lives only in testing, blocks unknown space and supplies no live-home authority. No branch-poll loop.
 
-- Founder paused the active goal. Stop implementation until resumed. Content handoff milestone `2c407d8` and setup record `256a7bd` are confirmed pushed. All three content worktrees exist with installed dependencies. The exact handoff milestone passed `pnpm verify` (201 tests and 19 standard captures); port allocation was demonstrated with two simultaneous previews.
-- Preserve the uncommitted art/runtime pass described above. Latest global typecheck, lint and build passed after integrating two light fields, water, detail fading and frame-error handling. Far-field focused tests passed 18/18. The final full verify has NOT been repeated for these uncommitted changes.
-- Main viewed `shots/kingdom/composition-town-dusk.png` and `composition-town-night.png`. Both rendered without browser errors: 240 homes active, seven workers, 73 geometry builds, 33 draws, 1,005,754 triangles, 9,569,616 combined field bytes, both fields settled. Every quarter now receives warmth. Main has not approved final art: coarse ground-light squares are conspicuous, facades may be too uniformly bright, the castle remains dark, and the layout is still repetitive. The lower camera, terrain-shaped water and stronger beacon are improvements, not final acceptance.
-- Runtime script `packages/testing/kingdom-checks.mjs` was strengthened for actual WEBGL_lose_context, runtime/construction worker failures, public Herald stale/live/offline/disconnect, field removal and error UI. Its latest source passes lint but has NOT run against this build. The checker was interrupted at founder pause before starting Chrome. There is no client-side route unmount, so construction-unmount browser evidence remains explicitly unproven.
-- Remaining before completion: review and tune the integrated look; inspect actual phone/noon/hamlet/stream changes; run strengthened runtime checks and full verify; record short arrival-wave capture (deterministic `__chatdomKingdom.capture(seconds)` now exists); update evidence and commit/push the next green milestone. No real-GPU frame-time evidence exists. Preview 5190 remains the owned session 58259 unless its live status changes; revalidate on resume. No temporary capture process was still running at pause.
+**Controller next:** Tobias’s 360 Hz check found jitter/sponginess, busy gait, denied pointer lock and half-slab
+sink. All four fixes belong to WC07/08, written into its progress/PRD. Three Terra-high studies are ready in
+`work/references/walk-{render-smoothing,slab-support,multiplayer-characters}.md` and specs 33–35. Camera already
+reads SDK render pose; all-field snap threshold and exact-height easing are hypotheses, not confirmed causes.
+Keep one replay law, blended ordinary corrections and explicit placement cuts. Actual slab walk→stand→jump
+and glassy real-display feel decide acceptance. No new claim that walking is fixed. Idle-stick/head overlap also
+remains with WC; first-look owns spectator-button copy, kingdom-light owns castle warmth.
 
-### Resumed on Sol — dusk acceptance
+**Forge:** Both pre/post gates now use fresh isolated Codex CLI Luna + independent Terra contexts; no local API
+keys/direct paid calls. Real contact sheets attach privately. Auth-file status is configuration, not approval.
+An owl run approved in 14s; subsequent HTTP owl review rejected subject fidelity, dragon held, crescent lantern
+rejected. Main viewed all sheets and sent forge-pieces concrete crescent-silhouette and owl-face fixes; do not
+weaken judges or claim calibration. RW05 gets this factory for durable room attachment. Managed 5195 now serves the Codex judge backend, confirmed through the 5190 proxy (200, configured); Herald
+5194 is untouched. The coordinator now takes provenance from required `KingdomForgeAuthority.origin`, so real
+model calls in a simulated room stay SIMULATED. Missing origin stops before reserve/providers. Wiring received
+the contract handoff; no persisted reservation change.
 
-- Founder resumed the same goal on Sol. Content hearth and street-prop lanes are running with the team; Herald is on H03, Atlas is addressing review. Main retains core integration and look ownership.
-- Active disjoint reviews: Astra xhigh on occlusion-aware distant-field reconstruction, reversible LOD transitions and exact terrain/water contact; Terra high on atmosphere/beacon and water. Main is lowering the town view toward its central street.
-- Strengthened runtime checks passed against the resumed build: actual WebGL context loss, construction/runtime worker failures, source expired/live/offline/disconnect and wave field reuploads. The final look build still needs the complete verify and capture matrix.
-- Owned temporary look server: localhost 5186. Attempt to start 5178 failed because occupied; no process on that port was touched. Preview 5190 must be checked after rebuilding.
-
-### Continuous light and contact checkpoint
-
-- The three real occluded volumes now cover nearby streets, all town quarters and the castle crown. Shared corner reconstruction removes square pools; raw flood values stay unchanged. Cached occupancy masks reduce worker reconstruction time. Combined estimated field workspace is 11.60 MiB under a 12 MiB guard. Coarse cells can still close narrow alleys; this is conservative darkness, not fabricated illumination.
-- First arrival now lights exactly one designated window, with Juniper over it. Content inspection explicitly lights every authored anchor. Specs 04/05 and DECISIONS record this consumer policy without changing shared schemas.
-- Manor foundations and full reserved lots are flat. The horizon no longer overlaps detailed ground, and its conforming collar/sampler grounds the groves. Water samples the exact terrain triangle diagonal. Detail meshes and panes share reversible fades. Constructor failures now release previously allocated scene resources as well as asynchronous failures.
-- This coherent look step passed `pnpm verify`: typecheck, lint, 230 tests, build and 19 standard captures. Main inspected the twelve kingdom views as desktop/phone contact sheets, plus close-window renders. The build is served on 5190 for founder hardware review. A separate cached actual directional-shadow module is being developed for the next integration. Final art acceptance and wave capture remain open; daylight is still flat, the shoreline material edge is too faceted and castle walls remain dark.
-
-### Shadow integration and final capture in progress
-
-- `a684496` is pushed: the continuous-light/contact milestone passed 230 tests and 19 standard shots. Its strengthened browser checks also passed: eight workers created, seven live before context loss, all released afterward; an injected synchronous Worker constructor failure released all four earlier workers.
-- The next look pass integrates cached actual directional shadows (20 MiB desktop / 5 MiB phone), full-detail home/castle casters and factor-2 flora, plus a continuous bank material bounded to the actual lake. Main inspected hamlet noon/dusk: cast shadows improve grounding and the jagged shore material edge is gone. Astra's real Chrome proof measured shaded RGB 38 versus sunlit 174, complete R8/depth framebuffers at both sizes, no GL errors.
-- Beacon policy is now identical across feeds: quiet fresh-live pilot plus community strength, zero when stale/offline. The film path now samples actual presentation time so panes retain their 0.7 s fade and detail transitions; it cannot capture a live Herald feed as if it were a simulation.
-- Current scripts/tests are still being verified against that final combined source. Remaining: final complete shot audit, browser rerun for shadow caching/removal/recovery, 160-frame offline arrival film and visual review, selected committed evidence, green commit/push. Founder was told 5190 is available; frame times and Noon→Dusk update costs still need hardware evidence. Content/Herald/Atlas remain with their teams, with uncommitted lane work visible; do not merge their unfinished files.
-
-### Historical pause checkpoint — resumed; see lane integration below
-
-- Goal is paused. Terrain architect and evidence checker were interrupted. No film was started. Preserve all uncommitted source.
-- Confirmed pushed: `a684496` continuous light/contact milestone (230 tests and 19 captures), and `f7313e1` cached sun-shadow module, four focused tests and real Chrome depth proof at `work/evidence/kingdom/sun-depth-proof.png`. The latter is a module checkpoint; its kingdom integration remains uncommitted.
-- Uncommitted integration includes shadows, bounded continuous shoreline material, unified beacon pilot policy, exact offline presentation sampling/LOD clock, public-green groves and root grounding, stronger HDR beacon appearance, testing scripts, and Spec 02 updates. Latest typecheck/lint/unit run passed 236 tests. An earlier integrated shadow checkpoint passed a full verify with 234 tests/19 captures; the newest full verify reached stream capture and failed the default 30 s SwiftShader screenshot timeout. The harness now allows 120 s and fails fast on error gates, but that latest harness has not completed a full run.
-- Browser runtime passed on the last production build: window field 0 → positive → 0, shadow update count stayed 1 through presence/camera changes, real live-frame field illumination followed by fully cleared window+beacon fields on offline/disconnect, actual context loss and constructor/asynchronous worker-failure cleanup. Town main pass: 44 draws / 1,104,438 triangles; cached shadow pass: 26 draws / 3,853,892 triangles / 21,003,584 bytes. Field workspace 12,162,420 bytes. These are counts, not hardware timing claims.
-- Main and Terra still reject final acceptance: repeated blank gable backs hide too many presence windows, and the hamlet ground reads as a rectangular plinth. Astra proposed a rolling ridge with exact current-built-footprint pads, soft Euclidean feathers and a spatial pad index, preserving every address/reserved lot. It was interrupted before any new world/layout edits landed. Full-reserved-lot-flat was our implementation overconstraint, not a frozen rule; future growth may terraform inside its fixed lot. Revisit those tests explicitly without losing actual foundation/threshold contact.
-- Camera experiment: main viewed `shots/kingdom/camera-raised-dusk.png` and `camera-raised-phone.png` (higher east oblique; more fronts but still repetitive). Source now contains an **unreviewed west-oblique experiment**: town desktop eye [-150,42,235], phone [-60,47,285], targets [0,14,50]/[0,14,25]. It was built to an owned temporary snapshot only; no west screenshot or approval exists. Review or replace it on resume.
-- Stronger beacon was viewed by Terra at `shots/kingdom/beacon-full-dusk.png` / `beacon-full-night.png`; main has not yet inspected that final appearance independently. The raised-camera trial includes the stronger beacon and main did inspect it.
-- Preview 5190 (owned session 58259) serves the last production snapshot, **not** the latest west camera or strongest beacon source. Temporary dev 5186 is owned session 25398. Owned camera-trial snapshots are temporary only; no production service was changed. Recheck process status on resume.
-- Next, only after resume: solve camera/terrain acceptance blockers, then freeze source long enough for full `pnpm verify`, inspect final twelve kingdom plus stream/panel shots, rerun runtime if engine changes require it, capture the 160-frame/20 s offline wave (1440×900 CSS / 960×600 physical by default), encode/review it, commit selected evidence and green integration, push. Real-GPU timing remains outstanding; founder was given 5190. Content, Herald and Atlas lanes remain with their teams and have unfinished work; do not merge uncommitted files.
-
-### Lane integration — current authoritative checkpoint
-
-- Founder resumed the goal, then prioritized the team's committed work before further dusk changes. Main locally
-  merged `lane/street-props` at `66c522a` (all twenty authored models; SP03 assembly acceptance still unchecked),
-  `lane/homes-hearth` at `9e316ff` (HH01 **and HH02**, nine models through house tier), and `lane/herald` at
-  `da2d1d9` (H01). Their later uncommitted files remain in their worktrees and were not copied or merged.
-- `pnpm install` registered the Herald/Twitch packages in the root lockfile. Astra high reviewed H01 and main's
-  integration correction now blocks capabilities on token loss/failed validation and obsolete inspections. Six
-  regression cases pass. No new live Twitch reads or H02/H03 success are claimed.
-- The browser's single SSE adapter now explicitly accepts either configured `live` or `simulated` origin,
-  labels replay SIMULATED and rejects cross-origin frames; existing freshness, sequence, epoch and realm guards
-  remain. H02's PRD records the option and `/?source=herald&presenceOrigin=simulated` route.
-- Main's uncommitted scene integration selects the nine reviewed Hearth forms for their actual matching plots;
-  other styles and unfinished manor/hall tiers still use explicitly authored core assets. Passive garden edges,
-  pots, troughs, shrubs and stones sit outside home reservations and clear of approaches. Addresses/presence
-  slots do not change. Props join actual shadow/light occupancy as well as worker-built instanced geometry.
-- Latest source passes typecheck, lint, build and all 415 unit tests, run with at most two CPU cores. A single
-  full verify/capture run follows before push. Capture runs must be serial and lean on this shared host. Fixed
-  evidence views now skip identical redraws while keeping the presence feed/watchdog alive. No film is running.
-- The previous dusk integration is preserved in the working tree and a local safety stash. The stash operation
-  could not remove a read-only mount, so tracked edits stayed in place; the two untracked beacon files were
-  restored explicitly. No source was lost. The stash contains only this main work, not lane files or secrets.
-- Remaining art blockers are still open: repetitive rear gables and the terraced hamlet plinth. Terrain architect
-  remains interrupted while this integration lands; no rolling-ridge proposal has been implemented. The west
-  camera experiment and stronger beacon need the new integrated shot review. Wave film and final acceptance
-  remain required. Goal stays active after this integration checkpoint.
-
-### Green content/Herald integration; Atlas unblock next
-
-- Main's combined integration passed `pnpm verify`: typecheck, lint, 419 unit tests, build and 19 standard shots.
-  Main opened all twelve kingdom views, both stream matrices and panel bench. Full props validation (20) and
-  partial Hearth validation (9) passed. The original phone triangle limit caught an overage; tested 20 m distant
-  horizon cells saved 37,484 triangles without changing the 1 m ground join or removing content. All 240 actual
-  production-selected home sources pass the field/removal test. Small props occlude the local field and shadows;
-  the distant approximation resolves buildings so sub-cell décor cannot falsely seal a street.
-- The replay adapter browser proof passed on one serial page: Juniper's new Hearth window/name at both sizes,
-  SIMULATED label, opposite-origin rejection with all light fields cleared, then recovery. Images and JSON are in
-  `work/evidence/kingdom/integration/`. No real Twitch/Herald producer success is implied. Main looked at them;
-  the phone is tightly cropped, and the wide backs/plinth remain unacceptable. No final wave film yet.
-- Founder then requested Atlas A01/A02 unblocked immediately. Its lane contains the reviewed real importer and
-  survey-preview map, but the main-owned lockfile lacks `apps/surveyor`. Main is adding that importer on
-  `lane/atlas`, checking a frozen offline install, then will commit A01/A02 together as explicitly authorized,
-  credit the shipped CC0/OFL assets and merge. No more repeated blocked worker/review rounds are needed.
-- Keep captures serial and CPU-bounded; full kingdom matrix is already proven for this source. After the Atlas
-  merge, check its actual two map views instead of needlessly recapturing the unchanged kingdom matrix. The
-  preview on 5190 serves the current integration build. Return next to the natural terrain and a dusk viewpoint
-  where the actual windows face the camera, then capture the wave once that composition works.
-
-### Atlas unblocked — authoritative latest state
-
-- A01/A02 are committed on `lane/atlas` as `0a3ba03`: the real Surveyor importer and first survey-preview map,
-  the main-supplied Surveyor lockfile importer, asset credits and checked PRD boxes. Tobias explicitly authorized
-  their combined commit. Historical repeated lockfile failures are condensed in the progress log; A03 is next.
-- Main resolved the two routine merge conflicts by retaining all Herald/Twitch dependencies and adding Surveyor
-  through pnpm, plus combining the art/font inventory with the kingdom's dependency/audio credits. Frozen offline
-  install passes on the lane and main. The lane passed 363 tests; combined main passed `pnpm verify --area atlas`
-  with 760 tests and two real Atlas captures, both opened by main. Review: `work/reviews/2026-10-30-atlas-integration.md`.
-- The actual export integrity check passed on `obs-20261030T042315Z-d5a9af3c1cf2` (199,095 observed channels;
-  254 sweeps, 12.64 hours, zero rejected/gaps). No source writes or official founding. The Atlas service on 5193
-  belongs to the lane and was only read, not restarted or reconfigured. The web preview remains on 5190.
-- Kingdom milestone `b4e0049` and Herald seam/auth fix `7b8e2eb` are pushed. Its full 19-shot matrix and two close
-  replay captures passed and were inspected. All new look/content work is committed; the old safety stash can be
-  discarded after confirming this checkpoint. No wave film yet. No real-GPU timing claim.
-- **Next remains the founder's look brief:** remove the hamlet's terraced plinth, compose the dusk view so the
-  actual designated windows face us, preserve the personal street-level arrival, then capture the ripple/beacon.
-  Do not call the existing west-oblique camera accepted: main and Terra still reject blank backs and overly dark
-  separation. The close Hearth view proves the content/adapter but is tightly cropped on phone and needs better
-  warm spill. The terrain architect's rolling-ridge/current-footprint-pad proposal is still unimplemented.
+**Evidence / next:** Current change: typecheck/lint, all 1518 tests and builds passed; canceled the queued capture under the new
+focused-check rule (backend-only change). Earlier phone dusk shot was looked at. Earlier three actual town browsers passed WASD/touch/stops/takeover; final looked market
+shots at 1440×900/390×844 use one renderer/three SDK clients, explicitly LOOK-only. Streets remain sparse/underlit.
+Next: actual founded collision/session entry, room-backed Herald/build/Forge, RW06 publication adoption,
+interactions/interiors, 300 walkers and plaza→pier. Real tobi4s_ window/provider proof remains open; realm goal is
+active. Main preview 5190 stays up; 5191/5192 untouched. Temporary capture/Forge-check services are closed.

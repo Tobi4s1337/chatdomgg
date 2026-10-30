@@ -1,5 +1,6 @@
 /* global URLSearchParams:readonly, Image:readonly */
 import { chromium } from '@playwright/test';
+import { acquireCaptureLock } from './capture-lock.mjs';
 import { createServer } from 'vite';
 import { startCapturePreview, closeCapturePreview } from './preview.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -13,20 +14,22 @@ const styleFilter=option('--style');
 if(styleFilter&&!['hearth','tide','grove'].includes(styleFilter)) throw new Error('Unknown --style.');
 const scene=option('--scene')??'asset';
 const presence=option('--presence')??'none';
-if(!['asset','mixed','threshold','windows','joins-hearth','joins-tide'].includes(scene)) throw new Error('Unknown --scene.');
+if(!['asset','castle','mixed','threshold','windows','joins-hearth','joins-tide','civic-square-hearth','civic-square-tide'].includes(scene)) throw new Error('Unknown --scene.');
+const assembly=scene==='mixed'||scene==='castle'||scene.startsWith('joins-')||scene.startsWith('civic-square-');
 if(!['none','on','off'].includes(presence)||(presence!=='none'&&scene!=='windows')||(scene==='windows'&&presence==='none')) throw new Error('Use --scene windows with --presence on or off.');
 const hour=option('--hour')??'19';
 if (!/^(?:[01]?\d|2[0-3])(?:\.\d+)?$/.test(hour)) throw new Error('--hour must be in [0,24).');
 const root=fileURLToPath(new URL('../..',import.meta.url));
-let loader,server,browser;
+let loader,server,browser,release;
 const escape=value=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 try {
+  release = await acquireCaptureLock();
   loader=await createServer({root,configFile:false,server:{middlewareMode:true,hmr:false,ws:false},appType:'custom'});
   const {loadContentCollection,coreRenderAssets}=await loader.ssrLoadModule('/packages/content/src/catalogue.ts');
   const collectionAssets=await loadContentCollection(collection);
   let assets=assetFilter?collectionAssets.filter(asset=>asset.id===assetFilter):collection==='core'&&!args.includes('--all')?coreRenderAssets(collectionAssets):collectionAssets;
   if(styleFilter) assets=assets.filter(asset=>asset.styleId===styleFilter);
-  if(scene==='mixed'||scene.startsWith('joins-')) assets=assets.slice(0,1);
+  if(assembly) assets=assets.slice(0,1);
   if(!assets.length) throw new Error(`No asset ${assetFilter} exists in ${collection}.`);
   await loader.close();loader=undefined;
   let base=option('--base-url');
@@ -46,10 +49,10 @@ try {
     await page.waitForFunction(()=>window.__chatdomReady===true||typeof window.__chatdomContentError==='string',{},{timeout:240_000});
     const error=await page.evaluate(()=>window.__chatdomContentError);
     if(error)throw new Error(error);
-    const marker=scene==='mixed'||scene.startsWith('joins-')?`[data-scene="${scene}"]`:`[data-asset="${asset.id}"]`;
+    const marker=assembly?`[data-scene="${scene}"]`:`[data-asset="${asset.id}"]`;
     if(await page.locator(marker).count()!==1)throw new Error(`Content renderer did not expose requested scene/asset ${scene}/${asset.id}.`);
-    const views=scene==='asset'?['front','side','back']:['front'];
-    const sizes=scene==='mixed'||scene.startsWith('joins-')?[[1440,900],[390,844],[1920,1080]]:[[480,480]];
+    const views=scene==='asset'||scene==='castle'?['front','side','back']:['front'];
+    const sizes=scene==='castle'?[[1440,900],[390,844]]:assembly?[[1440,900],[390,844],[1920,1080]]:[[480,480]];
     for(const angle of views) for(const [width,height] of sizes) {
       await page.setViewportSize({width,height});
       await page.evaluate(angle=>window.__chatdomContentView(angle),angle);
@@ -74,7 +77,7 @@ try {
   };
   const svg=makeSheet(1440,6);
   await writeFile(`${output}/contact-sheet.svg`,svg);
-  await writeFile(`${output}/render-stats.json`,JSON.stringify({collection,scene,presence,style:styleFilter??null,hour:Number(hour),scope:scene==='mixed'||scene.startsWith('joins-')?'fixture':assetFilter?'filtered':styleFilter?'style':collection==='core'&&!args.includes('--all')?'representative':'all',assets:stats},null,2)+'\n');
+  await writeFile(`${output}/render-stats.json`,JSON.stringify({collection,scene,presence,style:styleFilter??null,hour:Number(hour),scope:assembly?'fixture':assetFilter?'filtered':styleFilter?'style':collection==='core'&&!args.includes('--all')?'representative':'all',assets:stats},null,2)+'\n');
   for(const [width,height] of [[1440,900],[390,844]]) {
     const sheet=await browser.newPage({viewport:{width,height}});
     await sheet.setContent(`<html><body style="margin:0;background:#292830">${makeSheet(width,width<500?2:6)}</body></html>`);
@@ -82,10 +85,13 @@ try {
     await sheet.screenshot({path:`${output}/contact-sheet@${width}x${height}.png`,fullPage:true});
     await sheet.close();
   }
-  console.log(`Rendered ${assets.length} selected ${scene==='mixed'||scene.startsWith('joins-')?'fixtures':'assets'} / ${pictures.length} views. Contact sheets: ${output}/contact-sheet.svg and contact-sheet@1440x900.png / @390x844.png`);
+  console.log(`Rendered ${assets.length} selected ${assembly?'fixtures':'assets'} / ${pictures.length} views. Contact sheets: ${output}/contact-sheet.svg and contact-sheet@1440x900.png / @390x844.png`);
 } catch(error) {
   console.error(error instanceof Error?error.message:String(error));process.exitCode=1;
 } finally {
-  await browser?.close();await loader?.close();
-  if(server)await closeCapturePreview(server);
+  try { await browser?.close(); } finally {
+    try { await loader?.close(); } finally {
+      try { if(server) await closeCapturePreview(server); } finally { await release?.(); }
+    }
+  }
 }

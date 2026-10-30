@@ -1,4 +1,5 @@
 import { chromium } from '@playwright/test';
+import { acquireCaptureLock } from './capture-lock.mjs';
 import { startCapturePreview, closeCapturePreview } from './preview.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
@@ -6,9 +7,10 @@ const args = process.argv.slice(2);
 const baseIndex = args.indexOf('--base-url');
 const external = baseIndex < 0 ? undefined : args[baseIndex + 1];
 let base = external;
-let server, browser;
+let server, browser, release;
 const report = { checks: [], limitations: ['SwiftShader verifies behavior, not real-GPU performance.', 'No client-side unmount route exists; construction cancellation on unmount is not exercised.'] };
 try {
+  release = await acquireCaptureLock();
   if (!external) ({ server, base } = await startCapturePreview());
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   async function newPage({ failDuringLoading = false, throwOnConstruction = false, herald = false } = {}) {
@@ -145,6 +147,7 @@ try {
 } finally {
   await mkdir('shots/kingdom', { recursive: true });
   await writeFile('shots/kingdom/runtime.json', `${JSON.stringify(report, null, 2)}\n`);
-  await browser?.close();
-  if (server) await closeCapturePreview(server);
+  try { await browser?.close(); } finally {
+    try { if (server) await closeCapturePreview(server); } finally { await release?.(); }
+  }
 }

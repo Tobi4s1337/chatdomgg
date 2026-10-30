@@ -98,12 +98,17 @@ The existing capture modes use the same production worker, geometry/material and
 
 ```sh
 pnpm content:render --collection core --scene mixed
+pnpm content:render --collection core --scene castle
 pnpm content:render --collection core --scene threshold --asset home-hut-hearth-0
 pnpm content:render --collection core --scene windows --asset home-hut-hearth-0 --presence off
 pnpm content:render --collection core --scene windows --asset home-hut-hearth-0 --presence on
 pnpm content:render --collection street-props --style hearth
 pnpm content:render --collection street-props --scene joins-hearth
 ```
+
+`castle` uses the actual twelve-module compound from the world plan, through the same placement factory
+the kingdom consumes. It captures front/side/back at 1440×900 and 390×844. These are unoccupied model views;
+they do not certify its terrain approach, presence lighting or kingdom camera composition.
 
 `mixed` uses the first family's hut, second family's house and third family's hall (or named core representatives)
 with their south facades aligned. Missing required models fail explicitly. It captures 1440×900, 390×844 and

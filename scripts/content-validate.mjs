@@ -28,7 +28,7 @@ try {
     if (JSON.stringify(actual) !== JSON.stringify(wanted)) fail('Collection count, IDs or ordering do not match the lane contract.');
   }
   if (collection === 'core' && blueprints.length !== 51) fail('Core must contain 45 homes, three castles and three trees.');
-  if (collection !== 'core') {
+  if (collection.startsWith('homes-') || collection === 'street-props') {
     const modulePath = collection === 'street-props' ? '/packages/content/src/props/street/index.ts' : `/packages/content/src/homes/${collection.slice(6)}/index.ts`;
     const module = await server.ssrLoadModule(modulePath);
     for (const b of blueprints) {
@@ -38,6 +38,9 @@ try {
       if (JSON.stringify(create()) !== JSON.stringify(b) || JSON.stringify(create()) !== JSON.stringify(b)) fail(`${b.id}: factory is not reproducible or differs from BLUEPRINTS.`);
     }
   }
+  const civic = collection === 'civic-props', attached = collection === 'forge-pieces';
+  if (!partial && civic && blueprints.length !== 20) fail('Civic collection requires twenty finished assets.');
+  if (!partial && attached && blueprints.length !== 48) fail('Forge collection requires forty-five pieces and three door leaves.');
   const ids = new Set();
   const registered = new Set(MATERIALS.materials.map(m => m.id));
   if (new Set(MATERIALS.materials.map(m => m.name)).size !== MATERIALS.materials.length) fail('Material names must be unique.');
@@ -52,6 +55,12 @@ try {
     const lane = collection !== 'core';
     const prop = collection === 'street-props';
     const allowed = new Set([MAT.air, kit.wall, kit.roof, kit.trim, kit.stone, MAT.glass, MAT.earth, MAT.bark, MAT.leaf, MAT.moss, MAT.petal, MAT.blueFlower]);
+    if (civic || attached) for (const key of ['brass','cloth','cream','darkStone','thatch']) allowed.add(MAT[key]);
+    // Reviewed place collections need their physical brass, cloth and mixed masonry roles.
+    // This grant does not relax any other collection or admit arbitrary registered colours.
+    if (collection === 'places-water' || collection === 'places-high') {
+      for (const key of ['brass','cloth','cream','darkStone','thatch','goldLeaf','terracotta','forgeCopper']) allowed.add(MAT[key]);
+    }
     if (prop) { allowed.delete(kit.wall); allowed.delete(kit.roof); allowed.delete(MAT.glass); }
     for (const box of b.boxes) {
       if (!registered.has(box.material)) fail(`${b.id}: unregistered material ${box.material}`);
@@ -85,9 +94,9 @@ try {
       min[0]=Math.min(min[0],x); min[1]=Math.min(min[1],y); min[2]=Math.min(min[2],z);
       max[0]=Math.max(max[0],x+1); max[1]=Math.max(max[1],y+1); max[2]=Math.max(max[2],z+1);
     }
-    if (!occupied || !ground) fail(`${b.id}: empty asset or no ground support.`);
+    if (!occupied || (!attached && !ground)) fail(`${b.id}: empty asset or no ground support.`);
     if (lane && occupied > (prop ? 20_000 : 1_000_000)) fail(`${b.id}: occupied-cell budget exceeded.`);
-    if (lane) {
+    if (lane && !attached) {
       // All occupied geometry must connect through face neighbours to a ground cell.
       const visited = new Uint8Array(asset.voxels.length), queue = new Uint32Array(occupied);
       let head=0,tail=0;
@@ -135,6 +144,8 @@ try {
     for(const prepared of prepareAssetChunks(asset,MATERIALS.materials,MATERIALS.revision)) {
       const mesh=meshVoxelChunk(prepared); triangles+=mesh.indices.length/3; vertices+=mesh.vertices.length/2;chunks++;
     }
+    if(civic && (b.kind!=='civic'||b.windows.length||b.boxes.length>1024||occupied>120000||triangles>120000)) fail(`${b.id}: invalid civic asset or cost.`);
+    if(attached && (b.boxes.length>512||occupied>100000||triangles>40000)) fail(`${b.id}: Forge piece exceeds authored cost.`);
     if(lane&&triangles>(prop?40_000:250_000)) fail(`${b.id}: triangle budget exceeded.`);
     rows.push({id:b.id,boxes:b.boxes.length,occupied,windows:b.windows.length,chunks,vertices,triangles,modelDrawBudget:1,bounds:`${min.join(',')}..${max.join(',')}`});
     console.log(`${b.id}: ${occupied} cells · ${triangles} triangles · ${b.boxes.length} boxes`);

@@ -1,7 +1,7 @@
 # Lane street-props
 
 Spec: `work/specs/06-street-props.md` · Branch: `lane/street-props` · Worker: Codex Terra, high.
-Status: **ready; spec frozen 2026-10-30.**
+Status: **complete; main integration accepted 2026-10-30.**
 Scope: `packages/content/src/props/street/**`, this PRD, `progress.txt` and the street-props spec. Everything else is
 read-only. You are not alone: preserve other edits. Core/home assets, materials, shared/voxel/render, aggregate
 exports, root scripts/manifests and bench integration belong to main/others. Use `$ralph-lane`, `$voxel-content`,
@@ -25,7 +25,7 @@ or choose from Backlog without main. Keep ten required forms; replace weak desig
   Add pot, trough, rock cluster and shrub in both palettes: eight blueprints, four shapes. Give each a broad
   authored silhouette, credible support and restrained accents; no fake resource/function. Render all twenty
   assets from three dusk angles and compare noon/night. Improve the forms that read as cubes or clutter.
-- [ ] **SP03 — Demonstrate the complete quiet street batch** · evidence: acceptance + final sheets.
+- [x] **SP03 — Demonstrate the complete quiet street batch** · evidence: acceptance + final sheets.
   Finish all-form/style tests, contact sheets and assembled garden edges with both home kits. Inspect joins,
   ground contact, cavities and foliage close up and at phone/stream sizes. Run full-count acceptance (omit `--partial`) and `pnpm verify` with
   main integration; record actual costs, improvements and rejected forms. Resolve required `needs:` before done.

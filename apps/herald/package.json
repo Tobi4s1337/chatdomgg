@@ -6,11 +6,17 @@
   "scripts": {
     "build": "vite build --logLevel warn",
     "check:auth": "vite build --logLevel silent && node dist/herald.mjs check-auth",
-    "authorize": "vite build --logLevel silent && node dist/herald.mjs authorize"
+    "authorize": "vite build --logLevel silent && node dist/herald.mjs authorize",
+    "provision:source": "vite build --logLevel silent && node dist/herald.mjs provision-source",
+    "dev": "vite build --logLevel silent && node dist/herald.mjs dev",
+    "replay": "vite build --logLevel silent && node dist/herald.mjs replay",
+    "check:source": "vite build --logLevel silent && node dist/herald.mjs check-source",
+    "shots": "vite build --logLevel silent && node scripts/shots.mjs"
   },
   "dependencies": {
     "@chatdom/shared": "workspace:*",
     "@chatdom/twitch": "workspace:*",
+    "@chatdom/world": "workspace:*",
     "zod": "4.6.7"
   },
   "devDependencies": {

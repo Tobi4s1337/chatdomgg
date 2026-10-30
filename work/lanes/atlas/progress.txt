@@ -33,3 +33,5 @@ review: A05 verification: Atlas and Surveyor 727/727 and typecheck pass; pnpm ve
 2026-10-31 founder efficiency decision: PARK after the current task: finish and commit that task, then start no further task. Reviewed work remains eligible for integration. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
 
 follow-up: A05 inspect motion on a real GPU laptop and phone; SwiftShader cannot establish motion quality or frame timing.
+
+2026-10-31 founder efficiency decision: PARK after the current task: finish and commit that task, then start no further task. Reviewed work remains eligible for integration. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
