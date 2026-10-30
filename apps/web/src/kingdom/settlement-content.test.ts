@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateKingdom } from '@chatdom/world';
+import { HOME_DEPTH_METRES, HomeTierSchema } from '@chatdom/shared';
 import { createSettlementContent } from './settlement-content';
 
 describe('installed kingdom content', () => {
@@ -15,7 +16,7 @@ describe('installed kingdom content', () => {
       const front = h.position[2] + turn * h.blueprint.size[2] * .125;
       expect(Math.abs(front - (plot.rotation === 0 ? plot.lot.maxZ : plot.lot.minZ))).toBeLessThan(1e-8);
       expect(h.blueprint.windows.length).toBeGreaterThan(0);
-      if (plot.style === 'hearth' && plot.tier !== 'manor' && plot.tier !== 'hall') expect(h.blueprint.id).toMatch(/^home-hearth-(emberfold|bramblecross|heatherstead)-/);
+      if (plot.style === 'hearth') expect(h.blueprint.id).toMatch(/^home-hearth-(emberfold|bramblecross|heatherstead)-/);
     }
     for (const p of props) {
       expect(p.blueprint.kind).toBe('prop');
@@ -30,5 +31,17 @@ describe('installed kingdom content', () => {
       expect(q).toBeDefined();
       expect(Math.min(Math.abs(minZ - q.streetZ), Math.abs(maxZ - q.streetZ))).toBeGreaterThanOrEqual(1.75);
     }
+  });
+  it('uses the completed Hearth family for every growth tier, retaining its address and first window', () => {
+    const layout = generateKingdom({ seed: 'lanternmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
+    const plot = layout.homes.find(home => home.style === 'hearth')!;
+    const anchors = HomeTierSchema.options.map(tier => {
+      const { houses } = createSettlementContent({ ...layout, homes: [{ ...plot, tier, allowedDepth: HOME_DEPTH_METRES[tier] }] });
+      const house = houses[0]!;
+      expect(house.slot).toBe(plot.slot);
+      expect(house.blueprint.id).toMatch(new RegExp(`^home-hearth-(emberfold|bramblecross|heatherstead)-${tier}$`));
+      return { position: house.position, yaw: house.yaw, window: house.blueprint.windows[0] };
+    });
+    expect(anchors.every(anchor => JSON.stringify(anchor) === JSON.stringify(anchors[0]))).toBe(true);
   });
 });

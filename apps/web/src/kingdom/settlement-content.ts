@@ -5,12 +5,12 @@ import { terrainHeight, type KingdomLayout } from '@chatdom/world';
 
 export interface Dressing { readonly blueprint: VoxelBlueprint; readonly position: Vec3; readonly yaw: number }
 
-/** Installed, reviewed tiers replace the baseline. Manor/hall remain core assets
- * until their own authored lane tasks land; no unfinished factory is invoked. */
+/** Installed, reviewed Hearth families cover every tier; other styles retain
+ * their authored core kit until their own content lanes are accepted. */
 export function createSettlementContent(layout: KingdomLayout): { houses: WindowHouse[]; props: Dressing[] } {
   const houses: WindowHouse[] = [], props: Dressing[] = [];
   for (const plot of layout.homes) {
-    const authored = plot.style === 'hearth' && (plot.tier === 'hut' || plot.tier === 'cottage' || plot.tier === 'house');
+    const authored = plot.style === 'hearth';
     const blueprint = authored ? createHearthHome(plot.tier, plot.variant as 0 | 1 | 2) : createHome(plot.tier, plot.style, plot.variant);
     const streetZ = plot.rotation === 0 ? plot.lot.maxZ + 4 : plot.lot.minZ - 4;
     const depth = blueprint.size[2] * .125, yaw = plot.rotation * Math.PI / 2;
