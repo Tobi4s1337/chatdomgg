@@ -33,6 +33,11 @@ Main/integrator mounts the actual kingdom. Another isolated court cannot complet
 - `apps/realm/src/ports.ts` supplies actual `RealmRoomEffects.adoptWorld(world, layoutRevision, positions)`:
   positions cover every affected walker. `recoverWalker` and supported clear spawn are existing obligations.
   This is not a grant to edit the room, durable registry or movement solver.
+- `DurableKingdom.publicCheckpoint()` reads its real delivered public prefix without a principal. For cold
+  entry, retain through the existing registry and await `preparePublicCheckpoint()` to consume outstanding
+  approved public views before comparing with scene geometry, then release the hold. Preparation refuses a
+  lost writer or an incompletely acknowledged prefix; a future browser is not needed to make the read ready.
+  The receipt still requires exact scene/checkpoint agreement and the host's real access policy.
 - `packages/shared/src/realm/founded-world.ts` now contains the real receipt and GET route constants.
   `packages/world/src/founded-world/types.ts`, exported by the world root, contains the public scene types below.
   Neither file implements a scene producer, runtime scene validator, collision compiler or HTTP handler.

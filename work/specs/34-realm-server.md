@@ -298,6 +298,13 @@ one successful direct SQL insert is not a substitute for a room/authority transa
 
 ## References
 
+- `work/references/walk-render-smoothing.md`: exact SDK 0.18.8 render accumulator and reconciliation;
+  all-field snap thresholds are not metre-only thresholds. Preserve replay fields and explicit placement cuts.
+- `work/references/walk-slab-support.md`: actual partial-box tops and sustained support after stepping;
+  compare compiled collision on authority and predictor before changing tolerances.
+- `work/references/walk-multiplayer-characters.md`: fixed body versus render pose and distance-driven gait;
+  the surveyed Defold/NJ examples do not replace our server-authoritative movement law.
+
 - `work/references/colyseus-realm.md`: pinned release behavior, input/ack consumption, shared-view identity,
   district-switch decoder caveat, rotated reconnect token timing and real per-socket prediction costs.
 - `work/specs/33-realm.md`: main's ownership, durable-before-public boundary and shared contracts.

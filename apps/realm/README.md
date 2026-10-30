@@ -8,8 +8,9 @@ The Colyseus server that hosts each kingdom's shared walk, and the kingdom's one
 `PostgresRealmRepository` implements the frozen `RealmRepository` from `@chatdom/shared/realm`.
 
 - **One writer per kingdom.** `acquire` takes a 15 s lease on database time with a fresh 256-bit epoch. A live lease
-  refuses a second writer (`RealmLeaseHeldError`). The holder renews every 5 s. On its own monotonic clock it stops
-  2 s before the database would fence it. An expired epoch can never write again (`RealmWriterFencedError`), even if
+  refuses a second writer (`RealmLeaseHeldError`). On its own monotonic clock the holder stops 2 s before the
+  database would fence it, and renews three times inside that 13 s window (every ~4.3 s), so one slow renewal never
+  costs the lease. An independent watchdog closes the kingdom at the deadline even while a renewal is stalled. An expired epoch can never write again (`RealmWriterFencedError`), even if
   its process resumes.
 - **One indivisible commit.** `execute` locks the kingdom row, checks the epoch and the expected sequence, and decides
   with the world reducer at database time. One transaction then writes the fact (canonical JSON + SHA-256), the
@@ -110,7 +111,8 @@ people.
 - **Bootstrap** retains the public row prefix independently of private state that may be ahead. Each row updates
   the home/attachment/crowd projection and `throughCursor` before its delivery. A first Forge commit publishes its
   allocated home, later Forge commits replace the same socket, and a queued build changes that home only when its
-  own public row arrives. Bootstrap contains current views and no past ritual.
+  own public row arrives. On restart, immutable allocation bases and public rows are folded only through the durable
+  delivered cursor; undelivered rows remain for redelivery. Bootstrap contains current views and no past ritual.
 
 ### Delivery cursor for the browser lane
 
@@ -296,8 +298,92 @@ Every startup failure exits with status 1 and one secret-free line:
 | wrong credentials | `The realm database refused the configured credentials.` |
 | live mode | `Live realm entry requires the verified Twitch session service…` |
 
-Database limits (`REALM_DATABASE_LIMITS`): 8 pooled connections, 3 s connect, 5 s statement, 6 s query and 10 s
-idle-in-transaction timeouts. The last one ends a stalled lock holder so its lease can move on.
+Database limits are listed in the next section.
+
+## Limits, readiness and diagnostics (`src/limits/`, `src/diagnostics/`)
+
+Every queue, socket and wait has a finite ceiling (spec 34 R9). `REALM_LIMITS` in `src/limits/` is the one
+catalogue. Values owned by another module are referenced there, never copied.
+
+| Ceiling | Value | What happens past it |
+|---|---|---|
+| Incoming protocol frames per client | 90/s (Colyseus counts from the second frame of each window) | The sender is closed with 4002. Its walker is removed, and **no reconnect seat** is kept, so the next entry needs a fresh ticket. |
+| Walking integration | 30 Hz, one input per walker per tick | Extra inputs wait in the queue below and never add a step. An empty tick moves nobody. |
+| Input queue per walker | 8 | Colyseus drops the oldest input. Dropped inputs are never integrated. |
+| Inbound WebSocket frame | 16 KiB | uWS closes the socket before buffering the frame. The largest legitimate intent is under 1 KiB. |
+| Outbound buffer per socket | 1 MiB, `closeOnBackpressureLimit` | uWS drops the send and closes the socket (1006), so the decoder is never left stale. The room keeps a 30 s seat; the client reconnects and receives full state. |
+| Walkers plus reconnect seats | 300 | Colyseus refuses the join. Seats in their grace period count. |
+| Reconnect grace | 30 s | The seat ends and the walker leaves. |
+| Session recheck | every 1 s, 3 s answer limit | An unanswered check holds walking; 15 s without confirmation ends the seat with 4503. Expiry/revocation ends it with 4401. |
+| Actions in flight per person | 1 | The next intent gets an immediate `held` receipt (`Your previous request is still being confirmed…`). Nothing is queued. |
+| Action reply | 8 s | The walker gets an `unavailable` receipt and should reconnect to check. The slot frees only when the work itself settles. |
+| Writer queue per kingdom | 64 commands | `RealmBusyError` (`realm.busy`) at once. |
+| Unstarted command wait | 10 s | `RealmBusyError`. The command never ran, so the caller may retry it unchanged. |
+| Outbox dispatch batch | 256 rows | The next batch is read after the transport takes this one. A failure redelivers it after 1 s. |
+| Transient relay | 40/s per kingdom | The message is dropped and counted, never queued. |
+| Ingress body / inbox | 8 MiB / 4,096 waiting per kingdom | 413 / 503 `Send it again`. |
+| Database pool | 8 connections; 3 s connect, 5 s statement, 6 s query, 10 s idle-in-transaction | The statement fails with a secret-free description; a stalled lock holder is cut off so its lease can move on. |
+| Shutdown | 5 s for queued commits, 5 s for the last delivery | The process snapshots only if drained, then releases only its own lease. |
+
+**Readiness.** `RealmReadiness` probes its dependencies every 2 s, each with a 1.5 s answer limit: the database
+(`SELECT 1`), sessions (`realm_sessions`, live entry only) and writer leases. The writer probe fails when an open
+kingdom is no longer current, or has less than a third of its lease window left, meaning two renewals in a row did
+not land. After two consecutive misses a dependency is **held**:
+
+- `holdEntry` refuses new arrivals with 503 `The kingdom is not taking new arrivals while <reason>. Nothing was
+  changed; try again shortly.` This happens before a ticket is burned or an avatar exists.
+- Kingdoms refuse new owned commands at once with `RealmHeldError` (`realm.held`) instead of queueing them behind a
+  store that is not answering. Ingress rows stay in the inbox, and pending deeds stay pending until recovery.
+- People already inside keep walking: walking needs no store.
+
+The hold lifts on the first good probe.
+
+**Routes** (on the realm port, no CORS):
+
+- `GET /healthz` answers `200 { version, alive: true, uptimeMs }` while the process answers. Restart only on this.
+- `GET /readyz` answers 200 when every dependency is ready, otherwise 503. The body gives `ready` and `held` (the
+  reason), plus each dependency's `ready`, `reason`, `latencyMs` and `failures`. Under `limits`, it gives the
+  measured high-water marks beside their ceilings (input queue, actions per walker, socket backpressure bytes,
+  pending commands, outbox batch, database connections and waiting), refusals (dropped sends, held/late actions,
+  busy/held/expired commands, dropped transient messages), closes by `phase:reason`, writer closures by category and
+  each open kingdom's delivery cursor.
+
+Nothing in either body is a secret: they hold counts, byte sizes and fixed reason categories. Close reasons are the
+code's meaning (`left`, `connection-lost`, `frame-too-large`, `protocol-or-rate`, `entry-ended`, `server-shutdown`,
+…), never the message that went with the code.
+
+**Transport and room composition** (the integrator recipe; `main.ts` does exactly this):
+
+```ts
+const diagnostics = new RealmDiagnostics();
+const readiness = new RealmReadiness([databaseProbe(pool), authProbe(pool) /* live entry */, writerProbe(() => services.kingdoms.values())]);
+const held = () => readiness.held();
+const services = createDurableRealmServices({
+  repository, outbox, auth: holdEntry(authenticator, held), hold: held, kingdom, log,
+  attach: kingdom => {
+    const forget = kingdom.onClosed(reason => diagnostics.writerClosed(kingdom, reason));
+    const detach = ingress.attach(kingdom);
+    return () => { forget(); detach(); };
+  },
+});
+const { server, transport } = createRealmServer(services, diagnostics); // uWS caps + `dropped` + room observer
+diagnostics.watch({ pool });
+mountDiagnosticsRoutes(transport.app, readiness, diagnostics, () => services.kingdoms.values());
+await readiness.start();
+// Colyseus keeps ONE onShutdown callback: stop readiness and diagnostics there, then ingress, then the pool.
+server.onShutdown(async () => { readiness.stop(); diagnostics.stop(); await ingress.stop(); await pool.end(); });
+```
+
+`createKingdomRoom(services, observer)` takes the observer as an optional second argument (it defaults to a no-op).
+The frozen ports are unchanged.
+
+**Browser behaviour** (for the web lane):
+
+- Close 4002 means the client was closed for its frame rate or an invalid message. Do not auto-reconnect; request a
+  fresh ticket.
+- Close 1006 after a stall means the socket fell 1 MiB behind. Reconnect with the saved token: full state arrives,
+  then apply the delivery cursor rule above.
+- A `held` receipt means wait for the earlier receipt.
 
 ## Tests
 
