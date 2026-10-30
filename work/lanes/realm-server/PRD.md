@@ -29,7 +29,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
 
 ## Tasks
 
-- [ ] **RS01 — A committed fact survives a room restart** · evidence: test/log. Implement additive migrations
+- [x] **RS01 — A committed fact survives a room restart** · evidence: test/log. Implement additive migrations
   and the actual `RealmRepository` in `src/persistence/`, with fenced DB-time writer leases, expected sequence,
   command digest/outcomes and atomic private fact/state/ledger/outbox commit. Wire through the frozen startup
   injection and run a durable local room on 5191 by the end of this task. Focused R1/R2 test uses two competing
