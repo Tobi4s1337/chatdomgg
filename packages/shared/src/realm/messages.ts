@@ -51,11 +51,11 @@ export type RealmPublicMessage =
   | { readonly type: 'home'; readonly plotId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] };
 export interface RealmPublicDelivery {
   readonly version: 1; readonly kingdomId: KingdomId; readonly writerEpoch: string;
-  readonly sequence: number; readonly eventId: string; readonly message: RealmPublicMessage;
+  readonly sequence: number; readonly cursor: number; readonly eventId: string; readonly message: RealmPublicMessage;
 }
 export interface RealmBootstrap {
   readonly version: 1; readonly kingdomId: KingdomId; readonly writerEpoch: string;
-  readonly throughSequence: number; readonly layoutRevision: string; readonly collisionRevision: number;
+  readonly throughSequence: number; readonly throughCursor: number; readonly layoutRevision: string; readonly collisionRevision: number;
   /** Current approved views, not a replay of historical rituals. No private domain snapshot. */
   readonly current: readonly RealmPublicMessage[];
 }

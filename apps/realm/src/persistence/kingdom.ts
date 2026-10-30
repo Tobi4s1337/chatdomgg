@@ -5,6 +5,7 @@ import type { CollisionWorld, RealmAuthenticator, RealmBootstrap, RealmCapabilit
   RealmIntent, RealmPrincipal, RealmPrivateState, RealmPublicDelivery, RealmPublicMessage, RealmReceipt, RealmRepository,
   RealmStoredOutcome, RealmWriterLease } from '@chatdom/shared/realm';
 import { decideRealm } from '@chatdom/world/realm';
+import { embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmIntentContext, RealmRoomEffects, RealmRoomHandle, RealmRoomServices } from '../ports';
 import { RealmCommitUncertainError, RealmLeaseHeldError, RealmWriterFencedError, describeStorageFailure } from './database';
 import { REALM_BASE_ANVILS, type PostgresRealmRepository, type RealmOutboxRow } from './postgres-repository';
@@ -47,14 +48,18 @@ export class DurableKingdom implements RealmRoomHandle {
   private open = true;
   private deadline: number;
   private renewal: ReturnType<typeof setInterval>;
+  private watchdog!: ReturnType<typeof setTimeout>;
+  private renewing = false;
   private queue: Promise<unknown> = Promise.resolve();
   private pending = 0;
   private arrivals = 0;
   private cursor: number;
   private pumping: Promise<void> = Promise.resolve();
   private latestPresence: RealmPublicMessage | null;
-  private readonly published: Set<string>;
+  private publicSequence: number;
+  private readonly publicHomes = new Map<string, Extract<RealmPublicMessage, { type: 'home' }>>();
   private readonly walkers = new Set<string>();
+  private readonly principals = new Map<string, RealmPrincipal>();
   private readonly effects = new Set<RealmRoomEffects>();
   private readonly listeners = new Set<(message: RealmPublicDelivery) => void>();
   private readonly closed = new Set<(reason: string) => void>();
@@ -76,10 +81,16 @@ export class DurableKingdom implements RealmRoomHandle {
   private constructor(private readonly repository: DurableRepository, lease: RealmWriterLease, state: RealmPrivateState,
     private readonly options: DurableKingdomOptions, published: Set<string>, cursor: number, presence: RealmPublicMessage | null, started: number) {
     this.lease = lease; this.state = state; this.origin = state.origin; this.writerEpoch = lease.epoch;
-    this.published = published; this.cursor = cursor; this.latestPresence = presence;
+    this.cursor = cursor; this.latestPresence = presence; this.publicSequence = state.sequence;
+    for (const plot of published) {
+      const home = state.homes[plot];
+      if (home) this.publicHomes.set(plot, { type: 'home', plotId: home.id, revision: home.revision, assetHash: home.digest,
+        attachments: Object.values(home.attachments).flatMap(id => state.attachments[id] ? [state.attachments[id].attachment] : []) });
+    }
     this.deadline = started + repository.leaseMs - LEASE_MARGIN_MS;
     this.renewal = setInterval(() => void this.renew(), Math.floor(repository.leaseMs / 3));
     this.renewal.unref?.();
+    this.armWatchdog();
     this.log(`opened ${state.origin} kingdom ${state.kingdomId} at fact ${state.sequence}`);
   }
 
@@ -125,9 +136,20 @@ export class DurableKingdom implements RealmRoomHandle {
     return this.options.spawn(principal, this.arrivals++);
   }
 
+  recoverWalker(walkerId: string, collisionRevision: number): boolean {
+    const principal = this.principals.get(walkerId);
+    if (!this.current || !principal || collisionRevision !== this.world.revision) return false;
+    const position = this.options.spawn(principal, this.arrivals++);
+    if (position.some(value => !Number.isFinite(value))) return false;
+    const body = { x: position[0], y: position[1], z: position[2] };
+    if (embeddedSolids(body, this.world).length || !supported(body, this.world)) return false;
+    for (const effects of this.effects) if (effects.readWalker(walkerId) && effects.placeWalker(walkerId, position, collisionRevision)) return true;
+    return false;
+  }
+
   async intent(context: RealmIntentContext, intent: RealmIntent): Promise<RealmReceipt> {
     void context;
-    if (!this.current) return { version: 1, id: intent.id, status: 'unavailable', message: 'This kingdom lost its writer. Reconnect to continue; nothing was changed.' };
+    if (!this.current) return { version: 1, id: intent.id, status: 'unavailable', message: 'This kingdom lost its writer. Reconnect to check the result before continuing.' };
     return { version: 1, id: intent.id, status: 'unavailable', message: 'This server does not take building, forging or seat requests. Nothing in your kingdom was changed.' };
   }
 
@@ -135,24 +157,20 @@ export class DurableKingdom implements RealmRoomHandle {
     void principal;
     const current: RealmPublicMessage[] = [];
     if (this.latestPresence) current.push(this.latestPresence);
-    for (const plot of [...this.published].sort()) {
-      const home = this.state.homes[plot];
-      if (!home) continue;
-      current.push({ type: 'home', plotId: home.id, revision: home.revision, assetHash: home.digest,
-        attachments: Object.values(home.attachments).flatMap(id => this.state.attachments[id] ? [this.state.attachments[id].attachment] : []) });
-    }
-    return { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, throughSequence: this.state.sequence,
+    for (const plot of [...this.publicHomes.keys()].sort()) current.push(this.publicHomes.get(plot)!);
+    return { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, throughSequence: this.publicSequence, throughCursor: this.cursor,
       layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, current };
   }
 
   bindRoom(effects: RealmRoomEffects): () => void {
+    if (!this.current) { effects.close('authority-lost'); return () => {}; }
     this.effects.add(effects);
     return () => { this.effects.delete(effects); };
   }
 
-  lifecycle(event: 'join' | 'drop' | 'reconnect' | 'leave', _principal: RealmPrincipal, walkerId: string): void {
-    if (event === 'leave') { this.walkers.delete(walkerId); return; }
-    this.walkers.add(walkerId);
+  lifecycle(event: 'join' | 'drop' | 'reconnect' | 'leave', principal: RealmPrincipal, walkerId: string): void {
+    if (event === 'leave') { this.walkers.delete(walkerId); this.principals.delete(walkerId); return; }
+    this.walkers.add(walkerId); this.principals.set(walkerId, principal);
     if (!this.current) for (const effects of this.effects) effects.allowWalking(walkerId, false);
   }
 
@@ -225,43 +243,65 @@ export class DurableKingdom implements RealmRoomHandle {
     await this.pumping;
   }
 
-  /** Delivers committed outbox rows in commit order, then advances the in-memory cursor. */
+  /** Applies each committed public row and cursor before notifying listeners at that exact prefix. */
   private async pump(): Promise<void> {
     for (;;) {
       if (!this.current) return;
       let rows: RealmOutboxRow[];
       try { rows = await this.repository.readOutbox(this.kingdomId, this.cursor, 256); }
       catch (error) { this.log(`outbox read failed: ${describeStorageFailure(error)}`); return; }
-      if (rows.length === 0) return;
+      if (!this.current || rows.length === 0) return;
       for (const row of rows) {
-        if (row.plotId) this.published.add(row.plotId);
+        if (!this.current) return;
+        if (row.message.type === 'home') this.publicHomes.set(row.message.plotId, row.message);
         if (row.message.type === 'presence') this.latestPresence = row.message;
-        const delivery: RealmPublicDelivery = { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, sequence: row.sequence, eventId: row.eventId, message: row.message };
+        const delivery: RealmPublicDelivery = { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, sequence: row.sequence, cursor: row.id, eventId: row.eventId, message: row.message };
+        this.cursor = row.id; this.publicSequence = Math.max(this.publicSequence, row.sequence);
         for (const listener of this.listeners) { try { listener(delivery); } catch (error) { this.log(`delivery listener failed: ${(error as Error).name}`); } }
-        this.cursor = row.id;
       }
     }
   }
 
-  private async renew() {
+  /** Runs independently of a renewal request that may never settle. */
+  private armWatchdog() {
+    clearTimeout(this.watchdog);
     if (!this.open) return;
+    this.watchdog = setTimeout(() => {
+      if (performance.now() >= this.deadline) this.close('lease deadline passed');
+      else this.armWatchdog();
+    }, Math.max(0, Math.ceil(this.deadline - performance.now())));
+    this.watchdog.unref?.();
+  }
+
+  private async renew() {
+    if (!this.current) { this.close('lease deadline passed'); return; }
+    if (this.renewing) return;
+    this.renewing = true;
     const started = performance.now();
     try {
-      this.lease = await this.repository.renew(this.lease);
+      const renewed = await this.repository.renew(this.lease);
+      // A response after the old deadline cannot revive a closed authority.
+      if (!this.current) { this.close('lease deadline passed'); return; }
+      this.lease = renewed;
       this.deadline = started + this.repository.leaseMs - LEASE_MARGIN_MS;
+      this.armWatchdog();
     } catch (error) {
       if (error instanceof RealmWriterFencedError) this.close('fenced');
       else if (performance.now() >= this.deadline) this.close('lease expired while the database was unreachable');
       else this.log(`lease renewal failed, retrying: ${describeStorageFailure(error)}`);
-    }
+    } finally { this.renewing = false; }
   }
 
   private close(reason: string) {
     if (!this.open) return;
     this.open = false;
-    clearInterval(this.renewal);
+    clearInterval(this.renewal); clearTimeout(this.watchdog);
     this.listeners.clear();
     for (const walker of this.walkers) for (const effects of this.effects) effects.allowWalking(walker, false);
+    for (const effects of this.effects) {
+      try { effects.close(reason === 'disposed' ? 'shutdown' : 'authority-lost'); }
+      catch { this.log('room close callback failed'); }
+    }
     if (reason !== 'disposed') this.log(`writer authority closed for kingdom ${this.kingdomId}: ${reason}`);
     for (const listener of this.closed) listener(reason);
   }

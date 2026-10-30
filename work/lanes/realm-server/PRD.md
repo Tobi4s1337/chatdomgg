@@ -56,7 +56,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   `src/outbox/`. Implement `loadIngress`/`executeIngress`: persist source dedupe, private checkpoint and all
   capability-tagged facts plus public presence outbox in one transaction. Closed evidenced interval unions survive
   restart without doubling overlap or inventing coverage gaps; qualified-night credit needs actual ten-minute
-  coverage and a current owned home. Implement typed synchronous bootstrap at `throughSequence`, existing
+  coverage and a current owned home. Implement typed synchronous bootstrap at `throughCursor` (public prefix, including presence without a new domain fact), existing
   `lifecycle` and `bindRoom` effects, plus separate transient/owner delivery. Keep stable event IDs, current
   projection restoration and explicit at-least-once retry. Focused R7 test interrupts after commit/before delivery
   acknowledgement, then resumes: one applied ingress result, same public event ID, no replayed economic change,

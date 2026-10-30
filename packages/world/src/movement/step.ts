@@ -1,7 +1,7 @@
 import { WALK_BUTTON, type CollisionWorld, type PlayerState, type WalkInput } from '@chatdom/shared/realm';
 import { recoverBody, slideHorizontal, supported, sweepVertical } from './collide';
 
-export { bodyStuck, embeddedSolids, CONTACT_EPSILON, RECOVERY_REACH, SLIDE_PASSES, SUPPORT_PROBE } from './collide';
+export { bodyStuck, embeddedSolids, supported, CONTACT_EPSILON, RECOVERY_REACH, SLIDE_PASSES, SUPPORT_PROBE } from './collide';
 
 export const WALK_SPEED = 4;
 export const SPRINT_SPEED = 7;
