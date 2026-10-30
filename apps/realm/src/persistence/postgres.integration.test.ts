@@ -120,6 +120,13 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     expect(outbox.map(r => [r.event_id, r.kind])).toEqual([[`${kingdomId}:${fixture.setup.length + 1}:0`, 'forge']]);
     expect(outbox[0].message).not.toMatch(/PRIVATE|opaque-safety|judges|personId|ownerId|deed:|names:/);
     expect(outbox[0].message).not.toContain(fixture.person);
+    // Recovery uses public rows through the durable cursor, including a first Forge with no home row.
+    const deliveredId = Number((await db.query(`SELECT max(id) AS id FROM realm_outbox WHERE kingdom_id = $1`, [kingdomId])).rows[0].id);
+    const publicStore = new PostgresOutboxStore(db);
+    expect((await publicStore.prefix(kingdomId, deliveredId)).homes).toMatchObject([
+      { plotId: state.attachments['run:1']!.homeId, revision: `r${fixture.setup.length + 1}`, attachments: [{ id: 'run:1' }] },
+    ]);
+    expect((await publicStore.prefix(kingdomId, deliveredId - 1)).homes).toEqual([]);
     const epochs = (await db.query(`SELECT writer_epoch, writer_generation FROM "${schema}".realm_kingdoms WHERE kingdom_id = $1`, [kingdomId])).rows[0];
     expect(epochs).toEqual({ writer_epoch: null, writer_generation: '3' });
   }, 30_000);
@@ -345,6 +352,7 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     const send = (target: RealmIngress, observation: object) => target.accept(bearer, { version: 1, observation });
 
     // Process A owns the kingdom. It dies the instant its transport takes a chosen frame, before acknowledging it.
+    const home = await settledHome(allocations('live'), kingdomId, person);
     const a = faulty(pool()), first = realm(a.db);
     const hold = await first.services.retain(kingdomId), kingdom = hold.kingdom;
     const seenA: RealmPublicDelivery[] = [];
@@ -353,7 +361,6 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     const frames = (list: RealmPublicDelivery[]) => list.flatMap(d => d.message.type === 'presence' ? [d.message.frame] : []);
     const frameAt = async (list: RealmPublicDelivery[], revision: number) => { await waitUntil(() => frames(list).some(f => f.sequence === revision)); };
 
-    const home = await settledHome(allocations('live'), kingdomId, person);
     expect(await kingdom.execute('install-1', { type: 'home.installAllocated', home }, 'allocation')).toMatchObject({ status: 'committed' });
     expect(await kingdom.execute('rights-1', { type: 'citizen.rights', personId: person, rights: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'opaque-safety' } }, 'moderation')).toMatchObject({ status: 'committed' });
 

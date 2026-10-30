@@ -5,6 +5,7 @@ import { PostgresRealmRepository, assertRealmSchema, createDurableRealmServices,
   realmDatabaseConfig } from './persistence';
 import { PostgresOutboxStore } from './outbox';
 import { INGRESS_ROUTE, RealmIngress, ingressCredentials, mountIngressRoute } from './ingress';
+import { HEALTH_ROUTE, READY_ROUTE, RealmDiagnostics, RealmReadiness, databaseProbe, holdEntry, mountDiagnosticsRoutes, writerProbe } from './diagnostics';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -36,26 +37,40 @@ async function serve() {
   const repository = new PostgresRealmRepository(pool, { origin: 'simulated' });
   const credentials = ingressCredentials();
   const ingress = new RealmIngress(pool, 'simulated', credentials, line => console.info(line));
+  // Readiness: database and writer leases (SIMULATED entry has no session store to probe). Held dependencies refuse
+  // new arrivals and owned commands at once instead of queueing them behind a store that is not answering.
+  const diagnostics = new RealmDiagnostics();
+  const open = () => services.kingdoms.values();
+  const readiness = new RealmReadiness([databaseProbe(pool), writerProbe(open)]);
+  const held = () => readiness.held();
   const services = createDurableRealmServices({
-    repository, outbox: new PostgresOutboxStore(pool), auth: reference.auth, log: line => console.info(line),
-    attach: kingdom => ingress.attach(kingdom),
+    repository, outbox: new PostgresOutboxStore(pool), auth: holdEntry(reference.auth, held), log: line => console.info(line), hold: held,
+    attach: kingdom => {
+      const forget = kingdom.onClosed(reason => diagnostics.writerClosed(kingdom, reason));
+      const detach = ingress.attach(kingdom);
+      return () => { forget(); detach(); };
+    },
     kingdom: kingdomId => {
       if (kingdomId !== REFERENCE_KINGDOM) throw new Error('The SIMULATED realm hosts only its reference kingdom.');
       return { world: REFERENCE_WORLD, layoutRevision: 'reference-court-v1', spawn: (_principal, arrival) => courtSpawn(arrival) };
     },
   });
   ingress.use(services);
-  const { server, transport } = createRealmServer(services);
+  const { server, transport } = createRealmServer(services, diagnostics);
+  diagnostics.watch({ pool });
+  mountDiagnosticsRoutes(transport.app, readiness, diagnostics, open);
+  await readiness.start();
   transport.app.post('/reference/session', response => {
     response.writeHeader('Access-Control-Allow-Origin', '*').writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(reference.issue()));
   });
   // Herald/panel presence evidence. Without a configured service secret the door stays shut; walkers are still observed.
   if (ingress.gate.configured) mountIngressRoute(transport.app, ingress);
   // Colyseus disposes rooms first (each releases only its own hold), then ingress lets go of its kingdoms, then the pool closes.
-  server.onShutdown(async () => { await ingress.stop(); await pool.end(); });
+  server.onShutdown(async () => { readiness.stop(); diagnostics.stop(); await ingress.stop(); await pool.end(); });
   await server.listen(port, '0.0.0.0');
   console.info(`SIMULATED realm on ${port}: durable Postgres kingdom ${REFERENCE_KINGDOM} in schema "${config.schema}"; `
-    + (ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)'));
+    + (ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
+    + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}`);
 }
 
 async function serveMemoryReference() {

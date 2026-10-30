@@ -7,8 +7,8 @@ import { createRealmState } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { RealmRoomEffects } from '../ports';
 import { createDurableRealmServices, type DurableKingdom, type DurableKingdomHold, type DurableRepository } from './kingdom';
-import type { RealmOutboxStore } from '../outbox';
 import type { RealmOutboxRow } from './postgres-repository';
+import type { RealmOutboxStore } from '../outbox';
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -35,14 +35,14 @@ it('keeps bootstrap at the delivered prefix and closes on the deadline despite a
   const repository: DurableRepository = {
     leaseMs: 15_000, acquire: async () => { openingOrder.push('acquire'); return lease; }, renew: vi.fn(() => renewal.promise),
     load: async held => { expect(held).toBe(lease); openingOrder.push('load'); return initial; },
-    publishedPlots: async () => { openingOrder.push('projection'); return { plots: new Set([home.id]), cursor: 10 }; }, latestPresence: async () => null,
     committedState: () => privateAhead, execute: async () => ({ status: 'committed', sequence: 3, at: 0 }),
     lookup: async () => null, loadIngress: async () => null, executeIngress: async () => ({ status: 'unchanged', reason: 'unused' }),
     snapshot: async () => 3, release: async () => {},
   };
   const outbox: RealmOutboxStore = {
     open: async held => { expect(held).toBe(lease); openingOrder.push('outbox'); return 10; }, acknowledge: async () => {},
-    read: async () => { if (++reads <= 2) { firstRead.resolve(); return firstRows.promise; } secondRead.resolve(); return lateRows.promise; },
+    prefix: async () => { openingOrder.push('projection'); return { homes: [{ type: 'home', plotId: home.id, revision: home.revision, assetHash: home.digest, attachments: [] }], presence: null, sequence: 1, committed: 10 }; },
+    read: async () => { if (++reads === 1) { firstRead.resolve(); return firstRows.promise; } secondRead.resolve(); return lateRows.promise; },
   };
   let kingdom: DurableKingdom | undefined;
   let hold: DurableKingdomHold | undefined;
