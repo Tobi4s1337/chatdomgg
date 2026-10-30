@@ -4,6 +4,7 @@ import { startCapturePreview, closeCapturePreview } from './preview.mjs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 const args = process.argv.slice(2);
+const deferShaderHint = args.includes('--defer-shader-hint');
 const baseIndex = args.indexOf('--base-url');
 if (baseIndex >= 0 && (!args[baseIndex + 1] || args[baseIndex + 1].startsWith('--'))) throw new Error('--base-url requires a URL');
 let base = baseIndex < 0 ? undefined : args[baseIndex + 1].replace(/\/$/, '');
@@ -16,6 +17,19 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   page.on('pageerror', error => report.errors.push(`pageerror: ${error.message}`));
   page.on('console', message => { if (message.type() === 'error') report.errors.push(`console: ${message.text()}`); });
+  if (deferShaderHint) await page.addInitScript(() => {
+    // A driver can draw successfully before its optional async completion hint
+    // resolves. Opening the gate must depend on that draw, never on this hint.
+    const getExtension = window.WebGL2RenderingContext.prototype.getExtension;
+    window.WebGL2RenderingContext.prototype.getExtension = function(name) {
+      if (name === 'KHR_parallel_shader_compile') return getExtension.call(this, name) || { COMPLETION_STATUS_KHR: 0x91b1 };
+      return getExtension.call(this, name);
+    };
+    const getProgramParameter = window.WebGL2RenderingContext.prototype.getProgramParameter;
+    window.WebGL2RenderingContext.prototype.getProgramParameter = function(program, parameter) {
+      return parameter === 0x91b1 ? false : getProgramParameter.call(this, program, parameter);
+    };
+  });
   await page.addInitScript(() => {
     const NativeWorker = window.Worker;
     window.__liveWorkerErrors = [];
