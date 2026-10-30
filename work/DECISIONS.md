@@ -49,3 +49,13 @@ the affected behavior is complete or activating a feature that requires their an
 Apparent scout conflicts checked against the primary text: Tech §7.2 already includes optional shoutout-read
 scope and lists six tier-one scopes. Those are not unresolved mismatches in the current file. Dates/counts in the
 Atlas's historical Surveyor notes still need fresh observation before they can be cited as operational evidence.
+
+## 2026-10-30 — Founder steers the scaffold
+
+- Presence is the citizen’s own window, warm while present and named up close; the castle beacon is the kingdom’s light. This resolves older open light-form questions.
+- Sound uses CC0/permissive sources plus procedural audio. Credit every source in THIRD_PARTY.md; no silent actions. Hero animation authorship remains separate.
+- Freeze small tested contracts only at their first consumer. Identity/event envelope and Atlas now; world/voxel next, aimed at the dusk kingdom with windows lighting. No fourteen-group prerequisite.
+- Node 22.23.4 is the supplied runtime. Postgres 18 and Valkey are available via ignored .env; no need for Node 24 for the scaffold. Local Surveyor is the real-data input; do not alter its existing service.
+
+- **First interchange frozen after review:** identity/event primitives and Atlas interchange v1 only, after independent Astra high review and 22 tests. New Atlas binary/sidecar formats are our contract, not existing Surveyor endpoints. Exporter visibility/tombstone/atomicity checks remain publication gates.
+- **Survey preview:** real observations may be drawn on a labelled immutable draft while edition founding age/taxonomy/founder gates remain unmet. The existing collector is read-only; a new adapter writes only its owned derived store.

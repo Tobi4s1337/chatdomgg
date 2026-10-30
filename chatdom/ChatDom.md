@@ -289,8 +289,7 @@ may be a citizen elsewhere, never crowned there.
 
 **Presence is light.** While you are in chat, or lit from the panel, your light is on. A kingdom at night is its live
 audience made visible. A sub may tint a light's edge by tier (warm gold, rose, then a rainbow edge), and nothing paid
-makes it bigger or brighter. Lanterns are the
-first form this light takes; other forms are open (§11).
+makes it bigger or brighter. The citizen’s own window is their light: warm when they are present, with their name floating above it up close. The castle beacon is the whole kingdom’s light.
 
 **Time.**
 - The kingdom is founded live on stream, with its chat watching and naming it.
@@ -392,11 +391,6 @@ If these are not true, Chatdom is not finished. They are what to protect when ev
 
 ## 11. Open at the vision level
 
-- **The forms of light.** Presence is light, and that is settled. Whether lanterns are the universal form, or each
-  kingdom's light takes its own shape (lanterns, candles, torches, windows), is open. The founder is unsure about
-  leaning so hard on lanterns. The Atlas liveness study settled the map side: the Atlas is a day map, where a live
-  kingdom shows as a vermilion wash and a pennant, not as light. So the form of light is a question for inside the
-  kingdom only.
 - **How Chatdom sustains itself.** The panel's share of Bits comes first. Whether a shop or sponsors follow is decided
   after one season of data. Kingdoms are granted and money never buys standing, so any model must fit inside §8.
 - **Voice.** Today voice is only for the campfire and the throne room, by invitation. Whether more of the world should
@@ -481,3 +475,5 @@ Anything else needs a reason to exist.
 - **2026-10-29: consistency sweep after round 14.** The kingdom makes no clips or videos of its own; the Chronicle
   keeps stills (principle 6). The sub tint goes by tier (§5). Subs never raise trust (§8). The Atlas is a day map with
   no lights, so the form of light is an inside question (§11). Coal comes only from showing up (§12).
+
+- **2026-10-30: build decisions from the founder.** Presence is the citizen’s own warm window, lit while in chat (panel presence follows the same rule), named up close; the castle beacon is the whole kingdom’s light. Sound uses CC0/permissive libraries and procedural audio, every source credited in THIRD_PARTY.md, no silent actions. Freeze small tested contract groups only when their first consumer starts; world/voxel contracts follow the Atlas handoff.

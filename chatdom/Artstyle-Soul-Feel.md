@@ -592,9 +592,8 @@ neutral tone map, batched drawing and a quality governor. The rest is built on t
    to game-board art and concept frames (§10, §16.3). There is no human illustrator.
 4. **Signature hours:** dusk and night, with day reserved for offline visits and building.
 
-**Still open:**
-5. **The form of the light.** Lanterns, candles, windows or torches by biome, as in `ChatDom.md` §11. The art rule is
-   the same either way: warm light is people.
+**Decided by the founder on 2026-10-30:**
+5. **Presence is the citizen’s own warm window**, named up close; the castle beacon is the kingdom’s light.
 
 ## Change log
 
@@ -624,3 +623,5 @@ neutral tone map, batched drawing and a quality governor. The rest is built on t
   Atlas has no night (§12).
 - **2026-10-29: consistency sweep after round 14.** The sub tint goes by tier (§2), and the tier 3 cape is animated
   with a colour shimmer like the Super Mario star (§7).
+
+- **2026-10-30: windows are presence.** Citizen windows light while present, with names up close; the castle beacon represents the whole kingdom. Sound uses credited CC0/permissive libraries plus procedural audio, no silent actions.

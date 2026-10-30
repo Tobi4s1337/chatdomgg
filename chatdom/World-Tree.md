@@ -814,7 +814,7 @@ rules and branches above.
 | May the Atlas count citizens shared between kingdoms? | Yes, from 20 people, in bands, with an opt-out (`Atlas.md`) |
 
 **Still open:**
-- **The form of light** (lanterns, candles or windows) stays open in `ChatDom.md` §11. Rule 2 holds for any form.
+- **Presence light decided 2026-10-30:** the citizen’s own warm window, named up close; the castle beacon is the kingdom’s light.
 - **Whether a Bits piece lent for the day may also show on chatdom.gg** waits for Twitch's written answer
   (`Twitch.md` §17).
 
@@ -842,3 +842,5 @@ rules and branches above.
 - **2026-10-29: consistency sweep after round 14.** The sub tint goes by tier, and the tier 3 cape is animated (rule 2,
   §4, §14). The castle acts as the monarch's home for coals, not for the three-home cap (rule 9). The kingdom makes no
   videos of its own; "the night's recap" is now the night's Chronicle (rule 8, §9, §11).
+
+- **2026-10-30: windows are presence.** The citizen’s own window is their light; the whole kingdom’s light is its castle beacon (founder decision).

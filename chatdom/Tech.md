@@ -1585,8 +1585,7 @@ Decisions this file does not make, for the founder:
    is `Atlas.md` question 3.
 6. **Phones:** the device floor (an iPhone 13 and a 2023 mid-range Android are assumed). Is Firefox first-class? Is OBS
    on macOS a launch target?
-7. **The form of the light** (`ChatDom.md` §11). It decides where emitters go and what a lit home looks like from
-   500 m.
+7. **Resolved 2026-10-30:** presence is the citizen’s own warm window, named up close; the castle beacon is the kingdom’s light.
 8. **Crowned games across kingdoms:** must the adopting streamer re-crown, and does the author's name travel with
    every copy?
 9. **The stocks:** may a timed-out citizen be shown in the stocks, and may knighting grant a real Twitch VIP?
@@ -1690,3 +1689,5 @@ Decisions this file does not make, for the founder:
   stills only; wire recordings serve replay mode alone.
 - **2026-10-29: flat coal cap and optional scopes.** §11.3: everyone holds at most 3 coals. §7.2: tier 2 adds optional
   `channel:read:vips` and `channel:moderate` for the Watch ceremonies and ban events in `Twitch.md` §10.
+
+- **2026-10-30: scaffold direction.** Node 22.23.4 is supplied and sufficient for the scaffold. Freeze small tested contracts when their first consumer starts. Presence uses citizen windows; sound uses CC0/permissive libraries plus procedural audio, credited in THIRD_PARTY.md.

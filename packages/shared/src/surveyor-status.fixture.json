@@ -1,0 +1,53 @@
+{
+  "source": "surveyor-status",
+  "capturedAt": "2026-10-30T00:43:34.490Z",
+  "body": {
+    "since": 1793288699490,
+    "sweeps": 180,
+    "lastSweep": {
+      "at": 1793320891681,
+      "streams": 34424,
+      "calls": 348,
+      "ms": 64628
+    },
+    "channels": 159708,
+    "kingdoms": 25110,
+    "kingdomsWith2LiveHours": 17819,
+    "liveNow": 34281,
+    "liveKingdoms": 7591,
+    "raidWatch": {
+      "watching": 7953,
+      "verified": 7953,
+      "cost": {
+        "total": 7949,
+        "max": 10000
+      },
+      "enabled": true
+    },
+    "raids": {
+      "pairs": 4357,
+      "total": 4367,
+      "sinceStart": {
+        "kept": 4031,
+        "dropped": 4034
+      }
+    },
+    "recorder": {
+      "enabled": true,
+      "keepDays": 7,
+      "frames": 157,
+      "firstFrame": 1793292802154,
+      "lastFrame": {
+        "at": 1793320891681,
+        "streams": 34281,
+        "bytes": 62977
+      },
+      "frameBytes": 8887473,
+      "channels": 149548,
+      "raidEvents": 8065,
+      "raidEventsBetweenKingdoms": 4031
+    },
+    "helixRemaining": 799,
+    "streamClients": 0
+  }
+}

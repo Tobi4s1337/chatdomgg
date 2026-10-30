@@ -1,6 +1,6 @@
 # Chatdom build map
 
-Owner: `chatdom-main` · Written 2026-10-30 · Status: vision mapped; no product code yet.
+Owner: `chatdom-main` · Written 2026-10-30 · Status: workspace scaffolded; first identity/event and Atlas interchange v1 frozen; Atlas ready for handoff.
 
 This is the map of the whole build, not a release ladder. Dependencies determine what can run together; Tobias
 chooses the next work. A small working scene is a proving ground for the full system, never a smaller product.
@@ -74,7 +74,7 @@ commits; beats make the result visible. The Atlas consumes a public projection a
 ## 3. Contracts to freeze here
 
 The following are contract groups, not files already implemented. Main owns their schemas, examples, compatibility
-rules and tests. Freeze each group before its consumers start; do not hold Atlas hostage to every game rule.
+rules and tests. Freeze each small group when its first consumer starts; do not freeze all groups up front. World/voxel comes next after this first Atlas handoff.
 Frozen means versioned and tested, not unchangeable: main owns migrations and updates dependent lane briefs.
 
 | Contract | Lives in | What must be explicit | Unlocks |
@@ -301,8 +301,8 @@ Request infrastructure from the team when a concrete test needs it; do not subst
 
 | Question / tension | Owner and next evidence |
 |---|---|
-| Physical form of presence light | Tobias taste decision after comparable window/lantern/candle/torch views; keep semantic presence independent of the emitter asset |
-| Sound/music and hero animation authorship | Tobias + art direction; prototype listening/animation benches, explicit asset rights; no silent or stock-looking substitute |
+| Presence light — decided 2026-10-30 | Citizen’s own warm window, named up close; castle beacon is the kingdom’s light. Prove the dusk scene next. |
+| Sound — decided; hero animation still open | CC0/permissive libraries plus procedural sound; every source in THIRD_PARTY.md; no silent actions. Hero animation still needs its bench. |
 | Per-kingdom runtime AI budget | Main + Tobias; warm Forge/Genesis/variant calls measured for latency, tokens and daily load; free kingdoms need fair capacity/degradation without selling coals |
 | Renderer/pins and real-device floor | Main; confirm WebGL2/OBS material path, installed versions and phone/Firefox/macOS OBS targets; current host is not the GPU mentioned in old measurements |
 | Pool contribution versus earned score | Main domain spec; settle ledger treatment, contribution breadth/caps and one league bracket table before seasons or pool rewards can ship |
@@ -320,13 +320,13 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Handoff state
+## 10. Handoff state — 2026-10-30 scaffold
 
-- Read: AGENTS, full ChatDom/Moments/Tech/Quality; six supporting docs by individual Luna scouts, with their
-  Decided lists and relevant change logs read by main. Agent roles and local skill catalogue inspected.
-- Existing repository: vision, agent setup, skills and work guide. Prototype/source recon recorded separately.
-- Added this turn: this map, cross-cutting decisions, prototype reference note. No product scaffolding or code.
-- Lanes: none launched, no worktrees created, no frozen schema files yet. Atlas is the first intended handoff.
-- Next turn: scaffold and establish actual contract/test boundaries, then produce the first ready lane spec.
-- Services started / ports used: none. No infrastructure changed. Initial commit and push evidence is reported in
-  the turn response; subsequent progress should keep this section current.
+- Node 22.23.4 / pnpm 10.17.0 workspace; Solid/Vite web development bench; TypeScript, ESLint, Vitest and Chrome screenshots wired through `pnpm verify`.
+- First consumer boundaries: `packages/shared` identity/event primitives, observed Surveyor DTOs and Atlas edition/alignment/codec contracts. Frozen after Astra high review and 22 passing tests; advanced integrations remain unfrozen.
+- Atlas scope/spec and six-task Ralph PRD are in `work/specs/01-atlas.md` and `work/lanes/atlas/`; team starts the worker after main’s green commit/worktree setup. Whole scope retained; missing downstream producer contracts become `needs:` when reached.
+- Reference studies: voxel AO/light, sky/fog/time, Ultra-Water, crowd animation and map camera/cartography. Techniques and limitations recorded; no external product source copied. No GPU performance evidence yet.
+- Founder decisions resolved: citizen windows are presence, named nearby; castle beacon is kingdom light. Sound uses credited CC0/permissive sources plus procedural work. No silent actions.
+- Next main work: small tested world/voxel contract when that consumer starts, then the real dusk kingdom with windows coming on. Do not freeze the other groups pre-emptively.
+- Infrastructure: Postgres 18, Valkey and Surveyor passed `pnpm check:services` read-only. Secrets stay in ignored `.env`. Existing services untouched.
+- Screenshot runner owns temporary port 5189; web dev 5170; preview 5190; Atlas service reserved 5193. See final evidence/review for active preview and exact checks.

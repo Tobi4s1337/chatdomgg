@@ -1,0 +1,33 @@
+# Reference: pmndrs/sky
+
+https://github.com/pmndrs/sky · MIT · studied at `5a72017a5916f65e3d0077e019fb553fe2a21b63` (package 0.6.0)
+
+For: kingdom sky, fog, lighting and time-of-day design. Source paths below refer to `/tmp/chatdom-refs/sky` at that revision.
+
+## What it is
+
+A three.js WebGPU-renderer sky based on Hillaire's atmosphere, with a baked sky cube, solar-driven lighting, stars, authored sky grades and two haze methods. The expensive atmosphere stages are reused until inputs change; the sky can drive both the background and environment lighting (`README.md:12`, `src/sky/SkyAtmosphereBaker.ts:809`). The examples include live skies, a fog comparison and a grade editor (`README.md:257`, `examples/vanilla/24-sky-fog.html`). No demo screenshots are included in the checkout; the demos were read, not executed or visually judged.
+
+## What we take
+
+- **One coherent colour source.** Fog samples the sky in the view direction, so a distant silhouette approaches the sky behind it, including its sunward/anti-sunward difference (`src/sky/FogPostProcess.ts:1`, `:157`). Share Chatdom's authored sky function or a low-resolution filtered sky with fog. Avoid sampling stars, moon or a sharp sun disc into fog: those details would print across distant roofs. The reference blends toward blurred environment at night (`src/applyFog.ts:12`).
+- **Analytic height fog.** Density is `σ(h)=σ₀ exp(-(h-h₀)/H)`. Integrate the view ray analytically and composite with `min(1-exp(-τ), maxOpacity)`; no raymarch is needed. It uses a series `1-u/2+u²/6` when `u < 0.001`, clamps the exponent for finite floats, and explicitly handles horizontal rays (`src/sky/FogPostProcess.ts:72`, `:109`, `:128`, `:296`). Inputs are metres and density per km: reference defaults density 0.3/km, height falloff 300 m, base height 0, opacity cap 1 (`:47`, `:79`); these are physical-scale examples, not proposed voxel-world settings. Calibrate in world units against actual scene distances.
+- **Depth details matter.** Reconstruct camera ray and distance consistently with the actual projection/depth encoding; skip background pixels, and verify far plane and logarithmic depth separately (`src/sky/FogPostProcess.ts:247`, `:270`; `src/sky/HazePostProcess.ts:368`, `:416`). The reference mirrors below-horizon sample directions and offsets above the horizon to prevent dark ground texel leakage (`src/sky/FogPostProcess.ts:157`). A stylised analytic gradient may avoid this cube-specific issue.
+- **Art-directed time, not black nights.** Grade keys by sun elevation, interpolate smoothly and separately control zenith, horizon, sunward glow and a blue night fill; apply consistent colour treatment to the sky and distant haze (`src/grade.ts:7`, `:44`, `:77`, `:89`). Hemisphere fill fades in over day/night (`src/sky/SkyAmbient.ts:50`, `:192`); reference reaches full night at −6° by default (`:32`). Stars fade by local contrast with sky brightness rather than popping at one clock hour (`src/sky/SkyStars.ts:21`, `:223`).
+- **Dirty stages and stable resources.** Update sky/environment only when relevant inputs move; compile ahead and retain last valid result (`src/sky/SkyAtmosphereBaker.ts:750`, `:809`). If image-based light is needed, throttle and time-slice refresh, build in scratch, publish when complete, and retain texture identity (`src/sky/PmremScheduler.ts:14`, `:31`). Reference defaults 250 ms and one roughness level/frame; device-dependent measurements are not a budget guarantee.
+
+## What we do differently
+
+Chatdom specifies a **stylised gradient, sun and moon discs, painted clouds and stars**, not a physical atmospheric simulation (`chatdom/Artstyle-Soul-Feel.md:563`). Dusk is lilac above and gold at the horizon, night deep blue to violet, with warm community lights (`Artstyle-Soul-Feel.md:177`). A live stream brings dusk; do not bind this narrative to the viewer's real solar clock. Tune the sky, fog, ambient and light transitions together, keeping distant depth cool and people visibly warm. The analytic fog has scalar extinction, so it veils rather than performing true wavelength-dependent colour shifts (`src/sky/FogPostProcess.ts:15`): tune its sky colour and distance deliberately against the art direction.
+
+The package requires `WebGPURenderer` (`README.md:41`), including when that renderer runs its WebGL2 backend; it is **not a drop-in `WebGLRenderer` package**. Its 2D LUTs have TSL WebGL fallback (`src/sky/luts/TransmittanceLUT.ts:31`), but its aerial perspective uses a 3D storage texture and compute dispatch (`src/sky/luts/AerialPerspectiveLUT.ts:65`, `:220`), so do not assume that path works unchanged in WebGL2. Implement the chosen sky and closed-form fog in WebGL2 GLSL or the existing renderer's material system; test reconstructed depth on that backend. Avoid relying on the reference's private three.js PMREM methods: its own scheduler falls back to whole bakes when internals change (`src/sky/PmremScheduler.ts:46`).
+
+For phones, prefer a single sky evaluation and analytic fog over a per-frame 32³ froxel compute volume and the reference's 64-sample per-pixel raymarch fallback (`src/core/resolutions.ts:13`, `src/sky/HazePostProcess.ts:64`). A fullscreen fog pass adds scene-colour/depth reads and fill-rate; alternatively integrate fog in opaque material shading and measure both approaches on real devices, including transparent water, particles and sky. Do not assume the reference's GPU timings transfer to phones or SwiftShader. Preserve the horizon, warm windows and clay look on every tier; reduce effect counts or resolution only where the quality rules allow.
+
+## Leave behind
+
+Earth-scale radii, physically derived geographic clock, space-to-ground raymarch, Milky Way look, and the reference's photographic colour grade are not Chatdom's identity. Its atmosphere tables are useful background, not prescribed visual parameters: Earth radius 6360 km, atmosphere 6460 km, Rayleigh scale height 8 km, Mie 1.2 km and anisotropy 0.8 (`src/core/AtmosphereParams.ts:92`). Default LUTs are 256×64 transmittance, 32×32 multiscatter, 192×108 sky-view and 32³ aerial perspective (`src/core/resolutions.ts:13`). Its own docs list volumetric clouds as out of scope (`README.md:262`); Chatdom's painted clouds need their own design.
+
+## License
+
+MIT, copyright 2026 Dennis Smolek (`LICENSE`). Source code can be adapted with its copyright and permission notice; add source/license headers and a `THIRD_PARTY.md` entry when actually adapting. External example assets and bundled references have separate licenses; do not assume the root MIT covers them. This note adopts ideas only and adds no code or assets.

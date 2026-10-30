@@ -1,0 +1,31 @@
+{
+  "name": "chatdom",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.17.0",
+  "engines": {
+    "node": ">=22.23.4 <23"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @chatdom/web dev",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint apps packages scripts",
+    "test": "vitest run",
+    "build": "pnpm -r --if-present build",
+    "shots": "node packages/testing/shots.mjs",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm shots",
+    "check:services": "node --env-file=.env scripts/check-services.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
+    "@types/node": "22.19.15",
+    "eslint": "10.13.0",
+    "pg": "8.23.1",
+    "redis": "6.3.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
