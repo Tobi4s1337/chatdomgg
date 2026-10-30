@@ -59,8 +59,14 @@ of on stalks. It throws if a column has no leaf on top.
 `JOIN_FIXTURES` holds one front garden per kit. The core house stands behind z=0 and the street edge is at
 z 32..36. Each side runs end → straight → corner from the path to the street edge, then straight → end back
 toward the house. The path opening at x 20..40 stays clear in front of the door. Hearth puts the wall on the
-left and the fence on the right; Tide swaps them, so every piece is checked in several orientations. The plant
-transforms reserve full row footprints clear of the edges.
+left and the fence on the right; Tide swaps them, so every piece is checked in several orientations.
+
+The planting is laid for the bench camera, which looks in from the front right. Pots flank the door two cells
+clear of it, one turned a quarter so its flower faces the street. The trough lines the inside of the far side
+run, the one face the street sees whole. In Hearth a stone marks where the path enters the walled garden and the
+shrub fills the fence corner. In Tide the stone sits behind the rails and the shrub stands in the walled garden,
+tall enough to show over the cap. Every plant keeps its full row footprint clear of structure, of other plants
+and of the path, and stays inside the gardens (z < 32, x −12..72), never on the street.
 
 `street.test.ts` checks the actual occupancy of every model and of the transformed assemblies.
 Per form, the tests also check: open earth inside a closed lip that oversails the body on every side; flowers
@@ -92,3 +98,18 @@ Measured costs per model, the same in both kits (validator, confirmed by `render
 254 cells / 370 tris / 6 boxes, fence-corner 340 / 320 / 9, fence-end 148 / 150 / 5, wall-straight 414 / 180 / 7,
 wall-corner 770 / 454 / 15, wall-end 138 / 110 / 5, flower-pot 325 / 510 / 54, flower-trough 427 / 608 / 51,
 rock-cluster 443 / 626 / 54, leafy-shrub 597 / 1,022 / 160. Each renders in one measured draw.
+
+## Review rounds
+
+Each form went through renders in the production bench at dusk, noon and night. What was rejected:
+
+- **Fences:** a lean across the run (it read as a broken jog), a line post at the start of the bay (runs doubled
+  a post against every strainer).
+- **Walls:** proud through-stones and mossy bricks in the face (busy at stream size), a double-thick corner
+  (now bonded quoins of one wall thickness).
+- **Containers:** one-cell flowers on two-cell stalks (matchsticks), a sunk panel in the trough face (read as a
+  bench slot), crowned trough ends (read as posts).
+- **Stones:** ellipsoid masses (terraced masonry pyramids); the upright-sided, domed `rounded` shape replaced them.
+- **Shrub:** a single ellipsoid (a terraced blob); eleven overlapping clumps over a visible stem replaced it.
+- **Assemblies:** a trough set against the inside of the street-edge wall (only its leaves showed over the cap)
+  and a stone pressed against the side wall (it merged into the masonry). Both moved to where the street sees them.
