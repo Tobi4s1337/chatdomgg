@@ -322,47 +322,47 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Stop point:** one real chat wish → real Codex → independent word/result judges → author's home, committed.
-Then Forge look goes to the team; realm is next when Tobias briefs it. Town and homecoming/build are closed.
-No further terrain/light/budget proofs or record-only commits.
+**Stop point:** real chat wish → real Codex → independent word/result judges → maker's actual home, committed.
+Then remaining Forge look goes to the team; Tobias briefs the realm next. Town and homecoming/build are closed.
+Main now judges only the `lane/integrator` candidate Tobias announces ready; no direct lane merges. The integrator
+keeps reviewed lanes atop main, resolves conflicts and verifies. `AGENTS.md` records this workflow.
 
-**Landed:** `d19b786` streams real model runs into the browser, retains approval receipts, follows flight/landing
-closely, improves the sleeping dragon, adds six crowd palettes and the official SVG engraving. `18fe371` merges
-sound SO01–04, including the rapid mute/suspend convolver fix. `5839bdc` merges Herald H01–H04 and lockfile;
-H05 stays on its lane. Review fixes fence late sweep/verification replies and reordered stream observations.
-Web and Herald share settlement configuration and slots; live motion uses wall time. Witnessed direct chat
-can warm an offline window, while beacon/Chatters/rewards remain live-gated; stale data clears lights/names.
-Spec 03 records this contract amendment. Root `shots --area herald` delegates before taking the capture lock.
+**Core now:** Herald has a private, optional `!forge` handoff after durable presence binding. Ordinary chat text
+is discarded; creation words never enter public presence or health. Duplicate/expired deliveries cannot run;
+moderation, coverage loss and accepted offline/session changes cancel work immediately, including while serialized
+presence writes wait. The generation guard keeps an old wish out of a new broadcast. An absent Forge sink leaves
+normal Herald operation unchanged. Spec 03 and Herald's PRD describe this seam for H05.
 
-**Ready lanes:** Specs 19–24: `citizen-card`, `twitch-moments`, `campfire`, `tavern-tables`, `raid-gate`, `emotes`.
-All have committed PRDs, `lane/<name>` branches and sibling `../worktrees/<name>` worktrees. Spec 22 owns the
-Chalk/Taster core in `packages/games` except campfire's `dusk-court`; main binds services/shared promotions.
-Atlas owns map/roads/finder/entry; Spec 23 owns kingdom-side travel/Gate coordination. `1e55f31` opens Spec 25,
-`anvil-hero`: Terra xhigh, sculpted iron/stone, real horn/hardy hole, exact official engraving, sleeping dragon
-readable across the square. Main mounts/reviews exports. Ritual/refusal/content/crowd/wardrobe lanes continue.
+`apps/codex/src/kingdom-forge` now coordinates the real gates, Codex draft, native assembly and contact sheet
+behind an explicit realm authority port. It takes the authority's actual owned slot, rechecks home revision and
+SHA-256 geometry digest, and releases only a durably committed attachment. The authority must atomically consume
+one earned coal and retain attachment, original creation input, provenance, displaced items and public outbox.
+Cancellation/deadlines and attempt-scoped cleanup cannot claim a successful placement. Missing authority stays
+cold before providers. A canonical native-home resolver in `packages/forge` now also builds the street's homes;
+there is no separate server house recipe. These ports are implemented/tested, **not bound to a realm ledger or
+public snapshot consumer yet**. Actual ownership, trust and coal are never inferred from a presentation slot.
 
-**Evidence:** frozen install and `pnpm verify --area kingdom --tier town --hour dusk` passed typecheck/lint,
-1,273 tests/81 files, build and both standard dusk shots; both opened. Fresh Forge capture passed three
-attachments/refusal/build-rack/crowd checks. Looked at desktop/phone dragon/street, phone build rack, moon/owl,
-and all frames of `shots/forge/ritual.mp4` (21.5 s, 960×600). It is a labelled fixture, not live judge proof.
-Later `shots/forge/engraving@1440x900.png` confirms visible cloud AND terminal cuts in dark iron; the film
-predates that fix and still shows the old box anvil. Standard town shots: `shots/kingdom/town-dusk@1440x900.png`
-and `town-dusk@390x844.png`. No more main look passes before the real run.
+**Team:** Specs 19–24 (`citizen-card`, `twitch-moments`, `campfire`, `tavern-tables`, `raid-gate`, `emotes`) and
+25 (`anvil-hero`, Terra xhigh) have committed PRDs, branches and sibling `../worktrees/<name>` worktrees. Hero
+brief: sculpted iron/stone, real horn/hardy hole, faithful engraved official mark, sleeping dragon readable from
+the street. Main mounts/judges it. Sound SO01–04 and Herald H01–H04 already landed; subsequent lane work goes
+through the integrator. Ritual/refusal/content/crowd/wardrobe work continues with the team.
 
 **Services:** main preview5190 session6681; spell5195 session38778 (development citizens, judges unconfigured).
-Both restarted after their prior processes ended. `.env` has no `OPENAI_API_KEY`; real Codex drafting works,
-but no complete live judged run has passed. Missing judges fail cold. Herald5194 was real/healthy with seven
-subscriptions, then a lane capture replaced it with SIMULATED replay. Main's five-minute launch wait expired;
-it never started a second conduit consumer. Tobias authorizes stopping that copy, but its host PIDs are invisible
-here and the alternative host-process probe was rejected by approval policy. A host-side stop is still needed.
-Then start `pnpm --filter @chatdom/herald dev` and open on5190:
-`/?source=herald&seed=tobi4s_&tier=hamlet&firstYear=2026&year=2026&kingdom=129634568&camera=citizen&hour=19.5`.
-Actual human message→citizen/window evidence remains missing.
+Herald5194 is now main-owned session40179, real and healthy with 7/7 subscriptions; no second conduit consumer.
+Its existing private slot table was preserved in `~/.cache/chatdom/herald` (`HERALD_DATA_DIR`), outside git, because
+the original store is read-only here. Restart from main with that data directory; never overwrite a newer table.
+Real source: `/?source=herald&seed=tobi4s_&tier=hamlet&firstYear=2026&year=2026&kingdom=129634568&camera=citizen&hour=19.5`.
+The channel is observed offline; no human message has arrived during this run, so live window evidence is pending.
 
-**Next / doubts:** presence discards text and assigns presentation slots, not deeds. The private verified
-`!forge` branch, native-host resolver and approved public attachment remain to implement. Production words
-require actual home/trust and earned coals (10 live minutes, cap3). Asked Tobias: explicitly labelled real-chat
-development rehearsal before realm eligibility, or realm ledger first? Answer and judge key are pending. A
-rehearsal must default off, keep words private, cancel on moderation/grant/offline loss, publish only approved
-draft/slot/fingerprints and claim no production publication. Never relabel simulated provenance as live.
-Seven motifs cannot satisfy every subject; the result judge must hold unrelated substitutions.
+**Evidence / limits:** `pnpm verify --area kingdom --tier town --hour dusk --size phone` passed typecheck, lint,
+1,275 tests/82 files, build and capture. Opened `shots/kingdom/town-dusk@390x844.png`; the native-house refactor
+preserves the town, warm windows and beacon. Final focused coordinator/type/lint checks also pass. Existing Forge evidence remains
+`shots/forge/dragon@1440x900.png`, `dragon@390x844.png`, `engraving@1440x900.png` and `ritual.mp4` (21.5s, all frames
+inspected). They are labelled fixtures, not a live judged run; the film predates the corrected engraving/hero anvil.
+
+**Next / doubts:** `.env` still lacks `OPENAI_API_KEY`; actual Codex drafting works but both independent judges
+cannot complete. The authority adapter and approved public delivery/browser binding remain. Asked Tobias whether
+to demonstrate an explicitly labelled real-chat development rehearsal before realm eligibility, or build the real
+home/trust/earned-coal ledger first; answer remains pending. No rehearsal authorization or entitlement is assumed.
+Seven authored motifs cannot satisfy every subject: the result judge must hold unrelated substitutions.

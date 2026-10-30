@@ -64,6 +64,8 @@ export class StreamTracker {
   readonly #options: StreamTrackerOptions;
   readonly #now: () => number;
   readonly #ended: string[] = [];
+  readonly #listeners = new Set<() => void>();
+  #generation = 0;
   readonly #counters: StreamCounters = { polls: 0, failed: 0, lagging: 0, notLive: 0, observedLive: 0, observedOffline: 0, pushed: 0 };
   #condition: StreamCondition = 'unknown';
   #via: 'eventsub' | 'helix' | null = null;
@@ -84,6 +86,10 @@ export class StreamTracker {
   get live(): boolean {
     return this.#condition === 'live' && this.#fresh(this.#now());
   }
+
+  get sessionId(): string | null { return this.#streamId; }
+  get generation(): number { return this.#generation; }
+  onChange(listener: () => void): () => void { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; }
 
   /** A pushed EventSub change; reordered delivery cannot replace newer accepted evidence. */
   push(observation: StreamObservation): void {
@@ -151,11 +157,13 @@ export class StreamTracker {
   #accept(observation: StreamObservation, via: 'eventsub' | 'helix', recovered: boolean): void {
     // Match the reducer's observation order, including offline winning an equal-time online.
     if (!this.#accepts(observation.at, observation.live)) return;
+    if (this.live !== observation.live || observation.live && this.#streamId !== observation.streamId) this.#generation++;
     this.#condition = observation.live ? 'live' : 'offline';
     this.#via = via;
     this.#observedAt = observation.at;
     this.#recovered = recovered;
     if (observation.live) this.#streamId = observation.streamId;
+    for (const listener of this.#listeners) listener();
     const input = toPresenceInput(observation, this.#options.kingdomId, this.#options.source.origin);
     if (input) void this.#options.source.submit(input).catch(() => undefined);
   }
