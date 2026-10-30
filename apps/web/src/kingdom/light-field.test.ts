@@ -91,7 +91,7 @@ describe('authoritative worker light geometry', () => {
     expect(beyondBound.visited).toBe(0);
   });
 
-  const hearthWindows = (['hut', 'cottage', 'house'] as const).flatMap(tier => ([0, 1, 2] as const)
+  const hearthWindows = (['hut', 'cottage', 'house', 'manor', 'hall'] as const).flatMap(tier => ([0, 1, 2] as const)
     .flatMap(variant => [0, 1, 2, 3].map(turn => ({ tier, variant, turn }))));
   it.each(hearthWindows)('lights the authored first Hearth window for $tier/$variant at turn $turn and clears it completely', ({ tier, variant, turn }) => {
     const positions: Vec3[] = [[-4,9,-16],[-16,9,4],[4,9,16],[16,9,-4]];
