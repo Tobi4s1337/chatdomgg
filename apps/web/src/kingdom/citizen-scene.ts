@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MATERIALS } from '@chatdom/content';
 import { createVoxelMaterial, type VoxelRenderState } from '@chatdom/render';
-import { createCitizenMotion, type CitizenMotionSample, type SettlementPlan } from '@chatdom/world';
+import { createCitizenMotion, createCitizenBehaviours, dueBehaviourSteps, type CitizenGoalAnswer, type CitizenMotionSample, type SettlementPlan } from '@chatdom/world';
 import { CitizenChatCueSchema, type CitizenChatCue, type KingdomPresenceFrame } from '@chatdom/shared';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
@@ -10,7 +10,9 @@ export interface SpeechLabel { slot: number; name: string | null; x: number; y: 
 
 /** Render-side presentation only: the public presence projection remains unchanged. */
 export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan, pool: VoxelWorkerPool, clay: VoxelRenderState) {
-  const motion = createCitizenMotion(layout);
+  const motion = createCitizenMotion(layout), behaviours = createCitizenBehaviours();
+  let lastStepMs: number | null = null, answers: CitizenGoalAnswer[] = [];
+  const resetBehaviours = () => { behaviours.reset(); lastStepMs=null; answers=[]; };
   const material = createVoxelMaterial(MATERIALS, 'avatar');
   // Moving people receive open-sky fill; per-part baked cavities must not turn
   // darker skin into a silhouette before a nearby window lights.
@@ -32,7 +34,10 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       const instance = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: layout.homes.length, pool });
       if (disposed) instance.dispose(); else renderer = instance;
     },
-    applyFrame(next: KingdomPresenceFrame) { frame = next; motion.applyFrame(next); },
+    applyFrame(next: KingdomPresenceFrame) {
+      if(frame&&(frame.kingdomId!==next.kingdomId||frame.epoch!==next.epoch||frame.origin!==next.origin||next.asOf<frame.asOf))resetBehaviours();
+      frame = next; motion.applyFrame(next);
+    },
     receiveChat(input: unknown) {
       const result = CitizenChatCueSchema.safeParse(input);
       if (!result.success || !frame) return false;
@@ -42,11 +47,19 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       if (previous && previous.asOf >= cue.asOf) return false;
       speech.set(cue.slot, cue); return true;
     },
-    update(atMs: number, time: number, camera?: THREE.Camera) {
+    update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set()) {
+      if(frame)for(const stepMs of dueBehaviourSteps(lastStepMs,atMs)){
+        lastStepMs=stepMs;
+        const stepSamples=motion.sample(stepMs),ambientSlots=new Set(stepSamples.filter(sample=>!reservedSlots.has(sample.slot)).map(sample=>sample.slot));
+        const step=behaviours.step({kingdomId:frame.kingdomId,epoch:frame.epoch,origin:frame.origin,atMs:stepMs,samples:stepSamples,ambientSlots,destinationsFor:slot=>motion.destinationsForSlot(slot),answers});
+        answers=step.goals.map(request=>({request,result:motion.requestGoal(request)}));
+      }
       samples = motion.sample(atMs);
+      const overlays=behaviours.present(samples,atMs);
       renderer?.update(samples.map(sample => ({ id: String(sample.slot), look: looks[sample.slot % looks.length]!.id,
-        position: sample.position, heading: sample.heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time,
-        gesture: speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : 'none' as const })), camera);
+        position: sample.position, heading: sample.heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time:overlays.get(sample.slot)?.time??time,
+        lookYaw:overlays.get(sample.slot)?.lookYaw??0,
+        gesture: reservedSlots.has(sample.slot)?'none' as const:speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : overlays.get(sample.slot)?.gesture??'none' as const })), camera);
       shadows.count = 0;
       for (const sample of samples) {
         shadowMatrix.makeScale(1, 1, .8); shadowMatrix.setPosition(sample.position[0], sample.position[1] + .018, sample.position[2]);
@@ -78,7 +91,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       }
       return labels;
     },
-    clear() { motion.clear(); frame = undefined; samples = []; speech.clear(); renderer?.update([]); shadows.count = 0; },
-    dispose() { disposed = true; renderer?.dispose(); material.dispose(); scene.remove(shadows); shadows.dispose(); shadowGeometry.dispose(); shadowMaterial.dispose(); },
+    clear() { resetBehaviours(); motion.clear(); frame = undefined; samples = []; speech.clear(); renderer?.update([]); shadows.count = 0; },
+    dispose() { resetBehaviours(); disposed = true; renderer?.dispose(); material.dispose(); scene.remove(shadows); shadows.dispose(); shadowGeometry.dispose(); shadowMaterial.dispose(); },
   };
 }

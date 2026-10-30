@@ -26,6 +26,10 @@ describe('small world consumer boundaries', () => {
     expect(MaterialRegistrySchema.safeParse({version:1,revision:0,materials:[{...air,blocksLight:true}]}).success).toBe(false);
   });
   it('cannot disclose Chatters identities or add client authority', () => {
+    expect(PresenceInputSchema.parse(PRESENCE_FIXTURES.lost).kind).toBe('source-lost');
+    expect(PresenceInputSchema.safeParse({...PRESENCE_FIXTURES.lost,sources:['chat','chat']}).success).toBe(false);
+    expect(PresenceInputSchema.safeParse({...PRESENCE_FIXTURES.lost,sources:['walker']}).success).toBe(false);
+    expect(PresenceInputSchema.safeParse({...PRESENCE_FIXTURES.lost,actor:'king'}).success).toBe(false);
     const input = PRESENCE_FIXTURES.arrival;
     expect(PresenceInputSchema.safeParse({...input,source:'chatters',coverage:'complete'}).success).toBe(false);
     expect(PresenceInputSchema.safeParse({...input,actor:'king'}).success).toBe(false);
