@@ -22,6 +22,7 @@ interface Arrival {
 export interface SimulatedPresence {
   readonly feed: PresenceFeed;
   readonly firstSlot: number;
+  readonly epochMs: number;
   /** Seconds from the fixed simulation epoch, suitable for a camera/capture cue. */
   readonly completeAt: number;
   /** Absolute elapsed seconds; seeking backwards reproduces the same presence. */
@@ -93,7 +94,7 @@ export function createSimulatedPresence(layout: Pick<KingdomLayout, 'homes' | 'c
     },
   };
   return {
-    feed, firstSlot: first.slot, completeAt: arrivals.at(-1)!.at / 1000,
+    feed, firstSlot: first.slot, epochMs: WORLD_FIXTURE_TIME, completeAt: arrivals.at(-1)!.at / 1000,
     advance(seconds, sampleFrame = false) {
       if (!Number.isFinite(seconds) || seconds < 0 || seconds * 1000 + WORLD_FIXTURE_TIME > 8_640_000_000_000_000) {
         throw new RangeError('Simulation time must be a nonnegative supported timestamp');
