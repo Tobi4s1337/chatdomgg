@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StyleIdSchema, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
-import { generateKingdom } from '@chatdom/world';
+import { createCastlePlan, generateKingdom } from '@chatdom/world';
 import { createWindowLights, type WindowHouse } from '@chatdom/render';
 import { createHome, createHearthHome, createCastle, CASTLE_BEACON_ANCHOR_METRES, MATERIALS } from '@chatdom/content';
 import { PRESENCE_FIXTURES } from '@chatdom/shared/world-fixtures';
@@ -10,6 +10,7 @@ import { sampleLightVolume } from '@chatdom/voxel';
 import { createLightField, type LightFieldOptions } from './light-field';
 import { createSettlementContent } from './settlement-content';
 import { inhabitedLightBounds } from './light-bounds';
+import { createCastleContent } from './castle-content';
 import {
   bindLightFieldWorker, compileLightHouses, createLightFieldSolver, LIGHT_FIELD_BUDGET, LIGHT_FIELD_CELLS,
   resolveLightFieldConfig, buildLightFieldSamples, type SurfaceLightVolume, type LightFieldRequest, type LightFieldResponse, type LightFieldSolve,
@@ -33,6 +34,31 @@ function request(revision = 1, nextOrigin = origin): LightFieldSolve {
 }
 
 describe('authoritative worker light geometry', () => {
+  it('lights the authored compound beacon within the combined three-field budget', () => {
+    const town = generateKingdom({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
+    const { houses, props } = createSettlementContent(town);
+    const { buildings, beaconPosition } = createCastleContent(createCastlePlan());
+    const blockers = [...houses, ...buildings];
+    const local = createLightFieldSolver(town, [...blockers, ...props.map(prop => ({ ...prop, slot: 65534 }))])
+      .solve({ kind: 'solve', revision: 1, origin, emitters: [] }).volume;
+    const farOptions = { mode: 'kingdom', bounds: inhabitedLightBounds(town.homes) } as const;
+    const far = createLightFieldSolver(town, blockers, farOptions).solve({ kind: 'solve', revision: 1,
+      origin: resolveLightFieldConfig(town, farOptions).origin!, emitters: [] }).volume;
+    const beaconOptions = { mode: 'beacon', position: beaconPosition } as const;
+    const solver = createLightFieldSolver(town, blockers, beaconOptions);
+    const request = { kind: 'solve' as const, revision: 1, origin: resolveLightFieldConfig(town, beaconOptions).origin!,
+      emitters: [{ position: beaconPosition, normal: [0, 1, 0] as Vec3, level: 15 }] };
+    const lit = solver.solve(request).volume;
+    expect(lit.visited).toBeGreaterThan(0);
+    // The cap occupies the coarse source cell; projection starts the flood in
+    // the first exact-air cell above it rather than lighting through masonry.
+    expect(sampleLightVolume(lit, [beaconPosition[0], beaconPosition[1] + 2, beaconPosition[2]])).toBe(15);
+    expect(local.estimatedPeakBytes + far.estimatedPeakBytes + lit.estimatedPeakBytes).toBeLessThan(12 * 1024 * 1024);
+    const removed = solver.solve({ ...request, revision: 2, emitters: [] });
+    expect(removed.volume.visited).toBe(0);
+    expect(removed.occupancyBuilds).toBe(1);
+  });
+
   it('projects each of the 240 inhabited town windows independently into the distant field', () => {
     const town = generateKingdom({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
     const { houses } = createSettlementContent(town);
