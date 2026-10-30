@@ -1,16 +1,22 @@
 import type { HomeTier } from '@chatdom/shared';
 import { MAT } from '../../materials';
 import { homeId, unfinished, type HearthHome } from './family';
-import { BASE, FLOOR, KIT, Plan, WALL, base, chimney, doorway, gables, hollow, rearLimit, roof, studs, trough, walls, window, type Face, type Wing } from './grammar';
+import { BASE, FLOOR, KIT, Plan, WALL, base, chimney, doorway, gables, hollow, passage, rearLimit, roof, studs, trough, walls, window, type Face, type Wing } from './grammar';
 
 /**
  * Heatherstead: one long, quiet ridge across the lot, a lower lean-to porch tucked under the eaves, wall dormers
- * that set a measured rhythm above the openings, and from cottage tier a catslide outshut down the back.
+ * that set a measured rhythm above the openings, and from cottage tier a catslide outshut down the back. The house
+ * builds a second, narrower and lower range behind the outshut: the catslide falls into a valley against its slope,
+ * so the side reads as one long ridge, a long sweep and a quieter ridge behind. It stands to the east, keeping a
+ * broad garden behind the catslide, and a timber bay turns its east gable to the light.
  */
 const RANGE: Wing = { x0: 4, x1: 60, z0: 84, z1: 116, wallTop: 34, ridge: 'x', eave: 4, verge: 3, tread: 2, rise: 2, thickness: 4 };
 const DOOR_X = 16;
 const DORMERS = [16, 50] as const;
 const PORCH = { x0: 6, x1: 40, z0: 116, z1: 126, posts: [6, 22, 37] } as const;
+const BACK: Wing = { x0: 24, x1: 56, z0: 44, z1: 68, wallTop: 26, ridge: 'x', eave: 4, verge: 3, tread: 2, rise: 2, thickness: 4 };
+/** The bay projects six cells from the back range's east gable: a full timber-framed light under a lean-to. */
+const BAY = { x0: BACK.x1, x1: BACK.x1 + 6, z0: 46, z1: 60, top: 21 } as const;
 
 const street = { facing: 'south', plane: RANGE.z1 } as const satisfies Face;
 const westGable = { facing: 'west', plane: RANGE.x0 } as const satisfies Face;
@@ -73,8 +79,21 @@ function outshut(p: Plan): void {
   p.put(x0 - 1, low - 2, z0 - 1, x1 + 1, low, z0 + 1, KIT.trim);
 }
 
+function bay(p: Plan): void {
+  const { x0, x1, z0, z1, top } = BAY;
+  p.put(x0 - 1, 0, z0 - 1, x1 + 1, BASE, z1 + 1, KIT.stone);
+  p.put(x0, BASE, z0, x1, top, z1, KIT.wall);
+  for (const z of [z0, z1 - 2]) p.put(x1 - 1, BASE, z, x1 + 1, top, z + 2, KIT.trim);
+  // Open through the gable wall: the bay is part of the room, floored with the same boards.
+  p.carve(x0 - WALL, FLOOR, z0 + 2, x1 - 2, top - 1, z1 - 2);
+  p.put(x0 - WALL, FLOOR - 1, z0 + 2, x1 - 2, FLOOR, z1 - 2, KIT.trim);
+  // Lean-to roof in four courses stepping out from under the gable's wall plate.
+  for (let j = 0; j < 4; j++) p.put(x0 + 2 * j, top + 3 - j, z0 - 1, x0 + 2 * j + 2, top + 6 - j, z1 + 1, KIT.roof);
+  p.put(x1 + 1, top, z0 - 1, x1 + 2, top + 3, z1 + 1, KIT.trim);
+}
+
 export function heatherstead(tier: HomeTier): HearthHome {
-  if (tier !== 'hut' && tier !== 'cottage') return unfinished('heatherstead', tier);
+  if (tier !== 'hut' && tier !== 'cottage' && tier !== 'house') return unfinished('heatherstead', tier);
   const p = new Plan(homeId('heatherstead', tier), rearLimit(tier));
   base(p, RANGE);
   walls(p, RANGE);
@@ -83,8 +102,22 @@ export function heatherstead(tier: HomeTier): HearthHome {
   studs(p, eastGable, 90, 112, 32, 11);
   hollow(p, RANGE);
   gables(p, RANGE);
-  if (tier === 'cottage') outshut(p);
+  if (tier !== 'hut') outshut(p);
+  if (tier === 'house') {
+    // The back range is raised after the outshut so its walls take over the catslide's foot.
+    base(p, BACK);
+    walls(p, BACK);
+    studs(p, { facing: 'north', plane: BACK.z0 }, 30, 52, 24, 11);
+    studs(p, { facing: 'west', plane: BACK.x0 }, 47, 66, 24, 9);
+    studs(p, { facing: 'east', plane: BACK.x1 }, 47, 66, 24, 9);
+    hollow(p, BACK);
+    gables(p, BACK);
+  }
   roof(p, RANGE);
+  if (tier === 'house') {
+    roof(p, BACK);
+    bay(p);
+  }
   porch(p);
   for (const c of DORMERS) dormer(p, c);
 
@@ -99,9 +132,16 @@ export function heatherstead(tier: HomeTier): HearthHome {
   window(p, 'west-settle', westGable, { u0: 104, u1: 112, y0: 8, y1: 20 });
   chimney(p, 5, 13, 90, 102, 8, 60, 'none');
 
-  if (tier === 'cottage') {
+  if (tier !== 'hut') {
     window(p, 'outshut-east', { facing: 'east', plane: RANGE.x1 }, { u0: 70, u1: 78, y0: 8, y1: 18 });
     window(p, 'outshut-west', westGable, { u0: 70, u1: 78, y0: 8, y1: 18 });
+  }
+  if (tier === 'house') {
+    passage(p, 'z', 32, 44, BACK.z1 - WALL, 69, FLOOR + 19);
+    window(p, 'back-west', { facing: 'west', plane: BACK.x0 }, { u0: 58, u1: 64, y0: 8, y1: 20 });
+    window(p, 'back-bay', { facing: 'east', plane: BAY.x1 }, { u0: BAY.z0 + 2, u1: BAY.z1 - 2, y0: 6, y1: 18 }, { mullion: true });
+    window(p, 'back-loft', { facing: 'east', plane: BACK.x1 }, { u0: 53, u1: 59, y0: 28, y1: 32 });
+    chimney(p, 25, 33, 45, 55, 8, 50, 'none');
   }
   // Heather at the porch end and a low kerb of moss along the path edge.
   p.put(42, 0, 119, 56, 1, 125, MAT.earth);
@@ -111,5 +151,8 @@ export function heatherstead(tier: HomeTier): HearthHome {
     p.put(x + 1, 1 + h, z, x + 2, 2 + h, z + 3, MAT.blueFlower);
   }
   const supports = PORCH.posts.map(x => [x + 1, 123, 0, 24] as const);
-  return { blueprint: p.blueprint(), entrance, rooms: tier === 'hut' ? [[32, 2, 100]] : [[32, 2, 100], [32, 2, 74]], supports };
+  const rooms: (readonly [number, number, number])[] = [[32, 2, 100]];
+  if (tier !== 'hut') rooms.push([32, 2, 74]);
+  if (tier === 'house') rooms.push([40, 2, 54], [56, 2, 53]);
+  return { blueprint: p.blueprint(), entrance, rooms, supports };
 }

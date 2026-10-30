@@ -198,3 +198,17 @@ The shell and window metadata are complete static assets, ready for their real c
   cannot differ much from the street alone; bramblecross's steeper cross gable rides over its calmer range ridge.
 
 - **2026-10-30 — Presence consumer:** the first ordered window anchor is the citizen’s designated presence window. Keep it stable across tiers. The authoring bench lights all anchors for inspection; the kingdom lights that one anchor per citizen.
+
+- **2026-10-30 — Lane HH02: houses grow behind, roofs meet under bigger roofs.** Wings may now set per-end
+  `verges`, so a lower wing stops under a larger roof instead of piercing it. Emberfold's kitchen continues the
+  hall's axis at ridge 38, below the hall's rear verge, with a smaller twin stack on the same west flank.
+  Bramblecross's taller back range (ridge 50) crosses the garden wing's ridge, which runs on into its slope, and
+  turns a full gable to the garden. Heatherstead adds a quieter, narrower range (ridge 40) east of centre behind the
+  outshut: the catslide falls into a valley against its slope, a timber bay faces east and the west garden stays
+  open. New lane tests: room air may not escape with the door shut (this caught the cottage return's open west end
+  from HH01, now gabled); every cell from the doorway forward is identical across tiers; each tier uses opened
+  land and adds a room under former open sky; street IoU between tiers stays ≥ 0.75. House windows face only sides
+  or garden courts, so manor/hall must keep these outward prisms clear: emberfold x 0..14 z 60..68 and x 40..64
+  z 46..56; bramblecross x 30..64 z 76..84 and x 46..64 z 46..58, x 0..6 z 46..58; heatherstead x 0..24 z 58..64,
+  x 56..64 z 48..59. Rejected: a full-width heatherstead back range (82% of the ground built over, so no garden)
+  and a centred one (plan read like emberfold's).

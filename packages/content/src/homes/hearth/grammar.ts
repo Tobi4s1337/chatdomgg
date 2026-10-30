@@ -62,6 +62,8 @@ export interface Wing {
   readonly ridge: 'x' | 'z';
   /** Overhang past the eave walls and past the gable ends. */
   readonly eave: number; readonly verge: number;
+  /** Per-end verge, [low end, high end], when a wing runs in under a larger roof and must stop short. */
+  readonly verges?: readonly [number, number];
   /** Tile courses: horizontal tread and vertical rise per course, and slab thickness. */
   readonly tread: number; readonly rise: number; readonly thickness: number;
   /** Which gable ends are built: [low end, high end] along the ridge axis. */
@@ -145,7 +147,8 @@ export function gables(p: Plan, w: Wing): void {
 /** Two broad slopes of terracotta courses, timber barge boards proud of the tiles, and a rolled ridge. */
 export function roof(p: Plan, w: Wing): void {
   const { a, mid, courses } = span(w);
-  const [l0, l1] = w.ridge === 'z' ? [w.z0 - w.verge, w.z1 + w.verge] : [w.x0 - w.verge, w.x1 + w.verge];
+  const [v0, v1] = w.verges ?? [w.verge, w.verge];
+  const [l0, l1] = w.ridge === 'z' ? [w.z0 - v0, w.z1 + v1] : [w.x0 - v0, w.x1 + v1];
   const barges = w.barges ?? w.gables ?? [true, true];
   const t0 = barges[0] ? l0 + 2 : l0, t1 = barges[1] ? l1 - 2 : l1;
   for (let i = 0; i < courses; i++) {
@@ -234,6 +237,19 @@ export function doorway(p: Plan, face: Face, centre: number, height: number, hin
   const n = face.plane + inward;
   const mid = FLOOR + Math.floor(height / 2);
   return face.facing === 'south' || face.facing === 'north' ? [centre, mid, n] : [n, mid, centre];
+}
+
+/**
+ * An open passage between two rooms through a shared wall: timber jambs and a two-cell lintel, floor flush with
+ * both rooms. `normal` is the axis the passage runs along; u spans the opening, n the wall thickness.
+ */
+export function passage(p: Plan, normal: 'x' | 'z', u0: number, u1: number, n0: number, n1: number, top: number): void {
+  const put = (a0: number, a1: number, y0: number, y1: number, material: number) => {
+    if (normal === 'z') p.put(a0, y0, n0, a1, y1, n1, material);
+    else p.put(n0, y0, a0, n1, y1, a1, material);
+  };
+  put(u0 - 1, u1 + 1, FLOOR, top + 2, KIT.trim);
+  put(u0, u1, FLOOR, top, MAT.air);
 }
 
 /**

@@ -5,7 +5,7 @@ import { FAMILIES, type HearthHome } from './family';
 import { BLUEPRINTS, HOME_REVIEW, buildHearthHome, createHearthHome } from './index';
 
 const [SX, SY, SZ] = [64, 160, 128] as const;
-const FINISHED: readonly HomeTier[] = ['hut', 'cottage'];
+const FINISHED: readonly HomeTier[] = ['hut', 'cottage', 'house'];
 const KIT = STYLES.hearth;
 const PALETTE = new Set<number>([MAT.air, KIT.wall, KIT.roof, KIT.trim, KIT.stone, MAT.glass, MAT.earth, MAT.bark, MAT.leaf, MAT.moss, MAT.petal, MAT.blueFlower]);
 /** A citizen: 0.75 m square, 2.25 m of headroom, climbing at most two cells (0.25 m) per step. */
@@ -167,6 +167,24 @@ describe.each(homes)('$family $tier', ({ home, tier }) => {
     expect(head - 2).toBeGreaterThanOrEqual(20);
   });
 
+  it('keeps the weather out where wings and roofs meet: with the door shut, room air never reaches the open', () => {
+    // Glass, timber and plaster are all solid; a shut door is a slab across the doorway inside the wall.
+    const [ex, ey, ez] = home.entrance;
+    const YM = 100, rear = SZ - HOME_DEPTH_METRES[tier] * 8;
+    const shut = (x: number, y: number, z: number) => Math.abs(x - ex) <= 8 && y <= ey + 14 && z >= ez - 1 && z <= ez + 1;
+    const seen = new Uint8Array(SX * YM * SZ), queue: number[] = [];
+    for (const [x, y, z] of home.rooms) { const i = x + SX * (y + 4 + YM * z); seen[i] = 1; queue.push(i); }
+    while (queue.length) {
+      const i = queue.pop()!, x = i % SX, y = Math.floor(i / SX) % YM, z = Math.floor(i / (SX * YM));
+      const open = x === 0 || x === SX - 1 || z <= rear || z === SZ - 1 || y === YM - 1;
+      expect(open, `${b.id}: room air escapes at ${x},${y},${z}`).toBe(false);
+      for (const [nx, ny, nz] of [[x + 1, y, z], [x - 1, y, z], [x, y + 1, z], [x, y - 1, z], [x, y, z + 1], [x, y, z - 1]] as const) {
+        const n = nx + SX * (ny + YM * nz);
+        if (!seen[n] && !g.get(nx, ny, nz) && !shut(nx, ny, nz)) { seen[n] = 1; queue.push(n); }
+      }
+    }
+  });
+
   it('encloses each room under a roof', () => {
     for (const [x, y, z] of home.rooms) {
       let roofed = false;
@@ -214,6 +232,45 @@ describe('Hearth families grow without moving the address', () => {
       expect(HOME_REVIEW[after.blueprint.id]).toEqual(HOME_REVIEW[before.blueprint.id]);
       for (const w of before.blueprint.windows) expect(after.blueprint.windows).toContainEqual(w);
       expect(after.blueprint.windows.length).toBeGreaterThan(before.blueprint.windows.length);
+    }
+  });
+
+  it.each(FAMILIES)('%s grows backward into newly opened land with a new room, never moving its street front', family => {
+    const tiers = homes.filter(h => h.family === family);
+    for (let i = 1; i < tiers.length; i++) {
+      const [before, after] = [tiers[i - 1]!, tiers[i]!];
+      const [g0, g1] = [grid(before.home), grid(after.home)];
+      // Everything from the doorway forward — door, step, porch, hood, planting — is the same cell for cell.
+      const front = after.home.entrance[2] - 4;
+      let changed = 0;
+      for (let z = front; z < SZ; z++) for (let y = 0; y < SY; y++) for (let x = 0; x < SX; x++) if (g0.get(x, y, z) !== g1.get(x, y, z)) changed++;
+      expect(changed, `${after.home.blueprint.id} changes its street front`).toBe(0);
+      // The new tier builds on land the previous tier could not use.
+      const oldRear = SZ - HOME_DEPTH_METRES[before.tier] * 8;
+      let opened = 0;
+      for (let z = 0; z < oldRear; z++) for (let y = 0; y < SY; y++) for (let x = 0; x < SX; x++) if (g1.get(x, y, z)) opened++;
+      expect(opened, `${after.home.blueprint.id} does not use its opened land`).toBeGreaterThan(0);
+      // At least one room stands where the previous tier had open sky.
+      const fresh = after.home.rooms.filter(([x, y, z]) => {
+        for (let up = y; up < SY; up++) if (g0.get(x, up, z)) return false;
+        return true;
+      });
+      expect(fresh.length, `${after.home.blueprint.id} adds no room`).toBeGreaterThan(0);
+    }
+  });
+
+  it.each(FAMILIES)('%s stays recognisable from the street as it grows', family => {
+    const tiers = homes.filter(h => h.family === family).map(h => grid(h.home));
+    const street = (g: Grid) => {
+      const view = new Uint8Array(SX * SY);
+      for (let z = 0; z < SZ; z++) for (let y = 0; y < SY; y++) for (let x = 0; x < SX; x++) if (g.get(x, y, z)) view[x + SX * y] = 1;
+      return view;
+    };
+    for (let i = 1; i < tiers.length; i++) {
+      const [a, c] = [street(tiers[i - 1]!), street(tiers[i]!)];
+      let inter = 0, union = 0;
+      a.forEach((v, k) => { inter += v & c[k]!; union += v | c[k]!; });
+      expect(inter / union).toBeGreaterThanOrEqual(0.75);
     }
   });
 

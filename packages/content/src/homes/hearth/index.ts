@@ -6,7 +6,7 @@ import { FAMILIES, type FamilyBuilder, type HearthHome } from './family';
 
 const BUILDERS: Partial<Record<typeof FAMILIES[number], FamilyBuilder>> = { emberfold, bramblecross, heatherstead };
 /** Tiers whose three family forms are finished and reviewed. */
-const FINISHED: readonly HomeTier[] = ['hut', 'cottage'];
+const FINISHED: readonly HomeTier[] = ['hut', 'cottage', 'house'];
 
 export function buildHearthHome(tier: HomeTier, variant: 0 | 1 | 2): HearthHome {
   const parsed = HomeTierSchema.safeParse(tier);
