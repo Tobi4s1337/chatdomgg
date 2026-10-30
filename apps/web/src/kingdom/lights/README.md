@@ -53,3 +53,30 @@ History is explicit:
 
 The trace test (`people-light.test.ts`) covers a crossing, partial capacity, the fade, the pilot, repeated time,
 reverse seek, replay after clear and input validation.
+
+## Windows and warm pools (KL05)
+
+No adapter change is needed: this lives inside the existing `createWindowLights` and `createVoxelMaterial`, which
+the scene already constructs, updates with the hour and feeds with `getEnvironment(hour)`.
+
+- **The presence pane** (`packages/render/src/presence-lights.ts`) is still one pane per citizen, with the 0.7 s fade,
+  the LOD dither partition and named sources unchanged. A lit pane shows a lamp-lit room: brightest low and in the
+  centre, amber at its edges, with dark frame and mullions whose inner edges catch the light. When the pane is only
+  a few pixels across the town, it settles to its bright warm average so it can still be counted. An absent pane
+  reflects the sky it faces (dark blue-grey at night, pale sky by day), using the hour's zenith, horizon and fog.
+  The warmth follows `windowGlowForHour` (0 until 16.2 h, full from 18.5 h until dawn). By day a lit room shows only
+  as a faint warmth behind the reflection.
+- **The halo** is `WINDOW_HALO_SCALE` (1.3) × the pane. It is a thin warm spill on the reveal and frame, heavier on the
+  sill, and never a blob on the wall. It is drawn only after dusk.
+- **The pool** (`voxel-material.ts`) replaces the squared field with `pow(field, 1.6) × 1.15`, coloured from a warm
+  core through amber. With the flood's linear falloff, it reads about 0.55 at 3 m and 0.2 at 5 m in the 0.5 m local
+  field, then rolls to zero without a ring. It reads fully from night ≥ 0.2 (about 18.5 h in today's grades) and
+  is absent by day. Pool and beacon light share one soft cap (identity to 0.6, then asymptotic to 1.2), so
+  overlapping warmth never clips plaster to white. Citizens use the same material, so faces and cloth in a pool
+  warm with it.
+- **Voxel glass** (`surface: glass`) no longer shows its amber albedo, which read as a lit window where nobody was.
+  It reflects the same sky as an absent pane, plus a faint share of any nearby pool.
+
+`createVoxelMaterial` gains `uSkyZenith` and `uSkyHorizon`, which `setEnvironment` sets from the existing
+`Environment` fields. If KL02 retunes `night`, keep about 0.2 at 18.5 h, or move the `smoothstep(0., .2, uNight)`
+pool gate with it.
