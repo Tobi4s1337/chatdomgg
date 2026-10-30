@@ -92,9 +92,10 @@ describe('authoritative worker light geometry', () => {
   });
 
   const hearthWindows = (['hut', 'cottage', 'house'] as const).flatMap(tier => ([0, 1, 2] as const)
-    .flatMap(variant => [0, Math.PI].map(yaw => ({ tier, variant, yaw }))));
-  it.each(hearthWindows)('lights the authored first Hearth window for $tier/$variant at yaw $yaw and clears it completely', ({ tier, variant, yaw }) => {
-    const home: WindowHouse = { slot: 0, blueprint: createHearthHome(tier, variant), position: yaw === 0 ? [-4, 9, -16] : [4, 9, 16], yaw };
+    .flatMap(variant => [0, 1, 2, 3].map(turn => ({ tier, variant, turn }))));
+  it.each(hearthWindows)('lights the authored first Hearth window for $tier/$variant at turn $turn and clears it completely', ({ tier, variant, turn }) => {
+    const positions: Vec3[] = [[-4,9,-16],[-16,9,4],[4,9,16],[16,9,-4]];
+    const home: WindowHouse = { slot: 0, blueprint: createHearthHome(tier, variant), position: positions[turn]!, yaw: turn * Math.PI / 2 };
     const windows = createWindowLights(new Scene(), [home]);
     try {
       windows.setFrame({ ...PRESENCE_FIXTURES.public, asOf: PRESENCE_FIXTURES.public.asOf + 1000 });
