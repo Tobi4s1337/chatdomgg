@@ -40,10 +40,10 @@ export default function Kingdom() {
     }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(true);});
   });
   onCleanup(()=>{unmounted=true;cancelAnimationFrame(openingFrame);construction.abort();engine?.dispose();(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
-  function tap(action:()=>void){if(!engine)return;if(!sound()){engine.sound.unlock();setSound(true);}action();}
+  function tap(action:()=>void){if(!engine)return;if(!sound()){void engine.sound.unlock().then(setSound);}action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setView(value);tap(()=>engine!.setCamera(value));}
-  return <div class={`kingdom ${stream?'kingdom-stream':''}`} data-chatdom-kingdom data-chatdom-build={buildSession()?true:undefined}>
+  return <div class={`kingdom ${stream?'kingdom-stream':''}`} data-chatdom-kingdom data-forge-phase={forgeStatus()?.phase} data-chatdom-build={buildSession()?true:undefined}>
     <canvas ref={element=>{canvas=element;}} class="kingdom-canvas" aria-label={`${realmName}, a voxel kingdom lit by its people`} />
     <div class="kingdom-vignette" aria-hidden="true" />
     <header class="kingdom-heading">
@@ -59,8 +59,8 @@ export default function Kingdom() {
       <p>{error()?'The kingdom could not open. Try the gate again.':'A place is waiting for you.'}</p>
       <Show when={!error()} fallback={<button onClick={()=>location.reload()}>Try the gate again</button>}><div class="gate-progress"><i style={{width:`${Math.round(progress()*100)}%`}} /></div></Show>
     </div></Show>
-    <Show when={forgeStatus()?.open}><ForgePanel status={forgeStatus()!} submit={words=>engine!.forge.submit(words)} close={()=>engine?.forge.close()} refit={()=>{void engine?.forge.refit();}} family={value=>{location.href=`/?tier=${tier}&hour=${hour()}&forge=1&realm=${value}`;}} /></Show>
-    <Show when={buildSession()}>{session=><BuildTools controller={session().controller} ownerName="Juniper" imports={session().imports}/>}</Show>
+    <Show when={!stream&&forgeStatus()?.open}><ForgePanel status={forgeStatus()!} submit={words=>engine!.forge.submit(words)} close={()=>engine?.forge.close()} refit={()=>{void engine?.forge.refit();}} family={value=>{location.href=`/?tier=${tier}&hour=${hour()}&forge=1&realm=${value}`;}} /></Show>
+    <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} ownerName="Juniper" imports={session().imports}/>}</Show>
     <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>SIMULATED · welcome to the street</small></div>}</Show>
     <Show when={ready()&&!error()&&!stream&&!buildSession()&&!forgeStatus()?.open}><nav class="kingdom-controls" aria-label="Kingdom view">
       <div class="time-controls" aria-label="Time of day"><button classList={{selected:hour()<16}} onClick={()=>chooseHour(12)}>Noon</button><button classList={{selected:hour()>=16&&hour()<22}} onClick={()=>chooseHour(19.5)}>Dusk</button><button classList={{selected:hour()>=22}} onClick={()=>chooseHour(23)}>Night</button></div>

@@ -16,7 +16,8 @@ export function ForgePanel(props:{status:ForgeStatus;submit:(words:string)=>Prom
     </Show>
     <Show when={props.status.privateError}><p class="forge-private">Only you · {props.status.privateError}</p></Show>
     <Show when={props.status.kept&&!props.status.busy}><button onClick={props.refit}>Return a kept piece · {props.status.kept}</button></Show>
+    <Show when={props.status.plaque&&!props.status.busy}><p class="forge-origin">{props.status.plaque}</p></Show>
     <Show when={props.status.maker}><p class="forge-origin">{props.status.maker}</p></Show>
-    <p class="forge-footnote">Local grammar · three authored wishes. No coal spent.<br/>Codex and the live judges are not connected.</p>
+    <p class="forge-footnote">{props.status.runtime==='fixture'?'Presentation fixture · authored wishes. Judges and Codex simulated.':'Your words → the smith → a piece in this kingdom’s style.'}<br/>Development citizen · no coal spent.</p>
   </section>;
 }

@@ -1,5 +1,5 @@
 import type { VoxelBlueprint } from '@chatdom/shared';
-import { MAT, type StyleKey } from '../materials';
+import { MAT, STYLES, type StyleKey } from '../materials';
 
 type Box = VoxelBlueprint['boxes'][number];
 type Cell = [number, number, number];
@@ -16,36 +16,62 @@ export function createForgeMotif(motif: ForgeMotif, style: StyleKey): MotifGeome
     grove: {body:MAT.moss, shade:MAT.bark, light:MAT.thatch, dark:MAT.bark, metal:MAT.goldLeaf},
   }[style];
   if (motif === 'sleeping-dragon') {
-    // A low haunch tapers into a narrower neck and a head resting on its paws.
-    add(9,0,5,19,2,14,p.shade);
-    add(9,2,4,19,6,15,p.body); add(10,6,5,18,9,14,p.body);
-    add(12,9,6,17,10,13,p.body);
-    add(7,1,7,11,4,11,p.body); add(7,4,7,10,5,11,p.body);
-    add(3,1,5,8,5,13,p.body); add(1,1,7,4,3,11,p.body);
-    // Cut the closed eyes into the head instead of placing blocks on its cheeks.
-    add(4,3,5,7,4,6,MAT.air); add(4,3,5,7,4,6,p.dark);
-    add(4,3,12,7,4,13,MAT.air); add(4,3,12,7,4,13,p.dark);
+    // A real masonry throat rises through the coil, with a dark open chimney mouth.
+    // Its foot includes the stable mount; the dragon wraps the exposed shaft.
+    const stone = STYLES[style].stone;
+    add(11,0,7,15,9,11,stone);
+    add(10,8,6,16,10,12,stone);
+    add(11,9,7,15,10,11,MAT.air);
+    // Low hindquarters sit to the right of the stack, not over its top.
+    add(16,0,7,20,3,12,p.shade);
+    add(16,3,7,20,5,12,p.body);
+    add(17,5,8,19,6,11,p.body);
+    // A narrow neck runs around the near side of the masonry to the sleeping head.
+    add(8,0,5,17,2,7,p.body);
+    add(7,2,5,12,4,7,p.body);
+    add(6,1,6,10,4,11,p.body);
+    // A long tapered muzzle points left, with a clearly separate lower jaw.
+    add(3,2,6,7,5,12,p.body);
+    add(1,2,7,4,4,11,p.body);
+    add(1,1,8,5,2,10,p.shade);
+    // Two paws frame and support the chin, with warm claw tips.
+    add(4,0,3,9,2,5,p.body); add(3,0,3,5,1,5,p.light);
+    add(4,0,12,9,2,14,p.body); add(3,0,12,5,1,14,p.light);
+    add(7,1,4,9,3,7,p.body); add(7,1,11,9,3,13,p.body);
+    // Sleeping lids and nostrils on both sides.
+    add(4,3,5,7,4,6,p.dark); add(4,3,12,7,4,13,p.dark);
     add(2,3,6,3,4,7,p.dark); add(2,3,11,3,4,12,p.dark);
-    // Small swept-back horns are attached to the crown, not a broad white cap.
-    add(6,5,5,7,7,7,p.light); add(7,6,5,8,8,7,p.light);
-    add(6,5,11,7,7,13,p.light); add(7,6,11,8,8,13,p.light);
-    // Folded wing roots sweep back to narrow, pointed tips.
-    add(10,5,3,14,8,5,p.shade); add(14,5,3,17,7,5,p.shade);
-    add(17,5,4,19,6,5,p.shade); add(12,8,4,15,9,6,p.shade);
-    add(11,7,3,13,8,4,p.body); add(13,6,3,16,7,4,p.body);
-    add(10,5,14,14,8,16,p.shade); add(14,5,14,17,7,16,p.shade);
-    add(17,5,14,19,6,15,p.shade); add(12,8,13,15,9,15,p.shade);
-    add(11,7,15,13,8,16,p.body); add(13,6,15,16,7,16,p.body);
-    // The tail returns around the visible side, finishing in a tapered tip.
-    add(18,2,5,21,5,14,p.body); add(20,1,10,22,4,16,p.body);
-    add(17,0,14,22,3,17,p.body); add(13,0,15,18,2,18,p.body);
-    add(11,0,15,14,1,17,p.light);
-    // Native silhouettes: rounded tiles, swept fins, or leaf-like ridges.
-    if (style === 'hearth') { add(14,10,7,16,11,12,p.body); add(15,11,8,16,12,11,p.light); }
-    else if (style === 'tide') { add(14,10,7,17,11,11,p.body); add(16,11,8,19,12,10,p.light); }
-    else { add(13,10,7,16,11,11,p.light); add(15,11,8,18,12,10,p.light); }
-    // A hollow flue through the blunt muzzle; the sleeping eyelids remain untouched.
-    add(1,2,8,5,3,10,MAT.air);
+    // Horns sweep back from the crown rather than forming a blunt cap.
+    add(6,5,6,8,6,7,p.light); add(7,6,6,9,7,7,p.light);
+    add(8,7,6,10,8,7,p.light);
+    add(6,5,11,8,6,12,p.light); add(7,6,11,9,7,12,p.light);
+    add(8,7,11,10,8,12,p.light);
+    // Paired folded bat wings: a high leading finger, a dark membrane and
+    // two small scallops along the trailing edge. The wing roots meet the body.
+    for (const z of [5, 12]) {
+      add(16,3,z,19,7,z+2,p.shade);
+      add(17,7,z,19,10,z+2,p.shade);
+      add(18,10,z,19,12,z+2,p.shade);
+      add(19,5,z,21,9,z+2,p.shade);
+      add(21,4,z,22,7,z+2,p.shade);
+      add(22,3,z,23,5,z+2,p.shade);
+      // A single raised spar describes the fold without stippling the membrane.
+      const face = z === 5 ? 4 : 14;
+      add(18,9,face,19,11,face+1,p.body);
+      add(19,7,face,20,9,face+1,p.body);
+      add(20,6,face,21,7,face+1,p.body);
+      add(21,5,face,22,6,face+1,p.body);
+    }
+    // Slender tail turns around the rear, leaving an air gap inside its loop.
+    add(19,0,10,22,2,13,p.body); add(21,0,12,23,2,16,p.body);
+    add(16,0,15,23,1,17,p.body); add(12,0,16,17,1,18,p.body);
+    add(10,0,16,12,1,17,p.light);
+    // Native crest treatment stays local to the haunch.
+    if (style === 'hearth') { add(17,6,9,19,7,11,p.body); add(18,7,9,19,8,10,p.light); }
+    else if (style === 'tide') { add(17,6,9,20,7,11,p.body); add(19,7,9,21,8,10,p.light); }
+    else { add(17,6,9,19,7,11,p.light); add(18,7,9,20,8,10,p.light); }
+    // The flue opens straight out of the nose at the returned smoke anchor.
+    add(1,2,8,4,3,10,MAT.air);
     return {size:[24,16,18],boxes,mount:[12,0,9],emitter:[0,2,9]};
   }
   if (motif === 'crescent-moon') {
