@@ -1,0 +1,1 @@
+{"name":"@chatdom/codex","private":true,"version":"0.0.0","type":"module","scripts":{"build":"vite build --logLevel warn","start":"node --env-file-if-exists=../../.env dist/codex.mjs"},"dependencies":{"@chatdom/shared":"workspace:*","@chatdom/forge":"workspace:*","@chatdom/content":"workspace:*","@chatdom/voxel":"workspace:*","zod":"4.6.7"},"devDependencies":{"vite":"8.3.5"}}

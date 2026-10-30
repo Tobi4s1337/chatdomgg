@@ -3,5 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts" }
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "check": "vitest run --root ../.. packages/audio/src/budget.test.ts",
+    "demo": "node scripts/demo.mjs"
+  }
 }

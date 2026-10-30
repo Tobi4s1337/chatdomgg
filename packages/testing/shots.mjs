@@ -2,11 +2,31 @@ import { chromium } from '@playwright/test';
 import { acquireCaptureLock } from './capture-lock.mjs';
 import { startCapturePreview, closeCapturePreview } from './preview.mjs';
 import { mkdir } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const external = option('--base-url');
 let base = external;
 const area = option('--area') ?? 'all';
+// Herald's package script builds its producer and its runner owns the capture lock.
+// Dispatch before acquiring our own lock so the child never waits on its parent.
+if (area === 'herald') {
+  const areaIndex = args.indexOf('--area');
+  const forwarded = args.filter((_arg, index) => index !== areaIndex && index !== areaIndex + 1);
+  const child = spawn('pnpm', ['--filter', '@chatdom/herald', 'shots', '--', ...forwarded], {
+    cwd: fileURLToPath(new URL('../../', import.meta.url)), stdio: 'inherit',
+  });
+  const forward = signal => child.kill(signal);
+  const interrupt = () => forward('SIGINT'), terminate = () => forward('SIGTERM');
+  process.on('SIGINT', interrupt); process.on('SIGTERM', terminate);
+  const code = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code, signal) => resolve(code ?? (signal === 'SIGINT' ? 130 : 143)));
+  });
+  process.off('SIGINT', interrupt); process.off('SIGTERM', terminate);
+  process.exit(code);
+}
 if (!['all', 'foundation', 'kingdom', 'atlas'].includes(area)) throw new Error(`Unknown area: ${area}`);
 // Targeted look checks keep the shared host lean; the default verify matrix is unchanged.
 const tierFilter = option('--tier'), hourFilter = option('--hour'), sizeFilter = option('--size');
@@ -30,6 +50,7 @@ try {
     await page.waitForFunction(isKingdom => (window.__chatdomReady === true && (!isKingdom || (window.__chatdomKingdom?.stats.ready && window.__chatdomKingdom.stats.fieldUploads > 0 && window.__chatdomKingdom.stats.fieldSettled))) || !!document.querySelector('.kingdom-gate button'), kingdom, { timeout: 240_000 });
     if (await page.locator('.kingdom-gate button').count()) throw new Error(`${name}: kingdom error gate: ${await page.locator('.kingdom-gate').innerText()}${errors.length ? `\n${errors.join('\n')}` : ''}`);
     if (kingdom && await page.locator('[data-chatdom-kingdom]').count() !== 1) throw new Error('Kingdom screenshot requires the real kingdom root');
+    if (path === '/panel' && await page.locator('[data-chatdom-panel][data-view="kingdom"][data-source="simulated"]').count() !== 1) throw new Error('Panel screenshot requires its simulated kingdom view, not a connection state');
     if (area === 'atlas' && await page.locator('[data-chatdom-atlas]').count() !== 1) throw new Error('Atlas screenshot requires the real Atlas root');
     if (area === 'atlas') {
       const atlas = page.locator('[data-chatdom-atlas]');
@@ -46,8 +67,8 @@ try {
           await page.waitForFunction(() => window.__chatdomKingdom.stats.fieldSettled, null, { timeout: 120_000 });
           const stats = await page.evaluate(() => ({ ...window.__chatdomKingdom.stats }));
           const triangleLimit = width <= 390 ? 800_000 : 2_000_000;
-          // Three authored 17-part looks add 51 instanced draws plus contact shadows.
-          const drawLimit = stats.citizens > 0 ? 180 : 120;
+          // Six curated wardrobe looks add 96 instanced part draws plus cloth and contact shadows.
+          const drawLimit = stats.citizens > 0 ? 260 : 160;
           if (stats.drawCalls < 1 || stats.drawCalls > drawLimit || stats.triangles < 1 || stats.triangles > triangleLimit || stats.fieldBytes <= 0 || stats.fieldBytes > 12 * 1024 * 1024) throw new Error(`${name} ${width}x${height}: scene budget exceeded: ${JSON.stringify(stats)}`);
           if (!(await page.locator('.source-ribbon').innerText()).includes('SIMULATED')) throw new Error(`${name}: missing SIMULATED source`);
         }

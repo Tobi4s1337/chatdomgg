@@ -1,22 +1,32 @@
 import { spawn } from 'node:child_process';
+import { readFile, stat } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Every checkout on this Linux host uses the same inode. Never remove this file:
 // unlinking an advisory lock would let another process lock a different inode.
 export const CAPTURE_LOCK_PATH = '/tmp/chatdom-capture.lock';
 
-const holderSource = 'process.stdout.write("acquired\\n"); process.stdin.resume();';
-// The supervisor watches the caller's pipe even while flock is queued. --no-fork
-// keeps one PID for the waiting flock and its eventual holder, so cancellation
-// terminates exactly our process in either state, including after caller SIGKILL.
+// The supervisor owns both descriptors and watches the caller's pipe while queued
+// and acquired. Each short-lived flock helper inherits those same descriptions,
+// so killing a caller releases its locks even while a helper is blocked.
 const supervisorSource = `
   import { spawn } from 'node:child_process';
-  const child = spawn('flock', ['--exclusive', '--no-fork', process.argv[1], process.execPath, '-e', ${JSON.stringify(holderSource)}], { stdio: ['pipe', 'pipe', 'inherit'] });
+  import { openSync, closeSync } from 'node:fs';
+  const path = process.argv[1], priority = process.argv[2];
+  let child, descriptors = [], retry;
   let stopping = false;
+  const closeLocks = () => {
+    for (const descriptor of descriptors) closeSync(descriptor);
+    descriptors = [];
+  };
   const stop = () => {
     if (stopping) return;
     stopping = true;
-    child.stdin.end();
-    child.kill('SIGTERM');
+    clearTimeout(retry);
+    child?.kill('SIGTERM');
+    closeLocks();
+    process.stdin.destroy();
   };
   process.stdin.resume();
   process.stdin.once('end', stop);
@@ -24,27 +34,71 @@ const supervisorSource = `
   process.stdout.on('error', stop);
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
-  child.stdin.on('error', () => {});
-  child.stdout.pipe(process.stdout);
-  child.once('error', error => { console.error('Capture lock failed:', error.message); });
-  child.once('close', code => {
-    process.exitCode = stopping ? 0 : (code ?? 1);
-    process.stdin.destroy();
+  const lock = (mode, descriptor, nonblocking = false) => new Promise((resolve, reject) => {
+    child = spawn('flock', [mode, ...(nonblocking ? ['--nonblock'] : []), '3'], { stdio: ['ignore', 'ignore', 'inherit', descriptor] });
+    child.once('error', reject);
+    child.once('close', code => {
+      child = undefined;
+      if (stopping) resolve(false);
+      else if (code === 0) resolve(true);
+      else if (nonblocking && code === 1) resolve(false);
+      else reject(new Error('flock exited with code ' + code));
+    });
   });
+  try {
+    while (!stopping) {
+      descriptors.push(openSync(path + '.priority', 'a'));
+      descriptors.push(openSync(path, 'a'));
+      const admitted = await lock(priority === 'main' ? '--shared' : '--exclusive', descriptors[0], priority === 'lane');
+      if (admitted && !stopping && priority === 'main') process.stdout.write('priority\\n');
+      const acquired = admitted && !stopping && await lock('--exclusive', descriptors[1], priority === 'lane');
+      if (stopping) break;
+      if (acquired) {
+        process.stdout.write('acquired\\n');
+        break;
+      }
+      closeLocks();
+      await new Promise(resolve => { retry = setTimeout(resolve, 100); });
+    }
+  } catch (error) {
+    if (!stopping) {
+      console.error('Capture lock failed:', error.message);
+      process.exitCode = 1;
+    }
+    stop();
+  }
 `;
+
+async function checkoutPriority() {
+  const gitPath = fileURLToPath(new URL('../../.git', import.meta.url));
+  try {
+    const gitDirectory = (await stat(gitPath)).isDirectory() ? gitPath
+      : resolve(dirname(gitPath), (await readFile(gitPath, 'utf8')).trim().replace(/^gitdir:\s*/, ''));
+    return (await readFile(resolve(gitDirectory, 'HEAD'), 'utf8')).trim() === 'ref: refs/heads/main' ? 'main' : 'lane';
+  } catch {
+    return 'lane';
+  }
+}
 
 /**
  * Acquire before starting a preview or browser; release after both have closed.
  * `path` exists for isolated subprocess tests; runners always use the host path.
  * `signal` cancels the queue wait. An acquired lock stays held until release so
  * cancellation cannot admit another browser before the caller closes its own.
- * @param {{ path?: string, signal?: AbortSignal }} [options]
+ * Main captures take priority over polling lanes, without interrupting a holder.
+ * Older guards queued directly on the primary lock retain their existing order.
+ * Priority defaults to this checkout's branch; CHATDOM_CAPTURE_PRIORITY overrides
+ * that default and the explicit option overrides the environment (for tests).
+ * @param {{ path?: string, signal?: AbortSignal, priority?: 'main' | 'lane' }} [options]
  * @returns {Promise<(() => Promise<void>)>}
  */
-export async function acquireCaptureLock({ path = CAPTURE_LOCK_PATH, signal } = {}) {
+export async function acquireCaptureLock({ path = CAPTURE_LOCK_PATH, signal, priority = process.env.CHATDOM_CAPTURE_PRIORITY } = {}) {
   if (signal?.aborted) throw signal.reason ?? new Error('Capture lock cancelled');
-  console.log('[capture] waiting for the shared host lock');
-  const child = spawn(process.execPath, ['--input-type=module', '-e', supervisorSource, path], { stdio: ['pipe', 'pipe', 'inherit'] });
+  priority ??= await checkoutPriority();
+  if (priority !== 'main' && priority !== 'lane') throw new Error('Capture priority must be main or lane');
+  if (signal?.aborted) throw signal.reason ?? new Error('Capture lock cancelled');
+  console.log(`[capture] waiting for the shared host lock (${priority})`);
+  const child = spawn(process.execPath, ['--input-type=module', '-e', supervisorSource, path, priority], { stdio: ['pipe', 'pipe', 'inherit'] });
   // EPIPE is expected if the guard fails or is cancelled as we close its pipe.
   child.stdin.on('error', () => {});
   let releaseRequested = false;
@@ -67,9 +121,14 @@ export async function acquireCaptureLock({ path = CAPTURE_LOCK_PATH, signal } = 
   try {
     await new Promise((resolve, reject) => {
       let output = '';
+      let prioritized = false;
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', data => {
         output += data;
+        if (!prioritized && output.includes('priority\n')) {
+          prioritized = true;
+          console.log('[capture] main priority registered');
+        }
         if (output.includes('acquired\n')) resolve();
       });
       child.once('error', reject);

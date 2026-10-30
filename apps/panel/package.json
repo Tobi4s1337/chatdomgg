@@ -2,6 +2,10 @@
   "name": "@chatdom/panel",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5195 --strictPort"
+  },
   "dependencies": {
     "@chatdom/shared": "workspace:*",
     "solid-js": "1.9.18"
