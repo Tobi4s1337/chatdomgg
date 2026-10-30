@@ -348,3 +348,11 @@ experiences have shipped.
   main-owned movement, schema and domain rules. The payload ceiling is 16 KiB to admit bounded build operations.
   Presence checkpoint and its multi-fact batch commit through `executeIngress`/`loadIngress`, with evidenced
   interval union and current-home requirements consumed from the reducer.
+- **2026-10-30 — Lost source evidence is explicit.** Consume shared `source-lost` controls through accepted
+  `presenceTransition`. Persist global source cutoffs and disclosure provenance in the actual compressed
+  checkpoint; legacy checkpoints default to no cutoffs/unknown disclosure source. Only Herald admits these
+  controls. Stream loss shortens the same domain night lease, never manufactures offline. The ordered producer
+  must put its loss barrier before recovery observations; open runs are discarded and earned unions retained.
+  Current-state revocation removes affected Twitch metadata, not homes/rights/loyalty or independent people.
+  Include removal/redaction of revoked Twitch-derived historical inbox/outbox data in the owned revocation path;
+  clearing a checkpoint alone is not proof of that cleanup.

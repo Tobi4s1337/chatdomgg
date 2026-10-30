@@ -7,6 +7,9 @@ export const STREAM_LEASE_MS = 180_000;
 export const PresenceOriginSchema = z.enum(['live', 'recovered', 'simulated']);
 export const PresenceSourceSchema = z.enum(['chatters', 'chat', 'panel', 'walker']);
 export type PresenceSource = z.infer<typeof PresenceSourceSchema>;
+/** Herald may lose evidence without witnessing anyone depart or the stream end. */
+export const PresenceLossSourceSchema = z.enum(['chat', 'chatters', 'stream']);
+export type PresenceLossSource = z.infer<typeof PresenceLossSourceSchema>;
 const common = { version: z.literal(1), id: TokenSchema, kingdomId: KingdomIdSchema, observedAt: EpochMsSchema, origin: PresenceOriginSchema };
 export const PresencePersonSchema = z.discriminatedUnion('disclosure', [
   z.strictObject({ personId: PersonIdSchema, disclosure: z.literal('anonymous') }),
@@ -15,6 +18,9 @@ export const PresencePersonSchema = z.discriminatedUnion('disclosure', [
 export type PresencePerson = z.infer<typeof PresencePersonSchema>;
 /** Trusted private ingress. Never expose this schema on a public browser endpoint. */
 export const PresenceInputSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ ...common, kind: z.literal('source-lost'), sources: z.array(PresenceLossSourceSchema).min(1).max(3),
+    reason: z.enum(['unavailable', 'revoked']),
+  }),
   z.strictObject({ ...common, kind: z.literal('stream'), live: z.boolean(), sessionId: TokenSchema.nullable() }),
   z.strictObject({ ...common, kind: z.literal('observe'), source: PresenceSourceSchema,
     coverage: z.enum(['complete', 'partial', 'activity']), people: z.array(PresencePersonSchema).max(100_000),
@@ -24,6 +30,7 @@ export const PresenceInputSchema = z.discriminatedUnion('kind', [
   }),
   z.strictObject({ ...common, kind: z.literal('restore'), personId: PersonIdSchema }),
 ]).superRefine((input, ctx) => {
+  if (input.kind === 'source-lost' && new Set(input.sources).size !== input.sources.length) ctx.addIssue({ code: 'custom', message: 'Duplicate lost source' });
   if (input.kind === 'stream' && input.live !== (input.sessionId !== null)) ctx.addIssue({ code: 'custom', message: 'Live streams need a session; offline streams have none' });
   if (input.kind === 'observe') {
     if (new Set(input.people.map(p => p.personId)).size !== input.people.length) ctx.addIssue({ code: 'custom', message: 'Duplicate person in observation' });
