@@ -185,5 +185,30 @@ The shell and window metadata are complete static assets, ready for their real c
   been built or validated by this brief.
 
 - **2026-10-30 — Ready for the team.** Main reviewed the real core mixed-street desktop/phone views, doorway and clean SIMULATED window fixture. Validator checks all 51 baseline assets; six review-fixture tests pass. Capture previews allocate free ports for parallel worktrees. The actual lane assets remain this lane’s acceptance, not a claimed result of the tooling check.
+- **2026-10-30 — Lane HH01: one grammar, three plans.** `grammar.ts` builds gabled wings from tile courses
+  (tread/rise/thickness), stepped gables, chamfered timber corners, inset presence windows and an always-open
+  doorway whose leaf stands open inside. Families compose wings in ordered phases (base → walls → hollows →
+  gables → roofs → openings) so joins open naturally. Doorways: emberfold at the facade (focus z=122);
+  bramblecross's inset porch and heatherstead's lean-to porch put their doors one metre back (focus z=114) so the
+  porch, not a flat wall, meets the street. Hut windows face only the street or the side lot lines, so rear
+  growth never covers them. Lane tests are stricter than the validator: each window's whole outward prism must
+  reach the lot edge, a 0.75 m × 2.25 m citizen must walk from the street into every room with ≤2-cell steps,
+  declared porch/hood support columns must be unbroken, and each family pair must differ broadly (IoU < 0.8) in
+  at least two of street/side/plan projections and be near-identical (≥ 0.9) in none. Two side-gabled families
+  cannot differ much from the street alone; bramblecross's steeper cross gable rides over its calmer range ridge.
 
 - **2026-10-30 — Presence consumer:** the first ordered window anchor is the citizen’s designated presence window. Keep it stable across tiers. The authoring bench lights all anchors for inspection; the kingdom lights that one anchor per citizen.
+
+- **2026-10-30 — Lane HH02: houses grow behind, roofs meet under bigger roofs.** Wings may now set per-end
+  `verges`, so a lower wing stops under a larger roof instead of piercing it. Emberfold's kitchen continues the
+  hall's axis at ridge 38, below the hall's rear verge, with a smaller twin stack on the same west flank.
+  Bramblecross's taller back range (ridge 50) crosses the garden wing's ridge, which runs on into its slope, and
+  turns a full gable to the garden. Heatherstead adds a quieter, narrower range (ridge 40) east of centre behind the
+  outshut: the catslide falls into a valley against its slope, a timber bay faces east and the west garden stays
+  open. New lane tests: room air may not escape with the door shut (this caught the cottage return's open west end
+  from HH01, now gabled); every cell from the doorway forward is identical across tiers; each tier uses opened
+  land and adds a room under former open sky; street IoU between tiers stays ≥ 0.75. House windows face only sides
+  or garden courts, so manor/hall must keep these outward prisms clear: emberfold x 0..14 z 60..68 and x 40..64
+  z 46..56; bramblecross x 30..64 z 76..84 and x 46..64 z 46..58, x 0..6 z 46..58; heatherstead x 0..24 z 58..64,
+  x 56..64 z 48..59. Rejected: a full-width heatherstead back range (82% of the ground built over, so no garden)
+  and a centred one (plan read like emberfold's).

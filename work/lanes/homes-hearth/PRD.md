@@ -16,11 +16,11 @@ implement private substitutes or pick from Backlog without main. A weak piece is
 
 ## Tasks
 
-- [ ] **HH01 — A varied hut-and-cottage street worth looking at** · evidence: six-model bench + tests + shots.
+- [x] **HH01 — A varied hut-and-cottage street worth looking at** · evidence: six-model bench + tests + shots.
   Build the three family grammars at hut and cottage tiers, stable IDs/entrances/window anchors and the lane's
   `BLUEPRINTS`/factory entry. Export `HOME_REVIEW` doorway focus data and render all six in the actual bench at dusk, inspect their silhouettes, interior access
   and window planes; improve what looks cheap. Confirm full reserve with locked rear empty. First visible result.
-- [ ] **HH02 — Each family grows into its house** · evidence: three models + growth/contact tests + shots.
+- [x] **HH02 — Each family grows into its house** · evidence: three models + growth/contact tests + shots.
   Add the house tier with structural additions and kept family identity. Prove the entrance/address and existing
   window IDs do not move; test each shell's real approach/interior and palette. Inspect the nine-model comparison.
 - [ ] **HH03 — Manors and halls remember the same home** · evidence: six models + complete family sheets.
