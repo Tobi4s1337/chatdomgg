@@ -31,7 +31,7 @@ Do not add per-voxel tests. Missing required main inputs get a `needs:` line; wo
   hang as a thin sheet, clear the hips during a stride and settle on stopping. Capture front/side/back and a
   short walk-to-stop comparison; inspect both standard web sizes. · evidence: cloth visible in the actual
   runtime, no voxel drape/backpack, one catalogue schema check and inspected fit captures.
-- [ ] **WB02 — Make bodies and hair feel like different people.** Complete four contour families, eight human
+- [x] **WB02 — Make bodies and hair feel like different people.** Complete four contour families, eight human
   and two fey skin choices, six natural hair swatches and all eight hair treatments from R2–R3. Keep rig/pivots
   identical. Capture silhouette/body/hair contact sheets plus lightest/darkest skin at noon, dusk and night;
   inspect face read and textured-hair silhouettes at street distance. Add the one asymmetric source,

@@ -1,5 +1,5 @@
 import type { AvatarPartBlueprint } from '@chatdom/shared';
-import { BODY_FAMILIES, bodyContour, type BodyFamily } from './body';
+import { BODY_FAMILIES, bodyContour, torsoRow, type BodyFamily } from './body';
 import { capeColours } from './capes';
 import { GARB, type Subscription, type WearableStyle } from './palette';
 import { Sculpt } from './sculpt';
@@ -33,9 +33,9 @@ function shortCloak(fit: WearableFit): Sculpt {
   const c = bodyContour(fit.body);
   const cord = capeColours('shortCloak', fit.style).cloth;
   const s = new Sculpt();
-  const z = c.chest.front;
+  const collar = torsoRow(c, 15), z = collar.front;
   // The chest's rounded corners stop the cords a cell short of the shoulder edge.
-  s.box([-c.chest.half + 1, 15, z], [c.chest.half - 1, 16, z + 1], cord);
+  s.box([-collar.half + 1, 15, z], [collar.half - 1, 16, z + 1], cord);
   s.box([-1, 14, z], [1, 16, z + 1], GARB.clasp);
   return s;
 }
