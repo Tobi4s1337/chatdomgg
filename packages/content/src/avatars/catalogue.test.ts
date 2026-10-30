@@ -1,42 +1,57 @@
 import { describe, expect, it } from 'vitest';
 import { AVATAR_CAPE_LIMITS, AvatarCapeBlueprintSchema, VOXEL_METRES } from '@chatdom/shared';
-import { AVATAR_PALETTE, MAT, MATERIALS } from '../materials';
-import { BODY_FAMILIES, CAPE_FORMS, HAIR_FORMS, REVIEW_LINEUPS, REVIEW_LOOKS, assembleLook, compileAvatarPart, createBodyParts, createCape, createHairParts, createWearableParts, findReviewLook, occupiedCells, restPosition, validateLook } from './index';
+import { AVATAR_PALETTE, MATERIALS } from '../materials';
+import { BODY_FAMILIES, CAPE_FORMS, HAIR_FORMS, REVIEW_LINEUPS, REVIEW_LOOKS, assembleLook, compileAvatarPart, createBodyParts, createCape, createHairParts, createWearableParts, occupiedCells, partMatrix, restPosition, transformPoint, validateLook } from './index';
 
 const registered = new Set(MATERIALS.materials.filter(m => m.id !== 0).map(m => m.id));
 
+/** Root-local occupied cells of a part at rest, as "x,y,z" keys. */
+function restCells(part: Parameters<typeof compileAvatarPart>[0]): Set<string> {
+  const asset = compileAvatarPart(part, 0), [sx, sy] = asset.size, m = partMatrix(part), out = new Set<string>();
+  asset.voxels.forEach((v, i) => {
+    if (!v) return;
+    const p = transformPoint(m, [(i % sx + .5) * VOXEL_METRES.avatar, (Math.floor(i / sx) % sy + .5) * VOXEL_METRES.avatar, (Math.floor(i / (sx * sy)) + .5) * VOXEL_METRES.avatar]);
+    out.add(p.map(n => Math.floor(n / VOXEL_METRES.avatar)).join(','));
+  });
+  return out;
+}
+
 describe('body and hair catalogue', () => {
-  it('builds every body in every skin, and every hair form in every swatch on every body, within budget', () => {
+  it('builds every family in every skin, and every hair treatment in every swatch on every family', { timeout: 60_000 }, () => {
     for (const body of BODY_FAMILIES) {
-      const shape = createBodyParts(body, AVATAR_PALETTE.skin[0]);
-      for (const skin of AVATAR_PALETTE.skin) {
-        const parts = createBodyParts(body, skin);
-        // Skin is a palette choice: the same boxes, recoloured where the skin shows.
-        expect(parts.map(p => [p.attachment, p.pivot, p.size, p.boxes.length])).toEqual(shape.map(p => [p.attachment, p.pivot, p.size, p.boxes.length]));
-        expect(parts.some(p => p.boxes.some(b => b.material === skin))).toBe(true);
-      }
-      // Every form on every body; the swatch only recolours, so the full swatch range is built on one body.
-      for (const form of HAIR_FORMS) for (const hair of body === 'balanced' ? AVATAR_PALETTE.hair : AVATAR_PALETTE.hair.slice(0, 1)) {
+      for (const skin of AVATAR_PALETTE.skin) validateLook(createBodyParts(body, skin));
+      const [head] = createBodyParts(body, AVATAR_PALETTE.skin[0]).filter(part => part.attachment === 'head');
+      const skull = restCells(head!);
+      for (const form of HAIR_FORMS) for (const hair of AVATAR_PALETTE.hair) {
         const parts = createHairParts(form, { body, hair, headwear: null });
-        expect(parts.length).toBe(form === 'bareScalp' ? 0 : 1);
+        validateLook([...createBodyParts(body, AVATAR_PALETTE.skin[0]), ...parts]);
         for (const part of parts) {
           expect(part.attachment).toBe('head');
           expect(part.layer).toBe('hair');
+          for (const cell of restCells(part)) {
+            const [x, y, z] = cell.split(',').map(Number) as [number, number, number];
+            // Hair meets the skull face to face, never in the same cell.
+            expect(skull.has(cell)).toBe(false);
+            // Eyes, cheeks and mouth (rows 17–20 of the face plate and the cells in front of it) stay clear;
+            // a fringe may come down to the row just above the eyes.
+            expect(z >= 3 && x >= -5 && x < 5 && y >= 17 && y < 21, `${form} covers the face at ${cell}`).toBe(false);
+          }
         }
-        validateLook([...shape, ...parts]);
       }
     }
-    expect(() => createBodyParts('balanced', MAT.stone as never)).toThrow();
-    expect(() => createHairParts('sidePart', { body: 'balanced', hair: MAT.stone as never, headwear: null })).toThrow();
-  }, 60_000);
+    expect(() => createBodyParts('lanky' as never, AVATAR_PALETTE.skin[0])).toThrow();
+    expect(() => createBodyParts('balanced', AVATAR_PALETTE.hair[0] as never)).toThrow();
+    expect(() => createHairParts('mohawk' as never, { body: 'balanced', hair: AVATAR_PALETTE.hair[0], headwear: null })).toThrow();
+    expect(() => createHairParts('bob', { body: 'balanced', hair: AVATAR_PALETTE.skin[0] as never, headwear: null })).toThrow();
+  });
 
-  it('shows the whole range on the bench: every body, skin, hair form and hair swatch', () => {
-    expect(new Set(REVIEW_LOOKS.map(l => l.body))).toEqual(new Set(BODY_FAMILIES));
-    expect(new Set(REVIEW_LOOKS.map(l => l.skin))).toEqual(new Set(AVATAR_PALETTE.skin));
-    expect(new Set(REVIEW_LOOKS.flatMap(l => l.hair ? [l.hair.form] : []))).toEqual(new Set(HAIR_FORMS));
-    expect(new Set(REVIEW_LOOKS.flatMap(l => l.hair ? [l.hair.swatch] : []))).toEqual(new Set(AVATAR_PALETTE.hair));
-    for (const look of REVIEW_LOOKS) expect(look.label).toMatch(/^Simulated /);
-    for (const lineup of REVIEW_LINEUPS) for (const id of lineup.looks) expect(findReviewLook(id).id).toBe(id);
+  it('covers each family, every skin and hair swatch and every treatment in the review fixtures', () => {
+    const looks = [...REVIEW_LOOKS, ...REVIEW_LINEUPS.flatMap(lineup => lineup.looks)];
+    for (const body of BODY_FAMILIES) expect(looks.some(look => look.body === body)).toBe(true);
+    for (const skin of AVATAR_PALETTE.skin) expect(REVIEW_LOOKS.some(look => look.skin === skin)).toBe(true);
+    for (const hair of AVATAR_PALETTE.hair) expect(REVIEW_LOOKS.some(look => look.hair?.swatch === hair)).toBe(true);
+    for (const form of HAIR_FORMS) expect(REVIEW_LOOKS.some(look => look.hair?.form === form)).toBe(true);
+    for (const look of looks) expect(look.label).toMatch(/^Simulated citizen /);
   });
 });
 

@@ -1,4 +1,4 @@
-export { BODY_FAMILIES, createBodyParts, type BodyFamily } from './body';
+export { BODY_FAMILIES, bodyContour, createBodyParts, type BodyFamily, type Contour, type Section } from './body';
 export { HAIR_FORMS, createHairParts, type HairForm, type HairFit } from './hair';
 export { COMMON_WEARABLES, WEARABLE_AREA, createWearableParts, isHeadwear, type CommonWearableId, type HeadwearId, type WearableArea, type WearableFit, type WearableId } from './wearables';
 export { CAPE_FORMS, capeColours, createCape, isCapeForm, type CapeFormId } from './capes';

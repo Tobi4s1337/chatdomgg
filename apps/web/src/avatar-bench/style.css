@@ -38,3 +38,5 @@
   .avatar-panel{border-left:0;border-top:3px solid #6f5536;padding:18px 18px 16px;gap:11px}
   .avatar-title h1{font-size:22px}
 }
+.avatar-lineup-name{position:absolute;transform:translateX(-50%);max-width:150px;text-align:center;font-size:12px;line-height:1.25;color:#f3e7cc;text-shadow:0 1px 2px #1d1518;pointer-events:none}
+.avatar-lineup--silhouette .avatar-lineup-name{color:#3a2f34;text-shadow:none}

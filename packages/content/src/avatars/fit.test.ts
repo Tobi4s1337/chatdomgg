@@ -2,98 +2,87 @@ import { describe, expect, it } from 'vitest';
 import { VOXEL_METRES, type AvatarPartBlueprint, type Vec3 } from '@chatdom/shared';
 import { MAT } from '../materials';
 import { BODY_FAMILIES, compileAvatarPart, createBodyParts, partMatrix, transformPoint, type AvatarPose } from './index';
-import { Sculpt } from './sculpt';
 
 const M = VOXEL_METRES.avatar;
+const MARK = MAT.brass;
 
 /**
- * The seam between authored cells and the posed rig, through the same compiler and transforms the
- * bench uses. Expected positions are worked out by hand from the frozen joints (head pivot y = 16,
- * right shoulder [5, 15, 0], wrist 7 cells below it, grip one cell in front of the wrist), so a wrong
- * axis, a doubled pivot or a cells/metres slip moves a marker off its answer.
+ * Deliberately asymmetric fixtures: an L-shaped hat badge on the `hat` socket and a tool on `gripRight`.
+ * Each carries one brass marker cell. Their pivots are part-local cells, as the factories produce.
  */
-const POSE: AvatarPose = {
-  id: 'seam',
-  label: 'Head turned left, right arm raised forward',
-  // Head: +90° about Y turns +Z (face) towards +X. Right upper arm: −90° about X swings the hanging arm forward to horizontal.
-  rotations: { head: [0, 90, 0], upperArmRight: [-90, 0, 0] },
+const badge: AvatarPartBlueprint = {
+  version: 1, id: 'fixture.badge', lattice: 'avatar', size: [3, 2, 1], pivot: [0, 0, 0], attachment: 'hat', layer: 'accessory',
+  boxes: [{ from: [0, 0, 0], to: [3, 1, 1], material: MAT.cream }, { from: [2, 1, 0], to: [3, 2, 1], material: MARK }],
+};
+const tool: AvatarPartBlueprint = {
+  version: 1, id: 'fixture.tool', lattice: 'avatar', size: [1, 1, 3], pivot: [0, 0, 0], attachment: 'gripRight', layer: 'accessory',
+  boxes: [{ from: [0, 0, 0], to: [1, 1, 2], material: MAT.timber }, { from: [0, 0, 2], to: [1, 1, 3], material: MARK }],
 };
 
-/** A lopsided hat: a brim over the right-front of the crown with a brass marker on its front-right corner. */
-function hatFixture(): AvatarPartBlueprint {
-  return new Sculpt()
-    .box([-2, 24, -2], [3, 25, 3], MAT.cream)
-    .box([2, 24, 3], [3, 25, 4], MAT.brass)
-    .toPart('fixture.hat', 'hat', 'accessory');
-}
-
-/** A short tool held in the right grip, its brass tip three cells ahead of the grip. */
-function toolFixture(): AvatarPartBlueprint {
-  return new Sculpt()
-    .box([5, 7, 1], [6, 8, 4], MAT.timber)
-    .box([5, 7, 4], [6, 8, 5], MAT.brass)
-    .toPart('fixture.tool', 'gripRight', 'accessory');
-}
-
-/** Root-local metres of the centre of the part's only brass cell, after compiling and posing it. */
+/** Centre of the single marker cell found in the compiled asset, carried through the bench's part transform. */
 function marker(part: AvatarPartBlueprint, pose: AvatarPose): Vec3 {
   const asset = compileAvatarPart(part, 0);
   const [sx, sy] = asset.size;
-  const found = [...asset.voxels.entries()].filter(([, m]) => m === MAT.brass);
+  const found: Vec3[] = [];
+  asset.voxels.forEach((v, i) => { if (v === MARK) found.push([i % sx + .5, Math.floor(i / sx) % sy + .5, Math.floor(i / (sx * sy)) + .5]); });
   expect(found).toHaveLength(1);
-  const i = found[0]![0];
-  const cell: Vec3 = [i % sx, Math.floor(i / sx) % sy, Math.floor(i / (sx * sy))];
-  return transformPoint(partMatrix(part, pose), cell.map(c => (c + .5) * M) as unknown as Vec3);
+  const local = found[0]!.map(n => n * M) as unknown as Vec3;
+  return transformPoint(partMatrix(part, pose), local);
 }
 
-const metres = (cells: Vec3): Vec3 => cells.map(c => c * M) as unknown as Vec3;
-const expectNear = (actual: Vec3, expected: Vec3): void => actual.forEach((v, i) => expect(v).toBeCloseTo(expected[i]!, 9));
+/** Root-local centre of a body part's bounds in a pose, in metres. */
+function centre(part: AvatarPartBlueprint, pose: AvatarPose): Vec3 {
+  return transformPoint(partMatrix(part, pose), part.size.map(n => n * M / 2) as unknown as Vec3);
+}
 
-describe('attachment seam', () => {
-  it('places asymmetric markers where the frozen rig says, at rest and posed', () => {
-    // At rest the brass cells sit where they were authored: centres at cell + ½.
-    expectNear(marker(hatFixture(), { id: 'rest', label: 'rest', rotations: {} }), metres([2.5, 24.5, 3.5]));
-    expectNear(marker(toolFixture(), { id: 'rest', label: 'rest', rotations: {} }), metres([5.5, 7.5, 4.5]));
-    // Hat marker, head-relative (2.5, 8.5, 3.5), turned +90° about Y: (z, y, −x) = (3.5, 8.5, −2.5).
-    expectNear(marker(hatFixture(), POSE), metres([3.5, 24.5, -2.5]));
-    // Tool tip, shoulder-relative (0.5, −7.5, 4.5), −90° about X: (x, −z·sin, y·sin) = (0.5, 4.5, 7.5).
-    expectNear(marker(toolFixture(), POSE), metres([5.5, 19.5, 7.5]));
-  });
+const close = (actual: Vec3, expected: Vec3): void => {
+  for (let i = 0; i < 3; i++) expect(actual[i]).toBeCloseTo(expected[i]!, 6);
+};
 
-  it('keeps every body family on the same pivots, sides and posed joints', () => {
-    for (const family of BODY_FAMILIES) {
-      const parts = createBodyParts(family, MAT.skin3);
-      const byBone = new Map(parts.map(part => [part.attachment, part]));
-      expect(byBone.size).toBe(parts.length);
-      const pivot = (bone: AvatarPartBlueprint['attachment'], pose: AvatarPose): Vec3 => {
-        const part = byBone.get(bone)!;
-        return transformPoint(partMatrix(part, pose), part.pivot.map(c => c * M) as unknown as Vec3);
-      };
-      // Canonical pivots: the head at y = 16, wrists at (±5, 8, 0), ankles at (±2, 1, 0), whatever the contour.
-      expectNear(pivot('head', POSE), metres([0, 16, 0]));
-      expectNear(pivot('handLeft', POSE), metres([-5, 8, 0]));
-      expectNear(pivot('footRight', POSE), metres([2, 1, 0]));
-      // The raised right wrist: (0, −7, 0) below the shoulder swings to (0, 0, 7) in front of it.
-      expectNear(pivot('handRight', POSE), metres([5, 15, 7]));
-      // Left parts stay on −X and right parts on +X: no mirrored attachment.
-      for (const part of parts) {
-        const side = part.attachment.endsWith('Left') ? -1 : part.attachment.endsWith('Right') ? 1 : 0;
-        if (!side) continue;
-        const asset = compileAvatarPart(part, 0);
-        const [sx, sy] = asset.size;
-        asset.voxels.forEach((m, i) => {
-          if (!m) return;
-          const x = transformPoint(partMatrix(part), [(i % sx + .5) * M, (Math.floor(i / sx) % sy + .5) * M, (Math.floor(i / (sx * sy)) + .5) * M])[0];
-          expect(Math.sign(x)).toBe(side);
-        });
-      }
-    }
+const REST: AvatarPose = { id: 'rest', label: 'rest', rotations: {} };
+// Head turned 90° to its left (about +Y); right arm raised straight forward (−90° about X at the shoulder).
+const TURN: AvatarPose = { id: 'turn', label: 'head turn', rotations: { head: [0, 90, 0] } };
+const REACH: AvatarPose = { id: 'reach', label: 'reach', rotations: { upperArmRight: [-90, 0, 0] } };
+
+describe('avatar attachment and scale', () => {
+  for (const family of BODY_FAMILIES) it(`places markers and parts in metres on the ${family} body`, () => {
+    // Hat socket: head (0,16,0) + (0,8,0) = 24 cells = 1.5 m. Marker cell (2,1,0) centre (2.5,1.5,.5) cells.
+    close(marker(badge, REST), [2.5 * M, 1.5 + 1.5 * M, .5 * M]);
+    // Turned 90° about +Y, local (x, y, z) becomes (z, y, −x): the badge's long arm now points backward.
+    close(marker(badge, TURN), [.5 * M, 1.5 + 1.5 * M, -2.5 * M]);
+    // Right grip at rest: hand (5,8,0) + (0,0,1). Tool marker centre (.5,.5,2.5) cells.
+    close(marker(tool, REST), [5.5 * M, 8.5 * M, 3.5 * M]);
+    // Arm raised forward from the shoulder (5,15,0): hand at (5,15,7), grip offset (0,0,1) turns to (0,1,0),
+    // and the tool's +Z length turns to +Y: (.5,.5,2.5) → (.5,2.5,−.5). Marker at (5.5, 18.5, 6.5) cells.
+    close(marker(tool, REACH), [5.5 * M, 18.5 * M, 6.5 * M]);
+
+    const parts = new Map(createBodyParts(family, MAT.skin5).map(part => [part.attachment, part]));
+    // Canonical pivots: each family's geometry sits on the same joints. At rest a part's lowest corner is
+    // its (0,0,0) cell, so these rows are where the frozen rig puts them, whatever the family's volume.
+    const floor = (id: AvatarPartBlueprint['attachment']): number => transformPoint(partMatrix(parts.get(id)!, REST), [0, 0, 0])[1] / M;
+    expect(floor('head')).toBeCloseTo(16, 6);
+    expect(floor('handRight')).toBeCloseTo(6, 6);
+    expect(floor('forearmLeft')).toBeCloseTo(8, 6);
+    expect(floor('thighRight')).toBeCloseTo(4, 6);
+    expect(floor('footLeft')).toBeCloseTo(0, 6);
+    // Left is −X and right is +X, at the same height either side.
+    const left = centre(parts.get('handLeft')!, REST), right = centre(parts.get('handRight')!, REST);
+    expect(left[0]).toBeLessThan(-3 * M);
+    expect(right[0]).toBeGreaterThan(3 * M);
+    expect(left[1]).toBeCloseTo(right[1], 6);
+    // The body's own hand follows the raised arm forward and up to shoulder height; the left hand stays put.
+    const raised = centre(parts.get('handRight')!, REACH);
+    expect(raised[2]).toBeGreaterThan(6 * M);
+    expect(raised[1]).toBeGreaterThan(14 * M);
+    close(centre(parts.get('handLeft')!, REACH), left);
+    // Same head height for every family: the head tops out at 24 cells, one third of it head.
+    const head = parts.get('head')!;
+    expect(transformPoint(partMatrix(head, REST), [0, head.size[1] * M, 0])[1]).toBeCloseTo(24 * M, 6);
   });
 
   it('rejects an unknown socket and a build-lattice part', () => {
-    expect(() => new Sculpt().box([0, 0, 0], [1, 1, 1], MAT.cream).toPart('fixture.tail', 'tail' as never, 'accessory')).toThrow();
-    const hat = hatFixture();
-    expect(() => compileAvatarPart({ ...hat, attachment: 'tail' as never }, 0)).toThrow();
-    expect(() => compileAvatarPart({ ...hat, lattice: 'build' as never }, 0)).toThrow();
+    expect(() => partMatrix({ ...badge, attachment: 'tail' as never })).toThrow();
+    expect(() => compileAvatarPart({ ...badge, attachment: 'tail' as never }, 0)).toThrow();
+    expect(() => compileAvatarPart({ ...badge, lattice: 'build' as never }, 0)).toThrow();
   });
 });

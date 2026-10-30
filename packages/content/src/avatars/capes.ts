@@ -58,11 +58,15 @@ export function capeColours(id: CapeFormId, style: WearableStyle): CapeColours {
 
 /** Narrowed end of a flared or tapered cut, as a share of the widest span (frozen in the cape schema). */
 const NARROW = .72;
+/** Cells of air between the deepest point of the back and the hanging cloth. */
+const BACK_CLEARANCE = .5;
 /**
- * Cells of air between the deepest point of the back and the hanging cloth. Three quarters of a cell
- * keeps the slender back (flush with the socket) clear of the contract's mount floor.
+ * A flat back (the slender family's sits level with the socket) still mounts the sheet ¾ cell behind
+ * the socket, above the cape contract's 4 cm minimum.
  */
-const BACK_CLEARANCE = .75;
+const MIN_BACK = .75;
+/** The shoulder joints are at x = ±5 on every family. */
+const SHOULDER_JOINT = 5;
 const M = VOXEL_METRES.avatar;
 
 const round = (metres: number): number => Math.round(metres * 1e4) / 1e4;
@@ -83,15 +87,16 @@ export function createCape(id: CapeFormId, fit: WearableFit): AvatarCapeBlueprin
   const deepest = Math.min(c.chest.back, c.waist.back, c.hip.back, c.leg.back);
   const shoulders = 2 * (c.chest.half + cut.shoulderEase), hips = 2 * (Math.max(c.hip.half, c.waist.half) + cut.hipEase);
   // `width` is the widest span; the narrowed end of a flared or tapered cut must still cover what it hangs over.
+  // Broad and round shoulders would ask for more than the contract allows; they get the widest legal sheet,
+  // whose pinned edge still spans the shoulder joints.
   const wanted = cut.shape === 'flared' ? Math.max(hips, shoulders / NARROW)
     : cut.shape === 'tapered' ? Math.max(shoulders, hips / NARROW)
     : Math.max(shoulders, hips);
-  // A wide body may want more than the contract's widest sheet; it then loses only the shoulder ease.
   const width = Math.min(wanted, AVATAR_CAPE_LIMITS.maxWidth / M);
   const top = cut.shape === 'flared' ? width * NARROW : width;
-  // The pinned edge covers the shoulder blades: the whole back, or the span between the shoulder joints on a broad chest.
-  const blades = Math.min(2 * c.chest.half, 2 * Math.abs(restPosition('upperArmLeft')[0]));
-  if (top < blades) throw new Error(`${id} on ${fit.body} cannot span the shoulder blades within the cape contract.`);
+  // The pinned edge always covers the back between the shoulder joints.
+  const back = 2 * Math.min(c.chest.half, SHOULDER_JOINT);
+  if (top < back) throw new Error(`${id} on ${fit.body}: the pinned edge (${top.toFixed(2)} cells) is narrower than the back (${back}).`);
   const cape: AvatarCapeBlueprint = {
     version: 1,
     id: `cape.${id}.${fit.style}.${fit.body}`,
@@ -102,7 +107,7 @@ export function createCape(id: CapeFormId, fit: WearableFit): AvatarCapeBlueprin
     length: round((cut.mountRow - cut.hemRow) * M),
     hem: cut.hem,
     trimWidth: cut.trimWidth,
-    mount: { height: round((cut.mountRow - socketY) * M), back: round((socketZ - deepest + BACK_CLEARANCE) * M) },
+    mount: { height: round((cut.mountRow - socketY) * M), back: round(Math.max(socketZ - deepest + BACK_CLEARANCE, MIN_BACK) * M) },
     colours: { ...colours },
   };
   const parsed = AvatarCapeBlueprintSchema.safeParse(cape);

@@ -1,12 +1,13 @@
-import type { AvatarPartBlueprint, Vec3 } from '@chatdom/shared';
-import { BODY_FAMILIES, bodyContour, headVolume, skullVolume, type BodyFamily } from './body';
+import type { AvatarPartBlueprint } from '@chatdom/shared';
+import { BODY_FAMILIES, bodyContour, headVolume, type BodyFamily } from './body';
 import { GARB, materialName, resolveHair, type HairSwatchId } from './palette';
 import { Sculpt } from './sculpt';
 import type { HeadwearId } from './wearables';
 
 /**
- * Scalp and hair treatments, in catalogue order. Every one binds rigidly to the frozen head bone;
- * `bareScalp` is a real choice with no hair geometry at all.
+ * Scalp and hair treatments, in catalogue order. Every one binds rigidly to the frozen head bone and is
+ * built around the one shared head, so a treatment fits every body family; only the long braid reads
+ * the body, to hang clear of its back. The swatch is a separate choice, never a reward.
  */
 export const HAIR_FORMS = ['bareScalp', 'closeCrop', 'roundedCurls', 'coiledHighCrown', 'sidePart', 'bob', 'longBraid', 'pairedTwists'] as const;
 export type HairForm = (typeof HAIR_FORMS)[number];
@@ -18,108 +19,130 @@ export interface HairFit {
   readonly headwear: HeadwearId | null;
 }
 
-/**
- * The head the hair is grown on. Skull coordinates: x ∈ [−5, 5), y ∈ [16, 24), z ∈ [−4, 4), the
- * face plane at z = 3, eyes on rows 19–20, ears at x = −6 and 5 on rows 18–19.
+/*
+ * The head occupies x ∈ [−5, 5), y ∈ [16, 24), z ∈ [−4, 4); its face plate is the z = 3 row, eyes on
+ * rows 19–20 and the mouth on row 17. Every treatment keeps rows 17–21 of the face plate clear.
  */
-interface Scalp {
-  readonly m: number;
-  readonly skull: Sculpt;
-  readonly head: Sculpt;
-  /** Offset shells of the skull, one to three cells out. */
-  readonly shells: readonly [Sculpt, Sculpt, Sculpt];
+
+/** Where a layer around the head may grow: above the forehead, beside the face and down the back. */
+interface Hairline {
+  /** Lowest row over the forehead (cells in front of z = 2). */
+  readonly forehead: number;
+  /** Lowest row beside the face (beyond the head's sides, from z = 0 forward). */
+  readonly temple: number;
+  /** Lowest row behind the ears (z < 0). */
+  readonly nape: number;
 }
 
-function scalp(m: number): Scalp {
-  const skull = skullVolume(m);
-  return { m, skull, head: headVolume(m), shells: [skull.shell(1, m), skull.shell(2, m), skull.shell(3, m)] };
+const inside = (x: number): boolean => x >= -5 && x < 5;
+
+function withinHairline(line: Hairline): (x: number, y: number, z: number) => boolean {
+  return (x, y, z) => {
+    if (z >= 2 && inside(x)) return y >= line.forehead;
+    if (z >= 0) return y >= (inside(x) ? line.forehead : line.temple);
+    return y >= line.nape;
+  };
 }
 
-/** True in front of the face plate below `brow`, where hair would cover the eyes or cheeks. */
-const overFace = (x: number, y: number, z: number, brow: number, half = 5): boolean => z >= 2 && x >= -half && x < half && y < brow;
-
-/** Finishes a form: no cell inside the head (so layers meet face to face) and the face kept clear. */
-function finish(hair: Sculpt, s: Scalp, brow: number): Sculpt {
-  hair.carveWhere((x, y, z) => overFace(x, y, z, brow, 4) || (z >= 3 && y < brow - 1 && x >= -5 && x < 5));
-  return hair.subtract(s.head);
-}
-
-/**
- * Close crop: one even cell of hair over the crown, a clean hairline high on the forehead, neat
- * edges around the ears and a tapered nape. The simplest silhouette, so it carries the skull's shape.
- */
-function closeCrop(s: Scalp): Sculpt {
-  const hair = new Sculpt().merge(s.shells[0], (x, y, z) => {
-    if (z >= 3) return y >= 23;
-    if (z >= 1) return y >= 21;
-    if (z >= -2) return y >= 20;
-    return y >= 18;
-  });
-  // Squared sideburns in front of each ear.
-  for (const x of [-6, 5]) hair.box([x, 19, 1], [x + 1, 21, 2], s.m);
-  return finish(hair, s, 23);
-}
-
-/** A rounded bobble of hair: a small ellipsoid, the unit every curly form is built from. */
-function bobble(hair: Sculpt, centre: Vec3, r: number, m: number): void {
-  hair.ellipsoid(centre, [r, r * .9, r], m);
-}
-
-/** Points on a horizontal ellipse around the head axis (x centred between cells), from the back. */
-function ring(y: number, rx: number, rz: number, count: number, from = 0, to = 360, zc = -.25): Vec3[] {
-  const out: Vec3[] = [];
-  const span = to - from;
-  for (let i = 0; i < count; i++) {
-    const a = (from + (span === 360 ? span * i / count : span * i / Math.max(count - 1, 1))) * Math.PI / 180;
-    out.push([Math.sin(a) * rx, y, zc - Math.cos(a) * rz]);
-  }
+/** A layer `distance` cells deep around the head, trimmed to a hairline, never touching the face plate. */
+function layer(head: Sculpt, distance: number, material: number, line: Hairline): Sculpt {
+  const keep = withinHairline(line);
+  const out = new Sculpt().merge(head.grow(distance, material), keep);
   return out;
 }
 
-/**
- * Rounded curls: a full head of springy curls, built as rings of large rounded bobbles over a close
- * base, so it reads as distinct curls at street distance rather than a cap with texture. The fringe
- * is a row of smaller curls across the forehead; the back falls to the nape.
- */
-function roundedCurls(s: Scalp): Sculpt {
-  const hair = new Sculpt().merge(s.shells[1], (_x, y, z) => (z >= 2 ? y >= 22 : y >= 18));
-  const curls: [Vec3[], number][] = [
-    [[[0, 25.4, -.5]], 2.6],
-    [ring(25, 3.2, 2.8, 6, 30), 1.9],
-    [ring(23, 5.6, 4.9, 10, 18), 1.9],
-    [ring(20.6, 6.1, 5.1, 7, -110, 110), 1.8],
-    [ring(18.4, 5.6, 4.8, 5, -70, 70), 1.7],
-    // The fringe: smaller curls over the brow.
-    [[[-3.4, 23.2, 4.2], [-1.2, 23.6, 4.5], [1.2, 23.6, 4.5], [3.4, 23.2, 4.2]], 1.4],
-  ];
-  for (const [centres, r] of curls) for (const c of centres) bobble(hair, c, r, s.m);
-  return finish(hair, s, 22);
+/** Clear anything that would sit over the eyes, cheeks or mouth. */
+function clearFace(hair: Sculpt, below = 22): Sculpt {
+  return hair.carveWhere((x, y, z) => z >= 3 && inside(x) && y < below);
+}
+
+/** Brows in the hair colour, a cell proud of the face plate above each eye: only for treatments with an open forehead. */
+function brows(hair: Sculpt, material: number): void {
+  hair.box([-3, 22, 4], [-1, 23, 5], material).box([1, 22, 4], [3, 23, 5], material);
 }
 
 /**
- * Coiled high crown: tight coils gathered into a tall rounded crown, a substantial mass that lifts the
- * silhouette above the head, with close-cropped sides and nape. Big lobes break the outline into a
- * soft cloud; there is no scattered single-voxel texture.
+ * Bare scalp: the head's own rounded crown carries the shape, so the treatment is only a pair of brows
+ * in the chosen swatch, which keeps the face as expressive as any other.
  */
-function coiledHighCrown(s: Scalp): Sculpt {
-  const hair = new Sculpt().merge(s.shells[0], (_x, y, z) => (z >= 2 ? y >= 23 : z >= -1 ? y >= 20 : y >= 18));
-  hair.ellipsoid([0, 26, -.6], [5.6, 4, 5], s.m);
-  for (const c of ring(27.2, 3.6, 3.2, 6, 0)) bobble(hair, c, 2.1, s.m);
-  for (const c of ring(25.2, 5.1, 4.5, 8, 22)) bobble(hair, c, 1.9, s.m);
-  bobble(hair, [0, 29.2, -.6], 2.2, s.m);
-  // Below the mass the crown narrows into the close sides.
-  hair.carveWhere((x, y, z) => y < 22 && (x < -6 || x >= 6 || z < -6));
-  return finish(hair, s, 23);
+function bareScalp(material: number): Sculpt {
+  const hair = new Sculpt();
+  brows(hair, material);
+  return hair;
 }
 
 /**
- * Side part. Built from offset shells of the skull, so it follows the head exactly: one cell close on
+ * Close crop: one cell over the skull with a crisp square hairline at the temples, short sideburns in
+ * front of the ears and a nape that tapers up behind. Brows match.
+ */
+function closeCrop(material: number, head: Sculpt): Sculpt {
+  const hair = layer(head, 1, material, { forehead: 23, temple: 19, nape: 18 });
+  // Taper the back corners up toward the crown, as a fade would.
+  hair.carveWhere((x, y, z) => z <= -4 && y < 19 && (x < -3 || x >= 3));
+  // Sideburns stop in front of the ear line.
+  hair.carveWhere((x, y, z) => !inside(x) && y < 21 && z >= -1 && z < 0);
+  brows(hair, material);
+  return hair;
+}
+
+/**
+ * Lobes of a textured mass: rounded clumps about three cells across, spread evenly over a surface. Centres
+ * are picked greedily in a fixed order on the left half, at least `spacing` apart, then mirrored, so the
+ * mass is balanced and deterministic and every clump is big enough to survive the street camera.
+ */
+function lobes(surface: Sculpt, material: number, radius: number, spacing: number, where: (x: number, y: number, z: number) => boolean): Sculpt {
+  const centres: [number, number, number][] = [];
+  const candidates: [number, number, number][] = [];
+  surface.forEachCell((x, y, z) => { if (x < 0 && where(x, y, z)) candidates.push([x + 1, y + .5, z + .5]); });
+  // Top down, centre outward: the crown's outline is settled first, with a clump on the centre line.
+  candidates.sort((a, b) => b[1] - a[1] || b[0] - a[0] || a[2] - b[2]);
+  for (const c of candidates) if (centres.every(d => (c[0] - d[0]) ** 2 + (c[1] - d[1]) ** 2 + (c[2] - d[2]) ** 2 >= spacing * spacing)) centres.push(c);
+  const out = new Sculpt();
+  for (const [x, y, z] of centres) out.ellipsoid([x - .5, y, z], [radius, radius, radius], material);
+  return out.carveWhere(x => x >= 0).mirrorX();
+}
+
+/** Cells between two distances from the head: the surface a textured mass's clumps sit on. */
+function band(head: Sculpt, from: number, to: number, material: number): Sculpt {
+  return new Sculpt().merge(head.grow(to, material)).subtract(head.grow(from, material)).subtract(head);
+}
+
+/**
+ * Rounded curls: a full, round mass two and a half cells off the skull, over the ears and down to the
+ * nape, its surface built from clumps four cells across so the outline is soft and bumpy at street distance rather than flecked.
+ */
+function roundedCurls(material: number, head: Sculpt): Sculpt {
+  const line: Hairline = { forehead: 22, temple: 18, nape: 17 };
+  const keep = withinHairline(line);
+  // A deep body under the clumps, so the seams between them are shallow creases rather than pinholes.
+  const hair = layer(head, 2.5, material, line);
+  hair.merge(lobes(band(head, 2, 3, material), material, 2.1, 3.6, keep), (x, y, z) => keep(x, y, z) && y >= line.nape);
+  clearFace(hair, 22);
+  return hair.subtract(head).tidy(2);
+}
+
+/**
+ * Coiled high crown: close sides and nape, and a tall rounded crown of coils above the head, its outline
+ * broken into clumps so it reads as coiled hair rather than a hat.
+ */
+function coiledHighCrown(material: number, head: Sculpt): Sculpt {
+  const hair = layer(head, 1, material, { forehead: 23, temple: 19, nape: 18 });
+  const crown = new Sculpt().ellipsoid([0, 25.5, -1], [5.5, 3.4, 5], material);
+  crown.carveWhere((_x, y) => y < 24);
+  hair.merge(crown);
+  hair.merge(lobes(crown.shell(1, material).subtract(head), material, 1.6, 3.2, (_x, y) => y >= 25));
+  clearFace(hair, 23);
+  return hair.subtract(head).tidy(2);
+}
+
+/**
+ * Side part. Built from offset layers of the skull, so it follows the head exactly: one cell close on
  * the parted (left) side, two cells of lift over the crown and the full right side, a rounded
  * occipital mass and a tidy nape. The fringe is one sheet whose lower edge steps down diagonally
  * from the parting to the right temple, where a short lock falls past the ear.
  */
-function sidePart(s: Scalp): Sculpt {
-  const [near, far] = s.shells;
+function sidePart(material: number, head: Sculpt): Sculpt {
+  const near = head.shell(1, material), far = head.grow(2, material);
   const hair = new Sculpt();
   hair.merge(near, (_x, y) => y >= 18);
   hair.merge(far, (x, y, z) => (y >= 23 && x >= -2) || (x >= 3 && y >= 19 && z < 3) || (z <= -4 && y >= 19 && y < 25));
@@ -128,107 +151,133 @@ function sidePart(s: Scalp): Sculpt {
   hair.carveWhere((x, y, z) => {
     if (z >= 3 && x >= -6 && x < 4 && y < fringe(x)) return true;
     // The parted side lies close above the ear and tapers to the nape.
-    if (x < -5 && z >= -2 && y < 21) return true;
+    if (x < -5 && z >= 1 && y < 21) return true;
     if (x < -5 && y < 19) return true;
     if (x >= 5 && z >= -2 && z < 1 && y < 20) return true;
     if (z <= -5 && y < 19 && (x < -3 || x >= 3)) return true;
     return false;
   });
   // The right temple lock: a short fall of hair in front of the ear.
-  hair.box([5, 18, 1], [7, 21, 4], s.m);
-  hair.set(5, 18, 3, 0).set(6, 18, 3, 0).set(6, 18, 1, 0);
+  hair.box([4, 18, 2], [6, 21, 4], material);
+  hair.set(4, 18, 3, 0);
   // Parting: a notch where the close side meets the lift.
   for (let z = -1; z < 4; z++) hair.set(-2, 24, z, 0);
-  return hair.subtract(s.head);
+  return hair.subtract(head).tidy(2);
 }
 
 /**
- * Bob: a smooth chin-length cut with a straight, heavy fringe. Two cells of hair everywhere, a crisp
- * level hem at the jaw that tucks under by one cell, and front corners that frame the cheeks.
+ * Bob: a rounded bell of hair two cells deep that falls to the jaw at the sides and the nape behind,
+ * its lower edge turned under, with a straight fringe that stops a row above the eyes.
  */
-function bob(s: Scalp): Sculpt {
-  const hair = new Sculpt().merge(s.shells[1], (_x, y) => y >= 17);
-  // The blunt fringe stands one cell proud of the brow, cut level just above the eyes.
-  hair.box([-5, 22, 4], [5, 24, 5], s.m);
-  hair.box([-4, 24, 3], [4, 25, 5], s.m);
-  hair.carveWhere((x, y, z) => {
-    if (z >= 3 && x >= -5 && x < 5 && y < 22) return true;
-    // Tuck the hem: the innermost ring of the lowest row is cut away so the cut curves under.
-    if (y === 17 && Math.abs(x + .5) < 6.5 && z > -6 && z < 4) return !(Math.abs(x + .5) >= 6 || z <= -5);
-    return false;
-  });
-  // The front corners of the bob reach a cell past the face plane, framing the cheeks.
-  for (const x of [-7, -6, 5, 6]) hair.box([x, 17, 4], [x + 1, 22, 5], s.m);
-  hair.set(-7, 17, 4, 0).set(6, 17, 4, 0);
-  return hair.subtract(s.head);
+function bob(material: number, head: Sculpt): Sculpt {
+  const hair = layer(head, 2, material, { forehead: 21, temple: 17, nape: 16 });
+  // The bell frames the face: nothing in front of the cheeks, and the fringe only across the brow.
+  hair.carveWhere((x, y, z) => z >= 4 && y < 21);
+  hair.carveWhere((x, y, z) => z >= 4 && !inside(x) && y < 23);
+  // Turn the lowest row under: it keeps only the cells close to the head.
+  const close = head.grow(1.5, material);
+  hair.carveWhere((x, y, z) => y === (z < 0 ? 16 : 17) && !close.get(x, y, z));
+  clearFace(hair, 21);
+  return hair.subtract(head).tidy(2);
 }
 
 /**
- * Long braid: hair drawn smoothly back from the face into a knot at the nape, then one three-strand
- * braid that falls straight down the back to the waist, tied with a leather cord and finished with a
- * soft tuft. The plait reads as alternating lobes stepping left and right every two rows.
- * The braid hangs one cell clear of the deepest point of the wearer's back.
+ * Long braid: hair drawn back close over the crown into a knot at the nape, then a three-strand plait
+ * that hangs down the spine to the waist, tied off in leather with a short tuft. The plait keeps a cell
+ * of air behind the deepest point of the wearer's back, so it never sinks into the shoulders.
  */
-function longBraid(s: Scalp, body: BodyFamily): Sculpt {
+function longBraid(material: number, head: Sculpt, body: BodyFamily): Sculpt {
   const c = bodyContour(body);
-  const hair = new Sculpt().merge(s.shells[0], (_x, y, z) => (z >= 3 ? y >= 23 : z >= 0 ? y >= 21 : y >= 18));
-  // Fuller over the crown and back, where the hair is gathered.
-  hair.merge(s.shells[1], (_x, y, z) => z <= -2 && y >= 19 && y < 24);
-  const deepest = Math.min(c.chest.back, c.waist.back, c.hip.back);
-  const front = Math.min(-4, deepest - 1);
-  // The gathered knot at the nape.
-  hair.rounded([-2, 18, front - 3], [2, 22, front + 1], s.m, 1);
-  // Five plait segments, each two rows, alternating a cell to each side; the strand crossing shows as a step.
-  for (let i = 0; i < 5; i++) {
-    const top = 18 - i * 2, shift = i % 2 === 0 ? -1 : 0;
-    hair.box([-1 + shift, top - 2, front - 2], [2 + shift, top, front], s.m);
-    // Round each lobe's outer lower corner so the segments read as separate bundles.
-    hair.set(shift < 0 ? -2 : 1, top - 2, front - 2, 0);
+  const hair = layer(head, 1, material, { forehead: 22, temple: 19, nape: 17 });
+  hair.merge(head.grow(1.6, material), (_x, y, z) => y >= 23 && z < 3);
+  const back = Math.min(-4, c.chest.back - 1, c.waist.back - 1);
+  const z0 = back - 2;
+  // The knot where the hair gathers, bridging the skull to the plait.
+  hair.ellipsoid([0, 18.5, -5], [2.2, 2, 1.8], material);
+  hair.box([-1, 16, z0], [1, 18, back], material);
+  // Plait: two-row crossings that alternate sides, so the strands read as woven at a distance.
+  for (let i = 0; i < 3; i++) {
+    const top = 16 - 2 * i;
+    hair.box([-1, top - 2, z0], [1, top, back], material);
+    const side = i % 2 === 0 ? -2 : 1;
+    hair.box([side, top - 1, z0], [side + 1, top, back], material);
   }
-  // Leather tie and a short tuft below it.
-  hair.box([-1, 7, front - 2], [1, 8, front], GARB.leather);
-  hair.box([-1, 5, front - 2], [1, 7, front], s.m);
-  hair.set(-1, 5, front - 2, 0).set(0, 5, front - 1, 0);
-  return finish(hair, s, 23);
+  // Leather tie at the waist, then the tuft that flares below it, ending above the seat.
+  hair.box([-1, 9, z0], [1, 10, back], GARB.leather);
+  hair.box([-1, 7, z0], [1, 9, back], material).box([-2, 7, z0], [2, 8, back], material);
+  clearFace(hair, 22);
+  return hair.subtract(head);
 }
 
 /**
- * Paired twists: a centre parting and two chunky twisted bunches gathered above each ear, each
- * falling outward and down to the jaw. The twist reads as segments that step back and forth by a
- * cell; the ends finish in a rounded tuft above the shoulder.
+ * A two-strand twist hanging from a root: a two-by-two rope that stays in its column, every other
+ * two-row turn standing a cell further out (`out` is the unit step away from the head), so the rope
+ * reads as twisted in profile while the grooves between neighbours stay clean. Neighbours start on
+ * opposite turns (`phase`), so the bulges interleave instead of lining up in bands. The tip is rounded.
  */
-function pairedTwists(s: Scalp): Sculpt {
-  const hair = new Sculpt().merge(s.shells[0], (_x, y, z) => (z >= 3 ? y >= 23 : z >= 0 ? y >= 21 : y >= 18));
-  hair.merge(s.shells[1], (_x, y, z) => y >= 23 && z < 3);
-  // Centre parting, front to crown.
-  for (let z = -2; z < 5; z++) hair.set(-1, 25, z, 0).set(0, 25, z, 0);
-  // The left twist; the right is its mirror. Each segment is 3 × 2 × 3 cells.
-  const twist = new Sculpt();
-  const segments: Vec3[] = [[-8, 22, -2], [-9, 20, -1], [-9, 18, -2], [-9, 16, -1]];
-  for (const [x, y, z] of segments) twist.rounded([x, y, z], [x + 3, y + 2, z + 3], s.m, 1, [true, true, false, false, true, true]);
-  // The gathered root over the ear.
-  twist.rounded([-8, 22, -3], [-5, 25, 1], s.m, 1);
-  hair.merge(twist);
-  hair.merge(mirrorX(twist));
-  return finish(hair, s, 23);
+function twist(hair: Sculpt, material: number, root: readonly [number, number, number], length: number, out: readonly [number, number, number], phase = 0): void {
+  const [x, y, z] = root;
+  const bottom = y - length;
+  for (let i = 0; i * 2 < length; i++) {
+    const step = (i + phase) % 2;
+    const top = y - 2 * i, low = Math.max(bottom, top - 2);
+    const [dx, dy, dz] = [out[0] * step, out[1] * step, out[2] * step];
+    hair.box([x + dx, low + dy, z + dz], [x + dx + 2, top + dy, z + dz + 2], material);
+  }
+  // Round the tip: the outer half of the last row tucks in.
+  const last = (Math.ceil(length / 2) - 1 + phase) % 2;
+  const [lx, lz] = [x + out[0] * last, z + out[2] * last];
+  if (out[0]) { const cx = out[0] < 0 ? lx : lx + 1; hair.box([cx, bottom, lz], [cx + 1, bottom + 1, lz + 2], 0); }
+  if (out[2]) { const cz = out[2] < 0 ? lz : lz + 1; hair.box([lx, bottom, cz], [lx + 2, bottom + 1, cz + 1], 0); }
 }
 
-function mirrorX(source: Sculpt): Sculpt {
-  const out = new Sculpt();
-  source.forEachCell((x, y, z, m) => { out.set(-1 - x, y, z, m); });
-  return out;
+/**
+ * Paired twists: a rounded crown of two-strand twists that hang to the jaw around the sides and back,
+ * with short ones framing the forehead. Each twist is a two-by-two rope in its own column with a groove
+ * beside it, the same chunk size everywhere, so the head reads as many ropes rather than noise.
+ */
+function pairedTwists(material: number, head: Sculpt): Sculpt {
+  const line: Hairline = { forehead: 22, temple: 19, nape: 17 };
+  const hair = layer(head, 1, material, line);
+  const keep = withinHairline(line);
+  const dome = new Sculpt().merge(head.grow(2.4, material), (x, y, z) => y >= 23 && keep(x, y, z));
+  hair.merge(dome);
+  // Rope ends over the crown: rounded tips that break the dome's outline.
+  hair.merge(lobes(band(head, 2, 3, material), material, 1.3, 3, (_x, y) => y >= 25));
+  // Five ropes down the back to the nape, a groove between each, mirrored about the centre line.
+  [-7, -4, -1, 2, 5].forEach((x, i) => twist(hair, material, [x, 24, -7], 9, [0, 0, -1], i % 2));
+  [-4, -1].forEach((z, i) => {
+    twist(hair, material, [-8, 24, z], 7, [-1, 0, 0], 1 - i);
+    twist(hair, material, [6, 24, z], 7, [1, 0, 0], 1 - i);
+  });
+  // Short twists framing the face, stopping above the cheek; three over the brow.
+  twist(hair, material, [-8, 24, 2], 5, [-1, 0, 0]);
+  twist(hair, material, [6, 24, 2], 5, [1, 0, 0]);
+  for (const x of [-4, -1, 2]) twist(hair, material, [x, 26, 4], 3, [0, 0, 1]);
+  clearFace(hair, 22);
+  hair.carveWhere((x, y, z) => z >= 2 && !inside(x) && y < 19);
+  return hair.subtract(head).tidy(2);
 }
 
-const FORMS: Record<HairForm, ((s: Scalp, body: BodyFamily) => Sculpt) | null> = {
-  bareScalp: null, closeCrop, roundedCurls, coiledHighCrown, sidePart, bob, longBraid, pairedTwists,
+const FORMS: Record<HairForm, (material: number, head: Sculpt, body: BodyFamily) => Sculpt> = {
+  bareScalp: material => bareScalp(material),
+  closeCrop,
+  roundedCurls,
+  coiledHighCrown,
+  sidePart,
+  bob,
+  longBraid,
+  pairedTwists,
 };
 
 export function createHairParts(form: HairForm, fit: HairFit): readonly AvatarPartBlueprint[] {
-  if (!HAIR_FORMS.includes(form)) throw new Error(`Unknown hair form ${String(form)}.`);
+  const build = Object.hasOwn(FORMS, form) ? FORMS[form] : undefined;
+  if (!build) throw new Error(`Unknown hair form ${String(form)}.`);
   if (!BODY_FAMILIES.includes(fit.body)) throw new Error(`Unknown body family ${String(fit.body)}.`);
   if (fit.headwear !== null) throw new Error(`${form} has no authored fit under ${String(fit.headwear)}.`);
   const swatch = resolveHair(fit.hair);
-  const build = FORMS[form];
-  if (!build) return [];
-  return [build(scalp(swatch), fit.body).toPart(`hair.${form}.${materialName(swatch)}.${fit.body}`, 'head', 'hair')];
+  const hair = build(swatch, headVolume(swatch), fit.body);
+  // Only the braid depends on the body; the others share one ID across families.
+  const tag = form === 'longBraid' ? `${materialName(swatch)}.${fit.body}` : materialName(swatch);
+  return [hair.toPart(`hair.${form}.${tag}`, 'head', 'hair')];
 }
