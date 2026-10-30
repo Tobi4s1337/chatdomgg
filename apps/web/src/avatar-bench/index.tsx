@@ -9,6 +9,7 @@ import { createCitizenRenderer } from '../citizens';
 import { createCitizenCapeRenderer } from '../citizens/capes';
 import { WALK_STOP, WALK_STOP_FRAMES, phaseName, walkStopState, type BenchMotion } from './walk-stop';
 import { BENCH_ANGLES, benchOrientation, capeBounds, createCitizen, createPlinth, frameCamera, restBounds, type BenchAngle, type CitizenStats } from './stage';
+import AvatarLineup from './lineup';
 import './style.css';
 
 export interface AvatarBenchReport extends CitizenStats {
@@ -55,6 +56,8 @@ function benchBounds(parts: readonly AvatarPartBlueprint[], cape: AvatarCapeBlue
 }
 
 export default function AvatarBench() {
+  const lineup = new URLSearchParams(window.location.search).get('lineup');
+  if (lineup !== null) return <AvatarLineup id={lineup} />;
   let host!: HTMLDivElement;
   let disposed = false;
   let disposeScene: (() => void) | undefined;

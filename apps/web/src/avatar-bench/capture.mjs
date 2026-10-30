@@ -1,8 +1,10 @@
 /* global URLSearchParams:readonly, Image:readonly */
 // Captures the avatar bench: every review look from three angles at 480×480, the bench page at web
 // sizes, contact sheets per group at 1440×900 and 390×844, and measured render stats. Looks that wear
-// a cape also get a walk-to-stop strip (side and back) driven by the citizen runtime's cloth.
-//   node apps/web/src/avatar-bench/capture.mjs --base-url http://127.0.0.1:5190 [--hour 19] [--look id] [--group bodies]
+// a cape also get a walk-to-stop strip (side and back) driven by the citizen runtime's cloth. Review
+// lineups (silhouettes, the skin range, hair, street distance) are captured beside their group, at
+// dusk and at any further hours they name: close lineups at web sizes, street lineups at stream sizes.
+//   node apps/web/src/avatar-bench/capture.mjs --base-url http://127.0.0.1:5190 [--hour 19] [--look id] [--group bodies] [--lineups-only]
 import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -16,6 +18,7 @@ const hour = option('--hour') ?? '19';
 if (!/^(?:[01]?\d|2[0-3])$/.test(hour)) throw new Error('--hour must be a whole hour in 0..23.');
 const lookFilter = option('--look');
 const groupFilter = option('--group');
+const lineupsOnly = args.includes('--lineups-only');
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${root}shots/avatars/wardrobe-body${hour === '19' ? '' : `/hour-${hour}`}`;
 const ANGLES = ['front', 'side', 'back'];
@@ -26,13 +29,16 @@ let loader, server, browser, release;
 try {
   release = await acquireCaptureLock();
   loader = await createServer({ root, configFile: false, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom', logLevel: 'error' });
-  const { REVIEW_LOOKS, isCapeForm } = await loader.ssrLoadModule('/packages/content/src/avatars/index.ts');
+  const { REVIEW_LOOKS, REVIEW_LINEUPS, isCapeForm } = await loader.ssrLoadModule('/packages/content/src/avatars/index.ts');
   const { AVATAR_LOOK_LIMITS } = await loader.ssrLoadModule('/packages/shared/src/avatar.ts');
   const { WALK_STOP_FRAMES, phaseName } = await loader.ssrLoadModule('/apps/web/src/avatar-bench/walk-stop.ts');
   const looks = REVIEW_LOOKS.filter(look => (!lookFilter || look.id === lookFilter) && (!groupFilter || look.group === groupFilter))
+    .filter(() => !lineupsOnly)
     .map(({ id, group, label, note, wear }) => ({ id, group, label, note, cape: wear.some(item => isCapeForm(item.id)) }));
+  const lineups = lookFilter ? [] : REVIEW_LINEUPS.filter(lineup => !groupFilter || lineup.group === groupFilter)
+    .map(({ id, group, label, distance, angles, hours }) => ({ id, group, label, distance, angles: [...angles], hours: [...new Set([Number(hour), ...(hours ?? [])])] }));
   await loader.close(); loader = undefined;
-  if (!looks.length) throw new Error('No review look matches the filter.');
+  if (!looks.length && !lineups.length) throw new Error('No review look or lineup matches the filter.');
   let base = option('--base-url');
   if (!base) ({ server, base } = await startCapturePreview('CHATDOM_AVATAR_PORT'));
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
@@ -95,11 +101,34 @@ try {
     }
     console.log(`Captured ${look.group}/${look.id}.`);
   }
+  const lineupShots = [];
+  for (const lineup of lineups) {
+    await mkdir(`${output}/${lineup.group}`, { recursive: true });
+    const sizes = lineup.distance === 'street' ? [[1920, 1080], [1280, 720]] : PAGE_SIZES;
+    for (const at of lineup.hours) for (const angle of lineup.angles) for (const [width, height] of sizes) {
+      const page = await browser.newPage({ viewport: { width, height } });
+      page.on('pageerror', error => errors.push(`${lineup.id}: ${error.message}`));
+      page.on('console', message => { if (message.type() === 'error') errors.push(`${lineup.id}: ${message.text()}`); });
+      const query = new URLSearchParams({ lineup: lineup.id, angle, hour: String(at), seed: 'chatdom-avatars' });
+      await page.goto(`${base}/-/avatars?${query}`, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => window.__chatdomReady === true || typeof window.__chatdomAvatarError === 'string', {}, { timeout: 300_000 });
+      const failure = await page.evaluate(() => window.__chatdomAvatarError);
+      if (failure) throw new Error(`${lineup.id}: ${failure}`);
+      if (errors.length) throw new Error(errors.join('\n'));
+      const measured = await page.evaluate(() => window.__chatdomLineup);
+      if (measured?.lineup !== lineup.id || !(measured.triangles > 0)) throw new Error(`${lineup.id}: the bench did not render the lineup. Rebuild the web app.`);
+      const path = `${output}/${lineup.group}/lineup-${lineup.id}-${angle}-${String(at).padStart(2, '0')}h@${width}x${height}.png`;
+      await page.screenshot({ path });
+      await page.close();
+      lineupShots.push({ lineup: lineup.id, group: lineup.group, angle, hour: at, width, height, figurePixels: measured.figurePixels, triangles: measured.triangles, draws: measured.draws, path: path.slice(root.length) });
+    }
+    console.log(`Captured lineup ${lineup.id}.`);
+  }
   const sheet = (items, width, columns, title, pose = 'static rest pose') => {
     const tile = width / columns, height = 84 + Math.ceil(items.length / columns) * (tile + 28);
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#28232a"/><text x="18" y="32" fill="#efe3c8" font-family="Georgia" font-size="${width < 500 ? 16 : 22}">Chatdom · avatars · ${escape(title)} · ${escape(hour)}:00</text>${width < 500 ? `<text x="18" y="54" fill="#e8bd62" font-family="Georgia" font-size="10" letter-spacing="1.2">SIMULATED review people · ${escape(pose)}</text><text x="18" y="70" fill="#c9b48e" font-family="Georgia" font-size="9">Production avatar voxel pipeline</text>` : `<text x="18" y="58" fill="#e8bd62" font-family="Georgia" font-size="13" letter-spacing="1.5">SIMULATED review people · production avatar voxel pipeline · ${escape(pose)}</text>`}${items.map((p, i) => { const x = (i % columns) * tile, y = 84 + Math.floor(i / columns) * (tile + 28); return `<image x="${x}" y="${y}" width="${tile}" height="${tile}" href="data:image/png;base64,${p.data}"/><text x="${x + 8}" y="${y + tile + 16}" fill="#efe3c8" font-family="Georgia" font-size="${width < 500 ? 8 : 11}">${escape(p.caption ? `${p.id} · ${p.caption}` : `${p.id} · ${p.angle}`)}</text>`; }).join('')}</svg>`;
   };
-  const groups = [...new Set(pictures.map(p => p.group)), 'all'];
+  const groups = pictures.length ? [...new Set(pictures.map(p => p.group)), 'all'] : [];
   for (const group of groups) {
     const items = group === 'all' ? pictures : pictures.filter(p => p.group === group);
     const folder = group === 'all' ? output : `${output}/${group}`;
@@ -123,10 +152,11 @@ try {
       await page.close();
     }
   }
-  await writeFile(`${output}/render-stats.json`, `${JSON.stringify({ hour: Number(hour), pose: 'rest', simulated: true, limits: AVATAR_LOOK_LIMITS, scope: lookFilter || groupFilter ? 'filtered' : 'all', looks: stats }, null, 2)}\n`);
+  if (stats.length) await writeFile(`${output}/render-stats.json`, `${JSON.stringify({ hour: Number(hour), pose: 'rest', simulated: true, limits: AVATAR_LOOK_LIMITS, scope: lookFilter || groupFilter ? 'filtered' : 'all', looks: stats, lineups: lineupShots }, null, 2)}\n`);
+  if (lineupShots.length) await writeFile(`${output}/lineup-stats.json`, `${JSON.stringify({ simulated: true, lineups: lineupShots }, null, 2)}\n`);
   const over = stats.filter(s => !s.withinLimits);
   if (over.length) throw new Error(`Over the look budget: ${over.map(s => s.look).join(', ')}`);
-  console.log(`Captured ${looks.length} looks / ${pictures.length} stills into ${output}.`);
+  console.log(`Captured ${looks.length} looks / ${pictures.length} stills and ${lineupShots.length} lineup frames into ${output}.`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1;
 } finally {
