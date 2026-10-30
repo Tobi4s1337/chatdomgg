@@ -132,6 +132,69 @@ The client keeps this per kingdom connection. It must be followed exactly, becau
 
 `deliveryCursor` in `postgres.integration.test.ts` is this rule as executable reference.
 
+## Seats and reconnect (`src/auth/seats.ts`)
+
+Spec 34 R8: a reconnect is a checked lease on one seat. `RealmSeats` is the policy and `kingdom-room.ts` the
+Colyseus adapter around it.
+
+- **One seat per person per room.** A fresh authenticated entry by someone who already has a seat replaces it.
+  The newest window wins: the old socket closes with 4409 (or its grace is cancelled), its reconnect token dies, and
+  the new walker starts where the old one stood. Nobody gets a second avatar, and nobody is locked out by a
+  forgotten tab.
+- **Drop.** A socket that drops (1001, 1005, 1006, a reload, a lost network) stops movement at once: queued input is
+  cleared, velocity zeroed, and nothing moves the walker until it reconnects. The seat is held for 30 s, or until
+  the session ends if that is sooner. A seat the server ended gets no grace.
+- **Session checks.** Every seat, connected or dropped, has its entry checked against the session store once a second
+  (3 s timeout per question). `false` ends the seat (4401). An unanswered check holds walking without closing; after
+  15 s without an answer the seat ends with 4503. Session expiry ends the seat without asking.
+- **Reconnect** resumes only the same seat, only while it is still this person's, and only after `current` answers
+  `true` during the handshake. Colyseus keeps its own input sequence and acknowledgement epoch; there is no
+  application sequence.
+- **Writer epochs.** Seats live in one room, which lives under one writer lease. A process restart starts new rooms
+  under a new epoch, so every old token is refused and the person enters again with a fresh ticket. An in-process
+  lease loss closes the room through main's `RealmRoomEffects.close` (4003). The dropped seats' graces end with it.
+
+### Browser contract
+
+The browser source belongs to the browser lane; this is what it must do. `connectRealm` in
+`apps/web/src/realm/client.ts` already does steps 1–3.
+
+1. **Storage.** Keep the reconnect token in `sessionStorage`, so it is per tab. The key is `[endpoint, kingdomId,
+   resumeScope]`, where `resumeScope` comes from `GET /api/realm/session`. The value is `room.reconnectionToken`,
+   exactly as the SDK gives it: `k:<kingdomId>:<token>`. Never split, log or send it anywhere. The patched SDK splits
+   it at the last colon on both reconnect paths. Never store a ticket.
+2. **Rotation.** The token changes on every join and every reconnect. Save it after `joinOrCreate`/`reconnect`
+   resolves, and after automatic reconnects in a microtask queued from `room.onReconnect` (the SDK assigns the new
+   token after that callback returns). An older token is refused (524).
+3. **Reload.** Try `client.reconnect(saved, KingdomRoomState)` first. If it rejects, delete the key and enter fresh
+   with a new ticket. The rejection codes are:
+
+   | Code | Meaning |
+   |---|---|
+   | 524 | token invalid or expired: rotated, grace over, seat ended or replaced |
+   | 522 | `room "k:…" has been disposed`: the server restarted, or the writer moved, and nobody has entered since |
+   | 4401 / 4409 / 4410 / 4503 | refused during the handshake by the seat check (meanings below); the socket then closes with 4003 |
+
+4. **Lost network.** The SDK reconnects on its own after 1001, 1005, 1006 and 4010 (`room.onDrop`). It does so only
+   if the room was joined at least 5 s earlier, and tries 15 times with backoff up to 5 s. Show "Reconnecting…" from
+   `onDrop` until `onReconnect` or `onLeave`.
+5. **`room.onLeave(code, reason)`** ends the room. The `reason` is a person-readable sentence that is safe to show.
+
+   | Code | What happened | What the browser does |
+   |---|---|---|
+   | 4000 | the person left | clear this tab's key |
+   | 4001 | the realm process is shutting down | clear the key; enter fresh after a short backoff (1–5 s) |
+   | 4002 | protocol violation (message rate, invalid intent) | clear the key; offer Walk again |
+   | 4003 | reconnect failed, or the kingdom's writer moved | clear the key; enter fresh with a new ticket |
+   | 4401 | session ended: signed out, revoked, moderated or expired | clear every key for this `resumeScope`; read the session; if anonymous, show Walk (sign-in) |
+   | 4409 | the same person walked in from another window | clear this tab's key; show "Walking in another window" with a Walk-here button; never rejoin automatically |
+   | 4503 | the session store did not answer for 15 s | clear the key; enter fresh after a pause (5–15 s) |
+
+   4410 only appears as a reconnect refusal ("this seat has ended"): enter fresh.
+6. **Signout.** After `POST /api/realm/signout`, clear every key for that `resumeScope`. The server ends the seat
+   within about a second, whether it is connected or waiting out its grace.
+7. Walker ids are per entry. Use them only as keys for this room session; never persist or show them.
+
 ### Schema and migrations
 
 Migrations are additive SQL files in `src/persistence/migrations/`, applied in file order and recorded with
@@ -150,6 +213,7 @@ does not run migrations of its own.
 | `realm_ingress_checkpoints`, `realm_ingress_receipts` | presence checkpoint bytes and per-observation dedupe |
 | `realm_ingress_inbox` | authenticated observations accepted before any writer decides them (`0004`) |
 | `realm_outbox_cursors` | per-kingdom durable delivery cursor, moved only by the current epoch (`0004`) |
+| `realm_entries` | one row per consumed ticket; its random id is the walker's room id and the session-check key (`0005`) |
 
 ## Running locally
 
@@ -207,6 +271,14 @@ missing. It migrates a random `realm_test_*` schema and drops only that schema. 
 
   Throughout there is one coal, one credit fact, overlap is never counted twice, and the public payload holds no
   person ID, right, session, secret or chat.
+
+R8 has two halves. `src/auth/seats.test.ts` checks the seat policy with no database: replacement, the 30 s grace
+bounded by the session, revocation during the grace, expiry, and the unanswered-store hold. The reconnect harness
+runs inside the sign-in suite (`apps/api/src/realm-auth/auth.integration.test.ts`), which already holds real
+sessions. It starts this server's durable composition through `src/auth/reconnect-harness.ts` and drives the real SDK
+on `k:424243`. It covers: a reload through explicit reconnect, a lost network through automatic reconnect, rotated
+and refused tokens, a second window, signout during the grace, expiry while connected, and a restart that refuses
+every old token (automatic reconnect ends in 4003, a saved token in 522) before an authenticated fresh entry.
 
 Vitest caches transformed modules in `node_modules/.vitest-cache`, and that cache does not notice a new migration
 file behind `import.meta.glob`. After adding a migration, run `pnpm exec vitest --clearCache` once, or the suite will

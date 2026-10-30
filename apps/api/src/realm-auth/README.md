@@ -74,13 +74,19 @@ again, another account) gets a new one. A session lasts 14 days. One session may
 - `authenticate(join)` burns the ticket atomically, then requires: it was unexpired, issued for this kingdom and
   protocol, of the realm's origin, and its session is unrevoked and unexpired. Failures are `ServerError` 403
   with a person-readable message (400 for a malformed join). A database failure is 503 and never grants entry.
-- `current(principal, now)` is true only for an unrevoked, unexpired session that matches the principal's person
-  and origin, by database time. A forged or edited principal is false. A database failure throws, which the room
-  treats as "Entry unavailable".
+- Each accepted ticket opens one **entry** (`realm_entries`, migration `0005`). The principal's `sessionId` is that
+  entry's random id, never the Chatdom session id: Colyseus adopts it as the walker's room id, which every client in
+  the room sees. Two windows of one session therefore get two seat ids, and a walker key links nothing across
+  kingdoms or entries.
+- `current(principal, now)` resolves the entry to its session and is true only while that session is unrevoked
+  and unexpired, by database time, for the principal's person, kingdom and origin. A forged or edited principal is
+  false. A database failure throws, which the room treats as an unanswered check (walking held, see below).
 - A live realm refuses simulated tickets and principals; a SIMULATED realm refuses live ones.
 
-The room's one-second session check closes a revoked or expired connection. Ending its seat without the 30-second
-reconnect grace belongs to the RS05 lifecycle adapter.
+The room asks `current` for every seat, connected or waiting out a reconnect grace, once a second. Signout,
+revocation and expiry end the seat with no grace: a connected socket closes with 4401, a dropped seat's grace is
+cancelled. The full seat and reconnect contract for the browser is in `apps/realm/README.md` (*Seats and
+reconnect*). `sweep()` forgets entries of ended sessions.
 
 ## Running it
 
@@ -129,4 +135,8 @@ missing. It signs two simulated people in through HTTP, rejects replayed or stol
 foreign nonce, and expired and replaced sessions. It burns replayed, cross-kingdom and expired tickets, refuses
 client-chosen identities and forged principals, holds entry when storage fails, and walks both people into a real
 Colyseus room through the browser's own `connectRealm`. Signout and internal revocation then close their
-connections.
+connections with 4401 and end their seats at once.
+
+R8 runs a durable Postgres-backed realm (`apps/realm/src/auth/reconnect-harness.ts`) with real SDK clients on
+`k:424243`: reload (explicit reconnect with the saved token), lost network (automatic reconnect), rotated tokens,
+a second window, signout during the grace, expiry while connected, and a restart that leaves no old seat behind.

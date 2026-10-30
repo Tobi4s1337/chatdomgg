@@ -61,7 +61,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   projection restoration and explicit at-least-once retry. Focused R7 test interrupts after commit/before delivery
   acknowledgement, then resumes: one applied ingress result, same public event ID, no replayed economic change,
   no raw creation words/rights/tokens in the public payload. Supply browser dedupe/cursor wiring instructions.
-- [ ] **RS05 — Reconnect returns the same person and honors revocation** · evidence: test/log. Add the auth/
+- [x] **RS05 — Reconnect returns the same person and honors revocation** · evidence: test/log. Add the auth/
   lifecycle adapter through main's existing handshake-time `onReconnect`, periodic revocation and drop guards,
   with explicit 30-second grace, immediate drop-input stop, current-session recheck, one-person seat policy and
   writer-epoch invalidation. Focused R8 harness demonstrates drop/reconnect and
