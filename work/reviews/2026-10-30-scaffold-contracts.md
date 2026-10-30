@@ -46,3 +46,22 @@ Main reviewed the notes and representative source. Reference demo visuals remain
 external code was executed or copied into product code. Crowdbake is ideas only without a verified license.
 WebGLRenderer compatibility, actual GPU/device costs, light-field behavior, warm window reflections on water,
 real feed publication and full Atlas integration are still unproved. No performance or finished-world claim.
+
+## Goal completion audit
+
+The preceding goal turn made progress: implementation, independent reviews, green verification and push of
+15d49ce. This audit inspected the current checkout and remote rather than relying on that report alone.
+
+| Goal requirement | Current authoritative evidence |
+|---|---|
+| Workspace and full verification | package.json pipeline inspected; fresh `pnpm verify` passed on Node 22.23.4, all 22 meaningful contract tests, build and five Chrome captures |
+| Standard screenshots looked at | Fresh 1440×900 and 390×844 plus 1920×1080, 1280×720, 318×496 opened with view_image; development-bench scope unchanged |
+| Representative and hostile frozen boundary | Current schemas/codecs/tests/fixtures and frozen README inspected; prior independent Astra high review approved; no additional groups frozen |
+| Ready real-data Atlas handoff | Spec names actual exports, local Surveyor/read-only adapter, initial and later consumer seams; PRD decomposed into 15 bounded tasks, preserving full scope and visible A02 |
+| Lane can start | lane/atlas worktree exists, dependencies installed, zero-byte progress log and clean branch before audit update; main fast-forwards it to the completed handoff commit |
+| Four reference studies | All four tracked notes contain sources, revision/license evidence or explicit ideas-only restriction, techniques, device adaptations and limitations |
+| No voxel core | No packages/voxel or packages/world implementation exists; next main brief remains the dusk kingdom |
+
+The completion audit found the original six PRD tasks too broad and split them into fifteen outcomes. This changes
+work granularity only, not the frozen contract or Atlas scope. PLAN §10 now records the existing worktree and actual
+ready state instead of a future setup instruction. Preview 5190 answered HTTP 200 during this audit.

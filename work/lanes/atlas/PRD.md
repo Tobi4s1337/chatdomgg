@@ -19,77 +19,116 @@ and take an unblocked part/task. Never pick from Backlog without main instructio
 
 ## Tasks
 
-- [ ] **A01 — Real observations become a reproducible Atlas revision** · evidence: test + log.
-  Implement `@chatdom/surveyor` read-only HTTP/source-snapshot adapters, strict shared validation, durable normalized
-  raid observations/checkpoints, recorder decoding and coherent provenance/coverage. The existing shared
-  first-consumer boundary must be reviewed/frozen; later pulse/auth/travel/season seams freeze with their consumers
-  and do not block this task. Add owned `atlas:import`,
-  `atlas:check`, `atlas:serve` scripts exactly as the spec accepts; serve `/map-data` on local port 5193. Produce an
-  immutable labelled survey preview from actual channels/category minutes/raid observations; implement reviewed
-  taxonomy proposal, deterministic language/family land, waiting slots, settled ledger, content-addressed manifest
-  and corruption/invariant guards. Official edition founding rejects short observation windows, missing review or
-  authorization; source DB and running collector are never written. Include real import/check evidence, source
-  freshness, atomic failure recovery and same-input/same-revision checks. Spec R1–R5, R10–R11, R16, R21.
+These are implementation steps in one full-scope lane, not reduced releases. Each step owns one reviewable result;
+only its applicable acceptance checks must pass to tick it. All Spec 01 rules remain required to finish the lane.
+If a step expands beyond one coherent worker iteration, ask main to split it rather than hiding unfinished work.
+The first visible result is A02. A task blocked by a future shared seam records `needs:`; it never invents authority.
 
-- [ ] **A02 — The real map can be explored on laptop and phone** · evidence: shot + flow test.
-  Export default Solid `Atlas` from `apps/web/src/atlas/index.tsx`, with exactly one `[data-chatdom-atlas]` root.
-  Build the PixiJS 8/WebGL2 explorer map from A01: ink/watercolour coasts, reviewed licensed stamps, paper,
-  heraldry, compass/sea monster, pencil/ink states and honest survey-preview legend. Add float64 anchored
-  pan/wheel/pinch/inertia, interruptible flights, four zoom distances, tiered labels, culling/collision, tiles with
-  ancestor fallback, seam-free fades and bounded cache. Render actual live classes/dabs with paint and pennants;
-  show source as-of/coverage and designed first-load/error/offline/no-WebGL states. Provide real channel
-  selection, Unicode search, truthful public card and working Watch link now, through Atlas-owned validated
-  adapters (no unapproved global protocol). Main owns route/proxy/package integration. Set ready only after a
-  meaningful coherent frame. Run `pnpm shots --area atlas`; open 1440×900 and 390×844 images, check selected
-  result remains visible above phone sheet and no foundation bench can satisfy the assertion. Spec R6–R11, R17.
+- [ ] **A01 — Read a real Surveyor snapshot without changing its source** · evidence: test + import log.
+  Add the new `@chatdom/surveyor` manifest and read-only HTTP/SQLite snapshot adapter. Validate status/raid inputs
+  with shared schemas; export actual channel/category/raid observations to its own `ATLAS_DATA_DIR` with source
+  dates and coverage. Implement `atlas:import`, `atlas:check`, and `atlas:serve` on 5193 as specified, initially for
+  this snapshot. Missing inventories fail clearly; never manufacture channels or write source SQL. Prove a real
+  import, consistent transaction, bounded errors and atomic preservation of the last good snapshot. R1, R11, R16.
 
-- [ ] **A03 — Real raids leave roads and a night can be replayed** · evidence: shot + test + log.
-  Reconcile shared live/dab manifests and real SSE, persist cursor/dedupe/restart state and hold coherent dated
-  state on a gap rather than inventing life. A partial sweep cannot zero missing live channels, publish an unknown
-  class as offline, or refresh older bytes' observation time; retain the previous complete frame and its original
-  as-of, expose the partial gap separately, and test this behavior. Draw actual caravans, first/thickened/faded roads, sea lanes and
-  selected-road stories; distinguish pair aggregates from new events and recovered history from live animation.
-  Derive real raid trains/branches and permanent factual line records; ingest the founded bridges/embassies/
-  signposts/path/trade projections only through approved public facts, with ≥20 bands where derived from people.
-  Add real recorder history scrubber, seek/speed/date/gap labels and isolated replay transport. Demonstrate
-  desktop+phone live/stale/road/replay states, duplicate/reordered/restart reconciliation, old-road retention,
-  no synthetic event/identity filling and binary alignment failure. Missing advanced producers become explicit
-  needs, not fake events. Spec R11–R14, R21–R22.
+- [ ] **A02 — Show the first real survey map on laptop and phone** · evidence: shot + real-data flow.
+  Export the Solid Atlas component with exactly one `[data-chatdom-atlas]` root and meaningful ready signal.
+  Draw a composed Pixi map from A01's actual channels: immutable labelled survey-preview land, language regions,
+  ink coasts, watercolour, licensed town stamps/shields, actual channel selection and an observed-date legend.
+  Include basic pan/zoom, a working Watch link and designed loading/error states. This is the visible beginning
+  of the complete map, not a claim that later interactions are implemented. No official founding or synthetic
+  community names. Run `pnpm shots --area atlas` and inspect both sizes. R2, R4, R6–R9, R17.
 
-- [ ] **A04 — People discover good neighbours and a kingdom's public story** · evidence: shot + flow test.
-  Finish mapped/waiting/founded cards, approved drawing/hero descriptor consumption with valid stamp fallback,
-  real founding metadata/roads/crowns/embassies/aggregate bands, share/tell and authorized settler actions. Add
-  small-neighbour road discovery, notices from genuine quality/life facts, common-bracket season board, permanent
-  crowns/citations and factual crowning presentation. Add all `/map/*` deep-link parsers/view restoration and
-  server-rendered share/still assets; main wires root routes/metadata/endpoints. Enforce hiding/deletion/name
-  moderation/content-label policy and daily raw-content expiry in every search/card/share/projection. Unknown
-  labels/quality facts have an explicit truthful state, never fabricated ratings or winners. Declare minimal
-  producer seams to main before integration; don't edit shared or infer approval for collector expansion.
-  Prove no money/spectacle input can alter discovery and public exports contain no person data. Spec R13–R17, R22.
+- [ ] **A03 — Make geography and settlement survive new observations** · evidence: invariant tests + log.
+  Add versioned taxonomy/name proposals, deterministic language/family geography, holding tiers and hamlet slots,
+  immutable edition artifacts and append-only holding/tombstone ledger. Extend import/check with same-input/hash
+  reproducibility, duplicate-owner/slot-exhaustion/hide/growth checks, and preservation of previous addresses.
+  Official Edition 0/Edition I commands reject insufficient duration, unreviewed taxonomy and absent founder
+  authorization. Never found an edition as a test side effect. R2–R5.
 
-- [ ] **A05 — Go home, visit and march through the actual entry coordinator** · evidence: integration test + shot.
-  With main-frozen identity/auth/entry/travel/action seams, build the current-viewer homes/realm/tent ribbon,
-  consented friend pins and ephemeral My Twitch overlay. Prove three-home cap plus castle, no foreign royal
-  authority, consent revocation and no follows/private overlays in public caches. Implement wax-seal response,
-  saved auth resume, hero-drawing loading scene with true progress/raven, matched two-canvas ready reveal,
-  role-correct destination and reversible M/Back return with world-retention coordination. Implement road ride,
-  raid-arrival links and monarch-only Raid Gate finder/preview/confirmed/cancel/unknown states through main's
-  actual authorities. No direct Twitch writes or invented travel/passport success. A SIMULATED integration
-  fixture tests unavailable states but cannot close this task until real producer evidence exists. Spec R18–R20.
+- [ ] **A04 — Publish coherent live paint, pennants and small-channel dabs** · evidence: codec flow + shots.
+  Produce and consume the shared live-v2/dabs-v1/start-time artifacts behind one atomically swapped manifest.
+  Apply a canonical content/visibility gate to every output before publishing, with privacy/safety cases.
+  Draw all live classes with the specified wash/pennants, starts and founded spectacle priority. Partial sweeps,
+  wrong alignment, stale/future observations, corrupt assets and old snapshots retain the last complete frame
+  and its original observation time; they never manufacture offline or freshly live channels. R8, R11, R14, R16.
 
-- [ ] **A06 — The whole Atlas holds up in motion, on stream and after failure** · evidence: shot + test + cost log.
-  Complete the shared Atlas/director presentation for raid in/out, tonight's roads and season crowning; preload
-  it and omit private state/tiny counts. Finish material-specific varied sounds and crafted motion across input,
-  cards, paper, seal, pennant, road and notices. Exercise every loading/empty/stale/refused/denied/offline/context
-  loss/WebGL-free state, hostile Unicode/long names, 5-viewer and 50,000-viewer cases, delayed tiles, malformed
-  feeds, replay gaps, import failure and reconnect without false success. Inspect 1440×900, 390×844,
-  1920×1080 and 1280×720 evidence plus a motion/audio review. Measure public bundle isolation, request/culling/
-  cache/transfer budgets and no Twitch/realm calls from browsing; run all acceptance commands and produce an
-  honest remaining real-GPU/phone/OBS timing report. Confirm immutable full-level Edition I tooling and
-  long-tail land-by-raid behavior exist without founding/publishing an official edition. Close all producer
-  dependencies or leave the lane explicitly incomplete with needs. All spec rules and quality acceptance apply.
+- [ ] **A05 — Make map motion and tile loading hold together** · evidence: interaction tests + motion review.
+  Finish anchored wheel/pinch/pan/inertia, bounded interruptible flights, focus/back restoration and phone-sheet
+  padding. Add four zoom distances, stable tiered label/shield collision, culling and bounded texture cache;
+  implement ancestor tile fallback and seam-free sharpening. Test cancel/blur/resize, delayed/failed tiles,
+  context loss and the WebGL-free still/search fallback. Inspect both standard sizes in motion. R7, R9–R10.
+
+- [ ] **A06 — Find a real channel and read its public card** · evidence: Unicode/search/card flow + shots.
+  Implement bounded Unicode search and mapped/waiting cards using real observation metadata, strongest roads,
+  availability-aware actions and source dates. Complete route parsing/restoration for channel and selected road.
+  Apply hidden/unknown/mature/excluded and raw-content-expiry rules consistently across search and cards; unknown
+  never becomes general. Define any missing shared consumer seam with main before using it. R13, R16–R17, R22.
+
+- [ ] **A07 — A real raid rides once and leaves an honest road** · evidence: ingest/restart tests + shots.
+  Add a durable observation/checkpoint ledger around ephemeral SSE and historical pair aggregates, without
+  claiming unavailable upstream event IDs/cursors. Draw live caravans and sea lanes only for fresh events;
+  recovered history thickens/fades roads without replaying as live spectacle. Test duplicate/reordered input,
+  reconnect/restart gaps, aggregate reconciliation and old-road retention. Never mistake an aggregate for a new
+  individual raid or infer that missing coverage means no raids. R11–R12.
+
+- [ ] **A08 — Connected roads become factual lines and bridges** · evidence: derivation tests + shots.
+  Derive raid trains with sequential timing/forks/dedupe and persistent line records, adding only observed stops.
+  Through main-approved public facts add shared-chat bridges, embassy/signpost, footpath and trade-route views;
+  people-derived marks obey ≥20 thresholds/bands and opt-out. Missing producers are explicit `needs:` rather
+  than invented marks. Add line/road stories and deep links; no paid prominence. R12–R14, R22.
+
+- [ ] **A09 — Replay an actually recorded night** · evidence: decoder/seek/gap tests + dated replay shot.
+  Decode real version-1 recorder frames and their historical indices through the read-only adapter. Add a dated
+  scrubber, speed changes and backwards seeks with deterministic rebuilding. Keep live and replay transports
+  isolated; missing segments remain visible gaps. Historical metadata follows retention rules, not an indefinite
+  cache of raw content. Demonstrate one actual recorded interval and a controlled corrupt/gapped case. R21.
+
+- [ ] **A10 — Present founded stories, discovery and seasons** · evidence: producer integration + card/share shots.
+  Consume approved founded drawings/hero descriptors with the valid stamp fallback; add founded card history,
+  crowns/citations, embassies and eligible aggregate bands. Build Follow a Road, the real notice board, common
+  bracket season views and share/still assets. Main supplies quality/season/founding authority and wires root
+  metadata/endpoints. No fake winners, ratings, founded channels, or monetary discovery advantage. R13–R17, R22.
+
+- [ ] **A11 — Keep each viewer's own map private** · evidence: authorized overlay/revocation tests + shots.
+  After main freezes auth/consent seams, add current-viewer home/realm/tent ribbon, castle exception and mutual
+  friend pins. My Twitch asks for follows at point of use, retains them only for that view and clears them on
+  close/sign-out/revocation. Test three homes versus castle, foreign royal authority rejection and absence of
+  personal overlays/follows from all public caches/exports. Unavailable identity never becomes a fake login. R18.
+
+- [ ] **A12 — Enter and return through the real world coordinator** · evidence: actual entry flow + shots.
+  With main's entry/drawing-ready contract, implement wax-seal response, auth-resume preservation, true progress
+  and overrun state, matching hero-angle two-canvas reveal, role-correct arrival and reversible M/Back return.
+  Test denial/cancellation/disconnect and the 60-second world retention coordination. No room joins during
+  ordinary map browsing, false arrivals, fake ready timers or premature passport awards. R19.
+
+- [ ] **A13 — March with a confirmed raid or travel to a friend** · evidence: authority/cancel tests + shots.
+  Integrate actual travel reservation/rollback and public-caravan journey; implement the monarch-only Raid Gate
+  finder, authorized preview, confirmed/cancel/unknown outcomes and raid-arrival links. Route through main's
+  action service, with live write tests only on tobi4s_. Simulated integration fixtures are labelled and cannot
+  complete real integration acceptance. No direct Twitch writer or client-granted royal power. R20.
+
+- [ ] **A14 — Make the same Atlas work on stream, with sound** · evidence: director shots + audio/motion review.
+  Complete director hooks for raid in/out, tonight's roads and crowning; preload map presentation and remove
+  private overlays/tiny counts. Add crafted paper/wood/brass/wax motion and varied CC0/permissive or procedural
+  sound to every meaningful action, respecting autoplay/mute. Main credits exact sources in THIRD_PARTY.md.
+  Inspect 1920×1080 and 1280×720 plus desktop/phone. R9, R22 and the spec's quality bar.
+
+- [ ] **A15 — Demonstrate the complete Atlas under failure and scale** · evidence: acceptance + cost report.
+  Run all spec acceptance against real imports and completed integrations. Exercise the remaining designed UI
+  states, 5/50,000-viewer cases, hostile text, slow tiles, bad feeds and reconnect; verify request/bundle isolation,
+  culling/cache/transfer/memory budgets and no Twitch/realm calls from browsing. Confirm full-level Edition I
+  tooling and long-tail land-by-raid without founding/publishing an edition. Resolve producer `needs:` or leave
+  the lane incomplete. Record real-device/phone/OBS measurements still owed; never substitute SwiftShader fps.
 
 ## Backlog
 
 Worker discoveries go here with the rule/problem and evidence. These are not authorization to widen scope or skip
 any task above. There are no invented future features to implement from this list.
+
+## Decisions
+
+- **2026-10-30 — Completion audit decomposes work.** The original six tasks bundled importer, cartography,
+  rendering and integration into large steps. Main split them into fifteen bounded outcomes without dropping
+  any spec rule; the first visible map remains task 2. The previous six-task identifiers had no completed work
+  or worker commits. The shared interchange freeze is unchanged. Future producer seams freeze at their consumer.

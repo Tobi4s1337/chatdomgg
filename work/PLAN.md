@@ -324,7 +324,7 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 - Node 22.23.4 / pnpm 10.17.0 workspace; Solid/Vite web development bench; TypeScript, ESLint, Vitest and Chrome screenshots wired through `pnpm verify`.
 - First consumer boundaries: `packages/shared` identity/event primitives, observed Surveyor DTOs and Atlas edition/alignment/codec contracts. Frozen after Astra high review and 22 passing tests; advanced integrations remain unfrozen.
-- Atlas scope/spec and six-task Ralph PRD are in `work/specs/01-atlas.md` and `work/lanes/atlas/`; team starts the worker after main’s green commit/worktree setup. Whole scope retained; missing downstream producer contracts become `needs:` when reached.
+- Atlas spec and fifteen bounded Ralph tasks are in `work/specs/01-atlas.md` and `work/lanes/atlas/`. Branch `lane/atlas` and worktree `/root/chatdomgg-harness/worktrees/atlas` exist with dependencies installed; progress is empty and the team can start A01. Whole scope retained; missing downstream producer contracts become `needs:` when reached.
 - Reference studies: voxel AO/light, sky/fog/time, Ultra-Water, crowd animation and map camera/cartography. Techniques and limitations recorded; no external product source copied. No GPU performance evidence yet.
 - Founder decisions resolved: citizen windows are presence, named nearby; castle beacon is kingdom light. Sound uses credited CC0/permissive sources plus procedural work. No silent actions.
 - Next main work: small tested world/voxel contract when that consumer starts, then the real dusk kingdom with windows coming on. Do not freeze the other groups pre-emptively.
