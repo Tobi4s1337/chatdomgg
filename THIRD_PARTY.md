@@ -24,7 +24,7 @@ The Atlas ships the credited art and fonts below. No sampled third-party sound h
 
 Reference research is indexed in work/references/. No source from those external repositories was copied into product code. Crowdbake has no verified reuse license and is ideas only. Any future adaptation requires a source header and its own entry here, including upstream notices and separate asset rights.
 
-Kingdom sounds in `apps/web/src/kingdom/sound.ts` are original procedural Web Audio synthesis (oscillators, envelopes and a compressor), authored in this repository. They contain no sampled recordings. Atmosphere, water and voxel shaders are original implementations informed by the credited reference notes.
+Kingdom and Forge sounds in `apps/web/src/kingdom/sound.ts` and `apps/web/src/forge/sound.ts` are original procedural Web Audio synthesis (oscillators, envelopes and a compressor), authored in this repository. They contain no sampled recordings. Atmosphere, water and voxel shaders are original implementations informed by the credited reference notes.
 
 ## Atlas art and fonts
 

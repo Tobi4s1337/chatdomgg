@@ -10,7 +10,18 @@ export function findForgeSockets(home:VoxelBlueprint):ForgeHouseSocket[]{
   const cell=cellReader(home),[sx,sy,sz]=home.size,roof=new Set<number>([MAT.terracotta,MAT.slate,MAT.thatch]),fingerprint=homeFingerprint(home);
   const heights=new Int16Array(sx*sz);for(let z=0;z<sz;z++)for(let x=0;x<sx;x++){let y=sy-1;while(y>=0&&!cell(x,y,z))y--;heights[x+sx*z]=y;}
   const result:ForgeHouseSocket[]=[];
-  for(const kind of ['chimney','weathervane'] as const){
+  // Existing masonry outlets are the native chimney socket: crown them instead of growing a duplicate stack.
+  let capY=0;const masonry=new Set<number>([MAT.stone,MAT.limestone,MAT.darkStone,MAT.brick]);
+  for(let z=8;z<sz-8;z++)for(let x=12;x<sx-12;x++){const y=heights[x+sx*z]!;if(y>28&&masonry.has(cell(x,y,z)))capY=Math.max(capY,y+1);}
+  if(capY){const cap:[number,number,number][]=[];for(let z=8;z<sz-8;z++)for(let x=12;x<sx-12;x++)if(heights[x+sx*z]===capY-1&&masonry.has(cell(x,capY-1,z)))cap.push([x,capY,z]);
+    if(cap.length>=8){const first=cap[0]!,near=cap.filter(p=>Math.abs(p[0]-first[0])<16&&Math.abs(p[2]-first[2])<16),cx=Math.round((Math.min(...near.map(p=>p[0]))+Math.max(...near.map(p=>p[0])))/2),cz=Math.round((Math.min(...near.map(p=>p[2]))+Math.max(...near.map(p=>p[2])))/2);
+      // A low side stack can sit below the adjacent gable. Crown only when the
+      // complete dragon footprint clears that roof; otherwise choose a roof saddle.
+      let clear=true;for(let z=Math.max(0,cz-10);z<Math.min(sz,cz+10)&&clear;z++)for(let x=Math.max(0,cx-12);x<Math.min(sx,cx+12);x++)if(heights[x+sx*z]!+1>capY){clear=false;break;}
+      if(clear)result.push({id:'stack-chimney',kind:'chimney',profile:'stack',origin:[cx-16,capY,cz-16],supports:near,hostId:home.id,hostFingerprint:fingerprint,clearanceHeight:2});}
+  }
+  for(const kind of ['chimney','weathervane','lantern'] as const){
+    if(result.some(s=>s.kind===kind))continue;
     const candidates:{x:number;z:number;supports:[number,number,number][];low:number;high:number;crown:number;score:number}[]=[];
     for(let z=6;z<sz-6;z+=2)for(let x=6;x<sx-6;x+=2){
       const supports:[number,number,number][]=[];let low=Infinity,high=0,ok=true;
@@ -20,23 +31,25 @@ export function findForgeSockets(home:VoxelBlueprint):ForgeHouseSocket[]{
         supports.push([x+dx,y+1,z+dz]);low=Math.min(low,y+1);high=Math.max(high,y+1);
       }
       if(!ok||high-low>20||result.some(s=>Math.hypot(x-(s.origin[0]+16),z-(s.origin[2]+16))<22))continue;
-      const targetX=sx*(kind==='chimney'?.68:.25),targetZ=sz*.5;
-      let crown=high;for(let Z=Math.max(0,z-10);Z<Math.min(sz,z+10);Z++)for(let X=Math.max(0,x-12);X<Math.min(sx,x+12);X++)crown=Math.max(crown,heights[X+sx*Z]!+1);
+      const targetX=sx*(kind==='chimney'?.68:kind==='lantern'?.72:.25),targetZ=sz*(kind==='lantern'?.8:.5);
+      const rx=kind==='chimney'?12:kind==='lantern'?4:7,rz=kind==='chimney'?10:4;
+      let crown=high;for(let Z=Math.max(0,z-rz);Z<Math.min(sz,z+rz);Z++)for(let X=Math.max(0,x-rx);X<Math.min(sx,x+rx);X++)crown=Math.max(crown,heights[X+sx*Z]!+1);
       if(crown-high>24)continue;
       candidates.push({x,z,supports,low,high,crown,score:Math.hypot(x-targetX,z-targetZ)+(high-low)*.5+(crown-high)});
     }
     const best=candidates.sort((a,b)=>a.score-b.score)[0];
-    if(best)result.push({id:`roof-${kind}`,kind,origin:[best.x-16,best.low,best.z-16],supports:best.supports,hostId:home.id,hostFingerprint:fingerprint,clearanceHeight:best.crown-best.low+2});
+    if(best)result.push({id:`roof-${kind}`,kind,profile:'roof',origin:[best.x-16,best.low,best.z-16],supports:best.supports,hostId:home.id,hostFingerprint:fingerprint,clearanceHeight:best.crown-best.low+2});
   }
   // Front is +Z in the content contract. Keep the bracket clear of every existing pane.
   outer:for(let x=Math.floor(sx*.2);x<sx-4;x++)for(let y=30;y>=12;y--){
     let z=sz-1;while(z>=0&&!cell(x,y,z))z--;
-    if(z<0||![MAT.plaster,MAT.cream,MAT.timber,MAT.bark,MAT.brick].includes(cell(x,y,z) as typeof MAT.plaster))continue;
+    if(z<0||z+13>sz||![MAT.plaster,MAT.cream,MAT.timber,MAT.bark,MAT.brick].includes(cell(x,y,z) as typeof MAT.plaster))continue;
     if(home.windows.some(w=>w.facing==='south'&&Math.abs(z+1-w.centre[2])<16&&Math.abs(x-w.centre[0])<w.width/2+4&&Math.abs(y-w.centre[1])<w.height/2+8))continue;
     if(!cell(x-1,y,z)||!cell(x,y-1,z)||!cell(x-1,y-1,z))continue;
     let clear=true;for(let X=x-4;X<x+4&&clear;X++)for(let Y=y-3;Y<y+14&&clear;Y++)for(let Z=z+1;Z<z+13;Z++)if(cell(X,Y,Z)){clear=false;break;}
     if(!clear)continue;
-    result.push({id:'front-lantern',kind:'lantern',origin:[x-16,y-5,z+1],supports:[[x-1,y-1,z],[x,y,z]],hostId:home.id,hostFingerprint:fingerprint,clearanceHeight:0});break outer;
+    const old=result.findIndex(s=>s.kind==='lantern');if(old>=0)result.splice(old,1);
+    result.push({id:'front-lantern',kind:'lantern',profile:'wall',origin:[x-16,y-5,z+1],supports:[[x-1,y-1,z],[x,y,z]],hostId:home.id,hostFingerprint:fingerprint,clearanceHeight:0});break outer;
   }
   return result;
 }
@@ -45,21 +58,23 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
   const plan=HousePartPlanSchema.parse(input),kit=ForgeStyleKitSchema.parse(style);
   if(socket.kind!==plan.kind)throw new Error('That part does not fit this house socket.');
   if(kit.id!==`${kit.family}-native`||kit.revision!==1||kit.styleId!==STYLES[kit.family].id)throw new Error('Unregistered style kit.');
-  const native=STYLES[kit.family],motif=createForgeMotif(plan.motif,kit.family),boxes:VoxelBlueprint['boxes']=[];
+  const native=STYLES[kit.family],motif=createForgeMotif(plan.motif,kit.family);
+  if(plan.kind==='weathervane'){for(const b of motif.boxes){const z=motif.size[2]-b.to[2];b.to[2]=motif.size[2]-b.from[2];b.from[2]=z;}motif.mount[2]=motif.size[2]-motif.mount[2];motif.emitter[2]=motif.size[2]-motif.emitter[2];}
+  const boxes:VoxelBlueprint['boxes']=[];
   const add=(from:[number,number,number],to:[number,number,number],material:number)=>boxes.push({from,to,material});
   let top=4,centreZ=16;
-  if(plan.kind==='lantern'){
+  if(socket.profile==='wall'){
     centreZ=8;add([15,4,0],[17,6,9],MAT.brass);add([14,2,0],[18,8,1],native.trim);
   }else{
     const ridge=Math.max(...socket.supports.map(p=>p[1]-socket.origin[1]));
-    top=Math.max(socket.clearanceHeight,ridge+(plan.kind==='chimney'? (kit.family==='tide'?9:kit.family==='grove'?5:7):8));
+    top=socket.profile==='stack'?2:Math.max(socket.clearanceHeight,ridge+(plan.kind==='chimney'? (kit.family==='tide'?9:kit.family==='grove'?5:7):plan.kind==='lantern'?4:8));
     // Column feet individually meet the retained slope. No carve or erasure is ever applied to the house.
     for(const p of socket.supports){const x=p[0]-socket.origin[0],y=p[1]-socket.origin[1],z=p[2]-socket.origin[2];add([x,y,z],[x+1,ridge+2,z+1],native.stone);}
-    if(plan.kind==='chimney'){
+    if(plan.kind==='chimney'&&socket.profile!=='stack'){
       if(top-2>ridge+2)add([13,ridge+2,13],[19,top-2,19],native.stone);
       for(let y=Math.max(ridge+3,socket.clearanceHeight);y<top-2;y+=4)add([11,y,11],[21,y+1,21],kit.family==='grove'?MAT.moss:native.trim);
       add([10,top-2,10],[22,top,22],native.stone);
-    }else{add([15,ridge+2,15],[17,top,17],MAT.brass);add([12,ridge+3,15],[20,ridge+4,17],MAT.brass);}
+    }else if(top>ridge+2){add([15,ridge+2,15],[17,top,17],MAT.brass);if(top>ridge+4)add([12,ridge+3,15],[20,ridge+4,17],MAT.brass);}
   }
   const offset:[number,number,number]=[16-motif.mount[0],top-motif.mount[1],centreZ-motif.mount[2]];
   for(const b of motif.boxes)boxes.push({material:b.material,from:b.from.map((n,i)=>n+offset[i]!) as [number,number,number],to:b.to.map((n,i)=>n+offset[i]!) as [number,number,number]});
@@ -80,7 +95,7 @@ export function checkForge(result:AssembledForge,home:VoxelBlueprint):{solidCell
     const material=asset.voxels[x+sx*(y+sy*z)]!;if(!material)continue;solidCells++;palette.add(material);
     const X=x+result.socket.origin[0],Y=y+result.socket.origin[1],Z=z+result.socket.origin[2];
     if(host(X,Y,Z))throw new Error(`The ${result.plan.kind} would cover ${home.id} at ${X},${Y},${Z}; origin ${result.socket.origin}; local ${x},${y},${z}.`);
-    if(X<0||X>64||Y<0||Y>=160||Z<0||Z>home.size[2]+16)throw new Error('The piece reaches beyond this home.');
+    if(X<0||X>=64||Y<0||Y>=160||Z<0||Z>=home.size[2])throw new Error('The piece reaches beyond this home.');
     for(const w of home.windows)if(w.facing==='south'&&Math.abs(X-w.centre[0])<=w.width/2&&Math.abs(Y-w.centre[1])<=w.height/2&&Z>=w.centre[2]&&Z<w.centre[2]+3)throw new Error('Keep the window clear.');
   }
   if(solidCells<80||solidCells>15000||palette.size>9||result.blueprint.boxes.length>600)throw new Error('The shape needs a quieter, better balanced finish.');

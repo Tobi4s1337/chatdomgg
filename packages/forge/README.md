@@ -17,7 +17,7 @@ are separate requirements. The mesh is never cropped or thinned to meet a budget
 Attachments are exact geometry beside the shaped source. They never go through `BuildDraft.insertBlueprint`
 (which replaces a whole box) or architectural shaping (which would reinterpret a sculpture). Local placement
 receipts are a separate versioned sidecar. The browser reassembles and checks them on reload; a changed house
-invalidates their sockets. Main must extend source-aware placement reconciliation before live edit/publish.
+invalidates their sockets. Main must extend source-aware placement reconciliation before live edit/publish. Masonry stacks are crowned directly; roof saddles serve homes without a stack. Lanterns use a clear in-lot wall bracket or roof perch, never an overhang into the street.
 
 The browser demonstrator spends no coal and mints no public item/provenance. It labels its local grammar and
 unconnected Codex/judges. Only after actual assembly, check and worker mesh does a 21-second presentation run;

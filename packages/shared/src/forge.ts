@@ -13,12 +13,12 @@ export const ForgeStyleKitSchema = z.strictObject({version:z.literal(1),id:Token
 export type ForgeStyleKit = z.infer<typeof ForgeStyleKitSchema>;
 /** Host-derived cells in the immutable home blueprint; never accepted from the prompt. */
 export interface ForgeHouseSocket {
-  id:string; kind:HousePartPlan['kind']; origin:[number,number,number];
+  id:string; kind:HousePartPlan['kind']; profile:'roof'|'stack'|'wall'; origin:[number,number,number];
   /** Local points where the foundation meets the retained host surface. */
   supports: [number,number,number][];
   hostId:string; hostFingerprint:string; clearanceHeight:number;
 }
-export const ForgePlacementSchema=z.strictObject({version:z.literal(1),id:TokenSchema,hostId:TokenSchema,hostFingerprint:TokenSchema,socketId:TokenSchema,kitId:TokenSchema,kitRevision:z.number().int().positive(),plan:HousePartPlanSchema,origin:Cell3Schema});
+export const ForgePlacementSchema=z.strictObject({version:z.literal(1),id:TokenSchema,hostId:TokenSchema,hostFingerprint:TokenSchema,socketId:TokenSchema,kitId:TokenSchema,kitRevision:z.number().int().positive(),plan:HousePartPlanSchema,origin:Cell3Schema,provenance:z.strictObject({source:z.literal('simulated'),makerId:TokenSchema,makerName:z.string().min(1).max(64),kingdomKey:TokenSchema,kingdomName:z.string().min(1).max(64),firstForgedAt:z.number().int().nonnegative(),designId:TokenSchema}).optional()});
 export type ForgePlacement=z.infer<typeof ForgePlacementSchema>;
 export const FORGE_PHASES=['words','blueprint','pour','seal','strike','cool','flight','landed'] as const;
 export type ForgePhase=typeof FORGE_PHASES[number];
