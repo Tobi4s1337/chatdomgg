@@ -1,0 +1,10 @@
+.forge-bench{position:fixed;inset:0;overflow:hidden;background:#34333c;color:#eadfc8;font-family:Georgia,serif;isolation:isolate}
+.forge-bench-stage{position:absolute;inset:0}
+.forge-bench-stage canvas{display:block;width:100%;height:100%}
+.forge-bench header{position:absolute;inset:0 0 auto;padding:16px 20px 28px;background:linear-gradient(#211f27cc,#211f2700);display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.forge-bench header span{font:10px/1.4 Georgia,serif;letter-spacing:.16em;color:#d8c7a2}
+.forge-bench header strong{font-size:15px;line-height:1.3;font-weight:normal}
+.forge-bench header small{font-size:11px;color:#d6d0cc}
+.forge-bench header small.simulated{align-self:flex-start;padding:3px 8px;margin-top:2px;border:1px solid #c9a96a;background:#2b2530d9;color:#f1e3c2;letter-spacing:.06em}
+.forge-bench-status{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(320px,80%);padding:24px;background:#373039;border:1px solid #9f8c6a;text-align:center}
+.forge-bench-status p{font-size:14px;line-height:1.5;overflow-wrap:anywhere;margin:12px 0 0}
