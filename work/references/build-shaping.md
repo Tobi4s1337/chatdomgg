@@ -5,8 +5,8 @@ For the build core in `packages/world/src/build/` and its first browser consumer
 
 ## What we studied
 
-- **b-townscaper**, local Chatdom prototype, read-only at
-  `/root/chatdomgg/prototyping/kingdoms/b-townscaper/src/mesher.ts:76`. Its neighborhood state
+- **b-townscaper**, local Chatdom prototype, read-only source
+  `b-townscaper/src/mesher.ts:76`. Its neighborhood state
   combines occupied, above and below corner masks. Procedurally authored roof, fascia and
   vaulted-underside pieces appear because adjacent blocks make their situation meaningful.
   `mesher.ts:105` derives a vault from nearby support; `mesher.ts:124` adds roof and eave details.

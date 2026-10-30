@@ -7,6 +7,7 @@ export * from './atlas-raids';
 export * from './voxel';
 export * from './presence';
 export * from './avatar';
+export * from './avatar-cape';
 export * from './forge-pieces';
 export * from './build';
 export * from './citizen-chat';

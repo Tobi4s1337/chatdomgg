@@ -35,3 +35,19 @@ The demo's generic procedural humanoid, random schedules, distance-only chunk LO
 ## License
 
 No license file or license grant was found in the checkout or its package/README. Treat the reference as **ideas only** until an explicit usable license is verified; write our own implementation and do not copy code or bundled assets. `vendor/goobers/README.md:1–7` identifies separately sourced vendored material, with no asset permission established here. If the license is later clarified and code is adapted, record attribution and the exact adapted files in `THIRD_PARTY.md`.
+
+## Thin cape consumer — 2026-10-30
+
+The founder explicitly replaced block capes with smooth cloth sheets. Astra/xhigh inspected
+[three.js compute cloth](https://github.com/mrdoob/three.js/blob/a58e9ecf225b50e4a28a934442e854878bc2a959/examples/webgpu_compute_cloth.html)
+(MIT, pinned top edge and deformed normals) and
+[Drei MeshWobbleMaterial](https://github.com/pmndrs/drei/blob/master/src/core/MeshWobbleMaterial.tsx)
+(MIT, shader deformation). These informed an original implementation; no external code or assets were copied.
+
+`apps/web/src/citizens/capes.ts` uses one instanced 7×11 sheet for every cut/colour, pinned at the real back socket.
+Two damped per-citizen motion values drive lift and turn lag; travelled distance, speed and world-oriented wind
+shape the free hem. Tangents from the deformed surface produce its normals. We take pinning and damping;
+we leave behind per-person particle grids, a WebGPU requirement and rigid whole-cape wobble. Registry swatches
+and shared world-light uniforms keep cloth in the same dusk palette; tier shimmer interpolates colour only.
+`AvatarCapeBlueprintSchema` holds the wardrobe cut, fit, hem and palette. Runtime keeps motion. The local rear
+clearance is not a general cloth/world collision solver, and hardware timing still needs the founder’s GPU.
