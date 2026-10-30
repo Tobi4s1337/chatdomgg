@@ -45,7 +45,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   (a storage partition, never a credential); new sessions/accounts rotate it. Tickets remain single-use. Tests use
   an explicitly SIMULATED provider through production verification logic: reject wrong issuer/audience/nonce,
   expired/revoked sessions, replay/cross-kingdom tickets and client-selected identities. Live mode has no bypass.
-- [ ] **RS03 — Three real deeds, with streets that stay put** · evidence: test. Implement global allocation and
+- [x] **RS03 — Three real deeds, with streets that stay put** · evidence: test. Implement global allocation and
   immutable founded-layout adoption in `src/allocation/`. Persist person/kingdom/plot constraints, verified
   tenure evidence, original placement, receipt and pending-install recovery; validate `home.installAllocated`
   inside the durable write transaction. Focused R6 test races one person into four kingdoms and restarts during
