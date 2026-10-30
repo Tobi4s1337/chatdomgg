@@ -17,20 +17,20 @@ helper allocates a free port and queues through its machine-wide lock. Record an
 
 ## Tasks
 
-- [ ] **PS01 — A quiet viewer can see the kingdom under the video.** Build the static Extension entries and
+- [x] **PS01 — A quiet viewer can see the kingdom under the video.** Build the static Extension entries and
   exported `Panel`, relative assets and Helper boot. Capture our existing kingdom renderer into a small fixture
   picture, then create the complete visible 318×496 carved frame: crest/name, obvious SIMULATED source, picture,
   window action, useful tonight summary and one-drawer navigation. Bare production without Helper/data gets an
   honest designed connection state. Establish `__chatdomReady` and the lane `scripts/look.mjs` capture entry.
   Keep first render useful, without implementing backend assumptions. · evidence: panel hero at 318×496 and
   mobile at 390×844, opened at actual size; green commands; bundle payload ≤1 MB with no three.js in panel.
-- [ ] **PS02 — The kingdom has a stage, a corner window and a bottom street.** Build `apps/web/src/stream/index.tsx`
+- [x] **PS02 — The kingdom has a stage, a corner window and a bottom street.** Build `apps/web/src/stream/index.tsx`
   around the existing `createKingdomScene`, with clean output and optional preview. Author separate stage,
   corner and strip framing with thin crafted edges, correct source marks, supported hero/window shots and
   truthful loading/resting/lost-source treatment. Preserve current readiness/debug capture compatibility.
   Implement visibility disposal/remount and cancellation while constructing. No copied renderer or new camera
   contract. · evidence: stage 1920×1080/1280×720, window 480×270, strip 1280×180, plus hide/show browser check.
-- [ ] **PS03 — Lighting a window has consent, identity limits and a real answer.** Finish the adapter state
+- [x] **PS03 — Lighting a window has consent, identity limits and a real answer.** Finish the adapter state
   model and named/unnamed consent flow, Helper token refresh handling, logged-out/unshared/guest states, fixture
   confirmation animation and honest unavailable production outcome. Add home plaque and factual Tonight drawer,
   resting Ballad/Chronicle if supplied and missing-data states. Add the single meaningful adapter behavior test:
@@ -59,3 +59,4 @@ helper allocates a free port and queues through its machine-wide lock. Record an
 ## Backlog
 
 Ideas found while working go here as one line each. Do not pick them without a new brief.
+- A supported close "street" camera in the renderer would let the bottom strip look down a lit street into depth instead of cropping the window shot (main-owned scene.ts).

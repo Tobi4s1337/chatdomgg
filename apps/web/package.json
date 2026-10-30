@@ -15,7 +15,9 @@
     "@chatdom/world": "workspace:*",
     "pixi.js": "8.22.0",
     "solid-js": "1.9.18",
-    "three": "0.186.1"
+    "three": "0.186.1",
+    "@chatdom/vox-import": "workspace:*",
+    "@chatdom/forge": "workspace:*"
   },
   "devDependencies": {
     "@types/three": "0.186.0",

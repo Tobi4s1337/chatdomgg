@@ -186,5 +186,62 @@ The shell and window metadata are complete static assets, ready for their real c
   been built or validated by this brief.
 
 - **2026-10-30 — Ready for the team.** Main reviewed the real core mixed-street desktop/phone views, doorway and clean SIMULATED window fixture. Validator checks all 51 baseline assets; six review-fixture tests pass. Capture previews allocate free ports for parallel worktrees. The actual lane assets remain this lane’s acceptance, not a claimed result of the tooling check.
+- **2026-10-30 — HT01 grammar (lane).** One shared Tide grammar (`grammar.ts`): footprint plans become wall bands,
+  plinths and floors through greedy rectangles; slate roofs are 3-cell courses stepping 2 cells (hips 2/2) so each
+  row casts its own drip shadow; timber ridge boards and stepped bargeboards are the kit's warm line. Solid boxes
+  may set quoins, sills and surrounds into an earlier wall (ordered material break-up); air only carves openings.
+  Walls never rise above a roof course's underside, so no cream slivers show on slopes.
+- **2026-10-30 — Entrances.** Gullstep's door is in the street gable (focus z=122). Keelcroft's compact porch is
+  enclosed with an open stone arch on the facade (focus z=122) and the house door at its back. Saltbend's door sits
+  in the sheltered corner, 1.75 m behind the facade (focus z=108), which is what makes the corner sheltered.
+- **2026-10-30 — Growth.** Tiers add space behind the hut; the street face (z≥120, y<48) stays cell-identical and
+  later tiers append windows after the hut's, so `windows[0]` and every earlier anchor keep their place and order.
+  Huts carry no north windows, because each tier builds over the previous rear wall.
+- **2026-10-30 — Rejected forms.** Saltbend's steep entry gable stuck out of the hip as a lone ridge (now it shares
+  the hip pitch and dies into it); keelcroft's open court under a set-back porch read as a dark slot (now an enclosed
+  porch gable between the keels); a taller rear keel showed its gable over the return (now its ridge meets the
+  return's in a true valley); a timber ridge on keelcroft's return made a heavy "H" (return left plain slate).
 
 - **2026-10-30 — Presence consumer:** the first ordered window anchor is the citizen’s designated presence window. Keep it stable across tiers. The authoring bench lights all anchors for inspection; the kingdom lights that one anchor per citizen.
+- **2026-10-30 — HT02 houses (lane).** Each house is a structural addition behind the cottage that brings the family
+  language back in a new place. Gullstep adds a back range across the plot: the street gable's lopsided profile turned
+  to face east (high south eave, long low north catslide), with a bressumer and gable light like the front. Its tall
+  south wall closes the cottage wing, and the wing ridge runs on into the range's slope. Saltbend raises the
+  cottage outshut into a full hipped rear wing (stone skirt, cream band, eave a course below the house's). Its rings
+  run on until each one dies into the main hip course at the same height (`Hip.southAt`), so the T-junction has no
+  cut section or hollow. Keelcroft adds a second, longer rear keel, so the back pairs two keels around a court with
+  the stack between them, as the front pairs two keels around the porch.
+- **2026-10-30 — HT02 fixes and tests.** Keelcroft's cottage rear keel was entered under the return's eave course
+  at 1.6 m. Where a rear keel opens off the return, the course is now cut back to the keel's ceiling, giving full
+  headroom; the cottage's street face and anchors are unchanged. New tests: every room a tier adds is standable and
+  reached on foot from the street door; walls and roofs form one face-connected built mass; no wall top is open to
+  the sky. The second stack on gullstep's back range was rejected: from the street it lined up with the hut's stack
+  and read as one doubled chimney, against the family's single off-centre stack. Saltbend keeps the outshut's low
+  windows as anchors. The wing's new windows follow the house's main window line, so the flank shows the old window
+  beside the new ones.
+- **2026-10-30 — HT03 manors and halls (lane).** Every hall turns the hut's own street face to its garden. It is
+  the same construction code run through a front-to-back `Reflected` builder, at the hut's height and profile, so the
+  street skyline is unchanged and the hut's ridge stays the highest line of the home. Gullstep's hall is the lopsided
+  street gable with its bressumer, mullioned window, window box, gable light and door. Saltbend's is the hut's plan,
+  hip and sheltered corner, its corner door now the garden door. Keelcroft's is the paired keels and arched porch.
+  Tests hold this: over the first two metres the hall's garden face matches the hut's street face cell for cell
+  (≥ 0.9; gullstep 0.92, saltbend 0.97, keelcroft 1.0), and no tier's wall, slate or timber rises above the hut's.
+- **2026-10-30 — HT03 manors (lane).** The manor builds the range the hall will stand against. Gullstep runs a
+  second wing north from the range, in line with the tall east side (x 26–54), its ridge dying into the range's
+  catslide in a true valley (`valley()`, per-course `along`). Saltbend adds a low hipped cross range. The wing's
+  taller hip rides over it to a hipped end, and the range's rings leave out the wing's ring at the same height
+  (`Hip.under`), so they stop in valleys and show as two low shoulders. Keelcroft adds a back return at the street
+  return's height that closes the court. A pend runs under it from court to garden: each mouth is an arch under a
+  small hood at the porch's 45° pitch, and a side door joins the back return's west room to the pend, so the house
+  reaches its court and garden. From the manor on, a walk leads from the street door through the house to the
+  garden (tested).
+- **2026-10-30 — HT03 anchors and land (lane).** A manor's north wall is where the hall will stand, so it carries
+  the garden door, not windows. Manor windows sit on east/west faces the hall keeps, and every earlier anchor keeps
+  its place and order through the hall. A manor or hall has earned the whole lot and may build over up to 95% of it
+  (paving under 85%), but keeps open sky over a court, porch or side strip. Hut to house keep the 90%/75% bounds.
+- **2026-10-30 — HT03 rejected forms.** Keelcroft's back return at a 32-cell span stood a course above the street
+  return and read heavy from the street; it now has the street return's height. Its pend hoods at the family's
+  steep pitch met the return's ridge at the same height; they now use the porch's gentler pitch. Gullstep's manor
+  wing at the cottage wing's width gave 3.9 m² of standing room, too mean for a manor, so it was widened. Roofing
+  keelcroft's court as the hall was rejected before building: it would have turned two court windows inward. A
+  stack on gullstep's hall was rejected: the single off-centre stack is the family's.

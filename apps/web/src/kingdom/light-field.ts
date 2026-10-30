@@ -32,15 +32,18 @@ export function createLightField(
   options: LightFieldOptions = {},
 ): {
   update(centre: Vec3, sources: readonly LightFieldSource[]): void;
+  /** Rebuild occupancy after a published home changes. The displayed volume survives the replacement. */
+  replaceHouses(houses: readonly WindowHouse[]): void;
   dispose(): void;
   readonly stats: LightFieldStats;
 } {
   const config = resolveLightFieldConfig(layout, options);
-  const worker = new Worker(new URL('./light-field-worker.ts', import.meta.url), { type: 'module' });
+  let worker = new Worker(new URL('./light-field-worker.ts', import.meta.url), { type: 'module' });
   let ready = false, disposed = false, failed = false;
   let revision = 0, published = 0, completed = 0, discarded = 0, occupancyBuilds = 0, lastWorkerMs = 0, estimatedPeakBytes = 0;
   let errorMessage: string | null = null;
   let active: LightFieldSolve | null = null, pending: LightFieldSolve | null = null;
+  let latestSolve: LightFieldSolve | null = null;
   let latestKey: string | null = null;
 
   function dispose(): void {
@@ -73,8 +76,10 @@ export function createLightField(
     }
   }
 
+  function initialize(nextHouses: readonly WindowHouse[]): void {
+  const owner = worker;
   worker.onmessage = (event: MessageEvent<LightFieldResponse>) => {
-    if (disposed) return;
+    if (disposed || owner !== worker) return;
     const response = event.data;
     if (response === null || typeof response !== 'object') { fail(new Error('Invalid light field worker response')); return; }
     if (response.kind === 'ready') { ready = true; drain(); return; }
@@ -108,9 +113,11 @@ export function createLightField(
     } else discarded++;
     drain();
   };
-  worker.onerror = event => { event.preventDefault(); fail(new Error(event.message || 'Light field worker failed')); };
-  worker.onmessageerror = () => fail(new Error('Light field response could not be decoded'));
-  post({ kind: 'init', layout, houses, options: { mode: config.mode, ...(options.position ? { position: [...options.position] as Vec3 } : {}), ...(options.bounds ? { bounds: { ...options.bounds } } : {}) } });
+  worker.onerror = event => { if (owner !== worker) return; event.preventDefault(); fail(new Error(event.message || 'Light field worker failed')); };
+  worker.onmessageerror = () => { if (owner === worker) fail(new Error('Light field response could not be decoded')); };
+  post({ kind: 'init', layout, houses: nextHouses, options: { mode: config.mode, ...(options.position ? { position: [...options.position] as Vec3 } : {}), ...(options.bounds ? { bounds: { ...options.bounds } } : {}) } });
+  }
+  initialize(houses);
 
   return {
     update(centre, sources) {
@@ -132,8 +139,22 @@ export function createLightField(
       if (key === latestKey) return;
       if (!Number.isSafeInteger(revision + 1)) throw new Error('Light field revision exhausted');
       latestKey = key;
-      pending = { kind: 'solve', revision: ++revision, origin, emitters };
+      pending = latestSolve = { kind: 'solve', revision: ++revision, origin, emitters };
       drain();
+    },
+    replaceHouses(nextHouses) {
+      if (disposed) return;
+      if (!Number.isSafeInteger(revision + 1)) throw new Error('Light field revision exhausted');
+      // Each publication owns a new worker. A late ready/volume/error from the old
+      // occupancy cannot satisfy or fail a request made against the replacement.
+      worker.onmessage = worker.onerror = worker.onmessageerror = null;
+      worker.terminate();
+      if (active) discarded++;
+      active = null; ready = false; occupancyBuilds = 0;
+      if (latestSolve) pending = latestSolve = { ...latestSolve, revision: ++revision };
+      else pending = null;
+      worker = new Worker(new URL('./light-field-worker.ts', import.meta.url), { type: 'module' });
+      initialize(nextHouses);
     },
     dispose,
     get stats() {

@@ -1,0 +1,1 @@
+{"name":"@chatdom/forge","private":true,"version":"0.0.0","type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@chatdom/shared":"workspace:*","@chatdom/content":"workspace:*","@chatdom/voxel":"workspace:*"}}

@@ -89,12 +89,18 @@ importers:
       '@chatdom/content':
         specifier: workspace:*
         version: link:../../packages/content
+      '@chatdom/forge':
+        specifier: workspace:*
+        version: link:../../packages/forge
       '@chatdom/render':
         specifier: workspace:*
         version: link:../../packages/render
       '@chatdom/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@chatdom/vox-import':
+        specifier: workspace:*
+        version: link:../../packages/vox-import
       '@chatdom/voxel':
         specifier: workspace:*
         version: link:../../packages/voxel
@@ -129,6 +135,18 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
+  packages/forge:
+    dependencies:
+      '@chatdom/content':
+        specifier: workspace:*
+        version: link:../content
+      '@chatdom/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@chatdom/voxel':
+        specifier: workspace:*
+        version: link:../voxel
+
   packages/render:
     dependencies:
       '@chatdom/shared':
@@ -159,6 +177,18 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/vox-import:
+    dependencies:
+      '@chatdom/content':
+        specifier: workspace:*
+        version: link:../content
+      '@chatdom/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@chatdom/world':
+        specifier: workspace:*
+        version: link:../world
 
   packages/voxel:
     dependencies:
