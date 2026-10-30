@@ -219,3 +219,29 @@ The shell and window metadata are complete static assets, ready for their real c
   and read as one doubled chimney, against the family's single off-centre stack. Saltbend keeps the outshut's low
   windows as anchors. The wing's new windows follow the house's main window line, so the flank shows the old window
   beside the new ones.
+- **2026-10-30 — HT03 manors and halls (lane).** Every hall turns the hut's own street face to its garden. It is
+  the same construction code run through a front-to-back `Reflected` builder, at the hut's height and profile, so the
+  street skyline is unchanged and the hut's ridge stays the highest line of the home. Gullstep's hall is the lopsided
+  street gable with its bressumer, mullioned window, window box, gable light and door. Saltbend's is the hut's plan,
+  hip and sheltered corner, its corner door now the garden door. Keelcroft's is the paired keels and arched porch.
+  Tests hold this: over the first two metres the hall's garden face matches the hut's street face cell for cell
+  (≥ 0.9; gullstep 0.92, saltbend 0.97, keelcroft 1.0), and no tier's wall, slate or timber rises above the hut's.
+- **2026-10-30 — HT03 manors (lane).** The manor builds the range the hall will stand against. Gullstep runs a
+  second wing north from the range, in line with the tall east side (x 26–54), its ridge dying into the range's
+  catslide in a true valley (`valley()`, per-course `along`). Saltbend adds a low hipped cross range. The wing's
+  taller hip rides over it to a hipped end, and the range's rings leave out the wing's ring at the same height
+  (`Hip.under`), so they stop in valleys and show as two low shoulders. Keelcroft adds a back return at the street
+  return's height that closes the court. A pend runs under it from court to garden: each mouth is an arch under a
+  small hood at the porch's 45° pitch, and a side door joins the back return's west room to the pend, so the house
+  reaches its court and garden. From the manor on, a walk leads from the street door through the house to the
+  garden (tested).
+- **2026-10-30 — HT03 anchors and land (lane).** A manor's north wall is where the hall will stand, so it carries
+  the garden door, not windows. Manor windows sit on east/west faces the hall keeps, and every earlier anchor keeps
+  its place and order through the hall. A manor or hall has earned the whole lot and may build over up to 95% of it
+  (paving under 85%), but keeps open sky over a court, porch or side strip. Hut to house keep the 90%/75% bounds.
+- **2026-10-30 — HT03 rejected forms.** Keelcroft's back return at a 32-cell span stood a course above the street
+  return and read heavy from the street; it now has the street return's height. Its pend hoods at the family's
+  steep pitch met the return's ridge at the same height; they now use the porch's gentler pitch. Gullstep's manor
+  wing at the cottage wing's width gave 3.9 m² of standing room, too mean for a manor, so it was widened. Roofing
+  keelcroft's court as the hall was rejected before building: it would have turned two court windows inward. A
+  stack on gullstep's hall was rejected: the single off-centre stack is the family's.

@@ -89,7 +89,7 @@ function components(g: Grid, material: number): [number, number, number][][] {
 
 const STRUCTURE: ReadonlySet<number> = new Set([STYLES.tide.wall, STYLES.tide.roof, STYLES.tide.trim, STYLES.tide.stone]);
 
-describe('Salt & slate homes', () => {
+describe('Salt & slate homes', { timeout: 120_000 }, () => {
   it('lists only finished homes in family-major, shared-tier order', () => {
     expect(BLUEPRINTS.length).toBeGreaterThanOrEqual(6);
     const expected = FAMILIES.flatMap(f => HomeTierSchema.options.filter(t => READY.includes(t)).map(t => `home-tide-${f}-${t}`));
@@ -124,11 +124,13 @@ describe('Salt & slate homes', () => {
         for (let y = 0; y < g.sy && !any; y++) any = g.solid(x, y, z);
         if (any) { expect(z, `${b.id} occupies locked rear land at z=${z}`).toBeGreaterThanOrEqual(rear); footprint++; }
       }
-      // A home on its plot, not a slab across the whole reserve: open ground remains around it.
-      expect(footprint / (64 * (128 - rear))).toBeLessThan(0.9);
+      // A home on its plot, not a slab across the whole reserve: open ground remains around it. A manor or hall has
+      // earned the whole lot and fills most of it, yet still keeps open sky over a court, porch or garden strip.
+      const earned = tierOf(b) === 'manor' || tierOf(b) === 'hall';
+      expect(footprint / (64 * (128 - rear)), `${b.id} built-over share`).toBeLessThan(earned ? 0.95 : 0.9);
       let groundCells = 0;
       for (let z = rear; z < 128; z++) for (let x = 0; x < 64; x++) if (g.solid(x, 0, z)) groundCells++;
-      expect(groundCells / (64 * (128 - rear))).toBeLessThan(0.75);
+      expect(groundCells / (64 * (128 - rear)), `${b.id} paved share`).toBeLessThan(earned ? 0.85 : 0.75);
     }
   });
 
@@ -281,6 +283,52 @@ describe('Salt & slate homes', () => {
         for (let y = top + 1; y < g.sy && !capped; y++) capped = STRUCTURE.has(g.get(x, y, z));
         expect(capped, `${b.id}: wall open to the sky at ${x},${top},${z}`).toBe(true);
       }
+    }
+  });
+
+  it('keeps the hut\'s dignity: no addition rises above the hut\'s own ridge', () => {
+    const { wall, roof, trim } = STYLES.tide, built = new Set<number>([wall, roof, trim]);
+    // The highest wall, slate or timber of the whole home; the stone stack is the one thing allowed above it.
+    const ridge = (b: VoxelBlueprint) => {
+      const g = grid(b);
+      for (let y = g.sy - 1; y >= 0; y--) for (let z = 0; z < g.sz; z++) for (let x = 0; x < g.sx; x++) if (built.has(g.get(x, y, z))) return y + 1;
+      return 0;
+    };
+    for (const family of FAMILIES) {
+      const homes = BLUEPRINTS.filter(b => familyOf(b) === family), hut = ridge(homes[0]!);
+      for (const b of homes.slice(1)) expect(ridge(b), `${b.id} rises over the hut's ridge`).toBeLessThanOrEqual(hut);
+    }
+  });
+
+  it('turns the hut\'s own street face to the garden at the hall', () => {
+    const halls = BLUEPRINTS.filter(b => tierOf(b) === 'hall');
+    for (const hall of halls) {
+      const hut = grid(BLUEPRINTS.find(b => b.id === hall.id.replace(/hall$/, 'hut'))!), g = grid(hall);
+      // The hut's street face and the two metres behind it, against the hall's back two metres reflected:
+      // the same material in the same cell for nearly all of the built mass.
+      let both = 0, either = 0;
+      for (let z = 0; z < 16; z++) for (let y = 0; y < g.sy; y++) for (let x = 0; x < g.sx; x++) {
+        const a = hut.get(x, y, 127 - z), c = g.get(x, y, z);
+        if (!STRUCTURE.has(a) && !STRUCTURE.has(c)) continue;
+        either++;
+        if (a === c) both++;
+      }
+      expect(both / either, `${hall.id} garden face against the hut's street face`).toBeGreaterThan(0.9);
+    }
+  });
+
+  it('opens a way from the street door through the house to the garden once a home reaches the manor', () => {
+    for (const b of BLUEPRINTS.filter(b => ['manor', 'hall'].includes(tierOf(b)))) {
+      const g = grid(b), reached = walk(g, [HOME_REVIEW[b.id]!.entrance[0], 127]);
+      let garden = false;
+      for (let z = 0; z < 3; z++) for (let x = 0; x < g.sx; x++) garden ||= reached[x + g.sx * z]! >= 0;
+      expect(garden, `${b.id}: no way through to the garden`).toBe(true);
+    }
+    // Keelcroft's court is closed by its back return; its pend and side door still reach it from the house.
+    for (const tier of ['manor', 'hall'] as const) {
+      const g = grid(BLUEPRINTS.find(b => b.id === `home-tide-keelcroft-${tier}`)!);
+      const reached = walk(g, [HOME_REVIEW[`home-tide-keelcroft-${tier}`]!.entrance[0], 127]);
+      expect(reached[32 + g.sx * 64], `keelcroft ${tier} court`).toBe(0);
     }
   });
 

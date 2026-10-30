@@ -10,3 +10,8 @@ export function finished(family: Family, tier: HomeTier, built: readonly HomeTie
   if (!HomeTierSchema.options.includes(tier)) throw new Error(`Unknown home tier ${String(tier)}.`);
   if (!built.includes(tier)) throw new Error(`The ${family} ${tier} has not been built for the Tide collection.`);
 }
+
+/** True once a home has grown to `stage`: every tier keeps what the tiers before it built. */
+export function reached(tier: HomeTier, stage: HomeTier): boolean {
+  return HomeTierSchema.options.indexOf(tier) >= HomeTierSchema.options.indexOf(stage);
+}

@@ -23,7 +23,7 @@ implement private substitutes or pick from Backlog without main. A weak piece is
 - [x] **HT02 — Each family grows into its house** · evidence: three models + growth/contact tests + shots.
   Add the house tier with structural additions and kept family identity. Prove the entrance/address and existing
   window IDs do not move; test each shell's real approach/interior and palette. Inspect the nine-model comparison.
-- [ ] **HT03 — Manors and halls remember the same home** · evidence: six models + complete family sheets.
+- [x] **HT03 — Manors and halls remember the same home** · evidence: six models + complete family sheets.
   Finish manor/hall for all three families within active-depth and shared budgets. Add earned craftsmanship and
   space with restrained accents; keep the hut's dignity. Inspect all fifteen from three dusk angles and at noon/night.
 - [ ] **HT04 — Demonstrate a coherent, walkable Tide neighborhood** · evidence: validation + final sheets.

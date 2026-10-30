@@ -56,6 +56,18 @@ export class Shell {
   }
 }
 
+/**
+ * The same construction reflected front to back across the lot, so a hall can turn the hut's own street face to
+ * its garden. Boxes go straight into the real shell; place windows on the real shell, never through a reflection.
+ */
+export class Reflected extends Shell {
+  constructor(private readonly target: Shell) { super(); }
+
+  override put(material: number, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void {
+    this.target.put(material, x0, y0, LOT[2] - z1, x1, y1, LOT[2] - z0);
+  }
+}
+
 /** An outer wall face. `plane` is the coordinate of the exterior surface on the face's normal axis. */
 export interface Face { facing: Facing; plane: number }
 export const south = (plane: number): Face => ({ facing: 'south', plane });
@@ -166,12 +178,23 @@ export interface Gable {
   lo: number; hi: number;
   /** Bottom of the first course on each side; a higher base makes an asymmetric gable. */
   baseLo: number; baseHi: number;
-  /** Extent along the ridge, including verge overhang. */
-  along: readonly [number, number];
+  /**
+   * Extent along the ridge, including verge overhang. A function gives each course row its own extent, so a lower
+   * roof's courses run on until each one meets the course of a taller roof at the same height: a true valley.
+   */
+  along: Along;
   rise?: number; run?: number; thick?: number;
 }
 
+export type Along = readonly [number, number] | ((y0: number) => readonly [number, number]);
 export interface Course { a0: number; a1: number; y0: number; y1: number; side: 'lo' | 'hi' | 'crest' }
+
+const alongAt = (g: Gable, y0: number): readonly [number, number] => typeof g.along === 'function' ? g.along(y0) : g.along;
+
+/** The cross-ridge extent of a roof's slope course at height y0 on one side, or undefined above its crest. */
+export function courseAt(g: Gable, y0: number, side: 'lo' | 'hi'): Course | undefined {
+  return gableCourses(g).find(c => c.y0 === y0 && (c.side === side || c.side === 'crest'));
+}
 
 /** The course rows of a gable roof from eave to crest; pure geometry, shared by roof, gable walls and tests. */
 export function gableCourses(g: Gable): Course[] {
@@ -200,16 +223,31 @@ export interface RoofTrim {
   cap?: number;
 }
 
+/**
+ * Where a lower roof meets one slope of a taller cross roof: for each course row, the far edge of that slope's
+ * course at the same height, so the lower course overlaps it fully. Above the taller roof's slope courses, the
+ * lower roof stops at the middle of its crest.
+ */
+export function valley(taller: Gable, side: 'lo' | 'hi'): (y0: number) => number {
+  return y0 => {
+    const c = courseAt(taller, y0, side);
+    if (!c) throw new Error(`No course of the taller roof at y=${y0}`);
+    if (c.side === 'crest') return Math.floor((c.a0 + c.a1) / 2) + (side === 'lo' ? 1 : 0);
+    return side === 'lo' ? c.a1 : c.a0;
+  };
+}
+
 export function gableRoof(shell: Shell, g: Gable, trim: RoofTrim = {}): { top: number; ridge: number } {
   const courses = gableCourses(g);
-  const [l0, l1] = g.along;
-  for (const c of courses) across(shell, g.ridge, ROOF, c.a0, c.a1, c.y0, c.y1, l0, l1);
+  for (const c of courses) { const [l0, l1] = alongAt(g, c.y0); across(shell, g.ridge, ROOF, c.a0, c.a1, c.y0, c.y1, l0, l1); }
   for (const end of trim.barge ?? []) for (const c of courses) {
+    const [l0, l1] = alongAt(g, c.y0);
     const [b0, b1] = end === 'lo' ? [l0, l0 + 1] : [l1 - 1, l1];
     across(shell, g.ridge, TRIM, c.a0, c.a1, c.y0, c.y0 + 1, b0, b1);
   }
   const crest = courses.at(-1)!;
   const top = crest.y1, ridge = Math.floor((crest.a0 + crest.a1) / 2);
+  const [l0, l1] = alongAt(g, crest.y0);
   if (trim.cap !== undefined) across(shell, g.ridge, trim.cap, crest.a0 - 1, crest.a1 + 1, top, top + 2, l0, l1);
   return { top: trim.cap === undefined ? top : top + 2, ridge };
 }
@@ -239,31 +277,55 @@ export interface Hip {
    * course of the taller roof at the same height instead of ending in a cut section.
    */
   southAt?: (ring: number) => number;
+  /** The same on the north side: each ring runs on to this z, leaning into a taller roof behind. */
+  northAt?: (ring: number) => number;
+  /**
+   * A taller roof crossing this one: its ring at the same height. This ring leaves that rectangle out, so its
+   * courses stop against the taller slopes in valleys instead of running on inside them.
+   */
+  under?: (ring: number) => Rect | undefined;
+}
+
+/** A box with one rectangle (in plan) left out: up to four boxes around the hole. */
+function putAround(shell: Shell, material: number, x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, hole?: Rect): void {
+  if (!hole || hole.x0 >= x1 || hole.x1 <= x0 || hole.z0 >= z1 || hole.z1 <= z0) { shell.put(material, x0, y0, z0, x1, y1, z1); return; }
+  const hx0 = Math.max(x0, hole.x0), hx1 = Math.min(x1, hole.x1), hz0 = Math.max(z0, hole.z0), hz1 = Math.min(z1, hole.z1);
+  if (z0 < hz0) shell.put(material, x0, y0, z0, x1, y1, hz0);
+  if (hz1 < z1) shell.put(material, x0, y0, hz1, x1, y1, z1);
+  if (x0 < hx0) shell.put(material, x0, y0, hz0, hx0, y1, hz1);
+  if (hx1 < x1) shell.put(material, hx1, y0, hz0, x1, y1, hz1);
 }
 
 /** A hipped roof of shrinking course rings; the last rectangle is its ridge. */
 export function hipRoof(shell: Shell, h: Hip, cap?: number): { top: number } {
   const rise = h.rise ?? 2, run = h.run ?? 2, thick = h.thick ?? 4, limit = h.courses ?? Infinity;
+  const openSouth = h.open === 'south', openNorth = h.northAt !== undefined;
   let top = h.base, last: Rect | undefined;
   for (let k = 0; k < limit; k++) {
-    const r = { x0: h.x0 + run * k, z0: h.z0 + run * k, x1: h.x1 - run * k, z1: h.open === 'south' ? h.southAt?.(k) ?? h.z1 : h.z1 - run * k };
+    const r = {
+      x0: h.x0 + run * k, x1: h.x1 - run * k,
+      z0: openNorth ? h.northAt!(k) : h.z0 + run * k,
+      z1: openSouth ? h.southAt?.(k) ?? h.z1 : h.z1 - run * k,
+    };
     if (r.x1 <= r.x0 || r.z1 <= r.z0) break;
     const y0 = h.base + rise * k, y1 = y0 + rise;
-    const closing = k === limit - 1;
-    if (closing || r.x1 - r.x0 <= 2 * thick || r.z1 - r.z0 <= 2 * thick) shell.put(ROOF, r.x0, y0, r.z0, r.x1, y1, r.z1);
+    const closing = k === limit - 1, hole = h.under?.(k);
+    const put = (x0: number, z0: number, x1: number, z1: number) => putAround(shell, ROOF, x0, y0, z0, x1, y1, z1, hole);
+    if (closing || r.x1 - r.x0 <= 2 * thick || r.z1 - r.z0 <= 2 * thick) put(r.x0, r.z0, r.x1, r.z1);
     else {
-      const south = h.open === 'south' ? r.z1 : r.z1 - thick;
-      shell.put(ROOF, r.x0, y0, r.z0, r.x1, y1, r.z0 + thick);
-      if (h.open !== 'south') shell.put(ROOF, r.x0, y0, south, r.x1, y1, r.z1);
-      shell.put(ROOF, r.x0, y0, r.z0 + thick, r.x0 + thick, y1, south);
-      shell.put(ROOF, r.x1 - thick, y0, r.z0 + thick, r.x1, y1, south);
+      const north = openNorth ? r.z0 : r.z0 + thick, south = openSouth ? r.z1 : r.z1 - thick;
+      if (!openNorth) put(r.x0, r.z0, r.x1, north);
+      if (!openSouth) put(r.x0, south, r.x1, r.z1);
+      put(r.x0, north, r.x0 + thick, south);
+      put(r.x1 - thick, north, r.x1, south);
     }
     top = y1; last = r;
   }
   if (cap !== undefined && last) {
     const midZ = last.z0 + Math.floor((last.z1 - last.z0) / 2), midX = last.x0 + Math.floor((last.x1 - last.x0) / 2);
-    if (last.x1 - last.x0 >= last.z1 - last.z0) shell.put(cap, last.x0, top, midZ - 1, last.x1, top + 2, midZ + 1);
-    else shell.put(cap, midX - 1, top, last.z0, midX + 1, top + 2, last.z1);
+    const hole = h.under?.(Math.round((top - h.base) / rise));
+    if (last.x1 - last.x0 >= last.z1 - last.z0) putAround(shell, cap, last.x0, top, midZ - 1, last.x1, top + 2, midZ + 1, hole);
+    else putAround(shell, cap, midX - 1, top, last.z0, midX + 1, top + 2, last.z1, hole);
     top += 2;
   }
   return { top };
