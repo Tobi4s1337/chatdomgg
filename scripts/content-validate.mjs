@@ -140,7 +140,7 @@ try {
       const mesh=meshVoxelChunk(prepared); triangles+=mesh.indices.length/3; vertices+=mesh.vertices.length/2;chunks++;
     }
     if(civic && (b.kind!=='civic'||b.windows.length||b.boxes.length>1024||occupied>120000||triangles>120000)) fail(`${b.id}: invalid civic asset or cost.`);
-    if(attached && (b.boxes.length>512||occupied>100000||triangles>80000)) fail(`${b.id}: Forge piece exceeds authored cost.`);
+    if(attached && (b.boxes.length>512||occupied>100000||triangles>40000)) fail(`${b.id}: Forge piece exceeds authored cost.`);
     if(lane&&triangles>(prop?40_000:250_000)) fail(`${b.id}: triangle budget exceeded.`);
     rows.push({id:b.id,boxes:b.boxes.length,occupied,windows:b.windows.length,chunks,vertices,triangles,modelDrawBudget:1,bounds:`${min.join(',')}..${max.join(',')}`});
     console.log(`${b.id}: ${occupied} cells · ${triangles} triangles · ${b.boxes.length} boxes`);
