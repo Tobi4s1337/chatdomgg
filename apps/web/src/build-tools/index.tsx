@@ -7,8 +7,24 @@ import './build-tools.css';
 const count = new Intl.NumberFormat('en-GB');
 const apple = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 const mod = apple ? '⌘' : 'Ctrl';
-/** Matches the phone breakpoint in build-tools.css, where the palette folds into a drawer. */
-const PHONE = '(max-width: 600px)';
+/** Matches the thumb-rack breakpoints in build-tools.css (upright and sideways phones), where the palette folds into a drawer. */
+const PHONE = '(max-width: 600px), (max-height: 560px)';
+const ROAM: Record<string, (at: number, last: number) => number> = {
+  ArrowLeft: at => at - 1, ArrowUp: at => at - 1, ArrowRight: at => at + 1, ArrowDown: at => at + 1, Home: () => 0, End: (_, last) => last,
+};
+/**
+ * Arrow keys walk focus along one row of fittings (tools, samples, brush, mirror) without choosing anything.
+ * Tab still reaches every fitting, and the core's own keys pass through untouched.
+ */
+function roam(event: KeyboardEvent) {
+  const step = ROAM[event.key];
+  if (!step || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  const row = [...(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter(item => item.getClientRects().length);
+  const at = row.indexOf(document.activeElement as HTMLButtonElement);
+  if (at < 0) return;
+  event.preventDefault();
+  row[Math.max(0, Math.min(row.length - 1, step(at, row.length - 1)))]!.focus({ preventScroll: true });
+}
 type Materials = BuildToolsState['materials'];
 const sameMaterials = (a: Materials, b: Materials) => a.length === b.length && a.every((m, i) => m.id === b[i]!.id && m.name === b[i]!.name && m.colour === b[i]!.colour);
 
@@ -27,8 +43,9 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
   const chosen = () => materials().find(item => item.id === state().material);
   const chosenName = () => chosen() ? materialName(chosen()!.name) : '';
 
-  // View-only state: the phone drawer and a hover preview of a swatch's name.
+  // View-only state: the phone drawer (and whether it has been folded once) and a hover preview of a swatch's name.
   const [drawer, setDrawer] = createSignal(false);
+  const [shut, setShut] = createSignal(false);
   const [peek, setPeek] = createSignal<number | null>(null);
   const peeked = () => { const id = peek(); const item = id === null || id === state().material ? undefined : materials().find(m => m.id === id); return item && materialName(item.name); };
   const palette = createUniqueId();
@@ -41,13 +58,13 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
     setDrawer(true);
     shelf?.querySelector<HTMLButtonElement>('.bt-swatch[aria-pressed="true"]')?.focus({ preventScroll: true });
   }
-  function closeDrawer() { setDrawer(false); opener?.focus({ preventScroll: true }); }
+  function closeDrawer() { setDrawer(false); setShut(true); opener?.focus({ preventScroll: true }); }
   function drawerKey(event: KeyboardEvent) {
     if (event.key !== 'Escape' || !drawer() || !phone?.matches) return;
     event.preventDefault(); event.stopPropagation(); closeDrawer();
   }
 
-  return <aside class="bt-rack" classList={{ 'bt-locked': locked(), 'bt-drawer-open': drawer() }} aria-label="Build tools" data-build-tools-rack>
+  return <aside class="bt-rack" classList={{ 'bt-locked': locked(), 'bt-drawer-open': drawer(), 'bt-drawer-shut': shut() && !drawer() }} aria-label="Build tools" data-build-tools-rack>
     <header class="bt-head">
       <div class="bt-plate">
         <p class="bt-eyebrow">Build mode</p>
@@ -64,7 +81,7 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
       <Show when={state().dirty}><span class="bt-slip-note">Changes the street hasn’t seen</span></Show>
     </p>
 
-    <div class="bt-tools" role="group" aria-label="Tool">
+    <div class="bt-tools" role="group" aria-label="Tool" onKeyDown={roam}>
       <For each={TOOLS}>{item => <button class="bt-tool" disabled={locked()} aria-pressed={state().tool === item.id} aria-label={item.name} aria-keyshortcuts={item.key}
         onClick={() => props.controller.tool(item.id)}>{toolMarks[item.id]()}<span class="bt-tool-name">{item.name}</span><kbd>{item.key}</kbd></button>}</For>
     </div>
@@ -80,12 +97,12 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
       <div class="bt-drawer-head">
         <div class="bt-drawer-title">
           <p><small>Materials</small><span>{chosenName()}</span></p>
-          <p class="bt-readout">{tool().name} · {brush().label} block · {mirrorWord(state().mirror)}</p>
+          <p class="bt-readout">{tool().name} · {brush().label} · {mirrorWord(state().mirror)}</p>
         </div>
         <button class="bt-key bt-close" onClick={closeDrawer}>{drawerMark(true)}<span>Close</span></button>
       </div>
       <p class="bt-label">Material<span>{chosenName()}</span><Show when={peeked()}>{name => <em class="bt-peek">{name()}</em>}</Show></p>
-      <div ref={el => { shelf = el; }} class="bt-swatches" role="group" aria-label="Kingdom materials" onPointerLeave={() => setPeek(null)}>
+      <div ref={el => { shelf = el; }} class="bt-swatches" role="group" aria-label="Kingdom materials" onKeyDown={roam} onPointerLeave={() => setPeek(null)}>
         <For each={shelves()}>{group => <div class="bt-shelf" role="group" aria-label={group.name}>
           <span class="bt-shelf-name" aria-hidden="true">{group.name}</span>
           <div class="bt-shelf-row">
@@ -100,14 +117,14 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
     <div class="bt-shape">
       <div class="bt-field">
         <p class="bt-label">Block</p>
-        <div class="bt-seg" role="group" aria-label="Block size">
+        <div class="bt-seg" role="group" aria-label="Block size" onKeyDown={roam}>
           <For each={BRUSHES}>{item => <button disabled={locked()} aria-pressed={state().brush === item.cells} aria-label={item.name}
             onClick={() => props.controller.brush(item.cells)}>{brushMark(item.cells)}<span>{item.label}</span></button>}</For>
         </div>
       </div>
       <div class="bt-field">
         <p class="bt-label">Mirror</p>
-        <div class="bt-seg" role="group" aria-label="Mirror">
+        <div class="bt-seg" role="group" aria-label="Mirror" onKeyDown={roam}>
           <For each={MIRRORS}>{item => <button disabled={locked()} aria-pressed={state().mirror === item.value} aria-label={item.name}
             onClick={() => props.controller.mirror(item.value)}>{mirrorMark(item.value)}<span>{item.label}</span></button>}</For>
         </div>
