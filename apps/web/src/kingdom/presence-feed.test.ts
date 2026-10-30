@@ -238,6 +238,22 @@ describe('Herald public SSE adapter', () => {
     unsubscribe();
   });
 
+  it('accepts witnessed offline presence without claiming a live broadcast, and expires it on silence', () => {
+    const receive = vi.fn(), unavailable = vi.fn();
+    const unsubscribe = createHeraldPresence('/presence-data/stream', WORLD_FIXTURE_KINGDOM).subscribe(receive, unavailable);
+    const source = FakeEventSource.instances[0]!;
+    source.open();
+    const frame = liveFrame(1, 'herald:one', { streamLive: false, connection: 'offline', windows: [
+      { slot: 0, present: true, publicName: 'Tobi4s_', since: WORLD_FIXTURE_TIME },
+    ] });
+    source.send(frame);
+    expect(receive).toHaveBeenCalledWith(frame);
+    expect(unavailable).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(PRESENCE_LEASE_MS);
+    expect(unavailable).toHaveBeenCalledOnce();
+    unsubscribe();
+  });
+
   it('accepts a new producer epoch after reconnect, preserving same-epoch watermarks and closing old streams', () => {
     const receive = vi.fn(), unavailable = vi.fn();
     const unsubscribe = createHeraldPresence().subscribe(receive, unavailable);

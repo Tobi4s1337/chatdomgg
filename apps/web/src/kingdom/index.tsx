@@ -6,9 +6,11 @@ import type { KingdomBuildSession } from './build-scene';
 import './kingdom.css';
 import { ForgePanel } from '../forge';
 import type { ForgeStatus } from '../forge/scene';
+import { parseKingdomPresentationParams } from '../stream/params';
 
 export default function Kingdom() {
   const query=new URLSearchParams(location.search),tier=query.get('tier')==='hamlet'?'hamlet':'town';
+  const presentation=parseKingdomPresentationParams(query,tier);
   const realm=query.get('realm'),realmFamily=realm==='hearth'?'hearth':realm==='grove'?'grove':'tide',realmName=realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere';
   const rawHour=Number(query.get('hour')??19.5),rawTime=Number(query.get('time'));
   const initialHour=Number.isFinite(rawHour)?((rawHour%24)+24)%24:19.5,initialTime=query.has('time')&&Number.isFinite(rawTime)?Math.max(0,Math.min(3600,rawTime)):null;
@@ -24,7 +26,7 @@ export default function Kingdom() {
     const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
-    void createKingdomScene(canvas,{signal:construction.signal,tier,seed:query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(realm==='hearth'||realm==='grove'?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
+    void createKingdomScene(canvas,{signal:construction.signal,tier,...presentation,seed:query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(realm==='hearth'||realm==='grove'?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
       onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
@@ -65,7 +67,7 @@ export default function Kingdom() {
     <Show when={ready()&&!error()&&!stream&&!buildSession()&&!forgeStatus()?.open}><nav class="kingdom-controls" aria-label="Kingdom view">
       <div class="time-controls" aria-label="Time of day"><button classList={{selected:hour()<16}} onClick={()=>chooseHour(12)}>Noon</button><button classList={{selected:hour()>=16&&hour()<22}} onClick={()=>chooseHour(19.5)}>Dusk</button><button classList={{selected:hour()>=22}} onClick={()=>chooseHour(23)}>Night</button></div>
       <span class="control-divider" />
-      <button class="arrival-button" onClick={()=>{setView('hero');tap(()=>engine!.play());}}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 4 8 6-8 6Zm-4 0v12"/></svg>Let them in</button>
+      <Show when={source()==='SIMULATED'&&query.get('source')!=='herald'}><button class="arrival-button" onClick={()=>{setView('hero');tap(()=>engine!.play());}}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 4 8 6-8 6Zm-4 0v12"/></svg>Let them in</button></Show>
       <button class="window-button" onClick={()=>chooseView(view()==='window'?'hero':'window')}>{view()==='window'?'The whole kingdom':'At the window'}</button>
       <button class="window-button" onClick={()=>chooseView(view()==='citizen'?'hero':'citizen')}>{view()==='citizen'?'Above the streets':'Walk the street'}</button>
       <Show when={source()==='SIMULATED'}><button onClick={()=>tap(()=>{void engine!.build.enter();})}>Build my home</button><button onClick={()=>tap(()=>engine!.forge.open())}>At the Forge</button></Show>
