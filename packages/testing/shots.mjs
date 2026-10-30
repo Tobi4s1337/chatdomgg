@@ -2,11 +2,31 @@ import { chromium } from '@playwright/test';
 import { acquireCaptureLock } from './capture-lock.mjs';
 import { startCapturePreview, closeCapturePreview } from './preview.mjs';
 import { mkdir } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const external = option('--base-url');
 let base = external;
 const area = option('--area') ?? 'all';
+// Herald's package script builds its producer and its runner owns the capture lock.
+// Dispatch before acquiring our own lock so the child never waits on its parent.
+if (area === 'herald') {
+  const areaIndex = args.indexOf('--area');
+  const forwarded = args.filter((_arg, index) => index !== areaIndex && index !== areaIndex + 1);
+  const child = spawn('pnpm', ['--filter', '@chatdom/herald', 'shots', '--', ...forwarded], {
+    cwd: fileURLToPath(new URL('../../', import.meta.url)), stdio: 'inherit',
+  });
+  const forward = signal => child.kill(signal);
+  const interrupt = () => forward('SIGINT'), terminate = () => forward('SIGTERM');
+  process.on('SIGINT', interrupt); process.on('SIGTERM', terminate);
+  const code = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code, signal) => resolve(code ?? (signal === 'SIGINT' ? 130 : 143)));
+  });
+  process.off('SIGINT', interrupt); process.off('SIGTERM', terminate);
+  process.exit(code);
+}
 if (!['all', 'foundation', 'kingdom', 'atlas'].includes(area)) throw new Error(`Unknown area: ${area}`);
 // Targeted look checks keep the shared host lean; the default verify matrix is unchanged.
 const tierFilter = option('--tier'), hourFilter = option('--hour'), sizeFilter = option('--size');
