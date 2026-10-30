@@ -1,7 +1,8 @@
-import { ErrorBoundary, lazy, Show, Suspense, type Component } from 'solid-js';
+import { createSignal, ErrorBoundary, lazy, Show, Suspense, type Component } from 'solid-js';
 import type { BuildToolsController } from '@chatdom/shared';
 import FallbackTools from './Tools';
 import type { BuildImportBridge } from './session';
+import TemplatePicker, { buildTemplateChoices } from './TemplatePicker';
 
 const toolsModules = import.meta.glob<{ default: Component<{ controller: BuildToolsController }> }>('../build-tools/index.tsx');
 const importModules = import.meta.glob<{ default: Component<BuildImportBridge> }>('../vox-import/index.tsx');
@@ -13,15 +14,23 @@ export interface BuildToolsProps { controller: BuildToolsController; ownerName?:
 /** Optional lanes receive the live bridge. An absent lane adds no inert button or success state. */
 export function BuildTools(props: BuildToolsProps) {
   const fallback = () => <FallbackTools {...props} />;
+  const [templates, setTemplates] = createSignal(false);
   return <div class="build-composition" data-chatdom-build>
     <ErrorBoundary fallback={fallback}><Suspense fallback={fallback()}>
       <Show when={LaneTools} fallback={fallback()}>{View => { const ToolView = View(); return <ToolView controller={props.controller} />; }}</Show>
     </Suspense></ErrorBoundary>
-    <Show when={ImportTool && props.imports && props.controller.snapshot().mode === 'SIMULATED'}>
-      <div class="build-import-tools"><ErrorBoundary fallback={<p role="status">The import tools could not open. Your draft is safe.</p>}>
-        <Suspense fallback={<p role="status">Opening the import tools…</p>}>
-          <Show when={ImportTool}>{View => { const ImportView = View(); return <ImportView {...props.imports!} />; }}</Show>
-        </Suspense>
+    <Show when={props.imports && props.controller.snapshot().mode === 'SIMULATED'}>
+      <div class="build-import-tools"><ErrorBoundary fallback={<p role="status">The starting tools could not open. Your draft is safe.</p>}>
+        <Show when={templates()} fallback={<>
+          <Suspense fallback={<p role="status">Opening the import tools…</p>}>
+            <Show when={ImportTool}>{View => { const ImportView = View(); return <ImportView {...props.imports!} />; }}</Show>
+          </Suspense>
+          <Show when={buildTemplateChoices(props.imports!.draft.policy).length}>
+            <button type="button" class="build-template-tab" data-build-template-tab onClick={() => setTemplates(true)}>Begin with a starting shape</button>
+          </Show>
+        </>}>
+          <TemplatePicker {...props.imports!} controller={props.controller} close={() => setTemplates(false)} />
+        </Show>
       </ErrorBoundary></div>
     </Show>
   </div>;

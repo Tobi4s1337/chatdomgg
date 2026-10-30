@@ -1,0 +1,26 @@
+{
+  "name": "@chatdom/realm",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build --logLevel warn",
+    "start": "node --env-file-if-exists=../../.env dist/realm.mjs"
+  },
+  "dependencies": {
+    "@chatdom/shared": "workspace:*",
+    "@chatdom/world": "workspace:*",
+    "@colyseus/core": "0.18.23",
+    "@colyseus/schema": "5.0.42",
+    "@colyseus/uwebsockets-transport": "0.18.4",
+    "colyseus": "0.18.10",
+    "pg": "8.23.1",
+    "uwebsockets-express": "2.0.4",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@colyseus/sdk": "0.18.8",
+    "@types/pg": "8.23.1",
+    "vite": "8.3.5"
+  }
+}

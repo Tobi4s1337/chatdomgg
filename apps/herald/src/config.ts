@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { parseEnv } from 'node:util';
 import { kingdomFromSettings } from './source/kingdom';
+import { HERALD_PORT } from './source/server';
 
 /** The only channel this lane reads for real acceptance. */
 export const DEFAULT_CHANNEL_LOGIN = 'tobi4s_';
@@ -27,6 +28,11 @@ export interface HeraldConfig {
   readonly conduitId: string | null;
   /** Where the private presence binding table lives: outside the repository, owner-only. */
   readonly dataDir: string;
+  /**
+   * The loopback port `dev` and `replay` serve on (`HERALD_PORT`, default 5194, the one main's preview proxies).
+   * A second checkout running beside the kingdom's own Herald picks another.
+   */
+  readonly port: number;
   /** The presentation layout whose home slots windows bind to; must match main's preview. */
   readonly kingdom: KingdomConfig;
   readonly problems: readonly ConfigProblem[];
@@ -108,6 +114,14 @@ export async function loadConfig(sources: ConfigSources = {}): Promise<HeraldCon
     if (isAbsolute(rawDataDir)) dataDir = rawDataDir;
     else problems.push({ key: 'HERALD_DATA_DIR', issue: 'invalid' });
   }
+  const rawPort = setting('HERALD_PORT');
+  let port = HERALD_PORT;
+  if (rawPort !== null) {
+    const value = /^\d{1,5}$/.test(rawPort) ? Number(rawPort) : NaN;
+    // Unprivileged, and never the consent helper's callback port.
+    if (value >= 1024 && value <= 65535 && value !== AUTHORIZE_CALLBACK_PORT) port = value;
+    else problems.push({ key: 'HERALD_PORT', issue: 'invalid' });
+  }
   const kingdom = kingdomFromSettings(setting, channelLogin, sources.year ?? new Date().getUTCFullYear());
   problems.push(...kingdom.problems);
 
@@ -127,7 +141,7 @@ export async function loadConfig(sources: ConfigSources = {}): Promise<HeraldCon
     problems.push({ key: 'HERALD_TWITCH_ENV_FILE', issue: isMissingFile(error) ? 'missing' : 'unreadable' });
   }
 
-  return { channelLogin, channelLoginDefaulted: rawChannel === null, readerLogin, redirectUri, credentials, conduitId, dataDir, kingdom: kingdom.config, problems, secretsFile, settingsFile };
+  return { channelLogin, channelLoginDefaulted: rawChannel === null, readerLogin, redirectUri, credentials, conduitId, dataDir, port, kingdom: kingdom.config, problems, secretsFile, settingsFile };
 }
 
 /** A redirect URI Twitch could have registered: absolute https, or http on a loopback host. No query or fragment. */

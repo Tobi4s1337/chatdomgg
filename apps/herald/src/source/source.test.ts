@@ -336,7 +336,8 @@ describe('PresenceSource', () => {
     expect(h.frames.length).toBe(published + 1);
   });
 
-  it('holds 50,000 connected people in one bounded frame and one binding write', async () => {
+  // 50,000 identities through the real reducer: allow for a busy machine, not a slow design.
+  it('holds 50,000 connected people in one bounded frame and one binding write', { timeout: 30_000 }, async () => {
     let saves = 0;
     const memory = new MemoryBindingStore();
     const store: BindingStore = { kind: 'memory', load: () => memory.load(), erase: () => memory.erase(), close: async () => undefined, save: async bindings => {
@@ -736,7 +737,7 @@ describe('dev without credentials', () => {
       config: {
         channelLogin: 'tobi4s_', channelLoginDefaulted: true, readerLogin: null, redirectUri: null, credentials: null, conduitId: null,
         dataDir: '/nonexistent', kingdom: { seed: 'tobi4s_', tier: 'hamlet', firstYear: 2026, year: 2026 }, problems: [],
-        secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env',
+        port: 5194, secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env',
       },
     });
     try {

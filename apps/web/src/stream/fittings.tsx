@@ -34,3 +34,11 @@ export function Corner(props: { at: 'tl' | 'tr' | 'bl' | 'br' }) {
     <circle cx="4.6" cy="4.6" r="1.5" fill="#4a321b" /><circle cx="4.3" cy="4.3" r=".6" fill="#f7deae" />
   </svg>;
 }
+
+/** A small lamp flame beside a name at its window's climax. */
+export function Flame() {
+  return <svg class="stream-flame" viewBox="0 0 12 16" aria-hidden="true">
+    <path d="M6 15c-3.2 0-4.8-2.2-4.8-4.6C1.2 7.2 4 5.6 5.2 1c2.4 2.2 5.6 5 5.6 9.2C10.8 12.8 9.1 15 6 15Z" fill="#f2b45c" />
+    <path d="M6 14c-1.5 0-2.3-1-2.3-2.2 0-1.6 1.3-2.5 2.1-4.3 1.2 1.3 2.5 2.6 2.5 4.3C8.3 13 7.4 14 6 14Z" fill="#fde7b0" />
+  </svg>;
+}
