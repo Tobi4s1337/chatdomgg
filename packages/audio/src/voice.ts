@@ -77,6 +77,25 @@ export class VoiceGraph {
     this.chain(this.osc(type, frequency, start, start + attack + tau * 8), amp, target);
   }
 
+  /**
+   * A swell rather than a strike: a raised-cosine rise to `peak` over `rise` seconds (no corner at either end),
+   * then an exponential fall with time constant `tau`.
+   */
+  bloom(param: AudioParam, start: number, rise: number, peak: number, tau: number): void {
+    const curve = new Float32Array(33);
+    for (let i = 0; i < curve.length; i++) curve[i] = peak * (0.5 - 0.5 * Math.cos((Math.PI * i) / (curve.length - 1)));
+    param.setValueAtTime(0, start);
+    param.setValueCurveAtTime(curve, start, rise);
+    param.setTargetAtTime(0, start + rise, tau);
+  }
+
+  /** A stereo position inside the voice, for cues that move (a street of windows lighting along). */
+  pan(value: number): StereoPannerNode {
+    const node = this.context.createStereoPanner();
+    node.pan.value = value;
+    return this.track(node);
+  }
+
   private offsets = new Map<AudioScheduledSourceNode, number>();
 
   private schedule<T extends AudioScheduledSourceNode>(node: T, start: number, stop: number, offset = 0): T {

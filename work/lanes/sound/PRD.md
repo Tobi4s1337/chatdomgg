@@ -23,7 +23,7 @@ runs `pnpm verify` after integrating. Record what was listened to; waveform/peak
   SIMULATED bench at `/src/audio-bench/index.html` with actual state and cue buttons. Play both sounds after a
   trusted gesture, demonstrate locked versus running, mute and zero volume, and never claim successful unlock
   before resume resolves. Main may inspect this audible result immediately; do not wait for the whole lane.
-- [ ] **SO02 — Give the wave and castle beacon the same musical heart** · evidence: four-cue listening sequence.
+- [x] **SO02 — Give the wave and castle beacon the same musical heart** · evidence: four-cue listening sequence.
   Craft `wave` and `beacon` with the light family's tuning, physical texture and restrained layered tails.
   Finish the control family's brass/parchment options and variation selection. Keep the crescendo warm,
   intelligible under speech and free of harsh attacks or generic reward stings. Use a single mix path, start

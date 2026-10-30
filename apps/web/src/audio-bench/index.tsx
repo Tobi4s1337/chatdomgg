@@ -25,17 +25,49 @@ const FAMILIES: Family[] = [
     variations: ['centre', 'edge', 'corner'],
   },
   {
+    key: 'wood:brass', title: 'Brass lever', surface: 'brass in wood', cue: 'wood', options: { ui: 'brass' }, action: 'Tick',
+    line: 'A small brass lever seating in its wooden mount: a tuned tap, a short ring the finger damps, the mount beneath.',
+    variations: ['tip', 'middle', 'heel'],
+  },
+  {
+    key: 'wood:parchment', title: 'Parchment', surface: 'paper', cue: 'wood', options: { ui: 'parchment' }, action: 'Turn',
+    line: 'A sheet moved by hand: fingers on the paper, the page turning, a soft settle on the desk.',
+    variations: ['first', 'second', 'third'],
+  },
+  {
     key: 'light', title: 'A window lights', surface: 'glass, wick and glow', cue: 'light', action: 'Light a window',
     line: 'Someone came home. A fingertip of glass, the wick catching, then a warm glow that settles.',
     variations: ['F♯', 'A', 'D'],
   },
+  {
+    key: 'wave', title: 'The street lights up', surface: 'five windows', cue: 'wave', action: 'Light the street',
+    line: 'Window after window along the houses, each a small light of its own, gathering into one soft chord.',
+    variations: ['left to right', 'right to left', 'from the middle'],
+  },
+  {
+    key: 'beacon', title: 'The castle beacon', surface: 'fire and chord', cue: 'beacon', action: 'Light the beacon',
+    line: 'The torch set in the brazier, the fire catching, then a broad warm chord that crests and returns to quiet.',
+    variations: ['with E', 'with B', 'open'],
+  },
 ];
 
+interface SequenceStep { at: number; label: string; cue: AudioCue; options?: AudioCueOptions }
+
+/** Bench timings: the kingdom decides the real ones from who is home. */
+const SEQUENCES: { key: string; title: string; action: string; steps: SequenceStep[] }[] = [
+  {
+    key: 'ceremony', title: 'The light ceremony', action: 'Play the ceremony',
+    steps: [{ at: 0, label: 'a window', cue: 'light' }, { at: 1.6, label: 'the street', cue: 'wave' }, { at: 4.2, label: 'the beacon', cue: 'beacon' }],
+  },
+  {
+    key: 'four', title: 'Four cues in a row', action: 'Play all four',
+    steps: [{ at: 0, label: 'a knock', cue: 'wood' }, { at: 0.7, label: 'a window', cue: 'light' }, { at: 2.6, label: 'the street', cue: 'wave' }, { at: 5.6, label: 'the beacon', cue: 'beacon' }],
+  },
+];
+
+type StepState = 'waiting' | 'played' | 'silent';
+
 const UNFINISHED: { label: string; cue: AudioCue; options?: AudioCueOptions }[] = [
-  { label: 'Brass tick', cue: 'wood', options: { ui: 'brass' } },
-  { label: 'Parchment', cue: 'wood', options: { ui: 'parchment' } },
-  { label: 'Street wave', cue: 'wave' },
-  { label: 'Castle beacon', cue: 'beacon' },
   { label: 'Footstep', cue: 'step' },
   { label: 'Place', cue: 'place' },
   { label: 'Remove', cue: 'remove' },
@@ -63,6 +95,8 @@ export default function AudioBench(): JSX.Element {
   const [waking, setWaking] = createSignal(false);
   const [log, setLog] = createSignal<LogLine[]>([]);
   const [lastPlayed, setLastPlayed] = createSignal<Record<string, { variation: number; at: number }>>({});
+  const [runs, setRuns] = createSignal<Record<string, StepState[]>>({});
+  let timers: number[] = [];
 
   const note = (text: string, tone: LogLine['tone']) => setLog(lines => [{ at: clock(), text, tone }, ...lines].slice(0, 7));
   const refresh = () => { setState(audio.getState()); setInspection(inspectKingdomAudio(audio)); };
@@ -76,7 +110,8 @@ export default function AudioBench(): JSX.Element {
     frame = requestAnimationFrame(meter);
   };
   frame = requestAnimationFrame(meter);
-  onCleanup(() => { window.clearInterval(poll); cancelAnimationFrame(frame); audio.dispose(); });
+  const stopSequences = () => { for (const timer of timers) window.clearTimeout(timer); timers = []; };
+  onCleanup(() => { window.clearInterval(poll); cancelAnimationFrame(frame); stopSequences(); audio.dispose(); });
 
   const audible = () => state().status === 'ready' && !state().settings.muted && state().settings.volume > 0;
   const silentReason = () => {
@@ -108,6 +143,30 @@ export default function AudioBench(): JSX.Element {
     }
   }
 
+  /** Plays a sequence step by step through the same `cue()` calls; each step shows what the library answered. */
+  function runSequence(sequence: (typeof SEQUENCES)[number]) {
+    stopSequences();
+    setRuns({ [sequence.key]: sequence.steps.map((): StepState => 'waiting') });
+    note(`${sequence.title}: started`, 'quiet');
+    sequence.steps.forEach((step, index) => {
+      timers.push(window.setTimeout(() => {
+        const ok = audio.cue(step.cue, step.options);
+        refresh();
+        setRuns(previous => {
+          const states = [...(previous[sequence.key] ?? [])];
+          states[index] = ok ? 'played' : 'silent';
+          return { ...previous, [sequence.key]: states };
+        });
+        const family = FAMILIES.find(item => item.cue === step.cue && !item.options);
+        if (ok && family) {
+          const variation = inspectKingdomAudio(audio).variations[family.key] ?? 0;
+          setLastPlayed(previous => ({ ...previous, [family.key]: { variation, at: performance.now() } }));
+        }
+        note(`${sequence.title} · ${step.label} → ${ok ? 'played' : `not played (${silentReason() || 'held back by the mix'})`}`, ok ? 'ok' : 'quiet');
+      }, step.at * 1000));
+    });
+  }
+
   function tryUnfinished(item: (typeof UNFINISHED)[number]) {
     try {
       const ok = audio.cue(item.cue, item.options);
@@ -130,6 +189,7 @@ export default function AudioBench(): JSX.Element {
   }
 
   function close() {
+    stopSequences();
     audio.dispose();
     refresh();
     note('dispose(): voices stopped, context closed', 'quiet');
@@ -137,6 +197,8 @@ export default function AudioBench(): JSX.Element {
 
   function fresh() {
     const settings = audio.getState().settings;
+    stopSequences();
+    setRuns({});
     audio.dispose();
     audio = createKingdomAudio(settings);
     exposeForChecks();
@@ -159,7 +221,7 @@ export default function AudioBench(): JSX.Element {
       <p class="ab-eyebrow">Chatdom · Sound bench</p>
       <p class="ab-simulated"><strong>SIMULATED</strong> A listening bench. Nothing here happens in a kingdom.</p>
       <h1>The sound of a handmade kingdom</h1>
-      <p class="ab-lede">Wake the sound with a click, then knock on the wood and light a window. Every press goes through the same mix the kingdom uses.</p>
+      <p class="ab-lede">Wake the sound with a click, then press the controls, light a window, the street and the castle beacon. Every press goes through the same mix the kingdom uses.</p>
     </header>
 
     <div class="ab-layout">
@@ -231,6 +293,26 @@ export default function AudioBench(): JSX.Element {
             </button>
           </article>;
         }}</For>
+
+        <article class="ab-card ab-sequences">
+          <header>
+            <h2>Hear them together</h2>
+            <p class="ab-surface">one mix, real calls</p>
+          </header>
+          <p class="ab-line">The same cues in order, so each can be compared with how it sits beside the others. Every step is a real call and shows what came back.</p>
+          <For each={SEQUENCES}>{sequence => <div class="ab-sequence" data-sequence={sequence.key}>
+            <ol class="ab-steps">
+              <For each={sequence.steps}>{(step, index) => {
+                const stepState = () => runs()[sequence.key]?.[index()];
+                return <li class="ab-step" data-state={stepState() ?? 'idle'}>
+                  <time>{step.at.toFixed(1)} s</time>
+                  <span>{step.label}</span>
+                </li>;
+              }}</For>
+            </ol>
+            <button type="button" class="ab-play ab-play-wide" data-run={sequence.key} onClick={() => runSequence(sequence)}>{sequence.action}</button>
+          </div>}</For>
+        </article>
 
         <article class="ab-card ab-unfinished">
           <header>

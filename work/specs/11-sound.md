@@ -237,3 +237,14 @@ and walking/building feedback without predicting those systems.
   diagnostics), `renderKingdomAudio` (offline render through the same families, mixer and mix path),
   `FINISHED_FAMILIES` and the value arrays. The bench serves at `/src/audio-bench/index.html` and through the
   `/-/audio` route main already registered.
+- **2026-10-30 — SO02 lane decisions.** The ceremony shares one D major pentatonic palette, the same three glass
+  panes and the same wick: `wave` is five small window lights travelling across the stereo field, with wandering
+  (not climbing) phrases over a gathering D3 undertone; `beacon` is a recorded wooden beam (the torch into the
+  brazier), a procedural whoomph and sparks, then a six-note chord entering bottom-up under one filter that opens
+  to the crest (~1.1 s) and closes, faded out by 4.95 s. No recorded fire or bell exists in the chosen packs; a
+  tolling bell (`impactBell_heavy`) was rejected as the status sound the beacon must not be. Brass is a tuned
+  `impactMetal_light` tap plus an original lever ring and mount; parchment is a sliced RPG Audio `bookFlip` with an
+  original slide and settle. New selected files are peak-normalised to −1 dBFS (per-file gain recorded). Budget
+  tiers are now whole-mix ceilings that reserve room above them (step 28, build 36, ceremony 40, beacon 58, control
+  64 sources) instead of voice stealing, so the beacon and a control always fit beside a full ceremony without
+  cutting anything. Shared noise sources carry every wick burst of a wave, keeping it at 19–20 sources.

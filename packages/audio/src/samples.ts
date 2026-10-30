@@ -4,10 +4,19 @@ import woodKnockC from './assets/kenney/impact-wood-light-004.wav?url';
 import glassTapA from './assets/kenney/impact-glass-light-004.wav?url';
 import glassTapB from './assets/kenney/impact-glass-light-003.wav?url';
 import glassTapC from './assets/kenney/impact-glass-light-000.wav?url';
+import brassTickA from './assets/kenney/impact-metal-light-001.wav?url';
+import brassTickB from './assets/kenney/impact-metal-light-004.wav?url';
+import brassTickC from './assets/kenney/impact-metal-light-002.wav?url';
+import pageA from './assets/kenney/book-flip-3.wav?url';
+import pageB from './assets/kenney/book-flip-2.wav?url';
+import pageC from './assets/kenney/book-flip-1.wav?url';
+import plankA from './assets/kenney/impact-plank-medium-000.wav?url';
+import plankB from './assets/kenney/impact-plank-medium-002.wav?url';
+import plankC from './assets/kenney/impact-plank-medium-004.wav?url';
 
 /**
  * Selected foley, decoded once per instance. Sources and edits are recorded in packages/audio/THIRD_PARTY.md.
- * `peakHz` is the measured strongest partial, used to tune a tonal sample into the palette.
+ * `peakHz` is the measured strongest partial, used to tune a tonal sample into the palette (0: not tonal, never tuned).
  */
 export const SAMPLES = {
   'wood-knock-a': { url: woodKnockA, peakHz: 324 },
@@ -16,6 +25,15 @@ export const SAMPLES = {
   'glass-tap-a': { url: glassTapA, peakHz: 919 },
   'glass-tap-b': { url: glassTapB, peakHz: 981 },
   'glass-tap-c': { url: glassTapC, peakHz: 1081 },
+  'brass-tick-a': { url: brassTickA, peakHz: 2343 },
+  'brass-tick-b': { url: brassTickB, peakHz: 2404 },
+  'brass-tick-c': { url: brassTickC, peakHz: 2998 },
+  'page-a': { url: pageA, peakHz: 0 },
+  'page-b': { url: pageB, peakHz: 0 },
+  'page-c': { url: pageC, peakHz: 0 },
+  'beam-a': { url: plankA, peakHz: 0 },
+  'beam-b': { url: plankB, peakHz: 0 },
+  'beam-c': { url: plankC, peakHz: 0 },
 } as const;
 
 export type SampleId = keyof typeof SAMPLES;

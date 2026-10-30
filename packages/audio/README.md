@@ -14,12 +14,17 @@ button.onclick = async () => { if (await audio.unlock()) audio.cue('light'); };
 
 | Cue | Surfaces | Variations |
 |---|---|---|
-| `wood` | `ui: 'wood'` (default) | centre, edge and corner knocks of one carved block |
-| `light` | — | three windows on F♯4, A4 and D5 |
+| `wood` | `ui: 'wood'` (default) | centre, edge and corner knocks of one carved block, gone in ~120 ms |
+| `wood` | `ui: 'brass'` | a brass lever in a wooden mount, tuned to A6, A6, B6 and finger-damped within ~200 ms |
+| `wood` | `ui: 'parchment'` | three page turns of one sheet, each with a slide and a soft settle, ~200 ms |
+| `light` | — | three windows on F♯4, A4 and D5, ~1.8 s |
+| `wave` | — | five windows lighting along a street (left to right, right to left, from the middle), ~2.5 s |
+| `beacon` | — | the torch, the fire catching and a broad D-major chord that crests at ~1.1 s and is silent by 4.95 s |
 
-Every other cue and surface (`wave`, `beacon`, `step`, `place`, `remove`, `material`, brass and parchment
-controls) throws `kingdom audio: the … sound is not finished yet` until it is built. Nothing is registered as a
-stand-in.
+`light`, `wave` and `beacon` share one palette (D major pentatonic, `src/palette.ts`), the same glass panes and the
+same wick, and rise in loudness gently: about +0.5 dB from a window to the street and +6 dB to the beacon's crest.
+`step`, `place`, `remove` and `material` throw `kingdom audio: the … sound is not finished yet` until they are
+built. Nothing is registered as a stand-in.
 
 ## State
 
@@ -43,9 +48,11 @@ Voices → bus → 35 Hz rumble guard → glue compressor → master (volume²) 
 0.91) → output, with a send into a short authored wooden room. Conservative cue gains and the voice budget keep the
 mix far below the ceiling; the ceiling is a guarantee, not the level control.
 
-- **Budget:** at most 16 voices and 64 source nodes per instance, counting every layer. Tiers reserve headroom:
-  footsteps may fill 8 voices / 32 sources, building cues 12 / 48, the light ceremony 14 / 56, and controls and
-  the beacon the whole mix. A cue that does not fit returns `false`.
+- **Budget:** at most 16 voices and 64 source nodes per instance, counting every layer until it has stopped. Each
+  tier may only fill the whole mix up to its own ceiling, which reserves the room above it: footsteps 8 voices /
+  28 sources, building cues 12 / 36, the light ceremony 13 / 40, the beacon 15 / 58, controls everything. So the
+  beacon (18 sources) and a control (3–6) always fit beside a full ceremony, and a control still answers during
+  the beacon. A cue that does not fit returns `false`; nothing is cut or queued.
 - **Coalescing:** the same cue on the same surface within 40 ms plays once.
 - **Variation:** never the same variation twice in a row for one family on one surface.
 - **Placement:** `pan` is clamped to [-1, 1]; `distance` (metres, ≥ 0) attenuates by `1 / (1 + distance / 8)`:

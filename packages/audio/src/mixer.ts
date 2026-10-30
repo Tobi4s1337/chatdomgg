@@ -7,12 +7,17 @@ import { VoiceGraph, type Kit } from './voice';
 export const MAX_VOICES = 16;
 export const MAX_SOURCES = 64;
 
-/** How far each tier may fill the mix. The headroom above a tier is reserved for the tiers above it. */
+/**
+ * How far each tier may fill the whole mix (voices and source nodes, counted after admitting the new cue). The
+ * room above a tier is reserved for the tiers above it: the light ceremony stops at 40 sources so the castle beacon
+ * (18) and a control press (up to 6) always fit, and the beacon stops at 58 so a control still answers during it.
+ */
 export const TIER_LIMITS: Readonly<Record<MixTier, { voices: number; sources: number }>> = {
   control: { voices: MAX_VOICES, sources: MAX_SOURCES },
-  ceremony: { voices: 14, sources: 56 },
-  build: { voices: 12, sources: 48 },
-  step: { voices: 8, sources: 32 },
+  beacon: { voices: 15, sources: 58 },
+  ceremony: { voices: 13, sources: 40 },
+  build: { voices: 12, sources: 36 },
+  step: { voices: 8, sources: 28 },
 };
 
 /** The same cue on the same surface within this window is one sound, not two. */

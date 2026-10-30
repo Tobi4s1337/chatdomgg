@@ -138,3 +138,28 @@
   .ab-plaque { padding: 16px; }
   .ab-log li { grid-template-columns: 62px 1fr; font-size: 13px; }
 }
+
+.ab-sequences { grid-column: 1 / -1; }
+.ab-sequence { display: grid; grid-template-columns: 1fr minmax(180px, 220px); gap: 16px; align-items: center; padding: 12px 0; border-top: 1px solid #6d553633; }
+.ab-sequence .ab-play { margin: 0; }
+.ab-steps { display: flex; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ab-step {
+  flex: 1; display: grid; gap: 2px; padding: 7px 10px; border-radius: 4px; border: 1px solid #a37b3566; background: #fff6df80;
+  color: var(--ink-soft); transition: background .25s, color .25s, box-shadow .25s;
+}
+.ab-step time { font: 10px/1.2 ui-monospace, monospace; letter-spacing: .08em; color: #8a7350; }
+.ab-step span { font-size: 15px; }
+.ab-step[data-state='waiting'] { border-style: dashed; }
+.ab-step[data-state='played'] { color: #3a2412; background: linear-gradient(#ffe2a0, #f0bf63); box-shadow: 0 0 12px #f2b45a88; border-color: #c48b2c; }
+.ab-step[data-state='silent'] { color: #7a3b22; background: #e7a08333; border-color: #9c3b2266; }
+
+@media (max-width: 560px) {
+  .ab-sequence { grid-template-columns: 1fr; gap: 10px; }
+  .ab-steps { flex-wrap: wrap; }
+  .ab-step { flex: 1 1 40%; }
+}
+
+/* Keep the state and the meter in view while the lower cards are played. */
+@media (min-width: 901px) {
+  .ab-plaque { position: sticky; top: 24px; }
+}
