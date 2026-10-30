@@ -4,6 +4,7 @@ import { createWindowLights, geometryFromChunks, type VoxelRenderState, type Win
 import { KingdomIdSchema, type KingdomPresenceFrame, type VoxelBlueprint } from '@chatdom/shared';
 import { homeOrigin, type SettlementHome } from '@chatdom/world';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
+import { createPlotDressing } from '../build/plot-dressing';
 import { createBuildSession, readSimulatedPublication } from '../build/session';
 import { createPlotBuildPolicy } from '../build/policy';
 import { blueprintInReserve, buildBounds, composeBuildCamera } from '../build/composition';
@@ -31,6 +32,7 @@ export function createKingdomBuild(options: KingdomBuildOptions) {
   const policy = createPlotBuildPolicy(home, options.ownerId);
   const position = homeOrigin(home, policy.size[2] * .125), yaw = home.rotation * Math.PI / 2;
   const initialBlueprint = blueprintInReserve(options.authoredHome.blueprint, policy);
+  const dressing = createPlotDressing(options.scene, position, yaw); dressing.group.visible = false;
   const streetMesh = new THREE.Mesh(new THREE.BufferGeometry(), options.material.material);
   streetMesh.name = `local-home:${home.id}`; streetMesh.position.set(...position); streetMesh.rotation.y = yaw;
   streetMesh.visible = false; streetMesh.frustumCulled = false; options.scene.add(streetMesh);
@@ -46,6 +48,7 @@ export function createKingdomBuild(options: KingdomBuildOptions) {
 
   function visibility() {
     streetMesh.visible = !!streetHome && !draftShown;
+    dressing.group.visible = draftShown || !!streetHome;
     options.onHomeVisibility(draftShown || !!streetHome);
     renderRevision++;
   }
@@ -59,13 +62,13 @@ export function createKingdomBuild(options: KingdomBuildOptions) {
     draftShadow?.(); draftShadow = undefined;
     previous.dispose(); options.onSession(null); camera.clearViewOffset(); visibility();
     if (streetHome && !disposed) {
-      installStreetWindows(streetHome);
+      installStreetWindows(streetHome); dressing.update(streetHome.blueprint);
       if (!streetShadow) streetShadow = options.registerShadow?.(streetMesh);
     }
   }
   function installStreetWindows(placement: WindowHouse) {
     streetWindows?.dispose();
-    streetWindows = createWindowLights(options.scene, [placement]);
+    streetWindows = createWindowLights(options.scene, [placement], { allWindows: true });
     streetWindows.setFrame(presenceFrame ?? { version: 1, kingdomId: KingdomIdSchema.parse('1'), epoch: 'simulated-build', sequence: renderRevision,
       asOf: 1000, origin: 'simulated', streamLive: true, connection: 'fresh',
       windows: [{ slot: home.slot, present: true, publicName: options.ownerName, since: 0 }] });
@@ -77,7 +80,7 @@ export function createKingdomBuild(options: KingdomBuildOptions) {
     const geometry = geometryFromChunks(result.chunks, 'build');
     streetShadow?.(); streetShadow = undefined;
     streetMesh.geometry.dispose(); streetMesh.geometry = geometry;
-    streetHome = { slot: home.slot, blueprint, position, yaw }; bounds = buildBounds(blueprint);
+    streetHome = { slot: home.slot, blueprint, position, yaw }; bounds = buildBounds(blueprint); dressing.update(blueprint);
     streetMesh.updateMatrixWorld(true);
     streetShadow = options.registerShadow?.(streetMesh);
     options.onStreetHome(streetHome, streetMesh);
@@ -101,7 +104,8 @@ export function createKingdomBuild(options: KingdomBuildOptions) {
       policy, initialBlueprint: streetHome?.blueprint ?? initialBlueprint, position, yaw, slot: home.slot,
       ownerName: options.ownerName, source: options.source, sound: options.sound,
       onLeave: leave,
-      onMesh(mesh) {
+      onMesh(mesh, source) {
+        dressing.update(source);
         draftShadow?.(); draftShadow = options.registerShadow?.(mesh);
         if (mesh.geometry.boundingBox && !mesh.geometry.boundingBox.isEmpty()) bounds = mesh.geometry.boundingBox.clone();
         draftShown = true; visibility();
@@ -177,7 +181,7 @@ export function createKingdomBuild(options: KingdomBuildOptions) {
     dispose() {
       if (disposed) return;
       disposed = true; generation++; releaseDrag(); stopHousewarming(); closeSession();
-      streetShadow?.(); streetWindows?.dispose(); options.scene.remove(streetMesh); streetMesh.geometry.dispose();
+      streetShadow?.(); streetWindows?.dispose(); dressing.dispose(); options.scene.remove(streetMesh); streetMesh.geometry.dispose();
       options.onStreetHome(null); options.onHomeVisibility(false);
       canvas.removeEventListener('pointerdown', pointerDown, true); canvas.removeEventListener('pointermove', pointerMove, true);
       canvas.removeEventListener('pointerup', pointerUp, true); canvas.removeEventListener('pointercancel', pointerUp, true);

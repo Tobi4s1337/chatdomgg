@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 /** Small offline review films; scene time is sampled by moments.mjs, never inferred from SwiftShader fps. */
 export async function encodeMomentClips() {
-  for (const [name, rate] of [['walk', '5/3'], ['build', '2']]) {
+  for (const [name, rate] of [['walk', '3'], ['build', '2']]) {
     await new Promise((resolve, reject) => {
       const child = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', rate,
         '-i', `shots/moments/${name}/%03d.png`, '-vf', 'scale=960:-2,fps=30',

@@ -36,3 +36,9 @@ See `work/references/citizen-motion.md`, `build-shaping.md`, and `vox-import.md`
 2026-10-30: Public presence stays authoritative and unchanged. Arrival-delayed light is a render-side projection.
 SIMULATED actors are labelled; LIVE speech requires an actual cue. Local draft/publication persistence is
 explicitly a simulation until sign-in, deed authority and the moderation service are connected.
+
+2026-10-30: A supported thin rectangular roof cap is a roof footprint: derived Hearth/Tide gables or a Grove
+hip add the silhouette, eaves and framing. A narrow stone/timber chimney may pierce it. Hand-shaped slopes,
+roof holes, irregular connected wings and broad rooftop structures retain their authored shapes. The raw
+source, undo and tier allowance are unchanged. The browser dresses a detected doorway with a lantern,
+threshold and planted side strips; all authored windows warm together for the same owner.
