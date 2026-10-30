@@ -186,3 +186,18 @@ The shell and window metadata are complete static assets, ready for their real c
   been built or validated by this brief.
 
 - **2026-10-30 — Ready for the team.** Main reviewed the real core mixed-street desktop/phone views, doorway and clean SIMULATED window fixture. Validator checks all 51 baseline assets; six review-fixture tests pass. Capture previews allocate free ports for parallel worktrees. The actual lane assets remain this lane’s acceptance, not a claimed result of the tooling check.
+- **2026-10-30 — HT01 grammar (lane).** One shared Tide grammar (`grammar.ts`): footprint plans become wall bands,
+  plinths and floors through greedy rectangles; slate roofs are 3-cell courses stepping 2 cells (hips 2/2) so each
+  row casts its own drip shadow; timber ridge boards and stepped bargeboards are the kit's warm line. Solid boxes
+  may set quoins, sills and surrounds into an earlier wall (ordered material break-up); air only carves openings.
+  Walls never rise above a roof course's underside, so no cream slivers show on slopes.
+- **2026-10-30 — Entrances.** Gullstep's door is in the street gable (focus z=122). Keelcroft's compact porch is
+  enclosed with an open stone arch on the facade (focus z=122) and the house door at its back. Saltbend's door sits
+  in the sheltered corner, 1.75 m behind the facade (focus z=108), which is what makes the corner sheltered.
+- **2026-10-30 — Growth.** Tiers add space behind the hut; the street face (z≥120, y<48) stays cell-identical and
+  later tiers append windows after the hut's, so `windows[0]` and every earlier anchor keep their place and order.
+  Huts carry no north windows, because each tier builds over the previous rear wall.
+- **2026-10-30 — Rejected forms.** Saltbend's steep entry gable stuck out of the hip as a lone ridge (now it shares
+  the hip pitch and dies into it); keelcroft's open court under a set-back porch read as a dark slot (now an enclosed
+  porch gable between the keels); a taller rear keel showed its gable over the return (now its ridge meets the
+  return's in a true valley); a timber ridge on keelcroft's return made a heavy "H" (return left plain slate).

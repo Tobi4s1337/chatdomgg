@@ -16,7 +16,7 @@ implement private substitutes or pick from Backlog without main. A weak piece is
 
 ## Tasks
 
-- [ ] **HT01 — A varied hut-and-cottage street worth looking at** · evidence: six-model bench + tests + shots.
+- [x] **HT01 — A varied hut-and-cottage street worth looking at** · evidence: six-model bench + tests + shots.
   Build the three family grammars at hut and cottage tiers, stable IDs/entrances/window anchors and the lane's
   `BLUEPRINTS`/factory entry. Export `HOME_REVIEW` doorway focus data and render all six in the actual bench at dusk, inspect their silhouettes, interior access
   and window planes; improve what looks cheap. Confirm full reserve with locked rear empty. First visible result.
