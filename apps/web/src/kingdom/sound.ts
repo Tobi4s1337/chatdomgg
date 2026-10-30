@@ -11,7 +11,7 @@ export function createKingdomSound() {
     const t=context.currentTime+delay,osc=context.createOscillator(),gain=context.createGain();
     osc.type=type;osc.frequency.value=frequency;gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(volume,t+.018);gain.gain.exponentialRampToValueAtTime(.0001,t+duration);osc.connect(gain);gain.connect(master);osc.start(t);osc.stop(t+duration+.03);osc.onended=()=>{osc.disconnect();gain.disconnect();};
   }
-  return {unlock,get enabled(){return enabled;},toggle(){if(enabled){enabled=false;master?.gain.setTargetAtTime(0,context!.currentTime,.03);return false;}unlock();return true;},
+  return {unlock,output:()=>enabled&&context&&master?{context,master}:null,get enabled(){return enabled;},toggle(){if(enabled){enabled=false;master?.gain.setTargetAtTime(0,context!.currentTime,.03);return false;}unlock();return true;},
     cue(kind:'wood'|'light'|'wave'|'beacon') {
       const shift=[1,1.015,.985,1.008][variation++%4]!;
       if(kind==='wood'){note(180*shift,0,.07,.28,'triangle');note(360*shift,.008,.04,.08);}
