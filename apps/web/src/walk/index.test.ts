@@ -23,11 +23,11 @@ function signal() {
 }
 function realm(at: { x: number; y: number; z: number; yaw: number }) {
   const sent: WalkInput[] = [];
-  const self = { ...at, speed: 0 };
+  const self = { ...at, speed: 0, placement: 0 };
   const onLeave = signal(), onDrop = signal();
   const fake: WalkRealm = {
     selfId: 'me',
-    room: { onLeave, onDrop, state: { collisionRevision: 7, walkers: { get: id => id === 'me' ? { x: self.x, y: self.y, z: self.z, yaw: self.yaw } : undefined } } },
+    room: { onLeave, onDrop, state: { collisionRevision: 7, walkers: { get: id => id === 'me' ? { x: self.x, y: self.y, z: self.z, yaw: self.yaw, placement: self.placement } : undefined } } },
     tick(_now, input) {
       sent.push({ ...input });
       const poses: RealmWalkerPose[] = [
@@ -295,6 +295,13 @@ describe('the walk controller', () => {
     expect(controller.frame(32).find(p => p.self)!.y).toBe(0);
     self.y = predicted.y = .2; predicted.grounded = false;
     expect(controller.frame(48).find(p => p.self)!.y).toBe(.2);
+    self.x = predicted.x = 2; self.y = predicted.y = .5; predicted.grounded = true;
+    controller.frame(64);
+    self.y = predicted.y = 0;
+    expect(controller.frame(80).find(p => p.self)!.y).toBeGreaterThan(0);
+    // A relocation at identical feet height must also drop residual body and camera stair easing.
+    self.placement++;
+    expect(controller.frame(96).find(p => p.self)!.y).toBe(0);
     controller.dispose();
   });
 

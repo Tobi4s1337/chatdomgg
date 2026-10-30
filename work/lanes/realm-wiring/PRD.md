@@ -7,7 +7,8 @@ The executable boundary is verified: full `pnpm verify`, three uWS SDK clients a
 This lane never edits shared/world contracts or another lane's files.
 
 Use `$ralph-lane`, `$chatdom-vision`, `$twitch-dev` for Twitch integration, and `$look` for visual acceptance.
-You are not alone in the codebase. Preserve all other edits. Realm-server owns persistence/auth/founded manifest;
+You are not alone in the codebase. Preserve all other edits. Realm-server owns persistence/auth/adopted layouts;
+`realm-server-world` (spec 38) supplies the actual scene, manifest and collision world;
 realm-walk and realm-interactions own their surfaces. Herald owns its unaccepted H05 files. Main/the integrator
 alone applies central composition and scene/bench recipes. Never edit those files to unblock yourself.
 

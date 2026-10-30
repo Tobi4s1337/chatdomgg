@@ -24,6 +24,10 @@ The seven look/place lanes keep their existing ownership. Only the team integrat
   Consume at most one input per server tick; a flood cannot buy additional simulated seconds.
 - Quantized world-direction components and button bits cross the wire. Camera trigonometry stays outside
   simulation. Collision queries use immutable versioned solid AABBs in world metres; unknown terrain blocks.
+- The server's per-walker uint32 `placement` context changes on relocation, even at identical coordinates.
+  `RealmWalkInput` echoes it; stale-context inputs are consumed without movement. A changed token reseeds SDK
+  prediction and neighbour tracks before drawing, so short placements cannot glide through a wall. This field
+  is outside `PlayerState`/`PLAYER_FIELDS`; Colyseus still owns ordering and acknowledgements.
 - Public schema contains a small kingdom header and visible walkers. One StateView is shared by a district,
   including its neighbouring districts; never allocate a view for each walker. Chat presence has no sockets.
 - Durable domain state and the event log are private. Intents produce proposed facts; append with the writer
@@ -43,6 +47,13 @@ The seven look/place lanes keep their existing ownership. Only the team integrat
   itself never requires holding a mouse button. Pointer-lock warp filtering follows the researched lessons.
 
 ## References
+
+- `work/references/walk-render-smoothing.md`: exact SDK 0.18.8 render accumulator and reconciliation;
+  all-field snap thresholds are not metre-only thresholds. Preserve replay fields and explicit placement cuts.
+- `work/references/walk-slab-support.md`: actual partial-box tops and sustained support after stepping;
+  compare compiled collision on authority and predictor before changing tolerances.
+- `work/references/walk-multiplayer-characters.md`: fixed body versus render pose and distance-driven gait;
+  the surveyed Defold/NJ examples do not replace our server-authoritative movement law.
 
 - `work/references/colyseus-realm.md`: release APIs, district views, per-socket costs and recovery.
 - `work/references/walking-voxel-worlds.md`: swept boxes, supported auto-step, shoulder framing and input pitfalls.

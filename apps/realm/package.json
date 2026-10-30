@@ -8,7 +8,10 @@
     "start": "node --env-file-if-exists=../../.env dist/realm.mjs"
   },
   "dependencies": {
+    "@chatdom/content": "workspace:*",
+    "@chatdom/forge": "workspace:*",
     "@chatdom/shared": "workspace:*",
+    "@chatdom/voxel": "workspace:*",
     "@chatdom/world": "workspace:*",
     "@colyseus/core": "0.18.23",
     "@colyseus/schema": "5.0.42",
