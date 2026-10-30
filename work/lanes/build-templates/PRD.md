@@ -21,7 +21,7 @@ substitute for contracts. Record discoveries under Backlog without silently expa
 
 ## Tasks
 
-- [ ] **BT01 — A small Hearth home you can start shaping** · Author the complete gabled hut with supported
+- [x] **BT01 — A small Hearth home you can start shaping** · Author the complete gabled hut with supported
   floor, hollow room, clear threshold, finished roof and real window; export only this finished entry initially.
   Build `/-/templates` and its scoped capture adapter using production voxel/render modules and main's route hook.
   Render desktop/phone and three angles immediately. Demonstrate actual main draft insertion and one edited cell
