@@ -31,7 +31,7 @@ Use the shared capture queue and existing/assigned server; never cancel another 
 
 ## Tasks
 
-- [ ] **CF01 — Put the gathering beside the Wilds.** Export the default Solid surface and public-only stream
+- [x] **CF01 — Put the gathering beside the Wilds.** Export the default Solid surface and public-only stream
   entry, versioned local ports/strict decoders, and a deterministic injected SIMULATED session. Build a grounded
   night clearing, fire, logs, game lanterns and kingdom/Wilds horizon with shared palette/materials; mount
   actual authored avatar parts in 6-seat and 12-seat arrangements. Show waiting/text-only/closed states and
