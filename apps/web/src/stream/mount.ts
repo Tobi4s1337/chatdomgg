@@ -1,4 +1,4 @@
-import { createKingdomScene, type SceneOptions } from '../kingdom/scene';
+import { createKingdomScene, type NameLabel, type SceneOptions } from '../kingdom/scene';
 
 export type KingdomScene = Awaited<ReturnType<typeof createKingdomScene>>;
 export type StreamPhase = 'waking' | 'ready' | 'hidden' | 'failed';
@@ -21,6 +21,8 @@ export function createSceneMount(hooks: {
   onPhase(phase: StreamPhase): void;
   onProgress(text: string, fraction: number): void;
   onSource(label: string): void;
+  /** The renderer's permitted public names near the camera. The view decides whether one is shown. */
+  onNames(names: NameLabel[]): void;
   onScene(scene: KingdomScene | undefined): void;
 }) {
   const stats: SceneMountStats = { mounts: 0, alive: 0, disposed: 0, cancelled: 0 };
@@ -43,7 +45,7 @@ export function createSceneMount(hooks: {
   function unmount(phase: Exclude<StreamPhase, 'waking' | 'ready'>): void {
     const entry = current;
     current = undefined;
-    if (entry) { hooks.onScene(undefined); release(entry); }
+    if (entry) { hooks.onScene(undefined); hooks.onNames([]); release(entry); }
     hooks.onPhase(phase);
   }
 
@@ -63,7 +65,7 @@ export function createSceneMount(hooks: {
       ...hooks.settings(),
       signal: entry.controller.signal,
       onProgress: (text, fraction) => { if (own()) hooks.onProgress(text, fraction); },
-      onNames: () => { /* Personal labels are the director's to place, not the frame's. */ },
+      onNames: names => { if (own()) hooks.onNames(names); },
       onSource: label => { if (own()) hooks.onSource(label); },
       onError: () => { if (own()) unmount('failed'); },
     }).then(scene => {

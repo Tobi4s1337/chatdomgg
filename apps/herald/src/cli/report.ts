@@ -3,6 +3,7 @@ import type { AuthorizeOutcome } from '../auth/authorize';
 import type { Blocker, Capability, Role } from '../auth/grants';
 import { ROLE_SCOPES } from '../auth/grants';
 import type { ConfigProblem } from '../config';
+import type { ObserveProbe } from '../observe/probe';
 
 const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   chat: 'chat delivery',
@@ -121,4 +122,33 @@ export function formatAuthorizeOutcome(outcome: AuthorizeOutcome): string[] {
     case 'expired': return ['No callback arrived before the deadline. Run authorize again when ready.'];
     case 'cancelled': return ['Cancelled. Nothing was granted by this helper.'];
   }
+}
+
+const SWEEP_END: Readonly<Record<string, string>> = {
+  complete: 'complete',
+  page_limit: 'partial: page cap reached',
+  deadline: 'partial: deadline reached',
+  repeated_cursor: 'partial: Twitch repeated a cursor',
+  page_failed: 'partial: a page failed',
+  aborted: 'stopped',
+};
+
+/** `check:auth --observe`: one real read of each observed state, as conditions and counts only. */
+export function formatObserveProbe(probe: ObserveProbe | null): string[] {
+  const lines = ['', `Observed once · ${probe ? new Date(probe.observedAt).toISOString() : 'not read'} · counts only, nothing published`];
+  if (!probe) return [...lines, '  the broadcaster could not be resolved, so nothing was read'];
+  const stream = probe.stream;
+  if (stream.state === 'skipped') lines.push('  stream    not read: stream state is unavailable');
+  else if (stream.state === 'failed') lines.push(`  stream    unknown: Get Streams failed (${stream.failure})`);
+  else if (stream.state === 'offline') lines.push('  stream    offline: Get Streams lists no broadcast');
+  else lines.push(`  stream    ${stream.state === 'live' ? 'live' : 'listed but not live (the beacon stays dark)'}${stream.startedAt ? ` since ${new Date(stream.startedAt).toISOString()}` : ''}`);
+  const chatters = probe.chatters;
+  if (chatters.state === 'skipped') lines.push('  chatters  not read: the chatters sweep is unavailable');
+  else {
+    const people = `${chatters.connected} connected${chatters.duplicates ? ` (${chatters.duplicates} repeats dropped)` : ''}`;
+    const failure = chatters.failure ? ` (${chatters.failure})` : '';
+    lines.push(`  chatters  ${SWEEP_END[chatters.end] ?? chatters.end}${failure} · ${chatters.pages} ${chatters.pages === 1 ? 'page' : 'pages'} · ${people} · ${chatters.durationMs} ms`);
+    lines.push('            a running source sweeps each minute only while the broadcast is live; people stay unnamed');
+  }
+  return lines;
 }

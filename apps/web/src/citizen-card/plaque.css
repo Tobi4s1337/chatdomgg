@@ -1,0 +1,348 @@
+/* The citizen card: a wood board, brass fittings and a pinned parchment sheet, all drawn in code. Every rule is
+   scoped to cc- classes. Fonts are the Atlas's licensed files (OFL), referenced in place, never copied. */
+
+@font-face { font-family: 'IM Fell English'; font-style: normal; font-weight: 400; font-display: swap; src: url('../atlas/assets/fonts/im-fell-english-regular.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English'; font-style: italic; font-weight: 400; font-display: swap; src: url('../atlas/assets/fonts/im-fell-english-italic.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: swap; src: url('../atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: swap; src: url('../atlas/assets/fonts/alegreya-roman-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD, U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: swap; src: url('../atlas/assets/fonts/alegreya-roman-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116, U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: swap; src: url('../atlas/assets/fonts/alegreya-roman-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF; }
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: swap; src: url('../atlas/assets/fonts/alegreya-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD, U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: swap; src: url('../atlas/assets/fonts/alegreya-italic-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116, U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F; }
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: swap; src: url('../atlas/assets/fonts/alegreya-italic-greek.woff2') format('woff2');
+  unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF; }
+
+
+.cc-plaque, .cc-scrim, .cc-page {
+  --cc-ink: #2c2118;
+  --cc-ink-soft: #5d4a37;
+  --cc-ink-faint: #8a7356;
+  --cc-paper: #efe1bf;
+  --cc-paper-edge: #cfb688;
+  --cc-paper-glow: rgba(255, 196, 120, .22);
+  --cc-wood-1: #4a2c1a;
+  --cc-wood-2: #6b4128;
+  --cc-wood-3: #8a5734;
+  --cc-brass-hi: #f7e1a0;
+  --cc-brass: #c99a45;
+  --cc-brass-lo: #7a5420;
+  --cc-wax: #9b2a22;
+  --cc-display: 'IM Fell English', 'Iowan Old Style', Georgia, 'Noto Serif', 'Noto Serif CJK JP', serif;
+  --cc-caps: 'IM Fell English SC', 'IM Fell English', Georgia, serif;
+  --cc-text: 'Alegreya', 'Iowan Old Style', Georgia, 'Noto Serif', 'Noto Serif CJK JP', serif;
+  --cc-deckle-top: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='9' viewBox='0 0 160 9'%3E%3Cpath d='M0 9 L0.0 2.1 L4.0 3.4 L6.7 1.2 L10.3 2.0 L14.7 4.2 L19.7 1.7 L25.7 3.1 L30.9 1.4 L35.7 4.5 L41.7 2.9 L47.7 3.8 L51.8 4.1 L58.0 6.6 L61.1 2.0 L65.3 3.5 L69.9 2.6 L74.7 3.3 L79.9 4.5 L86.4 3.6 L92.3 4.7 L97.1 3.8 L102.9 3.3 L105.7 4.3 L108.5 4.1 L111.6 2.3 L117.6 1.4 L120.3 3.8 L126.3 4.7 L132.8 4.5 L137.7 1.3 L141.9 3.4 L144.5 4.3 L150.9 4.4 L155.2 3.1 L160.0 2.1 L160 9Z'/%3E%3C/svg%3E");
+  --cc-deckle-bottom: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='9' viewBox='0 0 160 9'%3E%3Cpath d='M0 0 L0.0 5.6 L5.7 4.4 L11.9 7.7 L18.1 5.5 L21.1 6.1 L25.8 3.5 L29.1 6.8 L34.7 7.2 L37.8 5.6 L40.3 4.7 L43.6 4.3 L47.3 4.3 L52.5 7.1 L57.8 4.3 L61.5 6.5 L64.5 7.6 L69.4 7.8 L73.3 6.7 L77.7 6.7 L83.0 7.6 L85.6 5.1 L88.2 5.0 L93.0 5.6 L96.2 4.4 L101.8 4.5 L105.6 6.5 L111.2 7.4 L116.9 2.5 L123.2 7.5 L128.2 4.5 L134.4 5.8 L138.1 5.0 L141.2 5.3 L144.4 7.6 L149.0 6.3 L153.9 4.8 L158.1 7.6 L160.0 5.6 L160 0Z'/%3E%3C/svg%3E");
+  --cc-deckle-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='160' viewBox='0 0 9 160'%3E%3Cpath d='M9 0 L2.4 0.0 L1.5 5.1 L1.4 9.1 L5.0 11.7 L2.7 14.6 L2.0 17.6 L3.3 23.9 L1.4 30.3 L3.9 33.9 L4.1 37.7 L3.5 42.5 L3.6 47.2 L3.6 50.5 L3.3 54.3 L4.1 58.0 L3.3 61.4 L3.8 67.4 L1.6 73.9 L1.7 79.4 L3.6 82.0 L4.4 86.8 L3.3 92.1 L4.2 96.4 L5.8 100.8 L3.5 106.1 L2.2 111.9 L1.3 117.1 L3.8 120.3 L1.7 125.9 L6.5 129.9 L3.2 134.2 L4.3 140.0 L2.5 144.1 L1.7 150.5 L2.0 153.9 L4.3 158.8 L2.4 160.0 L9 160Z'/%3E%3C/svg%3E");
+  --cc-deckle-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='160' viewBox='0 0 9 160'%3E%3Cpath d='M0 0 L6.2 0.0 L6.1 6.2 L7.1 11.0 L2.7 16.1 L7.5 19.8 L7.6 25.1 L5.4 31.4 L7.7 34.5 L7.1 37.3 L6.1 39.9 L5.9 45.8 L5.4 50.3 L4.2 53.9 L5.3 59.7 L4.6 63.2 L6.4 68.7 L4.4 72.8 L7.0 75.3 L4.3 79.7 L5.5 82.4 L7.5 86.0 L2.9 92.4 L5.2 95.9 L7.2 101.6 L7.1 105.8 L3.3 108.9 L7.0 113.1 L4.9 119.4 L7.0 125.5 L3.3 131.4 L7.0 137.9 L6.6 143.4 L7.5 146.2 L5.6 149.7 L4.3 154.0 L4.7 158.8 L6.2 160.0 L0 160Z'/%3E%3C/svg%3E");
+  /* Grain: long fractal noise, stretched along the board and mapped to dark streaks. */
+  --cc-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='240'%3E%3Cfilter id='g' x='0' y='0' width='1' height='1'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0035 0.085' numOctaves='4' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.16 0 0 0 0 0.08 0 0 0 0 0.04 2.6 0 0 0 -1.05'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  --cc-figure: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='300'%3E%3Cfilter id='f' x='0' y='0' width='1' height='1'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.0018 0.03' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.66 0 0 0 0 0.38 1.4 0 0 0 -0.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
+  /* Paper: fine fibres and a slow mottle of age. */
+  --cc-fibre: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cfilter id='p' x='0' y='0' width='1' height='1'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75 0.55' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.42 0 0 0 0 0.30 0 0 0 0 0.16 0 0 0 1.1 -0.52'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E");
+  --cc-mottle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='520'%3E%3Cfilter id='m' x='0' y='0' width='1' height='1'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='3' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.40 0 0 0 0 0.20 0 0 0 0.9 -0.36'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E");
+}
+[data-light='night'] .cc-plaque, .cc-plaque[data-light='night'], [data-light='night'].cc-scrim, [data-light='night'].cc-page {
+  --cc-paper: #e6cf9f; --cc-paper-edge: #b9945c; --cc-paper-glow: rgba(255, 170, 80, .30);
+}
+[data-light='day'] .cc-plaque, [data-light='day'].cc-scrim, [data-light='day'].cc-page {
+  --cc-paper: #f3e9cf; --cc-paper-edge: #d6c39a; --cc-paper-glow: rgba(255, 236, 190, .18);
+}
+
+/* ---- The dialog over the world ------------------------------------------------------------------------- */
+
+.cc-scrim {
+  position: fixed; inset: 0; z-index: 40; box-sizing: border-box;
+  /* One definite track, so the dialog's max-height resolves and a tall card scrolls inside the screen. */
+  display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: radial-gradient(120% 90% at 50% 45%, rgba(24, 14, 10, .42), rgba(12, 7, 6, .78));
+  animation: cc-fade .24s ease-out both;
+  overscroll-behavior: contain;
+}
+.cc-dialog {
+  position: relative; display: flex;
+  width: min(880px, 100%); max-height: 100%;
+  outline: none;
+}
+.cc-dialog > .cc-plaque { flex: 1; max-height: 100%; min-height: 0; }
+.cc-dialog .cc-wood { min-height: 0; }
+
+.cc-close {
+  position: absolute; top: -10px; right: -8px; z-index: 3;
+  width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer;
+  background: radial-gradient(circle at 34% 28%, var(--cc-brass-hi), var(--cc-brass) 45%, var(--cc-brass-lo) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 245, 210, .7), inset 0 -2px 3px rgba(60, 36, 8, .55), 0 3px 6px rgba(20, 10, 4, .55), 0 0 0 1.5px #3d2a0e;
+  transition: transform .08s ease-out, box-shadow .08s ease-out;
+}
+.cc-close svg { width: 22px; height: 22px; fill: none; stroke: #3b2a10; stroke-width: 2.6; stroke-linecap: round; filter: drop-shadow(0 1px 0 rgba(255, 238, 190, .6)); }
+.cc-close:active, .cc-button:active { transform: translateY(1px); }
+.cc-close:active { box-shadow: inset 0 2px 4px rgba(60, 36, 8, .6), 0 1px 2px rgba(20, 10, 4, .5), 0 0 0 1.5px #3d2a0e; }
+.cc-close:focus-visible, .cc-button:focus-visible, .cc-dialog a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px #2c2118, 0 0 0 6px #f4d27c, 0 3px 8px rgba(20, 10, 4, .5);
+}
+
+/* ---- The standalone page ------------------------------------------------------------------------------- */
+
+.cc-page {
+  position: relative; box-sizing: border-box; min-height: 100dvh; overflow: hidden;
+  display: grid; grid-template-rows: auto 1fr auto; justify-items: center;
+  /* The foot clears the roofline so the closing line never sits on the rooftops. */
+  padding: 18px 16px 112px;
+  color: #f2e4c4;
+  background:
+    radial-gradient(70% 55% at 50% 100%, rgba(255, 168, 92, .38), rgba(255, 168, 92, 0) 70%),
+    linear-gradient(180deg, #221b33 0%, #3d2a45 34%, #7a4549 64%, #c06f4c 88%, #d98a55 100%);
+}
+[data-light='night'].cc-page { background: radial-gradient(70% 55% at 50% 100%, rgba(255, 150, 70, .26), rgba(255, 150, 70, 0) 70%), linear-gradient(180deg, #0f1022 0%, #1d1a33 50%, #3a2a3c 100%); }
+[data-light='day'].cc-page { background: linear-gradient(180deg, #7fa6c9 0%, #b9cbd6 60%, #e8d9b8 100%); color: #2c2118; }
+.cc-page-head { z-index: 1; display: flex; gap: 14px; align-items: baseline; justify-content: center; flex-wrap: wrap; margin-bottom: 18px; text-align: center; }
+.cc-page-mark { font: 400 22px/1 var(--cc-caps); letter-spacing: .16em; color: #f6d995; text-shadow: 0 1px 0 rgba(0, 0, 0, .4); }
+.cc-page-kingdom { font: italic 400 17px/1.2 var(--cc-display); color: #f2e2c0; opacity: .9; }
+/* The SPA also loads the workspace's generic main layout. Keep this host a block so the inline-size
+   contained plaque stretches to the page track instead of shrinking inside a centred flex column. */
+.cc-page-main {
+  z-index: 1; display: block; width: min(900px, 100%); min-height: 0; align-self: center;
+  margin: 0; padding: 0; text-align: start;
+}
+.cc-page-foot { z-index: 1; margin-top: 22px; font: italic 400 15px/1.4 var(--cc-text); color: #f4e3c3; opacity: .78; text-align: center; max-width: 34em; }
+[data-light='day'] .cc-page-mark { color: #5a3a12; text-shadow: 0 1px 0 rgba(255, 246, 222, .6); }
+[data-light='day'] .cc-page-kingdom, [data-light='day'] .cc-page-foot { color: #3a2a1c; opacity: .88; }
+/* By day the roofs stand back in the haze and their windows are dark. */
+[data-light='day'] .cc-page-roofs { opacity: .32; filter: grayscale(1) brightness(1.4); }
+/* A row of rooftops at the foot of the page, with a few lit windows: the kingdom behind the card. */
+.cc-page-roofs {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 96px; z-index: 0; pointer-events: none; opacity: .9;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='466' height='120' viewBox='0 0 466 120'%3E%3Cpath fill='%23170f16' d='M0 120V78l18-14 18 14v-8h10V58l26-22 26 22v20h8V66l14-10 14 10v12h10V48l6-6 6 6v10l22-18 22 18v20h12V70l16-12 16 12v8h10V62l24-20 24 20v16h8V54l12-14 12 14v24h10V68l18-14 18 14v10h12V60l20-16 20 16v18h14V72l10-8 10 8v48z'/%3E%3Cg fill='%23ffbf66'%3E%3Crect x='62' y='66' width='5' height='6'/%3E%3Crect x='76' y='66' width='5' height='6' opacity='.7'/%3E%3Crect x='164' y='64' width='5' height='7'/%3E%3Crect x='252' y='60' width='5' height='7' opacity='.8'/%3E%3Crect x='300' y='62' width='4' height='6'/%3E%3Crect x='420' y='70' width='5' height='6' opacity='.85'/%3E%3C/g%3E%3C/svg%3E") bottom left / 372.8px 96px repeat-x;
+}
+
+/* ---- The plaque ---------------------------------------------------------------------------------------- */
+
+.cc-plaque {
+  container: cc / inline-size;
+  display: flex; min-width: 0;
+  color: var(--cc-ink); font-family: var(--cc-text);
+  animation: cc-rise .34s cubic-bezier(.2, .8, .2, 1) both;
+}
+.cc-wood {
+  position: relative; flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  padding: 34px 22px 22px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 220, 170, .16), rgba(255, 220, 170, 0) 18%, rgba(0, 0, 0, 0) 80%, rgba(0, 0, 0, .22)),
+    var(--cc-grain) 0 0 / 640px 240px,
+    var(--cc-figure) 0 0 / 900px 300px,
+    linear-gradient(100deg, var(--cc-wood-2), var(--cc-wood-3) 38%, var(--cc-wood-2) 62%, var(--cc-wood-1));
+  box-shadow:
+    inset 0 2px 0 rgba(255, 214, 160, .28), inset 0 -3px 0 rgba(0, 0, 0, .3),
+    inset 0 0 0 1px rgba(30, 14, 6, .7), inset 0 0 24px rgba(20, 8, 2, .45),
+    0 2px 0 #2a170c, 0 18px 40px rgba(10, 5, 2, .55), 0 4px 10px rgba(10, 5, 2, .4);
+}
+/* A carved bevel just inside the board's edge. */
+.cc-wood::before {
+  content: ''; position: absolute; inset: 9px; border-radius: 10px; pointer-events: none;
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, .35), inset 0 -1px 0 rgba(255, 220, 170, .18), 0 1px 0 rgba(255, 220, 170, .14);
+}
+.cc-corner { position: absolute; width: 50px; height: 50px; z-index: 2; pointer-events: none; filter: drop-shadow(0 2px 2px rgba(10, 4, 0, .5)); }
+.cc-corner--tl { top: 4px; left: 4px; }
+.cc-corner--tr { top: 4px; right: 4px; transform: scaleX(-1); }
+.cc-corner--bl { bottom: 4px; left: 4px; transform: scaleY(-1); }
+.cc-corner--br { bottom: 4px; right: 4px; transform: scale(-1, -1); }
+
+/* The brass nameplate screwed to the top rail. */
+.cc-plate {
+  position: absolute; top: 7px; left: 50%; z-index: 2; transform: translateX(-50%);
+  max-width: calc(100% - 140px); padding: 5px 30px 6px;
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .28), rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, .12)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .05) 0 1px, rgba(0, 0, 0, .03) 1px 3px),
+    linear-gradient(90deg, var(--cc-brass-lo), var(--cc-brass) 18%, var(--cc-brass-hi) 50%, var(--cc-brass) 82%, var(--cc-brass-lo));
+  box-shadow: inset 0 1px 0 rgba(255, 248, 220, .8), inset 0 -1px 0 rgba(70, 44, 10, .7), 0 0 0 1px #3d2a0e, 0 3px 5px rgba(10, 4, 0, .5);
+}
+.cc-plate::before, .cc-plate::after {
+  content: ''; position: absolute; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff1c4, #a77a30 60%, #4a300c);
+  box-shadow: 0 0 0 .8px #3d2a0e;
+}
+.cc-plate::before { left: 10px; }
+.cc-plate::after { right: 10px; }
+.cc-plate span {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 400 17px/1.25 var(--cc-caps); letter-spacing: .14em; color: #3a2709;
+  /* Engraved: a dark cut with light catching its lower lip. */
+  text-shadow: 0 1px 0 rgba(255, 244, 205, .75), 0 -1px 0 rgba(60, 36, 6, .35);
+}
+
+/* The parchment sheet, pinned in the board. */
+.cc-sheet { position: relative; flex: 1; min-height: 0; display: flex; }
+.cc-sheet-paper {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(90% 70% at 18% 8%, var(--cc-paper-glow), rgba(255, 200, 120, 0) 60%),
+    radial-gradient(140% 120% at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(110, 72, 30, .26) 100%),
+    var(--cc-fibre) 0 0 / 280px 280px,
+    var(--cc-mottle) 0 0 / 520px 520px,
+    var(--cc-paper);
+  -webkit-mask: var(--cc-deckle-top) top left / 160px 9px repeat-x, var(--cc-deckle-bottom) bottom left / 160px 9px repeat-x,
+    var(--cc-deckle-left) top left / 9px 160px repeat-y, var(--cc-deckle-right) top right / 9px 160px repeat-y,
+    linear-gradient(#000, #000) center / calc(100% - 16px) calc(100% - 16px) no-repeat;
+  mask: var(--cc-deckle-top) top left / 160px 9px repeat-x, var(--cc-deckle-bottom) bottom left / 160px 9px repeat-x,
+    var(--cc-deckle-left) top left / 9px 160px repeat-y, var(--cc-deckle-right) top right / 9px 160px repeat-y,
+    linear-gradient(#000, #000) center / calc(100% - 16px) calc(100% - 16px) no-repeat;
+}
+.cc-sheet::before {
+  /* The sheet's shadow on the wood, offset a little below, as paper lifts from a board. */
+  content: ''; position: absolute; inset: 3px 2px -3px; border-radius: 3px; pointer-events: none;
+  box-shadow: 0 4px 10px rgba(20, 8, 2, .55);
+}
+.cc-sheet-body {
+  position: relative; flex: 1; min-width: 0; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; scrollbar-color: rgba(122, 84, 32, .7) transparent;
+  padding: 30px 34px 30px;
+}
+.cc-sheet-body::-webkit-scrollbar { width: 8px; }
+.cc-sheet-body::-webkit-scrollbar-thumb { background: rgba(122, 84, 32, .6); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+
+/* ---- Hero: portrait, name and the plain facts ------------------------------------------------------------ */
+
+.cc-hero { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 34px; align-items: start; }
+.cc-portrait { margin: 0; padding: 7px; width: 264px; border-radius: 132px 132px 12px 12px / 120px 120px 12px 12px;
+  background:
+    linear-gradient(150deg, var(--cc-brass-hi), var(--cc-brass) 30%, var(--cc-brass-lo) 70%, #b78a3c 88%, var(--cc-brass-lo));
+  box-shadow: 0 0 0 1px #3d2a0e, 0 6px 12px rgba(40, 20, 6, .45), inset 0 1px 0 rgba(255, 248, 220, .7);
+}
+.cc-window {
+  position: relative; aspect-ratio: 25 / 31; overflow: hidden;
+  border-radius: 126px 126px 7px 7px / 114px 114px 7px 7px;
+  /* The hour behind them: dusk sky, a low warm sun and their street's roofline. */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='90' viewBox='0 0 250 90'%3E%3Cpath fill='%233a2232' fill-opacity='.85' d='M0 90V58l14-10 14 10v-6h8V40l20-16 20 16v14h6V46l12-8 12 8v10h8V34l16-14 16 14v22h10V48l14-10 14 10v8h8V40l18-14 18 14v50z'/%3E%3Cg fill='%23ffc06a'%3E%3Crect x='50' y='48' width='4' height='5'/%3E%3Crect x='124' y='44' width='4' height='5' opacity='.8'/%3E%3Crect x='196' y='50' width='4' height='5'/%3E%3C/g%3E%3C/svg%3E") bottom center / 100% auto no-repeat,
+    radial-gradient(60% 40% at 50% 74%, rgba(255, 196, 120, .85), rgba(255, 196, 120, 0) 70%),
+    linear-gradient(180deg, #3b3157 0%, #74506a 42%, #d08a63 78%, #efb07a 100%);
+  box-shadow: inset 0 0 0 2px rgba(40, 20, 6, .55), inset 0 6px 14px rgba(20, 10, 20, .45);
+}
+.cc-window img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 100%; }
+.cc-window-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 24px; text-align: center;
+  background: linear-gradient(180deg, rgba(239, 225, 191, .9), rgba(214, 190, 146, .92)); }
+.cc-window-empty span { font: italic 400 15px/1.35 var(--cc-text); color: var(--cc-ink-soft); max-width: 12em; }
+
+.cc-who { min-width: 0; padding-top: 6px; }
+.cc-simulated {
+  display: inline-flex; flex-direction: column; gap: 1px; margin: 0 0 14px; padding: 5px 12px 6px;
+  border: 2px solid #9c2a1e; border-radius: 4px; transform: rotate(-1.6deg);
+  color: #9c2a1e; background: rgba(156, 42, 30, .06);
+  box-shadow: inset 0 0 0 1px rgba(156, 42, 30, .35);
+}
+.cc-simulated b { font: 700 15px/1 var(--cc-text); letter-spacing: .2em; }
+.cc-simulated span { font: italic 400 13px/1.2 var(--cc-text); color: #7d2c20; }
+
+.cc-name {
+  margin: 0; font: 400 52px/1.04 var(--cc-display); letter-spacing: .005em;
+  overflow-wrap: anywhere; hyphens: manual; color: var(--cc-ink);
+}
+.cc-name[data-length='mid'] { font-size: 42px; }
+.cc-name[data-length='long'] { font-size: 34px; line-height: 1.1; }
+.cc-name[data-surface='parchment'] { color: var(--cc-name-colour); text-shadow: 0 1px 0 rgba(255, 246, 222, .55); }
+.cc-name[data-surface='plate'] {
+  display: inline-block; max-width: 100%; padding: .1em .38em .16em; border-radius: 6px;
+  color: var(--cc-name-colour); background: linear-gradient(180deg, #33261c, #22180f);
+  box-shadow: inset 0 1px 0 rgba(255, 230, 190, .12), 0 0 0 1.5px #8e6a2c, 0 0 0 3px #3d2a0e, 0 3px 6px rgba(40, 20, 6, .35);
+}
+.cc-swatch { display: inline-block; width: .42em; height: .42em; margin: 0 .3em .12em 0; border-radius: 50%; vertical-align: middle; box-shadow: 0 0 0 1.5px var(--cc-ink); }
+.cc-login { margin: 6px 0 0; font: italic 400 17px/1.3 var(--cc-text); color: var(--cc-ink-soft); overflow-wrap: anywhere; }
+.cc-standing { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 14px 0 0; font: 400 19px/1.3 var(--cc-caps); letter-spacing: .08em; color: var(--cc-ink-soft); }
+.cc-standing-mark { width: 22px; height: 22px; margin-right: -6px; }
+.cc-number { position: relative; }
+.cc-number::before { content: ''; position: absolute; left: -9px; top: 50%; width: 4px; height: 4px; margin-top: -2px; transform: rotate(45deg); background: var(--cc-ink-faint); }
+.cc-number b { font: 400 21px/1 var(--cc-display); letter-spacing: .02em; color: var(--cc-ink); font-variant-numeric: lining-nums; }
+.cc-flourish { display: block; width: min(260px, 100%); height: 18px; margin: 18px 0 14px; }
+.cc-flourish path { fill: none; stroke: var(--cc-ink-faint); stroke-width: 1.3; stroke-linecap: round; }
+
+.cc-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.cc-fact { display: grid; grid-template-columns: 30px minmax(0, 1fr); column-gap: 12px; align-items: baseline; }
+.cc-fact .cc-mark { grid-row: span 3; align-self: start; width: 28px; height: 28px; margin-top: 1px; }
+.cc-fact-label { font: 400 15px/1.2 var(--cc-caps); letter-spacing: .1em; color: var(--cc-ink-faint); }
+.cc-fact-value { font: 400 27px/1.18 var(--cc-display); color: var(--cc-ink); font-variant-numeric: lining-nums; overflow-wrap: anywhere; }
+.cc-fact-value time { white-space: nowrap; }
+.cc-fact-value--unknown, .cc-fact-value--quiet { font-style: italic; font-size: 22px; color: var(--cc-ink-soft); }
+.cc-fact-note { font: italic 400 15px/1.3 var(--cc-text); color: var(--cc-ink-soft); }
+.cc-street { color: var(--cc-ink-soft); }
+/* A street name wraps as a whole, never “Old / Row”. */
+.cc-street bdi { display: inline-block; max-width: 100%; }
+.cc-mark { fill: none; stroke: var(--cc-ink-soft); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+.cc-seal-slot { position: absolute; right: -6px; bottom: -8px; pointer-events: none; }
+/* The seal's corner belongs to it: facts wrap before they would run under the wax. */
+.cc-facts { padding-right: 88px; }
+.cc-seal { display: block; transform: rotate(-9deg); animation: cc-stamp .42s .2s cubic-bezier(.3, 1.4, .5, 1) both; }
+.cc-crest { display: block; }
+
+/* ---- States -------------------------------------------------------------------------------------------- */
+
+.cc-state { display: grid; justify-items: center; gap: 10px; padding: 40px 12px 36px; text-align: center; min-height: 280px; align-content: center; }
+.cc-state .cc-mark { width: 44px; height: 44px; stroke-width: 1.4; }
+.cc-state-title { margin: 4px 0 0; font: 400 32px/1.15 var(--cc-display); color: var(--cc-ink); }
+.cc-state-text { margin: 0; max-width: 26em; font: 400 18px/1.45 var(--cc-text); color: var(--cc-ink-soft); }
+.cc-mark--writing path { stroke-dasharray: 60; animation: cc-write 2.4s ease-in-out infinite; }
+.cc-button {
+  margin-top: 10px; min-height: 44px; padding: 0 22px; border: 0; border-radius: 7px; cursor: pointer;
+  font: 400 18px/1 var(--cc-caps); letter-spacing: .08em; color: #f6e7c4;
+  background:
+    var(--cc-grain) 0 0 / 640px 240px,
+    linear-gradient(180deg, var(--cc-wood-3), var(--cc-wood-1));
+  box-shadow: inset 0 1px 0 rgba(255, 220, 170, .3), inset 0 -2px 0 rgba(0, 0, 0, .35), 0 0 0 1.5px #c99a45, 0 0 0 3px #3d2a0e, 0 3px 6px rgba(20, 10, 4, .4);
+  transition: transform .08s ease-out;
+}
+
+/* ---- Narrow: a phone held upright, or a small dock ------------------------------------------------------ */
+
+@container cc (max-width: 640px) {
+  .cc-sheet-body { padding: 26px 20px 30px; }
+  .cc-hero { grid-template-columns: minmax(0, 1fr); gap: 20px; justify-items: center; }
+  .cc-portrait { width: min(212px, 72%); }
+  .cc-who { justify-self: stretch; display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 0; }
+  .cc-simulated { margin-bottom: 12px; align-items: center; }
+  .cc-name { font-size: 40px; }
+  .cc-name[data-length='mid'] { font-size: 33px; }
+  .cc-name[data-length='long'] { font-size: 27px; }
+  .cc-standing { justify-content: center; font-size: 17px; }
+  .cc-number b { font-size: 19px; }
+  .cc-flourish { margin: 14px auto 12px; }
+  .cc-facts { justify-self: stretch; text-align: left; gap: 12px; width: 100%; }
+  .cc-fact-value { font-size: 24px; }
+  .cc-fact-value--unknown, .cc-fact-value--quiet { font-size: 20px; }
+  .cc-facts { padding-right: 0; }
+  /* Upright, the seal closes the sheet below the facts instead of sitting on them. */
+  .cc-seal-slot { position: static; justify-self: end; margin: -6px -4px -10px 0; }
+  .cc-seal { width: 64px !important; height: 64px !important; }
+  .cc-plate { max-width: calc(100% - 110px); padding: 4px 24px 5px; }
+  .cc-plate span { font-size: 15px; }
+}
+@media (max-width: 480px) {
+  .cc-wood { padding: 30px 12px 14px; border-radius: 13px; }
+  .cc-corner { width: 40px; height: 40px; }
+  .cc-close { top: -8px; right: -4px; }
+  .cc-page { padding: 14px 10px 100px; }
+}
+
+/* ---- Motion -------------------------------------------------------------------------------------------- */
+
+@keyframes cc-fade { from { opacity: 0; } }
+@keyframes cc-rise { from { opacity: 0; transform: translateY(14px) scale(.985); } }
+@keyframes cc-stamp { 0% { opacity: 0; transform: rotate(-16deg) scale(1.45); } 70% { opacity: 1; transform: rotate(-8deg) scale(.95); } 100% { transform: rotate(-9deg) scale(1); } }
+@keyframes cc-write { 0% { stroke-dashoffset: 60; } 55%, 100% { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .cc-scrim, .cc-plaque, .cc-seal { animation: cc-fade .12s linear both; }
+  .cc-mark--writing path { animation: none; stroke-dasharray: none; }
+  .cc-close, .cc-button { transition: none; }
+}

@@ -203,7 +203,9 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       const incoming = new Map(frame.windows.map(window => [window.slot, window]));
       for (const [slot, state] of states) {
         const window = incoming.get(slot);
-        const present = Boolean(frame.streamLive && frame.connection === 'fresh' && window?.present);
+        // A witnessed chat act may light a home while its broadcast rests.
+        // The castle's beacon follows stream state separately.
+        const present = Boolean(frame.connection !== 'stale' && window?.present);
         const target = present ? 1 : 0;
         // A recovered snapshot may describe a transition already in progress or finished.
         const age = window ? Math.min(1, Math.max(0, (frame.asOf - window.since) / 700)) : 1;

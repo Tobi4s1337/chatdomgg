@@ -6,3 +6,7 @@ LANE COMPLETE
 
 2026-10-31 founder efficiency decision: PARK after the current task: finish and commit that task, then start no further task. Reviewed work remains eligible for integration. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
 follow-up: BT04 Review rerun of the focused capture did not finish under the local dev server; worker recorded a passing tour. Vite reported a dependency scan JSX parser error; check the capture with the normal preview build.
+
+integration: accepted committed BT03 c4c8bd6 through candidate merge a931084. BT03 is accepted; the producer retains apps/web/src/build-tools/index.tsx and build-tools.css until its already-written BT04 task is committed and accepted. First-look presentation transfer follows that acceptance; preserve controller, keyboard and thumb behavior. Uncommitted BT04 is not included. — 2026-10-30
+
+2026-10-31 founder efficiency decision: PARK after the current task: finish and commit that task, then start no further task. Reviewed work remains eligible for integration. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.

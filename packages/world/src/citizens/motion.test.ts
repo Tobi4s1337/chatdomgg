@@ -92,7 +92,7 @@ it('walks the actual 240-home town, arrives at owned windows, and seeks or leave
   expect(motion.sample(start + 45_000)).toEqual([]);
   motion.applyFrame({ ...frame, sequence: 3 }); // Backward replay reconstructs the same walk.
   expect(motion.sample(start + 6_000)).toEqual(halfway);
-  motion.applyFrame({ ...departed, sequence: 4, connection: 'stale' });
+  motion.applyFrame({ ...departed, sequence: 4, streamLive: false, connection: 'stale' });
   expect(motion.sample(start + 7_000)).toEqual([]);
   motion.clear(); expect(motion.sample(start + 6_000)).toEqual([]);
 }, 30_000);

@@ -9,7 +9,7 @@ export interface StreetNode {
   kind: 'junction' | 'market' | 'court' | 'frontage' | 'castle-gate' | 'frontier';
 }
 export interface StreetEdge {
-  id: string; from: string; to: string; kind: 'main' | 'lane' | 'approach'; name: string;
+  id: string; from: string; to: string; kind: 'main' | 'lane' | 'approach' | 'trail'; name: string;
   points: readonly Vec3[]; width: number; verge: number; quarterYear?: number;
 }
 export interface PublicSquare { id: string; boundary: readonly XZ[]; elevation: number; nodeId: string }
@@ -32,12 +32,15 @@ export interface CastlePlan {
   centre: Vec3; bounds: BoundsXZ; modules: readonly CastleModulePlacement[];
   court: PublicSquare; gateNodeId: string; beaconModuleId: string;
 }
-export interface LandformPlan {
-  version: 1; seed: number;
+export interface LandformBase {
+  seed: number;
   ridge: { origin: XZ; bearing: number; length: number; width: number; height: number };
   castleRise: { centre: XZ; radius: number; height: number };
   lake: { x: number; z: number; radiusX: number; radiusZ: number; level: number };
 }
+export interface LegacyLandformPlan extends LandformBase { version: 1 }
+/** Version 2 is consumed only after kingdom-land supplies its sampler and grading dispatch. */
+export type LandformPlan = LegacyLandformPlan | import('../kingdom-land/types').KingdomLandform;
 export interface SettlementPlan {
   version: 2; revision: string; config: KingdomConfig; landform: LandformPlan;
   homes: readonly SettlementHome[]; reservations: readonly PlotReservation[];
@@ -46,6 +49,6 @@ export interface SettlementPlan {
   castle: CastlePlan; bounds: BoundsXZ; lake: LandformPlan['lake'];
 }
 export interface PublicGroundSample {
-  id: string; kind: 'main' | 'lane' | 'approach' | 'market' | 'court' | 'forecourt';
+  id: string; kind: 'main' | 'lane' | 'approach' | 'trail' | 'market' | 'court' | 'forecourt';
   height: number; pavingDistance: number; reservedDistance: number;
 }

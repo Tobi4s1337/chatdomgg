@@ -1,7 +1,9 @@
 // The real panel. Today no kingdom service answers the panel: there is no verified
-// viewer session, no picture feed and no presence endpoint. So this adapter shows
-// exactly that, and never borrows the fixture. It never marks a window lit, never
-// sends a world command and never treats a Twitch ID as a Chatdom person.
+// viewer session, no picture feed, no presence endpoint, no crowd-act endpoint and no
+// service that could verify a Bits receipt. So this adapter shows exactly that, and
+// never borrows the fixture. It never marks a window lit, never sends a world command,
+// never offers the Bits shelf (whatever Twitch's Bits flag says, nothing could deliver
+// a product) and never treats a Twitch ID as a Chatdom person.
 import type { HelperBridge, HelperStatus } from '../helper';
 import type { Connection, Light, PanelAdapter, PanelSnapshot } from '../model';
 
@@ -41,6 +43,10 @@ function snapshotFor(status: HelperStatus, patient: boolean): PanelSnapshot {
     tonight: { kind: 'unavailable', reason: 'Tonight’s moments are not reaching the panel yet.' },
     home: { kind: 'unknown', reason: 'Your home card is not reaching the panel yet.' },
     tavern: { kind: 'unavailable', reason: 'The tavern is not reaching the panel yet.' },
+    forge: { kind: 'unavailable', reason: 'The forge is not reaching the panel yet.' },
+    act: null,
+    shelf: { kind: 'hidden' },
+    entry: { kind: 'none' },
   };
 }
 
@@ -56,6 +62,9 @@ export function createProductionAdapter(helper: HelperBridge): PanelAdapter {
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     // No kingdom service exists to receive this. Nothing is sent and nothing changes.
     requestLight() {},
+    // No crowd-act or Bits delivery service exists: no act or shelf is ever offered, and a call does nothing.
+    requestAct() {},
+    requestProduct() {},
     dispose() { clearTimeout(timer); unsubscribe(); listeners.clear(); },
   };
 }
