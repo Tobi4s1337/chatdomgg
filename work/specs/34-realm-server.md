@@ -298,6 +298,13 @@ one successful direct SQL insert is not a substitute for a room/authority transa
 
 ## References
 
+- `work/references/walk-render-smoothing.md`: exact SDK 0.18.8 render accumulator and reconciliation;
+  all-field snap thresholds are not metre-only thresholds. Preserve replay fields and explicit placement cuts.
+- `work/references/walk-slab-support.md`: actual partial-box tops and sustained support after stepping;
+  compare compiled collision on authority and predictor before changing tolerances.
+- `work/references/walk-multiplayer-characters.md`: fixed body versus render pose and distance-driven gait;
+  the surveyed Defold/NJ examples do not replace our server-authoritative movement law.
+
 - `work/references/colyseus-realm.md`: pinned release behavior, input/ack consumption, shared-view identity,
   district-switch decoder caveat, rotated reconnect token timing and real per-socket prediction costs.
 - `work/specs/33-realm.md`: main's ownership, durable-before-public boundary and shared contracts.
@@ -315,6 +322,11 @@ experiences have shipped.
 
 ## Decisions
 
+- **2026-10-30 — Founded geometry producer split (spec 38).** `realm-server` retains allocation/adoption,
+  Postgres, auth, reconnect, limits, districts, load and recovery. `realm-server-world` owns only the missing
+  public scene/immutable asset producer, browser-safe collision compiler, founded provider and HomeFurnisher
+  in its disjoint spec 38 folders. Consume its actual exports when delivered; main/integrator owns bootstrap
+  composition. Do not independently implement a second geometry producer in allocation or walking.
 - **2026-10-30 — Frozen after main acceptance.** Shared declarations, reducer, reference room, typed ports and
   auth DTOs exist as recorded above. Main reports full `pnpm verify` green, real uWS with three SDK clients/reload
   and three-browser Playwright entry passing. This spec and PRD are frozen; team starts the lane once main

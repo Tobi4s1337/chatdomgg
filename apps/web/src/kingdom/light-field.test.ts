@@ -216,9 +216,12 @@ describe('authoritative worker light geometry', () => {
       expect(Math.max(...exterior)).toBe(15);
       expect(lit.visited).toBeGreaterThan(500);
       expect(lit.visited).toBeGreaterThanOrEqual(unprojected.visited);
-      // Emberfold and Bramblecross expose the integration regression: their
-      // real-air source sits in a conservatively occupied half-metre facade cell.
-      if (variant !== 2) expect(unprojected.visited).toBe(0);
+      // Glazed openings resolve exactly, so the real air before the glass is open and an open light wider than
+      // a half-metre cell passes the warmth into the room. Emberfold's mullion leaves two 0.375 m lights: closed.
+      const room = [1.25, 1.5].map(distance => sampleLightVolume(lit,
+        window.position.map((value, axis) => value - window.normal[axis]! * distance) as unknown as Vec3));
+      if (variant === 0) expect(Math.max(...room)).toBe(0);
+      else expect(Math.min(...room)).toBeGreaterThanOrEqual(10);
       expect(lit.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
       const removed = solver.solve({ ...request(3), emitters: [] });
       expect(removed.volume.visited).toBe(0);
@@ -237,7 +240,7 @@ describe('authoritative worker light geometry', () => {
     for (let quarter = 0; quarter < 4; quarter++) {
       const transformed = compileLightHouses([{ ...house(), blueprint: model, position: [10, 5, 20], yaw: quarter * Math.PI / 2 }])[0]!;
       expect([transformed.min, transformed.max]).toEqual(expected[quarter]);
-      expect(transformed.boxes[0]).toEqual({ min: expected[quarter]![0], max: expected[quarter]![1], solid: true });
+      expect(transformed.boxes[0]).toEqual({ min: expected[quarter]![0], max: expected[quarter]![1], solid: true, glass: false });
     }
     expect(() => compileLightHouses([{ ...house(), yaw: 0.1 }])).toThrow('cardinal');
   });

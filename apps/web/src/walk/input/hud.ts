@@ -34,7 +34,34 @@ const LOOK_TEXT: Record<LookMode, { key: string; title: string; note: string }> 
 /** Where the stick rests before a thumb lands: lower left, clear of the edges and of a short landscape screen. */
 export function restingStick(width: number, height: number): { x: number; y: number } {
   const margin = TOUCH.radius + TOUCH.edge;
-  return { x: Math.max(margin, Math.min(width * .2, width / 2)), y: height * (height < 500 ? .54 : .66) };
+  return { x: Math.max(margin, Math.min(width * .2, width / 2)), y: height * thumbLine(height) };
+}
+
+/** Both thumbs rest on one line: two thirds down a phone, a little higher on a short landscape screen. */
+const thumbLine = (height: number) => height < 500 ? .54 : .66;
+
+export interface ThumbSlot { readonly x: number; readonly y: number; readonly radius: number }
+
+/**
+ * The phone's thumb map in surface CSS px, the one place the walking controls and the interaction owner's
+ * touch action agree on. The left thumb owns the stick region; the right thumb has Jump on the thumb line and
+ * the interaction's action (E on a keyboard) directly above it, a comfortable reach up rather than across.
+ * Both buttons sit right of the stick region, so a thumb walking never lands on either.
+ */
+export const THUMB = {
+  /** Jump's distance from the right edge to its centre, and its radius (64 px button). */
+  jumpInset: 54,
+  jumpRadius: 32,
+  /** The action control's radius (at least the 44 px minimum touch target) and its gap above Jump. */
+  actionRadius: 30,
+  actionGap: 26,
+} as const;
+
+export function thumbSlots(width: number, height: number): { readonly stick: ThumbSlot; readonly jump: ThumbSlot; readonly action: ThumbSlot } {
+  const rest = restingStick(width, height);
+  const jump = { x: width - THUMB.jumpInset, y: height * thumbLine(height), radius: THUMB.jumpRadius };
+  const action = { x: jump.x, y: jump.y - THUMB.jumpRadius - THUMB.actionGap - THUMB.actionRadius, radius: THUMB.actionRadius };
+  return { stick: { ...rest, radius: TOUCH.radius }, jump, action };
 }
 
 export function createWalkHud(container: HTMLElement, onJump: () => void): WalkHud {
@@ -101,6 +128,7 @@ export function createWalkHud(container: HTMLElement, onJump: () => void): WalkH
         }
         shownLook = state.look;
       }
+      jump.style.top = `${thumbSlots(state.width, state.height).jump.y.toFixed(1)}px`;
       const active = state.stick;
       if (active) learn();
       const at = active ?? restingStick(state.width, state.height);

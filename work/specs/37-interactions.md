@@ -319,3 +319,16 @@ responsibilities consumed here. Their absence blocks the corresponding integrate
   including movement/reload and three Playwright browsers passed. Actual room lifecycle/bindRoom effects are
   the integration seam. Start after main commits the handoff and creates lane/interactions and its worktree;
   these checks establish the shared consumer boundary, not already-built interaction handlers or the final tour.
+- **2026-10-30 — IN01: a seated body stays on its approach.** `sit`/`tavern` place the authoritative feet on the
+  seat's authored approach (registry- and context-proved supported and clear) and stop walking; the pose on the
+  log/chair is presentation from the same anchor (`rest`, `facing`). The room never holds a body overlapping solid
+  wood, so stand, drop, revision adoption and recovery all start from a safe standing place. `forge` confirms reach
+  only (no lease, no fact). Local signatures are frozen in `apps/web/src/interactions/README.md`.
+- **2026-10-30 — IN02: one seat per person follows the newest window.** The actual room's `principal.sessionId` is
+  a fresh entry per window and doubles as the walker key, so a reload is a new session. `join`/`reconnect` resume
+  the person's one lease (same target and generation, new walker key) instead of seating a second body; owner
+  delivery goes only to the person's newest connected session, and self-state revisions come from one room-wide
+  counter so they never fall across windows. Request dedupe is per entry session (a reloaded page restarts its IDs).
+  Moderation/leave/writer loss abort requests still awaiting rights or host admission; a host closes a seat only by
+  exact generation (`endSeat`). Arrival order across different awaited latencies is not a queue: the synchronous
+  decision is serialized, and nothing about a person (subs, money, rank) enters it.
