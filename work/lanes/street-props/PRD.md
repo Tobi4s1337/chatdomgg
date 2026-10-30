@@ -16,7 +16,7 @@ or choose from Backlog without main. Keep ten required forms; replace weak desig
 
 ## Tasks
 
-- [ ] **SP01 — A garden fence and wall kit that really joins** · evidence: twelve blueprints + individual shots + join tests.
+- [x] **SP01 — A garden fence and wall kit that really joins** · evidence: twelve blueprints + individual shots + join tests.
   Build straight/corner/end fence and wall forms, each in Hearth and Tide: twelve blueprints, six shapes. Export
   the entry/factory and `JOIN_FIXTURES` data with documented join planes. Validate actual occupancy, compatible
   heights and grounded joins. Render individual pieces in the real bench and inspect their joins in occupancy tests. Prepare assembly
