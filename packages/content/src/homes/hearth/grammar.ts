@@ -171,7 +171,7 @@ export interface Opening { readonly u0: number; readonly u1: number; readonly y0
 /** Outer face of a wall: the plane the glass sits one cell behind. */
 export interface Face { readonly facing: Facing; readonly plane: number }
 
-function onFace(p: Plan, face: Face, u0: number, u1: number, y0: number, y1: number, n0: number, n1: number, material: number): void {
+export function onFace(p: Plan, face: Face, u0: number, u1: number, y0: number, y1: number, n0: number, n1: number, material: number): void {
   // n is measured outward from the outer wall face: negative values lie inside the wall.
   const out = face.facing === 'south' || face.facing === 'east' ? 1 : -1;
   const a = out > 0 ? face.plane + n0 : face.plane - n1, b = out > 0 ? face.plane + n1 : face.plane - n0;
@@ -206,9 +206,81 @@ export function window(p: Plan, id: string, face: Face, o: Opening, options: { m
  * Exposed timber framing on a plain wall: studs at a steady spacing and a mid rail. Run before openings; every
  * window and door carves its own reveal back through the frame.
  */
-export function studs(p: Plan, face: Face, u0: number, u1: number, y1: number, every: number): void {
-  for (let u = u0; u + 2 <= u1; u += every) onFace(p, face, u, u + 2, BASE, y1, 0, 1, KIT.trim);
-  onFace(p, face, u0, u1, 14, 16, 0, 1, KIT.trim);
+export function studs(p: Plan, face: Face, u0: number, u1: number, y1: number, every: number, y0 = BASE, rail: number | null = 14): void {
+  for (let u = u0; u + 2 <= u1; u += every) onFace(p, face, u, u + 2, y0, y1, 0, 1, KIT.trim);
+  if (rail !== null) onFace(p, face, u0, u1, rail, rail + 2, 0, 1, KIT.trim);
+}
+
+/**
+ * A jettied upper storey. `ground` is the lower storey (its wallTop is the jetty line, its plate the joist bed);
+ * `upper` contains it and oversails on every side where its outer face stands further out. The upper storey
+ * sits on a projecting bressummer with the joist ends showing beneath it. Hollow both storeys afterwards with
+ * `hollowJetty`, after every other wing's walls, so joins open up.
+ */
+export function jetty(p: Plan, ground: Wing, upper: Wing): void {
+  const at = ground.wallTop;
+  p.put(upper.x0, at, upper.z0, upper.x1, upper.wallTop, upper.z1, KIT.wall);
+  const plate = upper.wallTop - 2;
+  p.put(upper.x0 - 1, plate, upper.z0 - 1, upper.x1 + 1, upper.wallTop, upper.z1 + 1, KIT.trim);
+  for (const x of [upper.x0, upper.x1 - WALL]) for (const z of [upper.z0, upper.z1 - WALL]) {
+    const ox = x === upper.x0 ? -1 : 1, oz = z === upper.z0 ? -1 : 1;
+    p.put(Math.min(x, x + ox), at, z, Math.max(x + WALL, x + WALL + ox), plate, z + WALL, KIT.trim);
+    p.put(x, at, Math.min(z, z + oz), x + WALL, plate, Math.max(z + WALL, z + WALL + oz), KIT.trim);
+  }
+  const sides: Face[] = [];
+  if (upper.x0 < ground.x0) sides.push({ facing: 'west', plane: upper.x0 });
+  if (upper.x1 > ground.x1) sides.push({ facing: 'east', plane: upper.x1 });
+  if (upper.z0 < ground.z0) sides.push({ facing: 'north', plane: upper.z0 });
+  if (upper.z1 > ground.z1) sides.push({ facing: 'south', plane: upper.z1 });
+  for (const face of sides) {
+    const [u0, u1] = face.facing === 'west' || face.facing === 'east' ? [upper.z0, upper.z1] : [upper.x0, upper.x1];
+    // Bressummer: a deep moulded beam one cell proud of the upper wall, the full width of the jetty.
+    onFace(p, face, u0 - 1, u1 + 1, at, at + 2, 0, 1, KIT.trim);
+    // Joist ends, one every three cells, carry it over the plate of the storey below.
+    const back = face.facing === 'west' ? ground.x0 - upper.x0 : face.facing === 'east' ? upper.x1 - ground.x1 : face.facing === 'north' ? ground.z0 - upper.z0 : upper.z1 - ground.z1;
+    for (let u = u0 + 1; u + 1 <= u1 - 1; u += 3) onFace(p, face, u, u + 1, at - 2, at, -back, 1, KIT.trim);
+  }
+}
+
+/** Hollows a jettied pair: the ground storey to the jetty line, the oversailing storey above it. */
+export function hollowJetty(p: Plan, ground: Wing, upper: Wing): void {
+  hollow(p, ground);
+  p.carve(upper.x0 + WALL, ground.wallTop, upper.z0 + WALL, upper.x1 - WALL, upper.wallTop, upper.z1 - WALL);
+}
+
+/**
+ * Clears everything inside a wing's walls between its wall plate and the underside of its own roof, so a roof
+ * laid earlier by a neighbouring wing never runs on through this wing's room. Run before `roof(w)`.
+ */
+export function attic(p: Plan, w: Wing): void {
+  const { a, mid, courses } = span(w);
+  const [s0, s1] = w.ridge === 'z' ? [w.x0 + WALL, w.x1 - WALL] : [w.z0 + WALL, w.z1 - WALL];
+  const [l0, l1] = w.ridge === 'z' ? [w.z0 + WALL, w.z1 - WALL] : [w.x0 + WALL, w.x1 - WALL];
+  for (let i = 0; i < courses; i++) {
+    const under = roofTop(w, a + i * w.tread) - w.thickness;
+    const c0 = a + i * w.tread, c1 = Math.min(a + (i + 1) * w.tread, mid);
+    for (const [u0, u1] of [[Math.max(s0, c0), Math.min(s1, c1)], [Math.max(s0, 2 * mid - c1), Math.min(s1, 2 * mid - c0)]] as const) {
+      if (u0 < u1 && under > w.wallTop) along(p, w, u0, u1, w.wallTop, under, l0, l1, MAT.air);
+    }
+  }
+}
+
+/** A small gabled hood over a door, carried on two stepped timber brackets; its eaves start at `y`. */
+export function hood(p: Plan, face: Face, centre: number, y: number): void {
+  const a = centre - 9, b = centre + 9;
+  for (let i = 0; i < 9; i++) {
+    const top = y + i;
+    for (const [u0, u1] of [[a + i, a + i + 1], [b - i - 1, b - i]] as const) {
+      onFace(p, face, u0, u1, top - 2, top, -3, 3, KIT.roof);
+      onFace(p, face, u0, u1, top - 2, top + 1, 3, 4, KIT.trim);
+    }
+  }
+  onFace(p, face, centre - 1, centre + 1, y + 9, y + 10, -3, 4, KIT.roof);
+  for (const u of [a + 1, b - 3]) {
+    onFace(p, face, u, u + 2, y - 11, y, 0, 1, KIT.trim);
+    onFace(p, face, u, u + 2, y - 6, y, 1, 2, KIT.trim);
+    onFace(p, face, u, u + 2, y - 3, y, 2, 3, KIT.trim);
+  }
 }
 
 /** A planted timber trough hung below a sill, never in front of the glass. */
@@ -271,4 +343,36 @@ export function chimney(p: Plan, x0: number, x1: number, z0: number, z1: number,
   p.put(cx - 1, top + 3, cz1 - 3, cx + 2, top + 5, cz1, KIT.roof);
   p.carve(cx - 1, top + 3, cz0 + 1, cx, top + 6, cz0 + 2);
   p.carve(cx, top + 3, cz1 - 2, cx + 1, top + 5, cz1 - 1);
+}
+
+/**
+ * Where a lower roof crosses under a higher one at right angles, fills between the higher roof's tiles and the
+ * lower roof's slab, so the lower slopes come down onto the higher ones in clean valleys instead of floating over
+ * them. Run after both roofs are laid.
+ */
+export function meet(p: Plan, lower: Wing, upper: Wing): void {
+  if (lower.ridge === upper.ridge) throw new Error(`${p.id}: only crossing roofs meet in valleys.`);
+  const L = span(lower), U = span(upper);
+  const [lv0, lv1] = lower.verges ?? [lower.verge, lower.verge];
+  const [uv0, uv1] = upper.verges ?? [upper.verge, upper.verge];
+  const lowerLength = lower.ridge === 'x' ? [lower.x0 - lv0, lower.x1 + lv1] : [lower.z0 - lv0, lower.z1 + lv1];
+  const upperLength = upper.ridge === 'x' ? [upper.x0 - uv0, upper.x1 + uv1] : [upper.z0 - uv0, upper.z1 + uv1];
+  const strips = (w: Wing, s: Span, lo: number, hi: number) => {
+    const out: [number, number, number][] = [];
+    for (let i = 0; i < s.courses; i++) {
+      const c0 = s.a + i * w.tread, c1 = Math.min(s.a + (i + 1) * w.tread, s.mid), top = roofTop(w, c0);
+      for (const [u0, u1] of [[c0, c1], [2 * s.mid - c1, 2 * s.mid - c0]] as const) {
+        if (Math.max(u0, lo) < Math.min(u1, hi)) out.push([Math.max(u0, lo), Math.min(u1, hi), top]);
+      }
+    }
+    return out;
+  };
+  for (const [c0, c1, high] of strips(lower, L, upperLength[0]!, upperLength[1]!)) {
+    for (const [d0, d1, low] of strips(upper, U, lowerLength[0]!, lowerLength[1]!)) {
+      const y1 = high - lower.thickness;
+      if (y1 <= low) continue;
+      if (upper.ridge === 'z') p.put(d0, low, c0, d1, y1, c1, KIT.roof);
+      else p.put(c0, low, d0, c1, y1, d1, KIT.roof);
+    }
+  }
 }
