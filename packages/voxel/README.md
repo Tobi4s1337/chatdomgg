@@ -156,3 +156,9 @@ contracts and inspect actual meshed silhouettes and nocturnal lighting. Main sho
 carves, sky invalidation across terrain and GPU upload budgets when their consumers start. The unresolved risks
 are large-asset bake latency/memory, terrain sky propagation beyond a single halo, conservative light-cell opening
 loss, camera-volume transitions, and actual WebGL2/OBS/mobile rendering cost.
+
+Render-only detail jobs may set `lodFactor: 2 | 4` on a blueprint request. The worker executes all ordered
+boxes first, then conservatively reduces final occupied cells; registered material mode wins with stable ID
+ties. Result identity stays the source asset while mesh/dependency stamps include the detail factor. Scale
+render instances by that factor. These meshes can expand up to 0.375 m, so retain original occupancy for
+lights/collision and original window anchors; do not substitute coarse geometry into domain state.

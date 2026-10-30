@@ -326,9 +326,9 @@ The new service must implement these exact executable scripts in `apps/surveyor/
 
 ```sh
 # Import the supplied source without source writes; output only to an owned runtime directory.
-SURVEYOR_BASE_URL=http://172.17.0.1:3541/atlas/api SURVEYOR_DB_PATH=/srv/chatdom-atlas/data/surveyor.db ATLAS_DATA_DIR=/tmp/chatdom-atlas-check pnpm --filter @chatdom/surveyor atlas:import
-ATLAS_DATA_DIR=/tmp/chatdom-atlas-check pnpm --filter @chatdom/surveyor atlas:check
-ATLAS_DATA_DIR=/tmp/chatdom-atlas-check pnpm --filter @chatdom/surveyor atlas:serve
+SURVEYOR_BASE_URL=http://172.17.0.1:3541/atlas/api SURVEYOR_DB_PATH="$SURVEYOR_DB_PATH" ATLAS_DATA_DIR=shots/atlas-data pnpm --filter @chatdom/surveyor atlas:import
+ATLAS_DATA_DIR=shots/atlas-data pnpm --filter @chatdom/surveyor atlas:check
+ATLAS_DATA_DIR=shots/atlas-data pnpm --filter @chatdom/surveyor atlas:serve
 # In another terminal, with that service running:
 pnpm --filter @chatdom/web build
 pnpm shots --area atlas
@@ -414,3 +414,48 @@ content-label collection expansion or production migration is inferred from a gr
   partial/gap coverage is separate, never rewritten bytes falsely showing offline or fresh data.
 
 - **2026-10-30 — Main freezes the first consumer boundary.** Independent Astra high review passed after explicit clocks/origin, partial-sweep rejection and raid observation-time integrity fixes; 22 contract tests pass. Identity/event and Atlas interchange v1 alone are frozen. Public publication still requires A01’s real exporter and canonical visibility gate. Later producer seams remain unfrozen until their consumer starts.
+
+- **2026-10-30 — A01 observation snapshot.** `@chatdom/surveyor` exports one read-only transaction into content-addressed
+  revisions (`obs-<asOf>-<hash>`), so an identical source gives the same revision and re-import is a no-op. Channel and
+  live state are cut at the last complete sweep; raid inventories are cut at the database read because raids arrive
+  between sweeps, and each keeps its own observation time. The candidate rule uses the source's form
+  (`viewer_min ≥ 25 · live_min`) on the exported minutes so export and check agree. Categories Twitch reports with an
+  empty name stay real categories with a null name. Revisions keep three by default to bound raw-content retention.
+
+- **2026-10-30 — A02 survey preview artifact.** Each imported revision gets one immutable preview under
+  `<dataDir>/previews/pv-<asOf>-<sha12(kind:algorithm:revision)>/`: `world.json` (regions, real language and category
+  names, coasts as delta-encoded fixed point ×20, decor, capitals and cities) plus `region-<i>.json` (towns and
+  villages, fetched only when the camera can mark them) and a hash-pinned `manifest.json`. It is verified before
+  publishing (hashes, schema, every holding on land, no overlaps), pruned with its revision, and served from
+  `/map-data/v1/preview` (pointer) and `/map-data/v1/preview/<id>/…` (immutable, ETag, gzip). Algorithm
+  `survey-preview-3` (see the A02 visibility decision below for what changed from `-2`): languages with ≥600 candidates are continents, the rest isles of “The Isles of Many Tongues”;
+  a ragged strait always parts two languages; inside a language, channels cluster by the category they streamed
+  most (small categories pool by game ID, so no invented community names); holdings are packed by sunflower placement and relaxation, land is a smooth union of
+  the clusters with seeded noise, coasts are marching squares + Douglas–Peucker. It is draft land: A03 owns the
+  stable geography.
+- **2026-10-30 — A02 drawing.** The land is a Canvas2D tile pyramid baked in workers on CPU-backed canvases
+  (`willReadFrequently`); GPU-backed worker canvases deferred all raster into the single GPU process and stalled the
+  map's WebGL uploads (28 s → 3.7 s to first complete view under SwiftShader). Coast detail is seeded by world
+  endpoints, so neighbouring tiles meet without seams. Holdings, shields and type are a Pixi overlay in screen space:
+  each tier is a survey mark until its distance (R7: cities at continent, towns at realm, villages at kingdom), then
+  a K. M. Alexander CC0 stamp; stamp + name + shield are placed together in stable priority order (tier, observed
+  average, channel ID), names try below/right/left/above, ≤300 shields. Decor bands keep clear of the tiers marked at
+  each band. Arms are seeded only from the channel ID (`heraldry/`, two tinctures, rule of tincture, no vermilion).
+  Map units are drawn as leagues on the scale bar. A tab keeps the preview it first drew (sessionStorage pin) and
+  offers a newer survey instead of redrawing under the cursor.
+- **2026-10-30 — A02 visibility gate and names projection (review fix).** One gate, `publicVisibility`
+  (`apps/surveyor/src/policy/visibility.ts`), decides what may be published about a channel: gone and gambling
+  channels get no land; withheld channels lose their mark and name. Gambling is the versioned list
+  `gambling-categories-1` of Twitch's real-money categories by game ID (Slots 498566, Virtual Casino 29452, Poker
+  488190; simulator games that mention casinos stay), applied when they hold ≥25 % of a channel's observed minutes
+  or its latest stream was in one; the preview records the policy version and the count kept off (590 of 28,881
+  candidates in the real 2026-10-30 04:02 survey). Raw logins and display names are no longer in the year-long
+  immutable files: those carry geometry keyed by channel ID only. Names live in the preview's `names.json` (pinned
+  by its manifest, pruned with its revision) and leave the service only through `/v1/preview/<id>/names`, a
+  `no-cache` projection that omits any name the source has not confirmed within 24 h (the card and map fall back to
+  the shield) and lists withheld IDs without reasons. Withholding is the service-owned
+  `moderation/withheld.json`; it reaches new maps at once and open maps at their five-minute names refresh, without
+  redrawing immutable land (the frozen edition's ledger and tombstones are A03). An unreadable list refuses all
+  names (fail closed). The browser also drops each name locally at its `freshUntil`. Every Atlas read has a bounded
+  timeout covering headers and body (pointer 10 s, names 15 s, chunk 30 s, world 45 s) and ends in the designed
+  failure state with its retry; the first view waits for land and names, or for names to fail on their own.

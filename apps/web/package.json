@@ -8,11 +8,19 @@
     "preview": "vite preview --host 0.0.0.0 --port 5190 --strictPort"
   },
   "dependencies": {
+    "@chatdom/content": "workspace:*",
+    "@chatdom/render": "workspace:*",
     "@chatdom/shared": "workspace:*",
+    "@chatdom/voxel": "workspace:*",
+    "@chatdom/world": "workspace:*",
+    "pixi.js": "8.22.0",
     "solid-js": "1.9.18",
-    "pixi.js": "8.22.0"
+    "three": "0.186.1",
+    "@chatdom/vox-import": "workspace:*",
+    "@chatdom/forge": "workspace:*"
   },
   "devDependencies": {
+    "@types/three": "0.186.0",
     "vite": "8.3.5",
     "vite-plugin-solid": "2.11.14"
   }

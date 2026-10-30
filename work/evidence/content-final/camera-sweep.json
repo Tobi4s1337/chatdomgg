@@ -1,0 +1,580 @@
+{
+  "sourcePath": "apps/web/src/kingdom/scene.ts",
+  "sourceHash": "358cb8ea77060bf2d114f844ad7db44c7974b10eeec1c2626d0db69650dc1fbb",
+  "sourceUnchanged": true,
+  "passed": true,
+  "failures": [],
+  "dt": 0.005,
+  "duration": 20,
+  "near": 0.15,
+  "farStep": 20,
+  "continuousPathBound": "The checked lift/pull form and endpoint heights make camera x/y/z coordinates monotone. Each continuous curve section stays in its endpoint AABB. Subtracting the maximum endpoint chord from minimum sampled solid distance bounds the continuous curve. Terrain uses maxima of all covering exact 1 m or distant cell vertices. Expanding the swept XZ box and lowering its Y by the largest near-plane radius encloses the whole continuous near plane.",
+  "method": "Exact ordered voxel occupancy at 0.125 m for clearance; exact ordered-box intersections for every sampled path segment; actual rendered horizon/detailed triangle sampler for terrain; nine near-plane samples per frame. Trees excluded.",
+  "limitations": [
+    "Two fixed seeds and two settlement sizes, at two viewport sizes; not a universal camera collision system.",
+    "Trees and other unlisted scene objects are excluded. Geometry checks do not establish visual framing, GPU performance or draw budgets.",
+    "Continuous proof is restricted to the checked monotone lift/pull form; changing that algorithm requires updating this harness."
+  ],
+  "records": [
+    {
+      "seed": "lanternmere",
+      "tier": "hamlet",
+      "viewport": "1440x900",
+      "firstHome": "home-hearth-emberfold-hut",
+      "firstSlot": 1024,
+      "objects": {
+        "homes": 24,
+        "props": 40,
+        "castles": 1
+      },
+      "evaluatedSamples": 4001,
+      "checkedPositions": 2901,
+      "homeEye": [
+        14.425,
+        11.225,
+        44.375
+      ],
+      "heroEye": [
+        100,
+        85,
+        150
+      ],
+      "heroTarget": [
+        0,
+        35,
+        0
+      ],
+      "heroFov": 50,
+      "firstCollision": null,
+      "collisionSegments": 0,
+      "minSolid": {
+        "distance": 1.875,
+        "time": 5.07,
+        "capped": false,
+        "id": "home-cottage-tide-0",
+        "slot": 1025,
+        "category": "home",
+        "point": [
+          14.425,
+          14.506664672281255,
+          44.375
+        ]
+      },
+      "minTerrain": {
+        "distance": 3.9749999999999996,
+        "time": 0,
+        "point": [
+          14.425,
+          11.225,
+          44.375
+        ]
+      },
+      "minNearTerrain": {
+        "distance": 3.8610465563172447,
+        "time": 0,
+        "point": [
+          14.265774348322658,
+          11.111046556317245,
+          44.25075110765923
+        ]
+      },
+      "maxSegment": 0.11705383122476724,
+      "maxNearRadius": 0.23189649140757218,
+      "conservativeSweptSolidClearance": 1.7579461687752327,
+      "continuousNearPlaneMargin": 1.5260496773676606,
+      "continuousTerrainClearance": 3.9749999999999996,
+      "continuousNearTerrainClearance": 3.7431035085924282,
+      "nearPointCollision": null
+    },
+    {
+      "seed": "lanternmere",
+      "tier": "hamlet",
+      "viewport": "390x844",
+      "firstHome": "home-hearth-emberfold-hut",
+      "firstSlot": 1024,
+      "objects": {
+        "homes": 24,
+        "props": 40,
+        "castles": 1
+      },
+      "evaluatedSamples": 4001,
+      "checkedPositions": 2901,
+      "homeEye": [
+        14.425,
+        11.225,
+        44.375
+      ],
+      "heroEye": [
+        65,
+        85,
+        150
+      ],
+      "heroTarget": [
+        0,
+        35,
+        0
+      ],
+      "heroFov": 58,
+      "firstCollision": null,
+      "collisionSegments": 0,
+      "minSolid": {
+        "distance": 1.875,
+        "time": 5.07,
+        "capped": false,
+        "id": "home-cottage-tide-0",
+        "slot": 1025,
+        "category": "home",
+        "point": [
+          14.425,
+          14.506664672281255,
+          44.375
+        ]
+      },
+      "minTerrain": {
+        "distance": 3.9749999999999996,
+        "time": 0,
+        "point": [
+          14.425,
+          11.225,
+          44.375
+        ]
+      },
+      "minNearTerrain": {
+        "distance": 3.8610465563172447,
+        "time": 0,
+        "point": [
+          14.372160502768505,
+          11.111046556317245,
+          44.243152096627384
+        ]
+      },
+      "maxSegment": 0.1038899625287549,
+      "maxNearRadius": 0.18210235972823488,
+      "conservativeSweptSolidClearance": 1.7711100374712452,
+      "continuousNearPlaneMargin": 1.5890076777430102,
+      "continuousTerrainClearance": 3.9749999999999996,
+      "continuousNearTerrainClearance": 3.7928976402717645,
+      "nearPointCollision": null
+    },
+    {
+      "seed": "lanternmere",
+      "tier": "town",
+      "viewport": "1440x900",
+      "firstHome": "home-hearth-emberfold-hut",
+      "firstSlot": 4096,
+      "objects": {
+        "homes": 240,
+        "props": 414,
+        "castles": 1
+      },
+      "evaluatedSamples": 4001,
+      "checkedPositions": 2901,
+      "homeEye": [
+        14.425,
+        5.975,
+        170.375
+      ],
+      "heroEye": [
+        210,
+        110,
+        310
+      ],
+      "heroTarget": [
+        0,
+        20,
+        50
+      ],
+      "heroFov": 48,
+      "firstCollision": null,
+      "collisionSegments": 0,
+      "minSolid": {
+        "distance": 1.875,
+        "time": 4.82,
+        "capped": false,
+        "id": "home-cottage-tide-0",
+        "slot": 4097,
+        "category": "home",
+        "point": [
+          14.425,
+          9.259533449945001,
+          170.375
+        ]
+      },
+      "minTerrain": {
+        "distance": 3.9749999999999996,
+        "time": 0,
+        "point": [
+          14.425,
+          5.975,
+          170.375
+        ]
+      },
+      "minNearTerrain": {
+        "distance": 3.8610465563172456,
+        "time": 0,
+        "point": [
+          14.265774348322658,
+          5.861046556317246,
+          170.25075110765923
+        ]
+      },
+      "maxSegment": 0.19992775277777336,
+      "maxNearRadius": 0.23189649140757218,
+      "conservativeSweptSolidClearance": 1.6750722472222266,
+      "continuousNearPlaneMargin": 1.4431757558146545,
+      "continuousTerrainClearance": 3.9749999999999996,
+      "continuousNearTerrainClearance": 3.7431035085924274,
+      "nearPointCollision": null
+    },
+    {
+      "seed": "lanternmere",
+      "tier": "town",
+      "viewport": "390x844",
+      "firstHome": "home-hearth-emberfold-hut",
+      "firstSlot": 4096,
+      "objects": {
+        "homes": 240,
+        "props": 414,
+        "castles": 1
+      },
+      "evaluatedSamples": 4001,
+      "checkedPositions": 2901,
+      "homeEye": [
+        14.425,
+        5.975,
+        170.375
+      ],
+      "heroEye": [
+        -75,
+        85,
+        285
+      ],
+      "heroTarget": [
+        0,
+        17,
+        60
+      ],
+      "heroFov": 57,
+      "firstCollision": null,
+      "collisionSegments": 0,
+      "minSolid": {
+        "distance": 1.875,
+        "time": 4.82,
+        "capped": false,
+        "id": "home-cottage-tide-0",
+        "slot": 4097,
+        "category": "home",
+        "point": [
+          14.425,
+          9.259533449945001,
+          170.375
+        ]
+      },
+      "minTerrain": {
+        "distance": 3.9749999999999996,
+        "time": 0,
+        "point": [
+          14.425,
+          5.975,
+          170.375
+        ]
+      },
+      "minNearTerrain": {
+        "distance": 3.8610465563172456,
+        "time": 0,
+        "point": [
+          14.372160502768505,
+          5.861046556317246,
+          170.24315209662737
+        ]
+      },
+      "maxSegment": 0.12378486035611778,
+      "maxNearRadius": 0.18210235972823488,
+      "conservativeSweptSolidClearance": 1.7512151396438822,
+      "continuousNearPlaneMargin": 1.5691127799156472,
+      "continuousTerrainClearance": 3.9749999999999996,
+      "continuousNearTerrainClearance": 3.7928976402717645,
+      "nearPointCollision": null
+    },
+    {
+      "seed": "willowmere",
+      "tier": "hamlet",
+      "viewport": "1440x900",
+      "firstHome": "home-cottage-grove-0",
+      "firstSlot": 1024,
+      "objects": {
+        "homes": 24,
+        "props": 36,
+        "castles": 1
+      },
+      "evaluatedSamples": 4001,
+      "checkedPositions": 2901,
+      "homeEye": [
+        13.675,
+        11.975,
+        44.5
+      ],
+      "heroEye": [
+        100,
+        85,
+        150
+      ],
+      "heroTarget": [
+        0,
+        35,
+        0
+      ],
+      "heroFov": 50,
+      "firstCollision": null,
+      "collisionSegments": 0,
+      "minSolid": {
+        "distance": 1.526843148460247,
+        "time": 0,
+        "capped": false,
+        "id": "home-hearth-emberfold-cottage",
+        "slot": 1025,
+        "category": "home",
+        "point": [
+          13.675,
+          11.975,
+          44.5
+        ]
+      },
+      "minTerrain": {
+        "distance": 4.725,
+        "time": 0,
+        "point": [
+          13.675,
+          11.975,
+          44.5
+        ]
+      },
+      "minNearTerrain": {
+        "distance": 4.611046556317245,
+        "time": 0,
+        "point": [
+          13.515774348322658,
+          11.861046556317245,
+          44.37575110765923
+        ]
+      },
+      "maxSegment": 0.11732084794460801,
+      "maxNearRadius": 0.23189649140757218,
+      "conservativeSweptSolidClearance": 1.409522300515639,
+      "continuousNearPlaneMargin": 1.1776258091080667,
+      "continuousTerrainClearance": 4.725,
+      "continuousNearTerrainClearance": 4.493103508592428,
+      "nearPointCollision": null
+    },
+    {
+      "seed": "willowmere",
+      "tier": "hamlet",
+      "viewport": "390x844",
+      "firstHome": "home-cottage-grove-0",
+      "firstSlot": 1024,
+      "objects": {
+        "homes": 24,
+        "props": 36,
+        "castles": 1
+      },
+      "evaluatedSamples": 4001,
+      "checkedPositions": 2901,
+      "homeEye": [
+        13.675,
+        11.975,
+        44.5
+      ],
+      "heroEye": [
+        65,
+        85,
+        150
+      ],
+      "heroTarget": [
+        0,
+        35,
+        0
+      ],
+      "heroFov": 58,
+      "firstCollision": null,
+      "collisionSegments": 0,
+      "minSolid": {
+        "distance": 1.526843148460247,
+        "time": 0,
+        "capped": false,
+        "id": "home-hearth-emberfold-cottage",
+        "slot": 1025,
+        "category": "home",
+        "point": [
+          13.675,
+          11.975,
+          44.5
+        ]
+      },
+      "minTerrain": {
+        "distance": 4.725,
+        "time": 0,
+        "point": [
+          13.675,
+          11.975,
+          44.5
+        ]
+      },
+      "minNearTerrain": {
+        "distance": 4.611046556317245,
+        "time": 0,
+        "point": [
+          13.622160502768505,
+          11.861046556317245,
+          44.368152096627384
+        ]
+      },
+      "maxSegment": 0.10403683407769362,
+      "maxNearRadius": 0.18210235972823488,
+      "conservativeSweptSolidClearance": 1.4228063143825533,
+      "continuousNearPlaneMargin": 1.2407039546543184,
+      "continuousTerrainClearance": 4.725,
+      "continuousNearTerrainClearance": 4.5428976402717645,
+      "nearPointCollision": null
+    },
+    {
+      "seed": "willowmere",
+      "tier": "town",
+      "viewport": "1440x900",
+      "firstHome": "home-cottage-grove-0",
+      "firstSlot": 4096,
+      "objects": {
+        "homes": 240,
+        "props": 402,
+        "castles": 1
+      },
+      "evaluatedSamples": 4001,
+      "checkedPositions": 2901,
+      "homeEye": [
+        13.675,
+        6.725,
+        170.5
+      ],
+      "heroEye": [
+        210,
+        110,
+        310
+      ],
+      "heroTarget": [
+        0,
+        20,
+        50
+      ],
+      "heroFov": 48,
+      "firstCollision": null,
+      "collisionSegments": 0,
+      "minSolid": {
+        "distance": 1.526843148460247,
+        "time": 0,
+        "capped": false,
+        "id": "home-hearth-emberfold-cottage",
+        "slot": 4097,
+        "category": "home",
+        "point": [
+          13.675,
+          6.725,
+          170.5
+        ]
+      },
+      "minTerrain": {
+        "distance": 4.725,
+        "time": 0,
+        "point": [
+          13.675,
+          6.725,
+          170.5
+        ]
+      },
+      "minNearTerrain": {
+        "distance": 4.611046556317246,
+        "time": 0,
+        "point": [
+          13.515774348322658,
+          6.611046556317246,
+          170.37575110765923
+        ]
+      },
+      "maxSegment": 0.20032276011452946,
+      "maxNearRadius": 0.23189649140757218,
+      "conservativeSweptSolidClearance": 1.3265203883457175,
+      "continuousNearPlaneMargin": 1.0946238969381454,
+      "continuousTerrainClearance": 4.725,
+      "continuousNearTerrainClearance": 4.493103508592427,
+      "nearPointCollision": null
+    },
+    {
+      "seed": "willowmere",
+      "tier": "town",
+      "viewport": "390x844",
+      "firstHome": "home-cottage-grove-0",
+      "firstSlot": 4096,
+      "objects": {
+        "homes": 240,
+        "props": 402,
+        "castles": 1
+      },
+      "evaluatedSamples": 4001,
+      "checkedPositions": 2901,
+      "homeEye": [
+        13.675,
+        6.725,
+        170.5
+      ],
+      "heroEye": [
+        -75,
+        85,
+        285
+      ],
+      "heroTarget": [
+        0,
+        17,
+        60
+      ],
+      "heroFov": 57,
+      "firstCollision": null,
+      "collisionSegments": 0,
+      "minSolid": {
+        "distance": 1.526843148460247,
+        "time": 0,
+        "capped": false,
+        "id": "home-hearth-emberfold-cottage",
+        "slot": 4097,
+        "category": "home",
+        "point": [
+          13.675,
+          6.725,
+          170.5
+        ]
+      },
+      "minTerrain": {
+        "distance": 4.725,
+        "time": 0,
+        "point": [
+          13.675,
+          6.725,
+          170.5
+        ]
+      },
+      "minNearTerrain": {
+        "distance": 4.611046556317246,
+        "time": 0,
+        "point": [
+          13.622160502768505,
+          6.611046556317246,
+          170.36815209662737
+        ]
+      },
+      "maxSegment": 0.12338429067299667,
+      "maxNearRadius": 0.18210235972823488,
+      "conservativeSweptSolidClearance": 1.4034588577872502,
+      "continuousNearPlaneMargin": 1.2213564980590152,
+      "continuousTerrainClearance": 4.725,
+      "continuousNearTerrainClearance": 4.5428976402717645,
+      "nearPointCollision": null
+    }
+  ]
+}

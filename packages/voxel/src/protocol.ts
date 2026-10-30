@@ -2,11 +2,14 @@ import type { VoxelAsset, VoxelBlueprint, VoxelMaterial, Vec3 } from '@chatdom/s
 import { prepareAssetChunks, rasterizeBlueprint, type PreparedAssetChunk } from './asset';
 import { buildLightVolume, type LightVolumeRequest, type LightVolume } from './light';
 import { meshVoxelChunk, type MeshChunkRequest, type VoxelChunkMesh } from './mesh';
+import { createRenderLodAsset, type RenderLodFactor } from './lod';
+
+export type { RenderLodFactor } from './lod';
 
 export type VoxelJob =
   | { readonly id: number; readonly kind: 'mesh'; readonly request: MeshChunkRequest }
   | { readonly id: number; readonly kind: 'asset'; readonly asset: VoxelAsset; readonly materials: readonly VoxelMaterial[]; readonly materialRevision: number }
-  | { readonly id: number; readonly kind: 'blueprint'; readonly blueprint: VoxelBlueprint; readonly revision: number; readonly materials: readonly VoxelMaterial[]; readonly materialRevision: number }
+  | { readonly id: number; readonly kind: 'blueprint'; readonly blueprint: VoxelBlueprint; readonly revision: number; readonly materials: readonly VoxelMaterial[]; readonly materialRevision: number; readonly lodFactor?: RenderLodFactor }
   | { readonly id: number; readonly kind: 'prepare'; readonly blueprint: VoxelBlueprint; readonly revision: number; readonly materials: readonly VoxelMaterial[]; readonly materialRevision: number }
   | { readonly id: number; readonly kind: 'light'; readonly request: LightVolumeRequest };
 
@@ -23,11 +26,15 @@ export type VoxelWorkerResponse = VoxelJobResult | VoxelJobFailure;
 export function executeVoxelJob(job: VoxelJob): VoxelJobResult {
   if (job.kind === 'mesh') return { id: job.id, kind: 'mesh', mesh: meshVoxelChunk(job.request) };
   if (job.kind === 'light') return { id: job.id, kind: 'light', volume: buildLightVolume(job.request) };
-  const asset = job.kind === 'asset' ? job.asset : rasterizeBlueprint(job.blueprint, job.revision);
+  let asset = job.kind === 'asset' ? job.asset : rasterizeBlueprint(job.blueprint, job.revision);
+  const assetId = asset.id;
+  // Release the full raster before sky/halo preparation; only the reduced volume is needed.
+  if (job.kind === 'blueprint' && job.lodFactor !== undefined) asset = createRenderLodAsset(asset, job.lodFactor, job.materials);
   const prepared = prepareAssetChunks(asset, job.materials, job.materialRevision);
   if (job.kind === 'prepare') return { id: job.id, kind: 'prepared', assetId: asset.id, revision: asset.revision, chunks: prepared };
   const chunks = prepared.map((request) => ({ coordinate: request.coordinate, mesh: meshVoxelChunk(request) }));
-  return { id: job.id, kind: 'asset', assetId: asset.id, revision: asset.revision, chunks };
+  // The response identifies the requested source; mesh stamps identify its rendered detail.
+  return { id: job.id, kind: 'asset', assetId, revision: asset.revision, chunks };
 }
 
 export function resultTransferables(result: VoxelJobResult): ArrayBuffer[] {

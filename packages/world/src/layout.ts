@@ -1,3 +1,5 @@
+import type { SettlementPlan } from './settlement/types';
+import { settlementTerrainHeight } from './settlement/terrain';
 import { HOME_DEPTH_METRES, type HomeTier, type Vec3 } from '@chatdom/shared';
 
 export type KingdomTier = 'hamlet' | 'town';
@@ -50,22 +52,76 @@ export function generateKingdom(config: KingdomConfig): KingdomLayout {
 }
 
 function smoothstep(a:number,b:number,x:number):number { const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t); }
-export function terrainHeight(layout: KingdomLayout,x:number,z:number):number {
-  const seed=seedHash(layout.config.seed)%1000;
-  const castleHill=12*Math.exp(-(x*x/2500+(z+46)*(z+46)/2800));
-  const base=1.2+castleHill+1.1*Math.sin(x*.033+seed)*Math.cos(z*.027)+.5*Math.sin((x+z)*.073);
-  let h=base;
-  // Smooth foundations are authored terrain, not floating houses or stepped dirt plinths.
-  for(const quarter of layout.quarters) {
-    const width=layout.config.tier==='hamlet'?44:124;
-    const weight=(1-smoothstep(width,width+15,Math.abs(x)))*(1-smoothstep(20,26,Math.abs(z-quarter.streetZ)));
-    h=h*(1-weight)+quarter.elevation*weight;
+interface GroundPad { minX:number;maxX:number;minZ:number;maxZ:number;height:number }
+interface TerrainPreparation { buckets:Map<string,GroundPad[]>;quarters:TenureQuarter[];seed:number;phase:number }
+const PAD_FEATHER=12, PAD_BUCKET=16;
+// Layouts are authored snapshots. Growth supplies a new snapshot with the same stable addresses;
+// a cache never owns or changes the home/lot data, and is released with its layout.
+const terrainPreparations=new WeakMap<KingdomLayout,TerrainPreparation>();
+function prepareTerrain(layout:KingdomLayout):TerrainPreparation {
+  const cached=terrainPreparations.get(layout);if(cached)return cached;
+  const buckets=new Map<string,GroundPad[]>(),quarters=[...layout.quarters].sort((a,b)=>a.streetZ-b.streetZ);
+  const pads:GroundPad[]=layout.homes.map(home=>{
+    const north=home.rotation===0,front=north?home.lot.maxZ:home.lot.minZ;
+    return {minX:home.lot.minX,maxX:home.lot.maxX,minZ:north?front-home.allowedDepth:front,
+      maxZ:north?front:front+home.allowedDepth,height:home.position[1]};
+  });
+  const roadEnd=layout.config.tier==='hamlet'?44:124;
+  // Paving and the authored street-edge props share a modest eight-metre-wide corridor.
+  for(const quarter of quarters)pads.push({minX:-roadEnd,maxX:roadEnd,minZ:quarter.streetZ-4,maxZ:quarter.streetZ+4,height:quarter.elevation});
+  pads.push({minX:layout.castle[0]-17,maxX:layout.castle[0]+17,
+    minZ:layout.castle[2]-18,maxZ:layout.castle[2]+20,height:layout.castle[1]});
+  for(const pad of pads)for(let z=Math.floor((pad.minZ-PAD_FEATHER)/PAD_BUCKET);z<=Math.floor((pad.maxZ+PAD_FEATHER)/PAD_BUCKET);z++)
+    for(let x=Math.floor((pad.minX-PAD_FEATHER)/PAD_BUCKET);x<=Math.floor((pad.maxX+PAD_FEATHER)/PAD_BUCKET);x++){
+      const key=`${x},${z}`,bucket=buckets.get(key);if(bucket)bucket.push(pad);else buckets.set(key,[pad]);
+    }
+  const hash=seedHash(layout.config.seed),prepared={buckets,quarters,seed:hash%1000,phase:(hash%6283)/1000};
+  terrainPreparations.set(layout,prepared);return prepared;
+}
+function settlementGrade(layout:KingdomLayout,quarters:readonly TenureQuarter[],z:number):number {
+  const first=quarters[0]!,last=quarters.at(-1)!,gate=layout.castle[2]+20;
+  if(z<=gate)return layout.castle[1];
+  if(z<first.streetZ-20)return layout.castle[1]+(first.elevation-layout.castle[1])*smoothstep(gate,first.streetZ-20,z);
+  if(z<=first.streetZ+4)return first.elevation;
+  for(let i=1;i<quarters.length;i++){
+    const previous=quarters[i-1]!,next=quarters[i]!;
+    if(z<next.streetZ-4)return previous.elevation+(next.elevation-previous.elevation)*smoothstep(previous.streetZ+4,next.streetZ-4,z);
+    if(z<=next.streetZ+4)return next.elevation;
   }
-  const castleWeight=(1-smoothstep(19,30,Math.abs(x)))*(1-smoothstep(20,30,Math.abs(z+46)));
-  h=h*(1-castleWeight)+13*castleWeight;
-  const lake=layout.lake,d=Math.sqrt(((x-lake.x)/lake.radiusX)**2+((z-lake.z)/lake.radiusZ)**2);
-  const shore=1-smoothstep(.83,1.25,d); h=h*(1-shore)-2.8*shore;
-  return h;
+  return last.elevation;
+}
+export function terrainHeight(layout: KingdomLayout | SettlementPlan,x:number,z:number):number {
+  if ('version' in layout && layout.version === 2) return settlementTerrainHeight(layout,x,z);
+  return legacyTerrainHeight(layout as KingdomLayout,x,z);
+}
+function legacyTerrainHeight(layout: KingdomLayout,x:number,z:number):number {
+  const {buckets,quarters,seed,phase}=prepareTerrain(layout);
+  let influence=0,weightedElevation=0;
+  for(const pad of buckets.get(`${Math.floor(x/PAD_BUCKET)},${Math.floor(z/PAD_BUCKET)}`)??[]){
+    const dx=Math.max(pad.minX-x,0,x-pad.maxX),dz=Math.max(pad.minZ-z,0,z-pad.maxZ);
+    if(dx===0&&dz===0)return pad.height;
+    const distance=Math.hypot(dx,dz);if(distance>=PAD_FEATHER)continue;
+    const weight=1-smoothstep(0,PAD_FEATHER,distance);
+    if(weight===1)return pad.height;
+    // Normalized odds retain exact footprint contact and blend overlapping rounded skirts.
+    const odds=weight/(1-weight);influence+=odds;weightedElevation+=odds*pad.height;
+  }
+  const grade=settlementGrade(layout,quarters,z),lastStreet=quarters.at(-1)!.streetZ;
+  const ridgeWidth=layout.config.tier==='hamlet'?62:150,centre=5*Math.sin(z*.021+phase);
+  const beyond=Math.max(0,-z-56)/50+Math.max(0,z-lastStreet-4)/58;
+  const ridge=Math.exp(-(((x-centre)/ridgeWidth)**2)-beyond*beyond);
+  let h=1.2+Math.max(0,grade-1.2)*ridge+1.1*Math.sin(x*.033+seed)*Math.cos(z*.027)+.5*Math.sin((x+z)*.073);
+  const lake=layout.lake,nx=(x-lake.x)/lake.radiusX,nz=(z-lake.z)/lake.radiusZ,angle=Math.atan2(nz,nx);
+  const shoreline=1+.12*Math.sin(angle*3+.35)+.055*Math.cos(angle*5-.4)+.035*Math.sin(angle*7+phase);
+  // Carve the bays before mandatory pads. The outer fade keeps the complete shoreline inside
+  // the bounded water plane, including seeds with a low natural bank beside a wide bay.
+  const shore=(1-smoothstep(.76,1.2,Math.hypot(nx,nz)/shoreline))*(1-smoothstep(1.15,1.28,Math.max(Math.abs(nx),Math.abs(nz))));
+  h=h*(1-shore)-2.8*shore;
+  h=(h+weightedElevation)/(1+influence);
+  // A gently graded central road connects the fixed street elevations; it is not a terrace.
+  const spine=(1-smoothstep(2.25,6,Math.abs(x-2*Math.sin(z*.03))))
+    *smoothstep(layout.castle[2]-26,layout.castle[2]-18,z)*(1-smoothstep(lastStreet+25,lastStreet+37,z));
+  return h+(grade-h)*spine;
 }
 
 /** Road centre lines are also consumed by future occupancy/navigation; the surface is terrain. */

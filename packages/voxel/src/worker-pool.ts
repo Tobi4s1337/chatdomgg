@@ -102,10 +102,27 @@ function matchesJob(result: VoxelJobResult, job: VoxelJob): boolean {
     }
     const assetId = job.kind === 'asset' ? job.asset.id : job.blueprint.id;
     const revision = job.kind === 'asset' ? job.asset.revision : job.revision;
-    return result.kind === 'asset' && result.assetId === assetId && result.revision === revision
-      && result.chunks.every(({ mesh }) => mesh.stamp.revision === revision
-        && mesh.stamp.materialRevision === job.materialRevision
-        && mesh.vertices instanceof Uint32Array && mesh.indices instanceof Uint32Array);
+    if (result.kind !== 'asset' || result.assetId !== assetId || result.revision !== revision) return false;
+    const factor = job.kind === 'blueprint' ? job.lodFactor ?? 1 : 1;
+    const meshId = factor === 1 ? assetId : `${assetId}:renderlod:${factor}`;
+    const size = job.kind === 'asset' ? job.asset.size : job.blueprint.size;
+    const counts = size.map(n => Math.ceil(n / (factor * 32)));
+    const seen = new Set<string>();
+    return result.chunks.every(({ coordinate, mesh }) => {
+      if (coordinate.length !== 3 || coordinate.some((n, axis) => !Number.isSafeInteger(n) || n < 0 || n >= counts[axis]!)) return false;
+      const key = `${meshId}:${coordinate.join(',')}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      const dependencies = [{ key: `${meshId}:full-sky`, revision }];
+      for (let dz = -1; dz <= 1; dz++) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0 && dz === 0) continue;
+        const neighbour = [coordinate[0] + dx, coordinate[1] + dy, coordinate[2] + dz];
+        dependencies.push({ key: `${meshId}:${neighbour.join(',')}`,
+          revision: neighbour.every((n, axis) => n >= 0 && n < counts[axis]!) ? revision : 0 });
+      }
+      return sameMeshStamp(mesh.stamp, { key, revision, materialRevision: job.materialRevision, dependencies })
+        && mesh.vertices instanceof Uint32Array && mesh.indices instanceof Uint32Array;
+    });
   } catch {
     return false;
   }

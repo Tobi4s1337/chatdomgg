@@ -265,6 +265,12 @@ lane is the first real presence producer on a frozen contract; it does not silen
 
 ## Decisions
 
+- **2026-10-30 — Explicit replay origin.** SSE transport and evidence origin are independent. The browser's
+  single adapter takes an explicit expected origin (`live` by default, `simulated` for Herald replay) and derives
+  its feed label from that choice. It rejects cross-origin frames while retaining all schema/realm/epoch/sequence/
+  freshness checks. The replay URL is `/?source=herald&presenceOrigin=simulated`, including the equivalent stream
+  route. This corrects main's initial live-only adapter without changing the public frame schema.
+
 - **2026-10-30 — Read-only first consumer.** Main authorizes real read integration for `tobi4s_`; no outbound Twitch
   action is part of this lane. Missing grants are a visible dependency, never simulated success.
 - **2026-10-30 — App-token conduit with outgoing shard.** Main chose one app-token conduit and one WebSocket shard
