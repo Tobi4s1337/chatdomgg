@@ -2,7 +2,7 @@ import { Room, ServerError, type Client } from '@colyseus/core';
 import { StateView } from '@colyseus/schema';
 import { KingdomIdSchema } from '@chatdom/shared';
 import { KingdomRoomState, WalkerSchema, WalkInputSchema, RealmJoinSchema, RealmIntentSchema, kingdomRoomId,
-  sanitizeWalkInput, type RealmPrincipal, type RealmReceipt } from '@chatdom/shared/realm';
+  sanitizeRealmWalkInput, type RealmPrincipal, type RealmReceipt } from '@chatdom/shared/realm';
 import { stepPlayer, bodyStuck, embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmRoomHandle, RealmRoomServices } from './ports';
 import { RealmSeats, RealmSeatRefusedError, REALM_SESSION_CHECK_MS } from './auth/seats';
@@ -21,7 +21,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     maxClients = LIMITS.maxClients;
     maxMessagesPerSecond = LIMITS.messagesPerSecond;
     patchRate = LIMITS.patchMs;
-    inputs = this.defineInput(WalkInputSchema, { bufferMaxSize: LIMITS.inputBuffer, sanitize: sanitizeWalkInput });
+    inputs = this.defineInput(WalkInputSchema, { bufferMaxSize: LIMITS.inputBuffer, sanitize: sanitizeRealmWalkInput });
     private handle!: RealmRoomHandle;
     private accepting = true;
     private recoveryRequests = new Map<string, number>();
@@ -67,6 +67,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
           const p = this.state.walkers.get(id);
           if (!this.accepting || !p || revision !== this.world.revision || !safePose(this.world, position)) return false;
           [p.x,p.y,p.z] = position; p.vx=0;p.vy=0;p.vz=0;p.grounded=true;
+          p.placement = (p.placement + 1) % 0x1_0000_0000;
           this.inputs.get(id).clear(); return true;
         },
         allowWalking: (id, allowed) => { this.walking.set(id,allowed); if(!allowed)this.inputs.get(id).clear(); },
@@ -78,7 +79,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
             void p;
           }
           this.recoveryRequests.clear();this.world=world;this.state.collisionRevision=world.revision;this.state.layoutRevision=layoutRevision;
-          for(const [id,p] of this.state.walkers) { [p.x,p.y,p.z]=positions.get(id)!;p.vx=0;p.vy=0;p.vz=0;p.collisionRevision=world.revision;this.inputs.get(id).clear(); }
+          for(const [id,p] of this.state.walkers) { [p.x,p.y,p.z]=positions.get(id)!;p.vx=0;p.vy=0;p.vz=0;p.grounded=true;p.collisionRevision=world.revision;p.placement=(p.placement+1)%0x1_0000_0000;this.inputs.get(id).clear(); }
           this.broadcast('revision',{layoutRevision,collisionRevision:world.revision});
         },
       }));
@@ -140,7 +141,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
           observer.inputDepth(queued.size);
           const input = queued.next();
           // Default skip policy: empty ticks don't create movement that the acknowledged input never ran.
-          if (input) stepPlayer(p, input, ctx.dt, this.world);
+          if (input && input.placement === p.placement) stepPlayer(p, input, ctx.dt, this.world);
           if (bodyStuck(p,this.world) && this.recoveryRequests.get(sid)!==this.world.revision) {
             this.recoveryRequests.set(sid,this.world.revision); this.inputs.get(sid).clear();
             try{this.handle.recoverWalker(sid,this.world.revision);}catch{connected.leave(4003,'The kingdom could not find a safe place. Reconnect to continue.');}

@@ -200,8 +200,35 @@ export class DurableKingdom implements RealmRoomHandle {
    */
   bootstrap(principal: RealmPrincipal): RealmBootstrap {
     void principal;
+    return this.publicCheckpoint();
+  }
+
+  /**
+   * Trusted in-process public read, including before the first walker joins. A founded-scene reader retains
+   * this kingdom through the existing registry, prepares its scene against this delivered prefix, then releases
+   * the hold. No principal, entry ticket or second writer is needed. This frozen view alone does not assert
+   * readiness: the reader must also check `current` and matching scene/layout/collision versions before serving.
+   */
+  publicCheckpoint(): RealmBootstrap {
     return { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, throughSequence: this.projection.sequence, throughCursor: this.projection.cursor,
       layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, current: this.projection.current() };
+  }
+
+  /**
+   * A cold founded-scene read is a trusted consumer of approved public views, even with no socket present.
+   * Drain their durable prefix before comparing it with prepared geometry; otherwise a recovered publication
+   * could wait for a join which itself needs this manifest. No historical ritual is replayed to a later join.
+   */
+  async preparePublicCheckpoint(): Promise<RealmBootstrap> {
+    if (!this.current) throw new RealmWriterFencedError(this.kingdomId);
+    const unsubscribe = this.subscribe(() => {});
+    try {
+      await this.dispatcher.kick();
+      if (!this.current) throw new RealmWriterFencedError(this.kingdomId);
+      // The dispatcher logs/retries storage failures. A swallowed read/ack failure isn't a ready manifest.
+      if (this.delivery.delivered !== this.delivery.committed) throw new RealmBusyError();
+      return this.publicCheckpoint();
+    } finally { unsubscribe(); }
   }
 
   bindRoom(effects: RealmRoomEffects): () => void {

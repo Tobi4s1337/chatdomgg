@@ -329,6 +329,17 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
   client calls the SDK's `reconciler.reset()` (reseed from the room's safe placement, void inputs sent before it,
   clear the latched jump) instead of replaying old inputs against replaced solids, and listens for the room's
   `revision` broadcast to fetch the world early (it also silences the SDK's unregistered-message warning).
-  `snap: 2` m (above sprint × patch, 1.4 m) draws a placement at once instead of gliding it through walls.
+  `snap: 2` m (above sprint × patch, 1.4 m) remains a fallback for large corrections. An explicit authority
+  placement token handles short relocations too, as specified below.
   The local yaw is drawn from the exact predicted byte, since smoothing a wrapping byte spun the citizen the long
   way. `predicted` (full `PlayerState`) and `predicting` are exposed for step easing and evidence.
+- **2026-10-30 — Relocation context belongs to the authority.** `WalkerSchema.placement` is a uint32 starting
+  at zero, incremented with unsigned wrap on every successful `placeWalker` and world adoption, including an
+  identical-coordinate placement. Failed placement changes nothing. `RealmWalkInput extends WalkInput` echoes
+  it only at the wire adapter; physics samples, `PlayerState`, `PLAYER_FIELDS` and `stepPlayer` stay unchanged.
+  The server consumes but ignores old-context input, including packets arriving after its buffer clear. The
+  client stamps decoded authority context after copying sampled controls and gates replay by it. Before SDK
+  ticking/sending, a changed placement/revision calls `reconciler.reset()` and clears pending jump; peers reattach
+  their existing SDK tracks to discard old interpolation rings. Never reset reliable input sequence or detach
+  self. Controller clears step easing and settles the camera at the new place without losing heading/zoom.
+  Ordinary corrections keep SDK smoothing. This is pose context, never another input sequence/acknowledgement.
