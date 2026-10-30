@@ -1,0 +1,2 @@
+
+2026-10-30 main look: fresh integrated town dusk at 390x844 still reads as an unlit grey castle beneath the beacon. In the castle light pass, make the great-hall front openings visibly warm and spill that warmth onto the entrance court; keep the beacon separate. Source: shots/kingdom/town-dusk@390x844.png.

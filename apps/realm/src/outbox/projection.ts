@@ -1,6 +1,19 @@
 import type { RealmPrivateState, RealmPublicMessage } from '@chatdom/shared/realm';
 import type { RealmOutboxRow } from '../persistence/postgres-repository';
 
+export type RealmPublicHome = Extract<RealmPublicMessage, { type: 'home' }>;
+export type RealmPublicPresence = Extract<RealmPublicMessage, { type: 'presence' }>;
+
+/** The delivered public prefix a projection starts from: what rows at or below `cursor` left standing. */
+export interface PublicPrefix {
+  readonly homes: Iterable<RealmPublicHome>;
+  readonly presence: RealmPublicPresence | null;
+  readonly cursor: number;
+  readonly sequence: number;
+  /** Original allocated bases, used only when a first Forge row publishes a home. */
+  readonly bases?: Iterable<RealmPublicHome>;
+}
+
 /**
  * The public face of a kingdom as of its last committed outbox row: which homes have been published and the newest
  * presence frame. Each delivered row advances this prefix synchronously. A fresh join sees the homes and attachments at
@@ -9,23 +22,18 @@ import type { RealmOutboxRow } from '../persistence/postgres-repository';
 export class PublicProjection {
   private readonly bases = new Map<string, Extract<RealmPublicMessage, { type: 'home' }>>();
   private readonly homes = new Map<string, Extract<RealmPublicMessage, { type: 'home' }>>();
-  sequence: number;
   private presence: Extract<RealmPublicMessage, { type: 'presence' }> | null;
   /** The newest outbox row folded in. */
   cursor: number;
+  /** The newest domain sequence folded in (`throughSequence`). */
+  sequence: number;
 
-  constructor(initial: { readonly plots: Iterable<string>; readonly cursor: number; readonly presence: RealmPublicMessage | null; readonly state: RealmPrivateState }) {
-    this.sequence = initial.state.sequence;
-    this.rememberHomes(initial.state);
-    for (const plot of initial.plots) {
-      const home = initial.state.homes[plot], base = this.bases.get(plot);
-      if (home && base) {
-        const restored = { ...base, attachments: Object.values(home.attachments).flatMap(id => initial.state.attachments[id] ? [initial.state.attachments[id].attachment] : []) };
-        this.bases.set(plot, restored); this.homes.set(plot, restored);
-      }
-    }
+  constructor(initial: PublicPrefix) {
+    this.sequence = initial.sequence;
+    for (const base of initial.bases ?? []) this.bases.set(base.plotId, base);
+    for (const home of initial.homes) { this.bases.set(home.plotId, home); this.homes.set(home.plotId, home); }
     this.cursor = initial.cursor;
-    this.presence = initial.presence?.type === 'presence' ? initial.presence : null;
+    this.presence = initial.presence;
   }
 
   /** Remember an allocated home's base once, before publication. Later private builds never overwrite that prefix. */

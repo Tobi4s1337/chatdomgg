@@ -214,6 +214,13 @@ counter or a green isolated bench.
 
 ## References
 
+- `work/references/walk-render-smoothing.md`: exact SDK 0.18.8 render accumulator and reconciliation;
+  all-field snap thresholds are not metre-only thresholds. Preserve replay fields and explicit placement cuts.
+- `work/references/walk-slab-support.md`: actual partial-box tops and sustained support after stepping;
+  compare compiled collision on authority and predictor before changing tolerances.
+- `work/references/walk-multiplayer-characters.md`: fixed body versus render pose and distance-driven gait;
+  the surveyed Defold/NJ examples do not replace our server-authoritative movement law.
+
 - `work/references/walking-voxel-worlds.md`: Voxelize's bounded sweep/slide and supported step trials; HYTOPIA's
   boom/film-offset lessons with stronger near-plane safety; time-based presentation easing and pointer-lock
   warp handling. Its prototype shoulder offset was explicitly not sufficient framing proof.
@@ -233,6 +240,15 @@ editor rig, director policy, interior cutaway art, renderer-wide performance rep
 These ownership boundaries do not excuse a broken walking/camera experience on the places supplied to this lane.
 
 ## Decisions
+
+- **2026-10-30 — Founder’s 360 Hz review governs WC07/08.** Fix visible walking jitter, busy gait,
+  repeated/denied pointer capture and unstable half-slab support before declaring walking ready. Read the
+  three Terra reference notes first. Current camera already reads Predict’s rendered pose: inspect all-field
+  `snap: 2` and exact-height step easing as hypotheses, not established causes. Ordinary corrections blend;
+  explicit placements/revisions cut. Keep one simulation law, one SDK input/replay protocol, and one rendered
+  local pose driving camera/body. Calm distance-driven cadence/bob, real-click-only optional lock with quiet
+  drag fallback, and actual compiled slab walk → stand → jump are the acceptance. Headless FPS is no evidence
+  of 360 Hz feel. Main owns integration; this lane owns fixes 1–4.
 
 - **2026-10-30 — Integrated WC05/WC06 presentation seam.** The reference consumer supplies `REFERENCE_WORLD`
   and forwards the real client's `predicted` getter and `clearInput()`. The controller derives step offsets from

@@ -74,7 +74,7 @@ state-aware opening loader; compose the delivered producer rather than implement
   pinned SDK parser and uWS colon-path patches; do not parse tokens in application code or rename rooms to hide a failure.
   Document tab-scoped account/kingdom token storage, rotation timing and exact errors for the browser lane;
   browser source files remain read-only. Never add application input sequence/ack state.
-- [ ] **RS06 — Slow or abusive clients have finite costs** · evidence: test/log. Implement configuration and
+- [x] **RS06 — Slow or abusive clients have finite costs** · evidence: test/log. Implement configuration and
   readiness diagnostics in `src/limits/` and `src/diagnostics/`: 90 frames/s, existing bounded input queue,
   one integration per tick, 16 KiB incoming frames for bounded build operations, 1 MiB backpressure with closure, bounded action/work/DB/outbox
   queues and timeouts. Focused R9 test combines input flood with controlled slow socket/storage: distance cannot
