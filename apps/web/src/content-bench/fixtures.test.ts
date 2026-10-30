@@ -4,6 +4,14 @@ import { loadBenchFixture, resolveJoinInstances } from './fixtures';
 
 const assets=[createHome('hut','hearth',0),createHome('house','tide',1),createHome('hall','grove',2)];
 describe('content review scenes use authored assets',()=>{
+  it('reviews the actual placed castle modules in the bench build-cell convention',async()=>{
+    const fixture = await loadBenchFixture('core',assets,assets[0]!,'castle');
+    expect(fixture.id).toBe('castle');
+    expect(fixture.instances).toHaveLength(12);
+    expect(fixture.instances[0]!.position).toEqual([-128,160,-640]);
+    expect(fixture.instances[0]!.blueprint.id).toBe('castle-tide');
+    expect(fixture.instances.filter(part => part.yaw === Math.PI/2)).toHaveLength(2);
+  });
   it('aligns different-depth street facades without changing their source boxes',async()=>{
     const before=JSON.stringify(assets);
     const fixture=await loadBenchFixture('core',assets,assets[0]!,'mixed');

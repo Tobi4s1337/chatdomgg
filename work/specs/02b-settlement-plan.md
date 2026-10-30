@@ -1,7 +1,7 @@
 # Spec 02b: A town gathered below its castle
 
 Status: implementation authorized, 2026-10-30. Main accepts the direction; the generator awaits tested freeze.
-The old production layout remains until consumer migration. Small tested geometry/castle groups may freeze
+The cardinal placement helpers and twelve-module castle group are tested and frozen for the content/bench consumers. The old production layout remains until consumer migration. Small tested geometry/castle groups may freeze
 as their first consumers start; the complete generator is not frozen by this proposal.
 
 Parent: [Spec 02](02-kingdom-light.md), especially R1, R6, R10–12 and the natural-ground decision.
@@ -314,3 +314,18 @@ grade and snap pitfalls, and the techniques we take into this implementation.
 
 Evidence at proposal: repository/source inspection and reference study only; no implementation, tests, captures
 or commits in this pass. Main owns acceptance and releases the source-edit freeze.
+
+
+### First consumer freeze: cardinal frames and castle, 2026-10-30
+
+`packages/world/src/settlement/geometry.ts`, its all-turn fixtures, and `settlement/castle.ts` supply the first
+content consumers. The actual plan is twelve modules,64×48m at floor20m; `beaconModuleId` resolves the real
+keep anchor at[0,50.5,-66] through `apps/web/src/kingdom/castle-content.ts`. The same helper supplies the compound
+review bench. No whole-castle scale transform exists. New tower/wall joins are physically face-adjacent; the
+outer gate and existing keep approach have a supported clear route. Main viewed the six production-worker
+front/side/back captures at both web sizes in `work/evidence/kingdom/castle-compound/`.
+
+The complete `SettlementPlan` generator remains under review. Its first six-home court template was rejected
+by main after inspecting actual generated geometry: repeated pods are another suburb. Plan real connected
+roads first, then fit individual street frontages and occasional irregular greens. The small castle/helper
+freeze does not certify the new town's roads, density, grading, light field or camera.

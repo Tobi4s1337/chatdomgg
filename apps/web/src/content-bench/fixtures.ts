@@ -18,6 +18,17 @@ const entries = import.meta.glob<ReviewExports>(['../../../../packages/content/s
 export async function loadBenchFixture(collection: string, assets: readonly VoxelBlueprint[], selected: VoxelBlueprint, mode: string): Promise<BenchFixture> {
   const single = { blueprint: selected, position: [0,0,0] as Vec3, yaw: 0 };
   if (mode === 'asset') return { id: selected.id, instances: [single] };
+  if (mode === 'castle') {
+    if (collection !== 'core') throw new Error('Castle review uses the authored core compound.');
+    const [{ createCastlePlan }, { createCastleContent }] = await Promise.all([
+      import('@chatdom/world'), import('../kingdom/castle-content'),
+    ]);
+    const { buildings } = createCastleContent(createCastlePlan());
+    return { id: 'castle', instances: buildings.map(part => ({
+      blueprint: part.blueprint, yaw: part.yaw,
+      position: part.position.map(value => value * 8) as unknown as Vec3,
+    })) };
+  }
   if (mode === 'windows') {
     const window = selected.windows[0];
     if (!window) throw new Error('Window review requires an authored window.');
