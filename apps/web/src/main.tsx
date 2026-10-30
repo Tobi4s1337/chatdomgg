@@ -10,7 +10,16 @@ const root = document.getElementById('root');
 if (!root) throw new Error('Missing application root');
 const atlas = import.meta.glob<{ default: Component }>('./atlas/index.tsx');
 const loadAtlas = atlas['./atlas/index.tsx'];
-if (window.location.pathname==='/-/content') {
+const laneViews = import.meta.glob<{ default: Component }>(['../../panel/src/Panel.tsx', './stream/index.tsx', './avatar-bench/index.tsx', './forge-bench/index.tsx', './audio-bench/index.tsx']);
+const lanePaths: Record<string, string> = {
+  '/panel': '../../panel/src/Panel.tsx', '/stream': './stream/index.tsx',
+  '/-/avatars': './avatar-bench/index.tsx', '/-/forge': './forge-bench/index.tsx', '/-/audio': './audio-bench/index.tsx',
+};
+const loadLane = laneViews[lanePaths[window.location.pathname] ?? ''];
+if (loadLane) {
+  const module = await loadLane();
+  render(() => <module.default />, root);
+} else if (window.location.pathname==='/-/content') {
   const {ContentBench}=await import('./content-bench');
   render(() => <ContentBench />,root);
 } else if (/^\/map(?:\/|$)/.test(window.location.pathname) && loadAtlas) {
