@@ -20,26 +20,26 @@ export function createForgeMotif(motif: ForgeMotif, style: StyleKey): MotifGeome
     add(9,0,5,19,2,14,p.shade);
     add(9,2,4,19,6,15,p.body); add(10,6,5,18,9,14,p.body);
     add(12,9,6,17,10,13,p.body);
-    add(6,1,6,11,4,12,p.body); add(7,4,6,10,6,12,p.body);
-    add(3,1,5,8,5,13,p.body); add(1,1,6,5,4,12,p.body);
-    // The thin, pale closed lids and short muzzle create a peaceful expression.
-    add(4,4,4,7,5,5,p.light); add(4,4,13,7,5,14,p.light);
-    add(5,3,4,7,4,5,p.dark); add(5,3,13,7,4,14,p.dark);
+    add(7,1,7,11,4,11,p.body); add(7,4,7,10,5,11,p.body);
+    add(3,1,5,8,5,13,p.body); add(1,1,7,4,3,11,p.body);
+    // Cut the closed eyes into the head instead of placing blocks on its cheeks.
+    add(4,3,5,7,4,6,MAT.air); add(4,3,5,7,4,6,p.dark);
+    add(4,3,12,7,4,13,MAT.air); add(4,3,12,7,4,13,p.dark);
     add(2,3,6,3,4,7,p.dark); add(2,3,11,3,4,12,p.dark);
     // Small swept-back horns are attached to the crown, not a broad white cap.
-    add(6,5,5,7,7,7,p.light); add(7,6,5,8,7,7,p.light);
-    add(6,5,11,7,7,13,p.light); add(7,6,11,8,7,13,p.light);
-    // Paired folded wings slope back over the haunch. Raised spars trace the folds.
-    add(10,5,3,15,8,5,p.shade); add(13,6,3,18,8,5,p.shade);
-    add(12,8,4,17,9,6,p.shade); add(11,7,3,13,8,4,p.light);
-    add(13,6,3,16,7,4,p.light); add(16,5,3,18,6,4,p.light);
-    add(10,5,14,15,8,16,p.shade); add(13,6,14,18,8,16,p.shade);
-    add(12,8,13,17,9,15,p.shade); add(11,7,15,13,8,16,p.light);
-    add(13,6,15,16,7,16,p.light); add(16,5,15,18,6,16,p.light);
-    // A tapered tail returns around the front of the sleeping body.
-    add(18,2,5,21,5,14,p.body); add(20,1,3,22,4,10,p.body);
-    add(17,0,2,22,3,5,p.body); add(13,0,2,18,2,4,p.body);
-    add(11,0,2,14,1,4,p.light);
+    add(6,5,5,7,7,7,p.light); add(7,6,5,8,8,7,p.light);
+    add(6,5,11,7,7,13,p.light); add(7,6,11,8,8,13,p.light);
+    // Folded wing roots sweep back to narrow, pointed tips.
+    add(10,5,3,14,8,5,p.shade); add(14,5,3,17,7,5,p.shade);
+    add(17,5,4,19,6,5,p.shade); add(12,8,4,15,9,6,p.shade);
+    add(11,7,3,13,8,4,p.body); add(13,6,3,16,7,4,p.body);
+    add(10,5,14,14,8,16,p.shade); add(14,5,14,17,7,16,p.shade);
+    add(17,5,14,19,6,15,p.shade); add(12,8,13,15,9,15,p.shade);
+    add(11,7,15,13,8,16,p.body); add(13,6,15,16,7,16,p.body);
+    // The tail returns around the visible side, finishing in a tapered tip.
+    add(18,2,5,21,5,14,p.body); add(20,1,10,22,4,16,p.body);
+    add(17,0,14,22,3,17,p.body); add(13,0,15,18,2,18,p.body);
+    add(11,0,15,14,1,17,p.light);
     // Native silhouettes: rounded tiles, swept fins, or leaf-like ridges.
     if (style === 'hearth') { add(14,10,7,16,11,12,p.body); add(15,11,8,16,12,11,p.light); }
     else if (style === 'tide') { add(14,10,7,17,11,11,p.body); add(16,11,8,19,12,10,p.light); }

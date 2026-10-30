@@ -322,46 +322,47 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Town closed; citizens and building are on main and 5190.** Founder confirmed the gate opens on the5080;
-`11f77e6` publishes `window.__chatdomReady` from the completed town draw. No more town terrain/light proof work.
-Tide HT01–03 and wardrobe WB01 are integrated. The feed remains visibly SIMULATED; real-GPU crowd timing is pending.
+**Town and homecoming/build slices are closed.** The live gate and `window.__chatdomReady` work; citizens follow
+streets, arrive at their own warm windows, and authored houses gain native roofs, trims and lanterns. The feed,
+local building and Forge remain visibly SIMULATED. Crowd behaviour and cape fit continue with the team.
 
-**Arrival now shows the moment.** The replay follows a home in a populated street instead of the newest outer edge.
-The simulated chat arrives together; all240 town citizens have bodies, using actual street routes, seeded walking
-paces and more of the path width. Camera holds through the doorway/window arrival before rising toward the castle.
-The current12-second walking clip includes57 home windows lighting, including Juniper's named window in view.
-Speech and light still follow the frozen cue/presence boundaries. This is not the ambient social policy yet.
+**Forge is on main and 5190 — `65f6653`, `d5a2fe7`.** Open `/?tier=town&hour=19.5&forge=1`. Type a sleeping dragon
+chimney, crescent moon lantern or owl weathervane. Strict plans assemble registered motifs in the kingdom's kit,
+check retained host occupancy/connectivity/clearance and mesh in the worker. Runes, actual silhouette blueprint,
+layered hot casting, seal, hammer, cooling and flight end in a retained attachment with smoke or glow. A short
+fitting crowns a clear existing stack; low stacks beside taller gables use a roof saddle. The dragon now has a
+low resting head, swept horns, tapered wings and a visible curled tail. Pour framing accounts for width and height.
 
-**Capes are cloth — founder decision, `c714f14`.** `AvatarCapeBlueprintSchema` holds cut, metre dimensions, shoulder
-fit, hem, cloth/lining/trim palette IDs and optional six-swatch tier shimmer. `citizens/capes.ts` renders thin,
-double-sided sheets in one instanced draw, pinned to the actual back socket, with speed/turn damping, wind and
-settling. Shimmer changes colour, never emission. Default citizens no longer wear voxel cloak blocks. Spec08 and
-wardrobe PRD include WB01C migration. `lane/wardrobe-body` was fast-forwarded to `c714f14`; its uncommitted progress
-note was preserved. The team can consume the contract and runtime now. Wall/long-hair fit remains visual follow-up.
+**Native places and memory.** Willowmere is Tide; `&realm=hearth` visits Emberwick, `&realm=grove` Mossmere, with
+native homes and separate storage. The same wish changes shape/materials. Local maker/origin/design lineage
+survives reload and copies retain it. Changed homes keep displaced pieces for refitting; nothing is erased.
+Unsupported words give a generic puff/cough and a maker-only explanation, at most one public beat per ten minutes.
+These are local craft checks, not moderation approval. Codex, authenticated chat/site requests, live/anvil/earned-coal
+gates, external judges and durable server publication/provenance remain unconnected. The full Forge goal is active.
 
-**Building has a house silhouette — `ebc44cd`.** Thin rectangular roof caps on supported rooms derive Hearth/Tide
-gables or Grove hips, eaves and timber framing; narrow chimneys pierce them. Raw source/undo/allowance stay intact.
-Irregular or deliberately shaped roofs remain authored. A detected doorway gains a lantern, threshold and small
-planted side strips. All windows in the edited/published home warm for its one owner. Private drafts and local
-publication persist in this browser; publication replaces street geometry/light blockers and gives a six-second
-housewarming orbit. LIVE deeds, server persistence and moderation are not connected. Touch confirmation is pending.
+**Team handoffs ready.** Specs17–18 and `lane/forge-ritual`, `lane/forge-refusals` have worktrees under
+`../worktrees/`. The team owns richer ritual/VFX/audio and detached nameless refusal presentation; main owns the
+plan, assembly, sockets, authority and integration. Their adapters consume the frozen shared frames. Main's baseline
+stays runnable until the replacements land. Forge sound currently shares the kingdom context; credits are in THIRD_PARTY.
 
-**Team lanes:** build-tools, build-templates, vox-import and crowd-behaviour have specs13–16 and matching branches/
-worktrees. They own tool polish,45 editable plans, VOX import and ambient policy. Main connects the template chooser
-and crowd caller at merge. Optional mount/bench hooks exist; no absent lane is represented by a fake functional UI.
-Panel-stream, wardrobe-body, forge-pieces, civic-props, sound, Atlas and Herald remain team-owned. Real chat speech
-still needs Herald projection into `CitizenChatCue`; the scene receive boundary exists.
+**Lane integration.** Forge-pieces FP01–02 (complete Hearth family) merged in `d3b687d`; Tide/Grove remain with its
+worker. Civic CP01–03 merged in `c49d6c2`: twelve crossing/market/heraldry assets, exposed through the catalogue;
+eight models, final anchors/review scene and kingdom placement remain. Panel-stream PS01–03 now mounts at `/panel`
+and `/stream`; production connections are honestly unavailable and fixtures labelled. PS04–06 remain. Workers'
+uncommitted changes were preserved. Build-tools BT01–02 await integration; its newer uncommitted tour fails finding
+a clear front strip. Sound SO01–02 is held for convolver/filter tails surviving interruption; the main review is in
+its progress log. Build templates, VOX import, wardrobe and ambient crowd lanes remain team-owned.
 
-**Evidence:** `pnpm verify --area kingdom --tier town --hour dusk` passed975 tests/59 files, typecheck, lint, build
-and both standard dusk town captures. `pnpm shots:moments` passed pointer edit/undo, actual arrival lights, local
-publication and reload without browser errors. Inspected citizen/build frames at1440×900 and390×844, plus walking
-frames before/after Juniper's window lit. Updated clips: `shots/moments/walk.mp4` (12s), `build.mp4` (5s). These are
-sampled development films, not product recording or GPU frame-time evidence. Captures used the shared lock serially.
+**Evidence.** `pnpm verify --area foundation --tier town --hour dusk` passed typecheck, lint, 1,032 tests/65 files,
+build and serial town, stream (1920×1080/1280×720) and panel (318×496) shots. The Forge browser smoke exercised
+three typed parts, separate sockets and refusal without loss; the realm check exercised Emberwick and retained lineage.
+Looked at desktop/phone dragon and pour shots, both realm treatments, refusal, flight and the integrated panel/stream.
+Selected dragon stills: `work/evidence/forge/`; full shots and the updated sampled21.5s film: `shots/forge/ritual.mp4`.
+The film uses the same procedural voices rendered offline; it is development evidence, not measured realtime FPS.
+The terrain/build fixtures now test representative occupied regions instead of repeatedly meshing unused whole lots.
 
-**Next:** founder5080 check on `/?tier=town&hour=19.5` → “Let them in”; “Build my home” opens the local plot.
-Review cloth/body fit and the two moments, integrate team work as it lands, then connect real citizen authority.
-Templates, richer wardrobe and social idle behaviour remain incomplete. No claim that the full goal is finished.
-
-**Host:** 5190 serves the current compiled main app through the existing gate-fix preview; its dist was refreshed.
-Its detached source is old; do not mistake it for main. Capture previews use free ports and close afterward.
-Atlas5193/Herald5194 reserved. Postgres, Valkey, Surveyor and other services untouched; `.env` stays ignored.
+**Next/doubts.** Connect real spell authority and chat ownership without treating the finite local parser as Codex.
+The ritual's molten shading and refusal puff are still plain; specs17–18 own that polish. Moon silhouette and the
+sound mix need a real-GPU/listening pass. Integrate cleared build-tools work and sound after its interruption fix.
+5190 now serves main's built app directly (preview session41016), not gate-fix's copied dist. Forge IDs support plain
+HTTP previews; unrelated window labels hide during the ritual. Atlas5193/Herald5194 reserved; other services untouched.

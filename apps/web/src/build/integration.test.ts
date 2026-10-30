@@ -26,9 +26,14 @@ it('keeps the same frontage through private editing, a saved street replacement 
     boxes: [{ from: [8, 0, 40], to: [24, 12, 56], material: STYLES.hearth.wall }], windows: [] };
   const authoredHome: WindowHouse = { slot: home.slot, blueprint, position: homeOrigin(home, 8), yaw: Math.PI / 2 };
   const material = createVoxelMaterial(MATERIALS, 'build'), scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(43, 1.6, .15, 2200);
-  const pool = { submit: async (job: Omit<VoxelJob, 'id'>) => executeVoxelJob({ ...job, id: 1 } as VoxelJob) } as VoxelWorkerPool;
+  const pool = { submit: async (job: Omit<VoxelJob, 'id'>) => {
+    const request={...job,id:1} as VoxelJob;
+    // Same occupied coordinates and real worker path; omit the fixture's unused air above/right/behind it.
+    if(request.kind==='blueprint'){const size=[0,1,2].map(i=>Math.max(1,...request.blueprint.boxes.map(b=>b.to[i]!))) as [number,number,number];return executeVoxelJob({...request,blueprint:{...request.blueprint,size}});}
+    return executeVoxelJob(request);
+  } } as VoxelWorkerPool;
   const onSession = vi.fn(), onHomeVisibility = vi.fn(), onStreetHome = vi.fn(), onHousewarming = vi.fn();
-  const sound = { unlock() {}, cue() {}, toggle: () => false, enabled: false, dispose() {} };
+  const sound = { output:()=>null, unlock() {}, cue() {}, toggle: () => false, enabled: false, dispose() {} };
   const options = { scene, camera, canvas, pool, material, home, authoredHome, ownerId: 'simulated:seed:juniper', ownerName: 'Juniper', source: 'SIMULATED' as const,
     sound, onSession, onHomeVisibility, onStreetHome, onHousewarming };
   const build = createKingdomBuild(options), target = new THREE.Vector3();
