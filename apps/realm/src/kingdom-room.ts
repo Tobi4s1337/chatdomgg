@@ -91,7 +91,7 @@ export function createKingdomRoom(services: RealmRoomServices) {
         if (!parsed.success) { client.leave(4002, 'Invalid intent'); return; }
         try {
         const p = this.state.walkers.get(client.sessionId), auth = client.auth;
-if (!p || !auth || !await services.auth.current(auth, Date.now())) { this.seats.end(client.sessionId, 'session-ended'); return; }
+        if (!p || !auth || !await services.auth.current(auth, Date.now())) { this.seats.end(client.sessionId, 'session-ended'); return; }
         if (!this.accepting) { client.leave(4003, 'Kingdom connection ended; reconnect to check your work.'); return; }
         // The domain implementation serializes/commits; a socket never supplies actor or position.
         const receipt = await this.handle.intent({ principal: auth, walkerId: client.sessionId,
@@ -123,9 +123,12 @@ if (!p || !auth || !await services.auth.current(auth, Date.now())) { this.seats.
       const auth = client.auth;
       if (!this.accepting) throw new ServerError(503,'The kingdom writer is unavailable');
       if (!auth || auth.kingdomId !== this.state.kingdomId || auth.origin !== this.state.origin) throw new ServerError(403, 'Wrong kingdom entry');
-if (!await services.auth.current(auth,Date.now()) || !this.accepting) throw new ServerError(403,'Entry expired');
+      if (!await services.auth.current(auth,Date.now()) || !this.accepting) throw new ServerError(403,'Entry expired');
       const previous = this.seats.seatOf(auth.personId), carried = previous ? this.state.walkers.get(previous) : undefined;
-      const resume = carried && carried.collisionRevision === this.world.revision ? carried : undefined;
+      // A second tab may arrive mid-jump or after a collision revision: carry only a safe standing pose.
+      const resume = carried && carried.collisionRevision === this.world.revision
+        && [carried.x, carried.y, carried.z].every(Number.isFinite)
+        && !embeddedSolids(carried, this.world).length && supported(carried, this.world) ? carried : undefined;
       const position = resume ? [resume.x, resume.y, resume.z] as const : this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
       if (!position.every(Number.isFinite) || embeddedSolids(body,this.world).length || !supported(body,this.world)) throw new ServerError(503,'The kingdom gate has no safe arrival yet');
       this.seats.seat(auth, client.sessionId);
@@ -153,7 +156,7 @@ if (!await services.auth.current(auth,Date.now()) || !this.accepting) throw new 
       } catch { /* Colyseus invokes onLeave when the grace expires or the seat ends. */ }
     }
     async onReconnect(client: Client<{ auth: RealmPrincipal }>) {
-if (!this.accepting || !client.auth) throw new ServerError(403,'Entry expired');
+      if (!this.accepting || !client.auth) throw new ServerError(403,'Entry expired');
       try {
         await this.seats.reconnected(client.sessionId);
       } catch (error) {

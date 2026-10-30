@@ -133,8 +133,9 @@ Colyseus adapter around it.
 
 - **One seat per person per room.** A fresh authenticated entry by someone who already has a seat replaces it.
   The newest window wins: the old socket closes with 4409 (or its grace is cancelled), its reconnect token dies, and
-  the new walker starts where the old one stood. Nobody gets a second avatar, and nobody is locked out by a
-  forgotten tab.
+  the new walker starts where the old one stood when that pose is safe and supported in the current collision
+  world. A mid-jump or otherwise unsafe pose uses a validated arrival instead. Nobody gets a second avatar, and
+  nobody is locked out by a forgotten tab.
 - **Drop.** A socket that drops (1001, 1005, 1006, a reload, a lost network) stops movement at once: queued input is
   cleared, velocity zeroed, and nothing moves the walker until it reconnects. The seat is held for 30 s, or until
   the session ends if that is sooner. A seat the server ended gets no grace.
