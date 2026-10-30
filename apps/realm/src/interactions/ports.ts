@@ -43,13 +43,21 @@ export interface InteractionZones {
  * is called in the same turn a lease ends. These stay typed in-process hooks; absence makes `tavern` unavailable.
  */
 export interface InteractionHosts {
+  /**
+   * `signal` aborts when the room stops waiting (moderation, leave, writer loss); the host should stop admitting.
+   * An admission that resolves after the abort is cancelled by the room and never seats anyone.
+   */
   admit?(request: { readonly targetId: string; readonly personId: PersonId; readonly walkerId: string; readonly signal: AbortSignal }): Promise<InteractionAdmission>;
   released?(lease: RealmInteractionLease, why: InteractionReleaseCause): void;
 }
 export type InteractionAdmission =
   | { readonly admitted: true; readonly cancel: () => void }
   | { readonly admitted: false; readonly reason: 'refused' | 'unavailable' };
-export type InteractionReleaseCause = 'stand' | 'leave' | 'expired' | 'revoked' | 'replaced' | 'target-removed';
+/**
+ * Why a lease ended. `replaced`: the same person sat elsewhere from a newer window. `host-ended`: its host closed it
+ * by exact generation. `closed`: the authority stopped writing (writer loss/shutdown).
+ */
+export type InteractionReleaseCause = 'stand' | 'leave' | 'expired' | 'revoked' | 'replaced' | 'target-removed' | 'host-ended' | 'closed';
 
 /** Movement owner's supported recovery (main: `RealmRoomHandle.recoverWalker`). */
 export type InteractionRecovery = (walkerId: string, collisionRevision: number) => boolean;
@@ -93,21 +101,34 @@ export interface InteractionAuthorityOptions {
  * hook shapes, so it binds to `RealmRoomHandle.intent/lifecycle/bindRoom/bindTransient` without editing them.
  */
 export interface InteractionAuthority extends RealmInteractions {
-  /** `RealmRoomHandle.intent` for `type: 'interact'`. Deduplicates by person and request ID. */
+  /**
+   * `RealmRoomHandle.intent` for `type: 'interact'`. Deduplicates by the principal's entry session and request ID:
+   * a redelivery returns the same receipt, and another window's IDs never collide with this one's.
+   */
   intent(context: RealmIntentContext, intent: InteractIntent): Promise<RealmReceipt>;
-  /** `RealmRoomHandle.lifecycle`, called with the room's own clock time. */
+  /**
+   * `RealmRoomHandle.lifecycle`, called with the room's own clock time. `join` by a person who holds a seat (a reload
+   * or a newer window, which the realm admits as a fresh session and walker) resumes that same lease and generation
+   * under the new walker; the replaced session is never delivered to again.
+   */
   lifecycle(event: 'join' | 'drop' | 'reconnect' | 'leave', principal: RealmPrincipal, walkerId: string, now: number): void;
   /** `RealmRoomHandle.bindRoom` effects. Without them every placing action is honestly unavailable. */
   bindRoom(effects: InteractionRoomEffects): () => void;
   /** `RealmRoomHandle.bindTransient` callbacks: seat fanout and self-only state. */
   bindDelivery(delivery: InteractionDelivery): () => void;
-  /** Moderation (warning, timeout, ban, revoked rights): this person's occupancy ends in this same turn. */
+  /**
+   * Moderation (warning, timeout, ban, revoked rights): this person's occupancy ends in this same turn and every
+   * request of theirs still awaiting rights or host admission is aborted, so it can never seat them afterwards.
+   */
   revoke(personId: PersonId): void;
+  /** The host ended this exact lease (its table closed). Fenced by generation; false when it is not the current one. */
+  endSeat(seat: { readonly targetId: string; readonly generation: number }): boolean;
   /** A new collision/layout revision was adopted: seats whose target no longer exists are released. */
   adoptRegistry(): void;
   /** Earliest absolute room-clock expiry of a held seat, so the room can schedule `expire(now)`. */
   nextExpiry(): number | null;
-  /** Current public seat envelope and one session's self state (bootstrap after join/reconnect). */
+  /** Current public seat envelope and one session's self state (bootstrap after join/reconnect). Self revisions rise
+   * across all of a person's sessions, so a newer window never mistakes an older window's state for news. */
   seats(): SeatsMessage;
   selfState(sessionId: string): RealmInteractionState;
   /** Lane-local change hook for the void lifecycle calls; delivery already happens through `bindDelivery`. */

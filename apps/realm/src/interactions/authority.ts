@@ -2,8 +2,8 @@ import type { PersonId, Vec3 } from '@chatdom/shared';
 import type { RealmInteractionAction, RealmInteractionContext, RealmInteractionLease, RealmInteractionResult, RealmInteractionState, RealmPrincipal, RealmReceipt } from '@chatdom/shared/realm';
 import type { RealmIntentContext } from '../ports';
 import {
-  ACTION_FOR_KIND, SEAT_KINDS, STANDING, STREET_ZONE, claimSeat, createSeatBook, dropSession, expireSeats, homeZone, interactionLegality,
-  publicSeats, rebindWalker, reconnectSession, releasePerson, releaseSession, releaseTargets, seatAt, seatOfSession, standSeat,
+  ACTION_FOR_KIND, SEAT_KINDS, STANDING, STREET_ZONE, claimSeat, createSeatBook, dropSession, endSeat as endLease, expireSeats, homeZone,
+  interactionLegality, publicSeats, reconnectSession, releasePerson, releaseSession, releaseTargets, resumeSeat, seatAt, seatOfSession, standSeat,
   type InteractionBlock, type InteractionRecord, type SeatBook,
 } from '../../../../packages/world/src/interactions';
 import { buildInteractionContext } from './context';
@@ -44,6 +44,9 @@ interface Self {
   readonly personId: PersonId; readonly sessionId: string;
   walkerId: string; state: RealmInteractionState; connected: boolean;
 }
+/** Why the room stopped waiting for a request's rights check or host admission. */
+type Abandoned = 'revoked' | 'left' | 'closed';
+interface InFlight { readonly personId: PersonId; readonly controller: AbortController }
 type Decision =
   | { readonly kind: 'accepted'; readonly result: Extract<RealmInteractionResult, { kind: 'accepted' }> }
   | { readonly kind: 'refused'; readonly result: Extract<RealmInteractionResult, { kind: 'refused' }>; readonly why: Why };
@@ -60,7 +63,13 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
   let delivery: InteractionDelivery | null = null;
   let disposed = false;
   const selves = new Map<string, Self>();
+  /** The session each person's private messages reach: the room's own `control` (newest window wins). */
+  const control = new Map<PersonId, string>();
+  /** One counter for every self state, so revisions only ever rise for a person across windows and reloads. */
+  let stateRevision = 0;
   const requests = new Map<string, Promise<RealmReceipt>>();
+  /** Requests still awaiting rights or host admission, per session. Aborting one means it can never act. */
+  const inflight = new Map<string, Set<InFlight>>();
   const listeners = new Set<(change: InteractionChange) => void>();
   /** Sessions holding an accepted host admission for this exact target, consumed by the next synchronous act. */
   const admissions = new Map<string, { readonly targetId: string; readonly cancel: () => void }>();
@@ -74,7 +83,7 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     return entry;
   };
   const setState = (entry: Self, next: Omit<RealmInteractionState, 'revision'>): RealmInteractionState => {
-    entry.state = Object.freeze({ revision: entry.state.revision + 1, ...next });
+    entry.state = Object.freeze({ revision: ++stateRevision, ...next });
     return entry.state;
   };
   const zoneFor = (entry: Self | undefined, walkerId: string, feet: Vec3): string => entry?.state.mode === 'interior' && entry.state.plotId
@@ -90,8 +99,28 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     const seats = book !== before ? seatsMessage() : null;
     const changes: InteractionSelfChange[] = selvesChanged.map(entry => ({ personId: entry.personId, sessionId: entry.sessionId, walkerId: entry.walkerId, state: entry.state }));
     if (seats) delivery?.transient(seats);
-    for (const change of changes) if (selves.get(change.sessionId)?.connected) delivery?.owner(change.personId, { type: 'interaction', requestId, writerEpoch, state: change.state });
+    for (const change of changes) if (reachable(change.sessionId)) delivery?.owner(change.personId, { type: 'interaction', requestId, writerEpoch, state: change.state });
     if (seats || changes.length || released.length) for (const listener of listeners) listener({ seats, selves: changes, released });
+  }
+  /** Owner delivery is per person, so only the session that person is controlling now may be told anything. */
+  function reachable(sessionId: string): boolean {
+    const entry = selves.get(sessionId);
+    return !!entry?.connected && control.get(entry.personId) === sessionId;
+  }
+  function track(personId: PersonId, sessionId: string): InFlight {
+    const flight: InFlight = { personId, controller: new AbortController() };
+    let set = inflight.get(sessionId);
+    if (!set) { set = new Set(); inflight.set(sessionId, set); }
+    set.add(flight);
+    return flight;
+  }
+  function untrack(sessionId: string, flight: InFlight): void {
+    const set = inflight.get(sessionId);
+    set?.delete(flight);
+    if (set && !set.size) inflight.delete(sessionId);
+  }
+  function abandon(match: (sessionId: string, flight: InFlight) => boolean, why: Abandoned): void {
+    for (const [sessionId, set] of inflight) for (const flight of set) if (match(sessionId, flight)) flight.controller.abort(why);
   }
   /** A lease ended without its holder standing: the body is free to walk again and its self state says so. */
   function unseat(lease: RealmInteractionLease): Self | null {
@@ -219,10 +248,23 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
 
   async function run(request: RealmIntentContext, intent: InteractIntent): Promise<RealmReceipt> {
     const { principal } = request;
-    const unavailable = (why: Why): RealmReceipt => ({ version: 1, id: intent.id, status: 'unavailable', message: REFUSAL_WORDS[why] });
-    if (disposed) return unavailable('epoch');
-    if (options.limiter && !options.limiter(principal.personId, options.clock())) return unavailable('limited');
-    if (!await options.rights.current(principal, options.clock())) return receipt(intent.id, refuse('rights'));
+    if (disposed) return unavailableReceipt(intent.id, 'epoch');
+    if (options.limiter && !options.limiter(principal.personId, options.clock())) return unavailableReceipt(intent.id, 'limited');
+    const flight = track(principal.personId, principal.sessionId);
+    try { return await awaited(request, intent, flight.controller.signal); } finally { untrack(principal.sessionId, flight); }
+  }
+  function unavailableReceipt(id: string, why: Why): RealmReceipt { return { version: 1, id, status: 'unavailable', message: REFUSAL_WORDS[why] }; }
+  /** The receipt for a request the room stopped waiting for: moderation wins, a closed authority says so. */
+  function abandoned(id: string, signal: AbortSignal): RealmReceipt {
+    const why = signal.reason as Abandoned;
+    return why === 'revoked' ? receipt(id, refuse('rights')) : unavailableReceipt(id, why === 'closed' ? 'epoch' : 'no-room');
+  }
+  async function awaited(request: RealmIntentContext, intent: InteractIntent, signal: AbortSignal): Promise<RealmReceipt> {
+    const { principal } = request;
+    const unavailable = (why: Why) => unavailableReceipt(intent.id, why);
+    const current = await options.rights.current(principal, options.clock());
+    if (signal.aborted) return abandoned(intent.id, signal);
+    if (!current) return receipt(intent.id, refuse('rights'));
     let admission: { readonly targetId: string; readonly cancel: () => void } | null = null;
     if (intent.action === 'tavern') {
       // Ask the existing table host only for a chair this person could take right now; then decide again after.
@@ -231,11 +273,11 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
       const preview = previewSeat(early);
       if (preview) return receipt(intent.id, preview);
       if (!options.hosts?.admit) return unavailable('no-host');
-      const abort = new AbortController();
-      const answer = await options.hosts.admit({ targetId: intent.targetId, personId: principal.personId, walkerId: request.walkerId, signal: abort.signal });
-      if (!answer.admitted) return answer.reason === 'unavailable' ? unavailable('no-host') : receipt(intent.id, refuse('host-refused'));
-      admission = { targetId: intent.targetId, cancel: () => { abort.abort(); answer.cancel(); } };
-      if (disposed) { admission.cancel(); return unavailable('epoch'); }
+      const answer = await options.hosts.admit({ targetId: intent.targetId, personId: principal.personId, walkerId: request.walkerId, signal });
+      if (!answer.admitted) return signal.aborted ? abandoned(intent.id, signal) : answer.reason === 'unavailable' ? unavailable('no-host') : receipt(intent.id, refuse('host-refused'));
+      admission = { targetId: intent.targetId, cancel: answer.cancel };
+      // Moderation, leave or writer loss while the host was answering: the admission is returned, nobody sits.
+      if (signal.aborted || disposed) { admission.cancel(); return abandoned(intent.id, signal); }
     }
     // Everything awaited is behind us: current pose, rights, deed and occupancy are read again, then one act.
     const context = contextFor(request, intent, options.clock());
@@ -267,7 +309,7 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     act: (context, action) => decide(context, action, null).result,
 
     intent(request, intent) {
-      const key = `${request.principal.personId}\u0000${intent.id}`;
+      const key = `${request.principal.sessionId}\u0000${intent.id}`;
       const known = requests.get(key);
       if (known) return known;
       const pending = run(request, intent).catch((): RealmReceipt => ({ version: 1, id: intent.id, status: 'unavailable', message: REFUSAL_WORDS['no-room'] }));
@@ -279,25 +321,46 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     lifecycle(event, principal: RealmPrincipal, walkerId, now) {
       if (disposed) return;
       if (event === 'drop') { authority.drop(principal.sessionId, now); return; }
-      if (event === 'leave') { authority.release(principal.sessionId); selves.delete(principal.sessionId); return; }
-      // join (a reload of the same session draws a new body) and reconnect resume the same lease and generation.
+      if (event === 'leave') {
+        authority.release(principal.sessionId);
+        selves.delete(principal.sessionId);
+        if (control.get(principal.personId) === principal.sessionId) control.delete(principal.personId);
+        return;
+      }
+      // join (a fresh entry: reload or a newer window) and reconnect resume this person's one lease and generation.
       const before = book;
       const entry = self(principal.sessionId, principal.personId, walkerId);
-      entry.connected = true;
-      if (entry.walkerId !== walkerId) { entry.walkerId = walkerId; book = rebindWalker(book, principal.sessionId, walkerId); }
-      const held = seatOfSession(book, principal.sessionId);
-      book = reconnectSession(book, principal.sessionId, now);
-      const lease = seatOfSession(book, principal.sessionId);
+      entry.connected = true; entry.walkerId = walkerId;
+      control.set(principal.personId, principal.sessionId);
+      const resumed = resumeSeat(book, { personId: principal.personId, sessionId: principal.sessionId, walkerId, now });
+      book = resumed.book;
       const ended: { lease: RealmInteractionLease; cause: InteractionReleaseCause }[] = [];
-      if (held && !lease) ended.push({ lease: held, cause: 'expired' });
-      else if (lease) {
+      const changed: Self[] = [];
+      if (resumed.ended) { ended.push({ lease: resumed.ended, cause: 'expired' }); const gone = unseat(resumed.ended); if (gone && gone !== entry) changed.push(gone); }
+      if (resumed.from && resumed.from.sessionId !== principal.sessionId) {
+        // The replaced window's self ends quietly: it is no longer delivered to and holds nothing.
+        const old = selves.get(resumed.from.sessionId);
+        if (old) { old.connected = false; setState(old, { mode: 'standing', targetId: null, plotId: null }); }
+      }
+      const lease = resumed.resumed;
+      if (lease) {
         // The resumed body is put back on its seat's approach; if that is no longer possible the seat ends.
         const record = options.registry()?.get(lease.seat.targetId);
-        if (record && effects?.placeWalker(walkerId, record.target.approach, options.world().revision)) effects.allowWalking(walkerId, false);
-        else { book = releaseSession(book, principal.sessionId).book; ended.push({ lease, cause: 'target-removed' }); }
+        if (record && effects?.placeWalker(walkerId, record.target.approach, options.world().revision)) {
+          effects.allowWalking(walkerId, false);
+          if (entry.state.mode !== 'seated' || entry.state.targetId !== lease.seat.targetId) setState(entry, { mode: 'seated', targetId: lease.seat.targetId, plotId: null });
+        } else {
+          book = releaseSession(book, principal.sessionId).book;
+          ended.push({ lease, cause: 'target-removed' });
+          unseat(lease);
+          if (entry.state.mode === 'seated') { setState(entry, { mode: 'standing', targetId: null, plotId: null }); effects?.allowWalking(walkerId, true); }
+        }
+      } else if (entry.state.mode === 'seated') {
+        // Nothing is held for this person any more (grace ran out while away): stand, honestly.
+        setState(entry, { mode: 'standing', targetId: null, plotId: null });
+        effects?.allowWalking(walkerId, true);
       }
-      for (const { lease: gone } of ended) unseat(gone);
-      publish(before, [], ended);
+      publish(before, changed, ended);
       delivery?.owner(entry.personId, { type: 'interaction', requestId: null, writerEpoch, state: entry.state });
     },
 
@@ -316,6 +379,7 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
       else publish(before, [], []);
     },
     release(sessionId) {
+      abandon(id => id === sessionId, 'left');
       const before = book;
       const { book: next, released } = releaseSession(book, sessionId);
       book = next;
@@ -332,10 +396,19 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     bindDelivery(next) { delivery = next; return () => { if (delivery === next) delivery = null; }; },
 
     revoke(personId) {
+      abandon((_, flight) => flight.personId === personId, 'revoked');
       const before = book;
       const { book: next, released } = releasePerson(book, personId);
       book = next;
       lifecycleRelease(released, 'revoked', before);
+    },
+    endSeat(seat) {
+      const before = book;
+      const { book: next, released } = endLease(book, seat);
+      if (!released) return false;
+      book = next;
+      lifecycleRelease([released], 'host-ended', before);
+      return true;
     },
     adoptRegistry() {
       const registry = options.registry();
@@ -357,12 +430,13 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
       const before = book;
       const ended = book.leases;
       book = createSeatBook(writerEpoch);
+      abandon(() => true, 'closed');
       for (const admission of admissions.values()) admission.cancel();
       admissions.clear();
       // Hosts hear that every lease ended; nothing is delivered to people from an authority that no longer writes.
       disposed = true;
-      lifecycleRelease(ended, 'leave', before);
-      listeners.clear(); requests.clear(); selves.clear();
+      lifecycleRelease(ended, 'closed', before);
+      listeners.clear(); requests.clear(); selves.clear(); control.clear(); inflight.clear();
       effects = null; delivery = null;
     },
   };

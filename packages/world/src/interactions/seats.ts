@@ -92,14 +92,27 @@ export function reconnectSession(book: SeatBook, sessionId: string, now: number)
   return next(book, book.leases.map(entry => entry === mine ? resumed : entry));
 }
 /**
- * A verified reload of the same authenticated session draws its body under a new opaque walker key. The lease,
- * its generation and its expiry stay; only the public render key follows the body.
+ * A verified entry by the person who holds a seat resumes it: a reconnect of the same session, or a reload/new
+ * window, which the realm admits as a fresh session and walker that replaces the old one (newest window wins).
+ * The lease keeps its target and generation, so there is never a second sitter; the session and the opaque walker
+ * key follow the body. A lease whose reconnect grace already ran out on the room clock ends instead.
  */
-export function rebindWalker(book: SeatBook, sessionId: string, walkerId: string): SeatBook {
-  const mine = seatOfSession(book, sessionId);
-  if (!mine || mine.seat.walkerId === walkerId) return book;
-  const moved = lease({ ...mine.seat, walkerId }, mine.sessionId, mine.personId, mine.writerEpoch, mine.expiresAt);
-  return next(book, book.leases.map(entry => entry === mine ? moved : entry));
+export function resumeSeat(book: SeatBook, entry: { readonly personId: PersonId; readonly sessionId: string; readonly walkerId: string; readonly now: number }): { readonly book: SeatBook; readonly resumed: RealmInteractionLease | null; readonly ended: RealmInteractionLease | null; readonly from: RealmInteractionLease | null } {
+  const held = seatOfPerson(book, entry.personId);
+  if (!held) return { book, resumed: null, ended: null, from: null };
+  if (held.seat.status === 'reconnecting' && held.expiresAt <= entry.now) return { book: next(book, book.leases.filter(lease => lease !== held)), resumed: null, ended: held, from: null };
+  if (held.sessionId === entry.sessionId && held.seat.walkerId === entry.walkerId && held.seat.status === 'occupied') return { book, resumed: held, ended: null, from: null };
+  const resumed = lease({ ...held.seat, walkerId: entry.walkerId, status: 'occupied' }, entry.sessionId, held.personId, held.writerEpoch, CONNECTED);
+  return { book: next(book, book.leases.map(lease => lease === held ? resumed : lease)), resumed, ended: null, from: held };
+}
+/**
+ * End one exact lease on behalf of its host (a table that closed, an admission that ended). The generation fences
+ * it: a stale callback for an earlier sitter cannot unseat whoever sits there now.
+ */
+export function endSeat(book: SeatBook, input: { readonly targetId: string; readonly generation: number }): { readonly book: SeatBook; readonly released: RealmInteractionLease | null } {
+  const held = seatAt(book, input.targetId);
+  if (!held || held.seat.generation !== input.generation) return { book, released: null };
+  return { book: next(book, book.leases.filter(lease => lease !== held)), released: held };
 }
 /** Leave, logout, failed reauthentication: the session's lease ends now. */
 export function releaseSession(book: SeatBook, sessionId: string): { readonly book: SeatBook; readonly released: RealmInteractionLease | null } {

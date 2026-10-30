@@ -44,7 +44,7 @@ integrator composition. Capture work is serial under the shared lock even when c
   actual pending/accepted/refused state for a log target; never a hardcoded success label. Begin one meaningful
   core scenario for legal/illegal reach and simultaneous claims. Capture the initial prompt at 1440×900/390×844.
 
-- [ ] **IN02 — Share a seat without duplicate sitters.** Implement pure legal actions/own-family seat transitions
+- [x] **IN02 — Share a seat without duplicate sitters.** Implement pure legal actions/own-family seat transitions
   and serialized room handler/lease hooks. Complete the core scenario with two sessions racing, duplicate IDs,
   stale generation/epoch, stand, drop/reload grace/expiry without connected clients, and immediate moderation
   recheck during awaited admission. Prove forged target/actor/position fields and through-wall reach fail. Public

@@ -73,16 +73,19 @@ interface InteractionAuthority extends RealmInteractions {
   lifecycle(event: 'join' | 'drop' | 'reconnect' | 'leave', principal, walkerId, now): void;
   bindRoom(effects: Pick<RealmRoomEffects, 'readWalker' | 'placeWalker' | 'allowWalking'>): () => void;
   bindDelivery({ transient, owner }): () => void;
-  revoke(personId): void; adoptRegistry(): void; nextExpiry(): number | null;
+  revoke(personId): void; endSeat({ targetId, generation }): boolean; adoptRegistry(): void; nextExpiry(): number | null;
   seats(): SeatsMessage; selfState(sessionId): RealmInteractionState;
   onChange(listener: (change: InteractionChange) => void): () => void; dispose(): void;
 }
 ```
 
-Request order, all on the room's single thread: dedupe by person + request ID (512 kept; a duplicate returns the
-same receipt promise) → limiter → `await rights.current` → for `tavern` only, preview the claim and `await
-hosts.admit` → rebuild the trusted `RealmInteractionContext` from `current()`, the registry at the world's
-revision, the deed and `rights.permitted` **now** → one synchronous `act`. A refusal after admission cancels it.
+Request order, all on the room's single thread: dedupe by the principal's entry session + request ID (512 kept; a
+duplicate returns the same receipt promise; a reloaded page's restarted IDs are new requests) → limiter → `await
+rights.current` → for `tavern` only, preview the claim and `await hosts.admit({ …, signal })` → rebuild the trusted
+`RealmInteractionContext` from `current()`, the registry at the world's revision, the deed and `rights.permitted`
+**now** → one synchronous `act`. A refusal after admission cancels it. `revoke`, `leave`/`release` and `dispose`
+abort that person's/session's requests still awaiting rights or admission: the signal aborts, an admission that
+arrives anyway is cancelled, and the receipt is the moderation refusal (or unavailable), never a seat.
 
 Decisions:
 - **The seated body stays on the authored approach.** `sit`/`tavern` place the authoritative feet on the seat's
@@ -97,11 +100,20 @@ Decisions:
 - Every lease change publishes `{ type: 'seats', writerEpoch, revision, seats }` once through `transient` and each
   changed self state through `owner(personId, { type: 'interaction', requestId, writerEpoch, state })` — the
   request's ID when it caused it, `null` for lifecycle. Join/reconnect also send the current self snapshot.
-- Lifecycle: `drop` keeps the seat as `reconnecting` until `now + reconnectGraceMs` (room clock); `join` of the
-  same session (reload) or `reconnect` resumes the same generation and rebinds the opaque walker key; `leave`
-  releases; `expire(now)` releases what ran out with nobody connected; `revoke` ends a person's leases in the same
-  turn and calls `hosts.released(lease, 'revoked')`; `adoptRegistry` releases seats whose target disappeared;
-  `dispose` (writer loss/shutdown) tells hosts and delivers nothing.
+- Identity follows the actual room: `principal.sessionId` is a fresh entry id per window, Colyseus uses it as the
+  walker id, and `RealmSeats` lets the newest window win. Owner delivery is per person, so the authority mirrors the
+  room's `control`: only the person's newest connected session is ever told anything, and self revisions come from
+  one counter for the whole room so they only rise across windows and reloads.
+- Lifecycle (IN02): `drop` keeps the seat as `reconnecting` until `now + reconnectGraceMs` (room clock; pass
+  `REALM_RECONNECT_GRACE_MS`). `join` (reload or a newer window) and `reconnect` resume **this person's** one lease
+  with the same target and generation under the new session/walker key, put the body back on the approach and hold
+  walking; the replaced window's self quietly ends and its later `stand`/`drop`/`leave` touch nothing. A return
+  after the grace stands honestly. `leave` releases; `expire(now)` releases what ran out with nobody connected;
+  `revoke` ends a person's leases in the same turn and calls `hosts.released(lease, 'revoked')`; `endSeat({
+  targetId, generation })` is the host's fenced close (`'host-ended'`; a stale generation returns false);
+  `adoptRegistry` releases seats whose target disappeared; `dispose` (writer loss/shutdown) tells hosts
+  (`'closed'`), aborts pending admissions and delivers nothing. A tavern admission belongs to its lease: whichever
+  way the lease ends, its `cancel` runs exactly once.
 
 ## Browser (`apps/web/src/interactions`)
 
@@ -158,7 +170,9 @@ Realm (in the kingdom room's handle wiring, after the founded layout and its col
 3. In `handle.intent(context, intent)`: `if (intent.type === 'interact') return interactions.intent(context, intent)`.
 4. In `handle.lifecycle(event, principal, walkerId, now)`: forward to `interactions.lifecycle(…)`; schedule
    `interactions.expire(clock())` at `interactions.nextExpiry()` on the room clock after every drop.
-5. Moderation (warning/timeout/ban/revoked rights): `interactions.revoke(personId)` in the same turn.
+5. Moderation (warning/timeout/ban/revoked rights): update the rights `permitted` reads, then
+   `interactions.revoke(personId)` in the same turn. A table host that closes a guest's place calls
+   `interactions.endSeat({ targetId, generation })` with the generation from `hosts.released`/the seat it admitted.
 6. After `adoptWorld`: rebuild the registry for the new revision, then `interactions.adoptRegistry()`.
 7. Writer loss/shutdown: `interactions.dispose()` before the room closes.
 
