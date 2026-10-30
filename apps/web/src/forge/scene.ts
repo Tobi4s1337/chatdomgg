@@ -7,6 +7,8 @@ import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { buildBounds } from '../build/composition';
 import { createForgeRitualView } from './ritual-view';
 import { createForgeEmitters } from './emitters';
+import { createForgeRefusalPresentation, FORGE_MOOD_CAPTION_CLASS, FORGE_MOOD_DURATION } from './refusal';
+import './refusal/caption.css';
 import { playForgeSound, renderForgeRitualAudio } from './sound';
 import {requestForgeRun,ForgeRunStopped} from './run-client';
 import type { createKingdomSound } from '../kingdom/sound';
@@ -17,6 +19,12 @@ type Placed={mesh:THREE.Mesh;result:AssembledForge;receipt:ForgePlacement;emitte
 export function createKingdomForge(options:Options){
   const pieceMaterial=new THREE.ShaderMaterial({glslVersion:options.material.material.glslVersion,uniforms:options.material.material.uniforms,vertexShader:options.material.material.vertexShader,fragmentShader:options.material.material.fragmentShader.replace('vec3 colour=base*edge*light*ao;','vec3 colour=base*edge*(light+vec3(.32,.25,.17))*ao;if(vMaterial==14u)colour+=vec3(1.6,.65,.12)*uNight;')});
   const view=createForgeRitualView(options.scene,{...options.material,material:pieceMaterial}),emitters=createForgeEmitters(options.scene),refusals=createForgeRefusalGate();
+  const moodRoot=new THREE.Group();options.scene.add(moodRoot);
+  const moodCaption=document.createElement('p');moodCaption.className=FORGE_MOOD_CAPTION_CLASS;
+  Object.assign(moodCaption.style,{position:'absolute',bottom:'42px',left:'50%',translate:'-50% 0',zIndex:'6'});
+  options.canvas.parentElement?.append(moodCaption);
+  const mood=createForgeRefusalPresentation({root:moodRoot,anvil:[options.anvil.x,options.anvil.y+1.43,options.anvil.z],caption:moodCaption});
+  let moodStarted=-Infinity;
   view.root.position.copy(options.anvil);view.root.visible=false;
   const placed=new Map<string,Placed>(),kept=new Map<string,ForgePlacement>();
   let open=false,preparing=false,disposed=false,revision=0,now=0,start=0,fixed:number|null=null,lastPhase='',lastStatus='',privateError:string|null=null,refusalUntil=0;
@@ -54,7 +62,7 @@ export function createKingdomForge(options:Options){
     const entry:Placed={mesh,result:work.result,receipt,emitter};const unshadow=options.registerShadow?.(mesh);if(unshadow)entry.unshadow=unshadow;placed.set(id,entry);kept.delete(work.id);work.committed=true;if(pendingReceipt?.id===work.id)pendingReceipt=null;save();
   }
   async function submit(words:string){
-    if(preparing||current&&!current.committed||options.source!=='simulated'||disposed)return false;
+    if(now<refusalUntil||preparing||current&&!current.committed||options.source!=='simulated'||disposed)return false;
     void options.sound.unlock().then(ready=>{if(ready&&!disposed&&preparing)playForgeSound(options.sound,'words');});privateError=null;open=true;preparing=true;fixed=null;runStarted=now;waitingStage='judging-words';view.beginWords();publishStatus();
     try{
       let plan:HousePartPlan,approval:ForgePlacement['approval'];
@@ -64,7 +72,7 @@ export function createKingdomForge(options:Options){
       if(current&&!current.committed)current.geometry.dispose();current=work;view.setPiece(work.geometry,work.bounds);start=now-(fixture?0:3000);lastPhase='';preparing=false;publishStatus();return true;
     }catch(error){if(disposed||runAbort.signal.aborted)return false;preparing=false;if(current?.committed)current=null;privateError=error instanceof Error?error.message:'The forge needs another wish.';
       // No request words, name, ID or reason enter the public soot beat.
-      if((fixture||error instanceof ForgeRunStopped&&error.outcome==='refuse')&&refusals.beat(now)){refusalUntil=now+2600;playForgeSound(options.sound,'refusal');}publishStatus();return false;
+      if(fixture||error instanceof ForgeRunStopped&&error.outcome==='refuse'){const beat=refusals.beat(now);if(beat?.kind==='refusal'){refusalUntil=now+FORGE_MOOD_DURATION*1000;moodStarted=now;mood.play(beat);playForgeSound(options.sound,'refusal');}}publishStatus();return false;
     }
   }
   async function prepare(){
@@ -83,7 +91,7 @@ export function createKingdomForge(options:Options){
   }
   function clearStale(){for(const [id,item] of placed)if(item.receipt.hostFingerprint!==homeFingerprint(options.home().blueprint)){kept.set(item.receipt.id,item.receipt);item.unshadow?.();item.mesh.geometry.dispose();options.scene.remove(item.mesh);placed.delete(id);if(current?.result.socket.id===id)current=null;privateError='Your forged pieces are kept safely while the house changes.';save();}}
   function update(timeMs:number,target:THREE.Vector3,hidden:boolean){
-    now=timeMs;if(observedHome!==options.home().blueprint){observedHome=options.home().blueprint;clearStale();revision++;}view.root.visible=!hidden;for(const item of placed.values())item.mesh.visible=!hidden;
+    now=timeMs;moodRoot.visible=!hidden&&open;mood.update(hidden||!open?Infinity:(now-moodStarted)/1000);if(observedHome!==options.home().blueprint){observedHome=options.home().blueprint;clearStale();revision++;}view.root.visible=!hidden;for(const item of placed.values())item.mesh.visible=!hidden;
     const frame=current?forgeRitualFrame(current.id,elapsed()):null;
     const waiting=preparing?{ritualId:'pending',phase:'words' as const,elapsed:(now-runStarted)/1000,phaseProgress:0,duration:21,source:'simulated' as const}:null;
     view.update(open?(waiting??frame):null, preparing?waitingStage==='drafting':!!frame&&frame.elapsed<5);
@@ -98,7 +106,6 @@ export function createKingdomForge(options:Options){
       if(frame.phase==='landed')view.piece.visible=false;
     }
     const landed=[...placed.values()].filter(p=>p.result.emitterKind).map(p=>({position:p.emitter,kind:p.result.emitterKind!}));
-    if(now<refusalUntil)landed.push({position:options.anvil.clone().add(new THREE.Vector3(0,1.5,0)),kind:'smoke'});
     emitters.update({time:fixed??now/1000,anvil:options.anvil.clone().add(new THREE.Vector3(0,1.6,0)),activity:open&&frame?.phase==='pour'?1:0,fillHeight:current&&frame?.phase==='pour'?current.bounds.getSize(new THREE.Vector3()).y*frame.phaseProgress:0,landed:hidden?[]:landed,strike:frame?.phase==='strike'?1-frame.phaseProgress:0});
     if(!open||hidden)return;
     options.camera.clearViewOffset();const portrait=options.canvas.clientWidth<640;
@@ -134,8 +141,8 @@ export function createKingdomForge(options:Options){
   }
   return {prepare,submit,update,status,refit,setEnvironment:view.setEnvironment,captureAudio:()=>{if(options.source!=='simulated')throw new Error('Offline audio is only available in the local simulation.');return renderForgeRitualAudio();},get renderRevision(){return open||placed.size?(fixed??now)+revision:revision;},get placements(){return [...placed.values()].map(p=>p.receipt);},
     open(){if(options.source!=='simulated')return;clearStale();open=true;options.sound.unlock();options.sound.cue('wood');publishStatus();},
-    close(){if(preparing||current&&!current.committed)return;open=false;options.camera.clearViewOffset();publishStatus();},
+    close(){if(now<refusalUntil||preparing||current&&!current.committed)return;open=false;options.camera.clearViewOffset();publishStatus();},
     seek(seconds:number){if(options.source!=='simulated'||!current)return;fixed=Math.max(0,seconds);revision++;},
-    dispose(){disposed=true;runAbort.abort();for(const p of placed.values()){p.unshadow?.();p.mesh.geometry.dispose();options.scene.remove(p.mesh);}if(current&&!current.committed)current.geometry.dispose();view.dispose();emitters.dispose();pieceMaterial.dispose();},
+    dispose(){disposed=true;runAbort.abort();for(const p of placed.values()){p.unshadow?.();p.mesh.geometry.dispose();options.scene.remove(p.mesh);}if(current&&!current.committed)current.geometry.dispose();mood.dispose();options.scene.remove(moodRoot);moodCaption.remove();view.dispose();emitters.dispose();pieceMaterial.dispose();},
   };
 }
