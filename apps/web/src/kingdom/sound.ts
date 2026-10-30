@@ -1,22 +1,46 @@
-/** Original procedural instruments. No samples or third-party recordings. */
+import {
+  createKingdomAudio, playKingdomPhrase,
+  type AudioCue, type AudioCueOptions, type KingdomPhrase, type KingdomPhraseOptions,
+} from '@chatdom/audio';
+
+/** The scene's one sound owner. Context, sources and the master stay inside the shared engine. */
 export function createKingdomSound() {
-  let context:AudioContext|undefined, master:GainNode|undefined, variation=0, enabled=false;
-  function unlock(){
-    context??=new AudioContext();
-    if(!master){master=context.createGain();master.gain.value=.16;const limiter=context.createDynamicsCompressor();limiter.threshold.value=-18;limiter.knee.value=12;limiter.ratio.value=8;master.connect(limiter);limiter.connect(context.destination);}
-    master.gain.setTargetAtTime(.16,context.currentTime,.03);void context.resume();enabled=true;
+  const audio = createKingdomAudio();
+  let requested = false, disposed = false, explicitlyMuted = false;
+
+  function unlock(): Promise<boolean> {
+    if (disposed) return Promise.resolve(false);
+    if (!explicitlyMuted) requested = true;
+    return audio.unlock().then(ready => ready && !audio.getState().settings.muted);
   }
-  function note(frequency:number,delay:number,duration:number,volume:number,type:OscillatorType='sine'){
-    if(!enabled||!context||!master)return;
-    const t=context.currentTime+delay,osc=context.createOscillator(),gain=context.createGain();
-    osc.type=type;osc.frequency.value=frequency;gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(volume,t+.018);gain.gain.exponentialRampToValueAtTime(.0001,t+duration);osc.connect(gain);gain.connect(master);osc.start(t);osc.stop(t+duration+.03);osc.onended=()=>{osc.disconnect();gain.disconnect();};
-  }
-  return {unlock,get enabled(){return enabled;},toggle(){if(enabled){enabled=false;master?.gain.setTargetAtTime(0,context!.currentTime,.03);return false;}unlock();return true;},
-    cue(kind:'wood'|'light'|'wave'|'beacon') {
-      const shift=[1,1.015,.985,1.008][variation++%4]!;
-      if(kind==='wood'){note(180*shift,0,.07,.28,'triangle');note(360*shift,.008,.04,.08);}
-      if(kind==='light'){note(523.25*shift,0,1.6,.22);note(1046.5*shift,.04,.7,.06);}
-      if(kind==='wave')for(let i=0;i<6;i++)note([261.63,329.63,392,523.25,659.25,784][i]!*shift,i*.13,2,.1);
-      if(kind==='beacon'){for(const f of [130.81,196,261.63,329.63,392])note(f*shift,0,4,.10,'triangle');note(1046.5,.2,3,.05);}
-    },dispose(){void context?.close();context=undefined;master=undefined;}};
+
+  return {
+    unlock,
+    get enabled() {
+      const { status, settings } = audio.getState();
+      return status === 'ready' && !settings.muted && settings.volume > 0;
+    },
+    toggle(): boolean {
+      if (disposed) return false;
+      if (requested) {
+        requested = false; explicitlyMuted = true;
+        audio.setSettings({ muted: true });
+        return false;
+      }
+      explicitlyMuted = false; audio.setSettings({muted:false});
+      void unlock();
+      return true;
+    },
+    cue(kind: AudioCue, options?: AudioCueOptions): boolean {
+      return audio.cue(kind, options);
+    },
+    phrase(phrase: KingdomPhrase, options?: KingdomPhraseOptions): boolean {
+      return playKingdomPhrase(audio, phrase, options);
+    },
+    dispose() {
+      disposed = true;
+      requested = false;
+      audio.dispose();
+    },
+  };
 }

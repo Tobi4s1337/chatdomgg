@@ -8,6 +8,8 @@ export type TwitchFailureKind =
   | 'bad_request'
   | 'not_found'
   | 'conflict'
+  | 'gone'
+  | 'limit_reached'
   | 'rate_limited'
   | 'provider'
   | 'network'
@@ -26,6 +28,8 @@ const PHRASES: Record<TwitchFailureKind, string> = {
   bad_request: 'request was rejected as malformed',
   not_found: 'resource was not found',
   conflict: 'resource already exists',
+  gone: 'this type or version has been removed',
+  limit_reached: 'a Twitch limit for this client was reached',
   rate_limited: 'rate limit reached',
   provider: 'Twitch reported a server error',
   network: 'Twitch could not be reached',
@@ -62,6 +66,7 @@ export function failureForStatus(status: number): TwitchFailureKind {
   if (status === 403) return 'forbidden';
   if (status === 404) return 'not_found';
   if (status === 409) return 'conflict';
+  if (status === 410) return 'gone';
   if (status === 429) return 'rate_limited';
   return 'provider';
 }

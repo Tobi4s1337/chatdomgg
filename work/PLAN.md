@@ -90,7 +90,7 @@ Frozen means versioned and tested, not unchangeable: main owns migrations and up
 | Appearance and animation | `shared` + `anim` | Shared skeleton/part sockets; chibi proportion; face states; clip/action timing; stance and springs; appearance hash; person look versus local earned pieces; LODs; equal-brightness sub tint | Wardrobe, avatar content, crowds, voice |
 | Making and judgment | `shared` | Pass/soften/hold/refuse; input/result checks outside agent; verdict/model/question-set versions; approved asset lineage; stream pass distinct from world publish; appeal/veil/revert; derivative invalidation; private refusal versus nameless beat | Forge, Genesis, games, build publishing, Watch |
 | Realm/session/travel protocol | `shared` + authority in `world` | Room roles, seat leases/reconnects, layer membership, movement validation, rate/bandwidth caps, writer failover, cross-kingdom reservation and rollback, no forced travel, destination bans | Realtime clients, games, Raid Gate |
-| Games and voice | `shared`; semantics in `chalk` | Family/variant manifest, view classes, legal-move visibility, match commands/results, practice rewards, deadlines, spectator/stream views, miniature summary; invited seats, age/consent, LiveKit permission lifecycle | Tavern games, Taster, campfire, Royal Audience |
+| Games and voice | `shared`; lane-local semantics in `packages/games` | Family/variant manifest, view classes, legal-move visibility, match commands/results, practice rewards, deadlines, spectator/stream views, miniature summary; invited seats, age/consent, LiveKit permission lifecycle | Tavern games, Taster, campfire, Royal Audience |
 | Spells and founding | `shared` | HousePartPlan, Charter, family/Chalk plans, fact-cited Voice lines; deterministic tools; quotas/timeouts; two external gates; checked fallback; ritual progress as observations of work, never fake success | Codex runtime, Forge, Genesis, Voice |
 | Seasons, discovery and memory | `shared` + `world` | Common league brackets, versioned score sources, contribution caps, visitor garlands, crowns, wonder progress; Chronicle/card/still records with fact and asset dependencies; privacy and retraction | Seasons, Chronicle, Atlas rankings, share surfaces |
 
@@ -140,11 +140,11 @@ Every usable-looking asset works. Every build has support and an escape path; pu
 
 ### Forge grammar, Genesis and game-language authority
 
-Main freezes and proves the fixed-shape Forge grammar, deterministic assembler and beauty checks, the Charter/layout
-generator, and Chalk's total interpreter/view semantics and Taster verification core. These are core rules, not
-handed to a UI lane to improvise. Taster includes whole-family settings checks, fairness/termination and two-world
-trace/taint checks, including legal moves and phase conditions that could disclose private state.
-Implementation of the spell service, content library and games can then proceed independently.
+Main owns the fixed-shape Forge grammar, deterministic assembler and beauty checks, the Charter/layout generator
+and shared promotions. Spec 22 delegates the full Chalk interpreter, view semantics and Taster core to
+`lane/tavern-tables` in `packages/games`; main reviews those core rules before promoting their shared consumers.
+Taster includes whole-family settings checks, fairness/termination and two-world trace/taint checks, including
+legal moves and phase conditions that could disclose private state. The lane owns implementation, not only UI.
 
 The full Forge scope includes the decided worn-piece branch on avatar sockets. Main owns its grammar/contract;
 content and safety lanes own its authored pieces and dedicated golden set. House parts open first under the
@@ -173,7 +173,7 @@ Split broad responsibilities into small PRDs (normally 3–6 tasks) as their con
 | **Content library** | Separate assigned subfolders of `packages/content/**` | Kingdom style kits, biomes, starter homes, civic places, furniture/tools, plants/wild species, companions, great beasts/dragon, wardrobe/tenure/sub pieces, curated flags, Forge motifs, emote uses, clips and seasonal decorations | Asset/interaction/rig/Forge contracts; visual benches |
 | **Baker** | `apps/baker/**` | CVOX versions, plot/ward LODs and impostors, contact sheets, guarded publication, emote conversion, approved Atlas drawings from real geometry, derivatives and CDN invalidation | Voxel/assets/publication/judgment; main's render API |
 | **Spell runtime and Watch** | `apps/codex/**`, `apps/api/src/watch/**`, `apps/web/src/watch/**` | API-key Codex workers/tools, bounded spell recipes, warm latency/cost tests, two independent gates, golden sets/drift checks, holds/appeals/rechecks, global veil and stream-pass workflows | Spell/grammar/judgment/authority contracts; approved renderer/assembler tools |
-| **Games and tavern** | `packages/chalk/src/families/**`, `apps/taster/**`, `apps/web/src/games/**`, `apps/realm/src/matches/families/**` | Authored verified families; quiz/chalk/chess/dice/regatta and Dusk Court; four chat modes (one player/many/teams/seats); Tableware styles and miniatures; spectate/join/resume; prompt variants, promise checks, shelf, crown polish and travelling author credit; full new-rules path behind its evidence gate | Main's Chalk/Trestle/view/seat/result contracts; art library and Taster core |
+| **Games and tavern — Spec 22** | `packages/games/**` except `dusk-court/**`, `apps/taster/**`, `apps/web/src/tavern/**`, `apps/realm/src/matches/tavern/**`, `apps/codex/src/games/**` | Authored verified families; quiz/chalk/chess/dice/regatta and Dusk Court; four chat modes (one player/many/teams/seats); Tableware styles and miniatures; spectate/join/resume; prompt variants, promise checks, shelf, crown polish and travelling author credit; full new-rules path behind its evidence gate | Lane-local Chalk/view/result/Taster ports first; main promotes shared contracts and binds auth/store/transport |
 | **Voice** | `apps/api/src/voice/**`, `apps/realm/src/voice/**`, `apps/web/src/voice/**` | Campfire and Royal Audience invitation, 16+ consent, trust/seat verification, PTT, permission revocation, OBS listening/monitoring and limiter; text seats; no recording | Seats/moderation/capability protocol; LiveKit adapter |
 | **Throne** | `apps/web/src/throne/**`, `apps/api/src/throne/**` | Connect and live-founding controls; dock/tab/phone/Stream Deck; one-press royal acts with previews, suggestions capped at three, Busy, safe areas, stream pass, safety keys, cost display and lifecycle | Capabilities/confirmed action results/Genesis/director interfaces |
 | **Director and stream** | `apps/web/src/stream/**`, `apps/web/src/director/**` | Beat-driven shot grammar, occlusion checks, calm/show, stage/corner/strip and seams, shutters, preloads, live Genesis direction, selected auto-open with veto, missed-climax in-app replay, OBS loss/recovery and long soak | Main's camera/render/beat/public projection; replay contract |
@@ -306,7 +306,7 @@ Request infrastructure from the team when a concrete test needs it; do not subst
 | Per-kingdom runtime AI budget | Main + Tobias; warm Forge/Genesis/variant calls measured for latency, tokens and daily load; free kingdoms need fair capacity/degradation without selling coals |
 | Renderer/pins and real-device floor | Main; confirm WebGL2/OBS material path, installed versions and phone/Firefox/macOS OBS targets; current host is not the GPU mentioned in old measurements |
 | Pool contribution versus earned score | Main domain spec; settle ledger treatment, contribution breadth/caps and one league bracket table before seasons or pool rewards can ship |
-| General generated games | Main/Taster; implement the full bounded new-rules path, but preserve the founder's activation gate: at least 60 of 100 real prompts pass all checks; verified variants still fulfil table requests |
+| General generated games | Spec 22/Taster lane; implement the full bounded new-rules path, but preserve the founder's activation gate: at least 60 of 100 real prompts pass all checks; verified variants still fulfil table requests |
 | Voice/harassment/age/cross-kingdom moderation | Main safety spec and founder choices; Safety §7 is unfinished; explicitly design block/mute, consent, ban reach, appeals and failure policy before exposure |
 | Twitch data to AI and retention | Team obtains the written/legal answers already requested by the vision; design provider/data boundaries and deletion independently; never infer consent from a code path |
 | Day-long panel Bits outside Twitch | Twitch written answer; preserve configurable expiry/eligibility and exact receipts; no promise of approval or monetization eligibility yet |
@@ -322,50 +322,47 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Town closed. Active work: citizens walking home, then private voxel building and housewarming.**
-Depth belongs in silhouette, motion, light, the moment and consumed contracts. One useful boundary test;
-lean serial captures. No more town terrain/light/budget proofs or record-only commits.
+**Stop point:** one real chat wish → real Codex → independent word/result judges → author's home, committed.
+Then Forge look goes to the team; realm is next when Tobias briefs it. Town and homecoming/build are closed.
+No further terrain/light/budget proofs or record-only commits.
 
-**Live gate takes priority.** `5c04787` removed the indefinite shader-completion barrier, but the founder's
-Chrome149/RTX5080 still waited at the subsequent first-light gate. Opening now requires the loaded scene's
-successful render; independent light refinement starts during loading and cannot hold that gate. `lightingReady`
-remains separate for captures. `window.__chatdomKingdom.inspect()` reads worker progress/upload bytes and render
-markers independently of the animation stats. No click is required. The revised preview is on5190; founder GPU
-confirmation is pending. `34867cd` replaces the slow horizon proof sweep with three representative tests
-(~0.74s test time), so lane reviews can pick it up now.
+**Landed:** `d19b786` streams real model runs into the browser, retains approval receipts, follows flight/landing
+closely, improves the sleeping dragon, adds six crowd palettes and the official SVG engraving. `18fe371` merges
+sound SO01–04, including the rapid mute/suspend convolver fix. `5839bdc` merges Herald H01–H04 and lockfile;
+H05 stays on its lane. Review fixes fence late sweep/verification replies and reordered stream observations.
+Web and Herald share settlement configuration and slots; live motion uses wall time. Witnessed direct chat
+can warm an offline window, while beacon/Chatters/rewards remain live-gated; stale data clears lights/names.
+Spec 03 records this contract amendment. Root `shots --area herald` delegates before taking the capture lock.
 
-**Gate evidence:** isolated from unfinished citizens in `../worktrees/gate-fix`. The no-time town opened even
-with all light-worker messages held and shader hints pending; releasing the workers produced all three fields
-and replay0/1/240 passed. `pnpm verify --hour dusk` passed954 tests plus seven serial standard-size captures;
-main inspected its town dusk image. The earlier full matrix passed at the shader-barrier fix. Software timing
-is not a GPU measurement. No new wave film or further town composition work is needed.
+**Ready lanes:** Specs 19–24: `citizen-card`, `twitch-moments`, `campfire`, `tavern-tables`, `raid-gate`, `emotes`.
+All have committed PRDs, `lane/<name>` branches and sibling `../worktrees/<name>` worktrees. Spec 22 owns the
+Chalk/Taster core in `packages/games` except campfire's `dusk-court`; main binds services/shared promotions.
+Atlas owns map/roads/finder/entry; Spec 23 owns kingdom-side travel/Gate coordination. `1e55f31` opens Spec 25,
+`anvil-hero`: Terra xhigh, sculpted iron/stone, real horn/hardy hole, exact official engraving, sleeping dragon
+readable across the square. Main mounts/reviews exports. Ritual/refusal/content/crowd/wardrobe lanes continue.
 
-**Uncommitted main work (preserve it):** `packages/shared/src/build.ts` and `citizen-chat.ts`;
-`packages/world/src/citizens/` (actual street routes, seekable walks, approved-node goals, arrival-light timestamp)
-and `build/` (draft operations/history, save format, shaping and honest publication boundary);
-`apps/web/src/citizens/` (part instancing/gait), `kingdom/citizen-scene.ts` and partial scene/UI integration;
-`apps/web/src/build/` (worker mesh, pointer tools, private local save, palette and tool UI). Focused CPU scenarios,
-typecheck and scoped lint passed; integrated visual acceptance has NOT happened. The build session still needs
-main scene/camera/house-replacement/housewarming wiring. LIVE draft persistence/moderation is unavailable;
-local publication must say SIMULATED. Keep that limitation explicit.
+**Evidence:** frozen install and `pnpm verify --area kingdom --tier town --hour dusk` passed typecheck/lint,
+1,273 tests/81 files, build and both standard dusk shots; both opened. Fresh Forge capture passed three
+attachments/refusal/build-rack/crowd checks. Looked at desktop/phone dragon/street, phone build rack, moon/owl,
+and all frames of `shots/forge/ritual.mp4` (21.5 s, 960×600). It is a labelled fixture, not live judge proof.
+Later `shots/forge/engraving@1440x900.png` confirms visible cloud AND terminal cuts in dark iron; the film
+predates that fix and still shows the old box anvil. Standard town shots: `shots/kingdom/town-dusk@1440x900.png`
+and `town-dusk@390x844.png`. No more main look passes before the real run.
 
-**Wardrobe:** WB01 is now committed on `lane/wardrobe-body` (`000d8eb`, then main merge `faa2ba0`), clean when
-checked. Review/merge it before the street look. Its factories/compile API fit the frozen rig; root needs the
-package export. Its17-part articulated legs require adapting the fallback renderer's rigid-leg foot correction.
-Use its authored citizen rather than growing the temporary core look into a second wardrobe library.
+**Services:** main preview5190 session6681; spell5195 session38778 (development citizens, judges unconfigured).
+Both restarted after their prior processes ended. `.env` has no `OPENAI_API_KEY`; real Codex drafting works,
+but no complete live judged run has passed. Missing judges fail cold. Herald5194 was real/healthy with seven
+subscriptions, then a lane capture replaced it with SIMULATED replay. Main's five-minute launch wait expired;
+it never started a second conduit consumer. Tobias authorizes stopping that copy, but its host PIDs are invisible
+here and the alternative host-process probe was rejected by approval policy. A host-side stop is still needed.
+Then start `pnpm --filter @chatdom/herald dev` and open on5190:
+`/?source=herald&seed=tobi4s_&tier=hamlet&firstYear=2026&year=2026&kingdom=129634568&camera=citizen&hour=19.5`.
+Actual human message→citizen/window evidence remains missing.
 
-**New draft handoffs:** specs13–16 and PRDs exist for `build-tools`, `build-templates`, `vox-import` and
-`crowd-behaviour`; no branches/worktrees yet. Finish their actual consumer hooks, review and freeze, commit with
-working core, then create `lane/<name>` and `../worktrees/<name>`. Sol/high wrote them. Build UI optional tools/import
-hooks exist; main still owns catalogue/bench routes, import package/lock entry, cue/policy/pose adapters. References
-are `work/references/build-shaping.md`, `citizen-motion.md`, `vox-import.md`. Do not claim drafts ready early.
-
-**Existing team:** specs07–11 and branch/worktrees exist for panel-stream, wardrobe-body, forge-pieces,
-civic-props and sound. Atlas/Herald remain team-owned; Hearth/street props integrated, Tide separate. Preserve
-active lane edits. Source remains labelled SIMULATED until the actual adapter supplies live evidence.
-
-**Host:** main5190 currently serves the isolated gate-fix build, with no unfinished citizens. The unserved
-citizen build is in a temporary output directory. Atlas5193/Herald5194 reserved; manual previews use a free5170–5199
-port. Shared capture lock and two-CPU runs keep the host lean. Postgres/Valkey/Surveyor untouched; `.env` ignored.
-Next: confirm opening on the5080, then connect/review citizens and build mode, two looked-at moments, short walking
-and building captures, smoke + verify, commit/push. Keep this section to one page.
+**Next / doubts:** presence discards text and assigns presentation slots, not deeds. The private verified
+`!forge` branch, native-host resolver and approved public attachment remain to implement. Production words
+require actual home/trust and earned coals (10 live minutes, cap3). Asked Tobias: explicitly labelled real-chat
+development rehearsal before realm eligibility, or realm ledger first? Answer and judge key are pending. A
+rehearsal must default off, keep words private, cancel on moderation/grant/offline loss, publish only approved
+draft/slot/fingerprints and claim no production publication. Never relabel simulated provenance as live.
+Seven motifs cannot satisfy every subject; the result judge must hold unrelated substitutions.

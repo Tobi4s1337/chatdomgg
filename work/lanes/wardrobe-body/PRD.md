@@ -6,7 +6,7 @@ Scope: `packages/content/src/avatars/**`, `apps/web/src/avatar-bench/**`, this P
 Read `AGENTS.md`, `$ralph-lane`, `$voxel-content`, `$look` and the spec. You are not alone in the codebase;
 do not revert others' work or edit outside the scope. Main creates the branch/worktree and integrates the lane.
 Spec 08 is frozen against `AvatarPartBlueprintSchema`, `AVATAR_RIG`, `AVATAR_SOCKETS`, `AVATAR_PART_LIMITS`,
-`AVATAR_LOOK_LIMITS` and `AVATAR_PALETTE`. The optional `/-/avatars` route loads a default component from
+`AVATAR_LOOK_LIMITS`, `AvatarCapeBlueprintSchema` and `AVATAR_PALETTE`. Capes are thin cloth data, never voxel parts; main owns the cloth renderer in `apps/web/src/citizens/capes.ts`. The optional `/-/avatars` route loads a default component from
 `apps/web/src/avatar-bench/index.tsx`. Never author a replacement shared contract to unblock yourself.
 
 Every task is done when `pnpm typecheck`, `pnpm lint`, the focused fit test once introduced, and `pnpm build`
@@ -23,6 +23,14 @@ Do not add per-voxel tests. Missing required main inputs get a `needs:` line; wo
   deterministic capture script and visibly labelled SIMULATED fixtures. Capture front/side/back at dusk and
   web desktop/mobile sheets. The first task ends with an actual rendered citizen, not a validator-only core.
   · evidence: three-angle images and opened 1440×900/390×844 sheets; schema/budget report.
+- [ ] **WB01C — Replace the block cloaks with cloth.** Before further back garments, migrate the first short
+  cloak and bench to `AvatarCapeBlueprintSchema`. Export `createCape(id, fit)` from the owned catalogue;
+  `createWearableParts` supplies only any rigid clasps/fasteners for these forms. Use main's real
+  `createCitizenCapeRenderer` on the bench and main's back socket pose; do not write another cloth solver.
+  Fit shoulder mounts, silhouette, length, lining, hem and registered colours to the four bodies. A cape must
+  hang as a thin sheet, clear the hips during a stride and settle on stopping. Capture front/side/back and a
+  short walk-to-stop comparison; inspect both standard web sizes. · evidence: cloth visible in the actual
+  runtime, no voxel drape/backpack, one catalogue schema check and inspected fit captures.
 - [ ] **WB02 — Make bodies and hair feel like different people.** Complete four contour families, eight human
   and two fey skin choices, six natural hair swatches and all eight hair treatments from R2–R3. Keep rig/pivots
   identical. Capture silhouette/body/hair contact sheets plus lightest/darkest skin at noon, dusk and night;
@@ -36,15 +44,13 @@ Do not add per-voxel tests. Missing required main inputs get a `needs:` line; wo
 - [ ] **WB04 — Let clothes carry a true history.** Complete the seven story pieces from R5, honest source
   descriptions, subscription active/lapsed mappings and tier-three rainbow swatch bindings. Keep laurel distinct
   from the monarch crown; do not implement grants, prices or fake reward success. Capture every piece and each
-  cape's front/side/back fit; inspect subdued lapse variants. Supply the exact registered swatches for main's
-  subsequent shimmer implementation. · evidence: opened story sheet, descriptions and active/lapsed comparison;
+  cape's front/side/back fit; inspect subdued lapse variants. Supply the exact registered swatches through the cape's `shimmer` field; the existing runtime handles colour motion. Never add emission. · evidence: opened story sheet, descriptions and active/lapsed comparison;
   no unearned glow.
 - [ ] **WB05 — Prove the assembled clothes fit the action poses.** Review all four bodies in walk
   contact/full stride, sitting, bow, raised-arm tool use and head turn on Three groups built from `AVATAR_RIG`.
   Focus on long coat, skirt, travelling cloak and long braid together; repair garment splits and secondary
-  attachment clearances. Capture pose-fit sheets and street/stream lineups. Write the specific runtime
-  cape/hair/shimmer follow-up main must inspect in its next walking-avatar brief; do not implement that engine
-  here. · evidence: opened pose-fit sheets at web sizes and 1920×1080/1280×720 lineups.
+  attachment clearances. Capture pose-fit sheets and street/stream lineups. Exercise main’s cloth runtime for capes and report any remaining clipping, settling or shimmer issue;
+  hair motion remains main-owned. Do not implement a second animation engine here. · evidence: opened pose-fit sheets at web sizes and 1920×1080/1280×720 lineups.
 - [ ] **WB06 — Deliver a coherent library to the avatar consumer.** Finish ordered catalogue/factory/review
   exports and the owned README with IDs, palette roles, permitted layer combinations, fit variants and costs.
   Validate the entire catalogue, run the focused seam test and full test/build checks, regenerate complete

@@ -31,18 +31,19 @@ export interface SimulatedPresence {
 }
 
 /** A labelled scenario producer. Every light and name passes through the world reducer. */
-export function createSimulatedPresence(layout: Pick<KingdomLayout, 'homes' | 'config'> | Pick<SettlementPlan, 'homes' | 'config'>): SimulatedPresence {
+export function createSimulatedPresence(layout: Pick<KingdomLayout, 'homes' | 'config'> | Pick<SettlementPlan, 'homes' | 'config'>, arrival?: { firstSlot: number; waveSeconds: number }): SimulatedPresence {
   if (!layout.homes.length) throw new TypeError('Presence scenario needs at least one home');
   const newestYear = Math.max(...layout.homes.map(home => home.quarterYear));
-  const first = layout.homes.find(home => home.quarterYear === newestYear && home.position[0] > 0)
+  const first = layout.homes.find(home => home.slot === arrival?.firstSlot) ?? layout.homes.find(home => home.quarterYear === newestYear && home.position[0] > 0)
     ?? layout.homes.find(home => home.quarterYear === newestYear)!;
   const ordered = [first, ...layout.homes.filter(home => home !== first).sort((a, b) => a.slot - b.slot)];
   const bindings: PresenceBinding[] = [];
+  const furthest = Math.max(1, ...ordered.map(home => Math.hypot(home.position[0] - first.position[0], home.position[2] - first.position[2])));
   const arrivals: Arrival[] = ordered.map((home, index) => {
     const personId = PersonIdSchema.parse((900_000_000_000_001_000n + BigInt(home.slot)).toString());
     bindings.push({ personId, slot: home.slot });
     const distance = Math.hypot(home.position[0] - first.position[0], home.position[1] - first.position[1], home.position[2] - first.position[2]);
-    const at = index === 0 ? 1000 : Math.round(Math.min(20, 4 + distance / 18) * 1000);
+    const at = index === 0 ? 1000 : Math.round((arrival ? 2 + Math.min(1, distance / furthest) * arrival.waveSeconds : Math.min(20, 4 + distance / 18)) * 1000);
     const name = index % 3 === 0 ? NAMES[index / 3] : undefined;
     const person: PresencePerson = name ? { personId, disclosure: 'named', displayName: name } : { personId, disclosure: 'anonymous' };
     return { at, person };
