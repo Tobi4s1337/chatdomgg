@@ -126,7 +126,7 @@ export function createLightField(
         if (source.normal && source.normal.some(value => !Number.isFinite(value))) throw new TypeError('Light source normals must be finite');
         const level = Math.min(15, Math.round(15 * source.strength / config.levelScale) * config.levelScale);
         if (level === 0 || source.position.some((value, axis) => value < origin[axis]! || value >= origin[axis]! + config.size[axis]! * config.cellSize)) continue;
-        emitters.push({ position: [...source.position], level, ...(config.mode !== 'local' && source.normal ? { normal: [...source.normal] as Vec3 } : {}) });
+        emitters.push({ position: [...source.position], level, ...(source.normal ? { normal: [...source.normal] as Vec3 } : {}) });
       }
       const key = JSON.stringify([origin, emitters]);
       if (key === latestKey) return;

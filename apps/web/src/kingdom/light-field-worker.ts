@@ -302,9 +302,10 @@ export function createLightFieldSolver(layout: KingdomLayout, houses: readonly W
         if (!Number.isInteger(emitter.level) || emitter.level < 0 || emitter.level > 15 || emitter.position.some(value => !Number.isFinite(value))) throw new Error('Invalid voxel light emitter');
       }
       if (!cachedOrigin || request.origin.some((value, axis) => value !== cachedOrigin![axis])) rasterize(request.origin);
-      const emitters = config.mode !== 'local'
-        ? request.emitters.map(emitter => projectEmitter(emitter, request.origin)).filter((emitter): emitter is LightEmitter => emitter !== null)
-        : request.emitters;
+      // Even half-metre cells can conservatively close an authored window recess.
+      // Every resolution uses the same bounded, exact-air outward projection.
+      const emitters = request.emitters.map(emitter => projectEmitter(emitter, request.origin))
+        .filter((emitter): emitter is LightEmitter => emitter !== null);
       const volume = buildLightVolume({ revision: request.revision, origin: request.origin, size, cellSize, occupancy, emitters });
       if (config.levelScale !== 1) for (let index = 0; index < volume.light.length; index++) volume.light[index] = Math.min(15, volume.light[index]! * config.levelScale);
       // Scratch replaces the caller-occupancy copy already counted by the voxel

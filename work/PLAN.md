@@ -320,7 +320,7 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Handoff state — 2026-10-30 active: lane integration before the dusk pass
+## 10. Handoff state — 2026-10-30 active dusk composition
 
 - Pushed: `d73c342` froze the small shared/world/voxel consumer contracts and Herald spec; `095c967` recorded its verified worktree. `lane/herald` / `../worktrees/herald` are ready at that boundary. No real Twitch authorization or chat success is claimed. Atlas remains with its team at `lane/atlas` / `../worktrees/atlas`; main does not edit its implementation.
 - Content specs 04–06 and PRDs are now frozen: `homes-hearth` (15 homes), `homes-tide` (15 homes), `street-props` (20 records / ten forms in two kits). Main reviewed the production bench, actual validator, mixed desktop/phone fixtures, doorway and SIMULATED window on/off. All 51 core baselines validate; lane assets are deliberately absent and missing collections fail. Committed and pushed in `2c407d8`. Branches `lane/homes-hearth`, `lane/homes-tide`, `lane/street-props` and worktrees `../worktrees/homes-hearth`, `../worktrees/homes-tide`, `../worktrees/street-props` exist at that green commit, with frozen-lockfile dependencies installed. Worker startup belongs to the team.
@@ -448,3 +448,51 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
   Do not call the existing west-oblique camera accepted: main and Terra still reject blank backs and overly dark
   separation. The close Hearth view proves the content/adapter but is tightly cropped on phone and needs better
   warm spill. The terrain architect's rolling-ridge/current-footprint-pad proposal is still unimplemented.
+
+### Pause checkpoint — latest; stop until founder resumes
+
+- Founder paused the goal again. Main set goal status paused and interrupted its owned targeted verify process
+  (exit 130). Terrain/light architects have completed their turns; no new capture was started for their changes.
+  Preserve all uncommitted files. Do not resume because this context is fresh.
+- Confirmed pushed main: `082232a` Atlas merge, `b4e0049` Hearth/props/shadow/look integration, `7b8e2eb` Herald
+  auth/replay seam correction. Atlas A01/A02 are committed as `0a3ba03`; main fast-forwarded `lane/atlas` and its
+  worktree to `082232a` and completed its frozen offline install for all ten packages. **A03 can proceed.**
+  Herald and content lanes retain their later uncommitted work; main did not copy it.
+- Last committed evidence: full `pnpm verify` passed 419 tests + 19 standard shots for the kingdom integration;
+  replay browser proof passed with two close Hearth images, origin rejection/withdrawal/recovery. Full props20
+  and partial Hearth9 validation passed. Combined Atlas main passed `pnpm verify --area atlas`: 760 tests + two
+  actual survey map shots, both opened by main. All captures ran serially on the same two CPU cores at low
+  priority. See the two integration review docs and `work/evidence/kingdom/integration/`, `work/evidence/atlas/`.
+- **New uncommitted natural terrain:** `packages/world/src/layout.ts`, its tests and `terrain-worker.test.ts`.
+  Astra xhigh replaced quarter-wide plateaus with a rolling ridge, current-depth footprint pads, exact street/
+  castle contacts, rounded 12 m feathers and a spatial pad index. Lake bays carve before mandatory contact pads.
+  Addresses/reservations/slots do not move. 49 focused tests, typecheck and scoped lint passed, including actual
+  Hearth/prop contact, all 240 sources and horizon joins. Maximum capture-seed contact offset .346 m under .4 m;
+  displacement 1.313 m under 2 m. Terrain topology/transfer unchanged. Visual acceptance is unproven.
+- **New uncommitted local-light correction:** the three light-field files. Recessed Hearth glass put a valid
+  source inside a conservative 0.5 m cell; the local path dropped its normal and skipped exact-air projection.
+  All modes now preserve normals and use the same bounded guarded projection. Real replay case local visits
+  rise 0 → 1,736; combined 31 → 1,767; removal clears to zero and memory stays unchanged. 43 focused tests and
+  scoped lint passed, including all eighteen family/tier/yaw combinations and thin/second-wall rejection.
+- **Unreviewed camera experiment in `scene.ts`:** town eye [180,130,265], phone [-80,130,285], target [0,14,50].
+  A CPU study in `shots/kingdom/camera-candidates.json` tested actual ordered-home occlusion/framing (not terrain,
+  LOD or pixels): 86/44 visible front sources versus far fewer in low-angle candidates. It is evidence for choosing
+  a shot, not art approval. The increased height may push the beacon-cloud moment out of frame; inspect and
+  adjust before keeping it. The personal opening remains at its actual street window.
+- `packages/testing/shots.mjs` now has uncommitted `--tier hamlet|town`, `--hour noon|dusk|night`, `--size
+  desktop|phone` filters for lean targeted checks. Defaults retain all standard shots. The interrupted command was
+  `pnpm verify --area kingdom --tier hamlet --hour dusk --size desktop`; do not claim it passed.
+- On resume only: review these diffs, update Spec 02's obsolete full-reservation-flat decision to current-built
+  footprint contacts (growth terraforms a new snapshot without moving the address), finish verification, then a
+  small serial dusk batch: natural hamlet, town window-facing composition, close Hearth spill. The wave film and
+  final complete art acceptance remain open. Last committed shots still show blank backs/plinth; don't call the
+  latest source demonstrated. Preview 5190 is live but may serve an unreviewed build from the interrupted run;
+  recheck before asking for hardware timings. No real-GPU timing evidence yet.
+
+### Resumed — terrain, recessed light and dusk composition
+
+- Founder resumed the same goal. The preceding turn made authoritative progress: pushed Atlas/content/Herald integration and recorded evidence; the pause preserved the next terrain/light work. Main reviewed those diffs and is running a CPU-bounded verify with only two desktop dusk captures. Capture work remains serial.
+- Spec 02 now records current-depth footprint grading rather than flattening the entire future reservation. All addresses and growth space remain fixed. Recessed local emitters now use the same guarded exact-air projection as the distant field. Both changes still await the integrated visual check.
+- The 130 m town camera is an experiment, not acceptance. Main is reviewing its roof clearance and cloud framing plus the opening camera arc before finalizing it. Final matrix, wave film and real-device timing remain open.
+
+- Natural-ground/local-emission milestone passed `pnpm verify --area kingdom --hour dusk --size desktop`: typecheck, lint, 787 tests, build and both desktop dusk captures. Main opened both. The hamlet plinth is gone; exact built contacts remain grounded. Its accepted terrain evidence is `work/evidence/kingdom/natural-ground/hamlet-dusk@1440x900.png`. Camera acceptance is separate: the town exposes many warm fronts but is still too overhead, and the hamlet still hides fronts behind the near row. The local-light regression is now covered across all eighteen Hearth tier/family/yaw combinations. Vitest is capped at two workers; capture selectors preserve the full default matrix.

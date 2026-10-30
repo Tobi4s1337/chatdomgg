@@ -7,11 +7,19 @@ const external = option('--base-url');
 let base = external;
 const area = option('--area') ?? 'all';
 if (!['all', 'foundation', 'kingdom', 'atlas'].includes(area)) throw new Error(`Unknown area: ${area}`);
+// Targeted look checks keep the shared host lean; the default verify matrix is unchanged.
+const tierFilter = option('--tier'), hourFilter = option('--hour'), sizeFilter = option('--size');
+if (tierFilter && !['hamlet', 'town'].includes(tierFilter)) throw new Error('Expected --tier hamlet|town');
+if (hourFilter && !['noon', 'dusk', 'night'].includes(hourFilter)) throw new Error('Expected --hour noon|dusk|night');
+if (sizeFilter && !['desktop', 'phone'].includes(sizeFilter)) throw new Error('Expected --size desktop|phone');
+const kingdomSizes = sizeFilter === 'desktop' ? [[1440, 900]] : sizeFilter === 'phone' ? [[390, 844]] : [[1440, 900], [390, 844]];
+const hours = [['noon', 12], ['dusk', 19.5], ['night', 23]].filter(([label]) => !hourFilter || label === hourFilter);
 let server, browser;
 try {
   if (!external) ({ server, base } = await startCapturePreview());
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const capture = async (path, name, sizes, kingdom = false, tier = 'town') => {
+    console.log(`Preparing ${name} (${sizes.map(([w, h]) => `${w}x${h}`).join(', ')})`);
     const page = await browser.newPage({ viewport: { width: sizes[0][0], height: sizes[0][1] } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -28,7 +36,7 @@ try {
     await page.evaluate(() => document.fonts.ready);
     for (const [width, height] of sizes) {
       await page.setViewportSize({ width, height });
-      for (const [label, hour] of kingdom ? [['noon', 12], ['dusk', 19.5], ['night', 23]] : [['', 0]]) {
+      for (const [label, hour] of kingdom ? hours : [['', 0]]) {
         if (kingdom) {
           await page.evaluate(hour => window.__chatdomKingdom.hour(hour), hour);
           await page.waitForFunction(hour => Math.abs(window.__chatdomKingdom.stats.hour - hour) < 0.01 && window.__chatdomKingdom.stats.camera === 'hero', hour);
@@ -44,13 +52,14 @@ try {
         const dir = `shots/${area === 'atlas' ? 'atlas' : kingdom ? 'kingdom' : 'foundation'}`;
         await mkdir(dir, { recursive: true });
         await page.screenshot({ path: `${dir}/${name}${label ? `-${label}` : ''}@${width}x${height}.png`, fullPage: false, timeout: 120_000 });
+        console.log(`Captured ${dir}/${name}${label ? `-${label}` : ''}@${width}x${height}.png`);
       }
     }
     await page.close();
   };
   if (area === 'atlas') await capture('/map', 'atlas', [[1440, 900], [390, 844]]);
   else {
-    for (const tier of ['town', 'hamlet']) await capture('/', tier, [[1440, 900], [390, 844]], true, tier);
+    for (const tier of tierFilter ? [tierFilter] : ['town', 'hamlet']) await capture('/', tier, kingdomSizes, true, tier);
     if (area !== 'kingdom') {
       await capture('/stream', 'stream', [[1920, 1080], [1280, 720]], true);
       await capture('/panel', 'panel', [[318, 496]]);

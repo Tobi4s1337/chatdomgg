@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StyleIdSchema, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import { generateKingdom } from '@chatdom/world';
 import { createWindowLights, type WindowHouse } from '@chatdom/render';
-import { createHome, createCastle, CASTLE_BEACON_ANCHOR_METRES, MATERIALS } from '@chatdom/content';
+import { createHome, createHearthHome, createCastle, CASTLE_BEACON_ANCHOR_METRES, MATERIALS } from '@chatdom/content';
 import { PRESENCE_FIXTURES } from '@chatdom/shared/world-fixtures';
 import { Scene } from 'three';
 import { createVoxelMaterial } from '@chatdom/render';
@@ -53,6 +53,72 @@ describe('authoritative worker light geometry', () => {
     const belowGround: Vec3 = [0.25, 8.75, 0.25];
     const ground = createLightFieldSolver(layout, [airHouse]).solve({ ...request(), emitters: [{ position: belowGround, level: 15 }] }).volume;
     expect(sampleLightVolume(ground, belowGround)).toBe(0);
+  });
+
+  it('projects a local source through exact air but refuses thin, later and restored walls', () => {
+    const buried = { position: [0.25, 10.25, 0.25] as Vec3, level: 15, normal: [1, 0, 0] as Vec3 };
+    const solve = (houses: readonly WindowHouse[], emitter = buried) => createLightFieldSolver(layout, houses)
+      .solve({ ...request(), emitters: [emitter] }).volume;
+    const opened = solve([house()]);
+    expect(sampleLightVolume(opened, buried.position)).toBe(0);
+    expect(sampleLightVolume(opened, [0.51, 10.25, 0.25])).toBe(15);
+    expect(sampleLightVolume(opened, source)).toBe(0);
+    expect(opened.visited).toBeGreaterThan(500);
+    const noNormal = createLightFieldSolver(layout, [house()]).solve({ ...request(), emitters: [{ position: buried.position, level: 15 }] }).volume;
+    expect(noNormal.visited).toBe(0);
+    expect(solve([house()], { ...buried, position: [0.0625, 10.25, 0.25] }).visited).toBe(0);
+    for (const x of [0.375, 0.875]) {
+      // The latter wall is in the second occupied cell, beyond the first boundary.
+      const wall: WindowHouse = { ...house(), position: [x, 6, -16] };
+      expect(solve([house(), wall]).visited).toBe(0);
+      const carved = { ...wall, blueprint: blueprint([wallBox, { ...wallBox, material: 0 }]) };
+      const throughCarve = solve([house(), carved]);
+      expect(Math.max(...[0.51, 1.01].map(x => sampleLightVolume(throughCarve, [x, 10.25, 0.25])))).toBe(15);
+      const restored = { ...wall, blueprint: blueprint([{ ...wallBox, material: 0 }, wallBox]) };
+      expect(solve([house(), restored]).visited).toBe(0);
+    }
+    expect(() => solve([house()], { ...buried, normal: [0.5, 0, 0.5] })).toThrow('cardinal');
+  });
+
+  it('limits local projection to two occupied cells even when the longer ray is exact air', () => {
+    const buried = { position: [0.25, 10.25, 0.25] as Vec3, level: 15, normal: [1, 0, 0] as Vec3 };
+    const belowBeam = (length: number): WindowHouse => ({ ...house(), blueprint: {
+      ...blueprint([{ from: [0, 35, 128], to: [length, 36, 132], material: 3 }]), size: [12, 128, 256],
+    } });
+    const projected = createLightFieldSolver(layout, [belowBeam(8)]).solve({ ...request(), emitters: [buried] }).volume;
+    expect(sampleLightVolume(projected, [1.01, 10.25, 0.25])).toBe(15);
+    const beyondBound = createLightFieldSolver(layout, [belowBeam(12)]).solve({ ...request(), emitters: [buried] }).volume;
+    expect(beyondBound.visited).toBe(0);
+  });
+
+  const hearthWindows = (['hut', 'cottage', 'house'] as const).flatMap(tier => ([0, 1, 2] as const)
+    .flatMap(variant => [0, Math.PI].map(yaw => ({ tier, variant, yaw }))));
+  it.each(hearthWindows)('lights the authored first Hearth window for $tier/$variant at yaw $yaw and clears it completely', ({ tier, variant, yaw }) => {
+    const home: WindowHouse = { slot: 0, blueprint: createHearthHome(tier, variant), position: yaw === 0 ? [-4, 9, -16] : [4, 9, 16], yaw };
+    const windows = createWindowLights(new Scene(), [home]);
+    try {
+      windows.setFrame({ ...PRESENCE_FIXTURES.public, asOf: PRESENCE_FIXTURES.public.asOf + 1000 });
+      expect(windows.getSources()).toHaveLength(1);
+      const window = windows.getSources()[0]!;
+      const emitter = { position: window.position, normal: window.normal, level: Math.round(window.strength * 15) };
+      const solver = createLightFieldSolver(layout, [home]);
+      const unprojected = solver.solve({ ...request(), emitters: [{ position: emitter.position, level: emitter.level }] }).volume;
+      const lit = solver.solve({ ...request(2), emitters: [emitter] }).volume;
+      const exterior = [0, 0.25, 0.5, 0.75, 1].map(distance => sampleLightVolume(lit,
+        window.position.map((value, axis) => value + window.normal[axis]! * distance) as unknown as Vec3));
+      expect(Math.max(...exterior)).toBe(15);
+      expect(lit.visited).toBeGreaterThan(500);
+      expect(lit.visited).toBeGreaterThanOrEqual(unprojected.visited);
+      // Emberfold and Bramblecross expose the integration regression: their
+      // real-air source sits in a conservatively occupied half-metre facade cell.
+      if (variant !== 2) expect(unprojected.visited).toBe(0);
+      expect(lit.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
+      const removed = solver.solve({ ...request(3), emitters: [] });
+      expect(removed.volume.visited).toBe(0);
+      expect(removed.volume.light.every(level => level === 0)).toBe(true);
+      expect(removed.volume.surfaceSamples.every(value => (value & 15) === 0)).toBe(true);
+      expect(removed.occupancyBuilds).toBe(1);
+    } finally { windows.dispose(); }
   });
 
   it('uses exact cardinal transforms and rejects unsupported arbitrary yaw', () => {
@@ -457,12 +523,16 @@ describe('dedicated light worker scheduling', () => {
     const { field, worker, onVolume } = setup();
     worker.ready();
     const position: [number, number, number] = [...source];
-    field.update([0, 0, 0], [{ position, strength: 1 }]);
+    const normal: [number, number, number] = [1, 0, 0];
+    field.update([0, 0, 0], [{ position, normal, strength: 1 }]);
     const initial = worker.latest();
+    expect(initial.emitters[0]?.normal).toEqual(normal);
     worker.respond(worker.result(initial));
-    field.update([8, 0, 0], [{ position, strength: 0.5 }]);
+    field.update([8, 0, 0], [{ position, normal, strength: 0.5 }]);
     position[0] = 999;
+    normal[0] = -1;
     expect(worker.latest().emitters[0]?.position[0]).toBe(source[0]);
+    expect(worker.latest().emitters[0]?.normal).toEqual([1, 0, 0]);
     expect(onVolume).toHaveBeenCalledOnce();
     field.dispose();
   });
