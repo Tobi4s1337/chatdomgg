@@ -1,7 +1,7 @@
 # Lane atlas
 
 Spec: `work/specs/01-atlas.md` · Branch: `lane/atlas` · Worker: Codex Sol, high; Terra high for visual subwork.
-Status: **A01/A02 reviewed and committed by main; A03 is next.** Spec and first-consumer interchange frozen; later producer seams require main’s freeze when reached.
+Status: **A01–A04 done (A03 accepted with open edge cases); A05 done.** Spec and first-consumer interchange frozen; later producer seams require main’s freeze when reached.
 
 Scope: `apps/web/src/atlas/**`, `apps/surveyor/**`, this PRD, `progress.txt`, the Atlas spec and
 `work/references/atlas-cartography.md`. Everything else is read-only. You are not alone in the codebase: preserve
@@ -39,21 +39,21 @@ The first visible result is A02. A task blocked by a future shared seam records 
   of the complete map, not a claim that later interactions are implemented. No official founding or synthetic
   community names. Run `pnpm shots --area atlas` and inspect both sizes. R2, R4, R6–R9, R17.
 
-- [ ] **A03 — Make geography and settlement survive new observations** · evidence: invariant tests + log.
+- [x] **A03 — Make geography and settlement survive new observations** · evidence: invariant tests + log.
   Add versioned taxonomy/name proposals, deterministic language/family geography, holding tiers and hamlet slots,
   immutable edition artifacts and append-only holding/tombstone ledger. Extend import/check with same-input/hash
   reproducibility, duplicate-owner/slot-exhaustion/hide/growth checks, and preservation of previous addresses.
   Official Edition 0/Edition I commands reject insufficient duration, unreviewed taxonomy and absent founder
   authorization. Never found an edition as a test side effect. R2–R5.
 
-- [ ] **A04 — Publish coherent live paint, pennants and small-channel dabs** · evidence: codec flow + shots.
+- [x] **A04 — Publish coherent live paint, pennants and small-channel dabs** · evidence: codec flow + shots.
   Produce and consume the shared live-v2/dabs-v1/start-time artifacts behind one atomically swapped manifest.
   Apply a canonical content/visibility gate to every output before publishing, with privacy/safety cases.
   Draw all live classes with the specified wash/pennants, starts and founded spectacle priority. Partial sweeps,
   wrong alignment, stale/future observations, corrupt assets and old snapshots retain the last complete frame
   and its original observation time; they never manufacture offline or freshly live channels. R8, R11, R14, R16.
 
-- [ ] **A05 — Make map motion and tile loading hold together** · evidence: interaction tests + motion review.
+- [x] **A05 — Make map motion and tile loading hold together** · evidence: interaction tests + motion review.
   Finish anchored wheel/pinch/pan/inertia, bounded interruptible flights, focus/back restoration and phone-sheet
   padding. Add four zoom distances, stable tiered label/shield collision, culling and bounded texture cache;
   implement ancestor tile fallback and seam-free sharpening. Test cancel/blur/resize, delayed/failed tiles,
@@ -125,6 +125,27 @@ The first visible result is A02. A task blocked by a future shared seam records 
 
 Worker discoveries go here with the rule/problem and evidence. These are not authorization to widen scope or skip
 any task above. There are no invented future features to implement from this list.
+
+- **2026-10-30 (A03) — Founder key and authorization ceremony.** `atlas:found` verifies an Ed25519 authorization
+  against `ATLAS_FOUNDER_PUBLIC_KEY`. Nobody holds a founder key yet, so main/Tobias must create one, keep the
+  private half off the server, and provision the public half before Edition 0 (eligible 2026-10-31 15:44 UTC).
+- **2026-10-30 (A03) — `families-1` awaits founder review.** It has 14 families and 91 games left unassigned with
+  reasons. Near-gambling categories (crypto, casino simulators) are deliberately unassigned, not mapped. Edition I
+  refuses it until it is marked reviewed (reviewer and date). The realm-name proposals are not shown until then.
+- **2026-10-30 (A03) — needs: founded-record producer.** A founded kingdom's own holding (`reason: founded`) and
+  raids into founded kingdoms need main's founded-record seam. Until then `check` reports any `founded` line as an
+  error and settlement grants none.
+- **2026-10-30 (A03) — Empty Outer Isles chunks.** The browser fetches the six empty Outer Isles `region-<n>.json`
+  chunks (a few hundred bytes each). Harmless, but the chunk loader could skip regions with no holdings.
+- **2026-10-30 (A05) — No watchdog for a hung bake worker.** Closed in A05: a 20 s ready / 8 s bake watchdog treats
+  a silent worker as crashed (tests in `map/tiles.test.ts`).
+- **2026-10-30 (A05) — The still copies the overlay and wash rules.** `still/compose.ts` restates the placement,
+  shield and wash rules of `map/overlay.ts` and `map/wash.ts` so the still needs no Pixi; `still/parity.test.ts`
+  guards drift. Moving those rules (and the tile farm) into Pixi-free modules both import would remove the copy.
+- **2026-10-30 (A05) — Still notice and ribbon.** Closed in A05: the notice hangs from the ribbon's banner at every
+  width. Search joins the still's DOM path in A06.
+- **2026-10-30 (A05) — Real-device motion check.** SwiftShader proves positions, states and holes, not frame time.
+  Wheel/trackpad glide, pinch, flick coast and the 0.42–2.6 s flights want a look on a real GPU laptop and phone.
 
 ## Decisions
 

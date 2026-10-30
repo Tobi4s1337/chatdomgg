@@ -14,6 +14,9 @@ import { FixtureSource, RECENT, clock, configFor, fakeSurveyor, sweepAt, tempDat
 import { previewIdFor } from './build';
 import { PREVIEW_LABEL, PreviewChunkSchema, PreviewWorldSchema, ServedNamesSchema } from './schema';
 import { previewDir, previewsRoot, readPreviewManifest, verifyPreviewDir } from './store';
+import { allowRealImports } from '../test/timeouts';
+
+allowRealImports();
 
 const cleanup: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
@@ -156,7 +159,9 @@ describe('survey preview routes', () => {
     expect(head.headers['content-length']).toBe(String(pointer.world.bytes));
 
     const world = PreviewWorldSchema.parse(JSON.parse(plain.text));
-    expect(world.regions.length).toBe(3);
+    // Three languages, plus the six empty Outer Isles kept for overflow.
+    expect(world.regions.filter((region) => region.language !== null)).toHaveLength(3);
+    expect(world.regions.filter((region) => region.kind === 'outer')).toHaveLength(6);
     for (const region of world.regions) {
       const url = `/map-data/v1/preview/${world.id}/${region.chunk.path}`;
       const chunk = await get(port, url, { headers: { 'accept-encoding': 'gzip' } });

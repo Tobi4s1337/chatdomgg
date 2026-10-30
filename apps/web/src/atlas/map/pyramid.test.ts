@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Box } from './camera';
 import { MAX_SCALE } from './camera';
 import {
-  decorBand, DECOR_SPACING, levelFor, levelScale, MAX_LEVEL, parentOf, pyramidFor, TILE_PX, tileBox, tileKey,
+  childrenOf, decorBand, DECOR_SPACING, levelFor, levelScale, MAX_LEVEL, parentOf, pyramidFor, TILE_PX, tileBox, tileKey,
   tilesFor, tileWorldSize, type Pyramid, type TileKey,
 } from './pyramid';
 
@@ -115,6 +115,21 @@ describe('parentOf', () => {
         expect(inner.minY).toBeGreaterThanOrEqual(outer.minY - 1e-9);
         expect(inner.maxY).toBeLessThanOrEqual(outer.maxY + 1e-9);
       }
+    }
+  });
+
+  it('is undone by childrenOf: four distinct children that tile their parent exactly', () => {
+    const pyramid = pyramidFor(AWKWARD);
+    for (const parent of [{ level: 0, tx: 0, ty: 0 }, { level: 4, tx: 9, ty: 15 }, { level: 9, tx: 511, ty: 0 }]) {
+      const children = childrenOf(parent);
+      expect(new Set(children.map(tileKey)).size).toBe(4);
+      const outer = tileBox(pyramid, parent);
+      let covered = 0;
+      for (const child of children) {
+        expect(parentOf(child)).toEqual(parent);
+        covered += area(intersect(tileBox(pyramid, child), outer));
+      }
+      expect(covered).toBeCloseTo(area(outer), 9);
     }
   });
 

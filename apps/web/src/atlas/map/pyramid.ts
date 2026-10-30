@@ -65,6 +65,14 @@ export function parentOf(key: TileKey): TileKey | null {
   return key.level === 0 ? null : { level: key.level - 1, tx: key.tx >> 1, ty: key.ty >> 1 };
 }
 
+/** The four tiles one level down that exactly fill a tile, row by row. */
+export function childrenOf(key: TileKey): TileKey[] {
+  const level = key.level + 1;
+  const tx = key.tx * 2;
+  const ty = key.ty * 2;
+  return [{ level, tx, ty }, { level, tx: tx + 1, ty }, { level, tx, ty: ty + 1 }, { level, tx: tx + 1, ty: ty + 1 }];
+}
+
 /** Decor bands (see the survey preview) step with the zoom so stamps keep a steady size on screen. */
 export const DECOR_SPACING = [96, 48, 24, 12, 6] as const;
 export function decorBand(scale: number): number {

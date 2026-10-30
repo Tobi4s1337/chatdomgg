@@ -19,8 +19,8 @@ describe('read-only Surveyor snapshot', () => {
       expect(sql).not.toMatch(/\bPRAGMA\s/i);
     }
     const adapter = readFileSync(new URL('./sqlite.ts', import.meta.url), 'utf8');
-    // The only exec calls are the read transaction's BEGIN and ROLLBACK.
-    expect([...adapter.matchAll(/\.exec\('([^']+)'\)/g)].map((match) => match[1])).toEqual(['BEGIN DEFERRED', 'ROLLBACK']);
+    // The only exec calls are the read transactions' BEGIN and ROLLBACK (the full snapshot and the live read).
+    expect([...adapter.matchAll(/\.exec\('([^']+)'\)/g)].map((match) => match[1])).toEqual(['BEGIN DEFERRED', 'ROLLBACK', 'BEGIN DEFERRED', 'ROLLBACK']);
     expect(Object.keys(REQUIRED_COLUMNS)).toContain('channels');
   });
 

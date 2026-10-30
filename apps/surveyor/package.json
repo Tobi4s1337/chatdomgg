@@ -7,7 +7,12 @@
     "build": "vite build --logLevel warn",
     "atlas:import": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs import",
     "atlas:check": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs check",
-    "atlas:serve": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs serve"
+    "atlas:serve": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs serve",
+    "atlas:found": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs found",
+    "atlas:settle": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs settle",
+    "atlas:rehearse": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs rehearse",
+    "atlas:authorize": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs authorize",
+    "atlas:live": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs live"
   },
   "dependencies": {
     "@chatdom/shared": "workspace:*",

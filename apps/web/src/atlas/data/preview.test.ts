@@ -108,6 +108,20 @@ describe('validateWorld', () => {
     expect(() => validateWorld(JSON.parse(publish().worldText) as unknown)).not.toThrow();
   });
 
+  it('accepts reviewed families and newer rule versions, which the key then names as they are', () => {
+    const world = makeWorld();
+    world.taxonomy = { ...world.taxonomy, id: 'families-2', status: 'reviewed', variety: 'variety-2', realmThreshold: 'realm-threshold-3' };
+    world.lattice.id = 'hex-2';
+    expect(validateWorld(world).taxonomy.status).toBe('reviewed');
+  });
+
+  it('accepts a world with no families at all, whose continents hold only the Crossroads and the Wilds', () => {
+    const world = makeWorld();
+    world.families = [];
+    world.realms = world.realms.map((realm) => (realm.kind === 'family' ? { ...realm, kind: 'wilds', family: -1, name: 'The Wilds' } : realm));
+    expect(() => validateWorld(world)).not.toThrow();
+  });
+
   it.each<[string, (w: Record<string, unknown> & PreviewWorld) => void, string]>([
     ['a different kind', (w) => { (w as { kind: string }).kind = 'chatdom-atlas-edition'; }, 'world.kind'],
     ['any label but the preview label', (w) => { (w as { label: string }).label = 'Edition 0'; }, 'world.label'],
@@ -128,15 +142,15 @@ describe('validateWorld', () => {
     ['a chunk path that is not JSON', (w) => { w.regions[0]!.chunk.path = 'region-0.js'; }, 'world.regions[0].chunk.path'],
     ['a game ID that is not numeric', (w) => { w.games[0]!.gameId = 'just-chatting'; }, 'world.games[0].gameId'],
     ['a coast with an odd number of values', (w) => { w.coasts[0]!.points.push(5); }, 'world.coasts'],
-    ['a coast of an unknown region', (w) => { w.coasts[0]!.region = 2; }, 'world.coasts'],
+    ['a coast of an unknown region', (w) => { w.coasts[0]!.region = 3; }, 'world.coasts'],
     ['a coast with a fractional value', (w) => { w.coasts[0]!.points[2] = 0.5; }, 'world.coasts[0].points[2]'],
     ['a cluster of an unknown game', (w) => { w.clusters[0]!.game = 3; }, 'world.clusters'],
-    ['a cluster of an unknown region', (w) => { w.clusters[0]!.region = 2; }, 'world.clusters'],
+    ['a cluster of an unknown region', (w) => { w.clusters[0]!.region = 3; }, 'world.clusters'],
     ['decor that is not in triples', (w) => { w.decor.pop(); }, 'world.decor'],
     ['a head column of the wrong length', (w) => { w.head.average.pop(); }, 'world.head.average'],
     ['a town in the head (towns arrive per region)', (w) => { w.head.tier[1] = 2; }, 'world.head.tier[1]'],
     ['a head tier out of range', (w) => { w.head.tier[0] = 4; }, 'world.head.tier[0]'],
-    ['a head settler of an unknown region', (w) => { w.head.region[0] = 2; }, 'world.head.region[0]'],
+    ['a head settler of an unknown region', (w) => { w.head.region[0] = 3; }, 'world.head.region[0]'],
     ['a head settler of an unknown game', (w) => { w.head.game[0] = 3; }, 'world.head.game[0]'],
     ['a game index below −1', (w) => { w.head.game[0] = -2; }, 'world.head.game[0]'],
     ['a channel ID with a leading zero', (w) => { w.head.ids[0] = '0552120296'; }, 'world.head.ids[0]'],
@@ -146,6 +160,37 @@ describe('validateWorld', () => {
     ['a world that does not say which gambling policy it was drawn under', (w) => { delete (w as Partial<PreviewWorld>).policy; }, 'world.policy'],
     ['a negative average', (w) => { w.head.average[0] = -1; }, 'world.head.average[0]'],
     ['a NaN coordinate', (w) => { w.head.x[0] = Number.NaN; }, 'world.head.x[0]'],
+    // The realm geography.
+    ['a world without hamlet slots counted', (w) => { delete (w.counts as Partial<PreviewWorld['counts']>).hamletSlots; }, 'world.counts.hamletSlots'],
+    ['a world without its taxonomy', (w) => { delete (w as Partial<PreviewWorld>).taxonomy; }, 'world.taxonomy'],
+    ['a taxonomy of unknown status', (w) => { (w.taxonomy as { status: string }).status = 'approved'; }, 'world.taxonomy.status'],
+    ['a taxonomy without a hash', (w) => { w.taxonomy.sha256 = 'proposal'; }, 'world.taxonomy.sha256'],
+    ['a variety rule of another form', (w) => { w.taxonomy.variety = 'diverse'; }, 'world.taxonomy.variety'],
+    ['a lattice of zero hamlet radius', (w) => { w.lattice.hamletRadius = 0; }, 'world.lattice.hamletRadius'],
+    ['a lattice of another kind', (w) => { w.lattice.id = 'square-1'; }, 'world.lattice.id'],
+    ['a world without the Outer Isles', (w) => { delete (w as Partial<PreviewWorld>).outer; }, 'world.outer'],
+    ['the Outer Isles drawn as nothing', (w) => { (w as { outer: unknown }).outer = null; }, 'world.outer'],
+    ['a world without realms', (w) => { w.realms = []; }, 'world.realms'],
+    ['a family id with capitals', (w) => { w.families[0]!.id = 'Shooters'; }, 'world.families[0].id'],
+    ['an unknown realm kind', (w) => { (w.realms[0] as { kind: string }).kind = 'heart'; }, 'world.realms[0].kind'],
+    ['realms out of order', (w) => { w.realms.reverse(); }, 'world.realms[0].index'],
+    ['a realm of an unknown region', (w) => { w.realms[3]!.region = 3; }, 'world.realms[3].region'],
+    ['a family realm of a family that does not exist', (w) => { w.realms[2]!.family = 2; }, 'world.realms[2].family'],
+    ['a family realm without a family', (w) => { w.realms[1]!.family = -1; }, 'world.realms[1].family'],
+    ['the Crossroads claiming a family', (w) => { w.realms[0]!.family = 0; }, 'world.realms[0].family'],
+    ['a family realm on an isle', (w) => { w.realms[4] = { ...w.realms[4]!, kind: 'family', family: 0 }; }, 'world.realms[4].kind'],
+    ['the Wilds on one of the Outer Isles', (w) => { w.realms[5]!.kind = 'wilds'; }, 'world.realms[5].kind'],
+    ['an isle realm on a continent', (w) => { w.realms[3]!.kind = 'isle'; }, 'world.realms[3].kind'],
+    ['a region without a language that is not one of the Outer Isles', (w) => { w.regions[1]!.language = null; }, 'world.regions[1].language'],
+    ['one of the Outer Isles claiming a language', (w) => { w.regions[2]!.language = 'en'; }, 'world.regions[2].language'],
+    ['an unknown region kind beside the Outer Isles', (w) => { (w.regions[2] as { kind: string }).kind = 'reserve'; }, 'world.regions[2].kind'],
+    ['a cluster without a realm', (w) => { delete (w.clusters[0] as Partial<PreviewWorld['clusters'][number]>).realm; }, 'world.clusters[0].realm'],
+    ['a cluster of an unknown realm', (w) => { w.clusters[0]!.realm = 6; }, 'world.clusters[0].realm'],
+    ['a cluster in a realm of another region', (w) => { w.clusters[3]!.realm = 1; }, 'world.clusters[3].realm'],
+    ['a head without a realm column', (w) => { delete (w.head as Partial<PreviewWorld['head']>).realm; }, 'world.head.realm'],
+    ['a realm column of the wrong length', (w) => { w.head.realm.push(1); }, 'world.head.realm'],
+    ['a head settler of an unknown realm', (w) => { w.head.realm[0] = 6; }, 'world.head.realm[0]'],
+    ['a head settler in a realm of another region', (w) => { w.head.realm[2] = 1; }, 'world.head.realm[2]'],
   ])('refuses %s', (_, mutate, path) => refusesWorld(mutate, path));
 });
 
@@ -164,6 +209,8 @@ describe('validateChunk', () => {
     ['a city inside a chunk', (c) => { c.settlers.tier[1] = 1; }, 0, 'chunk.settlers.tier[1]'],
     ['a settler filed under another region', (c) => { c.settlers.region[1] = 1; }, 0, 'chunk.settlers.region[1]'],
     ['a settler of an unknown game', (c) => { c.settlers.game[0] = 9; }, 0, 'chunk.settlers.game[0]'],
+    ['a settler in a realm of another region', (c) => { c.settlers.realm[1] = 4; }, 0, 'chunk.settlers.realm[1]'],
+    ['a settler of an unknown realm', (c) => { c.settlers.realm[0] = 99; }, 0, 'chunk.settlers.realm[0]'],
     ['columns of different lengths', (c) => { c.settlers.average.push(30); }, 0, 'chunk.settlers.average'],
     ['raw names inside a chunk', (c) => { (c.settlers as unknown as Record<string, unknown>).names = ['mira004', 'pumpkinpotion']; }, 0, 'chunk.settlers.names'],
     ['an unknown field', (c) => { (c as unknown as Record<string, unknown>).cursor = 'x'; }, 0, 'chunk.cursor'],
@@ -391,7 +438,7 @@ describe('fetchChunk', () => {
   it('refuses an unknown region without asking the service', async () => {
     const published = publish();
     const service = new FakeService().publish(published);
-    expect((await rejection(fetchChunk(service.source, published.world, 2))).reason).toBe<Reason>('invalid');
+    expect((await rejection(fetchChunk(service.source, published.world, 3))).reason).toBe<Reason>('invalid');
     expect((await rejection(fetchChunk(service.source, published.world, -1))).reason).toBe<Reason>('invalid');
     expect(service.calls).toHaveLength(0);
   });
