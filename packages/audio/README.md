@@ -47,21 +47,30 @@ stands still.
   gesture, decodes the foley, and resolves `true` only when a resume has resolved and the context is running.
   A browser that parks the resume (Chrome does when there was no gesture) gets an answer of `false` after
   2.5 s; status stays `locked`. A later gesture's unlock still works. Repeated unlocks are safe.
-- `suspended`: the browser or device paused a context that was running. Every voice is stopped at that moment,
-  so nothing replays when it comes back; cues return `false` until it runs again.
+- `suspended`: the browser or device paused a context that was running. Every voice is stopped at that moment
+  and the mix front is replaced (below), so nothing replays when it comes back, not even the room's tail; cues
+  return `false` until it runs again.
 - `cue()` returns `true` only when the sound was scheduled audibly. It returns `false` when locked, suspended,
   unavailable, disposed, muted, at zero volume, when a needed recording is not decoded, for a non-finite `pan`
   or `distance`, and when the mix budget or duplicate coalescing holds it back. It never queues.
-- `setSettings()` ramps the master over 30 ms. Muting fades to exactly zero and stops ringing tails under the
-  fade. `volume` is clamped to [0, 1]; a non-finite volume throws.
+- `setSettings()` ramps the master over 30 ms. Muting (or volume 0) fades to exactly zero; every ringing voice and
+  the mix front fade out with it, so unmuting, however soon, starts from silence. `volume` is clamped to [0, 1]; a
+  non-finite volume throws.
 - `dispose()` stops all sources, disconnects the graph and closes the context. An unlock still pending resolves
   `false` and cannot bring the instance back.
 
 ## Mix
 
-Voices → bus → 35 Hz rumble guard → glue compressor → master (volume²) → soft ceiling (linear to 0.7, never above
-0.91) → output, with a send into a short authored wooden room. Conservative cue gains and the voice budget keep the
-mix far below the ceiling; the ceiling is a guarantee, not the level control.
+Voices → bus → 35 Hz rumble guard → glue compressor → front fader → master (volume²) → soft ceiling (linear to
+0.7, never above 0.91) → output, with a send into a short authored wooden room. Conservative cue gains and the voice
+budget keep the mix far below the ceiling; the ceiling is a guarantee, not the level control. At full volume the
+complete demo sequence, including the crowd burst, peaks at 0.47 (−6.5 dBFS).
+
+- **Interruptions:** everything before the master that remembers sound (the room's 0.8 s convolution, the filters,
+  the compressor's gain reduction) is the front. Muting retires it under the same 30 ms fade as the master and
+  builds a fresh one; a browser suspension cuts it at once, while nothing is rendering. Old voices finish on the
+  old front, new voices start on the new one. The retired front is released when its fade has passed in render
+  time, so the same thing happens live and offline.
 
 - **Budget:** at most 16 voices and 64 source nodes per instance, counting every layer until it has stopped. Each
   tier may only fill the whole mix up to its own ceiling, which reserves the room above it: footsteps 8 voices /
@@ -81,12 +90,53 @@ mix far below the ceiling; the ceiling is a guarantee, not the level control.
   `18 kHz / (1 + distance / 6)`, never below 1.2 kHz (7.7 kHz at 8 m, 3.6 kHz at 24 m). A non-finite `pan` or
   `distance` makes `cue` return `false`. UI cues should pass neither.
 
+## Phrases (the Forge)
+
+A consumer that needs its own short phrase, such as a Forge phase, plays it through the same instance instead of
+reaching for the context:
+
+```ts
+import { noteHz, playKingdomPhrase, type KingdomPhrase } from '@chatdom/audio';
+
+const strike: KingdomPhrase = { key: 'forge:strike', tier: 'beacon', build(voice) {
+  const body = voice.gain(1); voice.chain(body, voice.out); voice.room = 0.2;
+  voice.partial(body, 'triangle', noteHz('D2'), voice.t, 0.004, 0.2, 0.3);
+} };
+playKingdomPhrase(audio, strike, { delay: 0.1 }); // true only if scheduled audibly
+```
+
+`build(voice, variation)` gets the voice's own authoring tools (`gain`, `filter`, `chain`, `osc`, `noise`,
+`envelope`, `partial`, `bloom`, `pan`, `room`, the start time `t` and its input `out`), never the context, master or
+output. A phrase is bounded: at most 24 oscillator/noise sources over 6 s, scheduled at most 2 s ahead
+(`PHRASE_LIMITS`); a larger one throws `RangeError`. It sits in the `ceremony` tier by default (`beacon` for a
+kingdom-wide moment), counts in the same 16 / 64 budget, coalesces by key, fades on mute, stops on interruption and
+closes on disposal. It answers like `cue()`: `false` when locked, muted, suspended, held back or given a non-finite
+delay, pan or distance. Recordings are not available to phrases. `renderKingdomAudio` accepts phrase steps, so a film
+of the Forge can be rendered through the same graph.
+
+## Cost
+
+44 recordings, 817,370 bytes shipped as mono 16-bit WAV (limit 4 MiB); once decoded, 9.05 s of mono float:
+1,596,180 bytes in a 44.1 kHz context (measured in Chrome), about 1.74 MB at 48 kHz (limit 16 MiB); plus about
+0.69 MB of authored buffers per instance at 48 kHz (noise and room). One context per instance; each
+recording is decoded once and shared by every voice; finished voices disconnect themselves.
+
 ## Diagnostics
 
 `inspectKingdomAudio(audio)` reports the context state, decoded recordings and failures, live voices and sources,
 last variations and the live output peak. `renderKingdomAudio(script, { duration })` renders a timed script
 through the same families, mixer and mix path in an `OfflineAudioContext`. Both are for the bench and checks;
 consumers only need `createKingdomAudio`.
+
+`pnpm --filter @chatdom/audio demo` runs the library in real Chrome on its own Vite dev server (the first free port
+in 5170–5199, stopped at the end) and checks the browser behaviour end to end: locked, a parked and a rejected
+resume (SIMULATED, as headless Chrome does not enforce the autoplay policy), a trusted click, every family audible at
+the live output, mute and zero volume, the beacon interrupted by mute and by a real context suspension, the phrase
+bridge, the crowd, disposal (also during an unlock) and the console. It then renders the complete sequence at full
+volume offline through the same graph and writes `shots/audio/kingdom-sequence.wav` (75.5 s: controls, light, wave,
+beacon, walking and building on six surfaces, the four together, the crowd burst, a mute and an interruption),
+`kingdom-waveform.png`, `kingdom-sequence.json` (peak, duration, per-segment levels, every check) and the bench at
+1440×900 and 390×844. It exits non-zero if a check fails.
 
 `pnpm --filter @chatdom/audio check` runs the one focused regression (`src/budget.test.ts`): two seconds of a
 footstep flood on every surface against the real families and mixer, counting the source nodes a Web Audio context

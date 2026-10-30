@@ -111,7 +111,8 @@
 .ab-play { margin-top: 16px; }
 
 /* Six surfaces: one row per material, a small carved key for each action. */
-.ab-surfaces, .ab-crowd { grid-column: 1 / -1; }
+.ab-surfaces, .ab-crowd, .ab-interrupt { grid-column: 1 / -1; }
+.ab-crowd-facts.ab-interrupt-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .ab-placement { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin: 0 0 18px; padding: 12px 14px; border-radius: 6px; background: #fff6df80; border: 1px solid #a37b3544; }
 .ab-placement label { display: grid; gap: 6px; font-size: 14px; color: var(--ink-soft); }
 .ab-placement b { color: var(--ink); font-weight: 400; }
@@ -201,4 +202,7 @@
 /* Keep the state and the meter in view while the lower cards are played. */
 @media (min-width: 901px) {
   .ab-plaque { position: sticky; top: 24px; }
+}
+@media (max-width: 560px) {
+  .ab-interrupt-facts dd { font-size: 15px; }
 }

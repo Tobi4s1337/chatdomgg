@@ -1,6 +1,6 @@
 import { createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import {
-  AUDIO_MATERIALS, createKingdomAudio, FINISHED_FAMILIES, inspectKingdomAudio, renderKingdomAudio,
+  AUDIO_MATERIALS, createKingdomAudio, FINISHED_FAMILIES, inspectKingdomAudio, playKingdomPhrase, renderKingdomAudio,
   type AudioCue, type AudioCueOptions, type AudioMaterial, type KingdomAudio, type KingdomAudioInspection, type KingdomAudioState,
 } from '../../../../packages/audio/src/index';
 import './bench.css';
@@ -112,6 +112,8 @@ const ACTIONS: { cue: AudioCue; label: string }[] = [
   { cue: 'material', label: 'Choose' },
 ];
 
+interface Interruption { before: number; held: number; after: number; running: boolean; played: boolean }
+
 interface CrowdResult { requested: number; played: number; peakVoices: number; peakLayers: number; control?: boolean; beacon?: boolean; own: number; ownPlayed: number; running: boolean }
 
 const MATERIAL_WORDS: Record<AudioMaterial, string> = {
@@ -143,6 +145,7 @@ export default function AudioBench(): JSX.Element {
   const [pan, setPan] = createSignal(0);
   const [distance, setDistance] = createSignal(0);
   const [crowd, setCrowd] = createSignal<CrowdResult>();
+  const [interruption, setInterruption] = createSignal<Interruption>();
   let timers: number[] = [];
 
   const note = (text: string, tone: LogLine['tone']) => setLog(lines => [{ at: clock(), text, tone }, ...lines].slice(0, 7));
@@ -157,7 +160,7 @@ export default function AudioBench(): JSX.Element {
     frame = requestAnimationFrame(meter);
   };
   frame = requestAnimationFrame(meter);
-  const stopSequences = () => { for (const timer of timers) window.clearTimeout(timer); timers = []; };
+  const stopSequences = () => { for (const timer of timers) { window.clearTimeout(timer); window.clearInterval(timer); } timers = []; };
   onCleanup(() => { window.clearInterval(poll); cancelAnimationFrame(frame); stopSequences(); audio.dispose(); });
 
   const audible = () => state().status === 'ready' && !state().settings.muted && state().settings.volume > 0;
@@ -273,6 +276,40 @@ export default function AudioBench(): JSX.Element {
     }, 1950));
   }
 
+  /**
+   * The beacon is muted 0.7 s in, at its loudest, and unmuted a tenth of a second later. Its chord would ring for
+   * four more seconds and the room for most of one; neither may come back. The output is measured throughout.
+   */
+  function interruptBeacon() {
+    stopSequences();
+    const result: Interruption = { before: 0, held: 0, after: 0, running: true, played: audio.cue('beacon') };
+    refresh();
+    setInterruption({ ...result });
+    if (!result.played) {
+      result.running = false;
+      setInterruption({ ...result });
+      note(`Mute mid-beacon → beacon not played (${silentReason() || 'held back by the mix'})`, 'quiet');
+      return;
+    }
+    markPlayed('beacon');
+    // The 30 ms mute fade (and the analyser's ~23 ms window over it) belongs to neither reading.
+    let phase: 'before' | 'fade' | 'held' | 'after' = 'before';
+    timers.push(window.setInterval(() => {
+      if (phase !== 'fade') result[phase] = Math.max(result[phase], inspectKingdomAudio(audio).level());
+      setInterruption({ ...result });
+    }, 10));
+    timers.push(window.setTimeout(() => { audio.setSettings({ muted: true }); phase = 'fade'; refresh(); }, 700));
+    timers.push(window.setTimeout(() => { phase = 'held'; }, 765));
+    timers.push(window.setTimeout(() => { audio.setSettings({ muted: false }); phase = 'fade'; refresh(); }, 800));
+    timers.push(window.setTimeout(() => { phase = 'after'; }, 865));
+    timers.push(window.setTimeout(() => {
+      stopSequences();
+      result.running = false;
+      setInterruption({ ...result });
+      note(`Mute mid-beacon: ${decibels(result.before)} before, ${decibels(result.after)} after unmute`, result.after <= 0.0001 ? 'ok' : 'refused');
+    }, 2400));
+  }
+
   function setVolume(value: number) {
     audio.setSettings({ volume: value / 100 });
     refresh();
@@ -305,7 +342,9 @@ export default function AudioBench(): JSX.Element {
   }
 
   function exposeForChecks() {
-    Object.assign(window, { __chatdomAudio: audio, __chatdomAudioRender: renderKingdomAudio, __chatdomAudioInspect: inspectKingdomAudio });
+    Object.assign(window, {
+      __chatdomAudio: audio, __chatdomAudioRender: renderKingdomAudio, __chatdomAudioInspect: inspectKingdomAudio, __chatdomAudioPhrase: playKingdomPhrase,
+    });
   }
   exposeForChecks();
   requestAnimationFrame(() => { (window as Window & { __chatdomReady?: boolean }).__chatdomReady = true; });
@@ -459,6 +498,20 @@ export default function AudioBench(): JSX.Element {
             <div><dt>Most layers</dt><dd data-testid="crowd-layers">{crowd() ? `${crowd()!.peakLayers} of 64` : '—'}</dd></div>
           </dl>
           <button type="button" class="ab-play" data-run="crowd" onClick={crowdBurst}>Let the crowd walk past</button>
+        </article>
+
+        <article class="ab-card ab-interrupt">
+          <header>
+            <h2>Interrupted mid-beacon</h2>
+            <p class="ab-surface">nothing comes back</p>
+          </header>
+          <p class="ab-line">The beacon is muted at its crest and unmuted a tenth of a second later. Its chord and the room it rings in are let go under the fade, so after unmuting the kingdom is quiet until something new happens.</p>
+          <dl class="ab-crowd-facts ab-interrupt-facts" data-running={interruption()?.running ? 'yes' : 'no'}>
+            <div><dt>Before mute</dt><dd data-testid="interrupt-before">{interruption() ? decibels(interruption()!.before) : '—'}</dd></div>
+            <div><dt>Muted</dt><dd data-testid="interrupt-held">{interruption()?.played ? decibels(interruption()!.held) : '—'}</dd></div>
+            <div><dt>After unmute</dt><dd data-testid="interrupt-after">{interruption()?.played ? decibels(interruption()!.after) : '—'}</dd></div>
+          </dl>
+          <button type="button" class="ab-play" data-run="interrupt" onClick={interruptBeacon}>Light the beacon, then mute it</button>
         </article>
 
         <section class="ab-log" aria-label="What happened">

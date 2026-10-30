@@ -1,6 +1,7 @@
 import { resolveFamily } from './families';
-import { createMix, masterLevel, rampMaster, RAMP_SECONDS, type Mix } from './mix';
+import { masterLevel, Mix } from './mix';
 import { Mixer, noiseBuffer } from './mixer';
+import { phraseDelay, phraseFamily, type KingdomPhrase, type KingdomPhraseOptions } from './phrase';
 import { fetchSample, SampleBank, type SampleBankReport, type SampleLoader } from './samples';
 import type { AudioCue, AudioCueOptions, AudioSettings, KingdomAudio, KingdomAudioState } from './types';
 
@@ -26,12 +27,24 @@ export interface KingdomAudioInspection {
 }
 
 const inspections = new WeakMap<KingdomAudio, () => KingdomAudioInspection>();
+const phrasePlayers = new WeakMap<KingdomAudio, (phrase: KingdomPhrase, options: KingdomPhraseOptions) => boolean>();
 
 /** Diagnostics for the bench and checks. Not part of what consumers need to play sound. */
 export function inspectKingdomAudio(audio: KingdomAudio): KingdomAudioInspection {
   const inspect = inspections.get(audio);
   if (!inspect) throw new TypeError('kingdom audio: not an instance created by createKingdomAudio');
   return inspect();
+}
+
+/**
+ * Plays a consumer's phrase (see `KingdomPhrase`) through this instance's context, mixer and mix path. Answers like
+ * `cue()`: true only if scheduled audibly; false when locked, suspended, muted, at zero volume, disposed, held back
+ * by the budget or coalescing, or for a non-finite delay, pan or distance. A malformed or oversized phrase throws.
+ */
+export function playKingdomPhrase(audio: KingdomAudio, phrase: KingdomPhrase, options: KingdomPhraseOptions = {}): boolean {
+  const play = phrasePlayers.get(audio);
+  if (!play) throw new TypeError('kingdom audio: not an instance created by createKingdomAudio');
+  return play(phrase, options);
 }
 
 function defaultContext(): AudioContext | undefined {
@@ -63,7 +76,7 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
   const samples = new SampleBank(deps.loadSample ?? fetchSample);
   let settings = normalizeSettings(DEFAULTS, initial);
   let status: KingdomAudioState['status'] = 'locked';
-  let context: AudioContext | undefined, mix: Mix | undefined, mixer: Mixer | undefined;
+  let context: AudioContext | undefined, mixer: Mixer | undefined;
   let pending: Promise<boolean> | undefined, unlockedOnce = false;
   // Whether a resume() on the current context has resolved, and how many are still in flight.
   let resumed = false, inFlight = 0;
@@ -79,7 +92,7 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
 
   function onStateChange(event: Event): void {
     if (status === 'disposed' || event.target !== context || !context) return;
-    if ((context.state as string) !== 'running') mixer?.silence(0);
+    if ((context.state as string) !== 'running') mixer?.interrupt();
     syncStatus();
     notify();
   }
@@ -93,8 +106,7 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
     try { created = (deps.createContext ?? defaultContext)(); } catch { created = undefined; }
     if (!created) { status = 'unavailable'; return undefined; }
     context = created; resumed = false; inFlight = 0;
-    mix = createMix(created, settings, random);
-    mixer = new Mixer(created, mix, { noise: noiseBuffer(created, random), samples, random });
+    mixer = new Mixer(created, new Mix(created, settings, random), { noise: noiseBuffer(created, random), samples, random });
     created.addEventListener('statechange', onStateChange);
     return created;
   }
@@ -153,21 +165,32 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
     return pending;
   }
 
+  /** Whether a cue may be scheduled audibly right now. */
+  function audible(): boolean {
+    syncStatus();
+    return status === 'ready' && !!context && !!mixer && context.state === 'running' && masterLevel(settings) > 0;
+  }
+
   function cue(kind: AudioCue, options: AudioCueOptions = {}): boolean {
     const family = resolveFamily(kind, options);
-    syncStatus();
-    if (status !== 'ready' || !context || !mixer || context.state !== 'running') return false;
-    if (masterLevel(settings) === 0) return false;
-    return mixer.play(family, options);
+    return audible() && mixer!.play(family, options);
+  }
+
+  function phrase(item: KingdomPhrase, options: KingdomPhraseOptions): boolean {
+    const family = phraseFamily(item), delay = phraseDelay(options);
+    if (delay === undefined || !audible()) return false;
+    const place: AudioCueOptions = {};
+    if (options.pan !== undefined) place.pan = options.pan;
+    if (options.distance !== undefined) place.distance = options.distance;
+    return mixer!.play(family, place, delay);
   }
 
   function setSettings(next: Partial<AudioSettings>): void {
     const previous = settings;
     settings = normalizeSettings(settings, next);
-    if (status === 'disposed' || !context || !mix || !mixer) return;
-    rampMaster(mix, context, settings);
-    // Muted means silent: ringing tails stop under the fade instead of waiting to come back on unmute.
-    if (masterLevel(settings) === 0 && masterLevel(previous) > 0) mixer.silence(context.currentTime + RAMP_SECONDS + 0.005);
+    if (status === 'disposed' || !context || !mixer) return;
+    // Muted means silent: ringing voices and the room's tail fade with the master instead of waiting for unmute.
+    mixer.applySettings(previous, settings);
   }
 
   function getState(): KingdomAudioState {
@@ -186,10 +209,11 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
       closing.removeEventListener('statechange', onStateChange);
       if (closing.state !== 'closed') closing.close().catch(() => undefined);
     }
-    context = undefined; mix = undefined; mixer = undefined;
+    context = undefined; mixer = undefined;
   }
 
   const audio: KingdomAudio = { unlock, cue, setSettings, getState, dispose };
+  phrasePlayers.set(audio, phrase);
   inspections.set(audio, () => ({
     contextState: context?.state ?? null,
     samples: samples.report(),

@@ -1,6 +1,6 @@
 import type { CueFamily, MixTier } from './families';
-import type { Mix } from './mix';
-import type { AudioCueOptions } from './types';
+import { masterLevel, RAMP_SECONDS, type Mix } from './mix';
+import type { AudioCueOptions, AudioSettings } from './types';
 import { VoiceGraph, type Kit } from './voice';
 
 /** Hard bounds for one instance, counting every foley and synthesis layer. */
@@ -87,7 +87,8 @@ export class Mixer {
 
   constructor(private readonly context: BaseAudioContext, private readonly mix: Mix, private readonly kit: Kit) {}
 
-  play(family: CueFamily, options: AudioCueOptions): boolean {
+  /** Plays one cue (or a consumer's phrase) `delay` seconds from now. False when held back; never queued. */
+  play(family: CueFamily, options: AudioCueOptions, delay = 0): boolean {
     const place = placement(options);
     if (!place || !this.kit.samples.has(family.samples)) return false;
     const context = this.context, now = context.currentTime;
@@ -96,15 +97,18 @@ export class Mixer {
 
     const input = context.createGain();
     input.gain.value = 10 ** ((family.fader ?? 0) / 20);
-    const graph = new VoiceGraph(context, input, now + LEAD_SECONDS, this.kit);
+    const graph = new VoiceGraph(context, input, now + LEAD_SECONDS + delay, this.kit);
     const variation = this.pickVariation(family.key, family.variations);
-    family.build(graph, variation);
+    const discard = () => { for (const node of graph.nodes) node.disconnect(); input.disconnect(); };
+    try { family.build(graph, variation); } catch (error) { discard(); throw error; }
     const sources = graph.scheduled.length;
-    if (!this.admit(family.tier, sources, place.gain)) {
-      for (const node of graph.nodes) node.disconnect();
-      input.disconnect();
-      return false;
+    const bounds = family.bounds;
+    if (bounds && (sources > bounds.sources || graph.end - graph.t > bounds.seconds)) {
+      discard();
+      throw new RangeError(`kingdom audio: ${family.key} uses ${sources} sources over ${(graph.end - graph.t).toFixed(2)} s; `
+        + `a phrase may use at most ${bounds.sources} over ${bounds.seconds} s`);
     }
+    if (!this.admit(family.tier, sources, place.gain)) { discard(); return false; }
 
     const distance = context.createGain(), panner = context.createStereoPanner(), send = context.createGain();
     distance.gain.value = place.gain; panner.pan.value = place.pan; send.gain.value = graph.room;
@@ -132,22 +136,32 @@ export class Mixer {
     return true;
   }
 
-  /** Stops every voice at `at`. Used on mute, suspension and disposal so nothing resumes or replays later. */
-  silence(at: number): void {
-    for (const voice of this.voices) {
-      if (voice.stopped) continue;
-      voice.stopped = true;
-      for (const { node, stop } of voice.graph.scheduled) {
-        try { node.stop(Math.min(stop, at)); } catch { /* a source that already ended */ }
-      }
-    }
+  /**
+   * New settings: the master moves over 30 ms. Going silent (muted, or volume 0) also fades every ringing voice
+   * with the master and renews the mix front under the same fade, so unmuting later, however soon, brings back
+   * neither a voice nor the room's tail.
+   */
+  applySettings(previous: Readonly<AudioSettings>, next: Readonly<AudioSettings>): void {
+    this.mix.rampMaster(next);
+    if (masterLevel(next) > 0 || masterLevel(previous) === 0) return;
+    for (const voice of this.voices) this.fade(voice, RAMP_SECONDS);
+    this.mix.renew(RAMP_SECONDS);
+  }
+
+  /**
+   * The browser or device stopped rendering (suspension, interruption). Every voice stops at once and the mix front
+   * is replaced, so when it runs again the output starts from silence: no voice, no room tail, no backlog.
+   */
+  interrupt(): void {
+    this.stopAll();
+    this.mix.renew(0);
   }
 
   /** Disconnects everything this mixer made, including the shared mix path. */
   close(): void {
-    this.silence(0);
+    this.stopAll();
     for (const voice of [...this.voices]) this.release(voice);
-    for (const node of this.mix.nodes) node.disconnect();
+    this.mix.close();
   }
 
   get voiceCount(): number { return this.voices.size; }
@@ -199,27 +213,39 @@ export class Mixer {
     if (this.fits(tier, sources)) return true;
     if (!FADE_ALLOWANCE[tier]) return false;
     const quieter = [...this.voices]
-      .filter(voice => voice.tier === 'step' && !voice.fading && (tier === 'build' || voice.gain * NEARER <= gain))
+      .filter(voice => voice.tier === 'step' && !voice.stopped && (tier === 'build' || voice.gain * NEARER <= gain))
       .sort((a, b) => a.gain - b.gain);
     const leaving = new Set<LiveVoice>();
     for (const voice of quieter) {
       leaving.add(voice);
       if (this.fits(tier, sources, leaving)) {
-        for (const replaced of leaving) this.fade(replaced);
+        for (const replaced of leaving) { replaced.fading = true; this.fade(replaced, STEP_FADE_SECONDS); }
         return true;
       }
     }
     return false;
   }
 
-  private fade(voice: LiveVoice): void {
+  /** Fades a voice out over `seconds` and stops its layers just after, never a hard cut while it is audible. */
+  private fade(voice: LiveVoice, seconds: number): void {
+    if (voice.stopped) return;
+    voice.stopped = true;
     const now = this.context.currentTime, gain = voice.distance.gain;
-    voice.fading = true;
     gain.cancelScheduledValues(now);
     gain.setValueAtTime(gain.value, now);
-    gain.linearRampToValueAtTime(0, now + STEP_FADE_SECONDS);
+    gain.linearRampToValueAtTime(0, now + seconds);
     for (const { node, stop } of voice.graph.scheduled) {
-      try { node.stop(Math.min(stop, now + STEP_FADE_SECONDS + 0.002)); } catch { /* a source that already ended */ }
+      try { node.stop(Math.min(stop, now + seconds + 0.002)); } catch { /* a source that already ended */ }
+    }
+  }
+
+  /** Stops every layer now. Only for a context that is not rendering, or that is being closed. */
+  private stopAll(): void {
+    for (const voice of this.voices) {
+      voice.stopped = true;
+      for (const { node } of voice.graph.scheduled) {
+        try { node.stop(0); } catch { /* a source that already ended */ }
+      }
     }
   }
 

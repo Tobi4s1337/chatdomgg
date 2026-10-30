@@ -188,7 +188,34 @@ Original Web Audio synthesis, written for Chatdom and not derived from any sampl
 
 ## Budget
 
+Measured by `pnpm --filter @chatdom/audio demo` (2026-10-30). The decoded figure is what Chrome actually holds
+after decoding every recording into its 44.1 kHz context; recordings are resampled to the context's rate, so a
+48 kHz device holds about 9% more.
+
 | | Now | Limit |
 |---|---|---|
-| Shipped recordings | 44 files, 817,370 bytes | 4 MiB |
-| Decoded recordings | 9.05 s mono, about 1.74 MB as 48 kHz float | 16 MiB |
+| Shipped recordings | 44 files, 817,370 bytes (Impact Sounds 35 files, 621,782 bytes; RPG Audio 9 files, 195,588 bytes) | 4 MiB |
+| Decoded recordings | 1,596,180 bytes (9.05 s of mono float at 44.1 kHz); about 1.74 MB at 48 kHz | 16 MiB |
+| Authored buffers per instance | 691,200 bytes at 48 kHz: the 2 s noise buffer (384,000) and the 0.8 s stereo room (307,200) | — |
+
+## For the root THIRD_PARTY.md
+
+Ready to paste under `## Kingdom audio` in the repository's `THIRD_PARTY.md`, replacing the sentence "No sampled
+third-party sound has been shipped" and the paragraph that calls the kingdom sounds purely procedural:
+
+```md
+## Kingdom audio
+
+The kingdom's sounds (`@chatdom/audio`) combine 44 selected recordings with original Web Audio synthesis authored in
+this repository. Every recording is one layer of a cue, never a whole cue. Per-file inventory (original and shipped
+names, edits, gains, sizes and where each is used): [packages/audio/THIRD_PARTY.md](packages/audio/THIRD_PARTY.md).
+
+| Source | Shipped | License and provenance |
+|---|---|---|
+| Kenney Vleugels, [Impact Sounds](https://kenney.nl/assets/impact-sounds) 1.0 | 35 mono 16-bit WAV files in `packages/audio/src/assets/kenney/` (621,782 bytes): light wood, glass and metal taps, medium wood, soft, metal, glass and plank impacts, wood, concrete and carpet footsteps | CC0 1.0, per the archive's `License.txt`, kept beside the files. `kenney_impact-sounds.zip`, downloaded 2026-10-30, SHA-256 `029d734af1582474edf3a694d1b0cebc97c1c152f2f39fa34d4c2bafc5de77f8`. Decoded from Ogg Vorbis, folded to mono, gain-adjusted, sliced or trimmed as recorded in the inventory. |
+| Kenney Vleugels, [RPG Audio](https://kenney.nl/assets/rpg-audio) | 9 mono 16-bit WAV files in the same folder (195,588 bytes): three book page turns, three dirt footsteps, three cloth slices | CC0 1.0, per the archive's `License.txt`, kept beside the files. `kenney_rpg-audio.zip`, downloaded 2026-10-30, SHA-256 `6dbeaf8544da958d8f2adcb4a4a4b76c1ade34a05f8ab9edccd327da7375f38b`. Edited as recorded in the inventory. |
+
+Credit is optional under CC0; Chatdom credits these anyway. Everything else in the kingdom's sound (the resonances,
+glows, wick and fire, the beacon chord, the D major pentatonic palette, the room impulse, the mix and the budget) is
+original synthesis authored here. Phrases played through `playKingdomPhrase` (the Forge's) can only use synthesis.
+```

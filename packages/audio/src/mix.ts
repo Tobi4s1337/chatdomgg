@@ -3,18 +3,21 @@ import type { AudioSettings } from './types';
 /**
  * The one mix path every cue goes through:
  *
- *   voices ─▶ bus ─▶ rumble guard (35 Hz) ─▶ glue compressor ─▶ master volume ─▶ ceiling ─▶ output
- *   voices ─▶ room send ─▶ 180 Hz high-pass ─▶ small-room convolver ─────▲
+ *   voices ─▶ bus ─▶ rumble guard (35 Hz) ─▶ glue compressor ─▶ front fader ─▶ master volume ─▶ ceiling ─▶ output
+ *   voices ─▶ room send ─▶ 180 Hz high-pass ─▶ small-room convolver ─▲
  *
  * Headroom comes from conservative cue gains and the voice budget first. The compressor only glues stacked cues;
  * the ceiling is a soft-knee waveshaper after the master fader that is linear up to 0.7 and can never exceed
  * 0.91, so even a pathological stack cannot clip. Muting ramps the master fader to exactly zero.
+ *
+ * Everything before the master that remembers sound (the room's 0.8 s convolution, the filters, the compressor's
+ * gain reduction) is the "front". A mute or a browser interruption retires the front and builds a fresh one, so
+ * nothing from before the interruption, not even the room's tail, can be heard afterwards.
  */
-export interface Mix {
+interface Front {
   bus: GainNode;
   room: GainNode;
-  master: GainNode;
-  analyser: AnalyserNode;
+  fader: GainNode;
   nodes: AudioNode[];
 }
 
@@ -25,44 +28,98 @@ export function masterLevel(settings: Readonly<AudioSettings>): number {
   return settings.muted ? 0 : settings.volume * settings.volume;
 }
 
-export function createMix(context: BaseAudioContext, settings: Readonly<AudioSettings>, random: () => number): Mix {
-  const bus = context.createGain(), room = context.createGain(), master = context.createGain();
-  const guard = context.createBiquadFilter();
-  guard.type = 'highpass'; guard.frequency.value = 35; guard.Q.value = 0.6;
+export class Mix {
+  readonly master: GainNode;
+  readonly analyser: AnalyserNode;
+  private readonly ceiling: WaveShaperNode;
+  private readonly impulse: AudioBuffer;
+  private front: Front;
+  /** Fronts fading out after a renewal, released once their fade has passed in render time. */
+  private readonly retired = new Set<Front>();
 
-  const glue = context.createDynamicsCompressor();
-  glue.threshold.value = -12; glue.knee.value = 8; glue.ratio.value = 4;
-  glue.attack.value = 0.003; glue.release.value = 0.15;
+  constructor(private readonly context: BaseAudioContext, settings: Readonly<AudioSettings>, random: () => number) {
+    this.master = context.createGain();
+    this.master.gain.value = masterLevel(settings);
+    this.ceiling = context.createWaveShaper();
+    this.ceiling.curve = ceilingCurve(); this.ceiling.oversample = '2x';
+    this.analyser = context.createAnalyser();
+    this.analyser.fftSize = 1024;
+    this.master.connect(this.ceiling);
+    this.ceiling.connect(context.destination); this.ceiling.connect(this.analyser);
+    this.impulse = smallRoom(context, random);
+    this.front = this.build();
+  }
 
-  const ceiling = context.createWaveShaper();
-  ceiling.curve = ceilingCurve(); ceiling.oversample = '2x';
+  /** Where a new voice connects its dry signal. */
+  get bus(): GainNode { return this.front.bus; }
+  /** Where a new voice sends to the room. */
+  get room(): GainNode { return this.front.room; }
 
-  // The room is small and wooden: it should not boom, so nothing below ~180 Hz reaches it.
-  const roomTone = context.createBiquadFilter();
-  roomTone.type = 'highpass'; roomTone.frequency.value = 180; roomTone.Q.value = 0.6;
-  const convolver = context.createConvolver();
-  convolver.normalize = true;
-  convolver.buffer = smallRoom(context, random);
-  const roomReturn = context.createGain();
-  roomReturn.gain.value = 0.55;
+  /** Moves the master fader over 30 ms from wherever it is now, so mute and volume never click. */
+  rampMaster(settings: Readonly<AudioSettings>): void {
+    const gain = this.master.gain, now = this.context.currentTime;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(gain.value, now);
+    gain.linearRampToValueAtTime(masterLevel(settings), now + RAMP_SECONDS);
+  }
 
-  const analyser = context.createAnalyser();
-  analyser.fftSize = 1024;
+  /**
+   * Builds a fresh front for new voices and retires the old one: faded to zero over `fade` seconds (with the
+   * voices still on it), or cut at once when `fade` is 0, which is only used while the context is not rendering.
+   */
+  renew(fade: number): void {
+    const old = this.front;
+    this.front = this.build();
+    if (fade <= 0) { release(old); return; }
+    const now = this.context.currentTime, gain = old.fader.gain;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(gain.value, now);
+    gain.linearRampToValueAtTime(0, now + fade);
+    this.retired.add(old);
+    // A silent marker on the old front ends when its fade has passed, in render time, live or offline.
+    const marker = this.context.createOscillator(), mute = this.context.createGain();
+    mute.gain.value = 0;
+    marker.connect(mute); mute.connect(old.fader);
+    marker.onended = () => { marker.disconnect(); mute.disconnect(); this.retired.delete(old); release(old); };
+    marker.start(now);
+    marker.stop(now + fade + 0.01);
+  }
 
-  master.gain.value = masterLevel(settings);
-  bus.connect(guard); guard.connect(glue); glue.connect(master); master.connect(ceiling);
-  ceiling.connect(context.destination); ceiling.connect(analyser);
-  room.connect(roomTone); roomTone.connect(convolver); convolver.connect(roomReturn); roomReturn.connect(guard);
+  /** Disconnects every node of the mix path, current and retired. */
+  close(): void {
+    release(this.front);
+    for (const front of this.retired) release(front);
+    this.retired.clear();
+    for (const node of [this.master, this.ceiling, this.analyser]) node.disconnect();
+  }
 
-  return { bus, room, master, analyser, nodes: [bus, room, master, guard, glue, ceiling, roomTone, convolver, roomReturn, analyser] };
+  private build(): Front {
+    const context = this.context;
+    const bus = context.createGain(), room = context.createGain(), fader = context.createGain();
+    const guard = context.createBiquadFilter();
+    guard.type = 'highpass'; guard.frequency.value = 35; guard.Q.value = 0.6;
+
+    const glue = context.createDynamicsCompressor();
+    glue.threshold.value = -12; glue.knee.value = 8; glue.ratio.value = 4;
+    glue.attack.value = 0.003; glue.release.value = 0.15;
+
+    // The room is small and wooden: it should not boom, so nothing below ~180 Hz reaches it.
+    const roomTone = context.createBiquadFilter();
+    roomTone.type = 'highpass'; roomTone.frequency.value = 180; roomTone.Q.value = 0.6;
+    const convolver = context.createConvolver();
+    convolver.normalize = true;
+    convolver.buffer = this.impulse;
+    const roomReturn = context.createGain();
+    roomReturn.gain.value = 0.55;
+
+    bus.connect(guard); guard.connect(glue); glue.connect(fader); fader.connect(this.master);
+    room.connect(roomTone); roomTone.connect(convolver); convolver.connect(roomReturn); roomReturn.connect(guard);
+    return { bus, room, fader, nodes: [bus, room, guard, glue, fader, roomTone, convolver, roomReturn] };
+  }
 }
 
-/** Moves the master fader over 30 ms from wherever it is now, so mute and volume never click. */
-export function rampMaster(mix: Mix, context: BaseAudioContext, settings: Readonly<AudioSettings>): void {
-  const gain = mix.master.gain, now = context.currentTime;
-  gain.cancelScheduledValues(now);
-  gain.setValueAtTime(gain.value, now);
-  gain.linearRampToValueAtTime(masterLevel(settings), now + RAMP_SECONDS);
+function release(front: Front): void {
+  for (const node of front.nodes) node.disconnect();
 }
 
 function ceilingCurve(): Float32Array<ArrayBuffer> {

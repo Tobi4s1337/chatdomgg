@@ -1,18 +1,26 @@
 import { resolveFamily } from './families';
-import { createMix, masterLevel, rampMaster, RAMP_SECONDS } from './mix';
+import { masterLevel, Mix } from './mix';
 import { Mixer, noiseBuffer } from './mixer';
+import { phraseDelay, phraseFamily, type KingdomPhrase, type KingdomPhraseOptions } from './phrase';
 import { fetchSample, SampleBank, type SampleLoader } from './samples';
 import type { AudioCue, AudioCueOptions, AudioSettings } from './types';
 import { normalizeSettings } from './engine';
 
+/**
+ * One timed step: a cue, a consumer phrase, new settings, or `interrupt`, which does exactly what the live instance
+ * does when the browser suspends its context (every voice stops, the mix front is replaced) while the render is
+ * paused at that moment.
+ */
 export type ScriptStep =
   | { at: number; cue: AudioCue; options?: AudioCueOptions }
-  | { at: number; settings: Partial<AudioSettings> };
+  | { at: number; phrase: KingdomPhrase; options?: KingdomPhraseOptions }
+  | { at: number; settings: Partial<AudioSettings> }
+  | { at: number; interrupt: true };
 
 export interface OfflineRender {
   buffer: AudioBuffer;
-  /** What each cue step returned, in script order, exactly as a live `cue()` would have. */
-  played: { at: number; cue: AudioCue; played: boolean }[];
+  /** What each cue or phrase step returned, in script order, exactly as a live call would have. */
+  played: { at: number; cue: string; played: boolean }[];
 }
 
 /**
@@ -27,7 +35,7 @@ export async function renderKingdomAudio(script: readonly ScriptStep[], options:
   const samples = new SampleBank(options.loadSample ?? fetchSample);
   await samples.load(context);
   let settings = normalizeSettings({ muted: false, volume: 0.65 }, options.settings ?? {});
-  const mix = createMix(context, settings, random);
+  const mix = new Mix(context, settings, random);
   const mixer = new Mixer(context, mix, { noise: noiseBuffer(context, random), samples, random });
   const played: OfflineRender['played'] = [];
 
@@ -42,8 +50,15 @@ export async function renderKingdomAudio(script: readonly ScriptStep[], options:
         if ('settings' in step) {
           const previous = settings;
           settings = normalizeSettings(settings, step.settings);
-          rampMaster(mix, context, settings);
-          if (masterLevel(settings) === 0 && masterLevel(previous) > 0) mixer.silence(context.currentTime + RAMP_SECONDS + 0.005);
+          mixer.applySettings(previous, settings);
+        } else if ('interrupt' in step) {
+          mixer.interrupt();
+        } else if ('phrase' in step) {
+          const family = phraseFamily(step.phrase), options = step.options ?? {}, delay = phraseDelay(options);
+          const place: AudioCueOptions = {};
+          if (options.pan !== undefined) place.pan = options.pan;
+          if (options.distance !== undefined) place.distance = options.distance;
+          played.push({ at: step.at, cue: family.key, played: delay !== undefined && masterLevel(settings) > 0 && mixer.play(family, place, delay) });
         } else {
           const family = resolveFamily(step.cue, step.options ?? {});
           played.push({ at: step.at, cue: step.cue, played: masterLevel(settings) > 0 && mixer.play(family, step.options ?? {}) });

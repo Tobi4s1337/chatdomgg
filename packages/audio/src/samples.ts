@@ -110,6 +110,8 @@ export interface SampleBankReport {
   loaded: number;
   total: number;
   failures: string[];
+  /** Memory the decoded recordings hold: frames × channels × 4 bytes, at the context's own sample rate. */
+  decodedBytes: number;
 }
 
 /** Decoded buffers shared by every voice of one instance. A failed sample stays failed and is reported. */
@@ -135,6 +137,8 @@ export class SampleBank {
   report(): SampleBankReport {
     const total = SAMPLE_IDS.length, loaded = this.buffers.size, failures = [...this.failures.values()];
     const state = !this.pending ? 'idle' : failures.length ? 'failed' : loaded === total ? 'ready' : 'loading';
-    return { state, loaded, total, failures };
+    let decodedBytes = 0;
+    for (const buffer of this.buffers.values()) decodedBytes += buffer.length * buffer.numberOfChannels * 4;
+    return { state, loaded, total, failures, decodedBytes };
   }
 }

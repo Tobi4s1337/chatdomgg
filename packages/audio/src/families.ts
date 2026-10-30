@@ -21,6 +21,8 @@ export interface CueFamily {
   samples: readonly SampleId[];
   /** Family fader in dB on the voice input; 0 when the cue's own layer gains already set its level. */
   fader?: number;
+  /** Set for consumer phrases: the most layers and seconds one may schedule. Built-in families are bounded by design. */
+  bounds?: { sources: number; seconds: number };
   build(voice: VoiceGraph, variation: number): void;
 }
 

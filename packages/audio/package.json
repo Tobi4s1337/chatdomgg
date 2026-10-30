@@ -5,6 +5,7 @@
   "type": "module",
   "exports": { ".": "./src/index.ts" },
   "scripts": {
-    "check": "vitest run --root ../.. packages/audio/src/budget.test.ts"
+    "check": "vitest run --root ../.. packages/audio/src/budget.test.ts",
+    "demo": "node scripts/demo.mjs"
   }
 }

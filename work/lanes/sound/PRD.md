@@ -34,7 +34,7 @@ runs `pnpm verify` after integrating. Record what was listened to; waveform/peak
   and duplicate coalescing. Build one focused regression that floods steps while preserving control/beacon
   feedback and the actual allocation bound. Run `pnpm --filter @chatdom/audio check`. Listen to repeated
   stepping/building and trim any fatiguing layer; no adjacency-repeat or material family may remain unfinished.
-- [ ] **SO04 — Demonstrate the complete stream-friendly mix** · evidence: WAV + waveform + bench shots.
+- [x] **SO04 — Demonstrate the complete stream-friendly mix** · evidence: WAV + waveform + bench shots.
   Provide `pnpm --filter @chatdom/audio demo` using the real graph to render the short complete sequence,
   stress burst and mute segment. Confirm non-silence where expected and peak below 0.95 at full volume; inspect
   waveform, resource cleanup, suspension/resume and disposal, including disposal during unlock. Capture and

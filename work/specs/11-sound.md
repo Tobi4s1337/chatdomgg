@@ -263,3 +263,15 @@ and walking/building feedback without predicting those systems.
   nearer is not a duplicate). Distance also low-passes: 18 kHz / (1 + d / 6 m), floor 1.2 kHz. The shipped SO01/SO02
   files peak at about −4 dBFS, not the −1 dBFS SO02 recorded (ffmpeg's integer mono fold adds −3 dB); SO03 folds
   explicitly and verifies −1 dBFS. `check` runs `src/budget.test.ts` against a counting fake context.
+- **2026-10-30 — SO04 lane decisions (with main's interruption review).** Everything before the master that holds
+  sound (room convolution, filters, compressor state) is a renewable front: mute or volume 0 fades it out with the
+  master and every voice over 30 ms and builds a fresh one; a browser suspension stops every voice and cuts the front
+  while nothing renders. Live and offline both release a retired front by a silent render-time marker. Main's Forge
+  bridge is additive and lane-local, outside the frozen interface: `playKingdomPhrase(audio, phrase, options)` plays a
+  consumer-authored `KingdomPhrase` (synthesis tools of one voice only, never the context, master or recordings) in
+  the ceremony or beacon tier, bounded to 24 sources over 6 s and 2 s ahead (larger throws), answering like `cue()`;
+  `renderKingdomAudio` accepts phrase and `interrupt` steps; `noteHz` is exported for the palette. `demo` runs an
+  in-process Vite dev server on the first free port in 5170–5199. Headless Chrome does not enforce autoplay, so it
+  demonstrates refusal with a SIMULATED parked and rejected `resume()`, and suspension with the real context's
+  `suspend()`. The offline render is seeded so the reviewed WAV is reproducible. In the stress burst, the street wave
+  is held back (the ceremony ceiling is full with the beacon and the crowd); controls and the beacon always play.
