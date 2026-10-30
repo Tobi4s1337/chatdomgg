@@ -39,6 +39,21 @@ describe('SIMULATED presence scenario', () => {
     expect(frames).toHaveLength(length);
   });
 
+  it('samples presentation time without inventing a later arrival or private evidence', () => {
+    const simulation = createSimulatedPresence(layout);
+    const frames:KingdomPresenceFrame[]=[];
+    simulation.feed.subscribe(frame=>frames.push(frame),vi.fn());
+    simulation.advance(1,true);
+    const arrival=frames.at(-1)!;
+    simulation.advance(1.175,true);
+    const sample=frames.at(-1)!;
+    expect(sample.asOf).toBe(WORLD_FIXTURE_TIME+1175);
+    expect(sample.windows).toEqual(arrival.windows);
+    expect(sample.windows.find(window=>window.present)!.since).toBe(WORLD_FIXTURE_TIME+1000);
+    expect(sample.sequence).toBeGreaterThan(arrival.sequence);
+    expect(KingdomPresenceFrameSchema.safeParse(sample).success).toBe(true);
+  });
+
   it('uses sixty-second reducer heartbeats to keep a complete roster fresh beyond both leases', () => {
     const simulation = createSimulatedPresence(layout);
     const frames: KingdomPresenceFrame[] = [];
@@ -154,6 +169,26 @@ describe('Herald public SSE adapter', () => {
     expect(receive).toHaveBeenCalledTimes(1);
     expect(unavailable).toHaveBeenCalledTimes(1);
     unsubscribe();
+  });
+
+  it('accepts explicitly configured SIMULATED Herald frames without weakening origin or replay guards', () => {
+    const receive = vi.fn(), unavailable = vi.fn();
+    const feed = createHeraldPresence('/presence-data/stream', WORLD_FIXTURE_KINGDOM, 'simulated');
+    expect(feed.label).toBe('SIMULATED');
+    const stop = feed.subscribe(receive, unavailable);
+    const source = FakeEventSource.instances[0]!; source.open();
+    source.send(liveFrame(1));
+    expect(receive).not.toHaveBeenCalled();
+    source.send(liveFrame(1, 'herald:replay', { origin: 'simulated' }));
+    source.send(liveFrame(1, 'herald:replay', { origin: 'simulated' }));
+    source.send(liveFrame(2, 'herald:replay', { origin: 'simulated', kingdomId: KingdomIdSchema.parse('12') }));
+    expect(receive).toHaveBeenCalledOnce();
+    expect(receive.mock.lastCall![0].origin).toBe('simulated');
+    source.send(liveFrame(2, 'herald:replay', { origin: 'simulated' }));
+    vi.advanceTimersByTime(PRESENCE_LEASE_MS);
+    expect(unavailable).toHaveBeenCalledTimes(3);
+    stop();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('does not renew freshness on duplicate or reordered frames and expires at exactly ninety seconds', () => {

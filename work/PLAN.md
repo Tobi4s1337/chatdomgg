@@ -320,7 +320,7 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Handoff state — 2026-10-30 active dusk look and integration
+## 10. Handoff state — 2026-10-30 active: lane integration before the dusk pass
 
 - Pushed: `d73c342` froze the small shared/world/voxel consumer contracts and Herald spec; `095c967` recorded its verified worktree. `lane/herald` / `../worktrees/herald` are ready at that boundary. No real Twitch authorization or chat success is claimed. Atlas remains with its team at `lane/atlas` / `../worktrees/atlas`; main does not edit its implementation.
 - Content specs 04–06 and PRDs are now frozen: `homes-hearth` (15 homes), `homes-tide` (15 homes), `street-props` (20 records / ten forms in two kits). Main reviewed the production bench, actual validator, mixed desktop/phone fixtures, doorway and SIMULATED window on/off. All 51 core baselines validate; lane assets are deliberately absent and missing collections fail. Committed and pushed in `2c407d8`. Branches `lane/homes-hearth`, `lane/homes-tide`, `lane/street-props` and worktrees `../worktrees/homes-hearth`, `../worktrees/homes-tide`, `../worktrees/street-props` exist at that green commit, with frozen-lockfile dependencies installed. Worker startup belongs to the team.
@@ -367,3 +367,63 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 - The next look pass integrates cached actual directional shadows (20 MiB desktop / 5 MiB phone), full-detail home/castle casters and factor-2 flora, plus a continuous bank material bounded to the actual lake. Main inspected hamlet noon/dusk: cast shadows improve grounding and the jagged shore material edge is gone. Astra's real Chrome proof measured shaded RGB 38 versus sunlit 174, complete R8/depth framebuffers at both sizes, no GL errors.
 - Beacon policy is now identical across feeds: quiet fresh-live pilot plus community strength, zero when stale/offline. The film path now samples actual presentation time so panes retain their 0.7 s fade and detail transitions; it cannot capture a live Herald feed as if it were a simulation.
 - Current scripts/tests are still being verified against that final combined source. Remaining: final complete shot audit, browser rerun for shadow caching/removal/recovery, 160-frame offline arrival film and visual review, selected committed evidence, green commit/push. Founder was told 5190 is available; frame times and Noon→Dusk update costs still need hardware evidence. Content/Herald/Atlas remain with their teams, with uncommitted lane work visible; do not merge their unfinished files.
+
+### Historical pause checkpoint — resumed; see lane integration below
+
+- Goal is paused. Terrain architect and evidence checker were interrupted. No film was started. Preserve all uncommitted source.
+- Confirmed pushed: `a684496` continuous light/contact milestone (230 tests and 19 captures), and `f7313e1` cached sun-shadow module, four focused tests and real Chrome depth proof at `work/evidence/kingdom/sun-depth-proof.png`. The latter is a module checkpoint; its kingdom integration remains uncommitted.
+- Uncommitted integration includes shadows, bounded continuous shoreline material, unified beacon pilot policy, exact offline presentation sampling/LOD clock, public-green groves and root grounding, stronger HDR beacon appearance, testing scripts, and Spec 02 updates. Latest typecheck/lint/unit run passed 236 tests. An earlier integrated shadow checkpoint passed a full verify with 234 tests/19 captures; the newest full verify reached stream capture and failed the default 30 s SwiftShader screenshot timeout. The harness now allows 120 s and fails fast on error gates, but that latest harness has not completed a full run.
+- Browser runtime passed on the last production build: window field 0 → positive → 0, shadow update count stayed 1 through presence/camera changes, real live-frame field illumination followed by fully cleared window+beacon fields on offline/disconnect, actual context loss and constructor/asynchronous worker-failure cleanup. Town main pass: 44 draws / 1,104,438 triangles; cached shadow pass: 26 draws / 3,853,892 triangles / 21,003,584 bytes. Field workspace 12,162,420 bytes. These are counts, not hardware timing claims.
+- Main and Terra still reject final acceptance: repeated blank gable backs hide too many presence windows, and the hamlet ground reads as a rectangular plinth. Astra proposed a rolling ridge with exact current-built-footprint pads, soft Euclidean feathers and a spatial pad index, preserving every address/reserved lot. It was interrupted before any new world/layout edits landed. Full-reserved-lot-flat was our implementation overconstraint, not a frozen rule; future growth may terraform inside its fixed lot. Revisit those tests explicitly without losing actual foundation/threshold contact.
+- Camera experiment: main viewed `shots/kingdom/camera-raised-dusk.png` and `camera-raised-phone.png` (higher east oblique; more fronts but still repetitive). Source now contains an **unreviewed west-oblique experiment**: town desktop eye [-150,42,235], phone [-60,47,285], targets [0,14,50]/[0,14,25]. It was built to an owned temporary snapshot only; no west screenshot or approval exists. Review or replace it on resume.
+- Stronger beacon was viewed by Terra at `shots/kingdom/beacon-full-dusk.png` / `beacon-full-night.png`; main has not yet inspected that final appearance independently. The raised-camera trial includes the stronger beacon and main did inspect it.
+- Preview 5190 (owned session 58259) serves the last production snapshot, **not** the latest west camera or strongest beacon source. Temporary dev 5186 is owned session 25398. Owned camera-trial snapshots are temporary only; no production service was changed. Recheck process status on resume.
+- Next, only after resume: solve camera/terrain acceptance blockers, then freeze source long enough for full `pnpm verify`, inspect final twelve kingdom plus stream/panel shots, rerun runtime if engine changes require it, capture the 160-frame/20 s offline wave (1440×900 CSS / 960×600 physical by default), encode/review it, commit selected evidence and green integration, push. Real-GPU timing remains outstanding; founder was given 5190. Content, Herald and Atlas lanes remain with their teams and have unfinished work; do not merge uncommitted files.
+
+### Lane integration — current authoritative checkpoint
+
+- Founder resumed the goal, then prioritized the team's committed work before further dusk changes. Main locally
+  merged `lane/street-props` at `66c522a` (all twenty authored models; SP03 assembly acceptance still unchecked),
+  `lane/homes-hearth` at `9e316ff` (HH01 **and HH02**, nine models through house tier), and `lane/herald` at
+  `da2d1d9` (H01). Their later uncommitted files remain in their worktrees and were not copied or merged.
+- `pnpm install` registered the Herald/Twitch packages in the root lockfile. Astra high reviewed H01 and main's
+  integration correction now blocks capabilities on token loss/failed validation and obsolete inspections. Six
+  regression cases pass. No new live Twitch reads or H02/H03 success are claimed.
+- The browser's single SSE adapter now explicitly accepts either configured `live` or `simulated` origin,
+  labels replay SIMULATED and rejects cross-origin frames; existing freshness, sequence, epoch and realm guards
+  remain. H02's PRD records the option and `/?source=herald&presenceOrigin=simulated` route.
+- Main's uncommitted scene integration selects the nine reviewed Hearth forms for their actual matching plots;
+  other styles and unfinished manor/hall tiers still use explicitly authored core assets. Passive garden edges,
+  pots, troughs, shrubs and stones sit outside home reservations and clear of approaches. Addresses/presence
+  slots do not change. Props join actual shadow/light occupancy as well as worker-built instanced geometry.
+- Latest source passes typecheck, lint, build and all 415 unit tests, run with at most two CPU cores. A single
+  full verify/capture run follows before push. Capture runs must be serial and lean on this shared host. Fixed
+  evidence views now skip identical redraws while keeping the presence feed/watchdog alive. No film is running.
+- The previous dusk integration is preserved in the working tree and a local safety stash. The stash operation
+  could not remove a read-only mount, so tracked edits stayed in place; the two untracked beacon files were
+  restored explicitly. No source was lost. The stash contains only this main work, not lane files or secrets.
+- Remaining art blockers are still open: repetitive rear gables and the terraced hamlet plinth. Terrain architect
+  remains interrupted while this integration lands; no rolling-ridge proposal has been implemented. The west
+  camera experiment and stronger beacon need the new integrated shot review. Wave film and final acceptance
+  remain required. Goal stays active after this integration checkpoint.
+
+### Green content/Herald integration; Atlas unblock next
+
+- Main's combined integration passed `pnpm verify`: typecheck, lint, 419 unit tests, build and 19 standard shots.
+  Main opened all twelve kingdom views, both stream matrices and panel bench. Full props validation (20) and
+  partial Hearth validation (9) passed. The original phone triangle limit caught an overage; tested 20 m distant
+  horizon cells saved 37,484 triangles without changing the 1 m ground join or removing content. All 240 actual
+  production-selected home sources pass the field/removal test. Small props occlude the local field and shadows;
+  the distant approximation resolves buildings so sub-cell décor cannot falsely seal a street.
+- The replay adapter browser proof passed on one serial page: Juniper's new Hearth window/name at both sizes,
+  SIMULATED label, opposite-origin rejection with all light fields cleared, then recovery. Images and JSON are in
+  `work/evidence/kingdom/integration/`. No real Twitch/Herald producer success is implied. Main looked at them;
+  the phone is tightly cropped, and the wide backs/plinth remain unacceptable. No final wave film yet.
+- Founder then requested Atlas A01/A02 unblocked immediately. Its lane contains the reviewed real importer and
+  survey-preview map, but the main-owned lockfile lacks `apps/surveyor`. Main is adding that importer on
+  `lane/atlas`, checking a frozen offline install, then will commit A01/A02 together as explicitly authorized,
+  credit the shipped CC0/OFL assets and merge. No more repeated blocked worker/review rounds are needed.
+- Keep captures serial and CPU-bounded; full kingdom matrix is already proven for this source. After the Atlas
+  merge, check its actual two map views instead of needlessly recapturing the unchanged kingdom matrix. The
+  preview on 5190 serves the current integration build. Return next to the natural terrain and a dusk viewpoint
+  where the actual windows face the camera, then capture the wave once that composition works.

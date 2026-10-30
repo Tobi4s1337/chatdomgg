@@ -7,22 +7,26 @@ function check(condition: boolean, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-describe('conforming distant terrain collar', () => {
+describe.each([10, 20] as const)('conforming distant terrain collar at %d m far detail', farStep => {
   it.each(['hamlet', 'town'] as const)('joins %s ground exactly and leaves no interior overlap or unmatched outer joins', tier => {
     const layout = generateKingdom({ seed: 'lanternmere', tier, firstYear: tier === 'hamlet' ? 2025 : 2022, year: 2026 });
-    const { geometry, clipBounds: bounds, sampleHeight } = createHorizonSurface(layout);
+    const { geometry, clipBounds: bounds, sampleHeight } = createHorizonSurface(layout, { farStep });
     expect(bounds).toEqual(tier === 'hamlet' ? [-96, 96, -112, 144] : [-176, 176, -112, 272]);
-    const outer = [Math.floor(bounds[0] / 10) * 10 - 10, Math.ceil(bounds[1] / 10) * 10 + 10,
-      Math.floor(bounds[2] / 10) * 10 - 10, Math.ceil(bounds[3] / 10) * 10 + 10];
+    const outer = [Math.floor(bounds[0] / farStep) * farStep - farStep, Math.ceil(bounds[1] / farStep) * farStep + farStep,
+      Math.floor(bounds[2] / farStep) * farStep - farStep, Math.ceil(bounds[3] / farStep) * farStep + farStep];
     const position = geometry.getAttribute('position'), normal = geometry.getAttribute('normal'), indices = geometry.index!;
     const edges = new Map<number, number>();
     let area = 0, sharedVertices = 0;
     for (let id = 0; id < position.count; id++) {
       const x = position.getX(id), y = position.getY(id), z = position.getZ(id);
       check([x, y, z].every(Number.isFinite), `Invalid horizon vertex ${id}`);
+      check(Math.abs(Math.hypot(normal.getX(id), normal.getY(id), normal.getZ(id)) - 1) < 1e-6
+        && normal.getY(id) > 0, `Invalid horizon normal ${id}`);
       const atOuterJoin = ((x === outer[0] || x === outer[1]) && z >= outer[2]! && z <= outer[3]!)
         || ((z === outer[2] || z === outer[3]) && x >= outer[0]! && x <= outer[1]!);
-      if (atOuterJoin) check(Math.abs(sampleHeight(x, z) - y) < 1e-8, `Contact misses outer join at ${x},${z}`);
+      if (atOuterJoin || Math.abs(x) === 1100 || Math.abs(z) === 1100) {
+        check(Math.abs(sampleHeight(x, z) - y) < 1e-8, `Contact misses outer join or boundary at ${x},${z}`);
+      }
       const isShared = ((x === bounds[0] || x === bounds[1]) && z >= bounds[2] && z <= bounds[3])
         || ((z === bounds[2] || z === bounds[3]) && x >= bounds[0] && x <= bounds[1]);
       if (!isShared) continue;
@@ -42,10 +46,16 @@ describe('conforming distant terrain collar', () => {
       check(cross > 0, 'Degenerate or reversed terrain triangle'); area += cross / 2;
       const centreX = triangle.reduce((sum, id) => sum + position.getX(id), 0) / 3;
       const centreZ = triangle.reduce((sum, id) => sum + position.getZ(id), 0) / 3;
-      // All collar/join triangles plus a regular distant sample; bounded local queries only.
-      if (Math.abs(centreX) < bounds[1] + 40 && centreZ > bounds[2] - 40 && centreZ < bounds[3] + 40 || i % 291 === 0) {
-        const expected = triangle.reduce((sum, id) => sum + position.getY(id), 0) / 3;
-        check(Math.abs(sampleHeight(centreX, centreZ) - expected) < 1e-8, `Contact misses triangle at ${centreX},${centreZ}`);
+      // Check every rendered plane, including the complete fan/collar joins and negative cells.
+      const expected = triangle.reduce((sum, id) => sum + position.getY(id), 0) / 3;
+      check(Math.abs(sampleHeight(centreX, centreZ) - expected) < 1e-8, `Contact misses triangle at ${centreX},${centreZ}`);
+      if (i % 291 === 0) {
+        // Roots do not sit only at triangle centres or grid vertices.
+        const weights = [0.13, 0.31, 0.56];
+        const x = triangle.reduce((sum, id, corner) => sum + position.getX(id) * weights[corner]!, 0);
+        const z = triangle.reduce((sum, id, corner) => sum + position.getZ(id) * weights[corner]!, 0);
+        const y = triangle.reduce((sum, id, corner) => sum + position.getY(id) * weights[corner]!, 0);
+        check(Math.abs(sampleHeight(x, z) - y) < 1e-8, `Root contact misses triangle at ${x},${z}`);
       }
       check(triangle.every(id => position.getX(id) <= bounds[0]) || triangle.every(id => position.getX(id) >= bounds[1])
         || triangle.every(id => position.getZ(id) <= bounds[2]) || triangle.every(id => position.getZ(id) >= bounds[3]),
@@ -71,22 +81,36 @@ describe('conforming distant terrain collar', () => {
     }
     const innerPerimeter = 2 * (bounds[1] - bounds[0] + bounds[3] - bounds[2]);
     expect(sharedVertices).toBe(innerPerimeter);
-    expect(boundaryCount).toBe(innerPerimeter + 4 * 220);
+    expect(boundaryCount).toBe(innerPerimeter + 4 * 2200 / farStep);
     expect(area).toBe(2200 ** 2 - (bounds[1] - bounds[0]) * (bounds[3] - bounds[2]));
-    expect(indices.count / 3).toBeLessThan(160_000);
-    expect(position.array.byteLength + normal.array.byteLength + indices.array.byteLength).toBeLessThan(4 * 1024 * 1024);
+    expect(indices.count / 3).toBeLessThan(farStep === 10 ? 160_000 : 110_000);
+    expect(position.array.byteLength + normal.array.byteLength + indices.array.byteLength)
+      .toBeLessThan((farStep === 10 ? 4 : 3) * 1024 * 1024);
     for (let z = bounds[2]; z <= bounds[3]; z += 11.25) for (let x = bounds[0]; x <= bounds[1]; x += 7.75) {
       expect(sampleHeight(x, z)).toBeCloseTo(sampleRenderedTerrainHeight(layout, x, z), 10);
     }
     expect(() => sampleHeight(NaN, 0)).toThrow('bounded horizon');
     expect(() => sampleHeight(1101, 0)).toThrow('bounded horizon');
-    console.info(`Horizon ${tier}: ${indices.count / 3} triangles, ${position.count} shared vertices, ${position.array.byteLength + normal.array.byteLength + indices.array.byteLength} bytes`);
+    console.info(`Horizon ${tier}, ${farStep} m: ${indices.count / 3} triangles, ${position.count} shared vertices, ${position.array.byteLength + normal.array.byteLength + indices.array.byteLength} bytes`);
     geometry.dispose();
   });
 
   it('rejects bounds that cannot fit the bounded horizon', () => {
     const layout = generateKingdom({ seed: 'bounds', tier: 'hamlet', firstYear: 2025, year: 2026 });
-    expect(() => createHorizonSurface({ ...layout, bounds: { minX: 0, maxX: 513, minZ: 0, maxZ: 16 } })).toThrow('bounded horizon');
-    expect(() => createHorizonSurface({ ...layout, bounds: { minX: NaN, maxX: 1, minZ: 0, maxZ: 16 } })).toThrow('finite');
+    expect(() => createHorizonSurface({ ...layout, bounds: { minX: 0, maxX: 513, minZ: 0, maxZ: 16 } }, { farStep })).toThrow('bounded horizon');
+    expect(() => createHorizonSurface({ ...layout, bounds: { minX: NaN, maxX: 1, minZ: 0, maxZ: 16 } }, { farStep })).toThrow('finite');
   });
+});
+
+it('keeps 10 m as the deterministic default and bounds the distant step', () => {
+  const layout = generateKingdom({ seed: 'lanternmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
+  const standard = createHorizonSurface(layout), explicit = createHorizonSurface(layout, { farStep: 10 });
+  expect(standard.clipBounds).toEqual(explicit.clipBounds);
+  expect(standard.geometry.getAttribute('position').array).toEqual(explicit.geometry.getAttribute('position').array);
+  expect(standard.geometry.getAttribute('normal').array).toEqual(explicit.geometry.getAttribute('normal').array);
+  expect(standard.geometry.index!.array).toEqual(explicit.geometry.index!.array);
+  for (const farStep of [0, -10, 15, 40, NaN, Infinity]) {
+    expect(() => createHorizonSurface(layout, { farStep: farStep as 10 })).toThrow('10 or 20');
+  }
+  standard.geometry.dispose(); explicit.geometry.dispose();
 });

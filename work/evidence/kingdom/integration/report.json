@@ -1,0 +1,63 @@
+{
+  "source": "synthetic public SSE frames; no real Twitch or Herald producer claim",
+  "checks": [
+    "explicit simulated origin accepted and labelled",
+    "Juniper and one warm window visible at both sizes",
+    "live origin rejected and all light fields cleared",
+    "same-origin recovery accepted"
+  ],
+  "snapshots": [
+    {
+      "file": "hearth-replay@1440x900.png",
+      "stats": {
+        "ready": true,
+        "workers": 6,
+        "homes": 24,
+        "activeWindows": 1,
+        "geometryBuilds": 103,
+        "fieldUploads": 6,
+        "drawCalls": 46,
+        "triangles": 447370,
+        "time": 30,
+        "hour": 19.5,
+        "camera": "window",
+        "fieldBytes": 8344704,
+        "source": "SIMULATED",
+        "fieldSettled": true,
+        "shadowUpdates": 1,
+        "shadowDrawCalls": 36,
+        "shadowTriangles": 907406,
+        "shadowBytes": 20983040,
+        "shadowEnabled": true,
+        "windowFieldVisited": 31,
+        "beaconFieldVisited": 6
+      }
+    },
+    {
+      "file": "hearth-replay@390x844.png",
+      "stats": {
+        "ready": true,
+        "workers": 6,
+        "homes": 24,
+        "activeWindows": 1,
+        "geometryBuilds": 103,
+        "fieldUploads": 6,
+        "drawCalls": 33,
+        "triangles": 321554,
+        "time": 30,
+        "hour": 19.5,
+        "camera": "window",
+        "fieldBytes": 8344704,
+        "source": "SIMULATED",
+        "fieldSettled": true,
+        "shadowUpdates": 2,
+        "shadowDrawCalls": 36,
+        "shadowTriangles": 907406,
+        "shadowBytes": 5254400,
+        "shadowEnabled": true,
+        "windowFieldVisited": 31,
+        "beaconFieldVisited": 6
+      }
+    }
+  ]
+}

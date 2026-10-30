@@ -16,12 +16,12 @@ or choose from Backlog without main. Keep ten required forms; replace weak desig
 
 ## Tasks
 
-- [ ] **SP01 — A garden fence and wall kit that really joins** · evidence: twelve blueprints + individual shots + join tests.
+- [x] **SP01 — A garden fence and wall kit that really joins** · evidence: twelve blueprints + individual shots + join tests.
   Build straight/corner/end fence and wall forms, each in Hearth and Tide: twelve blueprints, six shapes. Export
   the entry/factory and `JOIN_FIXTURES` data with documented join planes. Validate actual occupancy, compatible
   heights and grounded joins. Render individual pieces in the real bench and inspect their joins in occupancy tests. Prepare assembly
   transforms now; final all-ten-form assembly captures run after SP02 completes the kit.
-- [ ] **SP02 — Plants and stones finish the same street** · evidence: eight blueprints + two kit sheets.
+- [x] **SP02 — Plants and stones finish the same street** · evidence: eight blueprints + two kit sheets.
   Add pot, trough, rock cluster and shrub in both palettes: eight blueprints, four shapes. Give each a broad
   authored silhouette, credible support and restrained accents; no fake resource/function. Render all twenty
   assets from three dusk angles and compare noon/night. Improve the forms that read as cubes or clutter.

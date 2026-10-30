@@ -25,7 +25,7 @@ export interface SimulatedPresence {
   /** Seconds from the fixed simulation epoch, suitable for a camera/capture cue. */
   readonly completeAt: number;
   /** Absolute elapsed seconds; seeking backwards reproduces the same presence. */
-  advance(seconds: number): void;
+  advance(seconds: number, sampleFrame?: boolean): void;
   reset(): void;
 }
 
@@ -94,7 +94,7 @@ export function createSimulatedPresence(layout: KingdomLayout): SimulatedPresenc
   };
   return {
     feed, firstSlot: first.slot, completeAt: arrivals.at(-1)!.at / 1000,
-    advance(seconds) {
+    advance(seconds, sampleFrame = false) {
       if (!Number.isFinite(seconds) || seconds < 0 || seconds * 1000 + WORLD_FIXTURE_TIME > 8_640_000_000_000_000) {
         throw new RangeError('Simulation time must be a nonnegative supported timestamp');
       }
@@ -124,7 +124,7 @@ export function createSimulatedPresence(layout: KingdomLayout): SimulatedPresenc
         changed = true;
       }
       elapsed = target;
-      if (changed) {
+      if (changed || sampleFrame) {
         state = advancePresence(state, WORLD_FIXTURE_TIME + target);
         publish(target);
       }
@@ -141,10 +141,11 @@ export function createSimulatedPresence(layout: KingdomLayout): SimulatedPresenc
  * observations. Epoch changes are accepted only after a new connection opens;
  * reopening the same epoch retains its sequence watermark.
  */
-export function createHeraldPresence(url = '/presence-data/stream', kingdomId?: KingdomId): PresenceFeed {
+export function createHeraldPresence(url = '/presence-data/stream', kingdomId?: KingdomId, expectedOrigin: KingdomPresenceFrame['origin'] = 'live'): PresenceFeed {
   if (kingdomId !== undefined) KingdomIdSchema.parse(kingdomId);
+  if (expectedOrigin !== 'live' && expectedOrigin !== 'simulated') throw new TypeError('Unknown presence origin');
   return {
-    label: 'LIVE',
+    label: expectedOrigin === 'simulated' ? 'SIMULATED' : 'LIVE',
     subscribe(receive, unavailable) {
       let expectedKingdom = kingdomId;
       let disposed = false;
@@ -188,7 +189,7 @@ export function createHeraldPresence(url = '/presence-data/stream', kingdomId?: 
           let parsed: ReturnType<typeof KingdomPresenceFrameSchema.safeParse>;
           try { parsed = KingdomPresenceFrameSchema.safeParse(JSON.parse(event.data)); }
           catch { fail(); return; }
-          if (!parsed.success || parsed.data.origin !== 'live') { fail(); return; }
+          if (!parsed.success || parsed.data.origin !== expectedOrigin) { fail(); return; }
           const frame = parsed.data;
           if ((expectedKingdom !== undefined && frame.kingdomId !== expectedKingdom)
             || (connectionEpoch !== null && frame.epoch !== connectionEpoch)) { fail(); return; }

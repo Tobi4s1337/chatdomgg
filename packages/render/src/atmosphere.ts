@@ -94,7 +94,7 @@ const skyFragment = /* glsl */ `
     // Light catches the underside of the clouds where the beacon reaches them.
     // This is angular and soft, so it remains a patch of sky rather than a wedge.
     float beaconCloud = exp(-pow(acos(clamp(dot(d, uBeaconDirection), -1.0, 1.0)) / 0.11, 2.0));
-    color += vec3(0.22, 0.08, 0.018) * beaconCloud * (0.12 + cloud * 0.88) * uBeaconStrength;
+    color += vec3(0.44, 0.16, 0.036) * beaconCloud * (0.12 + cloud * 0.88) * uBeaconStrength * uBeaconStrength;
     // Sparse pinpricks anchored to sky direction; no time-dependent shimmer.
     vec2 starUV = vec2(atan(d.z, d.x) * 34.0, asin(clamp(d.y, -1.0, 1.0)) * 34.0);
     vec2 cell = floor(starUV), local = fract(starUV);
@@ -119,10 +119,11 @@ const shaftFragment = /* glsl */ `
     float x = abs(vUv.x * 2.0 - 1.0);
     float height = vUv.y;
     float envelope = smoothstep(0.0, 0.045, height) * (1.0-smoothstep(0.65, 1.0, height));
-    float core = exp(-x*x*34.0) * (1.0-smoothstep(0.10, 0.85, height));
+    float width = mix(0.34, 0.09, smoothstep(0.0, 1.0, height));
+    float core = exp(-pow(x / width, 2.0) * 2.0) * (1.0-smoothstep(0.38, 1.0, height));
     float veil = exp(-x*x*9.0) * (0.9 + 0.1*sin(height*10.0-uTime*0.25));
-    float alpha = envelope * (core*0.48 + veil*0.16) * uStrength;
-    vec3 color = mix(vec3(0.95, 0.42, 0.12), vec3(1.0, 0.72, 0.33), core);
+    float alpha = envelope * (core*(0.30 + 0.36*uStrength) + veil*0.16) * uStrength;
+    vec3 color = mix(vec3(0.95, 0.42, 0.12), vec3(1.8, 1.02, 0.42), core);
     gl_FragColor = vec4(color, alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -135,6 +136,20 @@ const haloFragment = /* glsl */ `
     vec2 p = (vUv - 0.5) * 2.0;
     float halo = exp(-dot(p,p)*5.5) * (1.0-smoothstep(0.48, 1.0, length(p)));
     gl_FragColor = vec4(vec3(0.91, 0.48, 0.22), halo * uStrength * 0.17);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }
+`;
+const baseFragment = /* glsl */ `
+  uniform float uStrength;
+  varying vec2 vUv;
+  void main() {
+    vec2 p = (vUv - 0.5) * 2.0;
+    float r2 = dot(p, p);
+    float core = exp(-r2 * 24.0);
+    float bloom = exp(-r2 * 5.0) * (1.0-smoothstep(0.5, 1.0, length(p)));
+    float alpha = (core * 0.66 + bloom * 0.30) * uStrength * uStrength;
+    gl_FragColor = vec4(mix(vec3(1.0, 0.38, 0.08), vec3(2.3, 1.1, 0.38), core), alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -173,7 +188,7 @@ export function createAtmosphere(scene: THREE.Scene): {
   scene.add(halo);
   // A small warm source at the tower gives the column somewhere to begin.
   const baseMaterial = new THREE.ShaderMaterial({
-    uniforms: { uStrength: { value: 0 } }, vertexShader: shaftVertex, fragmentShader: haloFragment,
+    uniforms: { uStrength: { value: 0 } }, vertexShader: shaftVertex, fragmentShader: baseFragment,
     transparent: true, depthWrite: false, blending: THREE.NormalBlending,
   });
   const base = new THREE.Mesh(haloGeometry, baseMaterial);
@@ -204,10 +219,10 @@ export function createAtmosphere(scene: THREE.Scene): {
       halo.scale.setScalar(10 + strength * 18);
       haloMaterial.uniforms.uStrength!.value = strength;
       base.visible = strength > 0.001;
-      base.position.copy(beaconPosition).y += 0.6;
+      base.position.copy(beaconPosition).y += 1.2;
       base.quaternion.copy(camera.quaternion);
-      base.scale.setScalar(7 + strength * 4);
-      baseMaterial.uniforms.uStrength!.value = strength * 2.5;
+      base.scale.setScalar(9 + strength * 17);
+      baseMaterial.uniforms.uStrength!.value = strength;
       shaftMaterial.uniforms.uStrength!.value = strength;
       shaftMaterial.uniforms.uTime!.value = Number.isFinite(elapsedSeconds) ? elapsedSeconds : 0;
     },

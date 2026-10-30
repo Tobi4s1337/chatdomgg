@@ -9,6 +9,7 @@ export interface VoxelRenderState {
   setLight(volume:LightVolume):void;
   setFarLight(volume:LightVolume):void;
   setBeaconLight(volume:LightVolume):void;
+  setShoreLevel(level:number,bounds:readonly [number,number,number,number]):void;
   setTerrainHeight(data:Float32Array,width:number,height:number,origin:[number,number],step:number):void;
   dispose():void;
 }
@@ -44,7 +45,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
   let farLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);farLightTexture.format=THREE.RedFormat;farLightTexture.needsUpdate=true;
   let beaconLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);beaconLightTexture.format=THREE.RedFormat;beaconLightTexture.needsUpdate=true;
   let heightTexture=new THREE.DataTexture(new Float32Array(1),1,1,THREE.RedFormat,THREE.FloatType);heightTexture.needsUpdate=true;
-  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0}};
+  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')}};
   const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,vertexShader:`
     in uint aPacked; in uint aMaterial;
     out float vLodFade;
@@ -75,7 +76,8 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     precision highp sampler3D;
     uniform sampler2D uPalette;uniform sampler3D uLight,uFarLight,uBeaconLight;
     uniform vec3 uSun,uAmbient,uSunDirection,uFog,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent;
-    uniform float uSunIntensity,uAmbientIntensity,uNight,uFarCell,uBeaconCell,uTerrain;
+    uniform float uSunIntensity,uAmbientIntensity,uNight,uFarCell,uBeaconCell,uTerrain,uShoreLevel;
+    uniform vec3 uTerrainSoil,uTerrainGrass;uniform vec4 uShoreBounds;
     in vec3 vWorld,vNormal;in float vAo,vSky,vLodFade;flat in uint vMaterial;
     float hash(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}
     float packedSample(sampler3D field,ivec3 cell){return floor(texelFetch(field,cell,0).r*255.+.5);}
@@ -139,6 +141,11 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       vec4 swatch=texelFetch(uPalette,ivec2(int(vMaterial&255u),int(vMaterial>>8u)),0);vec3 base=swatch.rgb;
       vec3 n=normalize(vNormal);vec2 uv=abs(n.y)>.5?vWorld.xz:abs(n.x)>.5?vWorld.zy:vWorld.xy;
       float kind=swatch.a;
+      // A bank follows continuous rendered height, rather than the material ID of
+      // a whole one-metre triangle poking through the water's edge.
+      if(uTerrain>.5&&vWorld.y<uShoreLevel+.7&&vWorld.x>uShoreBounds.x&&vWorld.x<uShoreBounds.y&&vWorld.z>uShoreBounds.z&&vWorld.z<uShoreBounds.w){
+        base=mix(uTerrainSoil,uTerrainGrass,smoothstep(uShoreLevel-.05,uShoreLevel+.7,vWorld.y));kind=2.;
+      }
       float detail=1.-smoothstep(.12,.55,max(length(dFdx(uv)),length(dFdy(uv))));
       float variation=hash(floor(vWorld*8.+n*.03));base*=1.+(.03*variation-.015)*detail;
       if(kind==2.)base*=.91+.075*sin(vWorld.x*.13)*sin(vWorld.z*.17)+.04*sin((vWorld.x+vWorld.z)*.43);
@@ -182,6 +189,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     setLight(v){lightTexture=uploadVolume(lightTexture,v);uniforms.uLight.value=lightTexture;uniforms.uLightOrigin.value.set(...v.origin);uniforms.uLightExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);},
     setFarLight(v){farLightTexture=uploadVolume(farLightTexture,v);uniforms.uFarLight.value=farLightTexture;uniforms.uFarOrigin.value.set(...v.origin);uniforms.uFarExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uFarCell.value=v.cellSize;},
     setBeaconLight(v){beaconLightTexture=uploadVolume(beaconLightTexture,v);uniforms.uBeaconLight.value=beaconLightTexture;uniforms.uBeaconOrigin.value.set(...v.origin);uniforms.uBeaconExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uBeaconCell.value=v.cellSize;},
+    setShoreLevel(level,bounds){if(!Number.isFinite(level)||bounds.some(value=>!Number.isFinite(value)))throw new Error('Shore level and bounds must be finite');uniforms.uShoreLevel.value=level;uniforms.uShoreBounds.value.set(...bounds);},
     setTerrainHeight(data,width,height,origin,step){heightTexture.dispose();heightTexture=new THREE.DataTexture(data,width,height,THREE.RedFormat,THREE.FloatType);heightTexture.minFilter=heightTexture.magFilter=THREE.NearestFilter;heightTexture.needsUpdate=true;uniforms.uTerrainHeight.value=heightTexture;uniforms.uTerrainOrigin.value.set(...origin);uniforms.uTerrainSize.value.set(width,height);uniforms.uTerrainStep.value=step;uniforms.uTerrain.value=1;},
     dispose(){material.dispose();texture.dispose();lightTexture.dispose();farLightTexture.dispose();beaconLightTexture.dispose();heightTexture.dispose();}};
 }
