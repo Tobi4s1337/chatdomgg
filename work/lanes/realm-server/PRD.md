@@ -76,7 +76,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   queues and timeouts. Focused R9 test combines input flood with controlled slow socket/storage: distance cannot
   increase, ceilings hold, dropped deltas close/resync, and unhealthy dependencies hold actions. Report measured
   high-water marks and secret-safe close reasons. Supply exact transport/room composition to the integrator.
-- [ ] **RS07 — Crossing a district removes the old district** · evidence: test/log. Add the isolated SDK
+- [x] **RS07 — Crossing a district removes the old district** · evidence: test/log. Add the isolated SDK
   district/decoder harness under `apps/realm/scripts/` and integration tests alongside diagnostics; consume the
   actual production room's `StateView` implementation. Extend the one-court view under the narrow room-file
   grant with shared district/neighbour views and explicit decoder-safe handoff. Focused R10 test crosses one person while

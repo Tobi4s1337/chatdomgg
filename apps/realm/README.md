@@ -188,6 +188,54 @@ The browser source belongs to the browser lane; this is what it must do. `connec
 6. **Signout.** After `POST /api/realm/signout`, clear every key for that `resumeScope`. The server ends the seat
    within about a second, whether it is connected or waiting out its grace.
 7. Walker ids are per entry. Use them only as keys for this room session; never persist or show them.
+## Districts (`src/limits/districts.ts`)
+
+Spec 34 R10: a socket receives the walkers near it, not the whole kingdom. `RealmDistricts` holds the room's
+shared views and `kingdom-room.ts` hands sockets between them.
+
+- **Grid.** The floor is cut into 48 m square districts (`REALM_DISTRICT_GRID`). A view holds its district and the
+  ring of eight around it, so everyone within at least 48 m (up to 96 m) is visible. A walker keeps its district
+  until it is 4 m past the edge, so pacing along a boundary does not churn. The walker's public `district` field
+  is the label `<cx>:<cz>`.
+- **One view per occupied district.** Every client standing in a district holds the same `StateView` object.
+  Colyseus caches each patch body by view identity, so a district's body is encoded once however many sockets share
+  it. Views are never made per walker and carry nothing per person. A view exists while somebody (connected or in
+  reconnect grace) stands in its district; the last one out disposes it, so its visibility bits cannot leak to the
+  next view id.
+- **Membership moves once per patch.** `onBeforePatch` re-reads positions, moves walkers between the views that
+  stop or start covering them, and encodes the result in that same patch. Joins add the new walker to every live
+  view that covers it; a leaving walker is removed from them while it is still attached to state.
+- **Handoff.** A crossing client takes its new district's shared view and is sent that view's full state, the same
+  frame Colyseus sends on join (`sendFullState`, pinned core 0.18.23; the room refuses to start without it). The SDK
+  decodes a full state over a live decoder as a resync: walkers it does not contain are removed (with `onRemove`),
+  new ones are added, unchanged ones stay put. The old shared view is never emptied for one person, so everyone left
+  behind keeps their decoder and view untouched. Only assigning `client.view` would leave the old district's walkers
+  as ghosts and never send the new district's existing walkers; R10's mutation run shows exactly that failure.
+- **Reconnect.** Colyseus copies a dropped socket's view onto the reconnecting one; the room then hands it the
+  walker's current view, and the reconnect's full state reconciles the decoder the same way.
+
+### What it costs
+
+`node apps/realm/scripts/districts.mjs [--out report.json]` runs the SIMULATED six-walker crossing on the production
+room and prints the report. It binds one ephemeral 127.0.0.1 port and needs no database. Bodies and socket frames
+are kept apart. A shared view saves encoding, not sockets: with input prediction on, every socket gets its own
+TIMED copy of its view's body (8-byte server clock + input ack) every patch, or a 9-byte heartbeat on a quiet tick.
+A crossing costs one full-state frame of the new view to the crossing socket only.
+
+| Window (6 sockets, 4 occupied districts, 2 per shared view) | Patches | Bodies encoded | Socket frames | Timing prefix | Handoff |
+|---|---|---|---|---|---|
+| Crossing (2.2 s walk, 0:0 → 1:0) | 14 | 48 (1,294 B), at most 4 per patch | 84 (2,726 B), 6 per patch | 672 B, 23 heartbeats | 1 full state to the crosser, 860 B |
+| Steady (everyone walking, 1 s) | 8 | 24 (3,006 B), at most 4 per patch | 48 (5,280 B), 6 per patch | 384 B, 12 heartbeats | none |
+
+These are SIMULATED numbers from one run on the shared development host (`/tmp/realm-rs07/districts.json`); RS08
+measures the 300-walker cost.
+
+### For the browser
+
+Nothing new to send. The walker map is the visible set: a walker leaving it means "out of view", not "left the
+kingdom" (presence frames say who is in the kingdom). Remove its avatar on `onRemove` and add on `onAdd`; a district
+crossing can deliver several of each in one state change. Do not hold references to removed walker objects.
+
 ## Homes and founded layouts (`src/allocation/`)
 
 `AllocationService` is the only way a citizen home comes to exist (spec 34 R6). It shares the realm's Postgres schema.
@@ -330,6 +378,12 @@ sessions. It starts this server's durable composition through `src/auth/reconnec
 on `k:424243`. It covers: a reload through explicit reconnect, a lost network through automatic reconnect, rotated
 and refused tokens, a second window, signout during the grace, expiry while connected, and a restart that refuses
 every old token (automatic reconnect ends in 4003, a saved token in 522) before an authenticated fresh entry.
+
+R10 (`src/diagnostics/districts.test.ts`, no database) runs `src/diagnostics/district-harness.ts`: the production room
+and transport, six real SDK decoders, one walker crossing 0:0 → 1:0. Only the crossing decoder drops `behind` and
+gains `ahead`; the walkers left in 0:0 keep their decoder and their shared view object; the crosser now shares the
+arrival's view; every decoder holds exactly its interest with the server's values; a patch encodes at most one body
+per view while every socket still gets its own frame.
 
 Vitest caches transformed modules in `node_modules/.vitest-cache`, and that cache does not notice a new migration
 file behind `import.meta.glob`. After adding a migration, run `pnpm exec vitest --clearCache` once, or the suite will
