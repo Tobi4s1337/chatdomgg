@@ -25,7 +25,7 @@ work or repeat town proof captures. Main handles `pnpm verify` and integration. 
   connect the actual bridge, and show Place/Erase/Paint/Fill, selected state, readable draft/source status and
   current budget. Make one real edit from the rack in the main-owned scene. The home stays visible at desktop
   and phone widths. No mock editor, fixture-only success or second route. · evidence: desktop/phone shots + real edit
-- [ ] **BT02 — Give materials, scale, symmetry and correction a crafted home.** Add the actual kingdom material swatches,
+- [x] **BT02 — Give materials, scale, symmetry and correction a crafted home.** Add the actual kingdom material swatches,
   names and selected mark; compact phone palette; all three brush sizes; and Off/X/Z/X+Z mirror. Exercise paint,
   occupied-region fill and a mirrored gesture through the core. Wire real undo/redo availability and complete
   gesture history; rejected targets retain a plain reason and leave history unchanged.

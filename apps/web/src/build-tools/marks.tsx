@@ -33,4 +33,6 @@ export const mirrorMark = (value: BuildMirror | null) => mark(<>
 export const undoMark = () => mark(<path d="M8.5 4.5 3.8 9.2l4.7 4.7M4 9.2h10.2a5.6 5.6 0 0 1 0 11.2H10" />);
 export const redoMark = () => mark(<path d="m15.5 4.5 4.7 4.7-4.7 4.7M20 9.2H9.8a5.6 5.6 0 0 0 0 11.2H14" />);
 export const leaveMark = () => mark(<><path d="M4.5 21.5V9.8a5 5 0 0 1 10 0v11.7M2.5 21.5h14" /><path d="M11.8 14.6h9.4m-3-3 3 3-3 3" /></>);
+/** A tray lid: open lifts the palette drawer, closed lowers it back into the rack. */
+export const drawerMark = (open: boolean) => mark(<><path class="bt-mark-faint" d="M3.5 17.5h17v3h-17Z" /><path d={open ? 'm7.5 9.5 4.5 4.5 4.5-4.5' : 'm7.5 13.5 4.5-4.5 4.5 4.5'} /></>);
 export const welcomeMark = () => mark(<><path d="m3 11.5 9-7.8 9 7.8M5.4 9.6v11.6h13.2V9.6" /><path d="M10 21.2v-5.4h4v5.4" /><path d="M12 11.2v.1" stroke-width="2.6" /></>);
