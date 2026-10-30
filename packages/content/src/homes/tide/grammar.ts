@@ -234,6 +234,11 @@ export interface Hip {
   open?: 'south';
   /** Stop after this many courses and close the remainder flat against that wall. */
   courses?: number;
+  /**
+   * With an open south side: where each ring stops, so a lower wing's slopes run on until they die into the
+   * course of the taller roof at the same height instead of ending in a cut section.
+   */
+  southAt?: (ring: number) => number;
 }
 
 /** A hipped roof of shrinking course rings; the last rectangle is its ridge. */
@@ -241,7 +246,7 @@ export function hipRoof(shell: Shell, h: Hip, cap?: number): { top: number } {
   const rise = h.rise ?? 2, run = h.run ?? 2, thick = h.thick ?? 4, limit = h.courses ?? Infinity;
   let top = h.base, last: Rect | undefined;
   for (let k = 0; k < limit; k++) {
-    const r = { x0: h.x0 + run * k, z0: h.z0 + run * k, x1: h.x1 - run * k, z1: h.open === 'south' ? h.z1 : h.z1 - run * k };
+    const r = { x0: h.x0 + run * k, z0: h.z0 + run * k, x1: h.x1 - run * k, z1: h.open === 'south' ? h.southAt?.(k) ?? h.z1 : h.z1 - run * k };
     if (r.x1 <= r.x0 || r.z1 <= r.z0) break;
     const y0 = h.base + rise * k, y1 = y0 + rise;
     const closing = k === limit - 1;

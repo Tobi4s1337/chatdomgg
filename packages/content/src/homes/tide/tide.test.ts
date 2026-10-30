@@ -64,11 +64,12 @@ function covered(g: Grid, x: number, h: number, z: number): boolean {
   return false;
 }
 
-/** Face-connected pieces of one material, as cell coordinates. */
+/** Face-connected pieces of one material (or, for -1, of the kit's structural materials), as cell coordinates. */
 function components(g: Grid, material: number): [number, number, number][][] {
   const seen = new Uint8Array(g.cells.length), parts: [number, number, number][][] = [];
+  const member = (m: number) => material < 0 ? STRUCTURE.has(m) : m === material;
   for (let start = 0; start < g.cells.length; start++) {
-    if (seen[start] || g.cells[start] !== material) continue;
+    if (seen[start] || !member(g.cells[start]!)) continue;
     const part: [number, number, number][] = [], stack = [start];
     seen[start] = 1;
     while (stack.length) {
@@ -78,7 +79,7 @@ function components(g: Grid, material: number): [number, number, number][][] {
         const nx = x + dx, ny = y + dy, nz = z + dz;
         if (nx < 0 || ny < 0 || nz < 0 || nx >= g.sx || ny >= g.sy || nz >= g.sz) continue;
         const n = nx + g.sx * (ny + g.sy * nz);
-        if (!seen[n] && g.cells[n] === material) { seen[n] = 1; stack.push(n); }
+        if (!seen[n] && member(g.cells[n]!)) { seen[n] = 1; stack.push(n); }
       }
     }
     parts.push(part);
@@ -239,6 +240,46 @@ describe('Salt & slate homes', () => {
         let gained = 0;
         for (let z = 0; z < 128; z++) for (let x = 0; x < 64; x++) if (c.get(x, FLOOR - 1, z) === STYLES.tide.trim && a.get(x, FLOOR - 1, z) !== STYLES.tide.trim) gained++;
         expect(gained / 64, `${after.id} new floor (m²)`).toBeGreaterThan(4);
+      }
+    }
+  });
+
+  it('makes every room a tier adds reachable on foot from the street door', () => {
+    for (const family of FAMILIES) {
+      const homes = BLUEPRINTS.filter(b => familyOf(b) === family);
+      for (let i = 1; i < homes.length; i++) {
+        const before = grid(homes[i - 1]!), after = homes[i]!, g = grid(after);
+        const reached = walk(g, [HOME_REVIEW[after.id]!.entrance[0], 127]);
+        // New boards and the clear standing space over them: a person must be able to stand on most of it.
+        let room = 0, walked = 0;
+        for (let z = 0; z < g.sz; z++) for (let x = 0; x < g.sx; x++) {
+          if (g.get(x, FLOOR - 1, z) !== STYLES.tide.trim || before.get(x, FLOOR - 1, z) === STYLES.tide.trim) continue;
+          if (!standable(g, x, FLOOR, z)) continue;
+          room++;
+          if (reached[x + g.sx * z] === FLOOR) walked++;
+        }
+        expect(room / 64, `${after.id} new standing room (m²)`).toBeGreaterThan(4);
+        expect(walked, `${after.id} new rooms cut off from the door`).toBe(room);
+      }
+    }
+  });
+
+  it('joins every addition to the house it grows from: one built mass, every wall capped', () => {
+    const { wall, roof } = STYLES.tide;
+    for (const b of BLUEPRINTS) {
+      const g = grid(b);
+      // Walls and roofs (with the timber and stone that tie them) form one face-connected body.
+      const body = components(g, -1);
+      const shell = body.filter(part => part.some(([x, y, z]) => g.get(x, y, z) === wall || g.get(x, y, z) === roof));
+      expect(shell.length, `${b.id}: walls or roofs standing apart`).toBe(1);
+      // No wall pokes out of its roof: every wall column ends under a roof, beam or capping stone.
+      for (let z = 0; z < g.sz; z++) for (let x = 0; x < g.sx; x++) {
+        let top = -1;
+        for (let y = g.sy - 1; y >= 0 && top < 0; y--) if (g.get(x, y, z) === wall) top = y;
+        if (top < 0) continue;
+        let capped = false;
+        for (let y = top + 1; y < g.sy && !capped; y++) capped = STRUCTURE.has(g.get(x, y, z));
+        expect(capped, `${b.id}: wall open to the sky at ${x},${top},${z}`).toBe(true);
       }
     }
   });

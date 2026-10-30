@@ -6,7 +6,7 @@ import { saltbend } from './saltbend';
 
 const BUILDERS: Readonly<Record<Family, (tier: HomeTier) => TideHome>> = { gullstep, saltbend, keelcroft };
 /** Tiers finished for every family, in the shared tier order. */
-const READY: readonly HomeTier[] = ['hut', 'cottage'];
+const READY: readonly HomeTier[] = ['hut', 'cottage', 'house'];
 
 function build(tier: HomeTier, variant: 0 | 1 | 2): TideHome {
   if (!HomeTierSchema.safeParse(tier).success) throw new Error(`Unknown home tier ${String(tier)}.`);

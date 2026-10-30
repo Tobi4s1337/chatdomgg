@@ -203,3 +203,19 @@ The shell and window metadata are complete static assets, ready for their real c
   return's in a true valley); a timber ridge on keelcroft's return made a heavy "H" (return left plain slate).
 
 - **2026-10-30 — Presence consumer:** the first ordered window anchor is the citizen’s designated presence window. Keep it stable across tiers. The authoring bench lights all anchors for inspection; the kingdom lights that one anchor per citizen.
+- **2026-10-30 — HT02 houses (lane).** Each house is a structural addition behind the cottage that brings the family
+  language back in a new place. Gullstep adds a back range across the plot: the street gable's lopsided profile turned
+  to face east (high south eave, long low north catslide), with a bressumer and gable light like the front. Its tall
+  south wall closes the cottage wing, and the wing ridge runs on into the range's slope. Saltbend raises the
+  cottage outshut into a full hipped rear wing (stone skirt, cream band, eave a course below the house's). Its rings
+  run on until each one dies into the main hip course at the same height (`Hip.southAt`), so the T-junction has no
+  cut section or hollow. Keelcroft adds a second, longer rear keel, so the back pairs two keels around a court with
+  the stack between them, as the front pairs two keels around the porch.
+- **2026-10-30 — HT02 fixes and tests.** Keelcroft's cottage rear keel was entered under the return's eave course
+  at 1.6 m. Where a rear keel opens off the return, the course is now cut back to the keel's ceiling, giving full
+  headroom; the cottage's street face and anchors are unchanged. New tests: every room a tier adds is standable and
+  reached on foot from the street door; walls and roofs form one face-connected built mass; no wall top is open to
+  the sky. The second stack on gullstep's back range was rejected: from the street it lined up with the hut's stack
+  and read as one doubled chimney, against the family's single off-centre stack. Saltbend keeps the outshut's low
+  windows as anchors. The wing's new windows follow the house's main window line, so the flank shows the old window
+  beside the new ones.

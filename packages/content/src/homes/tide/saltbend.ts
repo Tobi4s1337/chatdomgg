@@ -13,15 +13,18 @@ import { finished, type TideHome } from './family';
  */
 const SKIRT = 12;
 const EAVE = 28;
+const MAIN_ROOF = { x0: 2, z0: 84, x1: 62, z1: 128, base: 24 } as const;
+const WING_BASE = 22;
+const WING_EAVE = 24;
 // The entry gable shares the hip's pitch, so its ridge dies cleanly into the main slope behind the porch.
 const ENTRY: Gable = { ridge: 'z', lo: 40, hi: 60, baseLo: 26, baseHi: 26, along: [104, 128], rise: 2, run: 2, thick: 4 };
 
 export function saltbend(tier: HomeTier): TideHome {
-  finished('saltbend', tier, ['hut', 'cottage']);
+  finished('saltbend', tier, ['hut', 'cottage', 'house']);
   const shell = new Shell();
   const plan = new Plan().add(6, 88, 58, 124).cut(40, 110, 58, 124);
-  const grown = tier !== 'hut';
-  if (grown) plan.add(10, 64, 54, 88);
+  const grown = tier !== 'hut', house = grown && tier !== 'cottage';
+  if (grown) plan.add(10, house ? 40 : 64, 54, 88);
 
   floor(shell, plan, 3);
   extrude(shell, plan.band(3), STONE, 0, SKIRT);
@@ -33,10 +36,11 @@ export function saltbend(tier: HomeTier): TideHome {
 
   if (grown) {
     // Cottage: a lean-to outshut along the back under its own hipped ends; the old back wall becomes a partition.
-    extrude(shell, plan.band(3), WALL, SKIRT, 18, { x0: 0, z0: 0, x1: 64, z1: 88 });
+    // House: the outshut walls are raised and carried back into a full wing, hipped like the house it serves.
+    extrude(shell, plan.band(3), WALL, SKIRT, house ? WING_EAVE : 18, { x0: 0, z0: 0, x1: 64, z1: 88 });
     shell.put(WALL, 10, FLOOR, 88, 54, EAVE, 91);
     shell.air(38, FLOOR, 88, 50, FLOOR + 21, 91);
-    hipRoof(shell, { x0: 6, z0: 60, x1: 58, z1: 88, base: 14, open: 'south', courses: 6 });
+    if (!house) hipRoof(shell, { x0: 6, z0: 60, x1: 58, z1: 88, base: 14, open: 'south', courses: 6 });
   }
 
   // The sheltered corner: flagged floor, a stout post on its pad, beams carrying a boarded soffit.
@@ -50,7 +54,12 @@ export function saltbend(tier: HomeTier): TideHome {
   shell.put(TRIM, 54, 22, 117, 58, 24, 120);
   gableWall(shell, ENTRY, EAVE, 40, 58, 121, 124, TRIM);
 
-  hipRoof(shell, { x0: 2, z0: 84, x1: 62, z1: 128, base: 24 }, TRIM);
+  hipRoof(shell, MAIN_ROOF, TRIM);
+  if (house) {
+    // The wing's ridge stays a course below the house's; each ring runs on into the main course at its height.
+    const meet = (k: number) => Math.max(88, MAIN_ROOF.z0 + 2 * (k - (MAIN_ROOF.base - WING_BASE) / 2) + 4);
+    hipRoof(shell, { x0: 8, z0: 36, x1: 56, z1: 88, base: WING_BASE, open: 'south', courses: 10, southAt: meet }, TRIM);
+  }
   gableRoof(shell, ENTRY, { cap: TRIM, barge: ['hi'] });
 
   // A broad stack rises from the hearth on the back wall through the rear slope.
@@ -72,6 +81,10 @@ export function saltbend(tier: HomeTier): TideHome {
   if (grown) {
     windowIn(shell, west(10), { id: 'outshut-west', u: 70, y: 4, w: 8, h: 8, wall: 3, recess: 1, sill: STONE });
     windowIn(shell, east(54), { id: 'outshut-east', u: 74, y: 4, w: 8, h: 8, wall: 3, recess: 1, sill: STONE });
+  }
+  if (house) {
+    windowIn(shell, west(10), { id: 'wing-west', u: 48, y: 13, w: 10, h: 8, wall: 3, recess: 1, mullion: true, sill: STONE });
+    windowIn(shell, east(54), { id: 'wing-east', u: 52, y: 13, w: 10, h: 8, wall: 3, recess: 1, mullion: true, sill: STONE });
   }
 
   // Sea holly in a stone-edged bed along the skirt, and a cushion of thrift by the step.

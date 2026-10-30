@@ -18,13 +18,16 @@ const RETURN: Gable = { ridge: 'x', lo: 76, hi: 104, baseLo: 15, baseHi: 15, alo
 const PORCH: Gable = { ridge: 'z', lo: 22, hi: 42, baseLo: 22, baseHi: 22, along: [99, 125], rise: 2 };
 // The rear keel's ridge meets the return's at the same height and runs on to it: a true valley, no gable.
 const REAR: Gable = { ridge: 'z', lo: 37, hi: 63, baseLo: 15, baseHi: 15, along: [49, 88] };
+// House: a second rear keel, longer than the first, so the back pairs its keels around a court as the front does.
+const AFT: Gable = { ridge: 'z', lo: 1, hi: 27, baseLo: 15, baseHi: 15, along: [41, 88] };
 
 export function keelcroft(tier: HomeTier): TideHome {
-  finished('keelcroft', tier, ['hut', 'cottage']);
+  finished('keelcroft', tier, ['hut', 'cottage', 'house']);
   const shell = new Shell();
   const plan = new Plan().add(4, 80, 60, 104).add(4, 104, 24, 124).add(40, 104, 60, 124);
-  const grown = tier !== 'hut';
+  const grown = tier !== 'hut', house = grown && tier !== 'cottage';
   if (grown) plan.add(40, 52, 60, 80);
+  if (house) plan.add(4, 44, 24, 80);
 
   floor(shell, plan, WALL_T);
   extrude(shell, plan.band(WALL_T), STONE, 0, SKIRT);
@@ -42,13 +45,20 @@ export function keelcroft(tier: HomeTier): TideHome {
   if (grown) {
     // Cottage: a third, lower keel behind the return, reached through the back wall beside the hearth.
     gableWall(shell, REAR, 21, 40, 60, 52, 56);
-    shell.air(44, FLOOR, 76, 56, FLOOR + 13, 84);
     gableRoof(shell, REAR, { cap: TRIM, barge: ['lo'] });
+  }
+  if (house) {
+    gableWall(shell, AFT, 21, 4, 24, 44, 48);
+    gableRoof(shell, AFT, { cap: TRIM, barge: ['lo'] });
   }
 
   // The return's south eave dies into the wings: inside each wing it is cut back and the wing's own back gable
   // stands on the return roof, as the rear keel's gable does on the other side.
   gableRoof(shell, RETURN, { barge: ['lo', 'hi'] });
+  // Where a rear keel opens off the return, the return's north eave is cut back to the keel's own ceiling height,
+  // so the way through has full headroom.
+  if (grown) shell.air(44, FLOOR, 76, 56, 21, 84);
+  if (house) shell.air(8, FLOOR, 76, 20, 21, 84);
   shell.air(8, 15, 99, 20, 22, 104);
   shell.air(44, 15, 99, 56, 22, 104);
   for (const x of [4, 20, 40, 56]) shell.put(WALL, x, 15, 99, x + WALL_T, 18, 104);
@@ -87,6 +97,10 @@ export function keelcroft(tier: HomeTier): TideHome {
   if (grown) {
     windowIn(shell, west(40), { id: 'rear-west', u: 66, y: 4, w: 8, h: 10, wall: WALL_T, recess: 2, sill: STONE, head: STONE });
     windowIn(shell, east(60), { id: 'rear-east', u: 62, y: 4, w: 8, h: 10, wall: WALL_T, recess: 2, sill: STONE, head: STONE });
+  }
+  if (house) {
+    windowIn(shell, east(24), { id: 'aft-court', u: 66, y: 4, w: 8, h: 10, wall: WALL_T, recess: 2, sill: STONE, head: STONE });
+    windowIn(shell, west(4), { id: 'aft-west', u: 56, y: 4, w: 8, h: 10, wall: WALL_T, recess: 2, sill: STONE, head: STONE });
   }
 
   // A pot of sea holly either side of the step.
