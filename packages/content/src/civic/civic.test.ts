@@ -4,8 +4,8 @@ import { VoxelBlueprintSchema, type VoxelAsset, type VoxelBlueprint } from '@cha
 import { meshVoxelChunk, prepareAssetChunks, rasterizeBlueprint } from '../../../voxel/src/index';
 import { MAT, MATERIALS, STYLES } from '../materials';
 import {
-  BLUEPRINTS, CIVIC_FORMS, CIVIC_MANIFEST, FOOTBRIDGE, GATEWAY, GIFT_CART, MARKET_STORES, createCivicProp, footbridgeDeckTop,
-  type CivicForm, type CivicStyle,
+  BANNER_STANDARD, BLUEPRINTS, CIVIC_FORMS, CIVIC_MANIFEST, CREST_PLINTH, FOOTBRIDGE, GATEWAY, GIFT_CART, MARKET_STORES,
+  createCivicProp, footbridgeDeckTop, type CivicForm, type CivicStyle,
 } from './index';
 import { CIVIC_KITS } from './kit';
 
@@ -229,5 +229,93 @@ describe.each(STYLE_ORDER)('%s market furniture', style => {
     const inner = at(open.from[0] + 2, open.from[1] + 2, open.from[2] + 1);
     expect(inner).not.toBe(0);
     expect([MAT.cloth, MAT.leaf]).not.toContain(inner);
+  });
+});
+
+describe.each(STYLE_ORDER)('%s heraldry', style => {
+  const kit = CIVIC_KITS[style];
+
+  it('banner standard: a grounded pole carries a crossbar and a free-hanging swallowtail of the arms on both faces', () => {
+    const { at } = voxels(createCivicProp('banner-standard', style));
+    const { pole, bar, cloth } = BANNER_STANDARD;
+    // One unbroken upright from the socket to the brass lozenge, which is wider at its middle than at either point.
+    for (let y = 0; y < 64; y++) expect(at(pole.from[0], y, pole.from[2]), `upright ${y}`).not.toBe(0);
+    for (let y = 9; y < 55; y++) expect(at(pole.from[0], y, pole.from[2])).toBe(MAT.timber);
+    expect([at(6, 62, 7), at(9, 62, 7), at(7, 63, 7), at(7, 61, 7)]).toEqual([MAT.brass, MAT.brass, MAT.brass, MAT.brass]);
+    expect([at(6, 61, 7), at(6, 63, 7)]).toEqual([0, 0]);
+    for (let x = 1; x < 15; x++) expect(at(x, bar.from[1], bar.from[2]), `bar ${x}`).not.toBe(0);
+    // Read each face of the cloth as a viewer does: the first cell met looking in from the front and from behind.
+    const faces = [[] as number[], [] as number[]];
+    const bottom = cloth.top - cloth.rows + 1;
+    for (let x = cloth.x[0]; x < cloth.x[1]; x++) for (let y = bottom; y <= cloth.top; y++) {
+      let front = 0, back = 0;
+      for (let z = 13; z >= cloth.z[0] && !front; z--) front = at(x, y, z);
+      for (let z = cloth.z[0]; z < 13 && !back; z++) back = at(x, y, z);
+      faces[0]!.push(front);
+      faces[1]!.push(back);
+    }
+    for (const face of faces) {
+      const count = (m: number) => face.filter(f => f === m).length;
+      expect(count(kit.field)).toBeGreaterThan(150);
+      expect(count(kit.charge)).toBeGreaterThan(50);
+      expect(count(kit.border)).toBeGreaterThan(60);
+    }
+    // The cloth hangs against the pole, and under it the way stays open: nothing but the pole below its tails.
+    expect(at(7, 40, cloth.z[0])).not.toBe(0);
+    expect(at(7, 40, cloth.z[0] - 1)).toBe(MAT.timber);
+    for (let x = 0; x < 16; x++) for (let y = 9; y < bottom; y++) for (let z = cloth.z[0]; z < 16; z++) {
+      expect(at(x, y, z), `under cloth ${x},${y},${z}`).toBe(0);
+    }
+    // The swallowtail: two tails on the hem, and a V cut up between them for most of the notch.
+    for (let z = cloth.z[0]; z < 13; z++) {
+      for (let y = bottom; y < bottom + cloth.notch - 2; y++) expect(at(7, y, z), `notch ${y},${z}`).toBe(0);
+    }
+    expect(at(7, bottom + cloth.notch, cloth.z[0])).not.toBe(0);
+    // A fold carries a column a cell forward, so a tail cell is anywhere in the cloth's depth.
+    for (const x of [1, 3, 12, 14]) expect([9, 10, 11, 12].some(z => at(x, bottom, z)), `tail ${x}`).toBe(true);
+  });
+
+  it('crest plinth: the arms carved on both faces of a heater shield standing point down on a coursed pedestal', () => {
+    const { at } = voxels(createCivicProp('crest-plinth', style));
+    const { seat, shield, slab, faces } = CREST_PLINTH;
+    for (const [face, proud] of faces) {
+      const count = (z: number, material: number) => {
+        let n = 0;
+        for (let x = shield.x; x < shield.x + shield.width; x++) for (let y = shield.y; y < shield.y + shield.height; y++) {
+          if (at(x, y, z) === material) n++;
+        }
+        return n;
+      };
+      expect(count(face, kit.field)).toBeGreaterThan(200);
+      expect(count(proud, kit.charge)).toBeGreaterThan(60);
+      expect(count(proud, kit.border)).toBeGreaterThan(50);
+      // The field is sunk behind the proud charge and rim, so the arms are carved, not painted on.
+      expect(at(12, 36, face)).toBe(kit.field);
+      expect(at(12, 36, proud)).toBe(0);
+      expect(at(shield.x - 1, 30, proud)).toBe(kit.stone);
+    }
+    // A heater: full width at its shoulders, narrowing to a point that stands on the seat.
+    const width = (y: number) => {
+      let n = 0;
+      for (let x = 0; x < 24; x++) if (at(x, y, slab[0])) n++;
+      return n;
+    };
+    expect(width(34)).toBe(shield.width + 2);
+    for (let y = shield.y; y < 30; y++) expect(width(y), `taper ${y}`).toBeLessThanOrEqual(width(y + 1));
+    expect(width(shield.y)).toBeLessThanOrEqual(shield.width / 2 + 2);
+    for (let x = 10; x < 14; x++) for (let z = slab[0]; z < slab[1]; z++) {
+      expect(at(x, shield.y - 1, z)).toBe(kit.stone);
+      expect(at(x, seat.to[1] - 1, z)).not.toBe(0);
+    }
+    // Either flank is free above the cornice, so the shield reads as a shield and not a block.
+    expect(at(4, shield.y, slab[0])).toBe(0);
+    expect(at(19, shield.y, slab[0])).toBe(0);
+    // The die is laid in courses: shadow joints on the faces and band-stone quoins at the corners.
+    for (const y of [8, 12]) {
+      expect(at(12, y, 11)).toBe(0);
+      expect(at(12, y, 10)).not.toBe(0);
+    }
+    expect(at(4, 6, 11)).toBe(kit.band);
+    expect(at(12, 6, 11)).toBe(kit.stone);
   });
 });

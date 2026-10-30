@@ -1,5 +1,5 @@
 import { MAT } from '../materials';
-import { Boxes, type CivicKit } from './kit';
+import { Boxes, octagon, type CivicKit } from './kit';
 
 /**
  * Market furniture beside the core stalls and well: a two-wheeled gift cart and one stack of prepared stores.
@@ -287,10 +287,4 @@ function kegOnSide(b: Boxes, kit: CivicKit, t: MarketTreatment, from: readonly n
   }
   // The head is let in one cell behind the chime, its boards running up and down.
   b.add(x0 + 1, 2, Z - 1, X - 1, Y - 1, Z, MAT.air);
-}
-
-/** A column whose corners are cut by one cell, so round things read as faceted rather than as cubes. */
-function octagon(b: Boxes, x0: number, y0: number, z0: number, X: number, Y: number, Z: number, material: number): void {
-  b.add(x0, y0, z0 + 1, X, Y, Z - 1, material);
-  b.add(x0 + 1, y0, z0, X - 1, Y, Z, material);
 }

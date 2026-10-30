@@ -27,7 +27,7 @@ runs `pnpm verify` at integration. Do not claim geometry delivers runtime seatin
   Add gift-cart and market-stores in both kits. Shape crates, barrel, basket and goods as crafted readable voxels;
   keep cart wheel/handle contacts and the market's negative space. Compare with read-only core stalls/well so the
   new forms add variety. Render/review new assets with existing forms and record occupied bounds/costs.
-- [ ] **CP03 — The castle and plaza carry clear civic heraldry** · evidence: four more models + dusk silhouette review.
+- [x] **CP03 — The castle and plaza carry clear civic heraldry** · evidence: four more models + dusk silhouette review.
   Add banner-standard and crest-plinth in both kits with original simple abstract charges, grounded support,
   broad fabric/stone shapes and restrained colour. No fabricated emotes, crowns, loyalty or paid badges. Review
   three-angle real captures at thumbnail and close scale; improve anything that disappears or becomes confetti.

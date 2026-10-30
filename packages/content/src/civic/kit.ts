@@ -56,27 +56,52 @@ export class Boxes {
   }
 }
 
+/** Where the charge sits on a heraldic surface, in grid rows from the top (see `blazon`). */
+export interface Charge {
+  /** The row of the chevron's apex, and how many rows deep its arms are. */
+  readonly apex: number;
+  readonly thickness: number;
+  /** The lozenge under it: centre row and half its width and height, in cells. */
+  readonly lozenge: readonly [centre: number, halfWidth: number, halfHeight: number];
+}
+
 /**
- * The base civic charge: a lozenge (the beacon) over a broad chevron (one roof), on a field inside a raised
- * border. It is original, abstract and claims nothing about a channel, rank or purchase.
- * Rows run top to bottom: B border, F field, C charge, '.' outside the shield.
+ * The kingdom's base arms: a broad chevron (one roof) over a lozenge (the light kept under it), on a field inside
+ * a one-cell border. It is original and abstract and claims nothing about a channel, rank or purchase. The same
+ * arms are drawn at every size, from the gateway keystone to the banner and the crest, so they always match.
+ * Returns rows top to bottom: B border, F field, C charge, '.' outside the outline.
  */
-export const CIVIC_SHIELD = [
-  'BBBBBBBBBBBB',
-  'BFFFFFFFFFFB',
-  'BFFFFCCFFFFB',
-  'BFFFCCCCFFFB',
-  'BFFFFCCFFFFB',
-  'BFFFFFFFFFFB',
-  'BFFFFCCFFFFB',
-  'BFFFCCCCFFFB',
-  'BFFCCFFCCFFB',
-  'BFCCFFFFCCFB',
-  '.BCFFFFFFCB.',
-  '..BFFFFFFB..',
-  '...BFFFFB...',
-  '....BBBB....',
-] as const;
+export function blazon(width: number, height: number, inside: (col: number, row: number) => boolean, charge: Charge): string[] {
+  const within = (col: number, row: number) => col >= 0 && row >= 0 && col < width && row < height && inside(col, row);
+  const [centre, halfWidth, halfHeight] = charge.lozenge;
+  return Array.from({ length: height }, (_, row) => Array.from({ length: width }, (_, col) => {
+    if (!within(col, row)) return '.';
+    // The border follows the outline through its diagonals too, so a tapering edge stays one unbroken line.
+    for (const dc of [-1, 0, 1]) for (const dr of [-1, 0, 1]) if (!within(col + dc, row + dr)) return 'B';
+    const u = Math.abs(col + 0.5 - width / 2) - 0.5;
+    const arm = row - charge.apex - u;
+    if (arm >= 0 && arm < charge.thickness) return 'C';
+    return u / halfWidth + Math.abs(row + 0.5 - centre) / halfHeight < 1 ? 'C' : 'F';
+  }).join(''));
+}
+
+/** A heater outline: straight sides for `straight` rows, then curving in to a point. */
+export function heater(width: number, height: number, straight: number): (col: number, row: number) => boolean {
+  return (col, row) => {
+    if (row < straight) return true;
+    const t = (row + 0.5 - straight) / (height - straight);
+    return Math.abs(col + 0.5 - width / 2) < (width / 2) * Math.sqrt(Math.max(0, 1 - t * t)) + 0.25;
+  };
+}
+
+/** The gateway keystone: the arms on a 12 × 14 heater. */
+export const CIVIC_SHIELD = blazon(12, 14, heater(12, 14, 7), { apex: 2, thickness: 2, lozenge: [10, 2, 2.2] });
+
+/** A column whose corners are cut by one cell, so round things read as faceted rather than as cubes. */
+export function octagon(b: Boxes, x0: number, y0: number, z0: number, X: number, Y: number, Z: number, material: number): void {
+  b.add(x0, y0, z0 + 1, X, Y, Z - 1, material);
+  b.add(x0 + 1, y0, z0, X - 1, Y, Z, material);
+}
 
 /**
  * Lays a shield grid into a face, so it is inset in the masonry it sits in. `x0`/`y0` is its lower-left cell;
