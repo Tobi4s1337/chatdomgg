@@ -17,7 +17,7 @@ export default function Kingdom() {
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
     void createKingdomScene(canvas,{signal:construction.signal,tier,seed:query.get('seed')??'willowmere',hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
-      onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
+      onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
       testWindow.__chatdomKingdom={stats:instance.debug,inspect:()=>instance.inspect(),seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play(),capture:(time:number)=>instance.capture(time)};

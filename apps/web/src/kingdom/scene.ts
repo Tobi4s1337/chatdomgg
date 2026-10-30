@@ -21,7 +21,7 @@ import { terrainBatches } from './terrain-batches';
 
 export type CameraName='hero'|'window';
 export interface NameLabel {name:string;x:number;y:number;slot:number}
-export interface SceneOptions {tier:KingdomTier;seed:string;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneOptions {tier:KingdomTier;seed:string;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -197,6 +197,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }options.onNames(names.slice(0,3));}
   const fog=new THREE.FogExp2(0x000000);scene.fog=fog;
   let lastRenderedKey='';
+  let announcedReady=false;
   let renderPhase:'preparing'|'drawing'|'drawn'='preparing',renderStartedAt=0,renderCompletedAt=0;
   function render(now:number){
     if(disposed)return;try {const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
@@ -233,6 +234,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // full scene and presence windows have drawn; independently scheduled light
     // workers may still be waking. Captures can wait on lightingReady separately.
     Object.assign(debug,{ready:loaded&&renderCompletedAt>0,lightingReady:nearBytes>0&&farBytes>0&&beaconBytes>0,activeWindows:active,geometryBuilds,fieldUploads,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,time,hour,camera:camName,fieldBytes,shadowUpdates:sunShadows.stats.updates,shadowDrawCalls:sunShadows.stats.drawCalls,shadowTriangles:sunShadows.stats.triangles,shadowBytes:sunShadows.stats.textureBytes+sunShadows.stats.transformBytes,shadowEnabled:sunShadows.stats.enabled,windowFieldVisited:nearVisited+farVisited,beaconFieldVisited:beaconVisited,fieldSettled:field.stats.publishedRevision===field.stats.requestedRevision&&!field.stats.busy&&!field.stats.queued&&farField.stats.publishedRevision===farField.stats.requestedRevision&&!farField.stats.busy&&!farField.stats.queued&&farBytes>0&&beaconField.stats.publishedRevision===beaconField.stats.requestedRevision&&!beaconField.stats.busy&&!beaconField.stats.queued&&beaconBytes>0});
+    if(debug.ready){
+      (window as Window & {__chatdomReady?:boolean}).__chatdomReady=true;
+      if(!announcedReady){announcedReady=true;options.onReady?.();}
+    }
     raf=requestAnimationFrame(render);
     }catch(error){dispose();options.onError('The kingdom could not render');console.error('Kingdom frame failed',error);}
   }
