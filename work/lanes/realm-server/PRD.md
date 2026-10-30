@@ -51,7 +51,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   inside the durable write transaction. Focused R6 test races one person into four kingdoms and restarts during
   allocation: at most three citizen deeds, castle excluded, guest retained, occupied plot transforms unchanged
   and old layout cannot be overwritten by a regenerated plan. No fixture ownership in live paths.
-- [ ] **RS04 — Ingress cannot vanish and committed public delivery can resume** · evidence: test. Implement
+- [x] **RS04 — Ingress cannot vanish and committed public delivery can resume** · evidence: test. Implement
   authenticated capability/evidence-checked ingress in `src/ingress/` and committed ordered delivery in
   `src/outbox/`. Implement `loadIngress`/`executeIngress`: persist source dedupe, private checkpoint and all
   capability-tagged facts plus public presence outbox in one transaction. Closed evidenced interval unions survive

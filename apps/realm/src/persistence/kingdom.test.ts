@@ -7,6 +7,7 @@ import { createRealmState } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { RealmRoomEffects } from '../ports';
 import { DurableKingdom, type DurableRepository } from './kingdom';
+import type { RealmOutboxStore } from '../outbox';
 import type { RealmOutboxRow } from './postgres-repository';
 
 const deferred = <T>() => {
@@ -36,14 +37,17 @@ it('keeps bootstrap at the delivered prefix and closes on the deadline despite a
     committedState: () => privateAhead, execute: async () => ({ status: 'committed', sequence: 3, at: 0 }),
     lookup: async () => null, loadIngress: async () => null, executeIngress: async () => ({ status: 'unchanged', reason: 'unused' }),
     snapshot: async () => 3, release: async () => {},
-    readOutbox: async () => { if (++reads === 1) { firstRead.resolve(); return firstRows.promise; } secondRead.resolve(); return lateRows.promise; },
+  };
+  const outbox: RealmOutboxStore = {
+    open: async () => 10, acknowledge: async () => {},
+    read: async () => { if (++reads <= 2) { firstRead.resolve(); return firstRows.promise; } secondRead.resolve(); return lateRows.promise; },
   };
   let kingdom: DurableKingdom | undefined;
   try {
-    kingdom = await DurableKingdom.open(repository, kingdomId, { world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] });
+    kingdom = await DurableKingdom.open(repository, outbox, kingdomId, { world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] });
     const effects: RealmRoomEffects = { close: vi.fn(), readWalker: () => ({ x: 0, y: 0, z: 6, vx: 0, vy: 0, vz: 0, grounded: true, yaw: 0, distance: 0, collisionRevision: 1 }),
       placeWalker: vi.fn(() => true), allowWalking: vi.fn(), adoptWorld: vi.fn() };
-    kingdom.bindRoom(effects); kingdom.lifecycle('join', principal, 'walker:1');
+    kingdom.bindRoom(effects); kingdom.lifecycle('join', principal, 'walker:1', 0);
     expect(kingdom.recoverWalker('walker:1', 2)).toBe(false);
     expect(kingdom.recoverWalker('walker:1', 1)).toBe(true);
     expect(effects.allowWalking).not.toHaveBeenCalled(); // Recovery preserves the room's existing walking lock.

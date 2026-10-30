@@ -32,10 +32,99 @@ The Colyseus server that hosts each kingdom's shared walk, and the kingdom's one
 
 `DurableKingdom` is the room's `RealmRoomHandle` and the trusted in-process entry for internal services
 (`execute`, `ingest`, `lookup`). It holds at most 64 pending commands; when full it rejects with `RealmBusyError`.
-It publishes only committed outbox rows, in order, with stable event IDs (`<kingdom>:<seq>:<n>`). Bootstrap carries
-`throughSequence` plus the current published homes and the latest presence frame, never past rituals. Losing the
-lease closes the gate: decisions are cancelled, walking stops through `allowWalking(false)` and public delivery ends.
-`createDurableRealmServices` builds the `RealmRoomServices` that `createRealmServer` takes.
+It publishes only committed outbox rows (see *Public delivery*). Losing the lease closes the gate: decisions are
+cancelled, walking stops through `allowWalking(false)` and public delivery ends.
+`createDurableRealmServices` builds the `RealmRoomServices` that `createRealmServer` takes. A process opens a kingdom
+once; its room and in-process services share it through counted holds (`retain`), and the last release disposes it and
+releases the lease. A second room for the same kingdom in one process is refused with 409.
+
+## Presence ingress (`src/ingress/`)
+
+Spec 34 R7: evidence cannot vanish, and a coal is only ever earned by ten real minutes.
+
+1. **The door.** `POST /internal/realm/ingress` is for services, never browsers (no CORS). It needs
+   `Authorization: Bearer <secret>`, `Content-Type: application/json` and a body of at most 8 MiB:
+   `{ "version": 1, "observation": PresenceInput }` or `{ "version": 1, "cue": CitizenChatCue }`. Secrets come from
+   `REALM_INGRESS_HERALD_SECRET` and `REALM_INGRESS_PANEL_SECRET`, at least 32 characters each and different from
+   each other. Without either, the route is not mounted. Secrets are compared as SHA-256 digests in constant time.
+2. **The gate** (`IngressGate`) validates with the shared strict schemas, so unknown fields such as message text
+   fail. It also checks what each service may report:
+
+   | Service | May report |
+   |---|---|
+   | Herald | stream on/off, Chatters sweeps, chat activity, remove/restore holds |
+   | panel | one person's own panel activity |
+   | walker | in-process only, from principals this realm authenticated |
+
+   A live realm refuses simulated observations, and the reverse. The only capability ingress grants is `presence`.
+   No service can send a domain command, a receipt or a credit.
+3. **The inbox.** An admitted observation is committed to `realm_ingress_inbox` with its source idempotency key
+   (`service`, `observation.id`), its canonical digest and its capability. Then the door answers:
+
+   | Status | Answer |
+   |---|---|
+   | 202 | `accepted` (now durable) or `duplicate` (already durable) |
+   | 409 | the same id was used for different evidence |
+   | 400 / 401 / 403 / 415 | refused, unauthenticated, wrong origin, not JSON |
+   | 413 | too large |
+   | 503 | storage unavailable, or 4,096 unsettled observations waiting: resend later |
+
+   Resending is always safe.
+4. **The writer drains** the inbox in acceptance order, one observation per `executeIngress`. Receipt, `presence-v1`
+   checkpoint, every capability-tagged fact and the public frame commit together. The kingdom's writer does this,
+   whichever process holds it. When nobody holds the kingdom, the accepting process opens it and keeps it for
+   3 minutes after the last observation. Writers poll their inbox every second. A row drained twice meets its stored
+   receipt, so nothing is applied twice.
+5. **Evidence** (`presenceTransition`). The world presence reducer decides who is present. An interval is closed only
+   between two real observations of the same person by the same source, at most one presence lease (90 s) apart,
+   inside the current stream night. Anything else closes the run, so no interval opens across it: a gap, a complete
+   roster without the person, a moderation hold, the stream going offline, or a new writer epoch (a restart is
+   never coverage). The reducer unions the intervals, so overlapping sources and retries add nothing. When a person's
+   union reaches 600,000 ms and they own a home here, the same transaction credits that night's coal, once. Every
+   command is simulated first, so only acceptable ones are proposed. Command IDs are stable hashes. Lit windows are
+   owned homes (`home.slot`); a frame never names anyone who did not disclose a name.
+6. **Walkers.** Rooms report `join`/`reconnect`/`drop`/`leave` through `lifecycle`. A join or reconnect is observed
+   at once, and everyone connected is observed again every minute. Stamps use the database clock estimated at lease
+   renewal, minus 500 ms, so they are never in the database's future.
+7. **Speech** (`cue`, Herald only) is relayed through `bindTransient` to the rooms present right now: at most 40
+   messages per second per kingdom, with the rest dropped and counted. It is never stored or replayed.
+
+The `presence-v1` checkpoint is deflated canonical JSON holding the reducer's private presence state and the open
+evidence runs. It contains person IDs, approved public names and timings, and no chat text. The world reducer does
+not export its 256-bucket FNV-1a sharding, so the codec rebuilds the buckets and checks them against the reducer
+before first use. If world ever changes the layout, decoding fails closed (`RealmRecoveryError`) instead of misfiling
+people.
+
+## Public delivery (`src/outbox/`)
+
+- **Only committed rows.** `OutboxDispatcher` reads `realm_outbox` in commit order and hands each row to the
+  subscribed rooms as a `RealmPublicDelivery`. It then advances `realm_outbox_cursors.delivered_id`, fenced by the
+  current unexpired epoch. Each frame is checked against the public allowlist again at the door.
+- **At-least-once, never exactly-once.** If a process dies, or its acknowledgement fails, between handing over and
+  acknowledging, the rows after the durable cursor go out again with the same `eventId` and `sequence`. The same
+  writer retries after 1 s; otherwise the next writer does, starting with its first subscriber. A kingdom seen for
+  the first time starts its cursor at its newest row, not at history.
+- **Event IDs.** Fact rows use `<kingdom>:<seq>:<n>`. Presence frames use `<kingdom>:<seq>:p<checkpoint revision>`;
+  their `frame.sequence` is that durable revision and `frame.epoch` is `realm:<kingdom>`, so frames never repeat
+  across restarts.
+- **Bootstrap** retains the public row prefix independently of private state that may be ahead. Each row updates
+  the home/attachment/crowd projection and `throughCursor` before its delivery. A first Forge commit publishes its
+  allocated home, later Forge commits replace the same socket, and a queued build changes that home only when its
+  own public row arrives. Bootstrap contains current views and no past ritual.
+
+### Delivery cursor for the browser lane
+
+The client keeps this per kingdom connection. It must be followed exactly, because redelivery is normal:
+
+1. On join, buffer `world` messages. Send `bootstrap`, install its `current`, and remember `writerEpoch` and
+   `throughCursor` as `cursor`.
+2. Drop a delivery with another writer epoch, a seen `eventId`, or `delivery.cursor <= cursor`. Apply each remaining
+   delivery in order, record its event ID, and set `cursor = delivery.cursor`. Keep the last 1,024 event IDs. The
+   cursor orders all public rows, including zero-fact presence and multiple rows at the same fact sequence.
+3. A writer epoch change requires a fresh bootstrap. Clear the seen set and start again from step 1; bootstrap
+   already installs current views, so older rituals never replay as new.
+
+`deliveryCursor` in `postgres.integration.test.ts` is this rule as executable reference.
 
 ## Homes and founded layouts (`src/allocation/`)
 
@@ -82,7 +171,7 @@ Composition for a live kingdom (main owns the furnisher and the collision world)
 
 ```ts
 const allocations = new AllocationService(pool, { origin: 'live', verifier: new TenureEvidenceVerifier('live', tenureEvidenceKey()), furnish });
-const services = createDurableRealmServices({ repository, auth,
+const services = createDurableRealmServices({ repository, outbox: new PostgresOutboxStore(pool), auth,
   kingdom: async id => ({ world, spawn, layoutRevision: (await allocations.currentLayout(id))!.revision }),
   afterOpen: kingdom => allocations.recover(kingdom) });
 ```
@@ -110,6 +199,8 @@ does not run migrations of its own.
 | `realm_deed_holders` | the per-person lock row and global citizen-deed count (0–3) |
 | `realm_deeds` | receipt, placement, tenure, evidence, fixed install command and status (`pending`/`installed`/`void`) |
 | `realm_guests` | people kept as guests in a kingdom (`three-homes` or `kingdom-full`) |
+| `realm_ingress_inbox` | authenticated observations accepted before any writer decides them (`0004`) |
+| `realm_outbox_cursors` | per-kingdom durable delivery cursor, moved only by the current epoch (`0004`) |
 
 ## Running locally
 
@@ -125,7 +216,8 @@ REALM_SIMULATED=1 pnpm --filter @chatdom/realm start
 ```
 
 `REALM_SIMULATED=1` serves the labelled SIMULATED kingdom `999000001` with SIMULATED entry tickets
-(`POST /reference/session`). Its facts live in Postgres and survive restarts. Without `REALM_SIMULATED=1`, the server
+(`POST /reference/session`). With `REALM_INGRESS_HERALD_SECRET` set, Herald's SIMULATED replay can post
+presence to `POST /internal/realm/ingress`. Its facts live in Postgres and survive restarts. Without `REALM_SIMULATED=1`, the server
 refuses to start until the verified Twitch session service is wired in; live mode has no bypass and no memory
 court. `REALM_SIMULATED=1 REALM_STORAGE=memory` keeps main's memory-only reference court; nothing is saved there.
 
@@ -151,19 +243,42 @@ REALM_DATABASE_TESTS=1 node --env-file-if-exists=.env node_modules/vitest/vitest
 ```
 
 The Postgres suite runs only with `REALM_DATABASE_TESTS=1`, and then fails rather than skips if `DATABASE_URL` is
-missing. It migrates a random `realm_test_*` schema and drops only that schema. It proves that two writers race,
-that a lost COMMIT reply is resolved by lookup, and that a stale epoch is fenced: one spend, one fact and one outcome.
-It also proves that a committed fact survives a full room server restart and returns through bootstrap. The
-allocation test races one person into four kingdoms and lets a process die mid-allocation, lose a COMMIT reply and
-stop before installing. It proves three deeds, the castle apart, a retained guest, recovery on reopen, refused
-forged installs and immutable layouts. Every home in these tests comes from a real allocated deed.
+missing. It migrates a random `realm_test_*` schema and drops only that schema. It proves:
 
-Vitest caches transformed modules on disk (`node_modules/.vitest-cache`), keyed by each file's own content. The
-migration list is a build-time glob in `migrate.ts`, so after adding a migration run `pnpm exec vitest --clearCache`
-once, or the suite migrates without the new file.
+- Two writers race, a lost COMMIT reply is resolved by lookup, and a stale epoch is fenced: one spend, one fact and
+  one outcome.
+- A committed fact survives a full room server restart and returns through bootstrap.
+- Allocation races one person into four kingdoms, recovers a pending install after reopen, and proves three deeds, the castle apart, a retained guest, forged-install rejection and immutable layouts.
+- R7: Herald evidence enters through the authenticated door. The observation that completes ten minutes commits
+  the interval, the credit and the frame together. The process dies the moment its transport takes the frame,
+  before acknowledging or settling. The next writer then:
+  - redelivers the frame with the same event ID;
+  - answers Herald's retry with `duplicate`;
+  - returns the stored receipt to a direct retry;
+  - starts evidence runs again instead of covering the outage.
+
+  Throughout there is one coal, one credit fact, overlap is never counted twice, and the public payload holds no
+  person ID, right, session, secret or chat.
+
+Vitest caches transformed modules in `node_modules/.vitest-cache`, and that cache does not notice a new migration
+file behind `import.meta.glob`. After adding a migration, run `pnpm exec vitest --clearCache` once, or the suite will
+see an old list.
 
 ## Ports and processes
 
 Realm 5191 (this server), API 5192, web preview 5190 (the team's). Lane development runs use their own schema
 (`REALM_DATABASE_SCHEMA=realm_lane_rs01`), so diverging lane branches never stamp the shared `realm` schema with
 migrations that another branch does not carry.
+
+## Combined RS03/RS04 integration
+
+The services require both `outbox: new PostgresOutboxStore(pool)` and the allocation `afterOpen` hook above. The
+asynchronous `kingdom` resolver reads the stored founded layout; recovery finishes before the shared registry admits
+its first room/ingress hold. Add `attach: kingdom => ingress.attach(kingdom)`, then `ingress.use(services)` for durable
+presence. The room handle delegates collision recovery and closes on authority loss; the independent lease deadline
+cannot be revived by late renewal. Commit/unchanged command outcomes stay terminal, while rejected commands may retry.
+
+Focused validation uses the Postgres command above plus `pnpm exec vitest run apps/realm apps/api/src/realm-auth`,
+`pnpm typecheck`, `pnpm lint` and the realm build. R7 allocates its home through the real deed guard and uses a 6 s
+lease so renewal can complete before the existing conservative 2 s deadline margin. No permanent test servers or
+screenshots are added by this backend integration.
