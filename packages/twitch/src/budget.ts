@@ -48,9 +48,11 @@ export class RequestBudget {
   }
 
   async run<T>(operation: string, deadline: number, signal: AbortSignal | undefined, task: () => Promise<T>): Promise<T> {
-    await this.#admit(operation, signal);
+    await this.#admit(operation, deadline, signal);
     try {
       await this.#awaitPoints(operation, deadline, signal);
+      // Waiting for a slot or for points may have used up the caller's time; a late request is never sent.
+      if (this.#now() >= deadline) throw new TwitchRequestError('timeout', operation);
       return await task();
     } finally {
       this.#release();
@@ -61,32 +63,46 @@ export class RequestBudget {
     const remaining = remainingFromHeaders(headers);
     const resetAt = resetFromHeaders(headers);
     if (resetAt !== null) this.#resetAt = resetAt;
-    if (status === 429) this.#remaining = 0;
-    else if (remaining !== null) this.#remaining = remaining;
+    // A 429 that still reports points left is a resource limit (conduits, subscriptions), not pacing: trust the
+    // header. Without one, assume the bucket is empty until its reset.
+    if (remaining !== null) this.#remaining = remaining;
+    else if (status === 429) this.#remaining = 0;
   }
 
-  async #admit(operation: string, signal: AbortSignal | undefined): Promise<void> {
+  async #admit(operation: string, deadline: number, signal: AbortSignal | undefined): Promise<void> {
     if (signal?.aborted) throw new TwitchRequestError('aborted', operation);
     if (this.#active < this.#maxConcurrent) {
       this.#active += 1;
       return;
     }
     if (this.#queue.length >= this.#maxQueued) throw new TwitchRequestError('overloaded', operation);
+    const wait = deadline - this.#now();
+    if (wait <= 0) throw new TwitchRequestError('timeout', operation);
     await new Promise<void>((resolve, reject) => {
+      // The deadline timer runs on the injected sleep and is cancelled the moment the waiter leaves the queue.
+      const expiry = new AbortController();
+      const leave = (error: TwitchRequestError | null) => {
+        const index = this.#queue.indexOf(waiter);
+        if (index < 0) return;
+        this.#queue.splice(index, 1);
+        expiry.abort();
+        signal?.removeEventListener('abort', onAbort);
+        if (error) reject(error);
+      };
       const waiter: Waiter = {
         resolve: () => {
+          expiry.abort();
           signal?.removeEventListener('abort', onAbort);
           resolve();
         },
         reject,
       };
-      const onAbort = () => {
-        const index = this.#queue.indexOf(waiter);
-        if (index >= 0) this.#queue.splice(index, 1);
-        reject(new TwitchRequestError('aborted', operation));
-      };
+      const onAbort = () => leave(new TwitchRequestError('aborted', operation));
       signal?.addEventListener('abort', onAbort, { once: true });
       this.#queue.push(waiter);
+      void this.#sleep(wait, expiry.signal).then(() => {
+        if (!expiry.signal.aborted) leave(new TwitchRequestError('timeout', operation));
+      });
     });
   }
 

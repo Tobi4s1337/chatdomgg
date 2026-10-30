@@ -19,7 +19,8 @@ const FULL_GRANTS = { [READER.id]: ['user:read:chat', 'user:bot'], [BROADCASTER.
 function config(overrides: Partial<HeraldConfig> = {}): HeraldConfig {
   return {
     channelLogin: 'tobi4s_', channelLoginDefaulted: true, readerLogin: READER.login, redirectUri: new URL(REDIRECT),
-    credentials: { clientId: CLIENT_ID, clientSecret: new Secret(SECRET) }, problems: [],
+    credentials: { clientId: CLIENT_ID, clientSecret: new Secret(SECRET) }, conduitId: null, problems: [],
+    dataDir: '/simulated/data', kingdom: { seed: 'tobi4s_', tier: 'hamlet', firstYear: 2026, year: 2026 },
     secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env', ...overrides,
   };
 }
