@@ -126,6 +126,9 @@ importers:
       '@chatdom/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@chatdom/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@chatdom/vox-import':
         specifier: workspace:*
         version: link:../../packages/vox-import
@@ -174,6 +177,9 @@ importers:
       '@chatdom/voxel':
         specifier: workspace:*
         version: link:../voxel
+      '@chatdom/world':
+        specifier: workspace:*
+        version: link:../world
 
   packages/render:
     dependencies:
@@ -205,6 +211,12 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/ui:
+    dependencies:
+      solid-js:
+        specifier: 1.9.18
+        version: 1.9.18
 
   packages/vox-import:
     dependencies:

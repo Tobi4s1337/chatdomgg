@@ -148,6 +148,12 @@ export class PresenceSource {
     return this.#available ? this.#current : null;
   }
 
+  /** Server-only presentation lookup after a binding has been durably saved; never a home deed. */
+  boundSlot(personId: PersonId): number | null {
+    const slot = this.#bound.get(personId);
+    return slot !== undefined && this.#slotSet.has(slot) ? slot : null;
+  }
+
   /** Loads the durable bindings and projects the first frame. The source stays unavailable until told otherwise. */
   async open(): Promise<void> {
     if (this.#opened) return;

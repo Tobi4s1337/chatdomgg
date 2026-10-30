@@ -1,7 +1,8 @@
-import { createHome, createHearthHome, createTideHome, createStreetProp, createMarketWell, createMarketStall, type StreetPropForm } from '@chatdom/content';
+import { createStreetProp, createMarketWell, createMarketStall, type StreetPropForm } from '@chatdom/content';
+import { createNativeForgeHost } from '@chatdom/forge';
 import type { WindowHouse } from '@chatdom/render';
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
-import { homeOrigin, terrainHeight, transformCardinalPoint, type KingdomLayout, type SettlementHome, type SettlementPlan } from '@chatdom/world';
+import { terrainHeight, transformCardinalPoint, type KingdomLayout, type SettlementHome, type SettlementPlan } from '@chatdom/world';
 
 export interface Dressing { readonly blueprint: VoxelBlueprint; readonly position: Vec3; readonly yaw: number }
 type ContentPlot = Pick<SettlementHome, 'slot' | 'position' | 'rotation' | 'tier' | 'style' | 'variant' | 'ordinal'>;
@@ -25,10 +26,9 @@ export function createSettlementContent(layout: KingdomLayout): { houses: Window
 export function placeSettlementContent(plots: readonly ContentPlot[], ground: (x: number, z: number) => number): { houses: WindowHouse[]; props: Dressing[] } {
   const houses: WindowHouse[] = [], props: Dressing[] = [];
   for (const plot of plots) {
-    const blueprint = plot.style === 'hearth' ? createHearthHome(plot.tier, plot.variant as 0 | 1 | 2) : plot.style === 'tide' ? createTideHome(plot.tier, plot.variant as 0 | 1 | 2) : createHome(plot.tier, plot.style, plot.variant);
-    const depth = blueprint.size[2] * .125, yaw = plot.rotation * Math.PI / 2;
-    const position = homeOrigin(plot, depth);
-    houses.push({ slot: plot.slot, blueprint, position, yaw });
+    const native = createNativeForgeHost(plot), {blueprint,position,yaw} = native;
+    const depth = blueprint.size[2] * .125;
+    houses.push(native);
     if (plot.style === 'grove') continue;
     // Small public front-garden edges, outside the full reserved home. The
     // central entrance band stays clear for the authored doors and name views.
