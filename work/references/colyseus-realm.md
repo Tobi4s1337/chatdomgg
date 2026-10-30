@@ -92,6 +92,11 @@ Use these primitives directly before adding an abstraction that recreates their 
 
 ## Leave behind
 
+For an explicit server relocation, the pinned SDK's `reconciler.reset()` reseeds truth and clears replay/render
+anchors without resetting reliable input sequence. Reattaching a peer's existing `Predict` fields clears their
+old snapshot rings. Chatdom uses a separate authority placement context echoed on input, since server
+`InputBuffer.clear()` cannot fence packets still in transit. Neither mechanism changes `stepPlayer` or adds an ack.
+
 The playground's squares, force-impulse/debug UI, eight-player room limit, arena physics constants and ad hoc spawn ring. Do not copy its lack of per-input rate enforcement as a security model, its ten-second grace as a product decision, or its damped remote motion as an automatic choice for a kingdom. Do not execute the old scripts: they use port 2601 and broad process matching, outside this task's authorized server workflow.
 
 ## License

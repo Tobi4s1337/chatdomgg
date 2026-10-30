@@ -58,6 +58,9 @@ it('keeps bootstrap at the delivered prefix and closes on the deadline despite a
     });
     hold = await services.retain(kingdomId); kingdom = hold.kingdom;
     expect(openingOrder).toEqual(['acquire', 'load', 'geometry', 'outbox', 'projection']);
+    // Cold founded entry reads the real delivered checkpoint before a room or principal is admitted.
+    expect(kingdom.publicCheckpoint()).toEqual(kingdom.bootstrap(principal));
+    expect(kingdom.publicCheckpoint()).toMatchObject({ throughCursor: 10, current: [{ type: 'home', revision: 'home:1' }] });
     const effects: RealmRoomEffects = { close: vi.fn(), readWalker: () => ({ x: 0, y: 0, z: 6, vx: 0, vy: 0, vz: 0, grounded: true, yaw: 0, distance: 0, collisionRevision: 1 }),
       placeWalker: vi.fn(() => true), allowWalking: vi.fn(), adoptWorld: vi.fn() };
     kingdom.bindRoom(effects); kingdom.lifecycle('join', principal, 'walker:1', 0);
@@ -73,6 +76,7 @@ it('keeps bootstrap at the delivered prefix and closes on the deadline despite a
       message: { type: 'home', plotId: home.id, revision: 'home:2', assetHash: home.digest, attachments: [] } }]);
     await secondRead.promise;
     expect(checkpoints).toMatchObject([{ throughSequence: 2, throughCursor: 11, current: [{ type: 'home', revision: 'home:2' }] }]);
+    expect(kingdom.publicCheckpoint()).toEqual(checkpoints[0]);
     expect(deliveries[0]?.cursor).toBe(11);
     await vi.advanceTimersByTimeAsync(13_001);
     expect(effects.close).toHaveBeenCalledExactlyOnceWith('authority-lost');
