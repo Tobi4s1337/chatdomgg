@@ -60,7 +60,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const buildings=[...houses,...castleBuildings],content=[...buildings,...props];
   for(const {blueprint} of content)blueprints.set(blueprint.id,blueprint);
   const windows=own(createWindowLights(scene,houses));
-  const simulation=createSimulatedPresence(layout);
+  // Begin the arrival among neighbours, not alone at the newest edge of town.
+  const arrivalHomes=layout.homes.filter(h=>h.tier==='house');
+  const arrivalHome=arrivalHomes.sort((a,b)=>{
+    const neighbours=(home:typeof a)=>layout.homes.filter(h=>Math.hypot(h.position[0]-home.position[0],h.position[2]-home.position[2])<35).length;
+    return neighbours(b)-neighbours(a)||Math.hypot(a.position[0],a.position[2])-Math.hypot(b.position[0],b.position[2]);
+  })[0];
+  const simulation=createSimulatedPresence(layout,arrivalHome?{firstSlot:arrivalHome.slot,waveSeconds:6}:undefined);
   const source=options.source==='simulated'?simulation.feed:createHeraldPresence('/presence-data/stream',undefined,options.presenceOrigin??'live');
   const first=houses.find(h=>h.slot===simulation.firstSlot)!;
   const firstPane=first.blueprint.windows[0]!;
@@ -68,6 +74,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const paneAngle=({north:Math.PI,east:Math.PI/2,south:0,west:-Math.PI/2}[firstPane.facing])+first.yaw;
   const homeEye=focal.clone().add(new THREE.Vector3(Math.sin(paneAngle)*7+1.8,2.1,Math.cos(paneAngle)*7));
   const homeTarget=focal.clone().add(new THREE.Vector3(Math.cos(paneAngle)*1.3,1.1,-Math.sin(paneAngle)*1.3));
+  const streetOut=new THREE.Vector3(Math.sin(paneAngle),0,Math.cos(paneAngle));
+  const streetAlong=new THREE.Vector3(Math.cos(paneAngle),0,-Math.sin(paneAngle));
+  const arrivalRoute=crowd.motion.routeForSlot(simulation.firstSlot)!;
+  const citizenEye=new THREE.Vector3(...arrivalRoute.points.at(-1)!).addScaledVector(streetOut,6.5).addScaledVector(streetAlong,-13).add(new THREE.Vector3(0,5.5,0));
   const heroEye=new THREE.Vector3(),heroTarget=new THREE.Vector3(),target=new THREE.Vector3();
   const portrait=()=>canvas.clientWidth<canvas.clientHeight;
   let heroFov=53;
@@ -229,6 +239,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const lightKey=`${lightFrame?.epoch}:${lightFrame?.sequence}:${lightFrame?.windows.filter(w=>w.present).map(w=>w.slot).join(',')}`;
     if(lightFrame&&lightKey!==lastLightFrameKey){windows.setFrame(buildHidden?{...lightFrame,windows:lightFrame.windows.filter(w=>w.slot!==simulation.firstSlot)}:lightFrame);lastLightFrameKey=lightKey;lastField=-Infinity;}
     if(options.source==='simulated'&&frame){const person=frame.windows.find(w=>w.slot===simulation.firstSlot);if(person?.present&&time>=3&&time<9)crowd.receiveChat({version:1,id:'simulated-evening',kingdomId:frame.kingdomId,epoch:frame.epoch,origin:'simulated',slot:simulation.firstSlot,asOf:simulation.epochMs+3000,expiresAt:simulation.epochMs+9000,parts:[{kind:'text',text:'Evening, everyone! 🌿'}]});}
+    const arrival=crowd.subject(simulation.firstSlot);
+    if(options.source==='simulated'&&frame&&arrival?.homeLitAtMs&&presentationMs-arrival.homeLitAtMs<6000)crowd.receiveChat({version:1,id:'simulated-home',kingdomId:frame.kingdomId,epoch:frame.epoch,origin:'simulated',slot:simulation.firstSlot,asOf:Math.ceil(arrival.homeLitAtMs),expiresAt:Math.ceil(arrival.homeLitAtMs+6000),parts:[{kind:'text',text:'Home, at last. ✨'}]});
     windows.update(fixedTime?(autoCamera?0:1):dt,hour);
     const active=lightFrame?.windows.filter(w=>w.present).length??0;
     const beacon=beaconStrength(lightFrame,houses.length);
@@ -236,14 +248,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(loaded&&beacon>.9&&!beaconCue){sound.cue('beacon');beaconCue=true;}
     if(autoCamera){
       // Rise inside the street before withdrawing over the opposite roofs.
-      const subject=crowd.subject(simulation.firstSlot),pull=THREE.MathUtils.smootherstep(time,25,44);
-      if(subject){const p=new THREE.Vector3(...subject.position);camera.position.copy(p).add(new THREE.Vector3(-6,3.1,3.8));target.copy(p).add(new THREE.Vector3(0,1.05,0));}
+      const subject=crowd.subject(simulation.firstSlot),pull=THREE.MathUtils.smootherstep(time,18,36);
+      if(subject){const p=new THREE.Vector3(...subject.position);camera.position.copy(citizenEye);target.copy(p).add(new THREE.Vector3(0,1.05,0));}
       else {camera.position.copy(homeEye);target.copy(homeTarget);}
       camera.position.lerp(heroEye,pull);target.lerp(heroTarget,pull);
     }
-    else if(camName==='citizen'){const person=crowd.subject(simulation.firstSlot);const p=person?new THREE.Vector3(...person.position):focal.clone();camera.position.copy(p).add(new THREE.Vector3(-6,3.1,3.8));target.copy(p).add(new THREE.Vector3(0,1.05,0));}
+    else if(camName==='citizen'){const person=crowd.subject(simulation.firstSlot);const p=person?new THREE.Vector3(...person.position):focal.clone();camera.position.copy(citizenEye);target.copy(p).add(new THREE.Vector3(0,1.05,0));}
     else if(camName==='window'){camera.position.copy(homeEye);target.copy(homeTarget);}else{camera.position.copy(heroEye);target.copy(heroTarget);}
-    const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,THREE.MathUtils.smootherstep(time,25,44)):camName==='citizen'?48:camName==='window'?64:heroFov;
+    const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,THREE.MathUtils.smootherstep(time,18,36)):camName==='citizen'?48:camName==='window'?64:heroFov;
     if(Math.abs(camera.fov-wantedFov)>.001){camera.fov=wantedFov;camera.updateProjectionMatrix();}
     build.update(now,dt,hour,target);
     camera.lookAt(target);camera.updateMatrixWorld();updateInstances(fixedTime&&autoCamera?time*1000:now);

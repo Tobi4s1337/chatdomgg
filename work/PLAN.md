@@ -322,44 +322,46 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Town closed; citizen/build core is on main and 5190.** Founder confirmed `fe0526b` opens on the5080.
-`11f77e6` publishes `window.__chatdomReady` from the completed town render, independently of background light;
-the held-light-worker/live regression passed. `34867cd` already made horizon tests fast. No more town proof work.
+**Town closed; citizens and building are on main and 5190.** Founder confirmed the gate opens on the5080;
+`11f77e6` publishes `window.__chatdomReady` from the completed town draw. No more town terrain/light proof work.
+Tide HT01–03 and wardrobe WB01 are integrated. The feed remains visibly SIMULATED; real-GPU crowd timing is pending.
 
-**Landed:** Tide HT01–03 (15 homes, including all three manor/hall families) and wardrobe WB01 reviewed/merged;
-`72a8848` installs Tide in the streets and exports avatar parts. `059e110` freezes consumed citizen/chat/build
-contracts (spec12). `df4febd` integrates authored walking citizens, speech bubbles, arrival-driven windows,
-private voxel editing and local housewarming. Every present slot has a body; rendering culls offscreen bodies.
-Three looks share the first authored body/hair family. The renderer articulates legs and gives the cloak clearance.
+**Arrival now shows the moment.** The replay follows a home in a populated street instead of the newest outer edge.
+The simulated chat arrives together; all240 town citizens have bodies, using actual street routes, seeded walking
+paces and more of the path width. Camera holds through the doorway/window arrival before rising toward the castle.
+The current12-second walking clip includes57 home windows lighting, including Juniper's named window in view.
+Speech and light still follow the frozen cue/presence boundaries. This is not the ambient social policy yet.
 
-**Build:** place/erase/paint/fill, three brush sizes, mirror, gesture undo/redo, style palette and tier budget;
-worker meshes add trims, eaves, corbels and window detail without changing authored source. Private drafts and
-local publications survive browser reload. Publication replaces geometry, panes, shadow caster and field blockers,
-then gives a six-second orbit. Source remains visibly SIMULATED. LIVE deed authority, server persistence and
-six-view moderation are not connected; no live approval is fabricated. Real chat speech still needs the Herald
-projection into `CitizenChatCue`; the receive boundary exists. Touch confirmation remains main-owned follow-up.
+**Capes are cloth — founder decision, `c714f14`.** `AvatarCapeBlueprintSchema` holds cut, metre dimensions, shoulder
+fit, hem, cloth/lining/trim palette IDs and optional six-swatch tier shimmer. `citizens/capes.ts` renders thin,
+double-sided sheets in one instanced draw, pinned to the actual back socket, with speed/turn damping, wind and
+settling. Shimmer changes colour, never emission. Default citizens no longer wear voxel cloak blocks. Spec08 and
+wardrobe PRD include WB01C migration. `lane/wardrobe-body` was fast-forwarded to `c714f14`; its uncommitted progress
+note was preserved. The team can consume the contract and runtime now. Wall/long-hair fit remains visual follow-up.
 
-**Team can start now:** specs13–16, PRDs and empty progress files are committed. Branches `lane/build-tools`,
-`lane/build-templates`, `lane/vox-import`, `lane/crowd-behaviour` have matching `../worktrees/<name>` checkouts at
-`df4febd`. Tools/import consume actual optional build mounts; template/crowd bench routes and template catalogue
-hook exist. VOX package/dependency/lock metadata is installed; VI01 supplies its implementation entry. At merge,
-main connects the template chooser and crowd policy caller/control allowlist. Team owns these implementations.
-Existing panel-stream, wardrobe-body, forge-pieces, civic-props, sound, Atlas and Herald lanes remain team-owned.
+**Building has a house silhouette — `ebc44cd`.** Thin rectangular roof caps on supported rooms derive Hearth/Tide
+gables or Grove hips, eaves and timber framing; narrow chimneys pierce them. Raw source/undo/allowance stay intact.
+Irregular or deliberately shaped roofs remain authored. A detected doorway gains a lantern, threshold and small
+planted side strips. All windows in the edited/published home warm for its one owner. Private drafts and local
+publication persist in this browser; publication replaces street geometry/light blockers and gives a six-second
+housewarming orbit. LIVE deeds, server persistence and moderation are not connected. Touch confirmation is pending.
 
-**Evidence:** final `pnpm verify --area kingdom --tier town --hour dusk` passed973 tests/58 files, typecheck,
-lint, build and both standard town sizes. The merged-content baseline earlier passed969 tests and seven serial
-captures. The final moment smoke passed real pointer edit/undo, street arrival/light, publication and reload with
-no browser errors. `pnpm shots:moments` owns its temporary preview and serial capture lock; it writes inspected
-1440×900/390×844 frames plus offline sampled clips under `shots/moments/` (citizen/build PNGs, walk/build MP4s).
-These are development evidence, not a product recording feature. A long full capture run was interrupted;
-final verification deliberately used only the two required dusk town sizes. No SwiftShader fps claim.
+**Team lanes:** build-tools, build-templates, vox-import and crowd-behaviour have specs13–16 and matching branches/
+worktrees. They own tool polish,45 editable plans, VOX import and ambient policy. Main connects the template chooser
+and crowd caller at merge. Optional mount/bench hooks exist; no absent lane is represented by a fake functional UI.
+Panel-stream, wardrobe-body, forge-pieces, civic-props, sound, Atlas and Herald remain team-owned. Real chat speech
+still needs Herald projection into `CitizenChatCue`; the scene receive boundary exists.
 
-**Next:** founder5080 timing on `/?tier=town&hour=19.5`; “Let them in” replays the arrival, “Build my home”
-opens the plot. Direct build: `/?tier=hamlet&hour=19.5&build=1`. Review/merge the four new lanes as they arrive;
-keep tuning visible motion and making, not invisible proof suites. Ambient social behaviour, editable templates,
-import UI and richer wardrobe variety are lane work, not already finished features.
+**Evidence:** `pnpm verify --area kingdom --tier town --hour dusk` passed975 tests/59 files, typecheck, lint, build
+and both standard dusk town captures. `pnpm shots:moments` passed pointer edit/undo, actual arrival lights, local
+publication and reload without browser errors. Inspected citizen/build frames at1440×900 and390×844, plus walking
+frames before/after Juniper's window lit. Updated clips: `shots/moments/walk.mp4` (12s), `build.mp4` (5s). These are
+sampled development films, not product recording or GPU frame-time evidence. Captures used the shared lock serially.
 
-**Host:** 5190 serves main's current compiled app via the existing gate-fix preview; its served dist was updated.
-Temporary5197 preview has stopped. Atlas5193/Herald5194 reserved. Capture previews allocate free ports and close
-on completion; capture work is serial. Gate-fix/integration-check detached worktrees retain earlier verification
-state; do not mistake their source for main. Postgres/Valkey/Surveyor untouched; `.env` remains ignored.
+**Next:** founder5080 check on `/?tier=town&hour=19.5` → “Let them in”; “Build my home” opens the local plot.
+Review cloth/body fit and the two moments, integrate team work as it lands, then connect real citizen authority.
+Templates, richer wardrobe and social idle behaviour remain incomplete. No claim that the full goal is finished.
+
+**Host:** 5190 serves the current compiled main app through the existing gate-fix preview; its dist was refreshed.
+Its detached source is old; do not mistake it for main. Capture previews use free ports and close afterward.
+Atlas5193/Herald5194 reserved. Postgres, Valkey, Surveyor and other services untouched; `.env` stays ignored.
