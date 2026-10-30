@@ -171,7 +171,12 @@ export function createCitizenRoutes(plan: SettlementPlan, entryDistance?: number
   const bake = (slot: number, raw: readonly XZ[], streetIds: readonly string[], destination: CitizenDestination, preserveStart = false): CitizenRoute | undefined => {
     const local = raw.filter((point, index) => !index || length2(point, raw[index - 1]!) > EPSILON);
     if (!local.length) return undefined;
-    const offset = (randomUnit(seedHash(`${plan.config.seed}:lane:${slot}`)) - .5) * .44;
+    // People use the width of a street, rather than queue along its centre line.
+    // The final approach still tapers to the doorstep; the existing lot check
+    // pulls a tight corner back onto its safe centre path when needed.
+    const ribbons = streetIds.map(id => plan.streets.find(edge => edge.id === id)).filter(edge => edge && edge.kind !== 'approach');
+    const halfWidth = Math.min(1.1, ...ribbons.map(edge => edge!.width / 2 - BODY_RADIUS));
+    const offset = (randomUnit(seedHash(`${plan.config.seed}:lane:${slot}`)) - .5) * 2 * Math.max(.22, halfWidth);
     let shaped = local.length > 1 ? lane(roundCorners(local), offset, preserveStart) : local;
     if (!clear(shaped)) shaped = roundCorners(local);
     if (!clear(shaped)) shaped = local;

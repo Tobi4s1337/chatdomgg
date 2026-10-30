@@ -1,5 +1,6 @@
-import { createBodyParts, createHairParts, createWearableParts, compileAvatarPart, validateLook } from '@chatdom/content/avatars';
-import { AVATAR_PALETTE } from '@chatdom/content/materials';
+import { createBodyParts, createHairParts, compileAvatarPart, validateLook } from '@chatdom/content/avatars';
+import { AVATAR_PALETTE, MAT } from '@chatdom/content/materials';
+import type { AvatarCapeBlueprint } from '@chatdom/shared';
 import type { CitizenLook } from './index';
 
 /** Authored wardrobe combinations; selection remains the caller's responsibility. */
@@ -13,9 +14,8 @@ export function createDefaultCitizenLooks(): readonly CitizenLook[] {
     const blueprints = [
       ...createBodyParts('balanced', variant.skin),
       ...createHairParts('sidePart', { body: 'balanced', hair: variant.hair, headwear: null }),
-      ...createWearableParts('shortCloak', { body: 'balanced', style: variant.style }),
     ];
     validateLook(blueprints);
-    return { id: variant.id, parts: blueprints.map(blueprint => ({ blueprint, asset: compileAvatarPart(blueprint, 0) })) };
+    return { id: variant.id, cape: { version: 1, id: `cape.short.${variant.id}`, kind: 'cape', attachment: 'back', shape: 'flared', width: .58, length: .61, hem: 'rounded', trimWidth: .018, mount: { height: .0625, back: .095 }, colours: { cloth: variant.id === 'tide' ? MAT.fabricBlue : variant.id === 'grove' ? MAT.fabricGreen : MAT.fabricRed, lining: MAT.fabricMutedGold, trim: MAT.cloth } } satisfies AvatarCapeBlueprint, parts: blueprints.map(blueprint => ({ blueprint, asset: compileAvatarPart(blueprint, 0) })) };
   });
 }

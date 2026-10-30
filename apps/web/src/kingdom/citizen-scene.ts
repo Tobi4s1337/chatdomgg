@@ -45,7 +45,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
     update(atMs: number, time: number, camera?: THREE.Camera) {
       samples = motion.sample(atMs);
       renderer?.update(samples.map(sample => ({ id: String(sample.slot), look: looks[sample.slot % looks.length]!.id,
-        position: sample.position, heading: sample.heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), opacity: sample.opacity, time,
+        position: sample.position, heading: sample.heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time,
         gesture: speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : 'none' as const })), camera);
       shadows.count = 0;
       for (const sample of samples) {
