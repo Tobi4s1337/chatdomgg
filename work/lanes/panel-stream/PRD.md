@@ -36,7 +36,7 @@ helper allocates a free port and queues through its machine-wide lock. Record an
   resting Ballad/Chronicle if supplied and missing-data states. Add the single meaningful adapter behavior test:
   production unshared/unavailable never confirms or dispatches; explicit simulated named/unnamed can demonstrate
   confirmation and always keeps its source. · evidence: behavior test and panel state contact sheet at 318×496.
-- [ ] **PS04 — The panel has a place at the tavern and in tonight's shared moment.** Finish Tavern watching/seating
+- [x] **PS04 — The panel has a place at the tavern and in tonight's shared moment.** Finish Tavern watching/seating
   information, Forge signpost with live/coals/anvils limits, communal building meter, contextual crowd act with
   pending/ended/rate-limit states and fixed Bits shelf demonstration. No UGC input, real joined seat, private
   prompt echo, points spending, paid standing or fake purchase. Production shelf stays hidden without verified

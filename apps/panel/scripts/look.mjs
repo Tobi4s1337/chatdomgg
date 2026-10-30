@@ -31,6 +31,8 @@ const HELPER = 'https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js';
 const NO_HELPER = '';
 const AUTHORIZED_HELPER = `window.Twitch={ext:{onAuthorized(cb){setTimeout(()=>cb({channelId:'1',clientId:'look',token:'look-token',helixToken:'look-helix',userId:'ULOOK'}),40)},onContext(){},onVisibilityChanged(){},viewer:{isLinked:false,role:'viewer',onChanged(){}},actions:{requestIdShare(){}}}};`;
 // A viewer who already shared their identity, whose token Twitch then refreshes. Any request to share again is recorded.
+// Twitch says Bits work on this channel, and records any attempt to use them: the real panel must still offer no shelf.
+const BITS_HELPER = `window.__bitsUsed=0;window.__shareAsked=0;window.Twitch={ext:{onAuthorized(cb){setTimeout(()=>cb({channelId:'1',clientId:'look',token:'look-token',helixToken:'look-helix',userId:'ULOOK'}),40)},onContext(){},onVisibilityChanged(){},viewer:{isLinked:true,role:'viewer',onChanged(){}},features:{isBitsEnabled:true,onChanged(){}},bits:{useBits(){window.__bitsUsed++},onTransactionComplete(){},onTransactionCancelled(){},getProducts(){return Promise.resolve([])}},actions:{requestIdShare(){window.__shareAsked++}}}};`;
 const SHARED_HELPER = `window.__shareAsked=0;window.Twitch={ext:{onAuthorized(cb){setTimeout(()=>cb({channelId:'1',clientId:'look',token:'look-token',helixToken:'look-helix',userId:'ULOOK'}),40);setTimeout(()=>cb({channelId:'1',clientId:'look',token:'look-token-refreshed',helixToken:'look-helix-2',userId:'ULOOK'}),400)},onContext(){},onVisibilityChanged(){},viewer:{isLinked:true,role:'viewer',onChanged(){}},actions:{requestIdShare(){window.__shareAsked++}}}};`;
 
 async function budget() {
@@ -81,21 +83,22 @@ try {
 
   const open = async ({ url, width, height, helper = NO_HELPER }) => {
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
-    const errors = [], missing = [];
+    const errors = [], missing = [], requests = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     page.on('response', response => { if (response.status() >= 400) missing.push(`${response.status()} ${response.url()}`); });
+    page.on('request', request => requests.push(request.url()));
     await page.route(HELPER, route => route.fulfill({ status: 200, contentType: 'text/javascript', body: helper }));
     await page.goto(url);
     await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
     await page.evaluate(() => document.fonts.ready);
-    return { page, errors, missing };
+    return { page, errors, missing, requests };
   };
   const check = async (name, { page, errors, missing }, { settle = true } = {}) => {
     const { width, height } = page.viewportSize();
     const layout = await page.evaluate(() => {
       const scroller = document.scrollingElement;
-      const clipped = [...document.querySelectorAll('.cp-light-words strong, .cp-choice strong, .cp-tab span, .cp-back span, .cp-tag')]
+      const clipped = [...document.querySelectorAll('.cp-light-words strong, .cp-choice strong, .cp-tab span, .cp-back span, .cp-tag, .cp-act-button strong, .cp-bits strong, .cp-signpost strong, .cp-walk a, .cp-table-name')]
         .filter(el => el.scrollWidth > el.clientWidth + 1).map(el => el.textContent);
       const outside = [...document.querySelectorAll('.cp *')].filter(el => {
         const box = el.getBoundingClientRect();
@@ -130,6 +133,12 @@ try {
     const actual = await page.locator(selector).first().getAttribute(attribute);
     if (actual !== value) failures.push(`${name}: expected ${selector} ${attribute}=${value}, got ${actual}`);
   };
+  const simulatedTag = async (page, name) => {
+    if (!(await page.locator('.cp-tag.simulated').innerText()).toUpperCase().includes('SIMULATED')) failures.push(`${name}: SIMULATED mark missing`);
+  };
+  const actStatus = (page, status, timeout = 5000) => page.waitForSelector(`.cp-act[data-act-status="${status}"]`, { timeout });
+  const focusedText = page => page.evaluate(() => document.activeElement?.textContent?.trim() ?? '');
+  const smallTargets = page => page.evaluate(() => [...document.querySelectorAll('.cp button, .cp a')].filter(el => el.getBoundingClientRect().height > 0 && el.getBoundingClientRect().height < 44).map(el => el.textContent));
 
   // The stream view: the real renderer under SwiftShader, so each construction is slow.
   // Fixed `time` keeps captures deterministic; `hour=19.5` is the dusk the stage is made for.
@@ -308,9 +317,18 @@ try {
       await expect(view.page, 'panel-light-pending', '[data-chatdom-panel]', 'data-light', 'pending');
       if (!(await view.page.evaluate(() => document.activeElement?.classList.contains('cp-light')))) failures.push('panel-light: focus did not rest on the window after choosing');
       // The simulated journey, step by step: Twitch shares who you are, the kingdom answers, the window kindles.
+      // On a busy host one capture can outlast a whole step, so the steps after sharing are taken on a fresh panel.
       const kindle = [await check('panel-light-sharing', view)];
+      await view.page.close();
+      Object.assign(view, await open({ url: `${base}/panel?source=simulated`, width: 318, height: 496 }));
+      await view.page.locator('.cp-light-button').click();
+      await view.page.locator('.cp-choice').first().click();
       await view.page.waitForSelector('.cp-light-note .cp-light-words strong:text("Lighting your window")', { timeout: 5000 });
       kindle.push(await check('panel-light-confirming', view));
+      await view.page.close();
+      Object.assign(view, await open({ url: `${base}/panel?source=simulated`, width: 318, height: 496 }));
+      await view.page.locator('.cp-light-button').click();
+      await view.page.locator('.cp-choice').first().click();
       await view.page.waitForSelector('[data-light="lit"] .cp-light-button.kindling', { timeout: 5000 });
       await view.page.waitForTimeout(650);
       kindle.push(await check('panel-light-kindling', view, { settle: false }));
@@ -368,6 +386,145 @@ try {
       }
       contactSheet('panel-states@318x496', shots, 5);
     }],
+    // Tonight's shared moments: one tap is one command under chat's limits, and every answer is the kingdom's.
+    ['panel-acts', async () => {
+      const shots = [];
+      const vote = await open({ url: `${base}/panel?source=simulated&state=vote`, width: 318, height: 496 });
+      await simulatedTag(vote.page, 'panel-act-vote');
+      shots.push(await check('panel-act-vote', vote));
+      await vote.page.locator('.cp-act-button', { hasText: 'Lanterns' }).click();
+      await actStatus(vote.page, 'pending', 1000);
+      shots.push(await check('panel-act-vote-pending', vote));
+      await actStatus(vote.page, 'accepted');
+      if (!(await vote.page.evaluate(() => document.activeElement?.classList.contains('cp-act-wrap')))) failures.push('panel-act-vote: focus did not wait on the act after the tap');
+      if (await vote.page.locator('.cp-act-button').count()) failures.push('panel-act-vote: a counted vote must not offer a second vote');
+      shots.push(await check('panel-act-vote-counted', vote));
+      await vote.page.close();
+
+      const errand = await open({ url: `${base}/panel?source=simulated&state=errand`, width: 318, height: 496 });
+      shots.push(await check('panel-act-errand', errand));
+      const fill = () => errand.page.locator('.cp-act .cp-meter i').evaluate(el => parseFloat(el.style.width));
+      const before = await fill();
+      await errand.page.locator('.cp-act-button').click();
+      await actStatus(errand.page, 'accepted');
+      await errand.page.waitForTimeout(4000);
+      // In motion on purpose: the groove drains through chat's twenty-second pause.
+      shots.push(await check('panel-act-errand-hauled', errand, { settle: false }));
+      if (await fill() <= before) failures.push('panel-act-errand: the simulated stone did not raise the fixture building');
+      await errand.page.close();
+
+      const dragon = await open({ url: `${base}/panel?source=simulated&state=dragon`, width: 318, height: 496 });
+      shots.push(await check('panel-act-dragon', dragon));
+      await dragon.page.locator('.cp-act-button').click();
+      // The simulated viewer struck from chat a moment ago: the panel meets the same pause.
+      await actStatus(dragon.page, 'limited');
+      shots.push(await check('panel-act-dragon-limited', dragon, { settle: false }));
+      await actStatus(dragon.page, 'open', 8000);
+      await dragon.page.locator('.cp-act-button').click();
+      await actStatus(dragon.page, 'accepted');
+      shots.push(await check('panel-act-dragon-struck', dragon, { settle: false }));
+      await dragon.page.close();
+
+      const ended = await open({ url: `${base}/panel?source=simulated&state=act-ended`, width: 318, height: 496 });
+      await expect(ended.page, 'panel-act-ended', '.cp-act', 'data-act-status', 'ended');
+      if (await ended.page.locator('.cp-act-button').count()) failures.push('panel-act-ended: a closed vote must not be offered');
+      shots.push(await check('panel-act-ended', ended));
+      await ended.page.close();
+
+      // Not yet known to the kingdom: the vote waits for a light, and lighting it opens the vote.
+      const unshared = await open({ url: `${base}/panel?source=simulated&state=act-unshared`, width: 318, height: 496 });
+      await expect(unshared.page, 'panel-act-unshared', '.cp-act', 'data-act-status', 'unavailable');
+      shots.push(await check('panel-act-unshared', unshared));
+      await unshared.page.locator('.cp-act-gate .cp-inline-action').click();
+      await expect(unshared.page, 'panel-act-unshared', '[data-chatdom-panel]', 'data-drawer', 'light');
+      await unshared.page.locator('.cp-choice').nth(1).click();
+      await actStatus(unshared.page, 'open', 6000);
+      shots.push(await check('panel-act-unshared-lit', unshared));
+      await unshared.page.close();
+      contactSheet('panel-acts@318x496', shots, 6);
+    }],
+    // The tavern, the forge signpost and the shelf, each a drawer at the panel's real size.
+    ['panel-places', async () => {
+      const shots = [];
+      const view = await open({ url: `${base}/panel?source=simulated&state=named`, width: 318, height: 496 });
+      const { page } = view;
+      await page.locator('.cp-tab', { hasText: 'Tavern' }).click();
+      await expect(page, 'panel-tavern', '[data-chatdom-panel]', 'data-drawer', 'tavern');
+      if (await page.locator('.cp-table').count() < 2) failures.push('panel-tavern: the tavern should name its tables');
+      if (await page.getByText(/joined|your seat/i).count()) failures.push('panel-tavern: the panel must never claim a seat');
+      shots.push(await check('panel-tavern', view));
+      await page.locator('.cp-drawer-page').evaluate(el => { el.scrollTop = el.scrollHeight; });
+      const walk = page.locator('.cp-walk a');
+      const link = { href: await walk.getAttribute('href'), target: await walk.getAttribute('target'), rel: await walk.getAttribute('rel') };
+      if (!link.href?.includes('seed=willowmere') || link.target !== '_blank' || !link.rel?.includes('noopener')) failures.push(`panel-tavern: Walk in must open the kingdom's gate in a new tab (${JSON.stringify(link)})`);
+      shots.push(await check('panel-tavern-foot', view));
+      await page.locator('.cp-tab', { hasText: 'Forge' }).click();
+      await expect(page, 'panel-forge', '[data-chatdom-panel]', 'data-drawer', 'forge');
+      if (await page.locator('.cp-drawer input, .cp-drawer textarea, .cp-drawer [contenteditable]').count()) failures.push('panel-forge: the panel takes no words for the forge');
+      shots.push(await check('panel-forge', view));
+      await page.locator('.cp-drawer-page').evaluate(el => { el.scrollTop = el.scrollHeight; });
+      shots.push(await check('panel-forge-foot', view));
+      // Tonight, then the shelf inside it: Back returns to Tonight and its signpost, then to the first view.
+      await page.locator('.cp-tab', { hasText: 'Tonight' }).click();
+      await page.locator('.cp-drawer-page').evaluate(el => { el.scrollTop = el.scrollHeight; });
+      shots.push(await check('panel-tonight-raised', view));
+      await page.locator('.cp-signpost').click();
+      await expect(page, 'panel-shelf', '[data-chatdom-panel]', 'data-drawer', 'shelf');
+      if (!(await focusedText(page)).includes('Tonight')) failures.push(`panel-shelf: focus went to "${await focusedText(page)}", not Back to Tonight`);
+      if (await page.getByText(/\b(buy|purchase|price|cost|spend|donate|cheer)/i).count()) failures.push('panel-shelf: Bits words must be use, get or exchange');
+      shots.push(await check('panel-shelf', view));
+      await page.locator('.cp-bits').nth(1).click();
+      await page.waitForSelector('.cp-product[data-request="confirming"]', { timeout: 1000 });
+      shots.push(await check('panel-shelf-confirming', view));
+      await page.waitForSelector('.cp-product[data-request="cancelled"]', { timeout: 5000 });
+      shots.push(await check('panel-shelf-cancelled', view));
+      await page.locator('.cp-back').click();
+      await expect(page, 'panel-shelf-back', '[data-chatdom-panel]', 'data-drawer', 'tonight');
+      if (!(await focusedText(page)).includes('The shelf')) failures.push(`panel-shelf-back: focus went to "${await focusedText(page)}", not the shelf signpost`);
+      await page.keyboard.press('Escape');
+      await expect(page, 'panel-shelf-back', '[data-chatdom-panel]', 'data-drawer', 'none');
+      if (!(await focusedText(page)).includes('Tonight')) failures.push(`panel-shelf-back: focus went to "${await focusedText(page)}", not the Tonight tab`);
+      await page.close();
+      // Between streams the forge is banked and the shelf is put away; a guest forges where they live.
+      for (const [state, drawers] of [['resting', ['Forge', 'Tavern']], ['guest', ['Forge']], ['missing', ['Tavern', 'Forge']]]) {
+        const other = await open({ url: `${base}/panel?source=simulated&state=${state}`, width: 318, height: 496 });
+        for (const drawer of drawers) {
+          await other.page.locator('.cp-tab', { hasText: drawer }).click();
+          shots.push(await check(`panel-${drawer.toLowerCase()}-${state}`, other));
+        }
+        if (state === 'resting') {
+          await other.page.locator('.cp-tab', { hasText: 'Tonight' }).click();
+          if (await other.page.locator('.cp-signpost').count()) failures.push('panel-resting: the shelf must be put away between streams');
+        }
+        await other.page.close();
+      }
+      contactSheet('panel-places@318x496', shots, 6);
+    }],
+    // The real panel on a channel where Twitch says Bits work: still no shelf, no act, no request anywhere.
+    ['ext-panel-bits', async () => {
+      const view = await open({ url: `${panelBase}panel.html?anchor=panel&platform=web&mode=viewer&state=released`, width: 318, height: 496, helper: BITS_HELPER });
+      await view.page.waitForTimeout(800);
+      if (await view.page.locator('.cp-act, .cp-signpost, .cp-bits').count()) failures.push('ext-panel-bits: production offered an act or the shelf without a service to answer it');
+      for (const drawer of ['Tonight', 'Tavern', 'Forge']) {
+        await view.page.locator('.cp-tab', { hasText: drawer }).click();
+        if (await view.page.locator('.cp-drawer .cp-bits, .cp-drawer .cp-signpost, .cp-drawer .cp-walk').count()) failures.push(`ext-panel-bits: ${drawer} offered something production cannot deliver`);
+        if (drawer === 'Forge') await check('ext-panel-forge-unavailable', view);
+      }
+      const outside = view.requests.filter(url => !url.startsWith(panelBase) && url !== HELPER && !url.startsWith('data:'));
+      if (outside.length) failures.push(`ext-panel-bits: requests beyond the Extension's own files ${JSON.stringify(outside)}`);
+      if (await view.page.evaluate(() => window.__bitsUsed + window.__shareAsked) !== 0) failures.push('ext-panel-bits: Bits or identity sharing were asked for');
+      await view.page.close();
+      // The simulated shelf in the real Extension frame: its demonstration never reaches Twitch's Bits.
+      const fixture = await open({ url: `${panelBase}panel.html?source=simulated&state=named&anchor=panel&platform=web&mode=viewer`, width: 318, height: 496, helper: BITS_HELPER });
+      await fixture.page.locator('.cp-tab', { hasText: 'Tonight' }).click();
+      await fixture.page.locator('.cp-signpost').click();
+      await fixture.page.locator('.cp-bits').first().click();
+      await fixture.page.waitForSelector('.cp-product[data-request="cancelled"]', { timeout: 5000 });
+      if (await fixture.page.evaluate(() => window.__bitsUsed) !== 0) failures.push('ext-panel-bits: the simulated shelf reached Twitch\'s useBits');
+      const walk = await fixture.page.locator('.cp-tab', { hasText: 'Tavern' }).click().then(() => fixture.page.locator('.cp-walk a').getAttribute('href'));
+      if (!walk?.startsWith('https://chatdom.gg/')) failures.push(`ext-panel-bits: Walk in from the Extension must lead to chatdom.gg (${walk})`);
+      await fixture.page.close();
+    }],
     // A viewer who already shared their identity, after Twitch refreshed the token: connected, never lit, never asked again.
     ['ext-panel-shared', async () => {
       const view = await open({ url: `${panelBase}panel.html?anchor=panel&platform=web&mode=viewer&state=released`, width: 318, height: 496, helper: SHARED_HELPER });
@@ -410,10 +567,29 @@ try {
       for (const [width, height, name] of [[390, 844, 'ext-mobile'], [844, 390, 'ext-mobile-landscape']]) {
         const view = await open({ url: `${panelBase}mobile.html?source=simulated&state=named&platform=mobile&mode=viewer`, width, height });
         await check(name, view);
-        const small = await view.page.evaluate(() => [...document.querySelectorAll('.cp button, .cp a')].filter(el => el.getBoundingClientRect().height < 44).map(el => el.textContent));
+        const small = await smallTargets(view.page);
         if (small.length) failures.push(`${name}: targets under 44 px ${JSON.stringify(small)}`);
         await view.page.close();
       }
+      // A phone with chat closed: the act under the thumb, then a drawer opened and closed by touch alone.
+      for (const [width, height, state, name] of [[390, 844, 'vote', 'ext-mobile-vote'], [844, 390, 'errand', 'ext-mobile-landscape-errand']]) {
+        const view = await open({ url: `${panelBase}mobile.html?source=simulated&state=${state}&platform=mobile&mode=viewer`, width, height });
+        await check(name, view);
+        const small = await smallTargets(view.page);
+        if (small.length) failures.push(`${name}: targets under 44 px ${JSON.stringify(small)}`);
+        await view.page.close();
+      }
+      const view = await open({ url: `${panelBase}mobile.html?source=simulated&state=named&platform=mobile&mode=viewer`, width: 390, height: 844 });
+      for (const drawer of ['Tavern', 'Forge']) {
+        await view.page.locator('.cp-tab', { hasText: drawer }).click();
+        if (!(await focusedText(view.page)).includes('The kingdom')) failures.push(`ext-mobile-${drawer}: the drawer did not take focus on Back`);
+        const small = await smallTargets(view.page);
+        if (small.length) failures.push(`ext-mobile-${drawer}: targets under 44 px ${JSON.stringify(small)}`);
+        await check(`ext-mobile-${drawer.toLowerCase()}`, view);
+        await view.page.locator('.cp-back').click();
+        if (!(await focusedText(view.page)).includes(drawer)) failures.push(`ext-mobile-${drawer}: Back left focus on "${await focusedText(view.page)}"`);
+      }
+      await view.page.close();
     }],
     ['ext-config', async () => {
       for (const view of ['config', 'live_config']) {
