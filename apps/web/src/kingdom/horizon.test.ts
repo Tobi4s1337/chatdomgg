@@ -114,3 +114,21 @@ it('keeps 10 m as the deterministic default and bounds the distant step', () => 
   }
   standard.geometry.dispose(); explicit.geometry.dispose();
 });
+
+it('uses the supplied ground for both the detailed seam and contact queries', () => {
+  const bounds = { minX: -32, maxX: 32, minZ: -32, maxZ: 32 };
+  const ground = (x: number, z: number): number => 7 + x / 16 - z / 32;
+  const { geometry, clipBounds, sampleHeight } = createHorizonSurface({ bounds }, { farStep: 20, sampleTerrain: ground });
+  const vertices = geometry.getAttribute('position');
+  let shared = 0;
+  for (let i = 0; i < vertices.count; i++) {
+    const x = vertices.getX(i), z = vertices.getZ(i);
+    if (((x === clipBounds[0] || x === clipBounds[1]) && z >= clipBounds[2] && z <= clipBounds[3])
+      || ((z === clipBounds[2] || z === clipBounds[3]) && x >= clipBounds[0] && x <= clipBounds[1])) {
+      expect(vertices.getY(i)).toBe(Math.fround(ground(x, z))); shared++;
+    }
+  }
+  expect(shared).toBeGreaterThan(0);
+  expect(sampleHeight(-13.25, 6.75)).toBeCloseTo(ground(-13.25, 6.75), 8);
+  geometry.dispose();
+});
