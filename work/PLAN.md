@@ -328,46 +328,52 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Current handoff — 2026-10-30
+## 10. Current handoff — 2026-10-31
 
-**Brief:** the four realm lanes are running. Main temporarily took integration back with two Sol high agents,
-merging reviewed branches sequentially onto `integration/kingdom-queue`, inspecting the composed result and
-fast-forwarding main. Continue prioritising ready realm work. The seven look/place lanes retain the ownership
-and composition checklist in `work/lanes/kingdom-look-owners.md`; main judges their work rather than building it.
+**Working rule:** One worker per live-evening lane: realm (including founded-world), interactions, Forge ritual,
+anvil, kingdom light, crowd behaviour and panel/stream. All others park after their current task; reviewed work
+still integrates. No new lanes. Short integration looks, typecheck + changed tests, one visual shot; full evening
+checks at milestones. Accepted work stays accepted unless broken.
 
-**Accepted queue:** vox-import, panel-stream, forge-refusals, crowd-behaviour, build-templates, wardrobe-body,
-herald, forge-ritual, forge-pieces, citizen-card, build-tools and anvil-hero. Actual kingdom mounts now consume
-fitted capes, neighbourhood routines, the hero anvil with the preserved official engraving, rune/blueprint
-stages and nameless soot/sulk refusal. Old overlapping effects were removed. Build mode mounts fitted `.vox`
-imports and the starting-shape chooser; insertion replaces the real private draft in one undoable operation.
-Stream night direction and panel places are composed. Fixed the citizen card's visible collapsed-layout bug.
-WB02 and BT04 source WIP remain with their producers; presentation ownership does not transfer over unfinished work.
+**Main / composition:** `7356e9f` mounts room walkers in exact founded kingdom scenes; `c60f529` supplies the
+connected SIMULATED market fixture. Refresh `integration/kingdom-queue` from main before accepting producer
+work; realm comes first. Follow `work/lanes/kingdom-look-owners.md`, preserve source WIP and one writer. The
+older twelve-lane queue is accepted; unfinished WB02/BT04 remains with its owners.
 
-**Realm accepted:** RS01 durable Postgres authority, RS02 checked OIDC sessions/one-use room tickets (source
-`38f81ee`), and WC01/WC02 movement/input/shoulder camera. Dev and preview proxy `/api` to 5192. Main closed the
-current authority seams: independent writer-deadline shutdown stops the room; stuck bodies request supported,
-clear recovery at the current collision revision without releasing interaction locks; public bootstrap uses
-`throughCursor`, independent of domain fact sequence, so presence-only deliveries survive overlap. Specs
-33/34/36 and consumer PRDs match the code. Committed/unchanged command outcomes are terminal; identical rejected
-requests can be reconsidered against changed authority. Ingress receipts remain terminal.
+**Accepted authority:** RS01–06/WC01–06: fenced Postgres allocation, ingress/outbox, checked entry/reconnect,
+bounded inputs, shared movement and SDK prediction. Source-loss barriers fence stale presence. Wiring uses the
+accepted compressed checkpoint; `retain` + `preparePublicCheckpoint()` cold-opens its delivered prefix without
+inventing a principal. Placement context fences late input and resets self/peer/camera history.
 
-**Honest limits / next:** the controller is mounted on the connected, explicitly SIMULATED `/-/realm` court.
-Actual kingdom walking still needs realm-wiring's founded `RealmEntry` and immutable collision world. The card
-has a labelled fixture host; Tidewake Forge parts have a working assembly consumer, not the live plan grammar.
-Do not count either as a finished moment. Continue the four realm PRDs: founded allocation, live sign-in,
-300 walkers, districts, interiors/seats and room-backed Herald/build/Forge. Live startup remains closed until
-its real producers exist; a real Twitch callback round-trip remains unproven. The whole realm goal stays active.
+**Mounted boundary:** `Kingdom` accepts `RealmFoundedScene`, room `PresenceFeed`, `KingdomWalkBinding`;
+`engine.attachWalk` binds an already drawn scene. Recipe: `apps/web/src/kingdom/README.md`. Exact adopted plan,
+placements and asset hashes replace regeneration/legacy scatter/local saved parts. Scene mismatch holds walking
+and requests remount; the camera yields to walking and nearby names follow rendered people. The 5190 default
+still opens the spectator until actual entry/producer adapters compose; wiring needs a checked scene/manifest/
+collision bundle and current public cursors. Producer also needs approved public kingdom naming, not URL names. Spec 38 owns scene assembly/collision,
+provider/furnishing and HTTP reads; FW01/FW02 and RW03 received precise mount needs. Temporary bounded market
+collision lives only in testing, blocks unknown space and supplies no live-home authority. No branch-poll loop.
 
-**Sent back by eye:** vox-import VI03 must keep the complete fitted object visible above phone details;
-first-look needs a closer idle Forge camera so horn/hardy hole/mark read on phone; anvil AH02 needs worn dark
-iron and restrained edge light. Concrete fixes are in candidate and source progress logs. Other accepted work
-is not held for polish. The castle/ground/light still need their existing look lanes to reach the genre bar.
+**Controller next:** Tobias’s 360 Hz check found jitter/sponginess, busy gait, denied pointer lock and half-slab
+sink. All four fixes belong to WC07/08, written into its progress/PRD. Three Terra-high studies are ready in
+`work/references/walk-{render-smoothing,slab-support,multiplayer-characters}.md` and specs 33–35. Camera already
+reads SDK render pose; all-field snap threshold and exact-height easing are hypotheses, not confirmed causes.
+Keep one replay law, blended ordinary corrections and explicit placement cuts. Actual slab walk→stand→jump
+and glassy real-display feel decide acceptance. No new claim that walking is fixed. Idle-stick/head overlap also
+remains with WC; first-look owns spectator-button copy, kingdom-light owns castle warmth.
 
-**Evidence / running:** final `pnpm verify --area kingdom --tier town --hour dusk --size phone` passed typecheck,
-lint, 1,421 tests (four opt-in skips), workspace build and locked capture. Separate assembled checks actually ran
-both Postgres suites: seven focused tests passed; earlier movement/realm checks passed 53 tests. Main inspected
-street/Forge/build/import/templates at 1440×900 and 390×844, stream 1920×1080, panel 318×496, corrected card at both
-sizes, Tidewake assembly and final dusk. Template insertion/byte-exact Undo passed at both sizes; no browser
-errors. Selected frames: `shots/integration/`; standard shot: `shots/kingdom/town-dusk@390x844.png` (ignored artifacts).
-Main serves its preview on 5190. Existing 5191/5192 services responded and were left with their workers;
-Herald 5194/spell 5195 were not restarted. Captures remain serial, machine-locked, with main priority.
+**Forge:** Both pre/post gates now use fresh isolated Codex CLI Luna + independent Terra contexts; no local API
+keys/direct paid calls. Real contact sheets attach privately. Auth-file status is configuration, not approval.
+An owl run approved in 14s; subsequent HTTP owl review rejected subject fidelity, dragon held, crescent lantern
+rejected. Main viewed all sheets and sent forge-pieces concrete crescent-silhouette and owl-face fixes; do not
+weaken judges or claim calibration. RW05 gets this factory for durable room attachment. Managed 5195 now serves the Codex judge backend, confirmed through the 5190 proxy (200, configured); Herald
+5194 is untouched. The coordinator now takes provenance from required `KingdomForgeAuthority.origin`, so real
+model calls in a simulated room stay SIMULATED. Missing origin stops before reserve/providers. Wiring received
+the contract handoff; no persisted reservation change.
+
+**Evidence / next:** Current change: typecheck/lint, all 1518 tests and builds passed; canceled the queued capture under the new
+focused-check rule (backend-only change). Earlier phone dusk shot was looked at. Earlier three actual town browsers passed WASD/touch/stops/takeover; final looked market
+shots at 1440×900/390×844 use one renderer/three SDK clients, explicitly LOOK-only. Streets remain sparse/underlit.
+Next: actual founded collision/session entry, room-backed Herald/build/Forge, RW06 publication adoption,
+interactions/interiors, 300 walkers and plaza→pier. Real tobi4s_ window/provider proof remains open; realm goal is
+active. Main preview 5190 stays up; 5191/5192 untouched. Temporary capture/Forge-check services are closed.

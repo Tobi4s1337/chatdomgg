@@ -5,5 +5,6 @@ export { REALM_MIGRATIONS, migrateRealmSchema, realmSchemaName, type RealmMigrat
 export { assertRealmSchema } from './schema';
 export { PostgresRealmRepository, REALM_BASE_ANVILS, REALM_LEASE_MS, REALM_SNAPSHOT_EVERY, type PostgresRealmRepositoryOptions,
   type RealmCommitGuard, type RealmOutboxRow } from './postgres-repository';
-export { DurableKingdom, RealmBusyError, REALM_PENDING_COMMANDS, createDurableRealmServices, type DurableKingdomOptions,
-  type DurableRepository, type RealmCommandMeta } from './kingdom';
+export { DurableKingdom, RealmBusyError, RealmHeldError, REALM_PENDING_COMMANDS, REALM_COMMAND_QUEUE_WAIT_MS, REALM_DISPOSE_WAIT_MS, createDurableRealmServices, type DurableKingdomOptions,
+  type DurableKingdomHold, type DurableRealmServices, type DurableRepository, type RealmCommandMeta, type RealmLifecycleEvent,
+  type RealmLifecycleListener } from './kingdom';

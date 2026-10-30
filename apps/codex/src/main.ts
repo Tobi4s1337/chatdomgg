@@ -1,15 +1,20 @@
 import {createServer} from 'node:http';
-import {appendFile,mkdir} from 'node:fs/promises';
-import {resolve} from 'node:path';
+import {access,appendFile,mkdir} from 'node:fs/promises';
+import {resolve,join} from 'node:path';
+import {homedir} from 'node:os';
 import {runForge} from './run';
 import {createForgeProviders} from './providers';
 const port=Number(process.env.FORGE_PORT??5195),providers=createForgeProviders();
 const directory=resolve(process.env.FORGE_DATA_DIR??'../../.forge.local');
 await mkdir(directory,{recursive:true});
 let occupied=false;
+async function codexConfigured(){
+ // Configuration is not a health claim: an actual run must still authenticate and pass both gates.
+ try{await access(join(process.env.CODEX_HOME??join(homedir(),'.codex'),'auth.json'));return true;}catch{return false;}
+}
 const server=createServer(async(req,res)=>{
  const send=(code:number,value:unknown)=>{res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(value));};
- if(req.url==='/forge-data/status'){send(200,{mode:'local-development',citizens:'simulated',judgesConfigured:!!process.env.OPENAI_API_KEY,occupied});return;}
+ if(req.url==='/forge-data/status'){send(200,{mode:'local-development',citizens:'simulated',judgesConfigured:await codexConfigured(),judgeBackend:'codex-cli',occupied});return;}
  if(req.method!=='POST'||req.url!=='/forge-data/run'){send(404,{error:'Not found'});return;}
  // This development room never accepts a Twitch identity, realm authority or coal balance from a browser.
  if(req.headers['sec-fetch-site']==='cross-site'){send(403,{error:'Open the Forge from the kingdom.'});return;}

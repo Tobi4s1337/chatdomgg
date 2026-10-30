@@ -81,3 +81,13 @@ frontages, not extra windows pretending to be citizens.
 Readiness means the complete geometry has rendered with initial published light from all three volumes.
 It does not require a live worker queue to become idle. Until loading completes, identical frames are skipped
 even without a fixed time; the first meaningful frame still renders before the public flag and loading gate change.
+
+## 2026-10-30 — Forge gates use isolated Codex runs
+
+Tobias explicitly superseded the older Safety §4.2 direct-HTTP transport: no local paid API keys. The service
+invokes fresh, tool-free Codex CLI judge contexts before drafting and after actual six-angle rendering.
+Luna answers fixed policy questions; a separate Terra run independently checks the same evidence. Drafting
+shares no context with either. No endpoint moderation or Decisions receipt is fabricated; CLI estimates are
+uncalibrated and recorded with their actual backend/version. Missing/invalid/unsure checks do not publish.
+Status reports auth-file configuration, never a successful gate. The development bench remains SIMULATED
+citizens; realm ownership, coal reservation and durable attachment are separate authority obligations.

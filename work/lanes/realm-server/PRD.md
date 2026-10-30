@@ -29,6 +29,10 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
 
 ## Tasks
 
+Founded scene/collision/furnisher volume is assigned to `realm-server-world` (spec 38), which can work in
+parallel. This lane retains allocation/adoption and RS05–09. Main has frozen the public scene receipt and
+state-aware opening loader; compose the delivered producer rather than implementing it twice.
+
 - [x] **RS01 — A committed fact survives a room restart** · evidence: test/log. Implement additive migrations
   and the actual `RealmRepository` in `src/persistence/`, with fenced DB-time writer leases, expected sequence,
   command digest/outcomes and atomic private fact/state/ledger/outbox commit. Wire through the frozen startup
@@ -45,13 +49,13 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   (a storage partition, never a credential); new sessions/accounts rotate it. Tickets remain single-use. Tests use
   an explicitly SIMULATED provider through production verification logic: reject wrong issuer/audience/nonce,
   expired/revoked sessions, replay/cross-kingdom tickets and client-selected identities. Live mode has no bypass.
-- [ ] **RS03 — Three real deeds, with streets that stay put** · evidence: test. Implement global allocation and
+- [x] **RS03 — Three real deeds, with streets that stay put** · evidence: test. Implement global allocation and
   immutable founded-layout adoption in `src/allocation/`. Persist person/kingdom/plot constraints, verified
   tenure evidence, original placement, receipt and pending-install recovery; validate `home.installAllocated`
   inside the durable write transaction. Focused R6 test races one person into four kingdoms and restarts during
   allocation: at most three citizen deeds, castle excluded, guest retained, occupied plot transforms unchanged
   and old layout cannot be overwritten by a regenerated plan. No fixture ownership in live paths.
-- [ ] **RS04 — Ingress cannot vanish and committed public delivery can resume** · evidence: test. Implement
+- [x] **RS04 — Ingress cannot vanish and committed public delivery can resume** · evidence: test. Implement
   authenticated capability/evidence-checked ingress in `src/ingress/` and committed ordered delivery in
   `src/outbox/`. Implement `loadIngress`/`executeIngress`: persist source dedupe, private checkpoint and all
   capability-tagged facts plus public presence outbox in one transaction. Closed evidenced interval unions survive
@@ -61,7 +65,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   projection restoration and explicit at-least-once retry. Focused R7 test interrupts after commit/before delivery
   acknowledgement, then resumes: one applied ingress result, same public event ID, no replayed economic change,
   no raw creation words/rights/tokens in the public payload. Supply browser dedupe/cursor wiring instructions.
-- [ ] **RS05 — Reconnect returns the same person and honors revocation** · evidence: test/log. Add the auth/
+- [x] **RS05 — Reconnect returns the same person and honors revocation** · evidence: test/log. Add the auth/
   lifecycle adapter through main's existing handshake-time `onReconnect`, periodic revocation and drop guards,
   with explicit 30-second grace, immediate drop-input stop, current-session recheck, one-person seat policy and
   writer-epoch invalidation. Focused R8 harness demonstrates drop/reconnect and
@@ -70,7 +74,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   pinned SDK parser and uWS colon-path patches; do not parse tokens in application code or rename rooms to hide a failure.
   Document tab-scoped account/kingdom token storage, rotation timing and exact errors for the browser lane;
   browser source files remain read-only. Never add application input sequence/ack state.
-- [ ] **RS06 — Slow or abusive clients have finite costs** · evidence: test/log. Implement configuration and
+- [x] **RS06 — Slow or abusive clients have finite costs** · evidence: test/log. Implement configuration and
   readiness diagnostics in `src/limits/` and `src/diagnostics/`: 90 frames/s, existing bounded input queue,
   one integration per tick, 16 KiB incoming frames for bounded build operations, 1 MiB backpressure with closure, bounded action/work/DB/outbox
   queues and timeouts. Focused R9 test combines input flood with controlled slow socket/storage: distance cannot

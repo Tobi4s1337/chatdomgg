@@ -1,7 +1,7 @@
 import {
   EpochMsSchema, KingdomIdSchema, PersonIdSchema, PresenceInputSchema, TokenSchema, UIntSchema,
   PRESENCE_LEASE_MS, PRESENCE_MINUTE_MS, STREAM_LEASE_MS,
-  type KingdomId, type KingdomPresenceFrame, type PersonId, type PresenceInput, type PresenceSource,
+  type KingdomId, type KingdomPresenceFrame, type PersonId, type PresenceInput, type PresenceSource, type PresenceLossSource,
 } from '@chatdom/shared';
 
 const SOURCES: readonly PresenceSource[] = ['chatters', 'chat', 'panel', 'walker'];
@@ -22,6 +22,8 @@ interface PersonPresence {
   /** Survives expiry so reordered source input cannot recreate a newer lease. */
   readonly sourceTimes: Readonly<Partial<Record<PresenceSource, number>>>;
   readonly publicName: string | null;
+  /** Which independent source last supplied or withdrew this disclosure. */
+  readonly disclosureSource: Exclude<PresenceSource, 'chatters'> | null;
   readonly disclosureAt: number;
   readonly since: number;
   /** Remove/restore is ordered independently from activity. */
@@ -60,6 +62,8 @@ export interface PresenceState {
   readonly origin: Origin;
   readonly asOf: number;
   readonly stream: StreamPresence | null;
+  /** Global cutoffs also fence delayed evidence for people not present when coverage was lost. */
+  readonly sourceLostThrough: Readonly<Partial<Record<PresenceLossSource, number>>>;
   readonly people: ShardedMap<PersonId, PersonPresence>;
   readonly rosterThrough: number;
   readonly recentInputs: RecentInputs;
@@ -118,6 +122,13 @@ class PeopleEdit {
     changed.set(id, person);
   }
 
+  delete(id: PersonId): void {
+    const bucket = shard(id);
+    let changed = this.changed.get(bucket);
+    if (!changed) { changed = new Map(this.base[bucket]!); this.changed.set(bucket, changed); }
+    changed.delete(id);
+  }
+
   finish(): ShardedMap<PersonId, PersonPresence> {
     if (!this.changed.size) return this.base;
     const buckets = this.base.slice();
@@ -127,7 +138,7 @@ class PeopleEdit {
 }
 
 function emptyPerson(at: number): PersonPresence {
-  return { leases: {}, sourceTimes: {}, publicName: null, disclosureAt: -1, since: at, controlAt: -1, restoredAt: -1, restriction: null };
+  return { leases: {}, sourceTimes: {}, publicName: null, disclosureSource: null, disclosureAt: -1, since: at, controlAt: -1, restoredAt: -1, restriction: null };
 }
 
 /** Removes only strengthen a hold; arrival order must never shorten a timeout. */
@@ -201,7 +212,7 @@ export function createPresenceState(kingdomId: KingdomId, origin: Origin): Prese
   KingdomIdSchema.parse(kingdomId);
   if (origin !== 'live' && origin !== 'simulated') throw new TypeError('Presence needs a live or simulated origin');
   return {
-    kingdomId, origin, asOf: 0, stream: null, people: emptyShards(), rosterThrough: -1, lastMinuteAt: -1,
+    kingdomId, origin, asOf: 0, stream: null, sourceLostThrough: {}, people: emptyShards(), rosterThrough: -1, lastMinuteAt: -1,
     recentInputs: {
       ids: emptyShards(), cursor: 0, size: 0,
       blocks: Array.from({ length: PRESENCE_DEDUPE_CAPACITY / DEDUPE_BLOCK_SIZE }, () => Array<string | null>(DEDUPE_BLOCK_SIZE).fill(null)),
@@ -223,7 +234,39 @@ export function applyPresence(state: PresenceState, input: PresenceInput, now: n
   if (state.recentInputs.ids[shard(event.id)]!.has(event.id)) return state;
 
   const next = { ...state, asOf: now, recentInputs: remember(state.recentInputs, event.id) };
+  if (event.kind === 'source-lost') {
+    const lost = new Set(event.sources), cut = event.observedAt;
+    const sourceLostThrough = { ...state.sourceLostThrough };
+    for (const source of lost) sourceLostThrough[source] = Math.max(sourceLostThrough[source] ?? -1, cut);
+    const people = new PeopleEdit(state.people);
+    for (const bucket of state.people) for (const [id, person] of bucket) {
+      const leases = { ...person.leases };
+      const sourceTimes = { ...person.sourceTimes };
+      let changed = false;
+      for (const source of ['chat', 'chatters'] as const) if (lost.has(source)) {
+        if (leases[source] && leases[source]!.observedAt <= cut) { delete leases[source]; changed = true; }
+        if (event.reason === 'revoked' && sourceTimes[source] !== undefined && sourceTimes[source]! <= cut) {
+          delete sourceTimes[source]; changed = true;
+        }
+      }
+      // Legacy checkpoints did not record disclosure provenance: withdraw an unproven name conservatively.
+      const clearName = lost.has('chat') && person.disclosureAt <= cut
+        && (person.disclosureSource === 'chat' || (person.disclosureSource === null && person.publicName !== null));
+      if (!changed && !clearName) continue;
+      const updated = { ...person, leases, sourceTimes, ...(clearName ? { publicName: null, disclosureSource: null, disclosureAt: Math.max(person.disclosureAt, cut) } : {}) };
+      if (event.reason === 'revoked' && !Object.keys(leases).length && !Object.keys(sourceTimes).length
+        && updated.publicName === null && updated.restriction === null && updated.controlAt < 0 && updated.restoredAt < 0) {
+        people.delete(id); continue;
+      }
+      people.set(id, { ...updated, since: activeLeases(updated, cut).length ? person.since : Math.max(person.since, cut) });
+    }
+    // Losing the stream source means unknown, never an invented offline event or a different stream night.
+    const stream = lost.has('stream') && state.stream && state.stream.observedAt <= cut
+      ? { ...state.stream, expiresAt: Math.min(state.stream.expiresAt, cut) } : state.stream;
+    return { ...next, people: people.finish(), stream, sourceLostThrough };
+  }
   if (event.kind === 'stream') {
+    if (event.observedAt <= (state.sourceLostThrough.stream ?? -1)) return next;
     const prior = state.stream;
     if (prior && (event.observedAt < prior.observedAt || (event.observedAt === prior.observedAt && (event.live || !prior.live)))) return next;
     const sameSession = prior !== null && prior.live === event.live && prior.sessionId === event.sessionId;
@@ -248,13 +291,14 @@ export function applyPresence(state: PresenceState, input: PresenceInput, now: n
     if (event.kind === 'remove' && event.observedAt <= person.controlAt
       && restriction?.reason === person.restriction?.reason && restriction?.until === person.restriction?.until) return next;
     people.set(event.personId, {
-      ...person, leases: {}, publicName: null, disclosureAt: Math.max(person.disclosureAt, event.observedAt),
+      ...person, leases: {}, publicName: null, disclosureSource: null, disclosureAt: Math.max(person.disclosureAt, event.observedAt),
       since: event.observedAt, controlAt: Math.max(person.controlAt, event.observedAt),
       restoredAt: event.kind === 'restore' ? event.observedAt : person.restoredAt, restriction,
     });
     return { ...next, people: people.finish() };
   }
 
+  if (event.source !== 'panel' && event.source !== 'walker' && event.observedAt <= (state.sourceLostThrough[event.source] ?? -1)) return next;
   if (expiry(event.observedAt, PRESENCE_LEASE_MS) <= now) return next;
   if (event.source === 'chatters' && event.observedAt <= state.rosterThrough) return next;
   if (event.coverage === 'complete') {
@@ -291,6 +335,7 @@ export function applyPresence(state: PresenceState, input: PresenceInput, now: n
       leases: { ...person.leases, [event.source]: { observedAt: event.observedAt, expiresAt: expiry(event.observedAt, PRESENCE_LEASE_MS) } },
       sourceTimes: { ...person.sourceTimes, [event.source]: event.observedAt },
       publicName: updatesDisclosure ? (observed.disclosure === 'named' ? observed.displayName : null) : person.publicName,
+      disclosureSource: updatesDisclosure && event.source !== 'chatters' ? event.source : person.disclosureSource,
       disclosureAt: updatesDisclosure ? event.observedAt : person.disclosureAt,
       since: personPresent(state, person, event.observedAt) ? person.since : event.observedAt,
     });

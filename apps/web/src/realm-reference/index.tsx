@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { MATERIALS } from '@chatdom/content';
 import { createVoxelMaterial, getEnvironment } from '@chatdom/render';
 import type { WalkInput } from '@chatdom/shared/realm';
+import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import { connectReferenceRealm, type RealmClient, type RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkController, type WalkDebug } from '../walk';
@@ -48,8 +49,9 @@ export default function RealmReference() {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: colour, roughness: 1 }));
       mesh.position.set(x, y, z); scene.add(mesh); objects.push(mesh);
     };
-    box(0, -.3, 0, 36, .6, 36, '#656a58');
-    box(0, -.08, 3, 18, .16, 20, '#817d6d');
+    // Keep backing surfaces below the paving: sub-millimetre separation flickers on portrait cameras.
+    box(0, -.32, 0, 36, .6, 36, '#656a58');
+    box(0, -.10, 3, 18, .16, 20, '#817d6d');
     // Slightly varied stones make the court read as a laid surface without
     // adding collision geometry or changing the shared ground datum.
     const pavingGeometry = new THREE.BoxGeometry(.95, .025, .95);
@@ -114,7 +116,9 @@ export default function RealmReference() {
       if (cancelled) { connected.dispose(); return; }
       client = connected; debug.client = connected;
       // The existing reference smoke hook can supply explicit input; the same real client still ticks once.
-      walk=createWalkController({camera,surface:renderer.domElement,realm:{selfId:connected.selfId,room:connected.room,
+      walk=createWalkController({camera,surface:renderer.domElement,hud:host,collision:REFERENCE_WORLD,realm:{selfId:connected.selfId,room:connected.room,
+        get predicted(){return connected.predicted;},
+        clearInput:()=>connected.clearInput(),
         tick:(now,input)=>connected.tick(now,{...input,...override})}});
       window.__chatdomWalk=walk.debug;
       resize();

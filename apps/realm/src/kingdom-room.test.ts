@@ -35,7 +35,8 @@ it('three real SDK clients share movement and reload without reusing a single-us
   const a=joined[0]!,id=a.sessionId,x=a.state.walkers.get(id)!.x;
   const input=a.input<WalkInput>({mode:'reliable'});
   for(let n=0;n<12;n++){Object.assign(input.data,{moveX:127,moveZ:0,buttons:0,yaw:64,collisionRevision:1});input.send();await new Promise(r=>setTimeout(r,34));}
-  await waitFor(()=>joined.every(r=>Math.abs((r.state.walkers.get(id)?.x??-100)-(x+12*4/30))<.001));
+  // The first two grounded ticks ramp through 4/3 and 8/3 m/s, then cruise at 4 m/s.
+  await waitFor(()=>joined.every(r=>Math.abs((r.state.walkers.get(id)?.x??-100)-(x+44/30))<.001));
   const positions=joined.map(r=>r.state.walkers.get(id)!.x);expect(Math.max(...positions)-Math.min(...positions)).toBeLessThan(.01);
   a.reconnection.enabled=false;
   await a.leave(false);
