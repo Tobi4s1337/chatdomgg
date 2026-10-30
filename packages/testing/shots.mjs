@@ -1,4 +1,5 @@
 import { chromium } from '@playwright/test';
+import { acquireCaptureLock } from './capture-lock.mjs';
 import { startCapturePreview, closeCapturePreview } from './preview.mjs';
 import { mkdir } from 'node:fs/promises';
 const args = process.argv.slice(2);
@@ -14,8 +15,9 @@ if (hourFilter && !['noon', 'dusk', 'night'].includes(hourFilter)) throw new Err
 if (sizeFilter && !['desktop', 'phone'].includes(sizeFilter)) throw new Error('Expected --size desktop|phone');
 const kingdomSizes = sizeFilter === 'desktop' ? [[1440, 900]] : sizeFilter === 'phone' ? [[390, 844]] : [[1440, 900], [390, 844]];
 const hours = [['noon', 12], ['dusk', 19.5], ['night', 23]].filter(([label]) => !hourFilter || label === hourFilter);
-let server, browser;
+let server, browser, release;
 try {
+  release = await acquireCaptureLock();
   if (!external) ({ server, base } = await startCapturePreview());
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const capture = async (path, name, sizes, kingdom = false, tier = 'town') => {
@@ -66,6 +68,7 @@ try {
     }
   }
 } finally {
-  await browser?.close();
-  if (server) await closeCapturePreview(server);
+  try { await browser?.close(); } finally {
+    try { if (server) await closeCapturePreview(server); } finally { await release?.(); }
+  }
 }

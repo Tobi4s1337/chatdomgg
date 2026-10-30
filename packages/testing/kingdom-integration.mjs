@@ -1,12 +1,14 @@
 import { chromium } from '@playwright/test';
+import { acquireCaptureLock } from './capture-lock.mjs';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { startCapturePreview, closeCapturePreview } from './preview.mjs';
 
 // One serial page: the browser adapter receives synthetic PUBLIC SSE frames.
 // This proves the replay seam, not Herald ingest or real Twitch authorization.
-let server, browser;
+let server, browser, release;
 try {
+  release = await acquireCaptureLock();
   const { server: owned, base } = await startCapturePreview(); server = owned;
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -58,6 +60,7 @@ try {
   }, null, 2)}\n`);
   console.log('Replay adapter, withdrawal/recovery and two Hearth street captures passed.');
 } finally {
-  await browser?.close();
-  if (server) await closeCapturePreview(server);
+  try { await browser?.close(); } finally {
+    try { if (server) await closeCapturePreview(server); } finally { await release?.(); }
+  }
 }

@@ -1,5 +1,6 @@
 /* global URLSearchParams:readonly, Image:readonly */
 import { chromium } from '@playwright/test';
+import { acquireCaptureLock } from './capture-lock.mjs';
 import { createServer } from 'vite';
 import { startCapturePreview, closeCapturePreview } from './preview.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -18,9 +19,10 @@ if(!['none','on','off'].includes(presence)||(presence!=='none'&&scene!=='windows
 const hour=option('--hour')??'19';
 if (!/^(?:[01]?\d|2[0-3])(?:\.\d+)?$/.test(hour)) throw new Error('--hour must be in [0,24).');
 const root=fileURLToPath(new URL('../..',import.meta.url));
-let loader,server,browser;
+let loader,server,browser,release;
 const escape=value=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 try {
+  release = await acquireCaptureLock();
   loader=await createServer({root,configFile:false,server:{middlewareMode:true,hmr:false,ws:false},appType:'custom'});
   const {loadContentCollection,coreRenderAssets}=await loader.ssrLoadModule('/packages/content/src/catalogue.ts');
   const collectionAssets=await loadContentCollection(collection);
@@ -86,6 +88,9 @@ try {
 } catch(error) {
   console.error(error instanceof Error?error.message:String(error));process.exitCode=1;
 } finally {
-  await browser?.close();await loader?.close();
-  if(server)await closeCapturePreview(server);
+  try { await browser?.close(); } finally {
+    try { await loader?.close(); } finally {
+      try { if(server) await closeCapturePreview(server); } finally { await release?.(); }
+    }
+  }
 }
