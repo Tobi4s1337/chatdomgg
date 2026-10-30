@@ -14,7 +14,7 @@ host capture lock before preview/browser and capture serially. Main reviews/merg
 
 ## Tasks
 
-- [ ] **FF01 — See a nameless forge cough in its own small shot** · evidence: running bench + phone/desktop shots.
+- [x] **FF01 — See a nameless forge cough in its own small shot** · evidence: running bench + phone/desktop shots.
   Build the approved event-minimal adapter and a self-contained visibly SIMULATED bench. Deliver the actual
   finished anticipation/cough/settle with one fixed generic caption, dedicated caption node and deterministic
   elapsed-time sampling. Keep the viewport free of citizen/request context; capture and inspect immediately.
