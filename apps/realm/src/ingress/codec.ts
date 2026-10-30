@@ -29,7 +29,7 @@ export function encodeIngressCheckpoint(state: IngressCheckpointState): Uint8Arr
   for (const bucket of p.people) for (const [id, person] of bucket) people.push([id, person]);
   people.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
   const body = {
-    v: 1, kingdomId: p.kingdomId, origin: p.origin, asOf: p.asOf, stream: p.stream, rosterThrough: p.rosterThrough, lastMinuteAt: p.lastMinuteAt,
+    v: 1, kingdomId: p.kingdomId, origin: p.origin, asOf: p.asOf, stream: p.stream, sourceLostThrough: p.sourceLostThrough, rosterThrough: p.rosterThrough, lastMinuteAt: p.lastMinuteAt,
     people, recent: { cursor: p.recentInputs.cursor, size: p.recentInputs.size, blocks: p.recentInputs.blocks },
     writerEpoch: state.writerEpoch,
     runs: [...state.runs].sort(runOrder).map(r => [r.source, r.personId, r.sessionId, r.last]),
@@ -47,12 +47,12 @@ export function decodeIngressCheckpoint(checkpoint: RealmIngressCheckpoint, king
   if (body.v !== 1 || body.kingdomId !== kingdomId || body.origin !== origin) throw new RealmRecoveryError(kingdomId, `ingress checkpoint ${checkpoint.revision} belongs elsewhere`);
   const blank = createPresenceState(kingdomId, origin);
   const people = blank.people.map(() => new Map<PersonId, Person>());
-  for (const [id, person] of body.people) people[shardOf(id)]!.set(PersonIdSchema.parse(id), person);
+  for (const [id, person] of body.people) people[shardOf(id)]!.set(PersonIdSchema.parse(id), { ...person, disclosureSource: person.disclosureSource ?? null });
   const ids = blank.recentInputs.ids.map(() => new Map<string, true>());
   if (body.recent.blocks.length !== blank.recentInputs.blocks.length) throw new RealmRecoveryError(kingdomId, 'ingress checkpoint dedupe window has the wrong size');
   for (const block of body.recent.blocks) for (const id of block) if (id !== null) ids[shardOf(id)]!.set(id, true);
   const presence: PresenceState = {
-    kingdomId, origin, asOf: body.asOf, stream: body.stream, people, rosterThrough: body.rosterThrough, lastMinuteAt: body.lastMinuteAt,
+    kingdomId, origin, asOf: body.asOf, stream: body.stream, sourceLostThrough: body.sourceLostThrough ?? {}, people, rosterThrough: body.rosterThrough, lastMinuteAt: body.lastMinuteAt,
     recentInputs: { ids, blocks: body.recent.blocks, cursor: body.recent.cursor, size: body.recent.size },
   };
   const runs = body.runs.map(([source, personId, sessionId, last]) => ({ source, personId: PersonIdSchema.parse(personId), sessionId, last }));
@@ -62,6 +62,7 @@ export function decodeIngressCheckpoint(checkpoint: RealmIngressCheckpoint, king
 interface Encoded {
   readonly v: number; readonly kingdomId: string; readonly origin: string;
   readonly asOf: number; readonly stream: PresenceState['stream']; readonly rosterThrough: number; readonly lastMinuteAt: number;
+  readonly sourceLostThrough?: PresenceState['sourceLostThrough'];
   readonly people: readonly [string, Person][];
   readonly recent: { readonly cursor: number; readonly size: number; readonly blocks: readonly (readonly (string | null)[])[] };
   readonly writerEpoch: string;

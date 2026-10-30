@@ -216,6 +216,9 @@ export function createRealmAuthService(options: RealmAuthServiceOptions) {
       return database(async () => {
         await pool.query("delete from realm_sign_in_attempts where expires_at < now() - interval '1 hour'");
         await pool.query("delete from realm_tickets where expires_at < now() - interval '1 day'");
+        // Entries end with their session; the session row itself stays as revocation evidence (below).
+        await pool.query(`delete from realm_entries e using realm_sessions s
+          where s.session_id = e.session_id and (s.revoked_at is not null or s.expires_at < now())`);
         await pool.query(`delete from realm_sessions s where coalesce(s.revoked_at, s.expires_at) < now() - interval '30 days'
           and not exists (select 1 from realm_tickets t where t.session_id = s.session_id)`);
       });

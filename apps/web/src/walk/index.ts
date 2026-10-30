@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { WALK_BUTTON, type CollisionWorld, type WalkInput } from '@chatdom/shared/realm';
+import { WALK_BUTTON, type CollisionWorld, type PlayerState, type WalkInput } from '@chatdom/shared/realm';
+import { embeddedSolids } from '@chatdom/world/movement';
 import type { RealmWalkerPose } from '../realm/client';
 import { createShoulderRig, SHOULDER, type ShoulderPose } from './camera/shoulder';
 import { facingByte, headingFromByte, walkDirection } from './input/direction';
@@ -8,6 +9,7 @@ import { createWalkKeys, type PageLike } from './input/keyboard';
 import { createWalkLook, LOOK, type LockDocument, type LockSurface, type LookMode } from './input/look';
 import { createWalkPointer } from './input/pointer';
 import { createWalkTouch, type TouchSurface } from './input/touch';
+import { createStepEase } from './motion/step-ease';
 
 export { createShoulderRig, filmOffsetFor, framingFor, shoulderPose, SHOULDER } from './camera/shoulder';
 export type { ShoulderPose, ShoulderRig, ShoulderView } from './camera/shoulder';
@@ -29,10 +31,13 @@ export interface RoomSignal { (listener: (code: number, reason?: string) => void
 /** The part of `RealmClient` the controller drives. A connected `RealmClient` satisfies it as is. */
 export interface WalkRealm {
   readonly selfId: string;
+  /** Exact state from the client's reconciler, read only after tick; never delayed room schema state. */
+  readonly predicted?: Readonly<PlayerState>;
+  clearInput?(): void;
   readonly room: {
     readonly state: {
       readonly collisionRevision: number;
-      readonly walkers: { get(id: string): { readonly x: number; readonly y: number; readonly z: number; readonly yaw: number } | undefined };
+      readonly walkers: { get(id: string): { readonly x: number; readonly y: number; readonly z: number; readonly yaw: number; readonly placement?: number } | undefined };
     };
     /** Leaving or a dropped connection lets go of everything held, so nothing walks on after a reconnect. */
     readonly onLeave?: RoomSignal;
@@ -137,6 +142,9 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   let touchJump = false;
   const hud: WalkHud | null = options.hud ? createWalkHud(options.hud, () => { if (owner === 'walking') touchJump = true; }) : null;
   const rig = createShoulderRig(options.heading ?? 0);
+  const stepEase = createStepEase();
+  let stepRevision: number | null = null;
+  let stepPlacement: number | undefined;
   const supplied = options.collision;
   let solids: CollisionWorld | null = typeof supplied === 'function' ? null : supplied ?? null;
   const collision = () => {
@@ -163,7 +171,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   };
   const setOwner = (value: WalkOwner) => { owner = value; debug.owner = value; showHud(); };
   /** Blur, hidden page, menu, disconnect: nothing held, nothing pending, no capture, cursor given back. */
-  const drop = () => { keys.clear(); pointer.clear(); touch.clear(); look.exit(); touchJump = false; jumpedLastFrame = false; };
+  const drop = () => { keys.clear(); pointer.clear(); touch.clear(); look.exit(); touchJump = false; jumpedLastFrame = false; realm.clearInput?.(); stepEase.reset(); rig.settle(); };
   const hidden = () => { if (page.hidden) drop(); };
   const contextmenu = (event: Event) => { if (!event.defaultPrevented) drop(); };
   const disconnected = () => drop();
@@ -211,7 +219,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
         buttons: (walking && (keys.sprint || touch.sprint) ? WALK_BUTTON.sprint : 0) | jump,
         yaw: facing ?? 0, collisionRevision: realm.room.state.collisionRevision,
       };
-      const poses = realm.tick(now, input);
+      let poses = realm.tick(now, input);
       const self = poses.find(p => p.self);
       const authority = realm.room.state.walkers.get(realm.selfId);
       Object.assign(debug, { frames: debug.frames + 1, walkers: poses.length, input, authority: authority ? { x: authority.x, y: authority.y, z: authority.z } : null });
@@ -222,8 +230,22 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
       if (!walking) return poses;
       rig.update(dt, self.speed > .3 ? headingFromByte(self.yaw) : null, self.speed, pointer.dragging || touch.orbiting);
       const world = collision();
-      pose = rig.apply(camera, [self.x, self.y, self.z], width / height, world);
-      projected.set(self.x, self.y + BODY_CENTRE, self.z).project(camera);
+      let bodyY = self.y, cameraY: number | undefined;
+      const predicted = realm.predicted;
+      if (predicted) {
+        if (predicted.collisionRevision !== stepRevision || authority?.placement !== stepPlacement) {
+          stepEase.reset(); rig.settle(); stepRevision = predicted.collisionRevision; stepPlacement = authority?.placement;
+        }
+        const eased = stepEase.update(predicted.y, predicted.grounded, dt);
+        bodyY += eased.body - predicted.y;
+        cameraY = self.y + eased.camera - predicted.y;
+        // Further horizontal travel can carry the eased head under a new lintel: retain the actual body there.
+        if (bodyY !== self.y && world && embeddedSolids({ x: self.x, y: bodyY, z: self.z }, world).length) bodyY = self.y;
+        poses = poses.map(p => p.self ? { ...p, y: bodyY } : p);
+        debug.self!.y = bodyY;
+      }
+      pose = rig.apply(camera, [self.x, self.y, self.z], width / height, world, cameraY);
+      projected.set(self.x, bodyY + BODY_CENTRE, self.z).project(camera);
       Object.assign(debug, {
         ready: true, selfOpacity: pose.selfOpacity,
         screen: { x: (projected.x + 1) / 2 * width, y: (1 - projected.y) / 2 * height },
@@ -239,6 +261,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
     release() {
       if (owner !== 'walking') return;
       keys.setEnabled(false); pointer.setEnabled(false); touch.setEnabled(false); look.setEnabled(false); drop();
+      stepEase.reset();
       setOwner('released');
       straighten();
     },
@@ -251,11 +274,14 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
     reset(heading) {
       if (owner === 'disposed') return;
       keys.clear(); pointer.clear(); touch.clear(); touchJump = false; jumpedLastFrame = false;
+      realm.clearInput?.();
+      stepEase.reset();
       rig.reset(heading ?? (facing === null ? rig.view.yaw : headingFromByte(facing)));
     },
     dispose() {
       if (owner === 'disposed') return;
       stopLook(); stopTouch();
+      realm.clearInput?.();
       keys.dispose(); pointer.dispose(); touch.dispose(); look.dispose(); hud?.dispose();
       keyboard.removeEventListener('blur', drop);
       keyboard.removeEventListener('contextmenu', contextmenu);

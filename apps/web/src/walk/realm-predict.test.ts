@@ -3,7 +3,7 @@
 // a published collision revision and a room placement. The court and its walkers are the SIMULATED reference.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer as createNetServer } from 'node:net';
-import { PLAYER_FIELDS, RealmJoinSchema, WALK_BODY, type CollisionWorld, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
+import { PLAYER_FIELDS, RealmJoinSchema, WALK_BODY, type CollisionWorld, type RealmWalkInput, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
 import { REFERENCE_BLOCKS, REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import { connectRealm, type RealmClient, type RealmCollision, type RealmWalkerPose } from '../realm/client';
 import { createRealmServer } from '../../../realm/src/server';
@@ -51,11 +51,11 @@ const roomTruth = (client: RealmClient) => effects!.readWalker(client.selfId)!;
 
 /** Every input the client sends, as sent: wraps the room's one input handle. */
 function recordSends(client: RealmClient) {
-  const handle = client.room.input<WalkInput>({ mode: 'reliable' });
-  const sent: WalkInput[] = [];
+  const handle = client.room.input<RealmWalkInput>({ mode: 'reliable' });
+  const sent: RealmWalkInput[] = [];
   const send = handle.send.bind(handle);
   // The input data is a schema instance: its fields are accessors, so copy them by name.
-  handle.send = () => { const { moveX, moveZ, buttons, yaw, collisionRevision } = handle.data; sent.push({ moveX, moveZ, buttons, yaw, collisionRevision }); return send(); };
+  handle.send = () => { const { moveX, moveZ, buttons, yaw, collisionRevision, placement } = handle.data; sent.push({ moveX, moveZ, buttons, yaw, collisionRevision, placement }); return send(); };
   return { handle, sent };
 }
 
@@ -93,6 +93,21 @@ describe('the realm client predicts with the room', () => {
   // Until revision 2 is "fetched", this source answers revision 2 with the old world, the bug a careless producer
   // would make; the client must refuse it rather than predict through the new wall.
   const source: RealmCollision = { world: revision => published.has(revision) ? [REFERENCE_WORLD, REVISION_2][revision - 1] ?? null : REFERENCE_WORLD };
+
+  it('cancels a jump sampled before an input takeover when no fixed input was due yet', async () => {
+    const client = await connectRealm(endpoint, entry('walk-predict-takeover'), source); clients.push(client);
+    const { sent } = recordSends(client);
+    const now = performance.now();
+    client.tick(now, IDLE);
+    client.tick(now + 1, { ...IDLE, buttons: 2 });
+    expect(sent).toHaveLength(0);
+    client.clearInput();
+    await pause(40);
+    client.tick(performance.now(), IDLE);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every(input => (input.buttons & 2) === 0)).toBe(true);
+    client.dispose();
+  });
 
   it('stages exactly the due fixed inputs on slow frames, one jump per press, and agrees with the room in every field', async () => {
     a = await connectRealm(endpoint, entry('walk-predict-scope-a'), source); clients.push(a);
@@ -174,17 +189,34 @@ describe('the realm client predicts with the room', () => {
     expectSameFields(a);
   }, 30_000);
 
-  it('draws a room placement at once, never gliding through the wall between', async () => {
+  it('snaps a short room placement for self and neighbours and fences late pre-placement inputs', async () => {
     const { handle } = recordSends(a);
+    const before = WALL_X - .4, after = WALL_X + .6;
+    // One metre crosses this thin wall: below both the self (2 m) and neighbour (4 m) correction thresholds.
+    expect(effects!.placeWalker(a.selfId, [before, 0, 7], 2)).toBe(true);
+    await settle(a, handle);
+    await drive(a, 600, IDLE, 16, now => { b.tick(now, IDLE); });
     let from = 0;
     await drive(a, 100, IDLE, 16, (_now, poses) => { from = poses.find(p => p.self)!.x; });
-    expect(from).toBeLessThan(WALL_X);
-    expect(effects!.placeWalker(a.selfId, [WALL_X + 3, 0, 7], 2)).toBe(true);
-    const drawn: number[] = [];
-    await drive(a, 900, IDLE, 16, (_now, poses) => { drawn.push(poses.find(p => p.self)!.x); });
+    expect(from).toBeCloseTo(before, 6);
+    const oldPlacement = authority(a).placement;
+    expect(effects!.placeWalker(a.selfId, [after, 0, 7], 2)).toBe(true);
+    const drawn: number[] = [], neighbour: number[] = [];
+    await drive(a, 900, IDLE, 16, (now, poses) => {
+      drawn.push(poses.find(p => p.self)!.x);
+      neighbour.push(b.tick(now, IDLE).find(p => p.id === a.selfId)!.x);
+    });
     // Every frame is at the old place or the new one: nothing in between, nothing inside the wall.
-    expect(drawn.every(x => Math.abs(x - from) < .01 || Math.abs(x - (WALL_X + 3)) < .01)).toBe(true);
-    expect(drawn.at(-1)).toBeCloseTo(WALL_X + 3, 6);
+    for (const frames of [drawn, neighbour]) {
+      expect(frames.every(x => Math.abs(x - from) < .01 || Math.abs(x - after) < .01), JSON.stringify({ observer: frames === drawn ? 'self' : 'neighbour', from, after, frames })).toBe(true);
+      expect(frames.at(-1)).toBeCloseTo(after, 6);
+    }
+    // This packet arrives after the room cleared its queue. A clear alone cannot stop the stale jump/move;
+    // waiting for the decoded placement also proves the client won't replay it in the new context.
+    Object.assign(handle.data, EAST, { buttons: 2, collisionRevision: 2, placement: oldPlacement }); handle.send();
+    await drive(a, 250, IDLE, 16);
+    expect(roomTruth(a)).toMatchObject({ x: after, y: 0, grounded: true });
+    expect(authority(a).placement).not.toBe(oldPlacement);
     // Turning 64 → 250 → 4 crosses the yaw byte's wrap: each frame is drawn at one heading or the next, never
     // spun the long way round through the bytes between.
     const yaws = new Set<number>(), seen = (_now: number, poses: readonly RealmWalkerPose[]) => { yaws.add(poses.find(p => p.self)!.yaw); };

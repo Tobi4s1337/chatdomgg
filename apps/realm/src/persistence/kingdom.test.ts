@@ -6,9 +6,9 @@ import type { RealmOwnedHome, RealmPrincipal, RealmPublicDelivery, RealmWriterLe
 import { createRealmState } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { RealmRoomEffects } from '../ports';
-import { DurableKingdom, type DurableRepository } from './kingdom';
-import type { RealmOutboxStore } from '../outbox';
+import { createDurableRealmServices, RealmBusyError, type DurableKingdom, type DurableKingdomHold, type DurableRepository } from './kingdom';
 import type { RealmOutboxRow } from './postgres-repository';
+import type { RealmOutboxStore } from '../outbox';
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
@@ -30,21 +30,37 @@ it('keeps bootstrap at the delivered prefix and closes on the deadline despite a
   const principal: RealmPrincipal = { personId, kingdomId, origin: 'simulated', sessionId: 'session:1', expiresAt: 99_000, publicName: 'Juniper', look: 'hearth' };
   const renewal = deferred<RealmWriterLease>(), firstRows = deferred<RealmOutboxRow[]>(), lateRows = deferred<RealmOutboxRow[]>();
   const firstRead = deferred<void>(), secondRead = deferred<void>();
+  const openingOrder: string[] = [];
   let reads = 0;
   const repository: DurableRepository = {
-    leaseMs: 15_000, acquire: async () => lease, renew: vi.fn(() => renewal.promise), load: async () => initial,
-    publishedPlots: async () => ({ plots: new Set([home.id]), cursor: 10 }), latestPresence: async () => null,
+    leaseMs: 15_000, acquire: async () => { openingOrder.push('acquire'); return lease; }, renew: vi.fn(() => renewal.promise),
+    load: async held => { expect(held).toBe(lease); openingOrder.push('load'); return initial; },
     committedState: () => privateAhead, execute: async () => ({ status: 'committed', sequence: 3, at: 0 }),
     lookup: async () => null, loadIngress: async () => null, executeIngress: async () => ({ status: 'unchanged', reason: 'unused' }),
     snapshot: async () => 3, release: async () => {},
   };
   const outbox: RealmOutboxStore = {
-    open: async () => 10, acknowledge: async () => {},
-    read: async () => { if (++reads <= 2) { firstRead.resolve(); return firstRows.promise; } secondRead.resolve(); return lateRows.promise; },
+    open: async held => { expect(held).toBe(lease); openingOrder.push('outbox'); return 10; }, acknowledge: async () => {},
+    prefix: async () => { openingOrder.push('projection'); return { homes: [{ type: 'home', plotId: home.id, revision: home.revision, assetHash: home.digest, attachments: [] }], presence: null, sequence: 1, committed: 10 }; },
+    read: async () => { if (++reads === 1) { firstRead.resolve(); return firstRows.promise; } secondRead.resolve(); return lateRows.promise; },
   };
   let kingdom: DurableKingdom | undefined;
+  let hold: DurableKingdomHold | undefined;
   try {
-    kingdom = await DurableKingdom.open(repository, outbox, kingdomId, { world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] });
+    const services = createDurableRealmServices({ repository, outbox,
+      auth: { authenticate: async () => principal, current: async () => true },
+      kingdom: async (id, state) => {
+        expect(id).toBe(kingdomId); expect(state).toBe(initial);
+        expect(state.homes[home.id]!.blueprint).toBe(VOXEL_FIXTURE);
+        openingOrder.push('geometry');
+        return { world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] };
+      },
+    });
+    hold = await services.retain(kingdomId); kingdom = hold.kingdom;
+    expect(openingOrder).toEqual(['acquire', 'load', 'geometry', 'outbox', 'projection']);
+    // Cold founded entry reads the real delivered checkpoint before a room or principal is admitted.
+    expect(kingdom.publicCheckpoint()).toEqual(kingdom.bootstrap(principal));
+    expect(kingdom.publicCheckpoint()).toMatchObject({ throughCursor: 10, current: [{ type: 'home', revision: 'home:1' }] });
     const effects: RealmRoomEffects = { close: vi.fn(), readWalker: () => ({ x: 0, y: 0, z: 6, vx: 0, vy: 0, vz: 0, grounded: true, yaw: 0, distance: 0, collisionRevision: 1 }),
       placeWalker: vi.fn(() => true), allowWalking: vi.fn(), adoptWorld: vi.fn() };
     kingdom.bindRoom(effects); kingdom.lifecycle('join', principal, 'walker:1', 0);
@@ -60,6 +76,7 @@ it('keeps bootstrap at the delivered prefix and closes on the deadline despite a
       message: { type: 'home', plotId: home.id, revision: 'home:2', assetHash: home.digest, attachments: [] } }]);
     await secondRead.promise;
     expect(checkpoints).toMatchObject([{ throughSequence: 2, throughCursor: 11, current: [{ type: 'home', revision: 'home:2' }] }]);
+    expect(kingdom.publicCheckpoint()).toEqual(checkpoints[0]);
     expect(deliveries[0]?.cursor).toBe(11);
     await vi.advanceTimersByTimeAsync(13_001);
     expect(effects.close).toHaveBeenCalledExactlyOnceWith('authority-lost');
@@ -74,7 +91,38 @@ it('keeps bootstrap at the delivered prefix and closes on the deadline despite a
     expect(kingdom.bootstrap(principal)).toMatchObject({ throughSequence: 2, throughCursor: 11, current: [{ type: 'home', revision: 'home:2' }] });
   } finally {
     firstRows.resolve([]); lateRows.resolve([]); renewal.resolve(lease);
-    await kingdom?.dispose();
+    await hold?.release();
     clock.mockRestore(); vi.useRealTimers();
   }
+});
+
+it('prepares a cold public checkpoint without a walker, but holds while its delivery acknowledgement fails', async () => {
+  const kingdomId = KingdomIdSchema.parse('999000001'), initial = { ...createRealmState(kingdomId, 'simulated'), sequence: 1 };
+  const lease: RealmWriterLease = { kingdomId, epoch: 'cold-reader', expiresAt: Date.now() + 15_000 };
+  const acquire = vi.fn(async () => lease), authenticate = vi.fn();
+  const repository: DurableRepository = {
+    leaseMs: 15_000, acquire, renew: async () => ({ ...lease, expiresAt: Date.now() + 15_000 }), load: async () => initial,
+    committedState: () => initial, execute: async () => ({ status: 'committed', sequence: 1, at: 0 }), lookup: async () => null,
+    loadIngress: async () => null, executeIngress: async () => ({ status: 'unchanged', reason: 'unused' }),
+    snapshot: async () => 1, release: async () => {},
+  };
+  const row: RealmOutboxRow = { id: 11, sequence: 1, eventId: 'published:11', plotId: 'plot:1',
+    message: { type: 'home', plotId: 'plot:1', revision: 'home:2', assetHash: 'a'.repeat(64), attachments: [] } };
+  let refuseAck = true;
+  const outbox: RealmOutboxStore = {
+    open: async () => 10, prefix: async () => ({ homes: [], presence: null, sequence: 0, committed: 11 }),
+    read: async (_id, after) => after < 11 ? [row] : [],
+    acknowledge: async () => { if (refuseAck) throw new Error('SIMULATED unavailable acknowledgement'); },
+  };
+  const services = createDurableRealmServices({ repository, outbox, auth: { authenticate, current: async () => true },
+    kingdom: () => ({ world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] }),
+  });
+  const hold = await services.retain(kingdomId);
+  try {
+    expect(hold.kingdom.publicCheckpoint()).toMatchObject({ throughCursor: 10, current: [] });
+    await expect(hold.kingdom.preparePublicCheckpoint()).rejects.toBeInstanceOf(RealmBusyError);
+    refuseAck = false;
+    expect(await hold.kingdom.preparePublicCheckpoint()).toMatchObject({ throughCursor: 11, current: [row.message] });
+    expect(acquire).toHaveBeenCalledOnce(); expect(authenticate).not.toHaveBeenCalled();
+  } finally { await hold.release(); }
 });

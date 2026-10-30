@@ -203,6 +203,18 @@ describe('the camera stays out of solids', () => {
     expect(rig.clearance).not.toBeNull();
   });
 
+  for (const { width, height } of SIZES) it(`keeps an upward-looking near plane below a ceiling at the body crown at ${width}×${height}`, () => {
+    const { camera, rig, aspect } = rigAt(width, height, 0);
+    const ceiling = box([-4, WALK_BODY.height, -4], [4, 3, 4]);
+    const world = worldOf([ground, ceiling]);
+    rig.orbit(0, (-.5 - SHOULDER.pitch) / SHOULDER.orbitPitch * height, height);
+    run(rig, camera, [0, 0, 0], aspect, world, 2);
+    expect(clipsInto(camera, world.boxes)).toBeUndefined();
+    rig.zoom(-5000);
+    run(rig, camera, [0, 0, 0], aspect, world, 120);
+    expect(clipsInto(camera, world.boxes)).toBeUndefined();
+  });
+
   for (const { width, height } of SIZES) it(`keeps a short boom over the shoulder, citizen low and left, at ${width}×${height}`, () => {
     const { camera, rig, aspect } = rigAt(width, height, 0);
     const feet: Vec3 = [0, 0, 0];

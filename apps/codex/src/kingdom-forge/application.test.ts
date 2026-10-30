@@ -19,7 +19,7 @@ const draft: ForgeDraft = {
 const pass = { outcome: 'pass' as const, reason: 'passed', records: [{ judge: 'controlled-test-judge', status: 'complete' }] };
 
 /** Controlled authority only for this test. No test authorization implementation is exported to applications. */
-function fixture() {
+function fixture(origin: KingdomForgeAuthority['origin'] = 'live') {
   const home = createHome('house', 'hearth', 0), controller = new AbortController();
   const reservation: ForgeReservation = {
     kingdomId: command.kingdomId, personId: command.personId, slot: 7, home, family: 'hearth',
@@ -34,6 +34,7 @@ function fixture() {
     judgeWords: vi.fn(async () => pass), draft: vi.fn(async () => draft), judgeResult: vi.fn(async () => pass),
   };
   const authority: KingdomForgeAuthority = {
+    origin,
     reserve: vi.fn(async () => durable ? { kind: 'already-committed' as const } : { kind: 'reserved' as const, reservation }),
     revalidate: vi.fn(async () => ({ kind: 'current' as const, native: reservation })),
     commit: vi.fn(async (input, lease) => {
@@ -91,6 +92,20 @@ describe('the kingdom Forge application', () => {
     expect(accepted.providers.judgeWords).toHaveBeenCalledTimes(1);
     expect(accepted.authority.commit).toHaveBeenCalledTimes(1);
     expect(accepted.publicEvents.filter(event => event.type === 'committed')).toHaveLength(1);
+
+    // The exact same coordinator can rehearse against a simulated room without claiming a live creation.
+    const rehearsal = fixture('simulated');
+    expect(await rehearsal.run(command, rehearsal.lease)).toMatchObject({ kind: 'committed', attachment: {
+      provenance: { source: 'simulated' },
+    } });
+    expect(rehearsal.durable?.provenance.source).toBe('simulated');
+    expect(rehearsal.publicEvents.find(event => event.type === 'committed')).toMatchObject({
+      attachment: { provenance: { source: 'simulated' } },
+    });
+    const unbound = fixture();
+    Object.defineProperty(unbound.authority, 'origin', { value: undefined });
+    expect(await unbound.run(command, unbound.lease)).toEqual({ kind: 'cold' });
+    expect(unbound.authority.reserve).not.toHaveBeenCalled();
 
     const rejected = fixture();
     vi.mocked(rejected.providers.judgeWords).mockResolvedValue({ ...pass, outcome: 'refuse' });

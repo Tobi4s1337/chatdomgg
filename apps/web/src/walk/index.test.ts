@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { WALK_BUTTON, type CollisionWorld, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
+import { WALK_BUTTON, type CollisionWorld, type PlayerState, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
 import type { RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkRealm } from './index';
 
@@ -23,11 +23,11 @@ function signal() {
 }
 function realm(at: { x: number; y: number; z: number; yaw: number }) {
   const sent: WalkInput[] = [];
-  const self = { ...at, speed: 0 };
+  const self = { ...at, speed: 0, placement: 0 };
   const onLeave = signal(), onDrop = signal();
   const fake: WalkRealm = {
     selfId: 'me',
-    room: { onLeave, onDrop, state: { collisionRevision: 7, walkers: { get: id => id === 'me' ? { x: self.x, y: self.y, z: self.z, yaw: self.yaw } : undefined } } },
+    room: { onLeave, onDrop, state: { collisionRevision: 7, walkers: { get: id => id === 'me' ? { x: self.x, y: self.y, z: self.z, yaw: self.yaw, placement: self.placement } : undefined } } },
     tick(_now, input) {
       sent.push({ ...input });
       const poses: RealmWalkerPose[] = [
@@ -326,8 +326,35 @@ describe('the walk controller', () => {
     expect(controller.debug.camera.clearance).toBeNull();
   });
 
+  it('eases a predicted step down without moving collision feet or drawing the head into the next lintel', () => {
+    const lintel: SolidBox = { min: [2.5, 1.8, 8], max: [4, 3, 10] };
+    const collision: CollisionWorld = { revision: 7, query: () => [lintel] };
+    const { controller, fake, self } = setup(390, 844, undefined, collision);
+    self.y = .5;
+    const predicted: PlayerState = { x: self.x, y: .5, z: self.z, vx: 0, vy: 0, vz: 0, grounded: true, yaw: self.yaw, distance: 0, collisionRevision: 7 };
+    Object.defineProperty(fake, 'predicted', { value: predicted });
+    controller.frame(0);
+    self.y = predicted.y = 0;
+    expect(controller.frame(16).find(p => p.self)!.y).toBeGreaterThan(0);
+    expect(predicted.y).toBe(0);
+    // The next step of horizontal travel is under a lintel that clears the real body, but not its easing.
+    self.x = predicted.x = 3;
+    expect(controller.frame(32).find(p => p.self)!.y).toBe(0);
+    self.y = predicted.y = .2; predicted.grounded = false;
+    expect(controller.frame(48).find(p => p.self)!.y).toBe(.2);
+    self.x = predicted.x = 2; self.y = predicted.y = .5; predicted.grounded = true;
+    controller.frame(64);
+    self.y = predicted.y = 0;
+    expect(controller.frame(80).find(p => p.self)!.y).toBeGreaterThan(0);
+    // A relocation at identical feet height must also drop residual body and camera stair easing.
+    self.placement++;
+    expect(controller.frame(96).find(p => p.self)!.y).toBe(0);
+    controller.dispose();
+  });
+
   it.each(['blur', 'contextmenu'])('drops a queued phone jump and every held input on %s', event => {
-    const { controller, keyboard, touch, lockDocument, sent } = setup(390, 844, undefined, true);
+    const { controller, keyboard, touch, lockDocument, sent, fake } = setup(390, 844, undefined, true);
+    const clearInput = vi.fn(); Object.assign(fake, { clearInput });
     controller.frame(0);
     key(keyboard, 'keydown', 'KeyW');
     key(keyboard, 'keydown', 'KeyV');
@@ -337,6 +364,7 @@ describe('the walk controller', () => {
     controller.frame(16);
     expect(sent.at(-1)).toMatchObject({ moveX: 0, moveZ: 0, buttons: 0 });
     expect([controller.debug.look, controller.debug.stick, lockDocument.pointerLockElement]).toEqual(['free', null, null]);
+    expect(clearInput).toHaveBeenCalledOnce();
     controller.dispose();
   });
 });

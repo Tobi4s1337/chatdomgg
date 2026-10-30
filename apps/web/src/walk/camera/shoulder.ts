@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { CollisionWorld } from '@chatdom/shared/realm';
+import { WALK_BODY, type CollisionWorld } from '@chatdom/shared/realm';
 import { angleBetween, wrapAngle } from '../input/direction';
 import { clearBoom, nearFootprint, RECOVER_RATE, type BoomPoint } from './occlusion';
 
@@ -158,8 +158,9 @@ export interface ShoulderRig {
   /**
    * Place `camera` for the citizen's rendered feet. With a collision world the boom is swept first: a solid
    * pulls the camera in before this very frame is drawn, and only clear air lets it ease back out.
+   * Optional `cameraY` supplies step-only easing without moving the feet used for the collision anchor.
    */
-  apply(camera: THREE.PerspectiveCamera, feet: Vec3, aspect: number, world?: CollisionWorld | null): ShoulderPose;
+  apply(camera: THREE.PerspectiveCamera, feet: Vec3, aspect: number, world?: CollisionWorld | null, cameraY?: number): ShoulderPose;
   /** Entry framing behind `heading`, with all eased state dropped. */
   reset(heading: number): void;
   /** Keep the chosen view but drop easing, so the next frame lands exactly on the citizen (camera handed back). */
@@ -207,22 +208,29 @@ export function createShoulderRig(heading = 0): ShoulderRig {
       if (Math.abs(delta) > 2) return;
       yaw = wrapAngle(yaw + delta * (1 - Math.exp(-SHOULDER.followRate * Math.min(1, speed / 4) * step)));
     },
-    apply(camera, feet, aspect, world) {
-      if (followY === null) followY = feet[1];
+    apply(camera, feet, aspect, world, cameraY) {
+      // A caller with predicted grounded state supplies step-only easing; do not smooth jumps a second time.
+      if (cameraY !== undefined && Number.isFinite(cameraY)) followY = cameraY;
+      else if (followY === null) followY = feet[1];
       else {
         followY = Math.max(feet[1] - SHOULDER.heightLag, Math.min(feet[1] + SHOULDER.heightLag, followY));
         followY += (feet[1] - followY) * (1 - Math.exp(-SHOULDER.heightRate * lastStep));
       }
       let limit = distance;
+      let headOffset = 0;
       clearance = null;
       if (world) {
         // camera.zoom narrows the drawn frustum; the footprint uses the narrowed angle.
         const zoom = camera.zoom || 1;
         const point = (d: number, y: number): BoomPoint => {
-          const p = shoulderPose([feet[0], y, feet[2]], { yaw, pitch, distance: d }, aspect);
+          const p = shoulderPose([feet[0], y + headOffset, feet[2]], { yaw, pitch, distance: d }, aspect);
           const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(p.fov) / 2) / zoom));
           return { distance: d, eye: p.eye, footprint: nearFootprint(p.direction, fov, aspect, p.shift, camera.near) };
         };
+        // Looking up can put the near plane above the crown even when the real head is clear. Lower the
+        // camera within the supported body envelope so the zero-boom fallback is itself a safe view.
+        const crown = point(0, feet[1]);
+        headOffset = Math.min(0, feet[1] + WALK_BODY.height - crown.eye[1] - crown.footprint.max[1]);
         const lagged = followY;
         const clear = clearBoom(world, point(0, feet[1]), d => point(d, lagged), distance);
         if (clear.settle) followY = feet[1];
@@ -236,7 +244,7 @@ export function createShoulderRig(heading = 0): ShoulderRig {
         if (limit - drawn < 1e-3) drawn = limit;
       }
       tracking = drawn >= distance - 1e-9;
-      const pose = shoulderPose([feet[0], followY, feet[2]], { yaw, pitch, distance: drawn }, aspect);
+      const pose = shoulderPose([feet[0], followY + headOffset, feet[2]], { yaw, pitch, distance: drawn }, aspect);
       camera.position.set(...pose.eye);
       camera.up.set(0, 1, 0);
       camera.lookAt(look.set(pose.eye[0] + pose.direction[0], pose.eye[1] + pose.direction[1], pose.eye[2] + pose.direction[2]));

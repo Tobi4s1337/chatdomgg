@@ -9,3 +9,5 @@ Note from Tobias: CB02 is accepted on the 17:08 evidence. The full-suite failure
 review: CB02 typecheck, lint, focused scenario and build passed; full rerun interrupted under load; build integration and light-field timed out alone at default limits. Tobias accepted the earlier completed run and isolated light-field pass; build integration changed on main since fork. Rerun after merge.
 
 2026-10-30 integration/kingdom-queue: mounted accepted CB02 policy in kingdom citizen scene with fixed steps, actual presence/motion goals and renderer overlays; active build citizen excluded; source/reset/dispose clears transient policy. Typecheck, focused behaviours/citizens/build tests, lint and production build pass. Main still owns serial integrated visual judgment.
+
+2026-10-31 founder efficiency decision: Continue the live-evening lane with ONE worker; take one task at a time. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.

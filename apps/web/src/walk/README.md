@@ -21,9 +21,8 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
   `CollisionWorld` from realm wiring (spec 36) before `connectRealm` can join the kingdom's own room. The
   reference court (`connectReferenceRealm`, `REALM_SIMULATED=1`) is SIMULATED and is not the kingdom.
 - **Camera collision.** The boom and near plane are swept against the `collision` world passed to the
-  controller. The reference court binding does not pass one yet (`debug.camera.collisionRevision` is `null`
-  there), so its camera can still back through the court wall; the integrator adds `collision: REFERENCE_WORLD`
-  there and the kingdom's founded world in the kingdom binding.
+  controller. The reference court passes `collision: REFERENCE_WORLD`; the kingdom still needs its founded
+  world. The camera root stays below the body's crown when looking up under a tight ceiling.
 - **Prediction and collision revisions (WC06).** The realm client takes a revision source, holds prediction
   while a revision is missing and resets on adoption; see "Realm client" below.
 - **Backed against a wall (WC07).** A boom a solid pulled in fades the local citizen from further out
@@ -90,6 +89,13 @@ interface WalkController {
 still ticks with an idle input, keeping prediction and the other walkers moving behind a menu. It never
 disposes the realm client; whoever connected it disconnects it (and calls `release()` first so nothing stays
 held).
+
+The controller reads `realm.predicted` after ticking, when supplied by the real client. Grounded step offsets
+come from its exact `y`/`grounded`, never the delayed room schema; the returned local body eases only down, and
+the camera receives its own eased height while collision stays anchored to the feet. Jumps, revision changes
+and camera takeovers reset the offsets. A nearby lintel cancels body easing before the head can enter it.
+Wrappers must forward the `predicted` getter and `clearInput()` alongside `tick` and `room`, as the reference
+court does. A directly supplied `RealmClient` already provides both.
 
 `WalkDebug` is what the capture reads: `ready` (the camera stands on the connected citizen), `owner`, `selfId`,
 `self` (rendered pose), `authority` (room state for the local walker), `peers` (others as drawn, at most 4 Hz),
@@ -217,6 +223,7 @@ interface RealmClient {
   tick(now, input): readonly RealmWalkerPose[];  // once per frame: reconcile, stage due inputs, then render poses
   readonly predicted: Readonly<PlayerState>;     // local walker, every PLAYER_FIELDS field, exact and unsmoothed
   readonly predicting: boolean;                  // false while the room's revision is not available here
+  clearInput(): void;                           // drop a jump awaiting its first fixed input on takeover
   /* selfId, room, dispose() unchanged */
 }
 ```
@@ -237,10 +244,15 @@ interface RealmClient {
   replaced solids.
 - **Placements.** A correction over 2 m (`PLACEMENT_SNAP_M`, above 7 m/s × one 200 ms patch) is a placement: it is
   drawn at once instead of glided through whatever lies between. Ordinary corrections ease out over `smoothMs` 80.
+  A same-revision `recoverWalker` placement under 2 m currently also eases for 80 ms: the client cannot distinguish
+  it from an ordinary prediction correction and may draw across a solid between the old and recovered positions.
+  Realm authority must supply a real placement signal/serial before actual kingdom recovery is bound; no parallel
+  movement sequence or client-guessed placement protocol is added here.
 - **Yaw** of the local walker is drawn from the exact predicted byte: smoothing a byte that wraps at 256 would
   spin the citizen the long way round.
 - **Takeover.** While another owner holds the camera the controller keeps calling `tick` with an idle input, so
-  prediction, acknowledgements and the other walkers stay current; a dropped connection clears a latched jump. On
+  prediction, acknowledgements and the other walkers stay current; `clearInput()` discards a jump waiting for a
+  due fixed input on blur, menu, reset or disposal. A dropped connection also clears it. On
   return nothing is replayed: the next due input simply carries what is held then.
 
 `realm-predict.test.ts` checks all of this against the real room, uWS transport and SDK clients.
