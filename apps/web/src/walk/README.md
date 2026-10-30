@@ -24,6 +24,8 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
   controller. The reference court binding does not pass one yet (`debug.camera.collisionRevision` is `null`
   there), so its camera can still back through the court wall; the integrator adds `collision: REFERENCE_WORLD`
   there and the kingdom's founded world in the kingdom binding.
+- **Prediction and collision revisions (WC06).** The realm client takes a revision source, holds prediction
+  while a revision is missing and resets on adoption; see "Realm client" below.
 
 ## Modules
 
@@ -131,8 +133,8 @@ The integrator applies these call sites in `apps/web/src/kingdom/scene.ts` and `
 edit them. Entry URL proposed for the binding: **`/?walk=1`** on the kingdom page, which is what
 `capture.mjs` opens by default (`--path` changes it if the integrator chooses another).
 
-1. **Connect.** With realm wiring's kingdom entry and founded collision world:
-   `const realm = await connectRealm(endpoint, kingdomEntry, kingdomCollisionWorld, sessionStorage);`
+1. **Connect.** With realm wiring's kingdom entry and its collision revisions (see "Realm client" below):
+   `const realm = await connectRealm(endpoint, kingdomEntry, kingdomCollision, sessionStorage);`
 2. **Create** after the scene has loaded (camera, canvas and citizen renderer exist):
    ```ts
    import { createWalkController } from '../walk';
@@ -168,6 +170,55 @@ edit them. Entry URL proposed for the binding: **`/?walk=1`** on the kingdom pag
      integrator calls `release()` while the gate is shown and `resume()` once walking again.
 6. **Dispose** with the scene: `walk.dispose()` then `realm.dispose()`.
 7. **Test hook**, beside `__chatdomKingdom` in `index.tsx`: `window.__chatdomWalk = walk.debug`.
+
+## Realm client: prediction and collision revisions
+
+`apps/web/src/realm/client.ts` (the movement/Predict hunk; auth, join, reconnect and storage stay main's) runs the
+shared `stepPlayer` through Colyseus `Predict`. It adds no queue, sequence or acknowledgement of its own.
+
+```ts
+interface RealmCollision { world(revision: number): CollisionWorld | null }   // realm wiring supplies the kingdom's
+connectRealm(endpoint, entry, collision: CollisionWorld | RealmCollision, storage?): Promise<RealmClient>
+interface RealmClient {
+  tick(now, input): readonly RealmWalkerPose[];  // once per frame: reconcile, stage due inputs, then render poses
+  readonly predicted: Readonly<PlayerState>;     // local walker, every PLAYER_FIELDS field, exact and unsmoothed
+  readonly predicting: boolean;                  // false while the room's revision is not available here
+  /* selfId, room, dispose() unchanged */
+}
+```
+
+- **Collision source.** `world(revision)` returns exactly that revision's immutable world or `null` while it is
+  still on its way (start fetching it then; the client asks again every frame and as soon as the room
+  broadcasts `revision`). A world claiming another revision is refused. A plain `CollisionWorld` is a source of
+  one revision; connecting it to a room on another revision still fails at once, as before.
+- **Frame order.** `tick(now, input)`: (1) if the room has adopted a new revision for this walker, reset the
+  reconciler from the room's placement, forget inputs sent before it and clear a latched jump; (2)
+  `predict.tick(now)` reconciles and returns `n` due fixed steps; (3) send exactly `n` inputs, the jump only on
+  the first, each stamped with the room's current `collisionRevision` and passed through `sanitizeWalkInput`;
+  (4) read poses from `predict.value`. Nothing may read poses between (2) and (3). The controller's `frame(now)`
+  is the only caller.
+- **Revision transition.** The room places every walker on the new revision and refuses inputs of the old one.
+  Prediction steps an input only when its revision equals the walker's and that world is here; otherwise it holds
+  and the walker is drawn where the room puts it (latency, never air). Old inputs are never replayed against
+  replaced solids.
+- **Placements.** A correction over 2 m (`PLACEMENT_SNAP_M`, above 7 m/s × one 200 ms patch) is a placement: it is
+  drawn at once instead of glided through whatever lies between. Ordinary corrections ease out over `smoothMs` 80.
+- **Yaw** of the local walker is drawn from the exact predicted byte: smoothing a byte that wraps at 256 would
+  spin the citizen the long way round.
+- **Takeover.** While another owner holds the camera the controller keeps calling `tick` with an idle input, so
+  prediction, acknowledgements and the other walkers stay current; a dropped connection clears a latched jump. On
+  return nothing is replayed: the next due input simply carries what is held then.
+
+`realm-predict.test.ts` checks all of this against the real room, uWS transport and SDK clients.
+`realm-check.mjs` repeats it in two real browsers on the SIMULATED court (a diagnostic, not kingdom acceptance):
+
+```sh
+node apps/web/src/walk/realm-check.mjs [--realm-port 5188] [--web-port 5189] [--out shots/walk/wc06]
+```
+
+It starts the actual `KingdomRoom` with the SIMULATED reference services (memory only) on the realm port, so it
+can publish revision 2 with a wall like an authority, and a vite dev server for `/-/realm` on the web port; Chrome
+maps the page's `:5191` to the realm port. It stops both when done and writes `route.json` beside the shots.
 
 ## Feel
 
