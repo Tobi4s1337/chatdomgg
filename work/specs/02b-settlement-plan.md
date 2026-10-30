@@ -329,3 +329,24 @@ The complete `SettlementPlan` generator remains under review. Its first six-home
 by main after inspecting actual generated geometry: repeated pods are another suburb. Plan real connected
 roads first, then fit individual street frontages and occasional irregular greens. The small castle/helper
 freeze does not certify the new town's roads, density, grading, light field or camera.
+
+### Street topology review, 2026-10-30
+
+The next candidate met the 240-home field domain, but its parallel spines, repeated crossbars and whole-route
+frontage fill produced the rectangular plan in `work/evidence/kingdom/settlement-review/rejected-grid.png`.
+Main rejected that topology. The castle/market and reusable lot, route, grade and clearance machinery remain
+useful; the new generator is still unfrozen.
+
+Compose a sparse network around irregular landmark junctions and at least two distinct residential departures
+from the market. Prefer unequal branches, a few useful loops, and short buildable runs separated by bends or
+greens. Candidate triangulation is a proposal for an **uncommitted local patch**, never a global graph to refit
+after occupation. A quarter must actually fit 48 compatible full lots and their clear approaches within its
+catchment before acceptance. On growth, earlier roads, grades, lots and ports are fixed obstacles: extend from
+those ports without re-triangulating or smoothing the occupied town. New quarters may grow beyond the render
+window and the 240-home witness's field envelope.
+
+The measured witness allows roughly322×293m of active lot bounds before the16m field spill on each side;
+area alone proves no fit. Cardinal lots on diagonal roads can require more frontage, so retain useful short
+near-cardinal runs and use exact geometry rather than a fixed projected pitch. Prove 2027 and growth beyond
+the prior planning horizon, exact old-geometry preservation, and a 240-home field fit. Inspect a diagnostic
+with quarter colors, full reservations, approaches and ports before switching any renderer consumer.
