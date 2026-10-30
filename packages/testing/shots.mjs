@@ -21,6 +21,10 @@ try {
     if (await page.locator('.kingdom-gate button').count()) throw new Error(`${name}: kingdom error gate: ${await page.locator('.kingdom-gate').innerText()}${errors.length ? `\n${errors.join('\n')}` : ''}`);
     if (kingdom && await page.locator('[data-chatdom-kingdom]').count() !== 1) throw new Error('Kingdom screenshot requires the real kingdom root');
     if (area === 'atlas' && await page.locator('[data-chatdom-atlas]').count() !== 1) throw new Error('Atlas screenshot requires the real Atlas root');
+    if (area === 'atlas') {
+      const atlas = page.locator('[data-chatdom-atlas]');
+      if (await atlas.getAttribute('data-state') !== 'ready' || !await atlas.getAttribute('data-preview') || !await atlas.getAttribute('data-revision')) throw new Error(`Atlas screenshot requires a drawn survey, not a failure state: ${await atlas.getAttribute('data-state')}`);
+    }
     await page.evaluate(() => document.fonts.ready);
     for (const [width, height] of sizes) {
       await page.setViewportSize({ width, height });

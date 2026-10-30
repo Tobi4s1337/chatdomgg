@@ -102,3 +102,10 @@ Interface Sounds as CC0 (`e-atlas/README.md:150`). The corresponding source asse
 recorded before importing individual assets; the prototype's packed atlas is not a license inventory. Prefer a small
 repacked, reviewed CC0 stamp subset and an original heraldry system to dragging in a charged icon library. No
 unlicensed font, image or sound may be shipped merely because it exists in the old prototype.
+
+**A02 inventory (2026-10-30).** Shipped: 81 K. M. Alexander #NoBadMaps stamps (CC0 1.0, pack versions and every
+source path in `apps/web/src/atlas/assets/LICENSES.md` and `stamps.json`, repacked by
+`apps/surveyor/tools/pack-stamps.py`), IM Fell English / English SC and Alegreya (SIL OFL 1.1, google/fonts
+`6157dfaa`, built by `apps/surveyor/tools/build-atlas-fonts.sh`, licence texts beside the files). Heraldry is our own
+(`apps/web/src/atlas/heraldry/`, own charge paths); no game-icons.net charges and no prototype atlas were imported.
+`THIRD_PARTY.md` entries for these are requested from main.

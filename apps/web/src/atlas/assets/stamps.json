@@ -1,0 +1,1870 @@
+{
+ "version": 1,
+ "width": 1664,
+ "height": 1597,
+ "stamps": [
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-large-mountain-004",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Large Mountains/Large Mountain 004.png",
+   "w": 128,
+   "h": 87,
+   "ink": {
+    "x": 964,
+    "y": 1069,
+    "w": 128,
+    "h": 87
+   },
+   "fill": {
+    "x": 1094,
+    "y": 1069,
+    "w": 128,
+    "h": 87
+   },
+   "anchor": {
+    "x": 0.4922,
+    "y": 0.9655
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-large-mountain-008",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Large Mountains/Large Mountain 008.png",
+   "w": 128,
+   "h": 78,
+   "ink": {
+    "x": 1516,
+    "y": 1167,
+    "w": 128,
+    "h": 78
+   },
+   "fill": {
+    "x": 0,
+    "y": 1254,
+    "w": 128,
+    "h": 78
+   },
+   "anchor": {
+    "x": 0.4688,
+    "y": 0.8718
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-large-mountain-010",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Large Mountains/Large Mountain 010.png",
+   "w": 128,
+   "h": 107,
+   "ink": {
+    "x": 382,
+    "y": 956,
+    "w": 128,
+    "h": 107
+   },
+   "fill": {
+    "x": 512,
+    "y": 956,
+    "w": 128,
+    "h": 107
+   },
+   "anchor": {
+    "x": 0.4883,
+    "y": 0.9439
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-large-mountain-013",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Large Mountains/Large Mountain 013.png",
+   "w": 128,
+   "h": 93,
+   "ink": {
+    "x": 322,
+    "y": 1069,
+    "w": 128,
+    "h": 93
+   },
+   "fill": {
+    "x": 452,
+    "y": 1069,
+    "w": 128,
+    "h": 93
+   },
+   "anchor": {
+    "x": 0.5117,
+    "y": 0.9462
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-medium-mountain-001",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Medium Mountains/Medium Mountain 001.png",
+   "w": 108,
+   "h": 84,
+   "ink": {
+    "x": 212,
+    "y": 1167,
+    "w": 108,
+    "h": 84
+   },
+   "fill": {
+    "x": 322,
+    "y": 1167,
+    "w": 108,
+    "h": 84
+   },
+   "anchor": {
+    "x": 0.5093,
+    "y": 0.9405
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-medium-mountain-003",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Medium Mountains/Medium Mountain 003.png",
+   "w": 108,
+   "h": 79,
+   "ink": {
+    "x": 1296,
+    "y": 1167,
+    "w": 108,
+    "h": 79
+   },
+   "fill": {
+    "x": 1406,
+    "y": 1167,
+    "w": 108,
+    "h": 79
+   },
+   "anchor": {
+    "x": 0.5093,
+    "y": 0.9367
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-medium-mountain-007",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Medium Mountains/Medium Mountain 007.png",
+   "w": 108,
+   "h": 102,
+   "ink": {
+    "x": 1038,
+    "y": 956,
+    "w": 108,
+    "h": 102
+   },
+   "fill": {
+    "x": 1148,
+    "y": 956,
+    "w": 108,
+    "h": 102
+   },
+   "anchor": {
+    "x": 0.4815,
+    "y": 0.9314
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-medium-mountain-008",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Medium Mountains/Medium Mountain 008.png",
+   "w": 108,
+   "h": 80,
+   "ink": {
+    "x": 856,
+    "y": 1167,
+    "w": 108,
+    "h": 80
+   },
+   "fill": {
+    "x": 966,
+    "y": 1167,
+    "w": 108,
+    "h": 80
+   },
+   "anchor": {
+    "x": 0.5093,
+    "y": 0.9625
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-medium-mountain-016",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Medium Mountains/Medium Mountain 016.png",
+   "w": 108,
+   "h": 96,
+   "ink": {
+    "x": 1470,
+    "y": 956,
+    "w": 108,
+    "h": 96
+   },
+   "fill": {
+    "x": 0,
+    "y": 1069,
+    "w": 108,
+    "h": 96
+   },
+   "anchor": {
+    "x": 0.5093,
+    "y": 0.9688
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-medium-mountain-023",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Medium Mountains/Medium Mountain 023.png",
+   "w": 108,
+   "h": 65,
+   "ink": {
+    "x": 728,
+    "y": 1334,
+    "w": 108,
+    "h": 65
+   },
+   "fill": {
+    "x": 838,
+    "y": 1334,
+    "w": 108,
+    "h": 65
+   },
+   "anchor": {
+    "x": 0.5046,
+    "y": 0.9385
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-medium-mountain-028",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Medium Mountains/Medium Mountain 028.png",
+   "w": 108,
+   "h": 80,
+   "ink": {
+    "x": 1076,
+    "y": 1167,
+    "w": 108,
+    "h": 80
+   },
+   "fill": {
+    "x": 1186,
+    "y": 1167,
+    "w": 108,
+    "h": 80
+   },
+   "anchor": {
+    "x": 0.4583,
+    "y": 0.9375
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-small-mountain-005",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Small Mountains/Small Mountain 005.png",
+   "w": 84,
+   "h": 56,
+   "ink": {
+    "x": 1262,
+    "y": 1406,
+    "w": 84,
+    "h": 56
+   },
+   "fill": {
+    "x": 1348,
+    "y": 1406,
+    "w": 84,
+    "h": 56
+   },
+   "anchor": {
+    "x": 0.256,
+    "y": 0.9643
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-small-mountain-012",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Small Mountains/Small Mountain 012.png",
+   "w": 84,
+   "h": 67,
+   "ink": {
+    "x": 556,
+    "y": 1334,
+    "w": 84,
+    "h": 67
+   },
+   "fill": {
+    "x": 642,
+    "y": 1334,
+    "w": 84,
+    "h": 67
+   },
+   "anchor": {
+    "x": 0.4702,
+    "y": 0.9552
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-small-mountain-013",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Small Mountains/Small Mountain 013.png",
+   "w": 84,
+   "h": 53,
+   "ink": {
+    "x": 0,
+    "y": 1469,
+    "w": 84,
+    "h": 53
+   },
+   "fill": {
+    "x": 86,
+    "y": 1469,
+    "w": 84,
+    "h": 53
+   },
+   "anchor": {
+    "x": 0.494,
+    "y": 0.9811
+   }
+  },
+  {
+   "group": "mountain",
+   "name": "mountain-lumbia-small-mountain-015",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Small Mountains/Small Mountain 015.png",
+   "w": 84,
+   "h": 58,
+   "ink": {
+    "x": 1090,
+    "y": 1406,
+    "w": 84,
+    "h": 58
+   },
+   "fill": {
+    "x": 1176,
+    "y": 1406,
+    "w": 84,
+    "h": 58
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.931
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-001",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 001.png",
+   "w": 104,
+   "h": 36,
+   "ink": {
+    "x": 264,
+    "y": 1524,
+    "w": 104,
+    "h": 36
+   },
+   "fill": {
+    "x": 370,
+    "y": 1524,
+    "w": 104,
+    "h": 36
+   },
+   "anchor": {
+    "x": 0.5096,
+    "y": 0.9167
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-005",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 005.png",
+   "w": 104,
+   "h": 41,
+   "ink": {
+    "x": 1164,
+    "y": 1469,
+    "w": 104,
+    "h": 41
+   },
+   "fill": {
+    "x": 1270,
+    "y": 1469,
+    "w": 104,
+    "h": 41
+   },
+   "anchor": {
+    "x": 0.5096,
+    "y": 0.9512
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-010",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 010.png",
+   "w": 104,
+   "h": 32,
+   "ink": {
+    "x": 66,
+    "y": 1564,
+    "w": 104,
+    "h": 32
+   },
+   "fill": {
+    "x": 172,
+    "y": 1564,
+    "w": 104,
+    "h": 32
+   },
+   "anchor": {
+    "x": 0.5048,
+    "y": 0.9688
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-015",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 015.png",
+   "w": 104,
+   "h": 36,
+   "ink": {
+    "x": 476,
+    "y": 1524,
+    "w": 104,
+    "h": 36
+   },
+   "fill": {
+    "x": 582,
+    "y": 1524,
+    "w": 104,
+    "h": 36
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9722
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-027",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 027.png",
+   "w": 104,
+   "h": 34,
+   "ink": {
+    "x": 1324,
+    "y": 1524,
+    "w": 104,
+    "h": 34
+   },
+   "fill": {
+    "x": 1430,
+    "y": 1524,
+    "w": 104,
+    "h": 34
+   },
+   "anchor": {
+    "x": 0.5144,
+    "y": 0.9118
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-038",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 038.png",
+   "w": 104,
+   "h": 29,
+   "ink": {
+    "x": 278,
+    "y": 1564,
+    "w": 104,
+    "h": 29
+   },
+   "fill": {
+    "x": 384,
+    "y": 1564,
+    "w": 104,
+    "h": 29
+   },
+   "anchor": {
+    "x": 0.4904,
+    "y": 0.8966
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-039",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 039.png",
+   "w": 104,
+   "h": 35,
+   "ink": {
+    "x": 900,
+    "y": 1524,
+    "w": 104,
+    "h": 35
+   },
+   "fill": {
+    "x": 1006,
+    "y": 1524,
+    "w": 104,
+    "h": 35
+   },
+   "anchor": {
+    "x": 0.5096,
+    "y": 0.9143
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-046",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 046.png",
+   "w": 104,
+   "h": 36,
+   "ink": {
+    "x": 688,
+    "y": 1524,
+    "w": 104,
+    "h": 36
+   },
+   "fill": {
+    "x": 794,
+    "y": 1524,
+    "w": 104,
+    "h": 36
+   },
+   "anchor": {
+    "x": 0.4856,
+    "y": 0.9444
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-050",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 050.png",
+   "w": 104,
+   "h": 35,
+   "ink": {
+    "x": 1112,
+    "y": 1524,
+    "w": 104,
+    "h": 35
+   },
+   "fill": {
+    "x": 1218,
+    "y": 1524,
+    "w": 104,
+    "h": 35
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.9429
+   }
+  },
+  {
+   "group": "hill",
+   "name": "hill-lumbia-hill-063",
+   "source": "lumbia-cartography-brushes-2.0-png-pack/Landforms/Hills/Hill 063.png",
+   "w": 104,
+   "h": 25,
+   "ink": {
+    "x": 622,
+    "y": 1564,
+    "w": 104,
+    "h": 25
+   },
+   "fill": {
+    "x": 728,
+    "y": 1564,
+    "w": 104,
+    "h": 25
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.96
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-small-forest-001",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Small Forest/Small Forest 001.png",
+   "w": 103,
+   "h": 74,
+   "ink": {
+    "x": 814,
+    "y": 1254,
+    "w": 103,
+    "h": 74
+   },
+   "fill": {
+    "x": 919,
+    "y": 1254,
+    "w": 103,
+    "h": 74
+   },
+   "anchor": {
+    "x": 0.3883,
+    "y": 0.9459
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-small-forest-002",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Small Forest/Small Forest 002.png",
+   "w": 104,
+   "h": 78,
+   "ink": {
+    "x": 130,
+    "y": 1254,
+    "w": 104,
+    "h": 78
+   },
+   "fill": {
+    "x": 236,
+    "y": 1254,
+    "w": 104,
+    "h": 78
+   },
+   "anchor": {
+    "x": 0.4663,
+    "y": 0.859
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-small-forest-004",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Small Forest/Small Forest 004.png",
+   "w": 104,
+   "h": 70,
+   "ink": {
+    "x": 1408,
+    "y": 1254,
+    "w": 104,
+    "h": 70
+   },
+   "fill": {
+    "x": 1514,
+    "y": 1254,
+    "w": 104,
+    "h": 70
+   },
+   "anchor": {
+    "x": 0.4615,
+    "y": 0.9286
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-small-forest-005",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Small Forest/Small Forest 005.png",
+   "w": 104,
+   "h": 77,
+   "ink": {
+    "x": 342,
+    "y": 1254,
+    "w": 104,
+    "h": 77
+   },
+   "fill": {
+    "x": 448,
+    "y": 1254,
+    "w": 104,
+    "h": 77
+   },
+   "anchor": {
+    "x": 0.4519,
+    "y": 0.9351
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-small-forest-006",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Small Forest/Small Forest 006.png",
+   "w": 104,
+   "h": 68,
+   "ink": {
+    "x": 344,
+    "y": 1334,
+    "w": 104,
+    "h": 68
+   },
+   "fill": {
+    "x": 450,
+    "y": 1334,
+    "w": 104,
+    "h": 68
+   },
+   "anchor": {
+    "x": 0.4375,
+    "y": 0.8971
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-small-forest-008",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Small Forest/Small Forest 008.png",
+   "w": 104,
+   "h": 81,
+   "ink": {
+    "x": 644,
+    "y": 1167,
+    "w": 104,
+    "h": 81
+   },
+   "fill": {
+    "x": 750,
+    "y": 1167,
+    "w": 104,
+    "h": 81
+   },
+   "anchor": {
+    "x": 0.4712,
+    "y": 0.963
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-small-forest-010",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Small Forest/Small Forest 010.png",
+   "w": 104,
+   "h": 61,
+   "ink": {
+    "x": 1488,
+    "y": 1334,
+    "w": 104,
+    "h": 61
+   },
+   "fill": {
+    "x": 0,
+    "y": 1406,
+    "w": 104,
+    "h": 61
+   },
+   "anchor": {
+    "x": 0.5192,
+    "y": 0.9016
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-small-forest-012",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Small Forest/Small Forest 012.png",
+   "w": 104,
+   "h": 48,
+   "ink": {
+    "x": 780,
+    "y": 1469,
+    "w": 104,
+    "h": 48
+   },
+   "fill": {
+    "x": 886,
+    "y": 1469,
+    "w": 104,
+    "h": 48
+   },
+   "anchor": {
+    "x": 0.4712,
+    "y": 0.8958
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-forest-001",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Forests/Forest 001.png",
+   "w": 92,
+   "h": 87,
+   "ink": {
+    "x": 1224,
+    "y": 1069,
+    "w": 92,
+    "h": 87
+   },
+   "fill": {
+    "x": 1318,
+    "y": 1069,
+    "w": 92,
+    "h": 87
+   },
+   "anchor": {
+    "x": 0.4728,
+    "y": 0.908
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-forest-002",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Forests/Forest 002.png",
+   "w": 92,
+   "h": 59,
+   "ink": {
+    "x": 298,
+    "y": 1406,
+    "w": 92,
+    "h": 59
+   },
+   "fill": {
+    "x": 392,
+    "y": 1406,
+    "w": 92,
+    "h": 59
+   },
+   "anchor": {
+    "x": 0.4402,
+    "y": 0.9322
+   }
+  },
+  {
+   "group": "forest",
+   "name": "forest-mercator-forest-003",
+   "source": "mercator-settlement-png-pack-1.1/Flora/Forests/Forest 003.png",
+   "w": 92,
+   "h": 58,
+   "ink": {
+    "x": 902,
+    "y": 1406,
+    "w": 92,
+    "h": 58
+   },
+   "fill": {
+    "x": 996,
+    "y": 1406,
+    "w": 92,
+    "h": 58
+   },
+   "anchor": {
+    "x": 0.3533,
+    "y": 0.9655
+   }
+  },
+  {
+   "group": "marsh",
+   "name": "marsh-defer-swamp-001",
+   "source": "de-fer-cartography-brushes-2.0-png-pack/Landforms/Swamps/Swamp 001.png",
+   "w": 91,
+   "h": 92,
+   "ink": {
+    "x": 582,
+    "y": 1069,
+    "w": 91,
+    "h": 92
+   },
+   "fill": {
+    "x": 675,
+    "y": 1069,
+    "w": 91,
+    "h": 92
+   },
+   "anchor": {
+    "x": 0.5495,
+    "y": 0.9239
+   }
+  },
+  {
+   "group": "marsh",
+   "name": "marsh-defer-swamp-002",
+   "source": "de-fer-cartography-brushes-2.0-png-pack/Landforms/Swamps/Swamp 002.png",
+   "w": 96,
+   "h": 65,
+   "ink": {
+    "x": 948,
+    "y": 1334,
+    "w": 96,
+    "h": 65
+   },
+   "fill": {
+    "x": 1046,
+    "y": 1334,
+    "w": 96,
+    "h": 65
+   },
+   "anchor": {
+    "x": 0.5052,
+    "y": 0.9692
+   }
+  },
+  {
+   "group": "marsh",
+   "name": "marsh-defer-swamp-003",
+   "source": "de-fer-cartography-brushes-2.0-png-pack/Landforms/Swamps/Swamp 003.png",
+   "w": 96,
+   "h": 91,
+   "ink": {
+    "x": 768,
+    "y": 1069,
+    "w": 96,
+    "h": 91
+   },
+   "fill": {
+    "x": 866,
+    "y": 1069,
+    "w": 96,
+    "h": 91
+   },
+   "anchor": {
+    "x": 0.401,
+    "y": 0.9341
+   }
+  },
+  {
+   "group": "marsh",
+   "name": "marsh-defer-swamp-006",
+   "source": "de-fer-cartography-brushes-2.0-png-pack/Landforms/Swamps/Swamp 006.png",
+   "w": 94,
+   "h": 60,
+   "ink": {
+    "x": 106,
+    "y": 1406,
+    "w": 94,
+    "h": 60
+   },
+   "fill": {
+    "x": 202,
+    "y": 1406,
+    "w": 94,
+    "h": 60
+   },
+   "anchor": {
+    "x": 0.6649,
+    "y": 0.9
+   }
+  },
+  {
+   "group": "capital",
+   "name": "capital-mercator-city-001",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Cities/City 001.png",
+   "w": 124,
+   "h": 128,
+   "ink": {
+    "x": 362,
+    "y": 695,
+    "w": 124,
+    "h": 128
+   },
+   "fill": {
+    "x": 488,
+    "y": 695,
+    "w": 124,
+    "h": 128
+   },
+   "anchor": {
+    "x": 0.4677,
+    "y": 0.7461
+   }
+  },
+  {
+   "group": "capital",
+   "name": "capital-hogenburg-castles-7",
+   "source": "hogenburg-urban-cartography-png-pack/Buildings/Castles/Castles_7.png",
+   "w": 128,
+   "h": 122,
+   "ink": {
+    "x": 614,
+    "y": 695,
+    "w": 128,
+    "h": 122
+   },
+   "fill": {
+    "x": 744,
+    "y": 695,
+    "w": 128,
+    "h": 122
+   },
+   "anchor": {
+    "x": 0.4961,
+    "y": 0.8648
+   }
+  },
+  {
+   "group": "capital",
+   "name": "capital-hogenburg-castles-3",
+   "source": "hogenburg-urban-cartography-png-pack/Buildings/Castles/Castles_3.png",
+   "w": 128,
+   "h": 116,
+   "ink": {
+    "x": 1268,
+    "y": 695,
+    "w": 128,
+    "h": 116
+   },
+   "fill": {
+    "x": 1398,
+    "y": 695,
+    "w": 128,
+    "h": 116
+   },
+   "anchor": {
+    "x": 0.457,
+    "y": 0.7974
+   }
+  },
+  {
+   "group": "capital",
+   "name": "capital-vischer-city-011",
+   "source": "vischer-cartography-brushes-2.0-png-pack/Settlements/City/City 011.png",
+   "w": 128,
+   "h": 109,
+   "ink": {
+    "x": 122,
+    "y": 956,
+    "w": 128,
+    "h": 109
+   },
+   "fill": {
+    "x": 252,
+    "y": 956,
+    "w": 128,
+    "h": 109
+   },
+   "anchor": {
+    "x": 0.4766,
+    "y": 0.7477
+   }
+  },
+  {
+   "group": "capital",
+   "name": "capital-vischer-city-025",
+   "source": "vischer-cartography-brushes-2.0-png-pack/Settlements/City/City 025.png",
+   "w": 128,
+   "h": 75,
+   "ink": {
+    "x": 554,
+    "y": 1254,
+    "w": 128,
+    "h": 75
+   },
+   "fill": {
+    "x": 684,
+    "y": 1254,
+    "w": 128,
+    "h": 75
+   },
+   "anchor": {
+    "x": 0.4883,
+    "y": 0.8333
+   }
+  },
+  {
+   "group": "city",
+   "name": "city-mercator-large-town-002",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Large Towns/Large Town 002.png",
+   "w": 104,
+   "h": 82,
+   "ink": {
+    "x": 432,
+    "y": 1167,
+    "w": 104,
+    "h": 82
+   },
+   "fill": {
+    "x": 538,
+    "y": 1167,
+    "w": 104,
+    "h": 82
+   },
+   "anchor": {
+    "x": 0.4279,
+    "y": 0.811
+   }
+  },
+  {
+   "group": "city",
+   "name": "city-mercator-large-town-005",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Large Towns/Large Town 005.png",
+   "w": 93,
+   "h": 104,
+   "ink": {
+    "x": 848,
+    "y": 956,
+    "w": 93,
+    "h": 104
+   },
+   "fill": {
+    "x": 943,
+    "y": 956,
+    "w": 93,
+    "h": 104
+   },
+   "anchor": {
+    "x": 0.5161,
+    "y": 0.7644
+   }
+  },
+  {
+   "group": "city",
+   "name": "city-mercator-large-town-006",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Large Towns/Large Town 006.png",
+   "w": 101,
+   "h": 104,
+   "ink": {
+    "x": 642,
+    "y": 956,
+    "w": 101,
+    "h": 104
+   },
+   "fill": {
+    "x": 745,
+    "y": 956,
+    "w": 101,
+    "h": 104
+   },
+   "anchor": {
+    "x": 0.5545,
+    "y": 0.8221
+   }
+  },
+  {
+   "group": "city",
+   "name": "city-mercator-large-town-007",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Large Towns/Large Town 007.png",
+   "w": 104,
+   "h": 72,
+   "ink": {
+    "x": 1024,
+    "y": 1254,
+    "w": 104,
+    "h": 72
+   },
+   "fill": {
+    "x": 1130,
+    "y": 1254,
+    "w": 104,
+    "h": 72
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.8403
+   }
+  },
+  {
+   "group": "city",
+   "name": "city-mercator-large-town-010",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Large Towns/Large Town 010.png",
+   "w": 104,
+   "h": 86,
+   "ink": {
+    "x": 1412,
+    "y": 1069,
+    "w": 104,
+    "h": 86
+   },
+   "fill": {
+    "x": 1518,
+    "y": 1069,
+    "w": 104,
+    "h": 86
+   },
+   "anchor": {
+    "x": 0.5,
+    "y": 0.7849
+   }
+  },
+  {
+   "group": "city",
+   "name": "city-mercator-large-town-011",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Large Towns/Large Town 011.png",
+   "w": 104,
+   "h": 102,
+   "ink": {
+    "x": 1258,
+    "y": 956,
+    "w": 104,
+    "h": 102
+   },
+   "fill": {
+    "x": 1364,
+    "y": 956,
+    "w": 104,
+    "h": 102
+   },
+   "anchor": {
+    "x": 0.5144,
+    "y": 0.7598
+   }
+  },
+  {
+   "group": "city",
+   "name": "city-mercator-large-town-013",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Large Towns/Large Town 013.png",
+   "w": 104,
+   "h": 94,
+   "ink": {
+    "x": 110,
+    "y": 1069,
+    "w": 104,
+    "h": 94
+   },
+   "fill": {
+    "x": 216,
+    "y": 1069,
+    "w": 104,
+    "h": 94
+   },
+   "anchor": {
+    "x": 0.4375,
+    "y": 0.8245
+   }
+  },
+  {
+   "group": "city",
+   "name": "city-mercator-large-town-014",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Large Towns/Large Town 014.png",
+   "w": 104,
+   "h": 85,
+   "ink": {
+    "x": 0,
+    "y": 1167,
+    "w": 104,
+    "h": 85
+   },
+   "fill": {
+    "x": 106,
+    "y": 1167,
+    "w": 104,
+    "h": 85
+   },
+   "anchor": {
+    "x": 0.5096,
+    "y": 0.7471
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-014",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 014.png",
+   "w": 84,
+   "h": 71,
+   "ink": {
+    "x": 1236,
+    "y": 1254,
+    "w": 84,
+    "h": 71
+   },
+   "fill": {
+    "x": 1322,
+    "y": 1254,
+    "w": 84,
+    "h": 71
+   },
+   "anchor": {
+    "x": 0.4524,
+    "y": 0.7958
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-021",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 021.png",
+   "w": 84,
+   "h": 70,
+   "ink": {
+    "x": 0,
+    "y": 1334,
+    "w": 84,
+    "h": 70
+   },
+   "fill": {
+    "x": 86,
+    "y": 1334,
+    "w": 84,
+    "h": 70
+   },
+   "anchor": {
+    "x": 0.4405,
+    "y": 0.6786
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-022",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 022.png",
+   "w": 84,
+   "h": 62,
+   "ink": {
+    "x": 1144,
+    "y": 1334,
+    "w": 84,
+    "h": 62
+   },
+   "fill": {
+    "x": 1230,
+    "y": 1334,
+    "w": 84,
+    "h": 62
+   },
+   "anchor": {
+    "x": 0.5655,
+    "y": 0.7823
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-029",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 029.png",
+   "w": 84,
+   "h": 48,
+   "ink": {
+    "x": 992,
+    "y": 1469,
+    "w": 84,
+    "h": 48
+   },
+   "fill": {
+    "x": 1078,
+    "y": 1469,
+    "w": 84,
+    "h": 48
+   },
+   "anchor": {
+    "x": 0.4286,
+    "y": 0.8021
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-038",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 038.png",
+   "w": 84,
+   "h": 69,
+   "ink": {
+    "x": 172,
+    "y": 1334,
+    "w": 84,
+    "h": 69
+   },
+   "fill": {
+    "x": 258,
+    "y": 1334,
+    "w": 84,
+    "h": 69
+   },
+   "anchor": {
+    "x": 0.4286,
+    "y": 0.7174
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-039",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 039.png",
+   "w": 84,
+   "h": 59,
+   "ink": {
+    "x": 486,
+    "y": 1406,
+    "w": 84,
+    "h": 59
+   },
+   "fill": {
+    "x": 572,
+    "y": 1406,
+    "w": 84,
+    "h": 59
+   },
+   "anchor": {
+    "x": 0.5476,
+    "y": 0.7034
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-040",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 040.png",
+   "w": 84,
+   "h": 62,
+   "ink": {
+    "x": 1316,
+    "y": 1334,
+    "w": 84,
+    "h": 62
+   },
+   "fill": {
+    "x": 1402,
+    "y": 1334,
+    "w": 84,
+    "h": 62
+   },
+   "anchor": {
+    "x": 0.4226,
+    "y": 0.7177
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-054",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 054.png",
+   "w": 84,
+   "h": 55,
+   "ink": {
+    "x": 1434,
+    "y": 1406,
+    "w": 84,
+    "h": 55
+   },
+   "fill": {
+    "x": 1520,
+    "y": 1406,
+    "w": 84,
+    "h": 55
+   },
+   "anchor": {
+    "x": 0.4167,
+    "y": 0.7
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-068",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 068.png",
+   "w": 84,
+   "h": 50,
+   "ink": {
+    "x": 608,
+    "y": 1469,
+    "w": 84,
+    "h": 50
+   },
+   "fill": {
+    "x": 694,
+    "y": 1469,
+    "w": 84,
+    "h": 50
+   },
+   "anchor": {
+    "x": 0.4643,
+    "y": 0.79
+   }
+  },
+  {
+   "group": "town",
+   "name": "town-mercator-town-069",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Towns/Town 069.png",
+   "w": 84,
+   "h": 53,
+   "ink": {
+    "x": 172,
+    "y": 1469,
+    "w": 84,
+    "h": 53
+   },
+   "fill": {
+    "x": 258,
+    "y": 1469,
+    "w": 84,
+    "h": 53
+   },
+   "anchor": {
+    "x": 0.494,
+    "y": 0.783
+   }
+  },
+  {
+   "group": "village",
+   "name": "village-mercator-small-town-001",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Small Towns/Small Town 001.png",
+   "w": 64,
+   "h": 41,
+   "ink": {
+    "x": 1376,
+    "y": 1469,
+    "w": 64,
+    "h": 41
+   },
+   "fill": {
+    "x": 1442,
+    "y": 1469,
+    "w": 64,
+    "h": 41
+   },
+   "anchor": {
+    "x": 0.5156,
+    "y": 0.7927
+   }
+  },
+  {
+   "group": "village",
+   "name": "village-mercator-small-town-002",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Small Towns/Small Town 002.png",
+   "w": 64,
+   "h": 52,
+   "ink": {
+    "x": 344,
+    "y": 1469,
+    "w": 64,
+    "h": 52
+   },
+   "fill": {
+    "x": 410,
+    "y": 1469,
+    "w": 64,
+    "h": 52
+   },
+   "anchor": {
+    "x": 0.5312,
+    "y": 0.6635
+   }
+  },
+  {
+   "group": "village",
+   "name": "village-mercator-small-town-003",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Small Towns/Small Town 003.png",
+   "w": 64,
+   "h": 52,
+   "ink": {
+    "x": 476,
+    "y": 1469,
+    "w": 64,
+    "h": 52
+   },
+   "fill": {
+    "x": 542,
+    "y": 1469,
+    "w": 64,
+    "h": 52
+   },
+   "anchor": {
+    "x": 0.5781,
+    "y": 0.625
+   }
+  },
+  {
+   "group": "village",
+   "name": "village-mercator-small-town-005",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Small Towns/Small Town 005.png",
+   "w": 64,
+   "h": 33,
+   "ink": {
+    "x": 1536,
+    "y": 1524,
+    "w": 64,
+    "h": 33
+   },
+   "fill": {
+    "x": 0,
+    "y": 1564,
+    "w": 64,
+    "h": 33
+   },
+   "anchor": {
+    "x": 0.5859,
+    "y": 0.7727
+   }
+  },
+  {
+   "group": "village",
+   "name": "village-mercator-small-town-006",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Small Towns/Small Town 006.png",
+   "w": 64,
+   "h": 38,
+   "ink": {
+    "x": 0,
+    "y": 1524,
+    "w": 64,
+    "h": 38
+   },
+   "fill": {
+    "x": 66,
+    "y": 1524,
+    "w": 64,
+    "h": 38
+   },
+   "anchor": {
+    "x": 0.5312,
+    "y": 0.7763
+   }
+  },
+  {
+   "group": "village",
+   "name": "village-mercator-small-town-007",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Small Towns/Small Town 007.png",
+   "w": 63,
+   "h": 40,
+   "ink": {
+    "x": 1508,
+    "y": 1469,
+    "w": 63,
+    "h": 40
+   },
+   "fill": {
+    "x": 1573,
+    "y": 1469,
+    "w": 63,
+    "h": 40
+   },
+   "anchor": {
+    "x": 0.4603,
+    "y": 0.7125
+   }
+  },
+  {
+   "group": "village",
+   "name": "village-mercator-small-town-008",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Small Towns/Small Town 008.png",
+   "w": 64,
+   "h": 37,
+   "ink": {
+    "x": 132,
+    "y": 1524,
+    "w": 64,
+    "h": 37
+   },
+   "fill": {
+    "x": 198,
+    "y": 1524,
+    "w": 64,
+    "h": 37
+   },
+   "anchor": {
+    "x": 0.4844,
+    "y": 0.6081
+   }
+  },
+  {
+   "group": "village",
+   "name": "village-mercator-small-town-009",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Small Towns/Small Town 009.png",
+   "w": 64,
+   "h": 29,
+   "ink": {
+    "x": 490,
+    "y": 1564,
+    "w": 64,
+    "h": 29
+   },
+   "fill": {
+    "x": 556,
+    "y": 1564,
+    "w": 64,
+    "h": 29
+   },
+   "anchor": {
+    "x": 0.4531,
+    "y": 0.7414
+   }
+  },
+  {
+   "group": "village",
+   "name": "village-mercator-small-town-011",
+   "source": "mercator-settlement-png-pack-1.1/Settlements/Small Towns/Small Town 011.png",
+   "w": 64,
+   "h": 25,
+   "ink": {
+    "x": 834,
+    "y": 1564,
+    "w": 64,
+    "h": 25
+   },
+   "fill": {
+    "x": 900,
+    "y": 1564,
+    "w": 64,
+    "h": 25
+   },
+   "anchor": {
+    "x": 0.5156,
+    "y": 0.66
+   }
+  },
+  {
+   "group": "monster",
+   "name": "monster-monsters-grumpy-frog-beast",
+   "source": "here-there-be-monsters-png-pack-1.1/Ortelius' Monsters (1570)/Grumpy Frog Beast.png",
+   "w": 360,
+   "h": 331,
+   "ink": {
+    "x": 1178,
+    "y": 0,
+    "w": 360,
+    "h": 331
+   },
+   "fill": {
+    "x": 0,
+    "y": 362,
+    "w": 360,
+    "h": 331
+   },
+   "anchor": {
+    "x": 0.4694,
+    "y": 0.9607
+   }
+  },
+  {
+   "group": "monster",
+   "name": "monster-monsters-excited-sea-monster",
+   "source": "here-there-be-monsters-png-pack-1.1/Vrients' Monsters (1583-1608)/Excited Sea Monster.png",
+   "w": 360,
+   "h": 259,
+   "ink": {
+    "x": 1086,
+    "y": 362,
+    "w": 360,
+    "h": 259
+   },
+   "fill": {
+    "x": 0,
+    "y": 695,
+    "w": 360,
+    "h": 259
+   },
+   "anchor": {
+    "x": 0.4861,
+    "y": 0.9459
+   }
+  },
+  {
+   "group": "monster",
+   "name": "monster-monsters-spouting-frog-beast",
+   "source": "here-there-be-monsters-png-pack-1.1/Ortelius' Monsters (1570)/Spouting Frog Beast.png",
+   "w": 360,
+   "h": 274,
+   "ink": {
+    "x": 362,
+    "y": 362,
+    "w": 360,
+    "h": 274
+   },
+   "fill": {
+    "x": 724,
+    "y": 362,
+    "w": 360,
+    "h": 274
+   },
+   "anchor": {
+    "x": 0.4583,
+    "y": 0.9562
+   }
+  },
+  {
+   "group": "ship",
+   "name": "ship-janssonius-ship-005",
+   "source": "janssonius-cartography-brushes-2.0-png-pack/Cartouches/Ships/Ship 005.png",
+   "w": 120,
+   "h": 58,
+   "ink": {
+    "x": 658,
+    "y": 1406,
+    "w": 120,
+    "h": 58
+   },
+   "fill": {
+    "x": 780,
+    "y": 1406,
+    "w": 120,
+    "h": 58
+   },
+   "anchor": {
+    "x": 0.5083,
+    "y": 0.931
+   }
+  },
+  {
+   "group": "ship",
+   "name": "ship-zannonis-singleships-15",
+   "source": "zannonis-navy-png-pack/SingleShips/SingleShips_15.png",
+   "w": 120,
+   "h": 111,
+   "ink": {
+    "x": 1528,
+    "y": 695,
+    "w": 120,
+    "h": 111
+   },
+   "fill": {
+    "x": 0,
+    "y": 956,
+    "w": 120,
+    "h": 111
+   },
+   "anchor": {
+    "x": 0.5333,
+    "y": 0.8559
+   }
+  },
+  {
+   "group": "ship",
+   "name": "ship-zannonis-singleships-36",
+   "source": "zannonis-navy-png-pack/SingleShips/SingleShips_36.png",
+   "w": 104,
+   "h": 120,
+   "ink": {
+    "x": 874,
+    "y": 695,
+    "w": 104,
+    "h": 120
+   },
+   "fill": {
+    "x": 980,
+    "y": 695,
+    "w": 104,
+    "h": 120
+   },
+   "anchor": {
+    "x": 0.4567,
+    "y": 0.8667
+   }
+  },
+  {
+   "group": "ship",
+   "name": "ship-zannonis-singleships-13",
+   "source": "zannonis-navy-png-pack/SingleShips/SingleShips_13.png",
+   "w": 89,
+   "h": 120,
+   "ink": {
+    "x": 1086,
+    "y": 695,
+    "w": 89,
+    "h": 120
+   },
+   "fill": {
+    "x": 1177,
+    "y": 695,
+    "w": 89,
+    "h": 120
+   },
+   "anchor": {
+    "x": 0.5056,
+    "y": 0.925
+   }
+  },
+  {
+   "group": "compass",
+   "name": "compass-aubers-compass-rose",
+   "source": "aubers-cartography-brushes-2.1-png-pack/Cartouches/Map Elements (2)/Compass Rose.png",
+   "w": 288,
+   "h": 360,
+   "ink": {
+    "x": 598,
+    "y": 0,
+    "w": 288,
+    "h": 360
+   },
+   "fill": {
+    "x": 888,
+    "y": 0,
+    "w": 288,
+    "h": 360
+   },
+   "anchor": {
+    "x": 0.5017,
+    "y": 0.5847
+   }
+  },
+  {
+   "group": "compass",
+   "name": "compass-homann-compass-rose",
+   "source": "homann-cartography-brushes-2.0-png-pack/Cartouches/Map Elements/Compass Rose.png",
+   "w": 297,
+   "h": 360,
+   "ink": {
+    "x": 0,
+    "y": 0,
+    "w": 297,
+    "h": 360
+   },
+   "fill": {
+    "x": 299,
+    "y": 0,
+    "w": 297,
+    "h": 360
+   },
+   "anchor": {
+    "x": 0.4832,
+    "y": 0.5875
+   }
+  }
+ ]
+}

@@ -427,3 +427,24 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
   merge, check its actual two map views instead of needlessly recapturing the unchanged kingdom matrix. The
   preview on 5190 serves the current integration build. Return next to the natural terrain and a dusk viewpoint
   where the actual windows face the camera, then capture the wave once that composition works.
+
+### Atlas unblocked — authoritative latest state
+
+- A01/A02 are committed on `lane/atlas` as `0a3ba03`: the real Surveyor importer and first survey-preview map,
+  the main-supplied Surveyor lockfile importer, asset credits and checked PRD boxes. Tobias explicitly authorized
+  their combined commit. Historical repeated lockfile failures are condensed in the progress log; A03 is next.
+- Main resolved the two routine merge conflicts by retaining all Herald/Twitch dependencies and adding Surveyor
+  through pnpm, plus combining the art/font inventory with the kingdom's dependency/audio credits. Frozen offline
+  install passes on the lane and main. The lane passed 363 tests; combined main passed `pnpm verify --area atlas`
+  with 760 tests and two real Atlas captures, both opened by main. Review: `work/reviews/2026-10-30-atlas-integration.md`.
+- The actual export integrity check passed on `obs-20261030T042315Z-d5a9af3c1cf2` (199,095 observed channels;
+  254 sweeps, 12.64 hours, zero rejected/gaps). No source writes or official founding. The Atlas service on 5193
+  belongs to the lane and was only read, not restarted or reconfigured. The web preview remains on 5190.
+- Kingdom milestone `b4e0049` and Herald seam/auth fix `7b8e2eb` are pushed. Its full 19-shot matrix and two close
+  replay captures passed and were inspected. All new look/content work is committed; the old safety stash can be
+  discarded after confirming this checkpoint. No wave film yet. No real-GPU timing claim.
+- **Next remains the founder's look brief:** remove the hamlet's terraced plinth, compose the dusk view so the
+  actual designated windows face us, preserve the personal street-level arrival, then capture the ripple/beacon.
+  Do not call the existing west-oblique camera accepted: main and Terra still reject blank backs and overly dark
+  separation. The close Hearth view proves the content/adapter but is tightly cropped on phone and needs better
+  warm spill. The terrain architect's rolling-ridge/current-footprint-pad proposal is still unimplemented.
