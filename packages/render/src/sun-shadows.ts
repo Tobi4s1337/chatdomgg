@@ -97,6 +97,26 @@ float sunShadowVisibility(vec3 world, vec3 normal) {
 `;
 
 /**
+ * Depth-only casters. A voxel clay material (and any material sharing its uniforms) names its glass surface kind;
+ * glass then lets the sun through to the floor behind it, while its frame and every opaque wall still cast.
+ */
+function casterFragment(material: THREE.ShaderMaterial): string {
+  // A derived material with its own vertex transform and no material varying casts as plain depth.
+  if (!('uGlassKind' in material.uniforms) || !('uPalette' in material.uniforms) || !/flat out uint vMaterial\b/.test(material.vertexShader)) {
+    return 'out vec4 unusedColour; void main(){ unusedColour = vec4(1.0); }';
+  }
+  return `precision highp float;
+uniform sampler2D uPalette;
+uniform float uGlassKind;
+flat in uint vMaterial;
+out vec4 unusedColour;
+void main(){
+  if (abs(texelFetch(uPalette, ivec2(int(vMaterial & 255u), int(vMaterial >> 8u)), 0).a - uGlassKind) < 0.5) discard;
+  unusedColour = vec4(1.0);
+}`;
+}
+
+/**
  * One cached map for this bounded kingdom. Register the chosen static detail mesh BEFORE
  * camera culling rewrites its instance matrices. Geometry/height uniforms stay shared;
  * placements are copied so the presentation camera and its LOD fades cannot change shadows.
@@ -194,7 +214,7 @@ export function createSunShadows(renderer: THREE.WebGLRenderer, options: SunShad
         material = new THREE.ShaderMaterial({
           glslVersion: THREE.GLSL3, uniforms: mesh.material.uniforms,
           vertexShader: mesh.material.vertexShader,
-          fragmentShader: 'out vec4 unusedColour; void main(){ unusedColour = vec4(1.0); }',
+          fragmentShader: casterFragment(mesh.material),
           defines: { ...mesh.material.defines }, side: THREE.DoubleSide, colorWrite: false,
           depthWrite: true, depthTest: true, blending: THREE.NoBlending, toneMapped: false,
         });

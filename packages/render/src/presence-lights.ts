@@ -1,11 +1,21 @@
 import * as THREE from 'three';
 import { VOXEL_METRES, type KingdomPresenceFrame, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
+import { getEnvironment } from './atmosphere';
 
 export type WindowHouse = { slot: number; blueprint: VoxelBlueprint; position: Vec3; yaw: number };
 type WindowSource = { slot: number; position: Vec3; normal: Vec3; strength: number; name: string | null };
 type SlotState = { value: number; target: number; name: string | null; initialized: boolean };
 type LodFactor = 1 | 2 | 4;
 type WindowPlacement = { house: WindowHouse; window: VoxelBlueprint['windows'][number]; normal: THREE.Vector3; rotation: THREE.Quaternion; width: number; height: number };
+
+/** A halo is sized to its pane (spec 26 R3): it warms the frame, reveal and sill, never the wall as a blob. */
+export const WINDOW_HALO_SCALE = 1.3;
+
+/** Warm window light by hour: glass by day, rising through the afternoon and full from 18.5 h until dawn. */
+export function windowGlowForHour(hour: number): number {
+  const h = Number.isFinite(hour) ? ((hour % 24) + 24) % 24 : 12;
+  return THREE.MathUtils.smoothstep(Math.abs(h - 12), 4.2, 6.5);
+}
 
 /** Coarse voxel occupancy expands to cell boundaries along the outward face normal. */
 export function windowLodCentre(centre: Vec3, facing: VoxelBlueprint['windows'][number]['facing'], factor: LodFactor): Vec3 {
@@ -69,7 +79,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       slotIndices.set(house.slot, indices);
       slotDetails.set(house.slot, { from: 1, to: 1, progress: 1 });
       const paneMatrix = new THREE.Matrix4().compose(centre, rotation, new THREE.Vector3(w, h, 1));
-      const haloMatrix = new THREE.Matrix4().compose(centre.clone().addScaledVector(normal, 0.04), rotation, new THREE.Vector3(w * 2.4, h * 2.2, 1));
+      const haloMatrix = new THREE.Matrix4().compose(centre.clone().addScaledVector(normal, 0.04), rotation, new THREE.Vector3(w * WINDOW_HALO_SCALE, h * WINDOW_HALO_SCALE, 1));
       transforms.push(paneMatrix, paneMatrix.clone());
       haloTransforms.push(haloMatrix, haloMatrix.clone());
       slots.push(house.slot, house.slot);
@@ -77,24 +87,41 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       sources.push({ slot: house.slot, position: [point.x, point.y, point.z], normal: [normal.x, normal.y, normal.z], strength: 0, name: null });
     }
   }
-  const uniforms = { presence: { value: texture }, textureSize: { value: new THREE.Vector2(width, height) }, night: { value: 1 } };
+  const uniforms = { presence: { value: texture }, textureSize: { value: new THREE.Vector2(width, height) }, night: { value: 1 },
+    skyZenith: { value: new THREE.Color() }, skyHorizon: { value: new THREE.Color() }, skyFog: { value: new THREE.Color() } };
+  let gradedHour = Number.NaN;
+  function grade(hour: number): void {
+    // The hour eases continuously; regrade the reflected sky only when it has visibly moved.
+    if (Math.abs(hour - gradedHour) < 0.02) return;
+    gradedHour = hour;
+    const environment = getEnvironment(hour);
+    uniforms.skyZenith.value.set(environment.zenith); uniforms.skyHorizon.value.set(environment.horizon); uniforms.skyFog.value.set(environment.fog);
+    uniforms.night.value = windowGlowForHour(hour);
+  }
+  grade(23);
   const vertexShader = `
     attribute float plotSlot;
     attribute float detailFade;
     varying vec2 vUv;
     varying float vSlot, vDetailFade;
+    varying vec3 vWorld, vFacing;
     void main() {
       vUv = uv;
       vSlot = plotSlot;
       vDetailFade = detailFade;
-      gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+      vec4 world = modelMatrix * instanceMatrix * vec4(position, 1.0);
+      vWorld = world.xyz;
+      vFacing = normalize(mat3(modelMatrix * instanceMatrix) * vec3(0.0, 0.0, 1.0));
+      gl_Position = projectionMatrix * viewMatrix * world;
     }`;
   const shared = `
     uniform sampler2D presence;
     uniform vec2 textureSize;
     uniform float night;
+    uniform vec3 skyZenith, skyHorizon, skyFog;
     varying vec2 vUv;
     varying float vSlot, vDetailFade;
+    varying vec3 vWorld, vFacing;
     void discardDetail() {
       float threshold = fract(dot(floor(gl_FragCoord.xy), vec2(.754877666, .569840296)));
       if (vDetailFade >= 0.0 && threshold >= vDetailFade) discard;
@@ -110,26 +137,53 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   const paneMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `${shared}
     void main() {
       discardDetail();
-      float light = windowPresence();
+      float presence = windowPresence();
+      // Across the town a pane is a few pixels: it settles to its bright warm average so it still counts.
+      float distant = smoothstep(0.04, 0.2, max(fwidth(vUv.x), fwidth(vUv.y)));
       vec2 p = abs(vUv - 0.5);
       float frame = max(step(0.455, p.x), step(0.455, p.y));
-      float bars = max(1.0 - smoothstep(0.014, 0.025, p.x), 1.0 - smoothstep(0.018, 0.03, p.y));
-      float wood = max(frame, bars);
-      vec3 darkGlass = vec3(0.055, 0.085, 0.13);
-      vec3 amber = mix(vec3(0.82, 0.30, 0.055), vec3(1.0, 0.69, 0.25), 0.65 + 0.2 * vUv.y);
-      vec3 glass = mix(darkGlass, amber * mix(0.98, 1.4, night), light);
-      gl_FragColor = vec4(mix(glass, vec3(0.105, 0.055, 0.045), wood), 1.0);
+      float bars = max(1.0 - smoothstep(0.024, 0.036, p.x), 1.0 - smoothstep(0.022, 0.034, p.y));
+      float wood = max(frame, bars) * (1.0 - distant * 0.7);
+      // Glass reflects the sky it faces, the same reflection as every voxel pane: dark blue-grey at night,
+      // pale sky by day, a little brighter towards the head of the pane. Never a black hole.
+      vec3 view = normalize(vWorld - cameraPosition), mirror = reflect(view, normalize(vFacing));
+      vec3 seen = mix(skyHorizon, skyZenith, smoothstep(0.0, 0.65, mirror.y));
+      seen = mix(skyFog * 0.42, seen, smoothstep(-0.3, 0.04, mirror.y));
+      float fresnel = 0.42 + 0.5 * pow(1.0 - abs(dot(view, normalize(vFacing))), 3.0);
+      vec3 reflection = seen * mix(0.62, 0.42, night) * fresnel * (0.78 + 0.34 * vUv.y);
+      float sheen = 1.0 - smoothstep(0.0, 0.07, abs(vUv.x * 0.9 + vUv.y * 0.55 - 0.86));
+      reflection += seen * sheen * 0.16;
+      // A lamp-lit room: brightest low and centred, warming through amber to the edges of the glass.
+      vec2 c = (vUv - vec2(0.5, 0.34)) * vec2(1.3, 1.0);
+      float core = exp(-dot(c, c) * 5.2);
+      vec3 room = mix(vec3(0.62, 0.17, 0.03), vec3(1.0, 0.52, 0.14), smoothstep(0.02, 0.5, core));
+      room = mix(room, vec3(1.0, 0.80, 0.50), smoothstep(0.5, 1.0, core));
+      // By day the glass stays glass, with only a hint of the room behind it.
+      float lit = presence * mix(0.07, 1.0, night);
+      room = mix(room, vec3(1.0, 0.70, 0.36) * 1.15, distant);
+      vec3 glass = mix(reflection, room * mix(0.9, 1.25, night), lit);
+      // Mullions and frame stay dark; their inner edges catch the room's light.
+      float catchLight = frame * (1.0 - smoothstep(0.455, 0.49, max(p.x, p.y))) * lit;
+      vec3 timber = mix(vec3(0.2, 0.13, 0.09), vec3(0.07, 0.04, 0.035), night) + vec3(0.36, 0.13, 0.03) * catchLight;
+      // The real voxel glass remains visible through this presentation layer.
+      float street = gl_FrontFacing ? 1.0 : 0.18;
+      float glassAlpha = mix(0.1, mix(0.2, 0.68, night), presence) * street;
+      gl_FragColor = vec4(mix(glass, timber, wood), mix(glassAlpha, 1.0, wood));
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
-    }`, side: THREE.DoubleSide });
+    }`, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const haloMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `${shared}
     void main() {
       discardDetail();
-      vec2 p = (vUv - 0.5) * 2.0;
-      // The glass itself already emits; leave it untouched by the transparent halo.
-      float outside = smoothstep(0.37, 0.48, max(abs(p.x), abs(p.y)));
-      float glow = exp(-dot(p, p) * 2.8) * outside * windowPresence() * mix(0.14, 0.34, night);
-      gl_FragColor = vec4(1.0, 0.40, 0.08, glow);
+      // In pane units the glass spans +-0.5; the quad reaches the halo scale's edge.
+      vec2 q = (vUv - 0.5) * ${WINDOW_HALO_SCALE.toFixed(3)};
+      vec2 outside = max(abs(q) - 0.5, 0.0);
+      float distance = length(outside);
+      float edge = 1.0 - smoothstep(0.5 * ${WINDOW_HALO_SCALE.toFixed(3)} - 0.07, 0.5 * ${WINDOW_HALO_SCALE.toFixed(3)}, max(abs(q.x), abs(q.y)));
+      // A thin warm spill on the reveal, heavier on the sill below, leaving the glass itself untouched.
+      float sill = step(q.y, -0.5) * (1.0 - smoothstep(0.18, 0.5, abs(q.x)));
+      float glow = exp(-distance * 26.0) * smoothstep(0.0, 0.012, distance) * (1.0 + 1.3 * sill) * edge;
+      gl_FragColor = vec4(1.0, 0.46, 0.13, glow * windowPresence() * night * 0.42);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`, transparent: true, depthWrite: false, side: THREE.DoubleSide });
@@ -148,6 +202,8 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   }
   const panes = makeMesh(paneMaterial, transforms);
   const halos = makeMesh(haloMaterial, haloTransforms);
+  // Both layers are translucent: the pane first, then the halo around it.
+  panes.renderOrder = 1; halos.renderOrder = 2;
   function setDetail(slot: number, from: LodFactor, to: LodFactor, progress: number): void {
     const indices = slotIndices.get(slot);
     if (!indices) return;
@@ -167,7 +223,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
           .add(new THREE.Vector3(...placement.house.position))
           .addScaledVector(placement.normal, 0.006);
         panes.setMatrixAt(index * 2 + layer, new THREE.Matrix4().compose(centre, placement.rotation, new THREE.Vector3(placement.width, placement.height, 1)));
-        halos.setMatrixAt(index * 2 + layer, new THREE.Matrix4().compose(centre.clone().addScaledVector(placement.normal, 0.04), placement.rotation, new THREE.Vector3(placement.width * 2.4, placement.height * 2.2, 1)));
+        halos.setMatrixAt(index * 2 + layer, new THREE.Matrix4().compose(centre.clone().addScaledVector(placement.normal, 0.04), placement.rotation, new THREE.Vector3(placement.width * WINDOW_HALO_SCALE, placement.height * WINDOW_HALO_SCALE, 1)));
       }
       // Complementary masks use the same screen threshold as the voxel meshes.
       const outgoing = hiddenSlots.has(slot)?0:from === to ? 1 : -1 - amount;
@@ -223,8 +279,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
     update(elapsedSeconds, hour) {
       const step = Math.max(0, elapsedSeconds) / 0.7;
       for (const state of states.values()) state.value += Math.max(-step, Math.min(step, state.target - state.value));
-      const h = ((hour % 24) + 24) % 24;
-      uniforms.night.value = THREE.MathUtils.smoothstep(Math.abs(h - 12), 5, 8);
+      grade(hour);
       sync();
     },
     getSources() { return sources; },

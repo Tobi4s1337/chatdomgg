@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { WALK_BODY } from '@chatdom/shared/realm';
+import { WALK_BODY, type CollisionWorld, type SolidBox } from '@chatdom/shared/realm';
 import { createShoulderRig, shoulderPose, SHOULDER, type Vec3 } from './shoulder';
 
 const SIZES = [{ width: 1440, height: 900 }, { width: 390, height: 844 }] as const;
@@ -82,7 +82,8 @@ describe('the shoulder view', () => {
     const inside = rig.apply(camera, feet, 1.6);
     expect(inside.eye).toEqual([0, SHOULDER.eyeHeight, 0]);
     expect([inside.shift, inside.selfOpacity, camera.filmOffset]).toEqual([0, 0, 0]);
-    for (let n = 0; n < 200; n++) { rig.zoom(24); rig.update(1 / 60, null, 0, false); }
+    // Every frame applies, as the controller does: the citizen comes back with the boom.
+    for (let n = 0; n < 200; n++) { rig.zoom(24); rig.update(1 / 60, null, 0, false); rig.apply(camera, feet, 1.6); }
     const out = rig.apply(camera, feet, 1.6);
     expect(rig.view.distance).toBe(SHOULDER.maxDistance);
     expect(out.selfOpacity).toBe(1);
@@ -149,5 +150,79 @@ describe('the shoulder view', () => {
       expect(Math.abs(pose.shift - previous.shift)).toBeLessThan(.01);
       previous = pose;
     }
+  });
+
+  /** Flat ground and, when `gap` is a number, a wall that far behind a citizen at the origin facing +Z. */
+  const backed = (gap: number | null): CollisionWorld => {
+    const solids: SolidBox[] = [{ min: [-50, -1, -50], max: [50, 0, 50] }];
+    if (gap !== null) solids.push({ min: [-50, 0, -gap - .4], max: [50, 8, -gap] });
+    return { revision: 1, query: () => solids };
+  };
+
+  for (const { width, height } of SIZES) it(`looks past a faint citizen when a wall pulls the camera in at ${width}×${height}`, () => {
+    const aspect = width / height;
+    const camera = new THREE.PerspectiveCamera(43, 1, .15, 2200);
+    const rig = createShoulderRig(0);
+    rig.update(0, null, 0, false);
+    const pulled = rig.apply(camera, [0, 0, 0], aspect, backed(1.4));
+    expect(rig.view.distance).toBeLessThan(1.45);
+    // Backed against the wall the head would cover most of the lower half: it is all but gone.
+    const crown = pixel(camera, [0, WALK_BODY.height, 0], width, height);
+    expect(crown.y).toBeLessThan(height * .55);
+    expect(pulled.selfOpacity).toBeLessThan(.15);
+    // The shoulder, the safe boom and the street ahead are exactly what they were; only the citizen faded.
+    expect(pulled.shift).toBeGreaterThan(.3);
+    const plain = shoulderPose([0, 0, 0], rig.view, aspect);
+    expect(pulled.eye).toEqual(plain.eye);
+    expect(plain.selfOpacity).toBe(1);
+
+    // The same short boom chosen with the wheel is the walker's over-the-shoulder view: the citizen stays.
+    const wheeled = createShoulderRig(0);
+    wheeled.zoom((Math.sqrt(rig.view.distance / SHOULDER.maxDistance) - Math.sqrt(SHOULDER.distance / SHOULDER.maxDistance)) / SHOULDER.wheelZoom);
+    for (let n = 0; n < 120; n++) wheeled.update(1 / 60, null, 0, false);
+    expect(wheeled.view.distance).toBeCloseTo(rig.view.distance, 6);
+    expect(wheeled.apply(camera, [0, 0, 0], aspect, backed(null)).selfOpacity).toBe(1);
+
+    // A wall far enough behind that the view keeps its feet in the picture leaves the citizen whole.
+    const roomy = createShoulderRig(0);
+    roomy.update(0, null, 0, false);
+    expect(roomy.apply(camera, [0, 0, 0], aspect, backed(3.2)).selfOpacity).toBeGreaterThan(.97);
+  });
+
+  it('brings the citizen back as smoothly as the camera when the wall goes', () => {
+    const camera = new THREE.PerspectiveCamera(43, 1, .15, 2200);
+    const rig = createShoulderRig(0);
+    rig.update(0, null, 0, false);
+    let previous = rig.apply(camera, [0, 0, 0], 390 / 844, backed(1.4)).selfOpacity;
+    let largest = 0;
+    for (let n = 0; n < 60; n++) {
+      rig.update(1 / 60, null, 0, false);
+      const opacity = rig.apply(camera, [0, 0, 0], 390 / 844, backed(null)).selfOpacity;
+      expect(opacity).toBeGreaterThanOrEqual(previous);
+      largest = Math.max(largest, opacity - previous);
+      previous = opacity;
+    }
+    expect(previous).toBe(1);
+    expect(largest).toBeLessThan(.2);
+    // Wheeling in while still against the wall hands the fade back to the wheel's own first-person fade.
+    const pressed = createShoulderRig(0);
+    pressed.update(0, null, 0, false);
+    pressed.apply(camera, [0, 0, 0], 1.6, backed(.6));
+    pressed.zoom(-2000);
+    for (let n = 0; n < 120; n++) pressed.update(1 / 60, null, 0, false);
+    expect(pressed.apply(camera, [0, 0, 0], 1.6, backed(.6)).selfOpacity).toBe(0);
+  });
+
+  it('draws the walking camera without a view offset another owner left behind', () => {
+    const camera = new THREE.PerspectiveCamera(43, 1, .15, 2200);
+    const rig = createShoulderRig(0);
+    rig.apply(camera, [0, 0, 0], 1.6, backed(1.4));
+    const clean = camera.projectionMatrix.clone();
+    // The Forge and build compose with setViewOffset; a close that forgot to clear it must not shift the frustum
+    // past the near-plane footprint the boom was kept clear with.
+    camera.setViewOffset(1440, 900, -105, 15, 1440, 900);
+    rig.apply(camera, [0, 0, 0], 1.6, backed(1.4));
+    expect(camera.view?.enabled ?? false).toBe(false);
+    expect(camera.projectionMatrix.elements).toEqual(clean.elements);
   });
 });

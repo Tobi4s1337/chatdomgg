@@ -600,6 +600,14 @@ Each needs its own depth before launch; none is designed here.
 
 ## 8. Decided on 2026-10-29
 
+**2026-10-30 transport amendment (founder):** Forge judges run through authenticated Codex, like the plan;
+no paid direct API calls or local API keys. Each word/result gate is a fresh isolated judge context, separate
+from drafting, with Luna policy questions and an independent Terra check. They do not share planner history,
+tools or instructions. Missing/invalid/uncertain checks still fail closed. CLI self-estimates are not Decisions
+endpoint probabilities, and no moderation-endpoint call is claimed. This supersedes the older direct-HTTP
+transport and latency/cost assumptions below; the floor, independent gates and private holds are unchanged.
+
+
 The founder answered every question this file asked.
 
 | Question | Answer |
@@ -646,3 +654,7 @@ The founder answered every question this file asked.
   (§3.2). Subs never raise trust (§3.2).
 - **2026-10-29: flat coal cap.** Everyone holds at most 3 coals, whatever their trust, so a knighting cannot raise
   anyone's Forge allowance (§3.2).
+
+- **2026-10-30: founder’s Forge transport amendment.** Route judges through isolated Codex runs, without
+  local API keys or direct paid calls. Independent pre/post gates remain binding; receipts identify the actual
+  backend, and unavailable checks never pass. See §8 and `work/DECISIONS.md`.
