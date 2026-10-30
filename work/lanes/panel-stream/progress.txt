@@ -19,3 +19,7 @@ PS05: The stream now has a director (apps/web/src/stream/director.ts) that only 
 
 review: PS05 typecheck, lint, build and adapter test passed; inspected stream show and seam captures. Real-GPU OBS timing and cost remain to be checked. No server started.
 follow-up: PS05 Check shutter timing, drift and hidden-source GPU use in OBS on a real GPU.
+
+review: PS06 Typecheck, lint, build and focused adapter test passed; inspected existing config captures and fixed the clipped live-config heading. Full browser review twice waited on the shared capture lock and was stopped; rerun it and inspect the updated captures before ticking or committing. Main has newer commits and remains to be merged after the task commit. No server started.
+
+PS06: Config and live config provide explicitly simulated section, shelf and Hide previews; real saving, Hide and review remain unavailable. Added panel gesture sounds, focus, reduced motion, picture recovery and long-name handling. Review: typecheck, lint, build and focused adapter test passed; complete browser review passed except stream-show name timing under load, which passed on isolated rerun. Inspected ext-live_config@318x496, ext-config@390x844 and panel-long-names@318x496 in shots/panel-stream. Real GPU OBS timing and sound remain to be judged. Capture helper allocated its own ports and stopped its servers.
