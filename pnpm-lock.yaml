@@ -95,6 +95,9 @@ importers:
       '@chatdom/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@chatdom/vox-import':
+        specifier: workspace:*
+        version: link:../../packages/vox-import
       '@chatdom/voxel':
         specifier: workspace:*
         version: link:../../packages/voxel
@@ -159,6 +162,18 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/vox-import:
+    dependencies:
+      '@chatdom/content':
+        specifier: workspace:*
+        version: link:../content
+      '@chatdom/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@chatdom/world':
+        specifier: workspace:*
+        version: link:../world
 
   packages/voxel:
     dependencies:

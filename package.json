@@ -16,7 +16,8 @@
     "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm shots",
     "check:services": "node --env-file=.env scripts/check-services.mjs",
     "content:validate": "node scripts/content-validate.mjs",
-    "content:render": "node packages/testing/content-render.mjs"
+    "content:render": "node packages/testing/content-render.mjs",
+    "shots:moments": "node packages/testing/moments.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
