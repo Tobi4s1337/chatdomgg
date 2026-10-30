@@ -284,7 +284,14 @@ describe('bounded kingdom light field', () => {
       expect(volume.light.length).toBe(503_200);
       expect(volume.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
       const near = createLightFieldSolver(town, localBlockers).solve({ kind: 'solve', revision: 1, origin, emitters: [] }).volume;
-      expect(volume.estimatedPeakBytes + near.estimatedPeakBytes).toBeLessThan(12 * 1024 * 1024);
+      const castleOrigin: Vec3 = [town.castle[0] - 16, town.castle[1], town.castle[2] - 16];
+      const beaconPosition: Vec3 = [castleOrigin[0] + CASTLE_BEACON_ANCHOR_METRES[0], castleOrigin[1] + CASTLE_BEACON_ANCHOR_METRES[1], castleOrigin[2] + CASTLE_BEACON_ANCHOR_METRES[2]];
+      const beaconOptions = { mode: 'beacon', position: beaconPosition } as const;
+      const castle: WindowHouse = { slot: 65534, blueprint: createCastle('tide'), position: castleOrigin, yaw: 0 };
+      const beacon = createLightFieldSolver(town, [...homes, castle], beaconOptions).solve({
+        kind: 'solve', revision: 1, origin: resolveLightFieldConfig(town, beaconOptions).origin!, emitters: [],
+      }).volume;
+      expect(volume.estimatedPeakBytes + near.estimatedPeakBytes + beacon.estimatedPeakBytes).toBeLessThan(12 * 1024 * 1024);
       for (const quarter of town.quarters) {
         const slots = new Set(town.homes.filter(plot => plot.quarterYear === quarter.year).map(plot => plot.slot));
         const quarterSources = sources.filter(source => slots.has(source.slot));
