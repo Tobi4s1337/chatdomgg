@@ -1,0 +1,41 @@
+.behaviour-bench{position:fixed;inset:0;overflow:hidden;color:#efe3c8;font-family:Georgia,'Times New Roman',serif;background:#2b2530;display:grid;grid-template-columns:minmax(0,1fr) 360px}
+.behaviour-bench--still{display:block}
+.behaviour-stage{position:relative;min-width:0;min-height:0}
+.behaviour-bench--still .behaviour-stage{position:absolute;inset:0}
+.behaviour-stage canvas{display:block;width:100%;height:100%}
+.behaviour-still{position:absolute;left:8px;top:8px;margin:0;padding:4px 9px;font-size:12px;line-height:1.35;color:#f3e7cc;background:#2a2229d9;border:1px solid #8d7650;border-radius:3px;box-shadow:inset 0 1px 0 #ffffff14}
+.behaviour-still b{font-weight:normal;letter-spacing:.16em;color:#f2c56b;margin-right:4px}
+.behaviour-panel{position:relative;overflow:auto;padding:26px 24px 20px;background:linear-gradient(180deg,#3a2d2a 0%,#2c2326 100%);border-left:3px solid #6f5536;box-shadow:inset 1px 0 0 #b0905f55,-12px 0 30px #0000003a;display:flex;flex-direction:column;gap:13px}
+.behaviour-panel::before{content:'';position:absolute;inset:8px;border:1px solid #a2845a40;border-radius:4px;pointer-events:none}
+.behaviour-eyebrow{margin:0;font-size:10px;letter-spacing:.2em;color:#c9ad7b}
+.behaviour-title{display:flex;align-items:center;gap:10px 12px;flex-wrap:wrap}
+.behaviour-title h1{margin:0;font-weight:normal;font-size:25px;line-height:1.15;color:#f6ead0}
+.behaviour-simulated{font-size:10px;letter-spacing:.18em;padding:4px 8px 3px;color:#2a1f1c;background:#e8bd62;border-radius:2px;box-shadow:0 1px 0 #7d5a24,inset 0 1px 0 #fff3c4}
+.behaviour-phase{margin:2px 0 0;font-size:17px;color:#f2c56b;min-height:1.3em}
+.behaviour-timeline{position:relative;height:12px;margin:0 2px;background:#22191870;border:1px solid #7a603f88;border-radius:2px;box-shadow:inset 0 1px 2px #0006}
+.behaviour-timeline span{position:absolute;top:2px;bottom:2px;border-radius:1px}
+.behaviour-timeline .look,.behaviour-legend .look{background:#8fa3c9}
+.behaviour-timeline .pose,.behaviour-legend .pose{background:#e8bd62}
+.behaviour-timeline .settle,.behaviour-legend .settle{background:#a98c63}
+.behaviour-timeline .cut{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:#e2725b}
+.behaviour-timeline b{position:absolute;top:-5px;bottom:-5px;width:3px;margin-left:-1.5px;background:#f6ead0;border-radius:1px;box-shadow:0 0 0 1px #2a1f1c}
+.behaviour-legend{margin:-4px 0 0;font-size:11px;letter-spacing:.06em;color:#c9b48e;display:flex;align-items:center;gap:6px}
+.behaviour-legend span{display:inline-block;width:12px;height:7px;border-radius:1px;margin-left:6px}
+.behaviour-legend span:first-child{margin-left:0}
+.behaviour-note{margin:0;font-size:14px;line-height:1.45;color:#dccdb0;font-style:italic}
+.behaviour-controls{display:flex;gap:6px;flex-wrap:wrap}
+.behaviour-controls a,.behaviour-controls button{font:13px Georgia,serif;color:#f1e4c7;text-decoration:none;padding:6px 11px;min-height:32px;box-sizing:border-box;display:inline-flex;align-items:center;background:linear-gradient(#5a4430,#463425);border:1px solid #8f6f45;border-radius:3px;box-shadow:inset 0 1px 0 #c79f6a55,0 2px 0 #1d1512;cursor:pointer}
+.behaviour-controls [aria-current='true']{background:linear-gradient(#e2b863,#c4923f);color:#2a1d14;border-color:#f0cf86}
+.behaviour-facts{margin:0;font-size:12px;color:#d9c9aa;letter-spacing:.02em}
+.behaviour-foot{margin:auto 0 0;font-size:11px;line-height:1.5;color:#b4a68d}
+.behaviour-status{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);width:min(320px,80%);padding:20px;background:#372d31;border:1px solid #9f8c6a;text-align:center;z-index:2}
+.behaviour-status strong{letter-spacing:.12em;font-weight:normal;color:#f2c56b;font-size:12px}
+.behaviour-status p{font-size:14px;line-height:1.5;overflow-wrap:anywhere;margin:10px 0 0}
+@media (max-width:760px){
+  .behaviour-bench:not(.behaviour-bench--still){grid-template-columns:1fr;grid-template-rows:57% 43%}
+  .behaviour-panel{border-left:0;border-top:3px solid #6f5536;padding:16px 16px 14px;gap:9px}
+  .behaviour-title h1{font-size:20px}
+  .behaviour-phase{font-size:15px}
+  .behaviour-note{font-size:13px;line-height:1.4}
+  .behaviour-controls a,.behaviour-controls button{padding:5px 9px;min-height:30px;font-size:12px}
+}

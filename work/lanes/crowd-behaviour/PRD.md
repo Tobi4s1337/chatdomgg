@@ -22,7 +22,7 @@ views/captures say **SIMULATED**. Report actual motion/appearance evidence, no s
 
 ## Tasks
 
-- [ ] **CB01 — Make neighbours notice one another.** Put nine supplied simulated citizens on the real
+- [x] **CB01 — Make neighbours notice one another.** Put nine supplied simulated citizens on the real
   motion/render adapter in the owned bench. Implement deterministic policy state, a bounded neighbour lookup,
   one mild nod/wave with look/settle and pair cooldown, and explicit reset/removal/control interruption.
   Show the first readable doorstep encounter at desktop and phone sizes. Introduce the single scenario seam
