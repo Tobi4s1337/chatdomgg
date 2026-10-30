@@ -11,6 +11,7 @@ const STREAM_DEADLINE_MS = 10_000;
 
 /** What the reconciler needs from the authorization authority. */
 export interface ObservationAuthority {
+  readonly generation?: number;
   available(capability: Capability): boolean;
   refresh(): Promise<unknown>;
 }
@@ -196,6 +197,9 @@ export class Reconciler {
       this.#chatters = 'waiting_for_live';
       return;
     }
+    const generation = this.#options.authority.generation;
+    const current = () => !this.#stopped && this.#options.authority.generation === generation
+      && this.#options.authority.available('chatters') && this.tracker.live;
     const sweep = sweepChatters({
       helix: this.#options.helix, broadcasterId: this.#options.kingdomId, now: this.#now, signal: this.#abort.signal,
       ...this.#options.sweep,
@@ -207,10 +211,11 @@ export class Reconciler {
     } finally {
       this.#sweeping = null;
     }
-    if (this.#stopped || result.end === 'aborted') return;
+    if (!current() || result.end === 'aborted') return;
     this.#counters.sweeps++;
     this.#counters.pages += result.pages;
-    const applied = await this.#submit(result);
+    const applied = await this.#submit(result, current);
+    if (!current()) return;
     this.#last = {
       startedAt: result.startedAt, durationMs: result.finishedAt - result.startedAt, pages: result.pages, people: result.ids.length,
       end: result.end, failure: result.failure, applied,
@@ -241,14 +246,14 @@ export class Reconciler {
    * A complete sweep may record departures (people no longer listed); a partial one only refreshes the people
    * it saw, and a sweep that saw nobody without completing says nothing at all.
    */
-  async #submit(result: SweepResult): Promise<SubmitResult | 'not_submitted'> {
+  async #submit(result: SweepResult, current: () => boolean): Promise<SubmitResult | 'not_submitted'> {
     if (result.end !== 'complete' && result.ids.length === 0) return 'not_submitted';
     const input = toPresenceInput({
       kind: 'chatters', sweepId: `${result.startedAt.toString(36)}.${++this.#serial}`, at: result.startedAt,
       complete: result.end === 'complete', ids: result.ids,
     }, this.#options.kingdomId, this.#options.source.origin);
     if (!input) return 'not_submitted';
-    return this.#options.source.submit(input);
+    return this.#options.source.submit(input, current);
   }
 
   #chattersCondition(): ChattersCondition {

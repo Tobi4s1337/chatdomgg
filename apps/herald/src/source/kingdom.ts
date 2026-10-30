@@ -1,4 +1,4 @@
-import { generateKingdom, type KingdomConfig, type KingdomTier } from '@chatdom/world';
+import { generateSettlementPlan, type KingdomConfig, type KingdomTier } from '@chatdom/world';
 
 /**
  * The presentation layout whose home slots Herald may bind people to. It must be the same config main's
@@ -21,7 +21,9 @@ export const KINGDOM_TIERS: readonly KingdomTier[] = ['hamlet', 'town'];
 export const DEFAULT_FIRST_YEAR = 2026;
 
 export function presentKingdom(config: KingdomConfig): KingdomPresentation {
-  const layout = generateKingdom(config);
+  // Keep the existing bounded founding range before asking the road planner to work.
+  if (config.year - config.firstYear > 30) throw new RangeError('Invalid founding years');
+  const layout = generateSettlementPlan(config);
   return { config: layout.config, slots: layout.homes.map(home => home.slot).sort((a, b) => a - b) };
 }
 
@@ -45,7 +47,7 @@ export function kingdomFromSettings(setting: (key: string) => string | null, cha
   const config: KingdomConfig = { seed, tier: tier ?? 'hamlet', firstYear: firstYear ?? DEFAULT_FIRST_YEAR, year: lastYear ?? year };
   if (problems.length === 0) {
     try {
-      generateKingdom(config);
+      presentKingdom(config);
     } catch {
       problems.push({ key: 'HERALD_KINGDOM_YEAR', issue: 'invalid' });
     }

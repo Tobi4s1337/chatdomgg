@@ -7,6 +7,7 @@ import { toPresenceInput, type Observation } from '../source/observations';
 import type { PresenceSource, SubmitResult } from '../source/source';
 import type { HeraldEventType, SubscriptionPlan } from './subscriptions';
 import { TtlMap } from './ttl';
+import { extractForgeWords, ForgeCommandHandoff, type ForgeCommandApplication } from '../forge/commands';
 
 /** Twitch redelivers within minutes; ten minutes of keys covers a reconnect handover and its resends. */
 export const DEDUPE_TTL_MS = 600_000;
@@ -103,12 +104,15 @@ export interface IngestOptions {
    * Get Streams state; without one they go straight to the source.
    */
   readonly stream?: (observation: Extract<Observation, { readonly kind: 'stream' }>) => void;
+  /** Optional trusted creation application; ordinary presence never retains or exports message text. */
+  readonly forge?: ForgeCommandApplication;
   readonly now?: () => number;
 }
 
 /**
- * Turns verified EventSub deliveries into presence observations and nothing else. Chat bodies never get
- * past the narrow event schemas. Delivery IDs and chat message IDs are deduplicated separately; deletes,
+ * Turns verified EventSub deliveries into presence observations. An explicitly installed Forge application
+ * separately receives only bounded creation wishes after the presence binding applies. Ordinary chat bodies
+ * are discarded. Delivery IDs and chat message IDs are deduplicated separately; deletes,
  * user clears and room clears cancel activity still waiting to apply and leave tombstones so late or
  * reordered delivery cannot bring it back. Only bounded IDs and times are kept, and only for ten minutes.
  */
@@ -117,6 +121,7 @@ export class ChatIngest {
   readonly startedAt: number;
   readonly #options: IngestOptions;
   readonly #now: () => number;
+  readonly #forge: ForgeCommandHandoff | null;
   readonly #deliveries = new TtlMap<string, true>(DEDUPE_TTL_MS, DEDUPE_CAPACITY);
   readonly #messages = new TtlMap<string, true>(DEDUPE_TTL_MS, DEDUPE_CAPACITY);
   readonly #deleted = new TtlMap<string, true>(DEDUPE_TTL_MS, TOMBSTONE_CAPACITY);
@@ -137,6 +142,7 @@ export class ChatIngest {
     this.#now = options.now ?? Date.now;
     this.kingdomId = KingdomIdSchema.parse(options.source.kingdomId);
     this.startedAt = this.#now();
+    this.#forge = options.forge ? new ForgeCommandHandoff(options.source, options.forge, this.#now) : null;
   }
 
   /** Redacted counters and bounded cache sizes; never IDs or names. */
@@ -186,6 +192,7 @@ export class ChatIngest {
 
   /** Shutdown or revocation: cancel everything waiting and forget every transient key. */
   clear(): void {
+    this.#forge?.clear();
     for (const pending of this.#pending.values()) pending.canceled = true;
     this.#pending.clear();
     this.#deliveries.clear();
@@ -194,6 +201,8 @@ export class ChatIngest {
     this.#authorClears.clear();
     this.#roomClearedAt = Math.max(this.#roomClearedAt, this.#now());
   }
+
+  dispose(): void { this.clear(); this.#forge?.dispose(); }
 
   /** The frame's subscription must be exactly one of ours: this conduit, a planned type/version/condition. */
   #verify(frame: DeliveryFrame): SubscriptionPlan | null {
@@ -258,7 +267,16 @@ export class ChatIngest {
     this.#pending.set(event.message_id, pending);
     this.#counters.chatSubmitted++;
     this.#lastChatAt = receivedAt;
-    void this.#options.source.submit(input, () => !pending.canceled && this.#options.covered()).then(result => this.#settled(event.message_id, pending, result), () => this.#settled(event.message_id, pending, 'rejected'));
+    const words = this.#forge ? extractForgeWords(raw) : null;
+    const valid = () => !pending.canceled && this.#options.covered();
+    const broadcast = this.#options.forge?.broadcast, generation = broadcast?.generation, liveAtReceipt = broadcast?.live;
+    const forgeValid = () => valid() && liveAtReceipt === true && broadcast?.generation === generation;
+    void this.#options.source.submit(input, valid).then(result => {
+      this.#settled(event.message_id, pending, result);
+      if (result === 'applied' && words !== null && forgeValid()) this.#forge?.offer({
+        personId: event.chatter_user_id, messageId: event.message_id, words, observedAt: at,
+      }, forgeValid);
+    }, () => this.#settled(event.message_id, pending, 'rejected'));
   }
 
   #settled(messageId: string, pending: PendingActivity, result: SubmitResult): void {
@@ -279,6 +297,7 @@ export class ChatIngest {
     this.#counters.deletes++;
     // Delete alone withdraws that one message's activity; it does not hide its author.
     this.#deleted.set(parsed.data.message_id, true, receivedAt);
+    this.#forge?.cancel(parsed.data.message_id);
     const pending = this.#pending.get(parsed.data.message_id);
     if (pending) pending.canceled = true;
   }
@@ -292,6 +311,7 @@ export class ChatIngest {
     this.#counters.roomClears++;
     // A room clear withdraws waiting activity only. Nobody's identity is erased and no light goes out.
     this.#roomClearedAt = Math.max(this.#roomClearedAt, at);
+    this.#forge?.clear();
     for (const pending of this.#pending.values()) pending.canceled = true;
   }
 
@@ -302,6 +322,7 @@ export class ChatIngest {
       return;
     }
     const target = parsed.data.target_user_id;
+    this.#forge?.cancelAuthor(target);
     const clearedAt = at ?? receivedAt;
     this.#counters.userClears++;
     this.#authorClears.set(target, Math.max(clearedAt, this.#authorClears.get(target, receivedAt) ?? -1), receivedAt);

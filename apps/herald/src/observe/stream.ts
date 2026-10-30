@@ -64,6 +64,8 @@ export class StreamTracker {
   readonly #options: StreamTrackerOptions;
   readonly #now: () => number;
   readonly #ended: string[] = [];
+  readonly #listeners = new Set<() => void>();
+  #generation = 0;
   readonly #counters: StreamCounters = { polls: 0, failed: 0, lagging: 0, notLive: 0, observedLive: 0, observedOffline: 0, pushed: 0 };
   #condition: StreamCondition = 'unknown';
   #via: 'eventsub' | 'helix' | null = null;
@@ -85,8 +87,13 @@ export class StreamTracker {
     return this.#condition === 'live' && this.#fresh(this.#now());
   }
 
-  /** A pushed EventSub change. It is newer than any cache, so it always goes to the reducer. */
+  get sessionId(): string | null { return this.#streamId; }
+  get generation(): number { return this.#generation; }
+  onChange(listener: () => void): () => void { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; }
+
+  /** A pushed EventSub change; reordered delivery cannot replace newer accepted evidence. */
   push(observation: StreamObservation): void {
+    if (!this.#accepts(observation.at, observation.live)) return;
     this.#counters.pushed++;
     this.#pushed = { live: observation.live, at: observation.at };
     if (!observation.live && this.#streamId) this.#end(this.#streamId);
@@ -96,6 +103,11 @@ export class StreamTracker {
   /** A Get Streams answer for this channel, asked at `at`, or `null` when the request failed. */
   polled(streams: readonly HelixStream[] | null, at: number, reason: StreamReason): StreamHealth['lastPoll'] {
     this.#counters.polls++;
+    if (this.#observedAt !== null && at < this.#observedAt) {
+      this.#counters.lagging++;
+      this.#lastPoll = { reason, at, outcome: 'lagging' };
+      return this.#lastPoll;
+    }
     let outcome: NonNullable<StreamHealth['lastPoll']>['outcome'];
     if (streams === null) {
       this.#counters.failed++;
@@ -108,7 +120,7 @@ export class StreamTracker {
         this.#counters.notLive++;
         outcome = 'unknown';
       } else if (stream) {
-        if (this.#ended.includes(stream.id) || (this.#pushed && !this.#pushed.live && at - this.#pushed.at < HELIX_LAG_MS)) {
+        if (!this.#accepts(at, true) || this.#ended.includes(stream.id) || (this.#pushed && !this.#pushed.live && at - this.#pushed.at < HELIX_LAG_MS)) {
           this.#counters.lagging++;
           outcome = 'lagging';
         } else {
@@ -143,15 +155,22 @@ export class StreamTracker {
   }
 
   #accept(observation: StreamObservation, via: 'eventsub' | 'helix', recovered: boolean): void {
-    // Older than what we already hold: the reducer would ignore it too, so the tracker does not adopt it.
-    if (this.#observedAt !== null && observation.at < this.#observedAt) return;
+    // Match the reducer's observation order, including offline winning an equal-time online.
+    if (!this.#accepts(observation.at, observation.live)) return;
+    if (this.live !== observation.live || observation.live && this.#streamId !== observation.streamId) this.#generation++;
     this.#condition = observation.live ? 'live' : 'offline';
     this.#via = via;
     this.#observedAt = observation.at;
     this.#recovered = recovered;
     if (observation.live) this.#streamId = observation.streamId;
+    for (const listener of this.#listeners) listener();
     const input = toPresenceInput(observation, this.#options.kingdomId, this.#options.source.origin);
     if (input) void this.#options.source.submit(input).catch(() => undefined);
+  }
+
+  #accepts(at: number, live: boolean): boolean {
+    return this.#observedAt === null || at > this.#observedAt
+      || (at === this.#observedAt && !live && this.#condition === 'live');
   }
 
   #end(streamId: string): void {

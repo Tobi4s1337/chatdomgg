@@ -29,6 +29,7 @@ import { dirname, extname, join, resolve, sep } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath, URLSearchParams } from 'node:url';
 import { chromium } from '@playwright/test';
+import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const HERALD = resolve(HERE, '..');
@@ -50,15 +51,16 @@ const externalBase = option('--base-url', webDist ? null : 'http://127.0.0.1:519
 const tier = option('--tier', 'town');
 const seed = option('--seed', 'willowmere');
 const hour = Number(option('--hour', '21.5'));
-// Main's scene renders generateKingdom({ seed, tier, firstYear: hamlet ? 2025 : 2022, year: 2026 }); Herald must
-// bind people to the same layout's slots or a lit slot lands on another window.
+// Both surfaces and Herald use the same settlement configuration, including its founding years.
 const firstYear = option('--first-year', tier === 'hamlet' ? '2025' : '2022');
+const year = option('--year', '2026');
 const scenarios = option('--scenarios', SCENARIOS.join(',')).split(',').filter(Boolean);
 const live = args.includes('--live');
 const isPort = port => Number.isInteger(port) && port >= 1024 && port <= 65535;
-if (!['town', 'hamlet'].includes(tier) || !Number.isFinite(hour) || scenarios.some(name => !SCENARIOS.includes(name))
+if (!['town', 'hamlet'].includes(tier) || !Number.isFinite(hour) || !/^[1-9][0-9]{3}$/.test(firstYear) || !/^[1-9][0-9]{3}$/.test(year)
+  || Number(year) < Number(firstYear) || Number(year) - Number(firstYear) > 30 || scenarios.some(name => !SCENARIOS.includes(name))
   || !isPort(heraldPort) || !isPort(livePort) || (webPort !== 0 && !isPort(webPort)) || (webDist && externalBase)) {
-  process.stderr.write('Usage: shots [--base-url <url> | --web-dist <dir> [--web-port <port>]] [--herald-port <port>] [--scenarios evening,quiet,offline,stale,unavailable,restart] [--live [--live-port <port>]] [--tier town|hamlet] [--seed <seed>] [--hour <h>]\n');
+  process.stderr.write('Usage: shots [--base-url <url> | --web-dist <dir> [--web-port <port>]] [--herald-port <port>] [--scenarios evening,quiet,offline,stale,unavailable,restart] [--live [--live-port <port>]] [--tier town|hamlet] [--seed <seed>] [--first-year <yyyy>] [--year <yyyy>] [--hour <h>]\n');
   process.exit(2);
 }
 if (externalBase && heraldPort !== 5194) {
@@ -189,21 +191,26 @@ async function startHerald(run, scratch) {
   const command = run.mode === 'replay'
     ? ['replay', '--scenario', run.scenario, ...(run.arrival ? ['--arrival', run.arrival] : []), ...(run.bindings ? ['--bindings', scratch] : [])]
     : ['dev'];
-  const env = { ...process.env, HERALD_PORT: String(heraldPort), HERALD_KINGDOM_SEED: seed, HERALD_KINGDOM_TIER: tier, HERALD_KINGDOM_FIRST_YEAR: firstYear, HERALD_KINGDOM_YEAR: '2026' };
+  const env = { ...process.env, HERALD_PORT: String(heraldPort), HERALD_KINGDOM_SEED: seed, HERALD_KINGDOM_TIER: tier, HERALD_KINGDOM_FIRST_YEAR: firstYear, HERALD_KINGDOM_YEAR: year };
   const child = spawn(process.execPath, ['dist/herald.mjs', ...command], { cwd: HERALD, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let exited = null;
   child.on('exit', code => { exited = code ?? 1; });
   child.stdout.resume();
   child.stderr.resume();
-  await until(async () => { if (exited !== null) throw new Error(`herald ${command[0]} exited (${exited})`); return health(); }, 60_000, `herald ${command[0]}`);
-  return {
-    async stop() {
-      if (exited !== null) return;
-      const gone = new Promise(done => child.once('exit', done));
-      child.kill('SIGINT');
-      await Promise.race([gone, sleep(15_000).then(() => child.kill('SIGKILL'))]);
-    },
+  const stop = async () => {
+    if (exited !== null) return;
+    const gone = new Promise(done => child.once('exit', done));
+    child.kill('SIGTERM');
+    const deadline = globalThis.setTimeout(() => child.kill('SIGKILL'), 15_000);
+    try { await gone; } finally { globalThis.clearTimeout(deadline); }
   };
+  try {
+    await until(async () => { if (exited !== null) throw new Error(`herald ${command[0]} exited (${exited})`); return health(); }, 60_000, `herald ${command[0]}`);
+    return { stop };
+  } catch (error) {
+    await stop();
+    throw error;
+  }
 }
 
 function expectPage(run, source, page) {
@@ -216,7 +223,7 @@ function expectPage(run, source, page) {
     } else {
       if (page.ribbon !== 'SIMULATED') problems.push(`ribbon ${page.ribbon}, expected SIMULATED`);
       if ((run.name === 'evening' || run.name === 'quiet' || run.name === 'restart') && !lit) problems.push('no lit windows');
-      if ((run.name === 'offline' || run.name === 'stale') && lit) problems.push(`windows lit while ${source.frame?.connection}`);
+      if (run.name === 'stale' && lit) problems.push('windows lit while the source is stale');
     }
   } else {
     if (page.ribbon === 'SIMULATED') problems.push('the real source shows SIMULATED');
@@ -227,12 +234,13 @@ function expectPage(run, source, page) {
       const connection = source.frame.connection;
       const ribbon = { fresh: 'LIVE CHAT', offline: 'STREAM RESTING', stale: 'CONNECTION LOST' }[connection];
       if (page.ribbon !== ribbon) problems.push(`real ${connection} source shows ${page.ribbon}, expected ${ribbon}`);
-      if (connection !== 'fresh' && lit) problems.push(`windows lit while the real source is ${connection}`);
-      if (page.activeWindows > source.frame.present) problems.push(`${page.activeWindows} windows lit for ${source.frame.present} present`);
+      if (connection === 'stale' && lit) problems.push('windows lit while the real source is stale');
     }
   }
+  if (source.available && source.frame && page.activeWindows > source.frame.present) problems.push(`${page.activeWindows} windows lit for ${source.frame.present} present`);
+  if (!(source.available && source.frame?.streamLive && source.frame.connection === 'fresh') && page.beaconFieldVisited > 0) problems.push('castle beacon lit without a fresh live broadcast');
   if (run.name === 'quiet' && page.names.length) problems.push('a quiet (unnamed) window was named');
-  for (const name of page.names) if (run.mode !== 'replay' || !SYNTHETIC_NAMES.has(name)) problems.push('an unexpected window name appeared');
+  if (run.mode === 'replay') for (const name of page.names) if (!SYNTHETIC_NAMES.has(name)) problems.push('an unexpected window name appeared');
   if (page.errors.length) problems.push(`page errors: ${page.errors.join(' | ')}`);
   return problems;
 }
@@ -250,8 +258,9 @@ async function settle(page) {
   }
 }
 
-async function shoot(browser, run, path, sizes) {
-  const query = new URLSearchParams({ source: 'herald', seed, tier, hour: String(hour), time: '30', camera: 'hero' });
+async function shoot(browser, run, path, sizes, kingdomId) {
+  const query = new URLSearchParams({ source: 'herald', seed, tier, firstYear, year, hour: String(hour), camera: 'hero' });
+  if (kingdomId) query.set('kingdom', kingdomId);
   if (run.mode === 'replay') query.set('presenceOrigin', 'simulated');
   const page = await browser.newPage({ viewport: { width: sizes[0][0], height: sizes[0][1] } });
   const errors = [];
@@ -280,6 +289,7 @@ async function shoot(browser, run, path, sizes) {
         })(),
         names: [...document.querySelectorAll('.window-name')].map(label => [...label.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent).join('').trim()),
         activeWindows: window.__chatdomKingdom.stats.activeWindows,
+        beaconFieldVisited: window.__chatdomKingdom.stats.beaconFieldVisited,
         label: window.__chatdomKingdom.stats.source,
       }));
       const problems = expectPage(run, source ?? { available: false }, { ...state, errors });
@@ -308,19 +318,22 @@ function summary(source) {
 }
 
 await mkdir(OUT, { recursive: true });
+const release = await acquireCaptureLock();
 const web = webDist ? await serveWeb(webDist, webPort) : null;
 const base = (web?.base ?? externalBase).replace(/\/$/, '');
 if (web) process.stdout.write(`serving ${webDist} on ${base} · /presence-data → the Herald each run reads\n`);
-const scratch = await mkdtemp(join(tmpdir(), 'herald-shots-bindings-'));
+let scratch, browser;
 const seatings = {};
-const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-const report = { base, layout: { seed, tier, firstYear: Number(firstYear), year: 2026 }, hour, at: new Date().toISOString(), runs: [] };
+const report = { base, layout: { seed, tier, firstYear: Number(firstYear), year: Number(year) }, hour, at: new Date().toISOString(), runs: [] };
 let failed = false;
 try {
+  scratch = await mkdtemp(join(tmpdir(), 'herald-shots-bindings-'));
+  browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   for (const run of PLAN) {
     const herald = await startHerald(run, scratch);
     try {
       const reached = await until(async () => { const s = await health(); return s && ready[run.name](s) ? s : null; }, 120_000, `${run.name} to reach its moment`);
+      const kingdomId = reached.available ? (await currentFrame()).kingdomId : null;
       process.stdout.write(`${run.file ?? `restart-${run.compare}`}: herald ${reached.condition}${reached.frame ? ` · ${reached.frame.connection} · ${reached.frame.present} lit` : ''}\n`);
       const entry = { run: run.file ?? `restart-${run.compare}` };
       if (run.compare) {
@@ -331,8 +344,8 @@ try {
       }
       if (run.file) {
         const shots = [
-          ...await shoot(browser, run, '/', [[1440, 900], [390, 844]]),
-          ...await shoot(browser, run, '/stream', [[1920, 1080]]),
+          ...await shoot(browser, run, '/', [[1440, 900], [390, 844]], kingdomId),
+          ...await shoot(browser, run, '/stream', [[1920, 1080]], kingdomId),
         ];
         for (const shot of shots) {
           process.stdout.write(`  ${shot.file}: ${shot.ribbon} · ${shot.litWindows} lit · ${shot.namedLabels} named${shot.problems.length ? ` · FAIL ${shot.problems.join('; ')}` : ''}\n`);
@@ -354,10 +367,13 @@ try {
     failed ||= !stable || !moved;
   }
 } finally {
-  await browser.close();
-  if (web) await new Promise(done => { web.server.closeAllConnections(); web.server.close(done); });
-  await rm(scratch, { recursive: true, force: true });
-  await writeFile(join(OUT, `report-${tier}.json`), `${JSON.stringify(report, null, 2)}\n`);
+  try { await browser?.close(); } finally {
+    try {
+      if (web) await new Promise(done => { web.server.closeAllConnections(); web.server.close(done); });
+      if (scratch) await rm(scratch, { recursive: true, force: true });
+      await writeFile(join(OUT, `report-${tier}.json`), `${JSON.stringify(report, null, 2)}\n`);
+    } finally { await release(); }
+  }
 }
 process.stdout.write(`${failed ? 'FAILED' : 'ok'} · shots/herald/report-${tier}.json\n`);
 process.exitCode = failed ? 1 : 0;

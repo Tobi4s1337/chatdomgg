@@ -239,9 +239,76 @@ describe('stream state', () => {
     s.t.polled(listed('9'), T0 + 5_000, 'minute');
     expect(s.t.health()).toMatchObject({ condition: 'offline', observedAt: T0 + 10_000 });
   });
+
+  it('reordered pushes and empty polls cannot poison the current broadcast or its cache guard', () => {
+    const s = tracker();
+    s.t.polled(listed('9'), T0 + 10_000, 'startup');
+    s.t.push({ kind: 'stream', at: T0 + 5_000, live: false });
+    // A stale offline must not mark the newer broadcast as ended.
+    expect(s.t.polled(listed('9'), T0 + 20_000, 'minute')?.outcome).toBe('live');
+    expect(s.t.polled([], T0 + 15_000, 'minute')?.outcome).toBe('lagging');
+    expect(s.t.polled(listed('9'), T0 + 30_000, 'minute')?.outcome).toBe('live');
+    s.t.push({ kind: 'stream', at: T0 + 40_000, live: false });
+    s.t.push({ kind: 'stream', at: T0 + 35_000, live: true, streamId: '10' });
+    s.t.push({ kind: 'stream', at: T0 + 40_000, live: true, streamId: '10' });
+    // Neither an old online nor an equal-time online replaces the offline cache guard.
+    expect(s.t.polled(listed('10'), T0 + 50_000, 'minute')?.outcome).toBe('lagging');
+    expect(s.t.health()).toMatchObject({ condition: 'offline', observedAt: T0 + 40_000, counters: { pushed: 1 } });
+    expect(s.submitted).toHaveLength(4);
+  });
 });
 
 describe('reconciler with the source', () => {
+  it('discards a pending Chatters sweep across revocation, erasure and a fresh grant', async () => {
+    const store = new MemoryBindingStore();
+    const r = await rig({ store });
+    let generation = 0;
+    let release!: (page: HelixChattersPage) => void;
+    const getChattersPage = vi.fn(() => new Promise<HelixChattersPage>(resolve => (release = resolve)));
+    const reconciler = new Reconciler({
+      kingdomId: KINGDOM, source: r.source, now: () => r.now, everyMs: 0,
+      authority: { ...r.authority, get generation() { return generation; } },
+      helix: { getStreams: (...args) => r.helix.getStreams(...args), getChattersPage },
+    });
+    cleanups.push(() => reconciler.stop());
+    const running = reconciler.start();
+    await vi.waitFor(() => expect(getChattersPage).toHaveBeenCalledOnce());
+    r.authority.granted.delete('chatters');
+    generation++;
+    await r.source.erase();
+    r.authority.granted.add('chatters');
+    release({ userIds: quiet(2), cursor: null });
+    await running;
+    expect(await store.load()).toEqual([]);
+    expect(r.source.health().capacity.bound).toBe(0);
+    expect(r.lit()).toEqual([]);
+    expect(reconciler.health().chatters.last).toBeNull();
+  });
+
+  it('withdraws a Chatters sweep that revocation catches waiting for its binding write', async () => {
+    const store = new MemoryBindingStore();
+    const r = await rig({ store });
+    let generation = 0;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const save = store.save.bind(store);
+    const saving = vi.spyOn(store, 'save').mockImplementation(async bindings => { await gate; await save(bindings); });
+    const reconciler = new Reconciler({
+      kingdomId: KINGDOM, source: r.source, helix: r.helix, now: () => r.now, everyMs: 0,
+      authority: { ...r.authority, get generation() { return generation; } },
+    });
+    cleanups.push(() => reconciler.stop());
+    const running = reconciler.start();
+    await vi.waitFor(() => expect(saving).toHaveBeenCalledOnce());
+    generation++;
+    const erased = r.source.erase();
+    release();
+    await Promise.all([running, erased]);
+    expect(r.source.health().counters.canceled).toBe(1);
+    expect(await store.load()).toEqual([]);
+    expect(r.frames.every(frame => frame.windows.every(window => !window.present))).toBe(true);
+  });
+
   it('startup reads stream state, then lights quiet people unnamed with no identity on the wire', async () => {
     const r = await rig({ chatters: quiet(3) });
     await r.reconciler.start();

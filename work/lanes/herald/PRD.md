@@ -76,3 +76,13 @@ continue an independent task, never invent the missing authority. Never pick fro
 
 Worker discoveries go here with evidence. They do not authorize outbound Twitch actions, scope expansion or a
 second presence adapter.
+
+Main integration note (2026-10-30): H01–H04 feed the winding settlement on main. The amended public presence
+contract permits fresh direct chat/panel/walker presence while the broadcast is observed offline; stale frames
+still clear, Chatters/beacon/rewards still require live. Rebase the H05 expectations onto this distinction and
+use `pnpm shots --area herald`; capture owns its lock and must use a free development service port or coordinate
+with main rather than replacing the live 5194 source. No chat text/Forge commands belong to this presence path.
+
+Main Forge integration (2026-10-30): the optional private creation handoff in `src/forge/commands.ts` is separate
+from presence. H05 continues against default `dev` with no Forge sink. Preserve the accepted broadcast generation
+and cancellation hooks when integrating main; do not add identity, words or entitlement to public presence.

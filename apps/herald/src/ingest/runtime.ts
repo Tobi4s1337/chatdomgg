@@ -52,6 +52,7 @@ export interface DeliveryRuntimeOptions {
   readonly log?: (line: string) => void;
   /** Where pushed `stream.online`/`stream.offline` go (the live source's stream tracker). */
   readonly stream?: IngestOptions['stream'];
+  readonly forge?: IngestOptions['forge'];
   /**
    * Reads current state again (Get Streams, Chatters) whenever coverage is restored. Twitch does not replay
    * a gap, so the source publishes again only after this has settled.
@@ -82,6 +83,7 @@ export class DeliveryRuntime {
   /** Coverage is complete and the state after it has been reconciled: the source may publish. */
   #resumed = false;
   #resumeGeneration = 0;
+  #verificationGeneration = 0;
   #everResumed = false;
   #gaps = { count: 0, last: null as { from: number; to: number } | null };
   #verifying: Promise<void> | null = null;
@@ -101,6 +103,7 @@ export class DeliveryRuntime {
     this.#shard = new ConduitShardConnection({
       admin: options.admin, conduitId: options.conduitId, listener: {
         attached: (reason, gap) => {
+          this.#verificationGeneration++;
           if (gap) {
             this.#gaps.count++;
             this.#gaps.last = gap;
@@ -110,11 +113,13 @@ export class DeliveryRuntime {
           this.#scheduleVerify(0);
         },
         detached: reason => {
+          this.#verificationGeneration++;
           this.#log(`shard detached (${reason}); not publishing until delivery is restored`);
           this.#recompute();
         },
         frame: frame => this.#frame(frame),
         fatal: reason => {
+          this.#verificationGeneration++;
           this.#conduit = 'missing';
           this.#log(`conduit ${reason}: run provision:source`);
           this.#recompute();
@@ -129,6 +134,7 @@ export class DeliveryRuntime {
       source: options.source, conduitId: options.conduitId, clientId: options.clientId, plans: this.plans,
       covered: () => this.#covered && !this.#stopped,
       onAuthorizationRevoked: userId => {
+        this.#verificationGeneration++;
         const roles = options.authority.revoked(userId);
         if (roles.length === 0) return;
         this.#log(`authorization withdrawn by the ${roles.join(' and ')}; delivery stops until a fresh grant`);
@@ -138,6 +144,7 @@ export class DeliveryRuntime {
       },
       onSubscriptionRevoked: (type, status) => this.#revoked(type, status),
       ...(options.stream ? { stream: options.stream } : {}),
+      ...(options.forge ? { forge: options.forge } : {}),
       ...(options.now ? { now: options.now } : {}),
     });
   }
@@ -159,6 +166,7 @@ export class DeliveryRuntime {
   async start(): Promise<ConduitCondition> {
     this.#unsubscribe = this.#options.authority.on(event => {
       if (event.type === 'report') {
+        this.#verificationGeneration++;
         this.#recompute();
         this.#scheduleVerify(this.#options.settleMs ?? SETTLE_MS);
       }
@@ -196,6 +204,7 @@ export class DeliveryRuntime {
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
+    this.#verificationGeneration++;
     this.#abort.abort();
     if (this.#timer) clearInterval(this.#timer);
     if (this.#settleTimer) clearTimeout(this.#settleTimer);
@@ -203,7 +212,7 @@ export class DeliveryRuntime {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
     this.#shard.stop();
-    this.#ingest.clear();
+    this.#ingest.dispose();
     this.#covered = false;
     this.#resumed = false;
   }
@@ -214,6 +223,7 @@ export class DeliveryRuntime {
   }
 
   #revoked(type: HeraldEventType, status: string): void {
+    this.#verificationGeneration++;
     this.#coverage = this.#coverage.map(entry => entry.type === type ? { ...entry, state: 'disabled' as CoverageState, reason: status } : entry);
     this.#log(`${type} subscription disabled by Twitch (${status})`);
     this.#recompute();
@@ -234,13 +244,21 @@ export class DeliveryRuntime {
   }
 
   async #runVerify(): Promise<void> {
+    const generation = this.#verificationGeneration;
+    const sessionId = this.#shard.sessionId;
+    const obsolete = () => {
+      if (!this.#stopped && generation === this.#verificationGeneration && sessionId === this.#shard.sessionId) return false;
+      if (!this.#stopped) this.#verifyAgain = true;
+      return true;
+    };
     if (this.#conduit === 'unreachable') await this.#checkConduit();
+    if (obsolete()) return;
     if (this.#stopped || this.#conduit !== 'ready' || !this.#shard.attached) return;
     const signal = this.#abort.signal;
     try {
       const shards = await this.#options.admin.getShards(this.#options.conduitId, { signal });
+      if (obsolete()) return;
       const shard = shards.find(entry => entry.id === this.#shard.shardId);
-      const sessionId = this.#shard.sessionId;
       if (!shard || shard.status !== 'enabled' || sessionId === null || shard.sessionId !== sessionId) {
         // Twitch no longer delivers to our session. Repairing attaches a fresh one.
         this.#shard.repair(shard ? `shard_${shard.status}` : 'shard_missing');
@@ -250,13 +268,13 @@ export class DeliveryRuntime {
         admin: this.#options.admin, conduitId: this.#options.conduitId, plans: this.plans,
         authorized: capability => this.#options.authority.available(capability), signal,
       });
-      if (this.#stopped) return;
+      if (obsolete()) return;
       this.#coverage = [...result.coverage];
       this.#unexpected = result.unexpected;
       this.#verifiedAt = this.#now();
       if (result.created + result.deleted > 0) this.#log(`subscriptions reconciled: ${result.created} created, ${result.deleted} stale removed`);
     } catch (error) {
-      if (this.#stopped || isTwitchFailure(error, 'aborted')) return;
+      if (obsolete() || isTwitchFailure(error, 'aborted')) return;
       if (isTwitchFailure(error, 'not_found')) {
         this.#conduit = 'missing';
         this.#shard.stop();

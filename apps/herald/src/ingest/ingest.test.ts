@@ -1,4 +1,4 @@
-import { KingdomIdSchema, type KingdomPresenceFrame } from '@chatdom/shared';
+import { KingdomIdSchema, PRESENCE_LEASE_MS, type KingdomPresenceFrame } from '@chatdom/shared';
 import { AppTokenSession, EventSubAdmin, HelixReader, Secret } from '@chatdom/twitch';
 import { FAKE_EVENTSUB_URL, FakeEventSub, FakeTwitch, type FakeSocket } from '@chatdom/twitch/testing';
 import type { PresenceBinding } from '@chatdom/world';
@@ -16,6 +16,8 @@ import { provisionSource, recordConduitId } from './provision';
 import { DeliveryRuntime } from './runtime';
 import { HERALD_EVENT_TYPES } from './subscriptions';
 import { TtlMap } from './ttl';
+import { extractForgeWords, ForgeCommandHandoff, type ForgeCommandSink, type ForgeChatCommand, type ForgeCommandLease } from '../forge/commands';
+import { StreamTracker } from '../observe/stream';
 
 const CLIENT_ID = 'simulatedclient0000000000000001';
 const SECRET = 'simulated-client-secret-value-0001';
@@ -73,7 +75,7 @@ function chatEvent(person: { id: string; name: string }, messageId: string, extr
 }
 const broadcasterFields = { broadcaster_user_id: BROADCASTER.id, broadcaster_user_login: BROADCASTER.login, broadcaster_user_name: BROADCASTER.displayName };
 
-async function rig(options: { grants?: Record<string, readonly string[]>; store?: BindingStore; conduit?: 'present' | 'missing' } = {}) {
+async function rig(options: { grants?: Record<string, readonly string[]>; store?: BindingStore; conduit?: 'present' | 'missing'; forge?: ForgeCommandSink } = {}) {
   const fake = new FakeTwitch({ clientId: CLIENT_ID, clientSecret: SECRET, users: [BROADCASTER, READER], grants: options.grants ?? FULL_GRANTS });
   const eventsub = new FakeEventSub(fake, { keepaliveSeconds: 10 });
   const conduitId = options.conduit === 'missing' ? 'simulated-conduit-gone' : eventsub.addConduit(1);
@@ -87,10 +89,12 @@ async function rig(options: { grants?: Record<string, readonly string[]>; store?
   let unavailable = 0;
   source.subscribe({ frame: frame => frames.push(frame.frame), unavailable: () => void unavailable++ });
   const log: string[] = [];
+  const forgeStream = options.forge ? new StreamTracker({kingdomId:KINGDOM, source}) : null;
   const runtime = new DeliveryRuntime({
     conduitId, clientId: CLIENT_ID, broadcasterId: BROADCASTER.id, readerId: READER.id,
     admin: new EventSubAdmin(helix.session), authority, source, socketFactory: eventsub.socketFactory, url: FAKE_EVENTSUB_URL,
     random: () => 0.5, settleMs: 20, log: line => log.push(line),
+    ...(options.forge && forgeStream ? { forge: {run:options.forge, broadcast:forgeStream}, stream:observation=>forgeStream.push(observation) } : {}),
   });
   const stopAll = async () => {
     runtime.stop();
@@ -115,7 +119,7 @@ async function rig(options: { grants?: Record<string, readonly string[]>; store?
     eventsub.deliver('channel.chat.message', chatEvent(person, messageId, extra), meta);
   const latest = () => frames.at(-1) ?? source.current?.frame ?? null;
   const present = () => (source.current?.frame.windows ?? []).filter(window => window.present);
-  return { fake, eventsub, conduitId, tokens, helix, authority, source, runtime, frames, log, settle, until, socket, live, say, latest, present, stopAll, get unavailable() { return unavailable; } };
+  return { fake, eventsub, conduitId, tokens, helix, authority, source, runtime, frames, log, settle, until, socket, live, say, latest, present, stopAll, forgeStream, get unavailable() { return unavailable; } };
 }
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -136,6 +140,64 @@ async function started(options: Parameters<typeof rig>[0] = {}) {
   await r.until(() => r.runtime.covered);
   return r;
 }
+
+describe('private Forge command handoff', () => {
+  it('waits for a durable native slot, dedupes the wish and withdraws it on cleanup or broadcast loss', async () => {
+    const calls: Array<{command: ForgeChatCommand; lease: ForgeCommandLease}> = [];
+    const store = new GatedStore();
+    const r = await started({ store, forge: async (command, lease) => {
+      calls.push({command, lease});
+      await new Promise<void>(resolve => lease.signal.addEventListener('abort', () => resolve(), {once:true}));
+    } });
+    const wish = (text: string) => ({ message: { text } });
+    r.live(); await r.settle();
+    r.say(PEOPLE.juniper, 'ordinary'); await r.settle(); expect(calls).toHaveLength(0);
+    const originalAt = Date.now();
+    await r.settle(60_000); r.say(PEOPLE.juniper,'refresh'); await r.settle(31_000);
+    const expired = vi.fn(async () => {});
+    const admission = new ForgeCommandHandoff(r.source, {run:expired,broadcast:r.forgeStream!});
+    admission.offer({personId:PEOPLE.juniper.id,messageId:'expired-wish',words:'a dragon',observedAt:originalAt},()=>true);
+    await r.settle(); expect(Date.now()-originalAt).toBeGreaterThan(PRESENCE_LEASE_MS); expect(expired).not.toHaveBeenCalled(); admission.dispose();
+    let release!: () => void;
+    store.gate = new Promise<void>(resolve => { release = resolve; });
+    r.say(PEOPLE.rook, 'old-broadcast', wish('!forge a dragon from the old broadcast'));
+    await r.settle(); expect(calls).toHaveLength(0);
+    r.eventsub.deliver('stream.offline',broadcasterFields); await r.settle();
+    r.live('simulated-stream-2'); await r.settle();
+    expect(r.source.current!.frame.streamLive).toBe(true); // Both transitions are still behind the binding write.
+    release(); await r.settle();
+    expect(calls).toHaveLength(0);
+    r.say(PEOPLE.rook, 'dragon', wish('!forge a chimney shaped like a sleeping dragon')); await r.settle();
+    expect(calls).toHaveLength(1);
+    const first = calls[0]!;
+    expect(first.command).toMatchObject({ kingdomId: KINGDOM, personId: PEOPLE.rook.id, messageId:'dragon', words:'a chimney shaped like a sleeping dragon' });
+    expect(first.command.slot).toBe(r.present().find(w=>w.publicName===PEOPLE.rook.name)!.slot);
+    expect(first.lease.current()).toBe(true);
+    r.say(PEOPLE.rook, 'dragon', wish('!forge a different wish')); await r.settle(); expect(calls).toHaveLength(1);
+    expect(JSON.stringify(r.frames)).not.toContain('sleeping dragon');
+    expect(JSON.stringify(r.runtime.health())).not.toContain('sleeping dragon');
+    r.eventsub.deliver('channel.chat.message_delete',{...broadcasterFields,target_user_id:PEOPLE.rook.id,message_id:'dragon'});
+    await r.settle(); expect(first.lease.signal.aborted).toBe(true); expect(first.lease.current()).toBe(false);
+    r.say(PEOPLE.rook,'owl',wish('!forge an owl weathervane')); await r.settle();
+    r.eventsub.deliver('channel.chat.clear_user_messages',{...broadcasterFields,target_user_id:PEOPLE.rook.id}); await r.settle();
+    expect(calls[1]!.lease.signal.aborted).toBe(true);
+    r.say(PEOPLE.wren,'moon',wish('!forge a moon lantern')); await r.settle();
+    r.eventsub.deliver('channel.chat.clear',broadcasterFields); await r.settle();
+    expect(calls[2]!.lease.signal.aborted).toBe(true);
+    r.say(PEOPLE.juniper,'fox',wish('!forge a sleeping fox')); await r.settle();
+    store.gate = new Promise<void>(resolve => { release = resolve; });
+    r.say({id:'777000004',name:'Sage'},'pending-writer'); await r.settle();
+    r.eventsub.deliver('stream.offline',broadcasterFields); await r.settle();
+    expect(r.source.current!.frame.streamLive).toBe(true); // The write still holds the old projection.
+    expect(calls[3]!.lease.signal.aborted).toBe(true);
+    release(); await r.settle();
+    r.say(PEOPLE.wren,'offline',wish('!forge another moon lantern')); await r.settle(); expect(calls).toHaveLength(4);
+    r.live('simulated-stream-3'); await r.settle();
+    r.say(PEOPLE.wren,'after-live',wish('!forge a moon lantern')); await r.settle(); expect(calls).toHaveLength(5);
+    r.socket().close(); await r.settle(); expect(calls[4]!.lease.signal.aborted).toBe(true);
+    for (const text of ['hello !forge a dragon','!forge','!forge '+ 'x'.repeat(241)]) expect(extractForgeWords({message:{text}})).toBeNull();
+  });
+});
 
 describe('subscription reconciliation', () => {
   it('creates exactly the seven planned subscriptions on the configured conduit, once', async () => {
@@ -403,6 +465,46 @@ describe('chat into presence', () => {
 });
 
 describe('delivery health', () => {
+  it('an older verification cannot restore cleanup coverage after a subscription revocation', async () => {
+    const r = await started();
+    const list = EventSubAdmin.prototype.listConduitSubscriptions;
+    let releaseOld!: () => void;
+    let releaseFresh!: () => void;
+    const oldGate = new Promise<void>(resolve => (releaseOld = resolve));
+    const freshGate = new Promise<void>(resolve => (releaseFresh = resolve));
+    let captured = false;
+    let calls = 0;
+    const listing = vi.spyOn(EventSubAdmin.prototype, 'listConduitSubscriptions').mockImplementation(async function (this: EventSubAdmin, ...args) {
+      calls++;
+      if (calls !== 1) await freshGate;
+      const result = await list.apply(this, args);
+      if (calls === 1) { captured = true; await oldGate; }
+      return result;
+    });
+    try {
+      const verifying = r.runtime.verify();
+      await r.until(() => captured);
+      const cleanup = r.eventsub.subscriptions.find(entry => entry.type === 'channel.chat.message_delete')!;
+      cleanup.status = 'version_removed';
+      r.eventsub.sendFrame(r.socket(), 'revocation', { subscription: cleanup });
+      expect(r.source.available).toBe(false);
+      const verifiedAt = r.runtime.health().verifiedAt;
+      releaseOld();
+      await verifying;
+      expect(r.runtime.health().coverage.find(entry => entry.type === cleanup.type)).toMatchObject({ state: 'disabled', reason: 'version_removed' });
+      expect(r.runtime.health().verifiedAt).toBe(verifiedAt);
+      expect(r.source.available).toBe(false);
+      releaseFresh();
+      await r.until(() => r.source.available);
+      expect(calls).toBeGreaterThan(1);
+      expect(r.eventsub.subscriptions.includes(cleanup)).toBe(false);
+    } finally {
+      releaseOld();
+      releaseFresh();
+      listing.mockRestore();
+    }
+  });
+
   it('losing the shard closes the stream at once; repair restores it and records the gap', async () => {
     const r = await started();
     r.live();
@@ -636,4 +738,3 @@ describe('TtlMap', () => {
     expect(map.size).toBe(1);
   });
 });
-

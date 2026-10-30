@@ -9,6 +9,7 @@ import { DeliveryRuntime } from '../ingest/runtime';
 import { Reconciler } from '../observe/reconcile';
 import { FileBindingStore } from './bindings';
 import { presentKingdom } from './kingdom';
+import type { ForgeCommandSink } from '../forge/commands';
 import { startPresenceServer, type PresenceServer, type SourceHost, type UnstartedHealth } from './server';
 import { PresenceSource } from './source';
 
@@ -34,6 +35,8 @@ export async function startLiveSource(options: {
   readonly config: HeraldConfig;
   readonly print: (line: string) => void;
   readonly port?: number;
+  /** Main's trusted Forge application. Omitted until its own authority and judging path is connected. */
+  readonly forge?: ForgeCommandSink;
   /**
    * Where Twitch is. Production uses the real endpoints; the acceptance suite runs this same composition
    * against SIMULATED local fakes, so nothing in between is a test-only path.
@@ -128,6 +131,7 @@ export async function startLiveSource(options: {
     runtime = new DeliveryRuntime({
       conduitId: config.conduitId, clientId: config.credentials.clientId, broadcasterId: kingdomId.data, readerId,
       admin: new EventSubAdmin(helix.session), authority, source: live, log: line => print(`  ${line}`),
+      ...(options.forge ? { forge: {run:options.forge, broadcast:observed.tracker} } : {}),
       ...(options.twitch?.socketFactory ? { socketFactory: options.twitch.socketFactory } : {}),
       ...(options.twitch?.eventsubUrl ? { url: options.twitch.eventsubUrl } : {}),
       ...(options.twitch?.random ? { random: options.twitch.random } : {}),

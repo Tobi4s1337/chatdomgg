@@ -16,6 +16,8 @@ import { FRESHNESS_REFRESH_MS, PresenceSource, type SourceFrame } from './source
 
 const KINGDOM = SIMULATED_KINGDOM;
 const SLOTS = presentKingdom({ seed: 'test', tier: 'hamlet', firstYear: 2026, year: 2026 }).slots;
+// Source capacity/backpressure checks need slots, not 27 years of road geometry.
+const LARGE_SLOTS = Array.from({ length: 27 }, (_, quarter) => Array.from({ length: 48 }, (_, ordinal) => quarter * 1024 + ordinal)).flat();
 const T0 = Date.UTC(2026, 9, 30, 20, 0, 0);
 const temporary: string[] = [];
 
@@ -342,7 +344,7 @@ describe('PresenceSource', () => {
       saves++;
       await memory.save(bindings);
     } };
-    const town = presentKingdom({ seed: 'big', tier: 'town', firstYear: 2000, year: 2026 }).slots;
+    const town = LARGE_SLOTS;
     const h = harness({ store, slots: town });
     await h.source.open();
     h.source.setAvailable(true);
@@ -526,7 +528,7 @@ describe('FileBindingStore', () => {
 
 describe('presence server', () => {
   async function serve(stallMs = 200) {
-    const h = harness({ slots: presentKingdom({ seed: 'big', tier: 'town', firstYear: 2000, year: 2026 }).slots });
+    const h = harness({ slots: LARGE_SLOTS });
     await h.source.open();
     const server = await startPresenceServer({ host: () => h.source, port: 0, stallMs, keepaliveMs: 50, maxClients: 2 });
     return { h, server };
