@@ -21,7 +21,7 @@ work or repeat town proof captures. Main handles `pnpm verify` and integration. 
 
 ## Tasks
 
-- [ ] **BT01 — Put a real tool rack beside the home.** Export the agreed entry from `build-tools/index.tsx`,
+- [x] **BT01 — Put a real tool rack beside the home.** Export the agreed entry from `build-tools/index.tsx`,
   connect the actual bridge, and show Place/Erase/Paint/Fill, selected state, readable draft/source status and
   current budget. Make one real edit from the rack in the main-owned scene. The home stays visible at desktop
   and phone widths. No mock editor, fixture-only success or second route. · evidence: desktop/phone shots + real edit
