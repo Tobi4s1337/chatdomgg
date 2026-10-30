@@ -9,6 +9,7 @@ import { createVoxelMaterial } from '@chatdom/render';
 import { sampleLightVolume } from '@chatdom/voxel';
 import { createLightField, type LightFieldOptions } from './light-field';
 import { createSettlementContent } from './settlement-content';
+import { inhabitedLightBounds } from './light-bounds';
 import {
   bindLightFieldWorker, compileLightHouses, createLightFieldSolver, LIGHT_FIELD_BUDGET, LIGHT_FIELD_CELLS,
   resolveLightFieldConfig, buildLightFieldSamples, type SurfaceLightVolume, type LightFieldRequest, type LightFieldResponse, type LightFieldSolve,
@@ -32,6 +33,30 @@ function request(revision = 1, nextOrigin = origin): LightFieldSolve {
 }
 
 describe('authoritative worker light geometry', () => {
+  it('projects each of the 240 inhabited town windows independently into the distant field', () => {
+    const town = generateKingdom({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
+    const { houses } = createSettlementContent(town);
+    const lights = createWindowLights(new Scene(), houses);
+    try {
+      lights.setFrame({ ...PRESENCE_FIXTURES.public, asOf: PRESENCE_FIXTURES.public.asOf + 1000,
+        windows: town.homes.map(plot => ({ slot: plot.slot, present: true, publicName: null, since: PRESENCE_FIXTURES.public.asOf })) });
+      const sources = lights.getSources();
+      expect(sources).toHaveLength(240);
+      const options = { mode: 'kingdom', bounds: inhabitedLightBounds(town.homes) } as const;
+      const config = resolveLightFieldConfig(town, options);
+      expect(config.cellSize).toBe(2);
+      const castle: WindowHouse = { slot: 65534, blueprint: createCastle('tide'), position: [town.castle[0] - 16, town.castle[1], town.castle[2] - 16], yaw: 0 };
+      const solver = createLightFieldSolver(town, [...houses, castle], options);
+      const suppressed: number[] = [];
+      for (const [index, source] of sources.entries()) {
+        const result = solver.solve({ kind: 'solve', revision: index + 1, origin: config.origin!,
+          emitters: [{ position: source.position, normal: source.normal, level: Math.round(source.strength * 15) }] });
+        if (!result.volume.visited) suppressed.push(source.slot);
+      }
+      expect(suppressed).toEqual([]);
+    } finally { lights.dispose(); }
+  }, 120_000);
+
   it('blocks a 0.125 metre wall on the half-metre field and opens only fully enclosing air carves', () => {
     const closed = createLightFieldSolver(layout, [house()]).solve(request()).volume;
     expect(sampleLightVolume(closed, source)).toBe(15);
