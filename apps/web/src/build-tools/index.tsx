@@ -69,7 +69,7 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
       <div class="bt-plate">
         <p class="bt-eyebrow">Build mode</p>
         <h2>Shaping your home</h2>
-        <p class="bt-mode"><b>{state().mode}</b><span>{locked() ? 'Building is not open here yet' : 'Private draft in this browser'}</span></p>
+        <p class="bt-mode"><b>{state().mode}</b><span>{locked() ? 'Live building is not open yet' : 'Private draft in this browser'}</span></p>
       </div>
       <button class="bt-key bt-leave" onClick={() => props.controller.leave()} aria-label="Return to the street" aria-keyshortcuts="Escape">
         {leaveMark()}<span>Street</span><kbd>Esc</kbd>
@@ -78,7 +78,7 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
 
     <p class="bt-slip" role="status">
       <Show when={state().status} keyed>{status => <span class="bt-slip-text">{status}</span>}</Show>
-      <Show when={state().dirty}><span class="bt-slip-note">Changes the street hasn’t seen</span></Show>
+      <Show when={state().dirty}><span class="bt-slip-note">{locked() ? 'Not on the street' : 'Not yet on your local street'}</span></Show>
     </p>
 
     <div class="bt-tools" role="group" aria-label="Tool" onKeyDown={roam}>
@@ -146,8 +146,13 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
       </div>
     </div>
 
+    {/* Publication here is the core's browser-local SIMULATED street; LIVE has no review service to welcome anyone yet. */}
     <button class="bt-welcome" disabled={locked() || state().publishing} aria-busy={state().publishing} onClick={() => void props.controller.publish()}>
-      {welcomeMark()}<span>{state().publishing ? 'Opening the shutters…' : 'Welcome the street'}</span>
+      {welcomeMark()}
+      <span class="bt-welcome-text">
+        <span>{state().publishing ? 'Opening the shutters…' : 'Welcome the street'}</span>
+        <small>{locked() ? 'Needs the kingdom’s review service' : <><b>SIMULATED</b><span class="bt-long"> · only this browser’s street</span><span class="bt-short"> · local</span></>}</small>
+      </span>
     </button>
     <Show when={!locked()}><p class="bt-hint bt-camera">Right-drag to look around · scroll to step closer</p></Show>
   </aside>;
