@@ -48,6 +48,13 @@ The seven look/place lanes keep their existing ownership. Only the team integrat
 
 ## References
 
+- `work/references/walk-render-smoothing.md`: exact SDK 0.18.8 render accumulator and reconciliation;
+  all-field snap thresholds are not metre-only thresholds. Preserve replay fields and explicit placement cuts.
+- `work/references/walk-slab-support.md`: actual partial-box tops and sustained support after stepping;
+  compare compiled collision on authority and predictor before changing tolerances.
+- `work/references/walk-multiplayer-characters.md`: fixed body versus render pose and distance-driven gait;
+  the surveyed Defold/NJ examples do not replace our server-authoritative movement law.
+
 - `work/references/colyseus-realm.md`: release APIs, district views, per-socket costs and recovery.
 - `work/references/walking-voxel-worlds.md`: swept boxes, supported auto-step, shoulder framing and input pitfalls.
 
