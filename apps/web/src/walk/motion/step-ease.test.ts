@@ -73,4 +73,13 @@ describe('step ease', () => {
     ease.reset();
     expect(ease.update(1, true, 1 / 60)).toEqual({ body: 1, camera: 1 });
   });
+
+  it('drops a descending step offset immediately when the citizen jumps or is placed elsewhere', () => {
+    const ease = createStepEase();
+    ease.update(.5, true, 1 / 60);
+    expect(ease.update(0, true, 1 / 60).body).toBeGreaterThan(0);
+    expect(ease.update(.2, false, 1 / 60)).toEqual({ body: .2, camera: .2 });
+    ease.update(.5, true, 1 / 60); ease.update(0, true, 1 / 60);
+    expect(ease.update(3, true, 1 / 60)).toEqual({ body: 3, camera: 3 });
+  });
 });

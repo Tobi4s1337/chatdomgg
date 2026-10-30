@@ -11,7 +11,8 @@ it('publishes a first forge, replaces its socket, and keeps a later private buil
     revision: 'home:1', digest: 'a'.repeat(64), family: 'hearth', blueprint: VOXEL_FIXTURE,
     attribution: { makerName: 'Juniper', kingdomName: 'Emberwick', approvalId: 'names:1' }, attachments: {} };
   const state = { ...createRealmState(kingdomId, 'simulated'), sequence: 1, homes: { [home.id]: home } };
-  const projection = new PublicProjection({ plots: [], cursor: 0, presence: null, state });
+  const projection = new PublicProjection({ homes: [], cursor: 0, presence: null, sequence: 0 });
+  projection.rememberHomes(state);
   const attachment: CommittedForgeAttachment = { version: 1, id: 'run:1', runId: 'run:1', kingdomId, slot: 0, hostId: VOXEL_FIXTURE.id,
     hostFingerprint: 'fingerprint', socketId: 'chimney', origin: [0, 24, 0], kitId: 'hearth', kitRevision: 1, family: 'hearth',
     draft: { plan: { version: 2, kind: 'chimney', motif: 'sleeping-dragon', finish: 'native', accent: 'none' }, title: 'A sleeping dragon', plaque: 'Warm dreams' },

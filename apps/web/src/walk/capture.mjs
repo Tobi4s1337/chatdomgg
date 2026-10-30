@@ -44,6 +44,7 @@ try {
       .catch(() => { throw new Error(`${name}: the kingdom walk binding is absent at ${url}. The integrator binds createWalkController as described in apps/web/src/walk/README.md.`); });
     await page.waitForFunction(() => window.__chatdomWalk.ready === true && window.__chatdomWalk.owner === 'walking', null, { timeout: 60_000 })
       .catch(() => { throw new Error(`${name}: the walk controller never stood on a connected citizen. Is the kingdom's realm service running?`); });
+    if (await page.evaluate(() => window.__chatdomWalk.camera.collisionRevision === null)) throw new Error(`${name}: the walking camera has no collision world. Pass the kingdom's founded CollisionWorld as \`collision\` (apps/web/src/walk/README.md).`);
   }
   const debug = page => page.evaluate(() => JSON.parse(JSON.stringify(window.__chatdomWalk)));
   const [desk, phone] = pages;

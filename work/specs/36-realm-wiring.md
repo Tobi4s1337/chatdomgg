@@ -75,9 +75,9 @@ Scenes remain owned by main and the team integrator; the lane delivers adapters 
    demo citizen or automatic rights/coal grant. Check current authentication/revocation, live session where
    required, ownership and rights after awaits and again at the commit boundary. Visitors and newcomers do not
    gain free-word rights from subscriptions, walking, a presentation binding or possession of an API key.
-3. **R3 — One founded layout.** Use realm-server's persisted founded manifest and immutable layout/collision
+3. **R3 — One founded layout.** Use `realm-server-world` (spec 38) over realm-server's persisted adopted layout and immutable layout/collision
    revision to map plot IDs, slots, transforms and native homes. Never regenerate live allocation from the current
-   date, client seed/tier query or Herald defaults. The first production consumer uses realm-server's actual
+   date, client seed/tier query or Herald defaults. The first production consumer uses spec 38's actual
    immutable founded collision world at its persisted layout revision, never the reference court or a renderer-
    generated flat plane. A layout mismatch fails closed with a recoverable private state.
    An approved home replacement must enter the server's revision/asset/collision publication path before clients
@@ -180,7 +180,7 @@ Scenes remain owned by main and the team integrator; the lane delivers adapters 
 | API entry | `REALM_AUTH_ROUTES`, `RealmSessionReplySchema`, `RealmTicketRequestSchema`, `RealmTicketReplySchema`, `RealmSignoutReplySchema`, `RealmApiErrorSchema` in `packages/shared/src/realm/auth.ts`; same-origin cookies/CSRF and private no-store replies |
 | Browser → room | `RealmJoinSchema`, `RealmPrincipal`, `RealmAuthenticator`, `RealmIntentSchema`, private `RealmReceipt` in `packages/shared/src/realm/messages.ts`; main freezes, realm-server authenticates |
 | Private domain | `RealmDomainCommand`, `RealmDecisionContext`, `RealmPrivateState`, `RealmRepository`, `RealmIngressCheckpoint`, `RealmIngressTransition`; main's `decideRealm`/`applyRealmFact` in `packages/world/src/realm/reducer.ts`; realm-server fenced `execute`/`loadIngress`/`executeIngress` implementation |
-| Forge | Shared `KingdomForgeAuthority`, attempt/reservation/native home/attachment/outcome; existing `createKingdomForgeApplication` and `ForgeProviders`; Herald `ForgeCommandSink`/cancellation lease |
+| Forge | Shared `KingdomForgeAuthority` with required owning-room `origin`, attempt/reservation/native home/attachment/outcome; existing `createKingdomForgeApplication` and `ForgeProviders`; Herald `ForgeCommandSink`/cancellation lease. Bind `origin` from authority, never wish/browser; genuine model calls in a simulated room retain simulated provenance. |
 | Build | Existing `BuildDraft`, `BuildPublicationCandidate`, `BuildPublicationReviewer`, `BuildPublicationDecision`; room intent validation and authority; no new public approval endpoint |
 | Presence | Private `PresenceInputSchema`; existing world presence reducer, `presenceTick`, projection; public `KingdomPresenceFrame` inside `RealmPublicDelivery` |
 | Client observations | `RealmBootstrap` current public state through `throughCursor`; durable `RealmPublicMessage` / `RealmPublicDelivery`, validated by kingdom/epoch/cursor/event ID; separate `RealmTransientMessage` chat/remove/clear and `CitizenChatCueSchema`; asset hashes fetched through realm-server's approved asset route |
@@ -337,6 +337,19 @@ changes. These boundaries reserve parallel ownership; they do not permit omittin
 
 ## Decisions
 
+- 2026-10-30 — First loss consumer: shared `PresenceInput` now accepts strict `source-lost` with unique,
+  nonempty `sources` from `chat|chatters|stream` and `reason: unavailable|revoked`. Herald alone may report it.
+  Emit a source-specific barrier on lost coverage; full broadcaster revocation names all three. Serialize it
+  before recovered observations, cancel the old generation, and retry its stable ID without an activity TTL.
+  This is neither a departure nor offline. World persists source cutoffs: older/equal evidence cannot relight;
+  independent panel/walker evidence survives. Stream loss makes the projection stale and shortens the existing
+  domain night lease without changing its identity. Open evidence runs are discarded, never closed at the loss;
+  earned intervals remain. A delayed barrier cannot retroactively retract already committed credit.
+  Consume accepted `DurableKingdom`, `RealmIngress` and `presenceTransition` from `apps/realm/src/ingress`.
+  Its compressed `presence-v1` checkpoint owns qualification too: delete the lane's competing plain-JSON codec
+  and writer, rather than assigning two formats the same codec name. Adapt sink deadlines to retain controls.
+  `revoked` removes affected current Twitch metadata; historical inbox/outbox redaction remains with the server
+  owner and must not be claimed complete by a current-state reducer change.
 - 2026-10-30: Main owns the pure domain decide/apply and shared authority/repository contracts; wiring binds
   existing systems into that one writer. The executable boundary is verified and frozen; start follows main's
   handoff commit and lane worktree creation this turn.

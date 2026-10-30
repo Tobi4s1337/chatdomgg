@@ -298,6 +298,13 @@ one successful direct SQL insert is not a substitute for a room/authority transa
 
 ## References
 
+- `work/references/walk-render-smoothing.md`: exact SDK 0.18.8 render accumulator and reconciliation;
+  all-field snap thresholds are not metre-only thresholds. Preserve replay fields and explicit placement cuts.
+- `work/references/walk-slab-support.md`: actual partial-box tops and sustained support after stepping;
+  compare compiled collision on authority and predictor before changing tolerances.
+- `work/references/walk-multiplayer-characters.md`: fixed body versus render pose and distance-driven gait;
+  the surveyed Defold/NJ examples do not replace our server-authoritative movement law.
+
 - `work/references/colyseus-realm.md`: pinned release behavior, input/ack consumption, shared-view identity,
   district-switch decoder caveat, rotated reconnect token timing and real per-socket prediction costs.
 - `work/specs/33-realm.md`: main's ownership, durable-before-public boundary and shared contracts.
@@ -315,6 +322,11 @@ experiences have shipped.
 
 ## Decisions
 
+- **2026-10-30 — Founded geometry producer split (spec 38).** `realm-server` retains allocation/adoption,
+  Postgres, auth, reconnect, limits, districts, load and recovery. `realm-server-world` owns only the missing
+  public scene/immutable asset producer, browser-safe collision compiler, founded provider and HomeFurnisher
+  in its disjoint spec 38 folders. Consume its actual exports when delivered; main/integrator owns bootstrap
+  composition. Do not independently implement a second geometry producer in allocation or walking.
 - **2026-10-30 — Frozen after main acceptance.** Shared declarations, reducer, reference room, typed ports and
   auth DTOs exist as recorded above. Main reports full `pnpm verify` green, real uWS with three SDK clients/reload
   and three-browser Playwright entry passing. This spec and PRD are frozen; team starts the lane once main
@@ -348,3 +360,11 @@ experiences have shipped.
   main-owned movement, schema and domain rules. The payload ceiling is 16 KiB to admit bounded build operations.
   Presence checkpoint and its multi-fact batch commit through `executeIngress`/`loadIngress`, with evidenced
   interval union and current-home requirements consumed from the reducer.
+- **2026-10-30 — Lost source evidence is explicit.** Consume shared `source-lost` controls through accepted
+  `presenceTransition`. Persist global source cutoffs and disclosure provenance in the actual compressed
+  checkpoint; legacy checkpoints default to no cutoffs/unknown disclosure source. Only Herald admits these
+  controls. Stream loss shortens the same domain night lease, never manufactures offline. The ordered producer
+  must put its loss barrier before recovery observations; open runs are discarded and earned unions retained.
+  Current-state revocation removes affected Twitch metadata, not homes/rights/loyalty or independent people.
+  Include removal/redaction of revoked Twitch-derived historical inbox/outbox data in the owned revocation path;
+  clearing a checkpoint alone is not proof of that cleanup.

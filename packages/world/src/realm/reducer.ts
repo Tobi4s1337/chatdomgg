@@ -22,11 +22,16 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
   if ((ctx.receivedAt ?? ctx.now) > ctx.now) return reject('conflict');
   if (ctx.capability !== capability[c.type]) return reject('forbidden');
   switch (c.type) {
-    case 'stream.observe':
-      if ((c.sessionId === null && c.liveUntil !== 0) || (c.sessionId !== null && c.liveUntil <= ctx.now)) return reject('conflict');
+    case 'stream.observe': {
+      // A trusted source loss can shorten the existing night without inventing an offline event.
+      const shortening = c.sessionId !== null && c.sessionId === s.stream.sessionId && c.startedAt === s.stream.startedAt
+        && c.liveUntil >= s.stream.startedAt && c.liveUntil < s.stream.liveUntil;
+      if (!Number.isSafeInteger(c.liveUntil) || c.liveUntil < 0 || (c.sessionId === null && c.liveUntil !== 0)
+        || (c.sessionId !== null && c.liveUntil <= ctx.now && !shortening)) return reject('conflict');
       if (!Number.isSafeInteger(c.startedAt) || c.startedAt < 0 || c.startedAt > ctx.now
         || (c.sessionId !== null && c.sessionId === s.stream.sessionId && c.startedAt !== s.stream.startedAt)) return reject('conflict');
       break;
+    }
     case 'citizen.rights': {
       if (!Number.isSafeInteger(c.rights.revision) || c.rights.revision <= (own(s.rights, c.personId)?.revision ?? -1)) return reject('conflict');
       break;

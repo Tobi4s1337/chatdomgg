@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { WALK_BUTTON, type WalkInput } from '@chatdom/shared/realm';
+import { WALK_BUTTON, type CollisionWorld, type PlayerState, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
 import type { RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkRealm } from './index';
 
@@ -23,11 +23,11 @@ function signal() {
 }
 function realm(at: { x: number; y: number; z: number; yaw: number }) {
   const sent: WalkInput[] = [];
-  const self = { ...at, speed: 0 };
+  const self = { ...at, speed: 0, placement: 0 };
   const onLeave = signal(), onDrop = signal();
   const fake: WalkRealm = {
     selfId: 'me',
-    room: { onLeave, onDrop, state: { collisionRevision: 7, walkers: { get: id => id === 'me' ? { x: self.x, y: self.y, z: self.z, yaw: self.yaw } : undefined } } },
+    room: { onLeave, onDrop, state: { collisionRevision: 7, walkers: { get: id => id === 'me' ? { x: self.x, y: self.y, z: self.z, yaw: self.yaw, placement: self.placement } : undefined } } },
     tick(_now, input) {
       sent.push({ ...input });
       const poses: RealmWalkerPose[] = [
@@ -42,7 +42,9 @@ function realm(at: { x: number; y: number; z: number; yaw: number }) {
 function key(target: EventTarget, type: 'keydown' | 'keyup', code: string, repeat = false) {
   target.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { code, repeat, ctrlKey: false, metaKey: false, altKey: false }));
 }
-function setup(width = 1440, height = 900, heading?: number, withHud = false) {
+function setup(width = 1440, height = 900, heading?: number, collisionOrHud?: CollisionWorld | (() => CollisionWorld | null) | boolean) {
+  const withHud = collisionOrHud === true;
+  const collision = typeof collisionOrHud === 'boolean' ? undefined : collisionOrHud;
   const keyboard = new EventTarget(), page = Object.assign(new EventTarget(), { hidden: false });
   const lockDocument = Object.assign(new EventTarget(), {
     pointerLockElement: null as unknown,
@@ -56,7 +58,7 @@ function setup(width = 1440, height = 900, heading?: number, withHud = false) {
   const camera = new THREE.PerspectiveCamera(52, width / height, .15, 2200);
   const world = realm({ x: 2, y: 0, z: 9, yaw: 128 });
   const clock = { now: 0 };
-  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }), ...(withHud ? { hud: {} as HTMLElement } : {}) });
+  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }), ...(collision ? { collision } : {}), ...(withHud ? { hud: {} as HTMLElement } : {}) });
   const touch = (type: string, id: number, x: number, y: number) =>
     surface.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { pointerId: id, pointerType: 'touch', isPrimary: id === 1, button: 0, buttons: 1, clientX: x, clientY: y }));
   const mouse = (movementX: number, movementY: number) => lockDocument.dispatchEvent(Object.assign(new Event('mousemove'), { movementX, movementY }));
@@ -247,8 +249,65 @@ describe('the walk controller', () => {
     expect(sent).toHaveLength(1);
   });
 
+  it('keeps the camera out of the newest supplied collision world from the first frame a wall exists', () => {
+    const solids: SolidBox[] = [{ min: [-20, -1, -20], max: [20, 0, 20] }];
+    let world: CollisionWorld | null = { revision: 7, query: () => solids };
+    const { controller, camera } = setup(1440, 900, undefined, () => world);
+    controller.frame(0); controller.frame(16);
+    // The citizen stands at z = 9 facing -Z; the shoulder camera is about six metres behind, toward +Z.
+    expect(camera.position.z).toBeGreaterThan(14);
+    expect(controller.debug.camera).toMatchObject({ clearance: null, collisionRevision: 7, near: camera.near });
+    // A newly published revision puts a wall two metres behind the citizen.
+    const wall: SolidBox = { min: [-20, 0, 11], max: [20, 6, 11.4] };
+    world = { revision: 8, query: () => [...solids, wall] };
+    controller.frame(32);
+    expect(camera.position.z).toBeLessThan(11);
+    expect(controller.debug.camera.collisionRevision).toBe(8);
+    expect(controller.debug.camera.clearance).toBe(controller.debug.camera.distance);
+    expect(controller.debug.camera.desiredDistance).toBeGreaterThan(6);
+    // A moment without a world keeps the last one rather than letting the camera through the wall.
+    world = null;
+    controller.frame(48);
+    expect(camera.position.z).toBeLessThan(11);
+    expect(controller.debug.camera.collisionRevision).toBe(8);
+  });
+
+  it('reports a camera with no collision world honestly', () => {
+    const { controller } = setup();
+    controller.frame(0);
+    expect(controller.debug.camera.collisionRevision).toBeNull();
+    expect(controller.debug.camera.clearance).toBeNull();
+  });
+
+  it('eases a predicted step down without moving collision feet or drawing the head into the next lintel', () => {
+    const lintel: SolidBox = { min: [2.5, 1.8, 8], max: [4, 3, 10] };
+    const collision: CollisionWorld = { revision: 7, query: () => [lintel] };
+    const { controller, fake, self } = setup(390, 844, undefined, collision);
+    self.y = .5;
+    const predicted: PlayerState = { x: self.x, y: .5, z: self.z, vx: 0, vy: 0, vz: 0, grounded: true, yaw: self.yaw, distance: 0, collisionRevision: 7 };
+    Object.defineProperty(fake, 'predicted', { value: predicted });
+    controller.frame(0);
+    self.y = predicted.y = 0;
+    expect(controller.frame(16).find(p => p.self)!.y).toBeGreaterThan(0);
+    expect(predicted.y).toBe(0);
+    // The next step of horizontal travel is under a lintel that clears the real body, but not its easing.
+    self.x = predicted.x = 3;
+    expect(controller.frame(32).find(p => p.self)!.y).toBe(0);
+    self.y = predicted.y = .2; predicted.grounded = false;
+    expect(controller.frame(48).find(p => p.self)!.y).toBe(.2);
+    self.x = predicted.x = 2; self.y = predicted.y = .5; predicted.grounded = true;
+    controller.frame(64);
+    self.y = predicted.y = 0;
+    expect(controller.frame(80).find(p => p.self)!.y).toBeGreaterThan(0);
+    // A relocation at identical feet height must also drop residual body and camera stair easing.
+    self.placement++;
+    expect(controller.frame(96).find(p => p.self)!.y).toBe(0);
+    controller.dispose();
+  });
+
   it.each(['blur', 'contextmenu'])('drops a queued phone jump and every held input on %s', event => {
-    const { controller, keyboard, touch, lockDocument, sent } = setup(390, 844, undefined, true);
+    const { controller, keyboard, touch, lockDocument, sent, fake } = setup(390, 844, undefined, true);
+    const clearInput = vi.fn(); Object.assign(fake, { clearInput });
     controller.frame(0);
     key(keyboard, 'keydown', 'KeyW');
     key(keyboard, 'keydown', 'KeyV');
@@ -258,6 +317,7 @@ describe('the walk controller', () => {
     controller.frame(16);
     expect(sent.at(-1)).toMatchObject({ moveX: 0, moveZ: 0, buttons: 0 });
     expect([controller.debug.look, controller.debug.stick, lockDocument.pointerLockElement]).toEqual(['free', null, null]);
+    expect(clearInput).toHaveBeenCalledOnce();
     controller.dispose();
   });
 });

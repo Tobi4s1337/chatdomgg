@@ -384,13 +384,24 @@ describe.skipIf(!enabled)('realm sign-in and entry tickets (Postgres)', () => {
       const before = watcher.room.state.walkers.get(okoId)!;
       const place = { x: before.x, z: before.z };
       const firstClosed = left(reloaded);
-      const secondTab = tab(oko), second = await secondTab.walk();
+      let secondTab = tab(oko), second = await secondTab.walk();
       expect(await firstClosed).toBe(REALM_SEAT_ENDINGS.replaced.code);
       await waitFor(() => !watcher.room.state.walkers.has(okoId), 'the replaced seat to end');
       expect(second.selfId).not.toBe(okoId);
       expect(watcher.room.state.walkers.size).toBe(2);
       expect(watcher.room.state.walkers.get(second.selfId)).toMatchObject(place);
       expect(await refusal(okoTab.token()!)).toBe(524);
+
+      // A tab opened mid-jump cannot carry an unsupported pose: it still takes the seat at a validated arrival.
+      const jumping = second.room.input<WalkInput>({ mode: 'reliable' });
+      Object.assign(jumping.data, { moveX: 0, moveZ: 0, buttons: 2, yaw: 0, collisionRevision: 1 }); jumping.send();
+      await waitFor(() => (watcher.room.state.walkers.get(second.selfId)?.y ?? 0) > 0, 'the old tab mid-jump');
+      const jumpingId = second.selfId, jumpingClosed = left(second);
+      secondTab = tab(oko); second = await secondTab.walk();
+      expect(await jumpingClosed).toBe(REALM_SEAT_ENDINGS.replaced.code);
+      await waitFor(() => !watcher.room.state.walkers.has(jumpingId) && watcher.room.state.walkers.has(second.selfId), 'the airborne seat transfer');
+      expect(watcher.room.state.walkers.size).toBe(2);
+      expect(watcher.room.state.walkers.get(second.selfId)).toMatchObject({ y: 0, grounded: true });
 
       // Signing out while the seat waits out its grace ends it at the next session check, not 30 s later.
       second.room.reconnection.enabled = false;

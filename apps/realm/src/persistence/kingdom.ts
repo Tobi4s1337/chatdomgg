@@ -13,9 +13,12 @@ import { OutboxDispatcher, PublicProjection, TransientRelay, type RealmOutboxSto
 
 /** Commands waiting for the kingdom's single writer. A full queue is an explicit hold, never an unbounded promise. */
 export const REALM_PENDING_COMMANDS = 64;
+/** A queued command that has not started by then is refused unstarted, so nothing was written; callers never wait longer. */
+export const REALM_COMMAND_QUEUE_WAIT_MS = 10_000;
+/** Shutdown waits this long for queued commits, and again for the last delivery. */
+export const REALM_DISPOSE_WAIT_MS = 5_000;
 /** Margin taken off the lease on the local monotonic clock, so this process stops before the database would fence it. */
 const LEASE_MARGIN_MS = 2_000;
-const DISPOSE_WAIT_MS = 5_000;
 
 export interface DurableKingdomOptions {
   readonly world: CollisionWorld;
@@ -23,19 +26,29 @@ export interface DurableKingdomOptions {
   /** Arrival point for the n-th entry since open. Must be supported floor in `world`. */
   readonly spawn: (principal: RealmPrincipal, arrival: number) => readonly [number, number, number];
   readonly log?: (line: string) => void;
+  /**
+   * Why owned actions are held right now (an unready dependency), or null. A held kingdom refuses new commands at once
+   * with `realm.held` instead of queueing them behind a store that is not answering.
+   */
+  readonly hold?: () => string | null;
 }
 export interface RealmCommandMeta {
   readonly anvilCapacity?: number;
   readonly occurredAt?: number; readonly receivedAt?: number;
   readonly actor?: PersonId | null; readonly cause?: EventCause;
 }
-export type DurableRepository = RealmRepository & Pick<PostgresRealmRepository, 'publishedPlots' | 'latestPresence' | 'committedState' | 'snapshot' | 'leaseMs'>;
+export type DurableRepository = RealmRepository & Pick<PostgresRealmRepository, 'committedState' | 'snapshot' | 'leaseMs'>;
 export type RealmLifecycleEvent = Parameters<RealmRoomHandle['lifecycle']>[0];
 export type RealmLifecycleListener = (event: RealmLifecycleEvent, principal: RealmPrincipal, walkerId: string, now: number) => void;
 
 export class RealmBusyError extends Error {
   readonly code = 'realm.busy';
   constructor() { super('The kingdom is still writing earlier work; try again shortly.'); this.name = 'RealmBusyError'; }
+}
+/** A dependency is not ready, so the command was not started. Nothing was written. */
+export class RealmHeldError extends Error {
+  readonly code = 'realm.held';
+  constructor(readonly reason: string) { super(`The kingdom is holding new work while ${reason}; nothing was changed. Try again shortly.`); this.name = 'RealmHeldError'; }
 }
 
 /**
@@ -55,6 +68,8 @@ export class DurableKingdom implements RealmRoomHandle {
   private renewing = false;
   private queue: Promise<unknown> = Promise.resolve();
   private pending = 0;
+  private pendingHighWater = 0;
+  private refused = { busy: 0, held: 0, expired: 0 };
   private arrivals = 0;
   /** Database clock minus local clock, measured when the lease was last taken or renewed. */
   private clockOffset: number;
@@ -67,16 +82,22 @@ export class DurableKingdom implements RealmRoomHandle {
   private readonly lifecycles = new Set<RealmLifecycleListener>();
   private readonly closed = new Set<(reason: string) => void>();
 
-  static async open(repository: DurableRepository, outbox: RealmOutboxStore, kingdomId: KingdomId, options: DurableKingdomOptions): Promise<DurableKingdom> {
+  static async open(repository: DurableRepository, outbox: RealmOutboxStore, kingdomId: KingdomId,
+    options: DurableKingdomOptions | ((state: RealmPrivateState) => DurableKingdomOptions | Promise<DurableKingdomOptions>)): Promise<DurableKingdom> {
     const started = performance.now(), wall = Date.now();
     const lease = await repository.acquire(kingdomId);
     try {
       const state = await repository.load(lease);
+      // Founded geometry reads this writer's committed state, including approved home replacements. Never
+      // resolve it before acquiring the lease, or acquire a second writer inside the geometry loader.
+      const resolved = typeof options === 'function' ? await options(state) : options;
+      if (performance.now() >= started + repository.leaseMs - LEASE_MARGIN_MS) throw new RealmWriterFencedError(kingdomId);
       const delivered = await outbox.open(lease);
-      // The projection is read after the state, inside the same lease: no other writer can add rows in between.
-      const { plots, cursor } = await repository.publishedPlots(kingdomId);
-      const recent = await repository.latestPresence(kingdomId);
-      return new DurableKingdom(repository, outbox, lease, state, options, new PublicProjection({ plots, cursor, presence: recent, state }), delivered, started, wall);
+      const prefix = await outbox.prefix(kingdomId, delivered);
+      if (performance.now() >= started + repository.leaseMs - LEASE_MARGIN_MS) throw new RealmWriterFencedError(kingdomId);
+      const sequence = delivered >= prefix.committed ? state.sequence : prefix.sequence;
+      const projection = new PublicProjection({ ...prefix, cursor: delivered, sequence });
+      return new DurableKingdom(repository, outbox, lease, state, resolved, projection, delivered, prefix.committed, started, wall);
     } catch (error) {
       await repository.release(lease).catch(() => {});
       throw error;
@@ -84,22 +105,23 @@ export class DurableKingdom implements RealmRoomHandle {
   }
 
   private constructor(private readonly repository: DurableRepository, private readonly outbox: RealmOutboxStore, lease: RealmWriterLease, state: RealmPrivateState,
-    private readonly options: DurableKingdomOptions, projection: PublicProjection, delivered: number, started: number, wall: number) {
+    private readonly options: DurableKingdomOptions, projection: PublicProjection, delivered: number, committed: number, started: number, wall: number) {
     this.lease = lease; this.state = state; this.origin = state.origin; this.writerEpoch = lease.epoch;
     this.projection = projection;
     this.clockOffset = lease.expiresAt - repository.leaseMs - wall;
     this.deadline = started + repository.leaseMs - LEASE_MARGIN_MS;
     this.dispatcher = new OutboxDispatcher({
-      kingdomId: lease.kingdomId, writerEpoch: lease.epoch, delivered,
+      kingdomId: lease.kingdomId, writerEpoch: lease.epoch, delivered, committed,
       read: (after, limit) => this.outbox.read(this.kingdomId, after, limit),
       acknowledge: through => this.outbox.acknowledge(this.lease, through),
       project: row => this.projection.adopt([row]),
       current: () => this.current, fenced: () => this.close('fenced'), log: line => this.log(line),
     });
-    this.renewal = setInterval(() => void this.renew(), Math.floor(repository.leaseMs / 3));
+    // Three renewals fit inside the local window (lease minus margin), so one slow reply never costs the lease.
+    this.renewal = setInterval(() => void this.renew(), Math.max(100, Math.floor((repository.leaseMs - LEASE_MARGIN_MS) / 3)));
     this.renewal.unref?.();
     this.armWatchdog();
-    this.log(`opened ${state.origin} kingdom ${state.kingdomId} at fact ${state.sequence}${delivered < projection.cursor ? `, redelivering outbox rows after ${delivered}` : ''}`);
+    this.log(`opened ${state.origin} kingdom ${state.kingdomId} at fact ${state.sequence}${delivered < committed ? `, redelivering outbox rows after ${delivered}` : ''}`);
   }
 
   get kingdomId(): KingdomId { return this.lease.kingdomId; }
@@ -110,10 +132,16 @@ export class DurableKingdom implements RealmRoomHandle {
   get privateState(): RealmPrivateState { return this.state; }
   /** True only while this process holds an unexpired lease by its own conservative clock. */
   get current(): boolean { return this.open && performance.now() < this.deadline; }
+  /** Lease health by the local monotonic clock: remaining time before this process stops writing, of its full window. */
+  get writer() {
+    return { current: this.current, remainingMs: Math.max(0, Math.round(this.deadline - performance.now())), windowMs: this.repository.leaseMs - LEASE_MARGIN_MS };
+  }
   /** Estimated database time, for stamping in-process observations on the clock that will judge them. */
   databaseNow(): number { return Date.now() + this.clockOffset; }
   /** Durable delivery cursor and counters, for diagnostics. */
-  get delivery() { return { delivered: this.dispatcher.cursor, committed: this.projection.cursor, deliveries: this.dispatcher.deliveries, redeliveries: this.dispatcher.redeliveries, droppedTransient: this.relay.dropped }; }
+  get delivery() { return { delivered: this.dispatcher.cursor, committed: this.dispatcher.newest, deliveries: this.dispatcher.deliveries, redeliveries: this.dispatcher.redeliveries, largestBatch: this.dispatcher.largestBatch, droppedTransient: this.relay.dropped }; }
+  /** The writer queue: commands waiting or running now, its high-water mark, and commands refused unstarted by cause. */
+  get commands() { return { pending: this.pending, highWater: this.pendingHighWater, limit: REALM_PENDING_COMMANDS, refused: { ...this.refused } }; }
 
   /**
    * Trusted internal command. Serialized behind this kingdom's writer, decided by the world reducer at database time,
@@ -172,8 +200,35 @@ export class DurableKingdom implements RealmRoomHandle {
    */
   bootstrap(principal: RealmPrincipal): RealmBootstrap {
     void principal;
+    return this.publicCheckpoint();
+  }
+
+  /**
+   * Trusted in-process public read, including before the first walker joins. A founded-scene reader retains
+   * this kingdom through the existing registry, prepares its scene against this delivered prefix, then releases
+   * the hold. No principal, entry ticket or second writer is needed. This frozen view alone does not assert
+   * readiness: the reader must also check `current` and matching scene/layout/collision versions before serving.
+   */
+  publicCheckpoint(): RealmBootstrap {
     return { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, throughSequence: this.projection.sequence, throughCursor: this.projection.cursor,
       layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, current: this.projection.current() };
+  }
+
+  /**
+   * A cold founded-scene read is a trusted consumer of approved public views, even with no socket present.
+   * Drain their durable prefix before comparing it with prepared geometry; otherwise a recovered publication
+   * could wait for a join which itself needs this manifest. No historical ritual is replayed to a later join.
+   */
+  async preparePublicCheckpoint(): Promise<RealmBootstrap> {
+    if (!this.current) throw new RealmWriterFencedError(this.kingdomId);
+    const unsubscribe = this.subscribe(() => {});
+    try {
+      await this.dispatcher.kick();
+      if (!this.current) throw new RealmWriterFencedError(this.kingdomId);
+      // The dispatcher logs/retries storage failures. A swallowed read/ack failure isn't a ready manifest.
+      if (this.delivery.delivered !== this.delivery.committed) throw new RealmBusyError();
+      return this.publicCheckpoint();
+    } finally { unsubscribe(); }
   }
 
   bindRoom(effects: RealmRoomEffects): () => void {
@@ -220,9 +275,9 @@ export class DurableKingdom implements RealmRoomHandle {
   /** Bounded shutdown: stop new work, let queued commits finish, snapshot committed state, release only our own lease. */
   async dispose(): Promise<void> {
     clearInterval(this.renewal);
-    const drained = await Promise.race([this.queue.then(() => true, () => true), delay(DISPOSE_WAIT_MS).then(() => false)]);
+    const drained = await Promise.race([this.queue.then(() => true, () => true), delay(REALM_DISPOSE_WAIT_MS).then(() => false)]);
     // Hand over what committed; anything unacknowledged stays behind the durable cursor for the next writer.
-    if (this.current) await Promise.race([this.dispatcher.kick(), delay(DISPOSE_WAIT_MS)]);
+    if (this.current) await Promise.race([this.dispatcher.kick(), delay(REALM_DISPOSE_WAIT_MS)]);
     if (this.current && drained) {
       try { await this.repository.snapshot(this.lease); } catch (error) { this.log(`snapshot on close failed: ${describeStorageFailure(error)}`); }
     }
@@ -233,13 +288,37 @@ export class DurableKingdom implements RealmRoomHandle {
 
   // -----------------------------------------------------------------------------------------------------------------
 
+  /**
+   * One writer, a finite queue. A command is refused before it starts when the writer is gone, a dependency is held,
+   * the queue is full, or it waited `REALM_COMMAND_QUEUE_WAIT_MS` without starting. A refused command never ran, so
+   * the caller may retry it unchanged. Once started, it runs to its own (database-bounded) end.
+   */
   private serial<T>(work: () => Promise<T>): Promise<T> {
     if (!this.current) return Promise.reject(new RealmWriterFencedError(this.kingdomId));
-    if (this.pending >= REALM_PENDING_COMMANDS) return Promise.reject(new RealmBusyError());
+    const held = this.options.hold?.() ?? null;
+    if (held) { this.refused.held++; return Promise.reject(new RealmHeldError(held)); }
+    if (this.pending >= REALM_PENDING_COMMANDS) { this.refused.busy++; return Promise.reject(new RealmBusyError()); }
     this.pending++;
-    const run = this.queue.then(work, work).finally(() => { this.pending--; });
-    this.queue = run.catch(() => {});
-    return run;
+    this.pendingHighWater = Math.max(this.pendingHighWater, this.pending);
+    let state: 'waiting' | 'started' | 'expired' = 'waiting';
+    return new Promise<T>((resolve, reject) => {
+      const expiry = setTimeout(() => {
+        if (state !== 'waiting') return;
+        state = 'expired'; this.refused.expired++;
+        reject(new RealmBusyError());
+      }, REALM_COMMAND_QUEUE_WAIT_MS);
+      expiry.unref?.();
+      const run = this.queue.then(async () => {
+        clearTimeout(expiry);
+        if (state === 'expired') return;
+        state = 'started';
+        if (!this.current) throw new RealmWriterFencedError(this.kingdomId);
+        const late = this.options.hold?.() ?? null;
+        if (late) { this.refused.held++; throw new RealmHeldError(late); }
+        resolve(await work());
+      }).catch(reject).finally(() => { this.pending--; });
+      this.queue = run;
+    });
   }
 
   /** Runs one repository write and refreshes the committed state. An uncertain COMMIT is looked up before anything else. */
@@ -265,19 +344,17 @@ export class DurableKingdom implements RealmRoomHandle {
    */
   private async refresh() {
     let committed = this.repository.committedState(this.lease);
-    const after = this.projection.cursor;
     try {
       committed ??= await this.repository.load(this.lease);
       this.projection.rememberHomes(committed);
-      const rows = await this.outbox.read(this.kingdomId, after, 1_024);
       if (!this.current) return;
       this.state = committed;
-      // The dispatcher folds each row into the public projection before notifying at that prefix.
-      await this.dispatcher.offer(after, rows);
     } catch (error) {
-      if (error instanceof RealmWriterFencedError) this.close('fenced');
-      else this.log(`state refresh failed: ${describeStorageFailure(error)}`);
+      if (error instanceof RealmWriterFencedError) { this.close('fenced'); return; }
+      this.log(`state refresh failed: ${describeStorageFailure(error)}`);
     }
+    // Public rows move the bootstrap prefix only as they are handed to the transport (see PublicProjection).
+    await this.dispatcher.kick();
   }
 
   /** Runs independently of a renewal request that may never settle. */
@@ -303,8 +380,8 @@ export class DurableKingdom implements RealmRoomHandle {
       if (!this.current) { this.close('lease deadline passed'); return; }
       this.lease = renewed;
       this.deadline = started + this.repository.leaseMs - LEASE_MARGIN_MS;
+      this.clockOffset = renewed.expiresAt - this.repository.leaseMs - wall;
       this.armWatchdog();
-      this.clockOffset = this.lease.expiresAt - this.repository.leaseMs - wall;
     } catch (error) {
       if (error instanceof RealmWriterFencedError) this.close('fenced');
       else if (performance.now() >= this.deadline) this.close('lease expired while the database was unreachable');
@@ -351,14 +428,16 @@ export function createDurableRealmServices(input: {
   readonly repository: DurableRepository;
   readonly outbox: RealmOutboxStore;
   readonly auth: RealmAuthenticator;
-  /** World, layout revision and arrivals for a kingdom (a live kingdom reads its adopted founded layout here). */
-  readonly kingdom: (kingdomId: KingdomId) => DurableKingdomOptions | Promise<DurableKingdomOptions>;
+  /** Resolve adopted geometry from committed state after writer acquisition/load, before public bootstrap.
+   * The loader must finish within the opening lease's safe window; it never acquires another writer. */
+  readonly kingdom: (kingdomId: KingdomId, state: RealmPrivateState) => DurableKingdomOptions | Promise<DurableKingdomOptions>;
   /**
    * Trusted work after the lease is held and before the first walker enters, such as installing deeds left pending
    * by an interrupted allocation. Its failure is logged; it never fails the open or skips the lease.
    */
   readonly afterOpen?: (kingdom: DurableKingdom) => Promise<unknown>;
   readonly attach?: (kingdom: DurableKingdom) => () => void;
+  readonly hold?: () => string | null;
   readonly log?: (line: string) => void;
 }): DurableRealmServices {
   interface Entry { readonly kingdom: DurableKingdom; holds: number; room: boolean; detach: () => void }
@@ -373,8 +452,10 @@ export function createDurableRealmServices(input: {
     await closing.get(kingdomId);
     let kingdom: DurableKingdom;
     try {
-      const options = await input.kingdom(kingdomId);
-      kingdom = await DurableKingdom.open(input.repository, input.outbox, kingdomId, { ...options, ...(input.log ? { log: input.log } : {}) });
+      kingdom = await DurableKingdom.open(input.repository, input.outbox, kingdomId, async state => {
+        const options = await input.kingdom(kingdomId, state);
+        return { ...options, ...(input.hold ? { hold: input.hold } : {}), ...(input.log ? { log: input.log } : {}) };
+      });
     } catch (error) {
       if (error instanceof RealmLeaseHeldError) throw new ServerError(409, 'Another server holds this kingdom right now. Try again in a moment.');
       input.log?.(`[realm] kingdom ${kingdomId} did not open: ${describeStorageFailure(error)}`);

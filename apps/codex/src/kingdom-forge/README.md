@@ -16,6 +16,10 @@ ten minutes. A timeout aborts the attempt lease, including late authority work. 
 recover abandoned reservations by expiry. The chat command's presentation slot is only a hint; the authority
 chooses the actual owned home's slot. Ownership, trust, actual live session, moderation and quotas remain real authority.
 
+The binding exposes its owning room's `origin`. The coordinator captures that value before reserving and uses it
+for attachment provenance, including public completion. Missing/invalid origin is a cold forge before any model
+or reservation call. A genuine Codex run in a SIMULATED room remains SIMULATED; the wish cannot select its source.
+
 Successful commit receives the original approved wish separately as private `creation.words`, retained with the
 made item as creation input (Safety §5), never in the public attachment/outbox or generic audit. Ordinary chat is
 not retained. A refused outcome carries its private message for delivery only to its maker.

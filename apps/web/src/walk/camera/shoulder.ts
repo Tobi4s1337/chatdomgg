@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { WALK_BODY, type CollisionWorld } from '@chatdom/shared/realm';
 import { angleBetween, wrapAngle } from '../input/direction';
+import { clearBoom, nearFootprint, RECOVER_RATE, type BoomPoint } from './occlusion';
 
 /**
  * The walking camera: a shoulder view that leaves the street open ahead, and the same boom shortened
@@ -8,7 +10,9 @@ import { angleBetween, wrapAngle } from '../input/direction';
  *
  * Composition is done in the lens. The aim pivot sits on the optical axis directly above the citizen,
  * high enough that the body lands in the lower third, and `filmOffset` slides the image so the citizen
- * stands on the left third line. Because the whole image shifts, the vanishing point of "forward" sits in
+ * stands on the left third line. Closer in, the pivot is held high enough that the head never rises past
+ * `headY`, so a short boom (wheeled or pulled in by a wall) is an over-the-shoulder view, never a giant head
+ * in the middle of the picture; at zero the pivot is the eye. Because the whole image shifts, the vanishing point of "forward" sits in
  * the same column as the citizen: W walks them straight into the picture rather than across it.
  */
 export const SHOULDER = {
@@ -23,9 +27,11 @@ export const SHOULDER = {
   pitch: .18,
   minPitch: -.5,
   maxPitch: 1.1,
-  /** Between these boom lengths the framing blends from first person (no offset, eye pivot) to the shoulder. */
+  /** Between these boom lengths the lens shift blends from first person (none) to the shoulder. */
   blendNear: .3,
-  blendFar: 2.6,
+  blendFar: 1.4,
+  /** The head never sits higher on screen than this NDC height (−1 bottom, 1 top) except in first person. */
+  headY: -.15,
   /** Wider than tall: thirds in landscape. Taller than wide: a little more centred and a wider lens. */
   landscape: { fov: 50, screenX: -.333, screenY: -.38 },
   portrait: { fov: 64, screenX: -.32, screenY: -.38 },
@@ -47,13 +53,15 @@ export const SHOULDER = {
 export type Vec3 = readonly [number, number, number];
 export interface ShoulderView { readonly yaw: number; readonly pitch: number; readonly distance: number }
 export interface ShoulderPose {
+  /** The point above the feet the boom turns about; the eye stands the view's distance behind it. */
+  readonly pivot: Vec3;
   readonly eye: Vec3;
   /** Unit look direction. Roll is always zero, so the horizon stays level. */
   readonly direction: Vec3;
   readonly fov: number;
   /** Fraction of the half-width the image is shifted; the aim column sits at NDC x = -shift. */
   readonly shift: number;
-  /** Opacity for the local citizen: it fades out as the eye enters the head and returns on zoom out. */
+  /** Opacity for the local citizen: it fades out as the eye nears the head and returns on zoom out. */
   readonly selfOpacity: number;
 }
 
@@ -74,16 +82,19 @@ export function framingFor(aspect: number): { fov: number; screenX: number; scre
 export function shoulderPose(feet: Vec3, view: ShoulderView, aspect: number): ShoulderPose {
   const frame = framingFor(aspect);
   const d = Math.max(0, view.distance);
-  const blend = smoothstep(SHOULDER.blendNear, SHOULDER.blendFar, d);
   const tan = Math.tan(THREE.MathUtils.degToRad(frame.fov) / 2);
   const sinPitch = Math.sin(view.pitch), cosPitch = Math.cos(view.pitch);
-  // Body centre at NDC y = -lift: lift·tan·(d − δ·sinφ) = −δ·cosφ for δ = bodyCentre − pivot.
-  const lift = -frame.screenY * blend;
-  const framed = SHOULDER.bodyCentre + lift * tan * d / Math.max(.2, cosPitch - lift * tan * sinPitch);
-  const pivotHeight = SHOULDER.eyeHeight + (framed - SHOULDER.eyeHeight) * blend;
+  // A point h below the pivot lands at NDC y = −lift when lift·tan·(d − h·sinφ) = h·cosφ.
+  const below = (lift: number) => lift * tan * d / Math.max(.2, cosPitch - lift * tan * sinPitch);
+  // Body centre on the lower third, and the head no higher than headY: whichever needs the higher pivot.
+  const pivotHeight = Math.max(SHOULDER.bodyCentre + below(-frame.screenY), SHOULDER.eyeHeight + below(-SHOULDER.headY));
   const direction: Vec3 = [Math.sin(view.yaw) * cosPitch, -sinPitch, Math.cos(view.yaw) * cosPitch];
-  const eye: Vec3 = [feet[0] - direction[0] * d, feet[1] + pivotHeight - direction[1] * d, feet[2] - direction[2] * d];
-  return { eye, direction, fov: frame.fov, shift: -frame.screenX * blend, selfOpacity: smoothstep(.5, 1.25, d) };
+  const pivot: Vec3 = [feet[0], feet[1] + pivotHeight, feet[2]];
+  const eye: Vec3 = [pivot[0] - direction[0] * d, pivot[1] - direction[1] * d, pivot[2] - direction[2] * d];
+  // Fade by how close the eye actually is to the head.
+  const ex = eye[0] - feet[0], ey = eye[1] - feet[1] - SHOULDER.eyeHeight, ez = eye[2] - feet[2];
+  const shift = -frame.screenX * smoothstep(SHOULDER.blendNear, SHOULDER.blendFar, d);
+  return { pivot, eye, direction, fov: frame.fov, shift, selfOpacity: smoothstep(.5, 1.25, Math.sqrt(ex * ex + ey * ey + ez * ez)) };
 }
 
 /** The `filmOffset` (millimetres of film) that shifts the image by `shift` of its half-width. */
@@ -93,10 +104,14 @@ export function filmOffsetFor(camera: THREE.PerspectiveCamera, shift: number, as
 }
 
 export interface ShoulderRig {
-  /** The view being drawn, after easing. */
+  /** The view being drawn, after easing and occlusion: `distance` is the boom actually drawn. */
   readonly view: ShoulderView;
-  /** Where the wheel asked the boom to be; easing and later occlusion never overwrite it. */
+  /** Where the wheel asked the boom to be; easing and occlusion never overwrite it. */
   readonly desiredDistance: number;
+  /** The wheel's wish after presentation easing, before any solid shortens it. */
+  readonly zoomDistance: number;
+  /** How far the boom could reach this frame when a solid cut it short, otherwise null. */
+  readonly clearance: number | null;
   /** Seconds since the last manual orbit. */
   readonly idle: number;
   /** Drag in CSS pixels against a viewport of `viewportHeight` CSS pixels. */
@@ -105,8 +120,12 @@ export interface ShoulderRig {
   zoom(pixels: number): void;
   /** Advance presentation easing and auto-follow behind `travelHeading` while moving at `speed` m/s. */
   update(dt: number, travelHeading: number | null, speed: number, holding: boolean): void;
-  /** Place `camera` for the citizen's rendered feet. */
-  apply(camera: THREE.PerspectiveCamera, feet: Vec3, aspect: number): ShoulderPose;
+  /**
+   * Place `camera` for the citizen's rendered feet. With a collision world the boom is swept first: a solid
+   * pulls the camera in before this very frame is drawn, and only clear air lets it ease back out.
+   * Optional `cameraY` supplies step-only easing without moving the feet used for the collision anchor.
+   */
+  apply(camera: THREE.PerspectiveCamera, feet: Vec3, aspect: number, world?: CollisionWorld | null, cameraY?: number): ShoulderPose;
   /** Entry framing behind `heading`, with all eased state dropped. */
   reset(heading: number): void;
   /** Keep the chosen view but drop easing, so the next frame lands exactly on the citizen (camera handed back). */
@@ -116,11 +135,15 @@ export interface ShoulderRig {
 export function createShoulderRig(heading = 0): ShoulderRig {
   let yaw = wrapAngle(heading), pitch: number = SHOULDER.pitch, zoomT = Math.sqrt(SHOULDER.distance / SHOULDER.maxDistance);
   let distance: number = SHOULDER.distance, idle = Infinity, followY: number | null = null, lastStep = 0;
+  // `drawn` is the boom on screen; `tracking` means it follows the zoom directly (no solid in the way last frame).
+  let drawn: number = SHOULDER.distance, tracking = true, clearance: number | null = null;
   const desired = () => SHOULDER.maxDistance * zoomT * zoomT;
   const look = new THREE.Vector3();
   return {
-    get view() { return { yaw, pitch, distance }; },
+    get view() { return { yaw, pitch, distance: drawn }; },
     get desiredDistance() { return desired(); },
+    get zoomDistance() { return distance; },
+    get clearance() { return clearance; },
     get idle() { return idle; },
     orbit(dx, dy, viewportHeight) {
       const h = Math.max(1, viewportHeight);
@@ -141,19 +164,50 @@ export function createShoulderRig(heading = 0): ShoulderRig {
       const target = desired();
       distance += (target - distance) * (1 - Math.exp(-SHOULDER.distanceRate * step));
       if (Math.abs(target - distance) < 1e-4) distance = target;
+      if (tracking) drawn = distance;
       if (travelHeading === null || idle < SHOULDER.followDelay || !(speed > .5)) return;
       // Swing behind the walk, never through a reversal: walking back toward the camera keeps the view.
       const delta = angleBetween(yaw, travelHeading);
       if (Math.abs(delta) > 2) return;
       yaw = wrapAngle(yaw + delta * (1 - Math.exp(-SHOULDER.followRate * Math.min(1, speed / 4) * step)));
     },
-    apply(camera, feet, aspect) {
-      if (followY === null) followY = feet[1];
+    apply(camera, feet, aspect, world, cameraY) {
+      // A caller with predicted grounded state supplies step-only easing; do not smooth jumps a second time.
+      if (cameraY !== undefined && Number.isFinite(cameraY)) followY = cameraY;
+      else if (followY === null) followY = feet[1];
       else {
         followY = Math.max(feet[1] - SHOULDER.heightLag, Math.min(feet[1] + SHOULDER.heightLag, followY));
         followY += (feet[1] - followY) * (1 - Math.exp(-SHOULDER.heightRate * lastStep));
       }
-      const pose = shoulderPose([feet[0], followY, feet[2]], { yaw, pitch, distance }, aspect);
+      let limit = distance;
+      let headOffset = 0;
+      clearance = null;
+      if (world) {
+        // camera.zoom narrows the drawn frustum; the footprint uses the narrowed angle.
+        const zoom = camera.zoom || 1;
+        const point = (d: number, y: number): BoomPoint => {
+          const p = shoulderPose([feet[0], y + headOffset, feet[2]], { yaw, pitch, distance: d }, aspect);
+          const fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(p.fov) / 2) / zoom));
+          return { distance: d, eye: p.eye, footprint: nearFootprint(p.direction, fov, aspect, p.shift, camera.near) };
+        };
+        // Looking up can put the near plane above the crown even when the real head is clear. Lower the
+        // camera within the supported body envelope so the zero-boom fallback is itself a safe view.
+        const crown = point(0, feet[1]);
+        headOffset = Math.min(0, feet[1] + WALK_BODY.height - crown.eye[1] - crown.footprint.max[1]);
+        const lagged = followY;
+        const clear = clearBoom(world, point(0, feet[1]), d => point(d, lagged), distance);
+        if (clear.settle) followY = feet[1];
+        if (clear.occluded) clearance = clear.distance;
+        limit = clear.distance;
+      }
+      // In at once, before this frame is drawn; out again only through clear air, eased over ~.35 s.
+      if (limit <= drawn || tracking) drawn = limit;
+      else {
+        drawn += (limit - drawn) * (1 - Math.exp(-RECOVER_RATE * lastStep));
+        if (limit - drawn < 1e-3) drawn = limit;
+      }
+      tracking = drawn >= distance - 1e-9;
+      const pose = shoulderPose([feet[0], followY + headOffset, feet[2]], { yaw, pitch, distance: drawn }, aspect);
       camera.position.set(...pose.eye);
       camera.up.set(0, 1, 0);
       camera.lookAt(look.set(pose.eye[0] + pose.direction[0], pose.eye[1] + pose.direction[1], pose.eye[2] + pose.direction[2]));
@@ -167,7 +221,9 @@ export function createShoulderRig(heading = 0): ShoulderRig {
     reset(value) {
       yaw = wrapAngle(value); pitch = SHOULDER.pitch; idle = Infinity; followY = null;
       zoomT = Math.sqrt(SHOULDER.distance / SHOULDER.maxDistance); distance = SHOULDER.distance;
+      drawn = distance; tracking = true; clearance = null;
     },
-    settle() { followY = null; distance = desired(); idle = Infinity; },
+    // The next apply still sweeps the boom, so a camera handed back in a tight spot is pulled in on its first frame.
+    settle() { followY = null; distance = desired(); drawn = distance; tracking = true; idle = Infinity; },
   };
 }

@@ -5,3 +5,4 @@ export * from './forge-authority';
 export * from './domain';
 export * from './interactions';
 export * from './auth';
+export * from './founded-world';
