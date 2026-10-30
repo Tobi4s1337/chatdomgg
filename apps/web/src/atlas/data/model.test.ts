@@ -72,12 +72,24 @@ describe('geographyOf', () => {
     const geo = geographyOf(makeWorld());
     expect(geo.bounds).toEqual({ minX: -100, minY: -60, maxX: 120, maxY: 50 });
     expect(geo.regions[1]).toEqual({ index: 1, name: 'Deutsch', englishName: 'German', kind: 'isle', x: 80, y: 20, r: 15, members: 2 });
+    expect(geo.regions[2]).toMatchObject({ name: 'The Outer Isles', kind: 'outer', members: 0 });
     expect(geo.clusters).toEqual([
-      { region: 0, name: 'Just Chatting', x: 0, y: 0, r: 20, members: 3 },
-      { region: 0, name: null, x: -30, y: 10, r: 10, members: 2 },
-      { region: 1, name: null, x: 80, y: 20, r: 6, members: 2 }, // a game whose name is unknown
+      { region: 0, realm: 1, name: 'Just Chatting', x: 0, y: 0, r: 20, members: 3 },
+      { region: 0, realm: 0, name: null, x: -30, y: 10, r: 10, members: 2 }, // a mixed patch of the Crossroads
+      { region: 0, realm: 2, name: 'League of Legends', x: -35, y: -20, r: 9, members: 1 },
+      { region: 1, realm: 4, name: null, x: 80, y: 20, r: 6, members: 2 }, // a game whose name is unknown
+      { region: 2, realm: 5, name: null, x: 100, y: -40, r: 7.5, members: 0 }, // empty waiting land
     ]);
     expect(geo.isles).toEqual({ name: 'The Isles of Many Tongues', x: 80, y: 20, r: 25 });
+    expect(geo.outer).toEqual({ name: 'The Outer Isles', x: 100, y: -40, r: 10 });
+  });
+
+  it('keeps each realm with its region, kind, family, name and circle in world units', () => {
+    const geo = geographyOf(makeWorld());
+    expect(geo.realms.map((realm) => `${realm.region}:${realm.kind}:${realm.name}`)).toEqual([
+      '0:crossroads:The Crossroads', '0:family:Just Chatting & IRL', '0:family:Arenas & MOBAs', '0:wilds:The Wilds', '1:isle:Deutsch', '2:outer:The Outer Isles',
+    ]);
+    expect(geo.realms[2]).toEqual({ index: 2, region: 0, kind: 'family', family: 1, name: 'Arenas & MOBAs', x: -35, y: -20, r: 10, members: 1 });
   });
 
   it('keeps isles null when the preview has none', () => {
@@ -112,9 +124,10 @@ describe('SettlerStore', () => {
     const zack = store.byLogin.get('zackrawrr')!;
     expect(zack).toEqual<Settler>({
       index: 0, id: '552120296', login: 'zackrawrr', name: 'zackrawrr', freshUntil: world.asOf + DAY, withheld: false,
-      tier: 'capital', tierRank: 0, x: 6, y: -6, average: 33_015, game: 'Just Chatting', region: 0,
+      tier: 'capital', tierRank: 0, x: 6, y: -6, average: 33_015, game: 'Just Chatting', region: 0, realm: 1, realmName: 'Just Chatting & IRL',
     });
-    expect(store.byId.get('36926489')).toMatchObject({ name: 'GRONKH', tier: 'city', game: null, region: 1 });
+    // An isle is one realm, named for its language.
+    expect(store.byId.get('36926489')).toMatchObject({ name: 'GRONKH', tier: 'city', game: null, region: 1, realm: 4, realmName: 'Deutsch' });
     expect(store.hasRegion(0)).toBe(false);
   });
 
@@ -129,7 +142,8 @@ describe('SettlerStore', () => {
     expect(store.all).toHaveLength(5);
     expect(store.version).toBe(3);
     expect(store.all.map((s) => s.index)).toEqual([0, 1, 2, 3, 4]);
-    expect(store.byLogin.get('pumpkinpotion')).toMatchObject({ tier: 'village', tierRank: 3, game: 'League of Legends', x: -35.1, y: -18.05 });
+    expect(store.byLogin.get('pumpkinpotion')).toMatchObject({ tier: 'village', tierRank: 3, game: 'League of Legends', x: -35.1, y: -18.05, realm: 2, realmName: 'Arenas & MOBAs' });
+    expect(store.byLogin.get('mira004')).toMatchObject({ realm: 3, realmName: 'The Wilds' });
   });
 
   it('never holds the same channel twice', () => {
@@ -183,7 +197,7 @@ describe('SettlerStore', () => {
       // Most holdings are random; a few sit exactly on the bounds and on grid-cell boundaries.
       const x = edge === 0 ? world.bounds.minX : edge === 1 ? world.bounds.maxX : edge === 2 ? 480 * 2 - 2000 : Math.round(world.bounds.minX + random() * (world.bounds.maxX - world.bounds.minX));
       const y = edge === 3 ? world.bounds.minY : edge === 4 ? world.bounds.maxY : Math.round(world.bounds.minY + random() * (world.bounds.maxY - world.bounds.minY));
-      rows.push({ id: String(1_000_000 + i), login: `c${i}`, name: `C${i}`, tier: 2 + (i % 2), x, y, average: 25 + i, game: -1, region: 0 });
+      rows.push({ id: String(1_000_000 + i), login: `c${i}`, name: `C${i}`, tier: 2 + (i % 2), x, y, average: 25 + i, game: -1, region: 0, realm: i % 4 });
     }
     const store = new SettlerStore(world, () => world.asOf, 7);
     store.addChunk({ version: 1, kind: 'chatdom-atlas-survey-preview-region', preview: world.id, region: 0, settlers: columns(rows) });

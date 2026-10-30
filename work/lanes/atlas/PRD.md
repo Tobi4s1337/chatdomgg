@@ -39,7 +39,7 @@ The first visible result is A02. A task blocked by a future shared seam records 
   of the complete map, not a claim that later interactions are implemented. No official founding or synthetic
   community names. Run `pnpm shots --area atlas` and inspect both sizes. R2, R4, R6–R9, R17.
 
-- [ ] **A03 — Make geography and settlement survive new observations** · evidence: invariant tests + log.
+- [x] **A03 — Make geography and settlement survive new observations** · evidence: invariant tests + log.
   Add versioned taxonomy/name proposals, deterministic language/family geography, holding tiers and hamlet slots,
   immutable edition artifacts and append-only holding/tombstone ledger. Extend import/check with same-input/hash
   reproducibility, duplicate-owner/slot-exhaustion/hide/growth checks, and preservation of previous addresses.

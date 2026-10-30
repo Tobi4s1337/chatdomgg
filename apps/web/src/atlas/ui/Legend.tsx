@@ -10,7 +10,8 @@ export function LegendBody(props: { world: PreviewWorld }) {
   const w = () => props.world;
   const cadence = () => sweepCadence(w().window.hours, w().window.sweeps);
   const continents = () => w().regions.filter((region) => region.kind === 'continent').length;
-  const isles = () => w().regions.length - continents();
+  const isles = () => w().regions.filter((region) => region.kind === 'isle').length;
+  const proposed = () => w().taxonomy.status === 'proposed';
   const sample = () => w().head.ids[0];
   return (
     <>
@@ -37,8 +38,23 @@ export function LegendBody(props: { world: PreviewWorld }) {
         <li>
           <span class="atlas-key-mark"><span class="atlas-key-swatch" aria-hidden="true" /></span>
           <span>
-            {continents()} continents for languages with 600+ channels; {isles()} smaller tongues form {w().isles?.name ?? 'the isles'}.
-            Within a land, channels gather by the category they stream most.
+            {continents()} continents for languages with 600+ channels
+            <Show when={isles() > 0}>; {isles()} smaller {isles() === 1 ? 'tongue forms' : 'tongues form'} {w().isles?.name ?? 'the isles'}</Show>.
+          </span>
+        </li>
+        <li>
+          <span class="atlas-key-mark"><span class="atlas-key-swatch" data-kind="realms" aria-hidden="true" /></span>
+          <span>
+            A continent is parted into realms by family of games, with the Crossroads of variety channels at its heart and
+            the Wilds of smaller families at its edge. Within a realm, channels gather by the game they stream most.
+            {' '}{proposed() ? 'The families are a proposal still awaiting review.' : 'The families have been reviewed.'}
+          </span>
+        </li>
+        <li>
+          <span class="atlas-key-mark"><span class="atlas-key-swatch" data-kind="outer" aria-hidden="true" /></span>
+          <span>
+            {w().outer.name} are kept empty for when a realm's land runs out. The drawn land has room for
+            {' '}{formatCount(w().counts.hamletSlots)} more hamlets without moving a border.
           </span>
         </li>
       </ul>

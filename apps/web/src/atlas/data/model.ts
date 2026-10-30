@@ -1,4 +1,4 @@
-import { DECOR_KINDS, TIER_CODES, type DecorKind, type PreviewChunk, type PreviewWorld, type ServedNames, type SettlerColumns, type Tier } from './preview';
+import { DECOR_KINDS, TIER_CODES, type DecorKind, type PreviewChunk, type PreviewWorld, type RealmKind, type RegionKind, type ServedNames, type SettlerColumns, type Tier } from './preview';
 
 /**
  * One drawn holding, in world units. Its login and name come from the names projection and are held only while
@@ -19,6 +19,9 @@ export interface Settler {
   average: number;
   game: string | null;
   region: number;
+  realm: number;
+  /** The realm's map name: its family of games, the Crossroads, the Wilds, or the isle's language. */
+  realmName: string;
 }
 
 export interface Ring {
@@ -32,12 +35,19 @@ export interface Ring {
 
 export interface DecorMark { kind: DecorKind; bands: number; variant: number; x: number; y: number }
 
+export interface Circle { name: string; x: number; y: number; r: number }
+
+export interface GeoRealm { index: number; region: number; kind: RealmKind; family: number; name: string; x: number; y: number; r: number; members: number }
+
 /** The preview's geometry in world units (the file stores fixed-point integers at `coordScale`). */
 export interface Geography {
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
-  regions: { index: number; name: string; englishName: string; kind: 'continent' | 'isle'; x: number; y: number; r: number; members: number }[];
-  clusters: { region: number; name: string | null; x: number; y: number; r: number; members: number }[];
-  isles: { name: string; x: number; y: number; r: number } | null;
+  regions: { index: number; name: string; englishName: string; kind: RegionKind; x: number; y: number; r: number; members: number }[];
+  realms: GeoRealm[];
+  clusters: { region: number; realm: number; name: string | null; x: number; y: number; r: number; members: number }[];
+  isles: Circle | null;
+  /** The empty islands kept for overflow, labelled once as one archipelago. */
+  outer: Circle;
 }
 
 export function geographyOf(world: PreviewWorld): Geography {
@@ -48,11 +58,16 @@ export function geographyOf(world: PreviewWorld): Geography {
       index: region.index, name: region.name, englishName: region.englishName, kind: region.kind,
       x: region.x / s, y: region.y / s, r: region.r / s, members: region.members,
     })),
+    realms: world.realms.map((realm) => ({
+      index: realm.index, region: realm.region, kind: realm.kind, family: realm.family, name: realm.name,
+      x: realm.x / s, y: realm.y / s, r: realm.r / s, members: realm.members,
+    })),
     clusters: world.clusters.map((cluster) => ({
-      region: cluster.region, name: cluster.game >= 0 ? world.games[cluster.game]?.name ?? null : null,
+      region: cluster.region, realm: cluster.realm, name: cluster.game >= 0 ? world.games[cluster.game]?.name ?? null : null,
       x: cluster.x / s, y: cluster.y / s, r: cluster.r / s, members: cluster.members,
     })),
     isles: world.isles ? { name: world.isles.name, x: world.isles.x / s, y: world.isles.y / s, r: world.isles.r / s } : null,
+    outer: { name: world.outer.name, x: world.outer.x / s, y: world.outer.y / s, r: world.outer.r / s },
   };
 }
 
@@ -181,6 +196,7 @@ export class SettlerStore {
       if (this.byId.has(id)) continue;
       const tierRank = columns.tier[i]!;
       const gameIndex = columns.game[i]!;
+      const realm = columns.realm[i]!;
       const settler: Settler = {
         index: this.all.length,
         id,
@@ -195,6 +211,8 @@ export class SettlerStore {
         average: columns.average[i]!,
         game: gameIndex >= 0 ? this.world.games[gameIndex]?.name ?? null : null,
         region: columns.region[i]!,
+        realm,
+        realmName: this.world.realms[realm]?.name ?? '',
       };
       this.label(settler);
       this.all.push(settler);

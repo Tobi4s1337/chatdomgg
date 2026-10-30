@@ -13,6 +13,11 @@ SURVEYOR_BASE_URL=http://<collector>/atlas/api SURVEYOR_DB_PATH=<surveyor.db or 
   ATLAS_DATA_DIR=<own dir> pnpm --filter @chatdom/surveyor atlas:import
 ATLAS_DATA_DIR=<own dir> pnpm --filter @chatdom/surveyor atlas:check [-- --revision <id>]
 ATLAS_DATA_DIR=<own dir> pnpm --filter @chatdom/surveyor atlas:serve
+ATLAS_DATA_DIR=<own dir> pnpm --filter @chatdom/surveyor atlas:rehearse [-- --edition 0|I]
+ATLAS_DATA_DIR=<own dir> ATLAS_FOUNDER_PUBLIC_KEY=<pem or path> \
+  pnpm --filter @chatdom/surveyor atlas:found -- --edition 0|I --authorization <file>
+ATLAS_DATA_DIR=<own dir> ATLAS_FOUNDER_PUBLIC_KEY=<pem or path> pnpm --filter @chatdom/surveyor atlas:settle
+ATLAS_DATA_DIR=<own dir> pnpm --filter @chatdom/surveyor atlas:authorize -- --edition 0|I --key <private pem> --by <login>
 ```
 
 Each script builds `dist/atlas.mjs` first, so it never runs stale code. There are no defaults for the source host or
@@ -26,6 +31,7 @@ database: one environment's locations never become application constants.
 | `ATLAS_KEEP_REVISIONS` | Revisions retained after a successful import (default 3, current always kept). |
 | `SURVEYOR_HTTP_TIMEOUT_MS` | Per-request timeout (default 8000). Two attempts for a 5xx or timeout, none for a 4xx. |
 | `ATLAS_HOST`, `ATLAS_PORT` | Serve bind address, default `127.0.0.1:5193`. |
+| `ATLAS_FOUNDER_PUBLIC_KEY` | The founder's Ed25519 public key (PEM text or a path to it). Without it no founding authorization can verify, so `found` refuses and `check` reports a founded edition as unverifiable. |
 
 ## What an import does
 
@@ -53,6 +59,8 @@ observation time, so two imports in one sweep interval can differ only by raids 
 current.json                 { revision, manifestSha256, switchedAt } — the last good revision
 revisions/<revision>/        import.json + channels / games / raid-pairs / raid-observations / sweeps .ndjson
 ledger/imports.ndjson        append-only: every attempt, published / unchanged / failed with a bounded reason
+ledger/foundings.ndjson      append-only: every founding attempt, founded or refused, with its reasons
+editions/<ed-0|ed-1>/        an official edition (see Editions); exists only after an authorized founding
 previews/<preview>/          manifest.json · world.json · region-<n>.json · names.json — removed with its revision
 moderation/withheld.json     optional: channels withheld from the public map (see Public visibility)
 .staging/  .import.lock      transient
@@ -109,3 +117,83 @@ Every published fact about a channel passes `publicVisibility` (`src/policy/visi
   open maps draw their land bare at the next refresh (every five minutes) and new maps at once; the immutable
   geometry is not redrawn. An unreadable list refuses all names rather than reviving anyone, and `atlas:check`
   reports it.
+
+## Geography
+
+The world is drawn from one revision with the family taxonomy `src/cartography/families-1.json` and algorithm
+`survey-preview-4`. The same revision, taxonomy bytes and algorithm always give the same `world.json`, byte for byte;
+`atlas:check` rebuilds the current preview and fails if they differ.
+
+- **Languages.** A language with ≥600 candidates is a continent; smaller ones are isles of the Isles of Many Tongues.
+- **Realms** (`realm-threshold-1`). A continent is divided into realms: the Crossroads at its heart, one realm for
+  each family of games with at least max(24, 1.5 % of the continent's channels), and the Wilds at its edge for
+  smaller families and unassigned games. An isle is one realm. A channel's family is the one holding most of its
+  observed minutes across all of that family's games.
+- **Variety** (`variety-1`). A channel with ≥120 observed minutes, no community above 50 % and at least three
+  communities of ≥12 % each lives in the Crossroads. Each family is one community; each unassigned game is its own.
+- **Patches.** Inside a realm, channels sit with others who mostly stream the same game. All of a region's patches
+  are relaxed together, so a continent stays one landmass and each realm one contiguous province.
+- **The Outer Isles.** Six empty, lobed islands (about 5 % of the land) belong to no language. They take newcomers
+  whose realm has no room left.
+- **Hamlet lattice** (`hex-1`). Waiting land is cut into hamlet slots on a fixed lattice in 1/20-unit fixed point
+  (pitch 1.6 × 1.4, odd rows offset). A slot is usable when it is on land, in its realm, ≥0.9 from the coast and
+  ≥0.6 clear of every other holding. A slot's holding ID is `s:<i>:<j>` and never changes. Each realm's free slots
+  are counted in the world file.
+
+The taxonomy is a **proposal** (`status: proposed`) until the founder reviews it. The map shows the families' plain
+names, and the `realmName` proposals wait for that review. Edition I refuses an unreviewed taxonomy.
+
+## Editions (R2–R5)
+
+An edition is frozen land plus an append-only ledger of who holds what on it. Founding is a team decision: nothing
+here founds an edition on its own, and no test founds one outside a temporary directory.
+
+```
+editions/<id>/edition.json   the shared AtlasEdition (frozen, world hash, realm count)
+              founding.json  revision, observation window, taxonomy ref, the signed authorization, founder key hash
+              taxonomy.json  the exact taxonomy bytes it was drawn with; settlement uses these, never the repo's
+              world.json     frozen geometry; its SHA-256 is the edition's world hash
+              ledger.ndjson  settle / tombstone / restore / night lines, each naming the SHA-256 of the line before
+              heads.ndjson   every acknowledged ledger head (lines, settlers, hash, revision)
+```
+
+- **Founding gates.** `atlas:found` refuses, and says every reason at once, when the edition already exists, when the
+  source's own observation window is shorter than 48 h (Edition 0) or 7 days (Edition I), when Edition I's taxonomy
+  is unreviewed, or when there is no founder key, no authorization, or an authorization that names another edition,
+  revision or taxonomy, is dated in the future, or does not verify. A refusal writes only its line in
+  `ledger/foundings.ndjson`. An unreadable withheld list is a refusal too. A founding draws the world, settles every
+  mapped channel as `f:<ordinal>` in channel ID order, lays a `hidden` tombstone on each holding of a channel on the
+  withheld list before its first night closes, writes the edition to staging, verifies it completely and renames it
+  into place. `founding.json` records the list it read (`sha256:<bytes>` or `none`) and how many it hid. It never
+  replaces an existing edition.
+- **Authorization.** The founder signs `{kind, edition, revision, taxonomySha256, issuedAt, issuedBy}` (canonical JSON)
+  with an Ed25519 key that stays on the founder's machine: `atlas:authorize --key <private pem>` prints the file to
+  pass to `--authorization`. The service holds only the public key.
+- **Settlement.** `atlas:settle` settles the current revision into every founded edition, once per revision and only
+  for a revision newer than the last night.
+  - Newcomers who reach the candidate rule are settled largest first on the nearest free slot of their realm,
+    aimed at the centre of their raid ties there. When the realm is full they go to the nearest Outer Isle. When
+    that is full too they are counted as deferred, and never given land somebody holds.
+  - Edition I also grants a hamlet to a small channel raided by a settled kingdom after the last night. A raid
+    target the survey has not observed gets nothing and is counted.
+  - A channel withheld by moderation gets a `hidden` tombstone. It is restored only when it has left the list and
+    the revision actually observed it, not gone: a channel missing from a sweep may be hidden, deleted or banned,
+    so absence never restores anything. A gone channel gets a `gone` tombstone. Its holding is abandoned for 30 days
+    and then waiting land, and nobody else is ever granted it.
+  - Hidden outranks gone. A channel that is both gone and withheld gets a `hidden` tombstone, so its land waits at
+    once. A holding already tombstoned as gone that is then withheld gets a `hidden` tombstone over it, at the next
+    run, with or without a newer survey. The ledger accepts a `hidden` tombstone over a `gone` one, and refuses every
+    other second tombstone.
+  - A holding's tier is fixed when it is granted. The map may draw a growing kingdom one tier larger.
+- **Crash safety.** The new ledger is written beside the old one and renamed over it, and only then is its head
+  acknowledged. An interrupted settlement leaves an unacknowledged tail: `check` reports it, and the next `settle`
+  verifies it and then acknowledges it.
+- **Proof.** `atlas:check` verifies every edition:
+  - the world hash and the taxonomy bytes;
+  - the whole hash chain with canonical encoding, one owner per holding and one holding per channel;
+  - that every acknowledged head is still a prefix (no earlier address changed);
+  - every holding on its realm's dry land without overlap, and slot holdings exactly on the lattice;
+  - the founding gates and the signature, and that `founding.json` agrees with the founding night's settlements
+    and hidden tombstones.
+- **Rehearsal.** `atlas:rehearse` draws an edition in memory from the oldest kept revision and settles every later one
+  into it. After each night it proves that nothing moved and every invariant holds. It writes nothing.

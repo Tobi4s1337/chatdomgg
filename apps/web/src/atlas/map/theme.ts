@@ -45,3 +45,57 @@ export function rgba(hex: string, alpha: number): string {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
+
+/** Quiet earth pigments a family realm leans toward. None of them comes near vermilion. */
+export const REALM_ACCENTS = ['#d8c27a', '#a8c09a', '#c7a7a0', '#a9b8c9', '#9fbfb3', '#bcaec6'] as const;
+/** The Crossroads at a continent's heart: worn, paler ground. */
+const HEART = '#f4e9cc';
+/** The Wilds at its edge: moss and heath. */
+const WILD = '#8e9878';
+/** The Outer Isles are empty waiting land: a graphite-pale wash rather than a language's colour. */
+export const OUTER_TINT = '#cdc8b8';
+
+/** The base pigment of one region's land. */
+export function landTint(region: { index: number; kind: string }): string {
+  return region.kind === 'outer' ? OUTER_TINT : regionTint(region.index);
+}
+
+export interface TintRealm { index: number; region: number; kind: string; family: number; x: number; y: number; r: number }
+
+/**
+ * One wash per realm, derived from its region's pigment, so a realm reads as one place and the land still reads as
+ * its language. Family realms lean toward an accent, preferring the same accent for the same family everywhere,
+ * and take the next free one when a touching realm of the same land already wears it. The Crossroads is paler,
+ * the Wilds mossier; an isle keeps its language's colour.
+ */
+export function realmTints(realms: readonly TintRealm[], regions: readonly { index: number; kind: string }[]): string[] {
+  const accents: number[] = realms.map(() => -1);
+  for (const realm of realms) {
+    if (realm.kind !== 'family') continue;
+    const taken = new Set<number>();
+    for (const other of realms) {
+      if (other === realm || other.region !== realm.region || accents[other.index]! < 0) continue;
+      if (Math.hypot(other.x - realm.x, other.y - realm.y) < (other.r + realm.r) * 1.2) taken.add(accents[other.index]!);
+    }
+    const preferred = Math.max(0, realm.family) % REALM_ACCENTS.length;
+    let accent = preferred;
+    for (let k = 0; k < REALM_ACCENTS.length; k++) {
+      const candidate = (preferred + k) % REALM_ACCENTS.length;
+      if (!taken.has(candidate)) {
+        accent = candidate;
+        break;
+      }
+    }
+    accents[realm.index] = accent;
+  }
+  return realms.map((realm) => {
+    const region = regions[realm.region];
+    const base = region ? landTint(region) : regionTint(realm.region);
+    switch (realm.kind) {
+      case 'family': return mixHex(base, REALM_ACCENTS[accents[realm.index]!]!, 0.62);
+      case 'crossroads': return mixHex(base, HEART, 0.62);
+      case 'wilds': return mixHex(base, WILD, 0.5);
+      default: return base;
+    }
+  });
+}

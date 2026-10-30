@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { AtlasError } from './errors';
 
@@ -64,4 +65,19 @@ export function serveConfigFrom(env: Env): ServeConfig {
     host: env.ATLAS_HOST?.trim() || '127.0.0.1',
     port: intFrom(env, 'ATLAS_PORT', 5193, 1, 65_535),
   };
+}
+
+/**
+ * The founder's Ed25519 public key, as PEM text or a path to a PEM file. Absent means no founding can be authorized
+ * and no edition's founding signature can be verified; it is never defaulted.
+ */
+export function founderKeyPemFrom(env: Env): string | null {
+  const raw = env.ATLAS_FOUNDER_PUBLIC_KEY?.trim();
+  if (!raw) return null;
+  if (raw.startsWith('-----BEGIN')) return raw;
+  try {
+    return readFileSync(isAbsolute(raw) ? raw : resolve(raw), 'utf8');
+  } catch {
+    throw new AtlasError('config', 'ATLAS_FOUNDER_PUBLIC_KEY names a file that cannot be read.');
+  }
 }

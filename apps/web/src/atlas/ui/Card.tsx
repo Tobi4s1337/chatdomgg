@@ -8,10 +8,10 @@ import { ShieldIcon } from './marks';
 export type NamesState = 'loading' | 'ready' | 'failed';
 
 /**
- * A mapped channel's public card. Everything on it is observed survey data: the holding's tier, its land, the
- * observed average audience and main category over the survey window. It is mapped, not founded. Its name and
- * Watch link come from the names projection and are shown only while fresh; without them the card still reads
- * as the holding it is, and says why the name is missing.
+ * A mapped channel's public card. Everything on it is observed survey data: the holding's tier, its realm and
+ * land, the observed average audience and main category over the survey window. It is mapped, not founded. Its
+ * name and Watch link come from the names projection and are shown only while fresh; without them the card still
+ * reads as the holding it is, and says why the name is missing.
  */
 export function Card(props: {
   settler: Settler;
@@ -67,11 +67,13 @@ export function Card(props: {
         <Show when={region()}>
           {(r) => (
             <div>
-              <dt>Land</dt>
+              <dt>Realm</dt>
               <dd>
-                <span lang={r().language}>{r().name}</span>
+                {/* An isle is one realm and the Outer Isles one archipelago: their realm is the land itself. */}
+                <Show when={r().kind === 'continent' && props.settler.realmName}>{props.settler.realmName} · </Show>
+                <span lang={r().language ?? undefined}>{r().name}</span>
                 <Show when={r().englishName !== r().name}><span class="atlas-quiet"> · {r().englishName}</span></Show>
-                <span class="atlas-quiet"> · {r().kind === 'continent' ? 'continent' : 'isle'}</span>
+                <Show when={r().kind === 'isle'}><span class="atlas-quiet"> · isle</span></Show>
               </dd>
             </div>
           )}

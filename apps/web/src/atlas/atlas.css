@@ -94,6 +94,8 @@
 .atlas-key-notes li { display: grid; grid-template-columns: 36px 1fr; column-gap: 10px; align-items: center; padding: 3px 0; }
 .atlas-key-notes .atlas-key-mark { grid-row: auto; min-height: 0; }
 .atlas-key-swatch { width: 30px; height: 18px; border: 1px solid var(--ink); border-radius: 40% 55% 45% 60% / 60% 45% 55% 40%; background: linear-gradient(120deg, #cfd5a8, #e2c99a 55%, #d3c0cf); }
+.atlas-key-swatch[data-kind='realms'] { background: radial-gradient(circle at 50% 50%, #ece2c2 0 22%, transparent 24%), linear-gradient(90deg, #c8cd9b 0 34%, #d5c39c 34% 67%, #b9c3ad 67%); }
+.atlas-key-swatch[data-kind='outer'] { background: #ddd8c8; border-style: dashed; border-color: var(--ink-soft); }
 .atlas-key-survey { margin-top: 7px !important; font-size: 12px; line-height: 1.38; color: var(--ink-soft); }
 
 /* ── Bottom bar: scale and controls ──────────────────────────────────────────────────────────── */

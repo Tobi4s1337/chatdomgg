@@ -1,13 +1,14 @@
 import { Application, Container, Graphics, ImageSource } from 'pixi.js';
-import { decodeDecor, decodeRings, type Geography, type Settler, type SettlerStore } from '../data/model';
+import { decodeRings, type Geography, type Settler, type SettlerStore } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import stampSheetUrl from '../assets/stamps.webp?url';
 import stampSheet from '../assets/stamps.json';
 import { Camera, distanceFor, NO_INSETS, type Distance, type Insets, type Viewport } from './camera';
 import { markedTiers, Overlay } from './overlay';
-import type { PaintScene, Stamp } from './paint';
+import type { Stamp } from './paint';
 import { pyramidFor } from './pyramid';
-import { INK, PAPER_DEEP, mixHex, regionTint } from './theme';
+import { paintSceneFor } from './scene';
+import { INK, PAPER_DEEP } from './theme';
 import { TileFarm, TileLayer } from './tiles';
 
 export interface MapEvents {
@@ -77,17 +78,7 @@ export class MapView {
     this.camera.home(this.view, this.insets());
     const phone = Math.min(this.view.width, this.view.height) < 600;
     const pyramid = pyramidFor(data.geo.bounds);
-    const regionCount = data.world.regions.length;
-    const scene: Omit<PaintScene, 'stamps'> = {
-      pyramid,
-      rings: decodeRings(data.world),
-      regionCount,
-      clusters: data.geo.clusters.map((cluster, index) => ({
-        x: cluster.x, y: cluster.y, r: cluster.r, region: cluster.region,
-        tint: mixHex(regionTint(cluster.region), ['#d8c27a', '#a8c09a', '#c7a7a0', '#a9b8c9'][index % 4]!, 0.35),
-      })),
-      decor: decodeDecor(data.world),
-    };
+    const scene = paintSceneFor(data.world, data.geo, decodeRings(data.world));
     this.farm = new TileFarm(scene, stampSheetUrl, stamps, async () => sheet, pixelRatio);
     this.tiles = new TileLayer(pyramid, this.farm, pixelRatio, phone ? 140 : 260);
     const source = sheet ? new ImageSource({ resource: sheet, resolution: 1, scaleMode: 'linear', autoGenerateMipmaps: true }) : null;

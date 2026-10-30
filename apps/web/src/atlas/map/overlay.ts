@@ -1,6 +1,6 @@
 import { CanvasSource, Container, Graphics, Rectangle, Sprite, Text, Texture, type TextStyleOptions, type TextureSource } from 'pixi.js';
 import { drawShield, shieldDesign, SHIELD_ASPECT } from '../heraldry';
-import type { Geography, Settler, SettlerStore } from '../data/model';
+import type { Circle, Geography, GeoRealm, Settler, SettlerStore } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import { DISTANCE_SCALE, type Camera, type Viewport } from './camera';
 import { CollisionGrid, comparePriority, type Rect } from './collide';
@@ -34,6 +34,62 @@ export function stampVisible(tierRank: number, scale: number): boolean {
 
 export function markedTiers(scale: number): number {
   return MARKED_TIERS[decorBand(scale)]!;
+}
+
+const ramp = (value: number, from: number, to: number) => Math.min(1, Math.max(0, (value - from) / (to - from)));
+
+/** Language names: full across the world distance, fading out as a continent fills the screen. */
+export function regionLabelFade(scale: number): number {
+  return 1 - ramp(scale, DISTANCE_SCALE.continent * 1.6, DISTANCE_SCALE.realm);
+}
+
+/** Realm names are written in from here: a large continent fills the screen and its realms are big enough to name. */
+export const REALM_LABEL_FROM = DISTANCE_SCALE.continent * 0.4;
+
+/**
+ * Realm names (R7: "Continent: realms, cities"): absent at world distance, written in on the way to continent
+ * distance (once a continent fills the screen), and giving way to the patches inside a realm on the way to kingdom
+ * distance.
+ */
+export function realmLabelFade(scale: number): number {
+  return ramp(scale, REALM_LABEL_FROM, REALM_LABEL_FROM * 1.5) * (1 - ramp(scale, DISTANCE_SCALE.realm * 1.5, DISTANCE_SCALE.kingdom));
+}
+
+/** Game patches inside a realm: from realm distance on, quieter than the realm names, gone when holdings take over. */
+export function clusterLabelFade(scale: number): number {
+  return ramp(scale, DISTANCE_SCALE.realm * 0.85, DISTANCE_SCALE.realm * 1.15) * (1 - ramp(scale, DISTANCE_SCALE.kingdom, DISTANCE_SCALE.kingdom + 8));
+}
+
+/** Type sizes in CSS px for a realm and for a patch of a given screen radius; a patch is always set smaller. */
+export function realmLabelPx(screenR: number): number {
+  return Math.round(Math.max(13, Math.min(21, screenR * 0.1)));
+}
+export function clusterLabelPx(screenR: number): number {
+  return Math.round(Math.max(10.5, Math.min(12.5, screenR * 0.06)) * 2) / 2;
+}
+
+/**
+ * The realms that get a name on the map, biggest first, ties by index. An isle's single realm is not named (the
+ * isle's own name already says it), nor are the Outer Isles, which are named once as an archipelago.
+ */
+export function labelledRealms(realms: readonly GeoRealm[]): GeoRealm[] {
+  return realms.filter((realm) => realm.kind === 'crossroads' || realm.kind === 'family' || realm.kind === 'wilds')
+    .sort((a, b) => b.members - a.members || a.index - b.index);
+}
+
+/** A long realm name in two lines, broken near the middle and preferably before an ampersand. */
+export function realmLines(name: string): string {
+  let best = -1;
+  let bestScore = Infinity;
+  for (let i = 1; i < name.length - 1; i++) {
+    if (name[i] !== ' ') continue;
+    const score = Math.abs(i - name.length / 2) - (name[i + 1] === '&' ? 3 : 0);
+    if (score < bestScore) {
+      best = i;
+      bestScore = score;
+    }
+  }
+  return best < 0 ? name : `${name.slice(0, best)}\n${name.slice(best + 1)}`;
 }
 
 /** Something drawn that a pointer can pick: a stamp or a survey mark. */
@@ -107,10 +163,12 @@ interface LabelEntry { text: Text; usedAt: number }
 const PAPER_HEX = parseInt(PAPER.slice(1), 16);
 const INK_HEX = parseInt(INK.slice(1), 16);
 const LAND_HEX = parseInt('f6eed8', 16);
+/** Patch names: a softer sepia than the realm names above them. */
+const CLUSTER_HEX = 0x6b5a48;
 
 /**
  * Everything drawn above the land tiles: holdings (survey marks or settlement stamps), seeded shields, names,
- * language-region names, community (category) names and the selection ring. Positions are recomputed in screen
+ * language-region names, realm names, community (category) names and the selection ring. Positions are recomputed in screen
  * space whenever the camera moves, so stamps and type keep their size while the land zooms beneath them.
  */
 export class Overlay {
@@ -131,12 +189,14 @@ export class Overlay {
   private readonly textCache = new Map<string, LabelEntry>();
   private readonly shieldCache = new Map<string, { texture: Texture; usedAt: number }>();
   private readonly scratch: Settler[] = [];
+  private readonly realmOrder: GeoRealm[];
   private frame = 0;
   /** Pickable things from the last update, highest priority first. */
   drawn: Drawn[] = [];
 
   constructor(private readonly world: PreviewWorld, private readonly geo: Geography, private readonly store: SettlerStore, sheet: TextureSource | null, stamps: Stamp[], private readonly pixelRatio: number) {
     this.container.addChild(this.marks, this.fills, this.inks, this.selection, this.regionLayer, this.shields, this.labels);
+    this.realmOrder = labelledRealms(geo.realms);
     this.markTextures = [0, 1, 2, 3].map((tier) => markTexture(tier, pixelRatio));
     this.markPool = new Pool(this.marks, () => {
       const sprite = new Sprite();
@@ -265,8 +325,14 @@ export class Overlay {
     // 1. Language regions: the largest type on the map, written across the land at world and continent distance.
     this.placeRegions(camera, view, grid);
 
-    // 2. Stamps and names, in priority order; a stamp that would crowd a stronger one stays a survey mark.
+    // 2. Stamps and names, in priority order; a stamp that would crowd a stronger one stays a survey mark. Realm
+    // names go down after the capitals and before every smaller holding.
+    let realmsPlaced = false;
     for (const settler of visible) {
+      if (!realmsPlaced && settler.tierRank > 0 && !forced.has(settler)) {
+        this.placeRealms(camera, view, grid);
+        realmsPlaced = true;
+      }
       const s = camera.worldToScreen(settler.x, settler.y, view);
       const r = radii[settler.tierRank]!;
       const wantsStamp = forced.has(settler) || stampVisible(settler.tierRank, scale);
@@ -305,6 +371,7 @@ export class Overlay {
       mark.alpha = settler.tierRank === 3 ? 0.75 : 1;
       drawn.push({ settler, x: s.x, y: s.y, r: Math.max(5, r * scale) });
     }
+    if (!realmsPlaced) this.placeRealms(camera, view, grid);
 
     // 3. Community names (the observed main category of a cluster) once a realm is close.
     this.placeClusters(camera, view, grid);
@@ -336,9 +403,10 @@ export class Overlay {
 
   private placeRegions(camera: Camera, view: Viewport, grid: CollisionGrid): void {
     const scale = camera.scale;
-    const fade = scale >= DISTANCE_SCALE.realm ? 0 : scale >= DISTANCE_SCALE.continent * 1.6 ? 1 - (scale - DISTANCE_SCALE.continent * 1.6) / (DISTANCE_SCALE.realm - DISTANCE_SCALE.continent * 1.6) : 1;
+    const fade = regionLabelFade(scale);
     if (fade <= 0.02) return;
-    const regions = [...this.geo.regions].sort((a, b) => b.members - a.members || a.index - b.index);
+    // The Outer Isles share one name, written once over the archipelago below.
+    const regions = this.geo.regions.filter((region) => region.kind !== 'outer').sort((a, b) => b.members - a.members || a.index - b.index);
     for (const region of regions) {
       const screenR = region.r * scale;
       if (screenR < (region.kind === 'continent' ? 26 : 16)) continue;
@@ -386,32 +454,83 @@ export class Overlay {
         if (sub) sub.visible = false;
       }
     }
-    const isles = this.geo.isles;
-    if (isles && isles.r * scale > 30) {
-      const size = Math.round(Math.max(13, Math.min(24, isles.r * scale * 0.09)));
-      const label = this.text(`isles:${size}`, isles.name, {
+    if (this.geo.isles) this.placeArchipelago('isles', this.geo.isles, camera, view, grid, fade);
+    this.placeArchipelago('outer', this.geo.outer, camera, view, grid, fade);
+  }
+
+  /** A group of islands named once, along the top of the circle that holds them. */
+  private placeArchipelago(key: string, circle: Circle, camera: Camera, view: Viewport, grid: CollisionGrid, fade: number): void {
+    const scale = camera.scale;
+    if (circle.r * scale <= 30) return;
+    const size = Math.round(Math.max(13, Math.min(24, circle.r * scale * 0.09)));
+    const label = this.text(`${key}:${size}`, circle.name, {
+      fontFamily: FACE_ITALIC,
+      fontStyle: 'italic',
+      fontSize: size,
+      fill: INK_HEX,
+      letterSpacing: size * 0.18,
+      stroke: { color: PAPER_HEX, width: 3.5, join: 'round' },
+      padding: 6,
+    });
+    const top = Math.max(circle.y - circle.r * 0.92, this.geo.bounds.minY + 40);
+    const c = camera.worldToScreen(circle.x, top, view);
+    const rect: Rect = { x: c.x - label.width / 2, y: c.y, w: label.width, h: label.height };
+    if (grid.take(rect)) {
+      label.position.set(Math.round(rect.x), Math.round(rect.y));
+      label.alpha = 0.8 * fade;
+    } else label.visible = false;
+  }
+
+  /** Realm names across a continent: the families of games, the Crossroads at its heart and the Wilds at its edge. */
+  private placeRealms(camera: Camera, view: Viewport, grid: CollisionGrid): void {
+    const scale = camera.scale;
+    const fade = realmLabelFade(scale);
+    if (fade <= 0.02) return;
+    const box = camera.visibleBox(view, 40);
+    for (const realm of this.realmOrder) {
+      const screenR = realm.r * scale;
+      // A realm's name may run a little past its circle (up to 2.4 r wide), so the reach is 1.2 r.
+      const reach = realm.r * 1.2;
+      if (screenR < 30 || realm.x + reach < box.minX || realm.x - reach > box.maxX || realm.y + reach < box.minY || realm.y - reach > box.maxY) continue;
+      const size = realmLabelPx(screenR);
+      const style: TextStyleOptions = {
         fontFamily: FACE_ITALIC,
         fontStyle: 'italic',
         fontSize: size,
         fill: INK_HEX,
-        letterSpacing: size * 0.18,
-        stroke: { color: PAPER_HEX, width: 3.5, join: 'round' },
-        padding: 6,
-      });
-      const top = Math.max(isles.y - isles.r * 0.92, this.geo.bounds.minY + 40);
-      const c = camera.worldToScreen(isles.x, top, view);
-      const rect: Rect = { x: c.x - label.width / 2, y: c.y, w: label.width, h: label.height };
-      if (grid.take(rect)) {
+        letterSpacing: size * 0.12,
+        stroke: { color: PAPER_HEX, width: 3.2, join: 'round' },
+        padding: 5,
+        align: 'center',
+        lineHeight: size * 1.08,
+      };
+      let label = this.text(`m:${realm.index}:${size}`, realm.name, style);
+      if (label.width > screenR * 1.9 && realm.name.includes(' ')) {
+        label.visible = false;
+        label = this.text(`m2:${realm.index}:${size}`, realmLines(realm.name), style);
+      }
+      // A name much wider than its realm would read as its neighbour's; it waits for a closer view.
+      if (label.width > screenR * 2.4) {
+        label.visible = false;
+        continue;
+      }
+      const c = camera.worldToScreen(realm.x, realm.y, view);
+      let placed = false;
+      for (const dy of [0, 0.42, -0.42, 0.7, -0.7]) {
+        const rect: Rect = { x: c.x - label.width / 2, y: c.y + dy * screenR - label.height / 2, w: label.width, h: label.height };
+        if (!grid.take(rect)) continue;
         label.position.set(Math.round(rect.x), Math.round(rect.y));
-        label.alpha = 0.8 * fade;
-      } else label.visible = false;
+        label.alpha = 0.86 * fade;
+        placed = true;
+        break;
+      }
+      if (!placed) label.visible = false;
     }
   }
 
   private placeClusters(camera: Camera, view: Viewport, grid: CollisionGrid): void {
     const scale = camera.scale;
-    if (scale < DISTANCE_SCALE.continent) return;
-    const fade = Math.min(1, (scale - DISTANCE_SCALE.continent) / 0.8) * (scale > DISTANCE_SCALE.kingdom ? Math.max(0, 1 - (scale - DISTANCE_SCALE.kingdom) / 8) : 1);
+    const fade = clusterLabelFade(scale);
     if (fade <= 0.02) return;
     const box = camera.visibleBox(view, 80);
     const clusters = this.geo.clusters
@@ -421,14 +540,14 @@ export class Overlay {
     for (const { cluster, index } of clusters) {
       const name = cluster.name;
       if (!name) continue;
-      const size = Math.round(Math.max(12, Math.min(19, cluster.r * scale * 0.08)));
+      const size = clusterLabelPx(cluster.r * scale);
       const label = this.text(`c:${index}:${size}`, name, {
         fontFamily: FACE_ITALIC,
         fontStyle: 'italic',
         fontSize: size,
-        fill: 0x5a4a3a,
-        letterSpacing: size * 0.22,
-        stroke: { color: PAPER_HEX, width: 3, join: 'round' },
+        fill: CLUSTER_HEX,
+        letterSpacing: size * 0.16,
+        stroke: { color: PAPER_HEX, width: 2.6, join: 'round' },
         padding: 4,
       });
       const c = camera.worldToScreen(cluster.x, cluster.y, view);
@@ -439,7 +558,7 @@ export class Overlay {
         if (!grid.free(rect)) continue;
         grid.claim(rect);
         label.position.set(Math.round(rect.x), Math.round(rect.y));
-        label.alpha = 0.82 * fade;
+        label.alpha = 0.7 * fade;
         placed = true;
         break;
       }

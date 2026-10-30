@@ -459,3 +459,56 @@ content-label collection expansion or production migration is inferred from a gr
   names (fail closed). The browser also drops each name locally at its `freshUntil`. Every Atlas read has a bounded
   timeout covering headers and body (pointer 10 s, names 15 s, chunk 30 s, world 45 s) and ends in the designed
   failure state with its retry; the first view waits for land and names, or for names to fail on their own.
+
+- **2026-10-30 — A03 stable geography and editions.** Algorithm `survey-preview-4`, taxonomy `families-1`
+  (`apps/surveyor/src/cartography/families-1.json`, 14 families, 91 games left unassigned with reasons, **proposed**
+  until the founder reviews it; the map shows plain family names, the `realmName` proposals wait for that review).
+  - **Realms.** A continent has the Crossroads at its heart (variety rule `variety-1`: ≥120 min, top community
+    <50 %, ≥3 communities ≥12 %, a family counting as one community), one realm per family with
+    ≥max(24, 1.5 %) of its channels (`realm-threshold-1`), and the Wilds at its edge. An isle is one realm. Game
+    patches sit inside a realm.
+  - **Contiguous land.** Nested circle packing left voids that became sea and split continents into realm
+    islands, so all of a region's patches are relaxed together. Each patch is pulled to its realm's centre and
+    gently to the heart, then pushed apart with a wider gap between realms. Realm circles are area-equivalent and
+    serve as the power-distance membership for later slots.
+  - **The Outer Isles.** Six empty, lobed islands of no language (about 5 % of the land) take overflow.
+  - **Hamlet lattice `hex-1`.** Fixed point in 1/20 units, pitch 1.6 × 1.4 with odd rows offset, shore 0.9, gap
+    0.6. A slot is `s:i:j`, a founding holding `f:<ordinal>` in channel ID order.
+  - **Editions.** An edition is `editions/<ed-0|ed-1>/` (edition, founding, taxonomy bytes, world) plus a
+    hash-chained, canonically encoded `ledger.ndjson` (settle / tombstone / restore / night). `heads.ndjson`
+    acknowledges every head, so any earlier address is provably unchanged. Withheld channels get a hidden
+    tombstone and gone channels a gone tombstone (30 days abandoned, then waiting land). Land is never re-granted.
+    The holding tier is fixed and the map may draw one tier of growth. Edition I alone grants land by raid, and
+    only to observed targets.
+  - **Founding.** Founding needs the source's own window (48 h / 7 d), a reviewed taxonomy for Edition I, and an
+    Ed25519 founder authorization over {edition, revision, taxonomy hash, issuedAt, issuedBy} that verifies
+    against `ATLAS_FOUNDER_PUBLIC_KEY`. Every refusal is logged. Nothing founds by itself.
+  - **Withheld at founding (review fix).** A channel on the withheld list when an edition is founded keeps the
+    land it was drawn on (the world stays the preview's drawing), and its holding gets a `hidden` tombstone in the
+    founding night itself, so it is waiting land from the first read and nobody else can be granted it. The founding
+    reads the list once and fails closed when it is unreadable; `founding.json` records `withheld: {key, hidden}`
+    and `check` proves it matches the founding night. A tombstone is lifted only when the revision observed the
+    channel, neither gone nor withheld: leaving the list while missing from the sweep restores nothing.
+  - **Every settle run reads moderation (second review fix).** `atlas:settle` reads the withheld list (once,
+    fail-closed) before it decides anything. Without a newer revision it no longer stops at "up to date": newly
+    withheld holdings get `hidden` tombstones in that run (`at` = the run, `revision` = the last settled night),
+    with no night line and nothing else changed. Hiding is immediate; lifting still waits for a revision that
+    observed the channel. Every append, night or moderation, is first verified as the whole edition it would make
+    (old ledger + new lines, every head + the new one, founder key) from the exact bytes that were verified; only
+    an edition that passes is renamed over the old ledger, otherwise ledger and heads stay untouched.
+  - **Proof.** `atlas:check` rebuilds the preview byte for byte and verifies every edition.
+  - **Real-data evidence (2026-10-30).** A rehearsal on three real revisions settled two nights with 0 holdings
+    moved. Edition 0 and Edition I foundings were both refused (13.9 h observed, proposal taxonomy, no key, no
+    authorization). A later run (2026-10-30 16:32 UTC):
+    - Inputs: real imports `obs-20261030T162623Z-6d3443af9151` and `obs-20261030T163224Z-8fff6dfa7def`
+      (24.8 h, 497 sweeps, 260,923 channels, 0 rejected rows).
+    - `atlas:check` OK and the preview rebuilt byte for byte.
+    - The rehearsal drew 36,881 holdings in 135 realms with 585,915 free hamlet slots.
+    - One night settled 133 newcomers (29 by raid, 0 outer, 0 deferred, 1 unseen raid target), with 0 holdings
+      moved and every earlier address held.
+    - Edition 0 and Edition I were refused again (24.7 h observed) and logged. No `editions/` directory exists.
+  - **Hidden outranks gone (port fix).** A channel both gone and withheld gets a `hidden` tombstone, so its land
+    waits at once instead of lying abandoned for 30 days. A holding already tombstoned as gone that is then withheld
+    gets a `hidden` tombstone over it in the next run, by a night or by the moderation pass between surveys. The
+    ledger accepts exactly that replacement (gone → hidden) and refuses every other second tombstone, so nothing
+    replaces a hidden one and no cause is laid twice. This closes the three cases the last A03 review left open.
