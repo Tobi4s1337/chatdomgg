@@ -24,6 +24,10 @@ The seven look/place lanes keep their existing ownership. Only the team integrat
   Consume at most one input per server tick; a flood cannot buy additional simulated seconds.
 - Quantized world-direction components and button bits cross the wire. Camera trigonometry stays outside
   simulation. Collision queries use immutable versioned solid AABBs in world metres; unknown terrain blocks.
+- The server's per-walker uint32 `placement` context changes on relocation, even at identical coordinates.
+  `RealmWalkInput` echoes it; stale-context inputs are consumed without movement. A changed token reseeds SDK
+  prediction and neighbour tracks before drawing, so short placements cannot glide through a wall. This field
+  is outside `PlayerState`/`PLAYER_FIELDS`; Colyseus still owns ordering and acknowledgements.
 - Public schema contains a small kingdom header and visible walkers. One StateView is shared by a district,
   including its neighbouring districts; never allocate a view for each walker. Chat presence has no sockets.
 - Durable domain state and the event log are private. Intents produce proposed facts; append with the writer
@@ -103,7 +107,11 @@ supported 0.5 m auto-step, corner refinement and overlap recovery belong to the 
 in-process boundary is `apps/realm/src/ports.ts`: `RealmRoomServices` supplies authentication and the exclusive
 room handle; `RealmRoomHandle` supplies intent handling, bootstrap, committed subscriptions, transient/private
 delivery, lifecycle and disposal. `RealmRoomEffects` reads/places walkers, permits locomotion and atomically adopts
-committed geometry/collision revisions with safe poses. Awaited admission rechecks `RealmIntentContext.current()`.
+committed geometry/collision revisions with supported, clear poses. `close` irreversibly stops the old room on
+writer loss; `recoverWalker` asks the current authority for a safe anchor at the current collision revision,
+without releasing an interaction lease. Public deliveries carry an independent monotonic `cursor`; bootstrap
+installs `throughCursor`, including presence changes that do not advance domain `throughSequence`. Awaited
+admission rechecks `RealmIntentContext.current()`.
 Only sitting suppresses walking; an interior still permits walking to its exit.
 
 `apps/web/src/realm/client.ts:connectRealm` consumes `RealmEntry { kingdomId, resumeScope, ticket() }` plus the

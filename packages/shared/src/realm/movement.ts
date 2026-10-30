@@ -11,6 +11,9 @@ export const WALK_BODY = { radius: .28, height: 1.75, stepHeight: .5 } as const;
 export interface WalkInput {
   moveX: number; moveZ: number; buttons: number; yaw: number; collisionRevision: number;
 }
+/** Authority placement context, echoed on the wire. Colyseus still owns all input ordering and acknowledgements.
+ * It changes only when the server relocates this walker, so late inputs from before that placement cannot move it. */
+export interface RealmWalkInput extends WalkInput { placement: number }
 /** Feet in world metres, velocities m/s. The same fields are reconciled on both ends. */
 export interface PlayerState {
   x: number; y: number; z: number; vx: number; vy: number; vz: number;
@@ -36,4 +39,9 @@ export function sanitizeWalkInput(input: WalkInput): void {
   input.buttons = byte(input.buttons, 0, 255) & 3;
   input.yaw = byte(input.yaw, 0, 255);
   input.collisionRevision = byte(input.collisionRevision, 0, 0xffffffff);
+}
+
+export function sanitizeRealmWalkInput(input: RealmWalkInput): void {
+  sanitizeWalkInput(input);
+  input.placement = Number.isFinite(input.placement) ? Math.max(0, Math.min(0xffffffff, Math.trunc(input.placement))) : 0;
 }

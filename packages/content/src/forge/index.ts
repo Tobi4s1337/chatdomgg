@@ -1,16 +1,18 @@
 import type { ForgePieceDefinition, VoxelBlueprint } from '@chatdom/shared';
 import { FORGE_FAMILIES, FORGE_FORMS, FORM_KINDS, type ForgeFamilyId, type ForgeForm, type ForgeProfile } from './grammar';
 import { HEARTHFOLD_PIECES, HEARTHFOLD_PROFILES } from './hearthfold';
+import { TIDEWAKE_PIECES, TIDEWAKE_PROFILES } from './tidewake';
 
 export { FORGE_FAMILIES, FORGE_FORMS, FORM_KINDS, type ForgeFamilyId, type ForgeForm, type ForgeProfile } from './grammar';
 export { HEARTHFOLD } from './hearthfold';
+export { TIDEWAKE } from './tidewake';
 export { FORGE_REVIEW } from './review';
 export { composeForgeFixture, fingerprint, findMates, mateConnectors, placeConnector, placeSpace, poseLeafBox, rasterize, solidBoxes, REVIEW_LOT, type ComposedForgeHome, type ForgeReviewFixture, type ForgeReviewInstance, type LeafPose, type PlacedConnector } from './compose';
 
 const FACTORIES: Record<ForgeFamilyId, Partial<Record<ForgeForm, () => ForgePieceDefinition>>> = {
-  hearthfold: HEARTHFOLD_PIECES, tidewake: {}, grovebough: {},
+  hearthfold: HEARTHFOLD_PIECES, tidewake: TIDEWAKE_PIECES, grovebough: {},
 };
-export const FORGE_PROFILES: Record<ForgeFamilyId, readonly ForgeProfile[]> = { hearthfold: HEARTHFOLD_PROFILES, tidewake: [], grovebough: [] };
+export const FORGE_PROFILES: Record<ForgeFamilyId, readonly ForgeProfile[]> = { hearthfold: HEARTHFOLD_PROFILES, tidewake: TIDEWAKE_PROFILES, grovebough: [] };
 
 /** The finite grammar: a family and form from the published lists, nothing else. Unfinished forms throw. */
 export function createForgePiece(family: ForgeFamilyId, form: ForgeForm): ForgePieceDefinition {

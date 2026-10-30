@@ -89,7 +89,9 @@ export type RealmStoredOutcome =
  * Append fact, private state/receipt, ledger effects and public outbox ATOMICALLY; compare epoch+sequence.
  * Check `current` after acquiring locks and immediately before the write (no await in that final gap).
  * The transaction also enforces globally unique design IDs and global allocation receipts where applicable.
- * A duplicate commandId returns its stored outcome; a different payload with that id is a conflict.
+ * Committed and unchanged command outcomes are terminal. Rejected decisions may be reevaluated under current
+ * authority with the SAME id and payload (e.g. a held nightly credit after qualification). A changed payload
+ * with that id always conflicts. Ingress observation receipts remain terminal.
  * Never acknowledge or broadcast until commit. A lost reply is recovered by lookup, not called a refund.
  */
 export interface RealmRepository {

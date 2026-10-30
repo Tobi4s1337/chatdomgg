@@ -7,8 +7,10 @@
   --bt-brass-hi: #f4dc9d; --bt-brass: #c99f5b; --bt-brass-lo: #7c5a2a;
   --bt-parch: #f3e6c6; --bt-parch-lo: #e0cb9e; --bt-ink: #38261a; --bt-ink-soft: #6e5339; --bt-seal: #9c402c;
   --bt-cream: #f4e3bf; --bt-cream-soft: #cdb48b;
-  position: absolute; right: 24px; bottom: 24px; width: 380px; padding: 14px 14px 12px;
+  position: absolute; right: calc(24px + env(safe-area-inset-right)); bottom: calc(24px + env(safe-area-inset-bottom)); width: 380px; padding: 14px 14px 12px;
   display: flex; flex-direction: column; gap: 10px; pointer-events: auto; z-index: 12;
+  /* A tool rack, not a page: no text selection, callouts or double-tap zoom under a working thumb. */
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; overscroll-behavior: contain;
   color: var(--bt-cream); font: 14px/1.35 Alegreya, Georgia, serif; font-synthesis: none;
   background:
     radial-gradient(circle at 9px 9px, var(--bt-brass-hi) 0 1px, var(--bt-brass) 1.5px 2.6px, var(--bt-brass-lo) 3.2px, transparent 3.8px),
@@ -24,11 +26,14 @@
 .bt-rack p { margin: 0; }
 .bt-rack button { font: inherit; color: inherit; margin: 0; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .bt-rack button:disabled { cursor: default; }
-.bt-rack button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bt-parch), 0 0 0 4px var(--bt-seal); z-index: 1; }
+/* Keyboard focus is a brass wire set just outside the fitting, so the fitting keeps its own depth and seated state. */
+.bt-rack button:focus { outline: none; }
+.bt-rack button:focus-visible { outline: 2px solid var(--bt-brass-hi); outline-offset: 2px; z-index: 1; }
+.bt-rack .bt-swatch:focus-visible { outline-offset: 3px; }
 .bt-mark { width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 .bt-mark .bt-mark-faint { stroke-width: 1; opacity: .45; }
 .bt-mark .bt-mark-solid { fill: currentColor; stroke: none; }
-.bt-rack kbd { font: 10px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .04em; color: var(--bt-cream-soft); opacity: .8; }
+.bt-rack kbd { font: 11px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .04em; color: var(--bt-cream-soft); opacity: .85; }
 
 /* Parchment label pinned at the head of the rack. */
 .bt-head { display: flex; align-items: stretch; gap: 8px; }
@@ -123,6 +128,7 @@
 .bt-seg button span { font-size: 12px; line-height: 1; }
 .bt-seg button:not(:disabled):hover { background: #ffe1b414; color: var(--bt-cream); }
 .bt-seg button:not(:disabled):active { transform: translateY(1px); }
+.bt-seg button[aria-pressed='true']:not(:disabled):active { box-shadow: inset 0 1px 3px #3d270f99, 0 0 0 #1e1209; filter: brightness(.96); }
 .bt-seg button[aria-pressed='true'] { color: var(--bt-ink); border-color: var(--bt-brass-lo);
   background: linear-gradient(180deg, var(--bt-brass-hi), var(--bt-brass) 55%, #a98245); box-shadow: inset 0 1px 0 #fff3cc, 0 1px 0 #1e1209, 0 2px 3px #00000066; }
 .bt-seg button[aria-pressed='true'] span { font-weight: 600; }
@@ -156,8 +162,32 @@
 .bt-locked .bt-tools, .bt-locked .bt-swatches, .bt-locked .bt-seg { opacity: .7; }
 
 @media (hover: none) { .bt-rack kbd { display: none; } }
+/* Touch screens wide enough for the full rack (tablets) still get thumb-sized samples. */
+@media (pointer: coarse) and (min-width: 601px) and (min-height: 561px) {
+  .bt-swatches { column-gap: 12px; }
+  .bt-swatch { width: 44px; height: 44px; padding: 4px; }
+  .bt-ledger .bt-key { min-height: 46px; }
+}
 
-@media (max-width: 600px) {
+/* Laptop heights: the rack sheds its engraving and long help so it settles under the scene's own seal. */
+@media (min-width: 601px) and (min-height: 561px) and (max-height: 820px) {
+  .bt-rack { gap: 8px; padding: 12px 12px 10px; }
+  .bt-eyebrow, .bt-mirror-help, .bt-camera { display: none; }
+  .bt-plate { padding: 7px 11px; }
+  .bt-plate h2 { margin-top: 0; font-size: 20px; }
+  .bt-slip { min-height: 36px; padding: 6px 12px 6px 14px; }
+  .bt-tool { min-height: 58px; padding: 6px 2px 7px; }
+  .bt-shelf-row { gap: 4px; }
+  .bt-welcome { min-height: 44px; padding: 7px 12px; }
+}
+@media (min-width: 601px) and (min-height: 561px) and (max-height: 700px) {
+  .bt-tool-help, .bt-plate h2 { display: none; }
+  .bt-head .bt-plate { display: flex; flex-direction: column; justify-content: center; gap: 5px; }
+  .bt-leave { min-height: 44px; }
+}
+
+/* Phones, upright or on their side: the thumb rack, with the palette folded into a drawer. */
+@media (max-width: 600px), (max-height: 560px) {
   .bt-rack { left: calc(8px + env(safe-area-inset-left)); right: calc(8px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); width: auto;
     padding: 9px; gap: 7px 5px; border-radius: 12px;
     display: grid; grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr);
@@ -176,8 +206,8 @@
   .bt-tool .bt-mark { width: 22px; height: 22px; }
   .bt-tool-name { font-size: 13px; }
   .bt-tool[aria-pressed='true']::after { bottom: 3px; }
-  .bt-shape { gap: 6px; }
-  .bt-seg { padding: 3px; }
+  .bt-shape { grid-template-columns: minmax(0, 3fr) minmax(0, 4fr); gap: 6px; }
+  .bt-seg { padding: 3px; gap: 2px; }
   .bt-seg button { min-height: 44px; }
   .bt-ledger { display: contents; }
   .bt-ledger .bt-key { display: flex; width: 44px; padding: 0; }
@@ -203,24 +233,49 @@
   .bt-opener-text span { font-size: 15px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bt-opener .bt-mark { width: 20px; height: 20px; color: var(--bt-brass); }
 
-  /* The open drawer takes the place of the tool, material and shape rows; history and the street stay put. */
+  /* The open drawer takes the place of the tool, material and shape rows and is never taller than the closed rack,
+     so it covers no more of the home. Undo and redo stay put; Close drops to the thumb row in the street action's place. */
   .bt-materials { display: none; }
   /* The scene keeps its own SIMULATED seal in view, so the head plate folds away while the drawer is out. */
-  .bt-drawer-open { grid-template-areas: 'slip slip slip slip' 'mats mats mats mats' 'undo redo welcome welcome'; }
-  .bt-drawer-open .bt-head, .bt-drawer-open .bt-tools, .bt-drawer-open .bt-opener, .bt-drawer-open .bt-budget, .bt-drawer-open .bt-shape { display: none; }
-  .bt-drawer-open .bt-materials { display: flex; flex-direction: column; gap: 6px; animation: bt-drawer .16s ease-out; }
+  .bt-drawer-open { grid-template-areas: 'slip slip slip slip' 'mats mats mats mats' 'undo redo dhead dhead'; }
+  .bt-drawer-open .bt-head, .bt-drawer-open .bt-tools, .bt-drawer-open .bt-opener, .bt-drawer-open .bt-budget, .bt-drawer-open .bt-shape, .bt-drawer-open .bt-welcome { display: none; }
+  .bt-drawer-open .bt-materials { display: contents; }
+  .bt-drawer-open .bt-swatches { grid-area: mats; animation: bt-drawer .16s ease-out; }
   @keyframes bt-drawer { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-  .bt-drawer-head { display: flex; align-items: center; gap: 8px; }
+  .bt-drawer-head { grid-area: dhead; display: flex; align-items: center; gap: 6px; min-width: 0; animation: bt-drawer .16s ease-out; }
   .bt-drawer-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-left: 3px; }
   .bt-drawer-title p:first-child { display: flex; align-items: baseline; gap: 8px; }
-  .bt-drawer-title small { font: 11px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .1em; color: var(--bt-cream-soft); }
-  .bt-drawer-title span { font-size: 16px; line-height: 1; color: var(--bt-cream); }
+  .bt-drawer-title small { display: none; }
+  .bt-drawer-title span { font-size: 16px; line-height: 1; color: var(--bt-cream); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bt-readout { font-size: 12px; line-height: 1; color: var(--bt-cream-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bt-close { flex-direction: row; gap: 5px; min-width: 88px; padding: 0 12px; }
+  .bt-close { flex-direction: row; gap: 5px; min-width: 84px; padding: 0 11px; }
   .bt-close span { font-size: 14px; }
   .bt-swatches { column-gap: 12px; row-gap: 7px; padding: 6px 7px 9px; }
   .bt-shelf + .bt-shelf::before { left: -7px; }
   .bt-swatch { width: 44px; height: 44px; padding: 4px; }
+
+  /* Folding the drawer away lifts the rack's rows back into place. */
+  .bt-drawer-shut .bt-head, .bt-drawer-shut .bt-tools, .bt-drawer-shut .bt-opener, .bt-drawer-shut .bt-budget, .bt-drawer-shut .bt-shape, .bt-drawer-shut .bt-welcome { animation: bt-rise .16s ease-out; }
+  @keyframes bt-rise { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+}
+
+/* A phone on its side: the rack stands at the right edge, tools in a column, so the home keeps the middle of the screen. */
+@media (min-width: 601px) and (max-height: 560px) {
+  .bt-rack { left: auto; right: calc(8px + env(safe-area-inset-right)); width: 436px;
+    grid-template-columns: 66px 44px 44px minmax(0, 1fr) minmax(0, 1fr) 56px;
+    grid-template-areas: 'tools slip slip slip slip leave' 'tools pick pick pick budget budget' 'tools shape shape shape shape shape' 'tools undo redo welcome welcome welcome'; }
+  /* The scene's SIMULATED seal stays in view above the rack; the core's draft line sits in the slip. */
+  .bt-head { display: contents; }
+  .bt-plate { display: none; }
+  .bt-leave { grid-area: leave; min-width: 0; }
+  .bt-slip { min-height: 44px; }
+  .bt-tools { grid-template-columns: 1fr; grid-auto-rows: 1fr; }
+  .bt-tool { min-height: 44px; flex-direction: column; gap: 3px; padding: 4px 2px 6px; }
+  .bt-tool .bt-mark { width: 20px; height: 20px; }
+  .bt-tool-name { font-size: 12.5px; }
+  .bt-rack.bt-drawer-open { grid-template-columns: 44px 44px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'slip slip slip slip' 'mats mats mats mats' 'undo redo dhead dhead'; }
+  .bt-drawer-open .bt-slip { min-height: 34px; }
+  .bt-drawer-open .bt-swatches { row-gap: 5px; padding-bottom: 7px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

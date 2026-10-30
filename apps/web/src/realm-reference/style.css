@@ -9,4 +9,5 @@
 .realm-reference-sim { display: inline-block; border: 1px solid #e5c18c; padding: .25rem .5rem; background: #503a34; font: 700 .65rem system-ui, sans-serif; letter-spacing: .13em; }
 .realm-reference-info { position: absolute; z-index: 2; left: clamp(1rem, 4vw, 3.5rem); bottom: clamp(1rem, 4vw, 3rem); max-width: calc(100% - 2rem); padding: .75rem 1rem; border: 1px solid #bd9e6e; border-radius: .35rem; background: #44342ef2; box-shadow: 0 5px 20px #2e222366; font: .82rem/1.5 system-ui, sans-serif; }
 .realm-reference-info p { margin: 0; } .realm-reference-info p:first-child { color: #e7c888; font-weight: 700; } .realm-reference-info p.realm-reference-error { color: #ffb9a1; }
+.realm-reference .walk-look { left: clamp(1rem, 4vw, 3.5rem); top: 178px; }
 @media (max-width: 600px) { .realm-reference-header h1 { font-size: 2rem; } .realm-reference-info { font-size: .72rem; } }

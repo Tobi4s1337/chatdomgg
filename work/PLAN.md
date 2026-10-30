@@ -330,47 +330,41 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Brief now:** make this one walkable world. Main has frozen the realm boundary and demonstrated its thin
-three-client consumer; the team builds persistence, full walking, existing-system wiring and interactions.
-This is not yet the finished kingdom walk. The previous seven look/place lanes (26–32) remain active and
-retain their ownership map in `work/lanes/kingdom-look-owners.md`. Main does not build their art or merge
-individual branches; judge only the ready `lane/integrator` candidate Tobias announces.
+**Integration:** main temporarily owns the queue through Sol high reviewers and
+`integration/kingdom-queue`; ready realm work goes first. Follow `work/lanes/kingdom-look-owners.md`.
+The earlier twelve-lane queue is accepted. WB02/BT04 unfinished source work stays with its producers.
+Never overwrite source WIP or compose a second writer.
 
-**Core landed:** spec 33 and `@chatdom/shared/realm` contain actual schema/messages/auth DTOs, `k:<channelId>`,
-private commands/facts/repository/ingress contracts, promoted `KingdomForgeAuthority` and interaction leases.
-`packages/world` owns the pure movement step and private decide/apply/project reducer. A proposed fact becomes
-truth only after the fenced Postgres transaction commits; public fields are selected explicitly. Coal derives
-from ten evidenced minutes with an owned home, once per stream night, cap three including reserves. Forge binds
-rights, stream, home digest/revision and attempt; consume/attach/provenance/outbox are one commit. Uncertain
-replies require outcome lookup. Global home cap and founded allocation are transactional server work.
+**Realm accepted:** RS01–RS06 and WC01–WC06. Postgres authority, allocation/adoption, durable ingress/outbox,
+OIDC tickets, checked seats/reconnect/revocation, bounded clients/actions/writer queues, readiness, sweep/step/jump,
+input, shoulder/collision camera and prediction are in. RS06 source is `a4664ce`; candidate integration `9f7d73f`
+preserves first/replacement Forge parts and reconstructs the durable delivered prefix without ahead private builds.
+RS05's safe airborne tab-transfer fallback, deadline closure and account/session separation remain intact.
 
-**Four ready lanes:** spec 34 `realm-server` (nine tasks), 35 `walk-controller` (eight), 36 `realm-wiring` (nine),
-37 `interactions` (six), each with PRD, empty progress log, local `lane/<name>` and sibling worktree. Persistence/
-auth, movement/input/camera and target selection can start together. Wiring's adapters start on the frozen
-ports; durable acceptance waits for the real producers. Each PRD names disjoint workers and dependencies.
-Server owns narrow room district/lifecycle/rate/recovery hunks; walking owns narrow client Predict/revision/input
-hunks. Main retains shared types, domain rules and auth/join/reconnect client code. Integrator alone composes
-scene/worker/content/camera call sites; exact installation recipes are part of lane delivery.
+**Core now:** source-loss barriers preserve independent presence and fence stale evidence; wiring must consume
+accepted `DurableKingdom`/`RealmIngress` and the compressed codec, replacing its competing writer/plain-JSON codec.
+Founded manifest/routes and public scene types exist; geometry resolves after acquire/load under the original lease.
+`retain` plus `preparePublicCheckpoint()` cold-opens and drains approved public views without a walker/principal,
+holding readiness on failed acknowledgements; `publicCheckpoint()` reads that actual prefix. No browser/manifest
+join deadlock. Authority `placement` context now fences late input and resets SDK self/peer tracks and camera/stair
+easing even for a short same-revision relocation. Physics and Colyseus sequencing/acknowledgement stay unchanged.
 
-**Reference running:** preview 5190, explicit SIMULATED realm 5191; `/-/realm` renders only connected browser
-walkers. WASD/Shift/Space use the same pure step on server and client, with Colyseus reconciliation/interpolation.
-Reload retains the same walker. Entry uses the API's stable opaque `resumeScope` and a lazy fresh-ticket factory;
-single-use tickets never become reconnect storage keys. Versions: Colyseus 0.18.10/core 0.18.23/schema 5.0.42/SDK 0.18.8/uWS 0.18.4.
-Two pnpm patches fix colon room IDs in SDK reconnect parsing and uWS room URLs. 30 Hz input, 5 Hz patches,
-90 inbound frames/s, 16 KiB payload, 1 MiB backpressure with closure. Node 22 remains sufficient. Production
-startup fails closed until real services exist. API has a pinned manifest, not a fake auth server. Use spec 33's
-start commands and `pnpm realm:smoke`; do not stop unrelated services. Herald5194/spell5195 were not rechecked.
+**Critical path:** spec 38 / `realm-server-world` is ready with branch/worktree; no implementation has landed yet.
+FW01 scene assembly and FW02 pure indexed collision compilation can start independently. Use exact adopted plans,
+approved overrides and native lattice units; receipt hashes/revisions bind browser and authority. Main registers
+the collision subpath when its file exists. RS07–09 remain realm-server's; wiring mounts the actual producer.
+Wiring/interactions still have uncommitted producer work; accepted walking is the labelled SIMULATED reference court,
+not the actual `/?walk=1` kingdom. Preserve their WIP while consuming this base.
 
-**Acceptance still owed by lanes:** Postgres restart/fencing, actual Twitch sign-in/deeds, four district views
-and 300 distinct input clients; supported 0.5 m step, lower-left shoulder/first-person camera and real terrain
-collision; doors/seats; room-backed Herald/build/Forge and genuine judged chat wish. Geometry uses a persisted
-founded revision, never URL layout or a presentation slot as ownership. Ordinary chat stays ephemeral. Neither
-the reference court nor model fixtures pass these production/visual checks. Previous Forge work remains at
-its coordinator seam; both independent gates and a real home/live/coal state must succeed, with no bypass.
+**Next:** actual founded-town browser mounting; coherent post-publication room/handle/world/bootstrap/receipt
+adoption when RW06 starts; room-backed Herald/build/Forge and real interactions/interiors; 300 walkers; the
+three-browser town tour and plaza→pier. Real human tobi4s_ window/provider proof remains open. The staged card/Tidewake
+assembly are not live bindings. These are required work, not optional polish. The whole realm goal remains active.
 
-**Evidence / doubts:** full `pnpm verify --area kingdom --tier town --hour dusk --size phone` passed typecheck,
-lint, 1,278 tests/85 files, build and one serial dusk shot. Actual uWS/SDK movement/reload and three isolated
-Playwright browsers passed. Main inspected `shots/realm/three-walkers@1440x900.png`, `@390x844.png` and the dusk
-phone shot; `shots/realm/smoke.json` records the browser check. Captures remain lean, serial and machine-locked.
-The court proves transport, not the gasp. The largest risk remains isolated benches instead of the actual warm,
-walkable kingdom; the four lanes' final acceptance must use the composed streets, places, homes and horizon.
+**Evidence / look:** assembled verify passed 1,496 tests, one intentional reminder skip, real Postgres suites,
+typecheck, lint, workspace build and one serial phone dusk capture. Actual SDK regression covers a one-metre
+relocation across a wall for self/neighbour plus stale input; cold read covers failed acknowledgement recovery.
+Main looked at `shots/kingdom/town-dusk@390x844.png`: no new visible break; castle still reads as an unlit grey block.
+Sent kingdom-light one fix: warm great-hall openings with spill onto the entrance court. Existing imports/Forge/
+wall-pull-in feedback stands. Main preview is 5190; worker 5191/5192 remain untouched. No new persistent services;
+captures stay lean, serial and machine-locked.

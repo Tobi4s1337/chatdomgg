@@ -8,6 +8,8 @@ export interface RealmIntentContext {
   current(): Readonly<PlayerState> | null;
 }
 export interface RealmRoomEffects {
+  /** Irreversible writer-loss/shutdown gate: stop all room work, then disconnect without guessing commit outcomes. */
+  close(reason: 'authority-lost' | 'shutdown'): void;
   readWalker(walkerId: string): Readonly<PlayerState> | null;
   /** Caller validates support/egress at this revision. Stale revisions fail without moving anyone. */
   placeWalker(walkerId: string, position: readonly [number, number, number], collisionRevision: number): boolean;
@@ -22,8 +24,10 @@ export interface RealmRoomHandle {
   readonly world: CollisionWorld;
   readonly sequence: number;
   spawn(principal: RealmPrincipal): readonly [number, number, number];
+  /** Server-only: choose a supported clear anchor in the current world and place via bound effects. */
+  recoverWalker(walkerId: string, collisionRevision: number): boolean;
   intent(context: RealmIntentContext, intent: RealmIntent): Promise<RealmReceipt>;
-  /** Synchronous checkpoint: client buffers deltas, installs throughSequence, then applies newer entries. */
+  /** Synchronous checkpoint: client buffers deltas, installs throughCursor, then applies newer entries. */
   bootstrap(principal: RealmPrincipal): RealmBootstrap;
   bindRoom(effects: RealmRoomEffects): () => void;
   lifecycle(event: 'join' | 'drop' | 'reconnect' | 'leave', principal: RealmPrincipal, walkerId: string, now: number): void;
