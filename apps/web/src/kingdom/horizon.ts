@@ -3,20 +3,27 @@ import { terrainHeight, type KingdomLayout } from '@chatdom/world';
 
 type Bounds = [minX: number, maxX: number, minZ: number, maxZ: number];
 const FAR_EXTENT = 1100;
-const FAR_STEP = 10;
 const CHUNK_METRES = 16;
+
+export interface HorizonSurfaceOptions {
+  /** Distant cell size in metres; the detailed-terrain join always remains at 1 m. */
+  readonly farStep?: 10 | 20;
+}
 
 /**
  * The horizon starts at the worker's actual chunk-aligned footprint. A 1 m collar joins
- * its exact surface to the original 10 m distant triangles. Far tiles beside the collar
+ * its exact surface to 10 m (default) or 20 m distant triangles. Far tiles beside the collar
  * split their shared edges too, so neither join contains a T-junction or overlapping land.
+ * Use this surface's sampleHeight when grounding props: each detail setting has its own
+ * actual triangle planes, including the Float32-rounded collar and edge fans.
  */
-export function createHorizonSurface(layout: KingdomLayout): {
+export function createHorizonSurface(layout: KingdomLayout, { farStep = 10 }: HorizonSurfaceOptions = {}): {
   geometry: THREE.BufferGeometry;
   clipBounds: Bounds;
   /** Contact with the actual detailed, collar or distant triangles; no analytic-height shortcut. */
   sampleHeight(x: number, z: number): number;
 } {
+  if (farStep !== 10 && farStep !== 20) throw new Error('Horizon distant step must be 10 or 20 metres.');
   const { minX, maxX, minZ, maxZ } = layout.bounds;
   if (![minX, maxX, minZ, maxZ].every(Number.isFinite) || minX >= maxX || minZ >= maxZ) {
     throw new Error('Horizon needs finite, nonempty terrain bounds.');
@@ -24,9 +31,9 @@ export function createHorizonSurface(layout: KingdomLayout): {
   const inner: Bounds = [Math.floor(minX / CHUNK_METRES) * CHUNK_METRES,
     Math.ceil(maxX / CHUNK_METRES) * CHUNK_METRES, Math.floor(minZ / CHUNK_METRES) * CHUNK_METRES,
     Math.ceil(maxZ / CHUNK_METRES) * CHUNK_METRES];
-  const outer: Bounds = [Math.floor(inner[0] / FAR_STEP) * FAR_STEP - FAR_STEP,
-    Math.ceil(inner[1] / FAR_STEP) * FAR_STEP + FAR_STEP, Math.floor(inner[2] / FAR_STEP) * FAR_STEP - FAR_STEP,
-    Math.ceil(inner[3] / FAR_STEP) * FAR_STEP + FAR_STEP];
+  const outer: Bounds = [Math.floor(inner[0] / farStep) * farStep - farStep,
+    Math.ceil(inner[1] / farStep) * farStep + farStep, Math.floor(inner[2] / farStep) * farStep - farStep,
+    Math.ceil(inner[3] / farStep) * farStep + farStep];
   if (inner[1] - inner[0] > 512 || inner[3] - inner[2] > 512
     || outer[0] <= -FAR_EXTENT || outer[1] >= FAR_EXTENT || outer[2] <= -FAR_EXTENT || outer[3] >= FAR_EXTENT) {
     throw new Error('Terrain exceeds the bounded horizon footprint.');
@@ -45,10 +52,10 @@ export function createHorizonSurface(layout: KingdomLayout): {
   };
   // The original PlaneGeometry uses the 01→10 diagonal, opposite the detailed terrain.
   const farTriangleHeight = (x: number, z: number): number => {
-    const ix = Math.floor(x / FAR_STEP) * FAR_STEP, iz = Math.floor(z / FAR_STEP) * FAR_STEP;
-    const u = (x - ix) / FAR_STEP, v = (z - iz) / FAR_STEP;
-    const a = farHeight(ix, iz), b = farHeight(ix, iz + FAR_STEP);
-    const c = farHeight(ix + FAR_STEP, iz + FAR_STEP), d = farHeight(ix + FAR_STEP, iz);
+    const ix = Math.floor(x / farStep) * farStep, iz = Math.floor(z / farStep) * farStep;
+    const u = (x - ix) / farStep, v = (z - iz) / farStep;
+    const a = farHeight(ix, iz), b = farHeight(ix, iz + farStep);
+    const c = farHeight(ix + farStep, iz + farStep), d = farHeight(ix + farStep, iz);
     return u + v <= 1 ? a + u * (d - a) + v * (b - a)
       : c + (1 - u) * (b - c) + (1 - v) * (d - c);
   };
@@ -59,15 +66,15 @@ export function createHorizonSurface(layout: KingdomLayout): {
     positions.push(x, Math.fround(height), z); vertexIds.set(key, id);
     return id;
   };
-  for (let z = -FAR_EXTENT; z < FAR_EXTENT; z += FAR_STEP) for (let x = -FAR_EXTENT; x < FAR_EXTENT; x += FAR_STEP) {
-    if (x >= outer[0] && x + FAR_STEP <= outer[1] && z >= outer[2] && z + FAR_STEP <= outer[3]) continue;
-    const corners = [[x, z], [x, z + FAR_STEP], [x + FAR_STEP, z + FAR_STEP], [x + FAR_STEP, z]] as const;
+  for (let z = -FAR_EXTENT; z < FAR_EXTENT; z += farStep) for (let x = -FAR_EXTENT; x < FAR_EXTENT; x += farStep) {
+    if (x >= outer[0] && x + farStep <= outer[1] && z >= outer[2] && z + farStep <= outer[3]) continue;
+    const corners = [[x, z], [x, z + farStep], [x + farStep, z + farStep], [x + farStep, z]] as const;
     const segments = corners.map(([ax, az], side) => {
       const [bx, bz] = corners[(side + 1) % 4]!;
       const collarEdge = ax === bx
         ? (ax === outer[0] || ax === outer[1]) && Math.min(az, bz) >= outer[2] && Math.max(az, bz) <= outer[3]
         : (az === outer[2] || az === outer[3]) && Math.min(ax, bx) >= outer[0] && Math.max(ax, bx) <= outer[1];
-      return collarEdge ? FAR_STEP : 1;
+      return collarEdge ? farStep : 1;
     });
     if (segments.every(count => count === 1)) {
       const [a, b, c, d] = corners.map(([cx, cz]) => vertex(cx, cz, farHeight(cx, cz)));
@@ -82,7 +89,7 @@ export function createHorizonSurface(layout: KingdomLayout): {
         }
       }
       // This centre lies on the old diagonal; the fan preserves both original triangle planes.
-      const centre = vertex(x + FAR_STEP / 2, z + FAR_STEP / 2, farTriangleHeight(x + FAR_STEP / 2, z + FAR_STEP / 2));
+      const centre = vertex(x + farStep / 2, z + farStep / 2, farTriangleHeight(x + farStep / 2, z + farStep / 2));
       const triangles: number[] = [];
       for (let i = 0; i < boundary.length; i++) triangles.push(centre, boundary[i]!, boundary[(i + 1) % boundary.length]!);
       indices.push(...triangles); fanTriangles.set(`${x},${z}`, triangles);
@@ -135,9 +142,9 @@ export function createHorizonSurface(layout: KingdomLayout): {
       const a = height(ix, iz), b = height(ix, iz + 1), c = height(ix + 1, iz + 1), d = height(ix + 1, iz);
       return u <= v ? a + u * (c - b) + v * (b - a) : a + u * (d - a) + v * (c - d);
     }
-    const fan = fanTriangles.get(`${Math.floor(x / FAR_STEP) * FAR_STEP},${Math.floor(z / FAR_STEP) * FAR_STEP}`);
+    const fan = fanTriangles.get(`${Math.floor(x / farStep) * farStep},${Math.floor(z / farStep) * farStep}`);
     if (fan) {
-      // Only collar-adjacent tiles need this lookup: at most 13 triangles, never a mesh scan.
+      // Only collar-adjacent tiles need this lookup: at most farStep + 3 triangles, never a mesh scan.
       // Using actual Float32 vertices also accounts for the centre's sub-ULP rounding.
       for (let i = 0; i < fan.length; i += 3) {
         const a = fan[i]!, b = fan[i + 1]!, c = fan[i + 2]!;

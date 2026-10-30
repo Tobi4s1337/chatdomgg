@@ -8,6 +8,7 @@ import { Scene } from 'three';
 import { createVoxelMaterial } from '@chatdom/render';
 import { sampleLightVolume } from '@chatdom/voxel';
 import { createLightField, type LightFieldOptions } from './light-field';
+import { createSettlementContent } from './settlement-content';
 import {
   bindLightFieldWorker, compileLightHouses, createLightFieldSolver, LIGHT_FIELD_BUDGET, LIGHT_FIELD_CELLS,
   resolveLightFieldConfig, buildLightFieldSamples, type SurfaceLightVolume, type LightFieldRequest, type LightFieldResponse, type LightFieldSolve,
@@ -202,14 +203,11 @@ describe('bounded kingdom light field', () => {
   it('lights actual authored homes in all five town quarters within the combined budget', () => {
     const town = generateKingdom({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
     const townConfig = resolveLightFieldConfig(town, options);
-    const homes = town.homes.map(plot => {
-      const model = createHome(plot.tier, plot.style, plot.variant);
-      const streetZ = plot.rotation === 0 ? plot.lot.maxZ + 4 : plot.lot.minZ - 4;
-      const depth = model.size[2] * 0.125;
-      return { slot: plot.slot, blueprint: model, position: plot.rotation === 0
-        ? [plot.position[0] - 4, plot.position[1], streetZ - 4 - depth]
-        : [plot.position[0] + 4, plot.position[1], streetZ + 4 + depth], yaw: plot.rotation * Math.PI / 2 } satisfies WindowHouse;
-    });
+    const { houses: homes, props } = createSettlementContent(town);
+    // Distant cells resolve buildings; the half-metre local solve also resolves
+    // passive sub-cell garden props without turning them into two-metre walls.
+    const localBlockers = [...homes, ...props.map(p => ({ ...p, slot: 65534 }))];
+    expect(homes.some(h => h.blueprint.id.startsWith('home-hearth-'))).toBe(true);
     const windows = createWindowLights(new Scene(), homes);
     try {
       windows.setFrame({ ...PRESENCE_FIXTURES.public, asOf: PRESENCE_FIXTURES.public.asOf + 1000,
@@ -219,7 +217,7 @@ describe('bounded kingdom light field', () => {
       const volume = solver.solve({ kind: 'solve', revision: 1, origin: townConfig.origin!, emitters: sources.map(window => ({ position: window.position, normal: window.normal, level: Math.round(window.strength * 15) })) }).volume;
       expect(volume.light.length).toBe(503_200);
       expect(volume.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
-      const near = createLightFieldSolver(town, homes).solve({ kind: 'solve', revision: 1, origin, emitters: [] }).volume;
+      const near = createLightFieldSolver(town, localBlockers).solve({ kind: 'solve', revision: 1, origin, emitters: [] }).volume;
       expect(volume.estimatedPeakBytes + near.estimatedPeakBytes).toBeLessThan(12 * 1024 * 1024);
       for (const quarter of town.quarters) {
         const slots = new Set(town.homes.filter(plot => plot.quarterYear === quarter.year).map(plot => plot.slot));
@@ -231,7 +229,7 @@ describe('bounded kingdom light field', () => {
           const levels = quarterSources.filter(source => source.slot === slot && Math.abs(source.normal[2]) > 0.99).flatMap(source =>
             [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4].map(distance => sampleLightVolume(volume,
               source.position.map((value, axis) => value + source.normal[axis]! * distance) as unknown as Vec3)));
-          expect(Math.max(...levels), `Quarter ${quarter.year}, slot ${slot}`).toBe(15);
+          expect(Math.max(...levels), `Quarter ${quarter.year}, slot ${slot}: ${JSON.stringify({home:homes.find(h=>h.slot===slot)?.blueprint.id,sources:quarterSources.filter(s=>s.slot===slot),levels})}`).toBe(15);
         }
       }
       const removed = solver.solve({ kind: 'solve', revision: 2, origin: townConfig.origin!, emitters: [] });

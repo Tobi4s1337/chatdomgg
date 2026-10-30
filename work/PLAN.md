@@ -406,3 +406,24 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
   remains interrupted while this integration lands; no rolling-ridge proposal has been implemented. The west
   camera experiment and stronger beacon need the new integrated shot review. Wave film and final acceptance
   remain required. Goal stays active after this integration checkpoint.
+
+### Green content/Herald integration; Atlas unblock next
+
+- Main's combined integration passed `pnpm verify`: typecheck, lint, 419 unit tests, build and 19 standard shots.
+  Main opened all twelve kingdom views, both stream matrices and panel bench. Full props validation (20) and
+  partial Hearth validation (9) passed. The original phone triangle limit caught an overage; tested 20 m distant
+  horizon cells saved 37,484 triangles without changing the 1 m ground join or removing content. All 240 actual
+  production-selected home sources pass the field/removal test. Small props occlude the local field and shadows;
+  the distant approximation resolves buildings so sub-cell décor cannot falsely seal a street.
+- The replay adapter browser proof passed on one serial page: Juniper's new Hearth window/name at both sizes,
+  SIMULATED label, opposite-origin rejection with all light fields cleared, then recovery. Images and JSON are in
+  `work/evidence/kingdom/integration/`. No real Twitch/Herald producer success is implied. Main looked at them;
+  the phone is tightly cropped, and the wide backs/plinth remain unacceptable. No final wave film yet.
+- Founder then requested Atlas A01/A02 unblocked immediately. Its lane contains the reviewed real importer and
+  survey-preview map, but the main-owned lockfile lacks `apps/surveyor`. Main is adding that importer on
+  `lane/atlas`, checking a frozen offline install, then will commit A01/A02 together as explicitly authorized,
+  credit the shipped CC0/OFL assets and merge. No more repeated blocked worker/review rounds are needed.
+- Keep captures serial and CPU-bounded; full kingdom matrix is already proven for this source. After the Atlas
+  merge, check its actual two map views instead of needlessly recapturing the unchanged kingdom matrix. The
+  preview on 5190 serves the current integration build. Return next to the natural terrain and a dusk viewpoint
+  where the actual windows face the camera, then capture the wave once that composition works.

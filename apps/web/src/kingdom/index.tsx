@@ -14,7 +14,7 @@ export default function Kingdom() {
   const construction=new AbortController();
   onMount(()=>{
     document.body.classList.add('kingdom-page');
-    void createKingdomScene(canvas,{signal:construction.signal,tier,seed:query.get('seed')??'willowmere',hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',
+    void createKingdomScene(canvas,{signal:construction.signal,tier,seed:query.get('seed')??'willowmere',hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
       onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;setReady(true);

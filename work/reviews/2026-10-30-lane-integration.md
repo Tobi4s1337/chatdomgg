@@ -34,7 +34,26 @@ selects expected origin (`live` by default), derives its label from that selecti
 origin. Tests preserve schema/realm/epoch/sequence/freshness checks. No schema is widened and no simulation can
 appear under LIVE. H02's PRD records the exact function/route.
 
-## Verification in progress
+## Verification
 
-Typecheck, lint, build and all 415 unit tests passed on the combined main working tree. Standard capture and
-integration images follow, serially with CPU affinity and low scheduling priority; no software fps claim.
+- `taskset -c 0,1 nice -n 15 pnpm verify` passed typecheck, lint, **419 tests**, build and all **19 standard
+  screenshots**. Captures were serial. Main opened the twelve kingdom views as four contact sheets, the stream
+  matrices and panel bench; desktop/phone town dusk were also opened individually.
+- The first run caught 822,532 phone triangles against the unchanged 800,000 limit. Astra xhigh added tested
+  20 m distant horizon cells with the exact 1 m collar/contact sampler. This saves 37,484 town triangles and the
+  original phone gate now passes. Both far-detail settings pass full topology/normal/contact tests.
+- The strengthened all-quarter field test now uses the production-selected Hearth homes. It caught sub-cell
+  props falsely sealing the distant field: local 0.5 m occupancy keeps them, while the 2 m approximation uses
+  buildings. Every one of the 240 designated street sources now lights and removal clears the field.
+- Full twenty-prop validation and partial nine-home Hearth validation pass on main; partial does not certify the
+  unfinished manor/hall collection.
+- `node packages/testing/kingdom-integration.mjs` passed with **one serial page and two close captures**. Synthetic
+  public SSE frames at the replay URL light Juniper's actual Hearth window; opposite-origin ingress clears all
+  fields, and correct-origin recovery works. Main opened both images. This is a browser adapter proof, not real
+  Twitch/Herald ingest. The report and pictures are in `work/evidence/kingdom/integration/`.
+- Fixed-time frames skip identical GPU redraws while continuing transport/watchdogs. Captures were pinned to
+  two CPU cores at low priority. No real-GPU timing or final art acceptance is claimed.
+
+The new homes and garden pieces read clearly in the close view. Main and Terra still reject the wide composition:
+too many blank backs, too little street separation at night, and a terraced hamlet plinth. The phone close view
+also crops much of the house. These remain active look work; the wave film waits for that composition.

@@ -52,12 +52,14 @@ try {
     await page.getByRole('button', { name: 'Try the gate again' }).waitFor({ state: 'visible', timeout: 240_000 });
     await page.waitForFunction(() => window.__workerCounts.created > 0 && window.__workerCounts.live === 0 && !window.__chatdomReady, null, { timeout: 30_000 });
   };
-  const url = `${base}/?seed=willowmere&tier=town&hour=23&time=0&camera=hero`;
+  const url = `${base}/?seed=willowmere&tier=town&hour=19.5&time=0&camera=hero`;
   {
     const { page, errors } = await newPage();
     await page.goto(url); await ready(page);
     const initial = await page.evaluate(() => ({ ...window.__chatdomKingdom.stats }));
     assert.equal(initial.homes, 240);
+    assert.ok(initial.shadowUpdates > 0, `No sun shadow map rendered: ${JSON.stringify(initial)}`);
+    assert.equal(initial.windowFieldVisited, 0, 'Empty town still has window light');
     assert.ok(initial.geometryBuilds > 0 && initial.fieldBytes > 0 && initial.fieldBytes <= 12 * 1024 * 1024, `Invalid scene cost: ${JSON.stringify(initial)}`);
     assert.ok(initial.drawCalls > 0 && initial.drawCalls <= 120 && initial.triangles > 0 && initial.triangles <= 2_000_000, `Invalid scene render cost: ${JSON.stringify(initial)}`);
     assert.ok((await page.locator('.source-ribbon').innerText()).includes('SIMULATED'));
@@ -68,6 +70,9 @@ try {
       if (time !== 0 || active !== 0 || previousUploads !== initial.fieldUploads) await page.waitForFunction(previous => window.__chatdomKingdom.stats.fieldUploads > previous && window.__chatdomKingdom.stats.fieldSettled, previousUploads, { timeout: 120_000 });
       const stats = await page.evaluate(() => ({ ...window.__chatdomKingdom.stats }));
       assert.equal(stats.geometryBuilds, initial.geometryBuilds, `Geometry rebuilt at ${time}s`);
+      assert.equal(stats.shadowUpdates, initial.shadowUpdates, `Sun shadow map rebuilt at ${time}s`);
+      if (active === 0) assert.equal(stats.windowFieldVisited, 0, `Window light remained at ${time}s`);
+      else assert.ok(stats.windowFieldVisited > 0, `No window light propagated at ${time}s`);
       if (time === 1.8) await page.getByText('Juniper', { exact: false }).waitFor({ state: 'visible' });
     }
     const counts = await page.evaluate(() => window.__workerCounts);
@@ -120,15 +125,15 @@ try {
     assert.equal(await page.evaluate(() => window.__chatdomKingdom.stats.activeWindows), 0);
     await emit(1, true, 'fresh', [{ slot: 0, present: true, publicName: 'Juniper' }]);
     await page.getByText('LIVE CHAT', { exact: true }).waitFor();
-    await page.waitForFunction(() => window.__chatdomKingdom.stats.activeWindows === 1);
+    await page.waitForFunction(() => { const s = window.__chatdomKingdom.stats; return s.activeWindows === 1 && s.fieldSettled && s.windowFieldVisited > 0 && s.beaconFieldVisited > 0; }, null, { timeout: 120_000 });
     await emit(2, false, 'offline', []);
     await page.getByText('STREAM RESTING', { exact: true }).waitFor();
-    await page.waitForFunction(() => window.__chatdomKingdom.stats.activeWindows === 0);
+    await page.waitForFunction(() => { const s = window.__chatdomKingdom.stats; return s.activeWindows === 0 && s.fieldSettled && s.windowFieldVisited === 0 && s.beaconFieldVisited === 0; }, null, { timeout: 120_000 });
     await emit(3, true, 'fresh', [{ slot: 0, present: true, publicName: 'Juniper' }]);
-    await page.waitForFunction(() => window.__chatdomKingdom.stats.activeWindows === 1);
+    await page.waitForFunction(() => { const s = window.__chatdomKingdom.stats; return s.activeWindows === 1 && s.fieldSettled && s.windowFieldVisited > 0 && s.beaconFieldVisited > 0; }, null, { timeout: 120_000 });
     await page.evaluate(() => window.__eventSources.at(-1).disconnect());
     await page.getByText('CONNECTION LOST', { exact: true }).waitFor();
-    await page.waitForFunction(() => window.__chatdomKingdom.stats.activeWindows === 0);
+    await page.waitForFunction(() => { const s = window.__chatdomKingdom.stats; return s.activeWindows === 0 && s.fieldSettled && s.windowFieldVisited === 0 && s.beaconFieldVisited === 0; }, null, { timeout: 120_000 });
     assert.deepEqual(errors, [], `Unexpected browser errors: ${errors.join('\n')}`);
     report.checks.push({ name: 'expired frame, public live frame, offline, renewed frame and disconnect' });
     await page.close();

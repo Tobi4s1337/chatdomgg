@@ -17,7 +17,8 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     await page.goto(`${base}${path}?seed=willowmere&tier=${tier}&hour=12&time=30&camera=hero`);
-    await page.waitForFunction(isKingdom => window.__chatdomReady === true && (!isKingdom || (window.__chatdomKingdom?.stats.ready && window.__chatdomKingdom.stats.fieldUploads > 0 && window.__chatdomKingdom.stats.fieldSettled)), kingdom, { timeout: 240_000 });
+    await page.waitForFunction(isKingdom => (window.__chatdomReady === true && (!isKingdom || (window.__chatdomKingdom?.stats.ready && window.__chatdomKingdom.stats.fieldUploads > 0 && window.__chatdomKingdom.stats.fieldSettled))) || !!document.querySelector('.kingdom-gate button'), kingdom, { timeout: 240_000 });
+    if (await page.locator('.kingdom-gate button').count()) throw new Error(`${name}: kingdom error gate: ${await page.locator('.kingdom-gate').innerText()}${errors.length ? `\n${errors.join('\n')}` : ''}`);
     if (kingdom && await page.locator('[data-chatdom-kingdom]').count() !== 1) throw new Error('Kingdom screenshot requires the real kingdom root');
     if (area === 'atlas' && await page.locator('[data-chatdom-atlas]').count() !== 1) throw new Error('Atlas screenshot requires the real Atlas root');
     await page.evaluate(() => document.fonts.ready);
@@ -38,7 +39,7 @@ try {
         if (errors.length) throw new Error(`${name}: ${errors.join('\n')}`);
         const dir = `shots/${area === 'atlas' ? 'atlas' : kingdom ? 'kingdom' : 'foundation'}`;
         await mkdir(dir, { recursive: true });
-        await page.screenshot({ path: `${dir}/${name}${label ? `-${label}` : ''}@${width}x${height}.png`, fullPage: false });
+        await page.screenshot({ path: `${dir}/${name}${label ? `-${label}` : ''}@${width}x${height}.png`, fullPage: false, timeout: 120_000 });
       }
     }
     await page.close();
