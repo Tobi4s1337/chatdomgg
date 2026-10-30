@@ -64,7 +64,12 @@ after main has stopped editing them. The integrator alone calls those modules fr
   due input count, adopt the frozen safe revision transition/reset policy and document render/takeover order.
   · evidence: two real browsers, slow render, changed-solid/revision flow and recovery; authoritative positions
   and full fields agree; no invented queue, sequence/ack system or silent air fallback.
-- [ ] **WC07 — Walk the actual places and hand the camera back.** With integrator binding and realm wiring,
+- [ ] **WC07 — Walk the actual places and hand the camera back.** First read the three movement notes in
+  spec 35 References and resolve Tobias’s 360 Hz review: glassy rendered camera/body pose and blended ordinary
+  corrections, calm distance-driven gait, deliberate click-only pointer capture with quiet drag fallback,
+  and stable stepping/standing/jumping on actual half slabs. Inspect the SDK all-field snap threshold and
+  exact-height step easing without assuming either caused the report. One focused slab regression suffices;
+  final smoothness needs Tobias’s real display. Then With integrator binding and realm wiring,
   exercise the actual street, forged/placed parts, furniture, fence, doorway and roof rather than a separate
   collision bench. Supply only module fixes/recipes; integrator owns composition calls. Enter/exit menus,
   Forge/build and an existing camera takeover, then move immediately. Resolve keyboard/touch region conflicts
