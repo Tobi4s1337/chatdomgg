@@ -10,10 +10,18 @@ const root = document.getElementById('root');
 if (!root) throw new Error('Missing application root');
 const atlas = import.meta.glob<{ default: Component }>('./atlas/index.tsx');
 const loadAtlas = atlas['./atlas/index.tsx'];
-if (/^\/map(?:\/|$)/.test(window.location.pathname) && loadAtlas) {
+if (window.location.pathname==='/-/content') {
+  const {ContentBench}=await import('./content-bench');
+  render(() => <ContentBench />,root);
+} else if (/^\/map(?:\/|$)/.test(window.location.pathname) && loadAtlas) {
   const module = await loadAtlas();
   render(() => <module.default />, root);
 } else {
-  render(() => <App />, root);
-  requestAnimationFrame(() => { (window as Window & { __chatdomReady?: boolean }).__chatdomReady = true; });
+  if(window.location.pathname==='/panel') {
+    render(() => <App />, root);
+    requestAnimationFrame(() => { (window as Window & { __chatdomReady?: boolean }).__chatdomReady = true; });
+  } else {
+    const {default:Kingdom}=await import('./kingdom');
+    render(() => <Kingdom />, root);
+  }
 }

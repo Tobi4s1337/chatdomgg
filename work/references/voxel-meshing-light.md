@@ -2,8 +2,8 @@
 
 For: voxel world meshing, local lighting and worker contracts. Studied 2026-10-30:
 
-- [Binary Greedy Meshing v2](https://github.com/cgerikj/binary-greedy-meshing), MIT, revision `af8c688ed3af63e98f9631c05774f30e1350a021`; local `/tmp/chatdom-refs/binary-greedy`.
-- [WebGPU voxel engine](https://github.com/JamesKevinJones/webgpu-voxel-engine), MIT, revision `8abdc9140e076d1d092028d3c74ac274261d8e9c`; local `/tmp/chatdom-refs/webgpu-voxel-engine`.
+- [Binary Greedy Meshing v2](https://github.com/cgerikj/binary-greedy-meshing), MIT, revision `af8c688ed3af63e98f9631c05774f30e1350a021`; reference checkout `binary-greedy`.
+- [WebGPU voxel engine](https://github.com/JamesKevinJones/webgpu-voxel-engine), MIT, revision `8abdc9140e076d1d092028d3c74ac274261d8e9c`; reference checkout `webgpu-voxel-engine`.
 - [0fps: ambient occlusion for Minecraft-like worlds](https://0fps.net/2013/07/03/ambient-occlusion-for-minecraft-like-worlds/), 2013; [voxel lighting](https://0fps.net/2018/02/21/voxel-lighting/), 2018. No code license established: take the described ideas, write our own.
 - Local pre-repo `d-voxel-diorama/src/mesher/greedy.ts` and `worker.ts`: useful prototype evidence, not an external licensed dependency. Revision not established; do not copy wholesale.
 
@@ -35,3 +35,17 @@ Native OpenGL indirect multi-draw, 64-bit-only layout, WebGPU-only shader pipeli
 ## License
 
 Binary Greedy and WebGPU voxel engine are MIT: adapted code needs its original copyright and permission notice, a source/license header and a `THIRD_PARTY.md` entry. 0fps licensing for code is unverified: ideas only. Prototype is a read-only internal reference; reimplement rather than wholesale copy.
+
+## Current consumer decisions — 2026-10-30
+
+The terrain renderer keeps the 0.5 m voxel field and actual mesher as occupancy/AO/sky evidence, then emits
+conforming 1 m surface patches in its worker. Displacing unconstrained greedy corners was rejected after a
+measured 0.355 m crack at a T-junction. Shared-grid deformation, as used in Three's `PlaneGeometry` and the
+studied Ultra-Water terrain, informs this original implementation; no source was copied. Ground contact must
+sample the same triangle planes (`sampleRenderedTerrainHeight`), not the quantized top cells.
+
+Render-only factor-2/4 detail is reduced from final painted occupancy in the voxel worker. Any occupied source
+cell retains its coarse cell, with deterministic material mode, so thin walls/roofs survive. The caveat from
+[0fps on isosurface simplification](https://0fps.net/2012/08/20/simplifying-isosurfaces-part-2/) applies: coarse
+sampling changes topology. Original occupancy/window anchors remain authoritative; coarse envelopes may grow
+0.375 m and close narrow gaps. This is an original implementation informed by the technique, not imported code.

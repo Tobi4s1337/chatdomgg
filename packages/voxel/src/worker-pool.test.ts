@@ -151,6 +151,56 @@ describe('voxel module-worker scheduler', () => {
     pool.dispose();
   });
 
+  it('snapshots queued render detail and accepts worker reduction without changing source asset identity', async () => {
+    const { pool, workers } = setup(1);
+    const active = pool.submit(lightJob());
+    const prepared = prepareJob();
+    const input = { ...prepared, kind: 'blueprint' as const, lodFactor: 4 as 2 | 4 };
+    const queued = pool.submit(input);
+    input.lodFactor = 2;
+    input.blueprint.boxes.length = 0;
+    input.blueprint.id = 'changed';
+    workers[0]!.complete();
+    expect(workers[0]!.jobs[1]).toMatchObject({ kind: 'blueprint', lodFactor: 4, blueprint: { id: 'beam' } });
+    workers[0]!.complete();
+    const result = await queued;
+    if (result?.kind !== 'asset') throw new Error('Expected asset result');
+    expect(result).toMatchObject({ assetId: 'beam', revision: 7 });
+    expect(result.chunks).toHaveLength(1);
+    expect(result.chunks[0]!.mesh.stamp.key).toBe('beam:renderlod:4:0,0,0');
+    expect(result.chunks[0]!.mesh.stamp.materialRevision).toBe(3);
+    await active;
+    pool.dispose();
+  });
+
+  it('rejects another detail level even when job, source and material revisions match', async () => {
+    const { pool, workers } = setup(1);
+    const input = { ...prepareJob(), kind: 'blueprint' as const, lodFactor: 4 as const };
+    const pending = pool.submit(input);
+    const rejection = expect(pending).rejects.toThrow('incompatible job metadata');
+    const dispatched = workers[0]!.jobs[0]!;
+    if (dispatched.kind !== 'blueprint') throw new Error('Expected blueprint job');
+    workers[0]!.respond(executeVoxelJob({ ...dispatched, lodFactor: 2 }));
+    await rejection;
+    pool.dispose();
+  });
+
+  it.each(['key', 'coordinate', 'dependency', 'duplicate'] as const)('rejects invalid render detail %s metadata', async (fault) => {
+    const { pool, workers } = setup(1);
+    const pending = pool.submit({ ...prepareJob(), kind: 'blueprint', lodFactor: 4 });
+    const rejection = expect(pending).rejects.toThrow('incompatible job metadata');
+    const result = executeVoxelJob(workers[0]!.jobs[0]!);
+    if (result.kind !== 'asset') throw new Error('Expected asset result');
+    const first = result.chunks[0]!;
+    const stamp = first.mesh.stamp;
+    const broken = fault === 'key' ? { ...first, mesh: { ...first.mesh, stamp: { ...stamp, key: 'wrong' } } }
+      : fault === 'coordinate' ? { ...first, coordinate: [1, 0, 0] as const }
+      : fault === 'dependency' ? { ...first, mesh: { ...first.mesh, stamp: { ...stamp, dependencies: [] } } } : first;
+    workers[0]!.respond({ ...result, chunks: fault === 'duplicate' ? [first, first] : [broken] });
+    await rejection;
+    pool.dispose();
+  });
+
   it('snapshots active mesh stamps and dependency metadata used to validate responses', async () => {
     const { pool, workers } = setup(1);
     const dependencies = [{ key: 'terrain:1,0,0', revision: 2 }];

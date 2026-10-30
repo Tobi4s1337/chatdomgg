@@ -2,7 +2,7 @@
 
 https://github.com/pmndrs/sky · MIT · studied at `5a72017a5916f65e3d0077e019fb553fe2a21b63` (package 0.6.0)
 
-For: kingdom sky, fog, lighting and time-of-day design. Source paths below refer to `/tmp/chatdom-refs/sky` at that revision.
+For: kingdom sky, fog, lighting and time-of-day design. Source paths below refer to the `sky` reference checkout at that revision.
 
 ## What it is
 

@@ -12,6 +12,8 @@ No third-party art or sound has been shipped yet. Future sound sources must be C
 | pg | 8.23.1 | MIT | [package](https://www.npmjs.com/package/pg) |
 | pixi.js | 8.22.0 | MIT | [package](https://www.npmjs.com/package/pixi.js) |
 | redis | 6.3.1 | MIT | [package](https://www.npmjs.com/package/redis) |
+| three | 0.186.1 | MIT | [source](https://github.com/mrdoob/three.js) |
+| @types/three | 0.186.0 | MIT | [source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/three) |
 | solid-js | 1.9.18 | MIT | [package](https://www.npmjs.com/package/solid-js) |
 | typescript | 5.9.3 | Apache-2.0 | [package](https://www.npmjs.com/package/typescript) |
 | typescript-eslint | 8.72.1 | MIT | [package](https://www.npmjs.com/package/typescript-eslint) |
@@ -21,3 +23,5 @@ No third-party art or sound has been shipped yet. Future sound sources must be C
 | vitest | 5.0.5 | MIT | [package](https://www.npmjs.com/package/vitest) |
 
 Reference research is indexed in work/references/. No source from those external repositories was copied into product code. Crowdbake has no verified reuse license and is ideas only. Any future adaptation requires a source header and its own entry here, including upstream notices and separate asset rights.
+
+Kingdom sounds in `apps/web/src/kingdom/sound.ts` are original procedural Web Audio synthesis (oscillators, envelopes and a compressor), authored in this repository. They contain no sampled recordings. Atmosphere, water and voxel shaders are original implementations informed by the credited reference notes.

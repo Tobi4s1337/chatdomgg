@@ -1,7 +1,7 @@
 # Reference: Atlas cartography and camera
 
 For: [Spec 01](../specs/01-atlas.md). Studied 2026-10-30. No reference repository was cloned and no git command was run.
-Primary source files were fetched into `/tmp/chatdom-refs/`; prototype sources remained read-only.
+Primary source files were fetched into external reference checkouts; prototype sources remained read-only.
 
 ## What it is
 
@@ -18,18 +18,18 @@ remains the PixiJS 8 implementation required by `chatdom/Atlas.md`; neither GIS 
 | MapLibre GL JS | `62247a734e635e2b7cb2584fb99fc0d201128c57`, fetched 2026-10-30; BSD-3-Clause | [repository](https://github.com/maplibre/maplibre-gl-js), [license](https://github.com/maplibre/maplibre-gl-js/blob/62247a734e635e2b7cb2584fb99fc0d201128c57/LICENSE.txt), [camera](https://github.com/maplibre/maplibre-gl-js/blob/62247a734e635e2b7cb2584fb99fc0d201128c57/src/ui/camera.ts), [handler manager](https://github.com/maplibre/maplibre-gl-js/blob/62247a734e635e2b7cb2584fb99fc0d201128c57/src/ui/handler_manager.ts) |
 | OpenLayers | tag `v10.11.0`; BSD-2-Clause | [View API](https://openlayers.org/en/v10.11.0/apidoc/module-ol_View-View.html), [PinchZoom](https://github.com/openlayers/openlayers/blob/v10.11.0/src/ol/interaction/PinchZoom.js), [DragPan](https://github.com/openlayers/openlayers/blob/v10.11.0/src/ol/interaction/DragPan.js), [license](https://github.com/openlayers/openlayers/blob/v10.11.0/LICENSE.md) |
 | van Wijk and Nuij | paper, ideas only | [Smooth and efficient zooming and panning](https://www.win.tue.nl/~vanwijk/zoompan.pdf), [author implementation example](https://www.jasondavies.com/maps/zoom/) |
-| Chatdom `e-atlas` | local prototype, read-only; reimplement here | `/root/chatdomgg/prototyping/kingdoms/e-atlas/` |
-| Existing Surveyor | local prototype and current read-only HTTP/SQLite observations | `/root/chatdomgg/prototyping/kingdoms/g-atlas-live/surveyor/` |
+| Chatdom `e-atlas` | local prototype, read-only; reimplement here | `../../chatdomgg/prototyping/kingdoms/e-atlas/` |
+| Existing Surveyor | local prototype and current read-only HTTP/SQLite observations | `../../chatdomgg/prototyping/kingdoms/g-atlas-live/surveyor/` |
 
 ## What we take
 
 1. **One camera state, separate gesture deltas.** MapLibre
-   `/tmp/chatdom-refs/atlas-maplibre/src/ui/handler_manager.ts:72` defines handlers with reset/active/frame behavior;
+   `atlas-maplibre/src/ui/handler_manager.ts:72` defines handlers with reset/active/frame behavior;
    `:374` registers explicit coexistence; `:434` resolves and resets blocked handlers. Our drag, pinch and wheel
    handlers emit deltas to one float64 camera. A pointer-down cancels a flight; pointer-cancel, blur and unmount reset
    gesture state. Registration order must never make a second finger leave drag inertia running.
 2. **Preserve the anchor through zoom.** OpenLayers
-   `/tmp/chatdom-refs/atlas-openlayers/src/ol/interaction/PinchZoom.js:68` measures the distance ratio; `:90` computes
+   `atlas-openlayers/src/ol/interaction/PinchZoom.js:68` measures the distance ratio; `:90` computes
    the finger centroid; `:98` changes resolution around that anchor. Capture its world coordinate before scaling and
    solve the new camera centre from that same coordinate. The selected kingdom must remain above a phone's bottom
    sheet; use usable-viewport padding, as [OpenLayers View](https://openlayers.org/en/v10.11.0/apidoc/module-ol_View-View.html)

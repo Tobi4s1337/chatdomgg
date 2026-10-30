@@ -326,9 +326,9 @@ The new service must implement these exact executable scripts in `apps/surveyor/
 
 ```sh
 # Import the supplied source without source writes; output only to an owned runtime directory.
-SURVEYOR_BASE_URL=http://172.17.0.1:3541/atlas/api SURVEYOR_DB_PATH=/srv/chatdom-atlas/data/surveyor.db ATLAS_DATA_DIR=/tmp/chatdom-atlas-check pnpm --filter @chatdom/surveyor atlas:import
-ATLAS_DATA_DIR=/tmp/chatdom-atlas-check pnpm --filter @chatdom/surveyor atlas:check
-ATLAS_DATA_DIR=/tmp/chatdom-atlas-check pnpm --filter @chatdom/surveyor atlas:serve
+SURVEYOR_BASE_URL=http://172.17.0.1:3541/atlas/api SURVEYOR_DB_PATH="$SURVEYOR_DB_PATH" ATLAS_DATA_DIR=shots/atlas-data pnpm --filter @chatdom/surveyor atlas:import
+ATLAS_DATA_DIR=shots/atlas-data pnpm --filter @chatdom/surveyor atlas:check
+ATLAS_DATA_DIR=shots/atlas-data pnpm --filter @chatdom/surveyor atlas:serve
 # In another terminal, with that service running:
 pnpm --filter @chatdom/web build
 pnpm shots --area atlas

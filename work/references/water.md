@@ -2,7 +2,7 @@
 
 [Humpalumps/Ultra-Water](https://github.com/Humpalumps/Ultra-Water) · MIT · studied at `ce9248fa20afbdf63fd4c11709f68d7368aca0a0`
 
-For: Chatdom's water rendering and shoreline. Source paths and line numbers below refer to `/tmp/chatdom-refs/ultra-water` at this revision.
+For: Chatdom's water rendering and shoreline. Source paths and line numbers below refer to the `ultra-water` reference checkout at this revision.
 
 ## What it is
 

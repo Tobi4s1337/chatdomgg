@@ -1,6 +1,6 @@
 # Reference: the earlier Chatdom prototypes
 
-Studied 2026-10-30, read-only at `/root/chatdomgg/prototyping/kingdoms/`. These are local design references,
+Studied 2026-10-30, read-only at `../../chatdomgg/prototyping/kingdoms/`. These are local design references,
 not an imported codebase. Luna scouts inspected source; main reviewed representative store, Forge, map-camera
 and mesher code. No prototype code was executed, copied, modified or committed here. No git revision was captured.
 This is an orientation note, not a replacement for `$study-reference` before implementation specs.

@@ -2,7 +2,7 @@
 
 https://github.com/natepac/crowdbake · license unclear / no license found · studied at `1f6c8b44f0e1d57360503a935e120065ef0bd51b`
 
-For: character animation and crowd rendering (`chatdom/Tech.md` §8.3–8.4). Source line references below are to the checkout at `/tmp/chatdom-refs/crowdbake` at that revision.
+For: character animation and crowd rendering (`chatdom/Tech.md` §8.3–8.4). Source line references below are to the `crowdbake` reference checkout at that revision.
 
 ## What it is
 
