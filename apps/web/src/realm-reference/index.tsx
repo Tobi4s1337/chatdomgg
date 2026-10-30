@@ -5,10 +5,11 @@ import { createVoxelMaterial, getEnvironment } from '@chatdom/render';
 import type { WalkInput } from '@chatdom/shared/realm';
 import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import { connectReferenceRealm, type RealmClient, type RealmWalkerPose } from '../realm/client';
+import { createWalkController, type WalkController, type WalkDebug } from '../walk';
 import './style.css';
 
 type DebugRealm = { ready: boolean; poses: readonly RealmWalkerPose[]; setInput: (input: Partial<WalkInput> | null) => void; client?: RealmClient };
-declare global { interface Window { __chatdomRealm?: DebugRealm } }
+declare global { interface Window { __chatdomRealm?: DebugRealm; __chatdomWalk?: Readonly<WalkDebug> } }
 
 export default function RealmReference() {
   let host!: HTMLDivElement;
@@ -23,6 +24,7 @@ export default function RealmReference() {
     let cancelled = false;
     let frame = 0;
     let client: RealmClient | undefined;
+    let walk: WalkController | undefined;
     let citizen: Awaited<ReturnType<typeof createCitizenRenderer>> | undefined;
     const scene = new THREE.Scene();
     const environment = getEnvironment(19);
@@ -71,30 +73,24 @@ export default function RealmReference() {
       box(x, .12, 11.5, 3.75, .24, .32, '#c5af88');
       box(x, .12, -7, 3.75, .24, .32, '#c5af88');
     }
-    const keys = new Set<string>();
     let override: Partial<WalkInput> | null = null;
-    let yaw = 128;
-    const keydown = (event: KeyboardEvent) => {
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight'].includes(event.code)) { event.preventDefault(); keys.add(event.code); }
-    };
-    const keyup = (event: KeyboardEvent) => keys.delete(event.code);
-    const blur = () => keys.clear();
-    window.addEventListener('keydown', keydown); window.addEventListener('keyup', keyup); window.addEventListener('blur', blur);
     debug.setInput = input => { override = input; };
     const resize = () => {
       const width = host.clientWidth, height = host.clientHeight;
       if (!width || !height) return;
-      const aspect = width / height;
-      camera.aspect = aspect;
-      if (aspect < 1) { camera.position.set(0, 6, 23); camera.fov = 70; }
-      else { camera.position.set(8, 5, 17); camera.fov = 38; }
-      camera.lookAt(0, 1, 6); camera.updateProjectionMatrix(); renderer.setSize(width, height);
+      if(walk)walk.resize(width,height);
+      else {
+        camera.aspect = width / height;
+        camera.lookAt(0, 1, 6); camera.updateProjectionMatrix();
+      }
+      renderer.setSize(width,height);
     };
     window.addEventListener('resize', resize); resize();
     const looks = createDefaultCitizenLooks();
     const drawLabels = (poses: readonly RealmWalkerPose[]) => {
       labels.replaceChildren();
       for (const pose of poses) {
+        if(pose.self&&(walk?.selfOpacity??1)<.05)continue;
         const point = new THREE.Vector3(pose.x, pose.y + 1.9, pose.z).project(camera);
         if (point.z < -1 || point.z > 1 || Math.abs(point.x) > 1 || Math.abs(point.y) > 1) continue;
         const label = document.createElement('span');
@@ -105,11 +101,10 @@ export default function RealmReference() {
     };
     stop = () => {
       cancelled = true; cancelAnimationFrame(frame); window.removeEventListener('resize', resize);
-      window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur);
-      client?.dispose(); citizen?.dispose(); material.dispose();
+      walk?.dispose(); client?.dispose(); citizen?.dispose(); material.dispose();
       for (const mesh of objects) { mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); }
       pavingGeometry.dispose(); pavingMaterial.dispose(); paving.dispose(); shadowGeometry.dispose(); shadowMaterial.dispose(); shadows.dispose();
-      renderer.dispose(); renderer.domElement.remove(); delete window.__chatdomRealm; window.__chatdomReady = false;
+      renderer.dispose(); renderer.domElement.remove(); delete window.__chatdomRealm; delete window.__chatdomWalk; window.__chatdomReady = false;
     };
     void (async () => {
       const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 64 });
@@ -118,16 +113,17 @@ export default function RealmReference() {
       const connected = await connectReferenceRealm();
       if (cancelled) { connected.dispose(); return; }
       client = connected; debug.client = connected;
+      // The existing reference smoke hook can supply explicit input; the same real client still ticks once.
+      walk=createWalkController({camera,surface:renderer.domElement,hud:host,realm:{selfId:connected.selfId,room:connected.room,
+        tick:(now,input)=>connected.tick(now,{...input,...override})}});
+      window.__chatdomWalk=walk.debug;
+      resize();
       setStatus('Connected');
       const draw = (now: number) => {
         if (cancelled || !client || !citizen) return;
-        const moveX = (Number(keys.has('KeyD')) - Number(keys.has('KeyA'))) * 127;
-        const moveZ = (Number(keys.has('KeyS')) - Number(keys.has('KeyW'))) * 127;
-        if (moveX || moveZ) yaw = (Math.round(Math.atan2(moveX, moveZ) / (Math.PI * 2) * 256) + 256) % 256;
-        const input: WalkInput = { moveX, moveZ, buttons: (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 1 : 0) | (keys.has('Space') ? 2 : 0), yaw, collisionRevision: client.room.state.collisionRevision, ...override };
-        const poses = client.tick(now, input);
+        const poses = walk!.frame(now);
         debug.poses = poses;
-        citizen.update(poses.map(pose => ({ id: pose.id, look: looks.find(look => look.id === pose.look)?.id ?? looks[0]!.id, position: [pose.x, pose.y, pose.z], heading: pose.yaw * Math.PI * 2 / 256, distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, time: now / 1000 })), camera);
+        citizen.update(poses.map(pose => ({ id: pose.id, look: looks.find(look => look.id === pose.look)?.id ?? looks[0]!.id, position: [pose.x, pose.y, pose.z], heading: pose.yaw * Math.PI * 2 / 256, distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, time: now / 1000, opacity:pose.self?walk!.selfOpacity:1 })), camera);
         shadows.count = 0;
         for (const pose of poses) { tileMatrix.makeTranslation(pose.x, .012, pose.z); shadows.setMatrixAt(shadows.count++, tileMatrix); }
         shadows.instanceMatrix.needsUpdate = true;
@@ -136,9 +132,9 @@ export default function RealmReference() {
         frame = requestAnimationFrame(draw);
       };
       frame = requestAnimationFrame(draw);
-      connected.room.onLeave(() => { if (!cancelled) { setError(true); setStatus('Connection closed. Refresh to return to the court.'); debug.ready = false; cancelAnimationFrame(frame); } });
+      connected.room.onLeave(() => { if (!cancelled) { walk?.release();window.__chatdomReady=false;setError(true); setStatus('Connection closed. Refresh to return to the court.'); debug.ready = false; cancelAnimationFrame(frame); } });
     })().catch(reason => { if (!cancelled) { setError(true); setStatus(`Could not enter the court: ${reason instanceof Error ? reason.message : String(reason)}`); } });
   });
   onCleanup(() => stop());
-  return <main class="realm-reference"><div class="realm-reference-scene" ref={element=>{host=element;}}><div class="realm-reference-labels" ref={element=>{labels=element;}} /></div><header class="realm-reference-header"><p>CHATDOM · THE COURT</p><h1>Meet at dusk</h1><span class="realm-reference-sim">SIMULATED</span></header><div class="realm-reference-info"><p classList={{ 'realm-reference-error': error() }} role="status">{status()}</p><p>W A S D to walk · Shift to run · Space to jump</p><p>Each visitor is another connected browser.</p></div></main>;
+  return <main class="realm-reference"><div class="realm-reference-scene" ref={element=>{host=element;}}><div class="realm-reference-labels" ref={element=>{labels=element;}} /></div><header class="realm-reference-header"><p>CHATDOM · THE COURT</p><h1>Meet at dusk</h1><span class="realm-reference-sim">SIMULATED</span></header><div class="realm-reference-info"><p classList={{ 'realm-reference-error': error() }} role="status">{status()}</p><p>W A S D to walk · Shift to run · Space to jump · Drag to look · Wheel to zoom</p><p>Each visitor is another connected browser.</p></div></main>;
 }

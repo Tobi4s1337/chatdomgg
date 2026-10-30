@@ -83,10 +83,14 @@ export interface Moment {
   readonly text: string;
 }
 
+/** The building the whole kingdom is raising together. Nobody's share is ever shown. */
 export interface Raising {
   readonly building: string;
   /** 0..1, communal: it belongs to the whole kingdom. */
   readonly progress: number;
+  /** The level's stages, carved as notches on the meter: storeys of a scaffold. */
+  readonly steps: number;
+  /** What the finished level brings to everyone. */
   readonly next: string;
 }
 
@@ -135,9 +139,111 @@ export type Home =
   | { readonly kind: 'guest'; readonly displayName: string | null; readonly history: readonly Earned[] }
   | { readonly kind: 'unknown'; readonly reason: string };
 
+/** A table in the tavern. Seats are taken inside the kingdom, never from the panel. */
+export interface TavernTable {
+  readonly id: string;
+  readonly name: string;
+  /** The game being played, or null when the table is free. */
+  readonly game: string | null;
+  /** What is happening there now, in words. */
+  readonly now: string;
+  readonly seats: number;
+  /** Display names of the people seated, as the tavern shows them to everyone. */
+  readonly seated: readonly string[];
+}
+
 export type Tavern =
-  | { readonly kind: 'supplied'; readonly place: string; readonly table: string; readonly watching: string }
+  | {
+    readonly kind: 'supplied'; readonly place: string; readonly where: string;
+    readonly tables: readonly TavernTable[];
+    /** What a panel viewer can do here: follow, not sit. */
+    readonly watching: string;
+  }
   | { readonly kind: 'unavailable'; readonly reason: string };
+
+/**
+ * The viewer's coals, only as the kingdom states them. A Twitch identity, a slot or a
+ * guess never fills the scuttle. `damp` is private: only the viewer is told.
+ */
+export type Coals =
+  | { readonly kind: 'known'; readonly held: number; readonly cap: 3; readonly damp: boolean }
+  | { readonly kind: 'unknown'; readonly reason: string };
+
+/** The Forge, as a signpost. Nothing is forged, prompted or submitted from the panel. */
+export type Forge =
+  | {
+    readonly kind: 'supplied';
+    /** The forge burns only while the stream is live; between streams it is banked. */
+    readonly fire: 'burning' | 'banked';
+    readonly anvils: { readonly total: number; readonly working: number };
+    readonly coals: Coals;
+    /** Finished pieces with their makers' names. Refusals are private and never listed. */
+    readonly made: readonly { readonly id: string; readonly text: string }[];
+  }
+  | { readonly kind: 'unavailable'; readonly reason: string };
+
+/** One tap is one command, with chat's own limits: one person, one vote, no paid weight. */
+export type ActKind = 'vote' | 'errand' | 'dragon';
+export interface ActOption { readonly id: string; readonly label: string }
+
+export type ActStatus =
+  | { readonly kind: 'open' }
+  /** Sent, and waiting for the kingdom's answer. Not yet counted. */
+  | { readonly kind: 'pending'; readonly option: string }
+  /**
+   * Counted by the kingdom. `restMs` is chat's own pause before the same command
+   * counts again; null for a vote, which counts once.
+   */
+  | { readonly kind: 'accepted'; readonly option: string; readonly restMs: number | null }
+  /** The kingdom said not yet: the same limit as chat, wherever the last one came from. */
+  | { readonly kind: 'limited'; readonly words: string; readonly restMs: number }
+  | { readonly kind: 'ended'; readonly outcome: string }
+  /** This viewer cannot act here; `way` is the step that would let them. */
+  | { readonly kind: 'unavailable'; readonly reason: string; readonly way: 'light' | null };
+
+export interface CrowdAct {
+  readonly id: string;
+  readonly kind: ActKind;
+  /** Short heading, e.g. "A world vote". */
+  readonly title: string;
+  readonly prompt: string;
+  /** The chat command the tap stands for, e.g. "!haul". */
+  readonly command: string;
+  readonly options: readonly ActOption[];
+  /** The limit in words, the same as chat's. */
+  readonly limit: string;
+  /** Local time words, when the act closes on its own. */
+  readonly closes: string | null;
+  readonly status: ActStatus;
+  /** Errands raise the communal building; the slip shows it rising. */
+  readonly raising: Raising | null;
+}
+
+/**
+ * A fixed product on the Bits shelf. Moments, or things that last one day; never light,
+ * rank, a place, coals, tenure or anything permanent.
+ */
+export interface ShelfProduct {
+  readonly sku: string;
+  readonly title: string;
+  readonly bits: number;
+  readonly what: string;
+  readonly stays: { readonly kind: 'moment' } | { readonly kind: 'day'; readonly until: string; readonly what: string };
+}
+
+/** Twitch's own window confirms Bits. Cancelled is an outcome; nothing here can grant a product. */
+export type ShelfRequest =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'confirming'; readonly sku: string }
+  | { readonly kind: 'cancelled'; readonly sku: string };
+
+export type Shelf =
+  /** Shown only with Twitch's Bits signal and a delivery service that can verify a receipt. */
+  | { readonly kind: 'offered'; readonly products: readonly ShelfProduct[]; readonly request: ShelfRequest; readonly by: 'simulation' }
+  | { readonly kind: 'hidden' };
+
+/** Where "Walk in" leads: the kingdom's own entry gate, on chatdom.gg, in a new tab. */
+export type Entry = { readonly kind: 'gate'; readonly path: string } | { readonly kind: 'none' };
 
 export interface PanelSnapshot {
   readonly source: SourceMark;
@@ -150,6 +256,11 @@ export interface PanelSnapshot {
   readonly tonight: Tonight;
   readonly home: Home;
   readonly tavern: Tavern;
+  readonly forge: Forge;
+  /** The shared moment the crowd can join right now, if any. */
+  readonly act: CrowdAct | null;
+  readonly shelf: Shelf;
+  readonly entry: Entry;
 }
 
 /** One adapter per mounted panel. Actions report back only through the snapshot. */
@@ -158,5 +269,9 @@ export interface PanelAdapter {
   subscribe(listener: (snapshot: PanelSnapshot) => void): () => void;
   /** Ask to light the viewer's window. Must be called from a user gesture. */
   requestLight(choice: LightChoice): void;
+  /** One tap on the crowd act: one command, under chat's limits. Gesture only. */
+  requestAct(option: string): void;
+  /** Ask Twitch to confirm Bits for a shelf product. Gesture only; nothing is granted here. */
+  requestProduct(sku: string): void;
   dispose(): void;
 }

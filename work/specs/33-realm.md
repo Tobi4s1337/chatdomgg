@@ -103,7 +103,11 @@ supported 0.5 m auto-step, corner refinement and overlap recovery belong to the 
 in-process boundary is `apps/realm/src/ports.ts`: `RealmRoomServices` supplies authentication and the exclusive
 room handle; `RealmRoomHandle` supplies intent handling, bootstrap, committed subscriptions, transient/private
 delivery, lifecycle and disposal. `RealmRoomEffects` reads/places walkers, permits locomotion and atomically adopts
-committed geometry/collision revisions with safe poses. Awaited admission rechecks `RealmIntentContext.current()`.
+committed geometry/collision revisions with supported, clear poses. `close` irreversibly stops the old room on
+writer loss; `recoverWalker` asks the current authority for a safe anchor at the current collision revision,
+without releasing an interaction lease. Public deliveries carry an independent monotonic `cursor`; bootstrap
+installs `throughCursor`, including presence changes that do not advance domain `throughSequence`. Awaited
+admission rechecks `RealmIntentContext.current()`.
 Only sitting suppresses walking; an interior still permits walking to its exit.
 
 `apps/web/src/realm/client.ts:connectRealm` consumes `RealmEntry { kingdomId, resumeScope, ticket() }` plus the

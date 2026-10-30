@@ -5,9 +5,10 @@ import type { CollisionWorld, RealmAuthenticator, RealmBootstrap, RealmCapabilit
   RealmIntent, RealmPrincipal, RealmPrivateMessage, RealmPrivateState, RealmPublicDelivery, RealmReceipt, RealmRepository,
   RealmStoredOutcome, RealmTransientMessage, RealmWriterLease } from '@chatdom/shared/realm';
 import { decideRealm } from '@chatdom/world/realm';
+import { embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmIntentContext, RealmRoomEffects, RealmRoomHandle, RealmRoomServices } from '../ports';
 import { RealmCommitUncertainError, RealmLeaseHeldError, RealmWriterFencedError, describeStorageFailure } from './database';
-import { REALM_BASE_ANVILS, type PostgresRealmRepository, type RealmOutboxRow } from './postgres-repository';
+import { REALM_BASE_ANVILS, type PostgresRealmRepository } from './postgres-repository';
 import { OutboxDispatcher, PublicProjection, TransientRelay, type RealmOutboxStore } from '../outbox';
 
 /** Commands waiting for the kingdom's single writer. A full queue is an explicit hold, never an unbounded promise. */
@@ -50,6 +51,8 @@ export class DurableKingdom implements RealmRoomHandle {
   private open = true;
   private deadline: number;
   private renewal: ReturnType<typeof setInterval>;
+  private watchdog!: ReturnType<typeof setTimeout>;
+  private renewing = false;
   private queue: Promise<unknown> = Promise.resolve();
   private pending = 0;
   private arrivals = 0;
@@ -59,6 +62,7 @@ export class DurableKingdom implements RealmRoomHandle {
   private readonly dispatcher: OutboxDispatcher;
   private readonly relay = new TransientRelay();
   private readonly walkers = new Set<string>();
+  private readonly principals = new Map<string, RealmPrincipal>();
   private readonly effects = new Set<RealmRoomEffects>();
   private readonly lifecycles = new Set<RealmLifecycleListener>();
   private readonly closed = new Set<(reason: string) => void>();
@@ -72,7 +76,7 @@ export class DurableKingdom implements RealmRoomHandle {
       // The projection is read after the state, inside the same lease: no other writer can add rows in between.
       const { plots, cursor } = await repository.publishedPlots(kingdomId);
       const recent = await repository.latestPresence(kingdomId);
-      return new DurableKingdom(repository, outbox, lease, state, options, new PublicProjection({ plots, cursor, presence: recent }), delivered, started, wall);
+      return new DurableKingdom(repository, outbox, lease, state, options, new PublicProjection({ plots, cursor, presence: recent, state }), delivered, started, wall);
     } catch (error) {
       await repository.release(lease).catch(() => {});
       throw error;
@@ -89,10 +93,12 @@ export class DurableKingdom implements RealmRoomHandle {
       kingdomId: lease.kingdomId, writerEpoch: lease.epoch, delivered,
       read: (after, limit) => this.outbox.read(this.kingdomId, after, limit),
       acknowledge: through => this.outbox.acknowledge(this.lease, through),
+      project: row => this.projection.adopt([row]),
       current: () => this.current, fenced: () => this.close('fenced'), log: line => this.log(line),
     });
     this.renewal = setInterval(() => void this.renew(), Math.floor(repository.leaseMs / 3));
     this.renewal.unref?.();
+    this.armWatchdog();
     this.log(`opened ${state.origin} kingdom ${state.kingdomId} at fact ${state.sequence}${delivered < projection.cursor ? `, redelivering outbox rows after ${delivered}` : ''}`);
   }
 
@@ -142,32 +148,44 @@ export class DurableKingdom implements RealmRoomHandle {
     return this.options.spawn(principal, this.arrivals++);
   }
 
+  recoverWalker(walkerId: string, collisionRevision: number): boolean {
+    const principal = this.principals.get(walkerId);
+    if (!this.current || !principal || collisionRevision !== this.world.revision) return false;
+    const position = this.options.spawn(principal, this.arrivals++);
+    if (position.some(value => !Number.isFinite(value))) return false;
+    const body = { x: position[0], y: position[1], z: position[2] };
+    if (embeddedSolids(body, this.world).length || !supported(body, this.world)) return false;
+    for (const effects of this.effects) if (effects.readWalker(walkerId) && effects.placeWalker(walkerId, position, collisionRevision)) return true;
+    return false;
+  }
+
   async intent(context: RealmIntentContext, intent: RealmIntent): Promise<RealmReceipt> {
     void context;
-    if (!this.current) return { version: 1, id: intent.id, status: 'unavailable', message: 'This kingdom lost its writer. Reconnect to continue; nothing was changed.' };
+    if (!this.current) return { version: 1, id: intent.id, status: 'unavailable', message: 'This kingdom lost its writer. Reconnect to check the result before continuing.' };
     return { version: 1, id: intent.id, status: 'unavailable', message: 'This server does not take building, forging or seat requests. Nothing in your kingdom was changed.' };
   }
 
   /**
-   * Synchronous checkpoint. The committed state and the public rows it produced are adopted in one step (`refresh`),
-   * so `current` holds every public change at or below `throughSequence`. The client buffers deltas while installing
+   * Synchronous checkpoint of the published row prefix, independent of private state that may be ahead.
+   * `current` holds every public change through `throughCursor`. The client buffers deltas while installing
    * it, then applies only deliveries newer than this (see README: delivery cursor).
    */
   bootstrap(principal: RealmPrincipal): RealmBootstrap {
     void principal;
-    return { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, throughSequence: this.state.sequence,
-      layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, current: this.projection.current(this.state) };
+    return { version: 1, kingdomId: this.kingdomId, writerEpoch: this.writerEpoch, throughSequence: this.projection.sequence, throughCursor: this.projection.cursor,
+      layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, current: this.projection.current() };
   }
 
   bindRoom(effects: RealmRoomEffects): () => void {
+    if (!this.current) { effects.close('authority-lost'); return () => {}; }
     this.effects.add(effects);
     return () => { this.effects.delete(effects); };
   }
 
   lifecycle(event: RealmLifecycleEvent, principal: RealmPrincipal, walkerId: string, now: number): void {
-    if (event === 'leave') this.walkers.delete(walkerId);
+    if (event === 'leave') { this.walkers.delete(walkerId); this.principals.delete(walkerId); }
     else {
-      this.walkers.add(walkerId);
+      this.walkers.add(walkerId); this.principals.set(walkerId, principal);
       if (!this.current) for (const effects of this.effects) effects.allowWalking(walkerId, false);
     }
     // Walker presence is observed by ingress from these authenticated events; a listener failure never blocks the room.
@@ -242,22 +260,19 @@ export class DurableKingdom implements RealmRoomHandle {
   }
 
   /**
-   * Adopt the committed state together with the public rows it produced, then hand those rows to the dispatcher.
-   * A refresh failure never un-commits work: the old consistent pair stays until the next refresh succeeds.
+   * Remember newly committed home bases, then hand public rows to the dispatcher in commit order.
+   * A refresh failure never un-commits work or advances the public bootstrap beyond its installed prefix.
    */
   private async refresh() {
     let committed = this.repository.committedState(this.lease);
     const after = this.projection.cursor;
     try {
       committed ??= await this.repository.load(this.lease);
-      const rows: RealmOutboxRow[] = [];
-      for (let page = await this.outbox.read(this.kingdomId, after, 1_024); page.length; page = await this.outbox.read(this.kingdomId, rows.at(-1)!.id, 1_024)) {
-        rows.push(...page);
-        if (page.length < 1_024) break;
-      }
-      // One synchronous step: bootstrap never pairs a state with rows from another commit.
+      this.projection.rememberHomes(committed);
+      const rows = await this.outbox.read(this.kingdomId, after, 1_024);
+      if (!this.current) return;
       this.state = committed;
-      this.projection.adopt(rows);
+      // The dispatcher folds each row into the public projection before notifying at that prefix.
       await this.dispatcher.offer(after, rows);
     } catch (error) {
       if (error instanceof RealmWriterFencedError) this.close('fenced');
@@ -265,28 +280,49 @@ export class DurableKingdom implements RealmRoomHandle {
     }
   }
 
-  private async renew() {
+  /** Runs independently of a renewal request that may never settle. */
+  private armWatchdog() {
+    clearTimeout(this.watchdog);
     if (!this.open) return;
+    this.watchdog = setTimeout(() => {
+      if (performance.now() >= this.deadline) this.close('lease deadline passed');
+      else this.armWatchdog();
+    }, Math.max(0, Math.ceil(this.deadline - performance.now())));
+    this.watchdog.unref?.();
+  }
+
+  private async renew() {
+    if (!this.current) { this.close('lease deadline passed'); return; }
+    if (this.renewing) return;
+    this.renewing = true;
     const started = performance.now();
     try {
       const wall = Date.now();
-      this.lease = await this.repository.renew(this.lease);
+      const renewed = await this.repository.renew(this.lease);
+      // A response after the old deadline cannot revive a closed authority.
+      if (!this.current) { this.close('lease deadline passed'); return; }
+      this.lease = renewed;
       this.deadline = started + this.repository.leaseMs - LEASE_MARGIN_MS;
+      this.armWatchdog();
       this.clockOffset = this.lease.expiresAt - this.repository.leaseMs - wall;
     } catch (error) {
       if (error instanceof RealmWriterFencedError) this.close('fenced');
       else if (performance.now() >= this.deadline) this.close('lease expired while the database was unreachable');
       else this.log(`lease renewal failed, retrying: ${describeStorageFailure(error)}`);
-    }
+    } finally { this.renewing = false; }
   }
 
   private close(reason: string) {
     if (!this.open) return;
     this.open = false;
-    clearInterval(this.renewal);
+    clearInterval(this.renewal); clearTimeout(this.watchdog);
     this.dispatcher.stop();
     this.relay.clear();
     for (const walker of this.walkers) for (const effects of this.effects) effects.allowWalking(walker, false);
+    for (const effects of this.effects) {
+      try { effects.close(reason === 'disposed' ? 'shutdown' : 'authority-lost'); }
+      catch { this.log('room close callback failed'); }
+    }
     if (reason !== 'disposed') this.log(`writer authority closed for kingdom ${this.kingdomId}: ${reason}`);
     for (const listener of this.closed) listener(reason);
   }
@@ -315,7 +351,13 @@ export function createDurableRealmServices(input: {
   readonly repository: DurableRepository;
   readonly outbox: RealmOutboxStore;
   readonly auth: RealmAuthenticator;
-  readonly kingdom: (kingdomId: KingdomId) => DurableKingdomOptions;
+  /** World, layout revision and arrivals for a kingdom (a live kingdom reads its adopted founded layout here). */
+  readonly kingdom: (kingdomId: KingdomId) => DurableKingdomOptions | Promise<DurableKingdomOptions>;
+  /**
+   * Trusted work after the lease is held and before the first walker enters, such as installing deeds left pending
+   * by an interrupted allocation. Its failure is logged; it never fails the open or skips the lease.
+   */
+  readonly afterOpen?: (kingdom: DurableKingdom) => Promise<unknown>;
   readonly attach?: (kingdom: DurableKingdom) => () => void;
   readonly log?: (line: string) => void;
 }): DurableRealmServices {
@@ -331,13 +373,18 @@ export function createDurableRealmServices(input: {
     await closing.get(kingdomId);
     let kingdom: DurableKingdom;
     try {
-      kingdom = await DurableKingdom.open(input.repository, input.outbox, kingdomId, { ...input.kingdom(kingdomId), ...(input.log ? { log: input.log } : {}) });
+      const options = await input.kingdom(kingdomId);
+      kingdom = await DurableKingdom.open(input.repository, input.outbox, kingdomId, { ...options, ...(input.log ? { log: input.log } : {}) });
     } catch (error) {
       if (error instanceof RealmLeaseHeldError) throw new ServerError(409, 'Another server holds this kingdom right now. Try again in a moment.');
       input.log?.(`[realm] kingdom ${kingdomId} did not open: ${describeStorageFailure(error)}`);
       throw new ServerError(503, 'The kingdom could not be opened from storage. Nothing was changed.');
     }
     const entry: Entry = { kingdom, holds: 0, room: false, detach: () => {} };
+    if (input.afterOpen) {
+      try { await input.afterOpen(kingdom); }
+      catch (error) { input.log?.(`[realm] kingdom ${kingdomId} opened, but its open-time recovery did not finish: ${describeStorageFailure(error)}`); }
+    }
     entries.set(kingdomId, entry); kingdoms.set(kingdomId, kingdom);
     kingdom.onClosed(() => forget(kingdomId, entry));
     try { entry.detach = input.attach?.(kingdom) ?? entry.detach; }
@@ -397,6 +444,7 @@ class HeldRoomHandle implements RealmRoomHandle {
   get world() { return this.k.world; }
   get sequence() { return this.k.sequence; }
   spawn(principal: RealmPrincipal) { return this.k.spawn(principal); }
+  recoverWalker(walkerId: string, collisionRevision: number) { return this.k.recoverWalker(walkerId, collisionRevision); }
   intent(context: RealmIntentContext, intent: RealmIntent) { return this.k.intent(context, intent); }
   bootstrap(principal: RealmPrincipal) { return this.k.bootstrap(principal); }
   bindRoom(effects: RealmRoomEffects) { return this.k.bindRoom(effects); }

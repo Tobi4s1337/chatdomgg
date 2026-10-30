@@ -29,25 +29,25 @@ after main has stopped editing them. The integrator alone calls those modules fr
 
 ## Tasks
 
-- [ ] **WC01 — Put the player camera on a real citizen early.** Create the owned controller entry/lifecycle,
+- [x] **WC01 — Put the player camera on a real citizen early.** Create the owned controller entry/lifecycle,
   separate input/camera modules and exact integrator recipe using actual frozen realm render poses. Deliver a
   first camera-relative WASD and shoulder view with free cursor, film offset and dispose/reset behavior. Add a
   compact capture script and README with truthful ready/error checks and the actual entry URL. Ask integrator
   to bind it to the kingdom; record an explicit integration need if unavailable. Do not add a fake kingdom route
   or claim the reference court is the final surface. · evidence: first looked desktop/phone walking pose after
   binding, or clearly marked pending binding plus working module tests; exact integration recipe.
-- [ ] **WC02 — Make sweep and slide dependable.** Extend the exact shared step with bounded collision travel,
+- [x] **WC02 — Make sweep and slide dependable.** Extend the exact shared step with bounded collision travel,
   deterministic simultaneous contacts and support handling. Prevent thin-wall tunnelling, corner snag loops and
   diagonal speed gain. Add bounded embedded-body recovery and use the frozen adapter's recovery policy;
   an insufficient recovery seam becomes `needs:`, never a new return type. Keep distance tied to actual
   horizontal travel. · evidence: meaningful
   deterministic recording, thin-wall/corner/embedded/mismatch tests; observed real supplied wall collision.
-- [ ] **WC03 — Walk half-metre steps and jump once.** Add supported .5 m auto-step trials with headroom,
+- [x] **WC03 — Walk half-metre steps and jump once.** Add supported .5 m auto-step trials with headroom,
   horizontal progress and final support checks; retain slide on rejection. Tune shared acceleration/quick stops,
   sprint and grounded jump, document chosen constants and smooth rendered step height separately. No airborne
   climbing or repeated held jump. · evidence: exact-height/too-high/ceiling/grazing/narrow-landing tests; keyboard
   walk/sprint/one-jump route with matching gait distance and safe feet in the real kingdom.
-- [ ] **WC04 — Keep every input under control.** Complete keyboard event ownership, camera-relative byte
+- [x] **WC04 — Keep every input under control.** Complete keyboard event ownership, camera-relative byte
   quantization, jump pulse, drag orbit, optional labelled lock, wheel and phone thumb/orbit/pinch input.
   E remains reserved for interactions; never bind it to camera orbit.
   Filter lock deltas exactly as spec R8; recover rejection/re-lock cleanly. Clear held/pending/capture state on
@@ -80,3 +80,6 @@ after main has stopped editing them. The integrator alone calls those modules fr
 ## Backlog
 
 The worker records discoveries here and never selects them without a new brief.
+
+- The reference court (`/-/realm`, read-only) draws every walker's shadow at floor height, so a citizen on its
+  .5 m block casts it on the paving, and clips the self name label at the right edge at 1440×900.

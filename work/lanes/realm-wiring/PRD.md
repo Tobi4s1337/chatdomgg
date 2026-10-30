@@ -27,7 +27,7 @@ for a human message. Never pick Backlog without main instruction. Sub-agents nev
   actual frozen client and public delivery. Consume `REALM_AUTH_ROUTES` and the strict shared auth DTOs for
   production session/ticket entry; no guessed endpoints or reference-session fallback. Supply the actual
   `RealmEntry` with session `resumeScope` and a lazy fresh-ticket factory; reconnect never reuses a consumed
-  ticket. Implement buffered `RealmBootstrap`/`throughSequence` installation,
+  ticket. Implement buffered `RealmBootstrap`/`throughCursor` (independent of domain fact sequence) installation,
   presence freshness/origin/epoch/sequence handling and disposal; snapshot restoration never replays rituals.
   Provide the first exact scene installation recipe, then demonstrate a labelled SIMULATED window
   change through the actual room to two clients. No direct Herald SSE or first-plot fallback. R1–R4, R10.

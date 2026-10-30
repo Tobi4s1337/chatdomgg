@@ -29,12 +29,13 @@ export function referenceServices(): RealmRoomServices & { issue(): { ticket: st
     async open(kingdomId) {
       if (kingdomId !== REFERENCE_KINGDOM || open) throw new ServerError(409, 'The kingdom writer is already held');
       open = true;
-      const writerEpoch = randomUUID();
+      const writerEpoch = randomUUID(), roomEffects = new Set<import('./ports').RealmRoomEffects>();
       return { kingdomId, origin: 'simulated', writerEpoch, layoutRevision: 'reference-court-v1', world: REFERENCE_WORLD, sequence: 0,
         spawn: () => [((spawnCount++ % 3) - 1) * 4, 0, 7],
         intent: async (_context, intent) => ({ version: 1, id: intent.id, status: 'unavailable', message: 'This reference court only hosts walking. Your kingdom work has not been changed.' }),
-        bootstrap: () => ({ version: 1, kingdomId, writerEpoch, throughSequence: 0, layoutRevision: 'reference-court-v1', collisionRevision: 1, current: [] }),
-        bindRoom: () => () => {}, lifecycle: () => {},
+        bootstrap: () => ({ version: 1, kingdomId, writerEpoch, throughSequence: 0, throughCursor: 0, layoutRevision: 'reference-court-v1', collisionRevision: 1, current: [] }),
+        recoverWalker: (walkerId, revision) => revision===REFERENCE_WORLD.revision && [...roomEffects].some(effects=>effects.placeWalker(walkerId,[0,0,7],revision)),
+        bindRoom: effects => {roomEffects.add(effects);return()=>{roomEffects.delete(effects);};}, lifecycle: () => {},
         subscribe: () => () => {}, bindTransient: () => () => {}, dispose: async () => { open = false; },
       };
     },

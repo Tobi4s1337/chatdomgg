@@ -108,7 +108,7 @@ pnpm --filter @chatdom/api start            # LIVE: needs DATABASE_URL and ~/.co
 | `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` | none | live only; the redirect URI must be registered on the Twitch app |
 | `REALM_INTERNAL_SECRET` | unset | 32+ characters; enables internal revocation |
 
-The web preview should proxy `/api` to `http://127.0.0.1:5192`, so cookies and routes stay same-origin. Without
+The web dev server and preview proxy `/api` to `http://127.0.0.1:5192`, so cookies and routes stay same-origin. Without
 that proxy, set `REALM_PUBLIC_ORIGIN=http://localhost:5192` and open the API origin directly.
 
 ### SIMULATED sign-in

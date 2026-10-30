@@ -107,28 +107,22 @@ people.
 - **Event IDs.** Fact rows use `<kingdom>:<seq>:<n>`. Presence frames use `<kingdom>:<seq>:p<checkpoint revision>`;
   their `frame.sequence` is that durable revision and `frame.epoch` is `realm:<kingdom>`, so frames never repeat
   across restarts.
-- **Bootstrap** adopts the committed state and the public rows it produced in one synchronous step. Its `current`
-  therefore holds every published home (with committed attachments) and the newest crowd frame at or below
-  `throughSequence`, and no past ritual.
+- **Bootstrap** retains the public row prefix independently of private state that may be ahead. Each row updates
+  the home/attachment/crowd projection and `throughCursor` before its delivery. A first Forge commit publishes its
+  allocated home, later Forge commits replace the same socket, and a queued build changes that home only when its
+  own public row arrives. Bootstrap contains current views and no past ritual.
 
 ### Delivery cursor for the browser lane
 
 The client keeps this per kingdom connection. It must be followed exactly, because redelivery is normal:
 
-1. On join, buffer `world` messages. Send `bootstrap` and install its `current`. Remember `writerEpoch`,
-   `throughSequence` as `through`, and the bootstrap presence frame's `frame.sequence` as `frame` (−1 if there is
-   none).
-2. Then replay the buffer and every later `world` delivery through one rule:
-   - Drop it if `delivery.writerEpoch !== writerEpoch`.
-   - Drop it if its `eventId` is in the seen set. Keep the last 1,024 event IDs; that comfortably covers the
-     256-row redelivery batch.
-   - A `presence` message applies only if `message.frame.sequence > frame`. It replaces the crowd and sets `frame`.
-     Zero-fact frames share the previous fact's `sequence`, so never compare presence by `delivery.sequence`.
-   - A `forge` or `home` message applies only if `delivery.sequence > through`. It then sets
-     `through = delivery.sequence`, so a ritual plays once.
-3. A new `writerEpoch` (the room's `writerEpoch` changes, or a reconnect lands on a new writer) means a new
-   bootstrap. Clear the seen set and start again from step 1. Delivered public messages are never a reason to
-   replay spectacle that bootstrap already installed.
+1. On join, buffer `world` messages. Send `bootstrap`, install its `current`, and remember `writerEpoch` and
+   `throughCursor` as `cursor`.
+2. Drop a delivery with another writer epoch, a seen `eventId`, or `delivery.cursor <= cursor`. Apply each remaining
+   delivery in order, record its event ID, and set `cursor = delivery.cursor`. Keep the last 1,024 event IDs. The
+   cursor orders all public rows, including zero-fact presence and multiple rows at the same fact sequence.
+3. A writer epoch change requires a fresh bootstrap. Clear the seen set and start again from step 1; bootstrap
+   already installs current views, so older rituals never replay as new.
 
 `deliveryCursor` in `postgres.integration.test.ts` is this rule as executable reference.
 
@@ -194,6 +188,58 @@ The browser source belongs to the browser lane; this is what it must do. `connec
 6. **Signout.** After `POST /api/realm/signout`, clear every key for that `resumeScope`. The server ends the seat
    within about a second, whether it is connected or waiting out its grace.
 7. Walker ids are per entry. Use them only as keys for this room session; never persist or show them.
+## Homes and founded layouts (`src/allocation/`)
+
+`AllocationService` is the only way a citizen home comes to exist (spec 34 R6). It shares the realm's Postgres schema.
+
+- **Founded layouts are immutable.** `adoptLayout(kingdomId, plan)` stores a `SettlementPlan` whole: canonical JSON,
+  its SHA-256 and one row per home plot. A later revision is adopted only as an extension. It must keep the founding
+  seed and first year, and every plot's and home's transform, so streets stay put. It must also keep every paved
+  stretch of public street, every approach, node, court and quarter root, and the market, castle and landform.
+  Street geometry is compared stretch by stretch, not by edge ID. A new year's frontages add junctions, and the
+  generator then cuts a merged lane into new segments, which renames the `streetId` of plots already on it
+  (seed `rs03-517713746`: `plot:2024:41` moves from `contour:3:5:0` to `contour:3:5:121`). That is growth, not a move.
+  Every occupied plot must also match its deed's original placement, apart from that segment label. The answers are
+  `founded`, `extended`, `unchanged` or an explicit `rejected` with a reason (`regenerated`, `revision-conflict`,
+  `superseded`, `moved-plot`, `moved-street`, `occupied-plot-changed`, `origin`, `invalid`). Database triggers
+  refuse any UPDATE or DELETE of layout and plot rows.
+  Rooms read the current revision with `currentLayout`; nothing regenerates a plan at startup.
+- **Three citizen homes per person, globally.** `allocate` locks the person's `realm_deed_holders` row, then the
+  kingdom's layout head, and commits a pending deed that already counts. Database checks hold the count at 0–3 and
+  allow one live deed per person per kingdom and one owner per plot. The monarch asking in their own kingdom (the
+  kingdom ID is the broadcaster's Twitch ID) gets `castle`: a seat, never a deed and never one of the three. A
+  fourth kingdom, or a full one, answers `guest` and keeps a `realm_guests` row, so the guest light and history
+  wait there. Asking again is idempotent by person and kingdom. A lost COMMIT reply is resolved through that key.
+- **The address rule.** The verified follow year picks the tenure quarter. A follow before the founded years goes
+  to the oldest quarter. Unknown history goes to the edge of the newest quarter. The follow date's place in its
+  year picks the row (the street segment, oldest first). Verified subscription months move the choice one street
+  toward the castle, once and never into another quarter. A full row spills outward, a full quarter to the nearest
+  quarter. The deed keeps the chosen placement, the reasons (`tenure`) and the signed evidence records.
+- **Evidence is signed, never inferred.** `TenureEvidenceVerifier` accepts HMAC-SHA256 records from the Herald
+  (`helix.channel-followers` for `followed_at`, `chat.badge-info` or `eventsub.subscription-message` for months).
+  Records are keyed by `REALM_EVIDENCE_KEY` (≥32 bytes hex) and must match the kingdom, the person and the origin.
+  Unknown history stays `null`; nothing is derived from a slot, a sign-in or a payment.
+- **Install inside the writer's transaction.** `prepare` furnishes the deed's first home once and fixes the exact
+  `home.installAllocated` command on the deed. `install` commits it through the kingdom's fenced writer.
+  `verifyAllocation` is always one of the repository's commit guards. It accepts a home only for a pending deed whose
+  receipt, kingdom, origin, owner, plot, slot, layout revision and exact command match, and it marks the deed
+  `installed` in the same COMMIT. A refused install (`conflict`) voids the still-pending deed and releases its plot
+  and count. A cold or busy writer leaves it pending.
+- **Pending-install recovery.** A crash between allocation and install leaves a counted pending deed. Pass
+  `afterOpen: kingdom => allocations.recover(kingdom)` to `createDurableRealmServices`, and each kingdom then installs
+  its pending deeds before the first walker enters. A crash can neither free a slot nor create a fourth home.
+
+Composition for a live kingdom (main owns the furnisher and the collision world):
+
+```ts
+const allocations = new AllocationService(pool, { origin: 'live', verifier: new TenureEvidenceVerifier('live', tenureEvidenceKey()), furnish });
+const services = createDurableRealmServices({ repository, outbox: new PostgresOutboxStore(pool), auth,
+  kingdom: async id => ({ world, spawn, layoutRevision: (await allocations.currentLayout(id))!.revision }),
+  afterOpen: kingdom => allocations.recover(kingdom) });
+```
+
+`furnish(deed)` returns the deed's first home. That means approved starter content in the plot's family
+(`deed.placement.style`), its digest and approved names. Until one is composed, deeds stay pending and counted.
 
 ### Schema and migrations
 
@@ -211,6 +257,10 @@ does not run migrations of its own.
 | `realm_designs` | globally unique original design IDs |
 | `realm_outbox` | sanitized public deliveries (never words, rights, sessions or owners) |
 | `realm_ingress_checkpoints`, `realm_ingress_receipts` | presence checkpoint bytes and per-observation dedupe |
+| `realm_layout_heads`, `realm_layouts`, `realm_layout_plots` | each kingdom's current revision and every adopted plan and home plot (immutable) |
+| `realm_deed_holders` | the per-person lock row and global citizen-deed count (0–3) |
+| `realm_deeds` | receipt, placement, tenure, evidence, fixed install command and status (`pending`/`installed`/`void`) |
+| `realm_guests` | people kept as guests in a kingdom (`three-homes` or `kingdom-full`) |
 | `realm_ingress_inbox` | authenticated observations accepted before any writer decides them (`0004`) |
 | `realm_outbox_cursors` | per-kingdom durable delivery cursor, moved only by the current epoch (`0004`) |
 | `realm_entries` | one row per consumed ticket; its random id is the walker's room id and the session-check key (`0005`) |
@@ -256,11 +306,12 @@ REALM_DATABASE_TESTS=1 node --env-file-if-exists=.env node_modules/vitest/vitest
 ```
 
 The Postgres suite runs only with `REALM_DATABASE_TESTS=1`, and then fails rather than skips if `DATABASE_URL` is
-missing. It migrates a random `realm_test_*` schema and drops only that schema. It proves three things:
+missing. It migrates a random `realm_test_*` schema and drops only that schema. It proves:
 
 - Two writers race, a lost COMMIT reply is resolved by lookup, and a stale epoch is fenced: one spend, one fact and
   one outcome.
 - A committed fact survives a full room server restart and returns through bootstrap.
+- Allocation races one person into four kingdoms, recovers a pending install after reopen, and proves three deeds, the castle apart, a retained guest, forged-install rejection and immutable layouts.
 - R7: Herald evidence enters through the authenticated door. The observation that completes ten minutes commits
   the interval, the credit and the frame together. The process dies the moment its transport takes the frame,
   before acknowledging or settling. The next writer then:
@@ -289,3 +340,16 @@ see an old list.
 Realm 5191 (this server), API 5192, web preview 5190 (the team's). Lane development runs use their own schema
 (`REALM_DATABASE_SCHEMA=realm_lane_rs01`), so diverging lane branches never stamp the shared `realm` schema with
 migrations that another branch does not carry.
+
+## Combined RS03/RS04 integration
+
+The services require both `outbox: new PostgresOutboxStore(pool)` and the allocation `afterOpen` hook above. The
+asynchronous `kingdom` resolver reads the stored founded layout; recovery finishes before the shared registry admits
+its first room/ingress hold. Add `attach: kingdom => ingress.attach(kingdom)`, then `ingress.use(services)` for durable
+presence. The room handle delegates collision recovery and closes on authority loss; the independent lease deadline
+cannot be revived by late renewal. Commit/unchanged command outcomes stay terminal, while rejected commands may retry.
+
+Focused validation uses the Postgres command above plus `pnpm exec vitest run apps/realm apps/api/src/realm-auth`,
+`pnpm typecheck`, `pnpm lint` and the realm build. R7 allocates its home through the real deed guard and uses a 6 s
+lease so renewal can complete before the existing conservative 2 s deadline margin. No permanent test servers or
+screenshots are added by this backend integration.

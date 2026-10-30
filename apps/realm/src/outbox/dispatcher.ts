@@ -15,6 +15,8 @@ export interface OutboxDispatcherOptions {
   readonly delivered: number;
   readonly read: (afterId: number, limit: number) => Promise<RealmOutboxRow[]>;
   readonly acknowledge: (throughId: number) => Promise<void>;
+  /** Fold a committed row into the synchronous bootstrap prefix before its delivery. */
+  readonly project: (row: RealmOutboxRow) => void;
   readonly current: () => boolean;
   readonly fenced: () => void;
   readonly log: (line: string) => void;
@@ -85,10 +87,13 @@ export class OutboxDispatcher {
 
   /** One batch: hand every row to the transport, then acknowledge. False means stop and retry later. */
   private async hand(rows: readonly RealmOutboxRow[]): Promise<boolean> {
-    if (!this.options.current() || this.listeners.size === 0) return false;
+    if (!this.options.current()) return false;
+    if (this.listeners.size === 0) { for (const row of rows) this.options.project(row); return false; }
     for (const row of rows) {
+      if (!this.options.current()) return false;
       const delivery = this.delivery(row);
       if (!delivery) { this.later(`outbox row ${row.id} is not a public message; delivery holds`); return false; }
+      this.options.project(row);
       if (row.id <= this.highest) this.redeliveries++;
       this.highest = Math.max(this.highest, row.id);
       this.deliveries++;
@@ -113,7 +118,7 @@ export class OutboxDispatcher {
     const message = row.message;
     if (message.type === 'presence' && !KingdomPresenceFrameSchema.safeParse(message.frame).success) return null;
     if (message.type !== 'presence' && message.type !== 'forge' && message.type !== 'home') return null;
-    return { version: 1, kingdomId: this.options.kingdomId, writerEpoch: this.options.writerEpoch, sequence: row.sequence, eventId: row.eventId, message };
+    return { version: 1, kingdomId: this.options.kingdomId, writerEpoch: this.options.writerEpoch, sequence: row.sequence, cursor: row.id, eventId: row.eventId, message };
   }
 
   private later(line: string) {

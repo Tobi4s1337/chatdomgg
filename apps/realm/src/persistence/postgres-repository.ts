@@ -6,6 +6,7 @@ import type { RealmDecision, RealmDomainCommand, RealmFact, RealmIngressCheckpoi
 import type { PresenceInput } from '@chatdom/shared';
 import { applyRealmFact, createRealmState, decideRealm } from '@chatdom/world/realm';
 import { canonicalJson, digestOf, sha256Hex } from './codec';
+import { verifyAllocation } from '../allocation/guard';
 import { RealmCommitUncertainError, RealmLeaseHeldError, RealmRecoveryError, RealmStorageUnavailableError, RealmWriterFencedError, type RealmDatabase } from './database';
 
 /** Writer lease length. The holder renews at a third of this; an expired lease can never write again. */
@@ -18,7 +19,7 @@ export const REALM_BASE_ANVILS = 2;
 const NOW_MS = 'floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint';
 
 type Tx = pg.PoolClient;
-/** Extra durable constraints checked inside the commit, before anything is written (allocation receipts, …). */
+/** Extra durable constraints checked inside the commit, before the fact row is written. */
 export type RealmCommitGuard = (tx: Tx, fact: RealmFact, prior: RealmPrivateState) => Promise<'ok' | 'conflict'>;
 
 export interface PostgresRealmRepositoryOptions {
@@ -56,7 +57,8 @@ export class PostgresRealmRepository implements RealmRepository {
     this.leaseMs = bounded(options.leaseMs ?? REALM_LEASE_MS, 1_000, 120_000, 'leaseMs');
     this.snapshotEvery = bounded(options.snapshotEvery ?? REALM_SNAPSHOT_EVERY, 1, 100_000, 'snapshotEvery');
     this.anvilCapacity = bounded(options.anvilCapacity ?? REALM_BASE_ANVILS, 1, 64, 'anvilCapacity');
-    this.guards = [claimDesign, ...(options.guards ?? [])];
+    // Always on: a design exists once, and a home is installed only against its pending deed (no fixture ownership).
+    this.guards = [claimDesign, verifyAllocation, ...(options.guards ?? [])];
   }
 
   async acquire(kingdomId: KingdomId): Promise<RealmWriterLease> {
@@ -117,10 +119,10 @@ export class PostgresRealmRepository implements RealmRepository {
     const digest = digestOf(command);
     return this.commit(lease, commandId, async (tx, fence, state) => {
       const prior = await storedCommand(tx, lease.kingdomId, commandId);
-      // A commit is final. A refusal is only the latest answer: the same command may be asked again (a night's credit
+      // Committed and unchanged are final. A rejection is the latest answer: the command may be asked again (a night's credit
       // held before ten covered minutes must not stay held forever). Reusing an id for another payload is a conflict.
       if (prior && prior.digest !== digest) return { done: { status: 'rejected', reason: 'conflict' } };
-      if (prior?.status === 'committed') return { done: outcome(prior) };
+      if (prior && (prior.status === 'committed' || prior.status === 'unchanged')) return { done: outcome(prior) };
       // Cancelled before deciding: nothing is stored, so the command stays undecided and retryable by the next writer.
       if (!current()) return { done: { status: 'rejected', reason: 'cold' } };
       const decision = decide(state, fence.now);
@@ -177,7 +179,7 @@ export class PostgresRealmRepository implements RealmRepository {
         ids.add(commandId);
         const digest = digestOf(command), stored = await storedCommand(tx, lease.kingdomId, commandId);
         if (stored && stored.digest !== digest) return { done: { status: 'rejected', reason: 'conflict' } };
-        if (stored?.status === 'committed') continue;
+        if (stored && (stored.status === 'committed' || stored.status === 'unchanged')) continue;
         const decision = decideRealm(s, command, { now: fence.now, writerEpoch: lease.epoch, commandId, capability, current: current(), anvilCapacity: this.anvilCapacity,
           occurredAt: observation.observedAt, receivedAt: input.receivedAt, actor: null, cause: { kind: 'external', source: input.source, id: observation.id } });
         if (decision.kind !== 'accepted') {
@@ -380,11 +382,11 @@ async function storedCommand(tx: Tx, kingdomId: string, commandId: string) {
 }
 
 async function recordCommand(tx: Tx, lease: RealmWriterLease, commandId: string, digest: string, result: RealmStoredOutcome, now: number) {
-  // Only a refusal is ever replaced; the WHERE keeps a committed outcome immutable even against a buggy caller.
+  // Only a rejection is replaced; both committed and unchanged outcomes are terminal.
   const written = await tx.query(`INSERT INTO realm_commands (kingdom_id, command_id, digest, status, sequence, reason, writer_epoch, decided_ms) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT (kingdom_id, command_id) DO UPDATE SET status = excluded.status, sequence = excluded.sequence, reason = excluded.reason,
       writer_epoch = excluded.writer_epoch, decided_ms = excluded.decided_ms
-    WHERE realm_commands.status <> 'committed' AND realm_commands.digest = excluded.digest`,
+    WHERE realm_commands.status = 'rejected' AND realm_commands.digest = excluded.digest`,
   [lease.kingdomId, commandId, digest, result.status, result.status === 'committed' ? result.sequence : null, result.status === 'committed' ? null : result.reason, lease.epoch, now]);
   if (written.rowCount !== 1) throw new RealmRecoveryError(lease.kingdomId, `command ${commandId} already has a final outcome`);
 }
