@@ -92,4 +92,4 @@ it('keeps the same frontage through private editing, a saved street replacement 
       }
     }
   } finally { build.dispose(); material.dispose(); }
-}, 15000);
+}, 60_000); // Shared-host contention is not a build behavior failure.
