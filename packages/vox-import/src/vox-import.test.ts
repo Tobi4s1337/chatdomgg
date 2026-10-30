@@ -3,7 +3,7 @@ import { expect, it } from 'vitest';
 import { MAT, MATERIALS, STYLES } from '@chatdom/content';
 import type { BuildDraftPolicy, Vec3 } from '@chatdom/shared';
 import { BuildDraft } from '@chatdom/world';
-import { parseVox, prepareVoxImport, type VoxFile, type VoxScale } from './index';
+import { parseVox, prepareVoxImport, voxPlacementError, type VoxFile, type VoxScale } from './index';
 
 const bytes = new Uint8Array(readFileSync(new URL('../fixtures/lantern-cottage.vox', import.meta.url)));
 const style = STYLES.hearth;
@@ -15,7 +15,7 @@ const policy: BuildDraftPolicy = {
 };
 const materials = policy.palette.map(id => MATERIALS.materials.find(m => m.id === id)!);
 const prepare = (file: VoxFile, scale: VoxScale, origin: Vec3 = [20, 0, 90]) =>
-  prepareVoxImport({ file, model: 0, materials, styleId: policy.styleId, scale, origin, destination: { size: policy.size, maxVoxels: policy.maxVoxels } });
+  prepareVoxImport({ file, model: 0, materials, styleId: policy.styleId, scale, origin, destination: policy });
 const offsetOf = (id: string) => Buffer.from(bytes).indexOf(id, 8, 'latin1');
 const rgb = (file: VoxFile, index: number) => [...file.palette.subarray(index * 4, index * 4 + 4)];
 
@@ -52,6 +52,17 @@ it('reads the authored cottage upright in kingdom materials and refuses broken b
   expect(half.ok && half.summary).toMatchObject({ size: [9, 12, 8], reduced: true });
   expect(double.ok && double.summary).toMatchObject({ size: [36, 48, 32], boxes: summary.boxes, cells: 1745 * 8 });
   expect(quadruple.ok ? null : quadruple.error).toMatchObject({ code: 'destination', remedy: 'Try 2×.' });
+
+  // Raised past the 64-block height and pushed behind the plot: the same blueprint, honestly outside, and the core agrees.
+  expect(summary.placement.inside).toBe(true);
+  const outside = prepare(file, 2, [0, 20, 40]);
+  if (!outside.ok) throw new Error(outside.error.message);
+  expect(outside.summary.placement.over).toEqual([[0, 0], [0, 4], [8, 0]]);
+  expect(voxPlacementError(outside.summary.placement, policy)).toMatchObject({ code: 'placement', message: 'It reaches 4 blocks above your 64-block height and 8 blocks behind the back of your plot.' });
+  const before = draft.serialize();
+  expect(() => draft.insertBlueprint(outside.blueprint, outside.origin)).toThrow();
+  expect(draft.serialize()).toEqual(before);
+  expect(prepare(file, 1, [50, 0, 90]).ok ? 'accepted' : 'refused').toBe('refused'); // past the lattice is never a blueprint origin
 
   // Without RGBA the documented default table applies unshifted: index 1 is white, index 255 is #111111.
   const rgba = offsetOf('RGBA'), stripped = new Uint8Array(bytes.length - 1036);

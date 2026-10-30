@@ -10,7 +10,8 @@ export const VOX_IMPORT_LIMITS = Object.freeze({
 
 export type VoxErrorCode =
   | 'too-large' | 'not-vox' | 'version' | 'truncated' | 'structure' | 'limit' | 'dimensions'
-  | 'voxel' | 'duplicate' | 'empty' | 'palette-remap' | 'model' | 'materials' | 'too-detailed' | 'destination';
+  | 'voxel' | 'duplicate' | 'empty' | 'palette-remap' | 'model' | 'materials' | 'too-detailed' | 'destination'
+  | 'placement' | 'budget';
 
 /** A useful failure: what happened, and what the builder can do next. */
 export interface VoxImportError {
