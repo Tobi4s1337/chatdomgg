@@ -74,9 +74,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const castleOrigin:Vec3=[layout.castle[0]-16,layout.castle[1],layout.castle[2]-16];
   const beaconPosition:Vec3=CASTLE_BEACON_ANCHOR_METRES.map((value,axis)=>value+castleOrigin[axis]!) as unknown as Vec3;
   const blockers=[...houses,{slot:65534,blueprint:castle,position:castleOrigin,yaw:0}];
+  const nearBlockers=[...blockers,...props.map(p=>({...p,slot:65534}))];
   // Half-metre local occupancy resolves the little garden edges. Expanding a
   // sub-two-metre prop into whole distant cells would falsely seal the street.
-  const field=own(createLightField(layout,[...blockers,...props.map(p=>({...p,slot:65534}))],volume=>{if(disposed)return;clay.setLight(volume);fieldUploads++;nearBytes=volume.estimatedPeakBytes;nearVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom')));
+  const field=own(createLightField(layout,nearBlockers,volume=>{if(disposed)return;clay.setLight(volume);fieldUploads++;nearBytes=volume.estimatedPeakBytes;nearVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom')));
   const farField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setFarLight(volume);fieldUploads++;farBytes=volume.estimatedPeakBytes;farVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom'),{mode:'kingdom'}));
   const beaconField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setBeaconLight(volume);fieldUploads++;beaconBytes=volume.estimatedPeakBytes;beaconVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The castle light could not reach its towers'),{mode:'beacon',position:beaconPosition}));
   let lastField=-Infinity,lastNames=-Infinity,lastActive=0,beaconCue=false;
@@ -164,7 +165,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   function labels(){const names:NameLabel[]=[];for(const s of windows.getSources()){
     if(!s.name||s.strength<.1)continue;const p=new THREE.Vector3(...s.position),to=camera.position.clone().sub(p);
     if(to.length()>32||to.dot(new THREE.Vector3(...s.normal))<2)continue;
-    if(windowOccluded(houses,[camera.position.x,camera.position.y,camera.position.z],s.position))continue;
+    if(windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],s.position))continue;
     p.y+=1.1;p.project(camera);if(p.z>1||p.z<0||Math.abs(p.x)>.91||Math.abs(p.y)>.88)continue;
     names.push({name:s.name,slot:s.slot,x:(p.x+1)*canvas.clientWidth/2,y:(1-p.y)*canvas.clientHeight/2});
   }options.onNames(names.slice(0,3));}
