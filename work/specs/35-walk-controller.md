@@ -282,3 +282,31 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
   second try slid the eye along the entry boom and dropped the citizen off the bottom edge. Entry framing at 6.5 m
   is unchanged. Self-fade now measures eye-to-head distance. The controller takes `collision` (a world or a
   function read every frame; null keeps the last world). Obstructions are never faded.
+- **2026-10-30 — WC03 feel constants (one shared law, no client tuning).** Velocity moves toward the input's
+  target along the straight line between them, so neither diagonals nor turns gain speed and the target is met
+  exactly: `GROUND_ACCEL = 40` m/s² (walk 4 m/s in 3 ticks, sprint 7 m/s in .175 s), `GROUND_BRAKE = 70` m/s²
+  whenever the target is slower along the current travel (a walk stops in 2 ticks within .06 m, a sprint in 3
+  ticks within .24 m, a walk reverses in 5 ticks), `AIR_ACCEL = 10` m/s² both ways (a jump keeps its momentum,
+  steering stays possible). `JUMP_SPEED = 8`, `GRAVITY = 25.6`: a 1.25 m apex that clears a one-metre crate and never the
+  1.5 m street fence, .625 s in the air. The vertical move integrates the tick's exact parabola (mean of start and
+  end velocity), so the tick samples lie on it independent of tick size. Main's reference 6.8/20 apexed at 1.04 m,
+  too low to read as a jump next to a half-metre step. The frozen realm room test that hard-codes instant 4 m/s
+  travel (`x+12*4/30`) now needs the ramped value (`x+44/30`), recorded as a `needs:` for main.
+- **2026-10-30 — WC03 supported half-metre step.** Only when grounded at the tick start, not jumping and not
+  rising, and only when the ordinary slide was blocked and the intended direction pushes into the blocked face
+  (component across it at least 1/`STEP_GRAZE` = 1/4 of the one along it, about 14 degrees). The trial rises
+  exactly to the highest obstacle top on the swept path within `STEP_HEIGHT`, not a fixed .5 m, so a .3 m doorstep
+  under a 2.1 m lintel is walkable (0.3 + 1.75 fits) while 2.0 m is not; a ceiling may cut the rise and the replay
+  then clears only what fits. It replays the whole horizontal travel at that height, settles down onto support and
+  commits only if it gained more travel along the path than the slide (`STEP_PROGRESS` 1e-3 per metre) and a tread
+  exists for the body's centre `STEP_LANDING = .2` m past the face: a top no lower than one step under the landing
+  and nothing rising above it there. A parapet over a drop or a kerb against a wall is therefore not a step; a sill
+  with floor behind it is, and a long catch-up tick may clear a thin sill entirely. Rejection keeps the ordinary
+  slide. Down a step, a grounded walker that leaves support drops onto support within `STEP_HEIGHT` below in the
+  same tick (a full-body sweep), so stairs keep it grounded and jumpable; anything deeper is a fall. The vertical
+  part of a step is not walked distance.
+- **2026-10-30 — WC03 rendered step height.** `apps/web/src/walk/motion/step-ease.ts` eases presentation only,
+  from predicted feet height plus `grounded`: the camera follows a grounded step both ways over .1 s with at most
+  two steps of lag; the avatar eases only down a step (it just swept down through air, so it is never drawn in a
+  solid) and is drawn at its real height up a step, where any lag would sink its feet into the tread. Jumps and
+  falls pass through. The local pose needs `grounded` from the reconciler state (WC06 hunk) to bind it.

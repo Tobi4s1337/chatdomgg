@@ -114,7 +114,7 @@ export default function RealmReference() {
       if (cancelled) { connected.dispose(); return; }
       client = connected; debug.client = connected;
       // The existing reference smoke hook can supply explicit input; the same real client still ticks once.
-      walk=createWalkController({camera,surface:renderer.domElement,realm:{selfId:connected.selfId,room:connected.room,
+      walk=createWalkController({camera,surface:renderer.domElement,hud:host,realm:{selfId:connected.selfId,room:connected.room,
         tick:(now,input)=>connected.tick(now,{...input,...override})}});
       window.__chatdomWalk=walk.debug;
       resize();

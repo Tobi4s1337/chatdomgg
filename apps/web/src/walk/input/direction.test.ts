@@ -6,8 +6,10 @@ import { angleBetween, facingByte, headingFromByte, walkDirection } from './dire
 const OPEN: CollisionWorld = { revision: 1, query: () => [{ min: [-100, -1, -100], max: [100, 0, 100] }] };
 const travel = (moveX: number, moveZ: number, buttons = 0) => {
   const state: PlayerState = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true, yaw: 0, distance: 0, collisionRevision: 1 };
+  for (let n = 0; n < 6; n++) stepPlayer(state, { moveX, moveZ, buttons, yaw: 0, collisionRevision: 1 }, 1 / WALK_HZ, OPEN);
+  const x = state.x, z = state.z;
   for (let n = 0; n < WALK_HZ; n++) stepPlayer(state, { moveX, moveZ, buttons, yaw: 0, collisionRevision: 1 }, 1 / WALK_HZ, OPEN);
-  return Math.hypot(state.x, state.z);
+  return Math.hypot(state.x - x, state.z - z);
 };
 
 describe('camera-relative walking', () => {

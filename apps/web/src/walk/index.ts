@@ -165,7 +165,10 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   /** Blur, hidden page, menu, disconnect: nothing held, nothing pending, no capture, cursor given back. */
   const drop = () => { keys.clear(); pointer.clear(); touch.clear(); look.exit(); touchJump = false; jumpedLastFrame = false; };
   const hidden = () => { if (page.hidden) drop(); };
+  const contextmenu = (event: Event) => { if (!event.defaultPrevented) drop(); };
   const disconnected = () => drop();
+  keyboard.addEventListener('blur', drop);
+  keyboard.addEventListener('contextmenu', contextmenu);
   page.addEventListener('visibilitychange', hidden);
   realm.room.onLeave?.(disconnected);
   realm.room.onDrop?.(disconnected);
@@ -254,6 +257,8 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
       if (owner === 'disposed') return;
       stopLook(); stopTouch();
       keys.dispose(); pointer.dispose(); touch.dispose(); look.dispose(); hud?.dispose();
+      keyboard.removeEventListener('blur', drop);
+      keyboard.removeEventListener('contextmenu', contextmenu);
       page.removeEventListener('visibilitychange', hidden);
       realm.room.onLeave?.remove(disconnected);
       realm.room.onDrop?.remove(disconnected);
