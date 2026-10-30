@@ -10,6 +10,9 @@ export interface HorizonSurfaceOptions {
   readonly farStep?: 10 | 20;
 }
 
+type HorizonBounds = Pick<KingdomLayout, 'bounds'>;
+type HeightSampler = (x: number, z: number) => number;
+
 /**
  * The horizon starts at the worker's actual chunk-aligned footprint. A 1 m collar joins
  * its exact surface to 10 m (default) or 20 m distant triangles. Far tiles beside the collar
@@ -17,12 +20,22 @@ export interface HorizonSurfaceOptions {
  * Use this surface's sampleHeight when grounding props: each detail setting has its own
  * actual triangle planes, including the Float32-rounded collar and edge fans.
  */
-export function createHorizonSurface(layout: KingdomLayout, { farStep = 10 }: HorizonSurfaceOptions = {}): {
+export function createHorizonSurface(layout: KingdomLayout, options?: HorizonSurfaceOptions): HorizonSurface;
+export function createHorizonSurface(layout: HorizonBounds, options: HorizonSurfaceOptions & { sampleTerrain: HeightSampler }): HorizonSurface;
+export function createHorizonSurface(layout: HorizonBounds, options: HorizonSurfaceOptions & { sampleTerrain?: HeightSampler } = {}): HorizonSurface {
+  const { farStep = 10 } = options;
+  const heightAt = options.sampleTerrain ?? ((x: number, z: number): number => terrainHeight(layout as KingdomLayout, x, z));
+  return makeHorizonSurface(layout, farStep, heightAt);
+}
+
+interface HorizonSurface {
   geometry: THREE.BufferGeometry;
   clipBounds: Bounds;
   /** Contact with the actual detailed, collar or distant triangles; no analytic-height shortcut. */
   sampleHeight(x: number, z: number): number;
-} {
+}
+
+function makeHorizonSurface(layout: HorizonBounds, farStep: 10 | 20, heightAt: HeightSampler): HorizonSurface {
   if (farStep !== 10 && farStep !== 20) throw new Error('Horizon distant step must be 10 or 20 metres.');
   const { minX, maxX, minZ, maxZ } = layout.bounds;
   if (![minX, maxX, minZ, maxZ].every(Number.isFinite) || minX >= maxX || minZ >= maxZ) {
@@ -45,7 +58,7 @@ export function createHorizonSurface(layout: KingdomLayout, { farStep = 10 }: Ho
     const key = `${x},${z}`, cached = coarseHeights.get(key);
     if (cached !== undefined) return cached;
     const d = Math.hypot(x, z - 50);
-    const height = Math.fround(terrainHeight(layout, x, z) - 0.55 + Math.max(0, d - 350) * 0.025
+    const height = Math.fround(heightAt(x, z) - 0.55 + Math.max(0, d - 350) * 0.025
       + (Math.sin(x * 0.009) + Math.sin(z * 0.013)) * Math.min(22, Math.max(0, d - 330) * 0.05));
     coarseHeights.set(key, height);
     return height;
@@ -101,7 +114,7 @@ export function createHorizonSurface(layout: KingdomLayout, { farStep = 10 }: Ho
     const tz = z < inner[2] ? (inner[2] - z) / (inner[2] - outer[2])
       : z > inner[3] ? (z - inner[3]) / (outer[3] - inner[3]) : 0;
     const t = Math.max(tx, tz), blend = t * t * (3 - 2 * t);
-    const near = Math.fround(terrainHeight(layout, x, z));
+    const near = Math.fround(heightAt(x, z));
     return near + (farTriangleHeight(x, z) - near) * blend;
   };
   for (let z = outer[2]; z < outer[3]; z++) for (let x = outer[0]; x < outer[1]; x++) {
@@ -121,8 +134,8 @@ export function createHorizonSurface(layout: KingdomLayout, { farStep = 10 }: Ho
     const shared = ((x === inner[0] || x === inner[1]) && z >= inner[2] && z <= inner[3])
       || ((z === inner[2] || z === inner[3]) && x >= inner[0] && x <= inner[1]);
     if (!shared) continue;
-    const nx = (Math.fround(terrainHeight(layout, x - 1, z)) - Math.fround(terrainHeight(layout, x + 1, z))) / 2;
-    const nz = (Math.fround(terrainHeight(layout, x, z - 1)) - Math.fround(terrainHeight(layout, x, z + 1))) / 2;
+    const nx = (Math.fround(heightAt(x - 1, z)) - Math.fround(heightAt(x + 1, z))) / 2;
+    const nz = (Math.fround(heightAt(x, z - 1)) - Math.fround(heightAt(x, z + 1))) / 2;
     const length = Math.hypot(nx, 1, nz);
     normal.setXYZ(id, nx / length, 1 / length, nz / length);
   }
@@ -137,7 +150,7 @@ export function createHorizonSurface(layout: KingdomLayout, { farStep = 10 }: Ho
     const detailed = x >= inner[0] && x <= inner[1] && z >= inner[2] && z <= inner[3];
     if (detailed || (x >= outer[0] && x <= outer[1] && z >= outer[2] && z <= outer[3])) {
       const ix = Math.floor(x), iz = Math.floor(z), u = x - ix, v = z - iz;
-      const height = detailed ? (px: number, pz: number): number => Math.fround(terrainHeight(layout, px, pz))
+      const height = detailed ? (px: number, pz: number): number => Math.fround(heightAt(px, pz))
         : (px: number, pz: number): number => Math.fround(collarHeight(px, pz));
       const a = height(ix, iz), b = height(ix, iz + 1), c = height(ix + 1, iz + 1), d = height(ix + 1, iz);
       return u <= v ? a + u * (c - b) + v * (b - a) : a + u * (d - a) + v * (c - d);

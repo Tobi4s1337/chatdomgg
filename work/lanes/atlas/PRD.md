@@ -103,8 +103,9 @@ The first visible result is A02. A task blocked by a future shared seam records 
   ordinary map browsing, false arrivals, fake ready timers or premature passport awards. R19.
 
 - [ ] **A13 — March with a confirmed raid or travel to a friend** · evidence: authority/cancel tests + shots.
-  Integrate actual travel reservation/rollback and public-caravan journey; implement the monarch-only Raid Gate
-  finder, authorized preview, confirmed/cancel/unknown outcomes and raid-arrival links. Route through main's
+  Integrate Atlas-side roads, finder, authorized preview and raid-arrival links with the kingdom-side travel
+  coordinator in Spec 23 / `lane/raid-gate`, which owns reservation/rollback and Gate consent. Keep A07 roads,
+  A12 world entry and A14 map direction in Atlas; do not duplicate the Gate coordinator or its action writer. Route through main's
   action service, with live write tests only on tobi4s_. Simulated integration fixtures are labelled and cannot
   complete real integration acceptance. No direct Twitch writer or client-granted royal power. R20.
 

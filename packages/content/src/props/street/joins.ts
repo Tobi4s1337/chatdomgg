@@ -35,10 +35,12 @@ export const JOIN_FIXTURES: readonly {
     instances: [
       ...leftRun('hearth', 'wall'),
       ...rightRun('hearth', 'fence'),
-      { assetId: 'street-hearth-flower-pot', position: [12, 0, 2], quarterTurns: 0 },
-      { assetId: 'street-hearth-flower-pot', position: [40, 0, 10], quarterTurns: 1 },
-      { assetId: 'street-hearth-flower-trough', position: [0, 0, 24], quarterTurns: 0 },
-      { assetId: 'street-hearth-rock-cluster', position: [-10, 0, 8], quarterTurns: 0 },
+      // Pots flank the door two cells clear of it; the trough lines the inside of the side wall, where the
+      // street sees its whole face; a stone marks where the path enters the garden; the shrub fills the fence corner.
+      { assetId: 'street-hearth-flower-pot', position: [13, 0, 2], quarterTurns: 0 },
+      { assetId: 'street-hearth-flower-pot', position: [37, 0, 10], quarterTurns: 1 },
+      { assetId: 'street-hearth-flower-trough', position: [-11, 0, 30], quarterTurns: 1 },
+      { assetId: 'street-hearth-rock-cluster', position: [6, 0, 14], quarterTurns: 0 },
       { assetId: 'street-hearth-leafy-shrub', position: [58, 0, 16], quarterTurns: 0 },
     ],
   },
@@ -47,11 +49,13 @@ export const JOIN_FIXTURES: readonly {
     instances: [
       ...leftRun('tide', 'fence'),
       ...rightRun('tide', 'wall'),
-      { assetId: 'street-tide-flower-pot', position: [12, 0, 2], quarterTurns: 0 },
-      { assetId: 'street-tide-flower-pot', position: [40, 0, 10], quarterTurns: 1 },
-      { assetId: 'street-tide-flower-trough', position: [44, 0, 24], quarterTurns: 0 },
-      { assetId: 'street-tide-rock-cluster', position: [60, 0, 8], quarterTurns: 0 },
-      { assetId: 'street-tide-leafy-shrub', position: [-10, 0, 16], quarterTurns: 0 },
+      // The fence garden keeps its trough and stone in view through the rails; the shrub stands taller than
+      // the wall so it shows over the cap, as a garden behind a wall does.
+      { assetId: 'street-tide-flower-pot', position: [13, 0, 2], quarterTurns: 0 },
+      { assetId: 'street-tide-flower-pot', position: [37, 0, 10], quarterTurns: 1 },
+      { assetId: 'street-tide-flower-trough', position: [-11, 0, 30], quarterTurns: 1 },
+      { assetId: 'street-tide-rock-cluster', position: [2, 0, 28], quarterTurns: 1 },
+      { assetId: 'street-tide-leafy-shrub', position: [56, 0, 12], quarterTurns: 0 },
     ],
   },
 ];

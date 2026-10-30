@@ -212,3 +212,36 @@ The shell and window metadata are complete static assets, ready for their real c
   z 46..56; bramblecross x 30..64 z 76..84 and x 46..64 z 46..58, x 0..6 z 46..58; heatherstead x 0..24 z 58..64,
   x 56..64 z 48..59. Rejected: a full-width heatherstead back range (82% of the ground built over, so no garden)
   and a centred one (plan read like emberfold's).
+
+- **2026-10-30 — Lane HH03: manors and halls grow each family's own way.** Emberfold's manor raises a great
+  hall at the end of the axis: jettied on the garden and both flanks over a bressummer with joist ends,
+  close-studded, ridge 67 so a second gable rises behind the street gable, with a third and tallest west stack.
+  Its hall sets a lower chamber wing beside it (twin garden gables), crowns the great hall with a louvred lantern
+  and opens a hooded garden door that repeats the hut's street front. Bramblecross's manor north wing (ridge 53)
+  rides over the back range's ridge (50) and ends in a small gable on its far slope. A second stack stands at that
+  crossing, as at the front. Its hall adds a staggered west garden wing, whose ridge runs into the back range,
+  with the street porch turned to the meadow and an open garden door. Heatherstead's manor lays a third long
+  ridge across the back; the rear range's north face takes up the street's measure (dormer at x=50). The hall runs
+  it to the west lot line with the second dormer at x=16, as on the front, and sets a timber bay between them.
+  New grammar: `jetty`/`hollowJetty`, `attic` (clears a neighbour's roof out of a room's open roof), `meet`
+  (fills under a lower crossing roof so its slopes settle into valleys rather than floating), a facing-agnostic
+  `hood` and close-stud options on `studs`. `HearthHome.exits` lists garden doors; the weather test shuts every
+  door and the route test reaches each one. Manor/hall windows face only sides or the meadow, never land a later
+  tier builds on. Ground cover stays under 70% at every tier. Rejected: a full-width rear cross range for
+  Emberfold's hall (its plan read like Heatherstead's bar, and the room was only 2.25 m deep); a west-gable window
+  on Heatherstead's manor range (the hall extends over it); a loft light in the chamber gable (it cut through the
+  verge, which the weather test caught); upper-storey lights 8 cells tall under Emberfold's steep eave (the
+  outward-view test caught them; they're now squat jetty lights); flower troughs on walls two cells off the lot line.
+
+- **2026-10-30 — Lane HH04: no hidden geometry, one build per home.** Ordered composition left 5–47 source boxes per
+  model that never reach the finished home: corner posts buried in a joining wing's wall, the lowest gable course
+  inside its own roof slab, studs on a face that a later tier builds against, and carves of already-empty space.
+  `Plan.blueprint()` now `settle`s the list. A reverse pass keeps solids that no later box covers. A forward pass
+  over the survivors keeps carves that are the last to turn solid into air. Every cell's last changer survives, so
+  the raster is identical (cells, triangles and windows unchanged; a seeded overlapping-box test proves equality and
+  idempotence), with 2–7% fewer boxes. Patching each case at source was rejected: it would spread join knowledge
+  through every family. `createHearthHome` now returns the fifteen blueprints built at module load. The kingdom calls
+  it once per plot, so a town no longer rebuilds a home for every house. The import costs about 47 ms for all
+  fifteen on this host, settling included. New all-family tests: README budgets (≤2,000 boxes, ≤1M cells,
+  ≤64 windows); every box leaves a trace; window anchors never share glass; earlier anchors keep their order, so
+  the first (presence) window stays the same south-facing pane at every tier.

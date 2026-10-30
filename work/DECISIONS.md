@@ -67,3 +67,17 @@ other panes remain authored glass. This makes the promised first arrival literal
 town ripples on. The content bench explicitly lights every anchor to inspect placement, separate from the
 production presence policy. The designated anchor remains stable through home-tier growth like the other
 reserved anchors. No shared blueprint schema changes are required.
+
+
+## 2026-10-30 — Inhabited visits and explicit arrival replay
+
+A normal SIMULATED visit opens with the scenario's existing citizens present, through the same world reducer
+and window contract. Its camera and environmental animation remain live; it does not require a fixed capture
+time. “Let them in” explicitly resets that local scenario for the dark 0 → 1 named window → whole-town replay.
+Real Herald mode derives every presence from its configured source and never manufactures this simulated crowd.
+The designated one-person/one-window anchor remains; density comes from actual scenario presence and better
+frontages, not extra windows pretending to be citizens.
+
+Readiness means the complete geometry has rendered with initial published light from all three volumes.
+It does not require a live worker queue to become idle. Until loading completes, identical frames are skipped
+even without a fixed time; the first meaningful frame still renders before the public flag and loading gate change.

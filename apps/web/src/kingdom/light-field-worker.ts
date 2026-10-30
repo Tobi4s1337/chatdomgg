@@ -1,14 +1,15 @@
 import { VOXEL_METRES, VoxelBlueprintSchema, type Vec3 } from '@chatdom/shared';
 import type { WindowHouse } from '@chatdom/render';
-import { terrainHeight, type KingdomLayout } from '@chatdom/world';
+import { terrainHeight, settlementTerrainWorkspaceBytes, type KingdomLayout, type SettlementPlan } from '@chatdom/world';
 import { buildLightVolume, MAX_LIGHT_VOLUME_CELLS, type LightEmitter, type LightVolume } from '@chatdom/voxel';
 
 export const LIGHT_FIELD_SIZE: Vec3 = [128, 32, 128];
 export const LIGHT_FIELD_CELL = 0.5;
 export const LIGHT_FIELD_CELLS = 128 * 32 * 128;
 export const LIGHT_FIELD_BUDGET = 6 * 1024 * 1024;
+export type LightFieldLayout = KingdomLayout | SettlementPlan;
 
-export interface LightFieldOptions { readonly mode?: 'local' | 'kingdom' | 'beacon'; readonly position?: Vec3 }
+export interface LightFieldOptions { readonly mode?: 'local' | 'kingdom' | 'beacon'; readonly position?: Vec3; readonly bounds?: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number } }
 export interface LightFieldConfig {
   readonly mode: 'local' | 'kingdom' | 'beacon';
   readonly size: Vec3;
@@ -24,7 +25,7 @@ export interface LightFieldConfig {
  * surface-light band. The castle summit has no presence emitter. Larger tenure
  * layouts double cell size until they fit the same bounded workspace.
  */
-export function resolveLightFieldConfig(layout: KingdomLayout, options: LightFieldOptions = {}): LightFieldConfig {
+export function resolveLightFieldConfig(layout: LightFieldLayout, options: LightFieldOptions = {}): LightFieldConfig {
   const mode = options.mode ?? 'local';
   if (mode === 'local') return { mode, size: LIGHT_FIELD_SIZE, cellSize: LIGHT_FIELD_CELL, cells: LIGHT_FIELD_CELLS, origin: null, levelScale: 1 };
   if (mode === 'beacon') {
@@ -33,7 +34,7 @@ export function resolveLightFieldConfig(layout: KingdomLayout, options: LightFie
       origin: [Math.floor(options.position[0] / 2) * 2 - 32, Math.floor(options.position[1] / 2) * 2 - 40, Math.floor(options.position[2] / 2) * 2 - 32] };
   }
   if (mode !== 'kingdom') throw new Error('Unknown light field mode');
-  const { minX, maxX, minZ, maxZ } = layout.bounds;
+  const { minX, maxX, minZ, maxZ } = options.bounds ?? layout.bounds;
   if (![minX, maxX, minZ, maxZ].every(Number.isFinite) || minX >= maxX || minZ >= maxZ) throw new Error('Invalid kingdom light bounds');
   let cellSize = 2;
   for (;;) {
@@ -60,7 +61,7 @@ export interface LightFieldSolve {
   readonly emitters: readonly LightFieldEmitter[];
 }
 export type LightFieldRequest = LightFieldSolve | {
-  readonly kind: 'init'; readonly layout: KingdomLayout; readonly houses: readonly WindowHouse[]; readonly options?: LightFieldOptions;
+  readonly kind: 'init'; readonly layout: LightFieldLayout; readonly houses: readonly WindowHouse[]; readonly options?: LightFieldOptions;
 };
 export type LightFieldResponse = { readonly kind: 'ready' }
   | { readonly kind: 'volume'; readonly revision: number; readonly volume: SurfaceLightVolume; readonly occupancyBuilds: number; readonly solveMs: number }
@@ -177,7 +178,7 @@ function overlaps(min: Vec3, max: Vec3, origin: Vec3, config: LightFieldConfig):
  * Reusable worker-owned field workspace. A house's ordered carves affect only
  * its scratch shell; its final shell is unioned into terrain and other houses.
  */
-export function createLightFieldSolver(layout: KingdomLayout, houses: readonly WindowHouse[], options: LightFieldOptions = {}): {
+export function createLightFieldSolver(layout: LightFieldLayout, houses: readonly WindowHouse[], options: LightFieldOptions = {}): {
   solve(request: LightFieldSolve): { volume: SurfaceLightVolume; occupancyBuilds: number };
 } {
   const config = resolveLightFieldConfig(layout, options);
@@ -285,13 +286,48 @@ export function createLightFieldSolver(layout: KingdomLayout, houses: readonly W
       if (distance > cellSize * 2 || !clearProjection(emitter.position, axis, direction, distance)) return null;
       cell[axis] = cell[axis]! + direction;
       if (outside()) return null;
+      const position: [number, number, number] = [...emitter.position];
+      position[axis] = position[axis]! + direction * distance;
       if (!occupied()) {
-        const position: [number, number, number] = [...emitter.position];
-        position[axis] = position[axis]! + direction * distance;
         return { position, level };
+      }
+      // A low window can sit above real ground but below the top of its rounded
+      // two-metre terrain cell. After the same bounded outward escape, admit one
+      // upward cell only when terrain alone closes this cell, the entire bent
+      // ray is exact air, and the destination is genuinely unoccupied.
+      if (config.mode === 'kingdom' && axis !== 1 && terrainOnlyCell(cell, origin)) {
+        const upperY = origin[1] + (cell[1]! + 1) * cellSize + 1e-6;
+        const up = upperY - position[1];
+        if (up <= cellSize && distance + up <= cellSize * 2 && cell[1]! + 1 < size[1]
+          && !occupancy[cell[0]! + size[0] * (cell[1]! + 1 + size[1] * cell[2]!)]
+          && clearProjection(position, 1, 1, up)) {
+          position[1] = upperY;
+          return { position, level };
+        }
       }
     }
     return null;
+  }
+
+  /** Match rasterize's conservative terrain/ordered-box cells without another volume. */
+  function terrainOnlyCell(cell: readonly number[], origin: Vec3): boolean {
+    const x = cell[0]!, y = cell[1]!, z = cell[2]!, corner = x + (size[0] + 1) * z;
+    const min: Vec3 = [origin[0] + x * cellSize, origin[1] + y * cellSize, origin[2] + z * cellSize];
+    const max: Vec3 = [min[0] + cellSize, min[1] + cellSize, min[2] + cellSize];
+    const high = Math.max(cornerHeights[corner]!, cornerHeights[corner + 1]!, cornerHeights[corner + size[0] + 1]!,
+      cornerHeights[corner + size[0] + 2]!, terrainHeight(layout, min[0] + cellSize / 2, min[2] + cellSize / 2));
+    if (min[1] >= high) return false;
+    for (const house of geometry) {
+      if (house.min.some((value, axis) => value >= max[axis]! || house.max[axis]! <= min[axis]!)) continue;
+      let solid = false;
+      for (const box of house.boxes) {
+        if (box.solid) {
+          if (box.min.every((value, axis) => value < max[axis]! && box.max[axis]! > min[axis]!)) solid = true;
+        } else if (box.min.every((value, axis) => value <= min[axis]! && box.max[axis]! >= max[axis]!)) solid = false;
+      }
+      if (solid) return false;
+    }
+    return true;
   }
 
   return {
@@ -302,9 +338,10 @@ export function createLightFieldSolver(layout: KingdomLayout, houses: readonly W
         if (!Number.isInteger(emitter.level) || emitter.level < 0 || emitter.level > 15 || emitter.position.some(value => !Number.isFinite(value))) throw new Error('Invalid voxel light emitter');
       }
       if (!cachedOrigin || request.origin.some((value, axis) => value !== cachedOrigin![axis])) rasterize(request.origin);
-      const emitters = config.mode !== 'local'
-        ? request.emitters.map(emitter => projectEmitter(emitter, request.origin)).filter((emitter): emitter is LightEmitter => emitter !== null)
-        : request.emitters;
+      // Even half-metre cells can conservatively close an authored window recess.
+      // Every resolution uses the same bounded, exact-air outward projection.
+      const emitters = request.emitters.map(emitter => projectEmitter(emitter, request.origin))
+        .filter((emitter): emitter is LightEmitter => emitter !== null);
       const volume = buildLightVolume({ revision: request.revision, origin: request.origin, size, cellSize, occupancy, emitters });
       if (config.levelScale !== 1) for (let index = 0; index < volume.light.length; index++) volume.light[index] = Math.min(15, volume.light[index]! * config.levelScale);
       // Scratch replaces the caller-occupancy copy already counted by the voxel
@@ -312,7 +349,8 @@ export function createLightFieldSolver(layout: KingdomLayout, houses: readonly W
       const surfaceSamples = buildLightFieldSamples(size, occupancy, volume.light, cornerAir);
       // New worker reconstruction + the padded current CPU/GPU samples. The
       // raw result remains intact; no authoritative occupancy is transferred.
-      const estimatedPeakBytes = volume.estimatedPeakBytes + cornerHeights.byteLength + cornerAir.byteLength + surfaceSamples.byteLength + 2 * (surfaceSamples.byteLength - cells);
+      const terrainBytes = 'version' in layout && layout.version === 2 ? settlementTerrainWorkspaceBytes(layout) : 0;
+      const estimatedPeakBytes = volume.estimatedPeakBytes + cornerHeights.byteLength + cornerAir.byteLength + surfaceSamples.byteLength + 2 * (surfaceSamples.byteLength - cells) + terrainBytes;
       if (estimatedPeakBytes > LIGHT_FIELD_BUDGET) throw new Error('Light field exceeded its memory budget');
       return { volume: { ...volume, surfaceSamples, estimatedPeakBytes }, occupancyBuilds };
     },

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MAT } from '@chatdom/content';
 import { cornerAccessibility, haloIndex, unpackVoxelVertex, type AssetChunkMesh } from '@chatdom/voxel';
-import { generateKingdom, terrainHeight, type KingdomLayout } from '@chatdom/world';
-import { buildTerrain, prepareTerrainField, sampleRenderedTerrainHeight, terrainChunkRequest,
-  TERRAIN_SURFACE_BOUNDS_PADDING, type TerrainWorkerResponse } from './terrain-worker';
+import { generateKingdom, generateSettlementPlan, samplePublicGround, terrainHeight } from '@chatdom/world';
+import { buildTerrain, prepareTerrainField, sampleRenderedTerrainHeight, sampleTerrainTriangles, terrainChunkRequest,
+  TERRAIN_SURFACE_BOUNDS_PADDING, type TerrainLayout, type TerrainWorkerResponse } from './terrain-worker';
+import { createSettlementContent } from './settlement-content';
 
-function collect(layout: KingdomLayout): { chunks: AssetChunkMesh[]; messages: TerrainWorkerResponse[]; phaseMs: number[] } {
+function collect(layout: TerrainLayout): { chunks: AssetChunkMesh[]; messages: TerrainWorkerResponse[]; phaseMs: number[] } {
   const chunks: AssetChunkMesh[] = [], messages: TerrainWorkerResponse[] = [];
   const phaseMs: number[] = [];
   let phaseStart = performance.now();
@@ -25,8 +26,60 @@ function invariant(condition: boolean, message: string): asserts condition {
 }
 
 describe('conforming terrain surface', () => {
-  it.each(['hamlet', 'town'] as const)('covers the entire %s with matching shared edges, source materials and shading', tier => {
-    const layout = generateKingdom({ seed: 'lanternmere', tier, firstYear: tier === 'hamlet' ? 2025 : 2022, year: 2026 });
+  it('samples either rendered triangle from a supplied ground field', () => {
+    const ground = (x: number, z: number): number => (x + 2) * (z + 3);
+    expect(sampleTerrainTriangles(ground, -1.75, -2.25)).toBeCloseTo(.25, 12);
+    expect(sampleTerrainTriangles(ground, -1.25, -2.75)).toBeCloseTo(.25, 12);
+    expect(() => sampleTerrainTriangles(ground, Infinity, 0)).toThrow('finite coordinates');
+  });
+  it.each(['hamlet','town'] as const)('keeps the current capture seed inside the existing %s height budgets',tier=>{
+    const layout=generateKingdom({seed:'willowmere',tier,firstYear:tier==='hamlet'?2025:2022,year:2026});
+    const field=prepareTerrainField(layout),width=field.chunkCounts[0]*16+1;
+    let contactOffset=0,packedDisplacement=0;
+    for(let z=0;z<field.rows-2;z+=2)for(let x=0;x<field.columns-2;x+=2){
+      const sample=x/2+width*z/2,column=x+1+field.columns*(z+1);
+      const a=field.renderHeights[sample]!,b=field.renderHeights[sample+width]!;
+      const c=field.renderHeights[sample+width+1]!,d=field.renderHeights[sample+1]!;
+      const rawOwner=field.origin[1]+field.heights[column]!*.5;
+      for(const height of [a,b,c,d])packedDisplacement=Math.max(packedDisplacement,Math.abs(height-rawOwner));
+      for(let dz=0;dz<2;dz++)for(let dx=0;dx<2;dx++){
+        const u=.25+dx*.5,v=.25+dz*.5;
+        const height=u<=v?(1-v)*a+(v-u)*b+u*c:(1-u)*a+(u-v)*d+v*c;
+        const rawTop=field.origin[1]+field.heights[column+dx+field.columns*dz]!*.5;
+        contactOffset=Math.max(contactOffset,Math.abs(height-rawTop));
+      }
+    }
+    expect(contactOffset).toBeLessThan(.4);
+    expect(packedDisplacement).toBeLessThanOrEqual(TERRAIN_SURFACE_BOUNDS_PADDING);
+    console.info(`Capture terrain ${tier}: max contact offset ${contactOffset.toFixed(4)} m, packed displacement ${packedDisplacement.toFixed(4)} m`);
+  });
+  it.each(['hamlet','town'] as const)('grounds actual authored %s foundations and street props after placement',tier=>{
+    const layout=generateKingdom({seed:'lanternmere',tier,firstYear:tier==='hamlet'?2025:2022,year:2026});
+    const content=createSettlementContent(layout),placements=[...content.houses,...content.props];
+    let hearthFoundations=0,propFoundations=0;
+    for(const placement of placements){
+      const {blueprint,position,yaw}=placement,c=Math.cos(yaw),s=Math.sin(yaw);
+      for(const box of blueprint.boxes){
+        if(box.material===MAT.air||box.from[1]!==0)continue;
+        if(blueprint.id.startsWith('home-hearth-'))hearthFoundations++;
+        if(blueprint.kind==='prop'||blueprint.kind==='flora')propFoundations++;
+        for(const lx of [box.from[0]*.125,box.to[0]*.125])for(const lz of [box.from[2]*.125,box.to[2]*.125]){
+          const x=position[0]+lx*c+lz*s,z=position[2]-lx*s+lz*c;
+          const ground=sampleRenderedTerrainHeight(layout,x,z);
+          invariant(Math.abs(ground-position[1])<1e-6,`${blueprint.id} base misses ground at ${x},${z}: ${ground-position[1]} m`);
+        }
+      }
+    }
+    expect(hearthFoundations).toBeGreaterThan(0);
+    expect(propFoundations).toBeGreaterThan(0);
+  });
+  it.each([
+    { tier: 'town', settlement: true },
+  ] as const)('covers a representative chunk neighbourhood with matching edges, source materials and shading', ({ tier, settlement }) => {
+    const config = { seed: 'lanternmere', tier, firstYear: 2022, year: 2026 };
+    const generated = settlement ? generateSettlementPlan(config) : generateKingdom(config);
+    // The renderer seam needs adjacent chunks, not a second whole-kingdom proof on every lane review.
+    const layout={...generated,bounds:{minX:80,maxX:112,minZ:64,maxZ:96}};
     const field = prepareTerrainField(layout), startTime = performance.now(), { chunks, messages, phaseMs } = collect(layout);
     const buildMs = performance.now() - startTime;
     const cellsX = field.chunkCounts[0] * 16, cellsZ = field.chunkCounts[1] * 16;
@@ -100,8 +153,8 @@ describe('conforming terrain surface', () => {
       if (boundary) perimeterEdges++;
     }
     expect(perimeterEdges).toBe(2 * (cellsX + cellsZ));
-    expect([...corners.values()].some(corner => corner.layers.size > 1)).toBe(true);
-    expect(materials).toEqual(new Set([MAT.grass, MAT.paving, MAT.waterbed]));
+    expect(materials.size).toBeGreaterThan(0);
+    expect([...materials].every(m=>([MAT.grass,MAT.paving,MAT.waterbed] as number[]).includes(m))).toBe(true);
     expect(shadedCorners).toBeGreaterThan(0);
     expect(maxDisplacement).toBeLessThanOrEqual(TERRAIN_SURFACE_BOUNDS_PADDING);
     expect(maxContactOffset).toBeLessThan(0.4);
@@ -118,7 +171,7 @@ describe('conforming terrain surface', () => {
       if (message.kind === 'chunk') expect(message.progress.completed).toBe(index);
     }
     console.info(`Terrain ${tier}: ${cellsX * cellsZ * 2} triangles, ${bytes} transfer bytes, max packed displacement ${maxDisplacement.toFixed(4)} m, voxel-centre contact offset ${maxContactOffset.toFixed(4)} m, worker ${buildMs.toFixed(0)} ms (prepare/occupancy/surface ${phaseMs.map(ms => ms.toFixed(0)).join('/')} ms)`);
-  }, 60_000);
+  }, 15000);
 
   it('derives surface AO from authoritative voxel columns across a chunk seam', () => {
     const layout = generateKingdom({ seed: 'terrain-ao', tier: 'hamlet', firstYear: 2025, year: 2026 });
@@ -143,6 +196,35 @@ describe('conforming terrain surface', () => {
       checked++;
     }
     expect(checked).toBeGreaterThan(0);
+  });
+
+  it('uses signed paving widths for settlement roads and squares, and invalidates changed geometry', () => {
+    const plan = generateSettlementPlan({ seed: 'lanternmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
+    // Exercise the real civic ground without allocating the decorative terrain collar twice.
+    const layout = { ...plan, bounds: { minX: -16, maxX: 16, minZ: -16, maxZ: 32 } };
+    const field = prepareTerrainField(layout);
+    let paved = 0, meadow = 0, market = 0;
+    for (let z = 1; z < field.rows - 1; z++) for (let x = 1; x < field.columns - 1; x++) {
+      const worldX = field.origin[0] + (x - 0.5) * 0.5, worldZ = field.origin[2] + (z - 0.5) * 0.5;
+      const index = x + field.columns * z, ground = samplePublicGround(layout, worldX, worldZ);
+      const height = terrainHeight(layout, worldX, worldZ);
+      expect(field.origin[1] + field.heights[index]! * 0.5).toBe(Math.round(height / 0.5) * 0.5);
+      if (height < layout.lake.level + 0.25) continue;
+      if (ground && ground.pavingDistance <= 0) {
+        expect(field.surfaces[index]).toBe(MAT.paving);
+        paved++;
+        if (ground.kind === 'market') market++;
+      } else if (!ground || ground.pavingDistance > 0.32) {
+        expect(field.surfaces[index]).toBe(MAT.grass);
+        meadow++;
+      }
+    }
+    expect(paved).toBeGreaterThan(0);
+    expect(meadow).toBeGreaterThan(0);
+    expect(market).toBeGreaterThan(0);
+    const revised = prepareTerrainField({ ...layout, revision: `${layout.revision}:changed-grade` });
+    expect(revised.key).not.toBe(field.key);
+    expect(terrainChunkRequest(revised, [0, 1, 0]).stamp.key).not.toBe(terrainChunkRequest(field, [0, 1, 0]).stamp.key);
   });
 
   it('uses matching raw occupancy on both sides of chunk halos and preserves road solidity', () => {

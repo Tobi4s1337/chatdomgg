@@ -1,14 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StyleIdSchema, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
-import { generateKingdom } from '@chatdom/world';
+import { createCastlePlan, generateKingdom, generateSettlementPlan, terrainHeight } from '@chatdom/world';
 import { createWindowLights, type WindowHouse } from '@chatdom/render';
-import { createHome, createCastle, CASTLE_BEACON_ANCHOR_METRES, MATERIALS } from '@chatdom/content';
+import { createHome, createHearthHome, createCastle, CASTLE_BEACON_ANCHOR_METRES, MATERIALS } from '@chatdom/content';
 import { PRESENCE_FIXTURES } from '@chatdom/shared/world-fixtures';
 import { Scene } from 'three';
 import { createVoxelMaterial } from '@chatdom/render';
 import { sampleLightVolume } from '@chatdom/voxel';
 import { createLightField, type LightFieldOptions } from './light-field';
-import { createSettlementContent } from './settlement-content';
+import { createSettlementContent, placeSettlementContent } from './settlement-content';
+import { inhabitedLightBounds } from './light-bounds';
+import { createCastleContent } from './castle-content';
 import {
   bindLightFieldWorker, compileLightHouses, createLightFieldSolver, LIGHT_FIELD_BUDGET, LIGHT_FIELD_CELLS,
   resolveLightFieldConfig, buildLightFieldSamples, type SurfaceLightVolume, type LightFieldRequest, type LightFieldResponse, type LightFieldSolve,
@@ -32,6 +34,110 @@ function request(revision = 1, nextOrigin = origin): LightFieldSolve {
 }
 
 describe('authoritative worker light geometry', () => {
+  it('uses settlement civic ground for local occupancy and removes light without rebuilding it', () => {
+    const hamlet = generateSettlementPlan({ seed: 'lanternmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
+    const solver = createLightFieldSolver(hamlet, []);
+    const above: Vec3 = [0.25, hamlet.market.elevation + 1.25, 10.25];
+    const below: Vec3 = [0.25, hamlet.market.elevation - 0.25, 10.25];
+    const lit = solver.solve({ ...request(), emitters: [{ position: above, level: 15 }] });
+    expect(sampleLightVolume(lit.volume, above)).toBe(15);
+    expect(lit.volume.visited).toBeGreaterThan(0);
+    const buried = solver.solve({ ...request(2), emitters: [{ position: below, level: 15 }] });
+    expect(buried.volume.visited).toBe(0);
+    expect(sampleLightVolume(buried.volume, below)).toBe(0);
+    expect(buried.occupancyBuilds).toBe(1);
+  });
+
+  it('lights each settlement window independently and keeps all three real fields within budget', () => {
+    const town = generateSettlementPlan({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
+    const { houses, props } = placeSettlementContent(town.homes, (x, z) => terrainHeight(town, x, z));
+    const { buildings, beaconPosition } = createCastleContent(town.castle);
+    const blockers = [...houses, ...buildings];
+    const options = { mode: 'kingdom', bounds: inhabitedLightBounds(town.homes) } as const;
+    const config = resolveLightFieldConfig(town, options);
+    expect(config.cellSize).toBe(2);
+    const solver = createLightFieldSolver(town, blockers, options);
+    const windows = createWindowLights(new Scene(), houses);
+    try {
+      windows.setFrame({ ...PRESENCE_FIXTURES.public, asOf: PRESENCE_FIXTURES.public.asOf + 1000,
+        windows: town.homes.map(plot => ({ slot: plot.slot, present: true, publicName: null, since: PRESENCE_FIXTURES.public.asOf })) });
+      const sources = windows.getSources();
+      expect(sources).toHaveLength(240);
+      const suppressed: number[] = [];
+      for (const [index, source] of sources.entries()) {
+        const result = solver.solve({ kind: 'solve', revision: index + 1, origin: config.origin!,
+          emitters: [{ position: source.position, normal: source.normal, level: Math.round(source.strength * 15) }] });
+        if (!result.volume.visited) suppressed.push(source.slot);
+        expect(result.occupancyBuilds).toBe(1);
+      }
+      const far = solver.solve({ kind: 'solve', revision: sources.length + 1, origin: config.origin!,
+        emitters: sources.map(source => ({ position: source.position, normal: source.normal, level: Math.round(source.strength * 15) })) }).volume;
+      const local = createLightFieldSolver(town, [...blockers, ...props.map(prop => ({ ...prop, slot: 65534 }))])
+        .solve({ kind: 'solve', revision: 1, origin, emitters: [] }).volume;
+      const beaconOptions = { mode: 'beacon', position: beaconPosition } as const;
+      const beacon = createLightFieldSolver(town, blockers, beaconOptions).solve({ kind: 'solve', revision: 1,
+        origin: resolveLightFieldConfig(town, beaconOptions).origin!,
+        emitters: [{ position: beaconPosition, normal: [0, 1, 0], level: 15 }] }).volume;
+      expect(beacon.visited).toBeGreaterThan(0);
+      expect(local.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
+      expect(far.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
+      expect(local.estimatedPeakBytes + far.estimatedPeakBytes + beacon.estimatedPeakBytes).toBeLessThan(12 * 1024 * 1024);
+      const removed = solver.solve({ kind: 'solve', revision: sources.length + 2, origin: config.origin!, emitters: [] });
+      expect(removed.volume.visited).toBe(0);
+      expect(removed.occupancyBuilds).toBe(1);
+      expect(suppressed).toEqual([]);
+    } finally { windows.dispose(); }
+  }, 120_000);
+
+  it('lights the authored compound beacon within the combined three-field budget', () => {
+    const town = generateKingdom({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
+    const { houses, props } = createSettlementContent(town);
+    const { buildings, beaconPosition } = createCastleContent(createCastlePlan());
+    const blockers = [...houses, ...buildings];
+    const local = createLightFieldSolver(town, [...blockers, ...props.map(prop => ({ ...prop, slot: 65534 }))])
+      .solve({ kind: 'solve', revision: 1, origin, emitters: [] }).volume;
+    const farOptions = { mode: 'kingdom', bounds: inhabitedLightBounds(town.homes) } as const;
+    const far = createLightFieldSolver(town, blockers, farOptions).solve({ kind: 'solve', revision: 1,
+      origin: resolveLightFieldConfig(town, farOptions).origin!, emitters: [] }).volume;
+    const beaconOptions = { mode: 'beacon', position: beaconPosition } as const;
+    const solver = createLightFieldSolver(town, blockers, beaconOptions);
+    const request = { kind: 'solve' as const, revision: 1, origin: resolveLightFieldConfig(town, beaconOptions).origin!,
+      emitters: [{ position: beaconPosition, normal: [0, 1, 0] as Vec3, level: 15 }] };
+    const lit = solver.solve(request).volume;
+    expect(lit.visited).toBeGreaterThan(0);
+    // The cap occupies the coarse source cell; projection starts the flood in
+    // the first exact-air cell above it rather than lighting through masonry.
+    expect(sampleLightVolume(lit, [beaconPosition[0], beaconPosition[1] + 2, beaconPosition[2]])).toBe(15);
+    expect(local.estimatedPeakBytes + far.estimatedPeakBytes + lit.estimatedPeakBytes).toBeLessThan(12 * 1024 * 1024);
+    const removed = solver.solve({ ...request, revision: 2, emitters: [] });
+    expect(removed.volume.visited).toBe(0);
+    expect(removed.occupancyBuilds).toBe(1);
+  }, 20_000); // The shared CPU host may be rendering another lane; this is not a timing assertion.
+
+  it('projects each of the 240 inhabited town windows independently into the distant field', () => {
+    const town = generateKingdom({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
+    const { houses } = createSettlementContent(town);
+    const lights = createWindowLights(new Scene(), houses);
+    try {
+      lights.setFrame({ ...PRESENCE_FIXTURES.public, asOf: PRESENCE_FIXTURES.public.asOf + 1000,
+        windows: town.homes.map(plot => ({ slot: plot.slot, present: true, publicName: null, since: PRESENCE_FIXTURES.public.asOf })) });
+      const sources = lights.getSources();
+      expect(sources).toHaveLength(240);
+      const options = { mode: 'kingdom', bounds: inhabitedLightBounds(town.homes) } as const;
+      const config = resolveLightFieldConfig(town, options);
+      expect(config.cellSize).toBe(2);
+      const castle: WindowHouse = { slot: 65534, blueprint: createCastle('tide'), position: [town.castle[0] - 16, town.castle[1], town.castle[2] - 16], yaw: 0 };
+      const solver = createLightFieldSolver(town, [...houses, castle], options);
+      const suppressed: number[] = [];
+      for (const [index, source] of sources.entries()) {
+        const result = solver.solve({ kind: 'solve', revision: index + 1, origin: config.origin!,
+          emitters: [{ position: source.position, normal: source.normal, level: Math.round(source.strength * 15) }] });
+        if (!result.volume.visited) suppressed.push(source.slot);
+      }
+      expect(suppressed).toEqual([]);
+    } finally { lights.dispose(); }
+  }, 120_000);
+
   it('blocks a 0.125 metre wall on the half-metre field and opens only fully enclosing air carves', () => {
     const closed = createLightFieldSolver(layout, [house()]).solve(request()).volume;
     expect(sampleLightVolume(closed, source)).toBe(15);
@@ -53,6 +159,73 @@ describe('authoritative worker light geometry', () => {
     const belowGround: Vec3 = [0.25, 8.75, 0.25];
     const ground = createLightFieldSolver(layout, [airHouse]).solve({ ...request(), emitters: [{ position: belowGround, level: 15 }] }).volume;
     expect(sampleLightVolume(ground, belowGround)).toBe(0);
+  });
+
+  it('projects a local source through exact air but refuses thin, later and restored walls', () => {
+    const buried = { position: [0.25, 10.25, 0.25] as Vec3, level: 15, normal: [1, 0, 0] as Vec3 };
+    const solve = (houses: readonly WindowHouse[], emitter = buried) => createLightFieldSolver(layout, houses)
+      .solve({ ...request(), emitters: [emitter] }).volume;
+    const opened = solve([house()]);
+    expect(sampleLightVolume(opened, buried.position)).toBe(0);
+    expect(sampleLightVolume(opened, [0.51, 10.25, 0.25])).toBe(15);
+    expect(sampleLightVolume(opened, source)).toBe(0);
+    expect(opened.visited).toBeGreaterThan(500);
+    const noNormal = createLightFieldSolver(layout, [house()]).solve({ ...request(), emitters: [{ position: buried.position, level: 15 }] }).volume;
+    expect(noNormal.visited).toBe(0);
+    expect(solve([house()], { ...buried, position: [0.0625, 10.25, 0.25] }).visited).toBe(0);
+    for (const x of [0.375, 0.875]) {
+      // The latter wall is in the second occupied cell, beyond the first boundary.
+      const wall: WindowHouse = { ...house(), position: [x, 6, -16] };
+      expect(solve([house(), wall]).visited).toBe(0);
+      const carved = { ...wall, blueprint: blueprint([wallBox, { ...wallBox, material: 0 }]) };
+      const throughCarve = solve([house(), carved]);
+      expect(Math.max(...[0.51, 1.01].map(x => sampleLightVolume(throughCarve, [x, 10.25, 0.25])))).toBe(15);
+      const restored = { ...wall, blueprint: blueprint([{ ...wallBox, material: 0 }, wallBox]) };
+      expect(solve([house(), restored]).visited).toBe(0);
+    }
+    expect(() => solve([house()], { ...buried, normal: [0.5, 0, 0.5] })).toThrow('cardinal');
+  });
+
+  it('limits local projection to two occupied cells even when the longer ray is exact air', () => {
+    const buried = { position: [0.25, 10.25, 0.25] as Vec3, level: 15, normal: [1, 0, 0] as Vec3 };
+    const belowBeam = (length: number): WindowHouse => ({ ...house(), blueprint: {
+      ...blueprint([{ from: [0, 35, 128], to: [length, 36, 132], material: 3 }]), size: [12, 128, 256],
+    } });
+    const projected = createLightFieldSolver(layout, [belowBeam(8)]).solve({ ...request(), emitters: [buried] }).volume;
+    expect(sampleLightVolume(projected, [1.01, 10.25, 0.25])).toBe(15);
+    const beyondBound = createLightFieldSolver(layout, [belowBeam(12)]).solve({ ...request(), emitters: [buried] }).volume;
+    expect(beyondBound.visited).toBe(0);
+  });
+
+  const hearthWindows = (['hut', 'cottage', 'house', 'manor', 'hall'] as const).flatMap(tier => ([0, 1, 2] as const)
+    .flatMap(variant => [0, 1, 2, 3].map(turn => ({ tier, variant, turn }))));
+  it.each(hearthWindows)('lights the authored first Hearth window for $tier/$variant at turn $turn and clears it completely', ({ tier, variant, turn }) => {
+    const positions: Vec3[] = [[-4,9,-16],[-16,9,4],[4,9,16],[16,9,-4]];
+    const home: WindowHouse = { slot: 0, blueprint: createHearthHome(tier, variant), position: positions[turn]!, yaw: turn * Math.PI / 2 };
+    const windows = createWindowLights(new Scene(), [home]);
+    try {
+      windows.setFrame({ ...PRESENCE_FIXTURES.public, asOf: PRESENCE_FIXTURES.public.asOf + 1000 });
+      expect(windows.getSources()).toHaveLength(1);
+      const window = windows.getSources()[0]!;
+      const emitter = { position: window.position, normal: window.normal, level: Math.round(window.strength * 15) };
+      const solver = createLightFieldSolver(layout, [home]);
+      const unprojected = solver.solve({ ...request(), emitters: [{ position: emitter.position, level: emitter.level }] }).volume;
+      const lit = solver.solve({ ...request(2), emitters: [emitter] }).volume;
+      const exterior = [0, 0.25, 0.5, 0.75, 1].map(distance => sampleLightVolume(lit,
+        window.position.map((value, axis) => value + window.normal[axis]! * distance) as unknown as Vec3));
+      expect(Math.max(...exterior)).toBe(15);
+      expect(lit.visited).toBeGreaterThan(500);
+      expect(lit.visited).toBeGreaterThanOrEqual(unprojected.visited);
+      // Emberfold and Bramblecross expose the integration regression: their
+      // real-air source sits in a conservatively occupied half-metre facade cell.
+      if (variant !== 2) expect(unprojected.visited).toBe(0);
+      expect(lit.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
+      const removed = solver.solve({ ...request(3), emitters: [] });
+      expect(removed.volume.visited).toBe(0);
+      expect(removed.volume.light.every(level => level === 0)).toBe(true);
+      expect(removed.volume.surfaceSamples.every(value => (value & 15) === 0)).toBe(true);
+      expect(removed.occupancyBuilds).toBe(1);
+    } finally { windows.dispose(); }
   });
 
   it('uses exact cardinal transforms and rejects unsupported arbitrary yaw', () => {
@@ -122,6 +295,31 @@ describe('authoritative worker light geometry', () => {
 });
 
 describe('bounded kingdom light field', () => {
+  it('escapes only terrain quantization above low windows, with exact roof and wall checks', () => {
+    const lowGround = { ...layout, homes: [], quarters: layout.quarters.map(quarter => ({ ...quarter, elevation: 8.125 })) };
+    const options = { mode: 'kingdom', bounds: { minX: -16, maxX: 16, minZ: -16, maxZ: 16 } } as const;
+    const config = resolveLightFieldConfig(lowGround, options);
+    const position: Vec3 = [1, 9.875, 1], normal: Vec3 = [1, 0, 0];
+    const job = { kind: 'solve' as const, revision: 1, origin: config.origin!, emitters: [{ position, normal, level: 15 }] };
+    const solve = (blockers: readonly WindowHouse[], next: LightFieldSolve = job) => createLightFieldSolver(lowGround, blockers, options).solve(next).volume;
+    const lit = solve([]);
+    expect(lit.visited).toBeGreaterThan(0);
+    expect(sampleLightVolume(lit, [2.000001, 10.000001, 1])).toBe(15);
+    expect(sampleLightVolume(lit, position)).toBe(0);
+    const solid = (boxes: VoxelBlueprint['boxes']): WindowHouse => ({ slot: 0, position: [-4, 8.125, -4], yaw: 0,
+      blueprint: { ...blueprint(boxes), size: [128, 128, 128] } });
+    const roof = solid([{ from: [0, 15, 0], to: [128, 16, 128], material: 3 }]);
+    const wall = solid([{ from: [44, 0, 0], to: [45, 128, 128], material: 3 }]);
+    expect(solve([roof]).visited).toBe(0);
+    expect(solve([wall]).visited).toBe(0);
+    const shortRoof = solid([{ from: [48, 15, 0], to: [64, 16, 128], material: 3 }]);
+    // Clearing this roof's far end plus the upward step exceeds the original
+    // two-cell ray length, even though each individual segment would be clear.
+    expect(solve([shortRoof], { ...job, emitters: [{ position: [0.001, 9.875, 1], normal, level: 15 }] }).visited).toBe(0);
+    expect(solve([], { ...job, emitters: [{ position: [1, 8, 1], normal, level: 15 }] }).visited).toBe(0);
+    expect(solve([], { ...job, emitters: [{ position, level: 15 }] }).visited).toBe(0);
+  });
+
   const options = { mode: 'kingdom' } as const;
   const config = resolveLightFieldConfig(layout, options);
   const kingdomOrigin = config.origin!;
@@ -218,7 +416,14 @@ describe('bounded kingdom light field', () => {
       expect(volume.light.length).toBe(503_200);
       expect(volume.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
       const near = createLightFieldSolver(town, localBlockers).solve({ kind: 'solve', revision: 1, origin, emitters: [] }).volume;
-      expect(volume.estimatedPeakBytes + near.estimatedPeakBytes).toBeLessThan(12 * 1024 * 1024);
+      const castleOrigin: Vec3 = [town.castle[0] - 16, town.castle[1], town.castle[2] - 16];
+      const beaconPosition: Vec3 = [castleOrigin[0] + CASTLE_BEACON_ANCHOR_METRES[0], castleOrigin[1] + CASTLE_BEACON_ANCHOR_METRES[1], castleOrigin[2] + CASTLE_BEACON_ANCHOR_METRES[2]];
+      const beaconOptions = { mode: 'beacon', position: beaconPosition } as const;
+      const castle: WindowHouse = { slot: 65534, blueprint: createCastle('tide'), position: castleOrigin, yaw: 0 };
+      const beacon = createLightFieldSolver(town, [...homes, castle], beaconOptions).solve({
+        kind: 'solve', revision: 1, origin: resolveLightFieldConfig(town, beaconOptions).origin!, emitters: [],
+      }).volume;
+      expect(volume.estimatedPeakBytes + near.estimatedPeakBytes + beacon.estimatedPeakBytes).toBeLessThan(12 * 1024 * 1024);
       for (const quarter of town.quarters) {
         const slots = new Set(town.homes.filter(plot => plot.quarterYear === quarter.year).map(plot => plot.slot));
         const quarterSources = sources.filter(source => slots.has(source.slot));
@@ -374,6 +579,39 @@ function setup(onVolume = vi.fn(), onError = vi.fn(), options: LightFieldOptions
 describe('dedicated light worker scheduling', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
+  it('hands a settlement snapshot and explicit inhabited bounds to the worker', () => {
+    const hamlet = generateSettlementPlan({ seed: 'lanternmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
+    const bounds = inhabitedLightBounds(hamlet.homes);
+    ControlledWorker.instances = [];
+    vi.stubGlobal('Worker', ControlledWorker);
+    const onVolume = vi.fn(), field = createLightField(hamlet, [], onVolume, undefined, { mode: 'kingdom', bounds });
+    const worker = ControlledWorker.instances[0]!;
+    expect(worker.messages[0]).toMatchObject({ layout: { version: 2, revision: hamlet.revision }, options: { mode: 'kingdom', bounds } });
+    worker.ready();
+    field.update([0, 0, 0], []);
+    const request = worker.latest();
+    expect(request.origin).toEqual(resolveLightFieldConfig(hamlet, { mode: 'kingdom', bounds }).origin);
+    worker.respond(worker.result(request));
+    expect(onVolume).toHaveBeenCalledOnce();
+    expect(field.stats.failed).toBe(false);
+    field.dispose();
+  });
+
+  it('sends the same explicit inhabited domain to the worker and accepts its result', () => {
+    const bounds = { minX: -40, maxX: 80, minZ: -30, maxZ: 90 };
+    const { field, worker, onVolume } = setup(vi.fn(), vi.fn(), { mode: 'kingdom', bounds });
+    expect(worker.messages[0]).toMatchObject({ options: { mode: 'kingdom', bounds } });
+    bounds.minX = -400;
+    worker.ready();
+    field.update([0, 0, 0], []);
+    const request = worker.latest();
+    expect(request.origin).toEqual([-40, -2, -30]);
+    worker.respond(worker.result(request));
+    expect(onVolume).toHaveBeenCalledOnce();
+    expect(field.stats.failed).toBe(false);
+    field.dispose();
+  });
+
   it('keeps kingdom bounds fixed during camera travel and snapshots normals with quantized pending revisions', () => {
     const { field, worker, onVolume } = setup(vi.fn(), vi.fn(), { mode: 'kingdom' });
     const normal: [number, number, number] = [1, 0, 0];
@@ -457,12 +695,16 @@ describe('dedicated light worker scheduling', () => {
     const { field, worker, onVolume } = setup();
     worker.ready();
     const position: [number, number, number] = [...source];
-    field.update([0, 0, 0], [{ position, strength: 1 }]);
+    const normal: [number, number, number] = [1, 0, 0];
+    field.update([0, 0, 0], [{ position, normal, strength: 1 }]);
     const initial = worker.latest();
+    expect(initial.emitters[0]?.normal).toEqual(normal);
     worker.respond(worker.result(initial));
-    field.update([8, 0, 0], [{ position, strength: 0.5 }]);
+    field.update([8, 0, 0], [{ position, normal, strength: 0.5 }]);
     position[0] = 999;
+    normal[0] = -1;
     expect(worker.latest().emitters[0]?.position[0]).toBe(source[0]);
+    expect(worker.latest().emitters[0]?.normal).toEqual([1, 0, 0]);
     expect(onVolume).toHaveBeenCalledOnce();
     field.dispose();
   });
