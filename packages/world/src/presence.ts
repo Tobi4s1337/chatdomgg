@@ -151,8 +151,8 @@ function restricted(person: PersonPresence, at: number): boolean {
   return person.restriction !== null && (person.restriction.until === null || at < person.restriction.until);
 }
 
-function activeLeases(person: PersonPresence, now: number, since = 0): Lease[] {
-  return SOURCES.flatMap(source => {
+function activeLeases(person: PersonPresence, now: number, since = 0, sources: readonly PresenceSource[] = SOURCES): Lease[] {
+  return sources.flatMap(source => {
     const lease = person.leases[source];
     return lease && lease.observedAt <= now && lease.observedAt >= since && lease.expiresAt > now ? [lease] : [];
   });
@@ -165,8 +165,11 @@ function streamConnection(state: PresenceState, now: number): KingdomPresenceFra
 }
 
 function personPresent(state: PresenceState, person: PersonPresence, now: number): boolean {
-  return streamConnection(state, now) === 'fresh' && !restricted(person, now)
-    && activeLeases(person, now, state.stream!.startedAt).length > 0;
+  const connection = streamConnection(state, now);
+  if (connection === 'stale' || restricted(person, now)) return false;
+  // The castle follows the broadcast. A direct visit/message can still keep a home warm after it rests.
+  const sources = connection === 'offline' ? SOURCES.filter(source => source !== 'chatters') : SOURCES;
+  return activeLeases(person, now, state.stream!.startedAt, sources).length > 0;
 }
 
 function remember(recent: RecentInputs, id: string): RecentInputs {
@@ -223,7 +226,7 @@ export function applyPresence(state: PresenceState, input: PresenceInput, now: n
   if (event.kind === 'stream') {
     const prior = state.stream;
     if (prior && (event.observedAt < prior.observedAt || (event.observedAt === prior.observedAt && (event.live || !prior.live)))) return next;
-    const sameSession = prior?.live && event.live && prior.sessionId === event.sessionId;
+    const sameSession = prior !== null && prior.live === event.live && prior.sessionId === event.sessionId;
     return {
       ...next,
       stream: {
@@ -289,7 +292,7 @@ export function applyPresence(state: PresenceState, input: PresenceInput, now: n
       sourceTimes: { ...person.sourceTimes, [event.source]: event.observedAt },
       publicName: updatesDisclosure ? (observed.disclosure === 'named' ? observed.displayName : null) : person.publicName,
       disclosureAt: updatesDisclosure ? event.observedAt : person.disclosureAt,
-      since: activeLeases(person, event.observedAt).length ? person.since : event.observedAt,
+      since: personPresent(state, person, event.observedAt) ? person.since : event.observedAt,
     });
   }
   return { ...next, people: people.finish(), rosterThrough: event.coverage === 'complete' ? event.observedAt : state.rosterThrough };

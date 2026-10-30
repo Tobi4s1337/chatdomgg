@@ -46,7 +46,7 @@ export default function StreamView() {
 
   const mount = createSceneMount({
     host: () => picture,
-    settings: () => ({ tier: params.tier, seed: params.seed, hour, time: params.time, camera: camera(), source: params.source, presenceOrigin: params.presenceOrigin }),
+    settings: () => ({ tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId?{kingdomId:params.kingdomId}:{}), ...(params.focusSlot!==undefined?{focusSlot:params.focusSlot}:{}), hour, time: params.time, camera: camera(), source: params.source, presenceOrigin: params.presenceOrigin }),
     onPhase: next => {
       setPhase(next);
       if (next === 'ready') attempts = 0;

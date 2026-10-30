@@ -2,3 +2,5 @@
 .kingdom:has(.forge-panel) .citizen-speech,.kingdom:has(.forge-panel) .window-names{display:none}
 
 .forge-origin{font:italic 11px/1.4 Georgia,serif;color:#dcc08d;margin:12px 0 0}
+
+.kingdom[data-forge-phase="landed"] .citizen-speech{display:block}

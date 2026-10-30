@@ -272,7 +272,7 @@ Keep tests focused on the actual boundaries below; do not grow an exhaustive aud
    pending. Assert public JSON/HTML/image never release hidden stamps/counts, the late result is discarded, all
    that person's kingdom cards observe the new person revision, and a late client reply cannot change another
    subject. Include the denied owner mutation in this same scenario.
-2. A real HTTP share-flow test starts the owned handler with a fresh temporary SIMULATED file repository: GET the
+2. A real HTTP share-flow in the owned capture runner starts the owned handler with a fresh temporary SIMULATED file repository: GET the
    signed-out stable URL and parse server metadata; GET its 1200×630 PNG with a visible SIMULATED label; POST a
    judged guestbook entry as an authenticated permitted fixture writer; retry with the same command ID; restart/
    reload the repository and observe exactly one accepted entry. A denied/unjudged request never appears publicly.
@@ -281,8 +281,7 @@ Keep tests focused on the actual boundaries below; do not grow an exhaustive aud
 Provide `node apps/web/src/citizen-card/capture.mjs`, acquiring
 `packages/testing/capture-lock.mjs` before its owned preview/server/browser and releasing after all close. Server
 PNG rendering and capture share the same controlled Chromium during this proof, or run serially under that lock;
-never start a second independent Chromium beside another lane's capture. Any HTTP test invoking the actual PNG
-renderer also acquires that lock; reuse the test-owned browser rather than launching another one. Follow `$look`
+never start a second independent Chromium beside another lane's capture. Keep Chromium-backed HTTP/PNG work in the owned capture runner, outside Vitest; focused unit tests use injected renderers. Reuse that runner’s browser rather than launching another one. Follow `$look`
 Chrome/SwiftShader flags.
 Use deterministic labelled fixtures, await fonts/images and meaningful-frame `window.__chatdomReady`, not a fixed
 sleep. Store under `shots/citizen-card/` and record exact paths/ports. Exercise product exports, not parallel mocks.
