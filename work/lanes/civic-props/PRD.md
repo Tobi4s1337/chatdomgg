@@ -18,7 +18,7 @@ runs `pnpm verify` at integration. Do not claim geometry delivers runtime seatin
 
 ## Tasks
 
-- [ ] **CP01 — The crossing and welcome arch make the first visible civic kit** · evidence: four models + dusk angles.
+- [x] **CP01 — The crossing and welcome arch make the first visible civic kit** · evidence: four models + dusk angles.
   Create the entry/factory, complete ten-row `CIVIC_MANIFEST`, owned integration README and a nonempty finished
   subset `BLUEPRINTS`. Build footbridge and ceremonial gateway in Hearth/Tide, largest silhouette first. Give
   bridge real ramps/landings and the arch its full open passage. Prove support/clearance with production occupancy.
