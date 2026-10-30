@@ -59,3 +59,11 @@ Atlas's historical Surveyor notes still need fresh observation before they can b
 
 - **First interchange frozen after review:** identity/event primitives and Atlas interchange v1 only, after independent Astra high review and 22 tests. New Atlas binary/sidecar formats are our contract, not existing Surveyor endpoints. Exporter visibility/tombstone/atomicity checks remain publication gates.
 - **Survey preview:** real observations may be drawn on a labelled immutable draft while edition founding age/taxonomy/founder gates remain unmet. The existing collector is read-only; a new adapter writes only its owned derived store.
+
+## 2026-10-30 — One citizen, one presence window
+
+The ordered first window anchor of each home is its citizen's presence window. It lights and names that person;
+other panes remain authored glass. This makes the promised first arrival literally one warm window before the
+town ripples on. The content bench explicitly lights every anchor to inspect placement, separate from the
+production presence policy. The designated anchor remains stable through home-tier growth like the other
+reserved anchors. No shared blueprint schema changes are required.

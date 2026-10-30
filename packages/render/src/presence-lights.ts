@@ -18,9 +18,10 @@ export function windowLodCentre(centre: Vec3, facing: VoxelBlueprint['windows'][
 }
 
 /** Windows are independent of the voxel mesh. A single texture carries presence for every plot. */
-export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHouse[]): {
+export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHouse[], options: { allWindows?: boolean } = {}): {
   setFrame(frame: KingdomPresenceFrame): void;
   setLod(slot: number, factor: LodFactor): void;
+  setDetail(slot: number, from: LodFactor, to: LodFactor, progress: number): void;
   update(elapsedSeconds: number, hour: number): void;
   getSources(): readonly WindowSource[];
   clear(): void;
@@ -41,13 +42,15 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   const haloTransforms: THREE.Matrix4[] = [];
   const placements: WindowPlacement[] = [];
   const slotIndices = new Map<number, number[]>();
-  const slotLods = new Map<number, LodFactor>();
+  const slotDetails = new Map<number, { from: LodFactor; to: LodFactor; progress: number }>();
   const namedSlots = new Set<number>();
   const direction = { north: Math.PI, east: Math.PI / 2, south: 0, west: -Math.PI / 2 } as const;
   for (const house of houses) {
     if (!Number.isInteger(house.slot) || house.slot < 0 || house.slot > 65534) throw new Error('Invalid window slot');
     if (!states.has(house.slot)) states.set(house.slot, { value: 0, target: 0, name: null, initialized: false });
-    for (const window of house.blueprint.windows) {
+    // The first authored window is the citizen's presence light; other anchors
+    // remain available to content inspection without implying extra people.
+    for (const window of options.allWindows ? house.blueprint.windows : house.blueprint.windows.slice(0, 1)) {
       const angle = direction[window.facing] + house.yaw;
       const normal = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
       const local = new THREE.Vector3(...window.centre).multiplyScalar(VOXEL_METRES.build).applyAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw);
@@ -62,10 +65,12 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       const indices = slotIndices.get(house.slot) ?? [];
       indices.push(index);
       slotIndices.set(house.slot, indices);
-      slotLods.set(house.slot, 1);
-      transforms.push(new THREE.Matrix4().compose(centre, rotation, new THREE.Vector3(w, h, 1)));
-      haloTransforms.push(new THREE.Matrix4().compose(centre.clone().addScaledVector(normal, 0.04), rotation, new THREE.Vector3(w * 2.1, h * 1.9, 1)));
-      slots.push(house.slot);
+      slotDetails.set(house.slot, { from: 1, to: 1, progress: 1 });
+      const paneMatrix = new THREE.Matrix4().compose(centre, rotation, new THREE.Vector3(w, h, 1));
+      const haloMatrix = new THREE.Matrix4().compose(centre.clone().addScaledVector(normal, 0.04), rotation, new THREE.Vector3(w * 2.4, h * 2.2, 1));
+      transforms.push(paneMatrix, paneMatrix.clone());
+      haloTransforms.push(haloMatrix, haloMatrix.clone());
+      slots.push(house.slot, house.slot);
       const point = centre.clone().addScaledVector(normal, 0.4);
       sources.push({ slot: house.slot, position: [point.x, point.y, point.z], normal: [normal.x, normal.y, normal.z], strength: 0, name: null });
     }
@@ -73,11 +78,13 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   const uniforms = { presence: { value: texture }, textureSize: { value: new THREE.Vector2(width, height) }, night: { value: 1 } };
   const vertexShader = `
     attribute float plotSlot;
+    attribute float detailFade;
     varying vec2 vUv;
-    varying float vSlot;
+    varying float vSlot, vDetailFade;
     void main() {
       vUv = uv;
       vSlot = plotSlot;
+      vDetailFade = detailFade;
       gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
     }`;
   const shared = `
@@ -85,7 +92,12 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
     uniform vec2 textureSize;
     uniform float night;
     varying vec2 vUv;
-    varying float vSlot;
+    varying float vSlot, vDetailFade;
+    void discardDetail() {
+      float threshold = fract(dot(floor(gl_FragCoord.xy), vec2(.754877666, .569840296)));
+      if (vDetailFade >= 0.0 && threshold >= vDetailFade) discard;
+      if (vDetailFade < 0.0 && threshold < -vDetailFade - 1.0) discard;
+    }
     float windowPresence() {
       // Interpolation can land just below an integer slot at a row boundary.
       // Snap the discrete instance ID before computing its texture coordinates.
@@ -95,6 +107,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
     }`;
   const paneMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `${shared}
     void main() {
+      discardDetail();
       float light = windowPresence();
       vec2 p = abs(vUv - 0.5);
       float frame = max(step(0.455, p.x), step(0.455, p.y));
@@ -102,24 +115,28 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       float wood = max(frame, bars);
       vec3 darkGlass = vec3(0.055, 0.085, 0.13);
       vec3 amber = mix(vec3(0.82, 0.30, 0.055), vec3(1.0, 0.69, 0.25), 0.65 + 0.2 * vUv.y);
-      vec3 glass = mix(darkGlass, amber * mix(0.70, 1.0, night), light);
+      vec3 glass = mix(darkGlass, amber * mix(0.98, 1.4, night), light);
       gl_FragColor = vec4(mix(glass, vec3(0.105, 0.055, 0.045), wood), 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`, side: THREE.DoubleSide });
   const haloMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `${shared}
     void main() {
+      discardDetail();
       vec2 p = (vUv - 0.5) * 2.0;
       // The glass itself already emits; leave it untouched by the transparent halo.
-      float outside = smoothstep(0.43, 0.53, max(abs(p.x), abs(p.y)));
-      float glow = exp(-dot(p, p) * 3.5) * outside * windowPresence() * mix(0.07, 0.16, night);
-      gl_FragColor = vec4(1.0, 0.43, 0.09, glow);
+      float outside = smoothstep(0.37, 0.48, max(abs(p.x), abs(p.y)));
+      float glow = exp(-dot(p, p) * 2.8) * outside * windowPresence() * mix(0.14, 0.34, night);
+      gl_FragColor = vec4(1.0, 0.40, 0.08, glow);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   function makeMesh(material: THREE.ShaderMaterial, matrices: readonly THREE.Matrix4[]): THREE.InstancedMesh {
     const geometry = new THREE.PlaneGeometry(1, 1);
     geometry.setAttribute('plotSlot', new THREE.InstancedBufferAttribute(new Float32Array(slots), 1));
+    const fades = new Float32Array(slots.length);
+    for (let i = 0; i < fades.length; i += 2) fades[i] = 1;
+    geometry.setAttribute('detailFade', new THREE.InstancedBufferAttribute(fades, 1));
     const mesh = new THREE.InstancedMesh(geometry, material, slots.length);
     matrices.forEach((matrix, index) => mesh.setMatrixAt(index, matrix));
     mesh.instanceMatrix.needsUpdate = true;
@@ -129,6 +146,36 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   }
   const panes = makeMesh(paneMaterial, transforms);
   const halos = makeMesh(haloMaterial, haloTransforms);
+  function setDetail(slot: number, from: LodFactor, to: LodFactor, progress: number): void {
+    const indices = slotIndices.get(slot);
+    if (!indices) return;
+    const amount = Number.isFinite(progress) ? THREE.MathUtils.clamp(progress, 0, 1) : 0;
+    const previous = slotDetails.get(slot)!;
+    if (previous.from === from && previous.to === to && previous.progress === amount) return;
+    const matricesChanged = previous.from !== from || previous.to !== to;
+    slotDetails.set(slot, { from, to, progress: amount });
+    const paneFade = panes.geometry.getAttribute('detailFade') as THREE.InstancedBufferAttribute;
+    const haloFade = halos.geometry.getAttribute('detailFade') as THREE.InstancedBufferAttribute;
+    for (const index of indices) {
+      const placement = placements[index]!;
+      if (matricesChanged) for (const [layer, factor] of [from, to].entries()) {
+        const centre = new THREE.Vector3(...windowLodCentre(placement.window.centre, placement.window.facing, factor))
+          .multiplyScalar(VOXEL_METRES.build)
+          .applyAxisAngle(new THREE.Vector3(0, 1, 0), placement.house.yaw)
+          .add(new THREE.Vector3(...placement.house.position))
+          .addScaledVector(placement.normal, 0.006);
+        panes.setMatrixAt(index * 2 + layer, new THREE.Matrix4().compose(centre, placement.rotation, new THREE.Vector3(placement.width, placement.height, 1)));
+        halos.setMatrixAt(index * 2 + layer, new THREE.Matrix4().compose(centre.clone().addScaledVector(placement.normal, 0.04), placement.rotation, new THREE.Vector3(placement.width * 2.4, placement.height * 2.2, 1)));
+      }
+      // Complementary masks use the same screen threshold as the voxel meshes.
+      const outgoing = from === to ? 1 : -1 - amount;
+      const incoming = from === to ? 0 : amount;
+      paneFade.setX(index * 2, outgoing); paneFade.setX(index * 2 + 1, incoming);
+      haloFade.setX(index * 2, outgoing); haloFade.setX(index * 2 + 1, incoming);
+    }
+    if (matricesChanged) { panes.instanceMatrix.needsUpdate = true; halos.instanceMatrix.needsUpdate = true; }
+    paneFade.needsUpdate = true; haloFade.needsUpdate = true;
+  }
   function sync(): void {
     for (const [slot, state] of states) pixels[slot * 4] = Math.round(state.value * 255);
     texture.needsUpdate = true;
@@ -142,22 +189,9 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   }
   return {
     setLod(slot, factor) {
-      const indices = slotIndices.get(slot);
-      if (!indices || slotLods.get(slot) === factor) return;
-      slotLods.set(slot, factor);
-      for (const index of indices) {
-        const placement = placements[index]!;
-        const centre = new THREE.Vector3(...windowLodCentre(placement.window.centre, placement.window.facing, factor))
-          .multiplyScalar(VOXEL_METRES.build)
-          .applyAxisAngle(new THREE.Vector3(0, 1, 0), placement.house.yaw)
-          .add(new THREE.Vector3(...placement.house.position))
-          .addScaledVector(placement.normal, 0.006);
-        panes.setMatrixAt(index, new THREE.Matrix4().compose(centre, placement.rotation, new THREE.Vector3(placement.width, placement.height, 1)));
-        halos.setMatrixAt(index, new THREE.Matrix4().compose(centre.clone().addScaledVector(placement.normal, 0.04), placement.rotation, new THREE.Vector3(placement.width * 2.1, placement.height * 1.9, 1)));
-      }
-      panes.instanceMatrix.needsUpdate = true;
-      halos.instanceMatrix.needsUpdate = true;
+      setDetail(slot, factor, factor, 1);
     },
+    setDetail,
     setFrame(frame) {
       const incoming = new Map(frame.windows.map(window => [window.slot, window]));
       for (const [slot, state] of states) {
@@ -191,7 +225,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
     },
     dispose() {
       scene.remove(panes, halos);
-      panes.geometry.dispose(); halos.geometry.dispose(); paneMaterial.dispose(); haloMaterial.dispose(); texture.dispose();
+      panes.geometry.dispose(); halos.geometry.dispose(); panes.dispose(); halos.dispose(); paneMaterial.dispose(); haloMaterial.dispose(); texture.dispose();
     },
   };
 }

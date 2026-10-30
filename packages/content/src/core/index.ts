@@ -2,6 +2,8 @@ import { HOME_DEPTH_METRES, type HomeTier, type VoxelBlueprint } from '@chatdom/
 import { MAT, STYLES, type StyleKey } from '../materials';
 
 export const CASTLE_BEACON_HEIGHT_METRES = 30.5;
+/** Centre of the authored lantern cap, relative to the castle asset origin. */
+export const CASTLE_BEACON_ANCHOR_METRES = [16, CASTLE_BEACON_HEIGHT_METRES, 14] as const;
 
 type Box = VoxelBlueprint['boxes'][number];
 type Window = VoxelBlueprint['windows'][number];
