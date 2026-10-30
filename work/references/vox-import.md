@@ -3,8 +3,7 @@
 For: `work/specs/15-vox-import.md` · studied 2026-10-30.
 
 Primary format repository: [ephtracy/voxel-model](https://github.com/ephtracy/voxel-model), MIT,
-studied at `3bff8feaa7d94a6237f2c07dc4ca3c3d268ef06c` in
-`/tmp/chatdom-refs/ephtracy-voxel-model`. Three.js loader is a secondary implementation reference from its
+studied at `3bff8feaa7d94a6237f2c07dc4ca3c3d268ef06c` in a temporary read-only checkout. Three.js loader is a secondary implementation reference from its
 [official source](https://github.com/mrdoob/three.js/blob/dev/examples/jsm/loaders/VOXLoader.js), MIT; read via
 the official raw source, without adapting its code or treating its moving `dev` branch as a pinned dependency.
 

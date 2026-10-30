@@ -322,50 +322,44 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Town closed. Active work: citizens walking home, then private voxel building and housewarming.**
-Depth belongs in silhouette, motion, light, the moment and consumed contracts. One useful boundary test;
-lean serial captures. No more town terrain/light/budget proofs or record-only commits.
+**Town closed; citizen/build core is on main and 5190.** Founder confirmed `fe0526b` opens on the5080.
+`11f77e6` publishes `window.__chatdomReady` from the completed town render, independently of background light;
+the held-light-worker/live regression passed. `34867cd` already made horizon tests fast. No more town proof work.
 
-**Live gate takes priority.** `5c04787` removed the indefinite shader-completion barrier, but the founder's
-Chrome149/RTX5080 still waited at the subsequent first-light gate. Opening now requires the loaded scene's
-successful render; independent light refinement starts during loading and cannot hold that gate. `lightingReady`
-remains separate for captures. `window.__chatdomKingdom.inspect()` reads worker progress/upload bytes and render
-markers independently of the animation stats. No click is required. The revised preview is on5190; founder GPU
-confirmation is pending. `34867cd` replaces the slow horizon proof sweep with three representative tests
-(~0.74s test time), so lane reviews can pick it up now.
+**Landed:** Tide HT01–03 (15 homes, including all three manor/hall families) and wardrobe WB01 reviewed/merged;
+`72a8848` installs Tide in the streets and exports avatar parts. `059e110` freezes consumed citizen/chat/build
+contracts (spec12). `df4febd` integrates authored walking citizens, speech bubbles, arrival-driven windows,
+private voxel editing and local housewarming. Every present slot has a body; rendering culls offscreen bodies.
+Three looks share the first authored body/hair family. The renderer articulates legs and gives the cloak clearance.
 
-**Gate evidence:** isolated from unfinished citizens in `../worktrees/gate-fix`. The no-time town opened even
-with all light-worker messages held and shader hints pending; releasing the workers produced all three fields
-and replay0/1/240 passed. `pnpm verify --hour dusk` passed954 tests plus seven serial standard-size captures;
-main inspected its town dusk image. The earlier full matrix passed at the shader-barrier fix. Software timing
-is not a GPU measurement. No new wave film or further town composition work is needed.
+**Build:** place/erase/paint/fill, three brush sizes, mirror, gesture undo/redo, style palette and tier budget;
+worker meshes add trims, eaves, corbels and window detail without changing authored source. Private drafts and
+local publications survive browser reload. Publication replaces geometry, panes, shadow caster and field blockers,
+then gives a six-second orbit. Source remains visibly SIMULATED. LIVE deed authority, server persistence and
+six-view moderation are not connected; no live approval is fabricated. Real chat speech still needs the Herald
+projection into `CitizenChatCue`; the receive boundary exists. Touch confirmation remains main-owned follow-up.
 
-**Uncommitted main work (preserve it):** `packages/shared/src/build.ts` and `citizen-chat.ts`;
-`packages/world/src/citizens/` (actual street routes, seekable walks, approved-node goals, arrival-light timestamp)
-and `build/` (draft operations/history, save format, shaping and honest publication boundary);
-`apps/web/src/citizens/` (part instancing/gait), `kingdom/citizen-scene.ts` and partial scene/UI integration;
-`apps/web/src/build/` (worker mesh, pointer tools, private local save, palette and tool UI). Focused CPU scenarios,
-typecheck and scoped lint passed; integrated visual acceptance has NOT happened. The build session still needs
-main scene/camera/house-replacement/housewarming wiring. LIVE draft persistence/moderation is unavailable;
-local publication must say SIMULATED. Keep that limitation explicit.
+**Team can start now:** specs13–16, PRDs and empty progress files are committed. Branches `lane/build-tools`,
+`lane/build-templates`, `lane/vox-import`, `lane/crowd-behaviour` have matching `../worktrees/<name>` checkouts at
+`df4febd`. Tools/import consume actual optional build mounts; template/crowd bench routes and template catalogue
+hook exist. VOX package/dependency/lock metadata is installed; VI01 supplies its implementation entry. At merge,
+main connects the template chooser and crowd policy caller/control allowlist. Team owns these implementations.
+Existing panel-stream, wardrobe-body, forge-pieces, civic-props, sound, Atlas and Herald lanes remain team-owned.
 
-**Wardrobe:** WB01 is now committed on `lane/wardrobe-body` (`000d8eb`, then main merge `faa2ba0`), clean when
-checked. Review/merge it before the street look. Its factories/compile API fit the frozen rig; root needs the
-package export. Its17-part articulated legs require adapting the fallback renderer's rigid-leg foot correction.
-Use its authored citizen rather than growing the temporary core look into a second wardrobe library.
+**Evidence:** final `pnpm verify --area kingdom --tier town --hour dusk` passed973 tests/58 files, typecheck,
+lint, build and both standard town sizes. The merged-content baseline earlier passed969 tests and seven serial
+captures. The final moment smoke passed real pointer edit/undo, street arrival/light, publication and reload with
+no browser errors. `pnpm shots:moments` owns its temporary preview and serial capture lock; it writes inspected
+1440×900/390×844 frames plus offline sampled clips under `shots/moments/` (citizen/build PNGs, walk/build MP4s).
+These are development evidence, not a product recording feature. A long full capture run was interrupted;
+final verification deliberately used only the two required dusk town sizes. No SwiftShader fps claim.
 
-**New draft handoffs:** specs13–16 and PRDs exist for `build-tools`, `build-templates`, `vox-import` and
-`crowd-behaviour`; no branches/worktrees yet. Finish their actual consumer hooks, review and freeze, commit with
-working core, then create `lane/<name>` and `../worktrees/<name>`. Sol/high wrote them. Build UI optional tools/import
-hooks exist; main still owns catalogue/bench routes, import package/lock entry, cue/policy/pose adapters. References
-are `work/references/build-shaping.md`, `citizen-motion.md`, `vox-import.md`. Do not claim drafts ready early.
+**Next:** founder5080 timing on `/?tier=town&hour=19.5`; “Let them in” replays the arrival, “Build my home”
+opens the plot. Direct build: `/?tier=hamlet&hour=19.5&build=1`. Review/merge the four new lanes as they arrive;
+keep tuning visible motion and making, not invisible proof suites. Ambient social behaviour, editable templates,
+import UI and richer wardrobe variety are lane work, not already finished features.
 
-**Existing team:** specs07–11 and branch/worktrees exist for panel-stream, wardrobe-body, forge-pieces,
-civic-props and sound. Atlas/Herald remain team-owned; Hearth/street props integrated, Tide separate. Preserve
-active lane edits. Source remains labelled SIMULATED until the actual adapter supplies live evidence.
-
-**Host:** main5190 currently serves the isolated gate-fix build, with no unfinished citizens. The unserved
-citizen build is in a temporary output directory. Atlas5193/Herald5194 reserved; manual previews use a free5170–5199
-port. Shared capture lock and two-CPU runs keep the host lean. Postgres/Valkey/Surveyor untouched; `.env` ignored.
-Next: confirm opening on the5080, then connect/review citizens and build mode, two looked-at moments, short walking
-and building captures, smoke + verify, commit/push. Keep this section to one page.
+**Host:** 5190 serves main's current compiled app via the existing gate-fix preview; its served dist was updated.
+Temporary5197 preview has stopped. Atlas5193/Herald5194 reserved. Capture previews allocate free ports and close
+on completion; capture work is serial. Gate-fix/integration-check detached worktrees retain earlier verification
+state; do not mistake their source for main. Postgres/Valkey/Surveyor untouched; `.env` remains ignored.
