@@ -5,7 +5,7 @@ import {
 import { WORLD_FIXTURE_KINGDOM, WORLD_FIXTURE_TIME } from '@chatdom/shared/world-fixtures';
 import {
   advancePresence, applyPresence, createPresenceState, presenceTick, projectPresence, seedHash,
-  type KingdomLayout, type PresenceBinding,
+  type KingdomLayout, type SettlementPlan, type PresenceBinding,
 } from '@chatdom/world';
 
 const NAMES = [
@@ -30,7 +30,7 @@ export interface SimulatedPresence {
 }
 
 /** A labelled scenario producer. Every light and name passes through the world reducer. */
-export function createSimulatedPresence(layout: KingdomLayout): SimulatedPresence {
+export function createSimulatedPresence(layout: Pick<KingdomLayout, 'homes' | 'config'> | Pick<SettlementPlan, 'homes' | 'config'>): SimulatedPresence {
   if (!layout.homes.length) throw new TypeError('Presence scenario needs at least one home');
   const newestYear = Math.max(...layout.homes.map(home => home.quarterYear));
   const first = layout.homes.find(home => home.quarterYear === newestYear && home.position[0] > 0)
