@@ -70,13 +70,16 @@ them. It proves the actual 300-walker path with small Node clients rather than h
    `apps/realm/src/persistence/`. Acquire/renew/release use database time, a bounded lease and an unguessable
    fencing epoch. Every write compares the current unexpired epoch and expected sequence while holding the
    kingdom lock. A failed renewal immediately closes the authority gate, cancels uncommitted work and stops
-   authoritative input/public delivery. An old owner cannot write after takeover, even if its process resumes.
+   authoritative input/public delivery through `RealmRoomEffects.close`. An independent monotonic deadline closes
+   the room even while renewal/outbox awaits stall; late completions cannot reopen it. An old owner cannot write after takeover, even if its process resumes.
    Keep one owned walker per person per kingdom across simultaneous tabs; define and test replacement/rejection.
 2. **R2 — A commit is indivisible.** `execute` locks/fences, loads valid snapshot plus tail, invokes main's
    decision function with authoritative transaction time, rechecks `current`, and commits the fact, sequence,
    private state, command outcome, ledger/design constraints and public outbox together. Do not acknowledge,
    mutate authoritative room state or emit public success before commit. Unique `(kingdom, commandId)` stores
-   a canonical command digest and outcome: same payload returns that outcome; another payload conflicts.
+   a canonical command digest and outcome: committed and unchanged outcomes are terminal; a rejected same-
+   payload request may be reevaluated against current authority (for example after earning a coal). Another payload
+   conflicts. Ingress observation receipts remain terminal, including observations without domain facts.
    An uncertain COMMIT response is resolved by `lookup` before retry/cleanup; it is never an automatic refund.
    No held/refused decision, raw wish, rights, session ID, Twitch ID or reservation secret enters the public outbox.
 3. **R3 — Recover the same kingdom.** Version snapshots with their sequence and integrity metadata. Load one
@@ -129,7 +132,9 @@ them. It proves the actual 300-walker path with small Node clients rather than h
    `RealmPublicDelivery`, in fact order with stable `eventId` across retry. Transport is at-least-once: client
    dedupe/cursors prevent a lost dispatcher acknowledgement replaying a ritual. Restore the current published
    projection on fresh join without replaying historical spectacle. Implement synchronous `RealmRoomHandle.bootstrap`
-   at `throughSequence`: browser buffers deltas while installing `current`, then applies only newer entries.
+   at `throughCursor`: browser buffers deltas while installing `current`, then applies only newer cursor entries.
+   Domain `throughSequence` is not a public-delivery cursor: presence can change without a new domain fact. The
+   bootstrap checkpoint reflects the delivered public prefix, not a private state ahead of its outbox.
    Use existing `lifecycle` for walker presence observations and `bindRoom` effects for walking/geometry changes;
    `bindTransient` carries ephemeral chat/seats and owner replies separately. No transient speech is appended to
    the durable checkpoint/history. Do not claim delivery is exactly-once.

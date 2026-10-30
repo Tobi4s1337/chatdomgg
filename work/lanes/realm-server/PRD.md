@@ -29,7 +29,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
 
 ## Tasks
 
-- [ ] **RS01 — A committed fact survives a room restart** · evidence: test/log. Implement additive migrations
+- [x] **RS01 — A committed fact survives a room restart** · evidence: test/log. Implement additive migrations
   and the actual `RealmRepository` in `src/persistence/`, with fenced DB-time writer leases, expected sequence,
   command digest/outcomes and atomic private fact/state/ledger/outbox commit. Wire through the frozen startup
   injection and run a durable local room on 5191 by the end of this task. Focused R1/R2 test uses two competing
@@ -56,7 +56,7 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   `src/outbox/`. Implement `loadIngress`/`executeIngress`: persist source dedupe, private checkpoint and all
   capability-tagged facts plus public presence outbox in one transaction. Closed evidenced interval unions survive
   restart without doubling overlap or inventing coverage gaps; qualified-night credit needs actual ten-minute
-  coverage and a current owned home. Implement typed synchronous bootstrap at `throughSequence`, existing
+  coverage and a current owned home. Implement typed synchronous bootstrap at `throughCursor` (public prefix, including presence without a new domain fact), existing
   `lifecycle` and `bindRoom` effects, plus separate transient/owner delivery. Keep stable event IDs, current
   projection restoration and explicit at-least-once retry. Focused R7 test interrupts after commit/before delivery
   acknowledgement, then resumes: one applied ingress result, same public event ID, no replayed economic change,

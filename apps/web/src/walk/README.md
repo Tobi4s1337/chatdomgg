@@ -10,6 +10,11 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
 
 ## Status
 
+- **Reference court bound.** `/-/realm` runs this controller on `connectReferenceRealm`'s real room client,
+  renders its actual poses, and fades the local body in first person. The scene remains explicitly SIMULATED.
+  `window.__chatdomWalk` exposes the controller there; the existing `__chatdomRealm.setInput` reference smoke
+  hook shares the same single client tick. This reference is separate from the kingdom binding below.
+
 - **Bound to the kingdom: not yet.** The integrator owns the binding (recipe below). Until it lands,
   `capture.mjs` fails on purpose with "the kingdom walk binding is absent".
 - **Kingdom realm entry: not yet.** The kingdom needs a `RealmEntry` (ticket service) and the founded
@@ -182,5 +187,14 @@ the lower-left third, saves `street-shoulder@1440x900.png` and `street-shoulder@
 person and back, and fails on any page error, console error or failed request. It holds
 `packages/testing/capture-lock.mjs` throughout.
 
-The kingdom realm start command and tested URL are recorded here once the integrator and realm wiring supply
-them.
+Reference-only local setup (the durable schema is separate):
+
+```sh
+pnpm --filter @chatdom/realm build
+REALM_SIMULATED=1 REALM_STORAGE=memory REALM_PORT=5191 pnpm --filter @chatdom/realm start
+# With the web preview on 5190: http://127.0.0.1:5190/-/realm
+```
+
+Do not start a second process on an occupied port. Kingdom capture remains **PENDING BINDING** until realm
+wiring supplies a kingdom entry and its founded collision world. The reference court is never used as those
+producers. The kingdom realm start command and tested URL belong here when that actual binding lands.
