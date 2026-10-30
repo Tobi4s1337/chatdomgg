@@ -3,3 +3,5 @@ review: E01 The required statue and banner bench and viewed captures are absent;
 needs: E01 shared capture lock was busy; capture on port 5198 waited without acquiring it, so required front/side web and phone views remain unverified. Scoped tests, typecheck, scoped lint and build passed on review.
 done: E01 deterministic compiler and simulated statue/banner bench; scoped tests, typecheck, lint and build passed; front, side and banner web/phone captures viewed under shots/emotes.
 needs: E01 after merging main, scoped checks and captures passed; full suite was interrupted after prolonged shared-host execution before a final result. Main registers packages/emotes in the root lockfile.
+
+2026-10-31 founder efficiency decision: PARK after the current task: finish and commit that task, then start no further task. Reviewed work remains eligible for integration. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
