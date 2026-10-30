@@ -58,8 +58,27 @@ it('queues separate processes until release and makes release idempotent', async
   expect(first.child.exitCode).toBe(0); expect(second.child.exitCode).toBe(0);
 });
 
-it('releases when an acquired caller is killed', async () => {
-  const first = start(); await first.waitFor('CLIENT_READY');
+it('admits main ahead of an earlier waiting lane without interrupting the active capture', async () => {
+  const holder = start('', ', priority: "main"'); await holder.waitFor('CLIENT_READY');
+  const lane = start('', ', priority: "lane"'); await lane.waitFor('[capture] waiting');
+  await delay(150);
+  const main = start('', ', priority: "main"'); await main.waitFor('[capture] main priority registered');
+  await delay(150);
+  expect(holder.child.exitCode).toBeNull();
+  expect(main.output()).not.toContain('CLIENT_READY');
+  expect(lane.output()).not.toContain('CLIENT_READY');
+  holder.child.stdin.end(); await holder.waitFor('CLIENT_RELEASED');
+  await main.waitFor('CLIENT_READY');
+  expect(lane.output()).not.toContain('CLIENT_READY');
+  main.child.stdin.end(); await main.waitFor('CLIENT_RELEASED');
+  await lane.waitFor('CLIENT_READY');
+  lane.child.stdin.end(); await lane.waitFor('CLIENT_RELEASED');
+  await Promise.all([holder.closed, main.closed, lane.closed]);
+  expect(holder.child.exitCode).toBe(0); expect(main.child.exitCode).toBe(0); expect(lane.child.exitCode).toBe(0);
+});
+
+it.each(['main', 'lane'])('releases when an acquired %s caller is killed', async priority => {
+  const first = start('', `, priority: "${priority}"`); await first.waitFor('CLIENT_READY');
   const second = start(); await second.waitFor('[capture] waiting');
   first.child.kill('SIGKILL'); await first.closed;
   await second.waitFor('CLIENT_READY');
@@ -67,9 +86,9 @@ it('releases when an acquired caller is killed', async () => {
   expect(second.child.exitCode).toBe(0);
 });
 
-it('cancels a killed queued caller without holding the next acquisition', async () => {
+it.each(['main', 'lane'])('cancels a killed queued %s caller without holding the next acquisition', async priority => {
   const first = start(); await first.waitFor('CLIENT_READY');
-  const abandoned = start(); await abandoned.waitFor('[capture] waiting');
+  const abandoned = start('', `, priority: "${priority}"`); await abandoned.waitFor('[capture] waiting');
   abandoned.child.kill('SIGKILL'); await abandoned.closed;
   const next = start(); await next.waitFor('[capture] waiting');
   first.child.stdin.end(); await first.waitFor('CLIENT_RELEASED');
@@ -79,9 +98,9 @@ it('cancels a killed queued caller without holding the next acquisition', async 
   expect(next.child.exitCode).toBe(0);
 });
 
-it('cancels a queued acquisition through its abort signal', async () => {
+it.each(['main', 'lane'])('cancels a queued %s acquisition through its abort signal', async priority => {
   const first = start(); await first.waitFor('CLIENT_READY');
-  const cancelled = start('const controller = new AbortController(); setTimeout(() => controller.abort(new Error("TEST_CANCELLED")), 100);', ', signal: controller.signal');
+  const cancelled = start('const controller = new AbortController(); setTimeout(() => controller.abort(new Error("TEST_CANCELLED")), 100);', `, signal: controller.signal, priority: "${priority}"`);
   await cancelled.closed;
   expect(cancelled.child.exitCode).not.toBe(0);
   expect(cancelled.output()).not.toContain('CLIENT_READY');
@@ -91,6 +110,18 @@ it('cancels a queued acquisition through its abort signal', async () => {
   await next.waitFor('CLIENT_READY');
   next.child.stdin.end(); await next.waitFor('CLIENT_RELEASED'); await next.closed;
   expect(next.child.exitCode).toBe(0);
+});
+
+it('uses the environment priority and lets an explicit option override it', async () => {
+  const lane = start('process.env.CHATDOM_CAPTURE_PRIORITY = "lane";');
+  await lane.waitFor('CLIENT_READY');
+  expect(lane.output()).toContain('shared host lock (lane)');
+  lane.child.stdin.end(); await lane.waitFor('CLIENT_RELEASED'); await lane.closed;
+  const main = start('process.env.CHATDOM_CAPTURE_PRIORITY = "lane";', ', priority: "main"');
+  await main.waitFor('CLIENT_READY');
+  expect(main.output()).toContain('shared host lock (main)');
+  main.child.stdin.end(); await main.waitFor('CLIENT_RELEASED'); await main.closed;
+  expect(lane.child.exitCode).toBe(0); expect(main.child.exitCode).toBe(0);
 });
 
 it('keeps an acquired lock until cleanup even if its queue signal is later aborted', async () => {

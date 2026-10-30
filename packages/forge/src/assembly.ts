@@ -1,6 +1,7 @@
 import { ForgeStyleKitSchema, HousePartPlanSchema, type ForgeHouseSocket, type ForgeStyleKit, type HousePartPlan, type VoxelBlueprint } from '@chatdom/shared';
 import { MAT, STYLES } from '@chatdom/content/materials';
 import { createForgeMotif } from '@chatdom/content/forge-motifs';
+import { createForgeOrnament } from '@chatdom/content/forge-ornaments';
 import { rasterizeBlueprint } from '@chatdom/voxel';
 
 export function homeFingerprint(home:VoxelBlueprint):string {let hash=2166136261;for(const c of JSON.stringify(home))hash=Math.imul(hash^c.charCodeAt(0),16777619);return `home-${(hash>>>0).toString(16)}`;}
@@ -58,7 +59,19 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
   const plan=HousePartPlanSchema.parse(input),kit=ForgeStyleKitSchema.parse(style);
   if(socket.kind!==plan.kind)throw new Error('That part does not fit this house socket.');
   if(kit.id!==`${kit.family}-native`||kit.revision!==1||kit.styleId!==STYLES[kit.family].id)throw new Error('Unregistered style kit.');
-  const native=STYLES[kit.family],motif=createForgeMotif(plan.motif,kit.family);
+  const native=STYLES[kit.family],motif=['sleeping-dragon','crescent-moon','watchful-owl'].includes(plan.motif)?createForgeMotif(plan.motif as 'sleeping-dragon'|'crescent-moon'|'watchful-owl',kit.family):createForgeOrnament(plan.motif as 'sleeping-fox'|'sunflower'|'scallop-shell'|'shooting-star',kit.family);
+  if(plan.version===2){
+    const finish=plan.finish==='copper'?MAT.forgeCopper:plan.finish==='ceramic'?MAT.cream:null;
+    if(finish!==null)for(const box of motif.boxes)if(![MAT.air,MAT.darkStone,MAT.glass,MAT.brass].includes(box.material as typeof MAT.air))box.material=finish;
+    // Authored enamel inlays sit on existing solid faces, never in empty space.
+    if(plan.accent!=='none'){
+      const step=plan.accent==='stars'?5:plan.accent==='leaves'?4:3;
+      for(const box of [...motif.boxes].filter(b=>b.material!==MAT.air).slice(0,24)){
+        const [x,y,z]=box.to;if((box.from[0]+box.from[1]+box.from[2])%step)continue;
+        motif.boxes.push({from:[x-1,y-1,z-1],to:[x,y,z],material:plan.accent==='leaves'?MAT.moss:native.trim});
+      }
+    }
+  }
   if(plan.kind==='weathervane'){for(const b of motif.boxes){const z=motif.size[2]-b.to[2];b.to[2]=motif.size[2]-b.from[2];b.from[2]=z;}motif.mount[2]=motif.size[2]-motif.mount[2];motif.emitter[2]=motif.size[2]-motif.emitter[2];}
   const boxes:VoxelBlueprint['boxes']=[];
   const add=(from:[number,number,number],to:[number,number,number],material:number)=>boxes.push({from,to,material});
