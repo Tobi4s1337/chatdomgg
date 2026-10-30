@@ -10,20 +10,26 @@ export default function Kingdom() {
   const [names,setNames]=createSignal<NameLabel[]>([]),[hour,setHour]=createSignal(initialHour),[view,setView]=createSignal<CameraName>(query.get('camera')==='window'?'window':'hero');
   const [source,setSource]=createSignal(query.get('source')==='herald'?'CONNECTING':'SIMULATED'),[error,setError]=createSignal(false),[sound,setSound]=createSignal(false);
   const stream=location.pathname.endsWith('/stream')||location.pathname==='/stream';
-  let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false;
+  let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false,openingFrame=0;
   const construction=new AbortController();
   onMount(()=>{
+    const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
+    testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
     void createKingdomScene(canvas,{signal:construction.signal,tier,seed:query.get('seed')??'willowmere',hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
       onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
-      if(unmounted){instance.dispose();return;}engine=instance;setReady(true);
-      const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
+      if(unmounted){instance.dispose();return;}engine=instance;
       testWindow.__chatdomKingdom={stats:instance.debug,seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play(),capture:(time:number)=>instance.capture(time)};
-      requestAnimationFrame(()=>{testWindow.__chatdomReady=true;});
+      const showReady=()=>{
+        if(unmounted||error())return;
+        if(!instance.debug.ready){openingFrame=requestAnimationFrame(showReady);return;}
+        setReady(true);testWindow.__chatdomReady=true;
+      };
+      openingFrame=requestAnimationFrame(showReady);
     }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(true);});
   });
-  onCleanup(()=>{unmounted=true;construction.abort();engine?.dispose();document.body.classList.remove('kingdom-page');});
+  onCleanup(()=>{unmounted=true;cancelAnimationFrame(openingFrame);construction.abort();engine?.dispose();(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
   function tap(action:()=>void){if(!engine)return;if(!sound()){engine.sound.unlock();setSound(true);}action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setView(value);tap(()=>engine!.setCamera(value));}

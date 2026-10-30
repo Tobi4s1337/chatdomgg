@@ -23,7 +23,7 @@ export interface SceneOptions {tier:KingdomTier;seed:string;hour:number;time:num
 export interface KingdomDebug {ready:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
-  let disposed=false,raf=0,loaded=false,lastFrame=performance.now(),time=options.time??0,hour=options.hour,targetHour=hour,camName=options.camera;
+  let disposed=false,raf=0,loaded=false,lastFrame=performance.now(),time=options.time??30,hour=options.hour,targetHour=hour,camName=options.camera;
   let fixedTime=options.time!==null,autoCamera=!fixedTime&&camName==='hero',frame:KingdomPresenceFrame|undefined,fieldUploads=0,geometryBuilds=0,fieldBytes=0,nearBytes=0,farBytes=0,beaconBytes=0,nearVisited=0,farVisited=0,beaconVisited=0;
   const earlyCleanups:(()=>void)[]=[];
   let fullDispose:(()=>void)|undefined;
@@ -200,8 +200,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
     const renderKey=[loaded,time,hour,camName,geometryBuilds,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
-    if(!fixedTime||renderKey!==lastRenderedKey){renderer.render(scene,camera);lastRenderedKey=renderKey;}
-    Object.assign(debug,{ready:loaded,activeWindows:active,geometryBuilds,fieldUploads,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,time,hour,camera:camName,fieldBytes,shadowUpdates:sunShadows.stats.updates,shadowDrawCalls:sunShadows.stats.drawCalls,shadowTriangles:sunShadows.stats.triangles,shadowBytes:sunShadows.stats.textureBytes+sunShadows.stats.transformBytes,shadowEnabled:sunShadows.stats.enabled,windowFieldVisited:nearVisited+farVisited,beaconFieldVisited:beaconVisited,fieldSettled:field.stats.publishedRevision===field.stats.requestedRevision&&!field.stats.busy&&!field.stats.queued&&farField.stats.publishedRevision===farField.stats.requestedRevision&&!farField.stats.busy&&!farField.stats.queued&&farBytes>0&&beaconField.stats.publishedRevision===beaconField.stats.requestedRevision&&!beaconField.stats.busy&&!beaconField.stats.queued&&beaconBytes>0});
+    if((loaded&&!fixedTime)||renderKey!==lastRenderedKey){renderer.render(scene,camera);lastRenderedKey=renderKey;}
+    // Readiness is a rendered scene with initial light from every field, not an
+    // idle worker queue: live arrivals may keep requesting newer revisions.
+    Object.assign(debug,{ready:loaded&&nearBytes>0&&farBytes>0&&beaconBytes>0,activeWindows:active,geometryBuilds,fieldUploads,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,time,hour,camera:camName,fieldBytes,shadowUpdates:sunShadows.stats.updates,shadowDrawCalls:sunShadows.stats.drawCalls,shadowTriangles:sunShadows.stats.triangles,shadowBytes:sunShadows.stats.textureBytes+sunShadows.stats.transformBytes,shadowEnabled:sunShadows.stats.enabled,windowFieldVisited:nearVisited+farVisited,beaconFieldVisited:beaconVisited,fieldSettled:field.stats.publishedRevision===field.stats.requestedRevision&&!field.stats.busy&&!field.stats.queued&&farField.stats.publishedRevision===farField.stats.requestedRevision&&!farField.stats.busy&&!farField.stats.queued&&farBytes>0&&beaconField.stats.publishedRevision===beaconField.stats.requestedRevision&&!beaconField.stats.busy&&!beaconField.stats.queued&&beaconBytes>0});
     raf=requestAnimationFrame(render);
     }catch(error){dispose();options.onError('The kingdom could not render');console.error('Kingdom frame failed',error);}
   }
@@ -228,7 +230,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
   try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');await renderer.compileAsync(scene,camera);if(disposed)throw new Error('Scene closed while compiling');}catch(error){dispose();throw error;}
-  loaded=true;debug.ready=true;lastFrame=performance.now();options.onProgress('The first light could be yours',1);
+  loaded=true;lastFrame=performance.now();options.onProgress('The first light could be yours',1);
   return {layout,debug,sound,
     setHour(value:number){targetHour=value;sound.cue('wood');},
     setCamera(value:CameraName){camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
