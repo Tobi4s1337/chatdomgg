@@ -20,8 +20,10 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
 - **Kingdom realm entry: not yet.** The kingdom needs a `RealmEntry` (ticket service) and the founded
   `CollisionWorld` from realm wiring (spec 36) before `connectRealm` can join the kingdom's own room. The
   reference court (`connectReferenceRealm`, `REALM_SIMULATED=1`) is SIMULATED and is not the kingdom.
-- Camera collision (near-plane boom sweep against the solid world) is WC05. Until then the shoulder camera
-  can pass through a wall it backs into.
+- **Camera collision.** The boom and near plane are swept against the `collision` world passed to the
+  controller. The reference court binding does not pass one yet (`debug.camera.collisionRevision` is `null`
+  there), so its camera can still back through the court wall; the integrator adds `collision: REFERENCE_WORLD`
+  there and the kingdom's founded world in the kingdom binding.
 
 ## Modules
 
@@ -41,6 +43,10 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
 | `facingByte(moveX, moveZ)`, `headingFromByte(yaw)` | `input/direction.ts` | Yaw byte for the actual walk direction, and back to renderer radians |
 | `createShoulderRig(heading)`, `shoulderPose(...)` | `camera/shoulder.ts` | Shoulder framing with `filmOffset`, continuous wheel to first person, auto-follow, time-based easing |
 | `SHOULDER` | `camera/shoulder.ts` | The chosen framing and feel constants |
+| `clearBoom(world, anchor, at, wish)` | `camera/occlusion.ts` | Sweeps eye + near plane along the boom from the head; how far the camera may stand |
+| `nearFootprint(direction, fov, aspect, shift, near)` | `camera/occlusion.ts` | Box around the eye and the actual near-plane rectangle, lens shift included |
+| `sweepHit(from, to, footprint, solid)`, `overlapsSolid(...)` | `camera/occlusion.ts` | Swept and static box tests against one solid (touching is not overlap) |
+| `OCCLUSION`, `RECOVER_RATE` | `camera/occlusion.ts` | Margin .05 m, .25 m sweep pieces, .35 s outward recovery |
 
 Headings are radians about +Y, and zero faces +Z (the citizen renderer's convention). Yaw bytes are
 `round(heading / 2π × 256) mod 256`.
@@ -59,6 +65,7 @@ interface WalkControllerOptions {
   coarse?: boolean;                   // show phone controls before the first touch; default matchMedia('(pointer: coarse)')
   clock?: () => number;               // ms for the lock settle window; default performance.now
   heading?: number;                   // entry heading; default: the way the citizen already faces
+  collision?: CollisionWorld | (() => CollisionWorld | null | undefined);  // solids the camera stays out of, read every frame
 }
 interface WalkController {
   frame(now: number): readonly RealmWalkerPose[];  // once per animation frame, before anything reads the camera
@@ -81,7 +88,9 @@ held).
 `WalkDebug` is what the capture reads: `ready` (the camera stands on the connected citizen), `owner`, `selfId`,
 `self` (rendered pose), `authority` (room state for the local walker), `peers` (others as drawn, at most 4 Hz),
 `input` (the last `WalkInput` sent), `look` (`free`, `requesting`, `locked` or `fallback`), `stick` (the phone
-stick under the thumb, or null), `camera` (`yaw`, `pitch`, `distance`, `desiredDistance`, `fov`, `filmOffset`,
+stick under the thumb, or null), `camera` (`yaw`, `pitch`, `distance` drawn,
+`zoomDistance` eased wheel wish, `desiredDistance` wheel target, `clearance` how far a solid let the boom reach
+or null, `collisionRevision` of the world the camera was kept out of or null, `fov`, `near`, `filmOffset`,
 `shift`), `screen` (citizen body centre in CSS px), `viewport` and `selfOpacity`.
 
 When the room has `onLeave`/`onDrop` signals (a Colyseus room does), the controller listens to them itself: a
@@ -127,11 +136,14 @@ edit them. Entry URL proposed for the binding: **`/?walk=1`** on the kingdom pag
 2. **Create** after the scene has loaded (camera, canvas and citizen renderer exist):
    ```ts
    import { createWalkController } from '../walk';
-   const walk = createWalkController({ camera, surface: canvas, realm, hud: kingdomRoot });
+   const walk = createWalkController({ camera, surface: canvas, realm, hud: kingdomRoot, collision: () => kingdomCollisionWorld });
    walk.resize(canvas.clientWidth, canvas.clientHeight);
    ```
    `kingdomRoot` is the `[data-chatdom-kingdom]` element; the plaque and phone controls are drawn inside it
-   (`z-index: 2`, below the gate). Draw walkers with a `createCitizenRenderer` (or the crowd's) and give the local one
+   (`z-index: 2`, below the gate). `collision` is the same complete world the realm client steps against; pass
+   a function when realm wiring publishes new revisions so the camera reads the newest one each frame. The
+   camera's `near` must stay at most 0.15 m (the kingdom scene's is 0.15) so first person never reaches past the
+   body's own 0.28 m radius into a wall. Draw walkers with a `createCitizenRenderer` (or the crowd's) and give the local one
    `opacity: walk.selfOpacity`.
 3. **Each frame**, in `render(now)`, before the existing camera block:
    ```ts
@@ -166,12 +178,35 @@ rotating phone never jumps). The horizontal shift is a lens shift (`filmOffset`)
 solved so the body stays on its thirds at any pitch. Roll is always zero.
 
 The wheel moves one zoom parameter; the boom is `11 m × z²`, so it reaches exactly 0 with fine control over the
-last metre. Between 2.6 m and 0.3 m the pivot slides to the eyes (1.6 m) and the lens shift to zero; the local
-citizen fades from 1.25 m and is gone below 0.5 m. Wheel intent (`desiredDistance`) is kept apart from the drawn
+last metre. Closer than about 5.5 m the pivot is held high enough that the head never rises above
+`SHOULDER.headY` (−0.15, just under the middle), so a short boom is an over-the-shoulder view with the
+head and shoulder in the lower left, never a giant head in the middle of the picture; at zero the pivot is the
+eye (1.6 m). The lens shift stays full down to 1.4 m and reaches zero at 0.3 m. The local citizen fades as the eye
+comes within 1.25 m of the head and is gone within 0.5 m. Wheel intent (`desiredDistance`) is kept apart from the drawn
 distance, which eases at 14/s. Drag right turns the view right; drag up looks up. Pitch runs from −0.5 to 1.1
 rad. After 1.5 s without a manual orbit the camera swings gently behind the walk direction (never while a drag
 is held, never while standing, never across a reversal of more than 2 rad). Camera height eases at 12/s and
 never trails the body by more than 0.45 m, so a step or jump does not jerk the view.
+
+## Camera collision
+
+What stays out of solids is the eye together with the near-plane rectangle in front of it, at the actual fov,
+aspect, `camera.zoom` and lens shift, enclosed in a box with 5 cm of air (`nearFootprint`). Each frame that box
+is swept along the drawn boom curve, from the citizen's actual head (which the body keeps clear) out to the
+eased wheel distance, in pieces of at most 25 cm against one `query` of the supplied world (`clearBoom`). The
+first touch is how far the camera may stand. A hit is checked once more on the exact curve; if that fails, the
+start of the piece, already swept clear, is used. Thin posts, roofs, corners, doorways and the ground under a
+camera looking up are all caught; a centre ray alone would miss a post beside the boom that the near plane
+would cut.
+
+The camera comes in at once, before the first obstructed frame is drawn, including on the frame a new solid or
+revision appears. It goes back out only through clear air, easing over about 0.35 s (`RECOVER_RATE`: 95 %).
+Three distances are kept apart: the wheel's target (`desiredDistance`), the eased wish (`zoomDistance`) and the
+boom drawn (`distance`); a wall never changes the wish, and wheeling out behind a wall moves nothing until it
+clears. There is no minimum distance: pulled all the way to the head, the view is first person and the local
+citizen fades as it would on the wheel. If the eased camera height would lift the boom's root out of the body
+into a low ceiling, the camera sits on the actual head that frame. A function `collision` returning null keeps
+the last world rather than opening a hole. Nothing here fades obstructions; it always pulls in.
 
 ## Capture
 
@@ -181,7 +216,7 @@ node apps/web/src/walk/capture.mjs --base-url http://127.0.0.1:5190 [--path '/?w
 
 Two real browsers (1440×900 and 390×844) open the kingdom entry. The script fails explicitly if the page is
 not the kingdom (`[data-chatdom-kingdom]` and `__chatdomKingdom`), if `__chatdomWalk` is absent, if no citizen is
-placed within 60 s, or if either browser misses the other. It walks the desktop with Shift+W, presses Space once,
+placed within 60 s, if the camera has no collision world, or if either browser misses the other. It walks the desktop with Shift+W, presses Space once,
 checks the room's authoritative position moved and the phone shows it there, checks the drawn citizen sits in
 the lower-left third, saves `street-shoulder@1440x900.png` and `street-shoulder@390x844.png`, wheels into first
 person and back, and fails on any page error, console error or failed request. It holds

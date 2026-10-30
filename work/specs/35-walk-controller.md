@@ -271,3 +271,14 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
   `PlayerStep` stays void; `@chatdom/world/movement` exports `bodyStuck(state, world)` and `embeddedSolids` so the
   room can see the case. The frozen room never asks for a placement after a step, and `RealmRoomHandle` has no
   recovery request port, so that is recorded as a `needs:` for main/realm-server rather than a new return type.
+- **2026-10-30 — WC05 camera collision: sweep the drawn curve, pull in over the shoulder.** The eye plus the actual
+  near-plane rectangle (fov, aspect, `camera.zoom`, lens shift) is enclosed in a box with 5 cm of air and swept
+  along the drawn boom curve from the citizen's real head (kept clear by the body) out to the eased wheel wish, in
+  ≤ .25 m pieces against one `query` per frame, then checked once on the exact curve. In immediately, out over
+  ~.35 s (95 %), no minimum distance; wheel target, eased wish and drawn boom stay separate. Pulling in along the
+  same curve the wheel uses means a short boom is exactly a wheeled-in view, so the curve itself changed: closer
+  than ~5.5 m the pivot keeps the head at or below NDC −.15 (`SHOULDER.headY`), and the lens shift stays full to
+  1.4 m (was a blend from 2.6 m). The first try kept the old curve and showed a centred giant head at 1.6 m; a
+  second try slid the eye along the entry boom and dropped the citizen off the bottom edge. Entry framing at 6.5 m
+  is unchanged. Self-fade now measures eye-to-head distance. The controller takes `collision` (a world or a
+  function read every frame; null keeps the last world). Obstructions are never faded.

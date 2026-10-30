@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { WALK_BUTTON, type WalkInput } from '@chatdom/shared/realm';
+import { WALK_BUTTON, type CollisionWorld, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
 import type { RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkRealm } from './index';
 
@@ -33,7 +33,7 @@ function realm(at: { x: number; y: number; z: number; yaw: number }) {
 function key(target: EventTarget, type: 'keydown' | 'keyup', code: string, repeat = false) {
   target.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { code, repeat, ctrlKey: false, metaKey: false, altKey: false }));
 }
-function setup(width = 1440, height = 900, heading?: number) {
+function setup(width = 1440, height = 900, heading?: number, collision?: CollisionWorld | (() => CollisionWorld | null)) {
   const keyboard = new EventTarget(), page = Object.assign(new EventTarget(), { hidden: false });
   const lockDocument = Object.assign(new EventTarget(), {
     pointerLockElement: null as unknown,
@@ -47,7 +47,7 @@ function setup(width = 1440, height = 900, heading?: number) {
   const camera = new THREE.PerspectiveCamera(52, width / height, .15, 2200);
   const world = realm({ x: 2, y: 0, z: 9, yaw: 128 });
   const clock = { now: 0 };
-  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }) });
+  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }), ...(collision ? { collision } : {}) });
   const touch = (type: string, id: number, x: number, y: number) =>
     surface.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { pointerId: id, pointerType: 'touch', isPrimary: id === 1, button: 0, buttons: 1, clientX: x, clientY: y }));
   const mouse = (movementX: number, movementY: number) => lockDocument.dispatchEvent(Object.assign(new Event('mousemove'), { movementX, movementY }));
@@ -236,5 +236,35 @@ describe('the walk controller', () => {
     key(keyboard, 'keydown', 'KeyW');
     expect(controller.frame(16)).toEqual([]);
     expect(sent).toHaveLength(1);
+  });
+
+  it('keeps the camera out of the newest supplied collision world from the first frame a wall exists', () => {
+    const solids: SolidBox[] = [{ min: [-20, -1, -20], max: [20, 0, 20] }];
+    let world: CollisionWorld | null = { revision: 7, query: () => solids };
+    const { controller, camera } = setup(1440, 900, undefined, () => world);
+    controller.frame(0); controller.frame(16);
+    // The citizen stands at z = 9 facing -Z; the shoulder camera is about six metres behind, toward +Z.
+    expect(camera.position.z).toBeGreaterThan(14);
+    expect(controller.debug.camera).toMatchObject({ clearance: null, collisionRevision: 7, near: camera.near });
+    // A newly published revision puts a wall two metres behind the citizen.
+    const wall: SolidBox = { min: [-20, 0, 11], max: [20, 6, 11.4] };
+    world = { revision: 8, query: () => [...solids, wall] };
+    controller.frame(32);
+    expect(camera.position.z).toBeLessThan(11);
+    expect(controller.debug.camera.collisionRevision).toBe(8);
+    expect(controller.debug.camera.clearance).toBe(controller.debug.camera.distance);
+    expect(controller.debug.camera.desiredDistance).toBeGreaterThan(6);
+    // A moment without a world keeps the last one rather than letting the camera through the wall.
+    world = null;
+    controller.frame(48);
+    expect(camera.position.z).toBeLessThan(11);
+    expect(controller.debug.camera.collisionRevision).toBe(8);
+  });
+
+  it('reports a camera with no collision world honestly', () => {
+    const { controller } = setup();
+    controller.frame(0);
+    expect(controller.debug.camera.collisionRevision).toBeNull();
+    expect(controller.debug.camera.clearance).toBeNull();
   });
 });

@@ -53,7 +53,7 @@ after main has stopped editing them. The integrator alone calls those modules fr
   Filter lock deltas exactly as spec R8; recover rejection/re-lock cleanly. Clear held/pending/capture state on
   blur, hidden page, menu or disconnect. Preserve editable fields and click-versus-drag events for interaction.
   · evidence: pulse/held/repeat and slow-frame staging checks; warp/rejection/re-lock/blur/menu flow, usable touch.
-- [ ] **WC05 — Keep the camera out of the kingdom's solids.** Complete the conservative near-plane/shoulder
+- [x] **WC05 — Keep the camera out of the kingdom's solids.** Complete the conservative near-plane/shoulder
   collision sweep, immediate pull-in and .35 s outward recovery against the supplied complete CollisionWorld.
   Separate zoom intent from occlusion. Finish continuous wheel first person, self-visibility, level horizon,
   time-based follow and resize framing. · evidence: newly inserted occluder first-frame and corner/post/roof
@@ -80,3 +80,4 @@ after main has stopped editing them. The integrator alone calls those modules fr
 ## Backlog
 
 The worker records discoveries here and never selects them without a new brief.
+- Pulled in by a wall behind, let the camera also rise and pitch down a little (over-the-head) so the close view shows more street; needs a real-GPU feel check first (from WC05).

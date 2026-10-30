@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WALK_BUTTON, type WalkInput } from '@chatdom/shared/realm';
+import { WALK_BUTTON, type CollisionWorld, type WalkInput } from '@chatdom/shared/realm';
 import type { RealmWalkerPose } from '../realm/client';
 import { createShoulderRig, SHOULDER, type ShoulderPose } from './camera/shoulder';
 import { facingByte, headingFromByte, walkDirection } from './input/direction';
@@ -11,6 +11,8 @@ import { createWalkTouch, type TouchSurface } from './input/touch';
 
 export { createShoulderRig, filmOffsetFor, framingFor, shoulderPose, SHOULDER } from './camera/shoulder';
 export type { ShoulderPose, ShoulderRig, ShoulderView } from './camera/shoulder';
+export { clearBoom, nearFootprint, OCCLUSION, overlapsSolid, RECOVER_RATE, sweepHit } from './camera/occlusion';
+export type { BoomPoint, Clearance, Footprint } from './camera/occlusion';
 export { facingByte, headingFromByte, walkDirection } from './input/direction';
 export { createWalkHud, restingStick } from './input/hud';
 export type { WalkHud, WalkHudState } from './input/hud';
@@ -59,6 +61,13 @@ export interface WalkControllerOptions {
   readonly clock?: () => number;
   /** Entry heading in radians (0 faces +Z). Defaults to the direction the citizen already faces. */
   readonly heading?: number;
+  /**
+   * The complete collision world the camera must stay out of: the same immutable revision the realm client
+   * steps against, or a function returning the newest one each frame (read every frame, so a newly published
+   * solid pulls the camera in on the first frame it exists). A function returning null keeps the last world.
+   * Without it the camera has no collision, which `debug.camera.collisionRevision === null` reports.
+   */
+  readonly collision?: CollisionWorld | (() => CollisionWorld | null | undefined);
 }
 
 export type WalkOwner = 'walking' | 'released' | 'disposed';
@@ -80,7 +89,12 @@ export interface WalkDebug {
   look: LookMode;
   /** The phone stick under the thumb, in surface CSS px, or null. */
   stick: { x: number; y: number; forward: number; right: number; sprint: boolean } | null;
-  camera: { yaw: number; pitch: number; distance: number; desiredDistance: number; fov: number; filmOffset: number; shift: number };
+  /**
+   * `distance` is the boom drawn, `zoomDistance` the eased wheel wish, `desiredDistance` the wheel's target,
+   * `clearance` how far a solid let the boom reach this frame (null when nothing was in the way) and
+   * `collisionRevision` the world the camera was kept out of (null: no collision world supplied).
+   */
+  camera: { yaw: number; pitch: number; distance: number; zoomDistance: number; desiredDistance: number; clearance: number | null; collisionRevision: number | null; fov: number; near: number; filmOffset: number; shift: number };
   /** The citizen's body centre in CSS pixels of the surface, as drawn this frame. */
   screen: { x: number; y: number } | null;
   viewport: { width: number; height: number };
@@ -123,6 +137,12 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   let touchJump = false;
   const hud: WalkHud | null = options.hud ? createWalkHud(options.hud, () => { if (owner === 'walking') touchJump = true; }) : null;
   const rig = createShoulderRig(options.heading ?? 0);
+  const supplied = options.collision;
+  let solids: CollisionWorld | null = typeof supplied === 'function' ? null : supplied ?? null;
+  const collision = () => {
+    if (typeof supplied === 'function') solids = supplied() ?? solids;
+    return solids;
+  };
   const projected = new THREE.Vector3();
   let owner: WalkOwner = 'walking', placed = false, facing: number | null = null, jumpedLastFrame = false, last: number | null = null, peersAt = -Infinity;
   let width = Math.max(1, surface.clientWidth ?? 1), height = Math.max(1, surface.clientHeight ?? 1);
@@ -131,7 +151,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
     ready: false, owner, selfId: realm.selfId, frames: 0, walkers: 0, self: null, authority: null, peers: [],
     input: { moveX: 0, moveZ: 0, buttons: 0, yaw: 0, collisionRevision: realm.room.state.collisionRevision },
     look: look.mode, stick: null,
-    camera: { yaw: rig.view.yaw, pitch: rig.view.pitch, distance: rig.view.distance, desiredDistance: rig.desiredDistance, fov: camera.fov, filmOffset: camera.filmOffset, shift: 0 },
+    camera: { yaw: rig.view.yaw, pitch: rig.view.pitch, distance: rig.view.distance, zoomDistance: rig.zoomDistance, desiredDistance: rig.desiredDistance, clearance: null, collisionRevision: solids?.revision ?? null, fov: camera.fov, near: camera.near, filmOffset: camera.filmOffset, shift: 0 },
     screen: null, viewport: { width, height }, selfOpacity: 1,
   };
   const straighten = () => { if (camera.filmOffset !== 0) { camera.filmOffset = 0; camera.updateProjectionMatrix(); } };
@@ -198,12 +218,13 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
       debug.self = { x: self.x, y: self.y, z: self.z, yaw: self.yaw, speed: self.speed };
       if (!walking) return poses;
       rig.update(dt, self.speed > .3 ? headingFromByte(self.yaw) : null, self.speed, pointer.dragging || touch.orbiting);
-      pose = rig.apply(camera, [self.x, self.y, self.z], width / height);
+      const world = collision();
+      pose = rig.apply(camera, [self.x, self.y, self.z], width / height, world);
       projected.set(self.x, self.y + BODY_CENTRE, self.z).project(camera);
       Object.assign(debug, {
         ready: true, selfOpacity: pose.selfOpacity,
         screen: { x: (projected.x + 1) / 2 * width, y: (1 - projected.y) / 2 * height },
-        camera: { ...rig.view, desiredDistance: rig.desiredDistance, fov: camera.fov, filmOffset: camera.filmOffset, shift: pose.shift },
+        camera: { ...rig.view, zoomDistance: rig.zoomDistance, desiredDistance: rig.desiredDistance, clearance: rig.clearance, collisionRevision: world?.revision ?? null, fov: camera.fov, near: camera.near, filmOffset: camera.filmOffset, shift: pose.shift },
       });
       return poses;
     },
