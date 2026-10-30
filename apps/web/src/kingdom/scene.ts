@@ -22,7 +22,7 @@ import { terrainBatches } from './terrain-batches';
 export type CameraName='hero'|'window';
 export interface NameLabel {name:string;x:number;y:number;slot:number}
 export interface SceneOptions {tier:KingdomTier;seed:string;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
-export interface KingdomDebug {ready:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
+export interface KingdomDebug {ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
   let disposed=false,raf=0,loaded=false,lastFrame=performance.now(),time=options.time??30,hour=options.hour,targetHour=hour,camName=options.camera;
@@ -93,7 +93,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   let lastField=-Infinity,lastNames=-Infinity,lastActive=0,beaconCue=false;
   const unsubscribe=source.subscribe(next=>{frame=next;lastField=-Infinity;windows.setFrame(next);options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{windows.clear();frame=undefined;lastField=-Infinity;options.onSource('CONNECTION LOST');});
   earlyCleanups.push(unsubscribe);
-  const debug:KingdomDebug={ready:false,workers:pool.stats.size+4,homes:houses.length,activeWindows:0,geometryBuilds:0,fieldUploads:0,drawCalls:0,triangles:0,time:0,hour,camera:camName,fieldBytes:0,source:source.label,fieldSettled:false,shadowUpdates:0,shadowDrawCalls:0,shadowTriangles:0,shadowBytes:0,shadowEnabled:false,windowFieldVisited:0,beaconFieldVisited:0};
+  const debug:KingdomDebug={ready:false,lightingReady:false,workers:pool.stats.size+4,homes:houses.length,activeWindows:0,geometryBuilds:0,fieldUploads:0,drawCalls:0,triangles:0,time:0,hour,camera:camName,fieldBytes:0,source:source.label,fieldSettled:false,shadowUpdates:0,shadowDrawCalls:0,shadowTriangles:0,shadowBytes:0,shadowEnabled:false,windowFieldVisited:0,beaconFieldVisited:0};
   type Placement={position:Vec3;yaw:number};
   type RenderBatch={transitions:Map<Placement,DetailTransition>;blueprint:VoxelBlueprint;placements:readonly Placement[];levels:Map<number,THREE.InstancedMesh>};
   const batches=new Map<string,RenderBatch>();
@@ -197,6 +197,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }options.onNames(names.slice(0,3));}
   const fog=new THREE.FogExp2(0x000000);scene.fog=fog;
   let lastRenderedKey='';
+  let renderPhase:'preparing'|'drawing'|'drawn'='preparing',renderStartedAt=0,renderCompletedAt=0;
   function render(now:number){
     if(disposed)return;try {const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&!fixedTime)time+=dt;
@@ -220,17 +221,18 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=.0016;
     water.update(grade,time,camera);
-    if(loaded&&now-lastField>240){lastField=now;const centre:Vec3=[target.x,terrainHeight(layout,target.x,target.z),target.z];field.update(centre,windows.getSources());farField.update(centre,windows.getSources());beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]}]);}
+    if(now-lastField>240){lastField=now;const centre:Vec3=[target.x,terrainHeight(layout,target.x,target.z),target.z];field.update(centre,windows.getSources());farField.update(centre,windows.getSources());beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]}]);}
     if(now-lastNames>80){labels();lastNames=now;}
     if(loaded)sunShadows.updateSunDirection(grade.sunDirection);
     // Fixed evidence frames have no animation between seeks. Keep the public
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
     const renderKey=[loaded,time,hour,camName,geometryBuilds,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
-    if((loaded&&!fixedTime)||renderKey!==lastRenderedKey){renderer.render(scene,camera);lastRenderedKey=renderKey;}
-    // Readiness is a rendered scene with initial light from every field, not an
-    // idle worker queue: live arrivals may keep requesting newer revisions.
-    Object.assign(debug,{ready:loaded&&nearBytes>0&&farBytes>0&&beaconBytes>0,activeWindows:active,geometryBuilds,fieldUploads,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,time,hour,camera:camName,fieldBytes,shadowUpdates:sunShadows.stats.updates,shadowDrawCalls:sunShadows.stats.drawCalls,shadowTriangles:sunShadows.stats.triangles,shadowBytes:sunShadows.stats.textureBytes+sunShadows.stats.transformBytes,shadowEnabled:sunShadows.stats.enabled,windowFieldVisited:nearVisited+farVisited,beaconFieldVisited:beaconVisited,fieldSettled:field.stats.publishedRevision===field.stats.requestedRevision&&!field.stats.busy&&!field.stats.queued&&farField.stats.publishedRevision===farField.stats.requestedRevision&&!farField.stats.busy&&!farField.stats.queued&&farBytes>0&&beaconField.stats.publishedRevision===beaconField.stats.requestedRevision&&!beaconField.stats.busy&&!beaconField.stats.queued&&beaconBytes>0});
+    if((loaded&&!fixedTime)||renderKey!==lastRenderedKey){renderPhase='drawing';renderStartedAt=performance.now();renderer.render(scene,camera);renderCompletedAt=performance.now();renderPhase='drawn';lastRenderedKey=renderKey;}
+    // The gate covers loading the place, not background light refinement. The
+    // full scene and presence windows have drawn; independently scheduled light
+    // workers may still be waking. Captures can wait on lightingReady separately.
+    Object.assign(debug,{ready:loaded&&renderCompletedAt>0,lightingReady:nearBytes>0&&farBytes>0&&beaconBytes>0,activeWindows:active,geometryBuilds,fieldUploads,drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,time,hour,camera:camName,fieldBytes,shadowUpdates:sunShadows.stats.updates,shadowDrawCalls:sunShadows.stats.drawCalls,shadowTriangles:sunShadows.stats.triangles,shadowBytes:sunShadows.stats.textureBytes+sunShadows.stats.transformBytes,shadowEnabled:sunShadows.stats.enabled,windowFieldVisited:nearVisited+farVisited,beaconFieldVisited:beaconVisited,fieldSettled:field.stats.publishedRevision===field.stats.requestedRevision&&!field.stats.busy&&!field.stats.queued&&farField.stats.publishedRevision===farField.stats.requestedRevision&&!farField.stats.busy&&!farField.stats.queued&&farBytes>0&&beaconField.stats.publishedRevision===beaconField.stats.requestedRevision&&!beaconField.stats.busy&&!beaconField.stats.queued&&beaconBytes>0});
     raf=requestAnimationFrame(render);
     }catch(error){dispose();options.onError('The kingdom could not render');console.error('Kingdom frame failed',error);}
   }
@@ -260,10 +262,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // second compileAsync barrier between those successful draws and opening:
   // KHR_parallel_shader_compile is an optional driver completion hint, and can
   // remain pending even while the scene draws. The first fully loaded render
-  // and actual light uploads below are the readiness boundary on every GPU.
+  // opens the gate; background light readiness is reported independently.
   try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');}catch(error){dispose();throw error;}
-  loaded=true;lastFrame=performance.now();options.onProgress('The first light could be yours',1);
+  loaded=true;lastFrame=performance.now();options.onProgress('The gate is opening',1);
   return {layout,debug,sound,
+    inspect:()=>({build:'progressive-light-v1',loaded,renderPhase,renderStartedAt,renderCompletedAt,fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),
     setHour(value:number){targetHour=value;sound.cue('wood');},
     setCamera(value:CameraName){camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
     play(){sound.unlock();sound.cue('wood');windows.clear();simulation.reset();time=0;fixedTime=false;autoCamera=true;camName='hero';beaconCue=false;lastActive=0;},

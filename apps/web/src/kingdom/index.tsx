@@ -20,7 +20,7 @@ export default function Kingdom() {
       onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
-      testWindow.__chatdomKingdom={stats:instance.debug,seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play(),capture:(time:number)=>instance.capture(time)};
+      testWindow.__chatdomKingdom={stats:instance.debug,inspect:()=>instance.inspect(),seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play(),capture:(time:number)=>instance.capture(time)};
       const showReady=()=>{
         if(unmounted||error())return;
         if(!instance.debug.ready){openingFrame=requestAnimationFrame(showReady);return;}
