@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { createCastle, createTree, MATERIALS, CASTLE_BEACON_ANCHOR_METRES } from '@chatdom/content';
+import { createTree, MATERIALS } from '@chatdom/content';
 import { VoxelWorkerPool, type AssetChunkMesh } from '@chatdom/voxel';
 import { createAtmosphere, getEnvironment, createVoxelMaterial, geometryFromChunks, createWindowLights, type WindowHouse, createWater } from '@chatdom/render';
-import { generateKingdom, terrainHeight, roadDistance, randomUnit, seedHash, type KingdomTier } from '@chatdom/world';
+import { generateSettlementPlan, terrainHeight, samplePublicGround, randomUnit, seedHash, type KingdomTier } from '@chatdom/world';
 import type { KingdomPresenceFrame, Vec3, VoxelBlueprint } from '@chatdom/shared';
 import { createSimulatedPresence, createHeraldPresence } from './presence-feed';
 import { loadTerrain } from './terrain-client';
@@ -14,7 +14,9 @@ import { advanceDetailTransition, type DetailTransition, type DetailLevel } from
 import { createHorizonSurface } from './horizon';
 import { createSunShadows } from '@chatdom/render';
 import { beaconStrength } from './beacon';
-import { createSettlementContent } from './settlement-content';
+import { placeSettlementContent, placeMarketContent } from './settlement-content';
+import { createCastleContent } from './castle-content';
+import { inhabitedLightBounds } from './light-bounds';
 import { terrainBatches } from './terrain-batches';
 
 export type CameraName='hero'|'window';
@@ -30,7 +32,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const own=<T extends {dispose():void}>(resource:T):T=>{earlyCleanups.push(()=>resource.dispose());return resource;};
   const failLight=(message:string)=>queueMicrotask(()=>{if(disposed)return;fullDispose?.();options.onError(message);});
   try {
-  const layout=generateKingdom({seed:options.seed,tier:options.tier,firstYear:options.tier==='hamlet'?2025:2022,year:2026});
+  const layout=generateSettlementPlan({seed:options.seed,tier:options.tier,firstYear:options.tier==='hamlet'?2025:2022,year:2026});
   const renderer=own(new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'}));
   renderer.debug.onShaderError=(gl,program,vertex,fragment)=>{console.error('Kingdom shader failed',{vertex:gl.getShaderInfoLog(vertex),fragment:gl.getShaderInfoLog(fragment),link:gl.getProgramInfoLog(program)});throw new Error('A kingdom shader could not compile');};
   renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
@@ -47,8 +49,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   earlyCleanups.push(()=>abort.abort());
   const sound=own(createKingdomSound());
   const blueprints=new Map<string,VoxelBlueprint>();
-  const {houses,props}=createSettlementContent(layout);
-  for(const {blueprint} of [...houses,...props])blueprints.set(blueprint.id,blueprint);
+  const {houses,props}=placeSettlementContent(layout.homes,(x,z)=>terrainHeight(layout,x,z));
+  // Keep the meeting of the roads open. The market's well and two stalls sit
+  // along its edges, as real voxel geometry in the same shadow/occlusion lists.
+  props.push(...placeMarketContent(layout.market));
+  const {buildings:castleBuildings,beaconPosition}=createCastleContent(layout.castle);
+  const buildings=[...houses,...castleBuildings],content=[...buildings,...props];
+  for(const {blueprint} of content)blueprints.set(blueprint.id,blueprint);
   const windows=own(createWindowLights(scene,houses));
   const simulation=createSimulatedPresence(layout);
   const source=options.source==='simulated'?simulation.feed:createHeraldPresence('/presence-data/stream',undefined,options.presenceOrigin??'live');
@@ -62,23 +69,26 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const portrait=()=>canvas.clientWidth<canvas.clientHeight;
   let heroFov=53;
   function setHero(){
-    if(options.tier==='hamlet'){heroEye.set(portrait()?65:100,85,150);heroTarget.set(0,35,0);camera.fov=portrait()?58:50;}
-    else {heroEye.set(portrait()?-75:210,portrait()?85:110,portrait()?285:310);heroTarget.set(0,portrait()?17:20,portrait()?60:50);camera.fov=portrait()?57:48;}
+    // Look north from the inhabited streets: the castle crowns the scene and
+    // the pitched fronts stay legible below it, rather than becoming roof dots.
+    const market=layout.nodes.find(node=>node.id===layout.market.nodeId)!.position;
+    const hamlet=options.tier==='hamlet';
+    heroEye.set(market[0]+(portrait()?hamlet?64:150:hamlet?-65:-110),market[1]+(hamlet?31:portrait()?36:40),market[2]+(hamlet?118:160));
+    heroTarget.set(layout.castle.centre[0],layout.castle.centre[1]+9,portrait()?-35:market[2]-8);
+    camera.fov=portrait()?58:52;
     heroFov=camera.fov;camera.updateProjectionMatrix();
   }
   const sunShadows=own(createSunShadows(renderer,{bounds:new THREE.Box3(new THREE.Vector3(layout.bounds.minX-40,-8,layout.bounds.minZ-70),new THREE.Vector3(layout.bounds.maxX+40,60,layout.bounds.maxZ+20)),resolution:portrait()?1024:2048}));
   sunShadows.bindReceiver(clay.material);sunShadows.bindReceiver(ground.material);
   function resize(){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;setHero();sunShadows.setResolution(portrait()?1024:2048);}
   const observer=new ResizeObserver(resize);earlyCleanups.push(()=>observer.disconnect());observer.observe(canvas);resize();
-  const castle=createCastle('tide');
-  const castleOrigin:Vec3=[layout.castle[0]-16,layout.castle[1],layout.castle[2]-16];
-  const beaconPosition:Vec3=CASTLE_BEACON_ANCHOR_METRES.map((value,axis)=>value+castleOrigin[axis]!) as unknown as Vec3;
-  const blockers=[...houses,{slot:65534,blueprint:castle,position:castleOrigin,yaw:0}];
+  const blockers=buildings;
+  const lightBounds=inhabitedLightBounds(layout.homes);
   const nearBlockers=[...blockers,...props.map(p=>({...p,slot:65534}))];
   // Half-metre local occupancy resolves the little garden edges. Expanding a
   // sub-two-metre prop into whole distant cells would falsely seal the street.
   const field=own(createLightField(layout,nearBlockers,volume=>{if(disposed)return;clay.setLight(volume);fieldUploads++;nearBytes=volume.estimatedPeakBytes;nearVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom')));
-  const farField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setFarLight(volume);fieldUploads++;farBytes=volume.estimatedPeakBytes;farVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom'),{mode:'kingdom'}));
+  const farField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setFarLight(volume);fieldUploads++;farBytes=volume.estimatedPeakBytes;farVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom'),{mode:'kingdom',bounds:lightBounds}));
   const beaconField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setBeaconLight(volume);fieldUploads++;beaconBytes=volume.estimatedPeakBytes;beaconVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The castle light could not reach its towers'),{mode:'beacon',position:beaconPosition}));
   let lastField=-Infinity,lastNames=-Infinity,lastActive=0,beaconCue=false;
   const unsubscribe=source.subscribe(next=>{frame=next;lastField=-Infinity;windows.setFrame(next);options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{windows.clear();frame=undefined;lastField=-Infinity;options.onSource('CONNECTION LOST');});
@@ -129,7 +139,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   // Distant hills use 20 m cells on both sizes; the grounded 1 m collar stays
   // exact. One surface/sampler keeps groves grounded across viewport changes.
-  const {geometry:horizonGeometry,sampleHeight:landHeight}=createHorizonSurface(layout,{farStep:20});earlyCleanups.push(()=>horizonGeometry.dispose());
+  const {geometry:horizonGeometry,sampleHeight:landHeight}=createHorizonSurface(layout,{farStep:20,sampleTerrain:(x,z)=>terrainHeight(layout,x,z)});earlyCleanups.push(()=>horizonGeometry.dispose());
   const trees=[createTree(0),createTree(1),createTree(2)];
   const treePlaces=trees.map(()=>[] as {position:Vec3;yaw:number}[]);
   const treeCount=options.tier==='hamlet'?115:260;
@@ -139,25 +149,41 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     for(const dx of [-1.25,0,1.25])for(const dz of [-1.25,0,1.25])height=Math.min(height,landHeight(x+dx,z+dz));
     return height;
   };
-  // Each quarter has a small grove in the public green beside the winding spine.
-  // The entire eight-metre crown stays outside every reserved lot.
-  for(const [q,quarter] of layout.quarters.entries())for(const side of [-1,1])for(const offset of [8,15,22]){
-    const x=side*5.75,z=quarter.streetZ+offset;
-    if(roadDistance(layout,x,z)<3.5)continue;
-    const variant=(q+(side>0?1:0))%3;
+  // Index the full future reservations, so a growing home never needs a tree
+  // removed from its address. Public ground supplies its own corridor widths.
+  const reservationCells=new Map<string,typeof layout.reservations[number][]>(),indexStep=16,crown=4.25;
+  for(const reservation of layout.reservations){
+    const lot=reservation.lot;
+    for(let z=Math.floor((lot.minZ-crown)/indexStep);z<=Math.floor((lot.maxZ+crown)/indexStep);z++)for(let x=Math.floor((lot.minX-crown)/indexStep);x<=Math.floor((lot.maxX+crown)/indexStep);x++){
+      const key=`${x},${z}`,entries=reservationCells.get(key)??[];entries.push(reservation);reservationCells.set(key,entries);
+    }
+  }
+  const plant=(x:number,z:number,variant:number)=>{
+    const nearby=reservationCells.get(`${Math.floor(x/indexStep)},${Math.floor(z/indexStep)}`)??[];
+    if(nearby.some(({lot})=>x>lot.minX-crown&&x<lot.maxX+crown&&z>lot.minZ-crown&&z<lot.maxZ+crown))return;
+    if((samplePublicGround(layout,x,z)?.reservedDistance??Infinity)<crown)return;
+    const castle=layout.castle.bounds;
+    if(x>castle.minX-crown&&x<castle.maxX+crown&&z>castle.minZ-crown&&z<castle.maxZ+crown)return;
+    if(Math.hypot((x-layout.lake.x)/layout.lake.radiusX,(z-layout.lake.z)/layout.lake.radiusZ)<1.19)return;
+    if(planted.some(p=>p.distanceToSquared(new THREE.Vector2(x,z))<8))return;
     planted.push(new THREE.Vector2(x,z));treePlaces[variant]!.push({position:[x-4,rootHeight(x,z),z-4],yaw:0});
+  };
+  const activeCourts=new Set(layout.homes.map(home=>home.courtId));
+  for(const [i,court] of layout.courts.entries()){
+    if(!activeCourts.has(court.id))continue;
+    const anchor=layout.nodes.find(node=>node.id===court.nodeId)!;
+    const radius=Math.max(...court.boundary.map(([x,z])=>Math.hypot(x-anchor.position[0],z-anchor.position[2])))+7;
+    for(let side=0;side<8;side++){
+      const angle=side*Math.PI/4;
+      plant(anchor.position[0]+Math.cos(angle)*radius,anchor.position[2]+Math.sin(angle)*radius,(i+side)%3);
+    }
   }
   for(let i=0;i<treeCount*12&&planted.length<treeCount;i++) {
     const group=Math.floor(i/7),rand=(part:string)=>randomUnit(seedHash(`${options.seed}:grove:${part}`));
     const cx=layout.bounds.minX-35+rand(`${group}:x`)*(layout.bounds.maxX-layout.bounds.minX+70);
     const cz=layout.bounds.minZ-65+rand(`${group}:z`)*(layout.bounds.maxZ-layout.bounds.minZ+45);
     const angle=rand(`${i}:angle`)*Math.PI*2,radius=Math.sqrt(rand(`${i}:radius`))*10;
-    const x=cx+Math.cos(angle)*radius,z=cz+Math.sin(angle)*radius;
-    const inLot=layout.homes.some(h=>x>h.lot.minX-4.25&&x<h.lot.maxX+4.25&&z>h.lot.minZ-4.25&&z<h.lot.maxZ+4.25);
-    const lake=Math.hypot((x-layout.lake.x)/layout.lake.radiusX,(z-layout.lake.z)/layout.lake.radiusZ);
-    if(inLot||roadDistance(layout,x,z)<5.5||lake<1.19||Math.hypot(x,z+46)<28||planted.some(p=>p.distanceToSquared(new THREE.Vector2(x,z))<8))continue;
-    const y=rootHeight(x,z);
-    planted.push(new THREE.Vector2(x,z));treePlaces[group%3]!.push({position:[x-4,y,z-4],yaw:0});
+    plant(cx+Math.cos(angle)*radius,cz+Math.sin(angle)*radius,group%3);
   }
   // A continuous distant land silhouette lies beyond the detailed editable terrain.
   const horizonMaterial=own(new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:ground.material.uniforms,fragmentShader:ground.material.fragmentShader,vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
@@ -210,14 +236,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   fullDispose=dispose;earlyCleanups.length=0;
   raf=requestAnimationFrame(render);
-  const assets=[...blueprints.values(),castle,...trees],total=assets.length*3;let completed=0;
+  const assets=[...blueprints.values(),...trees],total=assets.length*3;let completed=0;
   // Coarse geometry is available first. Every resolution is prepared in workers; window anchors stay exact.
   const tasks=([4,2,1] as const).flatMap(factor=>assets.map(async b=>{
     const job={kind:'blueprint' as const,blueprint:b,revision:1,materials:MATERIALS.materials,materialRevision:MATERIALS.revision,...(factor===1?{}:{lodFactor:factor})};
     const result=await pool.submit(job);if(disposed||result?.kind!=='asset')return;
     const treeIndex=trees.indexOf(b);
-    const placements=b===castle?[{position:castleOrigin,yaw:0}]:treeIndex>=0?treePlaces[treeIndex]!:[...houses,...props].filter(h=>h.blueprint.id===b.id);
-    instance(b,result.chunks,placements,factor);options.onProgress(b===castle?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
+    const placements=treeIndex>=0?treePlaces[treeIndex]!:content.filter(h=>h.blueprint.id===b.id);
+    instance(b,result.chunks,placements,factor);options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
   }));
   tasks.push(loadTerrain(layout,()=>{}, {signal:abort.signal}).then(({chunks,origin})=>{
     if(disposed)return;
@@ -230,7 +256,12 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
-  try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');await renderer.compileAsync(scene,camera);if(disposed)throw new Error('Scene closed while compiling');}catch(error){dispose();throw error;}
+  // These meshes already render progressively under the gate. Do not put a
+  // second compileAsync barrier between those successful draws and opening:
+  // KHR_parallel_shader_compile is an optional driver completion hint, and can
+  // remain pending even while the scene draws. The first fully loaded render
+  // and actual light uploads below are the readiness boundary on every GPU.
+  try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');}catch(error){dispose();throw error;}
   loaded=true;lastFrame=performance.now();options.onProgress('The first light could be yours',1);
   return {layout,debug,sound,
     setHour(value:number){targetHour=value;sound.cue('wood');},

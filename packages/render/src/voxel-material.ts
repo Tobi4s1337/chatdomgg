@@ -157,7 +157,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       edge=mix(kind==3.?.96:kind==4.?.94:kind==6.?.95:1.,edge,detail);
       float ao=mix(.49,1.,vAo);float sky=mix(.24,1.,vSky);
       float diffuse=max(dot(n,normalize(uSunDirection)),0.);
-      vec3 cool=uAmbient*uAmbientIntensity*(.38+.62*max(n.y,0.))*sky;
+      vec3 cool=uAmbient*uAmbientIntensity*(.5+.5*max(n.y,0.))*sky;
       vec3 light=cool+uSun*uSunIntensity*diffuse*(.15+.85*vSky) /* sun-visibility */;
       vec3 uvw=(vWorld-uLightOrigin)/uLightExtent;
       float warm=surfaceField(uFarLight,uFarOrigin,uFarExtent,uFarCell,n);
@@ -168,7 +168,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         warm=mix(warm,surfaceField(uLight,uLightOrigin,uLightExtent,.5,n),nearBlend);
       }
       // The field is blocked by occupied cells; this adds real warm street/wall illumination, not a decal.
-      light+=vec3(1.,.57,.26)*warm*warm*(.22+.78*uNight)*.95;
+      light+=vec3(1.,.57,.26)*warm*warm*(.4+.6*uNight)*.95;
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
       light+=vec3(1.,.64,.32)*beacon*beacon*(.3+.7*uNight)*1.25;
       if(uTerrain>.5){

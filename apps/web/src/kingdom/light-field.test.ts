@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StyleIdSchema, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
-import { createCastlePlan, generateKingdom } from '@chatdom/world';
+import { createCastlePlan, generateKingdom, generateSettlementPlan, terrainHeight } from '@chatdom/world';
 import { createWindowLights, type WindowHouse } from '@chatdom/render';
 import { createHome, createHearthHome, createCastle, CASTLE_BEACON_ANCHOR_METRES, MATERIALS } from '@chatdom/content';
 import { PRESENCE_FIXTURES } from '@chatdom/shared/world-fixtures';
@@ -8,7 +8,7 @@ import { Scene } from 'three';
 import { createVoxelMaterial } from '@chatdom/render';
 import { sampleLightVolume } from '@chatdom/voxel';
 import { createLightField, type LightFieldOptions } from './light-field';
-import { createSettlementContent } from './settlement-content';
+import { createSettlementContent, placeSettlementContent } from './settlement-content';
 import { inhabitedLightBounds } from './light-bounds';
 import { createCastleContent } from './castle-content';
 import {
@@ -34,6 +34,61 @@ function request(revision = 1, nextOrigin = origin): LightFieldSolve {
 }
 
 describe('authoritative worker light geometry', () => {
+  it('uses settlement civic ground for local occupancy and removes light without rebuilding it', () => {
+    const hamlet = generateSettlementPlan({ seed: 'lanternmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
+    const solver = createLightFieldSolver(hamlet, []);
+    const above: Vec3 = [0.25, hamlet.market.elevation + 1.25, 10.25];
+    const below: Vec3 = [0.25, hamlet.market.elevation - 0.25, 10.25];
+    const lit = solver.solve({ ...request(), emitters: [{ position: above, level: 15 }] });
+    expect(sampleLightVolume(lit.volume, above)).toBe(15);
+    expect(lit.volume.visited).toBeGreaterThan(0);
+    const buried = solver.solve({ ...request(2), emitters: [{ position: below, level: 15 }] });
+    expect(buried.volume.visited).toBe(0);
+    expect(sampleLightVolume(buried.volume, below)).toBe(0);
+    expect(buried.occupancyBuilds).toBe(1);
+  });
+
+  it('lights each settlement window independently and keeps all three real fields within budget', () => {
+    const town = generateSettlementPlan({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
+    const { houses, props } = placeSettlementContent(town.homes, (x, z) => terrainHeight(town, x, z));
+    const { buildings, beaconPosition } = createCastleContent(town.castle);
+    const blockers = [...houses, ...buildings];
+    const options = { mode: 'kingdom', bounds: inhabitedLightBounds(town.homes) } as const;
+    const config = resolveLightFieldConfig(town, options);
+    expect(config.cellSize).toBe(2);
+    const solver = createLightFieldSolver(town, blockers, options);
+    const windows = createWindowLights(new Scene(), houses);
+    try {
+      windows.setFrame({ ...PRESENCE_FIXTURES.public, asOf: PRESENCE_FIXTURES.public.asOf + 1000,
+        windows: town.homes.map(plot => ({ slot: plot.slot, present: true, publicName: null, since: PRESENCE_FIXTURES.public.asOf })) });
+      const sources = windows.getSources();
+      expect(sources).toHaveLength(240);
+      const suppressed: number[] = [];
+      for (const [index, source] of sources.entries()) {
+        const result = solver.solve({ kind: 'solve', revision: index + 1, origin: config.origin!,
+          emitters: [{ position: source.position, normal: source.normal, level: Math.round(source.strength * 15) }] });
+        if (!result.volume.visited) suppressed.push(source.slot);
+        expect(result.occupancyBuilds).toBe(1);
+      }
+      const far = solver.solve({ kind: 'solve', revision: sources.length + 1, origin: config.origin!,
+        emitters: sources.map(source => ({ position: source.position, normal: source.normal, level: Math.round(source.strength * 15) })) }).volume;
+      const local = createLightFieldSolver(town, [...blockers, ...props.map(prop => ({ ...prop, slot: 65534 }))])
+        .solve({ kind: 'solve', revision: 1, origin, emitters: [] }).volume;
+      const beaconOptions = { mode: 'beacon', position: beaconPosition } as const;
+      const beacon = createLightFieldSolver(town, blockers, beaconOptions).solve({ kind: 'solve', revision: 1,
+        origin: resolveLightFieldConfig(town, beaconOptions).origin!,
+        emitters: [{ position: beaconPosition, normal: [0, 1, 0], level: 15 }] }).volume;
+      expect(beacon.visited).toBeGreaterThan(0);
+      expect(local.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
+      expect(far.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
+      expect(local.estimatedPeakBytes + far.estimatedPeakBytes + beacon.estimatedPeakBytes).toBeLessThan(12 * 1024 * 1024);
+      const removed = solver.solve({ kind: 'solve', revision: sources.length + 2, origin: config.origin!, emitters: [] });
+      expect(removed.volume.visited).toBe(0);
+      expect(removed.occupancyBuilds).toBe(1);
+      expect(suppressed).toEqual([]);
+    } finally { windows.dispose(); }
+  }, 120_000);
+
   it('lights the authored compound beacon within the combined three-field budget', () => {
     const town = generateKingdom({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
     const { houses, props } = createSettlementContent(town);
@@ -240,6 +295,31 @@ describe('authoritative worker light geometry', () => {
 });
 
 describe('bounded kingdom light field', () => {
+  it('escapes only terrain quantization above low windows, with exact roof and wall checks', () => {
+    const lowGround = { ...layout, homes: [], quarters: layout.quarters.map(quarter => ({ ...quarter, elevation: 8.125 })) };
+    const options = { mode: 'kingdom', bounds: { minX: -16, maxX: 16, minZ: -16, maxZ: 16 } } as const;
+    const config = resolveLightFieldConfig(lowGround, options);
+    const position: Vec3 = [1, 9.875, 1], normal: Vec3 = [1, 0, 0];
+    const job = { kind: 'solve' as const, revision: 1, origin: config.origin!, emitters: [{ position, normal, level: 15 }] };
+    const solve = (blockers: readonly WindowHouse[], next: LightFieldSolve = job) => createLightFieldSolver(lowGround, blockers, options).solve(next).volume;
+    const lit = solve([]);
+    expect(lit.visited).toBeGreaterThan(0);
+    expect(sampleLightVolume(lit, [2.000001, 10.000001, 1])).toBe(15);
+    expect(sampleLightVolume(lit, position)).toBe(0);
+    const solid = (boxes: VoxelBlueprint['boxes']): WindowHouse => ({ slot: 0, position: [-4, 8.125, -4], yaw: 0,
+      blueprint: { ...blueprint(boxes), size: [128, 128, 128] } });
+    const roof = solid([{ from: [0, 15, 0], to: [128, 16, 128], material: 3 }]);
+    const wall = solid([{ from: [44, 0, 0], to: [45, 128, 128], material: 3 }]);
+    expect(solve([roof]).visited).toBe(0);
+    expect(solve([wall]).visited).toBe(0);
+    const shortRoof = solid([{ from: [48, 15, 0], to: [64, 16, 128], material: 3 }]);
+    // Clearing this roof's far end plus the upward step exceeds the original
+    // two-cell ray length, even though each individual segment would be clear.
+    expect(solve([shortRoof], { ...job, emitters: [{ position: [0.001, 9.875, 1], normal, level: 15 }] }).visited).toBe(0);
+    expect(solve([], { ...job, emitters: [{ position: [1, 8, 1], normal, level: 15 }] }).visited).toBe(0);
+    expect(solve([], { ...job, emitters: [{ position, level: 15 }] }).visited).toBe(0);
+  });
+
   const options = { mode: 'kingdom' } as const;
   const config = resolveLightFieldConfig(layout, options);
   const kingdomOrigin = config.origin!;
@@ -498,6 +578,24 @@ function setup(onVolume = vi.fn(), onError = vi.fn(), options: LightFieldOptions
 
 describe('dedicated light worker scheduling', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
+
+  it('hands a settlement snapshot and explicit inhabited bounds to the worker', () => {
+    const hamlet = generateSettlementPlan({ seed: 'lanternmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
+    const bounds = inhabitedLightBounds(hamlet.homes);
+    ControlledWorker.instances = [];
+    vi.stubGlobal('Worker', ControlledWorker);
+    const onVolume = vi.fn(), field = createLightField(hamlet, [], onVolume, undefined, { mode: 'kingdom', bounds });
+    const worker = ControlledWorker.instances[0]!;
+    expect(worker.messages[0]).toMatchObject({ layout: { version: 2, revision: hamlet.revision }, options: { mode: 'kingdom', bounds } });
+    worker.ready();
+    field.update([0, 0, 0], []);
+    const request = worker.latest();
+    expect(request.origin).toEqual(resolveLightFieldConfig(hamlet, { mode: 'kingdom', bounds }).origin);
+    worker.respond(worker.result(request));
+    expect(onVolume).toHaveBeenCalledOnce();
+    expect(field.stats.failed).toBe(false);
+    field.dispose();
+  });
 
   it('sends the same explicit inhabited domain to the worker and accepts its result', () => {
     const bounds = { minX: -40, maxX: 80, minZ: -30, maxZ: 90 };

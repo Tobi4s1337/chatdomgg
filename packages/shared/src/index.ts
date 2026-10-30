@@ -6,3 +6,5 @@ export * from './atlas-binary';
 export * from './atlas-raids';
 export * from './voxel';
 export * from './presence';
+export * from './avatar';
+export * from './forge-pieces';

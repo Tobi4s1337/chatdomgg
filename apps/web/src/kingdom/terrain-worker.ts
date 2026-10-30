@@ -2,7 +2,9 @@ import { MAT, MATERIALS } from '@chatdom/content';
 import { VOXEL_METRES, type Vec3 } from '@chatdom/shared';
 import { haloIndex, HALO_VOLUME, meshVoxelChunk, packVoxelVertex, unpackVoxelVertex,
   type AssetChunkMesh, type MeshChunkRequest, type VoxelChunkMesh } from '@chatdom/voxel';
-import { roadDistance, seedHash, terrainHeight, type KingdomLayout } from '@chatdom/world';
+import { roadDistance, samplePublicGround, seedHash, terrainHeight, type KingdomLayout, type SettlementPlan } from '@chatdom/world';
+
+export type TerrainLayout = KingdomLayout | SettlementPlan;
 
 const CELL_METRES = VOXEL_METRES.terrain;
 const CHUNK_METRES = CELL_METRES * 32;
@@ -31,7 +33,7 @@ export interface TerrainField {
  * corner samples as the GPU texture. Analytic terrainHeight is the authored continuous field;
  * it is not exactly the piecewise-planar surface between render vertices.
  */
-export function sampleRenderedTerrainHeight(layout: KingdomLayout, x: number, z: number): number {
+export function sampleRenderedTerrainHeight(layout: TerrainLayout, x: number, z: number): number {
   return sampleTerrainTriangles((px, pz) => terrainHeight(layout, px, pz), x, z);
 }
 
@@ -54,7 +56,7 @@ export interface TerrainProgress {
   readonly chunk?: AssetChunkMesh;
 }
 
-export interface TerrainWorkerRequest { readonly kind: 'build-terrain'; readonly layout: KingdomLayout }
+export interface TerrainWorkerRequest { readonly kind: 'build-terrain'; readonly layout: TerrainLayout }
 export type TerrainWorkerResponse =
   | { readonly kind: 'start'; readonly total: number; readonly origin: Vec3 }
   | { readonly kind: 'chunk'; readonly progress: TerrainProgress }
@@ -62,7 +64,7 @@ export type TerrainWorkerResponse =
   | { readonly kind: 'error'; readonly message: string };
 
 /** One globally sampled grid includes every neighbouring column needed by all 34³ halos. */
-export function prepareTerrainField(layout: KingdomLayout): TerrainField {
+export function prepareTerrainField(layout: TerrainLayout): TerrainField {
   const { minX, maxX, minZ, maxZ } = layout.bounds;
   if (![minX, maxX, minZ, maxZ].every(Number.isFinite) || minX >= maxX || minZ >= maxZ) {
     throw new Error('Terrain needs finite, nonempty bounds.');
@@ -90,12 +92,16 @@ export function prepareTerrainField(layout: KingdomLayout): TerrainField {
     if (top <= 0 || top > 1024) throw new Error('Terrain exceeds the 32-chunk vertical budget.');
     const index = x + columns * z;
     heights[index] = top;
-    const distance = roadDistance(layout, worldX, worldZ);
     // Long, continuous worn edges read as a path; there is no per-voxel colour noise.
-    const roadWidth = 1.8 + 0.22 * Math.sin(worldX * 0.12 + worldZ * 0.09 + phase)
+    const wear = 0.22 * Math.sin(worldX * 0.12 + worldZ * 0.09 + phase)
       + 0.1 * Math.sin(worldX * 0.29 - worldZ * 0.17);
+    // Signed distance already includes each road/square's complete designed width.
+    // Wear may extend its edge, but never cuts into guaranteed public clearance.
+    const paved = 'version' in layout
+      ? (samplePublicGround(layout, worldX, worldZ)?.pavingDistance ?? Infinity) <= Math.max(0, wear)
+      : roadDistance(layout, worldX, worldZ) <= 1.8 + wear;
     surfaces[index] = height < layout.lake.level + 0.25 ? MAT.waterbed
-      : distance <= roadWidth ? MAT.paving : MAT.grass;
+      : paved ? MAT.paving : MAT.grass;
   }
   const renderColumns = countX * 16 + 1, renderRows = countZ * 16 + 1;
   const renderHeights = new Float32Array(renderColumns * renderRows);
@@ -103,7 +109,8 @@ export function prepareTerrainField(layout: KingdomLayout): TerrainField {
     renderHeights[x + renderColumns * z] = terrainHeight(layout, origin[0] + x, origin[2] + z);
   }
   return { origin, chunkCounts: [countX, countZ], columns, rows, heights, surfaces, renderHeights,
-    key: `terrain:${seedHash(JSON.stringify({ config: layout.config, bounds: layout.bounds })).toString(16)}` };
+    key: `terrain:${seedHash(JSON.stringify({ config: layout.config, bounds: layout.bounds,
+      ...('revision' in layout ? { revision: layout.revision } : {}) })).toString(16)}` };
 }
 
 /** Real terrain continues into every halo, even beyond the rendered footprint and below its base. */
@@ -226,7 +233,7 @@ function meshTerrainSurface(field: TerrainField, coordinate: Vec3, stamp: VoxelC
     for (const [dx, dz] of [[0, 0], [0, 2], [2, 2], [2, 0]] as const) {
       const height = field.renderHeights[(fieldX + dx) / 2 + renderColumns * ((fieldZ + dz) / 2)]!;
       if (!Number.isFinite(height) || Math.abs(height - (field.origin[1] + top * CELL_METRES)) > TERRAIN_SURFACE_BOUNDS_PADDING) {
-        throw new Error('Terrain smoothing exceeds its render bounds.');
+        throw new Error(`Terrain smoothing exceeds its render bounds at ${field.origin[0] + (fieldX + dx) * CELL_METRES},${field.origin[2] + (fieldZ + dz) * CELL_METRES}: surface ${height}, voxel top ${field.origin[1] + top * CELL_METRES}.`);
       }
       const shade = surfaceCornerShade(field, shading, fieldX + dx, fieldZ + dz);
       vertices.push(...packVoxelVertex({ x: x + dx, y, z: z + dz, face: 2, material, ...shade }));
@@ -240,7 +247,7 @@ function meshTerrainSurface(field: TerrainField, coordinate: Vec3, stamp: VoxelC
 }
 
 /** Two bounded worker passes retain compact column shading and only one transient voxel mesh. */
-export function buildTerrain(layout: KingdomLayout, emit: (response: TerrainWorkerResponse) => void): void {
+export function buildTerrain(layout: TerrainLayout, emit: (response: TerrainWorkerResponse) => void): void {
   const field = prepareTerrainField(layout);
   const coordinates = terrainSurfaceChunks(field);
   const total = coordinates.length * 2;

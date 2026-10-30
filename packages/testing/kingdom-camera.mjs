@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url';
 const root = process.cwd();
 const rootRequire = createRequire(resolve(root, 'package.json'));
 const webRequire = createRequire(resolve(root, 'apps/web/package.json'));
+const { transpileModule, ScriptTarget, ModuleKind } = rootRequire('typescript');
 const { createServer } = await import(pathToFileURL(rootRequire.resolve('vite')).href);
 const THREE = await import(pathToFileURL(resolve(dirname(webRequire.resolve('three')), 'three.module.js')).href);
 const sourcePath = 'apps/web/src/kingdom/scene.ts', reportPath = 'shots/kingdom/camera-sweep.json';
@@ -17,7 +18,9 @@ const sourceHash = createHash('sha256').update(sceneSource).digest('hex');
 const dt = 0.005, duration = 20;
 const setupStart = sceneSource.indexOf('  const firstPane=first.blueprint.windows[0]!;');
 const setupEnd = sceneSource.indexOf('  const sunShadows=', setupStart);
-const setupCode = sceneSource.slice(setupStart, setupEnd).replaceAll('windows[0]!', 'windows[0]');
+const setupCode = transpileModule(sceneSource.slice(setupStart, setupEnd), {
+  compilerOptions: { target: ScriptTarget.ESNext, module: ModuleKind.None },
+}).outputText;
 const autoStart = sceneSource.indexOf('    if(autoCamera){');
 const autoEnd = sceneSource.indexOf('\n    }\n    else if', autoStart);
 const autoCode = sceneSource.slice(autoStart + '    if(autoCamera){'.length, autoEnd);
@@ -41,13 +44,13 @@ for (const [start, end] of [...ranges, [fov[2], fov[3]]].map(range => range.map(
   if (![start, end].every(Number.isFinite) || start < 0 || end <= start || end > duration) throw new Error('Camera motion exceeds the checked time interval');
 }
 const cameraArgs = sceneSource.match(/new THREE\.PerspectiveCamera\(([\d.,\s]+)\)/)?.[1].split(',').map(Number);
-const farStep = Number(sceneSource.match(/createHorizonSurface\(layout,\{farStep:(10|20)\}\)/)?.[1]);
+const farStep = Number(sceneSource.match(/createHorizonSurface\(layout,\{farStep:(10|20),sampleTerrain:\(x,z\)=>terrainHeight\(layout,x,z\)\}\)/)?.[1]);
 if (!cameraArgs || cameraArgs.length !== 4 || !cameraArgs.every(Number.isFinite)
   || cameraArgs[2] <= 0 || cameraArgs[3] <= cameraArgs[2] || ![10, 20].includes(farStep)) {
   throw new Error('Camera clipping or horizon configuration changed');
 }
 const near = cameraArgs[2], initialFov = Number(fov[1]);
-const setupCamera = new Function('THREE', 'first', 'options', 'canvas', 'camera', `${setupCode}\nsetHero();return {homeEye,homeTarget,heroEye,heroTarget,target,heroFov};`);
+const setupCamera = new Function('THREE', 'first', 'options', 'canvas', 'camera', 'layout', `${setupCode}\nsetHero();return {homeEye,homeTarget,heroEye,heroTarget,target,heroFov};`);
 const moveCamera = new Function('THREE', 'time', 'camera', 'homeEye', 'homeTarget', 'heroEye', 'heroTarget', 'target', 'heroFov', `const autoCamera=true,camName='hero';${autoCode}\ncamera.fov=${fovCode};camera.lookAt(target);camera.updateMatrixWorld();`);
 const server = await createServer({ root, configFile: false, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
 const grids = new Map();
@@ -132,32 +135,33 @@ function terrainUpper(horizon, from, to, padding = 0) {
 }
 const rounded = value => typeof value === 'number' ? Math.round(value * 1e6) / 1e6 : value;
 try {
-  const { generateKingdom } = await server.ssrLoadModule('/packages/world/src/index.ts');
-  const { createSettlementContent } = await server.ssrLoadModule('/apps/web/src/kingdom/settlement-content.ts');
+  const { generateSettlementPlan, terrainHeight } = await server.ssrLoadModule('/packages/world/src/index.ts');
+  const { placeSettlementContent, placeMarketContent } = await server.ssrLoadModule('/apps/web/src/kingdom/settlement-content.ts');
   const { createSimulatedPresence } = await server.ssrLoadModule('/apps/web/src/kingdom/presence-feed.ts');
-  const { createCastle } = await server.ssrLoadModule('/packages/content/src/index.ts');
+  const { createCastleContent } = await server.ssrLoadModule('/apps/web/src/kingdom/castle-content.ts');
   const { createHorizonSurface } = await server.ssrLoadModule('/apps/web/src/kingdom/horizon.ts');
   const { blueprintOccludes } = await server.ssrLoadModule('/apps/web/src/kingdom/visibility.ts');
   const records = [], failures = [];
   for (const seed of ['lanternmere', 'willowmere']) for (const tier of ['hamlet', 'town']) {
-    const layout = generateKingdom({ seed, tier, firstYear: tier === 'hamlet' ? 2025 : 2022, year: 2026 });
-    const { houses, props } = createSettlementContent(layout);
+    const layout = generateSettlementPlan({ seed, tier, firstYear: tier === 'hamlet' ? 2025 : 2022, year: 2026 });
+    const { houses, props } = placeSettlementContent(layout.homes, (x, z) => terrainHeight(layout, x, z));
+    props.push(...placeMarketContent(layout.market));
     const first = houses.find(home => home.slot === createSimulatedPresence(layout).firstSlot);
     if (!first) throw new Error(`No camera home in ${seed}/${tier}`);
     const objects = [...houses.map(home => ({ ...home, category: 'home' })),
       ...props.map(prop => ({ ...prop, category: 'prop' })),
-      { slot: 65534, blueprint: createCastle('tide'), position: [layout.castle[0] - 16, layout.castle[1], layout.castle[2] - 16], yaw: 0, category: 'castle' }];
+      ...createCastleContent(layout.castle).buildings.map(module => ({ ...module, category: 'castle' }))];
     for (const object of objects) {
       if (!Number.isFinite(object.yaw) || Math.abs(object.yaw - Math.round(object.yaw / (Math.PI / 2)) * Math.PI / 2) > 1e-7) {
         throw new Error(`Camera collision checks require cardinal objects: ${object.blueprint.id}`);
       }
     }
-    const horizon = createHorizonSurface(layout, { farStep });
+    const horizon = createHorizonSurface(layout, { farStep, sampleTerrain: (x, z) => terrainHeight(layout, x, z) });
     try {
       for (const portrait of [false, true]) {
         const canvas = { clientWidth: portrait ? 390 : 1440, clientHeight: portrait ? 844 : 900 };
         const camera = new THREE.PerspectiveCamera(cameraArgs[0], canvas.clientWidth / canvas.clientHeight, near, cameraArgs[3]);
-        const setup = setupCamera(THREE, first, { tier }, canvas, camera);
+        const setup = setupCamera(THREE, first, { tier }, canvas, camera, layout);
         if (setup.heroEye.y < Math.max(Number(liftCeiling), setup.homeEye.y)
           || ![initialFov, setup.heroFov].every(value => Number.isFinite(value) && value > 0 && value < 180)) {
           throw new Error(`Camera endpoints violate the monotone proof: ${seed}/${tier}`);
@@ -218,8 +222,8 @@ try {
           }
           previous = point;
         }
-        const record = { seed, tier, viewport: portrait ? '390x844' : '1440x900', firstHome: first.blueprint.id, firstSlot: first.slot,
-          objects: { homes: houses.length, props: props.length, castles: 1 }, evaluatedSamples, checkedPositions,
+        const record = { seed, tier, revision: layout.revision, viewport: portrait ? '390x844' : '1440x900', firstHome: first.blueprint.id, firstSlot: first.slot,
+          objects: { homes: houses.length, props: props.length, castleModules: layout.castle.modules.length }, evaluatedSamples, checkedPositions,
           homeEye: setup.homeEye.toArray(), heroEye: setup.heroEye.toArray(), heroTarget: setup.heroTarget.toArray(), heroFov: setup.heroFov, firstCollision, collisionSegments,
           minSolid, minTerrain, minNearTerrain, maxSegment, maxNearRadius,
           conservativeSweptSolidClearance: minSolid.distance - maxSegment,

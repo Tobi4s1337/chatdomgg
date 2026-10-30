@@ -55,6 +55,22 @@ importers:
         specifier: 8.3.5
         version: 8.3.5(@types/node@22.19.15)
 
+  apps/panel:
+    dependencies:
+      '@chatdom/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      solid-js:
+        specifier: 1.9.18
+        version: 1.9.18
+    devDependencies:
+      vite:
+        specifier: 8.3.5
+        version: 8.3.5(@types/node@22.19.15)
+      vite-plugin-solid:
+        specifier: 2.11.14
+        version: 2.11.14(solid-js@1.9.18)(vite@8.3.5(@types/node@22.19.15))
+
   apps/surveyor:
     dependencies:
       '@chatdom/shared':
@@ -104,6 +120,8 @@ importers:
       vite-plugin-solid:
         specifier: 2.11.14
         version: 2.11.14(solid-js@1.9.18)(vite@8.3.5(@types/node@22.19.15))
+
+  packages/audio: {}
 
   packages/content:
     dependencies:

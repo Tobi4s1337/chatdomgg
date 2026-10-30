@@ -1,11 +1,11 @@
 /* global Worker:readonly */
 import type { Vec3 } from '@chatdom/shared';
 import type { WindowHouse } from '@chatdom/render';
-import { terrainHeight, type KingdomLayout } from '@chatdom/world';
+import { terrainHeight } from '@chatdom/world';
 import type { LightVolume } from '@chatdom/voxel';
 import {
   LIGHT_FIELD_BUDGET, resolveLightFieldConfig,
-  type LightFieldEmitter, type LightFieldOptions, type LightFieldRequest, type LightFieldResponse, type LightFieldSolve,
+  type LightFieldEmitter, type LightFieldLayout, type LightFieldOptions, type LightFieldRequest, type LightFieldResponse, type LightFieldSolve,
 } from './light-field-worker';
 
 export type { LightFieldOptions } from './light-field-worker';
@@ -28,7 +28,7 @@ export interface LightFieldStats {
 
 /** Main calls at most 5 Hz. No geometry rasterization or occupancy allocation runs here. */
 export function createLightField(
-  layout: KingdomLayout, houses: readonly WindowHouse[], onVolume: (volume: LightVolume) => void, onError?: (error: Error) => void,
+  layout: LightFieldLayout, houses: readonly WindowHouse[], onVolume: (volume: LightVolume) => void, onError?: (error: Error) => void,
   options: LightFieldOptions = {},
 ): {
   update(centre: Vec3, sources: readonly LightFieldSource[]): void;
