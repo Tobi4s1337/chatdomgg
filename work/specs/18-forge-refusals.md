@@ -194,3 +194,7 @@ coals/anvils, real Twitch operation, new townsfolk or general audio. Those remai
   same choreography and cue regardless of cause; no refusal-specific sound, punishment or persistent trace.
 
 - **2026-10-30 — Optional production bench hook.** Main registers `apps/web/src/forge-refusal-bench/index.tsx` at `/-/forge-refusal`. It must default-export a Solid component when supplied. No placeholder mounts while the lane is absent.
+- **2026-10-30 — Optional `motion` on the adapter (FF02).** `createForgeRefusalPresentation` takes an optional
+  `motion: 'auto' | 'full' | 'reduced'` (default `auto`). `auto` reads `prefers-reduced-motion` once per admitted
+  beat, so no listener is held and a beat never changes style halfway; the forced values exist only so the bench
+  can review both deterministically. A beat with any field beyond `kind`/`variant` is ignored, not stripped.

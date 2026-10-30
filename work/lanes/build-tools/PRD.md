@@ -30,7 +30,7 @@ work or repeat town proof captures. Main handles `pnpm verify` and integration. 
   occupied-region fill and a mirrored gesture through the core. Wire real undo/redo availability and complete
   gesture history; rejected targets retain a plain reason and leave history unchanged.
   · evidence: palette/brush shot + focused edit/history tour
-- [ ] **BT03 — Finish comfortable thumb and keyboard controls.** Finish phone arrangement, safe areas and 44 px
+- [x] **BT03 — Finish comfortable thumb and keyboard controls.** Finish phone arrangement, safe areas and 44 px
   hit targets. The palette leaves the real target, rejection reason and main-owned scene controls unobstructed.
   Complete designed focus, names, actual core shortcut hints and drawer focus restoration; global keyboard and
   canvas gestures remain core-owned. Clean up subscriptions/listeners. Finish material-appropriate press/drawer
