@@ -186,3 +186,5 @@ The shell and window metadata are complete static assets, ready for their real c
   been built or validated by this brief.
 
 - **2026-10-30 — Ready for the team.** Main reviewed the real core mixed-street desktop/phone views, doorway and clean SIMULATED window fixture. Validator checks all 51 baseline assets; six review-fixture tests pass. Capture previews allocate free ports for parallel worktrees. The actual lane assets remain this lane’s acceptance, not a claimed result of the tooling check.
+
+- **2026-10-30 — Presence consumer:** the first ordered window anchor is the citizen’s designated presence window. Keep it stable across tiers. The authoring bench lights all anchors for inspection; the kingdom lights that one anchor per citizen.

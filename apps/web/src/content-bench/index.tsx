@@ -78,7 +78,7 @@ export function ContentBench() {
         bounds.union(local);
       }
       const focus=fixture.focus ? new THREE.Vector3(...fixture.focus).multiplyScalar(VOXEL_METRES.build) : undefined;
-      const lights=presence==='none'?undefined:createWindowLights(scene,fixture.instances.map((item,slot)=>({...item,slot,position:item.position.map(v=>v*VOXEL_METRES.build) as [number,number,number]})));
+      const lights=presence==='none'?undefined:createWindowLights(scene,fixture.instances.map((item,slot)=>({...item,slot,position:item.position.map(v=>v*VOXEL_METRES.build) as [number,number,number]})),{allWindows:true});
       if(lights) {
         lights.setFrame(KingdomPresenceFrameSchema.parse({version:1,kingdomId:'1',epoch:'content-review',sequence:1,asOf:1000,origin:'simulated',streamLive:true,connection:'fresh',windows:fixture.instances.map((_,slot)=>({slot,present:presence==='on',publicName:null,since:0}))}));
         lights.update(1,hour);

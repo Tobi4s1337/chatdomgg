@@ -4,14 +4,14 @@ export function createKingdomSound() {
   function unlock(){
     context??=new AudioContext();
     if(!master){master=context.createGain();master.gain.value=.16;const limiter=context.createDynamicsCompressor();limiter.threshold.value=-18;limiter.knee.value=12;limiter.ratio.value=8;master.connect(limiter);limiter.connect(context.destination);}
-    void context.resume();enabled=true;
+    master.gain.setTargetAtTime(.16,context.currentTime,.03);void context.resume();enabled=true;
   }
   function note(frequency:number,delay:number,duration:number,volume:number,type:OscillatorType='sine'){
     if(!enabled||!context||!master)return;
     const t=context.currentTime+delay,osc=context.createOscillator(),gain=context.createGain();
     osc.type=type;osc.frequency.value=frequency;gain.gain.setValueAtTime(0,t);gain.gain.linearRampToValueAtTime(volume,t+.018);gain.gain.exponentialRampToValueAtTime(.0001,t+duration);osc.connect(gain);gain.connect(master);osc.start(t);osc.stop(t+duration+.03);osc.onended=()=>{osc.disconnect();gain.disconnect();};
   }
-  return {unlock,get enabled(){return enabled;},toggle(){if(enabled){enabled=false;return false;}unlock();return true;},
+  return {unlock,get enabled(){return enabled;},toggle(){if(enabled){enabled=false;master?.gain.setTargetAtTime(0,context!.currentTime,.03);return false;}unlock();return true;},
     cue(kind:'wood'|'light'|'wave'|'beacon') {
       const shift=[1,1.015,.985,1.008][variation++%4]!;
       if(kind==='wood'){note(180*shift,0,.07,.28,'triangle');note(360*shift,.008,.04,.08);}

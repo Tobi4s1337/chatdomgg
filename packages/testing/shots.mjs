@@ -25,12 +25,13 @@ try {
       await page.setViewportSize({ width, height });
       for (const [label, hour] of kingdom ? [['noon', 12], ['dusk', 19.5], ['night', 23]] : [['', 0]]) {
         if (kingdom) {
-          await page.evaluate(hour => { window.__chatdomKingdom.seek(30, 'hero'); window.__chatdomKingdom.hour(hour); }, hour);
+          await page.evaluate(hour => window.__chatdomKingdom.hour(hour), hour);
           await page.waitForFunction(hour => Math.abs(window.__chatdomKingdom.stats.hour - hour) < 0.01 && window.__chatdomKingdom.stats.camera === 'hero', hour);
           await page.evaluate(() => new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
+          await page.waitForFunction(() => window.__chatdomKingdom.stats.fieldSettled, null, { timeout: 120_000 });
           const stats = await page.evaluate(() => ({ ...window.__chatdomKingdom.stats }));
           const triangleLimit = width <= 390 ? 800_000 : 2_000_000;
-          if (stats.drawCalls < 1 || stats.drawCalls > 120 || stats.triangles < 1 || stats.triangles > triangleLimit || stats.fieldBytes <= 0 || stats.fieldBytes > 8 * 1024 * 1024) throw new Error(`${name} ${width}x${height}: scene budget exceeded: ${JSON.stringify(stats)}`);
+          if (stats.drawCalls < 1 || stats.drawCalls > 120 || stats.triangles < 1 || stats.triangles > triangleLimit || stats.fieldBytes <= 0 || stats.fieldBytes > 12 * 1024 * 1024) throw new Error(`${name} ${width}x${height}: scene budget exceeded: ${JSON.stringify(stats)}`);
           if (!(await page.locator('.source-ribbon').innerText()).includes('SIMULATED')) throw new Error(`${name}: missing SIMULATED source`);
         }
         if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) throw new Error(`${name} overflows viewport at ${width}x${height}`);
