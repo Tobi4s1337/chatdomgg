@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "scripts": {
+    "build": "vite build --logLevel warn",
+    "start": "node --env-file-if-exists=../../.env --env-file-if-exists=${HOME}/.config/chatdom/atlas.env dist/api.mjs",
+    "start:simulated": "REALM_AUTH_MODE=simulated node --env-file-if-exists=../../.env dist/api.mjs"
+  },
   "dependencies": {
     "@chatdom/shared": "workspace:*",
     "pg": "8.23.1",
