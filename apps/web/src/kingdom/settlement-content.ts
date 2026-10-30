@@ -31,13 +31,15 @@ export function placeSettlementContent(plots: readonly ContentPlot[], ground: (x
       const y = ground(centre[0], centre[2]);
       props.push({ blueprint: b, position: [origin[0], y, origin[2]], yaw });
     };
-    add(plot.ordinal % 2 ? 'flower-pot' : 'leafy-shrub', .125, .125);
+    // Keep the union of the authored door approaches clear, including the
+    // off-centre Hearth and Tide entrances. Small ornaments sit at the edges.
+    add(plot.ordinal % 2 ? 'flower-pot' : 'leafy-shrub', -.375, .125);
     add(plot.ordinal % 3 ? 'flower-trough' : 'rock-cluster', 6, .125);
     // A short joined fence or wall on selected gardens; opening stays generous.
     if (plot.ordinal % 4 === 0) {
       const kind = plot.ordinal % 8 === 0 ? 'wall' : 'fence';
-      add(`${kind}-straight`, 5.5, 1.75);
-      add(`${kind}-end`, 7.5, 1.75);
+      add(`${kind}-straight`, 5.625, 1.75);
+      add(`${kind}-end`, 7.625, 1.75);
     }
   }
   return { houses, props };

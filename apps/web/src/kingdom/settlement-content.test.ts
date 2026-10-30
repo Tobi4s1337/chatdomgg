@@ -1,9 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { generateKingdom, homeFrame, transformCardinalPoint } from '@chatdom/world';
 import { HOME_DEPTH_METRES, HomeTierSchema } from '@chatdom/shared';
+import { HOME_REVIEW } from '../../../../packages/content/src/homes/hearth';
 import { createSettlementContent, placeSettlementContent } from './settlement-content';
 
 describe('installed kingdom content', () => {
+  it('leaves a 1.5 metre route directly outside every authored front door', () => {
+    for (const style of ['hearth', 'tide'] as const) for (const tier of HomeTierSchema.options) for (const variant of [0, 1, 2] as const) for (const rotation of [0, 1, 2, 3] as const) {
+      const plot = { slot: 7, ordinal: 0, position: [10,0,20] as const, rotation, tier, style, variant };
+      const { houses, props } = placeSettlementContent([plot], () => 0);
+      const home = houses[0]!;
+      const door = style === 'hearth' ? HOME_REVIEW[home.blueprint.id]!.entrance[0] / 8 : (variant === 1 ? 18 : variant === 2 ? 39 : 29) / 8;
+      for (const prop of props) {
+        const relative = transformCardinalPoint([0,0,0], ((4 - rotation) % 4) as 0 | 1 | 2 | 3,
+          [prop.position[0] - home.position[0], prop.position[1] - home.position[1], prop.position[2] - home.position[2]]);
+        for (const box of prop.blueprint.boxes) {
+          if (!box.material) continue;
+          const x0 = relative[0] + box.from[0] / 8, x1 = relative[0] + box.to[0] / 8;
+          const z0 = relative[2] + box.from[2] / 8, z1 = relative[2] + box.to[2] / 8;
+          expect(x0 < door + .75 && x1 > door - .75 && z0 < home.blueprint.size[2] / 8 + 3 && z1 > home.blueprint.size[2] / 8,
+            `${style}/${tier}/${variant}/${rotation}: ${prop.blueprint.id} obstructs the entrance`).toBe(false);
+        }
+      }
+    }
+  });
   it('aligns actual home fronts and grounds garden props for all four cardinal turns', () => {
     for (const rotation of [0, 1, 2, 3] as const) {
       const plot = { slot: 7, ordinal: 0, position: [10,8,20] as const, rotation, tier: 'house' as const, style: 'hearth' as const, variant: 0 };
