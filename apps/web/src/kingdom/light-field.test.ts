@@ -440,6 +440,21 @@ function setup(onVolume = vi.fn(), onError = vi.fn(), options: LightFieldOptions
 describe('dedicated light worker scheduling', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
+  it('sends the same explicit inhabited domain to the worker and accepts its result', () => {
+    const bounds = { minX: -40, maxX: 80, minZ: -30, maxZ: 90 };
+    const { field, worker, onVolume } = setup(vi.fn(), vi.fn(), { mode: 'kingdom', bounds });
+    expect(worker.messages[0]).toMatchObject({ options: { mode: 'kingdom', bounds } });
+    bounds.minX = -400;
+    worker.ready();
+    field.update([0, 0, 0], []);
+    const request = worker.latest();
+    expect(request.origin).toEqual([-40, -2, -30]);
+    worker.respond(worker.result(request));
+    expect(onVolume).toHaveBeenCalledOnce();
+    expect(field.stats.failed).toBe(false);
+    field.dispose();
+  });
+
   it('keeps kingdom bounds fixed during camera travel and snapshots normals with quantized pending revisions', () => {
     const { field, worker, onVolume } = setup(vi.fn(), vi.fn(), { mode: 'kingdom' });
     const normal: [number, number, number] = [1, 0, 0];
