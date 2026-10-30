@@ -322,47 +322,49 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-30
 
-**Stop point:** one real chat wish → real Codex → independent word/result judges → author's home, committed.
-Then Forge look goes to the team; realm is next when Tobias briefs it. Town and homecoming/build are closed.
-No further terrain/light/budget proofs or record-only commits.
+**Brief now:** hand off the kingdom's first-look overhaul, then realm next. Forge work is stopped at the
+existing coordinator seam; no real fully judged landing has been demonstrated. Tobias judged the dusk kingdom
+solid but emotionally flat. Main reopened the saved desktop/phone shots and agrees: rows, broad green gaps,
+grey castle, too few warm windows and default Forge controls are not the genre bar.
 
-**Landed:** `d19b786` streams real model runs into the browser, retains approval receipts, follows flight/landing
-closely, improves the sleeping dragon, adds six crowd palettes and the official SVG engraving. `18fe371` merges
-sound SO01–04, including the rapid mute/suspend convolver fix. `5839bdc` merges Herald H01–H04 and lockfile;
-H05 stays on its lane. Review fixes fence late sweep/verification replies and reordered stream observations.
-Web and Herald share settlement configuration and slots; live motion uses wall time. Witnessed direct chat
-can warm an offline window, while beacon/Chatters/rewards remain live-gated; stale data clears lights/names.
-Spec 03 records this contract amendment. Root `shots --area herald` delegates before taking the capture lock.
+**Seven ready lanes:** specs 26 `kingdom-light`, 27 `kingdom-land`, 28 `ground-dressing`, 29 `places-water`,
+30 `places-high`, 31 `home-interiors`, 32 `first-look-polish`. Each has a PRD, empty progress log, local
+`lane/<name>` branch and sibling `../worktrees/<name>`. Their first independent tasks start together;
+disjoint parallel modules and later producer gates are explicit in each PRD. The controlling ownership map is
+`work/lanes/kingdom-look-owners.md`. Terra high for look/content; Sol high for deterministic layout/integration;
+hero castle/trees may use Terra xhigh. No lane's art was implemented by main this turn.
 
-**Ready lanes:** Specs 19–24: `citizen-card`, `twitch-moments`, `campfire`, `tavern-tables`, `raid-gate`, `emotes`.
-All have committed PRDs, `lane/<name>` branches and sibling `../worktrees/<name>` worktrees. Spec 22 owns the
-Chalk/Taster core in `packages/games` except campfire's `dusk-court`; main binds services/shared promotions.
-Atlas owns map/roads/finder/entry; Spec 23 owns kingdom-side travel/Gate coordination. `1e55f31` opens Spec 25,
-`anvil-hero`: Terra xhigh, sculpted iron/stone, real horn/hardy hole, exact official engraving, sleeping dragon
-readable across the square. Main mounts/reviews exports. Ritual/refusal/content/crowd/wardrobe lanes continue.
+**Seams settled:** main committed actual v2 land/site/water/path/zone types and trail kind; no fake generator
+stub. Water queries consume serialized landform, including pond depths and point-record streams. Structural
+sites are cardinal. Land owns geography and grading; dressing owns all landscape growth; places own structures;
+light owns glass, sky/grade/warm spill and the shared PeopleLight producer. Actual PeopleLight types exist;
+KL01 implements it first. Glass stays physically solid but passes sight/light using existing flags. High places
+also own a castle architectural sculpt, preserving the light lane's actual openings/stair release. Short parapets
+replace the old walls and blockers together before content lists, with actual dimensions. Clearing keeps the
+campfire's 9.6 m envelope plus crowns/egress. Interiors preserve canonical shells, supply painted rooms, and never
+invent life records, companions or awards. First-look keeps a legible SIMULATED seal and preserves every skin
+swatch. Wardrobe/build-tools presentation transfers are pre-approved only after integrator acceptance is recorded.
 
-**Evidence:** frozen install and `pnpm verify --area kingdom --tier town --hour dusk` passed typecheck/lint,
-1,273 tests/81 files, build and both standard dusk shots; both opened. Fresh Forge capture passed three
-attachments/refusal/build-rack/crowd checks. Looked at desktop/phone dragon/street, phone build rack, moon/owl,
-and all frames of `shots/forge/ritual.mp4` (21.5 s, 960×600). It is a labelled fixture, not live judge proof.
-Later `shots/forge/engraving@1440x900.png` confirms visible cloud AND terminal cuts in dark iron; the film
-predates that fix and still shows the old box anvil. Standard town shots: `shots/kingdom/town-dusk@1440x900.png`
-and `town-dusk@390x844.png`. No more main look passes before the real run.
+**Infrastructure present:** `@chatdom/ui` package/web dependency/lock entry, package TSX typechecking, civic
+factory exports, three dynamic collections and narrow place-material validation. Evidence `pose()` holds a
+camera, invalidates fixed-frame cache, survives resize and releases on explicit camera/capture/replay controls.
+Scene/terrain-worker/camera call-site composition has one owner: team integrator, using exact lane recipes.
+Main does not merge individual lanes; judge only the ready `lane/integrator` candidate Tobias announces.
 
-**Services:** main preview5190 session6681; spell5195 session38778 (development citizens, judges unconfigured).
-Both restarted after their prior processes ended. `.env` has no `OPENAI_API_KEY`; real Codex drafting works,
-but no complete live judged run has passed. Missing judges fail cold. Herald5194 was real/healthy with seven
-subscriptions, then a lane capture replaced it with SIMULATED replay. Main's five-minute launch wait expired;
-it never started a second conduit consumer. Tobias authorizes stopping that copy, but its host PIDs are invisible
-here and the alternative host-process probe was rejected by approval policy. A host-side stop is still needed.
-Then start `pnpm --filter @chatdom/herald dev` and open on5190:
-`/?source=herald&seed=tobi4s_&tier=hamlet&firstYear=2026&year=2026&kingdom=129634568&camera=citizen&hour=19.5`.
-Actual human message→citizen/window evidence remains missing.
+**Realm boundary:** v2 is an opt-in SIMULATED preview until realm adopts a founded revision. Same slots do not
+prove homes stayed put. Durable layout/deed/growth, authenticated movement/entry/actions, interior life and
+Forge home/trust/coal/public outbox bindings belong in realm, not fake client adapters. `apps/codex/src/kingdom-forge`
+and Herald's private cancellable wish handoff are implemented/tested but remain unbound to that authority.
+Last checked, judges lacked `OPENAI_API_KEY`; the CLI Codex draft worked. Never bypass either independent gate.
 
-**Next / doubts:** presence discards text and assigns presentation slots, not deeds. The private verified
-`!forge` branch, native-host resolver and approved public attachment remain to implement. Production words
-require actual home/trust and earned coals (10 live minutes, cap3). Asked Tobias: explicitly labelled real-chat
-development rehearsal before realm eligibility, or realm ledger first? Answer and judge key are pending. A
-rehearsal must default off, keep words private, cancel on moderation/grant/offline loss, publish only approved
-draft/slot/fingerprints and claim no production publication. Never relabel simulated provenance as live.
-Seven motifs cannot satisfy every subject; the result judge must hold unrelated substitutions.
+**Service handoff (last known, not rechecked this docs turn):** main preview5190, spell5195, main-owned
+Herald5194. Preserve its newer private slot store in `~/.cache/chatdom/herald` (`HERALD_DATA_DIR`), never overwrite
+it. Real source config: `/?source=herald&seed=tobi4s_&tier=hamlet&firstYear=2026&year=2026&kingdom=129634568`.
+Prior observed state was offline, with no human chat evidence yet. Existing Forge `shots/forge/ritual.mp4` remains
+labelled fixture footage, not a real approved run. This turn adds no visual implementation claim.
+
+**Evidence / doubts:** frozen install, typecheck, lint, all 1,275 tests/82 files and build pass. Final check is
+`pnpm verify --area kingdom --tier town --hour dusk --size phone` (one serial shot). Saved `shots/kingdom/town-dusk@1440x900.png` and `@390x844.png` were inspected. Captures stay lean,
+serial and locked; one or two relevant task shots reused at acceptance, not a Cartesian matrix. The main risk is
+seven beautiful isolated benches without a coherent integrated kingdom; the integrator's actual dusk scene is
+acceptance. Realm adoption and real ownership remain the next architectural work, not solved by these look lanes.

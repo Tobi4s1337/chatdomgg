@@ -29,6 +29,8 @@ export interface KingdomDebug {citizens:number;walking:number;ready:boolean;ligh
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
   let disposed=false,raf=0,loaded=false,lastFrame=performance.now(),time=options.time??30,hour=options.hour,targetHour=hour,camName=options.camera;
+  let capturePose:{eye:Vec3;target:Vec3;fov:number}|null=null;
+  let poseRevision=0;
   // A public feed uses the wall clock even when a capture URL carries a fixture time.
   let fixedTime=options.source==='simulated'&&options.time!==null,autoCamera=options.source==='simulated'&&!fixedTime&&camName==='hero',frame:KingdomPresenceFrame|undefined,fieldUploads=0,geometryBuilds=0,fieldBytes=0,nearBytes=0,farBytes=0,beaconBytes=0,nearVisited=0,farVisited=0,beaconVisited=0;
   const earlyCleanups:(()=>void)[]=[];
@@ -270,6 +272,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,THREE.MathUtils.smootherstep(time,18,36)):camName==='citizen'?48:camName==='window'?64:heroFov;
     if(Math.abs(camera.fov-wantedFov)>.001){camera.fov=wantedFov;camera.updateProjectionMatrix();}
     build.update(now,dt,hour,target);forge.update(now,target,!!build.session);
+    if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
     camera.lookAt(target);camera.updateMatrixWorld();updateInstances(fixedTime&&autoCamera?time*1000:now);
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=.0016;
@@ -280,7 +283,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // Fixed evidence frames have no animation between seeks. Keep the public
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
-    const renderKey=[forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
+    const renderKey=[poseRevision,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
     if((loaded&&!fixedTime)||renderKey!==lastRenderedKey){renderPhase='drawing';renderStartedAt=performance.now();renderer.render(scene,camera);renderCompletedAt=performance.now();renderPhase='drawn';lastRenderedKey=renderKey;}
     // The gate covers loading the place, not background light refinement. The
     // full scene and presence windows have drawn; independently scheduled light
@@ -325,11 +328,18 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   return {layout,debug,sound,build,forge,
     inspect:()=>({build:'progressive-light-v1',loaded,renderPhase,renderStartedAt,renderCompletedAt,presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(cue:unknown)=>crowd.receiveChat(cue),
     setHour(value:number){targetHour=value;sound.cue('wood');},
-    setCamera(value:CameraName){camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
-    play(){if(options.source!=='simulated')return;sound.unlock();sound.cue('wood');windows.clear();crowd.clear();lastLightFrameKey='';simulation.reset();time=0;fixedTime=false;autoCamera=true;camName='hero';beaconCue=false;lastActive=0;},
-    seek(value:number,view?:CameraName){lastField=-Infinity;if(view)camName=view;if(options.source!=='simulated')return;time=value;fixedTime=true;autoCamera=false;simulation.advance(value);windows.update(1,hour);},
+    setCamera(value:CameraName){capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
+    /** Evidence framing only. Null returns control to the current production camera. */
+    pose(eye:Vec3|null,lookAt?:Vec3,fov=43){
+      if(eye===null){capturePose=null;poseRevision++;lastField=-Infinity;instancesDirty=true;return;}
+      if(eye.length!==3||!lookAt||lookAt.length!==3||![...eye,...lookAt,fov].every(Number.isFinite)||fov<10||fov>100||Math.hypot(...eye.map((value,index)=>value-lookAt[index]!))<.01)throw new Error('Capture pose needs finite distinct eye/target and a 10–100 degree FOV');
+      capturePose={eye:[...eye],target:[...lookAt],fov};poseRevision++;autoCamera=false;lastField=-Infinity;instancesDirty=true;
+    },
+    play(){if(options.source!=='simulated')return;capturePose=null;poseRevision++;sound.unlock();sound.cue('wood');windows.clear();crowd.clear();lastLightFrameKey='';simulation.reset();time=0;fixedTime=false;autoCamera=true;camName='hero';beaconCue=false;lastActive=0;},
+    seek(value:number,view?:CameraName){lastField=-Infinity;if(view){capturePose=null;poseRevision++;camName=view;}if(options.source!=='simulated')return;time=value;fixedTime=true;autoCamera=false;simulation.advance(value);windows.update(1,hour);},
     capture(value:number){
       if(options.source!=='simulated')throw new Error('Offline capture requires the SIMULATED feed');
+      capturePose=null;poseRevision++;
       if(!fixedTime||!autoCamera||value<time)for(const batch of batches.values())batch.transitions.clear();
       time=value;fixedTime=true;autoCamera=true;camName='hero';lastField=-Infinity;
       // Sample actual reducer time, including the 0.7 s window fade; offline
