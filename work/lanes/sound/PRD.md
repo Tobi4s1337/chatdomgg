@@ -16,7 +16,7 @@ runs `pnpm verify` after integrating. Record what was listened to; waveform/peak
 
 ## Tasks
 
-- [ ] **SO01 — Hear a wooden control and a window welcoming someone home** · evidence: runnable bench + browser state.
+- [x] **SO01 — Hear a wooden control and a window welcoming someone home** · evidence: runnable bench + browser state.
   Fill the prepared package with the approved factory, real unlock/mute/volume/dispose behavior, and finished
   three-variation `wood` and `light` families. Audition the primary-source foley candidates; select and credit
   useful samples, keep their actual license notices and combine them with original resonance. Build the small

@@ -227,3 +227,13 @@ and walking/building feedback without predicting those systems.
 - **2026-10-30 — Runnable first.** Task 1 delivers an audible real control/light pair and actual browser unlock,
   followed by the ceremony palette, material actions, then the complete mix demonstration. No dummy success or
   empty final-cue registrations are needed to get an early listening result.
+- **2026-10-30 — SO01 lane decisions.** Selected recordings ship as mono 16-bit WAV (Safari's Ogg Vorbis decoding
+  is not guaranteed and WAV has no encoder padding; 6 files, 124 KB). Unknown cue/material/surface values and
+  families not finished yet throw; non-finite `pan`/`distance` make `cue` return false; a non-finite volume
+  throws. Every `unlock()` calls `resume()` synchronously in its own gesture, because Chrome parks a gesture-less
+  resume indefinitely: the wait is bounded at 2.5 s (answer `false`, still `locked`), and a parked resume that
+  resolves later still makes the instance ready. Mute and suspension stop ringing voices so nothing returns on
+  unmute or resume. Additive lane-local exports beside the frozen types: `inspectKingdomAudio` (bench/check
+  diagnostics), `renderKingdomAudio` (offline render through the same families, mixer and mix path),
+  `FINISHED_FAMILIES` and the value arrays. The bench serves at `/src/audio-bench/index.html` and through the
+  `/-/audio` route main already registered.
