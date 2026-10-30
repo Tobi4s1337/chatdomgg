@@ -14,8 +14,8 @@ export type { ShoulderPose, ShoulderRig, ShoulderView } from './camera/shoulder'
 export { clearBoom, nearFootprint, OCCLUSION, overlapsSolid, RECOVER_RATE, sweepHit } from './camera/occlusion';
 export type { BoomPoint, Clearance, Footprint } from './camera/occlusion';
 export { facingByte, headingFromByte, walkDirection } from './input/direction';
-export { createWalkHud, restingStick } from './input/hud';
-export type { WalkHud, WalkHudState } from './input/hud';
+export { createWalkHud, restingStick, THUMB, thumbSlots } from './input/hud';
+export type { ThumbSlot, WalkHud, WalkHudState } from './input/hud';
 export { createWalkKeys, isEditableTarget, isKeyboardControl } from './input/keyboard';
 export { createWalkLook, filterLookDelta, LOOK } from './input/look';
 export type { LockDocument, LockSurface, LookMode, WalkLook } from './input/look';

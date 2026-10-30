@@ -213,8 +213,10 @@ describe('the camera stays out of solids', () => {
     expect((head.x + 1) / 2).toBeLessThan(.42);
     expect((1 - head.y) / 2).toBeGreaterThanOrEqual((1 - SHOULDER.headY) / 2 - 1e-6);
     expect(camera.filmOffset).toBeGreaterThan(0);
-    // Close enough to see the shoulder, far enough that the body is still drawn.
-    expect(rig.apply(camera, feet, aspect, worldOf([ground, box([-6, 0, -2.4], [6, 5, -2])])).selfOpacity).toBe(1);
+    // Close enough to see the shoulder, far enough that the body is still there, already thinned by the pull-in.
+    const opacity = rig.apply(camera, feet, aspect, worldOf([ground, box([-6, 0, -2.4], [6, 5, -2])])).selfOpacity;
+    expect(opacity).toBeGreaterThan(.5);
+    expect(opacity).toBeLessThan(1);
   });
 
   it('never clips across a wide sweep of walls, posts and roofs at both aspects', () => {

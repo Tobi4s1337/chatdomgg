@@ -82,5 +82,8 @@ after main has stopped editing them. The integrator alone calls those modules fr
 The worker records discoveries here and never selects them without a new brief.
 - Pulled in by a wall behind, let the camera also rise and pitch down a little (over-the-head) so the close view shows more street; needs a real-GPU feel check first (from WC05).
 
+- The citizen renderer's screen-door fade shows as coarse dots on a body this close at mid opacity (a 1.75 m
+  pulled-in phone boom at 24 %); a finer or blue-noise/temporal dither would make the self-fade read as a ghost
+  rather than specks. Citizens owner (from WC07).
 - The reference court (`/-/realm`, read-only) draws every walker's shadow at floor height, so a citizen on its
   .5 m block casts it on the paving, and clips the self name label at the right edge at 1440×900.

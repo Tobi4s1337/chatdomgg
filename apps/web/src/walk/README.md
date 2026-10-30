@@ -26,6 +26,8 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
   there and the kingdom's founded world in the kingdom binding.
 - **Prediction and collision revisions (WC06).** The realm client takes a revision source, holds prediction
   while a revision is missing and resets on adoption; see "Realm client" below.
+- **Backed against a wall (WC07).** A boom a solid pulled in fades the local citizen from further out
+  (`selfFade`), so the camera looks past it at the street; the same short boom chosen with the wheel keeps it.
 
 ## Modules
 
@@ -40,11 +42,13 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
 | `createWalkTouch(surface, keyboard)` | `input/touch.ts` | Phone: floating left-thumb stick (push past the rim to sprint), one-finger orbit, two-finger pinch zoom |
 | `stickRegion(x, y, w, h)`, `stickIntent(dx, dy)`, `TOUCH` | `input/touch.ts` | Which part of the surface is the stick, thumb offset to intent, and the touch constants |
 | `createWalkHud(container, onJump)`, `restingStick(w, h)` | `input/hud.ts` | The mouse-look plaque, the phone stick and the jump button, drawn in the given container |
+| `thumbSlots(w, h)`, `THUMB` | `input/hud.ts` | The phone thumb map: resting stick, Jump, and the slot reserved for the interaction owner's touch action |
 | `isClickPress(dx, dy, ms)`, `CLICK_SLOP_PX`, `CLICK_MS` | `input/pointer.ts` | The click-versus-drag rule for the interaction owner (under 8 px and under 300 ms) |
 | `walkDirection(forward, right, heading)` | `input/direction.ts` | Camera-relative intent to world-relative signed bytes; diagonals never faster |
 | `facingByte(moveX, moveZ)`, `headingFromByte(yaw)` | `input/direction.ts` | Yaw byte for the actual walk direction, and back to renderer radians |
 | `createShoulderRig(heading)`, `shoulderPose(...)` | `camera/shoulder.ts` | Shoulder framing with `filmOffset`, continuous wheel to first person, auto-follow, time-based easing |
 | `SHOULDER` | `camera/shoulder.ts` | The chosen framing and feel constants |
+| `selfFade(eyeToHead, pulledIn)` | `camera/shoulder.ts` | Local citizen opacity: first-person fade, starting further out when a solid pulled the boom in |
 | `clearBoom(world, anchor, at, wish)` | `camera/occlusion.ts` | Sweeps eye + near plane along the boom from the head; how far the camera may stand |
 | `nearFootprint(direction, fov, aspect, shift, near)` | `camera/occlusion.ts` | Box around the eye and the actual near-plane rectangle, lens shift included |
 | `sweepHit(from, to, footprint, solid)`, `overlapsSolid(...)` | `camera/occlusion.ts` | Swept and static box tests against one solid (touching is not overlap) |
@@ -77,7 +81,7 @@ interface WalkController {
   reset(heading?: number): void;  // entry framing again
   dispose(): void;   // removes every listener, filmOffset → 0; does not close the realm
   readonly owner: 'walking' | 'released' | 'disposed';
-  readonly selfOpacity: number;   // pass as the local citizen's `opacity`; 0 in first person
+  readonly selfOpacity: number;   // pass as the local citizen's `opacity`; 0 in first person and when backed against a wall; 1 while released
   readonly debug: WalkDebug;      // live object, see below
 }
 ```
@@ -104,8 +108,8 @@ dropped or closed connection lets go of held keys, a pending jump, the stick, an
 |---|---|---|
 | W A S D, arrows, Shift, Space | walking (physical codes, so AZERTY/Dvorak keep the shape) | in a text field, select or contenteditable; with Ctrl/Cmd/Alt; during IME composition; Space/arrows on a keyboard-focused control (its focus ring is showing) |
 | V | mouse look on/off | in fields, with modifiers, on repeat, while released |
-| Escape | frees a mouse-look cursor (the browser does too) | otherwise untouched: menus keep it |
-| E | the interaction owner | walking never reads it |
+| Escape | frees a mouse-look cursor (the browser does too) | never `preventDefault`ed or stopped: menus, Forge, build and interactions (Stand/Leave) all still receive it |
+| E | the interaction owner | walking never reads it, on keyboard or touch |
 | Left mouse/pen on the world | drag orbit once it travels 8 px; a shorter, quicker press stays a click (`isClickPress`) | while locked; the click that ended a drag is swallowed, nothing else |
 | Wheel on the world | boom distance, line/page modes, ±240 px per event | over UI: the listener is on the world surface only |
 | Touch on the world | lower-left (`stickRegion`: x < 46 %, y > 34 %) is the stick; elsewhere one finger orbits, two pinch | taps (< 8 px) stay clicks; UI above the surface keeps its own touches |
@@ -126,6 +130,22 @@ the edges), with a 16 % dead zone; pushing past 1.3 × the 52 px rim sprints and
 elsewhere orbits from the first pixel it travelled; a second orbit finger pinches (3 wheel px per px of
 spread). The resting stick and the jump button sit at 66 % of the height (54 % on a short landscape screen).
 Their labels fade once used. The surface's `touch-action` is set to `none` while the controller lives.
+
+**Sharing the thumbs with interactions (spec 37 R3).** `thumbSlots(width, height)` is the one thumb map, in
+surface CSS px: `stick` (resting stick, left thumb), `jump` (right thumb, on the same line) and `action`, a
+60 px disc directly above Jump that is reserved for the interaction owner's touch equivalent of E. Both
+buttons lie wholly outside `stickRegion`, so a walking thumb never lands on one, and they never touch each other
+(`hud.test.ts` checks phones and tablets in both orientations). Draw the action as a DOM button above the
+surface centred on `action.x/y` (at least 44 px): its taps never reach the surface, so they never orbit, and a
+tap on the world itself stays a click for target selection. Re-read the slot on resize. Nothing else on a phone
+may cover the left 46 % below 34 % of the height while walking: the kingdom's own bottom bar and any toast
+belong above that band or are hidden while walking (integrator).
+
+**Escape order.** While mouse look holds the cursor, the browser itself spends Escape on freeing it, and it may
+not deliver that keydown to the page at all. If one does arrive while `document.pointerLockElement` is still
+the world surface (it clears only on the following `pointerlockchange`, whatever order the listeners run in),
+it means "give me my cursor": the interaction owner should not also stand the citizen up with it. With a free cursor Escape passes straight
+through to whoever owns it.
 
 ## Integration recipe (integrator)
 
@@ -162,12 +182,26 @@ edit them. Entry URL proposed for the binding: **`/?walk=1`** on the kingdom pag
    has already set position, orientation, fov, aspect and `filmOffset`, and called `updateMatrixWorld()`.
    Keep `updateInstances`, atmosphere, water, field and label updates; they read the camera as placed.
 4. **Resize.** In the existing `resize()`: `walk?.resize(canvas.clientWidth, canvas.clientHeight)`.
-5. **Takeover and return.**
-   - Build enter, Forge open, `setCamera`/`play`/`seek`/`capture`, or `pose(eye, …)`: `walk.release()`.
-   - Build exit, Forge close, `pose(null)`, or the walking view chosen again: `walk.resume()`.
-   - A menu that needs the keyboard or pointer: `release()` while open, `resume()` when it closes.
-   - Realm disconnect: the controller already lets go of every held input on `room.onLeave`/`onDrop`; the
+5. **Takeover and return.** One owner draws the camera at a time; the realm keeps ticking underneath.
+   - **Build.** `onBuild(session)` with a session → `walk.release()`. Resume only when build has let go of the
+     camera entirely: `onBuild(null)` *and* `onHousewarming(null)` (the housewarming shot outlives the session),
+     i.e. the frame `build.update(...)` returns `false`. Build's right-button drag and context-menu handling are
+     safe: walking listens to nothing while released.
+   - **Forge.** `onForge(status)` with `status.open` → `release()`; `status.open === false` → `resume()`. A
+     refused close (during a refusal or an uncommitted piece) keeps `open` true, so walking stays released.
+   - **Director / evidence.** `setCamera`, `play`, `seek`, `capture` or `pose(eye, …)` → `release()`; `pose(null)`
+     or choosing the walking view again → `resume()`.
+   - **A menu** that needs the keyboard or pointer: `release()` while open, `resume()` when it closes.
+   - **Realm disconnect:** the controller already lets go of every held input on `room.onLeave`/`onDrop`; the
      integrator calls `release()` while the gate is shown and `resume()` once walking again.
+
+   `release()` frees a locked cursor, drops every held key, drag, stick and pending jump, straightens
+   `filmOffset` to 0 for the next owner's composition and hands back a whole citizen (`selfOpacity` 1, even from
+   first person). Build and the Forge compose with `setViewOffset`; the first walking frame clears any view
+   offset still set (the near-plane collision footprint assumes the plain frustum), and the view, zoom and
+   first person the walker had are drawn straight onto the citizen with no easing in from the other camera. A
+   key still held when the menu closes walks again on its next auto-repeat; a held Space never jumps again.
+   Nothing needs a held mouse button, and `resume()` never re-locks the cursor by itself.
 6. **Dispose** with the scene: `walk.dispose()` then `realm.dispose()`.
 7. **Test hook**, beside `__chatdomKingdom` in `index.tsx`: `window.__chatdomWalk = walk.debug`.
 
