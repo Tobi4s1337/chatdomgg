@@ -1,7 +1,23 @@
 # Lane herald
 
 Spec: `work/specs/03-herald-presence.md` · Branch: `lane/herald` · Worker: Codex Sol, high.
-Status: **ready on the reviewed presence/shared-world freeze. H01 can start; main is integrating the browser scene for H02.**
+Status: **H01 merged by main; H02–H05 remain with the lane. Main's integration fixes are recorded below.**
+
+## Main integration notes — 2026-10-30
+
+- H01 review correction: token invalidation/replacement immediately disables reported capabilities. Failed
+  validation stays blocked until validation plus fresh grants succeed; an obsolete in-flight inspection cannot
+  republish success. Six regression cases were added in main; no new real Twitch reads are claimed.
+- H02 browser seam fixed in main: `createHeraldPresence(url, kingdomId, expectedOrigin)` defaults to `live`.
+  Replay explicitly selects `simulated`, reports `SIMULATED`, and retains strict schema, kingdom, epoch,
+  sequence and local freshness guards. Cross-origin frames fail closed in both modes. Open
+  `/?source=herald&presenceOrigin=simulated` (also `/stream`) for the replay SSE producer; real mode is
+  `/?source=herald`. Neither connection-open nor a simulated frame can establish LIVE.
+- Main ran `pnpm install` to register `@chatdom/herald` and `@chatdom/twitch` in the root lockfile. Lane workers
+  should merge main's integration fixes before completing the next task; do not overwrite them.
+- Review followups for the first long-running consumer: RequestBudget queue admission needs an actual deadline
+  timer and a deadline check before execution; transport must cap streamed response bytes before buffering the
+  whole body. Track these with the H04/H05 bounded-load acceptance, rather than claiming current code proves them.
 
 Scope: `apps/herald/**`, `packages/twitch/**`, this PRD, `progress.txt`, the Herald spec and
 `work/references/herald-presence.md`. Everything else is read-only. You are not alone in the codebase: preserve

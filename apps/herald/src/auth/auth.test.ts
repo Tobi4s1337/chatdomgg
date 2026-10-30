@@ -1,7 +1,7 @@
-import { AppTokenSession, HelixReader, Secret } from '@chatdom/twitch';
+import { AppTokenSession, type FetchLike, HelixReader, Secret, VALIDATE_INTERVAL_MS } from '@chatdom/twitch';
 import { FakeTwitch } from '@chatdom/twitch/testing';
 import { inspect } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { formatAuthorizeOutcome, formatAuthReport } from '../cli/report';
 import { type HeraldConfig, loadConfig } from '../config';
 import { type AuthorityEvent, HeraldAuthority, inspectAuthorization } from './authority';
@@ -171,6 +171,26 @@ describe('check:auth', () => {
     expect(none.ok).toBe(false);
     expect(formatAuthReport(none).join('\n')).toContain('Put TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET');
   });
+
+  it('a wrong-client replacement during inspection disables every capability', async () => {
+    const { fake, tokens, helix } = twitch();
+    await tokens.current();
+    fake.expireAppTokens();
+    fake.validateClientOverride = 'someotherclient000000000000000';
+    const result = await inspectAuthorization({ config: config(), tokens, helix });
+    expect(result.appToken.state).toBe('unavailable');
+    expect(result.capabilities.every(status => !status.available)).toBe(true);
+    tokens.close();
+  });
+
+  it('a second Helix 401 cannot leave stream or revocation looking authorized', async () => {
+    const { fake, tokens, helix } = twitch();
+    fake.fail('GET', 'api.twitch.tv/helix/users', 401, 2);
+    const result = await inspectAuthorization({ config: config(), tokens, helix });
+    expect(result.capabilities.every(status => !status.available)).toBe(true);
+    expect(fake.count('POST', 'id.twitch.tv/oauth2/token')).toBe(2);
+    tokens.close();
+  });
 });
 
 describe('HeraldAuthority', () => {
@@ -181,12 +201,101 @@ describe('HeraldAuthority', () => {
     fake.revokeGrant(BROADCASTER.id);
     fake.expireAppTokens();
     const reports: AuthorityEvent[] = [];
-    const next = new Promise<void>(resolve => authority.on(event => { reports.push(event); if (event.type === 'report') resolve(); }));
+    const next = new Promise<void>(resolve => authority.on(event => {
+      reports.push(event);
+      if (event.type === 'report' && event.report.appToken.state === 'valid') resolve();
+    }));
     await helix.getUsers({ logins: ['tobi4s_'] });
     await next;
     expect(authority.available('chatters')).toBe(false);
     expect(authority.available('stream')).toBe(true);
     authority.stop();
+  });
+
+  it('invalidates synchronously and rechecks grants on expiry replacement too', async () => {
+    let now = 1_000_000;
+    const fake = new FakeTwitch({ clientId: CLIENT_ID, clientSecret: SECRET, users: [BROADCASTER, READER], grants: FULL_GRANTS, now: () => now });
+    const tokens = new AppTokenSession({ clientId: CLIENT_ID, clientSecret: new Secret(SECRET), fetch: fake.fetch, now: () => now });
+    const helix = new HelixReader({ tokens, fetch: fake.fetch, now: () => now });
+    const authority = new HeraldAuthority({ config: config(), tokens, helix, now: () => now });
+    try {
+      await authority.start();
+      fake.revokeGrant(BROADCASTER.id);
+      now = tokens.status.expiresAt! - 1;
+      const replacement = tokens.current();
+      expect(authority.available('chat')).toBe(false);
+      expect(authority.available('stream')).toBe(false);
+      await replacement;
+      await authority.refresh();
+      expect(authority.available('chat')).toBe(false);
+      expect(authority.available('chatters')).toBe(false);
+      expect(authority.available('stream')).toBe(true);
+    } finally {
+      authority.stop(); tokens.close();
+    }
+  });
+
+  it('failed hourly validation stays blocked until validation and fresh grants succeed', async () => {
+    vi.useFakeTimers();
+    const { fake, tokens, helix } = twitch();
+    const authority = new HeraldAuthority({ config: config(), tokens, helix });
+    try {
+      await authority.start();
+      fake.fail('GET', 'id.twitch.tv/oauth2/validate', 500, 2);
+      await vi.advanceTimersByTimeAsync(VALIDATE_INTERVAL_MS);
+      expect(authority.report?.capabilities.every(status => !status.available)).toBe(true);
+      expect((await authority.refresh()).appToken.state).toBe('unavailable');
+      fake.revokeGrant(READER.id);
+      await authority.refresh();
+      expect(authority.available('chat')).toBe(false);
+      expect(authority.available('stream')).toBe(true);
+    } finally {
+      authority.stop(); tokens.close(); vi.useRealTimers();
+    }
+  });
+
+  it.each([false, true])('an obsolete grant read cannot restore capabilities after invalidation (renewal failure: %s)', async failRenewal => {
+    const fake = new FakeTwitch({ clientId: CLIENT_ID, clientSecret: SECRET, users: [BROADCASTER, READER], grants: FULL_GRANTS });
+    let holdNext = false;
+    let release = () => undefined as void;
+    let captured = () => undefined as void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const capture = new Promise<void>(resolve => { captured = resolve; });
+    const fetch: FetchLike = async (url, init) => {
+      const response = await fake.fetch(url, init);
+      if (holdNext && url.includes('/helix/authorization/users')) {
+        holdNext = false;
+        captured();
+        await gate;
+      }
+      return response;
+    };
+    const tokens = new AppTokenSession({ clientId: CLIENT_ID, clientSecret: new Secret(SECRET), fetch });
+    const helix = new HelixReader({ tokens, fetch });
+    const authority = new HeraldAuthority({ config: config(), tokens, helix });
+    try {
+      await authority.start();
+      const refused = await tokens.current();
+      holdNext = true;
+      const checking = authority.refresh();
+      await capture;
+      const published: boolean[] = [];
+      authority.on(event => { if (event.type === 'report') published.push(event.report.ok); });
+      fake.revokeGrant(READER.id);
+      if (failRenewal) fake.fail('POST', 'id.twitch.tv/oauth2/token', 403);
+      const renewal = tokens.renew(refused);
+      expect(authority.available('chat')).toBe(false);
+      expect(authority.available('stream')).toBe(false);
+      if (failRenewal) await expect(renewal).rejects.toMatchObject({ kind: 'credentials_rejected' });
+      else await renewal;
+      release();
+      await checking;
+      expect(published).not.toContain(true);
+      expect(authority.available('chat')).toBe(false);
+      expect(authority.available('stream')).toBe(!failRenewal);
+    } finally {
+      release(); authority.stop(); tokens.close();
+    }
   });
 
   it('acts on revocation only for the configured accounts and holds it until a fresh grant', async () => {
