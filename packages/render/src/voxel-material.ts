@@ -45,8 +45,8 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
   let farLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);farLightTexture.format=THREE.RedFormat;farLightTexture.needsUpdate=true;
   let beaconLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);beaconLightTexture.format=THREE.RedFormat;beaconLightTexture.needsUpdate=true;
   let heightTexture=new THREE.DataTexture(new Float32Array(1),1,1,THREE.RedFormat,THREE.FloatType);heightTexture.needsUpdate=true;
-  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')}};
-  const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,vertexShader:`
+  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
+  const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,alphaToCoverage:true,vertexShader:`
     in uint aPacked; in uint aMaterial;
     out float vLodFade;
     #ifdef USE_INSTANCING
@@ -77,8 +77,11 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     uniform sampler2D uPalette;uniform sampler3D uLight,uFarLight,uBeaconLight;
     uniform vec3 uSun,uAmbient,uSunDirection,uFog,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent;
     uniform float uSunIntensity,uAmbientIntensity,uNight,uFarCell,uBeaconCell,uTerrain,uShoreLevel;
+    // Shared uniforms: materials derived from this shader text carry them with the uniforms object.
+    uniform float uGlassKind,uGlassDither;
     uniform vec3 uTerrainSoil,uTerrainGrass;uniform vec4 uShoreBounds;
     in vec3 vWorld,vNormal;in float vAo,vSky,vLodFade;flat in uint vMaterial;
+    const int BAYER[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
     float hash(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}
     float packedSample(sampler3D field,ivec3 cell){return floor(texelFetch(field,cell,0).r*255.+.5);}
     bool fieldInside(vec3 p,vec3 size){return all(greaterThanEqual(p,vec3(0)))&&all(lessThan(p,size));}
@@ -179,13 +182,40 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       vec3 colour=base*edge*light*ao;
       vec2 cell=fract(uv*8.);float bevel=min(min(cell.x,1.-cell.x),min(cell.y,1.-cell.y));
       if(kind==3.||kind==4.||kind==6.)colour+=base*.018*(1.-smoothstep(.0,.10,bevel))*(.3+.7*diffuse)*vAo*detail;
+      // Glass is still clay geometry in this opaque pass. Its coverage lets the lit reveal and
+      // room behind show through, while it reflects the hour's sky and catches the sun.
+      float cover=1.;
+      if(abs(kind-uGlassKind)<.5){
+        vec3 eye=normalize(vWorld-cameraPosition),r=reflect(eye,n);
+        float fresnel=pow(1.-abs(dot(eye,n)),4.);
+        vec3 skyTint=mix(uFog,uAmbient*uAmbientIntensity*.9,smoothstep(-.05,.55,r.y))*mix(.62,1.,vSky);
+        float glint=pow(max(dot(r,normalize(uSunDirection)),0.),140.)*uSunIntensity*(1.-uNight);
+        colour=skyTint*mix(.46,.92,fresnel)+uSun*glint*1.4+vec3(1.,.57,.26)*min(warm,1.)*.28;
+        cover=clamp(mix(.24,.9,fresnel)+glint*.6,0.,1.);
+        if(uGlassDither>.5){
+          // Without multisampling, an ordered screen pattern stands in for fractional coverage.
+          ivec2 b=ivec2(mod(gl_FragCoord.xy,4.));
+          if((float(BAYER[b.x+b.y*4])+.5)/16.>=cover)discard;
+          cover=1.;
+        }
+      }
       float distanceToCamera=length(cameraPosition-vWorld);
       float fogAmount=1.-exp(-distanceToCamera*.00115*exp(-max(vWorld.y,0.)*.019));
       colour=mix(colour,uFog,min(.86,fogAmount));
       gl_FragColor=vec4(colour,1.);
+      gl_FragColor.a=cover;
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`});
+  // Alpha-to-coverage needs a multisampled target; otherwise glass falls back to an ordered pattern.
+  let coverageTarget:THREE.WebGLRenderTarget|null|undefined;
+  material.onBeforeRender=renderer=>{
+    const target=renderer.getRenderTarget();
+    if(target===coverageTarget)return;
+    coverageTarget=target;
+    const samples=target?target.samples:renderer.getContext().getContextAttributes()?.antialias?4:0;
+    uniforms.uGlassDither.value=samples>0?0:1;
+  };
   return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},
     setLight(v){lightTexture=uploadVolume(lightTexture,v);uniforms.uLight.value=lightTexture;uniforms.uLightOrigin.value.set(...v.origin);uniforms.uLightExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);},
     setFarLight(v){farLightTexture=uploadVolume(farLightTexture,v);uniforms.uFarLight.value=farLightTexture;uniforms.uFarOrigin.value.set(...v.origin);uniforms.uFarExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uFarCell.value=v.cellSize;},

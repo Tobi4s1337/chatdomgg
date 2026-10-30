@@ -115,13 +115,17 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       float frame = max(step(0.455, p.x), step(0.455, p.y));
       float bars = max(1.0 - smoothstep(0.014, 0.025, p.x), 1.0 - smoothstep(0.018, 0.03, p.y));
       float wood = max(frame, bars);
-      vec3 darkGlass = vec3(0.055, 0.085, 0.13);
+      vec3 coolGlass = vec3(0.09, 0.13, 0.19);
       vec3 amber = mix(vec3(0.82, 0.30, 0.055), vec3(1.0, 0.69, 0.25), 0.65 + 0.2 * vUv.y);
-      vec3 glass = mix(darkGlass, amber * mix(0.98, 1.4, night), light);
-      gl_FragColor = vec4(mix(glass, vec3(0.105, 0.055, 0.045), wood), 1.0);
+      // The voxel glass behind already reflects the sky and lets the room show. This layer adds the
+      // lamp-lit room's glow on the street side; from indoors only a faint warm sheen remains.
+      float street = gl_FrontFacing ? 1.0 : 0.18;
+      vec3 glass = mix(coolGlass, amber * mix(0.98, 1.4, night), light);
+      float glassAlpha = mix(0.1, mix(0.2, 0.68, night), light) * street;
+      gl_FragColor = vec4(mix(glass, vec3(0.105, 0.055, 0.045), wood), mix(glassAlpha, 1.0, wood));
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
-    }`, side: THREE.DoubleSide });
+    }`, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const haloMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `${shared}
     void main() {
       discardDetail();
@@ -148,6 +152,8 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   }
   const panes = makeMesh(paneMaterial, transforms);
   const halos = makeMesh(haloMaterial, haloTransforms);
+  // Both layers are translucent: the pane first, then the halo around it.
+  panes.renderOrder = 1; halos.renderOrder = 2;
   function setDetail(slot: number, from: LodFactor, to: LodFactor, progress: number): void {
     const indices = slotIndices.get(slot);
     if (!indices) return;
