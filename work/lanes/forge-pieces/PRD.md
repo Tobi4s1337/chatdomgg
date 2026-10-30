@@ -19,7 +19,7 @@ independent content work. Keep discoveries in Backlog without picking them up.
 
 ## Tasks
 
-- [ ] **FP01 — A first Hearth cottage made from real parts** · Author the floor, wall, corner, open door frame
+- [x] **FP01 — A first Hearth cottage made from real parts** · Author the floor, wall, corner, open door frame
   and separate hinged leaf, window, roof slope/ridge/gable/verge. Export finished definitions/blueprints and
   assemble a supported, enclosed small shell with clear entry and correct glass anchors. Demonstrate the finite
   connector profiles with a focused real-occupancy join check and invalid input rejection. Build the scoped
