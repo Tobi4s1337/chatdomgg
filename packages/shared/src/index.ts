@@ -8,3 +8,5 @@ export * from './voxel';
 export * from './presence';
 export * from './avatar';
 export * from './forge-pieces';
+export * from './build';
+export * from './citizen-chat';
