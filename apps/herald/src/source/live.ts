@@ -10,7 +10,7 @@ import { Reconciler } from '../observe/reconcile';
 import { FileBindingStore } from './bindings';
 import { presentKingdom } from './kingdom';
 import type { ForgeCommandSink } from '../forge/commands';
-import { HERALD_PORT, startPresenceServer, type PresenceServer, type SourceHost, type UnstartedHealth } from './server';
+import { startPresenceServer, type PresenceServer, type SourceHost, type UnstartedHealth } from './server';
 import { PresenceSource } from './source';
 
 export interface LiveSourceHandle {
@@ -52,7 +52,7 @@ export async function startLiveSource(options: {
 }): Promise<LiveSourceHandle> {
   const { config, print } = options;
   let host: SourceHost = unstarted('configured', 'starting', []);
-  const server = await startPresenceServer({ host: () => host, port: options.port ?? HERALD_PORT });
+  const server = await startPresenceServer({ host: () => host, port: options.port ?? options.config.port });
   print(`Herald source · LIVE · ${config.channelLogin} · http://127.0.0.1:${server.port}/presence-data/stream`);
 
   let tokens: AppTokenSession | null = null;

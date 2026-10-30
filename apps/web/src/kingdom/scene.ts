@@ -245,9 +245,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(disposed)return;try {const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&debug.ready&&!fixedTime)time+=dt;
     if(options.source==='simulated')simulation.advance(time);
-    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);clay.setEnvironment(grade);ground.setEnvironment(grade);crowd.material.setEnvironment({...grade,ambientIntensity:Math.max(.65,grade.ambientIntensity)});
+    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);clay.setEnvironment(grade);ground.setEnvironment(grade);forge.setEnvironment(grade);crowd.material.setEnvironment({...grade,ambientIntensity:Math.max(.65,grade.ambientIntensity)});
     const presentationMs=options.source==='simulated'?simulation.epochMs+time*1000:Date.now();
-    const citizens=loaded?crowd.update(presentationMs,time,camera):[];
+    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined):[];
     const lightFrame=loaded?crowd.lightFrame(presentationMs):frame;
     if(lightFrame)build.setFrame(lightFrame);
     const lightKey=`${lightFrame?.epoch}:${lightFrame?.sequence}:${lightFrame?.windows.filter(w=>w.present).map(w=>w.slot).join(',')}`;
