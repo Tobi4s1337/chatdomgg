@@ -29,13 +29,17 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
 
 ## Tasks
 
-- [ ] **RS01 — A committed fact survives a room restart** · evidence: test/log. Implement additive migrations
+Founded scene/collision/furnisher volume is assigned to `realm-server-world` (spec 38), which can work in
+parallel. This lane retains allocation/adoption and RS05–09. Main has frozen the public scene receipt and
+state-aware opening loader; compose the delivered producer rather than implementing it twice.
+
+- [x] **RS01 — A committed fact survives a room restart** · evidence: test/log. Implement additive migrations
   and the actual `RealmRepository` in `src/persistence/`, with fenced DB-time writer leases, expected sequence,
   command digest/outcomes and atomic private fact/state/ledger/outbox commit. Wire through the frozen startup
   injection and run a durable local room on 5191 by the end of this task. Focused R1/R2 test uses two competing
   writers, stale-epoch retry and lost COMMIT reply; prove one spend/fact/outcome after `lookup`/reload. Document
   local start/migrate commands and connection-safe failure. No live fallback to main's simulated memory adapter.
-- [ ] **RS02 — Twitch sign-in issues a checked room ticket** · evidence: test/log. Implement OIDC code/state/
+- [x] **RS02 — Twitch sign-in issues a checked room ticket** · evidence: test/log. Implement OIDC code/state/
   nonce verification, claimed person identity, hashed expiring/revocable Chatdom sessions, protected logout and
   opaque single-use kingdom tickets under `apps/api/src/realm-auth/`. Implement `RealmAuthenticator` under
   realm `src/auth/` using the same database. API runs on 5192 using main's scaffold. Focused R4/R5 tests use
@@ -45,23 +49,23 @@ uses the existing serial screenshots; inspect any changed sign-in surface at 144
   (a storage partition, never a credential); new sessions/accounts rotate it. Tickets remain single-use. Tests use
   an explicitly SIMULATED provider through production verification logic: reject wrong issuer/audience/nonce,
   expired/revoked sessions, replay/cross-kingdom tickets and client-selected identities. Live mode has no bypass.
-- [ ] **RS03 — Three real deeds, with streets that stay put** · evidence: test. Implement global allocation and
+- [x] **RS03 — Three real deeds, with streets that stay put** · evidence: test. Implement global allocation and
   immutable founded-layout adoption in `src/allocation/`. Persist person/kingdom/plot constraints, verified
   tenure evidence, original placement, receipt and pending-install recovery; validate `home.installAllocated`
   inside the durable write transaction. Focused R6 test races one person into four kingdoms and restarts during
   allocation: at most three citizen deeds, castle excluded, guest retained, occupied plot transforms unchanged
   and old layout cannot be overwritten by a regenerated plan. No fixture ownership in live paths.
-- [ ] **RS04 — Ingress cannot vanish and committed public delivery can resume** · evidence: test. Implement
+- [x] **RS04 — Ingress cannot vanish and committed public delivery can resume** · evidence: test. Implement
   authenticated capability/evidence-checked ingress in `src/ingress/` and committed ordered delivery in
   `src/outbox/`. Implement `loadIngress`/`executeIngress`: persist source dedupe, private checkpoint and all
   capability-tagged facts plus public presence outbox in one transaction. Closed evidenced interval unions survive
   restart without doubling overlap or inventing coverage gaps; qualified-night credit needs actual ten-minute
-  coverage and a current owned home. Implement typed synchronous bootstrap at `throughSequence`, existing
+  coverage and a current owned home. Implement typed synchronous bootstrap at `throughCursor` (public prefix, including presence without a new domain fact), existing
   `lifecycle` and `bindRoom` effects, plus separate transient/owner delivery. Keep stable event IDs, current
   projection restoration and explicit at-least-once retry. Focused R7 test interrupts after commit/before delivery
   acknowledgement, then resumes: one applied ingress result, same public event ID, no replayed economic change,
   no raw creation words/rights/tokens in the public payload. Supply browser dedupe/cursor wiring instructions.
-- [ ] **RS05 — Reconnect returns the same person and honors revocation** · evidence: test/log. Add the auth/
+- [x] **RS05 — Reconnect returns the same person and honors revocation** · evidence: test/log. Add the auth/
   lifecycle adapter through main's existing handshake-time `onReconnect`, periodic revocation and drop guards,
   with explicit 30-second grace, immediate drop-input stop, current-session recheck, one-person seat policy and
   writer-epoch invalidation. Focused R8 harness demonstrates drop/reconnect and

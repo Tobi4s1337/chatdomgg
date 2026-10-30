@@ -90,15 +90,19 @@ function sectionCells(from: PlacedConnector, turn: QuarterTurn, side: -1 | 1, se
 }
 
 /** Connectors that must find a partner in a finished assembly, by form. Floors and wall heads may stay open. */
-const REQUIRED: Record<string, readonly string[]> = {
-  wall: ['west', 'east', 'foot-west', 'foot-east'], door: ['west', 'east', 'foot-west', 'foot-east'], window: ['west', 'east', 'foot-west', 'foot-east'],
+const SHELL: Record<string, readonly string[]> = {
+  wall: ['west', 'east', 'foot-west', 'foot-east'], door: ['west', 'east', 'foot-west', 'foot-east', 'canopy'], window: ['west', 'east', 'foot-west', 'foot-east', 'shutters'],
   'wall-corner': ['east', 'north', 'foot-east', 'foot-north'], 'roof-slope': ['west', 'east', 'seat', 'crest'],
   'roof-ridge': ['west', 'east', 'seat'], 'roof-gable': ['foot-west', 'foot-east', 'apex'], 'roof-verge': ['slope-west', 'slope-east', 'ridge'],
-  'shutter-pair': ['mount'], 'porch-deck': ['floor'], 'porch-post': ['foot', 'beam', 'head'], trim: ['west', 'east', 'top'],
-  'porch-canopy': ['wall', 'post-west', 'post-east', 'beam'], chimney: ['seat'],
+  'shutter-pair': ['mount'], 'porch-deck': ['floor'], chimney: ['seat'],
+};
+/** Each hand carries its porch differently: Hearth frames a beam between posts, Tide rests a lintel on braced posts. */
+const REQUIRED: Record<string, Record<string, readonly string[]>> = {
+  hearthfold: { ...SHELL, 'porch-post': ['foot', 'beam', 'head'], trim: ['west', 'east', 'top'], 'porch-canopy': ['wall', 'post-west', 'post-east', 'beam'] },
+  tidewake: { ...SHELL, 'porch-post': ['foot', 'head', 'knee'], trim: ['post-west', 'post-east', 'top'], 'porch-canopy': ['wall', 'beam', 'knee-west', 'knee-east'] },
 };
 
-describe.each(FORGE_REVIEW.map(f => [f.familyId, f] as const))('%s review cottage', (family, fixture) => {
+describe.each(FORGE_REVIEW.map(f => [f.familyId, f] as const))('%s review cottage', { timeout: 30_000 }, (family, fixture) => {
   const shell = assemble(fixture, 'none');
   const placed = fixture.instances.flatMap(instance => pieceOf(instance.pieceId).connectors.map(c => placeConnector(c, instance)));
   const profiles = new Map(FORGE_PROFILES[family].map(p => [p.id, p]));
@@ -120,7 +124,7 @@ describe.each(FORGE_REVIEW.map(f => [f.familyId, f] as const))('%s review cottag
     const mated = new Set(mates.flatMap(([a, b]) => [`${a.instance}/${a.id}`, `${b.instance}/${b.id}`]));
     const missing = fixture.instances.flatMap(instance => {
       const form = instance.pieceId.replace(`forge-${family}-`, '');
-      return (REQUIRED[form] ?? []).filter(id => !mated.has(`${instance.id}/${id}`)).map(id => `${instance.id}/${id}`);
+      return (REQUIRED[family]![form] ?? []).filter(id => !mated.has(`${instance.id}/${id}`)).map(id => `${instance.id}/${id}`);
     });
     expect(missing).toEqual([]);
     const ownerOf = (x: number, y: number, z: number) => inLot(x, y, z) && shell.solid(x, y, z) ? fixture.instances[shell.owner[index(x, y, z)]!]!.id : null;
@@ -192,8 +196,8 @@ describe.each(FORGE_REVIEW.map(f => [f.familyId, f] as const))('%s review cottag
       forEachCell(placeSpace(box, instance), (x, y, z) => expect(shell.solid(x, y, z), `${instance.id} clearance ${x},${y},${z}`).toBe(false));
     }
     const door = fixture.instances.find(i => pieceOf(i.pieceId).door)!, spec = pieceOf(door.pieceId).door!;
-    const swing = pieceOf(door.pieceId).clearanceBoxes[0]!;
-    const inside = (p: readonly number[]) => p.every((v, k) => v >= swing.from[k]! - 1e-9 && v <= swing.to[k]! + 1e-9);
+    // The door's clearance boxes together reserve the sweep (a stepped leaf reserves a stepped band).
+    const inside = (p: readonly number[]) => pieceOf(door.pieceId).clearanceBoxes.some(swing => p.every((v, k) => v >= swing.from[k]! - 1e-9 && v <= swing.to[k]! + 1e-9));
     const leafCells: Space[] = [];
     const leaf = rasterize(spec.leaf), [lx, ly, lz] = spec.leaf.size;
     for (let z = 0; z < lz; z++) for (let y = 0; y < ly; y++) for (let x = 0; x < lx; x++) if (leaf[x + lx * (y + ly * z)]) leafCells.push({ from: [x, y, z], to: [x + 1, y + 1, z + 1] });

@@ -1,0 +1,2 @@
+
+2026-10-30 integration: Main authority update: public deliveries now require cursor and bootstrap throughCursor (presence can advance delivery with no new domain fact). Buffer/dedupe/install by public cursor and epoch, never discard presence by fact sequence. Handle now requires recoverWalker; bound effects include irreversible close. Specs 33/34/36 and wiring PRD aligned; consume main after candidate acceptance. Source WIP left intact.

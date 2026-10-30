@@ -234,6 +234,16 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
 
 ## Decisions
 
+- **2026-10-30 — Integrated WC05/WC06 presentation seam.** The reference consumer supplies `REFERENCE_WORLD`
+  and forwards the real client's `predicted` getter and `clearInput()`. The controller derives step offsets from
+  exact predicted feet/support, applies them only to returned render poses and an independent camera-height
+  target, and keeps camera collision anchored to the uneased feet. Body easing is cancelled when subsequent
+  horizontal travel puts it under a lintel; jump/placement/revision/takeover clears residual offsets. A client
+  jump waiting for its first due fixed input is cleared along with controller input on blur/menu/reset/dispose.
+  Looking upward under a ceiling flush with the body crown exposed an unsafe zero-boom near-plane fallback on
+  portrait; the camera root now lowers within the body envelope to keep the near footprint below the crown,
+  without changing the near distance, FOV or authoritative movement. Actual kingdom acceptance remains pending.
+
 - **2026-10-30 — Executable boundary frozen and client scope transferred.** Main demonstrated the real reference
   room/client with three SDK clients and three Playwright browsers moving/reloading; full verification passed.
   The lane extends the shared solver without changing its signature and owns the explicitly granted WC06
@@ -249,3 +259,76 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
   uses drag; optional pointer lock remains available. Do not bind Q/E orbit from the older Tech example.
 - **2026-10-30 — Focus the demonstration.** A few actual walking frames and meaningful movement/occlusion flows
   are required. A new proof project or a repeated large screenshot matrix is not the deliverable.
+- **2026-10-30 — WC02 solver: vertical first, then swept horizontal time of impact (tie-order change for main's
+  review).** Main's Y sweep stays first, so floor seams never read as walls. X and Z are no longer separate axis
+  sweeps: `slideHorizontal` (`packages/world/src/movement/collide.ts`) finds the whole body's earliest contact over
+  the diagonal travel, snaps the blocked axis to the solid's face and lets the other axis keep only its own
+  remaining travel (never re-normalized, so a wall slide cannot gain speed). One solid blocks the axis that entered
+  last, X before Z on an exact tie; solids met at the same instant block together. Separate X-then-Z sweeps made a
+  convex corner resolve differently for mirrored approaches; the swept version is mirror-symmetric, tested, and
+  independent of `query` order. Each pass blocks an axis or finishes, so `SLIDE_PASSES = 3` always terminates,
+  zero-time inside-corner hits included. `CONTACT_EPSILON = 1e-9` m: faces closer than that touch, never overlap.
+- **2026-10-30 — WC02 support and determinism.** `grounded` is read at the end of the tick (`vy <= 0` and a solid
+  top within `SUPPORT_PROBE = 1e-6` m under the footprint), so walking off a ledge is airborne at once and a jump
+  is only accepted from real support. `Math.hypot` became `Math.sqrt` of exact sums: sqrt is correctly rounded
+  everywhere, hypot is not specified to be, and Node and browsers must agree bit for bit. `distance` adds the
+  horizontal displacement of the slide only.
+- **2026-10-30 — WC02 overlap recovery and its seam.** Before moving, a body inside solids by more than the contact
+  tolerance is pushed out along one of six axis directions, just far enough to clear every solid it is inside,
+  within `RECOVERY_REACH = 1` m, and only if the swept path touches no solid it was not already inside (no push
+  through a neighbouring wall). Shortest valid push wins; ties go up, -X, +X, -Z, +Z, down. The push is not walked
+  distance. If nothing qualifies the step zeroes velocity and holds the body still, deterministically on both ends.
+  `PlayerStep` stays void; `@chatdom/world/movement` exports `bodyStuck(state, world)` and `embeddedSolids` so the
+  room can see the case. The frozen room never asks for a placement after a step, and `RealmRoomHandle` has no
+  recovery request port, so that is recorded as a `needs:` for main/realm-server rather than a new return type.
+- **2026-10-30 — WC05 camera collision: sweep the drawn curve, pull in over the shoulder.** The eye plus the actual
+  near-plane rectangle (fov, aspect, `camera.zoom`, lens shift) is enclosed in a box with 5 cm of air and swept
+  along the drawn boom curve from the citizen's real head (kept clear by the body) out to the eased wheel wish, in
+  ≤ .25 m pieces against one `query` per frame, then checked once on the exact curve. In immediately, out over
+  ~.35 s (95 %), no minimum distance; wheel target, eased wish and drawn boom stay separate. Pulling in along the
+  same curve the wheel uses means a short boom is exactly a wheeled-in view, so the curve itself changed: closer
+  than ~5.5 m the pivot keeps the head at or below NDC −.15 (`SHOULDER.headY`), and the lens shift stays full to
+  1.4 m (was a blend from 2.6 m). The first try kept the old curve and showed a centred giant head at 1.6 m; a
+  second try slid the eye along the entry boom and dropped the citizen off the bottom edge. Entry framing at 6.5 m
+  is unchanged. Self-fade now measures eye-to-head distance. The controller takes `collision` (a world or a
+  function read every frame; null keeps the last world). Obstructions are never faded.
+- **2026-10-30 — WC03 feel constants (one shared law, no client tuning).** Velocity moves toward the input's
+  target along the straight line between them, so neither diagonals nor turns gain speed and the target is met
+  exactly: `GROUND_ACCEL = 40` m/s² (walk 4 m/s in 3 ticks, sprint 7 m/s in .175 s), `GROUND_BRAKE = 70` m/s²
+  whenever the target is slower along the current travel (a walk stops in 2 ticks within .06 m, a sprint in 3
+  ticks within .24 m, a walk reverses in 5 ticks), `AIR_ACCEL = 10` m/s² both ways (a jump keeps its momentum,
+  steering stays possible). `JUMP_SPEED = 8`, `GRAVITY = 25.6`: a 1.25 m apex that clears a one-metre crate and never the
+  1.5 m street fence, .625 s in the air. The vertical move integrates the tick's exact parabola (mean of start and
+  end velocity), so the tick samples lie on it independent of tick size. Main's reference 6.8/20 apexed at 1.04 m,
+  too low to read as a jump next to a half-metre step. The frozen realm room test that hard-codes instant 4 m/s
+  travel (`x+12*4/30`) now needs the ramped value (`x+44/30`), recorded as a `needs:` for main.
+- **2026-10-30 — WC03 supported half-metre step.** Only when grounded at the tick start, not jumping and not
+  rising, and only when the ordinary slide was blocked and the intended direction pushes into the blocked face
+  (component across it at least 1/`STEP_GRAZE` = 1/4 of the one along it, about 14 degrees). The trial rises
+  exactly to the highest obstacle top on the swept path within `STEP_HEIGHT`, not a fixed .5 m, so a .3 m doorstep
+  under a 2.1 m lintel is walkable (0.3 + 1.75 fits) while 2.0 m is not; a ceiling may cut the rise and the replay
+  then clears only what fits. It replays the whole horizontal travel at that height, settles down onto support and
+  commits only if it gained more travel along the path than the slide (`STEP_PROGRESS` 1e-3 per metre) and a tread
+  exists for the body's centre `STEP_LANDING = .2` m past the face: a top no lower than one step under the landing
+  and nothing rising above it there. A parapet over a drop or a kerb against a wall is therefore not a step; a sill
+  with floor behind it is, and a long catch-up tick may clear a thin sill entirely. Rejection keeps the ordinary
+  slide. Down a step, a grounded walker that leaves support drops onto support within `STEP_HEIGHT` below in the
+  same tick (a full-body sweep), so stairs keep it grounded and jumpable; anything deeper is a fall. The vertical
+  part of a step is not walked distance.
+- **2026-10-30 — WC03 rendered step height.** `apps/web/src/walk/motion/step-ease.ts` eases presentation only,
+  from predicted feet height plus `grounded`: the camera follows a grounded step both ways over .1 s with at most
+  two steps of lag; the avatar eases only down a step (it just swept down through air, so it is never drawn in a
+  solid) and is drawn at its real height up a step, where any lag would sink its feet into the tread. Jumps and
+  falls pass through. The local pose needs `grounded` from the reconciler state (WC06 hunk) to bind it.
+- **2026-10-30 — WC06 Predict and collision revisions in the realm client.** `connectRealm` takes a
+  `CollisionWorld | RealmCollision` (`world(revision) → CollisionWorld | null`, exactly that revision or nothing),
+  a client-side seam for realm wiring's producer, not a shared or protocol change; a plain world is a one-revision
+  source and keeps main's fail-at-connect check. The reconciler's step runs `stepPlayer` only when the input's
+  revision equals the walker's and that world is here; otherwise prediction holds and the room's walk is drawn
+  (the room refuses the same inputs). Each staged input carries the room's current revision. On adoption the
+  client calls the SDK's `reconciler.reset()` (reseed from the room's safe placement, void inputs sent before it,
+  clear the latched jump) instead of replaying old inputs against replaced solids, and listens for the room's
+  `revision` broadcast to fetch the world early (it also silences the SDK's unregistered-message warning).
+  `snap: 2` m (above sprint × patch, 1.4 m) draws a placement at once instead of gliding it through walls.
+  The local yaw is drawn from the exact predicted byte, since smoothing a wrapping byte spun the citizen the long
+  way. `predicted` (full `PlayerState`) and `predicting` are exposed for step easing and evidence.

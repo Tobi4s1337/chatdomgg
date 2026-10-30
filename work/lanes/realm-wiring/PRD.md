@@ -7,7 +7,8 @@ The executable boundary is verified: full `pnpm verify`, three uWS SDK clients a
 This lane never edits shared/world contracts or another lane's files.
 
 Use `$ralph-lane`, `$chatdom-vision`, `$twitch-dev` for Twitch integration, and `$look` for visual acceptance.
-You are not alone in the codebase. Preserve all other edits. Realm-server owns persistence/auth/founded manifest;
+You are not alone in the codebase. Preserve all other edits. Realm-server owns persistence/auth/adopted layouts;
+`realm-server-world` (spec 38) supplies the actual scene, manifest and collision world;
 realm-walk and realm-interactions own their surfaces. Herald owns its unaccepted H05 files. Main/the integrator
 alone applies central composition and scene/bench recipes. Never edit those files to unblock yourself.
 
@@ -27,7 +28,7 @@ for a human message. Never pick Backlog without main instruction. Sub-agents nev
   actual frozen client and public delivery. Consume `REALM_AUTH_ROUTES` and the strict shared auth DTOs for
   production session/ticket entry; no guessed endpoints or reference-session fallback. Supply the actual
   `RealmEntry` with session `resumeScope` and a lazy fresh-ticket factory; reconnect never reuses a consumed
-  ticket. Implement buffered `RealmBootstrap`/`throughSequence` installation,
+  ticket. Implement buffered `RealmBootstrap`/`throughCursor` (independent of domain fact sequence) installation,
   presence freshness/origin/epoch/sequence handling and disposal; snapshot restoration never replays rituals.
   Provide the first exact scene installation recipe, then demonstrate a labelled SIMULATED window
   change through the actual room to two clients. No direct Herald SSE or first-plot fallback. R1–R4, R10.
@@ -35,7 +36,10 @@ for a human message. Never pick Backlog without main instruction. Sub-agents nev
 - [ ] **RW02 — Verified Herald observations enter the room privately** · evidence: ingest-to-room tests + service recipe.
   Add only new `realm-sink/**` service adapter files. Forward validated private presence/stream/moderation input
   and cancellation guards with kingdom-scoped service authority. Use `loadIngress`/`executeIngress` and the
-  versioned shared-world presence codec so checkpoint, commands, outcome and public projection commit together.
+  accepted realm `presenceTransition`/compressed checkpoint so commands, outcome and public projection commit together.
+  Reuse `DurableKingdom`/`RealmIngress`, removing the competing writer/plain-JSON `presence-v1` codec.
+  Forward shared `source-lost` barriers before recovery observations, without an activity expiry; cancel the old
+  generation first. Distinguish source-specific gaps from full broadcaster revocation; use no fake offline input.
   Preserve coverage, partial rosters, recovered
   observations, dedupe and every cleanup race. Write exact additive hooks for accepted source/live/ingest files
   and shutdown; main/integrator applies them after H05. Exercise the same sink with real composition and labelled

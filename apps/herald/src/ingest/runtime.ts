@@ -4,7 +4,7 @@ import {
 import type { AuthorityEvent } from '../auth/authority';
 import type { Capability, Role } from '../auth/grants';
 import type { PresenceSource } from '../source/source';
-import { ChatIngest, type IngestCounters, type IngestOptions } from './ingest';
+import { ChatIngest, type IngestHealth, type IngestOptions } from './ingest';
 import {
   type CoverageState, type HeraldEventType, planSubscriptions, reconcileSubscriptions, type SubscriptionCoverage, type SubscriptionPlan,
 } from './subscriptions';
@@ -29,7 +29,7 @@ export interface DeliveryHealth {
   readonly unexpectedSubscriptions: number;
   /** Delivery lost and later restored. Twitch does not replay what happened in between. */
   readonly gaps: { readonly count: number; readonly openSince: number | null; readonly last: { readonly from: number; readonly to: number } | null };
-  readonly ingest: { readonly counters: Readonly<IngestCounters>; readonly pending: number; readonly lastChatAt: number | null; readonly evictions: number };
+  readonly ingest: IngestHealth;
 }
 
 export interface DeliveryRuntimeOptions {

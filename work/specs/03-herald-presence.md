@@ -392,6 +392,25 @@ lane is the first real presence producer on a frozen contract; it does not silen
   directory (`replay --bindings <dir>`, refused for Herald's real data directory), with sweep order reversed the
   second time, and requires each public frame to seat every lit window and name on the same slot. A control run
   without the table must seat them differently, so the comparison can fail.
+- **2026-10-30 — H05 timing and the first real message (herald worker).** Local `/health` now times chat as
+  numbers only (`source.delivery.ingest.latency`). For the last 64 applied acts it keeps Twitch's stamp, Herald's
+  receipt, the apply time and the sequence of the frame first showing the act, plus median and max for
+  Twitch→Herald and Herald→frame. A withdrawn act is never timed. The frame is projected inside the same apply
+  step, so `appliedAt` is when subscribers are handed it. The first real `tobi4s_` message (2026-10-30T15:21:19Z,
+  channel offline) bound one durable slot and lit nothing. The frozen reducer shows presence only while the
+  broadcast is fresh, and an offline or stale frame cannot claim a present window. A real lit window therefore
+  needs `tobi4s_` live, and the source is ready for that. The 50,000-identity unit tests carry an explicit 30 s
+  timeout, because on a loaded shared host the default 5 s judged the machine rather than the design.
+- **2026-10-30 — One real Herald per conduit; lane runs on another port (herald worker, from Tobias's note).**
+  Main runs the kingdom's Herald from the main checkout on 5194. `dev` and `replay` take `HERALD_PORT` (env or
+  the settings file, default 5194). It must be unprivileged and not 5195, and an invalid value refuses to start
+  instead of falling back. The server binds before any Twitch call, and the binding-table lock is taken before
+  the conduit is touched, so a second real `dev` (busy port, or the same data dir) stops before it could take
+  shard 0 from the one serving. Set the lane's port per run in the environment, never in the shared
+  `herald.env`. The capture script takes `--herald-port` (5196 for lane runs) and `--web-dist`: it then serves
+  the web build itself on loopback (`--web-port`, 5197 for lane runs), with `/presence-data` proxied to whichever
+  Herald the current run reads. `--live` reads a real Herald already serving on `--live-port` (default 5194)
+  and never starts, stops or restarts it. Only when nothing serves there does it start `dev` on the herald port.
 
 - **2026-10-30 — Main integration, H01–H04.** Herald and the web now both use `generateSettlementPlan` with
   identical seed/tier/founding years; the public URL may pin kingdom and focus slot, never person identity.

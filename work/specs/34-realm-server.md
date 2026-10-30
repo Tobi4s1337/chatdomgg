@@ -70,13 +70,16 @@ them. It proves the actual 300-walker path with small Node clients rather than h
    `apps/realm/src/persistence/`. Acquire/renew/release use database time, a bounded lease and an unguessable
    fencing epoch. Every write compares the current unexpired epoch and expected sequence while holding the
    kingdom lock. A failed renewal immediately closes the authority gate, cancels uncommitted work and stops
-   authoritative input/public delivery. An old owner cannot write after takeover, even if its process resumes.
+   authoritative input/public delivery through `RealmRoomEffects.close`. An independent monotonic deadline closes
+   the room even while renewal/outbox awaits stall; late completions cannot reopen it. An old owner cannot write after takeover, even if its process resumes.
    Keep one owned walker per person per kingdom across simultaneous tabs; define and test replacement/rejection.
 2. **R2 — A commit is indivisible.** `execute` locks/fences, loads valid snapshot plus tail, invokes main's
    decision function with authoritative transaction time, rechecks `current`, and commits the fact, sequence,
    private state, command outcome, ledger/design constraints and public outbox together. Do not acknowledge,
    mutate authoritative room state or emit public success before commit. Unique `(kingdom, commandId)` stores
-   a canonical command digest and outcome: same payload returns that outcome; another payload conflicts.
+   a canonical command digest and outcome: committed and unchanged outcomes are terminal; a rejected same-
+   payload request may be reevaluated against current authority (for example after earning a coal). Another payload
+   conflicts. Ingress observation receipts remain terminal, including observations without domain facts.
    An uncertain COMMIT response is resolved by `lookup` before retry/cleanup; it is never an automatic refund.
    No held/refused decision, raw wish, rights, session ID, Twitch ID or reservation secret enters the public outbox.
 3. **R3 — Recover the same kingdom.** Version snapshots with their sequence and integrity metadata. Load one
@@ -129,7 +132,9 @@ them. It proves the actual 300-walker path with small Node clients rather than h
    `RealmPublicDelivery`, in fact order with stable `eventId` across retry. Transport is at-least-once: client
    dedupe/cursors prevent a lost dispatcher acknowledgement replaying a ritual. Restore the current published
    projection on fresh join without replaying historical spectacle. Implement synchronous `RealmRoomHandle.bootstrap`
-   at `throughSequence`: browser buffers deltas while installing `current`, then applies only newer entries.
+   at `throughCursor`: browser buffers deltas while installing `current`, then applies only newer cursor entries.
+   Domain `throughSequence` is not a public-delivery cursor: presence can change without a new domain fact. The
+   bootstrap checkpoint reflects the delivered public prefix, not a private state ahead of its outbox.
    Use existing `lifecycle` for walker presence observations and `bindRoom` effects for walking/geometry changes;
    `bindTransient` carries ephemeral chat/seats and owner replies separately. No transient speech is appended to
    the durable checkpoint/history. Do not claim delivery is exactly-once.
@@ -310,6 +315,11 @@ experiences have shipped.
 
 ## Decisions
 
+- **2026-10-30 — Founded geometry producer split (spec 38).** `realm-server` retains allocation/adoption,
+  Postgres, auth, reconnect, limits, districts, load and recovery. `realm-server-world` owns only the missing
+  public scene/immutable asset producer, browser-safe collision compiler, founded provider and HomeFurnisher
+  in its disjoint spec 38 folders. Consume its actual exports when delivered; main/integrator owns bootstrap
+  composition. Do not independently implement a second geometry producer in allocation or walking.
 - **2026-10-30 — Frozen after main acceptance.** Shared declarations, reducer, reference room, typed ports and
   auth DTOs exist as recorded above. Main reports full `pnpm verify` green, real uWS with three SDK clients/reload
   and three-browser Playwright entry passing. This spec and PRD are frozen; team starts the lane once main
@@ -343,3 +353,11 @@ experiences have shipped.
   main-owned movement, schema and domain rules. The payload ceiling is 16 KiB to admit bounded build operations.
   Presence checkpoint and its multi-fact batch commit through `executeIngress`/`loadIngress`, with evidenced
   interval union and current-home requirements consumed from the reducer.
+- **2026-10-30 — Lost source evidence is explicit.** Consume shared `source-lost` controls through accepted
+  `presenceTransition`. Persist global source cutoffs and disclosure provenance in the actual compressed
+  checkpoint; legacy checkpoints default to no cutoffs/unknown disclosure source. Only Herald admits these
+  controls. Stream loss shortens the same domain night lease, never manufactures offline. The ordered producer
+  must put its loss barrier before recovery observations; open runs are discarded and earned unions retained.
+  Current-state revocation removes affected Twitch metadata, not homes/rights/loyalty or independent people.
+  Include removal/redaction of revoked Twitch-derived historical inbox/outbox data in the owned revocation path;
+  clearing a checkpoint alone is not proof of that cleanup.

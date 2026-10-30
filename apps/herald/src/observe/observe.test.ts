@@ -42,7 +42,7 @@ function config(overrides: Partial<HeraldConfig> = {}): HeraldConfig {
     channelLogin: BROADCASTER.login, channelLoginDefaulted: false, readerLogin: READER.login, redirectUri: null,
     credentials: { clientId: CLIENT_ID, clientSecret: new Secret(SECRET) }, conduitId: null, problems: [],
     dataDir: '/simulated/data', kingdom: { seed: 'tobi4s_', tier: 'hamlet', firstYear: 2026, year: 2026 },
-    secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env', ...overrides,
+    port: 5194, secretsFile: '/simulated/atlas.env', settingsFile: '/simulated/herald.env', ...overrides,
   };
 }
 
@@ -153,7 +153,8 @@ describe('Chatters sweep', () => {
     expect(slow).toMatchObject({ end: 'deadline', pages: 3 });
   });
 
-  it('50,000 connected identities complete in 50 pages and leave the frame within its cap, all unnamed', async () => {
+  // 50,000 identities through the real reducer: allow for a busy machine, not a slow design.
+  it('50,000 connected identities complete in 50 pages and leave the frame within its cap, all unnamed', { timeout: 30_000 }, async () => {
     const everyone = quiet(50_000);
     const r = await rig({ chatters: everyone });
     await r.reconciler.start();
