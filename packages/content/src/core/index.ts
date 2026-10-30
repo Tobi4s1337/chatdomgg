@@ -2,6 +2,8 @@ import { HOME_DEPTH_METRES, type HomeTier, type VoxelBlueprint } from '@chatdom/
 import { MAT, STYLES, type StyleKey } from '../materials';
 
 export const CASTLE_BEACON_HEIGHT_METRES = 30.5;
+/** Centre of the authored lantern cap, relative to the castle asset origin. */
+export const CASTLE_BEACON_ANCHOR_METRES = [16, CASTLE_BEACON_HEIGHT_METRES, 14] as const;
 
 type Box = VoxelBlueprint['boxes'][number];
 type Window = VoxelBlueprint['windows'][number];
@@ -100,7 +102,11 @@ export function createCastle(style: StyleKey): VoxelBlueprint {
   box(boxes,106,8,210,111,55,218,kit.trim);
   box(boxes,145,8,210,150,55,218,kit.trim);
   box(boxes,111,55,210,145,60,218,kit.trim);
-  box(boxes,111,0,219,145,4,256,MAT.paving);
+  // Thirteen shallow, supported courses climb from the approach to the court.
+  // Each rises one build cell over four cells of run (0.125 m over 0.5 m).
+  for (let step=0; step<13; step++) {
+    box(boxes,111,0,202+step*4,145,13-step,206+step*4,MAT.paving);
+  }
   // Regular battlements; their gaps establish an iconic roofline.
   for(let x=40;x<218;x+=16) { box(boxes,x,71,204,x+9,79,211,kit.stone); box(boxes,x,71,32,x+9,79,39,kit.stone); }
   for(let z=43;z<204;z+=16) { box(boxes,31,71,z,38,79,z+9,kit.stone); box(boxes,218,71,z,225,79,z+9,kit.stone); }

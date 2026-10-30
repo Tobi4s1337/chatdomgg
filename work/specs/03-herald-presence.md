@@ -265,6 +265,12 @@ lane is the first real presence producer on a frozen contract; it does not silen
 
 ## Decisions
 
+- **2026-10-30 — Explicit replay origin.** SSE transport and evidence origin are independent. The browser's
+  single adapter takes an explicit expected origin (`live` by default, `simulated` for Herald replay) and derives
+  its feed label from that choice. It rejects cross-origin frames while retaining all schema/realm/epoch/sequence/
+  freshness checks. The replay URL is `/?source=herald&presenceOrigin=simulated`, including the equivalent stream
+  route. This corrects main's initial live-only adapter without changing the public frame schema.
+
 - **2026-10-30 — Read-only first consumer.** Main authorizes real read integration for `tobi4s_`; no outbound Twitch
   action is part of this lane. Missing grants are a visible dependency, never simulated success.
 - **2026-10-30 — App-token conduit with outgoing shard.** Main chose one app-token conduit and one WebSocket shard
@@ -278,3 +284,12 @@ lane is the first real presence producer on a frozen contract; it does not silen
   `channel.chat.clear_user_messages`, held ten minutes from its observation time. The reason names Chatdom's
   protective behavior and makes no claim about Twitch's unknown ban/timeout duration. Global clear only clears
   transient activity buffers. Text/bubbles stay outside this presence contract.
+- **2026-10-30 — H01 lane choices (herald worker).** Scripts run one Vite SSR bundle (`apps/herald/dist/herald.mjs`,
+  every dependency inlined), rebuilt by each script, because workspace sources use extensionless imports Node cannot
+  run directly. App keys are read only from the external secrets file and are never placed in `process.env`;
+  nonsecret `HERALD_*` settings come from the environment or the optional `~/.config/chatdom/herald.env`.
+  Re-consent for one role also requests the Herald scopes the same account already granted, so one account in both
+  roles never loses the other grant; non-Herald scopes are never requested. A `user.authorization.revoke` for a
+  configured account blocks its capabilities until Get Authorization By User first shows the grant gone and then
+  shows a new one. Helix admission keeps 100 points of the shared client bucket in reserve for the Surveyor. The
+  consent callback answers with a 303 to a result page, so the code does not stay in the address bar or history.

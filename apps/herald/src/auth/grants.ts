@@ -1,0 +1,92 @@
+/**
+ * Herald reads chat through an app-token conduit. Twitch only delivers when the people involved have
+ * previously granted this client the right scopes, so every capability is derived from recorded grants,
+ * never from holding the app secret.
+ */
+export const READER_SCOPES = ['user:bot', 'user:read:chat'] as const;
+export const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters'] as const;
+export const HERALD_SCOPES: readonly string[] = [...READER_SCOPES, ...BROADCASTER_SCOPES];
+
+export type Role = 'reader' | 'broadcaster';
+export type Capability = 'chat' | 'chatters' | 'stream' | 'revocation';
+export const CAPABILITIES: readonly Capability[] = ['chat', 'chatters', 'stream', 'revocation'];
+
+export const ROLE_SCOPES: Readonly<Record<Role, readonly string[]>> = { reader: READER_SCOPES, broadcaster: BROADCASTER_SCOPES };
+
+/** Which role must have granted which scopes for each capability. */
+const REQUIREMENTS: Readonly<Record<Capability, ReadonlyArray<{ readonly role: Role; readonly scopes: readonly string[] }>>> = {
+  // channel.chat.message and its cleanup types (message_delete, clear, clear_user_messages) over a conduit.
+  chat: [{ role: 'reader', scopes: READER_SCOPES }, { role: 'broadcaster', scopes: ['channel:bot'] }],
+  // Get Chatters with an app token, the broadcaster as moderator_id.
+  chatters: [{ role: 'broadcaster', scopes: ['moderator:read:chatters'] }],
+  // Get Streams and stream.online/offline need only the app token.
+  stream: [],
+  // user.authorization.revoke is conditioned on the client ID alone.
+  revocation: [],
+};
+
+export type AccountState = 'resolved' | 'not_designated' | 'not_found' | 'unchecked';
+
+export interface Account {
+  readonly role: Role;
+  readonly login: string | null;
+  readonly id: string | null;
+  readonly displayName: string | null;
+  readonly state: AccountState;
+  /** null until Get Authorization By User has answered for this account. */
+  readonly authorized: boolean | null;
+  readonly granted: readonly string[];
+}
+
+export type AppTokenState =
+  | { readonly state: 'valid'; readonly expiresAt: number }
+  | { readonly state: 'unavailable'; readonly reason: string };
+
+export type Blocker =
+  | { readonly kind: 'app_token'; readonly reason: string }
+  | { readonly kind: 'not_designated'; readonly role: Role }
+  | { readonly kind: 'account_not_found'; readonly role: Role; readonly login: string }
+  | { readonly kind: 'grant_unchecked'; readonly role: Role; readonly login: string }
+  | { readonly kind: 'not_authorized'; readonly role: Role; readonly login: string; readonly scopes: readonly string[] }
+  | { readonly kind: 'missing_scopes'; readonly role: Role; readonly login: string; readonly scopes: readonly string[] };
+
+export interface CapabilityStatus {
+  readonly capability: Capability;
+  readonly available: boolean;
+  readonly blockers: readonly Blocker[];
+}
+
+export function assessCapabilities(app: AppTokenState, accounts: Readonly<Record<Role, Account>>): CapabilityStatus[] {
+  return CAPABILITIES.map(capability => {
+    if (app.state !== 'valid') return { capability, available: false, blockers: [{ kind: 'app_token', reason: app.reason }] };
+    const blockers: Blocker[] = [];
+    for (const { role, scopes } of REQUIREMENTS[capability]) {
+      const blocker = blockerFor(accounts[role], scopes);
+      if (blocker) blockers.push(blocker);
+    }
+    return { capability, available: blockers.length === 0, blockers };
+  });
+}
+
+function blockerFor(account: Account, required: readonly string[]): Blocker | null {
+  if (account.state === 'not_designated' || account.login === null) return { kind: 'not_designated', role: account.role };
+  if (account.state === 'not_found') return { kind: 'account_not_found', role: account.role, login: account.login };
+  if (account.state === 'unchecked' || account.authorized === null) return { kind: 'grant_unchecked', role: account.role, login: account.login };
+  if (!account.authorized) return { kind: 'not_authorized', role: account.role, login: account.login, scopes: [...required] };
+  const missing = missingScopes(account.granted, required);
+  return missing.length === 0 ? null : { kind: 'missing_scopes', role: account.role, login: account.login, scopes: missing };
+}
+
+export function missingScopes(granted: readonly string[], required: readonly string[]): string[] {
+  const have = new Set(granted);
+  return required.filter(scope => !have.has(scope));
+}
+
+/**
+ * The scopes a consent request for `role` asks for. When the same account plays both roles, the Herald
+ * scopes it already granted are requested again so a fresh consent never narrows the other role's grant.
+ */
+export function scopesToRequest(role: Role, alreadyGranted: readonly string[]): string[] {
+  const keep = alreadyGranted.filter(scope => HERALD_SCOPES.includes(scope));
+  return [...new Set([...ROLE_SCOPES[role], ...keep])].sort();
+}

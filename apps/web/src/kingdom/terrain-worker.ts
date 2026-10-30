@@ -32,12 +32,17 @@ export interface TerrainField {
  * it is not exactly the piecewise-planar surface between render vertices.
  */
 export function sampleRenderedTerrainHeight(layout: KingdomLayout, x: number, z: number): number {
+  return sampleTerrainTriangles((px, pz) => terrainHeight(layout, px, pz), x, z);
+}
+
+/** Contact with the actual 1 m terrain triangles for any accepted ground sampler. */
+export function sampleTerrainTriangles(sampleTerrain: (x: number, z: number) => number, x: number, z: number): number {
   if (!Number.isFinite(x) || !Number.isFinite(z)) throw new Error('Terrain contact needs finite coordinates.');
   const left = Math.floor(x), back = Math.floor(z), u = x - left, v = z - back;
-  const h00 = Math.fround(terrainHeight(layout, left, back));
-  const h01 = Math.fround(terrainHeight(layout, left, back + 1));
-  const h11 = Math.fround(terrainHeight(layout, left + 1, back + 1));
-  const h10 = Math.fround(terrainHeight(layout, left + 1, back));
+  const h00 = Math.fround(sampleTerrain(left, back));
+  const h01 = Math.fround(sampleTerrain(left, back + 1));
+  const h11 = Math.fround(sampleTerrain(left + 1, back + 1));
+  const h10 = Math.fround(sampleTerrain(left + 1, back));
   return u <= v ? h00 + u * (h11 - h01) + v * (h01 - h00)
     : h00 + u * (h10 - h00) + v * (h11 - h10);
 }

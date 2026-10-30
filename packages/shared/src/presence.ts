@@ -49,7 +49,10 @@ export const KingdomPresenceFrameSchema = z.strictObject({
   if ((!frame.streamLive || frame.connection !== 'fresh') && frame.windows.some(w => w.present)) ctx.addIssue({ code: 'custom', message: 'Stale/offline frames cannot claim presence' });
 });
 export type KingdomPresenceFrame = z.infer<typeof KingdomPresenceFrameSchema>;
-/** Both simulation and Herald implement this, supplying full public projections. */
+/** Both simulation and Herald implement this, supplying full public projections.
+ * Transport is independent of origin: Herald replay uses `simulated` too.
+ * Consumers must explicitly select the expected origin and label simulated sources;
+ * opening SSE alone never establishes live evidence. */
 export interface PresenceFeed {
   readonly label: 'SIMULATED' | 'LIVE';
   subscribe(receive: (frame: KingdomPresenceFrame) => void, unavailable: () => void): () => void;

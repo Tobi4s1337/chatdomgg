@@ -201,3 +201,5 @@ The shell and window metadata are complete static assets, ready for their real c
   the hip pitch and dies into it); keelcroft's open court under a set-back porch read as a dark slot (now an enclosed
   porch gable between the keels); a taller rear keel showed its gable over the return (now its ridge meets the
   return's in a true valley); a timber ridge on keelcroft's return made a heavy "H" (return left plain slate).
+
+- **2026-10-30 — Presence consumer:** the first ordered window anchor is the citizen’s designated presence window. Keep it stable across tiers. The authoring bench lights all anchors for inspection; the kingdom lights that one anchor per citizen.

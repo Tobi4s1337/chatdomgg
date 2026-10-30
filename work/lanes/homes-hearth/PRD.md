@@ -1,7 +1,7 @@
 # Lane homes-hearth
 
 Spec: `work/specs/04-homes-hearth.md` · Branch: `lane/homes-hearth` · Worker: Codex Terra, high.
-Status: **ready; spec frozen 2026-10-30.**
+Status: **complete; main integration accepted 2026-10-30.**
 Scope: `packages/content/src/homes/hearth/**`, this PRD, `progress.txt` and the Hearth spec. Everything else is
 read-only. You are not alone: preserve other edits. Core assets, materials, shared/voxel/render, aggregate exports,
 root scripts/manifests and other lanes belong to main/others. Use `$ralph-lane`, `$voxel-content`,
@@ -16,17 +16,17 @@ implement private substitutes or pick from Backlog without main. A weak piece is
 
 ## Tasks
 
-- [ ] **HH01 — A varied hut-and-cottage street worth looking at** · evidence: six-model bench + tests + shots.
+- [x] **HH01 — A varied hut-and-cottage street worth looking at** · evidence: six-model bench + tests + shots.
   Build the three family grammars at hut and cottage tiers, stable IDs/entrances/window anchors and the lane's
   `BLUEPRINTS`/factory entry. Export `HOME_REVIEW` doorway focus data and render all six in the actual bench at dusk, inspect their silhouettes, interior access
   and window planes; improve what looks cheap. Confirm full reserve with locked rear empty. First visible result.
-- [ ] **HH02 — Each family grows into its house** · evidence: three models + growth/contact tests + shots.
+- [x] **HH02 — Each family grows into its house** · evidence: three models + growth/contact tests + shots.
   Add the house tier with structural additions and kept family identity. Prove the entrance/address and existing
   window IDs do not move; test each shell's real approach/interior and palette. Inspect the nine-model comparison.
-- [ ] **HH03 — Manors and halls remember the same home** · evidence: six models + complete family sheets.
+- [x] **HH03 — Manors and halls remember the same home** · evidence: six models + complete family sheets.
   Finish manor/hall for all three families within active-depth and shared budgets. Add earned craftsmanship and
   space with restrained accents; keep the hut's dignity. Inspect all fifteen from three dusk angles and at noon/night.
-- [ ] **HH04 — Demonstrate a coherent, walkable Hearth neighborhood** · evidence: validation + final sheets.
+- [x] **HH04 — Demonstrate a coherent, walkable Hearth neighborhood** · evidence: validation + final sheets.
   Finish all-family tests and the family/tier-ordered contact sheet, mixed street, threshold/interior and simulated presence light
   on/off renders at the spec sizes. Run full-count acceptance (omit `--partial`) and `pnpm verify` with main integration. Record actual asset/
   mesh costs, improvements and rejected forms; resolve required `needs:` before declaring the lane complete.

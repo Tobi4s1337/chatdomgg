@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { MAT } from '@chatdom/content';
 import { cornerAccessibility, haloIndex, unpackVoxelVertex, type AssetChunkMesh } from '@chatdom/voxel';
 import { generateKingdom, terrainHeight, type KingdomLayout } from '@chatdom/world';
-import { buildTerrain, prepareTerrainField, sampleRenderedTerrainHeight, terrainChunkRequest,
+import { buildTerrain, prepareTerrainField, sampleRenderedTerrainHeight, sampleTerrainTriangles, terrainChunkRequest,
   TERRAIN_SURFACE_BOUNDS_PADDING, type TerrainWorkerResponse } from './terrain-worker';
+import { createSettlementContent } from './settlement-content';
 
 function collect(layout: KingdomLayout): { chunks: AssetChunkMesh[]; messages: TerrainWorkerResponse[]; phaseMs: number[] } {
   const chunks: AssetChunkMesh[] = [], messages: TerrainWorkerResponse[] = [];
@@ -25,6 +26,53 @@ function invariant(condition: boolean, message: string): asserts condition {
 }
 
 describe('conforming terrain surface', () => {
+  it('samples either rendered triangle from a supplied ground field', () => {
+    const ground = (x: number, z: number): number => (x + 2) * (z + 3);
+    expect(sampleTerrainTriangles(ground, -1.75, -2.25)).toBeCloseTo(.25, 12);
+    expect(sampleTerrainTriangles(ground, -1.25, -2.75)).toBeCloseTo(.25, 12);
+    expect(() => sampleTerrainTriangles(ground, Infinity, 0)).toThrow('finite coordinates');
+  });
+  it.each(['hamlet','town'] as const)('keeps the current capture seed inside the existing %s height budgets',tier=>{
+    const layout=generateKingdom({seed:'willowmere',tier,firstYear:tier==='hamlet'?2025:2022,year:2026});
+    const field=prepareTerrainField(layout),width=field.chunkCounts[0]*16+1;
+    let contactOffset=0,packedDisplacement=0;
+    for(let z=0;z<field.rows-2;z+=2)for(let x=0;x<field.columns-2;x+=2){
+      const sample=x/2+width*z/2,column=x+1+field.columns*(z+1);
+      const a=field.renderHeights[sample]!,b=field.renderHeights[sample+width]!;
+      const c=field.renderHeights[sample+width+1]!,d=field.renderHeights[sample+1]!;
+      const rawOwner=field.origin[1]+field.heights[column]!*.5;
+      for(const height of [a,b,c,d])packedDisplacement=Math.max(packedDisplacement,Math.abs(height-rawOwner));
+      for(let dz=0;dz<2;dz++)for(let dx=0;dx<2;dx++){
+        const u=.25+dx*.5,v=.25+dz*.5;
+        const height=u<=v?(1-v)*a+(v-u)*b+u*c:(1-u)*a+(u-v)*d+v*c;
+        const rawTop=field.origin[1]+field.heights[column+dx+field.columns*dz]!*.5;
+        contactOffset=Math.max(contactOffset,Math.abs(height-rawTop));
+      }
+    }
+    expect(contactOffset).toBeLessThan(.4);
+    expect(packedDisplacement).toBeLessThanOrEqual(TERRAIN_SURFACE_BOUNDS_PADDING);
+    console.info(`Capture terrain ${tier}: max contact offset ${contactOffset.toFixed(4)} m, packed displacement ${packedDisplacement.toFixed(4)} m`);
+  });
+  it.each(['hamlet','town'] as const)('grounds actual authored %s foundations and street props after placement',tier=>{
+    const layout=generateKingdom({seed:'lanternmere',tier,firstYear:tier==='hamlet'?2025:2022,year:2026});
+    const content=createSettlementContent(layout),placements=[...content.houses,...content.props];
+    let hearthFoundations=0,propFoundations=0;
+    for(const placement of placements){
+      const {blueprint,position,yaw}=placement,c=Math.cos(yaw),s=Math.sin(yaw);
+      for(const box of blueprint.boxes){
+        if(box.material===MAT.air||box.from[1]!==0)continue;
+        if(blueprint.id.startsWith('home-hearth-'))hearthFoundations++;
+        if(blueprint.kind==='prop'||blueprint.kind==='flora')propFoundations++;
+        for(const lx of [box.from[0]*.125,box.to[0]*.125])for(const lz of [box.from[2]*.125,box.to[2]*.125]){
+          const x=position[0]+lx*c+lz*s,z=position[2]-lx*s+lz*c;
+          const ground=sampleRenderedTerrainHeight(layout,x,z);
+          invariant(Math.abs(ground-position[1])<1e-6,`${blueprint.id} base misses ground at ${x},${z}: ${ground-position[1]} m`);
+        }
+      }
+    }
+    expect(hearthFoundations).toBeGreaterThan(0);
+    expect(propFoundations).toBeGreaterThan(0);
+  });
   it.each(['hamlet', 'town'] as const)('covers the entire %s with matching shared edges, source materials and shading', tier => {
     const layout = generateKingdom({ seed: 'lanternmere', tier, firstYear: tier === 'hamlet' ? 2025 : 2022, year: 2026 });
     const field = prepareTerrainField(layout), startTime = performance.now(), { chunks, messages, phaseMs } = collect(layout);

@@ -10,20 +10,26 @@ export default function Kingdom() {
   const [names,setNames]=createSignal<NameLabel[]>([]),[hour,setHour]=createSignal(initialHour),[view,setView]=createSignal<CameraName>(query.get('camera')==='window'?'window':'hero');
   const [source,setSource]=createSignal(query.get('source')==='herald'?'CONNECTING':'SIMULATED'),[error,setError]=createSignal(false),[sound,setSound]=createSignal(false);
   const stream=location.pathname.endsWith('/stream')||location.pathname==='/stream';
-  let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false;
+  let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false,openingFrame=0;
   const construction=new AbortController();
   onMount(()=>{
+    const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
+    testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
-    void createKingdomScene(canvas,{signal:construction.signal,tier,seed:query.get('seed')??'willowmere',hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',
+    void createKingdomScene(canvas,{signal:construction.signal,tier,seed:query.get('seed')??'willowmere',hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
       onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
-      if(unmounted){instance.dispose();return;}engine=instance;setReady(true);
-      const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
-      testWindow.__chatdomKingdom={stats:instance.debug,seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play()};
-      requestAnimationFrame(()=>{testWindow.__chatdomReady=true;});
+      if(unmounted){instance.dispose();return;}engine=instance;
+      testWindow.__chatdomKingdom={stats:instance.debug,seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play(),capture:(time:number)=>instance.capture(time)};
+      const showReady=()=>{
+        if(unmounted||error())return;
+        if(!instance.debug.ready){openingFrame=requestAnimationFrame(showReady);return;}
+        setReady(true);testWindow.__chatdomReady=true;
+      };
+      openingFrame=requestAnimationFrame(showReady);
     }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(true);});
   });
-  onCleanup(()=>{unmounted=true;construction.abort();engine?.dispose();document.body.classList.remove('kingdom-page');});
+  onCleanup(()=>{unmounted=true;cancelAnimationFrame(openingFrame);construction.abort();engine?.dispose();(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
   function tap(action:()=>void){if(!engine)return;if(!sound()){engine.sound.unlock();setSound(true);}action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setView(value);tap(()=>engine!.setCamera(value));}
@@ -50,7 +56,7 @@ export default function Kingdom() {
       <span class="control-divider" />
       <a class="tier-button" onClick={()=>tap(()=>engine!.sound.cue('wood'))} href={`?tier=${tier==='hamlet'?'town':'hamlet'}&hour=${hour()}&time=30`}>{tier==='hamlet'?'Visit the town':'Visit the hamlet'}</a>
       <button class="sound-button" aria-label={sound()?'Mute sound':'Turn sound on'} aria-pressed={sound()} onClick={()=>{if(engine)setSound(engine.sound.toggle());}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4Z"/><Show when={sound()} fallback={<path d="m17 9 5 6m0-6-5 6"/>}><path d="M17 8q5 4 0 8m3-11q8 7 0 14"/></Show></svg></button>
-    </nav><p class="kingdom-caption">{source()==='SIMULATED'?'Simulated arrivals · real presence rules':'Windows follow the people in chat'}</p></Show>
+    </nav><p class="kingdom-caption">{source()==='SIMULATED'?'Every warm window is someone home':'Windows follow the people in chat'}</p></Show>
     <Show when={ready()&&stream}><div class="stream-signature">Willowmere <span>·</span> a kingdom lit by its people</div></Show>
   </div>;
 }
