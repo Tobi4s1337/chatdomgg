@@ -5,3 +5,7 @@ KL01: createPeopleLight in apps/web/src/kingdom/lights/people-light.ts, type-onl
 2026-10-31 worker-count clarification: this secondary worker finishes its CURRENT task and parks; return its work to the primary lane lead. Only the primary worker starts subsequent tasks. Preserve in-progress edits; no dropped work or fresh parallel task.
 
 follow-up: KL05 Complete and document the remaining integrated capture evidence and review the warm pool and citizen lighting; task remains open pending its dependency gates.
+
+2026-10-30 main look: fresh integrated town dusk at 390x844 still reads as an unlit grey castle beneath the beacon. In the castle light pass, make the great-hall front openings visibly warm and spill that warmth onto the entrance court; keep the beacon separate. Source: shots/kingdom/town-dusk@390x844.png.
+
+2026-10-31 founder efficiency decision: Continue the live-evening lane with ONE worker; take one task at a time. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.

@@ -11,7 +11,7 @@ Read `AGENTS.md`, `$ralph-lane`, `$chatdom-vision`, `$look`, spec 33 and both ci
 actual shared step and real room/client; three SDK clients and three Playwright browsers moved/reloaded and
 full verification passed. Main grants WC06's movement/Predict/collision-revision/input-staging client hunks now;
 auth/join/reconnect/storage remain read-only. Scene composition belongs to the integrator; realm wiring
-owns complete production collision data. No scene.ts edits, adjacent-owner hunks, shared changes, custom netcode
+mounts complete production collision data from `realm-server-world` (spec 38). No scene.ts edits, adjacent-owner hunks, shared changes, custom netcode
 or replacement town. Preserve other owners' changes. A missing seam is `needs:` while independent work proceeds.
 
 Every task is done when `pnpm typecheck`, `pnpm lint`,
@@ -53,18 +53,23 @@ after main has stopped editing them. The integrator alone calls those modules fr
   Filter lock deltas exactly as spec R8; recover rejection/re-lock cleanly. Clear held/pending/capture state on
   blur, hidden page, menu or disconnect. Preserve editable fields and click-versus-drag events for interaction.
   · evidence: pulse/held/repeat and slow-frame staging checks; warp/rejection/re-lock/blur/menu flow, usable touch.
-- [ ] **WC05 — Keep the camera out of the kingdom's solids.** Complete the conservative near-plane/shoulder
+- [x] **WC05 — Keep the camera out of the kingdom's solids.** Complete the conservative near-plane/shoulder
   collision sweep, immediate pull-in and .35 s outward recovery against the supplied complete CollisionWorld.
   Separate zoom intent from occlusion. Finish continuous wheel first person, self-visibility, level horizon,
   time-based follow and resize framing. · evidence: newly inserted occluder first-frame and corner/post/roof
   tests at both aspects; looked real street and tight-space view; no clipped first-person wall approach.
-- [ ] **WC06 — Adopt Predict and collision revisions without a second protocol.** Within the effective narrow
+- [x] **WC06 — Adopt Predict and collision revisions without a second protocol.** Within the effective narrow
   client grant, bind the improved shared step, all PLAYER_FIELDS, input pulses and collision revisions through
   the existing real Colyseus adapter. Preserve its auth/reconnect/transport lifecycle. Stage exactly Predict's
   due input count, adopt the frozen safe revision transition/reset policy and document render/takeover order.
   · evidence: two real browsers, slow render, changed-solid/revision flow and recovery; authoritative positions
   and full fields agree; no invented queue, sequence/ack system or silent air fallback.
-- [ ] **WC07 — Walk the actual places and hand the camera back.** With integrator binding and realm wiring,
+- [ ] **WC07 — Walk the actual places and hand the camera back.** First read the three movement notes in
+  spec 35 References and resolve Tobias’s 360 Hz review: glassy rendered camera/body pose and blended ordinary
+  corrections, calm distance-driven gait, deliberate click-only pointer capture with quiet drag fallback,
+  and stable stepping/standing/jumping on actual half slabs. Inspect the SDK all-field snap threshold and
+  exact-height step easing without assuming either caused the report. One focused slab regression suffices;
+  final smoothness needs Tobias’s real display. Then With integrator binding and realm wiring,
   exercise the actual street, forged/placed parts, furniture, fence, doorway and roof rather than a separate
   collision bench. Supply only module fixes/recipes; integrator owns composition calls. Enter/exit menus,
   Forge/build and an existing camera takeover, then move immediately. Resolve keyboard/touch region conflicts
@@ -80,6 +85,7 @@ after main has stopped editing them. The integrator alone calls those modules fr
 ## Backlog
 
 The worker records discoveries here and never selects them without a new brief.
+- Pulled in by a wall behind, let the camera also rise and pitch down a little (over-the-head) so the close view shows more street; needs a real-GPU feel check first (from WC05).
 
 - The reference court (`/-/realm`, read-only) draws every walker's shadow at floor height, so a citizen on its
   .5 m block casts it on the paving, and clips the self name label at the right edge at 1440×900.

@@ -13,6 +13,8 @@ export interface OutboxDispatcherOptions {
   readonly writerEpoch: string;
   /** The durable cursor this writer resumes from. Rows after it are delivered again with their original event IDs. */
   readonly delivered: number;
+  /** The newest committed row id known at open. */
+  readonly committed?: number;
   readonly read: (afterId: number, limit: number) => Promise<RealmOutboxRow[]>;
   readonly acknowledge: (throughId: number) => Promise<void>;
   /** Fold a committed row into the synchronous bootstrap prefix before its delivery. */
@@ -38,11 +40,16 @@ export class OutboxDispatcher {
   /** Rows handed to the transport, including redeliveries. */
   deliveries = 0;
   redeliveries = 0;
+  /** The most rows one pass handed to the transport (bounded by the dispatch batch). */
+  largestBatch = 0;
   private highest = 0;
+  /** The newest committed row id this writer has read: `cursor` equals it once everything committed was delivered. */
+  newest: number;
 
   constructor(private readonly options: OutboxDispatcherOptions) {
     this.delivered = options.delivered;
     this.highest = options.delivered;
+    this.newest = Math.max(options.delivered, options.committed ?? 0);
   }
 
   get cursor(): number { return this.delivered; }
@@ -51,14 +58,6 @@ export class OutboxDispatcher {
     this.listeners.add(listener);
     void this.kick();
     return () => { this.listeners.delete(listener); };
-  }
-
-  /** Deliver rows the caller already read after `afterId`; anything else falls back to reading from the cursor. */
-  offer(afterId: number, rows: readonly RealmOutboxRow[]): Promise<void> {
-    return this.serial(async () => {
-      if (afterId !== this.delivered || rows.length === 0) return this.pump();
-      if (await this.hand(rows)) await this.pump();
-    });
   }
 
   kick(): Promise<void> { return this.serial(() => this.pump()); }
@@ -81,6 +80,7 @@ export class OutboxDispatcher {
       let rows: RealmOutboxRow[];
       try { rows = await this.options.read(this.delivered, OUTBOX_DISPATCH_BATCH); }
       catch (error) { this.later(`outbox read failed: ${describeStorageFailure(error)}`); return; }
+      if (rows.length) this.newest = Math.max(this.newest, rows.at(-1)!.id);
       if (rows.length === 0 || !await this.hand(rows)) return;
     }
   }
@@ -88,7 +88,7 @@ export class OutboxDispatcher {
   /** One batch: hand every row to the transport, then acknowledge. False means stop and retry later. */
   private async hand(rows: readonly RealmOutboxRow[]): Promise<boolean> {
     if (!this.options.current()) return false;
-    if (this.listeners.size === 0) { for (const row of rows) this.options.project(row); return false; }
+    if (this.listeners.size === 0) return false;
     for (const row of rows) {
       if (!this.options.current()) return false;
       const delivery = this.delivery(row);
@@ -101,6 +101,7 @@ export class OutboxDispatcher {
         try { listener(delivery); } catch (error) { this.options.log(`delivery listener failed: ${(error as Error).name}`); }
       }
     }
+    this.largestBatch = Math.max(this.largestBatch, rows.length);
     const through = rows.at(-1)!.id;
     try {
       await this.options.acknowledge(through);

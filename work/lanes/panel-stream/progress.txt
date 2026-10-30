@@ -19,3 +19,5 @@ PS05: The stream now has a director (apps/web/src/stream/director.ts) that only 
 
 review: PS05 typecheck, lint, build and adapter test passed; inspected stream show and seam captures. Real-GPU OBS timing and cost remain to be checked. No server started.
 follow-up: PS05 Check shutter timing, drift and hidden-source GPU use in OBS on a real GPU.
+
+2026-10-31 founder efficiency decision: Continue the live-evening lane with ONE worker; take one task at a time. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
