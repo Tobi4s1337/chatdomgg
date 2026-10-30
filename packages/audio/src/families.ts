@@ -1,6 +1,7 @@
 import { CASTLE_BEACON } from './cues/beacon';
 import { BRASS_CONTROL, PARCHMENT_CONTROL, WOOD_CONTROL } from './cues/control';
 import { WINDOW_LIGHT } from './cues/light';
+import { SURFACES, type MaterialCue } from './cues/materials';
 import { STREET_WAVE } from './cues/wave';
 import type { SampleId } from './samples';
 import { AUDIO_CONTROL_SURFACES, AUDIO_CUES, AUDIO_MATERIALS, type AudioCue, type AudioCueOptions } from './types';
@@ -18,8 +19,13 @@ export interface CueFamily {
   tier: MixTier;
   variations: number;
   samples: readonly SampleId[];
+  /** Family fader in dB on the voice input; 0 when the cue's own layer gains already set its level. */
+  fader?: number;
   build(voice: VoiceGraph, variation: number): void;
 }
+
+/** Footsteps sit lowest; placing, lifting and choosing a material are the builder's own feedback, just above them. */
+const MATERIAL_TIERS: Readonly<Record<MaterialCue, MixTier>> = { step: 'step', place: 'build', remove: 'build', material: 'build' };
 
 const FAMILIES: Partial<Record<string, Omit<CueFamily, 'key'>>> = {
   'wood:wood': { tier: 'control', ...WOOD_CONTROL },
@@ -28,12 +34,14 @@ const FAMILIES: Partial<Record<string, Omit<CueFamily, 'key'>>> = {
   light: { tier: 'ceremony', ...WINDOW_LIGHT },
   wave: { tier: 'ceremony', ...STREET_WAVE },
   beacon: { tier: 'beacon', ...CASTLE_BEACON },
+  ...Object.fromEntries(Object.entries(MATERIAL_TIERS).flatMap(([cue, tier]) => AUDIO_MATERIALS.map(material =>
+    [`${cue}:${material}`, { tier, ...SURFACES[material][cue as MaterialCue] }]))),
 };
 
 /** Cue families that are finished and audible in this build, as `cue` or `cue:surface`. */
 export const FINISHED_FAMILIES: readonly string[] = Object.keys(FAMILIES);
 
-const MATERIAL_CUES = new Set<AudioCue>(['step', 'place', 'remove', 'material']);
+const MATERIAL_CUES = new Set<AudioCue>(Object.keys(MATERIAL_TIERS) as MaterialCue[]);
 
 /** Resolves a call to its family. Unknown values and families that are not finished yet throw, never fake success. */
 export function resolveFamily(kind: AudioCue, options: AudioCueOptions): CueFamily {

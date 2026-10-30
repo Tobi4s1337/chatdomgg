@@ -28,7 +28,7 @@ runs `pnpm verify` after integrating. Record what was listened to; waveform/peak
   Finish the control family's brass/parchment options and variation selection. Keep the crescendo warm,
   intelligible under speech and free of harsh attacks or generic reward stings. Use a single mix path, start
   bounding voices now and compare isolated cues to the full light/wave/beacon sequence in the same bench.
-- [ ] **SO03 — Walking and building sound like their materials** · evidence: six-surface comparisons + one regression.
+- [x] **SO03 — Walking and building sound like their materials** · evidence: six-surface comparisons + one regression.
   Finish `step`, `place`, `remove` and `material` for wood, stone, earth, metal, glass and fabric. Add local
   pan/distance attenuation, document the law and finish 16-voice/64-source limits with deliberate priorities
   and duplicate coalescing. Build one focused regression that floods steps while preserving control/beacon

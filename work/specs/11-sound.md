@@ -248,3 +248,18 @@ and walking/building feedback without predicting those systems.
   tiers are now whole-mix ceilings that reserve room above them (step 28, build 36, ceremony 40, beacon 58, control
   64 sources) instead of voice stealing, so the beacon and a control always fit beside a full ceremony without
   cutting anything. Shared noise sources carry every wick burst of a wave, keeping it at 19–20 sources.
+- **2026-10-30 — SO03 lane decisions.** Each surface lives in `src/cues/materials/<surface>.ts` with its own
+  recordings and resonance; the palm, fingertips, lift, grains and weight are shared (`handling.ts`) so all six
+  sound like one person building. 29 new Kenney CC0 files (Impact Sounds footsteps on wood, concrete and carpet,
+  medium wood/soft/metal/glass impacts; RPG Audio dirt footsteps and three cloth slices); stone has no separate
+  block recording worth shipping (`impactMining` rings like a pick), so its step is played slower and heavier as
+  the block. Metal and glass are tuned into the D major pentatonic palette and hand-damped. `remove` leads with the
+  material and keeps the lift as a soft breath, never a whoosh or a smash. Each material family has a dB fader,
+  set by measured momentary loudness across all six surfaces (steps ≈ −39 LUFS, cloth −42; choose −40; lift −38;
+  set −33 to −35 at volume 0.65). Budget: step ceiling 28 sources, build 34 (was 36); footsteps give way, faded over
+  20 ms, to building cues and to footsteps at least 3 dB nearer, within a per-tier fade allowance (step 6 voices /
+  12 sources, build 2 / 6) that keeps both at or below the ceremony's 14 voices / 40 sources, so the beacon and
+  control reserve holds; fading voices always count against 16 / 64. Coalescing is placement-aware (a call 3 dB
+  nearer is not a duplicate). Distance also low-passes: 18 kHz / (1 + d / 6 m), floor 1.2 kHz. The shipped SO01/SO02
+  files peak at about −4 dBFS, not the −1 dBFS SO02 recorded (ffmpeg's integer mono fold adds −3 dB); SO03 folds
+  explicitly and verifies −1 dBFS. `check` runs `src/budget.test.ts` against a counting fake context.

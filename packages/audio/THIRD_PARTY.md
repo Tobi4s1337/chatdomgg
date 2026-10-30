@@ -30,7 +30,37 @@ resonance, noise shaping and tuned tails written in `src/cues/`.
 | `impact-plank-medium-002.wav` | `impactPlank_medium_002.ogg` | `beacon`, torch into the brazier (with B) | 41,634 |
 | `impact-plank-medium-004.wav` | `impactPlank_medium_004.ogg` | `beacon`, torch into the brazier (open) | 37,844 |
 
-The glass panes are also the castle windows of `beacon` and the street windows of `wave`.
+The glass panes are also the castle windows of `beacon` and the street windows of `wave`, the ring of a glass
+floor tile in `step` and the nail on glass in glass `material`. The light wood knocks are also the timber lifted out
+in wood `remove` and handled in wood `material`.
+
+Added in SO03 for the six material surfaces:
+
+| Shipped file (`src/assets/kenney/`) | Original file (`Audio/`) | Used in | Gain | Bytes |
+|---|---|---|---|---|
+| `footstep-wood-000.wav` | `footstep_wood_000.ogg`, kept 0.00–0.11 s | `step` wood | +4.76 dB | 6,890 |
+| `footstep-wood-002.wav` | `footstep_wood_002.ogg` | `step` wood | +0.82 dB | 6,818 |
+| `footstep-wood-004.wav` | `footstep_wood_004.ogg` | `step` wood | +1.53 dB | 6,498 |
+| `impact-wood-medium-000.wav` | `impactWood_medium_000.ogg` | `place` wood | +1.74 dB | 19,648 |
+| `impact-wood-medium-002.wav` | `impactWood_medium_002.ogg` | `place` wood | +1.88 dB | 22,418 |
+| `impact-wood-medium-004.wav` | `impactWood_medium_004.ogg` | `place` wood | +2.19 dB | 22,504 |
+| `footstep-concrete-000.wav` | `footstep_concrete_000.ogg` | `step` stone; heavier as `place`, lighter as `remove`/`material`; the heel under metal and glass steps | +0.85 dB | 5,874 |
+| `footstep-concrete-002.wav` | `footstep_concrete_002.ogg` | as `-000` | +0.92 dB | 6,042 |
+| `footstep-concrete-003.wav` | `footstep_concrete_003.ogg` | as `-000` | +0.85 dB | 5,926 |
+| `impact-soft-medium-000.wav` | `impactSoft_medium_000.ogg` | `place`/`remove`/`material` earth; the fold landing in fabric `place` | -0.16 dB | 10,088 |
+| `impact-soft-medium-002.wav` | `impactSoft_medium_002.ogg` | as `-000` | +0.21 dB | 11,658 |
+| `impact-soft-medium-003.wav` | `impactSoft_medium_003.ogg` | as `-000` | +0.76 dB | 11,666 |
+| `impact-metal-medium-000.wav` | `impactMetal_medium_000.ogg` | `place` metal | +0.78 dB | 16,812 |
+| `impact-metal-medium-001.wav` | `impactMetal_medium_001.ogg` | `step`, `place`, `remove`, `material` metal | +0.95 dB | 9,076 |
+| `impact-metal-medium-002.wav` | `impactMetal_medium_002.ogg` | `step`, `remove`, `material` metal | +0.74 dB | 6,976 |
+| `impact-metal-medium-003.wav` | `impactMetal_medium_003.ogg` | `place` metal | +1.10 dB | 15,674 |
+| `impact-metal-medium-004.wav` | `impactMetal_medium_004.ogg` | `step`, `remove`, `material` metal | +0.66 dB | 6,514 |
+| `impact-glass-medium-000.wav` | `impactGlass_medium_000.ogg` | `place`, `remove` glass | +2.01 dB | 35,606 |
+| `impact-glass-medium-001.wav` | `impactGlass_medium_001.ogg` | `place`, `remove` glass | +1.60 dB | 34,516 |
+| `impact-glass-medium-004.wav` | `impactGlass_medium_004.ogg` | `place`, `remove` glass | +1.26 dB | 35,948 |
+| `footstep-carpet-000.wav` | `footstep_carpet_000.ogg`, kept 0.00–0.13 s | `step` fabric | +1.08 dB | 7,776 |
+| `footstep-carpet-001.wav` | `footstep_carpet_001.ogg` | `step` fabric | +0.96 dB | 7,064 |
+| `footstep-carpet-003.wav` | `footstep_carpet_003.ogg` | `step` fabric | +1.04 dB | 6,562 |
 
 **Edits to the wood and glass files (SO01):** decoded from Ogg Vorbis, stereo folded to mono, attenuated by 3 dB (the
 decoded Vorbis overshoots full scale by up to +2 dB), trailing audio below −66 dBFS trimmed, stored as 16-bit PCM
@@ -40,12 +70,25 @@ WAV at the original 44.1 kHz so every browser decodes it without encoder padding
 ffmpeg -i <original>.ogg -ac 1 -af "volume=-3dB,areverse,silenceremove=start_periods=1:start_threshold=-66dB,areverse" -c:a pcm_s16le <shipped>.wav
 ```
 
-**Edits to the metal and plank files (SO02):** the same, except the gain is set per file so the decoded peak sits at
-−1 dBFS: −3.07 dB (`metal-light-001`), −2.73 dB (`004`), −2.64 dB (`002`), −2.80 dB (`plank-medium-000`), −3.05 dB
-(`002`), −3.07 dB (`004`):
+**Edits to the metal and plank files (SO02):** the same, except the gain is set per file: −3.07 dB (`metal-light-001`),
+−2.73 dB (`004`), −2.64 dB (`002`), −2.80 dB (`plank-medium-000`), −3.05 dB (`002`), −3.07 dB (`004`). These gains
+were meant to bring the peak to −1 dBFS, but ffmpeg's own `-ac 1` fold rescales by a further −3 dB when it writes
+integer PCM, so the shipped SO01 and SO02 files actually peak at about −4 dBFS (0.62–0.63). Their runtime gains were
+set by measurement against those files, so they stay as they are:
 
 ```sh
 ffmpeg -i <original>.ogg -ac 1 -af "volume=<gain>dB,areverse,silenceremove=start_periods=1:start_threshold=-66dB,areverse" -c:a pcm_s16le <shipped>.wav
+```
+
+**Edits to the material files (SO03):** decoded from Ogg Vorbis, the channels folded explicitly with
+`pan=mono|c0=0.5*c0+0.5*c1` (no hidden rescale), a 20 Hz high-pass to remove DC, sliced where noted (4 ms fade in,
+50 ms fade out), the gain in the table, trailing audio below −66 dBFS trimmed with a 12 ms fade, stored as 16-bit PCM
+WAV at the original 44.1 kHz. The written peak of every file was checked at −1 dBFS (±0.1 dB).
+`footstep_wood_000` and `footstep_carpet_000` are cut at 0.11 s and 0.13 s because each recording ends with a
+separate low bump.
+
+```sh
+ffmpeg -i <original>.ogg -af "pan=mono|c0=0.5*c0+0.5*c1,[atrim=start=<a>:end=<b>,asetpts=N/SR/TB,afade=t=in:d=0.004,afade=t=out:st=<b-a-0.05>:d=0.05,]highpass=f=20,volume=<gain>dB,areverse,silenceremove=start_periods=1:start_threshold=-66dB,afade=t=in:d=0.012,areverse" -c:a pcm_s16le <shipped>.wav
 ```
 
 At runtime the knocks are high-passed at 170 Hz (removing a low rumble in the recordings), softened at 2.6 kHz and
@@ -69,8 +112,20 @@ planks play at their own pitch, band-limited to 75 Hz–1.3 kHz and kept low und
 | `book-flip-2.wav` | `bookFlip2.ogg` | parchment control, second page | 19,058 |
 | `book-flip-1.wav` | `bookFlip1.ogg` | parchment control, third page | 15,762 |
 
-**Edits:** decoded from Ogg Vorbis, stereo folded to mono, gain set so the decoded peak sits at −1 dBFS, trailing
-audio below −66 dBFS trimmed, 16-bit PCM WAV at the original 48 kHz. `bookFlip3` is used whole (+1.80 dB). `bookFlip2` keeps
+Added in SO03 (edited as described for the SO03 Impact Sounds files above, at the original 48 kHz):
+
+| Shipped file (`src/assets/kenney/`) | Original file (`Audio/`) | Used in | Gain | Bytes |
+|---|---|---|---|---|
+| `footstep-earth-00.wav` | `footstep00.ogg` | `step` earth | -0.39 dB | 23,968 |
+| `footstep-earth-02.wav` | `footstep02.ogg` | `step` earth | +1.10 dB | 23,046 |
+| `footstep-earth-07.wav` | `footstep07.ogg` | `step` earth | -0.38 dB | 21,676 |
+| `cloth-1.wav` | `cloth1.ogg`, kept 0.12–0.36 s | `place`, `remove`, `material` fabric | +3.99 dB | 23,118 |
+| `cloth-2.wav` | `cloth2.ogg`, kept 0.06–0.30 s | as `cloth-1` | +8.84 dB | 23,630 |
+| `cloth-3.wav` | `cloth3.ogg`, kept 0.10–0.34 s | as `cloth-1` | +9.71 dB | 23,118 |
+
+**Edits to the book pages (SO02):** decoded from Ogg Vorbis, stereo folded to mono, gain set per file (the same −3 dB
+fold applies, so they peak at about −4 dBFS), trailing audio below −66 dBFS trimmed, 16-bit PCM WAV at the original
+48 kHz. `bookFlip3` is used whole (+1.80 dB). `bookFlip2` keeps
 its first page turn, 0–0.20 s with a 50 ms fade-out (+5.73 dB). `bookFlip1` keeps its main turn, 0.55–0.77 s with
 a 50 ms fade-out (−4.28 dB):
 
@@ -81,6 +136,11 @@ ffmpeg -i bookFlip1.ogg -ac 1 -af "atrim=start=0.55:end=0.77,asetpts=N/SR/TB,afa
 At runtime the pages are high-passed at 340 Hz, shelved down 8 dB above 4.2 kHz and low-passed at 7.2 kHz, so the
 paper's air never hisses over a voice.
 
+At runtime the material files are band-limited per surface (high-pass 70–320 Hz, low-pass 2.4–6.8 kHz), the
+brightest grit and air shelved down; metal strikes are tuned by playback rate so their strongest partial (996, 1044,
+1023, 1093, 1007 Hz) lands on D5, E5, A5, B5 or B4 and are damped by a gain envelope; the glass blocks (903, 1033,
+899 Hz) are tuned to F♯5, A5 and E5 and damped within ~0.4 s. Each family has a fader in dB next to its definition.
+
 ### Auditioned, not shipped
 
 Measured and inspected as spectrograms on 2026-10-30, all CC0 per their archives' `License.txt`:
@@ -88,13 +148,21 @@ Measured and inspected as spectrograms on 2026-10-30, all CC0 per their archives
 - Kenney Impact Sounds, the rest of the pack. `impactWood_light_001/003` are near-duplicates of the chosen knocks;
   `impactPlank_medium_*` ring too long for a control (three of them became the beacon's torch instead);
   `impactMetal_light_000/003` duplicate the chosen brass taps; `impactBell_heavy_*` is a tolling bell, the
-  status sound the beacon must not be; `impactTin_*` and `impactPlate_*` are thin and boxy; `footstep_*` and the
-  other materials wait for the material cues.
+  status sound the beacon must not be; `impactTin_*` is thin and boxy. For the material cues (SO03):
+  `footstep_carpet_002/004` are byte-for-byte duplicates of `001/003`; `footstep_grass_*` run 0.6–0.8 s of loose
+  rustle, too long and hissy for a step; `footstep_snow_*` is a 0.37 s crunch that reads as snow, not soil;
+  `impactMining_*` rings with the pick's metal partials at 2–6 kHz for most of a second, the sound of mining rather
+  than setting stone; `impactPlate_light/medium_*` wash for 0.5–0.65 s; `impactGlass_light/heavy` and
+  `impactGlass_medium_002/003` were measured and the clearest three single-partial blocks kept;
+  `impactGeneric_light_*` rings like plastic; `impactPunch_*` is a body blow; `impactWood_heavy_*` is
+  mostly below 150 Hz.
 - Kenney RPG Audio, the rest of the pack. `metalLatch` and `metalClick` were considered as the lantern contact for
   `light` and as the brass tick, and not chosen: their spectral centroids sit at 6–8 kHz, a hard click. `metalPot*`
   was considered as the beacon's brazier and not chosen: each file is several clanging hits, not one contact.
-  `beltHandle*` and `clothBelt*` are mostly air above 8 kHz. The cloth, book-place and footstep files wait for
-  later families.
+  `beltHandle*` and `clothBelt*` are mostly air above 8 kHz. For SO03: `footstep03/04/09` start with a scuff
+  before the heel and `footstep01/05/06/08` were not needed beside `00`, `02` and `07`;
+  `cloth4` peaks at 0.22 with most of its energy as air; `dropLeather`, `handleSmallLeather*` and `bookPlace*` read
+  as leather and paper rather than cloth or stone; `handleCoins*` is coins.
 - [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) (`kenney_interface-sounds.zip`, SHA-256
   `f2193d072726d6758a5f7871b2dcc54dcce0d5c35c6f0a62f92549b327c81232`). Synthetic UI blips: not the carved,
   physical character Chatdom's controls need. Nothing selected.
@@ -111,11 +179,16 @@ Original Web Audio synthesis, written for Chatdom and not derived from any sampl
   (`src/cues/beacon.ts`);
 - the D major pentatonic palette (`src/palette.ts`);
 - the small-room impulse response, the glue compressor settings and the soft ceiling (`src/mix.ts`);
-- the shared white-noise buffer every noise layer reads from (`src/mixer.ts`).
+- the shared white-noise buffer every noise layer reads from, the distance and air law, the budget and footstep
+  replacement (`src/mixer.ts`);
+- for the six material surfaces (`src/cues/materials/`): the palm and fingertip touches, the lift, grit, crumbling
+  soil and falling grains, the weight under stone, metal and glass, the hollow of floorboards, the ring of a timber
+  block and its seating tock, the iron plate's hum and the fitting's clink, the slab ring under a glass step, the
+  scrape of stone into its bed, and the weave's whisper under a step on cloth.
 
 ## Budget
 
 | | Now | Limit |
 |---|---|---|
-| Shipped recordings | 15 files, 360,260 bytes | 4 MiB |
-| Decoded recordings | 4.02 s mono, about 772 KB as 48 kHz float | 16 MiB |
+| Shipped recordings | 44 files, 817,370 bytes | 4 MiB |
+| Decoded recordings | 9.05 s mono, about 1.74 MB as 48 kHz float | 16 MiB |

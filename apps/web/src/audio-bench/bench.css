@@ -110,10 +110,40 @@
 .ab-pip-on { color: #3a2412; background: linear-gradient(#ffe2a0, #f0bf63); box-shadow: 0 0 12px #f2b45a99; border-color: #c48b2c; }
 .ab-play { margin-top: 16px; }
 
-.ab-unfinished { grid-column: 1 / -1; background: linear-gradient(170deg, #e8dcc0, #d8c49a); }
-.ab-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.ab-chip { padding: 7px 12px; border-radius: 999px; border: 1px dashed #8a6b3d; background: #f5ead05c; color: #5b4527; font-size: 14px; }
-.ab-chip:hover { background: #f5ead0b0; }
+/* Six surfaces: one row per material, a small carved key for each action. */
+.ab-surfaces, .ab-crowd { grid-column: 1 / -1; }
+.ab-placement { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin: 0 0 18px; padding: 12px 14px; border-radius: 6px; background: #fff6df80; border: 1px solid #a37b3544; }
+.ab-placement label { display: grid; gap: 6px; font-size: 14px; color: var(--ink-soft); }
+.ab-placement b { color: var(--ink); font-weight: 400; }
+.ab-placement input { width: 100%; accent-color: var(--wood); }
+.ab-grid { display: grid; gap: 8px; }
+.ab-grid-row { display: grid; grid-template-columns: minmax(150px, 1.3fr) repeat(4, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+.ab-grid-name { display: grid; align-content: center; gap: 2px; padding: 4px 6px 4px 0; border-left: 4px solid var(--swatch, #a37b35); padding-left: 10px; }
+.ab-grid-name strong { font-weight: 400; font-size: 19px; }
+.ab-grid-name span { font-size: 13px; font-style: italic; color: var(--ink-soft); }
+.ab-grid-row[data-material='wood'] { --swatch: #8a5a32; }
+.ab-grid-row[data-material='stone'] { --swatch: #8d8a82; }
+.ab-grid-row[data-material='earth'] { --swatch: #6e5a3c; }
+.ab-grid-row[data-material='metal'] { --swatch: #4f5a63; }
+.ab-grid-row[data-material='glass'] { --swatch: #8fb7c0; }
+.ab-grid-row[data-material='fabric'] { --swatch: #a3524a; }
+.ab-cell {
+  display: grid; gap: 5px; justify-items: center; padding: 9px 6px 8px; border: 0; border-radius: 5px;
+  color: #fbecc8; font-size: 15px; background: linear-gradient(#835632, #5e3b1f);
+  box-shadow: 0 1px 0 #ffffff33 inset, 0 -2px 0 #0000004d inset, 0 2px 0 var(--wood-dark), 0 4px 8px #0004;
+  transition: transform .06s ease, box-shadow .06s ease, filter .2s;
+}
+.ab-cell:hover:not(:disabled) { filter: brightness(1.08); }
+.ab-cell:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 #ffffff26 inset, 0 0 0 var(--wood-dark), 0 2px 4px #0004; }
+.ab-dots { display: flex; gap: 5px; }
+.ab-dots i { width: 6px; height: 6px; border-radius: 50%; background: #2c1b0e; box-shadow: inset 0 1px 1px #0008; transition: background .2s, box-shadow .2s; }
+.ab-dots i.ab-dot-on { background: #ffd889; box-shadow: 0 0 6px #f2b45a; }
+
+.ab-crowd-facts { margin: 0 0 4px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.ab-crowd-facts div { padding: 8px 10px; border-radius: 5px; border: 1px solid #a37b3566; background: #fff6df80; }
+.ab-crowd-facts dt { font: 10px/1.3 ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); }
+.ab-crowd-facts dd { margin: 3px 0 0; font-size: 17px; font-variant-numeric: tabular-nums; }
+.ab-crowd-facts[data-running='yes'] div { border-style: dashed; }
 
 .ab-log { grid-column: 1 / -1; padding: 18px 22px; border-radius: 8px; background: #141d24c7; box-shadow: inset 0 0 0 1px #c9a24f33; }
 .ab-log h2 { margin: 0 0 10px; font: 11px/1 ui-monospace, monospace; letter-spacing: .2em; text-transform: uppercase; color: #cdb68b; font-weight: 400; }
@@ -153,7 +183,16 @@
 .ab-step[data-state='played'] { color: #3a2412; background: linear-gradient(#ffe2a0, #f0bf63); box-shadow: 0 0 12px #f2b45a88; border-color: #c48b2c; }
 .ab-step[data-state='silent'] { color: #7a3b22; background: #e7a08333; border-color: #9c3b2266; }
 
+@media (max-width: 1100px) {
+  .ab-crowd-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 560px) {
+  .ab-placement { grid-template-columns: 1fr; }
+  .ab-grid { gap: 14px; }
+  .ab-grid-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .ab-grid-name { grid-column: 1 / -1; grid-template-columns: auto 1fr; align-items: baseline; gap: 10px; }
+  .ab-cell { font-size: 14px; padding: 8px 2px 7px; }
+  .ab-crowd-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ab-sequence { grid-template-columns: 1fr; gap: 10px; }
   .ab-steps { flex-wrap: wrap; }
   .ab-step { flex: 1 1 40%; }

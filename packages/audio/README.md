@@ -20,11 +20,26 @@ button.onclick = async () => { if (await audio.unlock()) audio.cue('light'); };
 | `light` | — | three windows on F♯4, A4 and D5, ~1.8 s |
 | `wave` | — | five windows lighting along a street (left to right, right to left, from the middle), ~2.5 s |
 | `beacon` | — | the torch, the fire catching and a broad D-major chord that crests at ~1.1 s and is silent by 4.95 s |
+| `step` | `material`: 6 surfaces | a foot on floorboards, flagstones, a packed path, an iron plate, a glass tile or a rug; 40–200 ms |
+| `place` | `material`: 6 surfaces | a palm, then a timber block, dressed stone, clod of soil, iron fitting, glass block or folded cloth settling into place; 50–220 ms |
+| `remove` | `material`: 6 surfaces | the same piece unseated and lifted: a light contact of the material, a soft breath of lift, grit or soil falling back; never a smash |
+| `material` | `material`: 6 surfaces | the piece handled in the fingers when it is chosen: a small knock, two pebbles, a pinch of soil, a damped clink, a nail on glass, a corner of cloth |
 
 `light`, `wave` and `beacon` share one palette (D major pentatonic, `src/palette.ts`), the same glass panes and the
 same wick, and rise in loudness gently: about +0.5 dB from a window to the street and +6 dB to the beacon's crest.
-`step`, `place`, `remove` and `material` throw `kingdom audio: the … sound is not finished yet` until they are
-built. Nothing is registered as a stand-in.
+For `step`, `place`, `remove` and `material`, an omitted `material` means wood. Each surface keeps its own
+recordings and resonance (`src/cues/materials/`); the palm, fingertips, lift and grains are shared
+(`handling.ts`), so building with stone and with cloth sounds like the same person at work. Tuned materials (metal,
+glass) sit in the same D major pentatonic palette as the light. Every family has three takes and never repeats a
+take twice in a row on one surface.
+
+Levels, set across all six surfaces at volume 0.65 (approximate momentary loudness, 400 ms window): footsteps about
+−39 LUFS (cloth −42), choosing a material −40, lifting −38, setting a piece −33 to −35, beside the wooden control at
+−35.6 and a window lighting at −32. Footsteps stay under a voice; setting a piece answers like a control press. Each
+material family has a fader in dB next to its definition.
+
+Mapping real world or build data to a surface belongs to the consumer, as does not calling `step` while an avatar
+stands still.
 
 ## State
 
@@ -50,13 +65,21 @@ mix far below the ceiling; the ceiling is a guarantee, not the level control.
 
 - **Budget:** at most 16 voices and 64 source nodes per instance, counting every layer until it has stopped. Each
   tier may only fill the whole mix up to its own ceiling, which reserves the room above it: footsteps 8 voices /
-  28 sources, building cues 12 / 36, the light ceremony 13 / 40, the beacon 15 / 58, controls everything. So the
-  beacon (18 sources) and a control (3–6) always fit beside a full ceremony, and a control still answers during
-  the beacon. A cue that does not fit returns `false`; nothing is cut or queued.
-- **Coalescing:** the same cue on the same surface within 40 ms plays once.
+  28 sources, placing, lifting and choosing 12 / 34, the light ceremony 13 / 40, the beacon 15 / 58, controls
+  everything. So the beacon (18 sources) and a control (3–6) always fit, and a control still answers during the
+  beacon. A cue that does not fit returns `false`; nothing is queued.
+- **Footsteps give way:** when the mix is full, a building cue may fade out the quietest footsteps, and a footstep
+  may fade out footsteps at least 3 dB quieter than itself (your own feet walking past a crowd). They fade over
+  20 ms, never a hard cut. While they fade they are left out of the step and build ceilings only, within an
+  allowance (step 6 voices / 12 sources, build 2 / 6) that keeps those tiers at or below 14 voices and 40 sources,
+  so the beacon and control reserve above still holds. They always count against the hard 16 / 64.
+- **Coalescing:** the same cue on the same surface within 40 ms plays once, unless the newer call is at least 3 dB
+  nearer (a step beside you is not a duplicate of one across the square).
 - **Variation:** never the same variation twice in a row for one family on one surface.
 - **Placement:** `pan` is clamped to [-1, 1]; `distance` (metres, ≥ 0) attenuates by `1 / (1 + distance / 8)`:
-  full gain at 0 m, −6 dB at 8 m, −12 dB at 24 m. UI cues should pass neither.
+  full gain at 0 m, −6 dB at 8 m, −12 dB at 24 m. Beyond 1 m the air also softens the top: a low-pass at
+  `18 kHz / (1 + distance / 6)`, never below 1.2 kHz (7.7 kHz at 8 m, 3.6 kHz at 24 m). A non-finite `pan` or
+  `distance` makes `cue` return `false`. UI cues should pass neither.
 
 ## Diagnostics
 
@@ -64,3 +87,7 @@ mix far below the ceiling; the ceiling is a guarantee, not the level control.
 last variations and the live output peak. `renderKingdomAudio(script, { duration })` renders a timed script
 through the same families, mixer and mix path in an `OfflineAudioContext`. Both are for the bench and checks;
 consumers only need `createKingdomAudio`.
+
+`pnpm --filter @chatdom/audio check` runs the one focused regression (`src/budget.test.ts`): two seconds of a
+footstep flood on every surface against the real families and mixer, counting the source nodes a Web Audio context
+would actually be running, while a control, the beacon, your own nearby steps and a placed block must still play.

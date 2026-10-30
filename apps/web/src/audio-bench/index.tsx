@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, Show, type JSX } from 'solid-js';
 import {
-  createKingdomAudio, FINISHED_FAMILIES, inspectKingdomAudio, renderKingdomAudio,
-  type AudioCue, type AudioCueOptions, type KingdomAudio, type KingdomAudioInspection, type KingdomAudioState,
+  AUDIO_MATERIALS, createKingdomAudio, FINISHED_FAMILIES, inspectKingdomAudio, renderKingdomAudio,
+  type AudioCue, type AudioCueOptions, type AudioMaterial, type KingdomAudio, type KingdomAudioInspection, type KingdomAudioState,
 } from '../../../../packages/audio/src/index';
 import './bench.css';
 
@@ -51,28 +51,72 @@ const FAMILIES: Family[] = [
   },
 ];
 
-interface SequenceStep { at: number; label: string; cue: AudioCue; options?: AudioCueOptions }
+interface Call { dt: number; cue: AudioCue; options?: AudioCueOptions }
+/** One chip in a sequence: a few real calls that belong together (a surface walked on, a piece set and lifted). */
+interface SequenceStep { at: number; label: string; calls: Call[] }
 
-/** Bench timings: the kingdom decides the real ones from who is home. */
+const one = (at: number, label: string, cue: AudioCue, options?: AudioCueOptions): SequenceStep =>
+  ({ at, label, calls: [options ? { dt: 0, cue, options } : { dt: 0, cue }] });
+
+/** Four paces on one surface, left and right feet a little apart. */
+const walk = (at: number, material: AudioMaterial): SequenceStep => ({
+  at, label: material, calls: [0, 0.44, 0.88, 1.32].map((dt, index) => ({ dt, cue: 'step', options: { material, pan: index % 2 ? 0.12 : -0.12 } })),
+});
+
+/** Pick a material, set a piece, then lift it out again. */
+const build = (at: number, material: AudioMaterial): SequenceStep => ({
+  at, label: material, calls: [
+    { dt: 0, cue: 'material', options: { material } },
+    { dt: 0.55, cue: 'place', options: { material } },
+    { dt: 1.35, cue: 'remove', options: { material } },
+  ],
+});
+
+/** Bench timings: the kingdom decides the real ones from who is home and what is built. */
 const SEQUENCES: { key: string; title: string; action: string; steps: SequenceStep[] }[] = [
   {
     key: 'ceremony', title: 'The light ceremony', action: 'Play the ceremony',
-    steps: [{ at: 0, label: 'a window', cue: 'light' }, { at: 1.6, label: 'the street', cue: 'wave' }, { at: 4.2, label: 'the beacon', cue: 'beacon' }],
+    steps: [one(0, 'a window', 'light'), one(1.6, 'the street', 'wave'), one(4.2, 'the beacon', 'beacon')],
   },
   {
     key: 'four', title: 'Four cues in a row', action: 'Play all four',
-    steps: [{ at: 0, label: 'a knock', cue: 'wood' }, { at: 0.7, label: 'a window', cue: 'light' }, { at: 2.6, label: 'the street', cue: 'wave' }, { at: 5.6, label: 'the beacon', cue: 'beacon' }],
+    steps: [one(0, 'a knock', 'wood'), one(0.7, 'a window', 'light'), one(2.6, 'the street', 'wave'), one(5.6, 'the beacon', 'beacon')],
+  },
+  {
+    key: 'walk', title: 'Walk across every surface', action: 'Walk across',
+    steps: AUDIO_MATERIALS.map((material, index) => walk(index * 1.9, material)),
+  },
+  {
+    key: 'build', title: 'Build with every material', action: 'Build with each',
+    steps: AUDIO_MATERIALS.map((material, index) => build(index * 2.1, material)),
   },
 ];
 
 type StepState = 'waiting' | 'played' | 'silent';
 
-const UNFINISHED: { label: string; cue: AudioCue; options?: AudioCueOptions }[] = [
-  { label: 'Footstep', cue: 'step' },
-  { label: 'Place', cue: 'place' },
-  { label: 'Remove', cue: 'remove' },
-  { label: 'Material', cue: 'material' },
+interface SurfaceRow { material: AudioMaterial; underfoot: string; inHand: string }
+
+const SURFACE_ROWS: SurfaceRow[] = [
+  { material: 'wood', underfoot: 'floorboards', inHand: 'a timber block' },
+  { material: 'stone', underfoot: 'flagstones', inHand: 'a dressed stone' },
+  { material: 'earth', underfoot: 'a packed path', inHand: 'a clod of soil' },
+  { material: 'metal', underfoot: 'an iron plate', inHand: 'a forged fitting' },
+  { material: 'glass', underfoot: 'a glass tile', inHand: 'a glass block' },
+  { material: 'fabric', underfoot: 'a rug', inHand: 'a folded hanging' },
 ];
+
+const ACTIONS: { cue: AudioCue; label: string }[] = [
+  { cue: 'step', label: 'Step' },
+  { cue: 'place', label: 'Set' },
+  { cue: 'remove', label: 'Lift' },
+  { cue: 'material', label: 'Choose' },
+];
+
+interface CrowdResult { requested: number; played: number; peakVoices: number; peakLayers: number; control?: boolean; beacon?: boolean; own: number; ownPlayed: number; running: boolean }
+
+const MATERIAL_WORDS: Record<AudioMaterial, string> = {
+  wood: 'Wood', stone: 'Stone', earth: 'Earth', metal: 'Metal', glass: 'Glass', fabric: 'Fabric',
+};
 
 const STATUS_WORDS: Record<KingdomAudioState['status'], string> = {
   locked: 'Locked', ready: 'Ready', suspended: 'Suspended', unavailable: 'Unavailable', disposed: 'Closed',
@@ -96,6 +140,9 @@ export default function AudioBench(): JSX.Element {
   const [log, setLog] = createSignal<LogLine[]>([]);
   const [lastPlayed, setLastPlayed] = createSignal<Record<string, { variation: number; at: number }>>({});
   const [runs, setRuns] = createSignal<Record<string, StepState[]>>({});
+  const [pan, setPan] = createSignal(0);
+  const [distance, setDistance] = createSignal(0);
+  const [crowd, setCrowd] = createSignal<CrowdResult>();
   let timers: number[] = [];
 
   const note = (text: string, tone: LogLine['tone']) => setLog(lines => [{ at: clock(), text, tone }, ...lines].slice(0, 7));
@@ -143,37 +190,87 @@ export default function AudioBench(): JSX.Element {
     }
   }
 
+  const markPlayed = (key: string) => {
+    const variation = inspectKingdomAudio(audio).variations[key] ?? 0;
+    setLastPlayed(previous => ({ ...previous, [key]: { variation, at: performance.now() } }));
+    return variation;
+  };
+  const familyKey = (call: { cue: AudioCue; options?: AudioCueOptions }) =>
+    call.cue === 'wood' ? `wood:${call.options?.ui ?? 'wood'}`
+      : ['step', 'place', 'remove', 'material'].includes(call.cue) ? `${call.cue}:${call.options?.material ?? 'wood'}` : call.cue;
+
   /** Plays a sequence step by step through the same `cue()` calls; each step shows what the library answered. */
   function runSequence(sequence: (typeof SEQUENCES)[number]) {
     stopSequences();
     setRuns({ [sequence.key]: sequence.steps.map((): StepState => 'waiting') });
     note(`${sequence.title}: started`, 'quiet');
     sequence.steps.forEach((step, index) => {
-      timers.push(window.setTimeout(() => {
-        const ok = audio.cue(step.cue, step.options);
-        refresh();
-        setRuns(previous => {
-          const states = [...(previous[sequence.key] ?? [])];
-          states[index] = ok ? 'played' : 'silent';
-          return { ...previous, [sequence.key]: states };
-        });
-        const family = FAMILIES.find(item => item.cue === step.cue && !item.options);
-        if (ok && family) {
-          const variation = inspectKingdomAudio(audio).variations[family.key] ?? 0;
-          setLastPlayed(previous => ({ ...previous, [family.key]: { variation, at: performance.now() } }));
-        }
-        note(`${sequence.title} · ${step.label} → ${ok ? 'played' : `not played (${silentReason() || 'held back by the mix'})`}`, ok ? 'ok' : 'quiet');
-      }, step.at * 1000));
+      const answers: boolean[] = [];
+      for (const call of step.calls) {
+        timers.push(window.setTimeout(() => {
+          const ok = audio.cue(call.cue, call.options);
+          answers.push(ok);
+          refresh();
+          if (ok) markPlayed(familyKey(call));
+          if (answers.length < step.calls.length) return;
+          const all = answers.every(Boolean);
+          setRuns(previous => {
+            const states = [...(previous[sequence.key] ?? [])];
+            states[index] = all ? 'played' : 'silent';
+            return { ...previous, [sequence.key]: states };
+          });
+          const held = answers.filter(answer => !answer).length;
+          note(`${sequence.title} · ${step.label} → ${all ? 'played' : `${held} of ${answers.length} not played (${silentReason() || 'held back by the mix'})`}`, all ? 'ok' : 'quiet');
+        }, (step.at + call.dt) * 1000));
+      }
     });
   }
 
-  function tryUnfinished(item: (typeof UNFINISHED)[number]) {
-    try {
-      const ok = audio.cue(item.cue, item.options);
-      note(`${item.label} → ${ok ? 'played' : 'not played'}`, ok ? 'ok' : 'quiet');
-    } catch (error) {
-      note(`${item.label} refused: ${error instanceof Error ? error.message.replace('kingdom audio: ', '') : String(error)}`, 'refused');
+  function playSurface(cue: AudioCue, material: AudioMaterial) {
+    const options: AudioCueOptions = { material, pan: pan(), distance: distance() };
+    const ok = audio.cue(cue, options);
+    refresh();
+    const action = ACTIONS.find(item => item.cue === cue)!.label;
+    if (ok) note(`${MATERIAL_WORDS[material]} · ${action.toLowerCase()} · take ${markPlayed(`${cue}:${material}`) + 1} → played`, 'ok');
+    else note(`${MATERIAL_WORDS[material]} · ${action.toLowerCase()} → not played (${silentReason() || 'held back by the mix'})`, 'quiet');
+  }
+
+  /**
+   * A bounded crowd: 120 footstep requests in 1.8 s from walkers 6–36 m away on every surface, your own footsteps
+   * close by, a control press and the castle beacon in the middle of it. Everything is a real `cue()` call.
+   */
+  function crowdBurst() {
+    stopSequences();
+    const result: CrowdResult = { requested: 0, played: 0, peakVoices: 0, peakLayers: 0, own: 0, ownPlayed: 0, running: true };
+    const publish = () => {
+      const now = inspectKingdomAudio(audio);
+      result.peakVoices = Math.max(result.peakVoices, now.voices);
+      result.peakLayers = Math.max(result.peakLayers, now.sources);
+      setCrowd({ ...result });
+      refresh();
+    };
+    setCrowd({ ...result });
+    note('A crowd walks past: started', 'quiet');
+    for (let index = 0; index < 120; index++) {
+      timers.push(window.setTimeout(() => {
+        result.requested++;
+        const material = AUDIO_MATERIALS[index % AUDIO_MATERIALS.length]!;
+        if (audio.cue('step', { material, distance: 6 + ((index * 7) % 31), pan: (((index * 37) % 21) - 10) / 10 })) result.played++;
+        publish();
+      }, index * 15));
     }
+    [0.05, 0.5, 0.95, 1.4].forEach((at, index) => timers.push(window.setTimeout(() => {
+      result.own++;
+      if (audio.cue('step', { material: 'stone', pan: index % 2 ? 0.12 : -0.12 })) result.ownPlayed++;
+      publish();
+    }, at * 1000 + 7)));
+    timers.push(window.setTimeout(() => { result.control = audio.cue('wood'); publish(); }, 520));
+    timers.push(window.setTimeout(() => { result.beacon = audio.cue('beacon'); publish(); }, 910));
+    timers.push(window.setTimeout(() => {
+      result.running = false;
+      publish();
+      note(`A crowd walks past: ${result.played} of ${result.requested} far steps played, your steps ${result.ownPlayed} of ${result.own}, control ${result.control ? 'answered' : 'not played'}, beacon ${result.beacon ? 'lit' : 'not played'}`, result.control && result.beacon ? 'ok' : 'quiet');
+    }, 1950));
   }
 
   function setVolume(value: number) {
@@ -221,7 +318,7 @@ export default function AudioBench(): JSX.Element {
       <p class="ab-eyebrow">Chatdom · Sound bench</p>
       <p class="ab-simulated"><strong>SIMULATED</strong> A listening bench. Nothing here happens in a kingdom.</p>
       <h1>The sound of a handmade kingdom</h1>
-      <p class="ab-lede">Wake the sound with a click, then press the controls, light a window, the street and the castle beacon. Every press goes through the same mix the kingdom uses.</p>
+      <p class="ab-lede">Wake the sound with a click, then press the controls, light a window, the street and the castle beacon, and walk and build on six surfaces. Every press goes through the same mix the kingdom uses.</p>
     </header>
 
     <div class="ab-layout">
@@ -314,15 +411,54 @@ export default function AudioBench(): JSX.Element {
           </div>}</For>
         </article>
 
-        <article class="ab-card ab-unfinished">
+        <article class="ab-card ab-surfaces">
           <header>
-            <h2>Still being carved</h2>
-            <p class="ab-surface">refused, never faked</p>
+            <h2>Six surfaces</h2>
+            <p class="ab-surface">walk and build</p>
           </header>
-          <p class="ab-line">These families are not finished yet, so the library refuses them out loud instead of playing a stand-in. Try one.</p>
-          <div class="ab-chips">
-            <For each={UNFINISHED}>{item => <button type="button" class="ab-chip" onClick={() => tryUnfinished(item)}>{item.label}</button>}</For>
+          <p class="ab-line">The same feet and the same hands on wood, stone, earth, metal, glass and cloth. Each surface keeps its own recordings and resonance; try them with your eyes closed. Lit dots show which of three takes played.</p>
+          <div class="ab-placement">
+            <label>
+              <span>From <b>{pan() === 0 ? 'the centre' : `${pan() < 0 ? 'left' : 'right'} ${Math.abs(pan()).toFixed(1)}`}</b></span>
+              <input type="range" min="-10" max="10" step="1" value={pan() * 10} onInput={event => setPan(Number(event.currentTarget.value) / 10)} />
+            </label>
+            <label>
+              <span>Distance <b>{distance() === 0 ? 'right here' : `${distance()} m`}</b></span>
+              <input type="range" min="0" max="40" step="1" value={distance()} onInput={event => setDistance(Number(event.currentTarget.value))} />
+            </label>
           </div>
+          <div class="ab-grid">
+            <For each={SURFACE_ROWS}>{row => <div class="ab-grid-row" data-material={row.material}>
+              <div class="ab-grid-name">
+                <strong>{MATERIAL_WORDS[row.material]}</strong>
+                <span>{row.underfoot} · {row.inHand}</span>
+              </div>
+              <For each={ACTIONS}>{item => {
+                const key = `${item.cue}:${row.material}`, last = () => lastPlayed()[key];
+                return <button type="button" class="ab-cell" data-cue={key} onClick={() => playSurface(item.cue, row.material)} disabled={!FINISHED_FAMILIES.includes(key)}>
+                  <span>{item.label}</span>
+                  <span class="ab-dots" aria-hidden="true"><For each={[0, 1, 2]}>{take => <i classList={{ 'ab-dot-on': last()?.variation === take }} />}</For></span>
+                </button>;
+              }}</For>
+            </div>}</For>
+          </div>
+        </article>
+
+        <article class="ab-card ab-crowd">
+          <header>
+            <h2>A crowd walks past</h2>
+            <p class="ab-surface">bounded, not queued</p>
+          </header>
+          <p class="ab-line">120 footsteps in under two seconds from people 6–36 m away, your own steps close by, a control press and the castle beacon in the middle of it. Far steps give way; the control and the beacon always have room.</p>
+          <dl class="ab-crowd-facts" data-running={crowd()?.running ? 'yes' : 'no'}>
+            <div><dt>Far steps</dt><dd data-testid="crowd-steps">{crowd() ? `${crowd()!.played} of ${crowd()!.requested}` : '—'}</dd></div>
+            <div><dt>Your steps</dt><dd data-testid="crowd-own">{crowd() ? `${crowd()!.ownPlayed} of ${crowd()!.own}` : '—'}</dd></div>
+            <div><dt>Control</dt><dd data-testid="crowd-control">{crowd()?.control === undefined ? '—' : crowd()!.control ? 'answered' : 'not played'}</dd></div>
+            <div><dt>Beacon</dt><dd data-testid="crowd-beacon">{crowd()?.beacon === undefined ? '—' : crowd()!.beacon ? 'lit' : 'not played'}</dd></div>
+            <div><dt>Most voices</dt><dd data-testid="crowd-voices">{crowd() ? `${crowd()!.peakVoices} of 16` : '—'}</dd></div>
+            <div><dt>Most layers</dt><dd data-testid="crowd-layers">{crowd() ? `${crowd()!.peakLayers} of 64` : '—'}</dd></div>
+          </dl>
+          <button type="button" class="ab-play" data-run="crowd" onClick={crowdBurst}>Let the crowd walk past</button>
         </article>
 
         <section class="ab-log" aria-label="What happened">
