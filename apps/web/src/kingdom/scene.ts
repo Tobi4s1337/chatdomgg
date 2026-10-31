@@ -276,7 +276,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   // Distant hills use 20 m cells on both sizes; the grounded 1 m collar stays
   // exact. One surface/sampler keeps groves grounded across viewport changes.
-  const {geometry:horizonGeometry,sampleHeight:landHeight}=createHorizonSurface(layout,{farStep:20,distantRelief:!layout.genesisSurface,sampleTerrain:(x,z)=>terrainHeight(layout,x,z)});earlyCleanups.push(()=>horizonGeometry.dispose());
+  const {geometry:horizonGeometry,sampleHeight:landHeight}=createHorizonSurface(layout,{farStep:20,distantRelief:false,sampleTerrain:(x,z)=>terrainHeight(layout,x,z)});earlyCleanups.push(()=>horizonGeometry.dispose());
   const coverInput={ground:landHeight,
     waterKeepOut:(x:number,z:number,margin:number)=>Math.hypot((x-layout.lake.x)/(layout.lake.radiusX+margin),(z-layout.lake.z)/(layout.lake.radiusZ+margin))<1.19,
     occupied:content,keepClear:[{x:0,z:8,radius:7}]};

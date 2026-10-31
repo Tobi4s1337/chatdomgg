@@ -7,3 +7,5 @@ AS04: 18 hair styles + bald (new in character/hair-cuts.ts: side-part, slicked, 
 follow-up: AS04 Adjust the portrait framing for tall hats so the beanie pompom and pointed hat do not touch or clip the top edge.
 
 main look: AS03 checkpoint merged and both reference comparison sheets viewed. Next hair pass: break the straight projecting fringe shelf on the long styles into a lighter, uneven hairline; keep the crisp square face and black eyes. Full runtime swap waits for head, hair and clothes together.
+
+2026-10-31 main AS04 integration: fixture comparison and hats sheet viewed; character/study38 tests pass. Next visible fix: give tall hats portrait headroom so pompoms and pointed tips are not clipped; preserve the bust framing for short silhouettes. Runtime swap waits for body/clothes checkpoint.

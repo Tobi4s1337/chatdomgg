@@ -336,30 +336,30 @@ beacon, warm pools, gold frame and wide dusk grade. Close/wide castle lighta1dac
 lane checkpoints immediately; medium-effort helpers for routine recon/captures/merges. Check merges BEFORE
 starting the turn's capture, so a newly ready producer cannot strand an unnecessary render.
 
-**Current slice:** smithy camera lower and tighter. Open south-east direction[4.8,.9,12], aim1.8m higher without
-moving the eye; waiting holds the whole hearth, casting prioritises metal/faces. First far-east angle hit the well
-roof and was rejected. Viewed native1080p and `shots/magic/smithy-frame-pair.png` (before left): pour/anvil/faces
-read together, castle rises behind; a well-roof edge stays at far right, crowd still leans left. Same hash-verified
-adopted scene008f059a, SIMULATED fixed pour/gather clock, high HDR/ACES. Final source frozen for capture; no errors,
-resources closed. Typecheck, scoped lint,1 meaningful room/assembly/camera test and web build pass;15 PL03 tests
-pass. Whole hearth and actual crucible stay within frame; waiting margin tighter. No lighting/presence changes.
+**Current slice:** PL03 sculpted land adopted in the actual stream scene. One memoized picture-land:2 surface
+now feeds terrain workers, height texture, horizon, light-field occupancy, citizen contact and founded collision;
+base settlement sampler stays private to generation/preservation. Plan identity unchanged; existing physics
+revision now includes producer identity. Removed the old added sinusoidal horizon relief. No grade, windows,
+castle light or smoke changes. Viewed `shots/magic/land-adopted-after.png` and `land-adopted-pair.png` at1080p:
+stepped layered ridges replace smooth blobs at a glance. Central mountain too heavy behind beacon; concrete
+saddle/breathing-room follow-up sent to land lane. Existing foreground-bank follow-up remains. Material palette
+still uses current production terrain treatment; the lane's fixture-only rock/strata adapter is not mounted.
+Typecheck, scoped lint, web build and26 focused world/terrain/horizon tests pass; capture high HDR/ACES, no errors.
 
-**Land next:** PL03 checkpoint1541661 merged402e3c6; street/west frames in `work/evidence/PL03/` viewed. Ridges
-now have a silhouette; foreground still looks like parallel pink trenches. Concrete irregular-bank follow-up in
-lane progress. Producer `picture-land:2` remains candidate-only: main must adopt one derived sampler through
-terrain worker, horizon, light-field occupancy and collision/contact together. Existing physics version/digest and
-collisionRevision publication can carry this without new protocol; never forge plan.revision or paint triangles
-that disagree with walking. `createHorizonSurface` already accepts sampleTerrain; other consumers call terrainHeight.
-Actual sampler adoption, then wide-road life, is next. No need to wait for another lane checkpoint.
+**Next:** grove on existing planting sites when its families/adapter arrive, then visible wide-road life. Tree
+sculpt foundation20c87a9 merged; no replacement grove ready yet. Keep existing planting positions and accepted
+warm/cool light. Smithy cameraf0112c6 landed/viewed: lower SE, tighter pour/faces, castle behind; crowd still
+leans left. One visible change per turn. No waiting for whole lane completion; take useful checkpoints.
 
 **Avatar/art:** reference/spec49/PRD81eab8f chosen, all A/B/C rejected. AS03 head/portrait4c333ed merged8ff6f87;
-both comparison sheets viewed.8-cell skull plus hair gives~10-cell silhouette on unchanged rig; black eyes/no
+both comparison sheets viewed. AS04 hair/accessories5e6352f merged this turn; fixture comparison and hats sheet
+viewed,38 focused avatar tests pass. Tall hats need portrait headroom (lane follow-up).8-cell skull plus hair gives~10-cell silhouette on unchanged rig; black eyes/no
 mouth. Hair follow-up: lighter uneven fringe instead of a shelf. Clothes/accessories/builder stay with team;
 swap kingdom/stream/card/passport once head, hair and clothes are ready. No rig/socket proposal exists; exact
 proposals go in contract-proposal.md for main. Recipe remains content-local until its first runtime consumer.
 Main owns real save/earned-item authority. Effects EL01 merged66d5244 and bench viewed, not adopted; ember drift/
 brightness follow-up recorded. Heraldry44c948e/river hallb5d3897 viewed/merged, not mounted as Genesis seats.
-Trees had no new checkpoint. Passport/Genesis content continue. No second forest or emitter stack.
+Tree foundation checkpoint is additive; no runtime swap yet. Passport/Genesis content continue. No second forest or emitter stack.
 
 **Accepted paint/open moments:**7c16789 corrected GPU-rejected white smokea545cfa: stable~quarter of occupied
 hearths, thin grey-violet wisps, short fade and restrained amber base; close arrival smoke active. Viewed
