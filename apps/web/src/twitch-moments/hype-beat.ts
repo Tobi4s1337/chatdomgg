@@ -151,7 +151,7 @@ export function nextBattle(previous: BattleState | undefined, body: MomentBodyOf
 
 const PHASE_END: Readonly<Record<'victory' | 'retreat', number>> = { victory: DRAGON_BEAT.victory.end, retreat: DRAGON_BEAT.retreat.end };
 /** The Wyrm Bell rings first; the free dragon then wakes on the same summoning clock. */
-const bellLead = (battle: BattleState) => (battle.source === 'wyrm-bell' ? WYRM_BELL.end : 0);
+export const bellLead = (battle: BattleState) => (battle.source === 'wyrm-bell' ? WYRM_BELL.end : 0);
 
 export function dragonFrame(battle: BattleState, atMs: number): DragonFrame | null {
   const t = atMs - battle.phaseAt;

@@ -2,7 +2,7 @@
 // Captures the Twitch moments bench (SIMULATED source) under the shared host capture lock: one owned Vite server
 // and one Chromium, both closed before the lock is released. Each scenario opens frozen at kingdom time START and
 // is seeked through its anticipation, action and settle, then tiled into one contact sheet.
-//   node apps/web/src/twitch-moments-bench/capture.mjs [--port 5198] [--set support|spectacle] [--only gift,cart] [--sheet-only]
+//   node apps/web/src/twitch-moments-bench/capture.mjs [--port 5198] [--set support|spectacle] [--only gift,cart] [--beats name] [--sheet-only]
 // --sheet-only tiles the frames already on disk for every run, after partial re-captures with --only.
 // Frames land in shots/twitch-moments/<scenario>-<beat>@<w>x<h>.png; the sheet in shots/twitch-moments/sheet-<set>.png.
 import { chromium } from '@playwright/test';
@@ -17,7 +17,7 @@ const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 const port = Number(option('--port') ?? 5198);
 assertCapturePort(port, { name: '--port' });
-const only = option('--only')?.split(','), sheetOnly = args.includes('--sheet-only'), set = option('--set') ?? 'support';
+const only = option('--only')?.split(','), beatsOnly = option('--beats')?.split(','), sheetOnly = args.includes('--sheet-only'), set = option('--set') ?? 'support';
 if (set !== 'support' && set !== 'spectacle') throw new Error('--set must be support or spectacle.');
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${root}shots/twitch-moments`;
@@ -41,7 +41,7 @@ const SUPPORT = [
 ];
 /** The sky, the train and the dragon. Battle scenarios run the SIMULATED realm in setup, so their beats sit later. */
 const SPECTACLE = [
-  ['skyfire', STREAM, [['aurora', 3400], ['name', 7600], ['procession', 11200]]],
+  ['skyfire', STREAM, [['aurora', 3400], ['name', 7600], ['procession', 11200], ['return', 21000]]],
   ['volley', STREAM, [['launch', 1700], ['burst', 4300], ['fade', 8200]]],
   ['spark', PHONE, [['rise', 1200], ['peak', 2300], ['fade', 3600]]],
   ['street', DESKTOP, [['launch', 1500], ['burst', 3500], ['willow', 5600]]],
@@ -59,7 +59,8 @@ const SPECTACLE = [
   ['bell', DESKTOP, [['strokes', 1400], ['wake', 5800], ['rise', 9400]]],
   ['unbound', STREAM, [['earned', 800], ['stir', 2400], ['honest', 5200]]],
 ];
-const RUNS = (set === 'spectacle' ? SPECTACLE : SUPPORT).filter(([scenario]) => !only || only.includes(scenario));
+const RUNS = (set === 'spectacle' ? SPECTACLE : SUPPORT).filter(([scenario]) => !only || only.includes(scenario))
+  .map(([scenario, size, beats]) => [scenario, size, beats.filter(([beat]) => !beatsOnly || beatsOnly.includes(beat))]).filter(([, , beats]) => beats.length);
 
 let server, browser, release;
 const problems = [], rows = [];
@@ -112,7 +113,8 @@ if (sheetOnly) {
 // The sheet: each run is one row of three frames scaled to a common height, labelled by scenario and size.
 const tall = (width, height) => (height > width ? 640 : 300), across = ({ width, height, row }) => Math.round(width * tall(width, height) / height / 2) * 2 * row.length;
 const sheetWidth = Math.max(0, ...rows.map(across)), tiles = [];
-for (const { scenario, width, height, row } of rows) {
+// A partial re-shoot (--beats) only refreshes its frames; the sheet is tiled from complete runs (--sheet-only).
+for (const { scenario, width, height, row } of beatsOnly ? [] : rows) {
   const H = tall(width, height), w = Math.round(width * H / height / 2) * 2;
   const rowPath = `${output}/row-${scenario}@${width}x${height}.png`;
   const inputs = row.flatMap(p => ['-i', p]);

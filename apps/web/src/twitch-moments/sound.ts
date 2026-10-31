@@ -22,6 +22,7 @@ export const CUE_LENGTH_MS: Record<MomentCue, number> = {
   'train-whistle': 2000, 'train-steam': 3500, 'carriage-couple': 900, 'festival-drum': 2400,
   'dragon-roar': 3600, 'dragon-wings': 1200, 'dragon-breath': 2700, 'dragon-hit': 800, 'dragon-fall': 4000, 'dragon-snore': 3000,
   'wyrm-bell': 4000, 'victory-fanfare': 3200,
+  'crowd-murmur': 3600, 'crowd-cheer': 4600,
 };
 
 /** Where the ground takes the dragon's weight inside 'dragon-fall', so the cue can be placed on the landing. */
@@ -745,6 +746,58 @@ export function createProceduralMomentSound(options: ProceduralSoundOptions): Mo
     }
   }
 
+  /**
+   * A few townsfolk's voices on one vowel: each a pair of slightly detuned saws at its own pitch, glided by `contour`
+   * (multipliers over seconds), through the vowel's two formants, with breath under it. Deterministic per seed.
+   */
+  function voices(context: AudioContext, nodes: Nodes, out: AudioNode, t: number, seed: number, count: number, formants: readonly [number, number],
+    contour: readonly Point[], length: number, breath: number): void {
+    const rand = scatter(seed), body = gainNode(context, 2.6);
+    const [f1, f2] = formants, one = filterNode(context, 'bandpass', f1, 4.5), two = filterNode(context, 'bandpass', f2, 6);
+    const mixOne = gainNode(context, 1), mixTwo = gainNode(context, 0.55);
+    chain(body, one, mixOne, out); body.connect(two); two.connect(mixTwo); mixTwo.connect(out);
+    for (let i = 0; i < count; i++) {
+      // A mix of lower and higher voices, each a little early or late and panned across the street.
+      const pitch = (i % 2 ? 210 : 128) * (0.86 + 0.32 * rand()), lag = rand() * 0.22, pan = context.createStereoPanner(), amp = gainNode(context, 0.9 / count);
+      pan.pan.value = (rand() * 2 - 1) * 0.7;
+      chain(amp, pan, body);
+      for (const detune of [-7, 6]) {
+        const osc = toneAt(context, nodes, 'sawtooth', pitch, t + lag, t + length + 0.05);
+        osc.detune.value = detune + (rand() * 2 - 1) * 8;
+        glide(osc.frequency, t + lag, contour.map(([at, k]) => [at, pitch * k] as const));
+        lfo(context, nodes, 'sine', 4.6 + rand() * 1.4, 3 + rand() * 3, osc.frequency, t + lag, t + length + 0.05);
+        osc.connect(amp);
+      }
+    }
+    const air = gainNode(context, breath);
+    chain(noiseAt(context, nodes, t, t + length + 0.05, seed % 5), filterNode(context, 'bandpass', (f1 + f2) / 2, 0.8), air, body);
+  }
+
+  function crowdMurmur(context: AudioContext, out: GainNode, t: number, nodes: Nodes): void {
+    // The town turning to look: an "ooh" that rises with the moment and peaks on it (1.5 s in), then lets go.
+    const level = gainNode(context), tail = room(context, out, 1.1, 0.3, 1800);
+    level.gain.setValueAtTime(0, t); level.gain.linearRampToValueAtTime(0.1, t + 0.5); level.gain.linearRampToValueAtTime(0.5, t + 1.45);
+    level.gain.setTargetAtTime(0.0001, t + 1.75, 0.32);
+    level.connect(out); level.connect(tail);
+    voices(context, nodes, level, t, 0x0a11, 7, [430, 820], [[0, 0.92], [1.4, 1.12], [2.9, 1.02]], 3.0, 0.5);
+  }
+
+  function crowdCheer(context: AudioContext, out: GainNode, t: number, nodes: Nodes): void {
+    // The answer: a bright "aah" that leaps and falls away, with hands clapping across the street under it.
+    const level = gainNode(context), tail = room(context, out, 1.2, 0.32, 2200);
+    level.gain.setValueAtTime(0, t); level.gain.linearRampToValueAtTime(0.55, t + 0.14); level.gain.setTargetAtTime(0.3, t + 0.5, 0.35);
+    level.gain.setTargetAtTime(0.0001, t + 1.5, 0.42);
+    level.connect(out); level.connect(tail);
+    voices(context, nodes, level, t, 0xc4ee, 8, [760, 1220], [[0, 1.0], [0.18, 1.32], [0.9, 1.18], [3.4, 0.86]], 3.7, 0.9);
+    // Claps: dense at first, thinning out; each one a short band of noise, nobody quite together.
+    const rand = scatter(0x5eed), claps = gainNode(context, 1);
+    claps.connect(out); claps.connect(tail);
+    for (let i = 0; i < 34; i++) {
+      const at = t + 0.12 + 2.5 * (i / 34) ** 1.6 + rand() * 0.05;
+      grain(context, nodes, claps, at, 0.012 + rand() * 0.01, 1300 + rand() * 1300, 1.1, 0.34 * (1 - 0.6 * i / 34), (rand() * 2 - 1) * 0.8, 1 + rand() * 4);
+    }
+  }
+
   const VOICES: Record<MomentCue, (context: AudioContext, out: GainNode, t: number, nodes: AudioScheduledSourceNode[]) => void> = {
     horn, 'cloth-unfurl': cloth, 'gift-bell': bell, 'cart-roll': roll, 'parcel-land': land,
     'spark-rise': sparkRise, 'firework-launch': fireworkLaunch, 'firework-bloom': fireworkBloom, 'firework-crackle': fireworkCrackle,
@@ -752,6 +805,7 @@ export function createProceduralMomentSound(options: ProceduralSoundOptions): Mo
     'balloon-rise': balloonRise, 'train-whistle': trainWhistle, 'train-steam': trainSteam, 'carriage-couple': carriageCouple,
     'festival-drum': festivalDrum, 'dragon-roar': dragonRoar, 'dragon-wings': dragonWings, 'dragon-breath': dragonBreath, 'dragon-hit': dragonHit,
     'dragon-fall': dragonFall, 'dragon-snore': dragonSnore, 'wyrm-bell': wyrmBell, 'victory-fanfare': victoryFanfare,
+    'crowd-murmur': crowdMurmur, 'crowd-cheer': crowdCheer,
   };
 
   return {

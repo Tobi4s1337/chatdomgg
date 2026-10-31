@@ -311,6 +311,7 @@ export default function TwitchMomentsBench() {
           mesh: b => stage!.mesh(b), homeAnchor: (slot): HomeAnchor | null => stage!.homeAnchor(slot), doorAnchor: slot => stage!.doorAnchor(slot),
           windowAnchor: slot => stage!.windowAnchor(slot), placeAnchor: place => stage!.placeAnchor(place), giftRoute: () => stage!.giftRoute(), sound: port, camera: cameraPort,
           places: stage.places, light: glow => stage!.setGlow(glow), validatePose: pose => stage!.validatePose(pose),
+          crowd: call => stage!.crowd(call), watchers: () => stage!.watchers(),
           viewport: () => ({ width: canvas.clientWidth, height: canvas.clientHeight }) });
         setPhase('Weaving the banners');
         await view.prepare();
@@ -364,7 +365,7 @@ export default function TwitchMomentsBench() {
         if (fixedAt !== null) { now = START + fixedAt; setClockMs(now); }
         setPreview(moments.previewAction(DECREE));
         benchWindow.__chatdomMoments = {
-          metrics: () => moments?.metrics(), status: () => sim?.status() ?? null, view: () => view?.stats(), sample: (at: number) => moments?.sample(at),
+          metrics: () => moments?.metrics(), status: () => sim?.status() ?? null, view: () => ({ ...view?.stats(), crowd: stage?.stats().crowd }), sample: (at: number) => moments?.sample(at),
           pose: () => ({ camera: stage?.pose ?? null, base: basePose, check: (pose: CameraPose) => stage?.validatePose(pose) ?? null }), now: () => now,
           seek: (offset: number) => { now = START + offset; setClockMs(now); frame(now); },
           hide: (hidden: boolean) => moments?.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: !hidden, safeRects: [], autoOpenKinds: [] }),

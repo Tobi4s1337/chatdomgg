@@ -10,6 +10,7 @@ import { createDragonLayer } from './dragon-view';
 import { createGiftLayer, type DoorAnchor, type GiftRoute, type PlaceAnchor } from './gift-view';
 import { createSkyFlightLayer } from './sky-flight-view';
 import { createSkyLightLayer } from './sky-light-view';
+import type { CrowdCall } from './stage-beat';
 import type { SpectacleLayerHost, SpectaclePlaces } from './spectacle';
 import { createTrainLayer } from './train-view';
 
@@ -68,9 +69,24 @@ export interface MomentViewHost {
   readonly places?: SpectaclePlaces;
   /** The sky's light on the town this frame: the host tints its night by it (fireworks flash, aurora, dragon fire). */
   light?(glow: SkyGlow): void;
+  /**
+   * The staged beat for the host's crowd, every frame: the stage and the point to turn toward, or null. The host
+   * moves only its real present people (`chooseWatchers`, `crowdPose`); the view never adds a person to the town.
+   */
+  crowd?(call: CrowdCall | null): void;
+  /** Where the host's present people would stand to watch, so a sky shot can keep a few of them in its foreground. */
+  watchers?(): readonly Vec3[];
 }
 
-export interface SkyGlow { readonly colour: readonly [number, number, number]; readonly strength: number }
+export interface SkyGlow {
+  readonly colour: readonly [number, number, number];
+  readonly strength: number;
+  /**
+   * The lamps' held breath before a staged climax, 0..1: the host dims its ambient (never its windows) by this share,
+   * so the climax lands on a darker town and the warm windows read brighter. Absent means 0.
+   */
+  readonly hush?: number;
+}
 export interface ScreenNameplate { readonly id: string; readonly name: string; readonly x: number; readonly y: number }
 
 const NO_PLACES: SpectaclePlaces = {
@@ -379,6 +395,34 @@ export function createTwitchMomentView(host: MomentViewHost) {
     return null;
   };
 
+  const framer = new THREE.PerspectiveCamera(), projected = new THREE.Vector3();
+  /** Whether the view either side of the aim (about a third of the way out) is clear for 13 m. */
+  function openSides(eye: THREE.Vector3, target: THREE.Vector3): boolean {
+    const ahead = target.clone().sub(eye).setY(0).normalize();
+    return [0.45, -0.45].every(turn => checked(eye, eye.clone().addScaledVector(ahead.clone().applyAxisAngle(UP, turn), 13).add(new THREE.Vector3(0, 0.6, 0)), 60) !== null);
+  }
+
+  /**
+   * How many watchers a pose holds whole in its lower picture, near enough to read as people (5–48 m); with `seen`,
+   * only those the host's sightline check can actually see from the eye.
+   */
+  function foreground(pose: CameraPose, watching: readonly Vec3[], seen = false): number {
+    const { width, height } = host.viewport();
+    framer.fov = pose.fov; framer.aspect = width / Math.max(1, height); framer.near = 0.5; framer.far = 400;
+    framer.position.set(...pose.eye); framer.lookAt(...pose.target); framer.updateProjectionMatrix(); framer.updateMatrixWorld();
+    let score = 0;
+    for (const w of watching) {
+      const distance = Math.hypot(w[0] - pose.eye[0], w[1] - pose.eye[1], w[2] - pose.eye[2]);
+      if (distance < 5 || distance > 48) continue;
+      // Feet and head both inside the picture's lower part: a whole person, not a cropped head.
+      const feet = projected.set(w[0], w[1] + 0.05, w[2]).project(framer).clone(), head = projected.set(w[0], w[1] + 1.8, w[2]).project(framer);
+      if (![feet, head].every(p => p.z > 0 && p.z < 1 && Math.abs(p.x) < 0.88 && p.y > -0.96 && p.y < 0.15)) continue;
+      if (seen && !checked(new THREE.Vector3(...pose.eye), new THREE.Vector3(w[0], w[1] + 1.5, w[2]), pose.fov)) continue;
+      score++;
+    }
+    return score;
+  }
+
   /** Candidate turns (radians) about a subject, nearest the viewer's own side first. */
   const TURNS = [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2, -2, Math.PI];
   const turned = (direction: THREE.Vector3, turn: number) => direction.clone().applyAxisAngle(UP, turn);
@@ -402,12 +446,51 @@ export function createTwitchMomentView(host: MomentViewHost) {
         if (!sky) return null;
         const centre = new THREE.Vector3(...sky.centre), side = sideOf(centre, prior);
         const target = centre.clone().add(new THREE.Vector3(0, sky.ceiling * 0.52, 0));
-        return first(function* () {
-          for (const reach of [portrait ? 0.95 : 0.8, 0.62, 1.1]) for (const turn of TURNS) {
-            const eye = centre.clone().addScaledVector(turned(side, turn), sky.radius * reach).add(new THREE.Vector3(0, portrait ? 6 : 5, 0));
-            yield [eye, target, portrait ? 68 : 56] as const;
+        // Within the nearest workable distance, the turn that keeps the most watchers in the foreground: the town's
+        // people under the sky they are looking at. Only from the town's front (castle toward the centre), where the
+        // name and the emotes read the right way round; otherwise, and without watchers, the first legal pose.
+        const watching = host.watchers?.() ?? [], castle = places.castle();
+        const front = castle ? centre.clone().sub(new THREE.Vector3(...castle.crown)).setY(0) : null;
+        if (front && front.lengthSq() > 1e-4) front.normalize();
+        const facesFront = (eye: THREE.Vector3) => !!front && front.lengthSq() > 0.5 && eye.clone().sub(centre).setY(0).normalize().dot(front) >= 0.5;
+        // Over the watchers' shoulders: a little behind and beside real present people on the town's front, low and
+        // wide, so they stand in the lower picture with arms up under the sky they are watching. Kept only when a
+        // watcher is plainly in sight and neither side is walled in; the sky stays the subject (aimed a little lower).
+        if (watching.length >= 2 && front && front.lengthSq() > 0.5) {
+          const low = centre.clone().add(new THREE.Vector3(0, sky.ceiling * 0.4, 0));
+          let best: CameraPose | null = null, bestScore = 0;
+          for (const w of watching) {
+            const at = new THREE.Vector3(...w), out = at.clone().sub(centre).setY(0);
+            if (out.lengthSq() < 1) continue;
+            out.normalize();
+            const across = new THREE.Vector3().crossVectors(out, UP);
+            // Behind them, then beside them along the street (three-quarter on, the sky beyond).
+            for (const [back, aside] of [[9, 2.5], [9, -2.5], [12, 0], [7, 4], [7, -4], [14, 5], [14, -5], [4, 8], [4, -8], [1, 10], [1, -10]] as const) {
+              const eye = at.clone().addScaledVector(out, back).addScaledVector(across, aside).add(new THREE.Vector3(0, 2.4, 0));
+              if (!facesFront(eye)) continue;
+              const pose = checked(eye, low, portrait ? 74 : 64);
+              // Open on both sides: no wall standing close across a third of the picture.
+              if (!pose || !openSides(eye, low)) continue;
+              const score = foreground(pose, watching, true);
+              if (score > bestScore) { best = pose; bestScore = score; }
+            }
           }
-        }());
+          if (best) return best;
+        }
+        for (const reach of [portrait ? 0.95 : 0.8, 0.62, 1.1]) {
+          let fallback: CameraPose | null = null, best: CameraPose | null = null, bestScore = -1;
+          for (const turn of TURNS) {
+            const direction = turned(side, turn), eye = centre.clone().addScaledVector(direction, sky.radius * reach).add(new THREE.Vector3(0, portrait ? 6 : 5, 0));
+            const pose = checked(eye, target, portrait ? 68 : 56);
+            if (!pose) continue;
+            fallback ??= pose;
+            if (!watching.length || !facesFront(eye)) continue;
+            const score = foreground(pose, watching);
+            if (score > bestScore) { best = pose; bestScore = score; }
+          }
+          if (best ?? fallback) return best ?? fallback;
+        }
+        return null;
       }
       case 'castle': {
         const castle = places.castle();
@@ -541,6 +624,23 @@ export function createTwitchMomentView(host: MomentViewHost) {
     }
   }
 
+  /** Where the town turns to look for a staged subject: up into the sky, the home's banner, the cart, the train, the dragon. */
+  function lookPoint(subject: MomentSubject): THREE.Vector3 | null {
+    if (subject.kind === 'place' && subject.place === 'sky') {
+      const sky = places.sky();
+      return sky ? new THREE.Vector3(...sky.centre).add(new THREE.Vector3(0, sky.ceiling * 0.55, 0)) : null;
+    }
+    if (subject.kind === 'place' && subject.place === 'dragon') return dragon.head() ?? dragon.focus() ?? captionPoint(subject);
+    return captionPoint(subject);
+  }
+
+  let crowdCalled = false;
+  function callCrowd(frame: MomentFrame): void {
+    const stage = frame.visible ? frame.stage : null, point = stage && stage.watchers > 0 ? lookPoint(stage.subject) : null;
+    if (stage && point) { host.crowd?.({ ...stage, point: point.toArray() }); crowdCalled = true; }
+    else if (crowdCalled) { host.crowd?.(null); crowdCalled = false; }
+  }
+
   const mix = (a: CameraPose, b: CameraPose, t: number): CameraPose => {
     const k = smooth(t), lerp3 = (p: readonly number[], q: readonly number[]) => p.map((v, i) => v + (q[i]! - v) * k) as [number, number, number];
     return { eye: lerp3(a.eye, b.eye), target: lerp3(a.target, b.target), fov: a.fov + (b.fov - a.fov) * k };
@@ -622,7 +722,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
       flight.apply(frame.visible ? frame.sky : [], frame.atMs);
       trainLayer.apply(frame.visible ? frame.train : null, frame.atMs);
       dragon.apply(frame.visible ? frame.dragon : null, frame.atMs);
-      host.light?.(frame.visible ? skyLight.glow() : { colour: [0, 0, 0], strength: 0 });
+      host.light?.(frame.visible ? { ...skyLight.glow(), hush: Math.min(1, Math.max(0, frame.stage?.hush ?? 0)) } : { colour: [0, 0, 0], strength: 0, hush: 0 });
+      callCrowd(frame);
       syncAudio(frame);
       if (frame.visible) direct(frame); else release();
     },
@@ -652,11 +753,14 @@ export function createTwitchMomentView(host: MomentViewHost) {
     glow: (): SkyGlow => skyLight.glow(),
     stats: (): Record<string, number | boolean> => ({ banners: banners.size, meshes: [...banners.values()].reduce((n, b) => n + b.root.children.length, 0), edges: edges.size,
       ...gifts.stats(), ...prefixed('sky', skyLight.stats()), ...prefixed('flight', flight.stats()), ...prefixed('train', trainLayer.stats()),
-      ...prefixed('dragon', dragon.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent }),
+      ...prefixed('dragon', dragon.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent,
+      'stage.watchers': lastFrame?.visible && lastFrame.stage ? lastFrame.stage.watchers : 0, crowd: crowdCalled }),
     dispose(): void {
       if (disposed) return;
       disposed = true;
       release();
+      if (crowdCalled) { host.crowd?.(null); crowdCalled = false; }
+      host.light?.({ colour: [0, 0, 0], strength: 0, hush: 0 });
       for (const cancel of playing.values()) cancel();
       playing.clear();
       for (const slot of [...banners.keys()]) remove(slot);

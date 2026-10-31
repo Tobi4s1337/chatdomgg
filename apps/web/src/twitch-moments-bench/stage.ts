@@ -13,7 +13,8 @@ import { placeMarketContent, placeSettlementContent } from '../kingdom/settlemen
 import { loadTerrain } from '../kingdom/terrain-client';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from '../kingdom/terrain-worker';
 import { terrainBatches } from '../kingdom/terrain-batches';
-import type { CameraPose, DoorAnchor, GiftRoute, HomeAnchor, PlaceAnchor, SkyGlow, SpectaclePlaces, WindowAnchor } from '../twitch-moments';
+import type { CameraPose, CrowdCall, DoorAnchor, GiftRoute, HomeAnchor, PlaceAnchor, SkyGlow, SpectaclePlaces, WindowAnchor } from '../twitch-moments';
+import { createBenchCrowd } from './crowd';
 
 /**
  * The bench's kingdom: a real generated hamlet, composed from the same settlement, content, voxel worker,
@@ -35,13 +36,17 @@ export interface MomentStage {
   readonly places: SpectaclePlaces;
   /** The sky's light on the town (fireworks, aurora, dragon fire), mixed into the hour's ambient until the next call. */
   setGlow(glow: SkyGlow): void;
+  /** The staged beat for the bench's crowd: present people step out of their doors, turn to it and answer it. */
+  crowd(call: CrowdCall | null): void;
+  /** Where present people would stand to watch. */
+  watchers(): readonly Vec3[];
   setPresence(frame: KingdomPresenceFrame): void;
   setPose(pose: CameraPose): void;
   /** The director's occlusion check: null when the eye stands in or against a solid, or a solid hides the subject. */
   validatePose(pose: CameraPose): CameraPose | null;
   readonly pose: CameraPose;
   render(atMs: number): void;
-  stats(): { drawCalls: number; triangles: number; lightingReady: boolean };
+  stats(): { drawCalls: number; triangles: number; lightingReady: boolean; crowd: { people: number; shown: number } };
   dispose(): void;
 }
 
@@ -316,6 +321,8 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
     const fog = new THREE.FogExp2(0x000000); scene.fog = fog;
     await Promise.all(jobs);
     if (options.signal.aborted) throw new DOMException('The bench closed while loading', 'AbortError');
+    const crowd = own(await createBenchCrowd(scene, pool, clay, slot => { const house = houses.find(h => h.slot === slot); return house ? doorOf(house) : null; }));
+    if (options.signal.aborted) throw new DOMException('The bench closed while loading', 'AbortError');
 
     const anchors = new Map<number, HomeAnchor | null>();
     const solids = [...houses, ...castle, ...stalls].map(b => solidOf(b.position, b.yaw, b.blueprint.size))
@@ -357,16 +364,22 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
       giftRoute: () => route,
       places,
       setGlow(next) { glow = next; },
-      setPresence(frame) { windows.setFrame(frame); windows.update(1, options.hour); lastField = -Infinity; },
+      crowd: call => crowd.call(call),
+      watchers: () => crowd.watchers(),
+      setPresence(frame) {
+        windows.setFrame(frame); windows.update(1, options.hour); lastField = -Infinity;
+        crowd.setPresent(frame.connection === 'fresh' ? frame.windows.filter(w => w.present).map(w => w.slot) : []);
+      },
       setPose(next) { pose = next; },
       validatePose: next => sightline(layout, solids, next),
       get pose() { return pose; },
       render(atMs) {
         const base = getEnvironment(options.hour);
         // The sky's light washes the town: the ambient leans toward the burst's colour and lifts with its strength.
-        const k = Math.min(1, Math.max(0, glow.strength));
-        const grade = k > 0.001 ? { ...base, ambient: `#${lit.set(base.ambient).lerp(flash.setRGB(...glow.colour), Math.min(0.5, k * 0.85)).getHexString()}`,
-          ambientIntensity: base.ambientIntensity * (1 + 1.25 * k) } : base;
+        // Before a staged climax the town holds its breath: the ambient dims (the windows stay warm), then the burst's light takes over.
+        const k = Math.min(1, Math.max(0, glow.strength)), hush = Math.min(0.6, Math.max(0, glow.hush ?? 0));
+        const grade = k > 0.001 || hush > 0.001 ? { ...base, ambient: k > 0.001 ? `#${lit.set(base.ambient).lerp(flash.setRGB(...glow.colour), Math.min(0.5, k * 0.85)).getHexString()}` : base.ambient,
+          ambientIntensity: base.ambientIntensity * (1 + 1.25 * k) * (1 - hush) } : base;
         clay.setEnvironment(grade); ground.setEnvironment(grade);
         camera.position.set(...pose.eye); camera.lookAt(new THREE.Vector3(...pose.target));
         if (Math.abs(camera.fov - pose.fov) > 1e-3) { camera.fov = pose.fov; camera.updateProjectionMatrix(); }
@@ -382,10 +395,11 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
         atmosphere.update(options.hour, atMs / 1000, camera, new THREE.Vector3(...beaconPosition), 0.65);
         fog.color.set(grade.fog); fog.density = 0.0016;
         water.update(grade, atMs / 1000, camera);
+        crowd.update(atMs, options.hour, camera);
         shadows.updateSunDirection(grade.sunDirection);
         renderer.render(scene, camera);
       },
-      stats: () => ({ drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, lightingReady: nearBytes > 0 && farBytes > 0 && beaconBytes > 0 }),
+      stats: () => ({ drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, lightingReady: nearBytes > 0 && farBytes > 0 && beaconBytes > 0, crowd: crowd.stats() }),
       dispose: disposeAll,
     };
   } catch (error) {
