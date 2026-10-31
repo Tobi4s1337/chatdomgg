@@ -333,16 +333,19 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 **Order:** picture first, one visible fix per turn, before/after obvious at a glance. No new system lanes;
 exception explicitly authorised: reference avatar plus real builder. Routine helpers/captures/merges use medium
 effort. Keep accepted exposure34ac89a, indigo lift0896044, low street camera, beacon, warm pools and gold frame.
-The wide dusk view now sings: leave it alone. Restore close warm/cool contrast, then close windows, then smithy.
+The wide dusk view now sings: leave its grade alone. Street contrast96f2d08 retained; castle light this turn,
+then land as it lands, then life on the wide roads. Avatar parts swap in when head, hair and clothes are ready.
 
-**Current slice:** street lantern warmth restored against the indigo fill. Existing field/source positions stay;
-nearby surfaces get stronger warm response, avatars a gentler falloff reaching faces. Full within25m, easing
-back to the original treatment by60m. Rejected the unshipped global all-pane/2.5x candidate after the instruction
-to preserve the wide; scene/presence-window files restored. Do not reapply that candidate from capture scripts.
-Viewed native1080p and `shots/magic/street-warm-comparison@3840x1080.png` (0896044 left, current right): warm
-pools/face light return, blue roofs/stone stay cool. Fixed eye[-103.95,13.25,64], target[-110.45,8.8,51], FOV48,
-SIMULATED/hour19.5/time12; high HDR/ACES, settled/open. Orange hair is saturated; bodies remain the old look.
-Typecheck, scoped lint,13 render tests and final web build pass;81 scoped merge tests pass. Capture resources closed.
+**Current slice:** castle court light. The dedicated beacon/brazier field has a softer falloff on the approach;
+reflected amber reaches vertical stone as well as ledges. Camera-to-beacon distance100–170m eases back to the
+accepted wide response; no exposure, atmosphere, street pool or source-position changes. Viewed native1080p and
+`shots/magic/castle-pair.png` (before left): gatehouse and tower bases visibly warmer, outer towers still cool.
+Same adopted scene008f059a, court eye[-24,34,28], target[0,35,-57], FOV54, hour19.5,73 SIMULATED windows,
+high HDR/ACES, settled/open. Cloud clock differs~3s; camera/presence match. Court still sparse; upper keep rim weak.
+Typecheck, scoped lint,16 render/royal tests and web build pass;13 land producer tests pass. Capture resources closed.
+Street warmth96f2d08 remains: stronger nearby surface/face response to existing lanterns, taper25–60m; indigo
+lift0896044 stays. Viewed `shots/magic/street-warm-comparison@3840x1080.png`. The global all-pane/2.5x candidate
+was rejected to preserve the wide; never reapply it. Old saturated hair/bodies await the chosen reference parts.
 
 **Avatar reference chosen:** all A/B/C studies rejected. Spec49/PRD/reference reviewed and committed on the lane
 as81eab8f, merged to main063a71b. `work/references/avatar-style/reference.png` is now the target: crisp square
@@ -351,8 +354,9 @@ AS03 head/face/portrait is unblocked. Builder on web/panel, same recipe in kingd
 items never bought. No rig/socket/recipe proposal exists yet; exact proposals go in the lane's contract-proposal.md
 for main's small tested freeze. No silent runtime rig change. Main owns save/entitlement authority and host mounts.
 
-**Art merged and viewed:** PL01 candidate terrain c657fff (fixture only, not adopted land), accessible heraldry
-44c948e, river civic hall b5d3897. Land ridges need exposed faces/ledges readable at dusk; follow-up in its progress.
+**Art merged and viewed:** PL02 protected terrain producer2cf9824 (candidate only, not adopted land), accessible
+heraldry44c948e, river civic hall b5d3897. Viewed `work/evidence/PL02/street-producer@1920x1080.png`; PL03
+follow-up: break the uniform escarpment below the castle into irregular ledges, green and scree interruptions.
 River hall's bell/flag framing already has a follow-up. These do not yet replace Genesis seats or mount heraldry.
 Source refs: picture-land, picture-trees, effects-library; worktrees/specs46–48 unchanged. Trees/effects had no new
 commits. Land adoption must share height across render/contact and preserve pinned foundations. Passport45 and
@@ -367,8 +371,8 @@ crowd/hush/cheer/hype. No system wiring under this picture pass. Royal65534 is t
 picture through a retry only until min(receipt+90s,frame.asOf+90s), then0.7s fade. SIMULATED SSE smoke proved
 240 held, reconnect0walking, expiry0/0; evidence `shots/magic/presence-drop-smoke.json`. Other shimmer unlocalized.
 
-**Next picture:** close panes and their warm facade light, preserving the wide; then smithy lower/tighter,
-anvil/pour/crowd filling middle two-thirds, faces on BOTH sides lit by metal. Current west crescent isn't final.
+**Next picture:** land hills when ready, then wide-road life (lantern walkers, cart, chimney smoke), preserving
+the accepted wide grade. Still open: smithy lower/tighter, faces on BOTH sides lit by metal; west crescent isn't final.
 Molten02c3494 stays. Real approved chat ritual still unproved; no waiting observer before Tobias goes live.
 
 **Preserved/live:** city stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a (7files), preserve rounded copy; never drop.

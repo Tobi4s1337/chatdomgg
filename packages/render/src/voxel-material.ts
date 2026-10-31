@@ -260,14 +260,17 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       float poolAmount=pool*smoothstep(0.,.2,uNight)*${lattice==='avatar'?'mix(.44,1.8,closeLantern)':'(uTerrain>.5?2.15:.44)*mix(1.,1.9,closeLantern)'};
       vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
-      float beaconAmount=beacon*beacon*beacon*(.3+.7*uNight)*2.1;
+      // At the court, let the gate fires wash the stone instead of dying
+      // inside the old cubic falloff. The wide town keeps its accepted response.
+      float castleApproach=1.-smoothstep(100.,170.,length(cameraPosition-uBeaconPosition));
+      float beaconAmount=pow(beacon,mix(3.,1.35,castleApproach))*(.3+.7*uNight)*mix(2.1,3.8,castleApproach);
       // The tall beam lights the air above the keep. Its broad reflected amber
       // catches upward ledges, grazing walls and the hill, beyond the small flood
       // volume's reach. Sky occlusion preserves deep recesses; the town stays blue.
       vec3 fromBeacon=vWorld-uBeaconPosition;
       float beaconReach=1.-smoothstep(12.,82.,length(fromBeacon.xz));
       float silhouette=pow(1.-abs(dot(n,normalize(cameraPosition-vWorld))),2.);
-      float reflectedRim=(.18+.82*max(n.y,0.))*(.35+.65*silhouette);
+      float reflectedRim=(mix(.18,.48,castleApproach)+mix(.82,.52,castleApproach)*max(n.y,0.))*(.35+.65*silhouette);
       float aboveCrown=1.-smoothstep(12.,40.,fromBeacon.y);
       beaconAmount+=beaconReach*beaconReach*reflectedRim*aboveCrown*vSky*uBeaconStrength*uNight*2.8;
       // Overlapping warm light shares one soft cap, so lit plaster never clips to white.
