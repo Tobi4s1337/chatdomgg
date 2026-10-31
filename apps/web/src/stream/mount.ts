@@ -107,7 +107,7 @@ export function createSceneMount(hooks: {
       const opened = () => {
         if (!own()) return;
         if (!ready && scene.debug.ready) { ready = true; hooks.onPhase('ready'); }
-        const next = scene.forgeDirecting();
+        const next = scene.momentDirecting();
         if (next !== directing) { directing = next; hooks.onDirecting?.(next); }
         entry.frame = requestAnimationFrame(opened);
       };
