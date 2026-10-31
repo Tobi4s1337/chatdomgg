@@ -17,10 +17,10 @@ export type LandSource = Pick<TerrainArtCandidate, 'bounds' | 'height' | 'corner
  */
 
 /** Fixture palette entries for land the content palette has no swatch for yet. Ids sit far above content's. */
-export const FIXTURE_LAND = { rock: 240, scree: 241, ledge: 242, heath: 243 } as const;
+export const FIXTURE_LAND = { rock: 240, scree: 241, ledge: 242, heath: 243, trodden: 244 } as const;
 
 export const LAND_PALETTE: Readonly<Record<TerrainArtMaterial, number>> = {
-  grass: MAT.grass, heath: FIXTURE_LAND.heath, trail: MAT.earth, paving: MAT.paving,
+  grass: MAT.grass, heath: FIXTURE_LAND.heath, trail: FIXTURE_LAND.trodden, paving: MAT.paving,
   scree: FIXTURE_LAND.scree, rock: FIXTURE_LAND.rock, ledge: FIXTURE_LAND.ledge, waterbed: MAT.waterbed,
 };
 
@@ -29,16 +29,17 @@ export function landRegistry(): MaterialRegistry {
   const like = MATERIALS.materials.find(material => material.id === MAT.earth)!;
   const grass = MATERIALS.materials.find(material => material.id === MAT.grass)!;
   return { ...MATERIALS, materials: [...MATERIALS.materials,
-    { ...like, id: FIXTURE_LAND.rock, name: 'fixture-land-rock', colour: '#8a8072' },
-    { ...like, id: FIXTURE_LAND.scree, name: 'fixture-land-scree', colour: '#76695a' },
-    { ...like, id: FIXTURE_LAND.ledge, name: 'fixture-land-ledge', colour: '#808158' },
-    { ...grass, id: FIXTURE_LAND.heath, name: 'fixture-land-heath', colour: '#727a4c' },
+    { ...like, id: FIXTURE_LAND.rock, name: 'fixture-land-rock', colour: '#7a6857' },
+    { ...like, id: FIXTURE_LAND.scree, name: 'fixture-land-scree', colour: '#5f6143' },
+    { ...like, id: FIXTURE_LAND.ledge, name: 'fixture-land-ledge', colour: '#66703c' },
+    { ...grass, id: FIXTURE_LAND.heath, name: 'fixture-land-heath', colour: '#6b7448' },
+    { ...like, id: FIXTURE_LAND.trodden, name: 'fixture-land-trodden', colour: '#86735a' },
   ] };
 }
 
 /**
- * Land treatment patched into a copy of the kingdom's own terrain shader: faceted normals and soft
- * strata on rock only. Lighting, fog, shadow and light-field terms are untouched.
+ * Land treatment patched into a copy of the kingdom's own terrain shader: faceted normals on rock, banks
+ * and lips, and soft strata on rock faces only. Lighting, fog, shadow and light-field terms are untouched.
  */
 export function createLandMaterial(ground: THREE.ShaderMaterial): THREE.ShaderMaterial {
   const rock = `vMaterial>=${FIXTURE_LAND.rock}u&&vMaterial<=${FIXTURE_LAND.ledge}u`;
@@ -50,13 +51,13 @@ export function createLandMaterial(ground: THREE.ShaderMaterial): THREE.ShaderMa
   const fragmentShader = ground.fragmentShader
     .replace(normalLine, `${normalLine}
       if(${rock}){vec3 facet=normalize(cross(dFdx(vWorld),dFdy(vWorld)));if(dot(facet,n)<0.)facet=-facet;
-        float near=1.-smoothstep(140.,360.,length(cameraPosition-vWorld));n=normalize(mix(n,facet,(vMaterial==${FIXTURE_LAND.ledge}u?.25:.8)*near));}`)
+        float near=1.-smoothstep(140.,360.,length(cameraPosition-vWorld));n=normalize(mix(n,facet,(vMaterial==${FIXTURE_LAND.ledge}u?.25:.6)*near));}`)
     .replace(edgeLine, `${edgeLine}
-      if(${rock}&&vMaterial!=${FIXTURE_LAND.ledge}u){
-        float band=vWorld.y*1.35+.55*sin(vWorld.x*.19+vWorld.z*.13)+1.2*sin((vWorld.x-vWorld.z)*.031);
+      if(vMaterial==${FIXTURE_LAND.rock}u){
+        float band=vWorld.y*.72+.45*sin(vWorld.x*.13+vWorld.z*.09)+1.1*sin((vWorld.x-vWorld.z)*.027);
         float layer=fract(band),course=floor(band);
-        base*=.9+.14*fract(sin(course*12.9898)*43758.5453);
-        edge=mix(.74,1.,smoothstep(.0,.16,layer))*mix(1.06,1.,smoothstep(.75,1.,layer));
+        base*=.88+.16*fract(sin(course*12.9898)*43758.5453);
+        edge=mix(.8,1.,smoothstep(.0,.12,layer))*mix(1.05,1.,smoothstep(.8,1.,layer));
       }`);
   return new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3, uniforms: ground.uniforms, fragmentShader, defines: { ...ground.defines },
