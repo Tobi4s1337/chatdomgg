@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { MAT, MATERIALS } from '@chatdom/content';
 import { geometryFromChunks, type Environment, type VoxelRenderState } from '@chatdom/render';
 import { VoxelWorkerPool } from '@chatdom/voxel';
-import { AVATAR_LOOK_LIMITS, AvatarAttachmentIdSchema, VOXEL_METRES, type AvatarAttachmentId, type AvatarPartBlueprint, type VoxelAsset } from '@chatdom/shared';
-import { attachmentBind, attachmentLocalMatrix, compileAvatarPart, occupiedCells, partPivotMatrix, poseAttachments, type AvatarPose } from '../../../../packages/content/src/avatars';
+import { AVATAR_LOOK_LIMITS, AvatarAttachmentIdSchema, VOXEL_METRES, type AvatarAttachmentId, type AvatarCapeBlueprint, type AvatarPartBlueprint, type VoxelAsset } from '@chatdom/shared';
+import { attachmentBind, attachmentLocalMatrix, compileAvatarPart, occupiedCells, partMatrix, partPivotMatrix, poseAttachments, restPosition, type AvatarPose } from '@chatdom/content/avatars';
 
 export type BenchAngle = 'front' | 'side' | 'back';
 export const BENCH_ANGLES: readonly BenchAngle[] = ['front', 'side', 'back'];
@@ -17,6 +17,8 @@ export interface CitizenStats {
 
 export interface Citizen {
   readonly root: THREE.Group;
+  /** One group per bone and socket; the cape renderer reads the posed `back` group. */
+  readonly attachments: ReadonlyMap<AvatarAttachmentId, THREE.Group>;
   readonly stats: CitizenStats;
   readonly bounds: THREE.Box3;
   dispose(): void;
@@ -92,13 +94,27 @@ export async function createCitizen(pool: VoxelWorkerPool, material: VoxelRender
   if (cells > AVATAR_LOOK_LIMITS.maxOccupiedCells) throw new Error(`The look has ${cells} occupied cells; the limit is ${AVATAR_LOOK_LIMITS.maxOccupiedCells}.`);
   if (triangles > AVATAR_LOOK_LIMITS.maxTriangles) throw new Error(`The look meshes to ${triangles} triangles; the limit is ${AVATAR_LOOK_LIMITS.maxTriangles}.`);
   root.updateMatrixWorld(true);
-  const bounds = new THREE.Box3();
+  return { root, attachments: groups, bounds: restBounds(parts), stats: { parts: parts.length, boxes, occupiedCells: cells, triangles }, dispose: () => geometries.forEach(g => g.dispose()) };
+}
+
+/** Root-local box around a look's parts in the rest pose. */
+export function restBounds(parts: readonly AvatarPartBlueprint[]): THREE.Box3 {
+  const bounds = new THREE.Box3(), matrix = new THREE.Matrix4();
   for (const part of parts) {
-    const mesh = root.getObjectByName(part.id)!;
     const local = new THREE.Box3(new THREE.Vector3(), new THREE.Vector3(...part.size).multiplyScalar(VOXEL_METRES.avatar));
-    bounds.union(local.applyMatrix4(mesh.matrixWorld));
+    bounds.union(local.applyMatrix4(matrix.fromArray(partMatrix(part) as number[])));
   }
-  return { root, bounds, stats: { parts: parts.length, boxes, occupiedCells: cells, triangles }, dispose: () => geometries.forEach(g => g.dispose()) };
+  return bounds;
+}
+
+/**
+ * Root-local framing box for a cape: its hanging span plus room behind for the hem to lift in a stride.
+ * Framing only; the sheet's shape is the cape renderer's.
+ */
+export function capeBounds(cape: AvatarCapeBlueprint): THREE.Box3 {
+  const [, y, z] = restPosition('back').map(n => n * VOXEL_METRES.avatar) as [number, number, number];
+  const top = y + cape.mount.height, back = z - cape.mount.back;
+  return new THREE.Box3(new THREE.Vector3(-cape.width / 2, top - cape.length, back - cape.length * .55), new THREE.Vector3(cape.width / 2, top, back));
 }
 
 /**

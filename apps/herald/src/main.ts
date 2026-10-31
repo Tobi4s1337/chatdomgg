@@ -5,7 +5,7 @@ import { inspectAuthorization } from './auth/authority';
 import { runAuthorize } from './auth/authorize';
 import type { Role } from './auth/grants';
 import { formatAuthorizeOutcome, formatAuthReport, formatObserveProbe } from './cli/report';
-import { loadConfig } from './config';
+import { type HeraldConfig, loadConfig } from './config';
 import { provisionSource } from './ingest/provision';
 import { probeObservedState, type ObserveProbe } from './observe/probe';
 import { type BindingStore, BindingStoreError, FileBindingStore, MemoryBindingStore } from './source/bindings';
@@ -23,10 +23,10 @@ const USAGE = [
   '  authorize --role reader|broadcaster     ask one account for its Herald grant (interactive)',
   '  provision-source [--create-development-conduit]',
   '                                          reuse (or explicitly create) the conduit, attach its shard, reconcile subscriptions',
-  '  dev                                     the real source for the configured channel on 127.0.0.1:5194',
+  '  dev                                     the real source for the configured channel on 127.0.0.1:$HERALD_PORT (5194)',
   `  replay [--scenario ${SCENARIOS.join('|')}] [--kingdom <id>]`,
   '         [--bindings <dir>] [--arrival forward|reverse]',
-  '                                          SIMULATED presence through the same path on 127.0.0.1:5194;',
+  '                                          SIMULATED presence through the same path on 127.0.0.1:$HERALD_PORT (5194);',
   '                                          --bindings keeps its slots in a scratch table to show a restart',
   '  check-source                            verify the source path end to end on a private port (SIMULATED)',
 ];
@@ -42,6 +42,13 @@ function untilSignal(stop: () => Promise<void>): Promise<number> {
     process.on('SIGINT', onSignal);
     process.on('SIGTERM', onSignal);
   });
+}
+
+/** A port setting that does not parse never falls back to 5194, where another checkout's Herald may serve. */
+function portRefused(config: HeraldConfig): boolean {
+  if (!config.problems.some(problem => problem.key === 'HERALD_PORT')) return false;
+  process.stderr.write('herald: HERALD_PORT must be a free unprivileged port other than 5195\n');
+  return true;
 }
 
 function option(args: readonly string[], name: string): string | undefined {
@@ -104,7 +111,9 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   if (command === 'dev') {
-    const handle = await startLiveSource({ config: await loadConfig(), print });
+    const config = await loadConfig();
+    if (portRefused(config)) return 2;
+    const handle = await startLiveSource({ config, print });
     return untilSignal(handle.stop);
   }
 
@@ -118,6 +127,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       return 2;
     }
     const config = await loadConfig();
+    if (portRefused(config)) return 2;
     const layout = presentKingdom(config.kingdom);
     let store: BindingStore = new MemoryBindingStore();
     if (bindings) {
@@ -138,7 +148,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       process.stderr.write(`herald: the scratch binding table cannot be used (${error.fault})\n`);
       return 1;
     }
-    const server = await startPresenceServer({ host: () => source });
+    const server = await startPresenceServer({ host: () => source, port: config.port });
     print(`Herald source · SIMULATED · scenario ${scenario} · http://127.0.0.1:${server.port}/presence-data/stream`);
     print(`  ${SCENARIO_NOTES[scenario as ScenarioName]}`);
     print(`  kingdom ${kingdom.data} · ${layout.config.tier} ${layout.config.firstYear}–${layout.config.year} · ${layout.slots.length} home slots · synthetic people only`);
@@ -164,6 +174,9 @@ export async function main(argv: readonly string[]): Promise<number> {
 main(process.argv.slice(2)).then(code => {
   process.exitCode = code;
 }, (error: unknown) => {
-  process.stderr.write(`herald: ${error instanceof Error ? error.name : 'Error'} (details withheld)\n`);
+  if ((error as NodeJS.ErrnoException | null)?.code === 'EADDRINUSE') {
+    // Started before any Twitch call, so a second Herald never takes the conduit shard from the one serving.
+    process.stderr.write('herald: the port is in use (is the kingdom\'s Herald already serving?); set HERALD_PORT for this run\n');
+  } else process.stderr.write(`herald: ${error instanceof Error ? error.name : 'Error'} (details withheld)\n`);
   process.exitCode = 1;
 });

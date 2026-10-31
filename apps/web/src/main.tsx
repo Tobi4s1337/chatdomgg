@@ -20,7 +20,10 @@ const lanePaths: Record<string, string> = {
   '/-/avatars': './avatar-bench/index.tsx', '/-/forge': './forge-bench/index.tsx', '/-/audio': './audio-bench/index.tsx',
 };
 const loadLane = laneViews[lanePaths[window.location.pathname] ?? ''];
-if (loadLane) {
+if (window.location.pathname === '/-/realm') {
+  const { default: RealmReference } = await import('./realm-reference');
+  render(() => <RealmReference />, root);
+} else if (loadLane) {
   const module = await loadLane();
   render(() => <module.default />, root);
 } else if (window.location.pathname==='/-/content') {
@@ -29,6 +32,15 @@ if (loadLane) {
 } else if (/^\/map(?:\/|$)/.test(window.location.pathname) && loadAtlas) {
   const module = await loadAtlas();
   render(() => <module.default />, root);
+} else if (new URLSearchParams(location.search).get('walk') === '1') {
+  const [{ default: KingdomEntry }, { openSimulatedKingdomEntry }] = await Promise.all([
+    import('./kingdom-entry'), import('./kingdom-entry/simulated'),
+  ]);
+  // This stand-in is explicit. A live/session entry never silently becomes a simulated citizen.
+  const simulated = new URLSearchParams(location.search).get('source') === 'simulated';
+  render(() => <KingdomEntry open={simulated ? openSimulatedKingdomEntry : async () => {
+    throw new Error('The founded kingdom entry is not available yet.');
+  }} />, root);
 } else {
   if(window.location.pathname==='/panel') {
     render(() => <App />, root);

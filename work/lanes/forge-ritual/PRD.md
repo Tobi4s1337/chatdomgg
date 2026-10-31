@@ -15,7 +15,7 @@ serially; no independent Chromium alongside another capture. Keep every fixture 
 
 ## Tasks
 
-- [ ] **FR01 — Watch actual words gather into a house-part blueprint** · evidence: runnable bench + phone/desktop shots.
+- [x] **FR01 — Watch actual words gather into a house-part blueprint** · evidence: runnable bench + phone/desktop shots.
   Build the approved visual adapter and self-contained bench around main's real validated part clone. Deliver
   finished rune gathering, silhouette blueprint, calm held-stage behavior, clear/dispose and reduced-motion
   foundations. Expose only the stages actually completed; do not wire empty later cues as success. Capture and

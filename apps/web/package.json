@@ -19,7 +19,8 @@
     "three": "0.186.1",
     "@chatdom/vox-import": "workspace:*",
     "@chatdom/forge": "workspace:*",
-    "@chatdom/audio": "workspace:*"
+    "@chatdom/audio": "workspace:*",
+    "@colyseus/sdk": "0.18.8"
   },
   "devDependencies": {
     "@types/three": "0.186.0",

@@ -412,3 +412,14 @@ These belong to other owners:
   coordinates the reusable painted-room treatment; missing producer evidence stays visibly pending. A small kingdom's live castle sequence completes without
   an audience-strength threshold. Capture readiness comes from real completed work. The team integrator owns
   lane integration, and main judges the announced candidate.
+- **2026-10-30 — Glass (KL04).** The registry's glass stays `solid` and becomes non-occluding for faces, AO and light
+  (registry revision 4); no palette, packing or protocol change. The shared clay pass stays opaque: glass fragments
+  write fractional alpha-to-coverage (sky reflection, Fresnel, sun glint), so the meshed reveal and room show
+  through with no sorting and no second shell; without a multisampled target the same coverage becomes a 4×4 ordered
+  pattern. Sun casters built from a voxel material discard the glass kind, so frames and walls still cast. Sight
+  rays treat `surface: glass` like air. In the half-metre field a cell reached by a *glazed* opening (its glass and
+  the air carves that meet it) is open only when no light blocker survives anywhere inside it, sampled exactly at
+  build-cell centres; unglazed partial carves keep the conservative "carve must enclose the cell" rule and the
+  two-metre fields are unchanged. Consequence: an unmullioned light wider than half a metre passes warmth both ways;
+  a mullioned 8-cell window's two 0.375 m lights stay closed in the field (honest at that grid, still projected
+  outward). The presence pane is a translucent layer over the real glass (street side warm, room side a faint sheen).
