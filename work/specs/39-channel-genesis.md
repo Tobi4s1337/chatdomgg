@@ -237,3 +237,10 @@ main's handoff rather than being mistaken for a completed Atlas feature.
 - [Organic towns](../references/organic-towns.md): persistent connected streets and local outward growth.
 - [Spec 38: founded kingdom](38-founded-kingdom.md): exact adopted plans, approved public scenes, collision and
   immutable scene receipts. Entry never implicitly founds.
+
+### Rendered terrain bounds
+
+The heightfield shader replaces packed voxel-owner height with the sampled surface. Its mesh bounds enclose
+those actual rendered corner heights; the former two-metre displacement shortcut is not a landscape slope
+limit. Natural slopes retain their shape. Continuous spring/coast joins and dry bridge banks are authored
+landform rules, while occupied column ownership remains on the existing voxel lattice.
