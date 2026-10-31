@@ -3,14 +3,16 @@ import { z } from 'zod';
 import { CitizenChatCueSchema, KingdomIdSchema, PresenceInputSchema, type CitizenChatCue, type KingdomId, type PresenceInput } from '@chatdom/shared';
 import { digestOf } from '../persistence/codec';
 import type { IngressService } from './transition';
+import { RealmSupportObservationSchema, type RealmSupportObservation } from '@chatdom/shared/realm';
 
 /** A service credential must carry at least this much secret. Shorter configuration is refused at startup. */
 export const INGRESS_SECRET_MIN = 32;
 
 /**
- * What each authenticated service may report. Ingress only ever grants the `presence` capability: allocation,
+ * What each authenticated service may report as presence. Ingress only ever grants the `presence` capability: allocation,
  * publication, moderation and Forge commands never enter through this door, and no service may hand the realm a
  * domain command, a receipt or a credit. Qualified-night credit is derived inside the transaction from evidence.
+ * A separate Herald-only normalized support branch commits through its own moment record transaction.
  */
 const GRANTS: Record<IngressService, (input: PresenceInput) => boolean> = {
   // Herald watches Twitch: the stream itself, the Chatters roster, chat activity and Chatdom's moderation holds.
@@ -50,14 +52,16 @@ export interface AdmittedObservation {
 }
 /** Witnessed speech for the room's transient channel. It is relayed, never stored. */
 export interface AdmittedCue { readonly kind: 'cue'; readonly service: 'herald'; readonly kingdomId: KingdomId; readonly cue: CitizenChatCue }
+export interface AdmittedSupport { readonly kind: 'support'; readonly service: 'herald'; readonly observation: RealmSupportObservation }
 
 export type Admission =
-  | { readonly ok: true; readonly admitted: AdmittedObservation | AdmittedCue }
+  | { readonly ok: true; readonly admitted: AdmittedObservation | AdmittedCue | AdmittedSupport }
   | { readonly ok: false; readonly status: 'unauthenticated' | 'refused'; readonly message: string };
 
 const EnvelopeSchema = z.union([
   z.strictObject({ version: z.literal(1), observation: z.unknown() }),
   z.strictObject({ version: z.literal(1), cue: z.unknown() }),
+  z.strictObject({ version: z.literal(1), support: z.unknown() }),
 ]);
 
 /**
@@ -88,6 +92,12 @@ export class IngressGate {
     if (!service) return { ok: false, status: 'unauthenticated', message: 'This service is not known to the realm.' };
     const envelope = EnvelopeSchema.safeParse(body);
     if (!envelope.success) return { ok: false, status: 'refused', message: 'Send { version: 1, observation } or { version: 1, cue }.' };
+    if ('support' in envelope.data) {
+      if (service !== 'herald') return { ok: false, status: 'refused', message: 'Only Herald reports support acts.' };
+      const support = RealmSupportObservationSchema.safeParse(envelope.data.support);
+      if (!support.success || support.data.origin !== this.origin) return { ok: false, status: 'refused', message: 'Support evidence is invalid or belongs to another origin.' };
+      return { ok: true, admitted: { kind: 'support', service, observation: support.data } };
+    }
     if ('cue' in envelope.data) {
       if (service !== 'herald') return { ok: false, status: 'refused', message: 'Only Herald relays witnessed speech.' };
       const cue = CitizenChatCueSchema.safeParse(envelope.data.cue);

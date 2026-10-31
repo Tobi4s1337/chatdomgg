@@ -3,6 +3,10 @@
 The source format is `VoxelBlueprint` from `@chatdom/shared`. Blueprints are pure deterministic TypeScript:
 version 1, build lattice (0.125 m), half-open integer XYZ boxes, a registered `styleId`, and explicit window
 anchors. Box order matters: material zero carves earlier solids. Do not add fields to the strict schema.
+Main has frozen optional `seats` on civic blueprints for public benches: local build-cell `position`, supported
+standing `approach`, seated animation-root `rest`, quarter-turn `facing` and unique local `id`. These contacts
+travel with the approved asset; the room derives targets only from its installed placement. They do not grant
+tavern/game seats or belong on homes. Existing assets omit the field and retain their exact bytes.
 `src/materials.ts` owns all material IDs and the Hearth, Tide and Grove kits. No authored color literals,
 registry mutations, baked emissive windows, clock, network or global randomness belong in asset factories.
 

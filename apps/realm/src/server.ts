@@ -7,7 +7,18 @@ import type { RealmRoomServices } from './ports';
 
 /** The uWS transport with its open sockets readable for backpressure sampling (`getBufferedAmount` only). */
 export class RealmTransport extends uWebSocketsTransport {
+  private closed = false;
+  /** Native uWS has no Node HTTP server `close` event. This is the listener, never a client's socket. */
+  onListenerClosed: (() => void) | undefined;
   get sockets(): Iterable<{ getBufferedAmount(): number }> { return this.clients; }
+
+  override shutdown() {
+    // The upstream transport retains its native socket pointer after close; closing it twice is unsafe.
+    if (this.closed) return;
+    this.closed = true;
+    super.shutdown();
+    this.onListenerClosed?.();
+  }
 }
 
 /**

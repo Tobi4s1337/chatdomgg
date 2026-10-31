@@ -15,6 +15,7 @@ import { createRealmCastle } from './evening/castle';
 import { attachEveningInteractions } from './evening/interactions';
 import { createServer as createPortReservation } from 'node:net';
 import { realmListenPort } from './listen-port';
+import { ownRealmShutdown } from './lifecycle';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -87,7 +88,10 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const { server, transport } = boot.createServer({ mountIngress: app => mountEveningRoutes(app, evening) });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
-  server.onShutdown(async () => { await evening.stop(); await boot.stop(); await pool.end(); });
+  ownRealmShutdown(server, transport, async () => {
+    try { await evening.stop(); }
+    finally { try { await boot.stop(); } finally { await pool.end(); } }
+  });
   try {
     await boot.readiness.start();
     await releasePort();
@@ -101,6 +105,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
 async function serveMemoryReference(releasePort: () => Promise<void>, port: number) {
   const services = referenceServices();
   const { server, transport } = createRealmServer(services);
+  ownRealmShutdown(server, transport, async () => {});
   transport.app.post('/reference/session', response => {
     response.writeHeader('Access-Control-Allow-Origin', '*').writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(services.issue()));
   });

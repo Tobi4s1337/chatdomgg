@@ -1,9 +1,11 @@
 import { TokenSchema, type CitizenChatCue, type KingdomId, type PersonId, type PresenceInput } from '@chatdom/shared';
 import { z } from 'zod';
+import type { RealmSupportObservation } from '@chatdom/shared/realm';
 
 /** Optional private service port. Producers pass only normalized, already verified observations. */
 export interface RealmDeliverySink {
   observation(input: PresenceInput): Promise<void>;
+  support?(input: RealmSupportObservation): Promise<void>;
   speech(input: { readonly kingdomId: KingdomId; readonly personId: PersonId; readonly messageId: string;
     readonly observedAt: number; readonly parts: CitizenChatCue['parts']; readonly words: string | null }, current: () => boolean): void;
   remove(kingdomId: KingdomId, messageId: string): void;

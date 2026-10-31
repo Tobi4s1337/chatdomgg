@@ -6,6 +6,7 @@ import type { KingdomPresenceFrame } from '../presence';
 import type { ForgeActivity, CommittedForgeAttachment } from './forge-authority';
 import type { CitizenChatCue } from '../citizen-chat';
 import type { RealmInteractionState, RealmSeat } from './interactions';
+import type { TwitchMomentFact } from '../twitch-moments';
 
 export function kingdomRoomId(kingdom: KingdomId | string): `k:${string}` {
   return `k:${KingdomIdSchema.parse(kingdom)}`;
@@ -46,6 +47,10 @@ export type RealmReceipt =
 
 /** Public domain delivery is separate from the small movement schema; never send raw private facts. */
 export type RealmPublicMessage =
+  /** Only committed, disclosure-filtered facts. `current` keeps lasting state in the next quiet checkpoint. */
+  | { readonly type: 'moment'; readonly fact: TwitchMomentFact; readonly current: boolean }
+  /** Checkpoint only: never a request to animate historical events. */
+  | { readonly type: 'moments.current'; readonly throughSeq: number; readonly facts: readonly TwitchMomentFact[] }
   | { readonly type: 'presence'; readonly frame: KingdomPresenceFrame }
   | { readonly type: 'forge'; readonly event: ForgeActivity }
   | { readonly type: 'home'; readonly plotId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] }
@@ -76,7 +81,7 @@ export type RealmPrivateMessage =
 
 export interface RealmInteractionTarget {
   readonly id: string;
-  readonly kind: 'campfire-seat' | 'anvil' | 'tavern-seat' | 'home-door' | 'home-exit';
+  readonly kind: 'bench-seat' | 'campfire-seat' | 'anvil' | 'tavern-seat' | 'home-door' | 'home-exit';
   readonly position: Vec3; readonly approach: Vec3; readonly reach: number;
   readonly plotId?: string;
 }
