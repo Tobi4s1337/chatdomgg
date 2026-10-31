@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createWalkLook, filterLookDelta, LOOK } from './look';
 
-type Outcome = 'grant' | 'refuse' | 'unsupported-raw' | 'throw';
+type Outcome = 'grant' | 'refuse' | 'throw';
 function harness(outcomes: Outcome[] = []) {
   let now = 1000;
   const requests: ({ unadjustedMovement?: boolean } | undefined)[] = [];
@@ -19,7 +19,6 @@ function harness(outcomes: Outcome[] = []) {
       requests.push(options);
       const outcome = outcomes.shift() ?? 'grant';
       if (outcome === 'throw') throw Object.assign(new Error('blocked'), { name: 'SecurityError' });
-      if (outcome === 'unsupported-raw' && options?.unadjustedMovement) return Promise.reject(Object.assign(new Error('raw'), { name: 'NotSupportedError' }));
       if (outcome === 'refuse') {
         // Chrome both rejects the promise and fires pointerlockerror.
         doc.dispatchEvent(new Event('pointerlockerror'));
@@ -39,7 +38,7 @@ function harness(outcomes: Outcome[] = []) {
   };
   const move = (movementX: number, movementY: number) => doc.dispatchEvent(Object.assign(new Event('mousemove'), { movementX, movementY }));
   const settle = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); pending.splice(0).forEach(fn => fn()); };
-  return { look, doc, surface, keyboard, requests, key, move, settle, advance: (ms: number) => { now += ms; } };
+  return { look, doc, surface, keyboard, requests, key, move, settle, click: () => look.toggle({ type: 'click', isTrusted: true, detail: 1 }), advance: (ms: number) => { now += ms; } };
 }
 
 describe('mouse look', () => {
@@ -55,12 +54,12 @@ describe('mouse look', () => {
     expect(filterLookDelta(-180, 99, 500)).toEqual({ dx: -100, dy: 99 });
   });
 
-  it('opts in with V, ignores the settle window and warps, and gathers every event of a slow frame', async () => {
-    const { look, key, move, settle, advance, requests } = harness();
+  it('opts in with a real pointer click, ignores the settle window and warps, and gathers every event of a slow frame', async () => {
+    const { look, click, move, settle, advance, requests } = harness();
     expect(look.mode).toBe('free');
-    expect(key('KeyV').defaultPrevented).toBe(true);
+    click();
     expect(look.mode).toBe('requesting');
-    expect(requests).toEqual([{ unadjustedMovement: true }]);
+    expect(requests).toEqual([undefined]);
     await settle();
     expect(look.mode).toBe('locked');
     move(140, 0); advance(60); move(30, 0);
@@ -72,83 +71,89 @@ describe('mouse look', () => {
     expect(look.takeLook()).toEqual({ dx: 0, dy: 0 });
   });
 
-  it('gives the cursor back on Escape, V, blur and when disabled for a menu', async () => {
-    const { look, doc, key, move, settle, advance, keyboard } = harness();
-    key('KeyV'); await settle(); advance(200);
+  it('gives the cursor back on Escape, click, blur and when disabled for a menu', async () => {
+    const { look, doc, key, click, move, settle, advance, keyboard } = harness();
+    click(); await settle(); advance(200);
     move(10, 0);
     key('Escape');
     expect([look.mode, doc.pointerLockElement, look.takeLook().dx]).toEqual(['free', null, 0]);
-    key('KeyV'); await settle(); expect(look.mode).toBe('locked');
-    key('KeyV'); expect([look.mode, doc.pointerLockElement]).toEqual(['free', null]);
-    key('KeyV'); await settle();
+    click(); await settle(); expect(look.mode).toBe('locked');
+    click(); expect([look.mode, doc.pointerLockElement]).toEqual(['free', null]);
+    click(); await settle();
     keyboard.dispatchEvent(new Event('blur'));
     expect([look.mode, doc.pointerLockElement]).toEqual(['free', null]);
-    key('KeyV'); await settle();
+    click(); await settle();
     look.setEnabled(false);
     expect([look.mode, doc.pointerLockElement]).toEqual(['free', null]);
     expect(key('KeyV').defaultPrevented).toBe(false);
     expect(look.mode).toBe('free');
     look.setEnabled(true);
     // The browser's own unlock (its Escape) is followed too.
-    key('KeyV'); await settle(); doc.exitPointerLock();
+    click(); await settle(); doc.exitPointerLock();
     expect(look.mode).toBe('free');
   });
 
   it('falls back to drag on a refused lock, never on a fast flick, and a later lock clears it', async () => {
-    const { look, key, move, settle, advance } = harness(['grant', 'refuse', 'grant']);
-    key('KeyV'); await settle(); advance(200);
+    const { look, key, click, move, settle, advance } = harness(['grant', 'refuse', 'grant']);
+    click(); await settle(); advance(200);
     // A violent flick is discarded but never switches the mode.
     for (let n = 0; n < 20; n++) move(n % 2 ? 900 : -900, 400);
     expect([look.mode, look.takeLook()]).toEqual(['locked', { dx: 0, dy: 0 }]);
     key('Escape');
     // Chrome refuses a re-lock right after Escape.
-    key('KeyV'); await settle();
+    click(); await settle();
     expect(look.mode).toBe('fallback');
     move(50, 0);
     expect(look.takeLook().dx).toBe(0);
     key('Escape'); expect(look.mode).toBe('fallback');
-    // A later V retries, lands, and the fallback is gone; the settle window starts again.
-    key('KeyV'); expect(look.mode).toBe('requesting');
+    // A later click retries, lands, and the fallback is gone; the settle window starts again.
+    click(); expect(look.mode).toBe('requesting');
     await settle();
     expect(look.mode).toBe('locked');
     move(40, 0); expect(look.takeLook().dx).toBe(0);
     advance(130); move(40, 0); expect(look.takeLook().dx).toBe(40);
   });
 
-  it('retries without raw movement where it is unsupported, and survives a throwing request', async () => {
-    const raw = harness(['unsupported-raw']);
-    raw.key('KeyV'); await raw.settle();
-    expect(raw.requests).toEqual([{ unadjustedMovement: true }, undefined]);
-    expect(raw.look.mode).toBe('locked');
+  it('makes only one standard request per click and quietly survives rejection or a throwing request', async () => {
+    const refused = harness(['refuse']);
+    refused.click(); await refused.settle();
+    expect(refused.requests).toEqual([undefined]);
+    expect(refused.look.mode).toBe('fallback');
+    for (let n = 0; n < 20; n++) refused.key('KeyV');
+    await refused.settle();
+    expect(refused.requests).toHaveLength(1);
     const thrown = harness(['throw']);
-    thrown.key('KeyV');
+    thrown.click();
     expect(thrown.look.mode).toBe('fallback');
   });
 
   it('hands back a lock that lands after the walker let go, and ignores late refusals', async () => {
-    const { look, doc, key, settle } = harness();
-    key('KeyV');
+    const { look, doc, click, settle } = harness();
+    click();
     look.setEnabled(false);
     await settle();
     expect([look.mode, doc.pointerLockElement]).toEqual(['free', null]);
   });
 
-  it('never hears V from a text field, a repeat, or a shortcut', () => {
-    const { look, key } = harness();
+  it('never acquires from keyboard activation, synthetic clicks, V or a text field', () => {
+    const { look, key, requests } = harness();
     key('KeyV', { target: { tagName: 'INPUT', type: 'text' } });
     key('KeyV', { repeat: true });
+    look.toggle({ type: 'click', isTrusted: true, detail: 0 });
+    look.toggle({ type: 'click', isTrusted: false, detail: 1 });
     expect(look.mode).toBe('free');
+    expect(requests).toHaveLength(0);
   });
 
   it('reports each change once and stops on dispose', async () => {
-    const { look, key, settle, doc } = harness();
+    const { look, click, settle, doc } = harness();
     const seen: string[] = [];
     look.onChange(mode => seen.push(mode));
-    key('KeyV'); await settle();
+    click(); await settle();
     look.dispose();
     expect(seen).toEqual(['requesting', 'locked', 'free']);
     expect(doc.pointerLockElement).toBeNull();
-    key('KeyV');
+    click();
     expect(look.mode).toBe('free');
   });
 });

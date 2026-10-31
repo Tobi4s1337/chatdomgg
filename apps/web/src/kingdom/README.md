@@ -1,7 +1,22 @@
 # The kingdom scene and walking
 
-Main owns composition here. Entry/public-state adapters stay in the realm-wiring lane; immutable scene and
-collision production stay in realm-server-world. This is the existing dusk kingdom, not another court renderer.
+Main owns composition and the remaining realm implementation; the realm lanes are parked. The world lanes
+continue their places, art and polish. This is the existing dusk kingdom, not another court renderer.
+
+The spectator’s **Walk the street** button opens `/?walk=1`; an attached walker resumes in place after an
+overview. The citizen camera preset remains available to stream/capture consumers. The root `/?walk=1` mounts `KingdomEntry` from `../kingdom-entry`. Its `KingdomEntrySource` returns one
+checked connection bundle: scene, manifest, collision, client, room presence feed, approved public kingdom name
+and disposal. Entry owns cancellation, retry and geometry-remount lifetime; it disposes the drawn kingdom before
+the network connection. Wiring supplies this source, rather than installing the older scene patch recipe.
+
+`/?walk=1&source=simulated&hour=19.5` now opens the complete founded geometry through this boundary.
+Run `node scripts/kingdom-entry-preview.mjs --simulated` from the repo root on owned port 5187; the web preview
+proxies HTTP/WebSocket at `/realm-data`. The server assembles the exact plan once, serves its hash-addressed
+bytes and compiles the same complete collision world as the browser through `@chatdom/world/founded-collision`.
+Homes, garden edges, market, castle and groves are actual solids; only space beyond the supplied world blocks.
+This rehearsal still uses synthetic identities/presence and memory authority, saves nothing and grants no live
+identity or publication. Live entry never falls back to it. The durable producer/loader and safe-anchor recipe
+are in `apps/realm/src/founded/README.md`. The accepted plan has no pier or tavern yet, so this is not the final tour.
 
 `Kingdom` accepts `{ founded?: RealmFoundedScene, presenceFeed?: PresenceFeed, walk?: KingdomWalkBinding }`.
 The entry adapter fetches the current manifest, verifies the exact scene bytes/hash and producer validation,

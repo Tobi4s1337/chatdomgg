@@ -7,9 +7,12 @@
     ".": "./src/index.ts",
     "./movement": "./src/movement/step.ts",
     "./realm-reference": "./src/realm/reference.ts",
-    "./realm": "./src/realm/reducer.ts"
+    "./realm": "./src/realm/reducer.ts",
+    "./interactions": "./src/interactions/index.ts",
+    "./founded-collision": "./src/founded-world/collision.ts"
   },
   "dependencies": {
-    "@chatdom/shared": "workspace:*"
+    "@chatdom/shared": "workspace:*",
+    "@chatdom/voxel": "workspace:*"
   }
 }

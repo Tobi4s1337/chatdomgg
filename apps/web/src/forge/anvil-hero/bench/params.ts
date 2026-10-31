@@ -1,7 +1,7 @@
 export const BENCH_VIEWS = ['anvil-close', 'anvil-square', 'dragon-close', 'dragon-square'] as const;
 export type BenchView = typeof BENCH_VIEWS[number];
 /** Views whose geometry exists. The others fail visibly rather than showing an old stand-in. */
-export const BUILT_VIEWS: readonly BenchView[] = ['anvil-close', 'anvil-square'];
+export const BUILT_VIEWS: readonly BenchView[] = ['anvil-close', 'anvil-square', 'dragon-close', 'dragon-square'];
 export const BENCH_STYLES = ['hearth', 'tide', 'grove'] as const;
 export type BenchStyle = typeof BENCH_STYLES[number];
 
@@ -27,7 +27,7 @@ export function parseBench(search: string): BenchState {
   for (const key of params.keys()) if (!known.has(key)) throw new Error(`Unknown bench input "${key}". Use view, style, hour, heat or time.`);
   for (const key of known) if (params.getAll(key).length > 1) throw new Error(`Give ${key} once.`);
   const view = pick(params, 'view', BENCH_VIEWS, 'anvil-close');
-  if (!BUILT_VIEWS.includes(view)) throw new Error(`The sleeping dragon is not carved yet. Choose ${BUILT_VIEWS.join(' or ')}.`);
+  if (!BUILT_VIEWS.includes(view)) throw new Error(`The ${view} view is not carved yet. Choose ${BUILT_VIEWS.join(', ')}.`);
   const style = pick(params, 'style', BENCH_STYLES, 'hearth');
   const hour = params.get('hour') ?? '19';
   if (!/^(?:1?\d|2[0-3])$/.test(hour)) throw new Error(`Unknown hour "${hour}". Choose a whole hour 0..23.`);
