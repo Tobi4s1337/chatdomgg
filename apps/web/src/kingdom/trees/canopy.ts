@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { CanopyMotion } from '../../../../../packages/content/src/trees';
+import type { CanopyMotion } from '@chatdom/content/trees';
 
 /**
  * The quiet breeze in the crowns. One displacement function of a point's position in its tree, written twice: in GLSL

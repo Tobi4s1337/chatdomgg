@@ -1,5 +1,5 @@
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
-import { selectTree, type CanopyMotion, type PictureTree, type StyleFamily, type TreeSpecies } from '../../../../../packages/content/src/trees';
+import { selectTree, type CanopyMotion, type PictureTree, type StyleFamily, type TreeSpecies } from '@chatdom/content/trees';
 import type { GroundPiece } from '../ground-dressing/plan';
 
 const CELL = 0.125;

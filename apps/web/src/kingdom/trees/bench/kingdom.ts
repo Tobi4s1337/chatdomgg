@@ -23,7 +23,7 @@ import { createGroundDressing } from '../../ground-dressing/mount';
 import { planAdoptedCover } from '../../ground-dressing/adopted-cover';
 import { attachCanopy, createCanopyMaterial } from '../canopy';
 import { groveBatches, plantGrove } from '../plant';
-import type { CanopyMotion, StyleFamily } from '../../../../../../packages/content/src/trees';
+import type { CanopyMotion, StyleFamily } from '@chatdom/content/trees';
 import { existingTreeSites, toTreeSites } from './sites';
 
 type BenchWindow = Window & { __chatdomReady?: boolean; __treeKingdom?: unknown };

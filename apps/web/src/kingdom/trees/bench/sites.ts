@@ -4,7 +4,7 @@
 // grove on the sites the live picture plants today, so the before/after compare like with like.
 import type { Vec3 } from '@chatdom/shared';
 import { randomUnit, samplePublicGround, seedHash, type SettlementPlan } from '@chatdom/world';
-import type { StyleFamily } from '../../../../../../packages/content/src/trees';
+import type { StyleFamily } from '@chatdom/content/trees';
 import type { TreeSite } from '../plant';
 
 export interface ExistingSite { id: string; kind: 'court' | 'grove'; x: number; z: number; variant: number }

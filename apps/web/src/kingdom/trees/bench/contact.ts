@@ -6,7 +6,7 @@ import { MAT, MATERIALS } from '@chatdom/content';
 import { createVoxelMaterial, geometryFromChunks, getEnvironment } from '@chatdom/render';
 import type { VoxelBlueprint } from '@chatdom/shared';
 import { VoxelWorkerPool } from '@chatdom/voxel';
-import { createPictureTree, TREE_SPECIES, TREE_VARIANTS, type StyleFamily, type TreeSpecies } from '../../../../../../packages/content/src/trees';
+import { createPictureTree, TREE_SPECIES, TREE_VARIANTS, type StyleFamily, type TreeSpecies } from '@chatdom/content/trees';
 
 type BenchWindow = Window & { __chatdomReady?: boolean; __treeSheet?: unknown };
 const query = new URLSearchParams(location.search);

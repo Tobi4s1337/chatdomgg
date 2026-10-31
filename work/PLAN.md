@@ -334,16 +334,21 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
 beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current:** AS10 whole citizens0b11c76 merged and adopted in kingdom/stream/observed/self walkers.
-Six existing presence look IDs; exact linear vertex dyes inherit kingdom lighting/fog/AO. Shoulders±4
-are render-local; shared rig/sockets/schema untouched. Two existing thin cloth capes survive. Card painter
-uses the same canonical recipes. `shots/magic/avatar-runtime-pair.png` viewed at1920×1080 HIGH,
-hour19.5/time12: sharp hair/hats/plaid replace rounder citizens, accepted light/pools unchanged.
-`avatar-runtime-card.png` viewed at1440×900: purple portrait arch fits. Typecheck/scoped lint/17 focused
-tests/web build pass; no browser errors, capture resources released. Next: goggled deep-skin eyes need
-clearer contrast; ankle joins at maximum stride need a motion look. Live card/panel portrait asset delivery
-still needs its host binding; only painter/bench updated. Saved/equip/earned authority unchanged.
-Chosen reference/spec49/PRD81eab8f, A/B/C rejected. Render seam decision in avatar-style/contract-proposal.md.
+**Current:** PT10 a7d5253 merged; the generated kingdom now plants the full picture-tree family on the
+same court/grove sites, with willows by water, rare elders, quiet canopy wind and LOD-2 shadows.
+Accepted distant grove air736ee93 inherited. `shots/magic/picture-grove-pair.png` viewed at1920×1080
+HIGH, hour19.5/time25: broader irregular crowns frame the hill; light/camera/roads unchanged. Typecheck,
+scoped lint,18 tree tests and web build pass; no browser errors, capture resources released. Founded
+installed content remains authoritative (no replacement planting); its compiled trees still need the same
+art adoption. Next visible fix: road life at wide scale, actual present people on existing routes, never
+fake live traffic. Current quiet market routines and late SIMULATED arrivals are the existing seams.
+
+AS10 whole citizens0b11c76 adopted in kingdom/stream/observed/self walkers in e2a9100. Six stable
+presence look IDs use exact painted recipes/kingdom light; render-local shoulders±4, two thin cloth capes.
+`avatar-runtime-pair.png` and `avatar-runtime-card.png` viewed. Live card/panel portrait asset delivery
+still needs host binding; only painter/bench updated. Goggled deep-skin eyes need clearer contrast;
+ankle joins need a motion look. Builder stays with the avatar lane. Reference/spec49/PRD81eab8f,
+A/B/C rejected; decisions in avatar-style/contract-proposal.md. Shared save/equip authority unchanged.
 
 **Picture carried forward:**736ee93 gives static groves horizon dusk air beyond220m; `grove-air-pair.png`
 viewed, far-right grove loses definition.2f854d9 restores carried pools using existing exact-air projection,
