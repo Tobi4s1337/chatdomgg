@@ -11,6 +11,7 @@ import { buildBounds } from '../../build/composition';
 import { createForgeEmitters } from '../emitters';
 import { createForgePresentation, type ForgePresentation } from '../presentation';
 import { createForgeRitualView } from '../ritual-view';
+import { createLandingMaterial } from './landing-light';
 
 export interface RealmForgeSceneOptions {
   scene: THREE.Scene;
@@ -40,6 +41,7 @@ interface Casting {
   started: number | null;
   landed: boolean;
   landedAt: number | null;
+  light: ReturnType<typeof createLandingMaterial>;
 }
 
 /** This is a room-event presentation sink. It never creates or persists an attachment. */
@@ -52,7 +54,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
   options.scene.add(effects);
   const emitters = createForgeEmitters(options.scene);
   const seen = new Set<string>(), completedActivities = new Set<string>(), queue: CommittedForgeAttachment[] = [];
-  const standing = new Map<string, { attachment: CommittedForgeAttachment; position: THREE.Vector3; kind: 'smoke' | 'glow' }>();
+  const standing = new Map<string, { attachment: CommittedForgeAttachment; position: THREE.Vector3; kind: 'smoke' | 'glow'; direction?: THREE.Vector3 }>();
   const stages = new Map<string, { stage: string; started: number }>();
   const focusPoint = options.anvil.clone();
   const anvilFace = options.anvil.clone().add(new THREE.Vector3(0, 1.43, 0));
@@ -79,7 +81,9 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       if (!result.emitterKind) return;
       const position = new THREE.Vector3(...result.emitter).add(new THREE.Vector3(...attachment.origin))
         .multiplyScalar(VOXEL_METRES.build).applyAxisAngle(new THREE.Vector3(0, 1, 0), home.yaw).add(new THREE.Vector3(...home.position));
-      standing.set(attachment.id, { attachment, position, kind: result.emitterKind });
+      const direction = attachment.draft.plan.motif === 'sleeping-dragon'
+        ? new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), home.yaw) : undefined;
+      standing.set(attachment.id, { attachment, position, kind: result.emitterKind, ...(direction ? { direction } : {}) });
     } catch { /* An invisible or superseded host has no standing emitter in this scene. */ }
   }
 
@@ -89,6 +93,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     current.unshadow?.();
     options.scene.remove(current.mesh);
     current.mesh.geometry.dispose();
+    current.light.dispose();
     options.hideAttachment(current.attachment.id, false);
     current = null;
   }
@@ -102,6 +107,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     options.hideAttachment(attachment.id, true);
     let geometry: THREE.BufferGeometry | undefined;
     let mesh: THREE.Mesh | undefined;
+    let light: ReturnType<typeof createLandingMaterial> | undefined;
     try {
       const { home, result } = assembled(attachment);
       const output = await options.pool.submit({ kind: 'blueprint', blueprint: result.blueprint, materials: MATERIALS.materials, materialRevision: MATERIALS.revision, revision: ++revision });
@@ -112,7 +118,8 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       geometry = geometryFromChunks(output.chunks, 'build');
       const destination = new THREE.Vector3(...attachment.origin).multiplyScalar(VOXEL_METRES.build)
         .applyAxisAngle(new THREE.Vector3(0, 1, 0), home.yaw).add(new THREE.Vector3(...home.position));
-      mesh = new THREE.Mesh(geometry, options.material.material);
+      light = createLandingMaterial(options.material.material);
+      mesh = new THREE.Mesh(geometry, light.material);
       mesh.name = `realm-forge-clone:${attachment.id}`;
       mesh.position.copy(destination); mesh.rotation.y = home.yaw; mesh.frustumCulled = false;
       options.scene.add(mesh); mesh.updateMatrixWorld(true);
@@ -121,10 +128,11 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       const bounds = buildBounds(result.blueprint);
       const homeBounds = buildBounds(home.blueprint).union(bounds.clone().translate(new THREE.Vector3(...attachment.origin).multiplyScalar(VOXEL_METRES.build)));
       current = { attachment, home, result, bounds, homeBounds, destination, mesh, presentation,
-        unshadow: options.registerShadow?.(mesh), started: receivedClock ? now : null, landed: false, landedAt: null };
+        unshadow: options.registerShadow?.(mesh), started: receivedClock ? now : null, landed: false, landedAt: null, light };
     } catch {
       if (mesh) options.scene.remove(mesh);
       geometry?.dispose();
+      light?.dispose();
       // Geometry failure is not a failed room commit: its static attachment stays authoritative.
       options.hideAttachment(attachment.id, false);
     } finally {
@@ -196,14 +204,31 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       target.copy(workshop.target); offset.copy(workshop.offset);
     }
     if (casting && frame && (frame.phase === 'flight' || frame.phase === 'landed')) {
-      const home = fit(casting.homeBounds, new THREE.Vector3(...casting.home.position), casting.home.yaw, new THREE.Vector3(-.55, .6, 1));
+      const homePosition = new THREE.Vector3(...casting.home.position);
+      const home = fit(casting.homeBounds, homePosition, casting.home.yaw, new THREE.Vector3(-.3, .44, 1));
       if (frame.phase === 'flight') {
         const progress = THREE.MathUtils.smootherstep(frame.phaseProgress, 0, 1);
         casting.mesh.updateWorldMatrix(true, false);
         target.lerp(casting.mesh.localToWorld(casting.bounds.getCenter(new THREE.Vector3())), Math.min(1, progress * 4));
         target.lerp(home.target, progress);
         offset.lerp(home.offset, progress);
-      } else { target.copy(home.target); offset.copy(home.offset); }
+      } else {
+        // Receive it as a house first. Then a slow, finite move gives the gift
+        // its own portrait, with the eaves still identifying whose roof it is.
+        const roof = casting.bounds.clone().translate(new THREE.Vector3(...casting.attachment.origin).multiplyScalar(VOXEL_METRES.build));
+        const centre = roof.getCenter(new THREE.Vector3());
+        const roofPortrait = roof.clone().expandByVector(new THREE.Vector3(1.7, 1.05, 1.35));
+        roofPortrait.min.y = Math.min(roofPortrait.min.y, casting.homeBounds.max.y * .53);
+        // Leave air above the muzzle for its first curls of smoke.
+        roofPortrait.max.y += 1.1;
+        roofPortrait.min.x = Math.min(roofPortrait.min.x, centre.x - 2.8);
+        roofPortrait.max.x = Math.max(roofPortrait.max.x, centre.x + 2.8);
+        const portrait = fit(roofPortrait, homePosition, casting.home.yaw, new THREE.Vector3(-.16, .12, 1));
+        const age = casting.landedAt === null ? 0 : (now - casting.landedAt) / 1000;
+        const settle = THREE.MathUtils.smootherstep(age, .65, 2.8);
+        target.copy(home.target).lerp(portrait.target, settle);
+        offset.copy(home.offset).lerp(portrait.offset, settle);
+      }
     }
     if (width < 640 && casting && frame?.phase !== 'flight' && frame?.phase !== 'landed') offset.multiplyScalar(1.22);
     focusPoint.copy(target);
@@ -224,7 +249,9 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
         frame = { ...forgeRitualFrame(current.attachment.id, (now - current.started) / 1000), source: current.attachment.provenance.source };
         current.presentation.update(frame);
         if (frame.phase === 'landed') {
-          current.mesh.visible = false;
+          // Keep the identical committed clone for the brief warm welcome;
+          // reveal the room-owned static mesh when this presentation releases it.
+          current.mesh.visible = true;
           if (!current.landed) {
             current.landed = true;
             current.landedAt = now;
@@ -241,10 +268,12 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
                 { position: world(new THREE.Vector3(THREE.MathUtils.clamp(piece.x, homeBounds.min.x, homeBounds.max.x), homeBounds.max.y * .67, homeBounds.max.z + .15)), normal: front, strength: .68 },
               ],
             };
-            options.hideAttachment(current.attachment.id, false);
             options.feed.settled(current.attachment.id);
           }
         }
+        current.light.setWarmth(current.landedAt === null ? 0 :
+          THREE.MathUtils.smoothstep((now - current.landedAt) / 1000, 0, .35) *
+          (1 - THREE.MathUtils.smoothstep((now - current.landedAt) / 1000, 5.5, 8)));
         // Let the new house part breathe after it lands. Walking or another
         // explicit camera owner ends this hold immediately once the ritual ends.
         const landingHold = cameraAllowed ? 6 : 0;

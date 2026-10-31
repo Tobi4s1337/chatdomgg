@@ -8,7 +8,8 @@
   },
   "dependencies": {
     "@chatdom/shared": "workspace:*",
-    "solid-js": "1.9.18"
+    "solid-js": "1.9.18",
+    "@chatdom/ui": "workspace:*"
   },
   "devDependencies": {
     "vite": "8.3.5",

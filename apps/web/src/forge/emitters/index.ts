@@ -5,7 +5,7 @@ export interface ForgeEmitterInput {
   anvil: THREE.Vector3;
   activity: number;
   fillHeight?: number;
-  landed?: { position: THREE.Vector3; kind: 'smoke' | 'glow' }[];
+  landed?: { position: THREE.Vector3; kind: 'smoke' | 'glow'; direction?: THREE.Vector3 }[];
   strike?: number;
   /** One welcome beat, in world coordinates; age is seconds since landing. */
   landingBeat?: { position: THREE.Vector3; age: number; colour?: THREE.ColorRepresentation };
@@ -36,16 +36,17 @@ export function createForgeEmitters(scene: THREE.Scene) {
       transparent: true,
       depthWrite: false,
       blending: mode === 1 || mode === 5 ? THREE.NormalBlending : THREE.AdditiveBlending,
-      uniforms: { uMode: { value: mode }, uColour: { value: new THREE.Color(0xffba60) } },
+      uniforms: { uMode: { value: mode }, uColour: { value: new THREE.Color(0xffba60) }, uPixelScale: { value: 300 } },
       vertexShader: `
         attribute float aSize;
         attribute float aAlpha;
         varying float vAlpha;
+        uniform float uPixelScale;
         void main() {
           vAlpha = aAlpha;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mv;
-          gl_PointSize = min(96.0, aSize * (300.0 / max(0.1, -mv.z)));
+          gl_PointSize = min(96.0, aSize * (uPixelScale / max(0.1, -mv.z)));
         }
       `,
       fragmentShader: `
@@ -75,7 +76,7 @@ export function createForgeEmitters(scene: THREE.Scene) {
             // A soft union of offset lobes makes a puff rather than a flat disc.
             float d = min(length(p * vec2(0.94, 1.05)), min(length((p - vec2(-0.32, -0.08)) * 1.23), length((p - vec2(0.29, 0.12)) * 1.3)));
             a = (1.0 - smoothstep(0.42, 1.0, d)) * vAlpha;
-            c = vec3(0.58, 0.52, 0.47);
+            c = vec3(0.37, 0.39, 0.43);
           } else if (uMode == 2) {
             float d = length(p);
             float star = max((1.0 - smoothstep(0.0, 0.14, abs(p.x))) * (1.0 - smoothstep(0.08, 0.9, abs(p.y))), (1.0 - smoothstep(0.0, 0.14, abs(p.y))) * (1.0 - smoothstep(0.08, 0.9, abs(p.x))));
@@ -94,6 +95,14 @@ export function createForgeEmitters(scene: THREE.Scene) {
       `,
     });
     const points = new THREE.Points(geometry, material);
+    if (mode === 1 || mode === 5) {
+      const viewport = new THREE.Vector2();
+      points.onBeforeRender = (renderer, _scene, camera) => {
+        const perspective = camera as THREE.PerspectiveCamera;
+        if (perspective.isPerspectiveCamera) material.uniforms.uPixelScale!.value =
+          renderer.getDrawingBufferSize(viewport).y / (2 * Math.tan(THREE.MathUtils.degToRad(perspective.fov * .5)));
+      };
+    }
     points.frustumCulled = false;
     root.add(points);
     return { geometry, material, positions, sizes, alphas };
@@ -147,11 +156,12 @@ export function createForgeEmitters(scene: THREE.Scene) {
         const phase = fract(time / (entry.kind === 'smoke' ? 3.8 : 1.7) + hash(seed + 500));
         const j = i * 3;
         if (entry.kind === 'smoke') {
-          target.positions[j] = entry.position.x + Math.sin(time * 0.35 + seed) * 0.045 + phase * 0.16;
-          target.positions[j + 1] = entry.position.y + phase * 0.85;
-          target.positions[j + 2] = entry.position.z + Math.cos(seed * 1.3) * phase * 0.08;
-          target.sizes[i] = 0.255 + phase * 0.33;
-          target.alphas[i] = Math.sin(Math.PI * phase) * 0.24;
+          const exhale = Math.sin(phase * Math.PI * .5) * .7;
+          target.positions[j] = entry.position.x + (entry.direction?.x ?? 0) * exhale + Math.sin(time * 0.45 + seed + phase * 3.0) * phase * 0.2 + phase * 0.18;
+          target.positions[j + 1] = entry.position.y + phase * 2.0;
+          target.positions[j + 2] = entry.position.z + (entry.direction?.z ?? 0) * exhale + Math.cos(seed * 1.3 + phase * 3.0) * phase * 0.18;
+          target.sizes[i] = 0.24 + phase * 0.42;
+          target.alphas[i] = Math.sin(Math.PI * phase) * 0.42;
         } else {
           const angle = hash(seed + 600) * Math.PI * 2;
           const radius = 0.07 + hash(seed + 700) * 0.28;

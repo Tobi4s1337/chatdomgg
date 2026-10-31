@@ -52,7 +52,10 @@ describe('room-fed Forge scene', () => {
       expect(smokeAlpha()).toBe(true);
       const emission = new THREE.Vector3(...expected.emitter).add(new THREE.Vector3(...socket.origin)).multiplyScalar(VOXEL_METRES.build)
         .applyAxisAngle(new THREE.Vector3(0, 1, 0), home.yaw).add(new THREE.Vector3(...home.position));
-      expect(Math.abs(smoke!.geometry.getAttribute('position').getX(0) - emission.x)).toBeLessThan(.21);
+      const puff = new THREE.Vector3().fromBufferAttribute(smoke!.geometry.getAttribute('position'), 0).sub(emission);
+      // Breath starts at the rotated muzzle and curls forwards/up, never at the house door.
+      expect(Math.hypot(puff.x, puff.z)).toBeLessThan(1);
+      expect(puff.y).toBeGreaterThanOrEqual(0); expect(puff.y).toBeLessThan(2);
       handlers.stage?.('opaque-activity', 'drafting'); adapter.update(1000, false);
       expect(adapter.active()).toBe(true);
       expect(submit).not.toHaveBeenCalled(); expect(adapter.activeAttachmentId).toBeNull();
@@ -90,8 +93,8 @@ describe('room-fed Forge scene', () => {
       expect(smokeAlpha()).toBe(false);
       expect(hide).toHaveBeenCalledWith(attachment.id, true); expect(settled).not.toHaveBeenCalled();
       expect(adapter.update(20200, true)).toBe(true);
-      expect(hide).toHaveBeenLastCalledWith(attachment.id, false); expect(settled).toHaveBeenCalledExactlyOnceWith(attachment.id);
-      expect(clone.visible).toBe(false);
+      expect(hide).toHaveBeenLastCalledWith(attachment.id, true); expect(settled).toHaveBeenCalledExactlyOnceWith(attachment.id);
+      expect(clone.visible).toBe(true);
       expect(smokeAlpha()).toBe(true);
       expect(adapter.sources().every(source => source.strength === 0)).toBe(true);
       adapter.update(20350, true);
@@ -115,10 +118,15 @@ describe('room-fed Forge scene', () => {
       }
       const landedEye = camera.position.clone();
       expect(adapter.update(23000, true)).toBe(true);
-      expect(camera.position.distanceTo(landedEye)).toBeLessThan(1e-8);
+      expect(camera.position.distanceTo(landedEye)).toBeGreaterThan(.1);
+      const portraitEye = camera.position.clone();
+      adapter.update(23100, true);
+      expect(camera.position.distanceTo(portraitEye)).toBeLessThan(1e-8);
+      expect((clone as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>).material.uniforms.uLandingWarmth!.value).toBeGreaterThan(.9);
       expect(settled).toHaveBeenCalledOnce();
       adapter.update(23200, true); expect(adapter.sources()).toEqual([]);
       adapter.update(23000, false);
+      expect(hide).toHaveBeenLastCalledWith(attachment.id, false);
       handlers.committed?.(attachment, 'opaque-activity'); expect(submit).toHaveBeenCalledOnce();
       expect(adapter.activeAttachmentId).toBeNull();
       expect(adapter.update(24000, true)).toBe(false);

@@ -23,7 +23,7 @@ function forgeStandingPlan(plan: SettlementPlan): SettlementPlan {
     return inside && !plan.reservations.some(({ lot }) => x >= lot.minX - .6 && x <= lot.maxX + .6 && z >= lot.minZ - .6 && z <= lot.maxZ + .6);
   };
   const nodes = [...plan.nodes], streets = [...plan.streets], activeStreetIds = [...plan.activeStreetIds];
-  for (const [index, [dx, dz]] of [[-4, 0], [4, 0], [-3, 3], [3, 3], [0, 5]].entries()) {
+  for (const [index, [dx, dz]] of [[-4, 0], [4, 0], [-3, 3], [3, 3], [0, 5], [-5, 2], [-4, 5], [2, 6]].entries()) {
     const position: Vec3 = [market.position[0] + dx!, market.position[1], market.position[2] + dz!];
     // Check the whole connector, not just its endpoint, against market and lots.
     if (!Array.from({ length: 21 }, (_, i) => insideMarket(market.position[0] + dx! * i / 20, market.position[2] + dz! * i / 20)).every(Boolean)) continue;
@@ -133,7 +133,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
           && Math.hypot(sample.position[0] - forge!.anchor[0], sample.position[2] - forge!.anchor[2]) < 70)
           .sort((a, b) => Math.hypot(a.position[0] - forge!.anchor[0], a.position[2] - forge!.anchor[2]) - Math.hypot(b.position[0] - forge!.anchor[0], b.position[2] - forge!.anchor[2]));
         for (const sample of candidates) {
-          if (watchers.size >= 5) break;
+          if (watchers.size >= 8) break;
           const destination = motion.destinationsForSlot(sample.slot).find(item => item.nodeId.startsWith('forge:watch:') && !occupied.has(item.nodeId)
             && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) >= 3
             && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) <= 9);

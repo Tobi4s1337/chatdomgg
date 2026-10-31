@@ -14,7 +14,7 @@ const BROADCASTER = { id: '129634568', login: 'tobi4s_', displayName: 'tobi4s_' 
 const READER = { id: '900000001', login: 'herald_reader', displayName: 'HeraldReader' };
 const STRANGER = { id: '900000002', login: 'someone_else', displayName: 'SomeoneElse' };
 const REDIRECT = 'http://localhost:5195/herald/callback';
-const FULL_GRANTS = { [READER.id]: ['user:read:chat', 'user:bot'], [BROADCASTER.id]: ['channel:bot', 'moderator:read:chatters'] };
+const FULL_GRANTS = { [READER.id]: ['user:read:chat', 'user:bot', 'user:write:chat'], [BROADCASTER.id]: ['channel:bot', 'moderator:read:chatters'] };
 
 function config(overrides: Partial<HeraldConfig> = {}): HeraldConfig {
   return {
@@ -125,8 +125,10 @@ describe('capabilities', () => {
     expect(result.every(status => !status.available)).toBe(true);
   });
 
-  it('re-consent for one role keeps the other role\'s Herald scopes on a shared account, and nothing else', () => {
-    expect(scopesToRequest('reader', ['channel:bot', 'moderator:read:chatters', 'user:write:chat'])).toEqual(['channel:bot', 'moderator:read:chatters', 'user:bot', 'user:read:chat']);
+  it('re-consent preserves every existing scope and adds the crier permission', () => {
+    expect(scopesToRequest('reader', ['channel:bot', 'moderator:read:chatters', 'user:write:chat', 'channel:manage:polls'])).toEqual(['channel:bot', 'channel:manage:polls', 'moderator:read:chatters', 'user:bot', 'user:read:chat', 'user:write:chat']);
+    expect(scopesToRequest('broadcaster', ['user:write:chat', 'channel:manage:polls'])).toEqual(['channel:bot', 'channel:manage:polls', 'moderator:read:chatters', 'user:write:chat']);
+    expect(assessCapabilities({ state: 'valid', expiresAt: 999999 }, { reader: account('reader', ['user:bot', 'user:read:chat']), broadcaster: account('broadcaster', ['channel:bot']) }).find(status => status.capability === 'chat')?.available).toBe(true);
     expect(scopesToRequest('broadcaster', [])).toEqual(['channel:bot', 'moderator:read:chatters']);
   });
 });
@@ -362,16 +364,16 @@ describe('authorize', () => {
   }
 
   it('records the grant after CSRF, account, client and scope checks, then discards the tokens', async () => {
-    const { fake } = twitch({});
+    const { fake } = twitch({ [READER.id]: ['channel:manage:polls'] });
     let page = '';
     let foreign = 0;
     let reused = 0;
     const { outcome, lines } = await authorizeWith(fake, async (port, consentUrl) => {
       const consent = new URL(consentUrl);
-      expect(consent.searchParams.get('scope')).toBe('user:bot user:read:chat');
+      expect(consent.searchParams.get('scope')).toBe('channel:manage:polls user:bot user:read:chat user:write:chat');
       expect(consent.searchParams.get('redirect_uri')).toBe(REDIRECT);
       foreign = (await callback(port, { code: 'forged', state: 'not-the-state' })).status;
-      const code = fake.consent(READER.id, ['user:bot', 'user:read:chat'], REDIRECT);
+      const code = fake.consent(READER.id, ['channel:manage:polls', 'user:bot', 'user:read:chat', 'user:write:chat'], REDIRECT);
       const done = await callback(port, { code, state: consent.searchParams.get('state') ?? '' });
       expect(done.status).toBe(303);
       expect(done.headers.get('location')).not.toContain(code);
@@ -380,11 +382,11 @@ describe('authorize', () => {
     });
     expect(foreign).toBe(400);
     expect([0, 410]).toContain(reused);
-    expect(outcome).toEqual({ status: 'recorded', login: READER.login, scopes: ['user:bot', 'user:read:chat'] });
+    expect(outcome).toEqual({ status: 'recorded', login: READER.login, scopes: ['channel:manage:polls', 'user:bot', 'user:read:chat', 'user:write:chat'] });
     expect(page).toContain('Herald can listen now');
     expect(fake.calls.some(call => call.path.includes('revoke'))).toBe(false);
     const printed = [...lines, ...formatAuthorizeOutcome(outcome)].join('\n');
-    expect(printed).toContain('Requests only: user:bot user:read:chat');
+    expect(printed).toContain('Requests only: channel:manage:polls user:bot user:read:chat user:write:chat');
     expectNoSecrets(fake, printed, outcome, page);
   });
 

@@ -4,3 +4,9 @@ CF01: Built the public clearing and SIMULATED bench with strict public decoding 
 follow-up: CF01 Improve overlapping nameplates and fire visibility in crowded circle and stream views.
 
 2026-10-31 main: merged completed CF01 at d10c005; CF02 remains on the lane, not accepted by this merge. Shared the authored log generator in content and installed a two-person public market log via additive native composition/fenced adoption, using new civic seat metadata and bench-seat sit/stand authority. Actual adopted scene collision/reach/sit/stand checked, portable focused tests/type/lint/web+realm builds pass. Looked at shots/kingdom/live-evening/market-rest-SIMULATED@1440x900.png; no real E/sign-in claim. One visible next fix: make the log's adzed timber surface readable as warm cut wood at the seated hip under the accepted dusk lighting; bark stays dark, keep the silhouette/contacts. No new game task or expanded lane scope.
+
+2026-10-31 current handoff refresh: CF01 merged; CF02 is lane work and has not been accepted by main. See PRD current tasks and spec decision; prior task breakdown retained as history. One worker per lane; independent lanes may run in parallel. The lane owns feature-local adapters against existing ports; main owns shared contracts and cross-surface authority and integration bindings.
+
+2026-10-31 handoff correction: one stream-first 1920×1080 viewed capture per visual change; implement feature-local durable adapters against existing ports, recording only actual missing authority/contract seams. Retain lane-owned vote and room adapters.
+
+2026-10-31 main instruction from Tobias: park after the current in-progress task (or now if idle). No further chat fire/game work. Preserve useful completed code; no half-done merge or blanket acceptance. Spec45 passport replaces this work in the active goal.

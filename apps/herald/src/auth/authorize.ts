@@ -40,7 +40,7 @@ export interface AuthorizeOptions {
 }
 
 /**
- * The interactive grant bootstrap. It asks one account for exactly its Herald role's scopes, receives the
+ * The interactive grant bootstrap. It asks one account for its Herald role's scopes plus every existing scope for this client, receives the
  * callback on loopback, checks single-use CSRF state, exchanges the code server-side and verifies the
  * client, the account and the scopes. The user tokens are discarded unrevoked; afterwards the grant is
  * confirmed the way the runtime will see it, through Get Authorization By User with the app token.

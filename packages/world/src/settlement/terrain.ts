@@ -3,6 +3,7 @@ import { currentFootprint, expandBounds, homeFrame, pointBounds, polygonDistance
   segmentProjection, smoothstep, SpatialIndex, transformCardinalPoint } from './geometry';
 import type { BoundsXZ, LandformPlan, PublicGroundSample, SettlementPlan, XZ } from './types';
 import { naturalLandHeight, sampleLandWater } from '../kingdom-land/surface';
+import { sampleGenesisSurface } from '../genesis/surface';
 
 /** Version 1 is the installed sampler, unchanged. Version 2 is the kingdom-land surface. */
 export function naturalTerrainHeight(landform:LandformPlan,x:number,z:number):number {
@@ -116,12 +117,20 @@ function gradedHeight(plan:SettlementPlan,prepared:Prepared,x:number,z:number):n
   if(plan.landform.version!==2)return graded;
   // A road or trail never fills a channel: over wet ground the bridge deck carries the walk. Across the
   // bank, grading eases back to the natural shore, so nearby fill never stands as a wall at the water.
+  if(plan.genesisSurface){
+    const surface=sampleGenesisSurface(plan.genesisSurface,x,z);
+    // Potential land shares its exact coast/island sampler in workers and display.
+    // Grading may never fill the ocean or a river with a road's feather.
+    if(surface.shoreDistance<0)return Math.min(graded,surface.ground);
+    return surface.ground+(graded-surface.ground)*smoothstep(0,BANK_GRADE_BAND,surface.shoreDistance);
+  }
   const water=sampleLandWater(plan.landform,x,z);
   if(!water||water.shoreDistance>=BANK_GRADE_BAND)return graded;
   const natural=naturalLandHeight(plan.landform,x,z);
   return water.shoreDistance<0?Math.min(graded,natural):natural+(graded-natural)*smoothstep(0,BANK_GRADE_BAND,water.shoreDistance);
 }
 function authoredGrade(plan:SettlementPlan,prepared:Prepared,x:number,z:number):number {
+  if(plan.genesisSurface)return authoredGenesisGrade(plan,prepared,x,z);
   const {ground,foundations}=prepared;
   for(const influence of foundations.at(x,z))if(rectangleDistance(influence.rectangle!,x,z)<=0)return influence.height;
   // The square is a single level civic floor. Roads approaching it must not
@@ -146,7 +155,43 @@ function authoredGrade(plan:SettlementPlan,prepared:Prepared,x:number,z:number):
     weighted+=odds*value.height;weights+=odds;
   }
   if(coreCount)return coreHeight/coreCount;
-  return (naturalTerrainHeight(plan.landform,x,z)+weighted)/(1+weights);
+  const natural=plan.genesisSurface?sampleGenesisSurface(plan.genesisSurface,x,z).ground:naturalTerrainHeight(plan.landform,x,z);
+  return (natural+weighted)/(1+weights);
+}
+
+/** Continuous Genesis grading. An exact foundation is a constraint with a soft skirt;
+ * a nearby road must not discard that skirt merely because its own core begins.
+ * Existing adopted plans retain their original grading interpretation above. */
+function authoredGenesisGrade(plan:SettlementPlan,prepared:Prepared,x:number,z:number):number {
+  const influences=prepared.ground.at(x,z);
+  let anchorDistance=Infinity,anchorWeighted=0,anchorWeights=0;
+  const roads=new Map<string,{distance:number;height:number;weights:number;feather:number}>();
+  for(const influence of influences){
+    const value=sample(influence,x,z);
+    if(influence.kind==='foundation'||influence.kind==='market'){
+      if(value.distance<=0)return value.height;
+      if(value.distance>=influence.feather)continue;
+      const weight=(1-smoothstep(0,influence.feather,value.distance))**2/Math.max(.001,value.distance)**2;
+      anchorDistance=Math.min(anchorDistance,value.distance);anchorWeighted+=value.height*weight;anchorWeights+=weight;
+      continue;
+    }
+    value.distance-=influence.verge;
+    if(value.distance>=influence.feather)continue;
+    // Aggregate a road once. Its sampling density cannot make it dominate a bend.
+    const weight=(1-smoothstep(0,influence.feather,Math.max(0,value.distance)))**2/Math.max(1,value.distance)**2;
+    const previous=roads.get(influence.id);
+    if(previous){previous.distance=Math.min(previous.distance,value.distance);previous.height+=value.height*weight;previous.weights+=weight;}
+    else roads.set(influence.id,{distance:value.distance,height:value.height*weight,weights:weight,feather:influence.feather});
+  }
+  const natural=sampleGenesisSurface(plan.genesisSurface!,x,z).ground;
+  let weighted=0,weights=0,naturalWeight=1;
+  for(const road of roads.values()){
+    const weight=(1-smoothstep(0,road.feather,Math.max(0,road.distance)))**2;
+    naturalWeight*=1-weight;weighted+=road.height/road.weights*weight;weights+=weight;
+  }
+  const roadGrade=(natural*naturalWeight+weighted)/(naturalWeight+weights);
+  if(!anchorWeights)return roadGrade;
+  return roadGrade+(anchorWeighted/anchorWeights-roadGrade)*(1-smoothstep(0,FEATHER,anchorDistance));
 }
 
 /**
