@@ -121,6 +121,9 @@ const skyFragment = /* glsl */ `
     float sunward = max(dot(normalize(vec3(d.x, 0.0, d.z) + vec3(0.0001, 0.0, 0.0)), sunFlat), 0.0);
     // A warm band low on the sky, strongest under the sun; at noon its colour is black.
     color += uGlow * exp(-altitude * 7.0) * (0.35 + 0.65 * sunward * sunward);
+    // The last gold sits low below the lilac sky, leaving the stars and beacon alone.
+    float duskBand=uNight*(1.0-uNight)*5.0;
+    color += vec3(1.0,.74,.30)*length(uGlow)*.7*duskBand*exp(-altitude*18.0);
     float towardSun = max(dot(d, uSunDirection), 0.0);
     color += uSunColor * pow(towardSun, 14.0) * (1.0-uNight) * 0.14;
     float sun = smoothstep(0.9991, 0.9995, towardSun) * smoothstep(-0.04, 0.08, uSunDirection.y) * (1.0-uNight);

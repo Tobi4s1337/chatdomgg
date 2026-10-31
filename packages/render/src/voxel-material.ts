@@ -212,10 +212,18 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       edge=mix(kind==3.?.96:kind==4.?.94:kind==6.?.95:1.,edge,detail);
       float ao=mix(.49,1.,vAo);float sky=mix(.24,1.,vSky);
       float diffuse=max(dot(n,normalize(uSunDirection)),0.);
+      float distanceToCamera=length(cameraPosition-vWorld);
+      float closeMoon=(1.-smoothstep(35.,150.,distanceToCamera))*smoothstep(.2,.65,uNight);
       // Open faces take the hour's sky fill; occluded ones sink toward its shadow tint, so a shadowed
       // wall reads blue at noon and indigo at dusk rather than grey.
       float facing=.5+.5*max(n.y,0.);
       vec3 cool=mix(uShadow*.62,uAmbient,sky)*uAmbientIntensity*facing*(.4+.6*sky);
+      // Broad indigo sky bounce keeps sheltered doors and vertical walls readable.
+      // It is strongest in the close scene and eases away before the wide town;
+      // the exposure, warm light field and beacon retain their existing values.
+      vec3 indigo=mix(uAmbient,vec3(.24,.19,.45),.4);
+      float softMoon=max(0.,(dot(n,normalize(uSunDirection))+.25)/1.25);
+      cool+=closeMoon*(indigo*.42+uSun*.18*softMoon*(.3+.7*vSky));
       float sunSeen=1. /* sun-visibility */;
       float sunLit=sunSeen*(.15+.85*vSky);
       // Under a roof the near field's own line to the sun decides. The town map, whose texels would blur the
@@ -297,7 +305,6 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
           cover=1.;
         }
       }
-      float distanceToCamera=length(cameraPosition-vWorld);
       // Keep the nearby street crisp. Beyond it, integrate the low haze along the
       // whole sightline: a distant roof is seen through air, not just fog at its height.
       float heightRay=clamp(-.028*(max(vWorld.y,0.)-max(cameraPosition.y,0.)),-20.,20.);
@@ -309,7 +316,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       // Distance takes the sky's colour, warmer where the view runs toward a low sun.
       vec3 view=normalize(vec3(vWorld.x-cameraPosition.x,0.,vWorld.z-cameraPosition.z)+vec3(.0001,0.,0.));
       vec3 sunFlat=normalize(vec3(uSunDirection.x,0.,uSunDirection.z)+vec3(.0001,0.,0.));
-      vec3 fogColour=uFog+uGlow*pow(max(dot(view,sunFlat),0.),3.)*.8;
+      vec3 fogColour=mix(uFog,uSkyHorizon*1.3,.45)+uGlow*pow(max(dot(view,sunFlat),0.),3.)*.8;
       colour=mix(colour,fogColour,min(.86,fogAmount));
       gl_FragColor=vec4(colour,1.);
       gl_FragColor.a=cover;

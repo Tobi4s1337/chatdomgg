@@ -332,17 +332,18 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 **Order:** picture only, one visible fix/commit per turn, same-view before/after. No new systems/contracts/system
 lanes. Exposure34ac89a is ACCEPTED on Tobias's RTX5080: readable dusk, coloured roofs/fronts/castle, glowing sky.
-Keep that grade, low lantern street camera, warm pools, house models, beacon and gold frame. Window pull and
-height haze are landed for GPU judging. Avatar proportions remain Tobias's choice.
+Keep that exposure, low lantern street camera, warm pools, house models, beacon and gold frame. Founder says
+window/depth passes were too subtle. New order: close-view fill, windows 2–3x brighter, lower/tighter smithy.
+Each before/after must read at a glance. Avatar proportions remain Tobias's choice.
 
-**Current slice:** soft depth in the existing voxel material fog: clear first 65m, integrated low height haze
-plus aerial perspective above the ridges. No second post fog or exposure change. Rejected an overly dense
-first frame; reduced it before landing. Viewed native 1920x1080 and `shots/magic/depth-before-after@3840x1080.png`
-(left fab08be, right current; hero/hour19.5/time30, slight sky/framing motion). Far hills recede in blue; castle,
-near streets and windows remain readable. Ridge geometry is still too smooth, not solved by haze. High HDR/ACES,
-SIMULATED, curtain open/fields settled. Typecheck/scoped lint, 13 existing render tests and final web build pass.
-Capture resources closed. GPU comparison still needed. fab08be window cores/amber halos stay; its comparison is
-`shots/magic/window-pull-before-after@3840x1080.png`, halo still bounded to 1.3x pane, ground pools unchanged.
+**Current slice:** stronger close-view indigo sky bounce plus soft moon fill, full inside35m and easing out
+by150m. Existing exposure, beacon and warm pool calculations unchanged. Low sky gets an amber-gold band;
+distance haze leans lilac. Viewed native1080p and `shots/magic/street-light-before-after@3840x1080.png`:
+fresh903873f baseline versus current, fixed eye[-103.95,13.25,64], target[-110.45,8.8,51], FOV48,
+SIMULATED/hour19.5/time12. Facade/columns/eaves/roof clearly lift; warm pools stay. Roof blue is saturated;
+deep doorway interiors remain dark. Smithy uses the same material but needs its own judged composition shot.
+High HDR/ACES, settled/curtain open; typecheck/scoped lint,13 render tests and web build pass. Capture resources
+closed. GPU close-view look still needed. Prior depth/window comparisons remain in `shots/magic/`.
 
 **Prior flicker fixes retained:** bc9a54c removed carried-light nearest24 cutoff and added cull fades; Tobias
 says lanterns hold. 7c71b38 keeps the last accepted public picture through a feed retry only until
@@ -351,12 +352,10 @@ SIMULATED smoke: old240→0 immediately; fixed240 remain, same-epoch reconnect0w
 Evidence `shots/magic/presence-drop-before-after@3840x1080.png`, `presence-drop-smoke.json`. Separate GPU
 shimmer remains unlocalized; don't repeat slow software takes without an exact repro.
 
-**Merges:** passport, raid-gate, emotes, twitch-moments, atlas-w2 through47c0ef7 are on main. All5 captures now
-complete/viewed: `shots/integration/look-reset/contact@1920x800.png`. First4 are SIMULATED benches; Atlas is
-shipped/map with real survey data. Missing live bindings remain passport API/card/panel, gate world/item hosts,
-emote catalogue/scene, moments crowd/hush/cheer/hype. No new bindings built under this picture pass. Visible
-followups: larger passport small type, varied gate welcome poses, gathered plinth cloth, lit gift cart, Atlas
-labels kept inside frame. One-pass picture/Genesis recon found no new finished lane commits; no repeated audits.
+**Earlier merges:** passport, raid-gate, emotes, twitch-moments, atlas-w2 through47c0ef7 are on main and viewed:
+`shots/integration/look-reset/contact@1920x800.png`. First4 are SIMULATED benches; Atlas uses real survey data.
+Live bindings still missing: passport API/card/panel, gate world/item hosts, emote catalogue/scene, moments
+crowd/hush/cheer/hype. No system wiring under this picture pass. Land/trees/effects had no new commits.
 
 **Team picture lanes ready (spec/PRD/branch/worktree):**
 - 46 picture-land — `lane/picture-land`, `../worktrees/picture-land`: ridges/rock/ledges/ragged paths/terraces.
@@ -373,8 +372,9 @@ Avatar choice remains Tobias's; landmarks need export/placement/light adoption, 
 Viewed the avatar contact sheet and all three native1080p options, harbour and snapped river arms lane renders.
 56 scoped tests, typecheck, scoped lint and web build pass. Storybook shoulder gap, bright quay grass and dark
 violet/sable arms remain lane followups; merge not held. Avatar evidence: `work/evidence/avatar-style/AS01/`.
-**Next picture:** Smithy crowd wraps BOTH
-sides with faces behind pour; lower/closer camera, castle lit behind. Current13-person west crescent isn't final.
+**Next picture:** windows become the town's light: 2–3x brighter camera-facing panes, warm ground spill,
+lanterns lighting their carriers' faces. Then smithy lower/tighter: crowd wraps BOTH sides with faces behind
+pour, castle lit behind. Current13-person west crescent isn't final.
 Molten02c3494 stays. Real approved chat ritual remains unproved; no waiting observer before Tobias goes live.
 
 **Preserved/live:** unfinished city stash `7c6f1f9d324042998fff71e4d5ea7863ea46cf0a` (7files), retain rounded
