@@ -4,7 +4,7 @@ import { createCastleContent } from '../castle-content';
 import { placeMarketContent, placeSettlementContent } from '../settlement-content';
 import { sampleTerrainTriangles } from '../terrain-worker';
 import { planAdoptedCover } from './adopted-cover';
-import { footprintCorners, pieceRole, polygonDistance } from './plan';
+import { footprintCorners, occupiedCorners, pieceRole, polygonDistance } from './plan';
 
 it('adds only passive planting and flush stones over the adopted hamlet without changing its land or homes', () => {
   const adopted = generateSettlementPlan({ seed: 'willowmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
@@ -24,7 +24,7 @@ it('adds only passive planting and flush stones over the adopted hamlet without 
   const occupied = [...houses, ...props, ...placeMarketContent(adopted.market), ...createCastleContent(adopted.castle).buildings];
   const occupiedBefore = JSON.stringify(occupied.map(({ position, yaw }) => ({ position, yaw })));
   const occupiedBounds = occupied.map(piece => {
-    const corners = footprintCorners(piece.blueprint, piece.position, piece.yaw);
+    const corners = occupiedCorners(piece);
     return { minX: Math.min(...corners.map(p => p[0])), maxX: Math.max(...corners.map(p => p[0])),
       minZ: Math.min(...corners.map(p => p[1])), maxZ: Math.max(...corners.map(p => p[1])) };
   });

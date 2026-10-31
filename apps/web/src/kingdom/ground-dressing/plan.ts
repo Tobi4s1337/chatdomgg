@@ -1,7 +1,7 @@
 import { createStreetProp } from '@chatdom/content';
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
 import {
-  currentFootprint, homeFrame, randomUnit, samplePublicGround, seedHash,
+  currentFootprint, homeFrame, randomUnit, samplePublicGround, seedHash, transformCardinalPoint,
   type CardinalTurn, type KingdomLand, type KingdomTier, type SettlementHome, type SettlementPlan, type XZ,
 } from '@chatdom/world';
 import { createDressing, DRESSING_ROLES, DRESSING_FORMS, type DressingForm } from '../../../../../packages/content/src/props/dressing';
@@ -67,9 +67,30 @@ function classify(blueprint: VoxelBlueprint): { solid: boolean; cover: boolean; 
 interface Rect { minX: number; maxX: number; minZ: number; maxZ: number }
 /** World corners of a blueprint's footprint; yaw follows three.js: local (x, z) → (x cos + z sin, −x sin + z cos). */
 export function footprintCorners(blueprint: Pick<VoxelBlueprint, 'size'>, position: Vec3, yaw: number, inset = 0): XZ[] {
-  const c = Math.cos(yaw), s = Math.sin(yaw), w = blueprint.size[0] * CELL, d = blueprint.size[2] * CELL;
-  return [[inset, inset], [w - inset, inset], [w - inset, d - inset], [inset, d - inset]].map(([a, b]) =>
-    [position[0] + c * a! + s * b!, position[2] - s * a! + c * b!] as const);
+  const w = blueprint.size[0] * CELL, d = blueprint.size[2] * CELL;
+  return localCorners(position, yaw, inset, w - inset, inset, d - inset);
+}
+function localCorners(position: Vec3, yaw: number, a0: number, a1: number, b0: number, b1: number): XZ[] {
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  return [[a0, b0], [a1, b0], [a1, b1], [a0, b1]].map(([a, b]) => [position[0] + c * a! + s * b!, position[2] - s * a! + c * b!] as const);
+}
+
+const extents = new WeakMap<VoxelBlueprint, readonly [number, number, number, number]>();
+/**
+ * World corners of what a placement really occupies: the XZ extent of its solid boxes, not its blueprint box. A home
+ * blueprint reserves its lot's whole 16 m depth; only the built part keeps the ground behind it from being planted.
+ */
+export function occupiedCorners(piece: Pick<GroundPiece, 'blueprint' | 'position' | 'yaw'>): XZ[] {
+  let extent = extents.get(piece.blueprint);
+  if (!extent) {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const box of piece.blueprint.boxes) if (box.material !== 0) {
+      minX = Math.min(minX, box.from[0]); maxX = Math.max(maxX, box.to[0]); minZ = Math.min(minZ, box.from[2]); maxZ = Math.max(maxZ, box.to[2]);
+    }
+    extent = minX < maxX ? [minX * CELL, maxX * CELL, minZ * CELL, maxZ * CELL] : [0, piece.blueprint.size[0] * CELL, 0, piece.blueprint.size[2] * CELL];
+    extents.set(piece.blueprint, extent);
+  }
+  return localCorners(piece.position, piece.yaw, ...extent);
 }
 function boundsOf(points: readonly XZ[]): Rect {
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -135,13 +156,16 @@ interface HomeArea {
   front: Vec3; right: Vec3; outward: Vec3;
   /** Depth of the forecourt from the facade to the street's paving. */
   apron: number;
+  /** Depth from the facade to the rear of what the home has actually built (its real occupied footprint). */
+  rear: number;
 }
+interface Occupied { rect: Rect; corners: readonly XZ[]; home?: HomeArea }
 interface Context {
   input: GroundDressingInput; plan: SettlementPlan;
   areas: readonly HomeArea[];
   homes: RectIndex<HomeArea & { rect: Rect }>;
   lots: RectIndex<{ rect: Rect; id: string; slot?: number; home?: HomeArea }>;
-  occupied: RectIndex<{ rect: Rect; corners: readonly XZ[] }>;
+  occupied: RectIndex<Occupied>;
   polygons: (readonly XZ[])[];
   castle: Rect;
   rand(...parts: (string | number)[]): number;
@@ -158,7 +182,7 @@ function prepare(input: GroundDressingInput): Context {
       const s = samplePublicGround(plan, front[0] + outward[0] * apron, front[2] + outward[2] * apron);
       if (s && s.pavingDistance <= 0 && s.kind !== 'forecourt' && s.kind !== 'approach') break;
     }
-    const area: HomeArea = { home, rect: currentFootprint(home), lot: home.lot, front, right, outward, apron };
+    const area: HomeArea = { home, rect: currentFootprint(home), lot: home.lot, front, right, outward, apron, rear: home.allowedDepth };
     homes.add(area); bySlot.set(home.slot, area); areas.push(area);
   }
   for (const reservation of plan.reservations) {
@@ -166,10 +190,17 @@ function prepare(input: GroundDressingInput): Context {
     const area = home ? bySlot.get(home.slot) : undefined;
     lots.add({ rect: reservation.lot, id: reservation.id, ...(home ? { slot: home.slot } : {}), ...(area ? { home: area } : {}) });
   }
-  const occupied = new RectIndex<{ rect: Rect; corners: readonly XZ[] }>();
+  // What a lot holds is its home's building; its real rear is where the home's garden assembly starts.
+  const occupied = new RectIndex<Occupied>(), building = new Set<HomeArea>();
   for (const piece of input.occupied) {
-    const corners = footprintCorners(piece.blueprint, piece.position, piece.yaw);
-    occupied.add({ rect: boundsOf(corners), corners });
+    const corners = occupiedCorners(piece), rect = boundsOf(corners), cx = (rect.minX + rect.maxX) / 2, cz = (rect.minZ + rect.maxZ) / 2;
+    let home: HomeArea | undefined;
+    lots.near({ minX: cx, maxX: cx, minZ: cz, maxZ: cz }, 0, lot => { if (lot.home && cx > lot.rect.minX && cx < lot.rect.maxX && cz > lot.rect.minZ && cz < lot.rect.maxZ) { home = lot.home; return true; } return false; });
+    occupied.add({ rect, corners, ...(home ? { home } : {}) });
+    if (!home) continue;
+    const depth = Math.max(...corners.map(([x, z]) => -((x - home!.front[0]) * home!.outward[0] + (z - home!.front[2]) * home!.outward[2])));
+    home.rear = building.has(home) ? Math.max(home.rear, depth) : depth;
+    building.add(home);
   }
   const polygons: (readonly XZ[])[] = [plan.market.boundary, ...plan.courts.map(c => c.boundary), plan.castle.court.boundary,
     input.land.places.court.boundary, ...input.land.sites.map(site => site.footprint), ...(input.keepOut ?? [])];
@@ -258,14 +289,37 @@ function marketStalls(ctx: Context): MarketStall[] {
   return stalls.sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
+/** A point `side` metres along a home's right and `depth` metres back from its facade. */
+const inFrame = (area: HomeArea, side: number, depth: number): XZ =>
+  [area.front[0] + area.right[0] * side - area.outward[0] * depth, area.front[2] + area.right[2] * side - area.outward[2] * depth];
+const TURNS = [0, 1, 2, 3] as const satisfies readonly CardinalTurn[];
+/** The cardinal turn whose local +Z faces `dir`, and the one whose local +X runs along it (yaw = turn · π/2). */
+const turnFacing = (dir: XZ): CardinalTurn => TURNS.find(t => { const [x, , z] = transformCardinalPoint([0, 0, 0], t, [0, 0, 1]); return x === dir[0] && z === dir[1]; })!;
+const turnAlong = (dir: XZ): CardinalTurn => TURNS.find(t => { const [x, , z] = transformCardinalPoint([0, 0, 0], t, [1, 0, 0]); return x === dir[0] && z === dir[1]; })!;
+
 interface Candidate { blueprint: VoxelBlueprint; centre: XZ; yaw: number }
 interface Fit { position: Vec3; slope?: readonly [number, number] }
+interface FitOptions {
+  /** The lot the piece belongs to wholly; otherwise it stands outside every lot. */
+  lot?: string | undefined;
+  /** The one square flush planting may border (the stall garden). */
+  beside?: readonly XZ[] | undefined;
+  /**
+   * The home whose garden assembly the piece is part of. It may stand against that home's lot line and lean on its
+   * real walls (0.15 m clear, the back fence 0.5 m), but never inside its current footprint, the owner's build space.
+   */
+  assembly?: HomeArea | undefined;
+  /** The back fence spans its lot, so neighbouring homes and placements keep 0.5 m from it rather than 1.5 m. */
+  fence?: boolean;
+}
+const EPSILON = 1e-6;
+const shrink = (r: Rect): Rect => grow(r, -EPSILON);
 
 /**
  * Every clearance rule of R3 for one footprint. Returns the grounded placement, or a reason it cannot stand.
  * Cover is sheared onto the fitted ground plane (≤35°); structural pieces need level ground (≤0.125 m relief).
  */
-function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | undefined, beside?: readonly XZ[]): Fit | string {
+function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, { lot, beside, assembly, fence = false }: FitOptions = {}): Fit | string {
   const role = pieceRole(blueprint), height = blueprint.size[1] * CELL;
   const [cx, cz] = centre, c = Math.cos(yaw), s = Math.sin(yaw), w = blueprint.size[0] * CELL, d = blueprint.size[2] * CELL;
   const origin: XZ = [cx - (c * w / 2 + s * d / 2), cz - (-s * w / 2 + c * d / 2)];
@@ -276,13 +330,21 @@ function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | 
   const { input, plan } = ctx;
   if (rect.minX < plan.bounds.minX + 1 || rect.maxX > plan.bounds.maxX - 1 || rect.minZ < plan.bounds.minZ + 1 || rect.maxZ > plan.bounds.maxZ - 1) return 'outside the detailed land';
   // Lots: a placement belongs wholly to one lot, or wholly to the open ground outside every lot.
-  if (ctx.lots.near(rect, 0, item => overlaps(item.rect, rect) && item.id !== lot)) return 'crosses a lot line';
+  if (ctx.lots.near(rect, 0, item => overlaps(item.rect, shrink(rect)) && item.id !== lot)) return 'crosses a lot line';
   if (lot) {
-    const own = ctx.lots.near(rect, 0, item => item.id === lot && rect.minX >= item.rect.minX && rect.maxX <= item.rect.maxX && rect.minZ >= item.rect.minZ && rect.maxZ <= item.rect.maxZ);
+    const own = ctx.lots.near(rect, 0, item => item.id === lot && rect.minX >= item.rect.minX - EPSILON && rect.maxX <= item.rect.maxX + EPSILON
+      && rect.minZ >= item.rect.minZ - EPSILON && rect.maxZ <= item.rect.maxZ + EPSILON);
     if (!own) return 'leaves its lot';
   }
-  // Homes: never on the current footprint; solids keep 1.5 m.
-  if (ctx.homes.near(rect, 2, area => overlaps(grow(area.rect, role.solid ? 1.5 : 0.125), rect))) return 'on a home';
+  // Homes: never on a current footprint. Solids keep 1.5 m from every other home: from its whole lot when they stand
+  // outside the lots, so a neighbour growing deeper never unseats them.
+  const homeClash = ctx.homes.near(rect, 2, area => {
+    if (area === assembly) return overlaps(area.rect, shrink(rect));
+    if (!role.solid) return overlaps(grow(area.rect, 0.125), rect);
+    return overlaps(grow(area.rect, fence ? 0.5 : 1.5), rect);
+  });
+  if (homeClash) return 'on a home';
+  if (role.solid && !lot && ctx.lots.near(rect, 1.5, item => (!assembly || item.home !== assembly) && overlaps(grow(item.rect, 1.5), rect))) return 'beside another lot';
   // Forecourts: the entrance band stays empty; nothing taller than 0.6 m stands between a facade and its street.
   const forecourt = ctx.homes.near(rect, 12, area => {
     for (const [x, z] of [...corners, centre]) {
@@ -294,7 +356,8 @@ function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | 
     return false;
   });
   if (forecourt) return 'in a forecourt or entrance band';
-  if (ctx.occupied.near(rect, 2, item => overlaps(grow(item.rect, role.solid ? 1.5 : 0.25), rect))) return 'on an occupied placement';
+  const margin = (item: Occupied) => !role.solid ? 0.25 : item.home && item.home === assembly ? (fence ? 0.5 : 0.15) : fence ? 0.5 : 1.5;
+  if (ctx.occupied.near(rect, 2, item => overlaps(grow(item.rect, margin(item)), shrink(rect)))) return 'on an occupied placement';
   // Paving and verges: both are true distances, so one sample clears a whole disc around it. Split the box
   // into quarters only where a sample cannot vouch for its part (an exact, conservative quadtree).
   const clear = (key: 'pavingDistance' | 'reservedDistance', margin: number) => {
@@ -409,7 +472,7 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
     return found;
   };
   const tryPlace = (id: string, blueprint: VoxelBlueprint, centre: XZ, yaw: number, lot: { id: string; slot?: number } | undefined, beside?: readonly XZ[]): boolean => {
-    const result = fit(ctx, { blueprint, centre, yaw }, lot?.id, beside);
+    const result = fit(ctx, { blueprint, centre, yaw }, { lot: lot?.id, beside });
     if (typeof result === 'string') return false;
     placed.push({ id, blueprint: shared(blueprint), position: result.position, yaw,
       ...(lot?.slot !== undefined ? { lotSlot: lot.slot } : {}), ...(result.slope ? { slope: result.slope } : {}) });
@@ -429,7 +492,7 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
   //    both entrance bands, so a run of colour leads along the street to each door. Some are tended doorsteps
   //    (`placeDoorstep`): each neighbour's border in its own colour, a bed being planted and stones worn between
   //    the two doors. Old Row flowers and tends more than the newest street, and the arrival home is always tended.
-  const drifts: Drift[] = [], reserved: { rect: Rect; trodden: boolean }[] = [];
+  const drifts: Drift[] = [], reserved: { rect: Rect; trodden: boolean; slot?: number }[] = [];
   const oldest = Math.min(...plan.homes.map(h => h.quarterYear)), newest = Math.max(...plan.homes.map(h => h.quarterYear));
   const ageOf = (home: SettlementHome) => newest === oldest ? 1 : (newest - home.quarterYear) / (newest - oldest);
   const arrival = arrivalHome(plan);
@@ -467,7 +530,7 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
     // a hand or two either side of it, where a pot or shrub stands in the way or the two lots' grades meet in a step.
     const tilt = (ctx.rand(id, 'tilt') - 0.5) * 0.12;
     const gap = [0, -0.2, 0.2, -0.4, 0.4, -0.6, 0.6].map(offset => strip.gap + offset).find(u => tryPlace(`${id}:stones`, stones, strip.at(u, strip.apron - 1.8), inward + tilt, undefined));
-    if (gap === undefined) return fail(`stones ${fit(ctx, { blueprint: stones, centre: strip.at(strip.gap, strip.apron - 1.8), yaw: inward + tilt }, undefined)}`);
+    if (gap === undefined) return fail(`stones ${fit(ctx, { blueprint: stones, centre: strip.at(strip.gap, strip.apron - 1.8), yaw: inward + tilt })}`);
     const laid = placed.at(-1)!;
     reserved.push({ rect: grow(boundsOf(footprintCorners(stones, laid.position, laid.yaw, CELL)), 0.12), trodden: true });
     // The bed lies along the stones on the older home's side, as far in as the facade's pots allow.
@@ -522,12 +585,112 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
           reserved.push({ rect: grow(boundsOf(footprintCorners(blueprint, piece.position, piece.yaw, CELL)), key === 'stones' ? 0.12 : 0), trodden: key === 'stones' });
           first ??= from + shift; cursor = from + shift + length; laid = true; break;
         }
-      if (!laid) omissions.push(`${id}:${key}: ${fit(ctx, { blueprint, centre: at(from + length / 2, outs[0]!), yaw }, undefined, square)}`);
+      if (!laid) omissions.push(`${id}:${key}: ${fit(ctx, { blueprint, centre: at(from + length / 2, outs[0]!), yaw }, { beside: square })}`);
     }
     if (first === undefined) return;
     // The stock gone wild up the bank above the last beds, toward the middle of the square.
     drifts.push({ id: `${id}:wild`, centre: at(Math.max(first + 2, cursor - 1.2), 4.2), along: u, length: 5, width: 2.4, bloom: 'petal' });
   }
+
+  // Gardens. Each home's back fence stands where it has grown to, across its lot in the home's own frame, with the
+  // tended meadow behind it. Garden vignettes stand at a home's open lot side or back, never in its build space or its
+  // meadow, and field walls and rail fences break up the open meadow. Every one is solid, level and cardinal.
+  const blockers: GroundBlocker[] = [], gardened = new Set<number>();
+  const kitForm = (form: DressingForm, style: SettlementHome['style']) => shared(createDressing(form, DRESSING_ROLES[form].kit ? style : undefined));
+  /** Fits one solid with an exact cardinal turn, clear of every garden piece and worn stone already laid. */
+  const fitSolid = (id: string, blueprint: VoxelBlueprint, centre: XZ, turn: CardinalTurn, options: FitOptions, lotSlot?: number): GroundBlocker | string => {
+    const yaw = turn * Math.PI / 2, result = fit(ctx, { blueprint, centre, yaw }, options);
+    if (typeof result === 'string') return result;
+    const rect = boundsOf(footprintCorners(blueprint, result.position, yaw));
+    // A home's own fence never bars its vignette: the lot line already parts them, and growth moves only the fence.
+    if (reserved.some(r => r.slot !== options.assembly?.home.slot && overlaps(grow(r.rect, 0.3), rect))) return 'on a garden piece or worn stones';
+    return { id, blueprint, position: result.position, yaw, turn, ...(lotSlot !== undefined ? { lotSlot } : {}) };
+  };
+  const commit = (piece: GroundBlocker) => {
+    placed.push(piece); blockers.push(piece);
+    reserved.push({ rect: grow(boundsOf(footprintCorners(piece.blueprint, piece.position, piece.yaw)), 0.1), trodden: false, ...(piece.lotSlot !== undefined ? { slot: piece.lotSlot } : {}) });
+  };
+  const byHome = [...ctx.areas].sort((a, b) => a.home.slot - b.home.slot);
+
+  for (const area of byHome) {
+    const { home } = area, id = `lot:${home.id}:back-fence`, fence = kitForm('back-fence', home.style);
+    // Behind the open depth, and at least 0.5 m behind what is really built; a home that fills its lot has no fence.
+    const depth = fence.size[2] * CELL, at = Math.max(home.allowedDepth, area.rear + 0.5);
+    if (at + depth > home.lot.depth + EPSILON) { omissions.push(`${id}: the home fills its lot, leaving no rear strip that holds the fence 0.5 m clear`); continue; }
+    const piece = fitSolid(id, fence, inFrame(area, 0, at + depth / 2), home.rotation, { lot: home.id, assembly: area, fence: true }, home.slot);
+    if (typeof piece === 'string') omissions.push(`${id}: ${piece}`); else commit(piece);
+  }
+
+  /**
+   * One home's vignette, laid in a row against the house's side (outside its lot, from 2.5 m behind the facade) or
+   * against the back of its lot. Each piece faces away from the home. All of it fits or none of it is laid.
+   */
+  function placeVignette(area: HomeArea, key: string, forms: readonly DressingForm[], side: -1 | 0 | 1): boolean {
+    const { home } = area, out: XZ = side ? [area.right[0] * side, area.right[2] * side] : [-area.outward[0], -area.outward[2]];
+    const blueprints = forms.map(form => kitForm(form, home.style)), turn = turnFacing(out);
+    const widths = blueprints.map(b => b.size[0] * CELL), span = widths.reduce((n, w) => n + w, 0) + 0.3 * (forms.length - 1);
+    const shift = ctx.rand(key, 'shift', side);
+    // Along the side wall from the facade back; along the lot's back line from a seeded offset toward the middle.
+    const slack = Math.max(0, home.lot.frontage - span - 0.4), offset = (shift - 0.5) * slack;
+    const starts = side ? [2.5, 4.5, 7, 10].map(d => d + shift).filter(d => d + span <= home.lot.depth - 0.5)
+      : [...new Set([offset, 0, -offset])].map(t => t - span / 2);
+    for (const start of starts) {
+      const pieces: GroundBlocker[] = [];
+      let along = start;
+      for (const [i, blueprint] of blueprints.entries()) {
+        const across = blueprint.size[2] * CELL, mid = along + widths[i]! / 2;
+        const centre = side ? inFrame(area, side * (home.lot.frontage / 2 + 0.05 + across / 2), mid) : inFrame(area, mid, home.lot.depth + 0.05 + across / 2);
+        const piece = fitSolid(`${key}:${side ? (side > 0 ? 'right' : 'left') : 'back'}:${forms[i]}`, blueprint, centre, turn, { assembly: area });
+        if (typeof piece === 'string') break;
+        pieces.push(piece); along += widths[i]! + 0.3;
+      }
+      if (pieces.length === forms.length) { pieces.forEach(commit); return true; }
+    }
+    return false;
+  }
+  // Old Row keeps full gardens, the newest street a crate or two; each home tries its sides first, where the street
+  // sees them, then the back of its lot. A group that cannot stand anywhere falls back to its first piece alone.
+  const GARDENS: Record<'old' | 'mid' | 'new', readonly (readonly DressingForm[])[]> = {
+    old: [['woodpile', 'barrels'], ['garden-bed', 'crates'], ['handcart'], ['woodpile', 'crates']],
+    mid: [['garden-bed', 'crates'], ['woodpile'], ['barrels', 'crates'], ['handcart']],
+    new: [['crates'], ['barrels'], ['garden-bed']],
+  };
+  let wanted = 0;
+  for (const area of byHome) {
+    const { home } = area, age = ageOf(home), key = `garden:${home.slot}`;
+    if (ctx.rand(key) > 0.3 + 0.6 * age) continue;
+    wanted++;
+    const groups = GARDENS[age >= 0.6 ? 'old' : age >= 0.3 ? 'mid' : 'new'], group = groups[Math.floor(ctx.rand(key, 'group') * groups.length)]!;
+    const sides: (-1 | 0 | 1)[] = ctx.rand(key, 'side') < 0.5 ? [-1, 1, 0] : [1, -1, 0];
+    if ([group, group.slice(0, 1)].some(forms => sides.some(side => placeVignette(area, key, forms, side)))) gardened.add(home.slot);
+  }
+  if (wanted > gardened.size) omissions.push(`garden vignettes: ${wanted - gardened.size} of ${wanted} homes chosen for one have no open lot side or back`);
+
+  // Field runs on the open meadow, 6–45 m out from the town: old dry-stone walls by the older quarters, fresh rail
+  // fences by the newest. A run follows the contour along the cardinal axis that changes least, two to five lengths
+  // with the ends overlapping, sometimes broken by a gap, and stops where the next length cannot stand.
+  for (let gz = Math.floor(plan.bounds.minZ / 24); gz <= Math.floor(plan.bounds.maxZ / 24); gz++)
+    for (let gx = Math.floor(plan.bounds.minX / 24); gx <= Math.floor(plan.bounds.maxX / 24); gx++) {
+      const x = (gx + 0.2 + ctx.rand('field-x', gx, gz) * 0.6) * 24, z = (gz + 0.2 + ctx.rand('field-z', gx, gz) * 0.6) * 24;
+      const near = edgeDistance(ctx, x, z);
+      if (near < 6 || near > 45 || ctx.rand('field', gx, gz) > 0.55 * (0.3 + meadowNoise(ctx, x, z, 40, 'fields'))) continue;
+      const home = nearestHome(x, z, 90), age = home ? ageOf(home.home) : 0;
+      const blueprint = kitForm(age >= 0.5 ? 'field-wall' : 'rail-fence', home?.home.style ?? 'grove');
+      const relief = (u: XZ) => Math.abs(input.ground(x + u[0] * 6, z + u[1] * 6) - input.ground(x - u[0] * 6, z - u[1] * 6));
+      const axis: XZ = relief([1, 0]) <= relief([0, 1]) ? [1, 0] : [0, 1], sign = ctx.rand('field-sign', gx, gz) < 0.5 ? 1 : -1;
+      const u: XZ = [axis[0] * sign, axis[1] * sign], turn = turnAlong(u), length = blueprint.size[0] * CELL, pitch = length - 0.25;
+      const count = 2 + Math.floor(ctx.rand('field-count', gx, gz) * 3) + (age >= 0.6 ? 1 : 0);
+      const gap = ctx.rand('field-gap', gx, gz) < 0.35 ? 1 + Math.floor(ctx.rand('field-gap-at', gx, gz) * (count - 1)) : -1;
+      const segments: GroundBlocker[] = [];
+      let along = -(count * pitch) / 2;
+      for (let k = 0; k < count; k++) {
+        if (k === gap) along += 1.4;
+        const piece = fitSolid(`field:${gx}:${gz}:${k}`, blueprint, [x + u[0] * (along + length / 2), z + u[1] * (along + length / 2)], turn, {});
+        if (typeof piece === 'string') break;
+        segments.push(piece); along += pitch;
+      }
+      if (segments.length >= 2) segments.forEach(commit);
+    }
 
   // Open-meadow drifts on a coarse jittered lattice: likelier near the town, never an even scatter.
   for (let gz = Math.floor(plan.bounds.minZ / 11); gz <= Math.floor(plan.bounds.maxZ / 11); gz++)
@@ -546,13 +709,15 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
         length: 3 + ctx.rand('drift-length', gx, gz) * 3, width: 1.5 + ctx.rand('drift-width', gx, gz) * 1.2, bloom,
         ...(lot ? { lot: lot.id, ...(lot.slot !== undefined ? { slot: lot.slot } : {}) } : {}) });
     }
-  /** Whether a cover patch centred here would tuft through a doorstep bed or stones. */
+  // Cover never tufts through a bed, a stone or a garden piece; feet keep the turf short beside worn stones.
+  const kept = new RectIndex<{ rect: Rect; trodden: boolean }>();
+  for (const r of reserved) kept.add(r);
+  /** Whether a cover patch centred here would tuft through a doorstep bed, stones or a solid garden piece. */
   const onReserved = (blueprint: VoxelBlueprint, centre: XZ, yaw: number) => {
-    if (!reserved.length) return false;
     const w = blueprint.size[0] * CELL, d = blueprint.size[2] * CELL, c = Math.cos(yaw), s = Math.sin(yaw);
     const corner: Vec3 = [centre[0] - (c * w / 2 + s * d / 2), 0, centre[1] - (-s * w / 2 + c * d / 2)];
     const rect = boundsOf(footprintCorners(blueprint, corner, yaw, 0.25));
-    return reserved.some(r => overlaps(r.rect, rect));
+    return kept.near(rect, 0, r => overlaps(r.rect, rect));
   };
   const driftHearts = new Map<number, { centre: XZ; reach: number; lot?: string }[]>();
   const heartKey = (x: number, z: number) => (Math.floor(x / 8) + 4096) * 8192 + Math.floor(z / 8) + 4096;
@@ -612,7 +777,7 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
       const pavingClose = (sample?.pavingDistance ?? Infinity) < 2.6;
       const rear = lot?.slot !== undefined;
       // Feet keep the turf short beside worn stones: clover there, never tufts.
-      const trodden = reserved.some(r => r.trodden && rectDistance(r.rect, x, z) < 1.1);
+      const trodden = kept.near({ minX: x, maxX: x, minZ: z, maxZ: z }, 1.1, r => r.trodden && rectDistance(r.rect, x, z) < 1.1);
       const clover = trodden || ctx.rand('clover', ix, iz) < (pavingClose ? 0.42 : rear ? 0.38 : near ? 0.2 : 0.08);
       const blueprint = clover ? COVER.clover() : COVER.tufts(), yaw = ctx.rand('yaw', ix, iz) * Math.PI * 2;
       if (onReserved(blueprint, [x, z], yaw)) continue;
@@ -620,7 +785,6 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
     }
 
   // 3. A weathered stone at the head of some far drifts, never in a lot or a forecourt (spec 06 rock cluster).
-  const blockers: GroundBlocker[] = [];
   for (const drift of drifts) {
     if (drift.lot || !drift.id.startsWith('drift:') || ctx.rand(drift.id, 'stone') > 0.3) continue;
     if (!placed.some(p => p.id.startsWith(`${drift.id}:`))) continue;
@@ -629,7 +793,7 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
     const blueprint = shared(createStreetProp('rock-cluster', home?.home.style === 'tide' ? 'tide' : 'hearth'));
     const turn = Math.floor(ctx.rand(drift.id, 'turn') * 4) as CardinalTurn, yaw = turn * Math.PI / 2;
     const x = drift.centre[0] + drift.along[0] * (drift.length / 2 + 0.9), z = drift.centre[1] + drift.along[1] * (drift.length / 2 + 0.9);
-    const id = `${drift.id}:stone`, result = fit(ctx, { blueprint, centre: [x, z], yaw }, undefined);
+    const id = `${drift.id}:stone`, result = fit(ctx, { blueprint, centre: [x, z], yaw });
     if (typeof result === 'string') { omissions.push(`${id}: ${result}`); continue; }
     if (placed.some(p => !pieceRole(p.blueprint).cover && Math.hypot(p.position[0] - result.position[0], p.position[2] - result.position[2]) < 3)) continue;
     const stone: GroundBlocker = { id, blueprint, position: result.position, yaw, turn };
@@ -661,8 +825,7 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
   blockers.sort((a, b) => (a.id < b.id ? -1 : 1));
   return {
     pieces, blockers, collisionPieces: blockers, seatAnchors: [],
-    // Garden-kit vignettes (woodpile and barrels, bed and crates, the handcart) arrive with the garden kit.
-    report: { counts, homesWithVignette: 0, omissions },
+    report: { counts, homesWithVignette: gardened.size, omissions },
   };
 }
 
@@ -677,7 +840,40 @@ export function arrivalHome(plan: SettlementPlan): SettlementHome {
     || Math.hypot(a.position[0], a.position[2]) - Math.hypot(b.position[0], b.position[2]))[0]!;
 }
 
-export function planViews(land: GroundDressingLand, ground: (x: number, z: number) => number): GroundViews {
+/**
+ * The home a garden view looks at: in the oldest (or newest) quarter, preferring one whose plan has a back fence and a
+ * garden vignette, the middle of them by ordinal so the frame shows neighbours on both sides.
+ */
+export function gardenHome(plan: SettlementPlan, quarter: 'oldest' | 'newest', dressing?: GroundDressingPlan): SettlementHome {
+  const years = plan.homes.map(h => h.quarterYear), year = quarter === 'oldest' ? Math.min(...years) : Math.max(...years);
+  const ids = dressing ? new Set([...dressing.pieces.values()].flat().map(p => p.id)) : undefined;
+  const gardened = (h: SettlementHome) => !ids || (ids.has(`lot:${h.id}:back-fence`) && [...ids].some(id => id.startsWith(`garden:${h.slot}:`)));
+  const quarterHomes = plan.homes.filter(h => h.quarterYear === year).sort((x, y) => x.ordinal - y.ordinal || x.slot - y.slot);
+  const homes = quarterHomes.filter(gardened).length ? quarterHomes.filter(gardened) : quarterHomes;
+  return homes[Math.floor(homes.length / 2)]!;
+}
+
+/**
+ * From above the back of a lot, a little to one side, across its meadow to the back fence and the house. With the
+ * plan, the frame takes in the home's garden vignette too: aimed between it and the fence, from its side.
+ */
+export function gardenView(home: SettlementHome, ground: (x: number, z: number) => number, dressing?: GroundDressingPlan): GroundView {
+  const g = homeFrame(home), at = (side: number, depth: number, up: number): Vec3 => {
+    const x = g.front[0] + g.right[0] * side - g.outward[0] * depth, z = g.front[2] + g.right[2] * side - g.outward[2] * depth;
+    return [x, ground(x, z) + up, z];
+  };
+  const vignette = dressing ? [...dressing.pieces.values()].flat().filter(p => p.id.startsWith(`garden:${home.slot}:`)) : [];
+  if (!vignette.length) return { eye: at(6, home.lot.depth + 4, 4.6), target: at(-0.5, home.allowedDepth + 0.6, 0.7) };
+  const local = vignette.map(p => {
+    const dx = p.position[0] - g.front[0], dz = p.position[2] - g.front[2];
+    return [dx * g.right[0] + dz * g.right[2], -(dx * g.outward[0] + dz * g.outward[2])] as const;
+  });
+  const side = local.reduce((n, l) => n + l[0], 0) / local.length, depth = local.reduce((n, l) => n + l[1], 0) / local.length;
+  const toward = side < -1 ? -1 : 1, aimSide = side / 2, aimDepth = (depth + home.allowedDepth) / 2;
+  return { eye: at(aimSide + toward * 6, Math.max(home.lot.depth, depth) + 6.5, 5), target: at(aimSide, aimDepth, 0.6) };
+}
+
+export function planViews(land: GroundDressingLand, ground: (x: number, z: number) => number, dressing?: GroundDressingPlan): GroundViews {
   const plan = land.plan;
   const at = (x: number, z: number, up: number): Vec3 => [x, ground(x, z) + up, z];
   // Street: 1.6 m above the arrival home's street, looking along the frontage at its door and forecourt.
@@ -686,14 +882,8 @@ export function planViews(land: GroundDressingLand, ground: (x: number, z: numbe
     eye: at(a.front[0] + a.outward[0] * 6.2 - a.right[0] * 10, a.front[2] + a.outward[2] * 6.2 - a.right[2] * 10, 1.6),
     target: at(a.front[0] + a.outward[0] * 1.2 + a.right[0] * 2, a.front[2] + a.outward[2] * 1.2 + a.right[2] * 2, 0.8),
   };
-  // Garden: behind an Old Row home, over its tended rear meadow toward the back of the house.
-  const oldestYear = Math.min(...plan.homes.map(h => h.quarterYear));
-  const old = plan.homes.filter(h => h.quarterYear === oldestYear).sort((x, y) => x.ordinal - y.ordinal || x.slot - y.slot)[Math.floor(plan.homes.filter(h => h.quarterYear === oldestYear).length / 2)]!;
-  const g = homeFrame(old), back = -old.allowedDepth;
-  const garden = {
-    eye: at(g.front[0] + g.outward[0] * (back - 9) + g.right[0] * 6, g.front[2] + g.outward[2] * (back - 9) + g.right[2] * 6, 2.4),
-    target: at(g.front[0] + g.outward[0] * (back - 1.5), g.front[2] + g.outward[2] * (back - 1.5), 0.6),
-  };
+  // Garden: behind an Old Row home with a garden, over its tended rear meadow toward the back fence and the house.
+  const garden = gardenView(gardenHome(plan, 'oldest', dressing), ground, dressing);
   // Edge: from the newest street out toward the frontier and the treeline beyond it.
   const newestYear = Math.max(...plan.homes.map(h => h.quarterYear));
   const fresh = plan.homes.filter(h => h.quarterYear === newestYear).sort((x, y) => y.ordinal - x.ordinal || x.slot - y.slot)[0]!;

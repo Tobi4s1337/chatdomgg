@@ -1,6 +1,8 @@
 import type { VoxelBlueprint } from '@chatdom/shared';
 import { STYLES, type StyleKey } from '../../materials';
 import { cloverPebbles, cuttingBed, meadowTufts, seedlingBed, wildflowers } from './cover';
+import { backFence, fieldWall, railFence } from './field';
+import { barrels, crates, gardenBed, handcart, woodpile } from './garden';
 import { steppingStones } from './path';
 
 /** Every living and garden form of the collection, in spec 28's R1 table order. */
@@ -72,6 +74,14 @@ const BUILDERS: Partial<Record<DressingForm, Builder>> = {
   'clover-pebbles': cloverPebbles,
   'seedling-bed': seedlingBed,
   'cutting-bed': cuttingBed,
+  'garden-bed': gardenBed,
+  woodpile,
+  barrels,
+  crates,
+  handcart,
+  'field-wall': fieldWall,
+  'rail-fence': railFence,
+  'back-fence': backFence,
   'stepping-stones': steppingStones,
 };
 

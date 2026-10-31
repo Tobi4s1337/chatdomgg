@@ -21,3 +21,5 @@ GD01: market stall garden beside the real stalls. A stall whose back meets the s
 follow-up: GD01 Inspect the market garden in the integrated live scene at both web sizes; assess the dark bank and beds partly hidden behind the stores.
 
 2026-10-31 main merged/looked GD01 tended strips on adopted v1:17 seedling beds and17 non-solid flush stepping-stone strips, actual homes11/13 shown in shots/kingdom/live-evening/forecourt-dusk-SIMULATED@1440x900.png. Typecheck, scoped lint,31 content/adapter tests and web build green; no browser errors. Concrete next fix: make the seedling bed read from the street with visible sage-green leaf clumps over warm turned soil; in the looked dusk frame it is a dark narrow strip. Keep the existing stones/flowers/clearances and market-cart composition.
+follow-up: GD03 Complete the garden task evidence and inspect old/new gardens at both web sizes; bind solid blockers and collision pieces in integration before production use.
+follow-up: GD01 Make the existing seedling bed read from the street with visible sage-green leaf clumps over warm turned soil, as requested in the latest main note.
