@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createHome, MAT, MATERIALS, STYLES, type StyleKey } from '@chatdom/content';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, forgeTitle, planLocalForge } from '@chatdom/forge';
 import { createVoxelMaterial, geometryFromChunks, getEnvironment } from '@chatdom/render';
-import { VOXEL_METRES, type VoxelBlueprint } from '@chatdom/shared';
+import { VOXEL_METRES, type ForgePhase, type VoxelBlueprint } from '@chatdom/shared';
 import { VoxelWorkerPool } from '@chatdom/voxel';
 import { createForgeRitualView } from '../forge/ritual-view';
 import { BENCH_WISHES, type BenchPart } from './params';
@@ -37,6 +37,8 @@ export interface RitualWorld {
   piece: THREE.Mesh; anvil: [number, number, number]; landing: [number, number, number];
   title: string; triangles: number; sky: string;
   aim(width: number, height: number): void;
+  /** The bench's director: the anvil until the part leaves it, then follow the arc home. */
+  direct(phase: ForgePhase | null, progress: number, reduced: boolean): void;
   dispose(): void;
 }
 
@@ -89,29 +91,68 @@ export async function createRitualWorld(host: HTMLElement, part: BenchPart, fami
     const size = new THREE.Vector3(...result.blueprint.size).multiplyScalar(CELL);
     const anvil = ANVIL_GROUND.clone().add(new THREE.Vector3(0, WORK_SURFACE, 0));
 
+    // The forged part's tight bounds at its socket, for framing its arrival.
+    const socketCentre = new THREE.Box3().setFromObject(piece).getCenter(new THREE.Vector3());
+    // The anvil is framed from the front; the arc and the roof from the anvil's side, so the house never stands between.
+    const front = new THREE.Vector3(-.18, .3, 1).normalize(), beside = new THREE.Vector3(.62, .5, .6).normalize(), direction = new THREE.Vector3();
+    // Mid-flight the arc is seen side on, across its direction of travel, so its height and length both read.
+    const travel = socketCentre.clone().sub(ANVIL_GROUND).setY(0).normalize();
+    const profile = new THREE.Vector3(0, 1, 0).cross(travel).normalize();
+    if (profile.z < 0) profile.negate();
+    // At home the camera looks at the side of the house the socket is on: a wall lantern on the back wall is
+    // framed from behind, a roof part near the ridge from the anvil's side.
+    const houseBox = new THREE.Box3().setFromObject(houseMesh), houseCentre = houseBox.getCenter(new THREE.Vector3());
+    const outward = socketCentre.clone().sub(houseCentre).setY(0), halfWidth = Math.min(houseBox.max.x - houseBox.min.x, houseBox.max.z - houseBox.min.z) * .5;
+    const homeView = beside.clone().lerp(outward.normalize().setY(.62).normalize(), THREE.MathUtils.clamp((socketCentre.clone().sub(houseCentre).setY(0).length() / halfWidth - .45) / .4, 0, 1)).normalize();
+    profile.addScaledVector(new THREE.Vector3(0, 1, 0), .42).addScaledVector(travel, -.25).normalize();
+    const shots = { anvil: { target: new THREE.Vector3(), distance: 1 }, home: { target: new THREE.Vector3(), distance: 1 }, wide: { target: new THREE.Vector3(), distance: 1 } };
     const aim = (width: number, height: number) => {
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       const portrait = width / height < .8;
-      const reach = Math.max(1.9, Math.max(size.x, size.z) * .5 + .9), tall = WORK_SURFACE + size.y + .5;
-      const target = ANVIL_GROUND.clone().add(new THREE.Vector3(0, tall * (portrait ? .5 : .52), 0));
-      const direction = new THREE.Vector3(-.18, .3, 1).normalize();
       const vfov = THREE.MathUtils.degToRad(camera.fov), hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
-      // Fit the orbit and the full blueprint height, leaving the lower band for the bench controls.
-      const distance = Math.max(reach / Math.tan(hfov / 2 * .82), tall * .62 / Math.tan(vfov / 2 * .78)) * (portrait ? 1.08 : 1);
-      camera.position.copy(target).addScaledVector(direction, distance);
-      camera.lookAt(target);
+      const fit = (halfWidth: number, halfHeight: number) => Math.max(halfWidth / Math.tan(hfov / 2 * .82), halfHeight / Math.tan(vfov / 2 * .78));
+      // Fit the orbit, the full part height and the seal beside it, leaving the lower band for the bench controls.
+      const reach = Math.max(1.9, Math.max(size.x, size.z) * .5 + .9) + (portrait ? 0 : .7), tall = WORK_SURFACE + size.y + .5;
+      shots.anvil.target.copy(ANVIL_GROUND).add(new THREE.Vector3(portrait ? 0 : .45, tall * (portrait ? .46 : .52), 0));
+      shots.anvil.distance = fit(reach, tall * .62) * (portrait ? 1.1 : 1);
+      // At home: the part on its roof with enough of the house to read where it belongs.
+      shots.home.target.copy(socketCentre).add(new THREE.Vector3(0, -.8, 0));
+      shots.home.distance = fit(Math.max(4.5, size.x * 2), Math.max(3.4, size.y * 1.5)) * (portrait ? 1.05 : 1);
+      // Mid-flight: the anvil, the arc and the roof together.
+      const mid = shots.anvil.target.clone().lerp(socketCentre, .5).add(new THREE.Vector3(0, 2.5, 0));
+      shots.wide.target.copy(mid);
+      shots.wide.distance = fit(ANVIL_GROUND.distanceTo(socketCentre) * .42 + 2, 5.5);
       camera.clearViewOffset();
       // Lift the subject above the control card on phones, and slightly right of the caption on desktop.
       if (portrait) camera.setViewOffset(width, height, 0, height * .12, width, height);
       else camera.setViewOffset(width, height, -width * .06, height * .04, width, height);
       camera.updateProjectionMatrix();
+      place(shots.anvil.target, shots.anvil.distance);
+    };
+    const target = new THREE.Vector3(), follow = new THREE.Vector3();
+    const place = (at: THREE.Vector3, distance: number, toward = front) => {
+      direction.copy(toward);
+      camera.position.copy(at).addScaledVector(direction, distance); camera.lookAt(at);
+    };
+    const ease = (a: number, b: number, v: number) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * t * (t * (t * 6 - 15) + 10); };
+    const direct = (phase: ForgePhase | null, progress: number, reduced: boolean) => {
+      if (phase !== 'flight' && phase !== 'landed') { place(shots.anvil.target, shots.anvil.distance); return; }
+      // With reduced motion the camera cuts from the anvil to the home while the part is light, never sweeps.
+      if (phase === 'landed' || reduced) { if (phase === 'flight' && progress < .5) place(shots.anvil.target, shots.anvil.distance); else place(shots.home.target, shots.home.distance, homeView); return; }
+      // Pull back side on to see the arc, keep the part in frame, then come in on the roof as it meets it.
+      const out = ease(0, .35, progress), back = ease(.5, .88, progress);
+      target.copy(shots.anvil.target).lerp(shots.wide.target, out);
+      target.lerp(piece.getWorldPosition(follow), .45 * out * (1 - back)).lerp(shots.home.target, back);
+      direction.copy(front).lerp(profile, out).normalize().lerp(homeView, back).normalize();
+      camera.position.copy(target).addScaledVector(direction, THREE.MathUtils.lerp(THREE.MathUtils.lerp(shots.anvil.distance, shots.wide.distance, out), shots.home.distance, back));
+      camera.lookAt(target);
     };
     return {
       renderer, scene, camera, effects, piece, anvil: anvil.toArray(), landing: piece.position.toArray(),
       title: forgeTitle(plan), triangles: forged.triangles,
       sky: `linear-gradient(180deg, ${grade.zenith} 0%, ${grade.horizon} 72%, ${grade.fog} 100%)`,
-      aim, dispose,
+      aim, direct, dispose,
     };
   } catch (error) { dispose(); throw error; }
 }

@@ -1,17 +1,21 @@
 // Forge ritual presentation captures. Run from the repository root after `pnpm build`:
 //   node apps/web/src/forge-ritual-bench/capture.mjs [--base-url http://127.0.0.1:5176]
+//   node apps/web/src/forge-ritual-bench/capture.mjs --at 8,12.4 [--size 390x844] [--query part=lantern]
+// The second form only shoots the given ritual seconds into /tmp/chatdom-forge-ritual for quick review.
 // Holds the shared host capture lock before any preview or browser starts, and releases it in `finally`.
 import { chromium } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { URL, URLSearchParams } from 'node:url';
 import assert from 'node:assert/strict';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
 import { closeCapturePreview, startCapturePreview } from '../../../../packages/testing/preview.mjs';
 
-const OUT = 'shots/forge-ritual';
-const argBase = (() => { const i = process.argv.indexOf('--base-url'); return i > 0 ? process.argv[i + 1] : null; })();
+const arg = name => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null; };
+const argBase = arg('--base-url'), at = arg('--at');
+const OUT = at ? '/tmp/chatdom-forge-ritual' : 'shots/forge-ritual';
 const report = { port: null, checks: [], errors: [], shots: [] };
 
 /** 5190 is main's preview and 5193/5194 are reserved services; the rest of 5170–5199 is shared. */
@@ -57,50 +61,86 @@ try {
     const { width, height } = page.viewportSize(), path = `${OUT}/${name}@${width}x${height}.png`;
     await page.screenshot({ path, timeout: 180_000 }); report.shots.push(path); return path;
   };
+  const tile = (pattern, out, columns, rows) => {
+    const run = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '1', '-i', pattern, '-vf', `scale=360:225,tile=${columns}x${rows}:padding=0`, '-frames:v', '1', out], { encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr); report.shots.push(out);
+  };
+  const crop = (input, out, w, h, x, y) => {
+    const run = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', input, '-vf', `crop=${w}:${h}:${x}:${y}`, out], { encoding: 'utf8' });
+    assert.equal(run.status, 0, run.stderr); report.shots.push(out);
+  };
 
-  // Desktop dusk: each finished stage, then the pending blueprint hold.
-  const desk = await open('part=chimney&family=hearth&hour=19.5&t=0', { width: 1440, height: 900 });
-  for (const [name, t] of [['words', 1.7], ['words-gather', 2.75], ['blueprint', 3.9], ['blueprint-drawn', 4.75]]) {
-    const state = await seek(desk, t); await shoot(desk, name);
-    assert.equal(state.pieceShown, false, `${name}: the clone stays hidden until molten metal fills it`);
+  if (at) {
+    const [width, height] = (arg('--size') ?? '1440x900').split('x').map(Number);
+    const query = new URLSearchParams('part=chimney&family=hearth&hour=19.5&t=0');
+    for (const [key, value] of new URLSearchParams(arg('--query') ?? '')) query.set(key, value);
+    const page = await open(query.toString(), { width, height });
+    for (const t of at.split(',').map(Number)) { const state = await seek(page, t); await shoot(page, `at-${t}`); console.log(JSON.stringify(state)); }
+    await page.close();
+  } else {
+    await rm(`${OUT}/sheet`, { recursive: true, force: true }); await mkdir(`${OUT}/sheet`, { recursive: true });
+    // Desktop dusk: one frame per stage, with the ownership facts the bench reports.
+    const desk = await open('part=chimney&family=hearth&hour=19.5&t=0', { width: 1440, height: 900 });
+    const stages = [['words', 1.7], ['blueprint', 4.4], ['pour', 8], ['seal', 11.9], ['strike', 12.42], ['cool', 13.6], ['flight', 17.2], ['landed', 19.8]];
+    for (const [name, t] of stages) {
+      const state = await seek(desk, t); await shoot(desk, name);
+      assert.equal(state.phase, name, `${t} s presents ${name}`);
+      assert.equal(state.pieceShown, ['cool', 'flight', 'landed'].includes(name), `${name}: the clone is shown only once it has been struck`);
+      assert.ok(state.draws <= 40, `${name}: ${state.draws} draws in the whole bench frame`);
+    }
+    report.checks.push('Eight stages presented in order; the clone stays hidden until it cools on the anvil');
+    const cleared = await desk.evaluate(() => window.__chatdomForgeRitual.clear()); await settle(desk); await shoot(desk, 'cleared');
+    assert.deepEqual(cleared.shown, []); assert.equal(cleared.pieceShown, true, 'clear restores the borrowed clone visibility');
+    report.checks.push('Clear removes every owned effect and restores the clone');
+
+    // A timed contact sheet through all eight stages, shot at full desktop size so the controls stay small.
+    const times = [.8, 2.2, 3.8, 4.8, 6.5, 9, 10.8, 11.5, 12.0, 12.42, 13.2, 14.6, 16.2, 17.6, 18.9, 20.2];
+    for (const [i, t] of times.entries()) { await seek(desk, t); await desk.screenshot({ path: `${OUT}/sheet/${String(i).padStart(2, '0')}.png`, timeout: 180_000 }); }
+    tile(`${OUT}/sheet/%02d.png`, `${OUT}/stages@1440x900.png`, 4, 4);
+    await desk.close();
+
+    // Observed gates that never resolve: the blueprint and the seal each hold thirty seconds without moving on.
+    for (const [name, gate, phase] of [['pending-blueprint', 5, 'blueprint'], ['pending-seal', 12.2, 'seal']]) {
+      const page = await open(`part=chimney&family=hearth&hour=19.5&t=${gate}&gate=${gate}`, { width: 1440, height: 900 });
+      const start = await page.evaluate(() => window.__chatdomForgeRitual.report()); await shoot(page, `${name}-0s`);
+      const held = await seek(page, gate + 30); await shoot(page, `${name}-30s`);
+      for (const state of [start, held]) {
+        assert.equal(state.phase, phase); assert.equal(state.pieceShown, false);
+        assert.ok(!state.shown.includes('forge-flash') && !state.shown.includes('forge-crucible'), `${name}: nothing strikes or pours while held: ${state.shown}`);
+        if (phase === 'blueprint') assert.ok(!state.shown.includes('forge-seal') && !state.shown.includes('forge-hammer'), `${name}: no seal or hammer: ${state.shown}`);
+      }
+      assert.ok(held.held >= 29.9, `${name} held thirty seconds`);
+      report.checks.push(`${name}: held ${held.held.toFixed(1)} s at ${phase}; no strike, flash or arrival; clone hidden`);
+      await page.close();
+    }
+
+    // Phone and stream framings, with close crops of the pour, strike and arrival.
+    const phone = await open('part=chimney&family=hearth&hour=19.5&t=8', { width: 390, height: 844 });
+    for (const [name, t] of [['pour', 8], ['seal', 11.9], ['strike', 12.42], ['cool', 13.6], ['flight', 17.2], ['landed', 19.8]]) { await seek(phone, t); await shoot(phone, name); }
+    await phone.close();
+    const stream = await open('part=chimney&family=hearth&hour=19.5&t=8', { width: 1920, height: 1080 });
+    for (const [name, t] of [['pour', 8], ['strike', 12.42], ['cool', 14.2], ['flight', 17.2], ['landed', 19.3]]) { await seek(stream, t); await shoot(stream, name); }
+    crop(`${OUT}/pour@1920x1080.png`, `${OUT}/close-pour@760x760.png`, 760, 760, 700, 120);
+    crop(`${OUT}/strike@1920x1080.png`, `${OUT}/close-strike@760x760.png`, 760, 760, 700, 120);
+    crop(`${OUT}/landed@1920x1080.png`, `${OUT}/close-arrival@760x760.png`, 760, 760, 580, 160);
+    await stream.setViewportSize({ width: 1280, height: 720 }); await settle(stream);
+    for (const [name, t] of [['seal', 11.9], ['cool', 13.6]]) { await seek(stream, t); await shoot(stream, name); }
+    await stream.close();
+
+    // Another part and kit, a midday strike, and the reduced-motion ceremony chosen by the system preference.
+    const lantern = await open('part=lantern&family=tide&hour=19.5&t=12.42', { width: 1440, height: 900 });
+    await shoot(lantern, 'lantern-strike'); await seek(lantern, 19.8); await shoot(lantern, 'lantern-landed'); await lantern.close();
+    const midday = await open('part=weathervane&family=grove&hour=12.5&t=8', { width: 1440, height: 900 });
+    await shoot(midday, 'midday-pour'); await seek(midday, 12.42); await shoot(midday, 'midday-strike'); await midday.close();
+    const reduced = await open('part=chimney&family=hearth&hour=19.5&t=8', { width: 1440, height: 900 }, { reducedMotion: 'reduce' });
+    assert.equal((await reduced.evaluate(() => window.__chatdomForgeRitual.report())).reduced, true, 'system reduced motion is honoured');
+    for (const [name, t] of [['reduced-pour', 8], ['reduced-strike', 12.42], ['reduced-dissolve', 16.4], ['reduced-settle', 18.3], ['reduced-landed', 19.8]]) {
+      const state = await seek(reduced, t); await shoot(reduced, name);
+      assert.ok(!state.shown.includes('forge-flash'), `${name}: no flash with reduced motion`);
+    }
+    await reduced.close();
+    report.checks.push('Reduced motion follows prefers-reduced-motion: no flash, no streak, a dissolve and settle home');
   }
-  const pending0 = await seek(desk, 5), shot0 = await shoot(desk, 'pending-0s');
-  const pending30 = await seek(desk, 35), shot30 = await shoot(desk, 'pending-30s');
-  for (const state of [pending0, pending30]) {
-    assert.equal(state.phase, 'blueprint'); assert.equal(state.pieceShown, false);
-    assert.deepEqual(state.shown.filter(n => !['forge-blueprint', 'forge-motes'].includes(n)), [], `pending blueprint shows only the blueprint and calm motes: ${state.shown}`);
-  }
-  assert.ok(pending30.held >= 29.9, 'held thirty seconds at the blueprint');
-  report.checks.push(`Pending blueprint held ${pending30.held.toFixed(1)} s: phase stayed blueprint, clone hidden, no seal or strike drawn (${shot0}, ${shot30})`);
-  const cleared = await desk.evaluate(() => window.__chatdomForgeRitual.clear()); await settle(desk); await shoot(desk, 'cleared');
-  assert.deepEqual(cleared.shown, []); assert.equal(cleared.pieceShown, true, 'clear restores the borrowed clone visibility');
-  report.checks.push('Clear removes every owned effect and restores the clone');
-
-  // Timed contact sheet through the finished stages.
-  await desk.setViewportSize({ width: 720, height: 450 }); await settle(desk);
-  const times = [.3, .8, 1.3, 1.8, 2.3, 2.8, 3.2, 3.6, 4.1, 4.6];
-  for (const [i, t] of times.entries()) { await seek(desk, t); await desk.screenshot({ path: `${OUT}/sheet/${String(i).padStart(2, '0')}.png`, timeout: 180_000 }); }
-  const sheet = `${OUT}/stages@1440x900.png`;
-  const tile = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', '1', '-i', `${OUT}/sheet/%02d.png`, '-vf', 'scale=360:225,tile=5x2:padding=0', '-frames:v', '1', sheet], { encoding: 'utf8' });
-  assert.equal(tile.status, 0, tile.stderr); report.shots.push(sheet);
-  await desk.close();
-
-  // Phone and stream framings.
-  const phone = await open('part=chimney&family=hearth&hour=19.5&t=1.7', { width: 390, height: 844 });
-  await shoot(phone, 'words'); await seek(phone, 4.4); await shoot(phone, 'blueprint'); await seek(phone, 35); await shoot(phone, 'pending-30s');
-  await phone.close();
-  const stream = await open('part=chimney&family=hearth&hour=19.5&t=4.4', { width: 1920, height: 1080 });
-  await shoot(stream, 'blueprint'); await stream.setViewportSize({ width: 1280, height: 720 }); await settle(stream); await seek(stream, 2.2); await shoot(stream, 'words');
-  await stream.close();
-
-  // A smaller part, and the reduced-motion presentation chosen by the system preference.
-  const lantern = await open('part=lantern&family=tide&hour=19.5&t=4.6', { width: 1440, height: 900 });
-  await shoot(lantern, 'lantern-blueprint'); await lantern.close();
-  const reduced = await open('part=chimney&family=hearth&hour=19.5&t=1.7', { width: 1440, height: 900 }, { reducedMotion: 'reduce' });
-  assert.equal((await reduced.evaluate(() => window.__chatdomForgeRitual.report())).reduced, true, 'system reduced motion is honoured');
-  await shoot(reduced, 'reduced-words'); await seek(reduced, 4.1); await shoot(reduced, 'reduced-blueprint');
-  await reduced.close();
-  report.checks.push('Reduced motion follows prefers-reduced-motion');
 
   assert.deepEqual(report.errors, []);
   report.result = 'passed';
