@@ -7,6 +7,7 @@ import { assetHashOf, canonicalSceneJson, sha256Hex, utf8 } from './codec';
 import { createNativeTown, type NativeTown } from './native';
 import { FoundedSceneError, encodeFoundedScene, validateFoundedScene } from './validate';
 import { FOUNDED_PHYSICS_VERSION } from './collision';
+import { arrivalFurnishings } from './arrival-furnishings';
 
 export interface FoundedSceneInput {
   readonly kingdomId: KingdomId;
@@ -137,6 +138,7 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
   for (const fixture of native.fixtures) pieces.push({ id: fixture.id,
     blueprint: ownedCastle && fixture.id === keepId ? ownedCastle.blueprint : fixture.blueprint,
     position: fixture.position, rotation: fixture.rotation });
+  pieces.push(...arrivalFurnishings(plan, pieces));
 
   // Content identity is the exact bytes; one factory object is hashed once, distinct bytes stay distinct.
   const hashes = new Map<VoxelBlueprint, string>(), assets = new Map<string, RealmFoundedBlueprint>();

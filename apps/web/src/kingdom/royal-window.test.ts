@@ -5,8 +5,17 @@ import { StyleIdSchema, type VoxelBlueprint } from '@chatdom/shared';
 const VOXEL_FIXTURE: VoxelBlueprint = { version: 1, id: 'fixture:window', styleId: StyleIdSchema.parse('hearth'), kind: 'civic', lattice: 'build', size: [16, 24, 8], boxes: [], windows: [{ id: 'presence', centre: [8, 14, 8], width: 8, height: 12, facing: 'south' }] };
 import { REALM_CASTLE_SLOT } from '@chatdom/shared/realm';
 import { royalWindow } from './royal-window';
+import { createCastle } from '@chatdom/content';
 
 describe('royalWindow', () => {
+  it('uses the actual central upper lancet below the beacon, preserving the owned keep geometry', () => {
+    const blueprint = createCastle('tide'), before = JSON.stringify(blueprint);
+    const keep: WindowHouse = { slot: REALM_CASTLE_SLOT, blueprint, position: [-16, 20, -80], yaw: 0 };
+    const result = royalWindow([keep])!;
+    expect(result.blueprint.windows).toEqual([{ id: 'monarch-upper-lancet', centre: [117.5, 160, 139.04], width: 3, height: 6, facing: 'south' }]);
+    expect(result.blueprint.boxes).toBe(blueprint.boxes);
+    expect(JSON.stringify(blueprint)).toBe(before);
+  });
   it('selects one lowest world-south authored pane without altering the keep', () => {
     const north = { ...VOXEL_FIXTURE.windows[0]!, id: 'north', facing: 'north' as const };
     const upper = { ...VOXEL_FIXTURE.windows[0]!, id: 'upper', centre: [8, 18, 8] as [number, number, number] };

@@ -1,0 +1,50 @@
+import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
+import { createCastle, createCivicProp } from '@chatdom/content';
+import { createVoxelMaterial } from '@chatdom/render';
+import { MATERIALS } from '@chatdom/content';
+import { KingdomIdSchema, type KingdomPresenceFrame } from '@chatdom/shared';
+import { canAnimateKeep, canAnimateStandard, createRoyalLife } from './index';
+
+describe('royal life', () => {
+  it('only enables banner motion on the authored castle and shares the voxel light uniforms', () => {
+    const blueprint = createCastle('hearth');
+    expect(canAnimateKeep(blueprint)).toBe(true);
+    expect(canAnimateKeep({ ...blueprint, boxes: blueprint.boxes.filter(box => box.material !== 13) })).toBe(false);
+    const clay = createVoxelMaterial(MATERIALS, 'build');
+    const scene = new THREE.Scene();
+    const life = createRoyalLife(scene, clay, { slot: 0, blueprint, position: [2, 3, 4], yaw: Math.PI / 2 }, []);
+    expect(life.keepMaterial?.uniforms.uLight).toBe(clay.material.uniforms.uLight);
+    expect(life.keepMaterial?.vertexShader).toContain('world.xyz-uRoyalOrigin');
+    life.dispose(); clay.dispose();
+  });
+  it('animates the installed canonical standard even while the stream is offline', () => {
+    const blueprint = createCivicProp('banner-standard', 'tide');
+    expect(canAnimateStandard(blueprint)).toBe(true);
+    expect(canAnimateStandard({ ...blueprint, boxes: blueprint.boxes.slice(1) })).toBe(false);
+    const clay = createVoxelMaterial(MATERIALS, 'build');
+    const life = createRoyalLife(new THREE.Scene(), clay, undefined, [], { blueprint, position: [10, 2, 5], rotation: 1 });
+    expect(life.standardMaterial?.uniforms.uLight).toBe(clay.material.uniforms.uLight);
+    expect(life.standardMaterial?.uniforms.uRoyalYaw?.value).toBe(Math.PI / 2);
+    life.update(12, undefined, 19);
+    expect(life.standardMaterial?.uniforms.uRoyalTime?.value).toBe(12);
+    life.dispose(); clay.dispose();
+  });
+  it('shows fire and emits light only with a fresh live frame', () => {
+    const clay = createVoxelMaterial(MATERIALS, 'build');
+    const scene = new THREE.Scene();
+    const life = createRoyalLife(scene, clay, undefined, [{ position: [1, 2, 3], normal: [0, 1, 0] }]);
+    const frame: KingdomPresenceFrame = { version: 1, kingdomId: KingdomIdSchema.parse('1'), epoch: 'one', sequence: 1, asOf: 0, origin: 'live', connection: 'fresh', streamLive: true, windows: [] };
+    life.update(1, frame, 19);
+    expect(scene.children[0]?.visible).toBe(true);
+    expect(life.sources()[0]?.strength).toBeGreaterThan(0);
+    life.update(2, { ...frame, connection: 'stale', streamLive: false }, 19);
+    expect(scene.children[0]?.visible).toBe(false);
+    expect(life.sources()[0]?.strength).toBe(0);
+    life.update(3, undefined, 19);
+    expect(life.sources()[0]?.strength).toBe(0);
+    life.dispose();
+    expect(scene.children).toHaveLength(0);
+    clay.dispose();
+  });
+});

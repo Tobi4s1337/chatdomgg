@@ -27,6 +27,10 @@ import { createKingdomCitizens, type SpeechLabel } from './citizen-scene';
 import { foundedContent } from './founded-content';
 import { royalWindow } from './royal-window';
 import { composeWindowCamera } from './window-camera';
+import { composeRoyalCamera } from './royal-camera';
+import { createHomeLife } from './home-life';
+import { createRoyalLife } from './royal-life';
+import { foundedLifeSites } from './home-life-sites';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
 import { createObservedWalkers, walkerSlots } from './observed-walkers';
 import type { RealmWalkerFeed } from '@chatdom/shared/realm';
@@ -89,6 +93,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   for(const {blueprint} of content)blueprints.set(blueprintKey(blueprint),blueprint);
   const royal=installed?royalWindow(installed.forgeHosts):undefined;
   const presenceHouses=royal?[...houses,royal]:[...houses];
+  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:[],braziers:[],standard:undefined};
+  const homeLife=own(createHomeLife(scene,lifeSites.homes));
   const windows=own(createWindowLights(scene,presenceHouses));
   // Begin the arrival among neighbours, not alone at the newest edge of town.
   const arrivalHomes=layout.homes.filter(h=>h.tier==='house');
@@ -102,19 +108,20 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const arrivalDirector=options.directArrivals?createArrivalDirector():undefined;
   let arrivalCameraDirected=false,arrivalShot:ArrivalAttention|undefined,arrivalBlend=0,arrivalKey='';
   const arrivalEye=new THREE.Vector3(),arrivalTarget=new THREE.Vector3(),arrivalWantedEye=new THREE.Vector3(),arrivalWantedTarget=new THREE.Vector3();
-  let arrivalFov=48;
+  let arrivalFov=48,homeFov=64;
   const first=houses.find(h=>h.slot===simulation.firstSlot)!;
   const requestedFocus=presenceHouses.some(h=>h.slot===options.focusSlot)?options.focusSlot:undefined;
   let focusSlot=requestedFocus??(options.source==='simulated'?simulation.firstSlot:houses[0]!.slot);
   const focal=new THREE.Vector3(),homeEye=new THREE.Vector3(),homeTarget=new THREE.Vector3(),citizenEye=new THREE.Vector3();
   function focusHome(slot:number){
     const home=presenceHouses.find(h=>h.slot===slot),route=crowd.motion.routeForSlot(slot);if(!home||!route)return;
-    focusSlot=slot;const pane=home.blueprint.windows[0]??{centre:[home.blueprint.size[0]/2,Math.min(14,home.blueprint.size[1]/2),home.blueprint.size[2]],facing:'south' as const};
+    focusSlot=slot;homeFov=64;const pane=home.blueprint.windows[0]??{centre:[home.blueprint.size[0]/2,Math.min(14,home.blueprint.size[1]/2),home.blueprint.size[2]],facing:'south' as const};
     focal.set(...pane.centre).multiplyScalar(.125).applyAxisAngle(new THREE.Vector3(0,1,0),home.yaw).add(new THREE.Vector3(...home.position));
     const angle=({north:Math.PI,east:Math.PI/2,south:0,west:-Math.PI/2}[pane.facing])+home.yaw;
     homeEye.copy(focal).add(new THREE.Vector3(Math.sin(angle)*7+1.8,2.1,Math.cos(angle)*7));
     homeTarget.copy(focal).add(new THREE.Vector3(Math.cos(angle)*1.3,1.1,-Math.sin(angle)*1.3));
     if(home!==royal){const pose=composeWindowCamera(home,route.points.at(-1)!,camera.aspect,angle);homeEye.copy(pose.eye);homeTarget.copy(pose.target);}
+    else {const pose=composeRoyalCamera(home);homeEye.copy(pose.eye);homeTarget.copy(pose.target);homeFov=pose.fov;}
     citizenEye.set(...route.points.at(-1)!).add(new THREE.Vector3(Math.sin(angle)*6.5-Math.cos(angle)*13,5.5,Math.cos(angle)*6.5+Math.sin(angle)*13));
   }
   focusHome(focusSlot);
@@ -133,6 +140,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   const sunShadows=own(createSunShadows(renderer,{bounds:new THREE.Box3(new THREE.Vector3(layout.bounds.minX-40,-8,layout.bounds.minZ-70),new THREE.Vector3(layout.bounds.maxX+40,60,layout.bounds.maxZ+20)),resolution:portrait()?1024:2048}));
   sunShadows.bindReceiver(clay.material);sunShadows.bindReceiver(ground.material);sunShadows.bindReceiver(crowd.material.material);
+  const royalLife=own(createRoyalLife(scene,clay,installed?.forgeHosts.find(home=>home.slot===65534),lifeSites.braziers,lifeSites.standard));
+  if(royalLife.keepMaterial)sunShadows.bindReceiver(royalLife.keepMaterial);
+  if(royalLife.standardMaterial)sunShadows.bindReceiver(royalLife.standardMaterial);
   function resize(){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;setHero();focusHome(focusSlot);walk?.controller.resize(canvas.clientWidth,canvas.clientHeight);sunShadows.setResolution(portrait()?1024:2048);}
   const observer=new ResizeObserver(resize);earlyCleanups.push(()=>observer.disconnect());observer.observe(canvas);resize();
   const blockers=installed?[...houses,...props.map(p=>({...p,slot:65534}))]:buildings;
@@ -183,7 +193,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   function instance(blueprint:VoxelBlueprint,chunks:readonly AssetChunkMesh[],placements:readonly Placement[],factor:1|2|4=1){
     const geometry=geometryFromChunks(chunks,'build');geometry.setAttribute('aLodFade',new THREE.InstancedBufferAttribute(new Float32Array(placements.length).fill(1),1));geometries.push(geometry);
-    const mesh=new THREE.InstancedMesh(geometry,clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
+    const keepMesh=installed?.forgeHosts.some(home=>home.slot===65534&&blueprintKey(home.blueprint)===blueprintKey(blueprint));
+    const standardMesh=lifeSites.standard&&blueprintKey(lifeSites.standard.blueprint)===blueprintKey(blueprint);
+    const mesh=new THREE.InstancedMesh(geometry,standardMesh&&royalLife.standardMaterial?royalLife.standardMaterial:keepMesh&&royalLife.keepMaterial?royalLife.keepMaterial:clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
     placements.forEach((p,i)=>{m.compose(v.set(...p.position),q.setFromAxisAngle(new THREE.Vector3(0,1,0),p.yaw),new THREE.Vector3(factor,factor,factor));mesh.setMatrixAt(i,m);});
     mesh.instanceMatrix.needsUpdate=true;mesh.frustumCulled=false;mesh.name=blueprint.id;scene.add(mesh);meshes.push(mesh);geometryBuilds++;
     if(factor===(blueprint.kind==='flora'?2:1))sunShadows.register(mesh);
@@ -282,7 +294,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const water=own(createWater(scene,{lake:layout.lake,terrain:{data:heightData,width:heightWidth,height:heightDepth,origin:heightOrigin,step:1}}));
   function labels(){const names:NameLabel[]=[];for(const s of [...windows.getSources(),...build.getSources()]){
     if(!s.name||s.strength<.1)continue;const p=new THREE.Vector3(...s.position),to=camera.position.clone().sub(p);
-    if(to.length()>32||to.dot(new THREE.Vector3(...s.normal))<2)continue;
+    const royalPicture=s.slot===65534&&(camName==='window'||arrivalShot?.slot===65534&&arrivalShot.phase==='window');
+    if(to.length()>(royalPicture?90:32)||to.dot(new THREE.Vector3(...s.normal))<2)continue;
     if(windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],s.position))continue;
     p.y+=1.1;p.project(camera);if(p.z>1||p.z<0||Math.abs(p.x)>.91||Math.abs(p.y)>.88)continue;
     names.push({name:s.name,slot:s.slot,x:(p.x+1)*canvas.clientWidth/2,y:(1-p.y)*canvas.clientHeight/2});
@@ -325,7 +338,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }
     else if(camName==='citizen'){const person=crowd.subject(focusSlot);const p=person?new THREE.Vector3(...person.position):focal.clone();camera.position.copy(citizenEye);target.copy(p).add(new THREE.Vector3(0,1.05,0));}
     else if(camName==='window'){camera.position.copy(homeEye);target.copy(homeTarget);}else{camera.position.copy(heroEye);target.copy(heroTarget);}
-    const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,THREE.MathUtils.smootherstep(time,18,36)):camName==='citizen'?48:camName==='window'?64:heroFov;
+    const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,THREE.MathUtils.smootherstep(time,18,36)):camName==='citizen'?48:camName==='window'?homeFov:heroFov;
     if(!walking&&Math.abs(camera.fov-wantedFov)>.001){camera.fov=wantedFov;camera.updateProjectionMatrix();}
     if(!installed){build.update(now,dt,hour,target);forge.update(now,target,!!build.session);}
     const forgeDirected=forgeCameraDirected=realmForge?.update(now,!walking&&!build.session&&!capturePose)??false;
@@ -344,7 +357,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       if(arrivalBlend===0){arrivalEye.copy(camera.position);arrivalTarget.copy(target);arrivalFov=camera.fov;}
       const follow=1-Math.exp(-dt*2.8);
       arrivalEye.lerp(arrivalWantedEye,follow);arrivalTarget.lerp(arrivalWantedTarget,follow);
-      arrivalFov+=( (arrivalShot.phase==='window'?64:48)-arrivalFov)*follow;
+      arrivalFov+=( (arrivalShot.phase==='window'?homeFov:48)-arrivalFov)*follow;
     }
     const permitted=!walking&&!build.session&&!capturePose&&!forgeDirected;
     arrivalBlend=permitted?THREE.MathUtils.clamp(arrivalBlend+(arrivalShot?1:-1)*dt/1.2,0,1):0;
@@ -358,6 +371,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(nextArrival!==arrivalKey){arrivalKey=nextArrival;options.onArrival?.(arrivalShot?{slot:arrivalShot.slot,phase:arrivalShot.phase}:null);}
     if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
     if(!walking&&!forgeDirected)camera.lookAt(target);camera.updateMatrixWorld();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);updateInstances(fixedTime&&autoCamera?time*1000:now);
+    homeLife.update(presentationMs,time,lightFrame,hour,camera);royalLife.update(time,frame,hour);
     if(loaded&&now-lastAmbience>=160){
       lastAmbience=now;listenerRight.setFromMatrixColumn(camera.matrixWorld,0);
       const self=walking?walk?.poses.find(p=>p.self):undefined;
@@ -366,11 +380,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }
     if(loaded)sound.ambienceUpdate(now,ambienceTarget);
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
-    fog.color.set(grade.fog);fog.density=.0016;
+    fog.color.set(grade.fog);fog.density=grade.fogDensity;renderer.toneMappingExposure=grade.exposure;
     water.update(grade,time,camera);
     dressing.hideLot(buildHidden?simulation.firstSlot:null);
     dressing.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
-    if(now-lastField>240){lastField=now;const centre:Vec3=[target.x,terrainHeight(layout,target.x,target.z),target.z];field.update(centre,[...windows.getSources(),...build.getSources()]);farField.update(centre,[...windows.getSources(),...build.getSources()]);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]}]);}
+    if(now-lastField>240){lastField=now;const centre:Vec3=[target.x,terrainHeight(layout,target.x,target.z),target.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...royalLife.sources()];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
     const people=walk??observed;
     if(people)options.onWalkers?.(people.labels().filter(label=>{
       const person=people.poses.find(p=>p.id===label.id);
@@ -413,7 +427,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();

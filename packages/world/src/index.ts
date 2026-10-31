@@ -18,4 +18,5 @@ export { generateSettlementPlan } from './settlement/generator';
 export { samplePublicGround, settlementTerrainHeight, settlementTerrainWorkspaceBytes, naturalTerrainHeight } from './settlement/terrain';
 
 export * from './citizen-behaviours';
+export { homeLifeAnchors, type HomeLifeAnchors } from './home-life';
 export type { RealmFoundedBlueprint, RealmFoundedPlacement, RealmFoundedScene } from './founded-world/types';

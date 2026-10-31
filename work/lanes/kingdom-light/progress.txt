@@ -33,3 +33,5 @@ KL04: closed the sunlit-floor gap without a new render target. voxel-material.ts
 
 follow-up: KL04 Capture and inspect the glass views at phone size; measure the sunlit room on a real GPU against noon.
 2026-10-31 main looked next task: actual live market frame shots/kingdom/live-evening/market-wares@1440x900.png has reviewed cart/baskets beside market:stall:0 but the counter reads as a dark silhouette. Give this existing stall one warm practical over its counter, with real authored light anchors/spill; preserve citizen-window presence and observed-stream beacon rules. Main composes the public geometry; no presentation-only solid props or fake occupied homes.
+
+2026-10-31 main integration: applied the requested hourly fog.density and toneMappingExposure seam; deepened dusk after founder review. Door lanterns now enter authoritative founded geometry via arrivalFurnishings and warm from the arrived presence frame; gate braziers use observed live state. Reuse these actual fixtures/sources; do not duplicate lamps. Existing market-counter practical follow-up stands.

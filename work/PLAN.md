@@ -330,52 +330,50 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Active order:** real-chat evening; glassy walk; town with love; hero anvil/dragon; interactions; Twitch spectacle.
-Main carries evening/realm/walk and merges finished lane work promptly. One worker per active world lane, no new
-lanes. Terra handles volume/captures, Luna recon, Sol core main would otherwise write. Changed checks plus one
-chosen frame per visual change; full evening at milestones. Founder supplies the first actual chat line when
-available: never wait for it, fake people/live/coals, or ask again.
+**Order:** real-chat evening; glassy walk; town with love; hero anvil/dragon; interactions; Twitch spectacle.
+Main carries evening/realm/walk and takes finished lane work promptly. One worker per active world lane, no new
+lanes. Terra handles volume/look/captures, Luna recon, Sol core main would otherwise write. Changed checks and
+chosen stills; full evening at milestones. Tobias supplies the first actual chat line: do not wait for it or fake it.
 
-**Landed:** owned-keep presence/speech/walker binding0470f12, client royal arrival/window73746fe; woodland zones
-LD03 merged e253c71. Monarch follows the existing Crown Road to the actual gate, lights one authored keep pane
-(host65534), gets no street deed or unearned coal. Personal warmth works offline; the kingdom beacon still follows
-observed stream state. Keep source extends the light field bounds. Other accepted work includes RS07, IN03, FR03,
-WB02, BT04, AtlasA03–A05, E01, RG01, AH05, KL05, LD02, GD01 and FL03. Parked/incomplete table/campfire work stays out.
+**This slice:** deeper indigo dusk makes the home window and door lantern lead. World homeLifeAnchors derives
+actual portals and chimney mouths from final authored geometry. The authoritative founded scene adds door lamps
+beside real portals, two gate braziers and a reviewed royal standard; their geometry participates in scene hashes
+and collision revisions. Owned home/keep bytes and Forge fingerprints stay pinned. On actual arrived presence,
+the lantern warms and chimney smoke starts; stale presence clears both. No invented chimney on a plain custom roof.
+The same existing light fields receive these practicals. Scene fog/exposure now consume the authored hourly grade.
 
-**Stream arrival:** opt-in realm stage follows one witnessed recent arrival, then holds its genuinely lit window.
-Fresh validated chat can frame an existing resident too. No invented speech; heartbeats never replay; no queue.
-Walking/manual selection/Forge take priority. Offline observed chat remains a valid subject. Window framing fits
-actual house bounds plus doorstep/person, with roof/body margin and aspect-aware resize; the royal close-up stays
-on its authored pane. Typecheck, scoped lint,10 focused tests and web build pass. Looked at the fitted1920×1080
-SIMULATED still below. Review-only Date.now freeze and two completed draws let SwiftShader finish the PNG;
-software frames reached ~57s, so live motion/timing and the full-quality recording still need a GPU-backed recorder.
-All helper captures finished and released browser/server/lock. No owned review server remains running.
+**Royal picture:** full castle from the court approach, rather than a low-tower wall crop. One existing upper
+lancet crown above the pitched roof carries the monarch's warmth: keep-local build cells [117.5,160,139.04],
+3×6 cells, south-facing. Only this directed royal picture can show its name beyond the normal nearby-name range.
+Gate flames follow fresh observed live state; the standard and original keep banners sway with ambient wind.
+Personal presence still works offline; the kingdom beacon follows observed stream state independently. Keep65534
+gets no street deed or unearned coal. PH08's concrete follow-up remains a crafted surround for this high window.
 
-**One world:** actual adopted plan remains settlement:2:43cffdb6, 240 homes, collision revision2. Reviewed cart/stores
-compose beside market:stall:0 at[-13.5,9,3.5] and[-8.5,9,.5] in the authoritative scene; roads/plots/castle stay pinned.
-V2 land/woodland data is available, but the native compiler still consumes adopted v1; LD03's map plants no actual
-trees. Cover/flowers respect real plots/court/occupied geometry. Names, starter looks, homeSlot and bounded public
-5Hz walkers follow real ownership. Seated bodies/names use actual leases/rest anchors; native targets still only
-anvil/own door/exit. Seat authors must supply sole-height rest, not a log's seat-top. Glassy pass stands; GPU feel
-and multiple genuinely signed-in walkers still need actual acceptance.
+**Stream:** the accepted arrival director follows one witnessed recent arrival, then its genuinely warm window.
+Fresh validated chat may frame an existing resident too. No invented speech, heartbeat replay or queue. Walking,
+manual selection and Forge take priority. Ordinary window shots fit actual house bounds, doorstep and person.
 
-**Forge/sound:** Postgres/KingdomRoom owns allocation, presence, geometry and commits. Herald→room→Codex CLI/judges
-→owned host→public ritual/director is connected, unproved on real chat. Migration0007 applied; host fingerprints
-stay pinned. Actual casting keeps the engraved anvil hot through pour/cooling; sleeping dragon silhouette remains
-weak. Feet (stream:camera) sample shoreline/exposure for original wind/water in the existing mixer; mute/hide rules
-stand. shots/audio/landscape-tour.wav uses SIMULATED locations on the real plan; not auditioned on this host.
+**Look/checks:** looked at shots/kingdom/live-evening/homecoming-deep-dusk-SIMULATED@1920x1080.png and
+shots/kingdom/live-evening/royal-court-deep-dusk-SIMULATED@1440x900.png: clear lantern, soft plume, bubble/path/window;
+castle silhouette, named high pane, gate fires and standard. These are explicitly SIMULATED fixed-clock stills over
+the actual adopted town with derived pre-commit fixtures, not motion or real-chat acceptance. Review UTF-8 header
+fixes the temporary label's encoding slip. Both captures had no browser errors; all browsers/servers/locks released.
+Typecheck, scoped lint,18 focused tests (12 changed tests rerun serially), web/realm/API builds pass. No full-suite claim.
 
-**Runtime:** managed preview5190, API5196, realm5197(root env), Forge5195, Herald5194; auto-restart on main/env changes,
+**One world:** adopted settlement:2:43cffdb6, 240 homes, kingdom129634568. Reviewed market cart/stores stand by
+market:stall:0. LD03 woodland zones are merged; v2 land/planting data is available, but the actual compiler still
+consumes adopted v1. A zone map does not plant live trees. Genuine names, starter looks and bounded5Hz walkers
+follow ownership. Seated bodies/names follow actual leases; native targets remain anvil/own door/exit. Glassy pass
+stands; multiple genuinely signed-in walkers and GPU feel await acceptance. Market counter needs its warm practical;
+the castle's broad masonry needs the places lane's detail. Sleeping dragon silhouette remains weak.
+
+**Live:** managed preview5190, API5196, realm5197(root env), Forge5195, Herald5194; auto-restart on main/env changes,
 one live writer. Leave services alone. Browser origin http://localhost:5190. Old simulated5191 gone; spare5198 stopped;
-explicit SIMULATED rehearsal5187 separate. Latest Herald healthy/offline, pending0/faultnull/chatSubmitted0; no actual
-chat observed in this slice. Walk /?walk=1&kingdom=129634568&hour=19.5 needs genuine Twitch sign-in; read-only stream
-/stream?source=realm&kingdom=129634568&hour=19.5 watches the same kingdom.
+explicit SIMULATED rehearsal5187 separate. Walk /?walk=1&kingdom=129634568&hour=19.5 requires genuine Twitch sign-in;
+read-only /stream?source=realm&kingdom=129634568&hour=19.5 observes the same kingdom. Postgres/KingdomRoom owns
+allocation, presence, geometry, coal reservations and Forge commits; migration0007 applied. Herald→room→Codex CLI
+judges→owned host→public ritual is connected, still unproved on actual chat. No actual chat was supplied in this slice.
 
-**Look/next:** viewed shots/kingdom/live-evening/royal-window-SIMULATED@1440x900.png and
-shots/kingdom/live-evening/stream-homecoming-fit-SIMULATED@1920x1080.png over actual adopted geometry: warm named
-panes work; fitted shot includes whole citizen/roof and speech, but the person is small/back-facing and gable/doorway
-are sparse. PH08 gets a worn personal-window surround; parked homes-hearth gets a Grove gable truss backlog item.
-Market counter still needs its light-lane practical; ground gets a worn flower strip around existing wares. LD03's
-viewed planting map is a labelled fixture, not changed live landscape. No full-verify/evening claim. Next acceptance
-remains actual chat→shared arrival/window/name/bubble; actual wish→judged piece→right home; two/three genuine
-walkers and stream director, then record/watch the full60–90seconds. The full goal stays active.
+**Next:** actual chat→shared arrival/window/name/bubble and actual wish→judged piece→right home; keep the next core
+piece moving before that line arrives. A GPU browser will be available for the full-quality recording; until then
+stills/SwiftShader checks suffice. Smoke/banner motion and the complete live evening remain unaccepted. Goal active.
