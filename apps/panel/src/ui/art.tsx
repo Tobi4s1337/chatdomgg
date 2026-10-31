@@ -14,6 +14,12 @@ export function PanelDefs() {
     <radialGradient id="cp-ember" cx="50%" cy="80%" r="75%">
       <stop offset="0" stop-color="#d9873a" /><stop offset=".6" stop-color="#7a3c1e" /><stop offset="1" stop-color="#2b1f2c" />
     </radialGradient>
+    <radialGradient id="cp-table-top" cx="40%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#8a5d38" /><stop offset=".7" stop-color="#5e3d24" /><stop offset="1" stop-color="#3f2817" />
+    </radialGradient>
+    <radialGradient id="cp-candle" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffd890" stop-opacity=".9" /><stop offset="1" stop-color="#ffb04a" stop-opacity="0" />
+    </radialGradient>
     <clipPath id="cp-pane-clip" clipPathUnits="userSpaceOnUse"><path d="M10 38.5V17.5a10 10 0 0 1 20 0v21Z" /></clipPath>
     <filter id="cp-deckle" x="-4%" y="-8%" width="108%" height="116%">
       <feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="4" />
@@ -117,5 +123,114 @@ export function Shutters() {
     {/* A crescent cut through the left shutter, lit from within. */}
     <path d="M80 78a15 15 0 1 0 10 26 12 12 0 0 1-10-26Z" fill="#e9a352" opacity=".85" />
     <path d="M80 78a15 15 0 1 0 10 26 12 12 0 0 1-10-26Z" fill="none" stroke="#120d09" stroke-width="2" />
+  </svg>;
+}
+
+export function ForgeGlyph() {
+  return <svg class="cp-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 10.5h12.5c0 2-1.6 3.2-3.8 3.6v2.4h1.8v2.5H7.6v-2.5h1.8v-2.4c-2.6-.4-4.9-1.8-4.9-3.6Z" /><path d="M17 10.5h2.5" /><path d="m15.5 4.5-1 2.2m3.4-.8-1.9 1.6m-3.6-3.4.2 2.3" /></svg>;
+}
+
+/** Leaves Twitch: an arrow out of a frame, beside every link that opens chatdom.gg. */
+export function LeaveGlyph() {
+  return <svg class="cp-glyph leave" viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 5.5h5v5M18.5 5.5 11 13" /><path d="M16.5 13.5v4a1.5 1.5 0 0 1-1.5 1.5H7a1.5 1.5 0 0 1-1.5-1.5V9.5A1.5 1.5 0 0 1 7 8h4" /></svg>;
+}
+
+/**
+ * A tavern table from above: the round top, a candle when a game is on, and its seats.
+ * Taken seats glow warm, free ones are empty rings. Seats are a fact of the room, never a count of the audience.
+ */
+export function TableArt(props: { seats: number; taken: number; playing: boolean }) {
+  const seat = (i: number) => {
+    const angle = -Math.PI / 2 + (i / props.seats) * Math.PI * 2;
+    return { x: 24 + Math.cos(angle) * 18, y: 24 + Math.sin(angle) * 18 };
+  };
+  return <svg class="cp-table-art" viewBox="0 0 48 48" aria-hidden="true">
+    <circle cx="24" cy="25" r="12.5" fill="#0006" />
+    <circle cx="24" cy="24" r="12" fill="url(#cp-table-top)" stroke="#2e1d11" stroke-width="1.2" />
+    <circle cx="24" cy="24" r="9" fill="none" stroke="#c99a5c" stroke-width=".5" opacity=".45" />
+    <Show when={props.playing}>
+      <circle cx="24" cy="24" r="7" fill="url(#cp-candle)" />
+      <circle cx="24" cy="24" r="1.6" fill="#fff1c9" />
+    </Show>
+    {Array.from({ length: props.seats }, (_, i) => {
+      const { x, y } = seat(i);
+      return i < props.taken
+        ? <circle class="seat taken" cx={x} cy={y} r="3.4" />
+        : <circle class="seat" cx={x} cy={y} r="3" />;
+    })}
+  </svg>;
+}
+
+/**
+ * The forge from the street: a brick hearth, fire or banked embers, and its anvils.
+ * Working anvils carry a glowing piece and sparks; idle ones stand cold.
+ */
+export function ForgeArt(props: { burning: boolean; total: number; working: number }) {
+  const width = 280, spacing = Math.min(64, (width - 40) / Math.max(1, props.total));
+  const start = width / 2 - (spacing * (props.total - 1)) / 2;
+  return <svg class="cp-forge-art" classList={{ burning: props.burning }} viewBox={`0 0 ${width} 92`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+    <defs>
+      <radialGradient id="cp-fire" cx="50%" cy="85%" r="70%">
+        <stop offset="0" stop-color="#fff0c0" /><stop offset=".3" stop-color="#ffb04a" /><stop offset=".7" stop-color="#c2461c" /><stop offset="1" stop-color="#3a1810" />
+      </radialGradient>
+      <radialGradient id="cp-banked" cx="50%" cy="90%" r="70%">
+        <stop offset="0" stop-color="#b8542a" /><stop offset=".45" stop-color="#5a2416" /><stop offset="1" stop-color="#1c0f0b" />
+      </radialGradient>
+      <radialGradient id="cp-forge-wash" cx="50%" cy="40%" r="60%">
+        <stop offset="0" stop-color="#ff9a3c" stop-opacity=".35" /><stop offset="1" stop-color="#ff9a3c" stop-opacity="0" />
+      </radialGradient>
+      <pattern id="cp-brick" width="20" height="10" patternUnits="userSpaceOnUse">
+        <rect width="20" height="10" fill="#5a3324" />
+        <path d="M0 .5h20M0 5.5h20M10 .5v5M0 5.5v5M20 5.5v5" stroke="#2a160f" stroke-width="1" />
+        <path d="M1 1.5h8M11 6.5h8" stroke="#8a5a3e" stroke-width=".6" opacity=".6" />
+      </pattern>
+    </defs>
+    <rect width={width} height="92" fill="#1a110c" />
+    <Show when={props.burning}><rect width={width} height="92" fill="url(#cp-forge-wash)" /></Show>
+    {/* The hearth: a brick arch with the fire or the banked embers inside. */}
+    <path d={`M${width / 2 - 62} 62V28a62 22 0 0 1 124 0v34Z`} fill="url(#cp-brick)" />
+    <path d={`M${width / 2 - 36} 62V36a36 16 0 0 1 72 0v26Z`} fill={props.burning ? 'url(#cp-fire)' : 'url(#cp-banked)'} />
+    <path d={`M${width / 2 - 36} 62V36a36 16 0 0 1 72 0v26`} fill="none" stroke="#1a0d08" stroke-width="2.5" />
+    <Show when={props.burning}>
+      <path class="flame" d={`M${width / 2 - 14} 62c-2-10 6-12 5-22 6 6 9 10 9 16 3-4 2-8 1-12 7 6 9 12 7 18Z`} fill="#ffd27a" opacity=".85" />
+    </Show>
+    <rect y="62" width={width} height="30" fill="#2a1c14" />
+    <path d={`M0 62.5h${width}`} stroke="#6a4a32" stroke-width="1" opacity=".7" />
+    {Array.from({ length: props.total }, (_, i) => {
+      const x = start + i * spacing, hot = i < props.working;
+      return <g transform={`translate(${x} 0)`} classList={{ anvil: true, hot }}>
+        <ellipse cx="0" cy="86" rx="17" ry="3" fill="#0008" />
+        <path d="M-16 66h26c4 0 9-1.5 11-4h-5v-1H-16Z" fill={hot ? '#5d5f66' : '#45464c'} transform="translate(0 4)" />
+        <path d="M-9 71h14v5h4v8h-22v-8h4Z" fill={hot ? '#4b4c52' : '#38393e'} />
+        <path d="M-16 69.5h26" stroke={hot ? '#ffcf8a' : '#7d7f86'} stroke-width="1" opacity={hot ? '.9' : '.5'} />
+        <Show when={hot}>
+          <rect x="-8" y="66.5" width="12" height="3" rx="1" fill="#ffb24d" />
+          <g class="sparks"><circle cx="-2" cy="60" r="1" /><circle cx="5" cy="57" r=".8" /><circle cx="-7" cy="56" r=".7" /><circle cx="1" cy="52" r=".6" /></g>
+        </Show>
+      </g>;
+    })}
+  </svg>;
+}
+
+/** A coal in the scuttle: held and warm, or an empty place. */
+export function CoalArt(props: { held: boolean; damp?: boolean }) {
+  return <svg class="cp-coal" classList={{ held: props.held, damp: !!props.damp }} viewBox="0 0 28 22" aria-hidden="true">
+    <ellipse cx="14" cy="19" rx="11" ry="2.4" fill="#0007" />
+    <Show when={props.held} fallback={<path d="M5 14.5 8 7.5l6-3 7 2.5 2.5 7-4 4.5H9.5Z" fill="none" stroke="#8d6a45" stroke-width="1" stroke-dasharray="2 2" />}>
+      <path d="M5 14.5 8 7.5l6-3 7 2.5 2.5 7-4 4.5H9.5Z" fill="#231a17" stroke="#0d0907" stroke-width="1" />
+      <path d="M8 7.5l6-3 7 2.5-5 3Z" fill="#3a2e2a" />
+      <path class="heat" d="M10 16.5l3-4 4 1.5 3-3" fill="none" stroke="#ff9d42" stroke-width="1.1" stroke-linecap="round" />
+    </Show>
+  </svg>;
+}
+
+/** A small hand bell: the panel's sound. Muted, it is struck through and cannot ring. */
+export function BellGlyph(props: { muted: boolean }) {
+  return <svg class="cp-glyph bell" classList={{ muted: props.muted }} viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 4.2v1.4M7.2 15.8c1-1.2 1-3 1-5.2a3.8 3.8 0 0 1 7.6 0c0 2.2 0 4 1 5.2Z" />
+    <path d="M5.8 15.8h12.4" />
+    <Show when={!props.muted} fallback={<path class="strike" d="M4.8 4.8 19.2 19.2" />}>
+      <path d="M10.8 18.2a1.3 1.3 0 0 0 2.4 0M18.6 9.6c.9.9 1.3 2 1.3 3.2M5.4 9.6c-.9.9-1.3 2-1.3 3.2" />
+    </Show>
   </svg>;
 }

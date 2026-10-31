@@ -1,3 +1,4 @@
+import { createAnvilHeroDragon } from '@chatdom/content/anvil-hero';
 import { ForgeStyleKitSchema, HousePartPlanSchema, type ForgeHouseSocket, type ForgeStyleKit, type HousePartPlan, type VoxelBlueprint } from '@chatdom/shared';
 import { MAT, STYLES } from '@chatdom/content/materials';
 import { createForgeMotif } from '@chatdom/content/forge-motifs';
@@ -59,10 +60,13 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
   const plan=HousePartPlanSchema.parse(input),kit=ForgeStyleKitSchema.parse(style);
   if(socket.kind!==plan.kind)throw new Error('That part does not fit this house socket.');
   if(kit.id!==`${kit.family}-native`||kit.revision!==1||kit.styleId!==STYLES[kit.family].id)throw new Error('Unregistered style kit.');
-  const native=STYLES[kit.family],motif=['sleeping-dragon','crescent-moon','watchful-owl'].includes(plan.motif)?createForgeMotif(plan.motif as 'sleeping-dragon'|'crescent-moon'|'watchful-owl',kit.family):createForgeOrnament(plan.motif as 'sleeping-fox'|'sunflower'|'scallop-shell'|'shooting-star',kit.family);
+  const native=STYLES[kit.family],motif=plan.motif==='sleeping-dragon'?createAnvilHeroDragon(kit.family):['crescent-moon','watchful-owl'].includes(plan.motif)?createForgeMotif(plan.motif as 'sleeping-dragon'|'crescent-moon'|'watchful-owl',kit.family):createForgeOrnament(plan.motif as 'sleeping-fox'|'sunflower'|'scallop-shell'|'shooting-star',kit.family);
   if(plan.version===2){
     const finish=plan.finish==='copper'?MAT.forgeCopper:plan.finish==='ceramic'?MAT.cream:null;
-    if(finish!==null)for(const box of motif.boxes)if(![MAT.air,MAT.darkStone,MAT.glass,MAT.brass].includes(box.material as typeof MAT.air))box.material=finish;
+    // Finish the broad surface; preserve sleeping eyes, horns, paws and wing
+    // ribs so a metal casting keeps the same readable anatomy as native clay.
+    const surfaces=new Set<number>([kit.family==='grove'?MAT.moss:native.roof,MAT.brass,MAT.goldLeaf]);
+    if(finish!==null)for(const box of motif.boxes)if(surfaces.has(box.material))box.material=finish;
     // Authored enamel inlays sit on existing solid faces, never in empty space.
     if(plan.accent!=='none'){
       const step=plan.accent==='stars'?5:plan.accent==='leaves'?4:3;
@@ -78,6 +82,7 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
   let top=4,centreZ=16;
   if(socket.profile==='wall'){
     centreZ=8;add([15,4,0],[17,6,9],MAT.brass);add([14,2,0],[18,8,1],native.trim);
+    if(plan.version===2&&plan.kind==='lantern')add([14,2,6],[18,6,10],MAT.glass);
   }else{
     const ridge=Math.max(...socket.supports.map(p=>p[1]-socket.origin[1]));
     top=socket.profile==='stack'?2:Math.max(socket.clearanceHeight,ridge+(plan.kind==='chimney'? (kit.family==='tide'?9:kit.family==='grove'?5:7):plan.kind==='lantern'?4:8));
@@ -87,7 +92,7 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
       if(top-2>ridge+2)add([13,ridge+2,13],[19,top-2,19],native.stone);
       for(let y=Math.max(ridge+3,socket.clearanceHeight);y<top-2;y+=4)add([11,y,11],[21,y+1,21],kit.family==='grove'?MAT.moss:native.trim);
       add([10,top-2,10],[22,top,22],native.stone);
-    }else if(top>ridge+2){add([15,ridge+2,15],[17,top,17],MAT.brass);if(top>ridge+4)add([12,ridge+3,15],[20,ridge+4,17],MAT.brass);}
+    }else if(top>ridge+2){add([15,ridge+2,15],[17,top,17],MAT.brass);if(top>ridge+4)add([12,ridge+3,15],[20,ridge+4,17],MAT.brass);if(plan.version===2&&plan.kind==='lantern')add([14,Math.max(ridge+2,top-3),14],[18,top,18],MAT.glass);}
   }
   const offset:[number,number,number]=[16-motif.mount[0],top-motif.mount[1],centreZ-motif.mount[2]];
   for(const b of motif.boxes)boxes.push({material:b.material,from:b.from.map((n,i)=>n+offset[i]!) as [number,number,number],to:b.to.map((n,i)=>n+offset[i]!) as [number,number,number]});

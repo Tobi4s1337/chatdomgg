@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { VOXEL_FIXTURE } from '@chatdom/shared/world-fixtures';
-import { createWindowLights, windowLodCentre } from './presence-lights';
+import { KingdomIdSchema } from '@chatdom/shared';
+import { WINDOW_HALO_SCALE, createWindowLights, windowGlowForHour, windowLodCentre } from './presence-lights';
 
 describe('window LOD placement', () => {
+  it('lights witnessed offline chat independently of the beacon and clears stale evidence', () => {
+    const windows = createWindowLights(new THREE.Scene(), [{ slot: 0, blueprint: VOXEL_FIXTURE, position: [0, 0, 0], yaw: 0 }]);
+    const frame = { version: 1 as const, kingdomId: KingdomIdSchema.parse('129634568'), epoch: 'real-chat', sequence: 1,
+      asOf: 1000, origin: 'live' as const, streamLive: false, connection: 'offline' as const,
+      windows: [{ slot: 0, present: true, publicName: 'Tobi4s_', since: 0 }] };
+    windows.setFrame(frame);
+    expect(windows.getSources()[0]).toMatchObject({ strength: 1, name: 'Tobi4s_' });
+    windows.setFrame({ ...frame, sequence: 2, connection: 'stale' });
+    windows.update(1, 23);
+    expect(windows.getSources()[0]).toMatchObject({ strength: 0, name: null });
+    windows.dispose();
+  });
   it('renders one designated presence window per home, with an inspection opt-in for all anchors', () => {
     const blueprint = { ...VOXEL_FIXTURE, windows: [0, 1, 2].map(i => ({ ...VOXEL_FIXTURE.windows[0]!, id: `window-${i}` })) };
     const house = { slot: 0, blueprint, position: [0, 0, 0] as [number, number, number], yaw: 0 };
@@ -66,6 +79,34 @@ describe('window LOD placement', () => {
       expect(pane!.instanceMatrix.version).toBe(version);
       expect(windows.getSources()[0]!.position).toEqual(source);
     }
+    windows.dispose();
+  });
+
+  it('keeps every halo within 1.3x its pane through LOD moves, and glows only from dusk', () => {
+    const scene = new THREE.Scene();
+    const windows = createWindowLights(scene, [{ slot: 0, blueprint: VOXEL_FIXTURE, position: [3, 0, -4], yaw: Math.PI / 2 }]);
+    const [pane, halo] = scene.children as THREE.InstancedMesh[];
+    const size = (mesh: THREE.InstancedMesh, index: number) => {
+      const matrix = new THREE.Matrix4(), scale = new THREE.Vector3();
+      mesh.getMatrixAt(index, matrix); matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
+      return scale;
+    };
+    for (const factor of [1, 4] as const) {
+      windows.setLod(0, factor);
+      for (const index of [0, 1]) {
+        const ratio = size(halo!, index).divide(size(pane!, index));
+        expect(ratio.x).toBeLessThanOrEqual(1.3 + 1e-6); expect(ratio.y).toBeLessThanOrEqual(1.3 + 1e-6);
+        expect(ratio.x).toBeCloseTo(WINDOW_HALO_SCALE);
+      }
+    }
+    // By day the pane is glass; the warmth is full from 18.5 h through the night.
+    expect(windowGlowForHour(12)).toBe(0);
+    expect(windowGlowForHour(16)).toBe(0);
+    expect(windowGlowForHour(18.5)).toBe(1);
+    expect(windowGlowForHour(23)).toBe(1);
+    expect(windowGlowForHour(-1)).toBe(1);
+    expect(windowGlowForHour(17.5)).toBeGreaterThan(0.3);
+    expect(windowGlowForHour(17.5)).toBeLessThan(0.9);
     windows.dispose();
   });
 });

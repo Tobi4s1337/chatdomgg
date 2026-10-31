@@ -61,7 +61,7 @@ work/         how the build is organised (see below)
 ## How we work
 
 - **Main thread.** One Codex thread, `chatdom-main`, holds the build. It plans, freezes contracts, builds the
-  core, integrates, merges and commits. Tobias steers it. Its messages are direct. Treat them as the brief, and
+  core, judges integration candidates and commits. Tobias steers it. Its messages are direct. Treat them as the brief, and
   push back when something is wrong.
 - **`work/`** is the build's memory: `work/PLAN.md` (the build map), `work/DECISIONS.md`,
   `work/specs/<nn>-<slug>.md` (contracts), `work/lanes/<lane>/PRD.md` with `progress.txt`, and
@@ -78,7 +78,10 @@ work/         how the build is organised (see below)
   ingest, the content library, replays and capture. A lane is a worker in a git worktree on the branch
   `lane/<name>`. It owns one folder scope and follows its PRD Ralph-style: one task at a time, tick the box, one
   progress line, commit on the lane branch. `chatdom-main` writes the spec and the PRD (`$write-spec`), the team
-  starts the worker, and `chatdom-main` reviews and merges. Lane workers follow `$ralph-lane`.
+  starts the worker. Main merges reviewed lane work every turn, one branch at a time, with a short look and focused checks; no
+  announcement or additional permission is needed. An integrator candidate may still collect reviewed work,
+  but is not a gate. Merge clean work promptly; send the lane one concrete missing visual detail as its next task.
+  Lane workers follow `$ralph-lane`.
 - **Contracts first.** `packages/shared` (types, schemas, protocol messages, budgets) changes only in
   `chatdom-main`, and before the lanes that depend on it. A lane that needs a contract change writes `needs:` in
   its progress line and keeps going on something else.
@@ -119,7 +122,10 @@ Use `max` effort only for a problem that has already beaten `xhigh`. Don't use `
   the repo config. Leave them alone.
 - Push `main` to `origin` (private repo) after every green milestone or merge: `git push origin main`. Never
   force-push or rewrite pushed history. Lane branches stay local.
-- Lane branches merge into `main` through `chatdom-main`. Workers and sub-agents never run git.
+- Main takes reviewed lane commits without waiting for an announcement, one branch at a time, resolves
+  composition conflicts and keeps focused checks green. A ready `lane/integrator` candidate can also enter main.
+  Do not repeat deep lane reviews or hold clean work for a missing polish detail; send that detail back as the next task.
+  Sub-agents never run git; lane workers commit only their lane.
 
 ## Environment
 

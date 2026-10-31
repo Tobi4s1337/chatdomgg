@@ -18,7 +18,7 @@ serially. Production binding gaps are `needs:`; they do not defer the lane's own
 
 ## Tasks
 
-- [ ] **CC01 — Open a citizen's finished plaque and see their years here** · evidence: runnable desktop/phone card.
+- [x] **CC01 — Open a citizen's finished plaque and see their years here** · evidence: runnable desktop/phone card.
   Implement the agreed lane-local source/public/host types and projection seam, named card export and owned web
   bench. Use an actual existing avatar render for the labelled fixture; finish portrait/name/office, plain known/
   unknown follow/sub facts, number and home/street. Establish dialog/page modes, loading/withdrawn state,

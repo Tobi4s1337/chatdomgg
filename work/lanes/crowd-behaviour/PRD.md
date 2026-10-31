@@ -22,19 +22,19 @@ views/captures say **SIMULATED**. Report actual motion/appearance evidence, no s
 
 ## Tasks
 
-- [ ] **CB01 — Make neighbours notice one another.** Put nine supplied simulated citizens on the real
+- [x] **CB01 — Make neighbours notice one another.** Put nine supplied simulated citizens on the real
   motion/render adapter in the owned bench. Implement deterministic policy state, a bounded neighbour lookup,
   one mild nod/wave with look/settle and pair cooldown, and explicit reset/removal/control interruption.
   Show the first readable doorstep encounter at desktop and phone sizes. Introduce the single scenario seam
   test and extend that same scenario as later tasks add behaviour. No fake speech or friendship state.
   · evidence: greeting motion contact sheet and focused scenario test.
-- [ ] **CB02 — Give streets and the market a gentle rhythm.** Add the authored doorstep/stroll/market/home
+- [x] **CB02 — Give streets and the market a gentle rhythm.** Add the authored doorstep/stroll/market/home
   routines using only main's approved destinations and goal requests. Begin pauses only at confirmed arrival,
   return each excursion to its real frontage, handle blocked/unreachable goals calmly, and preserve active gait
   through changes. Vary meaningful choices and timings by stable slot/epoch seed; tune by watching nine
   citizens over a complete routine and a 240-slot street composition. · evidence: street/market/home frames,
   one timed routine contact sheet and arrival/blocked branches in the existing scenario test.
-- [ ] **CB03 — Let a witnessed chat line turn a few heads.** Consume the separate sanitized cue schema through
+- [x] **CB03 — Let a witnessed chat line turn a few heads.** Consume the separate sanitized cue schema through
   the exact main adapter. Give its present speaker a finite nod and at most two nearby listeners a
   short staggered look using actual cue identity/source/timing metadata; coalesce bursts, deduplicate IDs and discard expired/foreign-origin/removed-slot cues.
   Never store/display text in the policy or add it to presence. Demonstrate ordinary cue, burst, walker
@@ -52,3 +52,10 @@ views/captures say **SIMULATED**. Report actual motion/appearance evidence, no s
 ## Backlog
 
 Ideas discovered while working go here; do not select backlog work without a new brief.
+
+- Pair strolls: two neighbours who just greeted walk a short way together (needs main motion to accept a
+  shared goal or a follow offset; today each walker routes alone and paths may overlap).
+- Street-facing doorstep rest once main's motion offers a doorstep heading: the doorstep look and greetings
+  from the door would then read toward the lane instead of over the shoulder.
+- Market dressing grows with the town: the square has one well and two stalls on one side, so a 240-home
+  town's market visits share very little to watch.

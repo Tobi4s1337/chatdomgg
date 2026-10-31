@@ -1,0 +1,46 @@
+.walk-hud{position:absolute;inset:0;pointer-events:none;z-index:2;font-family:Georgia,'Times New Roman',serif;color:#f1dfbf;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.walk-hud[hidden]{display:none}
+
+/* Mouse look: one small carved plaque under the kingdom title, clear of the bottom controls, quiet until it changes. */
+.walk-look{appearance:none;text-align:left;cursor:pointer;pointer-events:auto;position:absolute;left:38px;top:140px;display:flex;align-items:center;gap:9px;max-width:min(330px,calc(100% - 76px));padding:7px 12px 7px 8px;border-radius:4px;border:1px solid #c19b6550;background:repeating-linear-gradient(1.5deg,transparent 0 5px,#e2bd8606 5px 6px),linear-gradient(#4a3d2fe8,#30271fec);box-shadow:0 3px 0 #1b1a1ad0,0 8px 20px #090d1d44,inset 0 1px 0 #e3c08f24;opacity:.72;transition:opacity .4s,transform .18s}
+.walk-look.is-fresh,.walk-look.is-locked,.walk-look.is-fallback{opacity:1}
+.walk-look-key{flex:none;min-width:24px;height:22px;padding:0 6px;display:grid;place-items:center;border-radius:3px;font:600 11px/1 Georgia,serif;letter-spacing:.04em;color:#3a2a17;background:linear-gradient(#f1d9a6,#c9a46c);border:1px solid #f6e2b7;box-shadow:0 2px 0 #7d5c31,inset 0 -1px 0 #a98451}
+.walk-look-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.walk-look-text b{font:400 12px/1.25 Georgia,serif;letter-spacing:.02em;color:#f3e1c0}
+.walk-look-text small{font:italic 11px/1.3 Georgia,serif;color:#d6bf9b}
+.walk-look-text small:empty{display:none}
+.walk-look-pip{flex:none;width:5px;height:5px;transform:rotate(45deg);background:#8d7656;box-shadow:none;transition:background .2s,box-shadow .2s}
+.walk-look.is-locked .walk-look-pip{background:#f0c272;box-shadow:0 0 8px #f3b552}
+.walk-look.is-fallback{border-color:#d59a6080}
+.walk-look.is-fallback .walk-look-pip{background:#d8875a}
+.walk-hud.is-touch .walk-look{display:none}
+
+/* Phone: a floating stick under the left thumb and a jump button under the right. */
+.walk-stick{position:absolute;left:0;top:0;width:0;height:0;display:none}
+.walk-hud.is-touch .walk-stick{display:block}
+.walk-stick-ring{position:absolute;left:-52px;top:-52px;width:104px;height:104px;border-radius:50%;border:1.5px solid #f2d7a866;background:radial-gradient(circle,#2b221a33 0 52%,#2b221a55 70%,#f3d29c1a 71%,transparent 74%);box-shadow:0 0 0 5px #20181214,inset 0 0 18px #1d150f40;transition:opacity .25s,border-color .2s,box-shadow .2s}
+.walk-stick-ring::before,.walk-stick-ring::after{content:'';position:absolute;inset:14px;border-radius:50%;border:1px dashed #f2d7a81f}
+.walk-stick-ring::after{inset:-18px;border:1px solid #f0c27200;transition:border-color .2s}
+.walk-stick-knob{position:absolute;left:-23px;top:-23px;width:46px;height:46px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#f7e3bb,#d2ab72 55%,#9d773f);border:1px solid #fbe9c4;box-shadow:0 3px 0 #6f5129,0 6px 14px #0c0a1450,inset 0 -2px 3px #8b6634;will-change:transform}
+.walk-stick-glyph{position:absolute;left:-52px;top:-52px;width:104px;height:104px;fill:none;stroke:#f5ddb0a0;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;transition:opacity .2s}
+.walk-stick-label{position:absolute;left:-60px;top:62px;width:120px;text-align:center;font:italic 11px/1.2 Georgia,serif;letter-spacing:.04em;color:#f0dab7c0;text-shadow:0 1px 4px #1a1420;transition:opacity .25s}
+.walk-stick.is-idle .walk-stick-ring{opacity:.62}
+.walk-stick.is-idle .walk-stick-knob{opacity:.8;transform:scale(.86)}
+.walk-stick.is-active .walk-stick-glyph,.walk-stick.is-active .walk-stick-label{opacity:0}
+.walk-stick.is-active .walk-stick-ring{border-color:#f6ddb0b0}
+.walk-stick.is-sprint .walk-stick-ring{border-color:#f5c777;box-shadow:0 0 0 5px #f0b5521f,0 0 22px #f2b04e40,inset 0 0 18px #1d150f40}
+.walk-stick.is-sprint .walk-stick-ring::after{border-color:#f0c27266}
+.walk-stick.is-sprint .walk-stick-knob{background:radial-gradient(circle at 38% 32%,#fff0cc,#ebc07a 55%,#b9883f)}
+
+.walk-jump{position:absolute;right:max(22px,env(safe-area-inset-right));top:66%;width:64px;height:64px;margin-top:-32px;display:none;place-items:center;padding:0;border-radius:50%;cursor:pointer;pointer-events:auto;touch-action:none;appearance:none;border:1.5px solid #f2d7a8a0;background:radial-gradient(circle at 50% 38%,#5b4835,#3a2e23 70%,#2b221b);box-shadow:0 0 0 4px #c49b6033,0 4px 0 #19140f,0 8px 18px #0b0a1650,inset 0 1px 0 #e9c99044;color:#f3dcb2;transition:transform .08s,box-shadow .08s}
+.walk-hud.is-touch .walk-jump{display:grid}
+.walk-jump svg{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.walk-jump span{position:absolute;top:70px;left:-20px;right:-20px;text-align:center;font:italic 11px/1.2 Georgia,serif;letter-spacing:.04em;color:#f0dab7c0;text-shadow:0 1px 4px #1a1420}
+.walk-hud.is-taught .walk-stick-label,.walk-hud.is-taught .walk-jump span{opacity:0}
+.walk-jump span{transition:opacity .25s}
+.walk-jump.is-pressed{transform:translateY(3px);box-shadow:0 0 0 4px #f0b55240,0 1px 0 #19140f,0 4px 10px #0b0a1650,inset 0 1px 0 #e9c99044}
+.walk-jump:focus-visible{outline:2px solid #edc98e;outline-offset:4px}
+@media (prefers-reduced-motion:reduce){.walk-look,.walk-stick-ring,.walk-jump{transition:none}}
+
+.walk-look:focus-visible{outline:2px solid #edc98e;outline-offset:4px}
+.walk-look:disabled{cursor:default}

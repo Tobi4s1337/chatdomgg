@@ -1,0 +1,41 @@
+html, body { margin: 0; height: 100%; background: #1d2030; overflow: hidden; }
+.anvil-bench { position: fixed; inset: 0; font-family: Georgia, 'Times New Roman', serif; color: #efe3cb; }
+.anvil-bench-stage { position: absolute; inset: 0; }
+.anvil-bench-stage canvas { display: block; width: 100%; height: 100%; }
+.anvil-bench-label {
+  position: absolute; top: 12px; left: 12px; display: grid; gap: 2px; padding: 8px 12px 9px;
+  background: rgba(28, 24, 30, .72); border: 1px solid rgba(214, 180, 122, .35); border-radius: 3px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .25); max-width: calc(100% - 48px);
+}
+.anvil-bench-simulated { font: 600 10px/1.2 ui-monospace, Menlo, monospace; letter-spacing: .14em; color: #f0b467; }
+.anvil-bench-label strong { font-weight: normal; font-size: 16px; }
+.anvil-bench-label small { font-size: 12px; color: #cdbb9a; }
+.anvil-bench-nav {
+  position: absolute; top: 12px; right: 12px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px;
+  max-width: 46%;
+}
+.anvil-bench-nav a {
+  font: 11px/1 ui-monospace, Menlo, monospace; color: #e6d4b2; text-decoration: none; padding: 5px 7px;
+  background: rgba(28, 24, 30, .6); border: 1px solid rgba(214, 180, 122, .25); border-radius: 2px;
+}
+.anvil-bench-nav a[aria-current='page'] { border-color: #f0b467; color: #fff2da; }
+.anvil-bench-status {
+  position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 16px; text-align: center;
+  background: rgba(28, 24, 30, .82); border: 1px solid rgba(214, 180, 122, .35); border-radius: 3px; max-width: 80%;
+}
+.anvil-bench-status p { margin: 4px 0 0; font-size: 13px; color: #d8c6a4; }
+.anvil-bench-status[role='alert'] { border-color: #d0643c; }
+.anvil-bench-status[hidden] { display: none; }
+@media (max-width: 640px) {
+  .anvil-bench-nav { display: none; }
+  .anvil-bench-label { top: 10px; left: 10px; padding: 6px 10px 7px; }
+}
+.anvil-sheet { position: relative; min-height: 100%; background: #292830; font-family: Georgia, 'Times New Roman', serif; color: #efe3cb; }
+.anvil-sheet-head { display: grid; gap: 2px; padding: 16px 20px 12px; }
+.anvil-sheet-head strong { font-weight: normal; font-size: 20px; }
+.anvil-sheet-head small { font-size: 12px; color: #c6b493; }
+.anvil-sheet-grid { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); }
+.anvil-sheet-grid figure { margin: 0; position: relative; aspect-ratio: 1; }
+.anvil-sheet-grid figcaption { position: absolute; left: 8px; bottom: 6px; font-size: 11px; color: #eadfc8; text-shadow: 0 1px 0 #000; }
+.anvil-sheet-grid canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+html:has(.anvil-sheet), html:has(.anvil-sheet) body { height: auto; overflow: visible; }

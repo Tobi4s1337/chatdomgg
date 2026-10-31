@@ -1,0 +1,54 @@
+/* The card bench's own furniture: a thin wooden rail of choices and, for dialog mode, a SIMULATED street at dusk
+   behind the scrim. The card itself brings every one of its own styles. */
+
+html, body { margin: 0; min-height: 100%; background: #1a1420; }
+body { -webkit-font-smoothing: antialiased; }
+
+.ccb { position: relative; min-height: 100dvh; font-family: 'Alegreya', Georgia, serif; color: #f2e4c4; }
+
+.ccb-bar {
+  position: relative; z-index: 50;
+  display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, #4a2f1e, #33201a);
+  box-shadow: inset 0 -1px 0 #1b100a, inset 0 1px 0 rgba(255, 214, 160, .2), 0 2px 8px rgba(0, 0, 0, .4);
+}
+.ccb-title { margin: 0; font-size: 15px; letter-spacing: .04em; }
+.ccb-title b { margin-right: 6px; padding: 2px 7px 1px; border: 1.5px solid #e2a14d; border-radius: 3px; font-size: 11px; letter-spacing: .2em; color: #f2c56b; }
+.ccb-choice { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ccb-choice span { margin-right: 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #cfae7c; }
+.ccb-choice a {
+  display: inline-flex; align-items: center; min-height: 30px; padding: 0 10px; border-radius: 4px;
+  font-size: 14px; color: #f1e4c7; text-decoration: none;
+  background: linear-gradient(#5a4430, #463425); box-shadow: inset 0 1px 0 rgba(199, 159, 106, .35), 0 0 0 1px #8f6f45;
+}
+.ccb-choice a[aria-current='true'] { color: #2a1d14; background: linear-gradient(#e9c06c, #c4923f); box-shadow: 0 0 0 1px #f0cf86; }
+.ccb-choice a:focus-visible { outline: 2px solid #f4d27c; outline-offset: 2px; }
+
+.ccb-status {
+  position: fixed; left: 50%; top: 50%; z-index: 60; transform: translate(-50%, -50%);
+  margin: 0; padding: 14px 22px; border-radius: 8px; max-width: min(90vw, 30em); text-align: center;
+  font: italic 400 18px/1.4 'Alegreya', Georgia, serif; color: #f6e7c4; background: rgba(42, 26, 18, .88);
+  box-shadow: 0 0 0 1.5px #8e6a2c, 0 8px 24px rgba(0, 0, 0, .45);
+}
+
+/* A street at dusk, drawn in code: sky, a low sun, two rows of roofs with lit windows, the cobbles. */
+.ccb-world {
+  position: fixed; inset: 0; z-index: 0;
+  display: grid; align-content: end; justify-items: center; gap: 14px; padding: 0 16px 48px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='220' viewBox='0 0 600 220'%3E%3Cpath fill='%233b2436' d='M0 220V120l30-24 30 24v-14h14V86l34-28 34 28v26h12V96l20-14 20 14v20h16V70l10-10 10 10v18l30-24 30 24v26h18V100l22-16 22 16v14h14V92l32-26 32 26v24h12V84l18-18 18 18v34h14V102l24-18 24 18v18h18V96l26-20 26 20v124z'/%3E%3Cpath fill='%23201420' d='M0 220V160l40-30 40 30v-10h20v-26l46-36 46 36v40h18v-22l26-20 26 20v20h22v-42l40-32 40 32v34h20v-18l30-22 30 22v14h24v-30l38-30 38 30v60z'/%3E%3Cg fill='%23ffbf66'%3E%3Crect x='136' y='138' width='8' height='10'/%3E%3Crect x='160' y='138' width='8' height='10' opacity='.75'/%3E%3Crect x='292' y='150' width='8' height='10'/%3E%3Crect x='402' y='160' width='7' height='9' opacity='.85'/%3E%3Crect x='520' y='150' width='8' height='10'/%3E%3C/g%3E%3C/svg%3E") bottom center / 900px 330px repeat-x,
+    radial-gradient(40% 30% at 50% 82%, rgba(255, 178, 104, .6), rgba(255, 178, 104, 0) 70%),
+    linear-gradient(180deg, #262040 0%, #4a3150 38%, #9a5655 70%, #d88a58 100%);
+}
+.ccb-bar ~ .ccb-world { top: 0; }
+.ccb-world-note { margin: 0; max-width: 34em; text-align: center; font: italic 400 16px/1.4 'Alegreya', Georgia, serif; color: #f4e3c3; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.ccb-open {
+  min-height: 48px; padding: 0 24px; border: 0; border-radius: 8px; cursor: pointer;
+  font: 400 19px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: #f6e7c4;
+  background: linear-gradient(180deg, #8a5734, #4a2c1a);
+  box-shadow: inset 0 1px 0 rgba(255, 220, 170, .3), inset 0 -2px 0 rgba(0, 0, 0, .35), 0 0 0 1.5px #c99a45, 0 0 0 3px #3d2a0e, 0 4px 10px rgba(0, 0, 0, .5);
+}
+.ccb-open:disabled { opacity: .6; cursor: progress; }
+.ccb-open:focus-visible { outline: none; box-shadow: 0 0 0 3px #2c2118, 0 0 0 6px #f4d27c; }
+.ccb-open:active { transform: translateY(1px); }

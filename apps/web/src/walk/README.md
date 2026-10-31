@@ -1,0 +1,344 @@
+# Walking the kingdom
+
+`apps/web/src/walk` puts the player camera on a real connected citizen. It samples the keyboard and the
+free cursor, quantizes camera-relative walking into the shared `WalkInput`, ticks the realm client once per
+frame and places a shoulder camera on the citizen the room actually moved. It owns no scene, no realm
+connection and no collision data. The kingdom scene stays with the integrator, the realm connection belongs to
+`apps/web/src/realm/client.ts`, and the founded collision world comes from realm wiring.
+
+Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
+
+## Status
+
+- **Reference court bound.** `/-/realm` runs this controller on `connectReferenceRealm`'s real room client,
+  renders its actual poses, and fades the local body in first person. The scene remains explicitly SIMULATED.
+  `window.__chatdomWalk` exposes the controller there; the existing `__chatdomRealm.setInput` reference smoke
+  hook shares the same single client tick. This reference is separate from the kingdom binding below.
+
+- **Bound to the kingdom.** The actual town renderer supplies `createKingdomWalk` with the checked founded
+  manifest, room client and complete collision revision. The current practice entry is
+  `http://127.0.0.1:5190/?walk=1&source=simulated&hour=19.5`; its provenance is visibly SIMULATED.
+- **Camera collision.** The boom and near plane sweep the same immutable collision revision used by the room
+  and predictor. The camera root stays below the body's crown under a tight ceiling.
+- **Prediction and collision revisions (WC06).** The realm client takes a revision source, holds prediction
+  while a revision is missing and resets on adoption; see "Realm client" below.
+- **Backed against a wall (WC07).** A boom a solid pulled in fades the local citizen from further out
+  (`selfFade`), so the camera looks past it at the street; the same short boom chosen with the wheel keeps it.
+
+## Modules
+
+| Export | File | What it does |
+|---|---|---|
+| `createWalkController(options)` | `index.ts` | Lifecycle: input, realm tick, camera, takeover |
+| `createWalkKeys(keyboard, page?)` | `input/keyboard.ts` | WASD/arrows, Shift, one jump per Space press, release on blur, hidden page, chat focus, context menu and Cmd |
+| `isEditableTarget(t)`, `isKeyboardControl(t)` | `input/keyboard.ts` | Fields keep every key; a keyboard-focused control keeps Space and arrows |
+| `createWalkPointer(surface, keyboard)` | `input/pointer.ts` | Mouse/pen drag orbit after 8 px, wheel with line/page modes, swallows only the click that ended a drag; no drags while locked |
+| `createWalkLook(surface, doc, keyboard, clock?)` | `input/look.ts` | Optional mouse look: a real pointer click locks, Escape/blur/menu frees; R8 delta filter; one refused request → quiet drag fallback |
+| `filterLookDelta(dx, dy, sinceLockMs)`, `LOOK` | `input/look.ts` | The R8 filter itself (120 ms settle, >250 px discarded, ±100 px clamp) and the look constants |
+| `createWalkTouch(surface, keyboard)` | `input/touch.ts` | Phone: floating left-thumb stick (push past the rim to sprint), one-finger orbit, two-finger pinch zoom |
+| `stickRegion(x, y, w, h)`, `stickIntent(dx, dy)`, `TOUCH` | `input/touch.ts` | Which part of the surface is the stick, thumb offset to intent, and the touch constants |
+| `createWalkHud(container, onJump, onLook?)`, `restingStick(w, h)` | `input/hud.ts` | The mouse-look plaque, the phone stick and the jump button, drawn in the given container |
+| `thumbSlots(w, h)`, `THUMB` | `input/hud.ts` | The phone thumb map: resting stick, Jump, and the slot reserved for the interaction owner's touch action |
+| `isClickPress(dx, dy, ms)`, `CLICK_SLOP_PX`, `CLICK_MS` | `input/pointer.ts` | The click-versus-drag rule for the interaction owner (under 8 px and under 300 ms) |
+| `walkDirection(forward, right, heading)` | `input/direction.ts` | Camera-relative intent to world-relative signed bytes; diagonals never faster |
+| `facingByte(moveX, moveZ)`, `headingFromByte(yaw)` | `input/direction.ts` | Yaw byte for the actual walk direction, and back to renderer radians |
+| `createShoulderRig(heading)`, `shoulderPose(...)` | `camera/shoulder.ts` | Shoulder framing with `filmOffset`, continuous wheel to first person, auto-follow, time-based easing |
+| `SHOULDER` | `camera/shoulder.ts` | The chosen framing and feel constants |
+| `selfFade(eyeToHead, pulledIn)` | `camera/shoulder.ts` | Local citizen opacity: first-person fade, starting further out when a solid pulled the boom in |
+| `clearBoom(world, anchor, at, wish)` | `camera/occlusion.ts` | Sweeps eye + near plane along the boom from the head; how far the camera may stand |
+| `nearFootprint(direction, fov, aspect, shift, near)` | `camera/occlusion.ts` | Box around the eye and the actual near-plane rectangle, lens shift included |
+| `sweepHit(from, to, footprint, solid)`, `overlapsSolid(...)` | `camera/occlusion.ts` | Swept and static box tests against one solid (touching is not overlap) |
+| `OCCLUSION`, `RECOVER_RATE` | `camera/occlusion.ts` | Margin .05 m, .25 m sweep pieces, .35 s outward recovery |
+
+Headings are radians about +Y, and zero faces +Z (the citizen renderer's convention). Yaw bytes are
+`round(heading / 2π × 256) mod 256`.
+
+### `createWalkController(options): WalkController`
+
+```ts
+interface WalkControllerOptions {
+  camera: THREE.PerspectiveCamera;    // the scene camera; while walking only the controller writes it
+  surface: HTMLElement;               // normally the canvas: drag orbit and wheel start here
+  realm: WalkRealm;                   // a connected RealmClient satisfies it unchanged
+  keyboard?: EventTarget;             // default window
+  page?: { hidden: boolean } & EventTarget;  // default document
+  lockDocument?: LockDocument;        // pointer-lock state and locked mousemove; default document
+  hud?: HTMLElement;                  // where the look plaque, stick and jump button are drawn (the kingdom root)
+  coarse?: boolean;                   // show phone controls before the first touch; default matchMedia('(pointer: coarse)')
+  clock?: () => number;               // ms for the lock settle window; default performance.now
+  heading?: number;                   // entry heading; default: the way the citizen already faces
+  collision?: CollisionWorld | (() => CollisionWorld | null | undefined);  // solids the camera stays out of, read every frame
+}
+interface WalkController {
+  frame(now: number): readonly RealmWalkerPose[];  // once per animation frame, before anything reads the camera
+  resize(width: number, height: number): void;     // CSS pixels of the surface
+  release(): void;   // hand camera + input to build/Forge/director/menu; realm keeps ticking idle; filmOffset → 0
+  resume(): void;    // take the camera back, same view, drawn straight onto the citizen
+  reset(heading?: number): void;  // entry framing again
+  dispose(): void;   // removes every listener, filmOffset → 0; does not close the realm
+  readonly owner: 'walking' | 'released' | 'disposed';
+  readonly selfOpacity: number;   // pass as the local citizen's `opacity`; 0 in first person and when backed against a wall; 1 while released
+  readonly debug: WalkDebug;      // live object, see below
+}
+```
+
+`frame(now)` calls `realm.tick(now, input)` exactly once, so nothing else may call `tick`. While released it
+still ticks with an idle input, keeping prediction and the other walkers moving behind a menu. It never
+disposes the realm client; whoever connected it disconnects it (and calls `release()` first so nothing stays
+held).
+
+The controller reads `realm.predicted` after ticking, when supplied by the real client. Grounded step offsets
+come from SDK rendered `y` and exact `grounded`, never the delayed room schema or raw fixed-step height; the returned local body eases only down, and
+the camera receives its own eased height while collision stays anchored to the feet. Jumps, revision changes
+and camera takeovers reset the offsets. A nearby lintel cancels body easing before the head can enter it.
+Wrappers must forward the `predicted` getter and `clearInput()` alongside `tick` and `room`, as the reference
+court does. A directly supplied `RealmClient` already provides both.
+
+`WalkDebug` is what the capture reads: `ready` (the camera stands on the connected citizen), `owner`, `selfId`,
+`self` (rendered pose), `authority` (room state for the local walker), `peers` (others as drawn, at most 4 Hz),
+`input` (the last `WalkInput` sent), `look` (`free`, `requesting`, `locked` or `fallback`), `stick` (the phone
+stick under the thumb, or null), `camera` (`yaw`, `pitch`, `distance` drawn,
+`zoomDistance` eased wheel wish, `desiredDistance` wheel target, `clearance` how far a solid let the boom reach
+or null, `collisionRevision` of the world the camera was kept out of or null, `fov`, `near`, `filmOffset`,
+`shift`), `screen` (citizen body centre in CSS px), `viewport` and `selfOpacity`.
+
+When the room has `onLeave`/`onDrop` signals (a Colyseus room does), the controller listens to them itself: a
+dropped or closed connection lets go of held keys, a pending jump, the stick, any drag and the pointer lock.
+
+## Input ownership
+
+| Input | Owner while walking | Never |
+|---|---|---|
+| W A S D, arrows, Shift, Space | walking (physical codes, so AZERTY/Dvorak keep the shape) | in a text field, select or contenteditable; with Ctrl/Cmd/Alt; during IME composition; Space/arrows on a keyboard-focused control (its focus ring is showing) |
+| Mouse look control | a trusted pointer click acquires lock; Escape releases | no keyboard acquisition, automatic retries or re-lock on resume |
+| Escape | frees a mouse-look cursor (the browser does too) | never `preventDefault`ed or stopped: menus, Forge, build and interactions (Stand/Leave) all still receive it |
+| E | the interaction owner | walking never reads it, on keyboard or touch |
+| Left mouse/pen on the world | drag orbit once it travels 8 px; a shorter, quicker press stays a click (`isClickPress`) | while locked; the click that ended a drag is swallowed, nothing else |
+| Wheel on the world | boom distance, line/page modes, ±240 px per event | over UI: the listener is on the world surface only |
+| Touch on the world | lower-left (`stickRegion`: x < 46 %, y > 34 %) is the stick; elsewhere one finger orbits, two pinch | taps (< 8 px) stay clicks; UI above the surface keeps its own touches |
+| Jump button | a tap jumps on touch-down; keyboard activation also jumps | never takes focus from the world |
+
+Everything held or pending is cleared on window blur, a hidden page, a native context menu, `release()`, a
+dropped connection and `dispose()`. A mouse released outside the window ends its drag on the next move.
+
+**Mouse look.** Free cursor by default. A real pointer click on the labelled **Mouse look** control makes one
+standard pointer-lock request. V and keyboard-generated button clicks never acquire it. Locked movement ignores
+the first 120 ms, discards any event with either axis over 250 px, clamps the rest to ±100 px and gathers them
+until the next frame; it turns 0.0024 rad per pixel at any window size. A refusal is handled once and the quiet
+control reads **Drag to look**; ordinary drag orbit continues. A later deliberate click may ask again. There is
+no raw-movement retry and no logging/retry loop. Escape, blur and `release()` free the cursor immediately;
+`resume()` never captures it. A fast flick only discards the warp, without changing mode.
+
+**Phone.** The stick appears under the thumb wherever it lands in the stick region (kept a whole ring inside
+the edges), with a 16 % dead zone; pushing past 1.3 × the 52 px rim sprints and lights the ring. A finger
+elsewhere orbits from the first pixel it travelled; a second orbit finger pinches (3 wheel px per px of
+spread). The resting stick and the jump button sit at 66 % of the height (54 % on a short landscape screen).
+Their labels fade once used. The surface's `touch-action` is set to `none` while the controller lives.
+
+**Sharing the thumbs with interactions (spec 37 R3).** `thumbSlots(width, height)` is the one thumb map, in
+surface CSS px: `stick` (resting stick, left thumb), `jump` (right thumb, on the same line) and `action`, a
+60 px disc directly above Jump that is reserved for the interaction owner's touch equivalent of E. Both
+buttons lie wholly outside `stickRegion`, so a walking thumb never lands on one, and they never touch each other
+(`hud.test.ts` checks phones and tablets in both orientations). Draw the action as a DOM button above the
+surface centred on `action.x/y` (at least 44 px): its taps never reach the surface, so they never orbit, and a
+tap on the world itself stays a click for target selection. Re-read the slot on resize. Nothing else on a phone
+may cover the left 46 % below 34 % of the height while walking: the kingdom's own bottom bar and any toast
+belong above that band or are hidden while walking (integrator).
+
+**Escape order.** While mouse look holds the cursor, the browser itself spends Escape on freeing it, and it may
+not deliver that keydown to the page at all. If one does arrive while `document.pointerLockElement` is still
+the world surface (it clears only on the following `pointerlockchange`, whatever order the listeners run in),
+it means "give me my cursor": the interaction owner should not also stand the citizen up with it. With a free cursor Escape passes straight
+through to whoever owns it.
+
+## Integration recipe (integrator)
+
+The integrator applies these call sites in `apps/web/src/kingdom/scene.ts` and `index.tsx`; this lane does not
+edit them. Entry URL proposed for the binding: **`/?walk=1`** on the kingdom page, which is what
+`capture.mjs` opens by default (`--path` changes it if the integrator chooses another).
+
+1. **Connect.** With realm wiring's kingdom entry and its collision revisions (see "Realm client" below):
+   `const realm = await connectRealm(endpoint, kingdomEntry, kingdomCollision, sessionStorage);`
+2. **Create** after the scene has loaded (camera, canvas and citizen renderer exist):
+   ```ts
+   import { createWalkController } from '../walk';
+   const walk = createWalkController({ camera, surface: canvas, realm, hud: kingdomRoot, collision: () => kingdomCollisionWorld });
+   walk.resize(canvas.clientWidth, canvas.clientHeight);
+   ```
+   `kingdomRoot` is the `[data-chatdom-kingdom]` element; the plaque and phone controls are drawn inside it
+   (`z-index: 2`, below the gate). `collision` is the same complete world the realm client steps against; pass
+   a function when realm wiring publishes new revisions so the camera reads the newest one each frame. The
+   camera's `near` must stay at most 0.15 m (the kingdom scene's is 0.15) so first person never reaches past the
+   body's own 0.28 m radius into a wall. Draw walkers with a `createCitizenRenderer` (or the crowd's) and give the local one
+   `opacity: walk.selfOpacity`.
+3. **Each frame**, in `render(now)`, before the existing camera block:
+   ```ts
+   const walking = walk?.owner === 'walking' && !capturePose;
+   const walkers = walk ? walk.frame(now) : [];
+   if (walking) {
+     const self = walk.debug.self;
+     if (self) target.set(self.x, self.y + 1.05, self.z);   // light fields and build/Forge follow the citizen
+   } else {
+     /* the existing autoCamera / citizen / window / hero block, unchanged */
+   }
+   ```
+   While walking, skip the existing `wantedFov` assignment and the `camera.lookAt(target)` call; the controller
+   has already set position, orientation, fov, aspect and `filmOffset`, and called `updateMatrixWorld()`.
+   Keep `updateInstances`, atmosphere, water, field and label updates; they read the camera as placed.
+4. **Resize.** In the existing `resize()`: `walk?.resize(canvas.clientWidth, canvas.clientHeight)`.
+5. **Takeover and return.** One owner draws the camera at a time; the realm keeps ticking underneath.
+   - **Build.** `onBuild(session)` with a session → `walk.release()`. Resume only when build has let go of the
+     camera entirely: `onBuild(null)` *and* `onHousewarming(null)` (the housewarming shot outlives the session),
+     i.e. the frame `build.update(...)` returns `false`. Build's right-button drag and context-menu handling are
+     safe: walking listens to nothing while released.
+   - **Forge.** `onForge(status)` with `status.open` → `release()`; `status.open === false` → `resume()`. A
+     refused close (during a refusal or an uncommitted piece) keeps `open` true, so walking stays released.
+   - **Director / evidence.** `setCamera`, `play`, `seek`, `capture` or `pose(eye, …)` → `release()`; `pose(null)`
+     or choosing the walking view again → `resume()`.
+   - **A menu** that needs the keyboard or pointer: `release()` while open, `resume()` when it closes.
+   - **Realm disconnect:** the controller already lets go of every held input on `room.onLeave`/`onDrop`; the
+     integrator calls `release()` while the gate is shown and `resume()` once walking again.
+
+   `release()` frees a locked cursor, drops every held key, drag, stick and pending jump, straightens
+   `filmOffset` to 0 for the next owner's composition and hands back a whole citizen (`selfOpacity` 1, even from
+   first person). Build and the Forge compose with `setViewOffset`; the first walking frame clears any view
+   offset still set (the near-plane collision footprint assumes the plain frustum), and the view, zoom and
+   first person the walker had are drawn straight onto the citizen with no easing in from the other camera. A
+   key still held when the menu closes walks again on its next auto-repeat; a held Space never jumps again.
+   Nothing needs a held mouse button, and `resume()` never re-locks the cursor by itself.
+6. **Dispose** with the scene: `walk.dispose()` then `realm.dispose()`.
+7. **Test hook**, beside `__chatdomKingdom` in `index.tsx`: `window.__chatdomWalk = walk.debug`.
+
+## Realm client: prediction and collision revisions
+
+`apps/web/src/realm/client.ts` (the movement/Predict hunk; auth, join, reconnect and storage stay main's) runs the
+shared `stepPlayer` through Colyseus `Predict`. It adds no queue, sequence or acknowledgement of its own.
+
+```ts
+interface RealmCollision { world(revision: number): CollisionWorld | null }   // realm wiring supplies the kingdom's
+connectRealm(endpoint, entry, collision: CollisionWorld | RealmCollision, storage?): Promise<RealmClient>
+interface RealmClient {
+  tick(now, input): readonly RealmWalkerPose[];  // once per frame: reconcile, stage due inputs, then render poses
+  readonly predicted: Readonly<PlayerState>;     // local walker, every PLAYER_FIELDS field, exact and unsmoothed
+  readonly predicting: boolean;                  // false while the room's revision is not available here
+  clearInput(): void;                           // drop a jump awaiting its first fixed input on takeover
+  /* selfId, room, dispose() unchanged */
+}
+```
+
+- **Collision source.** `world(revision)` returns exactly that revision's immutable world or `null` while it is
+  still on its way (start fetching it then; the client asks again every frame and as soon as the room
+  broadcasts `revision`). A world claiming another revision is refused. A plain `CollisionWorld` is a source of
+  one revision; connecting it to a room on another revision still fails at once, as before.
+- **Frame order.** `tick(now, input)`: (1) if the room has adopted a new revision for this walker, reset the
+  reconciler from the room's placement, forget inputs sent before it and clear a latched jump; (2)
+  `predict.tick(now)` reconciles and returns `n` due fixed steps; (3) send exactly `n` inputs, the jump only on
+  the first, each stamped with the room's current `collisionRevision` and passed through `sanitizeWalkInput`;
+  (4) read poses from `predict.value`. Nothing may read poses between (2) and (3). The controller's `frame(now)`
+  is the only caller.
+- **Revision transition.** The room places every walker on the new revision and refuses inputs of the old one.
+  Prediction steps an input only when its revision equals the walker's and that world is here; otherwise it holds
+  and the walker is drawn where the room puts it (latency, never air). Old inputs are never replayed against
+  replaced solids.
+- **Placements.** An authoritative placement serial or collision revision change resets SDK replay/render
+  anchors before ticking and sending, so even a short relocation cuts across a wall without drawing through it.
+  Ordinary corrections retain all `PLAYER_FIELDS` and ease over `smoothMs: 80`; SDK fixed-step interpolation
+  supplies the render pose. There is no all-fields `snap` threshold: yaw bytes, velocity and distance have
+  different units and must never pop a small positional correction. Body and camera share the same rendered
+  feet pose; only grounded stair presentation adds its bounded offsets.
+- **Yaw** of the local walker is drawn from the exact predicted byte: smoothing a byte that wraps at 256 would
+  spin the citizen the long way round.
+- **Takeover.** While another owner holds the camera the controller keeps calling `tick` with an idle input, so
+  prediction, acknowledgements and the other walkers stay current; `clearInput()` discards a jump waiting for a
+  due fixed input on blur, menu, reset or disposal. A dropped connection also clears it. On
+  return nothing is replayed: the next due input simply carries what is held then.
+
+`realm-predict.test.ts` checks all of this against the real room, uWS transport and SDK clients.
+`realm-check.mjs` repeats it in two real browsers on the SIMULATED court (a diagnostic, not kingdom acceptance):
+
+```sh
+node apps/web/src/walk/realm-check.mjs [--realm-port 5188] [--web-port 5189] [--out shots/walk/wc06]
+```
+
+It starts the actual `KingdomRoom` with the SIMULATED reference services (memory only) on the realm port, so it
+can publish revision 2 with a wall like an authority, and a vite dev server for `/-/realm` on the web port; Chrome
+maps the page's `:5191` to the realm port. It stops both when done and writes `route.json` beside the shots.
+
+## Feel
+
+The shoulder view stands the citizen on the left third line with the body centre in the lower third, about a
+quarter of the screen tall, with the street open ahead (`SHOULDER.landscape`/`portrait`, blended by aspect so a
+rotating phone never jumps). The horizontal shift is a lens shift (`filmOffset`), so the vanishing point of
+"forward" lies in the citizen's own column and W walks them straight into the picture. The pivot height is
+solved so the body stays on its thirds at any pitch. Roll is always zero.
+
+The wheel moves one zoom parameter; the boom is `11 m × z²`, so it reaches exactly 0 with fine control over the
+last metre. Closer than about 5.5 m the pivot is held high enough that the head never rises above
+`SHOULDER.headY` (−0.15, just under the middle), so a short boom is an over-the-shoulder view with the
+head and shoulder in the lower left, never a giant head in the middle of the picture; at zero the pivot is the
+eye (1.6 m). The lens shift stays full down to 1.4 m and reaches zero at 0.3 m. The local citizen fades as the eye
+comes within 1.25 m of the head and is gone within 0.5 m. Wheel intent (`desiredDistance`) is kept apart from the drawn
+distance, which eases at 14/s. Drag right turns the view right; drag up looks up. Pitch runs from −0.5 to 1.1
+rad. After 1.5 s without a manual orbit the camera swings gently behind the walk direction (never while a drag
+is held, never while standing, never across a reversal of more than 2 rad). Camera height eases at 12/s and
+never trails the body by more than 0.45 m, so a step or jump does not jerk the view.
+
+## Camera collision
+
+What stays out of solids is the eye together with the near-plane rectangle in front of it, at the actual fov,
+aspect, `camera.zoom` and lens shift, enclosed in a box with 5 cm of air (`nearFootprint`). Each frame that box
+is swept along the drawn boom curve, from the citizen's actual head (which the body keeps clear) out to the
+eased wheel distance, in pieces of at most 25 cm against one `query` of the supplied world (`clearBoom`). The
+first touch is how far the camera may stand. A hit is checked once more on the exact curve; if that fails, the
+start of the piece, already swept clear, is used. Thin posts, roofs, corners, doorways and the ground under a
+camera looking up are all caught; a centre ray alone would miss a post beside the boom that the near plane
+would cut.
+
+The camera comes in at once, before the first obstructed frame is drawn, including on the frame a new solid or
+revision appears. It goes back out only through clear air, easing over about 0.35 s (`RECOVER_RATE`: 95 %).
+Three distances are kept apart: the wheel's target (`desiredDistance`), the eased wish (`zoomDistance`) and the
+boom drawn (`distance`); a wall never changes the wish, and wheeling out behind a wall moves nothing until it
+clears. There is no minimum distance: pulled all the way to the head, the view is first person and the local
+citizen fades as it would on the wheel. If the eased camera height would lift the boom's root out of the body
+into a low ceiling, the camera sits on the actual head that frame. A function `collision` returning null keeps
+the last world rather than opening a hole. Nothing here fades obstructions; it always pulls in.
+
+## Capture
+
+```sh
+node apps/web/src/walk/capture.mjs --base-url http://127.0.0.1:5190 [--path '/?walk=1&source=simulated&hour=19.5'] [--out shots/walk]
+```
+
+Two real browsers (1440×900 and 390×844) open the kingdom entry. The script fails explicitly if the page is
+not the kingdom (`[data-chatdom-kingdom]` and `__chatdomKingdom`), if `__chatdomWalk` is absent, if no citizen is
+placed within 60 s, if the camera has no collision world, or if either browser misses the other. It walks the desktop with Shift+W, presses Space once,
+checks the room's authoritative position moved and the phone shows it there, checks the drawn citizen sits in
+the lower-left third, saves `street-shoulder@1440x900.png` and `street-shoulder@390x844.png`, wheels into first
+person and back, and fails on any page error, console error or failed request. It holds
+`packages/testing/capture-lock.mjs` throughout.
+
+Reference-only local setup (the durable schema is separate):
+
+```sh
+pnpm --filter @chatdom/realm build
+REALM_SIMULATED=1 REALM_STORAGE=memory REALM_PORT=5191 pnpm --filter @chatdom/realm start
+# With the web preview on 5190: http://127.0.0.1:5190/-/realm
+```
+
+Do not start a second process on an occupied port. The actual kingdom entry above consumes its founded collision
+world through realm wiring; the separate reference court remains a labelled diagnostic.
+
+## WC07 founder finish (main, 2026-10-31)
+
+The distance-driven avatar cycle is 1.8 m per complete left/right cycle rather than .75 m. Arm swing is .30 rad,
+hip .42 rad and knee .38 rad, with matching foot rotation and sole-height compensation; gestures and wardrobe
+attachments are unchanged. This removes the frantic five-cycle-per-second walk while retaining distance phase.
+The tread test queries a finite 1 µm volume before testing the exact landing point, because the founded compiler
+correctly rejects empty broad-phase bounds. Solver and compiled-geometry checks cover ascent, stopping and sustained
+idle support on a half slab, with deterministic replay.
+
+Focused tests include exact 360 Hz sampling of real SDK Predict over 30 Hz simulation, ordinary correction handling,
+explicit placement cuts, click-only acquisition/rejection/re-lock, and slab support. Real display acceptance still
+requires the founder route at 1440×900 and 390×844: walk/stop/reverse, sprint turn, jump, half slab, roof/doorway,
+click lock → Escape → later click re-lock after a fast flick, wheel in/out, menu return. Judge camera calm, cadence
+and foot contact on a real GPU; SwiftShader pixels do not establish high-refresh temporal feel.

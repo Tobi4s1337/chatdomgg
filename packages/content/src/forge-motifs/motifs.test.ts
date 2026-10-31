@@ -17,4 +17,18 @@ describe('forge motifs', () => {
     while (todo.length) { const [x,y,z] = todo.pop()!; for (const [dx,dy,dz] of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]) { const p: [number,number,number] = [x+dx!,y+dy!,z+dz!]; const k=key(...p); if(cells.has(k) && !seen.has(k)) {seen.add(k); todo.push(p);} } }
     expect(seen.size).toBe(cells.size);
   });
+  it.each(['hearth', 'tide', 'grove'] as StyleKey[])('%s dragon smoke starts immediately outside its hollow nose', (style) => {
+    const {boxes, emitter} = createForgeMotif('sleeping-dragon', style);
+    const materialAt = (x:number, y:number, z:number) => {
+      let material = 0;
+      for (const box of boxes) if (x >= box.from[0] && x < box.to[0] && y >= box.from[1] && y < box.to[1] && z >= box.from[2] && z < box.to[2]) material = box.material;
+      return material;
+    };
+    expect(emitter).toEqual([0, 2, 9]);
+    expect(materialAt(...emitter)).toBe(0);
+    expect(materialAt(1, 2, 9)).toBe(0);
+    expect(materialAt(1, 3, 9)).not.toBe(0);
+    expect(materialAt(1, 1, 9)).not.toBe(0);
+  });
+
 });
