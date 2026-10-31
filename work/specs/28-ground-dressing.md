@@ -405,3 +405,26 @@ with channel points; benches, gates, stiles and anything sat on or opened.
   earth, with one head cut for the stall. It is passive, mounted at full detail only and casts no shadow. The
   adopted cover now keeps every non-solid piece, so the flush stones of doorsteps and the stall garden reach the
   real scene. Solids still wait for collision composition.
+- **2026-10-31 — Gardens stand by the lot, never in the build space or the meadow.** A home blueprint reserves its
+  lot's whole 16 m, so the planner reads what a placement really occupies from its solid boxes (`occupiedCorners`),
+  and a lot's building is whatever the host placed inside it. The back fence's house-side face stands at
+  `max(allowedDepth, real rear + 0.5 m)` in the home's frame, across the lot's 8 m, turned with the home. A home
+  whose rear leaves no room for that within 16 m has no fence, and the reason is reported. The strip between the
+  real rear and `allowedDepth` belongs to the current footprint, the owner's build space, and the strip behind the
+  fence is the tended meadow. So vignettes stand outside the lot: against an open lot side from 2.5 m behind the
+  facade, or along the back lot line, each piece facing away from the home. A home's fence and vignette form one
+  authored assembly with it. They may lean on its real walls (0.15 m clear, the fence 0.5 m) and stand against its
+  lot line, but never inside its current footprint. Every other solid keeps 1.5 m from other occupied placements.
+  Outside the lots it keeps 1.5 m from every other home's whole lot, so a neighbour's growth never unseats it. The
+  fence spans the lot and keeps 0.5 m from its neighbours instead. In the founded town most lot gaps are 1 m, so
+  a vignette mostly finds an open row end or a back alley. `homesWithVignette` reports the actual count, and
+  `omissions` reports the homes that had no room, rather than relaxing the clearances. Garden forms are authored
+  shallow (7 cells deep) to fit those margins. Field walls (old quarters) and rail fences (newest) run 6–45 m out,
+  along the cardinal axis with the least relief, two to five 4 m lengths at a 3.75 m pitch. Each length is level, and
+  ends nest or stack rather than share faces. Every solid is a cardinal blocker and collision piece.
+  `planAdoptedCover(plan, input, { solids: true })` returns them for the integrator to bind; the default stays passive.
+- **2026-10-31 — A colour runs along the back fence.** The quality bar's "drift of one flower colour along the
+  fence" is planned with the fence: a lot-tagged loose drift of the home's kit colour on the tended-meadow side,
+  1.9 m behind the fence and measured from it (chance 0.35 + 0.55 × age; the arrival home always). It is cover
+  only, inside its lot, so growth moves it with the fence and `hideLot` hides it; a home whose fence stands too
+  near the lot line has none.

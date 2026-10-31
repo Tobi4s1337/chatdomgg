@@ -71,7 +71,7 @@ export function pieceMatrix(piece: GroundPiece, level: Level, out = new THREE.Ma
 export function createGroundDressing(host: GroundDressingHost): GroundDressing {
   const { plan, scene, camera, pool, clay, signal } = host;
   const derived = createDressingMaterial(clay.material);
-  const views = planViews(host.land, host.ground);
+  const views = planViews(host.land, host.ground, plan);
   let disposed = false, hidden: number | null = null, dirty = true, portrait = camera.aspect < 1, cpuBytes = 0;
 
   // Tiles hold every placement by its origin, the same point the shader measures fades from.

@@ -20,7 +20,7 @@ import { loadTerrain } from '../terrain-client';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from '../terrain-worker';
 import { SIMULATED_LAND, simulatedLand, simulatedWaterKeepOut } from './fixture';
 import { createGroundDressing } from './mount';
-import { arrivalHome, planGroundDressing } from './plan';
+import { arrivalHome, gardenHome, gardenView, planGroundDressing } from './plan';
 
 type BenchWindow = Window & { __chatdomReady?: boolean; __chatdomKingdom?: unknown };
 const query = new URLSearchParams(location.search);
@@ -133,11 +133,18 @@ try {
     const ex = x + mx / length * back, ez = z + mz / length * back;
     return { eye: [ex, landHeight(ex, ez) + 2.3, ez] as Vec3, target: [x, landHeight(x, z) + 0.6, z] as Vec3, fov: portrait ? 64 : 50 };
   };
+  // Old Row's garden (`garden`, as `views()` frames it in landscape) and the newest street's (`garden-new`), each
+  // aimed at its vignette in a portrait frame.
+  const gardenPose = (quarter: 'oldest' | 'newest') => {
+    const portrait = canvas.clientWidth < canvas.clientHeight;
+    return { ...gardenView(gardenHome(layout, quarter, plan), landHeight, plan, portrait), fov: portrait ? 64 : 58 };
+  };
   const views = dressing?.views();
   let pose = { eye: [0, 0, 0] as Vec3, target: [0, 0, 1] as Vec3, fov: 52 };
   const choose = (name: string) => {
     if (name === 'hero') pose = hero();
     else if (name === 'market') pose = market();
+    else if (name === 'garden' || name === 'garden-new') pose = gardenPose(name === 'garden' ? 'oldest' : 'newest');
     else if (views && name in views) { const view = views[name as keyof typeof views]; pose = { ...view, fov: name === 'ridge' ? 46 : 58 }; }
     else throw new Error(`Unknown view ${name}`);
   };
