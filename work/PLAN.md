@@ -349,6 +349,9 @@ durable; speech/wishes/deletions transient. Chat grants no identity/follower his
 keep is the separate Forge host65534, under the same actual ten-minute coal rule; migration0007 applied. A
 witnessed Forge pins exact host fingerprints through fitting, judgment, transaction and landing. Current code
 traces Herald→room→real Codex CLI/judges→owned host→public ritual→stream director; actual completion is unproved.
+The room-fed casting now heats the physical marked anvil through pour/cooling, without duplicating the external
+hammer/runes or exposing unjudged candidates. Its fixed camera envelope includes the crucible/bail, not only the
+part. Dragon copper/ceramic and inlays now select authored back surfaces, preserving horns/stack/details.
 
 **Citizen/stream:** WalkerSchema.homeSlot is appended (65535 means no street home); committed ownership updates
 join/allocation/reconnect and replacement removes the old public body immediately. Six stable free looks derive
@@ -375,7 +378,12 @@ errors,240homes,0observed people/windows; no fabricated warmth. First capture lo
 serial capture succeeded after the runtime update. Previous six-person appearance sheet remains
 `shots/citizen-defaults/review@1440x900.png` (explicit review fixture).
 
-**Checks/next:** Typecheck, touched lint, web build and22 focused content/adapter tests pass. The exhaustive
+**Latest look/checks:** `shots/forge/room-hot-pour-framed@1440x900.png` and `room-cool@1440x900.png` (same
+folder) are a labelled SIMULATED art harness running the actual room adapter, authored home/socket, assembly
+and meshing. Root looked: hot rune cuts and full crucible fit; dragon still reads too much as a plate-ring,
+so AH04 gets the muzzle-on-paws silhouette as its concrete next sculpt task. Latest capture has zero browser/
+HTTP errors. Typecheck, touched lint, web/realm builds and focused room/assembly tests pass (5 root tests,
+worker9 overlapping); previous22 content/adapter tests stand. No real-chat ritual/capture claim. The exhaustive
 planner clearance run was stopped; no full-suite/full-verify claim. Next acceptance is real chat→shared
 arrival/window/bubble, real wish→Codex/judges→right home, two/three real walkers and director, then record/watch
 60–90seconds. While waiting for the founder’s genuine line, compose real world producers and finish the hero

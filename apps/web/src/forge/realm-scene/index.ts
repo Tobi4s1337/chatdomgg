@@ -151,9 +151,12 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
   function direct(casting: Casting | null, frame: ForgeRitualFrame | null) {
     const width = Math.max(1, options.canvas.clientWidth), height = Math.max(1, options.canvas.clientHeight);
     const size = casting?.bounds.getSize(new THREE.Vector3()) ?? new THREE.Vector3(3, 2, 3);
-    const target = options.anvil.clone().add(new THREE.Vector3(0, (1.6 + size.y) * .5, 0));
+    // Above the casting: 0.9√heft for the lip, arrival/departure lift and the tilted bowl/bail (heft ≤ 1.8).
+    // Hold this envelope throughout the anvil shot so the pour never clips its crucible or pumps the camera.
+    const stageHeight = 1.6 + size.y + 2.7;
+    const target = options.anvil.clone().add(new THREE.Vector3(0, stageHeight * .5, 0));
     const fov = 43, half = THREE.MathUtils.degToRad(fov / 2);
-    const radius = Math.hypot(Math.max(3.4, size.x), 1.6 + size.y, Math.max(3.4, size.z)) / 2;
+    const radius = Math.hypot(Math.max(3.4, size.x), stageHeight, Math.max(3.4, size.z)) / 2;
     const distance = Math.max(10, radius / Math.sin(Math.min(half, Math.atan(Math.tan(half) * width / height))) * 1.15);
     const offset = new THREE.Vector3(7, 3.6, 11).normalize().multiplyScalar(distance);
     if (casting && frame && (frame.phase === 'flight' || frame.phase === 'landed')) {
@@ -200,6 +203,9 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
         phaseProgress: 0, duration: 21, source: 'live',
       } : null;
       view.update(waiting, !!waiting && pending?.[1].stage === 'drafting');
+      // The external presentation owns the clone, hammer and runes after commit. Heat the physical anvil too,
+      // without starting a second set of effects or exposing a candidate while the judges are still working.
+      if (frame) view.updateAnvil(frame);
       options.sound.forgeUpdate?.(frame ?? waiting);
       emitters.update({ time: now / 1000, anvil: anvilFace, activity: frame?.phase === 'pour' ? 1 : 0,
         fillHeight: frame?.phase === 'pour' && current ? current.bounds.getSize(new THREE.Vector3()).y * frame.phaseProgress : 0,

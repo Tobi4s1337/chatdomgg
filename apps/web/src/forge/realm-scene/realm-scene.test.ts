@@ -13,9 +13,10 @@ import { createRealmForgeScene } from './index';
 
 // The tested boundary is room authority -> actual assembly/meshing -> lifecycle/camera/standing emitter.
 // The anvil's canvas artwork has its own visual tests and needs a browser, so replace only that view.
+const stageHeat = vi.hoisted(() => vi.fn());
 vi.mock('../ritual-view', () => ({ createForgeRitualView: (scene: THREE.Scene) => {
   const root = new THREE.Group(); scene.add(root);
-  return { root, beginWords: vi.fn(), update: vi.fn(), setEnvironment: vi.fn(), dispose: () => scene.remove(root) };
+  return { root, beginWords: vi.fn(), update: vi.fn(), updateAnvil: stageHeat, setEnvironment: vi.fn(), dispose: () => scene.remove(root) };
 } }));
 
 describe('room-fed Forge scene', () => {
@@ -63,6 +64,15 @@ describe('room-fed Forge scene', () => {
       expect(clone.rotation.y).toBeCloseTo(home.yaw);
       camera.position.set(100, 80, 60); const untouched = camera.position.clone();
       expect(adapter.update(7000, false)).toBe(false); expect(camera.position.equals(untouched)).toBe(true);
+      expect(stageHeat).toHaveBeenLastCalledWith(expect.objectContaining({phase:'pour',source:'simulated'}));
+      // The actual pour prop must fit, not just the candidate: the production shot previously cut off its bail.
+      camera.aspect=1440/900; adapter.update(7000,true); camera.updateMatrixWorld(true);
+      const crucible=scene.getObjectByName('forge-crucible')!;
+      const bounds=new THREE.Box3().setFromObject(crucible);
+      for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
+        const p=new THREE.Vector3(x,y,z).project(camera);
+        expect(Math.abs(p.x)).toBeLessThan(.96);expect(Math.abs(p.y)).toBeLessThan(.96);
+      }
       expect(smokeAlpha()).toBe(false);
       expect(hide).toHaveBeenCalledWith(attachment.id, true); expect(settled).not.toHaveBeenCalled();
       expect(adapter.update(20000, true)).toBe(true);
