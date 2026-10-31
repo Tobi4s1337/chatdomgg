@@ -14,3 +14,4 @@ follow-up: TM01 capture and inspect the banner; main must bind the bench route a
 follow-up: TM02 validate the unused gift art blueprints and complete their presentation before use.
 
 2026-10-31 founder efficiency decision: PARK after the current task: finish and commit that task, then start no further task. Reviewed work remains eligible for integration. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
+follow-up: TM02 complete the remaining subscription and gift requirements, capture and inspect the sequence, and reconcile this work with the requested cheer spectacle; task remains open.

@@ -9,16 +9,24 @@ import { createMomentStage, type MomentStage } from './stage';
 import { BENCH_KINGDOM, benchPerson, createBenchSimulation, type BenchCitizen, type BenchDelivery, type BenchSimulation } from './simulation';
 import './style.css';
 
+/** The scrubber's reach: long enough for a full gift cart to arrive, hand out its waves and roll on. */
+const TIMELINE_MS = 20_000;
 /** Kingdom time at which every deterministic bench scenario begins. */
 const START = Date.UTC(2026, 9, 30, 19, 40);
 interface LogLine { readonly id: number; readonly text: string; readonly tone: 'public' | 'refused' | 'source' }
+
+/** Bench scenarios: each opens on one deterministic beat so a capture can seek straight into it. */
+const SCENARIOS = ['banner', 'neighbours', 'restored', 'idle', 'resub', 'tiers', 'lapse', 'rejoin', 'gift', 'forward', 'cart', 'friend'] as const;
+type Scenario = typeof SCENARIOS[number];
+const HEADINGS: Partial<Record<Scenario, string>> = { gift: 'A gift at the door', forward: 'A gift paid forward', cart: 'The gift cart', friend: 'From a friend of the realm',
+  resub: 'Seven months under the banner', tiers: 'A finer cloth', lapse: 'A banner furled', rejoin: 'The banner, again' };
 
 const DECREE = { kind: 'poll-create', title: 'Where shall the new well be dug?', choices: ['By the old bridge', 'In the market square', 'Up on Heather Hill'], durationSeconds: 180 } as const;
 
 export default function TwitchMomentsBench() {
   const query = new URLSearchParams(location.search);
   const live = query.get('mode') === 'live', clean = query.get('clean') === '1';
-  const scenario = (['banner', 'neighbours', 'restored', 'idle'] as const).find(s => s === query.get('scenario')) ?? 'neighbours';
+  const scenario: Scenario = SCENARIOS.find(s => s === query.get('scenario')) ?? 'neighbours';
   const fixedAt = query.has('at') ? Math.max(0, Number(query.get('at')) || 0) : null;
   const hour = Number.isFinite(Number(query.get('hour'))) && query.has('hour') ? Number(query.get('hour')) : 19.8;
   const [phase, setPhase] = createSignal('Raising the hamlet'), [progress, setProgress] = createSignal(0), [failed, setFailed] = createSignal<string | null>(null);
@@ -46,8 +54,8 @@ export default function TwitchMomentsBench() {
 
   function presenceFor(people: readonly BenchCitizen[], layoutSlots: readonly number[]): KingdomPresenceFrame {
     // SIMULATED presence: the bench's citizens are home, plus a few other lit windows along the street.
-    const named = new Map(people.filter(c => c.disclosure === 'named').map(c => [c.slot, c.name]));
-    const present = new Set([...people.map(c => c.slot), ...layoutSlots.filter((_, i) => i % 3 !== 1).slice(0, 10)]);
+    const named = new Map(people.flatMap(c => c.disclosure === 'named' && c.slot !== null ? [[c.slot, c.name] as const] : []));
+    const present = new Set([...people.flatMap(c => c.slot === null ? [] : [c.slot]), ...layoutSlots.filter((_, i) => i % 3 !== 1).slice(0, 10)]);
     return { version: 1, kingdomId: BENCH_KINGDOM, epoch: 'bench-presence', sequence: 1, asOf: START, origin: 'simulated', streamLive: true, connection: 'fresh',
       windows: layoutSlots.map(slot => ({ slot, present: present.has(slot), publicName: present.has(slot) ? named.get(slot) ?? null : null, since: START - 600_000 })) };
   }
@@ -58,16 +66,20 @@ export default function TwitchMomentsBench() {
     const home = [...anchored].sort((a, b) => (b.tier === 'house' ? 1 : 0) - (a.tier === 'house' ? 1 : 0) || neighbours(b) - neighbours(a))[0];
     if (!home) throw new Error('No home in this hamlet has a wall a banner can hang on');
     const near = homes.filter(h => h !== home).sort((a, b) => Math.hypot(a.position[0] - home.position[0], a.position[2] - home.position[2]) - Math.hypot(b.position[0] - home.position[0], b.position[2] - home.position[2]));
-    const quiet = near[0]!, others = near.slice(1).filter(h => s.homeAnchor(h.slot)).slice(0, 2);
+    // Neighbours with a banner wall first; any nearby home will do for a giver, who needs a name, not a wall.
+    const rest = near.slice(1), others = [...rest.filter(h => s.homeAnchor(h.slot)), ...rest.filter(h => !s.homeAnchor(h.slot))].slice(0, 2);
+    const quiet = near[0]!;
     return [
       { id: benchPerson(1), name: 'Juniper', slot: home.slot, disclosure: 'named' },
       { id: benchPerson(2), name: 'A quiet neighbour', slot: quiet.slot, disclosure: 'anonymous' },
       ...others.map((h, i) => ({ id: benchPerson(3 + i), name: ['Rowan', 'Hazel'][i]!, slot: h.slot, disclosure: 'named' as const })),
+      // Named in chat, but without a home in Willowmere yet: support for Moss is welcomed at the gate.
+      { id: benchPerson(9), name: 'Moss', slot: null, disclosure: 'named' },
     ];
   }
 
   function framing(s: MomentStage, people: readonly BenchCitizen[]): CameraPose {
-    const a = s.homeAnchor(people[0]!.slot)!, quiet = s.layout.homes.find(h => h.slot === people[1]!.slot)!;
+    const a = s.homeAnchor(people[0]!.slot!)!, quiet = s.layout.homes.find(h => h.slot === people[1]!.slot)!;
     const door = new THREE.Vector3(...a.doorstep), normal = new THREE.Vector3(...a.normal), right = new THREE.Vector3(...a.right);
     const toQuiet = new THREE.Vector3(quiet.position[0], door.y, quiet.position[2]).sub(door).dot(right) > 0 ? 1 : -1;
     const portrait = canvas.clientHeight > canvas.clientWidth;
@@ -86,16 +98,35 @@ export default function TwitchMomentsBench() {
     const before = sim.status().counts, seen = moments.metrics().admitted;
     const delivered = sim.deliver(kind, citizen);
     await settle();
-    const after = sim.status().counts, label = citizen.disclosure === 'named' ? citizen.name : 'a quiet neighbour';
+    const label = citizen.disclosure === 'named' ? citizen.name : 'a quiet neighbour';
+    report(delivered, before, seen, kind === 'lapse' ? `channel.subscription.end → ${label}`
+      : `${kind === 'resub' ? 'resub' : kind.startsWith('tier') ? `sub (${kind})` : 'sub'} notice → ${label}${citizen.slot === null ? ' at the gate' : '’s home'}`, kind === 'late');
+  }
+
+  /** The public outcome of whatever the source just delivered, as counted by the real ingest. */
+  function report(delivered: boolean, before: ReturnType<BenchSimulation['status']>['counts'], seen: number, what: string, late = false): void {
+    if (!sim || !moments) return;
+    const after = sim.status().counts;
     if (!delivered) { note('The source is down: Twitch has nothing to deliver to', 'source'); return; }
     if (after.duplicate > before.duplicate) note('Refused · a delivery Twitch already sent once', 'refused');
     else if (after.malformed > before.malformed) note('Refused · the event belongs to another channel', 'refused');
     else if (after.published > before.published) {
       const beat = moments.metrics().admitted > seen;
-      note(`channel.subscribe → ${label}’s home · ${beat ? 'banner unfurls' : kind === 'late' ? 'late: it simply flies' : 'state only'}`, 'public');
+      note(`${what} · ${beat ? 'a beat plays' : late ? 'late: it simply flies' : 'state only'}`, 'public');
       if (beat) setBeatAt(Math.max(now, beatAt() === null ? now : beatAt()!));
-    } else if (after.applied > before.applied) note(`channel.subscribe → recorded privately; ${label} is never named or marked`, 'public');
+    } else if (after.applied > before.applied) note(`${what} → recorded privately; never named or marked`, 'public');
     else if (after.record > before.record) note('Refused · the record store failed; nothing was published', 'refused');
+    refreshStatus();
+  }
+
+  async function gift(send: (s: BenchSimulation) => boolean, what: string): Promise<void> {
+    if (!sim || !moments) return;
+    const before = sim.status().counts, seen = moments.metrics().admitted;
+    const delivered = send(sim);
+    await settle();
+    report(delivered, before, seen, what);
+    // Gift groups gather briefly before the beat is planned; the beat starts when the group was first seen.
+    if (moments.metrics().admitted > seen || delivered) setBeatAt(beatAt() ?? now);
     refreshStatus();
   }
 
@@ -152,7 +183,8 @@ export default function TwitchMomentsBench() {
         moments.receivePresence(presenceFor(people, stage.layout.homes.map(h => h.slot)));
         const port = createProceduralMomentSound({ context: () => (sound() ? audio : null), now: () => now, gain: () => (sound() ? 1 : 0) });
         view = createTwitchMomentView({ parent: stage.parent, material: stage.material, kit: query.get('kit') === 'hearth' ? 'hearth' : 'tide',
-          mesh: b => stage!.mesh(b), homeAnchor: (slot): HomeAnchor | null => stage!.homeAnchor(slot), sound: port, camera: cameraPort,
+          mesh: b => stage!.mesh(b), homeAnchor: (slot): HomeAnchor | null => stage!.homeAnchor(slot), doorAnchor: slot => stage!.doorAnchor(slot),
+          windowAnchor: slot => stage!.windowAnchor(slot), placeAnchor: place => stage!.placeAnchor(place), giftRoute: () => stage!.giftRoute(), sound: port, camera: cameraPort,
           viewport: () => ({ width: canvas.clientWidth, height: canvas.clientHeight }) });
         setPhase('Weaving the banners');
         await view.prepare();
@@ -166,9 +198,25 @@ export default function TwitchMomentsBench() {
           const started = sim.start();
           note(`Source · SIMULATED local EventSub transport, plan: ${started.plan.map(p => `${p.type} v${p.version}`).join(', ')}`, 'source');
           await settle();
-          const [juniper, quiet] = people;
-          if (scenario === 'restored') {
+          const [juniper, quiet] = people, rowan = people.find(p => p.name === 'Rowan'), hazel = people.find(p => p.name === 'Hazel'), moss = people.find(p => p.name === 'Moss')!;
+          const giver = rowan ?? juniper!, other = hazel ?? quiet!;
+          if (scenario === 'resub' || scenario === 'tiers' || scenario === 'lapse' || scenario === 'rejoin') {
+            // An hour earlier Juniper already flew a banner: the beat now is the change, not the first raising.
+            now = START - 3_600_000; await deliver('subscribe', juniper!);
+            if (scenario === 'rejoin') { now = START - 1_800_000; await deliver('lapse', juniper!); }
+            now = START; await deliver(scenario === 'resub' ? 'resub' : scenario === 'tiers' ? 'tier-3' : scenario === 'lapse' ? 'lapse' : 'rejoin', juniper!);
+            setBeatAt(START);
+          } else if (scenario === 'gift') {
+            await gift(s => s.giftOne(giver, juniper!), `${giver.name} gifts a sub to Juniper`);
+          } else if (scenario === 'forward') {
+            await gift(s => s.giftOne(other, juniper!, { id: giver.id, name: giver.name }), `${other.name} pays ${giver.name}’s gift forward to Juniper`);
+          } else if (scenario === 'cart') {
+            await gift(s => s.giftGroup(giver, 6, [juniper!, other, moss, quiet!]), `${giver.name} gifts 6 subs · 4 recipients disclosed`);
+          } else if (scenario === 'friend') {
+            await gift(s => s.giftGroup('anonymous', 3, [juniper!], '2000'), 'An anonymous gifter gives 3 subs · 1 recipient disclosed');
+          } else if (scenario === 'restored') {
             now = START - 3_600_000; await deliver('subscribe', juniper!); await deliver('subscribe', quiet!);
+            now = START - 3_000_000; await gift(s => s.giftOne(rowan ?? juniper!, juniper!), 'A gift an hour ago');
             now = START; sim.restartSource(); await settle();
             note('New source session · restored from records, no beat replays', 'source');
             setBeatAt(null);
@@ -210,7 +258,7 @@ export default function TwitchMomentsBench() {
     setActionNote(result.status === 'unavailable' ? 'Nothing was sent. No action service is bound to this bench.' : `Result: ${result.status}`);
   }
 
-  const offset = () => { const start = beatAt(); return start === null ? 0 : Math.max(0, Math.min(12_000, clockMs() - start)); };
+  const offset = () => { const start = beatAt(); return start === null ? 0 : Math.max(0, Math.min(TIMELINE_MS, clockMs() - start)); };
   const statusText = () => live ? 'LIVE · NOT CONNECTED' : status() === 'ready' ? 'SIMULATED' : status() === 'unavailable' ? 'SIMULATED · SOURCE DOWN' : 'SIMULATED · CONNECTING';
 
   return <div class="moments-bench" classList={{ clean, live }} data-chatdom-moments>
@@ -219,12 +267,13 @@ export default function TwitchMomentsBench() {
     <div class="moment-captions" aria-live="polite">
       <For each={captions()}>{caption => <div class="moment-caption" style={{ left: `${caption.x}px`, top: `${caption.y}px`, opacity: caption.opacity }}>
         <span class="caption-mark" aria-hidden="true" /><strong>{caption.title}</strong><small>{caption.line}</small>
+        <Show when={caption.detail}><em class="caption-detail">{caption.detail}</em></Show>
       </div>}</For>
     </div>
     <Show when={!clean}>
       <header class="moments-heading">
         <p class="moments-eyebrow">Twitch happens in the kingdom</p>
-        <h1>A banner at home</h1>
+        <h1>{HEADINGS[scenario] ?? 'A banner at home'}</h1>
         <p class="moments-sub">Willowmere · a hamlet of {citizens().length ? 'familiar' : ''} lights</p>
       </header>
     </Show>
@@ -242,9 +291,21 @@ export default function TwitchMomentsBench() {
               <ul class="citizens">
                 <For each={citizens()}>{citizen => <li>
                   <span class="citizen-name" classList={{ quiet: citizen.disclosure === 'anonymous' }}>{citizen.name}<small>{citizen.disclosure === 'named' ? 'named citizen' : 'never named or marked'}</small></span>
-                  <button onClick={() => void deliver('subscribe', citizen)}>Subscribes</button>
+                  <Show when={citizen.slot !== null}><button onClick={() => void deliver('subscribe', citizen)}>Subscribes</button></Show>
                 </li>}</For>
               </ul>
+              <div class="source-actions">
+                <button onClick={() => void deliver('resub', citizens()[0]!)}>Resub · 7 months</button>
+                <button onClick={() => void deliver('tier-2', citizens()[0]!)}>Tier 2</button>
+                <button onClick={() => void deliver('tier-3', citizens()[0]!)}>Tier 3</button>
+                <button onClick={() => void deliver('lapse', citizens()[0]!)}>Lapses</button>
+              </div>
+              <div class="source-actions">
+                <button onClick={() => { const c = citizens(), giver = c[2] ?? c[0]!; void gift(s => s.giftOne(giver, c[0]!), `${giver.name} gifts a sub to ${c[0]!.name}`); }}>Gift one</button>
+                <button onClick={() => { const c = citizens(), giver = c[3] ?? c[0]!, from = c[2] ?? c[0]!; void gift(s => s.giftOne(giver, c[0]!, { id: from.id, name: from.name }), `${giver.name} pays ${from.name}’s gift forward`); }}>Pay it forward</button>
+                <button onClick={() => { const c = citizens(), giver = c[2] ?? c[0]!; void gift(s => s.giftGroup(giver, 6, c.filter(x => x !== giver)), `${giver.name} gifts 6 subs`); }}>Gift cart</button>
+                <button onClick={() => { const c = citizens(); void gift(s => s.giftGroup('anonymous', 3, [c[0]!], '2000'), 'An anonymous gifter gives 3 subs'); }}>Anonymous gifts</button>
+              </div>
               <div class="source-actions">
                 <button onClick={() => void deliver('repeat', citizens()[0]!)}>Deliver again</button>
                 <button onClick={() => void deliver('late', citizens()[2] ?? citizens()[0]!)}>Late delivery</button>
@@ -257,12 +318,12 @@ export default function TwitchMomentsBench() {
               <h2>Timeline</h2>
               <div class="timeline">
                 <button class="play" aria-label={playing() ? 'Pause' : 'Play'} onClick={() => setPlaying(!playing())}>{playing() ? 'Pause' : 'Play'}</button>
-                <input type="range" min="0" max="12000" step="20" value={offset()} disabled={beatAt() === null} aria-label="Time into the latest banner beat"
+                <input type="range" min="0" max={TIMELINE_MS} step="20" value={offset()} disabled={beatAt() === null} aria-label="Time into the latest banner beat"
                   onInput={event => seek(Number(event.currentTarget.value))} />
                 <output>{(offset() / 1000).toFixed(1)} s</output>
               </div>
               <div class="beat-marks" aria-hidden="true">
-                <i style={{ left: `${BANNER_BEAT.anticipation / 120}%` }} /><i style={{ left: `${BANNER_BEAT.action / 120}%` }} /><i style={{ left: `${BANNER_BEAT.settle / 120}%` }} /><i style={{ left: `${BANNER_BEAT.end / 120}%` }} />
+                <For each={[BANNER_BEAT.anticipation, BANNER_BEAT.action, BANNER_BEAT.settle, BANNER_BEAT.end]}>{mark => <i style={{ left: `${mark / TIMELINE_MS * 100}%` }} />}</For>
               </div>
               <button class="sound" aria-pressed={sound()} onClick={enableSound}>{sound() ? 'Sound on' : 'Sound off'}</button>
             </section>

@@ -21,6 +21,7 @@ body.moments-bench-page{margin:0;background:#1d1b24;overflow:hidden}
 .moment-caption .caption-mark{position:absolute;top:-6px;left:50%;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe7a6,#b58a3c 70%);box-shadow:0 1px 2px #0008}
 .moment-caption strong{font-weight:normal;font-size:17px;line-height:1.2;color:#fff2d2;overflow-wrap:anywhere}
 .moment-caption small{font-size:11px;letter-spacing:.08em;color:#e1c992}
+.moment-caption .caption-detail{margin-top:3px;padding-top:4px;border-top:1px solid #8e6b3a88;font-style:normal;font-size:12px;line-height:1.25;color:#f3dfb2;overflow-wrap:anywhere}
 
 .sheet-toggle{position:absolute;right:24px;bottom:20px;z-index:3}
 .moments-panel{position:absolute;right:24px;top:64px;bottom:66px;width:330px;overflow:auto;padding:4px 18px 16px;border:1px solid #806a4a;border-radius:6px;background:#26212dee;box-shadow:0 18px 40px #0b09108c;scrollbar-width:thin;scrollbar-color:#6c5a42 #0000}
