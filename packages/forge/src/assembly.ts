@@ -1,3 +1,4 @@
+import { createAnvilHeroDragon } from '@chatdom/content/anvil-hero';
 import { ForgeStyleKitSchema, HousePartPlanSchema, type ForgeHouseSocket, type ForgeStyleKit, type HousePartPlan, type VoxelBlueprint } from '@chatdom/shared';
 import { MAT, STYLES } from '@chatdom/content/materials';
 import { createForgeMotif } from '@chatdom/content/forge-motifs';
@@ -59,7 +60,7 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
   const plan=HousePartPlanSchema.parse(input),kit=ForgeStyleKitSchema.parse(style);
   if(socket.kind!==plan.kind)throw new Error('That part does not fit this house socket.');
   if(kit.id!==`${kit.family}-native`||kit.revision!==1||kit.styleId!==STYLES[kit.family].id)throw new Error('Unregistered style kit.');
-  const native=STYLES[kit.family],motif=['sleeping-dragon','crescent-moon','watchful-owl'].includes(plan.motif)?createForgeMotif(plan.motif as 'sleeping-dragon'|'crescent-moon'|'watchful-owl',kit.family):createForgeOrnament(plan.motif as 'sleeping-fox'|'sunflower'|'scallop-shell'|'shooting-star',kit.family);
+  const native=STYLES[kit.family],motif=plan.motif==='sleeping-dragon'?createAnvilHeroDragon(kit.family):['crescent-moon','watchful-owl'].includes(plan.motif)?createForgeMotif(plan.motif as 'sleeping-dragon'|'crescent-moon'|'watchful-owl',kit.family):createForgeOrnament(plan.motif as 'sleeping-fox'|'sunflower'|'scallop-shell'|'shooting-star',kit.family);
   if(plan.version===2){
     const finish=plan.finish==='copper'?MAT.forgeCopper:plan.finish==='ceramic'?MAT.cream:null;
     // Finish the broad surface; preserve sleeping eyes, horns, paws and wing

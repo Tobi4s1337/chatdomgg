@@ -8,7 +8,8 @@
     "./materials": "./src/materials.ts",
     "./avatars": "./src/avatars/index.ts",
     "./forge-motifs": "./src/forge-motifs/index.ts",
-    "./forge-ornaments": "./src/forge-ornaments/index.ts"
+    "./forge-ornaments": "./src/forge-ornaments/index.ts",
+    "./anvil-hero": "./src/anvil-hero/index.ts"
   },
   "dependencies": {
     "@chatdom/shared": "workspace:*"

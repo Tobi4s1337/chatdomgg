@@ -1,18 +1,32 @@
 import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { createCitizenMotion, type CitizenMotionSample } from '@chatdom/world';
-import type { Vec3 } from '@chatdom/shared';
+import * as THREE from 'three';
+import type { CitizenChatCue, Vec3 } from '@chatdom/shared';
 import { placeMarketContent } from '../kingdom/settlement-content';
 import {
   createNeighbourStreet, createTownStreets, NEIGHBOUR_FIXTURE as F, TOWN_FIXTURE, type NeighbourStreet,
 } from '../../../../packages/world/src/citizen-behaviours/fixture';
-import type { CitizenEncounter, CitizenOverlay, CitizenRoutineView } from '../../../../packages/world/src/citizen-behaviours';
+import type { CitizenChatReaction, CitizenEncounter, CitizenOverlay, CitizenRoutineView } from '../../../../packages/world/src/citizen-behaviours';
 import { createBehaviourLoop, type BehaviourFrame, type BehaviourLoopSource } from './loop';
 import { createBehaviourStage, type BenchFocus, type BenchView } from './stage';
-import { closedMarketGate, scoutStreet, type RoutineBeat, type RoutineStory } from './stories';
+import { chatSource, closedMarketGate, scoutChat, scoutStreet, type RoutineBeat, type RoutineStory, type ScoutedChat } from './stories';
 import './style.css';
 
-type Scenario = 'encounter' | 'takeover' | 'departure' | 'stroll' | 'market' | 'closed' | 'town';
-type Family = 'greeting' | 'routine' | 'town';
+type Scenario = 'encounter' | 'takeover' | 'departure' | 'stroll' | 'market' | 'closed' | 'chat' | 'burst' | 'chat-walker' | 'reconnect' | 'town';
+type Family = 'greeting' | 'routine' | 'chat' | 'town';
+/** A chat moment as the report carries it, in fixture seconds. */
+interface ChatReport {
+  readonly cueId: string;
+  readonly speaker: number;
+  readonly listeners: readonly { readonly slot: number; readonly at: number; readonly out: number; readonly end: number }[];
+  readonly start: number; readonly nod: number; readonly nodEnd: number; readonly end: number;
+  readonly cut: number | null;
+  /** Lines said in the moment (a burst has many) and how many of them turned heads. */
+  readonly lines: number;
+  readonly reactions: number;
+  readonly outcomes: readonly { readonly id: string; readonly outcome: string }[];
+}
+interface Bubble { readonly slot: number; readonly x: number; readonly y: number; readonly name: string | null; readonly parts: CitizenChatCue['parts'] }
 interface BehaviourReport {
   readonly t: number;
   readonly hour: number;
@@ -24,6 +38,10 @@ interface BehaviourReport {
   readonly cut: number | null;
   /** The followed excursion, in fixture seconds. Routine scenarios only. */
   readonly routine: { readonly slot: number; readonly kind: RoutineStory['kind']; readonly beats: readonly { readonly kind: RoutineBeat['kind']; readonly from: number; readonly to: number; readonly node: string | null; readonly routine: string }[] } | null;
+  /** The followed chat line. Chat scenarios only. */
+  readonly chat: ChatReport | null;
+  /** SIMULATED speech bubbles on screen, by the kingdom consumer's own rules. */
+  readonly bubbles: number;
   readonly subject: { readonly slot: number; readonly routine: string; readonly activity: string; readonly nodeId: string | null; readonly lookYaw: number; readonly gesture: string } | null;
   readonly overlays: readonly { readonly slot: number; readonly gesture: CitizenOverlay['gesture']; readonly lookYaw: number }[];
   readonly counts: Readonly<Record<CitizenRoutineView['activity'], number>>;
@@ -52,15 +70,26 @@ const SCENARIOS: readonly { id: Scenario; family: Family; name: string; title: s
     note: 'An occasional market visit: the walk across the hamlet, a look over one side of the square and then the other, a few seconds to take it in, and the walk home. Nothing is bought; the market is only watched.' },
   { id: 'closed', family: 'routine', name: 'Market closed', title: 'A gentle rhythm in the street',
     note: 'The square is closed by a simulated reserved action, so the route is refused. The neighbour stays at their door, never teleports or spins between choices, and later takes a stroll instead.' },
+  { id: 'chat', family: 'chat', name: 'A line in chat', title: 'A witnessed line turns a few heads',
+    note: 'A simulated chat line arrives for someone at their door. Its speaker gives one small nod; the two neighbours who can hear it turn to look, one after the other, hold the look and settle. Nobody moves toward them, and the words stay in the bubble.' },
+  { id: 'burst', family: 'chat', name: 'A burst', title: 'A witnessed line turns a few heads',
+    note: 'Six simulated lines inside a second, one person three times, plus an expired, a foreign and a missing-body cue. Only a couple of lines turn heads; repeats join the reaction already under way, the rest only show their bubble.' },
+  { id: 'chat-walker', family: 'chat', name: 'Walker speaks', title: 'A witnessed line turns a few heads',
+    note: 'The speaker comes under simulated walker control mid-nod. Ambient behaviour lets go of them at once and never poses them again; the neighbours who heard them keep their short look.' },
+  { id: 'reconnect', family: 'chat', name: 'Reconnect', title: 'A witnessed line turns a few heads',
+    note: 'The source reconnects while neighbours are looking. The kingdom resets its policy, as the real consumer does; the same line is still on offer, but it was said before this connection, so nobody turns again.' },
   { id: 'town', family: 'town', name: 'A town of 240', title: 'A town at ease',
     note: 'Every home of a five-quarter town occupied by a simulated neighbour, on the kingdom\'s real motion and citizen renderer. Rests, strolls and market visits are seeded per person, so nobody moves in step.' },
 ];
 const VIEWS: Record<Family, readonly { id: BenchView; name: string }[]> = {
   greeting: [{ id: 'doorstep', name: 'Doorstep' }, { id: 'close', name: 'Close' }, { id: 'street', name: 'Street' }],
   routine: [{ id: 'follow', name: 'Follow' }, { id: 'market', name: 'Market' }, { id: 'street', name: 'Street' }],
+  chat: [{ id: 'doorstep', name: 'Doorstep' }, { id: 'close', name: 'Close' }, { id: 'street', name: 'Street' }],
   town: [{ id: 'aerial', name: 'Above' }, { id: 'follow', name: 'In a lane' }],
 };
 const STEP_MS = 100;
+/** Which line each chat scenario follows. */
+const CHAT_CUE: Partial<Record<Scenario, string>> = { chat: 'simulated-line', burst: 'simulated-burst-0', 'chat-walker': 'simulated-walker', reconnect: 'simulated-reconnect' };
 const TOWN_CLIP: readonly [number, number] = [125_000, 205_000];
 
 const flat = (a: Vec3, b: Vec3): number => Math.hypot(a[0] - b[0], a[2] - b[2]);
@@ -84,6 +113,9 @@ export default function CitizenBehaviourBench() {
   const [clock, setClock] = createSignal(0);
   const [encounter, setEncounter] = createSignal<{ encounter: CitizenEncounter; cut: number } | null>(null);
   const [story, setStory] = createSignal<RoutineStory | null>(null);
+  /** The followed line, every reaction of its moment (a burst has more) and the valid lines said in it. */
+  const [said, setSaid] = createSignal<{ reaction: CitizenChatReaction; scouted: ScoutedChat; cut: number | null; burst: readonly CitizenChatReaction[]; lines: number } | null>(null);
+  const [bubbles, setBubbles] = createSignal<readonly Bubble[]>([]);
   const [scene, setScene] = createSignal<{ views: readonly CitizenRoutineView[]; overlays: ReadonlyMap<number, CitizenOverlay> }>({ views: [], overlays: new Map() });
   const [playing, setPlaying] = createSignal(fixed === null);
   let disposed = false, teardown: (() => void) | undefined, replay: (() => void) | undefined;
@@ -101,8 +133,17 @@ export default function CitizenBehaviourBench() {
       await new Promise(resolve => setTimeout(resolve, 0));
 
       // The moments to show, read from the same motion and policy the stage plays.
-      let first: CitizenEncounter | null = null, routine: RoutineStory | null = null;
-      if (family !== 'town') {
+      let first: CitizenEncounter | null = null, routine: RoutineStory | null = null, line: CitizenChatReaction | null = null;
+      if (family === 'chat') {
+        setStatus('Listening to the simulated street');
+        const scouted = scoutChat(street, source, F.startMs, F.startMs + 240_000);
+        line = scouted.reactions.find(item => item.cueId === CHAT_CUE[scenario]) ?? null;
+        if (!line) throw new Error('That line turned no heads in the simulated story.');
+        const cut = scenario === 'chat-walker' ? line.startMs + 700 : scenario === 'reconnect' ? Math.ceil((line.startMs + 1_200) / STEP_MS) * STEP_MS : null;
+        const inMoment = (id: string): boolean => scenario === 'burst' ? id.startsWith('simulated-burst') : id === line!.cueId;
+        const lines = new Set(scouted.notes.filter(note => inMoment(note.id) && !['expired', 'foreign', 'absent'].includes(note.outcome)).map(note => note.id)).size;
+        setSaid({ reaction: line, scouted, cut, burst: scenario === 'burst' ? scouted.reactions.filter(item => inMoment(item.cueId)) : [line], lines });
+      } else if (family !== 'town') {
         setStatus('Following the simulated street');
         const scouted = scoutStreet(street, source, F.startMs, F.startMs + 400_000);
         first = family === 'greeting' ? scouted.encounter : null;
@@ -116,16 +157,18 @@ export default function CitizenBehaviourBench() {
 
       // The shown story: identical, plus the chosen labelled interruption.
       const departures = new Map(scenario === 'departure' && first ? [[first.recipient, cut]] : []);
-      const motion = createCitizenMotion(street.plan);
-      const loopSource: BehaviourLoopSource = { ...source, frameAt: atMs => street.frameAt(atMs, departures),
+      const motion = createCitizenMotion(street.plan), chat = family === 'chat' ? chatSource(street, source) : null;
+      const frameFor = (atMs: number) => street.frameAt(atMs, chat ? chat.script.departures : departures);
+      const loopSource: BehaviourLoopSource = chat ? chat.source : { ...source, frameAt: atMs => street.frameAt(atMs, departures),
         ambientAt: atMs => scenario === 'takeover' && first && atMs >= cut ? new Set(street.slots.filter(slot => slot !== first.greeter)) : everyone,
         ...(scenario === 'closed' ? { gate: closedMarketGate(street.plan.market.nodeId) } : {}) };
       const loop = createBehaviourLoop(motion, loopSource);
       const stage = await createBehaviourStage(canvas, street.plan, street.slots, { hour, onProgress: setStatus });
       if (disposed) { stage.dispose(); return; }
 
-      const clipStart = first ? first.startMs - 5_000 : routine ? routine.startMs : fixture.startMs + TOWN_CLIP[0];
-      const clipEnd = first ? first.endMs + 4_000 : routine ? routine.endMs : fixture.startMs + TOWN_CLIP[1];
+      const lineEnd = line ? Math.max(...(said()?.burst ?? [line]).map(item => item.endMs)) : 0;
+      const clipStart = first ? first.startMs - 5_000 : line ? line.startMs - 4_000 : routine ? routine.startMs : fixture.startMs + TOWN_CLIP[0];
+      const clipEnd = first ? first.endMs + 4_000 : line ? lineEnd + 4_000 : routine ? routine.endMs : fixture.startMs + TOWN_CLIP[1];
       let now = fixed === null ? clipStart : fixture.startMs + fixed * 1000, raf = 0, last = performance.now(), cursor: number | null = null;
       let latest: { views: readonly CitizenRoutineView[] } = { views: [] }, beatKey = '';
 
@@ -151,6 +194,21 @@ export default function CitizenBehaviourBench() {
           const greeter = atPose.find(sample => sample.slot === first.greeter)!, recipient = atPose.find(sample => sample.slot === first.recipient)!;
           return { slot: first.greeter, subject: greeter.position, subjectHeading: greeter.heading, subjectSpeed: greeter.speed,
             other: recipient.position, otherHeading: recipient.heading, otherSpeed: recipient.speed };
+        }
+        if (line) {
+          // The speaker, and the neighbours who turn to them: held once, around the nod.
+          const atPose = scoutPose ?? current.samples, speaker = atPose.find(sample => sample.slot === line.speaker)!;
+          // A burst holds every reaction of its moment that stands within bubble range of the first speaker.
+          const people = new Set((said()?.burst ?? [line]).flatMap(item => [item.speaker, ...item.listeners.map(listener => listener.slot)]));
+          people.delete(line.speaker);
+          const listeners = [...people].map(slot => atPose.find(sample => sample.slot === slot)).filter((sample): sample is CitizenMotionSample => Boolean(sample))
+            .filter(sample => flat(sample.position, speaker.position) <= 14)
+            .sort((a, b) => flat(b.position, speaker.position) - flat(a.position, speaker.position));
+          const far = listeners[0];
+          // Two listeners stand either side of the speaker: hold all three, looking across the line between them.
+          return { slot: line.speaker, subject: speaker.position, subjectHeading: speaker.heading, subjectSpeed: speaker.speed,
+            other: far?.position ?? ahead(speaker, 3), otherHeading: far?.heading ?? speaker.heading + Math.PI, otherSpeed: 0,
+            ...(listeners.length > 1 ? { spread: flat(far!.position, speaker.position) } : {}) };
         }
         let subject = routine ? find(routine.slot) : undefined;
         if (!routine) {
@@ -179,18 +237,35 @@ export default function CitizenBehaviourBench() {
       // A greeting is framed once, around the pose; routines are re-framed at each change of beat.
       let scoutPose: readonly CitizenMotionSample[] | null = null;
       if (first) { await advanceTo(first.poseAtMs, 'Following the street'); scoutPose = loop.present(first.poseAtMs).samples; }
+      if (line) { await advanceTo(line.nodAtMs, 'Listening to the street'); scoutPose = loop.present(line.nodAtMs).samples; }
       const beatAt = (atMs: number): RoutineBeat | undefined => routine?.beats.find(beat => atMs >= beat.fromMs && atMs < beat.toMs);
       const frame = (current: BehaviourFrame, force: boolean): void => {
-        if (first && !force) return;
+        if ((first || line) && !force) return;
         const beat = beatAt(now), key = routine ? `${beat?.kind}:${beat?.fromMs}` : family === 'town' ? 'town' : 'greeting';
         if (!force && key === beatKey) return;
         beatKey = key; stage.setView(view, focusAt(current));
       };
 
+      /** The kingdom consumer's bubble rules: said and unexpired, within 28 m of the eye, on screen, three at most. */
+      const speak = (current: BehaviourFrame): void => {
+        if (!chat) return;
+        const held = chat.script.heldAt(now, current.samples), point = new THREE.Vector3(), list: Bubble[] = [];
+        for (const sample of current.samples) {
+          const cue = held.filter(item => item.slot === sample.slot).at(-1);
+          if (!cue || sample.state === 'leaving') continue;
+          point.set(sample.position[0], sample.position[1] + 1.9, sample.position[2]);
+          if (point.distanceTo(stage.camera.position) > 28) continue;
+          point.project(stage.camera);
+          if (point.z < 0 || point.z > 1 || Math.abs(point.x) > .85 || Math.abs(point.y) > .8) continue;
+          list.push({ slot: sample.slot, x: (point.x + 1) * canvas.clientWidth / 2, y: (1 - point.y) * canvas.clientHeight / 2, name: sample.publicName, parts: cue.parts });
+          if (list.length >= 3) break;
+        }
+        setBubbles(list);
+      };
       const report = (lightSettled: boolean, current: BehaviourFrame): void => {
         const counts = { walking: 0, pausing: 0, resting: 0, waiting: 0, held: 0 };
         for (const item of latest.views) counts[item.activity]++;
-        const followed = routine?.slot ?? (first ? first.greeter : null);
+        const followed = routine?.slot ?? (first ? first.greeter : line ? line.speaker : null);
         const subjectView = followed === null ? undefined : latest.views.find(item => item.slot === followed);
         const overlay = followed === null ? undefined : current.overlays.get(followed);
         setScene({ views: latest.views, overlays: current.overlays });
@@ -198,6 +273,15 @@ export default function CitizenBehaviourBench() {
           cut: first ? seconds(cut) : null,
           encounter: first ? { greeter: first.greeter, recipient: first.recipient, gesture: first.gesture, start: seconds(first.startMs), pose: seconds(first.poseAtMs),
             poseEnd: seconds(first.poseEndMs), end: seconds(first.endMs), glance: first.glanceAtMs === null ? null : seconds(first.glanceAtMs) } : null,
+          bubbles: bubbles().length,
+          chat: line ? (() => {
+            const moment = said()!, burst = moment.burst, ids = scenario === 'burst' ? (id: string) => id.startsWith('simulated-burst') : (id: string) => id === line.cueId;
+            const outcomes = moment.scouted.notes.filter(note => ids(note.id)).map(note => ({ id: note.id, outcome: note.outcome }));
+            return { cueId: line.cueId, speaker: line.speaker, start: seconds(line.startMs), nod: seconds(line.nodAtMs), nodEnd: seconds(line.nodEndMs), end: seconds(line.endMs),
+              listeners: line.listeners.map(item => ({ slot: item.slot, at: seconds(item.atMs), out: seconds(item.outAtMs), end: seconds(item.endMs) })),
+              cut: moment.cut === null ? null : seconds(moment.cut), lines: moment.lines,
+              reactions: burst.length, outcomes };
+          })() : null,
           routine: routine ? { slot: routine.slot, kind: routine.kind, beats: routine.beats.map(beat => ({ kind: beat.kind, from: seconds(beat.fromMs), to: seconds(beat.toMs), node: beat.nodeId, routine: beat.routine })) } : null,
           subject: subjectView ? { slot: subjectView.slot, routine: subjectView.routine, activity: subjectView.activity, nodeId: subjectView.nodeId,
             lookYaw: overlay?.lookYaw ?? 0, gesture: overlay?.gesture ?? 'none' } : null,
@@ -213,12 +297,12 @@ export default function CitizenBehaviourBench() {
         const current = loop.present(now);
         frame(current, true);
         for (let i = 0; i < 600; i++) {
-          stage.draw(now, seconds(now), street.frameAt(now, departures), current, true);
+          stage.draw(now, seconds(now), frameFor(now), current, true);
           if (i > 1 && stage.lightSettled) break;
           await new Promise(resolve => setTimeout(resolve, 50));
           if (disposed) return;
         }
-        stage.draw(now, seconds(now), street.frameAt(now, departures), current, true); stage.finish();
+        stage.draw(now, seconds(now), frameFor(now), current, true); stage.finish(); speak(current);
         report(stage.lightSettled, current);
         window.__chatdomReady = true;
       };
@@ -235,7 +319,7 @@ export default function CitizenBehaviourBench() {
               if (steps.length) latest = { views: steps.at(-1)!.routines };
               const current = loop.present(now);
               frame(current, false);
-              stage.draw(now, seconds(now), street.frameAt(now, departures), current, false);
+              stage.draw(now, seconds(now), frameFor(now), current, false); speak(current);
               setClock(seconds(now)); report(false, current);
             }
           }
@@ -251,7 +335,7 @@ export default function CitizenBehaviourBench() {
         setStatus('');
         const current = loop.present(now);
         frame(current, true);
-        stage.draw(now, seconds(now), street.frameAt(now, departures), current, true); stage.finish();
+        stage.draw(now, seconds(now), frameFor(now), current, true); stage.finish(); speak(current);
         report(false, current);
         window.__chatdomReady = true;
       }
@@ -283,6 +367,20 @@ export default function CitizenBehaviourBench() {
       for (const item of scene().views) if (item.activity in counts) counts[item.activity as keyof typeof counts]++;
       return `${counts.resting} at their doors · ${counts.walking} walking · ${counts.pausing} pausing`;
     }
+    const moment = said();
+    if (moment) {
+      const e = moment.reaction, t = kingdomNow(), listening = e.listeners.filter(item => t >= item.atMs && t < item.endMs).length;
+      if (scenario === 'reconnect' && moment.cut !== null && t >= moment.cut) return 'Reconnected · the line is not replayed';
+      if (scenario === 'chat-walker' && moment.cut !== null && t >= moment.cut) return listening ? 'Walker control · neighbours still look' : 'Walker control · the routine lets go';
+      if (scenario === 'burst' && t >= e.startMs && t < Math.max(...moment.burst.map(item => item.endMs))) {
+        return `A burst · ${moment.burst.length} of ${moment.lines} lines turn heads`;
+      }
+      if (t < e.startMs) return 'At ease';
+      if (t < e.nodAtMs) return 'A line in chat · the speaker lifts';
+      if (t < e.nodEndMs) return listening ? `A small nod · ${listening === 1 ? 'a neighbour turns' : 'two neighbours turn'}` : 'A small nod';
+      if (t < e.endMs) return listening ? `${listening === 1 ? 'A neighbour looks' : 'Two neighbours look'} · then settle` : 'Settling';
+      return 'At ease';
+    }
     const routine = subjectState();
     if (routine) {
       const { looking, beat } = routine, homeNode = story()?.beats.find(item => item.kind === 'rest')?.nodeId;
@@ -310,6 +408,14 @@ export default function CitizenBehaviourBench() {
       settle: { left: at(e.poseEndMs), width: width(e.poseEndMs, e.endMs) }, cut: scenario === 'encounter' ? null : at(s.cut),
       cursor: `${Math.max(0, Math.min(100, (kingdomNow() - from) / span * 100)).toFixed(2)}%` };
   };
+  const chatMarks = () => {
+    const moment = said(); if (!moment) return null;
+    const e = moment.reaction, from = e.startMs - 1_500, span = e.endMs + 1_500 - from, at = (ms: number): string => `${((ms - from) / span * 100).toFixed(2)}%`;
+    const width = (a: number, b: number): string => `${((b - a) / span * 100).toFixed(2)}%`;
+    return { lead: { left: at(e.startMs), width: width(e.startMs, e.nodAtMs) }, nod: { left: at(e.nodAtMs), width: width(e.nodAtMs, e.nodEndMs) },
+      listeners: e.listeners.map(item => ({ left: at(item.atMs), width: width(item.atMs, item.endMs) })),
+      cut: moment.cut === null ? null : at(moment.cut), cursor: `${Math.max(0, Math.min(100, (kingdomNow() - from) / span * 100)).toFixed(2)}%` };
+  };
   const routineMarks = () => {
     const s = story(); if (!s) return null;
     const span = s.endMs - s.startMs, at = (ms: number): number => Math.max(0, Math.min(100, (ms - s.startMs) / span * 100));
@@ -319,6 +425,11 @@ export default function CitizenBehaviourBench() {
   const named = family === 'town' ? null : F.arrivals.filter(arrival => arrival.publicName).length;
   const people = family === 'town' ? 240 : F.arrivals.length;
   const facts = (): string => {
+    const moment = said();
+    if (moment) {
+      const turned = new Set(moment.burst.flatMap(item => [item.speaker, ...item.listeners.map(listener => listener.slot)])).size;
+      return `${people} simulated neighbours · ${moment.lines} line${moment.lines === 1 ? '' : 's'} · ${moment.burst.length} turn${moment.burst.length === 1 ? 's' : ''} heads · ${turned} people move · ${clock().toFixed(1)} s`;
+    }
     const views = scene().views, walking = views.filter(item => item.activity === 'walking').length;
     const out = views.filter(item => item.activity === 'pausing').length;
     return named === null
@@ -327,7 +438,12 @@ export default function CitizenBehaviourBench() {
   };
 
   return <section class={`behaviour-bench behaviour-bench--${frameMode}`}>
-    <div class="behaviour-stage"><canvas ref={element => { canvas = element; }} aria-label={family === 'town' ? 'A simulated town of 240 neighbours' : 'A simulated street of nine neighbours'} /></div>
+    <div class="behaviour-stage"><canvas ref={element => { canvas = element; }} aria-label={family === 'town' ? 'A simulated town of 240 neighbours' : 'A simulated street of nine neighbours'} />
+      <div class="behaviour-speech" aria-live="polite"><For each={bubbles()}>{bubble => <div class="behaviour-bubble" style={{ left: `${bubble.x}px`, top: `${bubble.y}px` }}>
+        <small>SIMULATED{bubble.name ? ` · ${bubble.name.replace(/^SIMULATED /, '')}` : ''}</small>
+        <p><For each={bubble.parts}>{part => part.kind === 'text' ? part.text : <span class="behaviour-emote">{part.alt}</span>}</For></p>
+      </div>}</For></div>
+    </div>
     <Show when={frameMode === 'still'}>
       <p class="behaviour-still"><b>SIMULATED</b> {phase()} · {clock().toFixed(2)} s</p>
     </Show>
@@ -343,6 +459,15 @@ export default function CitizenBehaviourBench() {
             <b style={{ left: m().cursor }} />
           </div>
           <p class="behaviour-legend"><span class="look" />look <span class="pose" />{encounter()?.encounter.gesture ?? 'nod'} <span class="settle" />settle</p>
+        </>}</Show>
+        <Show when={chatMarks()}>{m => <>
+          <div class="behaviour-timeline behaviour-timeline--chat" aria-hidden="true">
+            <span class="look" style={m().lead} /><span class="pose" style={m().nod} />
+            <For each={m().listeners}>{(item, i) => <span class={`listen listen-${i()}`} style={item} />}</For>
+            <Show when={m().cut}>{cut => <i class="cut" style={{ left: cut() }} />}</Show>
+            <b style={{ left: m().cursor }} />
+          </div>
+          <p class="behaviour-legend"><span class="look" />lift <span class="pose" />nod <span class="listen" />neighbours look</p>
         </>}</Show>
         <Show when={routineMarks()}>{m => <>
           <div class="behaviour-timeline" aria-hidden="true">

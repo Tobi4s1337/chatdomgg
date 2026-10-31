@@ -1,5 +1,5 @@
 /**
- * Optional mouse look. The free cursor is the default; V opts into pointer lock and Escape (or V again) gives
+ * Optional mouse look. The free cursor is the default; a real click on the labelled control opts into pointer lock and Escape gives
  * the cursor straight back. Locked movement is filtered against the warps some platforms deliver on lock,
  * monitor crossings and window focus: the first 120 ms after locking are ignored, any event with either axis
  * over 250 px is discarded whole, the rest are clamped to ±100 px, and non-finite values never arrive.
@@ -9,7 +9,7 @@
  * falls back to the ordinary bounded drag orbit and says so; a fast flick never causes that fallback. The next
  * successful lock clears it.
  */
-import { isEditableTarget, type KeyEventLike } from './keyboard';
+import type { KeyEventLike } from './keyboard';
 
 export const LOOK = {
   /** Ignore locked movement for this long after the lock lands. */
@@ -20,8 +20,6 @@ export const LOOK = {
   clampPx: 100,
   /** Radians of turn per locked mouse pixel. */
   radiansPerPx: .0024,
-  /** The play gesture that opts into mouse look. */
-  toggleCode: 'KeyV',
 } as const;
 
 export type LookMode = 'free' | 'requesting' | 'locked' | 'fallback';
@@ -47,11 +45,11 @@ export interface WalkLook {
   readonly mode: LookMode;
   /** Locked pixels gathered since the last take, already filtered. */
   takeLook(): { readonly dx: number; readonly dy: number };
-  /** Ask for the lock (needs a user gesture, as V is) or let it go. */
-  toggle(): void;
+  /** Only a trusted pointer click on the labelled control may acquire the cursor. Keyboard clicks do not. */
+  toggle(event: Pick<MouseEvent, 'type' | 'isTrusted' | 'detail'>): void;
   /** Give the cursor back now and forget any gathered look. Fallback stays labelled until a lock succeeds. */
   exit(): void;
-  /** A menu or takeover owns the pointer while disabled: the lock is let go and V is not heard. */
+  /** A menu or takeover owns the pointer while disabled: the lock is let go. */
   setEnabled(enabled: boolean): void;
   /** Called whenever the mode changes, for the label. */
   onChange(listener: (mode: LookMode) => void): () => void;
@@ -75,16 +73,12 @@ export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard
     if (!surface.requestPointerLock) { set('fallback'); return; }
     const id = ++attempt;
     set('requesting');
-    // Raw movement avoids OS acceleration where offered; a platform without it refuses only that option.
-    const tryLock = (raw: boolean) => {
-      let result: Promise<void> | void;
-      try { result = surface.requestPointerLock!(raw ? { unadjustedMovement: true } : undefined); }
-      catch (error) { if (raw && isNotSupported(error)) tryLock(false); else refuse(id); return; }
-      if (result && typeof result.then === 'function') {
-        result.then(undefined, (error: unknown) => { if (raw && id === attempt && isNotSupported(error)) tryLock(false); else refuse(id); });
-      }
-    };
-    tryLock(true);
+    // One standard request per real click. Retrying a rejected raw/cooldown request creates browser spam
+    // and can recapture a cursor the person has already released. Drag orbit always remains usable.
+    try {
+      const result = surface.requestPointerLock();
+      if (result && typeof result.then === 'function') result.then(undefined, () => refuse(id));
+    } catch { refuse(id); }
   };
   const change = () => {
     if (ours()) {
@@ -103,12 +97,11 @@ export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard
   const keydown = (raw: Event) => {
     const event = raw as unknown as KeyEventLike;
     if (event.code === 'Escape') { if (mode === 'locked' || mode === 'requesting') exit(); return; }
-    if (!enabled || event.code !== LOOK.toggleCode || event.repeat || event.defaultPrevented) return;
-    if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing || isEditableTarget(event.target)) return;
-    event.preventDefault();
-    toggle();
   };
-  const toggle = () => { if (mode === 'locked' || mode === 'requesting') exit(); else if (enabled) request(); };
+  const toggle = (event: Pick<MouseEvent, 'type' | 'isTrusted' | 'detail'>) => {
+    if (mode === 'locked' || mode === 'requesting') { exit(); return; }
+    if (enabled && event.type === 'click' && event.isTrusted && event.detail > 0) request();
+  };
   // Focus leaving the window ends a lock (the browser does too) and anything gathered for it.
   const lost = () => { if (mode === 'fallback') forget(); else exit(); };
   doc.addEventListener('pointerlockchange', change);
@@ -132,8 +125,4 @@ export function createWalkLook(surface: LockSurface, doc: LockDocument, keyboard
       keyboard.removeEventListener('blur', lost);
     },
   };
-}
-
-function isNotSupported(error: unknown): boolean {
-  return !!error && typeof error === 'object' && (error as { name?: unknown }).name === 'NotSupportedError';
 }

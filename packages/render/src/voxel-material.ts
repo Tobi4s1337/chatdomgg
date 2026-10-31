@@ -212,9 +212,8 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       if(abs(kind-uGlassKind)<.5){
         vec3 eye=normalize(vWorld-cameraPosition),r=reflect(eye,n);
         float fresnel=pow(1.-abs(dot(eye,n)),4.);
-        vec3 skyTint=mix(uFog,uAmbient*uAmbientIntensity*.9,smoothstep(-.05,.55,r.y))*mix(.62,1.,vSky);
         float glint=pow(max(dot(r,normalize(uSunDirection)),0.),140.)*uSunIntensity*(1.-uNight);
-        colour=skyTint*mix(.46,.92,fresnel)+uSun*glint*1.4+vec3(1.,.57,.26)*min(warm,1.)*.28;
+        colour+=uSun*glint*1.4;
         cover=clamp(mix(.24,.9,fresnel)+glint*.6,0.,1.);
         if(uGlassDither>.5){
           // Without multisampling, an ordered screen pattern stands in for fractional coverage.

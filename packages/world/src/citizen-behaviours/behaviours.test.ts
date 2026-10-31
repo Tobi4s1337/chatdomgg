@@ -1,10 +1,10 @@
 import { expect, it } from 'vitest';
 import { createCitizenMotion } from '../citizens/motion';
 import type { CitizenGoalRequest, CitizenGoalResult, CitizenMotionSample } from '../citizens/types';
-import { createNeighbourStreet, createTownStreets, NEIGHBOUR_FIXTURE as F, TOWN_FIXTURE, type NeighbourStreet } from './fixture';
+import { createNeighbourStreet, createSimulatedChat, createTownStreets, NEIGHBOUR_FIXTURE as F, SIMULATED_LINES, TOWN_FIXTURE, type NeighbourStreet, type SimulatedChat } from './fixture';
 import {
-  BEHAVIOUR_TUNING as T, createCitizenBehaviours, dueBehaviourSteps, type CitizenBehaviourStep, type CitizenEncounter, type CitizenGoalAnswer,
-  type CitizenOverlay, type CitizenRoutineTransition, type CitizenRoutineView,
+  BEHAVIOUR_TUNING as T, createCitizenBehaviours, dueBehaviourSteps, type CitizenBehaviourStep, type CitizenChatReaction, type CitizenCueNote, type CitizenEncounter,
+  type CitizenGoalAnswer, type CitizenOverlay, type CitizenRoutineTransition, type CitizenRoutineView,
 } from './index';
 
 interface Scenario {
@@ -20,6 +20,8 @@ interface Scenario {
   readonly freeze?: { readonly fromMs: number; readonly toMs: number };
   /** The caller's own refusal in front of motion, e.g. a street closed by main's reserved action. */
   readonly gate?: (request: CitizenGoalRequest) => CitizenGoalResult | null;
+  /** The SIMULATED chat script: cues as main's adapter holds them, walker control, a reconnect reset and departures. */
+  readonly chat?: SimulatedChat;
   readonly onStep?: (step: CitizenBehaviourStep, samples: readonly CitizenMotionSample[]) => void;
   readonly onRender?: (atMs: number, overlays: ReadonlyMap<number, CitizenOverlay>, samples: readonly CitizenMotionSample[]) => void;
 }
@@ -39,19 +41,27 @@ function play(scenario: Scenario) {
   const world = scenario.street ?? street, fixture = scenario.fixture ?? F;
   const motion = createCitizenMotion(world.plan), policy = createCitizenBehaviours();
   const started: CitizenEncounter[] = [], transitions: CitizenRoutineTransition[] = [], asked: Asked[] = [];
+  const reacted: CitizenChatReaction[] = [], notes: CitizenCueNote[] = [];
+  const departures = scenario.chat?.departures ?? scenario.departures;
   const destinationsFor = (slot: number) => motion.destinationsForSlot(slot);
   let last: number | null = null, answers: CitizenGoalAnswer[] = [], previous = new Map<number, CitizenMotionSample>();
   for (let now = fixture.startMs; now <= scenario.untilMs; now += scenario.renderMs) {
     if (scenario.freeze && now > scenario.freeze.fromMs && now < scenario.freeze.toMs) continue;
     for (const stepMs of dueBehaviourSteps(last, now)) {
-      const jumped = last !== null && stepMs - last > T.maxGapMs;
+      // A reconnect: the caller resets its policy, as main's consumer does; motion carries on.
+      const reset = scenario.chat?.resetsAt(stepMs) ?? false;
+      if (reset) { policy.reset(); answers = []; }
+      const jumped = reset || last !== null && stepMs - last > T.maxGapMs;
       last = stepMs;
-      const frame = world.frameAt(stepMs, scenario.departures);
+      const frame = world.frameAt(stepMs, departures);
       if (frame) motion.applyFrame(frame);
       const samples = motion.sample(stepMs);
-      const held = (slot: number): boolean => Boolean(scenario.takeover && slot === scenario.takeover.slot && stepMs >= scenario.takeover.atMs && stepMs < (scenario.takeover.untilMs ?? Infinity));
+      const controlled = scenario.chat?.controlledAt(stepMs);
+      const held = (slot: number): boolean => Boolean(controlled?.has(slot) || scenario.takeover && slot === scenario.takeover.slot && stepMs >= scenario.takeover.atMs && stepMs < (scenario.takeover.untilMs ?? Infinity));
       const ambientSlots = new Set(world.slots.filter(slot => !held(slot)));
-      const step = policy.step({ kingdomId: fixture.kingdomId, epoch: fixture.epoch, origin: fixture.origin, atMs: stepMs, samples, ambientSlots, destinationsFor, answers });
+      const cues = scenario.chat?.cuesAt(stepMs, samples);
+      const step = policy.step({ kingdomId: fixture.kingdomId, epoch: fixture.epoch, origin: fixture.origin, atMs: stepMs, samples, ambientSlots, destinationsFor, answers,
+        ...(cues ? { cues } : {}) });
       answers = step.goals.map(request => ({ request, result: scenario.gate?.(request) ?? motion.requestGoal(request) }));
       // Every visible intention belongs to a present, non-departing person, one encounter each.
       const present = new Map(samples.filter(sample => sample.state !== 'leaving').map(sample => [sample.slot, sample]));
@@ -103,13 +113,37 @@ function play(scenario: Scenario) {
       const stops = step.routines.filter(view => view.activity === 'pausing').map(view => view.nodeId);
       expect(new Set(stops).size).toBe(stops.length);
       expect(policy.stats.pending).toBe(step.goals.length);
+      // Chat: real present people only, one current reaction each, at most two listeners, nobody sent anywhere.
+      const roles = step.reactions.flatMap(reaction => [reaction.speaker, ...reaction.listeners.map(listener => listener.slot)]);
+      expect(new Set(roles).size).toBe(roles.length);
+      expect(step.reactions.length).toBeLessThanOrEqual(T.chat.maxActive);
+      for (const reaction of step.reactions) {
+        expect(present.has(reaction.speaker)).toBe(true);
+        expect(reaction.listeners.length).toBeLessThanOrEqual(T.chat.maxListeners);
+        for (const listener of reaction.listeners) { expect(present.has(listener.slot)).toBe(true); expect(ambientSlots.has(listener.slot)).toBe(true); }
+        if (!ambientSlots.has(reaction.speaker)) expect(reaction.speakerNods).toBe(false);
+      }
+      for (const slot of roles) {
+        expect(busy).not.toContain(slot);
+        expect(step.goals.some(goal => goal.slot === slot)).toBe(false);
+      }
+      // No storm: two lines never start moving heads in one neighbourhood at once.
+      for (const [i, a] of step.reactions.entries()) for (const b of step.reactions.slice(i + 1)) {
+        if (b.startMs === step.atMs) expect(flat(present.get(a.speaker)!.position, present.get(b.speaker)!.position)).toBeGreaterThanOrEqual(T.chat.localMetres);
+      }
+      reacted.push(...step.reacted); notes.push(...step.cues);
+      // The words never enter policy state or output.
+      if (cues?.length) {
+        const exported = JSON.stringify([step.reactions, step.cues, step.routines, step.transitions, step.encounters, policy.stats]);
+        for (const words of SIMULATED_LINES) expect(exported).not.toContain(words);
+      }
       previous = new Map(samples.map(sample => [sample.slot, sample]));
       scenario.onStep?.(step, samples);
     }
     const samples = motion.sample(now);
     scenario.onRender?.(now, policy.present(samples, now), samples);
   }
-  return { started, transitions, asked, policy, motion };
+  return { started, transitions, asked, policy, motion, reacted, notes };
 }
 
 it('gives nine simulated neighbours a gentle street life through the actual motion adapter', () => {
@@ -290,6 +324,107 @@ it('gives nine simulated neighbours a gentle street life through the actual moti
   expect(crowd.asked.length).toBeGreaterThan(town.slots.length / 2);
   expect(crowd.asked.filter(item => !item.result.accepted)).toEqual([]);
 
+  // A witnessed chat line turns a few heads. The SIMULATED script supplies cues the way main's adapter holds
+  // them (every unexpired cue, again on every step), choosing each moment from the actual samples of this story.
+  const chat = createSimulatedChat(street), frames: { atMs: number; overlays: ReadonlyMap<number, CitizenOverlay>; samples: readonly CitizenMotionSample[] }[] = [];
+  const talk = play({ renderMs: 50, untilMs: at(230), chat, onRender(atMs, overlays, samples) { if (atMs >= at(65)) frames.push({ atMs, overlays, samples }); } });
+  expect([...chat.moments.keys()]).toEqual(['line', 'burst', 'walker', 'reconnect', 'departure']);
+  const decided = talk.notes.filter(note => note.outcome !== 'duplicate');
+  // Each ID is decided exactly once per story, however often main supplies it again; repeats can never restart
+  // a reaction. Only the reconnect line is judged again, by the reset policy, and found stale.
+  const once = decided.filter(note => !(note.id === 'simulated-reconnect' && note.outcome === 'stale'));
+  expect(new Set(once.map(note => note.id)).size).toBe(once.length);
+  expect(talk.notes.some(note => note.outcome === 'duplicate')).toBe(true);
+  expect(new Set(talk.reacted.map(reaction => reaction.cueId)).size).toBe(talk.reacted.length);
+  const outcome = (id: string): CitizenCueNote['outcome'] | undefined => decided.find(note => note.id === id)?.outcome;
+  const reaction = (id: string): CitizenChatReaction => talk.reacted.find(item => item.cueId === id)!;
+  const yawOf = (slot: number, atMs: number): number => frames.find(frame => frame.atMs >= atMs)?.overlays.get(slot)?.lookYaw ?? 0;
+  const frameAt = (atMs: number) => frames.find(frame => frame.atMs >= atMs)!;
+  const bearingTo = (from: CitizenMotionSample, to: CitizenMotionSample): number =>
+    Math.atan2(Math.sin(Math.atan2(to.position[0] - from.position[0], to.position[2] - from.position[2]) - from.heading), Math.cos(Math.atan2(to.position[0] - from.position[0], to.position[2] - from.position[2]) - from.heading));
+
+  // An ordinary line: one finite nod after a small lead, then two neighbours turn, staggered, toward the speaker.
+  const line = reaction('simulated-line');
+  expect(line).toMatchObject({ speaker: chat.moments.get('line')!.slots[0], speakerNods: true, origin: 'simulated' });
+  expect(line.nodAtMs - line.startMs).toBeGreaterThanOrEqual(T.chat.leadMs[0]);
+  expect(line.nodEndMs - line.nodAtMs).toBe(T.gestures.nod.durationMs);
+  expect(line.listeners.length).toBe(2);
+  expect(line.listeners[0]!.atMs - line.nodAtMs).toBeGreaterThanOrEqual(T.chat.listenDelayMs[0]);
+  expect(line.listeners[0]!.atMs - line.nodAtMs).toBeLessThanOrEqual(T.chat.listenDelayMs[1]);
+  expect(line.listeners[1]!.atMs - line.listeners[0]!.atMs).toBeGreaterThanOrEqual(T.chat.secondListenerMs[0]);
+  const during = frames.filter(frame => frame.atMs >= line.startMs - 500 && frame.atMs <= line.endMs + 500);
+  for (const frame of during) {
+    const nod = frame.overlays.get(line.speaker);
+    // The nod is one cycle: it exists only inside its own window, then the speaker returns to their life.
+    expect(nod?.gesture === 'nod').toBe(frame.atMs >= line.nodAtMs && frame.atMs < line.nodEndMs);
+    // Nobody else in the street gestures because of the line.
+    for (const [slot, overlay] of frame.overlays) if (slot !== line.speaker) expect(overlay.gesture).toBe('none');
+  }
+  // No pops: every head in the moment turns smoothly from the lift to the settle. The fastest authored ease
+  // (a full neck turn over the shortest look-in) moves ~0.21 rad per 50 ms frame; a snap would move more.
+  for (const slot of [line.speaker, ...line.listeners.map(listener => listener.slot)]) {
+    const yaws = during.map(frame => frame.overlays.get(slot)?.lookYaw ?? 0);
+    for (let i = 1; i < yaws.length; i++) expect(Math.abs(yaws[i]! - yaws[i - 1]!)).toBeLessThan(.3);
+  }
+  for (const listener of line.listeners) {
+    const held = frameAt((listener.atMs + listener.outAtMs) / 2), self = held.samples.find(sample => sample.slot === listener.slot)!;
+    const speaker = held.samples.find(sample => sample.slot === line.speaker)!, toward = bearingTo(self, speaker);
+    expect(Math.abs(held.overlays.get(listener.slot)!.lookYaw)).toBeGreaterThan(.15);
+    expect(Math.sign(held.overlays.get(listener.slot)!.lookYaw)).toBe(Math.sign(toward));
+    // Before their turn the listener shows nothing of the line; after it, they are back where they were.
+    expect(Math.abs(yawOf(listener.slot, listener.atMs - 60))).toBeLessThan(Math.abs(held.overlays.get(listener.slot)!.lookYaw));
+  }
+
+  // A burst: six lines in a second, one speaker three times, plus an expired, a foreign and an absent cue.
+  const burst = chat.moments.get('burst')!;
+  expect(outcome('simulated-burst-0')).toBe('reacted');
+  expect(outcome('simulated-burst-again-1')).toBe('coalesced');
+  expect(outcome('simulated-burst-again-2')).toBe('coalesced');
+  expect(outcome('simulated-burst-expired')).toBe('expired');
+  expect(outcome('simulated-burst-foreign')).toBe('foreign');
+  expect(outcome('simulated-burst-absent')).toBe('absent');
+  const burstReactions = talk.reacted.filter(item => item.cueId.startsWith('simulated-burst'));
+  expect(burstReactions.length).toBeLessThanOrEqual(Math.ceil(street.slots.length / T.chat.peoplePerReaction));
+  for (let i = 1; i < 6; i++) expect(['reacted', 'coalesced', 'crowded', 'stale']).toContain(outcome(`simulated-burst-${i}`));
+  // No storm frame: at most one nod per reaction, and only the chosen few turn their heads for the lines.
+  const burstFrames = frames.filter(frame => frame.atMs >= burst.atMs && frame.atMs < burst.atMs + 6_000);
+  const nodding = Math.max(...burstFrames.map(frame => [...frame.overlays.values()].filter(overlay => overlay.gesture !== 'none').length));
+  expect(nodding).toBeLessThanOrEqual(burstReactions.length);
+  const turned = new Set(burstReactions.flatMap(item => [item.speaker, ...item.listeners.map(listener => listener.slot)]));
+  expect(turned.size).toBeLessThanOrEqual(burstReactions.length * 3);
+
+  // Walker takeover mid-nod: the speaker is released at once and never posed, but neighbours may still look at them.
+  const walker = reaction('simulated-walker'), walkerSlot = walker.speaker, takenFrom = walker.startMs + 700;
+  expect(walker.listeners.length).toBeGreaterThanOrEqual(1);
+  const controlled = frames.filter(frame => frame.atMs >= Math.ceil(takenFrom / T.stepMs) * T.stepMs && frame.atMs < walker.endMs);
+  expect(controlled.length).toBeGreaterThan(10);
+  for (const frame of controlled) expect(frame.overlays.has(walkerSlot)).toBe(false);
+  const watcher = walker.listeners[0]!;
+  expect(Math.abs(yawOf(watcher.slot, (watcher.atMs + watcher.outAtMs) / 2))).toBeGreaterThan(.15);
+
+  // A reconnect mid-look: the caller resets, the same cue is still held by main, and nothing replays.
+  const reconnect = reaction('simulated-reconnect'), resetAt = Math.ceil((reconnect.startMs + 1_200) / T.stepMs) * T.stepMs;
+  expect(talk.notes.filter(note => note.id === 'simulated-reconnect').map(note => note.outcome).slice(0, 2)).toEqual(['reacted', 'duplicate']);
+  const afterReset = talk.notes.filter(note => note.id === 'simulated-reconnect' && note.atMs >= resetAt);
+  expect(afterReset[0]).toMatchObject({ atMs: resetAt, outcome: 'stale' });
+  expect(afterReset.slice(1).every(note => note.outcome === 'duplicate')).toBe(true);
+  expect(talk.reacted.filter(item => item.startMs >= resetAt && item.startMs < resetAt + 10_000)).toEqual([]);
+
+  // The speaker leaves mid-reaction: their reaction ends in the same step, and listeners ease back from looking at nobody.
+  const leaving = reaction('simulated-departure'), leftAt = chat.departures.get(leaving.speaker)!;
+  expect(leaving.listeners.length).toBeGreaterThanOrEqual(1);
+  const gone = frames.filter(frame => frame.atMs >= Math.ceil(leftAt / T.stepMs) * T.stepMs && frame.atMs <= leftAt + T.look.releaseMs + 200);
+  const easing = gone.map(frame => Math.abs(frame.overlays.get(leaving.listeners[0]!.slot)?.lookYaw ?? 0));
+  expect(Math.abs(yawOf(leaving.listeners[0]!.slot, leftAt - 60))).toBeGreaterThan(.1);
+  for (let i = 1; i < easing.length; i++) expect(easing[i]!).toBeLessThanOrEqual(easing[i - 1]! + 1e-9);
+  expect(easing.at(-1)).toBeLessThan(.02);
+  expect(gone.every(frame => !frame.overlays.has(leaving.speaker))).toBe(true);
+
+  // Render cadence never changes which lines turn heads, who turns, or when.
+  const slow = play({ renderMs: 250, untilMs: at(230), chat: createSimulatedChat(street) });
+  expect(slow.reacted).toEqual(talk.reacted);
+  expect(slow.notes.filter(note => note.outcome !== 'duplicate')).toEqual(decided);
+
   // Reset, an epoch change and a backward clock each start a clean story.
   const policy = baseline.policy;
   expect(policy.stats.actors).toBe(street.slots.length);
@@ -297,7 +432,7 @@ it('gives nine simulated neighbours a gentle street life through the actual moti
   policy.step({ kingdomId: F.kingdomId, epoch: 'simulated:another-evening', origin: F.origin, atMs: story, samples, ambientSlots: new Set(street.slots), destinationsFor });
   expect(policy.stats).toMatchObject({ actors: street.slots.length, cooldowns: 0, encounters: 0, releases: 0, pending: 0 });
   policy.step({ kingdomId: F.kingdomId, epoch: 'simulated:another-evening', origin: F.origin, atMs: story, samples: [], ambientSlots: new Set(), destinationsFor });
-  expect(policy.stats).toEqual({ actors: 0, contacts: 0, cooldowns: 0, encounters: 0, releases: 0, claims: 0, pending: 0 });
+  expect(policy.stats).toEqual({ actors: 0, contacts: 0, cooldowns: 0, encounters: 0, releases: 0, claims: 0, pending: 0, reactions: 0, cuesSeen: 0, cuesWaiting: 0 });
   policy.reset();
   expect(policy.present(samples, story).size).toBe(0);
-}, 180_000);
+}, 300_000);

@@ -1,8 +1,9 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { FORGE_STAGE_TIMING } from '@chatdom/forge';
 import type { ForgePhase } from '@chatdom/shared';
 import { createForgeStage, type ForgePresentation, type StageEnvironment } from '../forge/presentation/stage';
 import { benchFrame } from './clock';
-import { BUILT_UNTIL, parseRitualBench, type RitualBenchState } from './params';
+import { parseRitualBench, RITUAL_SECONDS, type RitualBenchState } from './params';
 import { createRitualWorld, type RitualWorld } from './world';
 import './style.css';
 
@@ -27,8 +28,13 @@ declare global {
   }
 }
 
-const CAPTIONS: Partial<Record<ForgePhase, string>> = { words: 'Words find their shape', blueprint: 'A wish, drawn in light' };
-const STAGES = [{ name: 'Words', from: 0, to: 3 }, { name: 'Blueprint', from: 3, to: 5 }] as const;
+const CAPTIONS: Record<ForgePhase, string> = {
+  words: 'Words find their shape', blueprint: 'A wish, drawn in light', pour: 'Molten metal fills the drawing',
+  seal: 'Sealed: fit for this home', strike: 'One strike', cool: 'Cooling into the kingdom’s colours',
+  flight: 'Off to its home', landed: 'Home, on its socket',
+};
+const STAGE_NAMES: Record<ForgePhase, string> = { words: 'Words', blueprint: 'Blueprint', pour: 'Pour', seal: 'Seal', strike: 'Strike', cool: 'Cool', flight: 'Flight', landed: 'Landed' };
+const STAGES = FORGE_STAGE_TIMING.map(([phase, from, to]) => ({ phase, from, to }));
 const PARTS = [['chimney', 'Dragon chimney'], ['lantern', 'Moon lantern'], ['weathervane', 'Owl vane']] as const;
 const KITS = [['hearth', 'Hearth'], ['tide', 'Tide'], ['grove', 'Grove']] as const;
 const RITUAL_ID = 'bench-simulated-ritual';
@@ -66,6 +72,7 @@ export default function ForgeRitualBench() {
     const { frame, held: wait } = benchFrame(RITUAL_ID, time(), gate());
     presentation.update(cleared() ? null : frame);
     setPhase(cleared() ? null : frame.phase); setHeld(wait);
+    world.direct(cleared() ? null : frame.phase, frame.phaseProgress, reduced());
     world.renderer.render(world.scene, world.camera);
     world.renderer.getContext().finish();
   };
@@ -76,7 +83,7 @@ export default function ForgeRitualBench() {
     raf = window.requestAnimationFrame(next => loop(next, now));
   };
   const setMotion = (value: boolean) => { setReduced(value); motionListeners.forEach(listener => listener()); draw(); };
-  const play = () => { if (cleared() || time() >= BUILT_UNTIL + 40) setTime(0); setCleared(false); setPlaying(p => !p); };
+  const play = () => { if (cleared() || time() >= RITUAL_SECONDS + 4) setTime(0); setCleared(false); setPlaying(p => !p); };
   const seek = (t: number) => { setPlaying(false); setCleared(false); setTime(Math.max(0, t)); draw(); };
   const navigate = (key: string, value: string) => { const params = new URLSearchParams(window.location.search); params.set(key, value); params.delete('t'); window.location.search = params.toString(); };
 
@@ -144,9 +151,9 @@ export default function ForgeRitualBench() {
     if (cleared()) return 'The anvil is clear';
     const p = phase();
     if (held() > 0) return `Waiting at the ${p ?? 'gate'} · ${held().toFixed(held() < 10 ? 1 : 0)} s`;
-    return p ? CAPTIONS[p] ?? '' : '';
+    return p ? CAPTIONS[p] : '';
   };
-  const span = BUILT_UNTIL;
+  const span = RITUAL_SECONDS;
   return <section class="ritual-bench" style={{ background: sky() || undefined }}>
     <div ref={element => { host = element; }} class="ritual-bench-stage" />
     <header class="ritual-bench-head">
@@ -161,9 +168,9 @@ export default function ForgeRitualBench() {
           <button class="ritual-play" onClick={play} aria-label={playing() ? 'Pause' : 'Play'}>{playing() ? '❚❚' : '▶'}</button>
           <div class="ritual-track">
             <input type="range" min="0" max={span} step="0.05" value={Math.min(time(), span)} aria-label="Seek the ritual" onInput={e => seek(Number(e.currentTarget.value))} />
-            <div class="ritual-stages"><For each={STAGES}>{stage => <span style={{ width: `${(stage.to - stage.from) / span * 100}%` }} classList={{ on: phase() === stage.name.toLowerCase() }}>{stage.name}</span>}</For></div>
+            <div class="ritual-stages" aria-hidden="true"><For each={STAGES}>{stage => <span style={{ width: `${(stage.to - stage.from) / span * 100}%` }} classList={{ on: phase() === stage.phase }} title={STAGE_NAMES[stage.phase]} />}</For></div>
           </div>
-          <output class="ritual-time">{time().toFixed(1)} s</output>
+          <output class="ritual-time"><b>{phase() ? STAGE_NAMES[phase()!] : '—'}</b>{Math.min(time(), span + 99).toFixed(1)} s</output>
         </div>
         <div class="ritual-row ritual-toggles">
           <button aria-pressed={gate() !== null} onClick={() => { setGate(gate() === null ? Math.min(time(), span) : null); draw(); }}>{gate() === null ? 'Hold here' : 'Release hold'}</button>
@@ -174,7 +181,7 @@ export default function ForgeRitualBench() {
           <select aria-label="Part" value={input()!.part} onChange={e => navigate('part', e.currentTarget.value)}><For each={PARTS}>{([value, label]) => <option value={value}>{label}</option>}</For></select>
           <select aria-label="Kingdom kit" value={input()!.family} onChange={e => navigate('family', e.currentTarget.value)}><For each={KITS}>{([value, label]) => <option value={value}>{label}</option>}</For></select>
         </div>
-        <p class="ritual-note">Words and blueprint are finished here; later stages hold the drawn blueprint.</p>
+        <p class="ritual-note">SIMULATED local run around a real forged part. Nothing is judged, attached or saved here.</p>
       </div>
     </Show>
     <Show when={status()}><div class="ritual-status" role={failed() ? 'alert' : 'status'}><strong>{failed() ? 'The anvil could not be lit' : 'At the anvil'}</strong><p>{status()}</p></div></Show>
