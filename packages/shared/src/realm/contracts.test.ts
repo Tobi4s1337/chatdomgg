@@ -10,8 +10,16 @@ import { RealmWalkerFrameSchema } from './watch';
 import { PersonIdSchema } from '../identity';
 import { CITIZEN_STARTER_LOOKS, starterCitizenLook } from '../citizen-look';
 import { StyleIdSchema, type VoxelBlueprint } from '../voxel';
+import { ForgeTransientActivitySchema } from './forge-authority';
 
 describe('realm wire boundary v1', () => {
+  it('ends an observed Forge animation without publishing a verdict or private wish', () => {
+    const ended = { type: 'ended', activityId: 'attempt:opaque' };
+    expect(ForgeTransientActivitySchema.parse(ended)).toEqual(ended);
+    for (const field of ['words', 'personId', 'makerName', 'reason', 'outcome', 'attachment']) {
+      expect(ForgeTransientActivitySchema.safeParse({ ...ended, [field]: 'private' }).success).toBe(false);
+    }
+  });
   it('patches only a public street link and free look without disclosing identity or granting browser authority', () => {
     const privatePerson = PersonIdSchema.parse('9007199254740993123');
     const look = starterCitizenLook(privatePerson);

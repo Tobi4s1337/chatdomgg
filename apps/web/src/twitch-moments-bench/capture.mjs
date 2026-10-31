@@ -10,12 +10,13 @@ import { createServer } from 'vite';
 import { execFileSync } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { assertCapturePort } from '../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
 
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 const port = Number(option('--port') ?? 5198);
-if (!Number.isInteger(port) || port < 5170 || port > 5199) throw new Error('--port must be a development port in 5170–5199.');
+assertCapturePort(port, { name: '--port' });
 const only = option('--only')?.split(','), sheetOnly = args.includes('--sheet-only');
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${root}shots/twitch-moments`;

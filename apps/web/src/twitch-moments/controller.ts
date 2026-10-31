@@ -515,6 +515,8 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     reset,
     receiveFact,
     receivePresence,
+    /** The room's public presence is unavailable; remove tint without inventing another observation. */
+    clearPresence() { presence = null; },
     setPresentation,
     sample,
     previewAction,

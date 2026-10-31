@@ -9,6 +9,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createServer } from 'vite';
+import { assertCapturePort } from '../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
 
 const { values } = parseArgs({ options: {
@@ -16,7 +17,7 @@ const { values } = parseArgs({ options: {
   out: { type: 'string', default: 'shots/walk/wc06' },
 } });
 const realmPort = Number(values['realm-port']), webPort = Number(values['web-port']);
-for (const port of [realmPort, webPort]) if (!(port >= 5170 && port <= 5199)) throw new Error('Use development ports in 5170–5199');
+for (const port of [realmPort, webPort]) assertCapturePort(port);
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const FIELDS = ['x', 'y', 'z', 'vx', 'vy', 'vz', 'grounded', 'yaw', 'distance', 'collisionRevision'];
 const WALL_X = 4.5, RADIUS = .28, FACE = WALL_X - RADIUS;

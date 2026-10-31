@@ -8,3 +8,4 @@ export { createStreetProp, STREET_PROP_FORMS, STREET_PROP_SIZES, type StreetProp
 export { createTideHome } from './homes/tide';
 export { createCivicProp, CIVIC_FORMS, CIVIC_STYLES, FOOTBRIDGE, type CivicForm, type CivicStyle } from './civic';
 export { createDoorLantern, createGateBrazier, DOOR_LANTERN_MOUNT, DOOR_LANTERN_GLASS, GATE_BRAZIER_MOUNT, GATE_BRAZIER_FLAME } from './arrival-lights';
+export { createSeatLog, createMarketSeatLog, MARKET_SEAT_LOG_GROUND, type SeatLogProp } from './seating';

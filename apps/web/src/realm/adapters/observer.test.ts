@@ -31,8 +31,8 @@ const expected = { kingdomId: K, origin: 'simulated' as const, collisionRevision
 
 describe('buffered room checkpoint installation', () => {
   it('shows only live validated transient Forge stages and never treats them as a committed attachment', () => {
-    const { room, emit } = fakeRoom(), observer = observeRealm(room, expected), stages: string[] = [], parts: string[] = [];
-    observeForgeActivity(observer, { stage: (id, stage) => stages.push(`${id}:${stage}`), committed: part => parts.push(part.id) });
+    const { room, emit } = fakeRoom(), observer = observeRealm(room, expected), stages: string[] = [], parts: string[] = [], ended: string[] = [];
+    observeForgeActivity(observer, { stage: (id, stage) => stages.push(`${id}:${stage}`), ended: id => ended.push(id), committed: part => parts.push(part.id) });
     const stage = { type: 'forge', event: { type: 'stage', activityId: 'run-live', stage: 'drafting' } };
     emit('transient', stage); expect(stages).toEqual([]);
     emit('bootstrap', boot(0, []));
@@ -40,6 +40,10 @@ describe('buffered room checkpoint installation', () => {
     emit('transient', { type: 'forge', event: { ...stage.event, stage: 'approved' } });
     emit('transient', committed(part('uncommitted')));
     expect(stages).toEqual(['run-live:drafting']); expect(parts).toEqual([]);
+    emit('transient', { type: 'forge', event: { type: 'ended', activityId: 'run-live', reason: 'private verdict' } });
+    expect(ended).toEqual([]);
+    emit('transient', { type: 'forge', event: { type: 'ended', activityId: 'run-live' } });
+    expect(ended).toEqual(['run-live']);
     observer.unavailable(); emit('transient', stage); expect(stages).toHaveLength(1); observer.dispose();
   });
   it('buffers deliveries before bootstrap, discards those at or below its cursor and applies newer ones in cursor order', () => {

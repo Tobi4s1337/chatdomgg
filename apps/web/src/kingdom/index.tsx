@@ -16,9 +16,11 @@ import { parseKingdomPresentationParams } from '../stream/params';
 import { ProvenanceSeal, provenanceFromSource } from '@chatdom/ui';
 import '@chatdom/ui/kit.css';
 import { isEditableTarget, isKeyboardControl } from '../walk';
+import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
+import './moment-captions.css';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
-export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
+export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;momentFeed?:TwitchMomentFeed;walkerFeed?:RealmWalkerFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
   const query=new URLSearchParams(location.search),tier=props.founded?.plan.config.tier??(query.get('tier')==='hamlet'?'hamlet':'town');
   const presentation=parseKingdomPresentationParams(query,tier);
   const realm=query.get('realm'),realmFamily=realm==='hearth'?'hearth':realm==='grove'?'grove':'tide',realmName=props.kingdomName??(realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere');
@@ -27,6 +29,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
   const [ready,setReady]=createSignal(false),[progress,setProgress]=createSignal(0),[phase,setPhase]=createSignal('Unfolding the valley');
   const [names,setNames]=createSignal<NameLabel[]>([]),[speech,setSpeech]=createSignal<SpeechLabel[]>([]),[hour,setHour]=createSignal(initialHour),[view,setView]=createSignal<CameraName>(query.get('camera')==='citizen'?'citizen':query.get('camera')==='window'?'window':'hero');
   const [walkers,setWalkers]=createSignal<readonly WalkerLabel[]>([]),[walking,setWalking]=createSignal(false);
+  const [momentCaptions,setMomentCaptions]=createSignal<readonly ScreenCaption[]>([]);
   let host!:HTMLDivElement;
   const [source,setSource]=createSignal(props.presenceFeed?.label??(query.get('source')==='herald'?'CONNECTING':'SIMULATED')),[error,setError]=createSignal(false),[sound,setSound]=createSignal(false);
   const stream=location.pathname.endsWith('/stream')||location.pathname==='/stream';
@@ -70,8 +73,8 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
-    void createKingdomScene(canvas,{...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(realm==='hearth'||realm==='grove'?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
-      onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
+    void createKingdomScene(canvas,{...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(realm==='hearth'||realm==='grove'?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
+      onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onMomentCaptions:setMomentCaptions,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
       // OBS may allow autoplay; a browser that requires a gesture stays honestly locked until the retry.
@@ -123,6 +126,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     <div class="window-names" aria-live="polite"><For each={names()}>{label=><div class="window-name" style={{left:`${label.x}px`,top:`${label.y}px`}}><span class="name-diamond" />{label.name}<small>home again</small></div>}</For></div>
     <div class="walker-names" aria-label="People in the street"><Index each={walkers()}>{label=><span class="walker-name" data-walker={label().id} style={{left:`${label().x}px`,top:`${label().y}px`}}>{label().name}<Show when={label().self}><small>you</small></Show></span>}</Index></div>
     <div class="citizen-speech"><For each={speech()}>{label=><div class="citizen-bubble" style={{left:`${label.x}px`,top:`${label.y}px`}}><Show when={label.name}><small>{label.name}</small></Show><p><For each={label.parts}>{part=>part.kind==='text'?part.text:<img src={`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(part.id)}/default/dark/1.0`} alt={part.alt} />}</For></p></div>}</For></div>
+    <div class="kingdom-moment-captions"><For each={momentCaptions()}>{caption=><div class="kingdom-moment-caption" style={{left:`${caption.x}px`,top:`${caption.y}px`,opacity:caption.opacity}}><strong>{caption.title}</strong><p>{caption.line}</p><Show when={caption.detail}><small>{caption.detail}</small></Show></div>}</For></div>
     <Show when={!ready()||error()}><div class="kingdom-gate" role="status">
       <svg viewBox="0 0 80 80" aria-hidden="true"><path d="M17 70V25l12-12h22l12 12v45M26 70V31a14 14 0 0 1 28 0v39M12 70h56M31 13V7h6v6m6 0V7h6v6"/></svg>
       <h2>{error()?'The road needs a moment.':phase()}</h2>

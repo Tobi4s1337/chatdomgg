@@ -1,6 +1,6 @@
 # Spec 20: Twitch happens in the kingdom
 
-Status: **frozen 2026-10-30 for main review; lane-local first-consumer contracts below.**
+Status: **frozen 2026-10-30; public fact/feed promoted by main on 2026-10-31 for the realm consumer.**
 Vision: `chatdom/ChatDom.md` principles 4–9, 13, 15–18 and §§5–8, 10;
 `chatdom/Moments.md` §§6, 7, 12; `chatdom/Twitch.md` §§2–15, 19, 21;
 `chatdom/Monarch.md` §§6–7; `chatdom/Artstyle-Soul-Feel.md` §§8–9, 13–14.
@@ -172,14 +172,13 @@ application rules, Helix endpoint semantics and dispatch/reconciliation logic in
 
 ## Contracts
 
-### Lane-owned bounded projections, built on the existing envelope
+### Bounded projections, built on the existing envelope
 
-Implement these in `apps/web/src/twitch-moments/contracts.ts`, import Zod and the actual shared schema helpers.
-They are local first-consumer contracts reviewed by main, **not new exports from packages/shared**. The schema
-file is pure Zod/shared code with no DOM, renderer or server side effects; the owned API/Herald modules import
-that same schema rather than duplicate it. Main owns source authentication/signing, durable storage engine and
-root endpoint integration; the lane owns actual upstream mapping and application/executor semantics. Other
-consumers must not import these as a frozen repository-wide protocol without main's explicit review.
+The public body/fact/feed now live in `packages/shared/src/twitch-moments.ts`, exported as
+`@chatdom/shared/twitch-moments`. The original web contracts module re-exports them and keeps lane-local
+command/application schemas. This promotes the accepted shapes unchanged for the realm's first consumer.
+Main owns source authentication/signing, durable storage and root endpoint integration; the lane owns actual
+upstream mapping and application/executor semantics.
 
 `TwitchMomentBodySchema` is a strict discriminated union on `kind`. Every variant has `key: TokenSchema`
 (stable semantic event/entity key) and `displayUntil: EpochMsSchema` (latest time to start its transient beat).
@@ -615,6 +614,18 @@ Main retains the production integration obligations above; no requested moment i
 because it can be demonstrated by a fixture. No auto-clips, video product, external-game control or new paid status.
 
 ## Decisions
+
+- **2026-10-31 — Realm owns live support delivery.** Main adds the optional, existing-chat-grant
+  `channel.chat.notification@1` subscription to Herald's verified conduit. Only the existing normalizer's
+  stripped `RealmSupportObservation` enters Herald's bounded durable outbox; raw provider bodies/chat never
+  enter it. The Herald-only ingress commits through the kingdom writer queue/lease, normalized record port,
+  independent per-kingdom moment sequence and realm public outbox. Public `moment` deltas contain a validated
+  fact plus `current`; checkpoint-only `moments.current` carries the watermark and lasting state. Room and
+  public stream observers restore that state quietly and animate only subsequent cursor-ordered deliveries.
+  Quiet citizens stay anonymous, and the keep's slot remains independent of street deeds. No new entitlement,
+  coal, payment or write authority follows from this transport. Structured subscription sources, badge
+  metadata tee, other event families and bidirectional action executors still need their explicit bindings;
+  this does not claim a real event occurred or that TM03's spectacle is accepted.
 
 - **2026-10-30 — Local first-consumer catalogue.** Main accepted the lane-owned bounded Zod catalogue on the
   existing fact/intent envelope. There are no invented shared exports. Main reviews the precise local schema and

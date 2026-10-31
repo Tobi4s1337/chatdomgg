@@ -7,6 +7,7 @@ import { openRealmApiSession, RealmEntryError, type RealmFetch } from '../realm/
 import { createRoomChatFeed } from '../realm/adapters/chat';
 import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
 import { observeRealm, observedRoom, type RealmObserver } from '../realm/adapters/observer';
+import { createRoomMomentFeed } from '../realm/adapters/moments';
 import { createRoomPresenceFeed } from '../realm/adapters/presence';
 import type { KingdomEntrySource } from './types';
 
@@ -73,7 +74,7 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
     signal.addEventListener('abort', aborted, { once: true });
     try { await readyCheckpoint(observer, signal); signal.throwIfAborted(); }
     catch (error) { dispose(); throw error; }
-    return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), chatFeed, forgeFeed,
+    return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), chatFeed, forgeFeed, momentFeed: createRoomMomentFeed(observer, origin),
       kingdomName, ...(options.notice ? { notice: options.notice } : {}), dispose };
   };
   return async signal => {
