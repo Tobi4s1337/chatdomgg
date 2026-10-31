@@ -3,13 +3,17 @@ import {
   type AudioCue, type AudioCueOptions, type ForgeAudio, type KingdomPhrase, type KingdomPhraseOptions,
 } from '@chatdom/audio';
 import type { ForgeRitualFrame } from '@chatdom/shared';
+import { createKingdomAmbience } from './ambience';
+import type { AmbienceTarget } from './ambience/types';
 
 /** The scene's one sound owner. Context, sources and the master stay inside the shared engine. */
 export function createKingdomSound() {
   const audio = createKingdomAudio();
+  const ambience = createKingdomAmbience(phrase => playKingdomPhrase(audio, phrase));
   let requested = false, disposed = false, explicitlyMuted = false;
   let forge: ForgeAudio | undefined, forgeContext: AudioContext | undefined;
   let forgeAudible = false, catchUp = true;
+  let hiddenMuted = false;
 
   function canSound() {
     const { status, settings } = audio.getState();
@@ -21,9 +25,18 @@ export function createKingdomSound() {
     if (forgeAudible) forge?.setMix({ muted: true, volume: 1 });
     forgeAudible = false;
   }
-  function onVisibility() { if (document.hidden) silenceForge(); }
+  function onVisibility() {
+    hiddenMuted = document.hidden;
+    // The shared mixer drains every voice and its room tail, including environmental phrases.
+    // Restoring visibility preserves the user's explicit mute choice and starts only fresh observations.
+    audio.setSettings({ muted: hiddenMuted || explicitlyMuted });
+    if (hiddenMuted) silenceForge();
+  }
   function onContextState() { if (forgeContext?.state !== 'running') silenceForge(); }
-  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibility);
+    if (document.hidden) onVisibility();
+  }
 
   function forgeUpdate(frame: ForgeRitualFrame | null) {
     if (disposed) return;
@@ -65,7 +78,7 @@ export function createKingdomSound() {
         silenceForge();
         return false;
       }
-      explicitlyMuted = false; audio.setSettings({muted:false});
+      explicitlyMuted = false; audio.setSettings({muted:hiddenMuted});
       void unlock();
       return true;
     },
@@ -75,12 +88,16 @@ export function createKingdomSound() {
     phrase(phrase: KingdomPhrase, options?: KingdomPhraseOptions): boolean {
       return playKingdomPhrase(audio, phrase, options);
     },
+    ambienceUpdate(now: number, target: AmbienceTarget): void {
+      ambience.update(now, target, !disposed && canSound());
+    },
     dispose() {
       disposed = true;
       requested = false;
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
       forgeContext?.removeEventListener('statechange', onContextState);
       forge?.dispose();
+      ambience.dispose();
       audio.dispose();
     },
   };
