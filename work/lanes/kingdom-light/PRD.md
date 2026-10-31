@@ -52,7 +52,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   simulated source and binds the existing replay control.
   **Evidence:** one reducer-backed seek/arrival/departure trace; actual town open and replay at 0/30 s after mounting.
 
-- [ ] **KL04 — Glass passes sight and light without losing its frame.**
+- [x] **KL04 — Glass passes sight and light without losing its frame.**
   Implement the complete approved glass path in the spec's narrow files: glass material flags distinct from
   collision solidity, visible interior-facing surfaces, appropriate voxel rendering, presence panes that allow
   sight, sun-shadow transmission and ordered light-field blockers. Reuse existing material flags and formats;

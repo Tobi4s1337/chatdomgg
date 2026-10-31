@@ -436,3 +436,13 @@ These belong to other owners:
   leaves a visible patch on a floor; direct sun indoors is also scaled by the baked sky `(.15+.85*vSky)`. A sunlit
   floor needs a camera-local sun cascade (a new render target, so main decides under R7) before the sky factor is
   retuned for receivers it covers.
+- **2026-10-31 — Sun indoors through the near field (KL04 close).** No camera-local cascade and no new render target
+  (R7 holds). Under a roof (`vSky` < 0.85), a sun-facing clay fragment walks the near field's uploaded half-metre
+  light blockers toward the sun for up to 48 cells (glass and open carves are clear); the town map is asked only about
+  casters beyond where that line stopped (`sunShadowInAir`, a derivative-free in-air read added to `sun-shadows.ts`).
+  A slab of whole blocker cells always costs ≥ 1 cell of path, so < 0.8 cells of blocked path fades the line as an
+  opening's quantised edge: the real cottages' 0.5 m walls straddle two field cells and read strictly as a 1 m tunnel
+  (a sliver of floor at a 56° sun); with the allowance a 1.75 m light gives a 0.54 m patch against 0.57 m true, and a
+  solid wall or roof never leaks. The result only raises the existing `(.15+.85*vSky)` sun term, so outdoor faces are
+  unchanged. Fields without corner samples (ground, horizon, citizens) keep today's light. The 0.25 m mullion casts
+  no bar of its own at this grid.
