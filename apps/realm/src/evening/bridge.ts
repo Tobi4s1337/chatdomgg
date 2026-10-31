@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { CitizenChatCueSchema, PRESENCE_LEASE_MS, type CitizenChatCue, type KingdomId, type PresenceInput } from '@chatdom/shared';
-import { RealmHeraldEnvelopeSchema, RealmHeraldForgeCommandSchema, type KingdomForgeCommand, type KingdomForgeLease, type KingdomForgeOutcome, type RealmHeraldChat, type RealmPrivateMessage } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, RealmHeraldEnvelopeSchema, RealmHeraldForgeCommandSchema, type KingdomForgeCommand, type KingdomForgeLease, type KingdomForgeOutcome, type RealmHeraldChat, type RealmPrivateMessage } from '@chatdom/shared/realm';
 import { createKingdomForgeApplication } from '../../../codex/src/kingdom-forge/application';
 import { createForgeProviders, type ForgeProviders } from '../../../codex/src/providers';
 import { decodeIngressCheckpoint, presenceEpoch, presencePerson, type IngressReply, type RealmIngress } from '../ingress';
@@ -222,7 +222,7 @@ export class RealmEveningBridge {
     return relayed;
   }
 
-  /** Private person identity selects the owned home. Herald's presentation slot never becomes a deed. */
+  /** Private person identity selects the owned home or keep. Herald's presentation slot never becomes a deed. */
   speech(personId: string, cue: CitizenChatCue): boolean {
     const host = this.speechHost(personId, cue);
     if (!host) return false;
@@ -236,12 +236,14 @@ export class RealmEveningBridge {
     if (!kingdom?.current || kingdom.origin !== cue.origin || kingdom.origin !== this.options.origin) return null;
     const now = kingdom.databaseNow();
     if (cue.asOf > now || cue.expiresAt <= now) return null;
-    const home = Object.values(kingdom.privateState.homes).find(home => home.ownerId === personId);
-    if (!home) return null;
+    const state = kingdom.privateState;
+    const slot = state.castle?.ownerId === personId ? REALM_CASTLE_SLOT
+      : Object.values(state.homes).find(home => home.ownerId === personId)?.slot;
+    if (slot === undefined) return null;
     const frame = kingdom.publicCheckpoint().current.find(message => message.type === 'presence')?.frame;
     if (!frame || now - frame.asOf >= PRESENCE_LEASE_MS
-      || !frame.windows.some(window => window.slot === home.slot && window.present && window.since <= cue.asOf)) return null;
-    return { kingdom, slot: home.slot };
+      || !frame.windows.some(window => window.slot === slot && window.present && window.since <= cue.asOf)) return null;
+    return { kingdom, slot };
   }
 
   private async waitForChat(input: RealmHeraldChat): Promise<boolean> {

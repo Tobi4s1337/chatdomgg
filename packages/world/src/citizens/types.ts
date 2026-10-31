@@ -46,6 +46,8 @@ export interface CitizenRoute {
 }
 
 export interface CitizenMotionOptions {
+  /** Installed native keep only. The monarch arrives at the existing castle gate, never a synthetic plot. */
+  readonly castleHome?: boolean;
   /** Default: a seeded 12–30m local arrival, spread throughout the town. */
   readonly entryDistance?: number;
   /** Default: seeded 1.05–1.35 m/s; the renderer uses travelled distance for gait. */

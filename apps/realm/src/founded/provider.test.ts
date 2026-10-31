@@ -65,10 +65,12 @@ describe('founded physical town and persisted loader (SIMULATED)', () => {
       const store = new FileFoundedStore(directory), loader = createFoundedWorldLoader(source, store), empty = createRealmState(kingdomId, 'simulated');
       await store.native(kingdomId, plan, 'simulated');
       const first = await loader.load(kingdomId, empty);
+      expect(first.scene.placements.some(piece => piece.id.startsWith('market:wares:v1:'))).toBe(true);
       const checkpoint: RealmBootstrap = { version: 1, kingdomId, writerEpoch: 'SIMULATED-writer', throughCursor: 0, throughSequence: 0,
         layoutRevision: plan.revision, collisionRevision: first.world.revision, current: [] };
       expect(first.manifestFor(checkpoint)).toEqual(first.build.manifest);
       const native = await store.native(kingdomId, plan, 'simulated');
+      expect(native.fixtures.some(piece => piece.id.startsWith('market:wares:v1:'))).toBe(false); // Pinned baseline is retained.
       const moduleId = plan.castle.beaconModuleId, keep = native.fixtures.find(f => f.id === castleHostId(moduleId))!;
       const castle: RealmOwnedCastle = { id: keep.id, moduleId, ownerId: PersonIdSchema.parse('900001111'), slot: REALM_CASTLE_SLOT,
         layoutRevision: plan.revision, revision: 'castle:1', digest: 'e'.repeat(64), family: 'tide', blueprint: keep.blueprint, attachments: {},
