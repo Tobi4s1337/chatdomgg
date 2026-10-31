@@ -4,12 +4,12 @@ import { WALK_BUTTON, type CollisionWorld, type PlayerState, type SolidBox, type
 import type { RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkRealm } from './index';
 
-const hudInput = vi.hoisted(() => ({ jump: undefined as (() => void) | undefined }));
+const hudInput = vi.hoisted(() => ({ jump: undefined as (() => void) | undefined, look: undefined as ((event: MouseEvent) => void) | undefined }));
 vi.mock('./input/hud', async importOriginal => ({
   ...await importOriginal<typeof import('./input/hud')>(),
-  createWalkHud: (_container: HTMLElement, jump: () => void) => {
-    hudInput.jump = jump;
-    return { update() {}, dispose() { hudInput.jump = undefined; } };
+  createWalkHud: (_container: HTMLElement, jump: () => void, look: (event: MouseEvent) => void) => {
+    hudInput.jump = jump; hudInput.look = look;
+    return { update() {}, dispose() { hudInput.jump = undefined; hudInput.look = undefined; } };
   },
 }));
 
@@ -238,9 +238,9 @@ describe('the walk controller', () => {
 
   it('turns a fixed angle per locked mouse pixel, gathering a whole slow frame', () => {
     const turn = (width: number, height: number) => {
-      const { controller, keyboard, mouse, clock } = setup(width, height);
+      const { controller, mouse, clock } = setup(width, height, undefined, true);
       controller.frame(0);
-      key(keyboard, 'keydown', 'KeyV');
+      hudInput.look!({ type: 'click', isTrusted: true, detail: 1 } as MouseEvent);
       expect(controller.debug.look).toBe('locked');
       const start = controller.debug.camera.yaw;
       clock.now = 50; mouse(50, 0); // inside the settle window: ignored
@@ -259,10 +259,11 @@ describe('the walk controller', () => {
   });
 
   it('lets go of held keys, a pending jump, the stick and the lock on a dropped connection, a hidden page and a menu', () => {
-    const { controller, keyboard, page, touch, onDrop, onLeave, lockDocument, sent } = setup();
+    const { controller, keyboard, page, touch, onDrop, onLeave, lockDocument, sent } = setup(1440, 900, undefined, true);
     controller.frame(0);
     const holdAll = () => {
-      key(keyboard, 'keydown', 'KeyW'); key(keyboard, 'keydown', 'Space'); key(keyboard, 'keydown', 'KeyV');
+      key(keyboard, 'keydown', 'KeyW'); key(keyboard, 'keydown', 'Space');
+      hudInput.look!({ type: 'click', isTrusted: true, detail: 1 } as MouseEvent);
       touch('pointerdown', 1, 200, 800); touch('pointermove', 1, 200, 740);
     };
     const still = (now: number) => {
@@ -326,6 +327,25 @@ describe('the walk controller', () => {
     expect(controller.debug.camera.clearance).toBeNull();
   });
 
+  it('does not inject an exact 30 Hz height change before SDK rendered feet begin moving', () => {
+    const { controller, camera, fake, self } = setup();
+    const predicted: PlayerState = { x: self.x, y: 0, z: self.z, vx: 0, vy: 0, vz: 0, grounded: true, yaw: self.yaw, distance: 0, collisionRevision: 7 };
+    Object.defineProperty(fake, 'predicted', { value: predicted });
+    controller.frame(0); controller.frame(1000 / 360);
+    const cameraY = camera.position.y;
+    // A fixed tick climbs, while interpolation still draws the previous endpoint. Both presentation consumers
+    // must stay on that endpoint; the exact state only supplies grounded/revision decisions.
+    predicted.y = .5;
+    const drawn = controller.frame(2000 / 360).find(p => p.self)!;
+    expect(drawn.y).toBe(0);
+    expect(camera.position.y).toBeCloseTo(cameraY, 12);
+    self.y = .5 / 12;
+    controller.frame(3000 / 360);
+    expect(controller.debug.self!.y).toBe(self.y);
+    expect(camera.position.y).toBeGreaterThanOrEqual(cameraY);
+    controller.dispose();
+  });
+
   it('eases a predicted step down without moving collision feet or drawing the head into the next lintel', () => {
     const lintel: SolidBox = { min: [2.5, 1.8, 8], max: [4, 3, 10] };
     const collision: CollisionWorld = { revision: 7, query: () => [lintel] };
@@ -357,7 +377,7 @@ describe('the walk controller', () => {
     const clearInput = vi.fn(); Object.assign(fake, { clearInput });
     controller.frame(0);
     key(keyboard, 'keydown', 'KeyW');
-    key(keyboard, 'keydown', 'KeyV');
+    hudInput.look!({ type: 'click', isTrusted: true, detail: 1 } as MouseEvent);
     touch('pointerdown', 1, 90, 700); touch('pointermove', 1, 90, 600);
     hudInput.jump!();
     keyboard.dispatchEvent(new Event(event, { cancelable: true }));

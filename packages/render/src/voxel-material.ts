@@ -36,6 +36,9 @@ export function geometryFromChunks(chunks:readonly AssetChunkMesh[],lattice:Voxe
   geometry.boundingBox=bounds;geometry.boundingSphere=bounds.getBoundingSphere(new THREE.Sphere());return geometry;
 }
 
+/** Voxel fog thins with height, so it runs at this share of the scene's `FogExp2` density. */
+const VOXEL_FOG_SCALE=.72;
+
 export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLattice):VoxelRenderState {
   const palette=new Float32Array(65536*4);
   const kinds=['air','earth','grass','stone','wood','plaster','roof','leaf','metal','fabric','glass'];
@@ -45,7 +48,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
   let farLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);farLightTexture.format=THREE.RedFormat;farLightTexture.needsUpdate=true;
   let beaconLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);beaconLightTexture.format=THREE.RedFormat;beaconLightTexture.needsUpdate=true;
   let heightTexture=new THREE.DataTexture(new Float32Array(1),1,1,THREE.RedFormat,THREE.FloatType);heightTexture.needsUpdate=true;
-  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
+  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
   const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,alphaToCoverage:true,vertexShader:`
     in uint aPacked; in uint aMaterial;
     out float vLodFade;
@@ -75,9 +78,8 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     #define gl_FragColor voxelColour
     precision highp sampler3D;
     uniform sampler2D uPalette;uniform sampler3D uLight,uFarLight,uBeaconLight;
-    uniform vec3 uSun,uAmbient,uSunDirection,uFog,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent;
-    uniform float uSunIntensity,uAmbientIntensity,uNight,uFarCell,uBeaconCell,uTerrain,uShoreLevel;
-    // Shared uniforms: materials derived from this shader text carry them with the uniforms object.
+    uniform vec3 uSun,uAmbient,uSunDirection,uFog,uShadow,uGlow,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent;
+    uniform float uSunIntensity,uAmbientIntensity,uFogDensity,uNight,uFarCell,uBeaconCell,uTerrain,uShoreLevel;
     uniform float uGlassKind,uGlassDither;
     uniform vec3 uTerrainSoil,uTerrainGrass;uniform vec4 uShoreBounds;
     in vec3 vWorld,vNormal;in float vAo,vSky,vLodFade;flat in uint vMaterial;
@@ -160,7 +162,10 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       edge=mix(kind==3.?.96:kind==4.?.94:kind==6.?.95:1.,edge,detail);
       float ao=mix(.49,1.,vAo);float sky=mix(.24,1.,vSky);
       float diffuse=max(dot(n,normalize(uSunDirection)),0.);
-      vec3 cool=uAmbient*uAmbientIntensity*(.5+.5*max(n.y,0.))*sky;
+      // Open faces take the hour's sky fill; occluded ones sink toward its shadow tint, so a shadowed
+      // wall reads blue at noon and indigo at dusk rather than grey.
+      float facing=.5+.5*max(n.y,0.);
+      vec3 cool=mix(uShadow*.62,uAmbient,sky)*uAmbientIntensity*facing*(.4+.6*sky);
       vec3 light=cool+uSun*uSunIntensity*diffuse*(.15+.85*vSky) /* sun-visibility */;
       vec3 uvw=(vWorld-uLightOrigin)/uLightExtent;
       float warm=surfaceField(uFarLight,uFarOrigin,uFarExtent,uFarCell,n);
@@ -207,9 +212,8 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       if(abs(kind-uGlassKind)<.5){
         vec3 eye=normalize(vWorld-cameraPosition),r=reflect(eye,n);
         float fresnel=pow(1.-abs(dot(eye,n)),4.);
-        vec3 skyTint=mix(uFog,uAmbient*uAmbientIntensity*.9,smoothstep(-.05,.55,r.y))*mix(.62,1.,vSky);
         float glint=pow(max(dot(r,normalize(uSunDirection)),0.),140.)*uSunIntensity*(1.-uNight);
-        colour=skyTint*mix(.46,.92,fresnel)+uSun*glint*1.4+vec3(1.,.57,.26)*min(warm,1.)*.28;
+        colour+=uSun*glint*1.4;
         cover=clamp(mix(.24,.9,fresnel)+glint*.6,0.,1.);
         if(uGlassDither>.5){
           // Without multisampling, an ordered screen pattern stands in for fractional coverage.
@@ -219,8 +223,12 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         }
       }
       float distanceToCamera=length(cameraPosition-vWorld);
-      float fogAmount=1.-exp(-distanceToCamera*.00115*exp(-max(vWorld.y,0.)*.019));
-      colour=mix(colour,uFog,min(.86,fogAmount));
+      float fogAmount=1.-exp(-distanceToCamera*uFogDensity*exp(-max(vWorld.y,0.)*.019));
+      // Distance takes the sky's colour, warmer where the view runs toward a low sun.
+      vec3 view=normalize(vec3(vWorld.x-cameraPosition.x,0.,vWorld.z-cameraPosition.z)+vec3(.0001,0.,0.));
+      vec3 sunFlat=normalize(vec3(uSunDirection.x,0.,uSunDirection.z)+vec3(.0001,0.,0.));
+      vec3 fogColour=uFog+uGlow*pow(max(dot(view,sunFlat),0.),3.)*.8;
+      colour=mix(colour,fogColour,min(.86,fogAmount));
       gl_FragColor=vec4(colour,1.);
       gl_FragColor.a=cover;
       #include <tonemapping_fragment>
@@ -235,7 +243,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     const samples=target?target.samples:renderer.getContext().getContextAttributes()?.antialias?4:0;
     uniforms.uGlassDither.value=samples>0?0:1;
   };
-return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSkyZenith.value.set(g.zenith);uniforms.uSkyHorizon.value.set(g.horizon);uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},
+return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSkyZenith.value.set(g.zenith);uniforms.uSkyHorizon.value.set(g.horizon);uniforms.uShadow.value.set(g.shadow);uniforms.uGlow.value.set(g.glow);uniforms.uFogDensity.value=g.fogDensity*VOXEL_FOG_SCALE;uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},
     setLight(v){lightTexture=uploadVolume(lightTexture,v);uniforms.uLight.value=lightTexture;uniforms.uLightOrigin.value.set(...v.origin);uniforms.uLightExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);},
     setFarLight(v){farLightTexture=uploadVolume(farLightTexture,v);uniforms.uFarLight.value=farLightTexture;uniforms.uFarOrigin.value.set(...v.origin);uniforms.uFarExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uFarCell.value=v.cellSize;},
     setBeaconLight(v){beaconLightTexture=uploadVolume(beaconLightTexture,v);uniforms.uBeaconLight.value=beaconLightTexture;uniforms.uBeaconOrigin.value.set(...v.origin);uniforms.uBeaconExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uBeaconCell.value=v.cellSize;},

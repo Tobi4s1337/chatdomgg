@@ -24,6 +24,12 @@ export interface BenchFocus {
   readonly slot: number;
   readonly subject: Vec3; readonly subjectHeading: number; readonly subjectSpeed: number;
   readonly other: Vec3; readonly otherHeading: number; readonly otherSpeed: number;
+  /**
+   * People stand around the subject on both sides, up to this many metres away (a speaker and the
+   * neighbours who turn to them): centre on the subject, look across the line through `other`, and
+   * back off far enough to hold everyone.
+   */
+  readonly spread?: number;
 }
 
 const LIGHT_UNIFORMS = ['uLight', 'uLightOrigin', 'uLightExtent', 'uFarLight', 'uFarOrigin', 'uFarExtent', 'uFarCell', 'uBeaconLight', 'uBeaconOrigin', 'uBeaconExtent', 'uBeaconCell'];
@@ -95,7 +101,15 @@ export async function createBehaviourStage(canvas: HTMLCanvasElement, plan: Sett
 
     const geometries: THREE.BufferGeometry[] = [];
     cleanups.push(() => { for (const geometry of geometries) geometry.dispose(); });
+    /** Footprints of everything built (houses, dressing, trees) that can stand between a lens and a person. */
+    const occluders: { x: number; z: number; r: number }[] = [];
     const instance = (blueprint: VoxelBlueprint, geometry: THREE.BufferGeometry, list: readonly { position: Vec3; yaw: number }[], scale: number): void => {
+      if (!geometry.boundingBox) geometry.computeBoundingBox();
+      const box = geometry.boundingBox!, centre = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+      if (size.y * scale > .6) for (const place of list) {
+        const c = Math.cos(place.yaw), n = Math.sin(place.yaw), x = centre.x * scale, z = centre.z * scale;
+        occluders.push({ x: place.position[0] + x * c + z * n, z: place.position[2] - x * n + z * c, r: Math.max(size.x, size.z) * scale * .45 });
+      }
       geometry.setAttribute('aLodFade', new THREE.InstancedBufferAttribute(new Float32Array(list.length).fill(1), 1)); geometries.push(geometry);
       const mesh = new THREE.InstancedMesh(geometry, clay.material, list.length), matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion();
       list.forEach((place, i) => mesh.setMatrixAt(i, matrix.compose(new THREE.Vector3(...place.position), rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), place.yaw), new THREE.Vector3(scale, scale, scale))));
@@ -178,9 +192,10 @@ export async function createBehaviourStage(canvas: HTMLCanvasElement, plan: Sett
         const subject = new THREE.Vector3(...focus.subject), other = new THREE.Vector3(...focus.other);
         const forward = (heading: number, speed = 1): THREE.Vector2 => new THREE.Vector2(Math.sin(heading) * speed, Math.cos(heading) * speed);
         const relative = forward(focus.otherHeading, focus.otherSpeed).sub(forward(focus.subjectHeading, focus.subjectSpeed));
-        const close = view === 'close', span = Math.hypot(other.x - subject.x, other.z - subject.z);
-        const middle = subject.clone().lerp(other, close || portrait ? .3 : .42);
-        const radius = close ? (portrait ? 3.4 : 3.6) + span * (portrait ? .2 : .35) : (portrait ? 4.2 : 5.4) + span * (portrait ? .35 : .55);
+        const close = view === 'close', span = Math.hypot(other.x - subject.x, other.z - subject.z), spread = close ? undefined : focus.spread;
+        const middle = spread === undefined ? subject.clone().lerp(other, close || portrait ? .3 : .42) : subject.clone();
+        const radius = spread !== undefined ? spread * (portrait ? 1.7 : 1.25) + 3
+          : close ? (portrait ? 3.4 : 3.6) + span * (portrait ? .2 : .35) : (portrait ? 4.2 : 5.4) + span * (portrait ? .35 : .55);
         let best = -Infinity, azimuth = 0;
         for (let i = 0; i < 72; i++) {
           const a = i / 72 * Math.PI * 2, direction = new THREE.Vector2(Math.sin(a), Math.cos(a));
@@ -188,7 +203,7 @@ export async function createBehaviourStage(canvas: HTMLCanvasElement, plan: Sett
           const toCamera = (from: THREE.Vector3): THREE.Vector2 => new THREE.Vector2(x - from.x, z - from.z).normalize();
           // The noticer's face first, the other person's second; both apart on screen.
           let score = forward(focus.subjectHeading).dot(toCamera(subject)) * 1.4 + forward(focus.otherHeading).dot(toCamera(other)) * .35;
-          score -= Math.abs(direction.dot(new THREE.Vector2(other.x - subject.x, other.z - subject.z).normalize())) * .45;
+          score -= Math.abs(direction.dot(new THREE.Vector2(other.x - subject.x, other.z - subject.z).normalize())) * (spread === undefined ? .45 : 1.6);
           // Neither person may walk through the lens or stand between it and the noticer.
           const lens = new THREE.Vector2(x, z), face = new THREE.Vector2(subject.x, subject.z), sight = face.clone().sub(lens);
           for (let t = -1.5; t <= 3; t += .25) {
@@ -198,6 +213,15 @@ export async function createBehaviourStage(canvas: HTMLCanvasElement, plan: Sett
             if (passer.distanceTo(lens) < radius * .55) score -= .6;
           }
           for (let t = .2; t <= 1; t += .2) if (blocked(middle.x + direction.x * radius * t, middle.z + direction.y * radius * t)) score -= 3;
+          // Planters, stalls, wells and trees: none may stand in front of the subject or the other person.
+          for (const [person, weight] of [[subject, 2.5], [other, 1]] as const) {
+            const to = new THREE.Vector2(person.x - x, person.z - z), length = to.length();
+            for (const item of occluders) {
+              const along = Math.max(0, Math.min(1, ((item.x - x) * to.x + (item.z - z) * to.y) / Math.max(1e-6, length * length)));
+              if (along * length > length - .25) continue;
+              if (Math.hypot(x + to.x * along - item.x, z + to.y * along - item.z) < item.r + .35) { score -= weight; break; }
+            }
+          }
           // A wall beside the lens fills the frame's edge even when the sight line is clear.
           if (view === 'follow' && blocked(x, z, 2.4)) score -= 2;
           if (terrainHeight(plan, x, z) > middle.y + 1.2) score -= 3;
@@ -205,7 +229,8 @@ export async function createBehaviourStage(canvas: HTMLCanvasElement, plan: Sett
         }
         camera.fov = close ? (portrait ? 46 : 34) : portrait ? 52 : 40;
         eye.set(middle.x + Math.sin(azimuth) * radius, 0, middle.z + Math.cos(azimuth) * radius);
-        eye.y = Math.max(terrainHeight(plan, eye.x, eye.z), middle.y) + (close ? 1.6 : portrait ? 1.9 : 2.2);
+        // A wider group is seen from a little higher, over planters and sills, so every head reads.
+        eye.y = Math.max(terrainHeight(plan, eye.x, eye.z), middle.y) + (spread !== undefined ? 2.2 + spread * .26 : close ? 1.6 : portrait ? 1.9 : 2.2);
         target.copy(middle).add(new THREE.Vector3(0, close ? 1.05 : .95, 0));
         // Follow the noticer from here on: same screen place, same angle.
         anchor.copy(subject);

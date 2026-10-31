@@ -2,11 +2,13 @@ import type { Vec3 } from '@chatdom/shared';
 import { randomUnit, seedHash } from '../layout';
 import type { CitizenMotionSample } from '../citizens/types';
 import type { CitizenGoalRequest } from '../citizens/types';
+import { createChatReactions } from './chat';
 import { neighbourPairs } from './neighbours';
+import { between, envelope, ease, gestureAt, NONE, relativeYaw, wrap } from './pose';
 import { createRoutines } from './routines';
 import { BEHAVIOUR_TUNING as T } from './tuning';
 import type {
-  CitizenBehaviourInput, CitizenBehaviours, CitizenBehaviourStep, CitizenEncounter, CitizenGoalAnswer, CitizenOverlay,
+  CitizenBehaviourInput, CitizenBehaviours, CitizenBehaviourStep, CitizenCueNote, CitizenEncounter, CitizenGoalAnswer, CitizenOverlay,
   CitizenRoutineTransition, CitizenRoutineView,
 } from './types';
 
@@ -43,27 +45,7 @@ interface Actor {
 }
 interface Contact { readonly a: number; readonly b: number; readonly since: number; decided: boolean }
 
-const ease = (n: number): number => { const t = Math.max(0, Math.min(1, n)); return t * t * (3 - 2 * t); };
-const wrap = (angle: number): number => Math.atan2(Math.sin(angle), Math.cos(angle));
-const between = ([low, high]: readonly [number, number], unit: number): number => Math.round(low + (high - low) * unit);
 const pairKey = (a: number, b: number): number => Math.min(a, b) * 65_536 + Math.max(a, b);
-const NONE: CitizenOverlay = { gesture: 'none', lookYaw: 0, time: 0 };
-
-/** Head yaw, relative to the body, that faces `target`; clamped to a comfortable neck. */
-function relativeYaw(self: CitizenMotionSample, target: Vec3): number {
-  const yaw = wrap(Math.atan2(target[0] - self.position[0], target[2] - self.position[2]) - self.heading);
-  const limit = self.speed > .05 ? T.look.walkingLimit : T.look.standingLimit;
-  return Math.max(-limit, Math.min(limit, yaw));
-}
-/** 0 → 1 over [in0, in1], hold, 1 → 0 over [out0, out1]. */
-function envelope(t: number, in0: number, in1: number, out0: number, out1: number): number {
-  if (t <= in0 || t >= out1) return 0;
-  if (t < in1) return ease((t - in0) / Math.max(1, in1 - in0));
-  if (t <= out0) return 1;
-  return 1 - ease((t - out0) / Math.max(1, out1 - out0));
-}
-const gestureAt = (gesture: 'nod' | 'wave', poseAtMs: number, poseEndMs: number, atMs: number): Pick<CitizenOverlay, 'gesture' | 'time'> =>
-  atMs >= poseAtMs && atMs < poseEndMs ? { gesture, time: (atMs - poseAtMs) / 1000 + T.gestures[gesture].phaseSeconds } : { gesture: 'none', time: 0 };
 
 /**
  * Local ambient presentation for main's supplied citizens. It owns no route, body, identity,
@@ -81,13 +63,14 @@ export function createCitizenBehaviours(): CitizenBehaviours {
   let seedBase = '';
   const unit = (...parts: (string | number)[]): number => randomUnit(seedHash(`${seedBase}:${parts.join(':')}`));
   const routines = createRoutines(unit);
+  const chat = createChatReactions(unit);
 
   const reset = (): void => {
     source = null; lastAtMs = null; ambient = new Set(); seedBase = '';
-    actors.clear(); encounters.clear(); contacts = new Map(); routines.clear();
+    actors.clear(); encounters.clear(); contacts = new Map(); routines.clear(); chat.clear();
   };
   const dropTransient = (): void => {
-    encounters.clear(); contacts = new Map();
+    encounters.clear(); contacts = new Map(); chat.clearTransient();
     for (const actor of actors.values()) { actor.release = null; actor.standingSince = null; }
   };
   const uniqueEncounters = (): Encounter[] => [...new Set(encounters.values())].sort((p, q) => p.greeter - q.greeter);
@@ -126,16 +109,19 @@ export function createCitizenBehaviours(): CitizenBehaviours {
     }
   }
 
+  /** What one ambient person shows: routine look, then a greeting, or an eased release under any chat look. */
+  function shownAt(slot: number, actor: Actor, sample: CitizenMotionSample, bySlot: ReadonlyMap<number, CitizenMotionSample>, atMs: number): CitizenOverlay {
+    const encounter = encounters.get(slot), base = routines.yaw(slot, atMs);
+    if (encounter) return encounterOverlay(encounter, slot, sample, bySlot.get(slot === encounter.greeter ? encounter.recipient : encounter.greeter), atMs, base);
+    return chat.overlay(slot, sample, bySlot, atMs, actor.release ? releaseOverlay(actor.release, atMs, base) : { ...NONE, lookYaw: base });
+  }
   function present(samples: readonly CitizenMotionSample[], atMs: number): ReadonlyMap<number, CitizenOverlay> {
     const bySlot = new Map(samples.map(sample => [sample.slot, sample]));
     const overlays = new Map<number, CitizenOverlay>();
     for (const sample of samples) {
       const slot = sample.slot, actor = actors.get(slot);
       if (!actor || !ambient.has(slot) || sample.state === 'leaving') continue;
-      const encounter = encounters.get(slot), base = routines.yaw(slot, atMs);
-      let overlay: CitizenOverlay = { ...NONE, lookYaw: base };
-      if (encounter) overlay = encounterOverlay(encounter, slot, sample, bySlot.get(slot === encounter.greeter ? encounter.recipient : encounter.greeter), atMs, base);
-      else if (actor.release) overlay = releaseOverlay(actor.release, atMs, base);
+      const overlay = shownAt(slot, actor, sample, bySlot, atMs);
       if (overlay.gesture !== 'none' || Math.abs(overlay.lookYaw) > 1e-4) overlays.set(slot, overlay);
     }
     return overlays;
@@ -158,10 +144,18 @@ export function createCitizenBehaviours(): CitizenBehaviours {
     // Only present, arriving or resting people take part. A departing body is never kept for a gesture.
     const present_ = new Map<number, CitizenMotionSample>();
     for (const sample of input.samples) if (sample.state !== 'leaving') present_.set(sample.slot, sample);
+    /** A look cut short eases back from exactly what the person shows at this step; a gesture under way finishes. */
+    const release = (slot: number): void => {
+      const actor = actors.get(slot), self = present_.get(slot);
+      if (!actor || !self || !ambient.has(slot)) return;
+      const shown = shownAt(slot, actor, self, present_, atMs), tail = actor.release?.tail && atMs < actor.release.tail.poseEndMs ? actor.release.tail : null;
+      actor.release = { fromYaw: shown.lookYaw, startMs: atMs, tail };
+    };
     for (const [slot, actor] of actors) {
       if (present_.has(slot)) continue;
       const encounter = encounters.get(slot);
       if (encounter) interrupt(encounter, present_, atMs);
+      chat.drop(slot, release);
       for (const other of actor.cooldowns.keys()) actors.get(other)?.cooldowns.delete(slot);
       actors.delete(slot); routines.drop(slot);
     }
@@ -197,15 +191,35 @@ export function createCitizenBehaviours(): CitizenBehaviours {
       encounter.greeterAt = greeter.position; encounter.recipientAt = recipient.position;
     }
 
-    // One spatial index per step. Contacts exist only while a pair is within range.
+    // One spatial index per step, for greetings and chat listeners. Contacts exist only while a pair is within range.
     const points = [...present_.values()].filter(sample => sample.opacity >= .99).map(sample => ({ slot: sample.slot, x: sample.position[0], z: sample.position[2] }));
-    const next = new Map<number, Contact>();
-    for (const pair of neighbourPairs(points, T.greeting.keepMetres, T.neighbours.cellMetres, T.neighbours.maxPerCitizen)) {
+    const next = new Map<number, Contact>(), near = new Map<number, { slot: number; distance: number }[]>();
+    for (const pair of neighbourPairs(points, T.neighbours.rangeMetres, T.neighbours.cellMetres, T.neighbours.maxPerCitizen)) {
+      for (const [self, other] of [[pair.a, pair.b], [pair.b, pair.a]] as const) {
+        const list = near.get(self); if (list) list.push({ slot: other, distance: pair.distance }); else near.set(self, [{ slot: other, distance: pair.distance }]);
+      }
+      if (pair.distance > T.greeting.keepMetres) continue;
       const id = pairKey(pair.a, pair.b), known = contacts.get(id);
       if (known) next.set(id, known);
       else if (pair.distance <= T.greeting.noticeMetres) next.set(id, { a: pair.a, b: pair.b, since: atMs, decided: false });
     }
     contacts = next;
+    for (const list of near.values()) list.sort((p, q) => p.distance - q.distance || p.slot - q.slot);
+
+    // A witnessed chat line, before greetings: its speaker and listeners are then busy for this step's contacts.
+    const cues: CitizenCueNote[] = [];
+    const reacted = chat.step({ atMs, source: { kingdomId: input.kingdomId, epoch: input.epoch, origin: input.origin }, cues: input.cues ?? [],
+      present: present_, ambient, near: slot => near.get(slot) ?? [], since: slot => actors.get(slot)?.seenSince, notes: cues, release,
+      free: slot => {
+        const actor = actors.get(slot);
+        return Boolean(actor && !encounters.has(slot) && !actor.release && atMs - actor.seenSince >= T.greeting.presentBeforeMs);
+      },
+      claim: slot => {
+        const encounter = encounters.get(slot);
+        if (encounter) interrupt(encounter, present_, atMs);
+        const tail = actors.get(slot)?.release?.tail;
+        return tail && atMs < tail.poseEndMs ? tail.poseEndMs : -Infinity;
+      } });
 
     const started: CitizenEncounter[] = [];
     for (const contact of contacts.values()) {
@@ -215,7 +229,7 @@ export function createCitizenBehaviours(): CitizenBehaviours {
       const pairCooling = (actors.get(contact.a)!.cooldowns.get(contact.b) ?? -Infinity) > atMs;
       if (pairCooling || atMs - contact.since > T.greeting.decisionWindowMs) { contact.decided = true; continue; }
       if (distance < T.greeting.minMetres || distance > T.greeting.noticeMetres) continue;
-      const free = (sample: CitizenMotionSample): boolean => !encounters.has(sample.slot) && sample.opacity >= .99
+      const free = (sample: CitizenMotionSample): boolean => !encounters.has(sample.slot) && !chat.has(sample.slot) && sample.opacity >= .99
         && atMs - actors.get(sample.slot)!.seenSince >= T.greeting.presentBeforeMs;
       // Both people must be able to see each other: nobody greets a back, and the neck limits a glance.
       const sees = (self: CitizenMotionSample, other: CitizenMotionSample, limit: number): boolean =>
@@ -264,13 +278,14 @@ export function createCitizenBehaviours(): CitizenBehaviours {
     for (const [slot, sample] of present_) {
       if (goals.length >= T.routine.maxGoalsPerStep) break;
       if (!ambient.has(slot)) continue;
-      const busy = encounters.has(slot) || Boolean(actors.get(slot)!.release?.tail && atMs < actors.get(slot)!.release!.tail!.poseEndMs);
+      const busy = encounters.has(slot) || chat.has(slot) || Boolean(actors.get(slot)!.release?.tail && atMs < actors.get(slot)!.release!.tail!.poseEndMs);
       const goal = routines.due(slot, sample, homeOf(slot), input.destinationsFor(slot), busy, routineStep);
       if (goal) goals.push(goal);
     }
     const routineViews: CitizenRoutineView[] = [];
     for (const slot of present_.keys()) { const item = routines.view(slot); if (item) routineViews.push(item); }
-    return { atMs, overlays: present(input.samples, atMs), encounters: uniqueEncounters().map(view), started, goals, transitions, routines: routineViews };
+    return { atMs, overlays: present(input.samples, atMs), encounters: uniqueEncounters().map(view), started, goals, transitions, routines: routineViews,
+      reactions: chat.views(), reacted, cues };
   }
 
   const view = (encounter: Encounter): CitizenEncounter => ({ greeter: encounter.greeter, recipient: encounter.recipient, gesture: encounter.gesture,
@@ -283,7 +298,7 @@ export function createCitizenBehaviours(): CitizenBehaviours {
       let cooldowns = 0, releases = 0;
       for (const actor of actors.values()) { cooldowns += actor.cooldowns.size; if (actor.release) releases++; }
       return { actors: actors.size, contacts: contacts.size, cooldowns: cooldowns / 2, encounters: new Set(encounters.values()).size, releases,
-        claims: routines.claims, pending: routines.pending };
+        claims: routines.claims, pending: routines.pending, ...chat.stats };
     },
   };
 }

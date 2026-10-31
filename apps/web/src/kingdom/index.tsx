@@ -2,6 +2,7 @@ import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
 import { createKingdomScene, type CameraName, type NameLabel } from './scene';
 import type { RealmFoundedScene } from '@chatdom/world';
 import type { PresenceFeed } from '@chatdom/shared';
+import type { RealmChatFeed } from '../realm/adapters/chat';
 import type { KingdomWalkBinding, WalkerLabel } from './walk-scene';
 import type { SpeechLabel } from './citizen-scene';
 import { BuildTools } from '../build';
@@ -12,7 +13,7 @@ import type { ForgeStatus } from '../forge/scene';
 import { parseKingdomPresentationParams } from '../stream/params';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
-export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
+export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
   const query=new URLSearchParams(location.search),tier=props.founded?.plan.config.tier??(query.get('tier')==='hamlet'?'hamlet':'town');
   const presentation=parseKingdomPresentationParams(query,tier);
   const realm=query.get('realm'),realmFamily=realm==='hearth'?'hearth':realm==='grove'?'grove':'tide',realmName=props.kingdomName??(realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere');
@@ -22,11 +23,12 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
   const [names,setNames]=createSignal<NameLabel[]>([]),[speech,setSpeech]=createSignal<SpeechLabel[]>([]),[hour,setHour]=createSignal(initialHour),[view,setView]=createSignal<CameraName>(query.get('camera')==='citizen'?'citizen':query.get('camera')==='window'?'window':'hero');
   const [walkers,setWalkers]=createSignal<readonly WalkerLabel[]>([]),[walking,setWalking]=createSignal(false);
   let host!:HTMLDivElement;
-  const [source,setSource]=createSignal(query.get('source')==='herald'?'CONNECTING':'SIMULATED'),[error,setError]=createSignal(false),[sound,setSound]=createSignal(false);
+  const [source,setSource]=createSignal(props.presenceFeed?.label??(query.get('source')==='herald'?'CONNECTING':'SIMULATED')),[error,setError]=createSignal(false),[sound,setSound]=createSignal(false);
   const stream=location.pathname.endsWith('/stream')||location.pathname==='/stream';
   let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false,openingFrame=0;
   const [buildSession,setBuildSession]=createSignal<KingdomBuildSession|null>(null),[housewarming,setHousewarming]=createSignal<string|null>(null);
   const construction=new AbortController();
+  let unsubscribeChat:(()=>void)|undefined;
   const [forgeStatus,setForgeStatus]=createSignal<ForgeStatus|null>(null);
   async function attachWalk(binding:KingdomWalkBinding){
     if(!engine||unmounted)return;
@@ -46,6 +48,12 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
+      unsubscribeChat=props.chatFeed?.subscribe(message=>{
+        if(unmounted)return;
+        if(message.type==='chat')instance.receiveChat(message.cue);
+        else if(message.type==='chat.remove')instance.clearChat(message.cueIds);
+        else {instance.clearChat();setSpeech([]);}
+      });
       testWindow.__chatdomKingdom={attachWalk,detachWalk:()=>{instance.detachWalk();delete window.__chatdomWalk;setWalking(false);},walkDebug:instance.walkDebug,stats:instance.debug,build:instance.build,forge:instance.forge,inspect:()=>instance.inspect(),subject:()=>instance.subject(),pose:instance.pose,seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play(),capture:(time:number)=>instance.capture(time)};
       const showReady=()=>{
         if(unmounted||error())return;
@@ -58,7 +66,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       if(!props.founded&&query.get('forge')==='1')instance.forge.open();
     }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(true);});
   });
-  onCleanup(()=>{unmounted=true;cancelAnimationFrame(openingFrame);construction.abort();engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
+  onCleanup(()=>{unmounted=true;cancelAnimationFrame(openingFrame);construction.abort();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
   function tap(action:()=>void){if(!engine)return;if(!sound()){void engine.sound.unlock().then(setSound);}action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setWalking(false);setView(value);tap(()=>engine!.setCamera(value));}

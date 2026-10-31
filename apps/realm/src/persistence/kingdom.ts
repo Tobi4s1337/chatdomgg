@@ -1,9 +1,10 @@
 import { performance } from 'node:perf_hooks';
 import { ServerError } from '@colyseus/core';
-import type { KingdomId, PersonId, EventCause } from '@chatdom/shared';
+import type { KingdomId, PersonId, EventCause, Vec3 } from '@chatdom/shared';
 import type { CollisionWorld, RealmAuthenticator, RealmBootstrap, RealmCapability, RealmDomainCommand, RealmIngressCheckpoint, RealmIngressTransition,
   RealmIntent, RealmPrincipal, RealmPrivateMessage, RealmPrivateState, RealmPublicDelivery, RealmReceipt, RealmRepository,
   RealmStoredOutcome, RealmTransientMessage, RealmWriterLease } from '@chatdom/shared/realm';
+import { WALK_BODY } from '@chatdom/shared/realm';
 import { decideRealm } from '@chatdom/world/realm';
 import { embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmIntentContext, RealmRoomEffects, RealmRoomHandle, RealmRoomServices } from '../ports';
@@ -31,8 +32,23 @@ export interface DurableKingdomOptions {
    * with `realm.held` instead of queueing them behind a store that is not answering.
    */
   readonly hold?: () => string | null;
+  /** Prepare from this writer's committed state. Publication stays with the held writer below. */
+  readonly prepareWorld?: (state: RealmPrivateState) => Promise<DurableWorldAdoption>;
+}
+/** A checked immutable candidate, with no authority to publish itself during asynchronous preparation. */
+export interface DurableWorldAdoption {
+  readonly world: CollisionWorld;
+  readonly layoutRevision: string;
+  readonly spawn: DurableKingdomOptions['spawn'];
+  /** Compare approved public homes/attachments, independently of the currently adopted collision revision. */
+  matches(checkpoint: RealmBootstrap): boolean;
+  positions(walkers: readonly { readonly id: string; readonly position: Vec3 }[]): ReadonlyMap<string, Vec3>;
+  /** Called synchronously after room and handle adoption; makes the exact receipt discoverable. */
+  adopted(): void;
 }
 export interface RealmCommandMeta {
+  /** Optional trusted caller lease, rechecked alongside the writer through the final pre-COMMIT boundary. */
+  readonly current?: () => boolean;
   readonly anvilCapacity?: number;
   readonly occurredAt?: number; readonly receivedAt?: number;
   readonly actor?: PersonId | null; readonly cause?: EventCause;
@@ -81,6 +97,10 @@ export class DurableKingdom implements RealmRoomHandle {
   private readonly effects = new Set<RealmRoomEffects>();
   private readonly lifecycles = new Set<RealmLifecycleListener>();
   private readonly closed = new Set<(reason: string) => void>();
+  private geometry: Pick<DurableKingdomOptions, 'world' | 'layoutRevision' | 'spawn'>;
+  private preparingWorld: Promise<void> | null = null;
+  private worldNeeded = false;
+  private preparedGeometry: { readonly homes: RealmPrivateState['homes']; readonly attachments: RealmPrivateState['attachments']; readonly candidate: DurableWorldAdoption } | null = null;
 
   static async open(repository: DurableRepository, outbox: RealmOutboxStore, kingdomId: KingdomId,
     options: DurableKingdomOptions | ((state: RealmPrivateState) => DurableKingdomOptions | Promise<DurableKingdomOptions>)): Promise<DurableKingdom> {
@@ -107,6 +127,7 @@ export class DurableKingdom implements RealmRoomHandle {
   private constructor(private readonly repository: DurableRepository, private readonly outbox: RealmOutboxStore, lease: RealmWriterLease, state: RealmPrivateState,
     private readonly options: DurableKingdomOptions, projection: PublicProjection, delivered: number, committed: number, started: number, wall: number) {
     this.lease = lease; this.state = state; this.origin = state.origin; this.writerEpoch = lease.epoch;
+    this.geometry = options;
     this.projection = projection;
     this.clockOffset = lease.expiresAt - repository.leaseMs - wall;
     this.deadline = started + repository.leaseMs - LEASE_MARGIN_MS;
@@ -114,7 +135,11 @@ export class DurableKingdom implements RealmRoomHandle {
       kingdomId: lease.kingdomId, writerEpoch: lease.epoch, delivered, committed,
       read: (after, limit) => this.outbox.read(this.kingdomId, after, limit),
       acknowledge: through => this.outbox.acknowledge(this.lease, through),
-      project: row => this.projection.adopt([row]),
+      project: row => {
+        this.projection.adopt([row]);
+        // Run only after the synchronous delivery listeners have been handed this public prefix.
+        queueMicrotask(() => { void this.prepareWorld(); });
+      },
       current: () => this.current, fenced: () => this.close('fenced'), log: line => this.log(line),
     });
     // Three renewals fit inside the local window (lease minus margin), so one slow reply never costs the lease.
@@ -125,8 +150,8 @@ export class DurableKingdom implements RealmRoomHandle {
   }
 
   get kingdomId(): KingdomId { return this.lease.kingdomId; }
-  get layoutRevision(): string { return this.options.layoutRevision; }
-  get world(): CollisionWorld { return this.options.world; }
+  get layoutRevision(): string { return this.geometry.layoutRevision; }
+  get world(): CollisionWorld { return this.geometry.world; }
   get sequence(): number { return this.state.sequence; }
   /** Private committed state for trusted in-process services. Never a public or Schema payload. */
   get privateState(): RealmPrivateState { return this.state; }
@@ -148,16 +173,19 @@ export class DurableKingdom implements RealmRoomHandle {
    * committed with its outbox, and only then published. A lost COMMIT reply is resolved by lookup, never guessed.
    */
   execute(commandId: string, command: RealmDomainCommand, capability: RealmCapability, meta: RealmCommandMeta = {}): Promise<RealmStoredOutcome> {
+    const current = () => {
+      try { return this.current && (meta.current?.() ?? true); } catch { return false; }
+    };
     return this.serial(async () => {
       const decide = (state: RealmPrivateState, now: number) => decideRealm(state, command, {
-        now, writerEpoch: this.lease.epoch, commandId, capability, current: this.current,
+        now, writerEpoch: this.lease.epoch, commandId, capability, current: current(),
         anvilCapacity: meta.anvilCapacity ?? REALM_BASE_ANVILS,
         ...(meta.occurredAt === undefined ? {} : { occurredAt: meta.occurredAt }),
         ...(meta.receivedAt === undefined ? {} : { receivedAt: meta.receivedAt }),
         ...(meta.actor === undefined ? {} : { actor: meta.actor }),
         ...(meta.cause === undefined ? {} : { cause: meta.cause }),
       });
-      return this.settle(commandId, () => this.repository.execute(this.lease, commandId, command, decide, () => this.current));
+      return this.settle(commandId, () => this.repository.execute(this.lease, commandId, command, decide, current));
     });
   }
 
@@ -173,16 +201,24 @@ export class DurableKingdom implements RealmRoomHandle {
   // RealmRoomHandle -------------------------------------------------------------------------------------------------
 
   spawn(principal: RealmPrincipal): readonly [number, number, number] {
-    return this.options.spawn(principal, this.arrivals++);
+    return this.geometry.spawn(principal, this.arrivals++);
   }
 
   recoverWalker(walkerId: string, collisionRevision: number): boolean {
     const principal = this.principals.get(walkerId);
     if (!this.current || !principal || collisionRevision !== this.world.revision) return false;
-    const position = this.options.spawn(principal, this.arrivals++);
+    let position: Vec3;
+    try { position = this.geometry.spawn(principal, this.arrivals++); }
+    catch { return false; }
     if (position.some(value => !Number.isFinite(value))) return false;
     const body = { x: position[0], y: position[1], z: position[2] };
     if (embeddedSolids(body, this.world).length || !supported(body, this.world)) return false;
+    for (const id of this.walkers) if (id !== walkerId) for (const effects of this.effects) {
+      const peer = effects.readWalker(id);
+      if (peer && Math.abs(peer.x - position[0]) < WALK_BODY.radius * 2 + .05
+        && Math.abs(peer.z - position[2]) < WALK_BODY.radius * 2 + .05
+        && Math.abs(peer.y - position[1]) < WALK_BODY.height) return false;
+    }
     for (const effects of this.effects) if (effects.readWalker(walkerId) && effects.placeWalker(walkerId, position, collisionRevision)) return true;
     return false;
   }
@@ -227,6 +263,8 @@ export class DurableKingdom implements RealmRoomHandle {
       if (!this.current) throw new RealmWriterFencedError(this.kingdomId);
       // The dispatcher logs/retries storage failures. A swallowed read/ack failure isn't a ready manifest.
       if (this.delivery.delivered !== this.delivery.committed) throw new RealmBusyError();
+      await this.prepareWorld();
+      if (!this.current) throw new RealmWriterFencedError(this.kingdomId);
       return this.publicCheckpoint();
     } finally { unsubscribe(); }
   }
@@ -355,6 +393,49 @@ export class DurableKingdom implements RealmRoomHandle {
     }
     // Public rows move the bootstrap prefix only as they are handed to the transport (see PublicProjection).
     await this.dispatcher.kick();
+    await this.prepareWorld();
+  }
+
+  /** Async bytes preparation, then one synchronous authority/prefix/pose check and atomic room adoption. */
+  private prepareWorld(): Promise<void> {
+    if (!this.options.prepareWorld || !this.current) return Promise.resolve();
+    this.worldNeeded = true;
+    if (this.preparingWorld) return this.preparingWorld;
+    this.preparingWorld = (async () => {
+      while (this.worldNeeded && this.current) {
+        this.worldNeeded = false;
+        const state = this.state;
+        try {
+          const cached = this.preparedGeometry;
+          const candidate = cached?.homes === state.homes && cached.attachments === state.attachments
+            ? cached.candidate : await this.options.prepareWorld!(state);
+          if (!this.current) return;
+          if (state.homes !== this.state.homes || state.attachments !== this.state.attachments) {
+            this.worldNeeded = true; continue;
+          }
+          this.preparedGeometry = { homes: state.homes, attachments: state.attachments, candidate };
+          if (!candidate.matches(this.publicCheckpoint())) continue;
+          if (candidate.world === this.world) { candidate.adopted(); continue; }
+          const walkers: { id: string; position: Vec3 }[] = [];
+          for (const id of this.walkers) {
+            for (const effects of this.effects) {
+              const walker = effects.readWalker(id);
+              if (walker) { walkers.push({ id, position: [walker.x, walker.y, walker.z] }); break; }
+            }
+          }
+          const positions = candidate.positions(walkers);
+          // No await between reading occupied poses and publishing the exact matching world/receipt.
+          for (const effects of this.effects) effects.adoptWorld(candidate.world, candidate.layoutRevision, positions);
+          this.geometry = candidate;
+          this.arrivals = 0;
+          candidate.adopted();
+        } catch (error) {
+          // A failed scene never changes the committed outcome or withdraws the previous adopted world.
+          this.log(`founded world preparation held: ${(error as Error).name}`);
+        }
+      }
+    })().finally(() => { this.preparingWorld = null; });
+    return this.preparingWorld;
   }
 
   /** Runs independently of a renewal request that may never settle. */

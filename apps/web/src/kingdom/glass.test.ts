@@ -20,6 +20,13 @@ function room(pane: number): VoxelBlueprint {
     windows: [{ id: 'south', centre: [16, 13, 31], width: 12, height: 10, facing: 'south' }] };
 }
 const glazed = room(MAT.glass), bricked = room(MAT.stone);
+// A 1 m casement of two 0.375 m lights either side of a timber mullion, set so no half-metre cell is all glass.
+const mullioned: VoxelBlueprint = { ...room(MAT.glass), id: 'glass-room-mullioned', boxes: [
+  ...shell.slice(0, 2),
+  { from: [9, 8, 29], to: [17, 18, 32], material: MAT.air },
+  { from: [9, 8, 30], to: [17, 18, 31], material: MAT.glass },
+  { from: [12, 8, 29], to: [14, 18, 31], material: MAT.timber },
+], windows: [{ id: 'south', centre: [13, 13, 31], width: 8, height: 10, facing: 'south' }] };
 
 function mesh(blueprint: VoxelBlueprint): VoxelChunkMesh {
   const [chunk] = prepareAssetChunks(rasterizeBlueprint(blueprint), MATERIALS.materials, MATERIALS.revision);
@@ -83,18 +90,24 @@ describe('glass passes sight and light without losing its frame', () => {
     const street = at([16, 13, 32 + 6]);
     const solve = (blueprint: VoxelBlueprint) => createLightFieldSolver(layout, [{ slot: 0, blueprint, position, yaw: 0 }])
       .solve({ kind: 'solve', revision: 1, origin: [-32, position[1] - 4, -32], emitters: [{ position: street, level: 15 }] }).volume;
-    const open = solve(glazed), closed = solve(bricked);
+    const open = solve(glazed), closed = solve(bricked), casement = solve(mullioned);
     expect(sampleLightVolume(open, street)).toBe(15);
     expect(sampleLightVolume(open, at([16, 12, 20]))).toBeGreaterThanOrEqual(9);
     expect(sampleLightVolume(closed, at([16, 12, 20]))).toBe(0);
     // The wall beside the window keeps its own cells, so nothing leaks around the frame.
     expect(sampleLightVolume(open, at([4, 13, 30.5]))).toBe(0);
+    // Light crosses beside the mullion even though every half-metre cell there also holds frame, mullion or wall.
+    expect(sampleLightVolume(casement, at([13, 12, 20]))).toBeGreaterThanOrEqual(9);
+    expect(sampleLightVolume(casement, at([4, 13, 30.5]))).toBe(0);
+    expect(sampleLightVolume(casement, at([24, 13, 30.5]))).toBe(0);
   });
 
   it('sees through the glass but not the wall beside it', () => {
     expect(blueprintOccludes(glazed, [16, 13, 40], [16, 13, 16])).toBe(false);
     expect(blueprintOccludes(glazed, [5, 13, 40], [5, 13, 16])).toBe(true);
     expect(blueprintOccludes(bricked, [16, 13, 40], [16, 13, 16])).toBe(true);
+    expect(blueprintOccludes(mullioned, [10.5, 13, 40], [10.5, 13, 16])).toBe(false);
+    expect(blueprintOccludes(mullioned, [13, 13, 40], [13, 13, 16])).toBe(true);
   });
 
   it('lets the sun through glass in the caster pass and keeps every opaque wall casting', () => {

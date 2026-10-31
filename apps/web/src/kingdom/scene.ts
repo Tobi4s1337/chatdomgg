@@ -355,7 +355,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     walkDebug:()=>walk?.controller.debug??null,
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
-    inspect:()=>({build:'progressive-light-v1',loaded,renderPhase,renderStartedAt,renderCompletedAt,presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(cue:unknown)=>crowd.receiveChat(cue),
+    inspect:()=>({build:'progressive-light-v1',loaded,renderPhase,renderStartedAt,renderCompletedAt,presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(cue:unknown)=>crowd.receiveChat(cue),clearChat:(cueIds?:readonly string[])=>crowd.clearChat(cueIds),
     setHour(value:number){targetHour=value;sound.cue('wood');},
     setCamera(value:CameraName){walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
     /** Evidence framing only. Null returns control to the current production camera. */

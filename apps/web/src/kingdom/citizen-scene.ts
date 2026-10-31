@@ -47,6 +47,11 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       if (previous && previous.asOf >= cue.asOf) return false;
       speech.set(cue.slot, cue); return true;
     },
+    clearChat(cueIds?: readonly string[]) {
+      if (!cueIds) { speech.clear(); return; }
+      const removed = new Set(cueIds);
+      for (const [slot, cue] of speech) if (removed.has(cue.id)) speech.delete(slot);
+    },
     update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set()) {
       if(frame)for(const stepMs of dueBehaviourSteps(lastStepMs,atMs)){
         lastStepMs=stepMs;

@@ -74,7 +74,9 @@ Typed fixtures live only under benches/tests and are visibly SIMULATED. Runtime 
 
 ## Composition checklist for the integrator
 
-Accept reviewed implementations one branch at a time atop current main; no main-thread direct lane merges.
+Accept reviewed implementations one branch at a time atop current main. Main now merges them directly without
+waiting for an announcement (founder decision 2026-10-31). A short look is enough: merge clean work and send the
+missing visible detail back as the lane’s next task.
 A small scene adapter is fine; no universal plugin engine is requested. Do the following as one connected slice:
 
 1. Choose the accepted plan and produce static place/civic placements before fields/shadows/occlusion compile.
