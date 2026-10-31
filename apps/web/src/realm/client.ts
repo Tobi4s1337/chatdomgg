@@ -1,9 +1,10 @@
-import { Client, type Room } from '@colyseus/sdk';
+import { type Room } from '@colyseus/sdk';
 import { Predict } from '@colyseus/sdk/predict';
 import { KingdomRoomState, PLAYER_FIELDS, RealmJoinSchema, kingdomRoomId, sanitizeRealmWalkInput, type RealmJoin, type RealmWalkInput, type WalkInput } from '@chatdom/shared/realm';
 import { stepPlayer } from '@chatdom/world/movement';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { CollisionWorld, PlayerState } from '@chatdom/shared/realm';
+import { createRealmNetwork } from './transport';
 
 export interface RealmWalkerPose { readonly id: string; readonly name: string; readonly look: string; readonly homeSlot: number; readonly x: number; readonly y: number; readonly z: number; readonly yaw: number; readonly distance: number; readonly speed: number; readonly self: boolean }
 export interface RealmEntry {
@@ -44,7 +45,7 @@ export interface RealmClient {
   dispose(): void;
 }
 export async function connectRealm(endpoint: string, entry: RealmEntry, collision: CollisionWorld | RealmCollision, storage?: Storage): Promise<RealmClient> {
-  const network = new Client(endpoint);
+  const network = createRealmNetwork(endpoint);
   const expectedRoom = kingdomRoomId(entry.kingdomId);
   if (entry.resumeScope.length < 16 || entry.resumeScope.length > 128) throw new Error('The kingdom entry session is unavailable');
   const key = `chatdom:realm:v1:${JSON.stringify([endpoint, entry.kingdomId, entry.resumeScope])}`;

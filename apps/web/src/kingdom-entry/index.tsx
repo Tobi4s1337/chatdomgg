@@ -1,7 +1,7 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import Kingdom from '../kingdom';
-import { RealmEntryError, realmSignInUrl } from '../realm/adapters/entry';
+import { RealmEntryError, realmEntryFailureMessage, realmSignInUrl } from '../realm/adapters/entry';
 import type { KingdomEntryConnection, KingdomEntrySource } from './types';
 import './entry.css';
 
@@ -53,7 +53,7 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
       if (closed || current !== generation) return;
       release();
       const unauthenticated = error instanceof RealmEntryError && error.status === 'unauthenticated';
-      setMessage(error instanceof RealmEntryError ? error.message : undefined);
+      setMessage(realmEntryFailureMessage(error));
       setState(unauthenticated ? 'unauthenticated' : 'refused');
     }
   }

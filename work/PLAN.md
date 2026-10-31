@@ -330,52 +330,49 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Order:** real-chat evening; glassy walk; town with love; hero anvil/dragon; interactions; Twitch spectacle.
-Goal active. Main owns evening/realm/walk, merges promptly, sends one visible improvement back. No new lanes.
-Terra volume/look, Luna recon, Sol core. Scoped checks; milestone end-to-end. Tobias supplies real chat/GPU.
+**Priority:** repair the signed-in live walk before resuming the landing pass. Goal remains active: real evening,
+glassy walk, loved town, anvil/dragon, interactions, Twitch spectacle. No new lanes; scoped checks and one look.
 
-**Sign-in fixed and live:**20731b3 permits only the root `walk=1`/canonical numeric kingdom query, re-emits
-`/?walk=1&kingdom=129634568`, rejects extra/duplicate/encoded forms, appends outcomes with `&signin=…`.
-Parser/actual-callback tests, existing OIDC test, typecheck/lint/API build passed. Managed API restarted on it;
-root observed302 for the walk entry,400 for extras; Tobias confirmed the Twitch redirect. Actual sign-in/walk
-acceptance is still pending; his interim workaround was sign-in without returnTo then reopen the walk link.
+**Live entry cause/fix:** actual API-minted temporary session authenticated through5190; ticket issued200. The
+next POST `/live-realm-data/matchmake/joinOrCreate/kingdom` returned502 and removed the5197 listener twice.
+Managed service log: `KingdomRoom.onBeforePatch` read `publishWalkers` on the uninitialized authority handle.
+Colyseus starts patches during async `onCreate`; ad344fc now holds publication until initialization finishes,
+and disables it on disposal. Real uWS/SDK delayed-open regression passes. Managed realm adopted ad344fc.
 
-**Adopted world:**kingdom129634568,settlement:2:43cffdb6,240 homes,v1 terrain; last served collision6,
-scene134778eb60ac5414858df3c7cee5ed2abc4d65ba4331e45a259c5cc75294d4b3. Hearth/two Forge braziers, door
-lamps, royal standard/gate fires and two-seat market log are installed. Preserve plots; LD03/04 v2 woods/walks
-remain future data. Monarch65534 lights the keep, gets no street deed/unearned coal. Royal pane surround:PH08.
+**Browser/network proof:** Chromium against the actual live services, minted session for the existing monarch,
+no test court: entry metadata, session, founded manifest/scene, ticket, matchmaking all200 JSON. Reload made
+`POST /live-realm-data/matchmake/reconnect/k:129634568`200 JSON; both sockets stayed at
+`/live-realm-data/<process>/k:129634568`, received room frames. No missing-prefix or parser failure reproduced
+after the realm fix. Firefox157 downloaded but cannot launch in this sandbox (namespace/profile failure).
+No existing user session/person was changed. Temporary diagnostic sessions must be revoked after the check.
 
-**Film completed and watched:**`shots/kingdom/live-evening/rehearsal-02-SIMULATED.mp4`,90 s,1920×1080,
-4 actual frames/logical second,360 frames,silent. Root reviewed every frame via `contact-02/sheet-01.jpg`…
-`sheet-12.jpg` plus native62/73/84/89 s stills beneath that same directory. Hash-verified adopted collision3
-geometry,current prospective hearth,AUTHORED wish; visibly SIMULATED,not actual chat/approval/room receipt.
-Original clip intact. Reproduce with `node packages/testing/live-evening.mjs`.
+**Entry boundary:** the SDK now pins HTTP/reconnect/WS to the configured proxy origin and prefix, including a
+server-advertised public socket address. Session/metadata/manifest/ticket/matchmaking JSON reads reject HTML,
+plain text or malformed JSON with the actual step/path/status/type; the gate displays unexpected error reasons
+and SDK codes too. A real Chromium page given an intentionally injected200 HTML matchmaking reply displayed
+that exact route and expected-JSON reason, without a parser exception. This injected case is not the founder’s
+original failure. Return-path whitelist stays strict. Sign-in retries remove callback outcome metadata.
 
-**Judgment:**homecoming charming; soft smoke rises from actual roof flues. Pale door-level shapes were repeated
-hairstyles; varied supplied looks help. The rehearsal now includes70 nearest actual doors: three citizens enter
-the Forge frame by62 s and survive commit remount. Hearth/braziers/runes/pour work; landing follows the arc,
-frames the whole house and holds six seconds. Still not a gasp: roof dragon small/dark, rear wing competes with
-head, nose breath unclear. Anvil next fix: lower that wing below the head’s horn line. Actual Codex words/draft
-run passes words gate, but independent image gate still refuses (Luna low unfaithfulness,Terra refuse). No waiver.
+**OAuth:** live start returns302 to Twitch `openid`, state+nonce bound, redirect_uri exactly
+`http://localhost:5190/api/realm/auth/callback`; extra return params400. Callback route303s an invalid attempt
+to `/?signin=expired`. Tobias is registering the callback; actual Twitch consent remains his browser action.
 
-**Merged from isolated candidate after filming:**3d3ffc7 includes c45836f GD03,e6d38ce PW03/04,f8df1e6 TM03;
-places-high added only a direction note. Actual v1 lake now uses full desktop/reduced phone reflections and
-real pane/beacon/brazier sources. Looked at candidate `shots/kingdom/live-evening/candidate-water-dusk-SIMULATED@1440x900.png`:
-reflected sky/trees,no bright rim,bank still sparse/dark. PW05:one dense overlapping cove reed bed,open walk-up
-edge. GD03 solid gardens need main’s durable founded-placement/collision binding; passive cover stays mounted,
-no browser-only solids. Root also looked at lane garden-dusk and Skyfire stills; TM03 next:soft overlapping
-curtain folds instead of upright aurora tiles. Real cheer/hype-to-room binding remains main work; support notices
-already use the durable outbox. Sky/roof/keep anchors use mounted geometry; unavailable lair/track stay absent.
+**Interactive evidence:** the single locked SwiftShader check writes
+`shots/kingdom/live-entry/live-walk-report.json` and `live-walk@1440x900.png` beside it. Inspect the latest
+report/image for actual world drawing, keyboard movement and errors; network-only success does not prove those.
+Preview5190/API5196/realm5197/Forge5195/Herald5194 are host-managed; do not change host config or other captures.
 
-**Glassy path:**real-room correction trace keeps shoulder camera on SDK-rendered feet between fixed steps;
-129 walk/movement tests pass,no gratuitous retuning. GPU/phone feel remains unaccepted. New spectacles had held
-the gate for318 future-effect meshes; essential citizens/walkers now open first, optional parts prepare on four
-worker lanes with failure/disposal metrics. 87146c6 bounds/reaps Twitch capture workers; TM03 preserves it.
-All captures must acquire/run/close/release in ONE process,never a detached standalone lock holder.
+**Adopted world:**129634568,settlement:2:43cffdb6,240 homes,v1 terrain,collision6,
+scene134778eb60ac5414858df3c7cee5ed2abc4d65ba4331e45a259c5cc75294d4b3. Keep plots; v2 woods/walks future data.
+Hearth/braziers/door lamps/royal standard/gate fires/market log installed. Monarch65534 owns the keep window.
 
-**Checks/runtime:**frozen install,typecheck,touched lint,relevant lane/water/walk/moment tests,web/Herald/API
-builds pass. Busy-box ground test now aggregates every sampled violation and passes under1 s. No full matrix.
-Preview5190,API5196,realm5197,Forge5195,Herald5194; browser http://localhost:5190. Host restarts affected
-services/packages,all on.env changes. Own browsers/servers closed; movie exited0,candidate lock holder130
-(queued work may own the shared lock now). No host/env edits. Next:real sign-in/walk/chat,approved real wish;
-readable dragon and real spectacle input. Genuine multiplayer/chat/GPU recording remain unproven.
+**Landing parked:** root’s code is safely in stash a80be61 (`WIP landing portrait paused for live entry repair`),
+not main. Includes warm material/roof portrait/muzzle smoke/eight spectator places/short recorder. First
+landing take terminated143 at88s; its intact still was looked at, MP4 incomplete. Revised take cancelled130
+while queued, no browser. Preserve the completed90s `shots/kingdom/live-evening/rehearsal-02-SIMULATED.mp4`;
+arrival/gathering accepted. Do not claim an approved real wish: independent image gate still refuses the sculpt.
+
+**Other seams:** GD03 solid gardens need durable collision mounting; passive dressing stays installed. TM03
+sky/roof/keep anchors mounted, real cheer/hype source binding pending; no invented lair/track. PW05 dense cove,
+AH04 lower rear wing. Accepted walking smoothing remains; GPU/phone feel still needs Tobias. Changed tests,
+typecheck, lint and realm/web builds pass; no full matrix or doc-only commits.
