@@ -22,6 +22,40 @@ export class FoundedSceneError extends Error {
 }
 
 const finite = z.number().refine(n => Number.isFinite(n) && Math.abs(n) <= FOUNDED_SCENE_LIMITS.extent, 'outside the founded extent');
+const point = z.tuple([finite, finite, finite]);
+const xz = z.tuple([finite, finite]);
+const turn = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]);
+const count = z.number().int().min(0).max(100_000);
+const positive = finite.refine(n => n > 0);
+const bounds = z.strictObject({ minX: finite, maxX: finite, minZ: finite, maxZ: finite }).refine(b => b.minX < b.maxX && b.minZ < b.maxZ);
+const square = z.strictObject({ id: TokenSchema, boundary: z.array(xz).min(3).max(256), elevation: finite, nodeId: TokenSchema });
+const plotFields = { id: TokenSchema, quarterYear: count, ordinal: count, street: z.string().max(256), streetId: TokenSchema,
+  courtId: TokenSchema, approachId: TokenSchema, position: point, rotation: turn,
+  lot: z.strictObject({ minX: finite, maxX: finite, minZ: finite, maxZ: finite, height: z.literal(20), depth: z.literal(16), frontage: z.literal(8) }) };
+const homeSchema = z.strictObject({ ...plotFields, slot: count, tier: z.enum(['hut', 'cottage', 'house', 'manor', 'hall']),
+  allowedDepth: positive, style: z.enum(['hearth', 'tide', 'grove']), variant: z.number().int().min(0).max(2) });
+const lakeSchema = z.strictObject({ x: finite, z: finite, radiusX: positive, radiusZ: positive, level: finite });
+/** Complete public plan shape: nested records cannot smuggle private fields into otherwise allowed plan keys. */
+const PlanSchema = z.strictObject({
+  version: z.literal(2), revision: TokenSchema,
+  config: z.strictObject({ seed: z.string().min(1).max(256), tier: z.enum(['hamlet', 'town']), firstYear: count, year: count }),
+  landform: z.strictObject({ version: z.literal(1), seed: z.number().int().min(0).max(0xffffffff),
+    ridge: z.strictObject({ origin: xz, bearing: finite, length: positive, width: positive, height: finite }),
+    castleRise: z.strictObject({ centre: xz, radius: positive, height: finite }), lake: lakeSchema }),
+  homes: z.array(homeSchema).max(FOUNDED_SCENE_LIMITS.homes),
+  reservations: z.array(z.strictObject(plotFields)).max(16384),
+  quarters: z.array(z.strictObject({ year: count, name: z.string().max(256), rootNodeId: TokenSchema,
+    courtIds: z.array(TokenSchema).max(4096), growthNodeIds: z.array(TokenSchema).max(4096) })).max(64),
+  nodes: z.array(z.strictObject({ id: TokenSchema, position: point, kind: z.enum(['junction', 'market', 'court', 'frontage', 'castle-gate', 'frontier']) })).max(32768),
+  streets: z.array(z.strictObject({ id: TokenSchema, from: TokenSchema, to: TokenSchema, kind: z.enum(['main', 'lane', 'approach', 'trail']),
+    name: z.string().max(256), points: z.array(point).min(2).max(4096), width: positive, verge: finite.refine(n => n >= 0), quarterYear: count.optional() })).max(32768),
+  activeStreetIds: z.array(TokenSchema).max(32768), market: square, courts: z.array(square).max(4096),
+  castle: z.strictObject({ centre: point, bounds, modules: z.array(z.strictObject({ id: TokenSchema,
+    kind: z.enum(['keep', 'gatehouse', 'curtain', 'tower']), position: point, rotation: turn, size: z.tuple([positive, positive, positive]) })).max(1024),
+    court: square, gateNodeId: TokenSchema, beaconModuleId: TokenSchema }),
+  bounds, lake: lakeSchema,
+});
+
 const PlacementSchema = z.strictObject({
   id: TokenSchema,
   assetHash: Sha256Schema,
@@ -53,6 +87,7 @@ export async function validateFoundedScene(input: unknown): Promise<RealmFounded
   if (plan['version'] !== 2) fail('the plan version is unsupported');
   if (plan['revision'] !== receipt.layoutRevision) fail('the plan revision differs from the layout revision');
   if (!isPlain(plan['landform']) || plan['landform']['version'] !== 1) fail('the landform has no installed sampler');
+  parse(PlanSchema, plan, 'plan geometry', fail);
   const homes = plan['homes'];
   if (!Array.isArray(homes) || homes.length > FOUNDED_SCENE_LIMITS.homes) return fail('the plan homes are missing or unbounded');
   const plots = new Map<string, unknown>(), slots = new Set<number>();

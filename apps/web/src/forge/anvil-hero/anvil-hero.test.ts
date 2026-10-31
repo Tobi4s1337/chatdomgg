@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { createAnvilHero, MARK_SCALE } from './index';
-import { ANVIL_FACE_HEIGHT, BLOCK, CHEEK_Z, FACE_ROW, GRID_MIN, GRID_SIZE, H, HARDY, MARK_WINDOW, PLATE, sculptAnvilStage, Y_OFFSET } from './sculpt';
+import { ANVIL_FACE_HEIGHT, BLOCK, CHEEK_Z, FACE_ROW, FEET, FOOT_ARCH_HALF_Z, FOOT_ARCH_X, GRID_MIN, GRID_SIZE, H, HARDY, MARK_WINDOW, PLATE, sculptAnvilStage, Y_OFFSET } from './sculpt';
 
 const sculpt = sculptAnvilStage();
 const [nx, ny, nz] = GRID_SIZE;
@@ -32,6 +32,14 @@ describe('the anvil stage', () => {
     for (let row = PLATE.rows[0]; row <= FACE_ROW; row++) {
       for (let z = HARDY.z[0]; z < HARDY.z[1]; z++) { expect(material(HARDY.x[0] - 1, row, z)).not.toBe(0); expect(material(HARDY.x[1], row, z)).not.toBe(0); }
       for (let x = HARDY.x[0]; x < HARDY.x[1]; x++) { expect(material(x, row, HARDY.z[0] - 1)).not.toBe(0); expect(material(x, row, HARDY.z[1])).not.toBe(0); }
+    }
+  });
+
+  it('stands on four feet, with the arches open right through from the side and the end', () => {
+    for (let row = FEET.rows[0]; row < FEET.rows[0] + 2; row++) {
+      for (let x = FOOT_ARCH_X[0]; x < FOOT_ARCH_X[1]; x++) for (let z = FEET.z[0] - 1; z <= FEET.z[1]; z++) expect(material(x, row, z)).toBe(0);
+      for (let z = -FOOT_ARCH_HALF_Z; z < FOOT_ARCH_HALF_Z; z++) for (let x = FEET.x[0] - 1; x <= FEET.x[1]; x++) expect(material(x, row, z)).toBe(0);
+      for (const x of [FEET.x[0], FEET.x[1] - 1]) for (const z of [FEET.z[0], FEET.z[1] - 1]) expect(material(x, row, z)).not.toBe(0);
     }
   });
 

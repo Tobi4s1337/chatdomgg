@@ -6,6 +6,7 @@ import { homeOrigin, transformCardinalPoint, type CardinalTurn, type RealmFounde
 import { assetHashOf, canonicalSceneJson, sha256Hex, utf8 } from './codec';
 import { createNativeTown, type NativeTown } from './native';
 import { FoundedSceneError, encodeFoundedScene, validateFoundedScene } from './validate';
+import { FOUNDED_PHYSICS_VERSION } from './collision';
 
 export interface FoundedSceneInput {
   readonly kingdomId: KingdomId;
@@ -126,7 +127,7 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
   };
   const scene = await validateFoundedScene(JSON.parse(canonicalSceneJson(candidate)));
   const { bytes, manifest } = await encodeFoundedScene(scene);
-  const geometry = { version: scene.version, kingdomId: scene.kingdomId, origin: scene.origin, layoutRevision: scene.layoutRevision,
+  const geometry = { compiler: FOUNDED_PHYSICS_VERSION, version: scene.version, kingdomId: scene.kingdomId, origin: scene.origin, layoutRevision: scene.layoutRevision,
     plan: scene.plan, materials: scene.materials, assets: scene.assets, placements: scene.placements };
   const geometryDigest = await sha256Hex(utf8(canonicalSceneJson(geometry)));
   return { scene, bytes, manifest, geometryDigest, homes,

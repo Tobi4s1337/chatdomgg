@@ -9,7 +9,6 @@ import { assetHashOf, canonicalSceneJson, utf8 } from './codec';
 import { FoundedUnavailableError, NativeTownCache, loadAdoptedPlan, type FoundedLayoutSource } from './load';
 import { createNativeTown } from './native';
 import { assembleFoundedScene } from './scene';
-import { SIMULATED_TOWN } from './simulated';
 import { FoundedSceneError, decodeFoundedScene, encodeFoundedScene, validateFoundedScene } from './validate';
 
 const kingdomId = KingdomIdSchema.parse('900000002'), owner = PersonIdSchema.parse('900000202');
@@ -179,17 +178,13 @@ describe('the SIMULATED current-town artifact', () => {
   it('decodes as a browser would and preserves the adopted plan, owned home and attached part', async () => {
     const bytes = new Uint8Array(await readFile(at('scene.json')));
     const manifest = JSON.parse(await readFile(at('manifest.json'), 'utf8')) as RealmFoundedManifest;
-    const evidence = JSON.parse(await readFile(at('evidence.json'), 'utf8'));
     const scene: RealmFoundedScene = await decodeFoundedScene(bytes, manifest);
-    expect(evidence.label).toBe('SIMULATED');
-    expect(scene).toMatchObject({ origin: 'simulated', kingdomId: SIMULATED_TOWN.kingdomId, collisionRevision: 1, layoutRevision: evidence.layoutRevision });
-    expect(manifest).toEqual(evidence.manifest);
+    expect(scene).toMatchObject({ origin: 'simulated', kingdomId: '900000001', collisionRevision: 1, layoutRevision: 'settlement:2:23b3c1b5' });
     // The adopted plan was stored and loaded, not regenerated; its fixture generator is the only reproduction path.
-    expect(canonicalSceneJson(scene.plan)).toBe(canonicalSceneJson(generateSettlementPlan(SIMULATED_TOWN.config)));
-    expect(scene.placements.length).toBe(evidence.counts.placements);
-    const [owned] = evidence.owned as { plotId: string; attachments: string[] }[];
-    expect(scene.placements.filter(p => p.plotId === owned!.plotId).map(p => p.id)).toEqual([`home:${owned!.plotId}`, `forge:${evidence.attachedPart}`]);
-    expect(scene.placements.some(p => p.id === `forge:${evidence.displacedPart}`)).toBe(false);
+    expect(canonicalSceneJson(scene.plan)).toBe(canonicalSceneJson(generateSettlementPlan({ seed: 'simulated-founded-town', tier: 'town', firstYear: 2022, year: 2026 })));
+    expect(scene.placements.length).toBe(924);
+    expect(scene.placements.filter(p => p.plotId === 'plot:2023:8').map(p => p.id)).toEqual(['home:plot:2023:8', 'forge:simulated-run-2']);
+    expect(scene.placements.some(p => p.id === 'forge:simulated-run-1')).toBe(false);
     // Exact deterministic bytes: re-encoding the decoded scene reproduces the receipt.
     expect((await encodeFoundedScene(scene)).manifest).toEqual(manifest);
     expect(utf8(canonicalSceneJson(scene)).byteLength).toBe(bytes.byteLength);

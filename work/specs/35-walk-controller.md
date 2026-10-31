@@ -308,6 +308,19 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
   second try slid the eye along the entry boom and dropped the citizen off the bottom edge. Entry framing at 6.5 m
   is unchanged. Self-fade now measures eye-to-head distance. The controller takes `collision` (a world or a
   function read every frame; null keeps the last world). Obstructions are never faded.
+- **2026-10-30 — WC07 handing the camera back, the pull-in fade and the thumb map.** A boom a solid pulled in
+  fades the local citizen from further out: `selfFade` blends from the wheel's eye-to-head band (.5–1.25 m) to
+  1.5–2.4 m over the first .25–1.5 m the solid took away, so a camera backed against a wall looks past the
+  citizen at the street, while the same short boom chosen with the wheel keeps the over-the-shoulder body.
+  Opacity follows a pull-in at once and returns at 10/s, because a boom springing out of a corner travels most of
+  a metre in one frame; below 5 % the citizen is not drawn, since the renderer's screen-door fade of a body this
+  close reads as specks on the lens. Camera position, shoulder and near-plane clearance are unchanged. Build and
+  the Forge compose with `setViewOffset`; the shoulder rig clears any view offset on every walking frame, because
+  the near-plane footprint assumes the plain frustum and a forgotten offset would let the drawn frustum into a
+  wall. `thumbSlots` is the phone's one thumb map, shared with interactions: the action slot (60 px) sits
+  directly above Jump, both wholly outside the stick region; the HUD positions Jump from the same function.
+  Escape is never consumed by walking. The README's takeover recipe names build's `onBuild`/`onHousewarming`,
+  the Forge's `status.open` and the director calls exactly.
 - **2026-10-30 — WC03 feel constants (one shared law, no client tuning).** Velocity moves toward the input's
   target along the straight line between them, so neither diagonals nor turns gain speed and the target is met
   exactly: `GROUND_ACCEL = 40` m/s² (walk 4 m/s in 3 ticks, sprint 7 m/s in .175 s), `GROUND_BRAKE = 70` m/s²

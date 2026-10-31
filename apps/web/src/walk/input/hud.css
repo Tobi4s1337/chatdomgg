@@ -40,5 +40,4 @@
 .walk-jump span{transition:opacity .25s}
 .walk-jump.is-pressed{transform:translateY(3px);box-shadow:0 0 0 4px #f0b55240,0 1px 0 #19140f,0 4px 10px #0b0a1650,inset 0 1px 0 #e9c99044}
 .walk-jump:focus-visible{outline:2px solid #edc98e;outline-offset:4px}
-@media (max-height:500px){.walk-jump{top:54%}}
 @media (prefers-reduced-motion:reduce){.walk-look,.walk-stick-ring,.walk-jump{transition:none}}
