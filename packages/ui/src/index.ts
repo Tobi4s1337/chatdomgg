@@ -1,2 +1,2 @@
-// Package boundary for lane/first-look-polish. No unfinished components are exposed.
-export {};
+export { provenanceFromSource, provenanceLines, PROVENANCE_WORDS, type Provenance, type ProvenanceFacts, type ProvenanceLine } from './provenance';
+export { ProvenanceSeal } from './ProvenanceSeal';

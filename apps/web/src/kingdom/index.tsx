@@ -10,6 +10,8 @@ import './kingdom.css';
 import { ForgePanel } from '../forge';
 import type { ForgeStatus } from '../forge/scene';
 import { parseKingdomPresentationParams } from '../stream/params';
+import { ProvenanceSeal, provenanceFromSource } from '@chatdom/ui';
+import '@chatdom/ui/kit.css';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
 export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;walk?:KingdomWalkBinding}={}) {
@@ -28,6 +30,8 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
   const [buildSession,setBuildSession]=createSignal<KingdomBuildSession|null>(null),[housewarming,setHousewarming]=createSignal<string|null>(null);
   const construction=new AbortController();
   const [forgeStatus,setForgeStatus]=createSignal<ForgeStatus|null>(null);
+  /** Local practice on this screen (Forge, a simulated home build, its housewarming) is its own fact beside the feed. */
+  const practice=()=>!!forgeStatus()?.open||buildSession()?.controller.snapshot().mode==='SIMULATED'||!!housewarming();
   async function attachWalk(binding:KingdomWalkBinding){
     if(!engine||unmounted)return;
     await engine.attachWalk({...binding,hud:host,onSceneNeeded:()=>{
@@ -69,7 +73,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       <svg class="realm-mark" viewBox="0 0 48 60" aria-hidden="true"><path d="M8 20h8v-6h6v6h4v-6h6v6h8v25L24 55 8 45Z"/><path d="M18 39V28h12v11m-6-26c-7-5-4-10 0-13 0 6 7 7 0 13Z"/><path d="M5 10h4m30 0h4M24 58v2"/></svg>
       <div><p class="kingdom-eyebrow">A home for your chat</p><h1>{realmName}</h1><p class="kingdom-subtitle">{tier==='hamlet'?'A little kingdom. Every light matters.':'Old streets. Familiar names. A light for everyone.'}</p></div>
     </header>
-    <div class={`source-ribbon ${source()==='SIMULATED'?'simulation':''}`}><span class="source-pip" />{source()}</div>
+    <ProvenanceSeal class="source-ribbon kingdom-seal" state={provenanceFromSource(source())} simulated={practice()} />
     <div class="window-names" aria-live="polite"><For each={names()}>{label=><div class="window-name" style={{left:`${label.x}px`,top:`${label.y}px`}}><span class="name-diamond" />{label.name}<small>home again</small></div>}</For></div>
     <div class="walker-names" aria-label="People in the street"><Index each={walkers()}>{label=><span class="walker-name" data-walker={label().id} style={{left:`${label().x}px`,top:`${label().y}px`}}>{label().name}<Show when={label().self}><small>you</small></Show></span>}</Index></div>
     <div class="citizen-speech"><For each={speech()}>{label=><div class="citizen-bubble" style={{left:`${label.x}px`,top:`${label.y}px`}}><Show when={label.name}><small>{label.name}</small></Show><p><For each={label.parts}>{part=>part.kind==='text'?part.text:<img src={`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(part.id)}/default/dark/1.0`} alt={part.alt} />}</For></p></div>}</For></div>
@@ -81,14 +85,14 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     </div></Show>
     <Show when={!stream&&forgeStatus()?.open}><ForgePanel status={forgeStatus()!} submit={words=>engine!.forge.submit(words)} close={()=>engine?.forge.close()} refit={()=>{void engine?.forge.refit();}} family={value=>{location.href=`/?tier=${tier}&hour=${hour()}&forge=1&realm=${value}`;}} /></Show>
     <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} ownerName="Juniper" imports={session().imports}/>}</Show>
-    <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>SIMULATED · welcome to the street</small></div>}</Show>
+    <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>Welcome to the street</small></div>}</Show>
     <Show when={ready()&&walking()&&!error()&&!stream}><button class="walk-overlook" onClick={()=>chooseView('hero')}>Above the streets</button></Show>
     <Show when={ready()&&!walking()&&!error()&&!stream&&!buildSession()&&!forgeStatus()?.open}><nav class="kingdom-controls" aria-label="Kingdom view">
       <div class="time-controls" aria-label="Time of day"><button classList={{selected:hour()<16}} onClick={()=>chooseHour(12)}>Noon</button><button classList={{selected:hour()>=16&&hour()<22}} onClick={()=>chooseHour(19.5)}>Dusk</button><button classList={{selected:hour()>=22}} onClick={()=>chooseHour(23)}>Night</button></div>
       <span class="control-divider" />
       <Show when={source()==='SIMULATED'&&!props.presenceFeed&&query.get('source')!=='herald'}><button class="arrival-button" onClick={()=>{setView('hero');tap(()=>engine!.play());setWalking(false);}}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 4 8 6-8 6Zm-4 0v12"/></svg>Let them in</button></Show>
       <button class="window-button" onClick={()=>chooseView(view()==='window'?'hero':'window')}>{view()==='window'?'The whole kingdom':'At the window'}</button>
-      <button class="window-button" onClick={()=>chooseView(view()==='citizen'?'hero':'citizen')}>{view()==='citizen'?'Above the streets':'Walk the street'}</button>
+      <button class="window-button" onClick={()=>chooseView(view()==='citizen'?'hero':'citizen')}>{view()==='citizen'?'Above the streets':'Follow a citizen'}</button>
       <Show when={source()==='SIMULATED'&&!props.founded}><button onClick={()=>tap(()=>{void engine!.build.enter();})}>Build my home</button><button onClick={()=>tap(()=>engine!.forge.open())}>At the Forge</button></Show>
       <Show when={engine?.walkDebug()}><button onClick={()=>{engine?.selectWalk(true);setWalking(true);}}>Walk with everyone</button></Show>
       <span class="control-divider" />
