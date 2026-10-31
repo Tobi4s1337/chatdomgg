@@ -38,7 +38,17 @@ const prepared = loader.current(kingdomId);
 const manifest = prepared?.manifestFor(realPublicCheckpoint); // null until public versions agree
 ```
 
-`loader.load(kingdomId,state)` also returns the prepared world for composition/adoption. Bytes can be prospective;
+`loader.load(kingdomId,state)` initializes the current world when opening the held writer. `loader.options`
+also installs `DurableKingdomOptions.prepareWorld`; runtime home installation, approved building and attached
+Forge changes are prepared by that same writer from its committed state. Preparation stores immutable bytes
+without changing `loader.current`. After the actual delivered public home/attachment prefix agrees, the writer
+reads occupied poses afresh, prepares safe positions, and synchronously calls room `adoptWorld`, replaces its
+world/spawn options and publishes the matching provider receipt. The existing room revision message causes the
+browser's `onSceneNeeded` refetch. Failures retain the previous world; manifest reads stay unavailable until the
+adopted world and public checkpoint agree. Presence-only changes reuse the prepared geometry. Collision revision
+numbers identify immutable geometry, so an approved return to earlier geometry can reuse an older distinct number.
+
+Bytes can be prospective;
 `manifestFor` requires matching kingdom/layout/collision revisions and every current public owned-home revision,
 content digest and attached part IDs. The composition owner must also enforce actual adoption and access policy,
 retain/release the existing registry and prepare its public checkpoint before exposing a receipt.

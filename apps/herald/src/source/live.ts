@@ -12,6 +12,7 @@ import { presentKingdom } from './kingdom';
 import type { ForgeCommandSink } from '../forge/commands';
 import { startPresenceServer, type PresenceServer, type SourceHost, type UnstartedHealth } from './server';
 import { PresenceSource } from './source';
+import type { RealmDelivery } from '../realm-delivery/delivery';
 
 export interface LiveSourceHandle {
   readonly server: PresenceServer;
@@ -37,6 +38,7 @@ export async function startLiveSource(options: {
   readonly port?: number;
   /** Main's trusted Forge application. Omitted until its own authority and judging path is connected. */
   readonly forge?: ForgeCommandSink;
+  readonly realm?: RealmDelivery;
   /**
    * Where Twitch is. Production uses the real endpoints; the acceptance suite runs this same composition
    * against SIMULATED local fakes, so nothing in between is a test-only path.
@@ -103,9 +105,11 @@ export async function startLiveSource(options: {
       dataDir: config.dataDir, kingdomId: kingdomId.data,
       repositoryRoot: options.repositoryRoot === undefined ? repositoryRoot() : options.repositoryRoot,
     }),
+    ...(options.realm ? { realm: options.realm } : {}),
   });
   const live = source;
-  host = live;
+  const health = () => ({ ...live.health(), ...(options.realm ? { realm: options.realm.health() } : {}) });
+  host = { get current() { return live.current; }, subscribe: listener => live.subscribe(listener), health };
   try {
     await live.open();
   } catch {
@@ -117,7 +121,7 @@ export async function startLiveSource(options: {
   // Stream state needs only the app token, so it is observed even while chat delivery is not authorized.
   const observed = new Reconciler({ kingdomId: kingdomId.data, helix, authority, source: live, log: line => print(`  ${line}`) });
   reconciler = observed;
-  host = { get current() { return live.current; }, subscribe: listener => live.subscribe(listener), health: () => ({ ...live.health(), observed: observed.health() }) };
+  host = { get current() { return live.current; }, subscribe: listener => live.subscribe(listener), health: () => ({ ...health(), observed: observed.health() }) };
   const startup = observed.start();
 
   const readerId = report.accounts.reader.id;
@@ -132,6 +136,7 @@ export async function startLiveSource(options: {
       conduitId: config.conduitId, clientId: config.credentials.clientId, broadcasterId: kingdomId.data, readerId,
       admin: new EventSubAdmin(helix.session), authority, source: live, log: line => print(`  ${line}`),
       ...(options.forge ? { forge: {run:options.forge, broadcast:observed.tracker} } : {}),
+      ...(options.realm ? { realm: options.realm } : {}),
       ...(options.twitch?.socketFactory ? { socketFactory: options.twitch.socketFactory } : {}),
       ...(options.twitch?.eventsubUrl ? { url: options.twitch.eventsubUrl } : {}),
       ...(options.twitch?.random ? { random: options.twitch.random } : {}),
@@ -141,7 +146,7 @@ export async function startLiveSource(options: {
     const delivery = runtime;
     host = {
       get current() { return live.current; }, subscribe: listener => live.subscribe(listener),
-      health: () => ({ ...live.health(), observed: observed.health(), delivery: delivery.health() }),
+      health: () => ({ ...health(), observed: observed.health(), delivery: delivery.health() }),
     };
     const conduit = await delivery.start();
     if (conduit !== 'ready') print(`  not publishing: the configured conduit is ${conduit.replace('_', ' ')} (run provision:source)`);
