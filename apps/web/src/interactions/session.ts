@@ -11,11 +11,14 @@ import type { InteractionFeedback, InteractionInbound, InteractionRealm, Interac
 export const REFUSAL_MS = 3200;
 /** A request the room never answers stops blocking E after this long and says so honestly. */
 export const PENDING_LIMIT_MS = 8000;
+/** Said when the room has not answered within `PENDING_LIMIT_MS`. */
+export const UNANSWERED = 'The kingdom has not answered yet. Nothing is assumed.';
 
 export type InteractionPhase =
   | { readonly kind: 'idle' }
   | { readonly kind: 'pending'; readonly requestId: string; readonly targetId: string; readonly action: RealmInteractionAction; readonly since: number }
-  | { readonly kind: 'refused'; readonly requestId: string; readonly targetId: string; readonly action: RealmInteractionAction; readonly message: string; readonly at: number };
+  /** The room's no (`refused`), or its "not now" (`unavailable`: a missing host, a closed room, no answer). */
+  | { readonly kind: 'refused'; readonly outcome: 'refused' | 'unavailable'; readonly requestId: string; readonly targetId: string; readonly action: RealmInteractionAction; readonly message: string; readonly at: number };
 
 export interface InteractionAccepted {
   readonly requestId: string; readonly targetId: string; readonly action: RealmInteractionAction; readonly state: RealmInteractionState;
@@ -78,7 +81,7 @@ export function createInteractionSession(options: {
       if (receipt.state.revision >= state.self.revision) set({ self: receipt.state });
       if (mine) {
         set({ phase: { kind: 'idle' } });
-        options.feedback?.cue('accepted');
+        options.feedback?.cue('accepted', phase.action);
         const outcome = { requestId: receipt.id, targetId: phase.targetId, action: phase.action, state: receipt.state };
         for (const listener of accepted) listener(outcome);
       }
@@ -86,8 +89,8 @@ export function createInteractionSession(options: {
     }
     if (receipt.status === 'refused' || receipt.status === 'unavailable') {
       if (!mine) return;
-      set({ phase: { kind: 'refused', requestId: receipt.id, targetId: phase.targetId, action: phase.action, message: receipt.message, at: options.clock() } });
-      options.feedback?.cue('refused');
+      set({ phase: { kind: 'refused', outcome: receipt.status, requestId: receipt.id, targetId: phase.targetId, action: phase.action, message: receipt.message, at: options.clock() } });
+      options.feedback?.cue(receipt.status, phase.action);
     }
   }
 
@@ -96,7 +99,7 @@ export function createInteractionSession(options: {
       if (!state.connected || state.phase.kind === 'pending') return false;
       const requestId = nextId();
       set({ phase: { kind: 'pending', requestId, targetId, action, since: options.clock() } });
-      options.feedback?.cue('pending');
+      options.feedback?.cue('pending', action);
       options.realm.send({ version: 1, type: 'interact', id: requestId, targetId, action });
       return true;
     },
@@ -110,7 +113,8 @@ export function createInteractionSession(options: {
       const phase = state.phase;
       if (phase.kind === 'refused' && now - phase.at >= REFUSAL_MS) set({ phase: { kind: 'idle' } });
       if (phase.kind === 'pending' && now - phase.since >= PENDING_LIMIT_MS) {
-        set({ phase: { kind: 'refused', requestId: phase.requestId, targetId: phase.targetId, action: phase.action, message: 'The kingdom has not answered yet. Nothing is assumed.', at: now } });
+        set({ phase: { kind: 'refused', outcome: 'unavailable', requestId: phase.requestId, targetId: phase.targetId, action: phase.action, message: UNANSWERED, at: now } });
+        options.feedback?.cue('unavailable', phase.action);
       }
     },
     abandon() {
