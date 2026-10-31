@@ -335,29 +335,27 @@ street-led30–35° composition, voxel terraces/three ridges and sky-backed roof
 accepted beacon shape, house models and gold frame/crest. One piece per turn, scoped checks,1920×1080 viewed;
 no matrices/audit-only commits. No new reviewed candidate in main..lane/integrator at turn start.
 
-**This turn — molten pour / square warmth:** blueprint body/ink fade out early as filled cells become the solid
-orange-white HDR shell, with darker iron/seams; heat gives way to the actual clone during cooling. Shared cell
-ownership, judges/commit boundaries, flight/landing and reduced motion remain. Realm adapter now emits pour/
-seal/strike/cooling light into the same occluded field used by paving and citizens; opaque pending stages emit
-no fake casting light. Capture waits for those field workers and redraws before saving. Hearth has a larger
-bright flame/sparks/full source; forge braziers retain normal scale and stay lit as working fires independently
-of stream state. Castle brazier treatment untouched. Scoped tests14/typecheck/lint and isolated web build pass.
+**This turn — audience crescent:** compact shared walking paths replace the spread U and repeated market
+backtracking. Only present, home-arrived citizens are invited; sockets/walkers stay excluded. Arrivals face the
+anvil; three rear poses ease onto planted tiptoes. One approaches and steps onto the actually installed market
+cask (same raised position for body, subject and shadow). Same-authority rebuild retains routes/poses; a changed
+support cannot reuse them. Camera fits the audience with the smithy and full crucible. No new reviewed
+integrator commits at turn start. Typecheck/scoped lint,4 focused tests and isolated web build pass.
 
-**Look / NOT CLOSED:** `shots/magic/room-smithy-pour@1920x1080.png` viewed after two iterations. Actual room-fed
-presentation from hash-verified adopted bytes plus prospective SIM fixtures/attachment, muted; not real judged
-chat or gold-frame OBS UI. No browser errors, runner/browser/server/lock closed. Metal reads orange/solid,
-blue cloud gone, paving/faces receive warm spill; right brazier no longer a giant white flame. Still too regular
-and gridded, hearth core white. Only FOUR figures visible (two foreground facing viewer, one left cropped, one
-right separate): the requested ring is NOT demonstrated. Do not move to life or claim Forge moment finished.
+**Look / still open:** `shots/magic/room-smithy-pour@1920x1080.png` viewed at1920×1080. Around10 distinct bodies
+read as a gathering now (13 actual arrivals in the runtime test). Whole crucible/anvil remain visible. Still too
+many backs/overlapping heads; rear faces and the barrel support are too dark, tiptoe subtle. Next ring adjustment:
+bring the camera toward the front of their inward-facing crescent and warm the rear faces/support. Do that before
+life; do not claim the ring fully meets the bar. Metal/pour accepted by Tobias; preserve it. Capture exited0,
+no browser errors, owned browser/server/lock closed. This is the room-fed SIM rehearsal, not a real judged wish.
 
-**Audience WIP in code:**16 authored market standing points, workshop-avoiding paths and one-second bounded
-selection of present/home-lit citizens. Actual cached market accepts all16. Test verifies assignments, NOT
-arrival/visibility. A3s same-authority handoff prevents restored watcher routes being cleared by an inactive
-Forge sample before activity replays during scene rebuild; focused false→update→true test passes. This did
-NOT improve the visible still. Next diagnose actual route samples/goalReached/headings at38/62/64/72s and
-camera coverage before another capture; do not add more assignment-only tests or fake/teleport an audience.
-Anvil-hero owns the sleeping muzzle/forepaws sculpt; its hearth dragon still reads grey cluster. Actual judged
-chat-word cue still missing (must be transient after word judge passes, never log rejected speech).
+**Timing diagnosis:** the old still gave citizens34s to walk22–66m; checkpoint worked,14 were still walking.
+The still now holds drafting for another60 logical seconds (commit124s, pour132s); no invented people, speedup
+or teleport and no production approval delay. Focused test checks actual routes/arrivals/headings/barrel against
+the same generated layout as cached adoption, rather than merely16 assignments. Short real runs can still pour
+before distant spectators arrive; do not fabricate a crowd to mask that. Molten/fire02c3494 is accepted: solid
+HDR cells, early blueprint fade, occluded casting spill, bigger hearth and normal-sized working braziers.
+Anvil-hero owns sleeping muzzle/forepaws sculpt. Actual judged chat-word cue remains missing.
 
 **Night dc8abcb:** half-stop exposure lift and cool moon/sky fill restored roof/street readability after4f4cb83
 was too crushed. Broad analytic beacon reflection now catches keep/hill; bounce still broader than a delicate

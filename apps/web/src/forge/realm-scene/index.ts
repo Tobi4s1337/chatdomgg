@@ -198,8 +198,9 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       return { target: centre.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).add(position), offset: backward.multiplyScalar(distance + .6) };
     }
     if (waiting || frame?.phase === 'words' || frame?.phase === 'blueprint' || frame?.phase === 'pour') {
-      // The hearth and its sleeping dragon stand beside the anvil, rather than disappearing outside a close crop.
-      const workshop = fit(new THREE.Box3(new THREE.Vector3(-1.7, -.125, -6), new THREE.Vector3(8.65, Math.max(4.8, waiting ? 0 : stageHeight), 1.45)),
+      // Hold the working smithy and the west/north audience crescent together.
+      // Keep a clear foreground wedge so heads never hide the pour.
+      const workshop = fit(new THREE.Box3(new THREE.Vector3(-9, -.125, -10), new THREE.Vector3(8.65, Math.max(4.8, waiting ? 0 : stageHeight), 2.5)),
         options.anvil, 0, new THREE.Vector3(-7, 2.4, 11));
       target.copy(workshop.target); offset.copy(workshop.offset);
     }
