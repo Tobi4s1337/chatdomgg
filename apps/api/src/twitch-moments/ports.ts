@@ -1,6 +1,6 @@
 // apps/api has no package manifest yet (main-owned); shared types are reached by path until it does.
 import type { KingdomId, PersonId } from '../../../../packages/shared/src';
-import type { ActionKind, TwitchMomentFact } from '../../../web/src/twitch-moments/contracts';
+import type { ActionKind, Capability, KingdomMomentIntent, TwitchMomentFact } from '../../../web/src/twitch-moments/contracts';
 
 /**
  * Frozen local ports for the action application (Spec 20, TM01). Main binds root session/CSRF verification,
@@ -68,3 +68,33 @@ export interface ProviderBudgetPort {
 
 /** What the crier policy receives: an already witnessed public fact, never a browser request. */
 export type WitnessedMoment = TwitchMomentFact;
+
+export type KingdomMomentArgs = KingdomMomentIntent['args'];
+export type KingdomMomentKind = KingdomMomentArgs['kind'];
+
+/** One free contribution as main's realm receives it: who (from the authenticated principal), where and what. */
+export interface KingdomMomentCommand {
+  readonly kingdomId: KingdomId;
+  readonly personId: PersonId;
+  readonly intentId: string;
+  readonly args: KingdomMomentArgs;
+}
+
+/**
+ * The realm's own verdict. `accepted` means the realm counted this contribution (its receipt, not a victory);
+ * `refused` is a definite no; `unavailable` means it was never applied; `unknown` means the realm cannot say yet.
+ */
+export type RealmGameplayReply =
+  | { readonly status: 'accepted'; readonly receiptKey: string; readonly acceptedAt: number }
+  | { readonly status: 'refused'; readonly reason: 'permission' | 'ineligible' | 'rate-limit' | 'conflict' | 'invalid'; readonly retryAt: number | null }
+  | { readonly status: 'unavailable' }
+  | { readonly status: 'unknown' };
+
+/**
+ * Main's realm gameplay application: the battle simulation, cadence, daily caps and earned ledger live there.
+ * It verifies the current encounter for a strike and decides every outcome; this module only delegates to it.
+ */
+export interface RealmGameplayPort {
+  submit(command: KingdomMomentCommand, signal: AbortSignal): Promise<RealmGameplayReply>;
+  capabilities(kingdomId: KingdomId, personId: PersonId): Promise<ReadonlyMap<KingdomMomentKind, Capability>>;
+}
