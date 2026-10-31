@@ -96,8 +96,12 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const sound=own(createKingdomSound());
   const blueprints=new Map<string,VoxelBlueprint>();
   const installed=options.founded?foundedContent(options.founded):undefined;
+  // Use the installed market cask as a real raised viewing spot, never a phantom support.
+  const stores=installed?.props.find(prop=>/^civic-(hearth|tide)-market-stores$/.test(prop.blueprint.id));
+  const barrelCentre=stores?new THREE.Vector3(.5,0,.625).applyAxisAngle(new THREE.Vector3(0,1,0),stores.yaw).add(new THREE.Vector3(...stores.position)):undefined;
+  const forgeBarrel=barrelCentre&&barrelCentre.distanceTo(new THREE.Vector3(0,layout.market.elevation,8))<13?{position:barrelCentre.toArray() as Vec3,height:11/8}:undefined;
   const previousCitizens=citizenHandoff;citizenHandoff=undefined;
-  const crowd=own(createKingdomCitizens(scene,layout,pool,clay,!!installed&&!!royalWindow(installed.forgeHosts),previousCitizens&&Date.now()-previousCitizens.at<60000?previousCitizens.checkpoint:undefined));
+  const crowd=own(createKingdomCitizens(scene,layout,pool,clay,!!installed&&!!royalWindow(installed.forgeHosts),previousCitizens&&Date.now()-previousCitizens.at<60000?previousCitizens.checkpoint:undefined,forgeBarrel));
   const renderKeys=new Map(options.founded?.assets.map(asset=>[asset.blueprint,asset.assetHash]));
   const blueprintKey=(b:VoxelBlueprint)=>renderKeys.get(b)??b.id;
   const {houses,props}=installed??placeSettlementContent(layout.homes,(x,z)=>terrainHeight(layout,x,z));
@@ -369,7 +373,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     observed?.frame(now);
     const feet=walkerSlots(walk ? walk.poses : observed?.poses??[]);
     crowd.watchForge(!!realmForge?.active()||forge.status().busy,presentationMs,[0,layout.market.elevation,8]);
-    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet):[];
+    const night=THREE.MathUtils.smoothstep(Math.abs(((hour%24)+24)%24-12),4.2,6.5);
+    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet,night):[];
     const lightFrame=loaded?crowd.lightFrame(presentationMs):frame;
     if(lightFrame)build.setFrame(lightFrame);
     // Potential land may show an anonymous night painting, independently of its empty
@@ -448,11 +453,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     water.update({time,environment:grade,camera,sources:[
       ...[...windows.getSources(),...build.getSources()].map(source=>({...source,kind:'window' as const})),
       {position:beaconPosition,strength:beacon,kind:'beacon'},
-      ...[...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources()].map(source=>({...source,kind:'lamp' as const})),
+      ...[...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources()].map(source=>({...source,kind:'lamp' as const})),
     ]});
     dressing.hideLot(buildHidden?simulation.firstSlot:null);
     dressing.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
-    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...(realmForge?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
+    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...(realmForge?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
     const people=walk??observed;
     if(people)options.onWalkers?.(people.labels().filter(label=>{
       const person=people.poses.find(p=>p.id===label.id);

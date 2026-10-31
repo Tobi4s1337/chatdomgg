@@ -24,6 +24,7 @@ const landingOnly=process.argv.includes('--landing-only');
 const landingFilm=process.argv.includes('--landing-film');
 const stills=forgeStill||landingOnly||process.argv.includes('--stills');
 const take=forgeStill?'room-smithy-pour':landingFilm?'landing-04':'rehearsal-02';
+const gatherDelay=forgeStill?60_000:0;
 const fps=stills?1:Number(process.env.CHATDOM_EVENING_FPS??4),duration=90,errors=[],telemetry=[],browserChoice=process.env.CHATDOM_EVENING_BROWSER??'chrome';if(!Number.isInteger(fps)||fps<1||fps>24)throw Error('CHATDOM_EVENING_FPS must be an integer from 1 to 24');let server,browser,encoder,diagnostics;const release=await acquireCaptureLock({priority:'main'});
 // Closing owned resources interrupts a stalled Playwright operation and enters finally.
 let hardDeadline;
@@ -44,9 +45,12 @@ try{
  if(landingFilm)await mkdir(out+`/${take}-frames`,{recursive:true});
  if(!stills) encoder=spawn('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','image2pipe','-framerate',String(fps),'-vcodec','mjpeg','-i','-','-c:v','libx264','-threads','2','-preset','veryfast','-crf','20','-pix_fmt','yuv420p','-movflags','+frag_keyframe+empty_moov+default_base_moof','-g',String(fps),out+`/${take}-SIMULATED.mp4`],{stdio:['pipe','ignore','inherit']});
  for(let i=0;i<fps*duration;i++){
-  const ms=i*1000/fps;
-  if(forgeStill && ![0,2000,13000,31000,38000,62000,64000,65000,72000].includes(ms))continue;
-  if(forgeStill && ms>72000)break;
+  const baseMs=i*1000/fps;
+  // Still review holds the real drafting stage for another minute so nearby
+  // households reach the smithy on foot; no extra people or teleports.
+  const ms=baseMs+(baseMs>=64000?gatherDelay:0);
+  if(forgeStill && ![0,2000,13000,31000,38000,62000,64000,65000,72000].includes(baseMs))continue;
+  if(forgeStill && baseMs>72000)break;
   if(landingFilm && ms<64000 && ![0,2000,13000,31000,38000,62000].includes(ms))continue;
   if(landingFilm && ms>=64000 && ms<76000 && i%fps!==0)continue;
   if(landingOnly && ms<64000 && ![0,2000,13000,31000,38000,62000].includes(ms))continue;
@@ -55,28 +59,28 @@ try{
   if(ms===2000)await page.evaluate(()=>window.__arrive());
   if(ms===13000)await page.evaluate(()=>window.__chat());
   if(ms===38000)await page.evaluate(()=>window.__stage());
-  if(ms===64000)await page.evaluate(()=>window.__commit());
+  if(baseMs===64000)await page.evaluate(()=>window.__commit());
   // Scene creation and worker messages need real event-loop turns; logical time stays fixed.
   await page.evaluate(async ms=>{window.__step(ms);await new Promise(resolve=>setTimeout(resolve,0))},ms);
-  if(forgeStill && ms===64000){
-   for(let attempts=0;attempts<240;attempts++){await page.evaluate(async()=>{window.__step(64000);await new Promise(r=>setTimeout(r,50))});if(await page.evaluate(()=>window.__scene.debug.ready && window.__scene.forgeDirecting()))break;if(attempts===239)throw Error('Room Forge did not become ready at fixed commit time')}
+  if(forgeStill && baseMs===64000){
+   for(let attempts=0;attempts<240;attempts++){await page.evaluate(async ms=>{window.__step(ms);await new Promise(r=>setTimeout(r,50))},ms);if(await page.evaluate(()=>window.__scene.debug.ready && window.__scene.forgeDirecting()))break;if(attempts===239)throw Error('Room Forge did not become ready at fixed commit time')}
   }
   if(i%fps===0){
    telemetry.push(await page.evaluate(ms=>({ms,subject:window.__scene.subject(),activeWindows:window.__scene.debug.activeWindows,walking:window.__scene.debug.walking,forgeDirecting:window.__scene.forgeDirecting(),momentDirecting:window.__scene.momentDirecting()}),ms));
    await writeFile(out+`/${take}-progress.json`,JSON.stringify({fps,duration,sha256:hash,stills,telemetry,events:await page.evaluate(()=>window.__events),errors},null,2));
   }
   if(!stills&&(!landingFilm||ms>=76000)){const frame=await page.screenshot({type:'jpeg',quality:90,timeout:120000});if(landingFilm)await writeFile(out+`/${take}-frames/${String(i-76*fps).padStart(4,'0')}.jpg`,frame);if(!encoder.stdin.write(frame))await once(encoder.stdin,'drain')}
-  if(forgeStill && ms===72000){
+  if(forgeStill && baseMs===72000){
    // The molten source starts on this logical frame. Let its workers deliver
    // before drawing the still, so paving/faces show the actual casting light.
    await page.waitForFunction(()=>Object.values(window.__scene.inspect().fields).every(f=>f.publishedRevision===f.requestedRevision&&!f.busy&&!f.queued),null,{timeout:120000});
-   await page.evaluate(()=>window.__step(72000));
+   await page.evaluate(ms=>window.__step(ms),ms);
    if(!await page.evaluate(()=>window.__scene.forgeDirecting()))throw Error('Forge camera is not directing the pour');await page.screenshot({path:`${out}/room-smithy-pour@1920x1080.png`,timeout:120000});}
   if((!forgeStill&&!landingFilm&&!landingOnly&&ms===62000)||(stills&&ms===84000)||(landingFilm&&ms===88000)){await page.screenshot({path:`${out}/${take}-${ms/1000}s-SIMULATED.png`,timeout:120000});console.log('captured',ms/1000,'logical seconds')}
   if(errors.length)throw Error(errors.join('\n'));
  }
  if(encoder){encoder.stdin.end();const [code]=await once(encoder,'exit');if(code!==0)throw Error(`ffmpeg exited ${code}`);encoder=undefined}
- const report={fps,duration:forgeStill?72:landingFilm?duration-76:duration,browser:browserChoice,source:'hash-verified cached adopted scene with prospective civic fixtures',sha256:hash,stills,muted:true,telemetry,events:await page.evaluate(()=>window.__events),home:await page.evaluate(()=>window.__home),errors};await writeFile(out+`/${take}-report.json`,JSON.stringify(report,null,2));console.log('Rehearsal complete');
+ const report={fps,duration:forgeStill?72+gatherDelay/1000:landingFilm?duration-76:duration,browser:browserChoice,source:'hash-verified cached adopted scene with prospective civic fixtures',sha256:hash,stills,muted:true,telemetry,events:await page.evaluate(()=>window.__events),home:await page.evaluate(()=>window.__home),errors};await writeFile(out+`/${take}-report.json`,JSON.stringify(report,null,2));console.log('Rehearsal complete');
 } catch(error){errors.push(String(error.stack||error));await writeFile(out+`/${take}-error.json`,JSON.stringify({stills,errors,telemetry},null,2)).catch(()=>{});throw error
 }finally{
  clearInterval(diagnostics);encoder?.kill();
