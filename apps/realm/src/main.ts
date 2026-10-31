@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { ForgeWriteGate, FileForgeApprovals } from './wiring';
 import { RealmEveningBridge, mountEveningRoutes } from './evening';
 import { createRealmCitizens } from './evening/citizens';
+import { createServer as createPortReservation } from 'node:net';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -27,9 +28,21 @@ try {
 
 async function serve() {
   if (!Number.isInteger(port) || port < 5170 || port > 5199) throw new Error('Use a development port in 5170–5199');
+  // uWS permits SO_REUSEPORT. Two local builds on one port would split entry and sockets between worlds.
+  const reservation = createPortReservation();
+  await new Promise<void>((resolve, reject) => {
+    reservation.once('error', () => reject(new Error(`Realm port ${port} is already in use; choose a free REALM_PORT.`)));
+    reservation.listen({ port, host: '0.0.0.0', exclusive: true }, resolve);
+  });
+  let held = true;
+  const release = async () => { if (held) { held = false; await new Promise<void>(resolve => reservation.close(() => resolve())); } };
+  try { await serveOwnedPort(release); } finally { await release(); }
+}
+
+async function serveOwnedPort(releasePort: () => Promise<void>) {
   if (storage === 'memory') {
     if (!simulated) throw new Error('Memory reference mode requires explicit REALM_SIMULATED=1.');
-    return serveMemoryReference();
+    return serveMemoryReference(releasePort);
   }
   if (storage !== 'postgres') throw new Error('REALM_STORAGE must be "postgres" or, for the SIMULATED reference only, "memory".');
 
@@ -66,6 +79,7 @@ async function serve() {
   server.onShutdown(async () => { await evening.stop(); await boot.stop(); await pool.end(); });
   try {
     await boot.readiness.start();
+    await releasePort();
     await server.listen(port, '0.0.0.0');
   } catch (error) { await evening.stop(); await boot.stop(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
@@ -73,12 +87,13 @@ async function serve() {
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);
 }
 
-async function serveMemoryReference() {
+async function serveMemoryReference(releasePort: () => Promise<void>) {
   const services = referenceServices();
   const { server, transport } = createRealmServer(services);
   transport.app.post('/reference/session', response => {
     response.writeHeader('Access-Control-Allow-Origin', '*').writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(services.issue()));
   });
+  await releasePort();
   await server.listen(port, '0.0.0.0');
   console.info(`SIMULATED realm reference on ${port}: memory only, nothing is saved`);
 }
