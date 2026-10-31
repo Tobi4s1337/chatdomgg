@@ -1,0 +1,16 @@
+{
+  "bench": "SIMULATED typed Forge fittings; no request, travel or Forge",
+  "ports": [
+    5171,
+    5172
+  ],
+  "checks": [
+    "bench keyboard: Tab enters on the chosen crest, arrows walk without choosing and wrap, Home/End, Space and Enter choose (one wood cue each), Tab leaves in one press, Shift+Tab returns, resting crest skipped, resting rail ignores presses, allowance counts typing, invalid field described",
+    "bench 1440x900: a tap chooses, no text under 12 px, every crest at least 44×44, no select, no overflow",
+    "bench 390x844: a tap chooses, no text under 12 px, every crest at least 44×44, no select, no overflow",
+    "forge 1440x900: no select, radiogroup present, no text under 12 px, 44 px targets, SIMULATED seal visible, panel at 32,356,356,510",
+    "forge 390x844: no select, radiogroup present, no text under 12 px, 44 px targets, SIMULATED seal visible, panel at 12,397,366,435",
+    "forge keyboard: Tab order words → anvil → three wishes → chosen realm; ArrowRight walks without travelling; a 503 reply returns the words with the private reason on the field",
+    "forge touch: tapping the Mossmere crest takes the road to realm=grove"
+  ]
+}

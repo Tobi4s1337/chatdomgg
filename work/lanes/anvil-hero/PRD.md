@@ -37,6 +37,16 @@ seams rather than expanding scope. The five tasks are an execution order for the
   Supply an integration checklist for replacing old stage geometry and selecting only the sleeping-dragon
   replacement; do not edit the runtime. · evidence: commands + integration notes + final doubts
 
+- [ ] **AH06 — A sleeping dragon you recognise across the street.** Refine only the existing sculpt so
+  one lowered head rests on two distinct forepaws, with a continuous curled body and folded wing below
+  the head/stack silhouette. The current stream flight reads as blue stone plus pale projections: simplify
+  competing shapes, open the head/paw negative space and use existing kingdom material contrast. Preserve
+  envelope, socket fit, open flue, exported nose anchor and exact anvil mark. Judge the actual assembled
+  chimney on a whole house: a 1920×1080 stream-distance view and a roof close view, same dusk light,
+  before/after. Use the production assembler in the existing bench; report missing host framing as `needs:`.
+  Scoped tests and typecheck; one good looked-at pair, no screenshot matrix. Commit visible checkpoints
+  for immediate merge. · evidence: a readable sleeping silhouette in both views, not more surface detail.
+
 ## Backlog
 
 Worker adds ideas here and never picks from them.

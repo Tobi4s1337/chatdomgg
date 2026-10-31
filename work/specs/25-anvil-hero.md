@@ -182,6 +182,13 @@ transient ritual effects, audio, refusal logic, generated images, package regist
 
 ## Decisions
 
+- 2026-11-01: AH06 is the next whole-part art outcome. The actual assembled sleeping-dragon chimney must
+  read as one head on two paws from the stream camera, with a quiet folded wing and continuous coil.
+  Simplification and negative space take priority over detail. Keep the accepted mount/envelope, nose,
+  materials and anvil/mark; no runtime, grammar or authority changes. Use scoped checks and a looked-at
+  same-view pair on a whole house at stream distance plus a close view; this supersedes the old capture
+  matrix for this task. Main owns flight, landing direction and integration.
+
 - **2026-10-30 — Team owns the remaining Forge look.** Main lands the real end-to-end path and stops Forge;
   this lane supplies reviewable art exports. Main's only follow-up here is mount/selection integration and review.
 - **2026-10-30 — Disjoint replacement.** New folders own physical anvil craft and the sleeping-dragon replacement;

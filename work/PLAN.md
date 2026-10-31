@@ -334,12 +334,18 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
 beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current:** Forge flight effects mounted in the actual kingdom/stream, both room and SIM paths.
-One scene pool reads the posed piece history; warm streaks rise/fade, reduced motion clears them,
-and only the old flight trail is replaced. Pour/runes/impact/home smoke and accepted lighting stay.
-`shots/magic/forge-flight-pair.png` viewed at1920×1080, same SIM fixture/time17.3. Gold glints
-are visible, but still too scattered for a sweeping trail: this is a checkpoint, not visual signoff.
-Typecheck/scoped lint/33 focused tests and web build passed. No new art lane commits waiting.
+**Current:** Forge art checkpoint: merged Anvil Hero AH04 bd938eb and Forge panel FL02 9fd035f.
+The dragon now has a clearer head and stack; AH06 in spec25/PRD gives the team its next whole art outcome:
+one sleeping head on two distinct paws, readable on a whole house from the stream and up close.
+Final same-view evidence: `shots/magic/forge-sculpt-pair.png`,1920×1080 SIM flight/time17.3, viewed.
+Also viewed `forge-current-{words,pour,landed}.png` phase samples at640×360: roof/smoke read,
+but these seeks do not prove gathering/transitions. Next capture must run the current sequence continuously.
+Typecheck/scoped lint/61 focused tests/web build pass. An attempted continuous wake still read as spaced
+dashes and was reverted, not shipped. Existing b2251ee recorded-history flight effects remain: real and
+SIM channels are independent; reduced motion clears them. Accepted lighting/pour/home smoke stay.
+Next: judge the current whole ceremony, lift flight/landing direction and the uneven watcher ring;
+the sculpture still needs a sleeping silhouette. No Forge visual signoff or new systems. Team now owns
+the three Genesis kingdoms, panel portraits/passport, raid journey and cheer/hype spectacles; merge checkpoints.
 
 AS11 09f0267 merged (ebde8de). Builder reachable from `/showcase` at `/-/avatar-builder`,
 SIMULATED with browser-local saves. Real saved/equip/entitlement authority remains pending; no shared
