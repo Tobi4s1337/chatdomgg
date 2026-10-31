@@ -51,6 +51,27 @@ freezes it into `@chatdom/shared` as `citizen-look` v2, the ids lists in `recipe
 
 - `@chatdom/content` package export `./avatar-style` (the web imports it by relative path today).
 
+## From AS11 (the builder, earned items, the same character everywhere) · 2026-11-01
+
+needs: main to freeze and wire the following; the lane builds against them as written.
+
+1. **`citizen-look` v2 includes `earned`.** `EarnedLook` in `character/recipe.ts`: `ribbons {months}`,
+   `hood {cloth, trim}`, `pins` (≤ 2, `keepsake | forged | founder`), `cape {kind, id, cloth, lining, trim}`,
+   `scarf {id, colours}`, `forgedHat {id, motif, colours}`. Every piece carries its render data and its record
+   id. `parseLook` refuses a hat with a forged hat, neckwear with a scarf, more than two pins, duplicate ids.
+2. **A `CitizenEntitlements` seam from the look authority** (`character/earned.ts`): origin, kingdom,
+   followed months, sub `{tier, months, active}`, founder, keepsakes, forged pieces and moments (cheer storms;
+   raids with `from`, the home kingdom, so a scarf keeps its colours abroad). Built server-side from verified
+   records only; the lane's fixtures are SIMULATED.
+3. **A `LookAuthority` save seam** (`AvatarBuilder.tsx`): `save(look)` re-parses and re-runs `checkEarned`
+   against the server's entitlements, stores the look for the real person and returns the stored look or an
+   error message.
+4. **Cape colours are hex** in the recipe until per-citizen swatches exist; `capeCut` keeps every cape inside
+   the frozen `AvatarCapeBlueprint` limits.
+5. **`@chatdom/content` export `./avatar-style`** (still imported by relative path).
+6. **Mount `AvatarBuilder layout="panel"`** in `apps/panel` and `layout="page"` in the web home/passport.
+7. **Wire the entry points:** `citizenObject(wornIn(look, e), { dim: subLapsed(e) })` in the kingdom and stream
+   view, `createPortraitRenderer().renderBlob` for the citizen card and passport, per kingdom.
 ## Main decision — runtime adoption, 2026-10-31
 
 The new citizen is now a `paint-grid` renderer input beside legacy compiled looks.

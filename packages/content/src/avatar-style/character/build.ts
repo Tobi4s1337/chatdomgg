@@ -4,7 +4,8 @@ import { drawBody } from './body';
 import { drawBib, drawBottom, drawNeckwear, drawOuter, drawShoes, drawTop } from './wardrobe';
 import { drawHead, type HeadOptions } from './head';
 import { drawBeard, drawHair, drawMoustache, drawTiedHair } from './hair';
-import { drawEarrings, drawFlower, drawGlasses, drawHat, hatBrim } from './accessories';
+import { drawEarrings, drawFlower, drawGlasses, drawHat, hatShape } from './accessories';
+import { RIBBON_COLOURS, drawEarnedBody, forgedHat, ribbonMarks } from './earned-draw';
 import { BRASS, BLUSH_PINK, EYE_INK, EYE_INK_DEEP, FLOWER_HEART, FRECKLE_BROWN, LEAF_GREEN, METALS } from './palette';
 import type { CitizenLook } from './recipe';
 
@@ -14,6 +15,7 @@ import type { CitizenLook } from './recipe';
  * tied hair out from under the hat, beard and moustache, then glasses, earrings and a flower.
  */
 export function buildCitizen(look: CitizenLook, options: HeadOptions = {}): VoxelGrid {
+  const hat = look.earned.forgedHat ? forgedHat(look.earned.forgedHat.motif) : look.hat ? hatShape(look.hat.style) : null;
   const g = new VoxelGrid();
   drawBody(g);
   drawBottom(g, look.bottom.style, look.bottom.pattern);
@@ -22,15 +24,16 @@ export function buildCitizen(look: CitizenLook, options: HeadOptions = {}): Voxe
   if (look.outer) drawOuter(g, look.outer.style, look.outer.pattern);
   if (look.neckwear) drawNeckwear(g, look.neckwear.style);
   drawShoes(g, look.shoes.style);
+  drawEarnedBody(g, look.earned);
   drawHead(g, look, options);
   drawHair(g, look.hair.style);
-  if (look.hat) drawHat(g, look.hat.style);
-  drawTiedHair(g, look.hair.style, look.hat ? hatBrim(look.hat.style) : undefined);
+  if (hat) drawHat(g, hat);
+  drawTiedHair(g, look.hair.style, hat?.brim);
   if (look.beard) drawBeard(g, look.beard.style);
   if (look.moustache) drawMoustache(g, look.moustache.style);
   if (look.glasses) drawGlasses(g, look.glasses.style, look.eyes.spacing);
   if (look.earrings) drawEarrings(g, look.earrings.style);
-  if (look.flower) drawFlower(g, look.hat?.style ?? null);
+  if (look.flower) drawFlower(g, hat);
   return g;
 }
 
@@ -39,13 +42,19 @@ export function buildCitizen(look: CitizenLook, options: HeadOptions = {}): Voxe
  * coherent: a deep tone is the same hue darker, blush is pink mixed into this skin, and light hair gets a
  * stronger deep tone than dark hair so its layers still separate.
  */
-export function slotColours(look: CitizenLook): Record<Slot, Rgb> {
+export interface ColourOptions {
+  /** A lapsed sub: sub pieces dim but are still worn (ChatDom.md §4). */
+  readonly subLapsed?: boolean | undefined;
+}
+
+export function slotColours(look: CitizenLook, options: ColourOptions = {}): Record<Slot, Rgb> {
+  const forged = look.earned.forgedHat;
   const skin = rgb(look.skin), hair = rgb(look.hair.colour);
   const neck = rgb(look.neckwear?.dye ?? look.top.dye), shoe = rgb(look.shoes.dye);
   const beard = rgb(look.beard?.colour ?? look.hair.colour);
   const stache = rgb(look.moustache?.colour ?? look.beard?.colour ?? look.hair.colour);
   const deep = (c: Rgb) => shade(c, luma(c) > .55 ? .8 : luma(c) < .15 ? .7 : .78);
-  const hat = rgb(look.hat?.colour ?? look.top.dye), trim = rgb(look.hat?.trim ?? look.top.dye);
+  const hat = rgb(forged?.colours[0] ?? look.hat?.colour ?? look.top.dye), trim = rgb(forged?.colours[1] ?? look.hat?.trim ?? look.top.dye);
   // Dark felt and knit lift instead of darkening, so a black beanie still shows its knit.
   const tone = (c: Rgb) => (luma(c) < .12 ? mix(c, [1, 1, 1], .12) : shade(c, .84));
   return {
@@ -86,6 +95,34 @@ export function slotColours(look: CitizenLook): Record<Slot, Rgb> {
     // Sneakers have a white rubber sole; a white sneaker gets a pale grey one so the two still part.
     sole: luma(shoe) > .8 ? rgb('#c9c4bc') : rgb('#f3f1ee'),
     button: rgb(BRASS),
+    ...earnedColours(look, options),
+  };
+}
+
+const GREY: Rgb = [.5, .49, .5];
+
+/** The earned pieces' colours. With one month mark reached, both ribbon cells are its colour. */
+function earnedColours(look: CitizenLook, { subLapsed = false }: ColourOptions): Record<Slot & (`ribbon${1 | 2}` | `hood${'' | 'Deep' | 'Trim'}` | `pin${1 | 2}${'a' | 'b' | 'm'}` | `raid${'A' | 'B' | 'Deep'}` | 'forgeMetal'), Rgb> {
+  const e = look.earned;
+  const marks = e.ribbons ? ribbonMarks(e.ribbons.months) : [1 as const];
+  const ribbon = (i: number) => {
+    const c = rgb(RIBBON_COLOURS[marks[Math.min(i, marks.length - 1)]!]);
+    return subLapsed ? mix(c, GREY, .45) : c;
+  };
+  const hood = rgb(e.hood?.cloth ?? look.top.dye), hoodTrim = rgb(e.hood?.trim ?? look.top.accent);
+  const pin = (i: 0 | 1) => {
+    const p = e.pins[i];
+    if (!p || p.kind === 'founder') return [rgb(BRASS), rgb('#fbf6ea'), rgb(BRASS)] as const;
+    return [rgb(p.colours[0]), rgb(p.colours[1]), rgb(p.kind === 'forged' ? METALS[0].hex : BRASS)] as const;
+  };
+  const [p1, p2] = [pin(0), pin(1)];
+  const [ra, rb] = (e.scarf?.colours ?? [look.top.dye, look.top.accent]).map(rgb) as [Rgb, Rgb];
+  return {
+    ribbon1: ribbon(0), ribbon2: ribbon(1),
+    hood, hoodDeep: cloth(hood), hoodTrim,
+    pin1a: p1[0], pin1b: p1[1], pin1m: p1[2], pin2a: p2[0], pin2b: p2[1], pin2m: p2[2],
+    raidA: ra, raidB: rb, raidDeep: cloth(ra),
+    forgeMetal: rgb(METALS[0].hex),
   };
 }
 

@@ -25,7 +25,7 @@ function speckle(g: VoxelGrid, from: Slot, to: Slot, share: number, salt: number
   for (const [[x, y, z], slot] of [...g.entries()]) if (slot === from && cellHash(x, y, z, salt) < share) g.set(x, y, z, to);
 }
 
-interface Hat {
+export interface Hat {
   /** The lowest row the hat covers: hair at and above it, outside the skull, is under the hat. */
   readonly brim: number;
   /** Where a tucked flower sits, when the hat has a band for it: [y, z] on the person's right side. */
@@ -125,9 +125,12 @@ const HATS: Record<HatStyleId, Hat> = {
 /** The rows a hat starts at, for tests and the builder. */
 export const hatBrim = (style: HatStyleId): number => HATS[style].brim;
 
+/** A hat style's shape, for anything that wears hats the same way (the forged hat in `earned-draw.ts`). */
+export const hatShape = (style: HatStyleId): Hat => HATS[style];
+
 /** Flattens the hair under the crown, then draws the hat. Tied hair is laid over afterwards. */
-export function drawHat(g: VoxelGrid, style: HatStyleId): void {
-  const hat = HATS[style];
+export function drawHat(g: VoxelGrid, style: HatStyleId | Hat): void {
+  const hat = typeof style === 'string' ? HATS[style] : style;
   const inSkull = (x: number, y: number, z: number) => x >= X0 && x < X1 && y < SKULL.y[1] && z >= Z0 && z < SKULL.z[1];
   for (const [[x, y, z], slot] of [...g.entries()]) {
     if (y < hat.brim || !HAIR_SLOTS.includes(slot)) continue;
@@ -199,9 +202,9 @@ export function drawEarrings(g: VoxelGrid, style: EarringStyleId): void {
  * A flower over the ear on the person's right (the side the portrait shows), facing out: a heart, four
  * petals, a leaf. With a banded hat it is tucked into the band; otherwise it sits on the hair's outer surface.
  */
-export function drawFlower(g: VoxelGrid, hat: HatStyleId | null): void {
-  const band = hat ? HATS[hat].band : undefined;
-  const [yc, zc] = band ?? [hat ? HATS[hat].brim - 1 : 21, 1];
+export function drawFlower(g: VoxelGrid, worn: HatStyleId | Hat | null): void {
+  const hat = typeof worn === 'string' ? HATS[worn] : worn;
+  const [yc, zc] = hat?.band ?? [hat ? hat.brim - 1 : 21, 1];
   let side = X0;
   for (const [[x, y, z]] of g.entries()) if (Math.abs(y - yc) <= 1 && Math.abs(z - zc) <= 1 && x < side) side = x;
   const x = side - 1;

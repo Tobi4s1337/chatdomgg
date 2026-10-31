@@ -1,7 +1,7 @@
 import type { Hex } from './colour';
 import { BOTTOM_CLOTH, DYES, LEATHER, LENS_TINTS, METALS, NATURAL_HAIR, PETALS, SKIN_TONES, STRAW, WILD_HAIR } from './palette';
 import {
-  defaultAccent,
+  NO_EARNED, defaultAccent,
   type BeardStyleId, type BottomStyleId, type CitizenLook, type EarringStyleId, type EyeShape, type EyeSpacing, type Freckles, type GlassesStyleId,
   type HairStyleId, type HatStyleId, type MoustacheStyleId, type NeckwearStyleId, type OuterStyleId, type PatternId, type ShoeStyleId, type TopStyleId,
 } from './recipe';
@@ -65,6 +65,7 @@ const look = (s: Spec): { readonly name: string; readonly look: CitizenLook } =>
     bottom: wear(s.bottom),
     neckwear: s.neckwear ? { style: s.neckwear[0], dye: s.neckwear[1], accent: s.neckwear[2] } : null,
     shoes: { style: s.shoes[0], dye: s.shoes[1] },
+    earned: NO_EARNED,
   },
 });
 

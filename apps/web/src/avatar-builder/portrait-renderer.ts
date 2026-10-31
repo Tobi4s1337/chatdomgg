@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {
   PORTRAIT, buildCitizen, meshCitizen, portraitEye, rgb, slotColours, type CitizenLook, type CitizenMesh, type HeadOptions,
 } from '../../../../packages/content/src/avatar-style';
+import { capeObject, disposeCape } from './cape';
 
 /*
  * The citizen renderer. `citizenObject` is the character as a three.js mesh in avatar cells (scale it by
@@ -82,15 +83,23 @@ function glassGeometry(mesh: CitizenMesh): THREE.BufferGeometry {
   return g;
 }
 
+export interface CitizenOptions extends HeadOptions {
+  /** Sub pieces after a lapsed sub: dimmed, still worn. Main reads it from `subLapsed(entitlements)`. */
+  readonly dim?: boolean | undefined;
+  /** Leave the cape off (a runtime that draws its own cloth from `capeCut`). */
+  readonly noCape?: boolean | undefined;
+}
+
 /**
- * The character in avatar cells, root at the origin, facing +Z: the opaque body as `citizen-solid`, and any
- * lenses as `citizen-glass` drawn after it. Dispose with `disposeCitizen`; materials are the caller's.
+ * The character in avatar cells, root at the origin, facing +Z: the opaque body as `citizen-solid`, any
+ * lenses as `citizen-glass` drawn after it, and a cape as `citizen-cape` (cloth at rest). Dispose with
+ * `disposeCitizen`; the voxel materials are the caller's, the cape's are the citizen's own.
  */
 export function citizenObject(
-  look: CitizenLook, options: HeadOptions = {},
+  look: CitizenLook, options: CitizenOptions = {},
   material: THREE.Material = citizenMaterial(), glass: THREE.Material = citizenGlassMaterial(),
 ): THREE.Group {
-  const grid = buildCitizen(look, options), colours = slotColours(look);
+  const grid = buildCitizen(look, options), colours = slotColours(look, { subLapsed: options.dim });
   const group = new THREE.Group();
   group.name = 'citizen';
   const solid = new THREE.Mesh(citizenGeometry(meshCitizen(grid, colours, 'solid')), material);
@@ -104,10 +113,14 @@ export function citizenObject(
     mesh.renderOrder = 1;
     group.add(mesh);
   }
+  const cape = options.noCape ? null : capeObject(look, options.dim);
+  if (cape) group.add(cape);
   return group;
 }
 
 export function disposeCitizen(citizen: THREE.Object3D): void {
+  const cape = citizen.getObjectByName('citizen-cape');
+  if (cape) { cape.removeFromParent(); disposeCape(cape); }
   citizen.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
 }
 
@@ -170,14 +183,51 @@ function frameSubject(camera: THREE.PerspectiveCamera, subject: THREE.Object3D):
   }
 }
 
+/**
+ * What a picture shows. `bust` is the portrait (spec L6), the same everywhere: card, passport, builder. `figure`
+ * is the whole citizen, for clothes and shoes; `back` the whole citizen from behind, for capes; `chest` the face
+ * and chest close, for pins, ribbons and scarves; `nape` the shoulders from behind, for the hood; `face` the face
+ * close, for eyes, freckles and glasses; `lower` the hips down, for bottoms and shoes.
+ */
+export type PortraitView = 'bust' | 'figure' | 'back' | 'chest' | 'nape' | 'face' | 'lower';
+
+export interface PortraitOptions {
+  readonly view?: PortraitView | undefined;
+  readonly dim?: boolean | undefined;
+  /** Draw over a transparent background instead of the purple gradient (builder tiles on parchment). */
+  readonly transparent?: boolean | undefined;
+}
+
 export interface PortraitRenderer {
-  /** A new canvas of `size` × `size` with the look's bust portrait. */
-  render(look: CitizenLook, size: number): HTMLCanvasElement;
+  /** A new canvas of `size` × `size` with the look's bust portrait (or another view). */
+  render(look: CitizenLook, size: number, options?: PortraitOptions): HTMLCanvasElement;
+  /** The same picture as PNG bytes, for a host that stores or uploads it (the card, the passport). */
+  renderBlob(look: CitizenLook, size: number, options?: PortraitOptions): Promise<Blob>;
   dispose(): void;
 }
 
+/** The whole-figure views: yaw from the person's front, toward their right; target and half height in cells. */
+const FIGURE_VIEWS = {
+  figure: { yaw: 24, pitch: 12, target: [0, 13.4, 0], halfHeight: 15.2 },
+  back: { yaw: 180 - 34, pitch: 12, target: [0, 12, 0], halfHeight: 12.6 },
+  chest: { yaw: 22, pitch: 8, target: [0, 15.2, 0], halfHeight: 7.4 },
+  nape: { yaw: 180 - 38, pitch: 18, target: [0, 16.4, 0], halfHeight: 8.6 },
+  face: { yaw: 18, pitch: 6, target: [0, 19.4, 0], halfHeight: 5.6 },
+  lower: { yaw: 26, pitch: 14, target: [0, 7.6, 0], halfHeight: 8.8 },
+} as const;
+
+function placeFigure(camera: THREE.PerspectiveCamera, view: keyof typeof FIGURE_VIEWS): void {
+  const v = FIGURE_VIEWS[view], fov = PORTRAIT.camera.fovDegrees;
+  const yaw = v.yaw * Math.PI / 180, pitch = v.pitch * Math.PI / 180;
+  const distance = v.halfHeight / Math.tan(fov * Math.PI / 360);
+  camera.fov = fov;
+  camera.position.set(-Math.sin(yaw) * Math.cos(pitch) * distance, v.target[1] + Math.sin(pitch) * distance, Math.cos(yaw) * Math.cos(pitch) * distance);
+  camera.lookAt(v.target[0], v.target[1], v.target[2]);
+  camera.updateProjectionMatrix();
+}
+
 export function createPortraitRenderer(): PortraitRenderer {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.shadowMap.enabled = true;
@@ -209,12 +259,15 @@ export function createPortraitRenderer(): PortraitRenderer {
   scene.add(sky, key, key.target, rim, rim.target);
   const material = citizenMaterial(), glass = citizenGlassMaterial();
 
-  return {
-    render(look, size) {
+  const render = (look: CitizenLook, size: number, options: PortraitOptions = {}) => {
       const inner = size * PORTRAIT.supersample;
       renderer.setSize(inner, inner, false);
-      const subject = citizenObject(look, {}, material, glass);
-      frameSubject(camera, subject);
+      const view = options.view ?? 'bust';
+      const subject = citizenObject(look, { dim: options.dim }, material, glass);
+      if (view === 'bust') frameSubject(camera, subject);
+      else placeFigure(camera, view);
+      scene.background = options.transparent ? null : background;
+      renderer.setClearColor(0x000000, 0);
       scene.add(subject);
       renderer.render(scene, camera);
       scene.remove(subject);
@@ -226,6 +279,12 @@ export function createPortraitRenderer(): PortraitRenderer {
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(renderer.domElement, 0, 0, size, size);
       return out;
+  };
+  return {
+    render,
+    renderBlob(look, size, options) {
+      const canvas = render(look, size, options);
+      return new Promise((resolve, reject) => canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('The portrait could not be encoded.'))), 'image/png'));
     },
     dispose() {
       material.dispose();
