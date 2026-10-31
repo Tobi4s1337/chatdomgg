@@ -199,9 +199,10 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     }
     if (waiting || frame?.phase === 'words' || frame?.phase === 'blueprint' || frame?.phase === 'pour') {
       // Hold the working smithy and the west/north audience crescent together.
-      // Keep a clear foreground wedge so heads never hide the pour.
+      // See the west-side audience from the forge side, with a clear
+      // foreground wedge so heads never hide the pour.
       const workshop = fit(new THREE.Box3(new THREE.Vector3(-9, -.125, -10), new THREE.Vector3(8.65, Math.max(4.8, waiting ? 0 : stageHeight), 2.5)),
-        options.anvil, 0, new THREE.Vector3(-7, 2.4, 11));
+        options.anvil, 0, new THREE.Vector3(1.5, 2.4, 11));
       target.copy(workshop.target); offset.copy(workshop.offset);
     }
     if (casting && frame && (frame.phase === 'flight' || frame.phase === 'landed')) {
@@ -312,7 +313,8 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       // it lands. Feed the same occluded field used by paving and moving faces.
       const sources: { position: Vec3; normal: Vec3; strength: number }[] = castingHeat > 0 ? [
         { position: [anvilFace.x, anvilFace.y + .45, anvilFace.z], normal: [0, 1, 0], strength: castingHeat },
-        { position: [anvilFace.x - 2, options.anvil.y + .3, anvilFace.z + 1.5], normal: [0, 1, 0], strength: castingHeat * .8 },
+        // Light leaving the audience-facing side of the molten casting.
+        { position: [anvilFace.x - .5, anvilFace.y + .3, anvilFace.z - .4], normal: [-1, 0, 0], strength: castingHeat },
       ] : [];
       if (!landing) return sources;
       const age = (now - landing.at) / 1000;

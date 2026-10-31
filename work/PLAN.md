@@ -335,19 +335,21 @@ street-led30–35° composition, voxel terraces/three ridges and sky-backed roof
 accepted beacon shape, house models and gold frame/crest. One piece per turn, scoped checks,1920×1080 viewed;
 no matrices/audit-only commits. No new reviewed candidate in main..lane/integrator at turn start.
 
-**This turn — audience crescent:** compact shared walking paths replace the spread U and repeated market
-backtracking. Only present, home-arrived citizens are invited; sockets/walkers stay excluded. Arrivals face the
-anvil; three rear poses ease onto planted tiptoes. One approaches and steps onto the actually installed market
-cask (same raised position for body, subject and shadow). Same-authority rebuild retains routes/poses; a changed
-support cannot reuse them. Camera fits the audience with the smithy and full crucible. No new reviewed
-integrator commits at turn start. Typecheck/scoped lint,4 focused tests and isolated web build pass.
+**This turn — faces in the forge light:** anvil camera moves from the back of the west-side crescent toward
+its faces; same full smithy/audience/crucible envelope. Auxiliary casting source is on the molten piece's
+west-facing side, directed into the gathering through the existing occluded light field. Accepted molten
+geometry, stream, sparks, night grade and authority unchanged. No new integrator commits. Typecheck/scoped
+lint, room-fed Forge test and isolated web build pass.
 
-**Look / still open:** `shots/magic/room-smithy-pour@1920x1080.png` viewed at1920×1080. Around10 distinct bodies
-read as a gathering now (13 actual arrivals in the runtime test). Whole crucible/anvil remain visible. Still too
-many backs/overlapping heads; rear faces and the barrel support are too dark, tiptoe subtle. Next ring adjustment:
-bring the camera toward the front of their inward-facing crescent and warm the rear faces/support. Do that before
-life; do not claim the ring fully meets the bar. Metal/pour accepted by Tobias; preserve it. Capture exited0,
-no browser errors, owned browser/server/lock closed. This is the room-fed SIM rehearsal, not a real judged wish.
+**Look / next:** `shots/magic/room-smithy-pour@1920x1080.png` viewed1920×1080: about11 distinct people, warm
+faces, whole anvil/crucible in frame; the13-arrival crescent now reads as a gathering. Barrel spectator visible,
+but the support is dark and tiptoe subtle. Keep those as small visual weaknesses; next is visible life, then
+composition. Capture exited0/no browser errors; owned browser/server/lock closed. Room-fed SIM rehearsal,
+not a real judged wish. The091b0ac before-view is `room-smithy-pour-ring-091b0ac@1920x1080.png` beside it.
+
+**Audience091b0ac:** compact shared routes, existing present/home-arrived citizens only, inward facing, three
+eased toe poses and one continuous step onto the installed cask. Body/subject/shadow share support height.
+Same-authority rebuild retains routes; a changed support cannot reuse them. No invented or teleported audience.
 
 **Timing diagnosis:** the old still gave citizens34s to walk22–66m; checkpoint worked,14 were still walking.
 The still now holds drafting for another60 logical seconds (commit124s, pour132s); no invented people, speedup
