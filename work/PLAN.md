@@ -336,6 +336,11 @@ raid journey, earned growth/Chronicle, chat-led fire, panel/emotes. Walking stay
 Refresh Atlas (raid road/entry only), raid-gate, twitch-moments, emotes and campfire lanes next; progression
 lanes follow a frozen growth contract. Parked world lanes finish current work. Short turns, delegate reading.
 
+**In flight:** real chat and 13:13 weathervane wish delivered; specific Forge outcome under investigation.
+Public stream observer queues on capture session8705 (Terra helper); no recording claimed yet. Ask Tobias
+for the next wish only once attached. Genesis architect owns new world/genesis module + spec39/reference;
+no adopted scene changes. Five Twitch-first lane briefs refreshed; keep lane worktrees clean before syncing.
+
 **Grant fix:** Herald reader consent now includes user:write:chat for the crier and unions ALL scopes already
 held by this client/user, including scopes outside Herald. Existing read-only chat grants still allow ingest.
 Realm remains openid-only; any future API scopes must first preserve existing grants. Focused auth tests cover
