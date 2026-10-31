@@ -330,54 +330,46 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Order:** picture only, one obvious same-view before/after per turn. Merge good art checkpoints first;
+**Order:** picture only, one obvious same-view before/after per turn. Merge good checkpoints first;
 medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
 beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current:** PT10 now reaches founded kingdoms through the existing producer enrichment/scene-adoption
-path, not browser geometry replacement. Native tree fixture IDs and exact roots stay; homes/other fixtures
-and pinned baseline stay. New tree assets get normal hashes/collision revisions. Shared pure planting moved
-to content; installed canopy motion uses supplied meshes and the accepted distant-air material. Focused
-founded test+10 web tree tests/typecheck/lint/web build pass. Same-view public LIVE evidence:
-`shots/magic/founded-grove-{before,after,pair}.png`, `/stream?source=realm&kingdom=129634568&hour=19.5&time=30&camera=hero`.
-The channel is resting (0 citizens, lights dark); this is real public founded geometry, not a simulated crowd.
-Before: manifest ddd7fcac…014fc3d5, collision8,260 trees/3 old forms. Managed services adopt main normally.
-Generated groves f424fac retain existing sites and accepted736ee93 haze (`picture-grove-pair.png`).
+**Current:** AS11 09f0267 merged (ebde8de). Builder reachable from `/showcase` at `/-/avatar-builder`,
+SIMULATED with browser-local saves. Real saved/equip/entitlement authority remains pending; no shared
+v2 freeze. Additive local earned recipe accepted in avatar-style/contract-proposal.md; rig/sockets stay.
+`shots/magic/avatar-builder-main.png` viewed at1440×900; hair click changes portrait, Save says
+“Saved in this preview.”63 focused tests/typecheck/lint/build passed; after copy fix7 builder tests/lint.
+Lane next: show a clear continuation hint when colour controls sit below the options sheet's fold;
+older earned ribbon marks must remain wearable as tenure grows (already in lane log).
 
-95e403b keeps32 late SIMULATED neighbours at16–23.75s on existing routes; first Juniper/live timings
-unchanged. `road-homecoming-pair.png` viewed at19.5/time25:104→115 walking/240 supplied, more lanterns
-on left street/crossings. Opening choreography only. Market visitor experiment rejected/reverted: warmed
-`market-visitors-pair.png` at70s showed no clear gain; square screened by roofs. Next road-life change must
-read on open foreground routes, not behind houses. Capture warming:640×360 HIGH in≤1s seeks, then1920
-and settle; serial/hard deadlines. Separate browsers avoid accumulating software-renderer memory.
+**Live grove closed:**743effc uses existing producer enrichment/normal scene adoption, not browser
+geometry substitution.260 fixture IDs/roots stay; homes/other fixtures and native pin untouched. Public
+LIVE manifest now784da96e…f7c2d327, collision9, unchanged layout43cffdb6;15 forms replace3. Actual
+resting realm `shots/magic/founded-grove-pair.png` viewed at1920×1080 HIGH.0 citizens/windows is the
+observed offline state, not a simulated crowd. Source ready/curtain open/no browser errors; captures
+released. Generated groves f424fac also retain existing sites and accepted736ee93 distant air.
 
-AS10 whole citizens0b11c76 adopted in kingdom/stream/observed/self walkers in e2a9100. Six stable
-presence look IDs use exact painted recipes/kingdom light; render-local shoulders±4, two thin cloth capes.
-`avatar-runtime-pair.png` and `avatar-runtime-card.png` viewed. Live card/panel portrait asset delivery
-still needs host binding; only painter/bench updated. Goggled deep-skin eyes need clearer contrast;
-ankle joins need a motion look. Builder stays with the avatar lane. Reference/spec49/PRD81eab8f,
-A/B/C rejected; decisions in avatar-style/contract-proposal.md. Shared save/equip authority unchanged.
+**Citizens/roads:**AS10 e2a9100 uses sharp painted recipes in kingdom/stream/observed/self walkers and
+card painter. Six stable presence look IDs, render-local shoulders±4, two thin cloth capes; no shared rig
+change. Live card/panel portrait delivery still needs host binding. Goggled deep-skin eyes need contrast;
+ankle joins need a motion look. Reference/spec49/PRD81eab8f; A/B/C rejected.95e403b stages32 late
+SIMULATED neighbours at16–23.75s; first Juniper/live timings unchanged. `road-homecoming-pair.png`
+viewed at19.5/time25:104→115 walking/240 supplied. Everyday market experiment rejected/reverted:
+`market-visitors-pair.png` at70s had no clear gain; roofs screen the square. Next road-life pass must read
+on open foreground routes. Never fake live traffic or replace actual observations with rehearsal data.
 
-**Picture carried forward:**736ee93 gives static groves horizon dusk air beyond220m; `grove-air-pair.png`
-viewed, far-right grove loses definition.2f854d9 restores carried pools using existing exact-air projection,
-no strength/budget retune (`lantern-road-pools-pair.png`).73dc36e stages12 SIMULATED foreground arrivals
-16–21s:104 walking/136lit vs93/147, still small (`wide-homecoming-pair.png`); live traffic not demonstrated.
-975af2f/44de84b adopt sculpted picture-land consistently through render/light/contact/founded collision;
-9f843d7 ridge haze, aa7baeb birch/alder/fir at existing sites. Full tree families/wind remain team-owned.
-Land next: lower saddle behind beacon, break parallel pink trench banks. Accepted layout stays43cffdb6.
+**Picture carried:**975af2f/44de84b sculpted land consistent across render/light/contact/collision;
+9f843d7 ridge haze. Keep layout43cffdb6; kingdom-land6f60ae2 is parked v2. Forge64efb0f16 present
+spectators still left-heavy; pour02c3494/cameraf0112c6 stay. Market be6ab51 cart/wares. Effects d535804
+merged/unmounted; flight seam is realm-scene after presentation.update with actual piece world pose;
+retire only old stage flight trail, not sparks/runes/impact. Accepted home smoke stays. Harbour a6fcf9a
+potential `/kingdom/63920635` seat needs real royal glass anchor before live adoption. River/mountain
+seats remain. Keepers7eff5d8/sound1ed6865 additive/unmounted; emote40aeb18 glass clips. Some passport/
+gate/moments/Atlas host bindings absent. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a stays.
 
-**Mounted/merged:** Forge64efb0f16 present spectators, still left-heavy; pour02c3494/cameraf0112c6 stay.
-Market be6ab51 cart/wares; square sparse. Harbour a6fcf9a watchtower potential `/kingdom/63920635` only:
-better scale, isolated; needs actual royal glass anchor before live adoption. River/mountain seats remain.
-Effects d535804 merged; accepted smoke NOT replaced. Flight seam next: realm-scene after presentation.update,
-actual mesh world pose+ForgeRitualFrame; retire only old stage flight trail loop. Keepers7eff5d8/sound1ed6865
-additive, unmounted/unheard; never fake crowds. Emote40aeb18 glass clips, follow-up in lane log. Kingdom-land
-6f60ae2 is parked layout v2, NOT picture-land. Passport/gate/emotes/moments/atlas-w2 merged through47c0ef7,
-some live host bindings absent. Genesis content mostly unmounted. Do not reopen these as systems now.
-
-**Do not repeat:** ineffective far lantern scale/HDR/halo and idle retunes reverted;44m approaches lost34
-warm homes for3 visible walkers. Keep existing roads/identities, never fake live traffic. Captures serial,
-actual HIGH/settled fields, hard deadlines/finally. Lantern fadesbc9a54c; presence7c71b38 holds valid lease
-through retries then0.7s fade. Royal65534 is keep pane. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a
-stays; retain rounded copy. Managed5190web/5196API/5197realm/5195Forge/5194herald, affected-code restarts,
-all on.env. Logs ONLY `../conductor/state/services.log`, never journals/other services.
+**Operations:**managed5190web/5196API/5197realm/5195Forge/5194herald; affected-code restarts only,
+all on.env. Latest grove reload was delayed, then adopted normally. Logs ONLY `../conductor/state/services.log`.
+No journals/other services. Captures serial, hard deadlines/finally; no open observer waiting for chat.
+For warmed behaviour views use640×360 HIGH,≤1s seeks, then1920 and settle; separate browsers avoid
+software-renderer accumulation. Do not repeat ineffective far-lantern HDR/scale/halo or idle retunes,
+or44m approaches that lost34 warm homes for3 visible walkers. Presence leases7c71b38, lantern fadesbc9a54c.

@@ -15,3 +15,5 @@ follow-up: AS10 Check face readability and skin warmth at stream distance under 
 follow-up: AS11 Preserve previously earned ribbon marks when subscription tenure increases; the current exact-offer check rejects an older saved mark.
 
 2026-10-31 main integration: AS10 adopted in real kingdom/stream defaults and card portrait painter; same-view HIGH street pair viewed at shots/magic/avatar-runtime-pair.png. next: improve the goggled deep-skin citizen eye readability at street distance without whitening the skin; preserve the solid black eyes. Ankle joins at maximum stride need a motion look, no persistent gap established by still. Render-local shoulder/colour decisions recorded in contract-proposal.md; shared saved/equip schema unchanged.
+
+2026-11-01 main integration: AS11 merged; SIMULATED builder exposed from /showcase at /-/avatar-builder. Actual main page viewed at1440×900, hair selection and preview-local save checked; local recipe decision in contract-proposal.md, no live authority freeze. next: give the options sheet a clear continuation hint when colour controls are below the fold (hair page at1440×900); preserve the existing framing and grid.

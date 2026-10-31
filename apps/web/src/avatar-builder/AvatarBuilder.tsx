@@ -218,7 +218,7 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
     if (s.kind === 'saving') return 'Saving…';
     if (s.kind === 'error') return s.message ?? 'Not saved.';
     if (unearned().length) return 'Something worn is not earned yet.';
-    if (s.kind === 'saved' && !changed()) return 'Saved. This is you everywhere.';
+    if (s.kind === 'saved' && !changed()) return props.authority.origin === 'simulated' ? 'Saved in this preview.' : 'Saved. This is you everywhere.';
     return changed() ? 'Unsaved changes' : 'This is your saved look';
   };
 
@@ -230,7 +230,7 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
           <p class="ab-who">{props.name}</p>
         </div>
         <Show when={props.authority.origin === 'simulated' || props.entitlements.origin === 'simulated'}>
-          <ProvenanceSeal state="simulated" class="ab-seal" {...(panel() ? {} : { detail: 'Bench person and records: nothing is saved to anyone' })} />
+          <ProvenanceSeal state="simulated" class="ab-seal" {...(panel() ? {} : { detail: 'A preview citizen. Changes stay in this browser.' })} />
         </Show>
       </header>
 

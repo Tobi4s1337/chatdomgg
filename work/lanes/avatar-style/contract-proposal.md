@@ -84,3 +84,12 @@ The content recipe is exported as `@chatdom/content/avatar-style`; kingdom/strea
 portraits consume the same canonical recipes. This freezes the renderer seam, not a new saved/equip
 protocol. Proposal 3 remains pending its persistence consumer: no shared schema, ownership or earned-item
 authority changed in this picture slice.
+
+## Main decision — AS11 preview adoption, 2026-11-01
+
+The additive content recipe `earned` and its backward-compatible parser are accepted for rendering.
+The existing rig, shoulders and sockets stay as adopted in AS10. The builder is available as a clearly
+SIMULATED preview with browser-local saves; this does not freeze a shared `citizen-look` v2, grant
+entitlements, or persist a real person's appearance. Those authority contracts wait for their real consumer.
+The supplied earned checks remain validation helpers, not proof that a client owns an item. No change to
+live presence appearance IDs or the kingdom's saved/equip authority is included in this merge.

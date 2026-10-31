@@ -27,6 +27,8 @@ const loadLane = laneViews[lanePaths[window.location.pathname] ?? ''];
 if (/^\/kingdom\/[1-9][0-9]*$/.test(window.location.pathname)) {
   const { default: GenesisPreview } = await import('./genesis');
   render(() => <GenesisPreview />, root);
+} else if (window.location.pathname === '/-/avatar-builder') {
+  await import('./avatar-builder/builder-bench');
 } else if (window.location.pathname === '/showcase') {
   const { default: Showcase } = await import('./showcase');
   render(() => <Showcase />, root);
