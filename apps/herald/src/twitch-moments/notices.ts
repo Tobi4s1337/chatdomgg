@@ -3,7 +3,8 @@ import { z } from '../../../web/src/twitch-moments/zod';
 import { providerToken } from './credit';
 import { applyEntitlement, type EntitlementAct } from './entitlement';
 import { receiveAggregate, receiveForward, receiveRecipient, type GiftTier, type NoticeGifter } from './gifts';
-import { IGNORED, type MomentNormalizer, type NormalizedFact } from './normalizer';
+import { IGNORED, type MomentNormalizer, type NormalizedFact, type NormalizeResult } from './normalizer';
+import type { EntitlementContext } from './entitlement';
 
 // Only the fields a support act needs are read. `message`, `system_message`, `badges`, `color`, fragments and
 // every login are never read, kept or forwarded; unknown fields are stripped by the parser.
@@ -122,24 +123,27 @@ export const channelChatNotification: MomentNormalizer<ChatNotice> = {
   type: 'channel.chat.notification',
   version: '1',
   parse: parseNotice,
-  async apply(notice, { kingdomId, notification, repository, directory }) {
-    const ledger = { kingdomId, repository, directory }, at = notification.occurredAt;
-    switch (notice.kind) {
-      case 'entitlement': {
-        const result = await applyEntitlement(ledger, notice.personId, at, notice.act);
-        return result.outcome === 'stale' ? result : { outcome: 'applied', facts: result.facts };
-      }
-      case 'recipient': {
-        // The recipient's own home changes silently; the parcel is the group's. A stale entitlement still delivers it.
-        const entitlement = await applyEntitlement(ledger, notice.recipientId, at, { kind: 'gift', tier: notice.tier });
-        const facts: NormalizedFact[] = entitlement.outcome === 'applied' ? [...entitlement.facts] : [];
-        facts.push(...await receiveRecipient(ledger, { ...notice, at }));
-        return { outcome: 'applied', facts };
-      }
-      case 'aggregate':
-        return { outcome: 'applied', facts: await receiveAggregate(ledger, { ...notice, at }) };
-      case 'forward':
-        return { outcome: 'applied', facts: await receiveForward(ledger, { ...notice, at }) };
-    }
-  },
+  apply: (notice, { kingdomId, notification, repository, directory }) =>
+    applyChatNotice(notice, { kingdomId, repository, directory }, notification.occurredAt),
 };
+
+/** Same normalizer for authenticated, stripped service evidence; no provider frame is reconstructed. */
+export async function applyChatNotice(notice: ChatNotice, ledger: EntitlementContext, at: number): Promise<NormalizeResult> {
+  switch (notice.kind) {
+    case 'entitlement': {
+      const result = await applyEntitlement(ledger, notice.personId, at, notice.act);
+      return result.outcome === 'stale' ? result : { outcome: 'applied', facts: result.facts };
+    }
+    case 'recipient': {
+      // The recipient's own home changes silently; the parcel is the group's. A stale entitlement still delivers it.
+      const entitlement = await applyEntitlement(ledger, notice.recipientId, at, { kind: 'gift', tier: notice.tier });
+      const facts: NormalizedFact[] = entitlement.outcome === 'applied' ? [...entitlement.facts] : [];
+      facts.push(...await receiveRecipient(ledger, { ...notice, at }));
+      return { outcome: 'applied', facts };
+    }
+    case 'aggregate':
+      return { outcome: 'applied', facts: await receiveAggregate(ledger, { ...notice, at }) };
+    case 'forward':
+      return { outcome: 'applied', facts: await receiveForward(ledger, { ...notice, at }) };
+  }
+}

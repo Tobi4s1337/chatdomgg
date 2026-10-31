@@ -13,8 +13,9 @@ const root = document.getElementById('root');
 if (!root) throw new Error('Missing application root');
 const atlas = import.meta.glob<{ default: Component }>('./atlas/index.tsx');
 const loadAtlas = atlas['./atlas/index.tsx'];
-const laneViews = import.meta.glob<{ default: Component }>(['../../panel/src/Panel.tsx', './stream/index.tsx', './avatar-bench/index.tsx', './forge-bench/index.tsx', './audio-bench/index.tsx', './template-bench/index.tsx', './citizen-behaviour-bench/index.tsx', './forge-ritual-bench/index.tsx', './forge-refusal-bench/index.tsx', './citizen-card/index.tsx', './twitch-moments-bench/index.tsx', './campfire/index.tsx', './tavern/index.tsx', './raid-gate/index.tsx', './emotes/index.tsx']);
+const laneViews = import.meta.glob<{ default: Component }>(['../../panel/src/Panel.tsx', './stream/index.tsx', './avatar-bench/index.tsx', './forge-bench/index.tsx', './audio-bench/index.tsx', './template-bench/index.tsx', './citizen-behaviour-bench/index.tsx', './forge-ritual-bench/index.tsx', './forge-refusal-bench/index.tsx', './citizen-card/index.tsx', './twitch-moments-bench/index.tsx', './campfire/index.tsx', './tavern/index.tsx', './raid-gate/index.tsx', './emotes/index.tsx', './passport/index.tsx']);
 const lanePaths: Record<string, string> = {
+  '/-/passport':'./passport/index.tsx',
   '/-/citizen-card':'./citizen-card/index.tsx', '/-/twitch-moments':'./twitch-moments-bench/index.tsx', '/-/campfire':'./campfire/index.tsx',
   '/-/tavern':'./tavern/index.tsx', '/-/raid-gate':'./raid-gate/index.tsx', '/-/emotes':'./emotes/index.tsx',
   '/panel': '../../panel/src/Panel.tsx', '/stream': './stream/index.tsx',
@@ -23,7 +24,10 @@ const lanePaths: Record<string, string> = {
   '/-/avatars': './avatar-bench/index.tsx', '/-/forge': './forge-bench/index.tsx', '/-/audio': './audio-bench/index.tsx',
 };
 const loadLane = laneViews[lanePaths[window.location.pathname] ?? ''];
-if (window.location.pathname === '/-/realm') {
+if (window.location.pathname === '/showcase') {
+  const { default: Showcase } = await import('./showcase');
+  render(() => <Showcase />, root);
+} else if (window.location.pathname === '/-/realm') {
   const { default: RealmReference } = await import('./realm-reference');
   render(() => <RealmReference />, root);
 } else if (loadLane) {
@@ -36,7 +40,7 @@ if (window.location.pathname === '/-/realm') {
   const module = await loadAtlas();
   render(() => <module.default />, root);
 } else if (new URLSearchParams(location.search).get('walk') === '1') {
-  const [{ default: KingdomEntry }, { openSimulatedKingdomEntry }, { createLiveKingdomEntrySource }, { RealmEntryError }] = await Promise.all([
+  const [{ default: KingdomEntry }, { openSimulatedKingdomEntry }, { createLiveKingdomEntrySource }, { RealmEntryError, readRealmJson }] = await Promise.all([
     import('./kingdom-entry'), import('./kingdom-entry/simulated'), import('./kingdom-entry/live'), import('./realm/adapters/entry'),
   ]);
   const query = new URLSearchParams(location.search);
@@ -48,7 +52,7 @@ if (window.location.pathname === '/-/realm') {
     const response = await fetch(REALM_ENTRY_ROUTE.replace(':kingdomId', encodeURIComponent(kingdom.data)), {
       signal, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
     });
-    const body: unknown = await response.json().catch(() => null);
+    const body = await readRealmJson(response, `Finding the kingdom (/api/realm/entry/${kingdom.data})`);
     if (!response.ok) {
       const error = RealmApiErrorSchema.safeParse(body);
       throw new RealmEntryError(error.success ? error.data.status : response.status === 401 ? 'unauthenticated' : 'unavailable',

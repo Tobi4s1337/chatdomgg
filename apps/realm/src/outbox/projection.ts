@@ -1,5 +1,6 @@
 import { castleHostId, type RealmPrivateState, type RealmPublicMessage } from '@chatdom/shared/realm';
 import type { RealmOutboxRow } from '../persistence/postgres-repository';
+import { MOMENT_CURRENT_LIMIT, type TwitchMomentFact } from '@chatdom/shared/twitch-moments';
 
 export type RealmPublicHome = Extract<RealmPublicMessage, { type: 'home' }>;
 export type RealmPublicCastle = Extract<RealmPublicMessage, { type: 'castle' }>;
@@ -11,6 +12,7 @@ export interface PublicPrefix {
   readonly presence: RealmPublicPresence | null;
   readonly castle?: RealmPublicCastle | null;
   readonly castleBase?: RealmPublicCastle | null;
+  readonly moments?: { readonly throughSeq: number; readonly facts: readonly TwitchMomentFact[] };
   readonly cursor: number;
   readonly sequence: number;
   /** Original allocated bases, used only when a first Forge row publishes a home. */
@@ -28,6 +30,8 @@ export class PublicProjection {
   private castleBase: RealmPublicCastle | null;
   private castle: RealmPublicCastle | null;
   private presence: Extract<RealmPublicMessage, { type: 'presence' }> | null;
+  private momentThrough = 0;
+  private readonly moments = new Map<string, TwitchMomentFact>();
   /** The newest outbox row folded in. */
   cursor: number;
   /** The newest domain sequence folded in (`throughSequence`). */
@@ -41,6 +45,8 @@ export class PublicProjection {
     for (const home of initial.homes) { this.bases.set(home.plotId, home); this.homes.set(home.plotId, home); }
     this.cursor = initial.cursor;
     this.presence = initial.presence;
+    this.momentThrough = initial.moments?.throughSeq ?? 0;
+    for (const fact of initial.moments?.facts ?? []) this.rememberMoment(fact);
   }
 
   /** Remember an allocated home's base once, before publication. Later private builds never overwrite that prefix. */
@@ -72,6 +78,10 @@ export class PublicProjection {
         else { this.bases.set(row.plotId, published); this.homes.set(row.plotId, published); }
       }
       if (row.message.type === 'presence' && (!this.presence || row.message.frame.sequence > this.presence.frame.sequence)) this.presence = row.message;
+      if (row.message.type === 'moment') {
+        this.momentThrough = Math.max(this.momentThrough, row.message.fact.seq);
+        if (row.message.current) this.rememberMoment(row.message.fact);
+      }
       this.cursor = row.id;
       this.sequence = Math.max(this.sequence, row.sequence);
     }
@@ -79,10 +89,18 @@ export class PublicProjection {
 
   /** Current approved views: the newest crowd, then each published home with its committed attachments. */
   current(): RealmPublicMessage[] {
-    const current: RealmPublicMessage[] = [];
+    const current: RealmPublicMessage[] = this.momentThrough > 0
+      ? [{ type: 'moments.current', throughSeq: this.momentThrough, facts: [...this.moments.values()] }] : [];
     if (this.presence) current.push(this.presence);
     if (this.castle) current.push(this.castle);
     for (const plot of [...this.homes.keys()].sort()) current.push(this.homes.get(plot)!);
     return current;
+  }
+
+  private rememberMoment(fact: TwitchMomentFact) {
+    const key = `${fact.body.kind}:${fact.body.key}`, previous = this.moments.get(key);
+    if (previous && previous.seq >= fact.seq) return;
+    if (!previous && this.moments.size >= MOMENT_CURRENT_LIMIT) throw new Error('Moment current state exceeds its budget');
+    this.moments.set(key, fact);
   }
 }

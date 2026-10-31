@@ -8,6 +8,28 @@ export class RealmEntryError extends Error {
   constructor(readonly status: RealmApiError['status'], message: string) { super(message); this.name = 'RealmEntryError'; }
 }
 
+/** Show the actual gate failure, including SDK errors, without rendering a stack or credential-bearing URL. */
+export function realmEntryFailureMessage(error: unknown): string {
+  const details = error && typeof error === 'object' ? error as { message?: unknown; code?: unknown } : null;
+  const message = typeof details?.message === 'string' && details.message.trim() ? details.message
+    : typeof error === 'string' && error.trim() ? error : 'The gate failed without giving a reason.';
+  const clean = message.replace(/https?:\/\/[^\s"<>]+/g, raw => {
+    try { const url = new URL(raw); url.search = ''; url.hash = ''; url.username = ''; url.password = ''; return url.toString(); }
+    catch { return '[connection address]'; }
+  }).replace(/((?:ticket|token|secret|authorization|cookie)\s*[=:]\s*)[^\s,;]+/gi, '$1[redacted]').replace(/\s+/g, ' ').trim().slice(0, 320);
+  return typeof details?.code === 'number' ? `${clean} (code ${details.code})` : clean;
+}
+
+/** A proxy's HTML/text reply is an entry failure, not an unexplained JSON parser exception. */
+export async function readRealmJson(response: Response, step: string): Promise<unknown> {
+  const type = response.headers.get('content-type')?.split(';')[0]?.trim() ?? 'no content type';
+  if (!/^application\/(?:[\w.-]+\+)?json$/i.test(type)) {
+    throw new RealmEntryError('unavailable', `${step} returned HTTP ${response.status} ${type}; expected JSON.`);
+  }
+  try { return await response.json(); }
+  catch { throw new RealmEntryError('unavailable', `${step} returned HTTP ${response.status} with invalid JSON.`); }
+}
+
 export type RealmApiSession =
   | { readonly status: 'anonymous'; signInUrl(returnTo: string): string }
   | { readonly status: 'authenticated'; readonly expiresAt: number; readonly entry: RealmEntry;
@@ -28,6 +50,12 @@ async function failure(response: Response, fallback: string): Promise<RealmEntry
 /** Only a local kingdom path may be a return destination; the API validates it again. */
 export function realmSignInUrl(returnTo: string): string {
   if (!returnTo.startsWith('/') || returnTo.startsWith('//') || returnTo.includes('\\')) throw new RealmEntryError('refused', 'That gate leads somewhere outside Chatdom.');
+  // Callback outcomes explain the previous attempt; they are not part of its return destination.
+  const target = new URL(returnTo, 'https://chatdom.invalid');
+  if (['expired', 'declined', 'refused', 'unavailable'].includes(target.searchParams.get('signin') ?? '')) {
+    target.searchParams.delete('signin');
+    returnTo = `${target.pathname}${target.search}${target.hash}`;
+  }
   return `${REALM_AUTH_ROUTES.start}?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
@@ -52,7 +80,7 @@ export async function openRealmApiSession(kingdomId: KingdomId, fetcher: RealmFe
   try { response = await fetcher(REALM_AUTH_ROUTES.session, { ...PRIVATE, ...(signal ? { signal } : {}), method: 'GET', headers: { Accept: 'application/json' } }); }
   catch { throw new RealmEntryError('unavailable', 'The kingdom gate cannot be reached right now.'); }
   if (!response.ok) throw await failure(response, 'The kingdom gate cannot read your visit right now.');
-  const session = RealmSessionReplySchema.safeParse(await response.json().catch(() => null));
+  const session = RealmSessionReplySchema.safeParse(await readRealmJson(response, 'Reading your session (/api/realm/session)'));
   if (!session.success) throw new RealmEntryError('unavailable', 'The kingdom gate answered in a way we cannot trust.');
   if (session.data.status === 'anonymous') return { status: 'anonymous', signInUrl: realmSignInUrl };
   const { csrfToken, resumeScope, expiresAt } = session.data;
@@ -66,7 +94,7 @@ export async function openRealmApiSession(kingdomId: KingdomId, fetcher: RealmFe
       try { reply = await fetcher(REALM_AUTH_ROUTES.ticket, { ...PRIVATE, ...(signal ? { signal } : {}), method: 'POST', headers, body: JSON.stringify(body) }); }
       catch { throw new RealmEntryError('unavailable', 'The kingdom gate cannot be reached right now.'); }
       if (!reply.ok) throw await failure(reply, 'The kingdom gate did not open.');
-      const issued = RealmTicketReplySchema.safeParse(await reply.json().catch(() => null));
+      const issued = RealmTicketReplySchema.safeParse(await readRealmJson(reply, 'Requesting your entry ticket (/api/realm/ticket)'));
       if (!issued.success || issued.data.join.kingdomId !== kingdomId) throw new RealmEntryError('unavailable', 'The gate offered an entry for another kingdom.');
       if (issued.data.expiresAt <= Date.now()) throw new RealmEntryError('unavailable', 'The gate entry expired before you reached it. Try again.');
       return issued.data.join;

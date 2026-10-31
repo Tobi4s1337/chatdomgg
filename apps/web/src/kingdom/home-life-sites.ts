@@ -1,4 +1,4 @@
-import { DOOR_LANTERN_GLASS, GATE_BRAZIER_FLAME } from '@chatdom/content';
+import { DOOR_LANTERN_GLASS, GATE_BRAZIER_FLAME, FORGE_HEARTH_FLAME, FORGE_HEARTH_CHIMNEY_NOSE } from '@chatdom/content';
 import { VOXEL_METRES, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import { homeLifeAnchors, transformCardinalPoint, type RealmFoundedScene } from '@chatdom/world';
 import type { HomeLifeSite } from './home-life';
@@ -31,4 +31,24 @@ export function foundedLifeSites(scene: RealmFoundedScene): { homes: HomeLifeSit
       lantern: at(lamp, [DOOR_LANTERN_GLASS[0], DOOR_LANTERN_GLASS[1], blueprint.size[2] + .04]), normal: [Math.sin(angle), 0, Math.cos(angle)] });
   }
   return { homes, braziers, standard };
+}
+
+/** Anchors come from the exact installed civic forge, not a presentation-only copy. */
+export function foundedForgeSites(scene: RealmFoundedScene): { fires: RoyalBrazier[]; noses: Vec3[] } {
+  const assets = new Map(scene.assets.map(asset => [asset.assetHash, asset.blueprint]));
+  const fires: RoyalBrazier[] = [], noses: Vec3[] = [];
+  for (const piece of scene.placements) {
+    const blueprint = assets.get(piece.assetHash);
+    if (!blueprint) continue;
+    const at = (local: readonly number[]): Vec3 => transformCardinalPoint(piece.position, piece.rotation,
+      [local[0]! * VOXEL_METRES.build, local[1]! * VOXEL_METRES.build, local[2]! * VOXEL_METRES.build]);
+    if (piece.id === 'forge:hearth:v1' && /^civic-forge-hearth-(hearth|tide|grove)$/.test(blueprint.id)) {
+      const angle = piece.rotation * Math.PI / 2;
+      fires.push({ position: at(FORGE_HEARTH_FLAME), normal: [Math.sin(angle), 0, Math.cos(angle)] });
+      noses.push(at(FORGE_HEARTH_CHIMNEY_NOSE));
+    } else if (piece.id.startsWith('forge:brazier:v1:') && /^arrival-gate-brazier-(hearth|tide|grove)$/.test(blueprint.id)) {
+      fires.push({ position: at(GATE_BRAZIER_FLAME), normal: [0, 1, 0] });
+    }
+  }
+  return { fires, noses };
 }

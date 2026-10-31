@@ -24,7 +24,7 @@ seams rather than expanding scope. The five tasks are an execution order for the
   the same contract main uses. Judge cold/heated close shots, square shots and official-mark comparison detail;
   fix shape, shadows and contrast. · evidence: looked comparison + mount/disposal tests
 - [x] **AH03 — A dragon asleep around its chimney.** Deliver `createAnvilHeroDragon` for Hearth, Tide and Grove,
-  preserving existing bounds/mount/nose anchors and registered materials. Show chin on paws, a continuous coil,
+  preserving existing bounds/mount and registered materials; use the exported front-facing nose anchor. Show chin on paws, a continuous coil,
   folded wings and useful negative space; validate real final occupancy/support and open flue. Add actual roof
   context and existing nose smoke to the bench. · evidence: focused geometry tests + looked three-angle sheets
 - [ ] **AH04 — Make both silhouettes survive the square and the phone.** Refine the iron, stone and dragon from

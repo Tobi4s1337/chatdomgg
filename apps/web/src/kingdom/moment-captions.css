@@ -1,0 +1,5 @@
+.kingdom-moment-captions { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+.kingdom-moment-caption { position:absolute; transform:translate(-50%,-100%); max-width:min(28rem,86vw); padding:.7rem 1.05rem; border:1px solid #b58d536b; border-radius:3px 3px 10px 10px; color:#f6e6c5; background:#241d18ec; box-shadow:0 3px 12px #10101e75,inset 0 1px #f2d69425; text-align:center; font:400 15px/1.4 Georgia,serif; }
+.kingdom-moment-caption strong { display:block; color:#e9c385; font-weight:400; font-size:12px; letter-spacing:.09em; }
+.kingdom-moment-caption p { margin:.2rem 0; }
+.kingdom-moment-caption small { display:block; color:#d5c3a5; font-size:12px; }

@@ -29,7 +29,9 @@ export function twitchOidc(clientId: string, clientSecret: string): OidcProvider
   };
 }
 
-/** `openid` only: no Twitch API rights. The display name is requested as an ID-token claim, not a scope. */
+/** Keep this openid-only flow separate. If API scopes are ever added, first union the existing
+ * client/user grant (as Herald does); expanded consent must never narrow another feature’s grant.
+ * `openid` only: no Twitch API rights. The display name is requested as an ID-token claim, not a scope. */
 export function authorizationUrl(provider: OidcProvider, request: { redirectUri: string; state: string; nonce: string }): string {
   const url = new URL(provider.authorizationEndpoint);
   url.search = new URLSearchParams({
