@@ -330,50 +330,50 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Order / latest review:** finish readable night → solid molten Forge pour, brighter fire/spill and a fuller
-inward-facing watcher ring → visible life → lower street-led composition at30–35°, voxel terraces/three ridges
-and sky-backed roof landing. Keep accepted beacon shape, house models and gold frame/crest. No new systems.
-One piece per turn, scoped checks and viewed1920×1080 evidence; no matrices or audit-only commits. No fresh
-reviewed integration candidate: lane/integrator is already an ancestor of main (main…lane counts329/0 at check).
+**Order / latest review:** molten Forge / bright fire / inward-facing audience BEFORE visible life, then lower
+street-led30–35° composition, voxel terraces/three ridges and sky-backed roof landing. No new systems. Preserve
+accepted beacon shape, house models and gold frame/crest. One piece per turn, scoped checks,1920×1080 viewed;
+no matrices/audit-only commits. No new reviewed candidate in main..lane/integrator at turn start.
 
-**This turn — readable moonlit night and Genesis lights:** lifted evening exposure half a stop (.66→.93,
-.60→.85) and added cool moon/sky fill after the user's compressed-stream review. Retains HDR panes/local pools
-and restrained wall warmth from4f4cb83. Beacon shape unchanged; exposure compensation keeps its radiance steady.
-An analytic broad reflection from its lit air catches sky-exposed ledges/grazing faces/hill beyond the small
-occluded flood volume. This is art-directed bounced light, not a new shadow or volumetric system. It follows
-actual beacon strength and disappears when the beacon is off. Terrain/build materials share its uniforms.
+**This turn — molten pour / square warmth:** blueprint body/ink fade out early as filled cells become the solid
+orange-white HDR shell, with darker iron/seams; heat gives way to the actual clone during cooling. Shared cell
+ownership, judges/commit boundaries, flight/landing and reduced motion remain. Realm adapter now emits pour/
+seal/strike/cooling light into the same occluded field used by paving and citizens; opaque pending stages emit
+no fake casting light. Capture waits for those field workers and redraws before saving. Hearth has a larger
+bright flame/sparks/full source; forge braziers retain normal scale and stay lit as working fires independently
+of stream state. Castle brazier treatment untouched. Scoped tests14/typecheck/lint and isolated web build pass.
 
-Genesis potential land has deterministic anonymous SIMULATED window painting (6/7 homes), consumed ONLY by
-windows.setFrame. Its real presence feed remains empty; no crowd/build/room/history/deeds receive those slots.
-Preview stream state remains offline. Debug counts the actual visual panes. All previews now show the standard
-small SIMULATED chip; Atlas return lives in the caption. Rounded viewers and three distinct authored lore lines
-replace the developer copy, including rounded showcase counts. These are proposed-world lore, not channel quotes.
+**Look / NOT CLOSED:** `shots/magic/room-smithy-pour@1920x1080.png` viewed after two iterations. Actual room-fed
+presentation from hash-verified adopted bytes plus prospective SIM fixtures/attachment, muted; not real judged
+chat or gold-frame OBS UI. No browser errors, runner/browser/server/lock closed. Metal reads orange/solid,
+blue cloud gone, paving/faces receive warm spill; right brazier no longer a giant white flame. Still too regular
+and gridded, hearth core white. Only FOUR figures visible (two foreground facing viewer, one left cropped, one
+right separate): the requested ring is NOT demonstrated. Do not move to life or claim Forge moment finished.
 
-**Viewed:** `shots/magic/moonlit-town@1920x1080.png` (gold-framed SIM stream,214lit/240citizens) and
-`shots/magic/moonlit-coast@1920x1080.png` (real API strict404 potential,13lit/0citizens), both19.5/high HDR,
-settled fields, no browser errors. Town curtain explicitly hidden before accepted capture: an earlier screenshot
-caught loading despite renderer-ready and was rejected. Roofs/streets read blue now, castle/hill receive warmth.
-Foreground remains dark, castle bounce broad; coast still sparse with an oversized keep and fine water banding.
-River's old darker still was captured; updated river/mountain comparison is NOT demonstrated. No whole-magic-pass
-completion claim. Typecheck, scoped lint,13 focused tests and isolated web build pass; browsers/previews/locks
-closed. A real-GPU1080p look at5190 `/stream?source=simulated&hour=19.5&time=30` and `/kingdom/63920635?hour=19.5`
-should judge compressed readability, halo/pool balance and castle bounce; software fps proves nothing.
+**Audience WIP in code:**16 authored market standing points, workshop-avoiding paths and one-second bounded
+selection of present/home-lit citizens. Actual cached market accepts all16. Test verifies assignments, NOT
+arrival/visibility. A3s same-authority handoff prevents restored watcher routes being cleared by an inactive
+Forge sample before activity replays during scene rebuild; focused false→update→true test passes. This did
+NOT improve the visible still. Next diagnose actual route samples/goalReached/headings at38/62/64/72s and
+camera coverage before another capture; do not add more assignment-only tests or fake/teleport an audience.
+Anvil-hero owns the sleeping muzzle/forepaws sculpt; its hearth dragon still reads grey cluster. Actual judged
+chat-word cue still missing (must be transient after word judge passes, never log rejected speech).
 
-**Forge next — exact seams:** presentation/blueprint.ts pale shell + stage.ts set/pour + shell.ts molten cells;
-reduce the hologram through pour, show solid orange-white metal/cooling. royal-life/index.ts forge fire strength
-currently.8; realm-scene.sources only emits landing light, not pour. citizen-scene.watchForge gathers at most8,
-standing points3–9m from anvil; arrange a larger ring and face it inward. These are the next focused art changes.
-Smithy e81a71b is real versioned content/provider/collision, not a browser-only prop. Viewed its room-fed pour
-again; blueprint white, dragon grey cluster. Anvil-hero progress owns next muzzle/forepaw sculpt fix; keep mark.
-Old stream-wide is hero, not a genuinely wide view. Post544d55a is linear HDR/depth AO/bloom/one ACES output;
-material height fog stays on, optional post fog off until transparent water migrates consistently.
+**Night dc8abcb:** half-stop exposure lift and cool moon/sky fill restored roof/street readability after4f4cb83
+was too crushed. Broad analytic beacon reflection now catches keep/hill; bounce still broader than a delicate
+rim. Viewed `shots/magic/moonlit-town@1920x1080.png` and `moonlit-coast@1920x1080.png`. Town stream curtain
+must actually be hidden before captures: renderer-ready alone caught a loading picture once. Genesis previews
+have anonymous SIM window painting ONLY at window renderer; presence feed/crowd/build/room/history stay empty.
+13lit/0citizens on coast; standard SIM chip, rounded audiences and distinct proposed lore. Updated river/mountain
+comparison remains undemonstrated. Coast sparse/oversized keep/water banding; foregrounds dark. GPU1080p look
+at5190 `/stream?source=simulated&hour=19.5&time=30` and `/kingdom/63920635?hour=19.5` still useful for glow/readability.
+Post544d55a: linear HDR/original depth AO/bloom/one ACES output; material fog on, optional post fog off. Old
+stream-wide is hero, not an actual wide view. Smithy e81a71b is real versioned civic content/provider/collision.
 
-**Preserved / live:** unfinished city/camera/count/art-brief work remains in stash
-`7c6f1f9d324042998fff71e4d5ea7863ea46cf0a` (7files); do not drop. Rounded counts now overlap that stash: retain
-current rounded copy when applying later. work/night-paint has superseded initial paint; do not reapply it.
-Genesis40–44/passport45 are with team; Atlas still needs actual three holding entries/under25-viewer dabs.
-Real greeting/wish reached realm but wish followed stream:offline by4.8s; approved real ritual unproved. Forge is
-server-side/no browser required. Tobias announces live/sends next wish; no waiting observer. Actual-word cue
-still needs a transient post-judge-pass path, never log rejected speech. Managed5190web/5196API/5197realm/
+**Preserved / live:** city/camera/count/art-brief WIP in stash `7c6f1f9d324042998fff71e4d5ea7863ea46cf0a`
+(7files), do not drop; retain current rounded copy on overlap. work/night-paint is superseded; don't reapply.
+Genesis40–44/passport45 with team; Atlas still needs actual3 holding entries/under25-viewer dabs. Greeting/wish
+reached realm but wish followed offline by4.8s; approved real ritual unproved. Forge is server-side/no browser
+required. Tobias announces live/sends next wish; no waiting observer. Managed5190web/5196API/5197realm/
 5195Forge/5194Herald; relevant-code restarts only, all on.env. Read ONLY `../conductor/state/services.log`, never
-host journals. Adopted layout43cffdb6/240homes/v1 pinned; provider owns workshop revision; monarch65534 keep pane.
+host journals. Layout43cffdb6/240homes/v1 pinned; provider owns workshop revision; monarch65534 keep pane.

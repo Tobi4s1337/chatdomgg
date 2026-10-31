@@ -58,6 +58,7 @@ describe('room-fed Forge scene', () => {
       expect(puff.y).toBeGreaterThanOrEqual(0); expect(puff.y).toBeLessThan(2);
       handlers.stage?.('opaque-activity', 'drafting'); adapter.update(1000, false);
       expect(adapter.active()).toBe(true);
+      expect(adapter.sources()).toEqual([]); // Opaque judging cannot invent a luminous casting.
       expect(submit).not.toHaveBeenCalled(); expect(adapter.activeAttachmentId).toBeNull();
       expect(adapter.update(1100, true)).toBe(true);
       camera.updateMatrixWorld(true);
@@ -82,6 +83,7 @@ describe('room-fed Forge scene', () => {
       camera.position.set(100, 80, 60); const untouched = camera.position.clone();
       expect(adapter.update(7000, false)).toBe(false); expect(camera.position.equals(untouched)).toBe(true);
       expect(stageHeat).toHaveBeenLastCalledWith(expect.objectContaining({phase:'pour',source:'simulated'}));
+      expect(adapter.sources()).toContainEqual({ position: [5, 1.88, 8], normal: [0, 1, 0], strength: 1 });
       // The actual pour prop must fit, not just the candidate: the production shot previously cut off its bail.
       camera.aspect=1440/900; adapter.update(7000,true); camera.updateMatrixWorld(true);
       const crucible=scene.getObjectByName('forge-crucible')!;

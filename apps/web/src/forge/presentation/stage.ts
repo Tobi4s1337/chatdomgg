@@ -126,7 +126,7 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
   const spinQuaternion = new THREE.Quaternion(), bankQuaternion = new THREE.Quaternion(), rotation = new THREE.Quaternion();
   let shellPose = anvilPose;
   const up = new THREE.Vector3(0, 1, 0), along = new THREE.Vector3(), velocity = new THREE.Vector3();
-  const look = { visible: false, reveal: 0, ink: 0, inkAlpha: 1, dissolve: 0, glow: 1, lock: 0 };
+  const look = { visible: false, reveal: 0, ink: 0, inkAlpha: 1, bodyAlpha: 1, dissolve: 0, glow: 1, lock: 0 };
   const shellState: ShellState = { visible: false, mode: SHELL_MODE.molten, cool: 0, flash: 0, cover: 0, vanish: 0, time: 0 };
   const sealState = { visible: false, place: sealPlace, side: reach + 1.25, below: size.y * .5 + .75, alpha: 0, stamp: 0, emboss: 0, hot: 0, ribbon: 0, live: false };
 
@@ -224,7 +224,7 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
   }
 
   function pour(f: StageFrame, reduced: boolean) {
-    const p = f.progress, fill = smooth(.13, .9, p);
+    const p = f.progress, fill = smooth(.1, .9, p);
     cells.uFill.value = fill;
     // The crucible arrives above the part, tips, pours, rights itself and leaves.
     const arrive = smoother(0, .1, p), leave = smoother(.94, 1, p);
@@ -310,7 +310,7 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
     const phase = f.phase, p = f.progress, later = (of: ForgePhase) => FORGE_STAGE_TIMING.findIndex(s => s[0] === phase) >= FORGE_STAGE_TIMING.findIndex(s => s[0] === of);
     // Every owned value is set on every frame, so any sampling interval or seek draws the same picture.
     piece.visible = false; restorePiece();
-    look.visible = false; look.reveal = 0; look.ink = 0; look.inkAlpha = 1; look.dissolve = reduced ? 1 : 0; look.glow = 1; look.lock = 0;
+    look.visible = false; look.reveal = 0; look.ink = 0; look.inkAlpha = 1; look.bodyAlpha = 1; look.dissolve = reduced ? 1 : 0; look.glow = 1; look.lock = 0;
     cells.uFill.value = later('seal') ? 1 : 0;
     Object.assign(shellState, { visible: false, mode: SHELL_MODE.molten, cool: 0, flash: 0, cover: 0, vanish: 0, time: f.elapsed });
     sealState.visible = false; sealState.alpha = 0;
@@ -325,10 +325,12 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
     if (phase === 'words') words(f, reduced);
     else if (phase === 'blueprint') { drawn(f, p, reduced, true); if (!reduced) driftMotes(f, smooth(.6, 1, p)); }
     else if (phase === 'pour') {
-      // The drawing stays locked while metal fills it from below; its contour lets go as the last layer lands.
+      // The drawing gives way to the rising metal as the stream arrives.
       drawn(f, 1, reduced, false);
       pour(f, reduced);
-      look.inkAlpha = 1 - smooth(.8, .97, p); look.visible = look.inkAlpha > 0 || cells.uFill.value < 1;
+      look.bodyAlpha = 1 - smooth(.06, .2, p);
+      look.inkAlpha = 1 - smooth(.06, .23, p);
+      look.visible = look.inkAlpha > .001 || look.bodyAlpha > .001;
       shellState.visible = true;
     } else if (phase === 'seal' || phase === 'strike') {
       shellState.visible = true;
