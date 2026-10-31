@@ -5,8 +5,9 @@ The living and garden forms that dress open ground (spec 28, R1). `index.ts` exp
 `DRESSING_ROLES` and `DRESSING_SIZES`. Non-kit forms are built in Grove and have `kind: 'flora'`. All units below
 are 0.125 m build cells, half-open, with y=0 the ground.
 
-So far the collection holds the six meadow cover forms and the `seedling-bed` in `cover.ts`, and the
-`stepping-stones` kit form in `path.ts`. These last two make the tended doorstep. The heather, fern, garden,
+So far the collection holds the six meadow cover forms, the `seedling-bed` and the `cutting-bed` in `cover.ts`,
+and the `stepping-stones` kit form in `path.ts`. The seedling bed and stones make the tended doorstep; with the
+cutting bed they make the market stall's garden. The heather, fern, garden,
 field, edge-stone, tree and woodland forms will join the same index as they are authored and reviewed. Until
 then `createDressing` throws for them.
 
@@ -45,6 +46,13 @@ except for a head's stemless cells, which its own head holds up. So every patch 
   planting holes heaped two cells high. There is no tool and nothing to harvest. It is passive and lies flush,
   so it may stand in a forecourt.
 
+- **cutting-bed** 24×4×10: a grower's cutting bed, the stock of a market stall. A continuous edge of turned
+  `earth` holds three staggered rows of 2×2 heads in three blocks of one colour each: five `petal`, four `cream`,
+  five `goldLeaf`, never mixed, so it reads as planted rather than wild. `plan` takes a colour per head, named by
+  its even corner. Leaves bank against every head. Between the cream and the gold one head has been cut for the
+  stall: its bare stems stand with `moss` cut ends, and a single heaped clod lies on the edge beside them. It
+  is half a metre tall, passive and flush, with nothing to pick, sit on or step up.
+
 ## Path
 
 - **stepping-stones** (kit) 24×2×8: three flat stones a stride apart, two courses of the kit's stone (Hearth
@@ -79,6 +87,7 @@ Full detail, from the mesher (confirmed by `render-stats.json`); each renders in
 | wildflowers-* (each) | 219 | 956 | 93 |
 | clover-pebbles | 96 | 502 | 37 |
 | seedling-bed | 182 | 590 | 39 |
+| cutting-bed | 351 | 1,098 | 106 |
 | stepping-stones (each kit) | 182 | 324 | 37 |
 
 Budget: ≤ 1,500 triangles per cover form, ≤ 6,000 per path form. The flush forms are mounted at full detail

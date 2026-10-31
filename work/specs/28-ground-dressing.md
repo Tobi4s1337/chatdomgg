@@ -390,3 +390,18 @@ with channel points; benches, gates, stiles and anything sat on or opened.
   forecourt drift, with the reason in `report.omissions`.
 - **2026-10-31 — Public drifts take their colour from the nearest lot, not the current footprint,** so a home's
   growth never recolours dressing outside its lot.
+- **2026-10-31 — The market stall keeps a garden, so `cutting-bed` joins the cover forms.** Main asked for a
+  flower-filled, worn planting strip beside the existing stalls, without a second cart. The square is paved to its
+  edge, and the wild drift's 2 m patch cannot hug that edge under the square's radius rule. A stall whose back
+  meets the square's edge within 4 m gets a strip on the open ground behind it. The stall is found in the host's
+  real `occupied` placements (`market-stall-*`); none is assumed. From behind the stall's inner end, a run of up to
+  a dozen metres heads toward the middle of the square, where the market sees it: a cutting bed, worn stepping
+  stones up the bank, a second cutting bed turned half round, then a seedling bed. A loose petal drift has seeded
+  itself up the bank above them, and the turf by the stones is clover. Only these flush, passive pieces may border
+  that one square. Each whole box stays outside it, 0.3 m off its paving, with no corner of the square inside the
+  box. Every other clearance is unchanged, and whatever does not fit is reported in `omissions` (in the founded
+  town the castle road's paving ends the run before the seedling bed). `cutting-bed` (24×4×10, cover band and
+  budget) follows `seedling-bed` in the R1 order. It has three blocks of one colour (petal, cream, gold) on turned
+  earth, with one head cut for the stall. It is passive, mounted at full detail only and casts no shadow. The
+  adopted cover now keeps every non-solid piece, so the flush stones of doorsteps and the stall garden reach the
+  real scene. Solids still wait for collision composition.

@@ -15,7 +15,7 @@ const BANDS: Record<'tufts' | 'clover' | 'flowers' | 'flat' | 'solid', Bands> = 
   clover: [[1, 0, 30, 0, 21]],
   // Flower drifts keep the town reading flowered from the castle.
   flowers: [[1, 0, 30, 0, 21], [2, 30, 90, 21, 60], [4, 90, 180, 60, 110]],
-  // Flush pieces (a seedling bed, stepping stones) are one course deep: a coarse level would stand them up as slabs,
+  // Flush pieces (seedling and cutting beds, stepping stones) lie on one course of earth or stone: a coarse level would stand them up as slabs,
   // so they keep full detail and dissolve past the street.
   flat: [[1, 0, 40, 0, 28]],
   solid: [[1, 0, 32, 0, 22], [2, 32, 95, 22, 55], [4, 95, 180, 55, 110]],
@@ -50,7 +50,7 @@ interface Batch { blueprint: VoxelBlueprint; family: keyof typeof BANDS; blocks:
 
 function familyOf(blueprint: VoxelBlueprint): keyof typeof BANDS {
   const role = pieceRole(blueprint);
-  if (role.form === 'seedling-bed' || role.form === 'stepping-stones') return 'flat';
+  if (role.form === 'seedling-bed' || role.form === 'cutting-bed' || role.form === 'stepping-stones') return 'flat';
   if (!role.cover) return 'solid';
   return role.form.startsWith('wildflowers-') ? 'flowers' : role.form === 'clover-pebbles' ? 'clover' : 'tufts';
 }

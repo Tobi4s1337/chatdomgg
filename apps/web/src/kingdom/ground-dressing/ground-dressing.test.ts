@@ -82,7 +82,7 @@ describe('planGroundDressing', () => {
     expect(JSON.stringify([...again.pieces])).toBe(JSON.stringify([...plan.pieces]));
     const ids = all(plan).map(p => p.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.every(id => /^(meadow|lot:[^:]+|forecourt:\d+:-?1|doorstep:\d+:-?1|drift:-?\d+:-?\d+)(:[^:]+)*$/.test(id))).toBe(true);
+    expect(ids.every(id => /^(meadow|lot:[^:]+|forecourt:\d+:-?1|doorstep:\d+:-?1|drift:-?\d+:-?\d+|market:stall:\d+:garden)(:[^:]+)*$/.test(id))).toBe(true);
     expect(all(plan).length).toBeGreaterThan(4000);
     expect(all(plan).length).toBeLessThanOrEqual(40_000);
   }, 120_000);

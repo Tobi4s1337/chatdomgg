@@ -24,9 +24,10 @@ const HEAD = [2, 4] as const;
  * - `e`, `E`: turned earth one or two cells tall. `s`: a seedling leaf on one earth cell. `t`: a seedling heart,
  *   a leaf and a moss tip on one earth cell. `m`: one cell of moss. `M`: moss on one earth cell.
  *
- * Columns never overhang except a head's `H` cells, so every patch stands on its own ground.
+ * Columns never overhang except a head's `H` cells, so every patch stands on its own ground. `flower` is one
+ * material, or a material per head named by its even corner, for a bed planted in blocks of colour.
  */
-export function plan(rows: readonly string[], size: Vec, flower?: number, stone: number = MAT.stone): Map<string, number> {
+export function plan(rows: readonly string[], size: Vec, flower?: number | ((hx: number, hz: number) => number), stone: number = MAT.stone): Map<string, number> {
   if (rows.length !== size[2] || rows.some(row => row.length !== size[0])) throw new Error(`A plan must be ${size[2]} rows of ${size[0]} marks.`);
   const cells = new Map<string, number>();
   const column = (x: number, z: number, from: number, to: number, material: number) => {
@@ -56,7 +57,7 @@ export function plan(rows: readonly string[], size: Vec, flower?: number, stone:
     const whole = quad.every(m => 'FHfh'.includes(m)) && quad.some(m => 'Ff'.includes(m)) && quad.filter(m => 'fh'.includes(m)).length <= 1;
     if (!whole) throw new Error(`The flower head at ${hx},${hz} is not a 2×2 on even cells with a stem and at most one chipped corner.`);
     if (mark === 'F' || mark === 'f') column(x, z, 0, HEAD[0], MAT.leaf);
-    column(x, z, HEAD[0], mark === 'f' || mark === 'h' ? HEAD[0] + 1 : HEAD[1], flower);
+    column(x, z, HEAD[0], mark === 'f' || mark === 'h' ? HEAD[0] + 1 : HEAD[1], typeof flower === 'number' ? flower : flower(hx, hz));
   }));
   return cells;
 }
@@ -194,4 +195,30 @@ const SEEDLINGS = [
 export function seedlingBed(): Cover {
   const size: Vec = [24, 3, 8];
   return { size, boxes: toBoxes(plan(SEEDLINGS, size), size) };
+}
+
+/**
+ * A grower's cutting bed, the stock of a market stall: a strip of turned earth holding three staggered rows of
+ * blooms in three blocks of one colour each, pink, then cream, then gold, so it reads as planted rather than wild.
+ * Leaves bank against every head. Between the cream and the gold one head has been cut for the stall, leaving
+ * its bare stems with the cut ends showing, and the soil is heaped on the path side where it came up. It lies on the
+ * ground at half a metre, passive and flush like the seedling bed: nothing to pick, sit on or step up.
+ */
+const CUTTING = [
+  '........................',
+  '.eeeeeeeeeeeeeeEeeeeee..',
+  '.eFF21Ff12FF21b12eFF21e.',
+  '.eFF22FF21Fh12cb1efF12e.',
+  '.ee1FF21FF12FF2eFF21FFe.',
+  '.eeeFf1eFFe1hF1eFF1eFhe.',
+  '.eFF12FF2eFF21FF1eFF2ee.',
+  '.eFh1eFF1eFF1eFf2eFF1ee.',
+  '.eeeeeeeeeeeeeeeeeeeeee.',
+  '........................',
+];
+
+export function cuttingBed(): Cover {
+  const size: Vec = [24, 4, 10];
+  const block = (hx: number) => (hx <= 6 ? MAT.petal : hx <= 12 ? MAT.cream : MAT.goldLeaf);
+  return { size, boxes: toBoxes(plan(CUTTING, size, block), size) };
 }

@@ -116,16 +116,28 @@ try {
   if (dressing) tasks.push(dressing.ready);
 
   // Capture poses: this lane's plan-derived views, plus the scene's own hero framing over the town.
-  const market = layout.nodes.find(node => node.id === layout.market.nodeId)!.position;
+  const marketNode = layout.nodes.find(node => node.id === layout.market.nodeId)!.position;
   const hero = () => {
     const portrait = canvas.clientWidth < canvas.clientHeight;
-    return { eye: [market[0] + (portrait ? 150 : -110), market[1] + (portrait ? 36 : 40), market[2] + 160] as Vec3,
-      target: [layout.castle.centre[0], layout.castle.centre[1] + 9, portrait ? -35 : market[2] - 8] as Vec3, fov: portrait ? 58 : 52 };
+    return { eye: [marketNode[0] + (portrait ? 150 : -110), marketNode[1] + (portrait ? 36 : 40), marketNode[2] + 160] as Vec3,
+      target: [layout.castle.centre[0], layout.castle.centre[1] + 9, portrait ? -35 : marketNode[2] - 8] as Vec3, fov: portrait ? 58 : 52 };
+  };
+  // The stall garden, seen from the square at standing height: the stall to one side, its beds along the bank.
+  const market = () => {
+    const garden = plan ? [...plan.pieces.values()].flat().filter(p => p.id.startsWith('market:stall:') && !p.id.includes(':wild:')) : [];
+    if (!garden.length) throw new Error('No stall garden in this plan');
+    const xs = garden.map(p => p.position[0]), zs = garden.map(p => p.position[2]);
+    const x = (Math.min(...xs) + Math.max(...xs)) / 2, z = (Math.min(...zs) + Math.max(...zs)) / 2;
+    const square = layout.market.boundary, mx = square.reduce((n, p) => n + p[0], 0) / square.length - x, mz = square.reduce((n, p) => n + p[1], 0) / square.length - z;
+    const length = Math.hypot(mx, mz) || 1, portrait = canvas.clientWidth < canvas.clientHeight, back = portrait ? 15 : 12;
+    const ex = x + mx / length * back, ez = z + mz / length * back;
+    return { eye: [ex, landHeight(ex, ez) + 2.3, ez] as Vec3, target: [x, landHeight(x, z) + 0.6, z] as Vec3, fov: portrait ? 64 : 50 };
   };
   const views = dressing?.views();
   let pose = { eye: [0, 0, 0] as Vec3, target: [0, 0, 1] as Vec3, fov: 52 };
   const choose = (name: string) => {
     if (name === 'hero') pose = hero();
+    else if (name === 'market') pose = market();
     else if (views && name in views) { const view = views[name as keyof typeof views]; pose = { ...view, fov: name === 'ridge' ? 46 : 58 }; }
     else throw new Error(`Unknown view ${name}`);
   };

@@ -57,7 +57,7 @@ describe('ground-dressing blueprints', () => {
   it('lists the finished forms in R1 order, kit forms Hearth, Tide, Grove', () => {
     expect(BLUEPRINTS.map(b => b.id)).toEqual([
       'dressing-meadow-tufts', 'dressing-wildflowers-petal', 'dressing-wildflowers-blue', 'dressing-wildflowers-gold',
-      'dressing-wildflowers-cream', 'dressing-clover-pebbles', 'dressing-seedling-bed',
+      'dressing-wildflowers-cream', 'dressing-clover-pebbles', 'dressing-seedling-bed', 'dressing-cutting-bed',
       'dressing-hearth-stepping-stones', 'dressing-tide-stepping-stones', 'dressing-grove-stepping-stones',
     ]);
   });
@@ -226,6 +226,38 @@ describe('seedling bed', () => {
     expect(seedlings.filter(s => s.some(c => cells.get(key(...c)) === MAT.moss) && s.length === 6).length).toBeGreaterThanOrEqual(7);
     expect(seedlings.filter(s => s.length === 1)).toHaveLength(1);
     expect([...cells].filter(([k, m]) => m === MAT.earth && parse(k)[1] === 1).length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('cutting bed', () => {
+  const cells = cellsOf('cutting-bed');
+  const blooms = [MAT.petal, MAT.cream, MAT.goldLeaf] as const;
+
+  it('stands half a metre at most inside one continuous edge of turned earth', () => {
+    expect(Math.max(...[...cells.keys()].map(k => parse(k)[1]))).toBeLessThanOrEqual(3);
+    expect(new Set(cells.values())).toEqual(new Set([MAT.earth, MAT.leaf, MAT.moss, ...blooms]));
+    // One soil edge runs round the whole bed; the rest shows between the plants.
+    const [edge] = components(cells, m => m === MAT.earth).sort((a, b) => b.length - a.length);
+    expect(Math.min(...edge!.map(c => c[2]))).toBe(1);
+    expect(Math.max(...edge!.map(c => c[2]))).toBe(8);
+    expect(Math.max(...edge!.map(c => c[0])) - Math.min(...edge!.map(c => c[0]))).toBeGreaterThanOrEqual(20);
+    // Every bloom sits on its head courses, held by its stem and leaves.
+    for (const [k, m] of cells) if ((blooms as readonly number[]).includes(m)) expect(parse(k)[1], k).toBeGreaterThanOrEqual(2);
+  });
+
+  it('is planted in three blocks of one colour, pink then cream then gold, never mixed', () => {
+    const heads = blooms.map(m => components(cells, n => n === m).filter(c => c.length >= 6));
+    expect(heads.map(list => list.length)).toEqual([5, 4, 5]);
+    const spans = heads.map(list => list.flat().map(c => c[0]));
+    // Each block keeps to its own run along the bed.
+    expect(Math.max(...spans[0]!)).toBeLessThan(Math.min(...spans[1]!));
+    expect(Math.max(...spans[1]!)).toBeLessThan(Math.min(...spans[2]!));
+  });
+
+  it('shows one head cut for the stall: bare stems with a cut end, and heaped soil', () => {
+    const cut = [...cells].filter(([k, m]) => m === MAT.moss && parse(k)[0] >= 13 && parse(k)[0] <= 16);
+    expect(cut.length).toBeGreaterThanOrEqual(2);
+    expect([...cells].filter(([k, m]) => m === MAT.earth && parse(k)[1] === 1)).toHaveLength(1);
   });
 });
 

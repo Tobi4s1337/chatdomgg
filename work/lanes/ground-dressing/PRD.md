@@ -28,7 +28,7 @@ agent writes the web planner at a time. Never label two tasks independent while 
 
 ## Tasks
 
-- [ ] **GD01 — A tended meadow visible through the real renderer.** Author meadow tufts, four single-colour
+- [x] **GD01 — A tended meadow visible through the real renderer.** Author meadow tufts, four single-colour
   wildflower drifts and clover/pebbles. Build pure deterministic clear-ground/density/drift planning, renderer
   mount, actual shadow release/cleanup, capture script and a typed SIMULATED fixture bench with production voxel
   mesher/material. Preserve calm open meadow and street/window clearance. Use bounded visible batching; measure the representative result once, without a synthetic future-family budget proof. Keep planner output

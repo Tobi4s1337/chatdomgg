@@ -220,6 +220,44 @@ function forecourtStrip(ctx: Context, a: HomeArea, side: 1 | -1): ForecourtStrip
   };
 }
 
+/** A market stall whose back meets the edge of the square, framed for the garden behind it. */
+interface MarketStall {
+  id: string; style: SettlementHome['style'];
+  /** Unit direction along the edge, from the stall's outer end toward the middle of the square. */
+  u: XZ;
+  /** Unit outward normal of the edge, away from the square. */
+  n: XZ;
+  /** The point on the edge behind the stall's back centre; `start`/`end` bound the strip along `u` from it. */
+  edge: XZ; start: number; end: number;
+}
+
+/**
+ * Stalls are the host's real occupied placements (`market-stall-*` inside the square), never assumed positions. A
+ * stall qualifies when the square's edge lies within 4 m behind its back.
+ */
+function marketStalls(ctx: Context): MarketStall[] {
+  const square = ctx.plan.market.boundary, stalls: MarketStall[] = [];
+  const middle: XZ = [square.reduce((n, p) => n + p[0], 0) / square.length, square.reduce((n, p) => n + p[1], 0) / square.length];
+  for (const piece of ctx.input.occupied) {
+    const match = /^market-stall-(\d+)$/.exec(piece.blueprint.id);
+    if (!match) continue;
+    const c = Math.cos(piece.yaw), s = Math.sin(piece.yaw), w = piece.blueprint.size[0] * CELL;
+    const back: XZ = [piece.position[0] + c * w / 2, piece.position[2] - s * w / 2], n: XZ = [-s, -c];
+    if (polygonDistance(square, ...back) >= 0) continue;
+    let depth = 0;
+    while (depth <= 4 && polygonDistance(square, back[0] + n[0] * depth, back[1] + n[1] * depth) < 0) depth += 0.05;
+    if (depth > 4) continue;
+    const edge: XZ = [back[0] + n[0] * depth, back[1] + n[1] * depth];
+    // Toward the middle of the square along the edge: the stall's outer end lies the other way.
+    const across: XZ = [c, -s], sign = (middle[0] - back[0]) * across[0] + (middle[1] - back[1]) * across[1] >= 0 ? 1 : -1;
+    const u: XZ = [across[0] * sign, across[1] * sign];
+    const nearest = [...ctx.areas].sort((a, b) => rectDistance(a.lot, ...back) - rectDistance(b.lot, ...back))[0];
+    // The run starts behind the stall's inner end and reaches at most a dozen metres on toward the middle.
+    stalls.push({ id: `market:stall:${match[1]}:garden`, style: nearest?.home.style ?? 'hearth', u, n, edge, start: w / 2 - 1.3, end: w / 2 + 12 });
+  }
+  return stalls.sort((a, b) => (a.id < b.id ? -1 : 1));
+}
+
 interface Candidate { blueprint: VoxelBlueprint; centre: XZ; yaw: number }
 interface Fit { position: Vec3; slope?: readonly [number, number] }
 
@@ -227,7 +265,7 @@ interface Fit { position: Vec3; slope?: readonly [number, number] }
  * Every clearance rule of R3 for one footprint. Returns the grounded placement, or a reason it cannot stand.
  * Cover is sheared onto the fitted ground plane (≤35°); structural pieces need level ground (≤0.125 m relief).
  */
-function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | undefined): Fit | string {
+function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | undefined, beside?: readonly XZ[]): Fit | string {
   const role = pieceRole(blueprint), height = blueprint.size[1] * CELL;
   const [cx, cz] = centre, c = Math.cos(yaw), s = Math.sin(yaw), w = blueprint.size[0] * CELL, d = blueprint.size[2] * CELL;
   const origin: XZ = [cx - (c * w / 2 + s * d / 2), cz - (-s * w / 2 + c * d / 2)];
@@ -275,7 +313,12 @@ function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | 
   // Castle: nothing inside its bounds; within 12 m only what stays under a metre.
   if (overlaps(ctx.castle, rect)) return 'inside the castle';
   if (height > 1 && overlaps(grow(ctx.castle, 12), rect)) return 'tall beside the castle';
-  for (const polygon of ctx.polygons) if (polygonDistance(polygon, cx, cz) < radius + 0.25) return 'inside a square, court, site or keep-out';
+  for (const polygon of ctx.polygons) {
+    if (polygon !== beside) { if (polygonDistance(polygon, cx, cz) < radius + 0.25) return 'inside a square, court, site or keep-out'; continue; }
+    // Flush planting may border the one square it dresses: its whole box outside, no corner of the square inside it.
+    if (corners.some(([x, z]) => polygonDistance(polygon, x, z) < 0.3) || polygon.some(([x, z]) => x > rect.minX && x < rect.maxX && z > rect.minZ && z < rect.maxZ
+      && polygonDistance(corners, x, z) < 0)) return 'inside a square, court, site or keep-out';
+  }
   for (const circle of input.keepClear) if (rectDistance(rect, circle.x, circle.z) < circle.radius) return 'inside a keep-clear circle';
   if (input.waterKeepOut(cx, cz, radius + 0.75)) return 'in or beside water';
   // Ground: a 3×3 sample grid across the box, 5×5 under a level solid, whose lowest corner it must reach.
@@ -313,7 +356,7 @@ function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | 
 
 const COVER_FORMS = {
   tufts: 'meadow-tufts', clover: 'clover-pebbles', petal: 'wildflowers-petal', blue: 'wildflowers-blue',
-  gold: 'wildflowers-gold', cream: 'wildflowers-cream', bed: 'seedling-bed',
+  gold: 'wildflowers-gold', cream: 'wildflowers-cream', bed: 'seedling-bed', cutting: 'cutting-bed',
 } as const satisfies Record<string, DressingForm>;
 type Bloom = 'petal' | 'blue' | 'gold' | 'cream';
 /** Each kit's meadow leans to its own flower: heather pink and gold by the hearth, sea blue and cream by the tide. */
@@ -365,8 +408,8 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
     });
     return found;
   };
-  const tryPlace = (id: string, blueprint: VoxelBlueprint, centre: XZ, yaw: number, lot: { id: string; slot?: number } | undefined): boolean => {
-    const result = fit(ctx, { blueprint, centre, yaw }, lot?.id);
+  const tryPlace = (id: string, blueprint: VoxelBlueprint, centre: XZ, yaw: number, lot: { id: string; slot?: number } | undefined, beside?: readonly XZ[]): boolean => {
+    const result = fit(ctx, { blueprint, centre, yaw }, lot?.id, beside);
     if (typeof result === 'string') return false;
     placed.push({ id, blueprint: shared(blueprint), position: result.position, yaw,
       ...(lot?.slot !== undefined ? { lotSlot: lot.slot } : {}), ...(result.slope ? { slope: result.slope } : {}) });
@@ -442,6 +485,50 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
       along: [a.outward[0], a.outward[2]], length: outer - inner, width: 0.8, bloom, row: true });
     return true;
   }
+  for (const stall of marketStalls(ctx)) placeStallGarden(stall);
+
+  /**
+   * The stall's own garden: where a market stall backs onto the edge of the square, its grower keeps cutting beds
+   * on the open ground behind it. From behind the stall's inner end the beds run along the edge toward the middle
+   * of the square, where the market sees them: pink, cream and gold in blocks, worn stones between the beds where
+   * the grower climbs the bank, a second cutting bed, then a bed being planted for the next market. Above them the
+   * stock has seeded itself up the bank in a loose drift. Every piece is flush and passive, keeps the paving and the
+   * stall's occupied geometry clear and passes every other clearance; whatever does not fit is left out with its
+   * reason. The stall and its wares are never moved or doubled.
+   */
+  function placeStallGarden(stall: MarketStall): void {
+    const { id, u, n, edge, start, end, style } = stall, square = plan.market.boundary;
+    const at = (along: number, out: number): XZ => [edge[0] + u[0] * along + n[0] * out, edge[1] + u[1] * along + n[1] * out];
+    // Local +X of a form runs along `u` (beds) or out along `n` (stones).
+    const alongYaw = Math.atan2(-u[1], u[0]), outYaw = Math.atan2(-n[1], n[0]);
+    const jitter = (key: string) => (ctx.rand(id, key) - 0.5) * 0.07;
+    const stones = shared(createDressing('stepping-stones', style));
+    // [key, form, length along the edge, distances out from the edge, yaw]. Beds lie a hand off the paving, each
+    // set a little in or out so the run never reads as ruled; the stones climb a stride up the bank.
+    const out = (key: string) => 1 + ctx.rand(id, 'out', key) * 0.25;
+    const sequence: readonly [string, VoxelBlueprint, number, readonly number[], number][] = [
+      ['cutting:0', COVER.cutting(), 3, [out('cutting:0'), 1.05], alongYaw + jitter('cutting:0')],
+      ['stones', stones, 1, [1.95, 2.1], outYaw + jitter('stones')],
+      ['cutting:1', COVER.cutting(), 3, [out('cutting:1'), 1.05], alongYaw + Math.PI + jitter('cutting:1')],
+      ['seedlings', COVER.bed(), 3, [out('seedlings') - 0.1, 0.95], alongYaw + jitter('seedlings')],
+    ];
+    let cursor = start, first: number | undefined;
+    for (const [key, blueprint, length, outs, yaw] of sequence) {
+      const from = cursor + 0.3 + ctx.rand(id, 'gap', key) * 0.35;
+      let laid = false;
+      for (let shift = 0; !laid && shift <= 3 && from + shift + length <= end; shift += 0.25)
+        for (const o of outs) if (tryPlace(`${id}:${key}`, blueprint, at(from + shift + length / 2, o), yaw, undefined, square)) {
+          const piece = placed.at(-1)!;
+          reserved.push({ rect: grow(boundsOf(footprintCorners(blueprint, piece.position, piece.yaw, CELL)), key === 'stones' ? 0.12 : 0), trodden: key === 'stones' });
+          first ??= from + shift; cursor = from + shift + length; laid = true; break;
+        }
+      if (!laid) omissions.push(`${id}:${key}: ${fit(ctx, { blueprint, centre: at(from + length / 2, outs[0]!), yaw }, undefined, square)}`);
+    }
+    if (first === undefined) return;
+    // The stock gone wild up the bank above the last beds, toward the middle of the square.
+    drifts.push({ id: `${id}:wild`, centre: at(Math.max(first + 2, cursor - 1.2), 4.2), along: u, length: 5, width: 2.4, bloom: 'petal' });
+  }
+
   // Open-meadow drifts on a coarse jittered lattice: likelier near the town, never an even scatter.
   for (let gz = Math.floor(plan.bounds.minZ / 11); gz <= Math.floor(plan.bounds.maxZ / 11); gz++)
     for (let gx = Math.floor(plan.bounds.minX / 11); gx <= Math.floor(plan.bounds.maxX / 11); gx++) {

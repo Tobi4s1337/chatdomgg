@@ -1,12 +1,12 @@
 import type { VoxelBlueprint } from '@chatdom/shared';
 import { STYLES, type StyleKey } from '../../materials';
-import { cloverPebbles, meadowTufts, seedlingBed, wildflowers } from './cover';
+import { cloverPebbles, cuttingBed, meadowTufts, seedlingBed, wildflowers } from './cover';
 import { steppingStones } from './path';
 
 /** Every living and garden form of the collection, in spec 28's R1 table order. */
 export const DRESSING_FORMS = [
   'meadow-tufts', 'wildflowers-petal', 'wildflowers-blue', 'wildflowers-gold', 'wildflowers-cream', 'clover-pebbles',
-  'seedling-bed', 'heather-drift', 'fern-bank',
+  'seedling-bed', 'cutting-bed', 'heather-drift', 'fern-bank',
   'garden-bed', 'woodpile', 'barrels', 'crates', 'handcart',
   'field-wall', 'rail-fence', 'back-fence',
   'stepping-stones', 'edge-stones',
@@ -35,7 +35,7 @@ const tree: DressingRole = { band: 'medium', solid: true, sway: 'canopy', kit: f
 
 export const DRESSING_ROLES: Readonly<Record<DressingForm, DressingRole>> = {
   'meadow-tufts': cover, 'wildflowers-petal': cover, 'wildflowers-blue': cover, 'wildflowers-gold': cover,
-  'wildflowers-cream': cover, 'clover-pebbles': cover, 'seedling-bed': cover, 'heather-drift': cover, 'fern-bank': cover,
+  'wildflowers-cream': cover, 'clover-pebbles': cover, 'seedling-bed': cover, 'cutting-bed': cover, 'heather-drift': cover, 'fern-bank': cover,
   'garden-bed': kitPiece, woodpile: piece, barrels: piece, crates: piece, handcart: piece,
   'field-wall': kitPiece, 'rail-fence': kitPiece, 'back-fence': kitPiece,
   // Stepping stones lie flush with the turf and are walked over; kerb stones edge a path.
@@ -49,7 +49,7 @@ export const DRESSING_ROLES: Readonly<Record<DressingForm, DressingRole>> = {
 export const DRESSING_SIZES: Readonly<Record<DressingForm, readonly [number, number, number]>> = {
   'meadow-tufts': [16, 5, 16], 'wildflowers-petal': [16, 6, 16], 'wildflowers-blue': [16, 6, 16],
   'wildflowers-gold': [16, 6, 16], 'wildflowers-cream': [16, 6, 16], 'clover-pebbles': [16, 2, 16],
-  'seedling-bed': [24, 3, 8], 'heather-drift': [24, 6, 24], 'fern-bank': [24, 10, 24],
+  'seedling-bed': [24, 3, 8], 'cutting-bed': [24, 4, 10], 'heather-drift': [24, 6, 24], 'fern-bank': [24, 10, 24],
   'garden-bed': [24, 6, 12], woodpile: [20, 12, 10], barrels: [14, 10, 8], crates: [12, 12, 10], handcart: [24, 14, 12],
   'field-wall': [32, 7, 5], 'rail-fence': [32, 10, 4], 'back-fence': [64, 9, 3],
   'stepping-stones': [24, 2, 8], 'edge-stones': [16, 3, 4],
@@ -71,6 +71,7 @@ const BUILDERS: Partial<Record<DressingForm, Builder>> = {
   'wildflowers-cream': () => wildflowers('cream'),
   'clover-pebbles': cloverPebbles,
   'seedling-bed': seedlingBed,
+  'cutting-bed': cuttingBed,
   'stepping-stones': steppingStones,
 };
 
