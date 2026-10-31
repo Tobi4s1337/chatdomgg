@@ -4,7 +4,7 @@
 // CHATDOM_EVENING_SCENE selects the cached scene path; the required SHA-256 is checked below.
 // Recording captures four actual frames per logical second; still reviews use one.
 // No live chat, judged approval, authoritative receipt or realm write is implied.
-import { setInterval, clearInterval } from 'node:timers';
+import { setInterval, clearInterval, clearTimeout } from 'node:timers';
 import { createServer } from '../../apps/web/node_modules/vite/dist/node/index.js';
 import { chromium, firefox } from '../../node_modules/@playwright/test/index.mjs';
 import { acquireCaptureLock } from './capture-lock.mjs';
@@ -66,7 +66,12 @@ try{
    await writeFile(out+`/${take}-progress.json`,JSON.stringify({fps,duration,sha256:hash,stills,telemetry,events:await page.evaluate(()=>window.__events),errors},null,2));
   }
   if(!stills&&(!landingFilm||ms>=76000)){const frame=await page.screenshot({type:'jpeg',quality:90,timeout:120000});if(landingFilm)await writeFile(out+`/${take}-frames/${String(i-76*fps).padStart(4,'0')}.jpg`,frame);if(!encoder.stdin.write(frame))await once(encoder.stdin,'drain')}
-  if(forgeStill && ms===72000){if(!await page.evaluate(()=>window.__scene.forgeDirecting()))throw Error('Forge camera is not directing the pour');await page.screenshot({path:`${out}/room-smithy-pour@1920x1080.png`,timeout:120000});}
+  if(forgeStill && ms===72000){
+   // The molten source starts on this logical frame. Let its workers deliver
+   // before drawing the still, so paving/faces show the actual casting light.
+   await page.waitForFunction(()=>Object.values(window.__scene.inspect().fields).every(f=>f.publishedRevision===f.requestedRevision&&!f.busy&&!f.queued),null,{timeout:120000});
+   await page.evaluate(()=>window.__step(72000));
+   if(!await page.evaluate(()=>window.__scene.forgeDirecting()))throw Error('Forge camera is not directing the pour');await page.screenshot({path:`${out}/room-smithy-pour@1920x1080.png`,timeout:120000});}
   if((!forgeStill&&!landingFilm&&!landingOnly&&ms===62000)||(stills&&ms===84000)||(landingFilm&&ms===88000)){await page.screenshot({path:`${out}/${take}-${ms/1000}s-SIMULATED.png`,timeout:120000});console.log('captured',ms/1000,'logical seconds')}
   if(errors.length)throw Error(errors.join('\n'));
  }
