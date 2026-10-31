@@ -8,3 +8,5 @@ GENESIS-EMOTE-ART-10: emote monuments, glass and vane whole on the lane bench. P
 LANE COMPLETE
 
 2026-10-31 main checkpoint integration: carved art5778aa5 merged, focused suite green and simulated1080p bench viewed. Next visible fix: soften the central stained-glass emission/bloom enough to retain the emote eye and mouth details; keep the warm surrounding glass. Actual Genesis mounting remains main integration.
+
+follow-up: GENESIS-EMOTE-ART-10 Main merged40aeb18 and viewed the glass at1080p; lower only the bright central eye/mouth panes so their detail survives bloom, keeping the surrounding warm glass.

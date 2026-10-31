@@ -333,14 +333,19 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 **Order:** picture first, one visible fix per turn with an obvious before/after. No new systems/contracts;
 chosen avatar/builder remains authorised. Keep wide exposure34ac89a, indigo0896044, street warmth96f2d08,
 beacon, warm pools, gold frame, softer smoke7c16789 and castle lighta1dac83/32633a8. Merge useful art checkpoints
-first; medium-effort helpers for routine recon/captures/fixes. No new runtime/content checkpoints this turn.
+first; medium-effort helpers for routine recon/captures/fixes. Latest runtime/content checkpoint merges and their consumer are below.
 
-**Current slice:** distant horizon alone gets dusk-gated lilac aerial perspective, beginning220m away,
-stronger through low valleys. Town/castle/pools/exposure unchanged. Viewed `shots/magic/ridge-haze-pair.png`
-at1920×1080 HIGH, hour19.5/time30: clear ridge separation, facets preserved after reducing an overly pale
-first pass. Typecheck, scoped lint,4 existing shadow receiver tests and web build pass. Strict art checkpoint
-scan found no new usable code: grove families/adapter and avatar body/clothes remain with their lanes.
-Next: grove on existing sites as it lands; readable lantern walkers in the wide view. Roads still feel empty.
+**Current slice:** narrow reviewed GD02 birch/alder/fir replace generic tree crowns through `createTree`,
+shared by the stream scene and native compiler. Same sites, eight-metre origin/footprint, actual build lattice;
+only padding, no scale/new planting. Viewed `shots/magic/grove-pair.png` and `grove-after.png`,1920×1080 HIGH,
+hour19.5/time30, against the identical prior wide frame. Clear conifer/white-bark variation; distant tree contact
+still hard to read through haze. Preserve accepted light. Grove remains a checkpoint, not the full seeded
+family/wind pass. Roads still empty; readable lantern walkers next. Avatar body/clothes still with their lane.
+
+**Merged:** effects d535804 (21 tests), emote art40aeb18 (31), ground-dressing92421d5 (160). Root viewed their
+existing evidence; emote eye/mouth still clip locally, follow-up in lane progress. Effects vocabulary is available
+but accepted home smoke is NOT replaced. Integration checks: typecheck, scoped lint,51 core assets validated,
+web build. Picture-trees foundation remains20c87a9; its oak/willow/seeded adapter/wind work stays with team.
 
 **Previous coast slice:**a6fcf9a mounts the reviewed harbour watchtower in `/kingdom/63920635`, on the valid
 castle parcel with flag/lamps/beacon. Proposed shoreline site remains ungraded/disconnected. Potential Genesis
@@ -358,10 +363,11 @@ open. Keep accepted wide camera and light; grove/avatar integration follows usab
 
 **Land:**975af2f adopts picture-land:2 consistently through workers/height texture/horizon/light occupancy/citizen
 contact/founded collision. Plan identity unchanged; existing physics revision includes producer.44de84b applies
-rock colour/strata/faceted normals to steep horizon faces. Near-ground classified fixture adapter still separate.
+rock colour/strata/faceted normals to steep horizon faces. Near-ground classified fixture adapter still separate.9f843d7 adds horizon-only lilac dusk air beyond220m;
+`shots/magic/ridge-haze-pair.png` viewed, facets retained, town unchanged.
 Viewed `shots/magic/land-adopted-pair.png` and `land-rock-pair.png`; silhouette obvious, faces coarse. Land lane
 has concrete next fix: lower saddle behind beacon/keep, ridges to either side; irregular-bank follow-up remains.
-Grove waits for tree families/planting adapter; foundation20c87a9 merged. Keep existing planting sites.
+Narrow GD02 forms now mounted; full tree family/planting adapter remains with picture-trees. Keep existing sites.
 
 **Avatar/art:** chosen reference/spec49/PRD81eab8f; A/B/C rejected. AS03 head4c333ed and AS04 hair/accessories
 5e6352f merged/viewed;38 focused tests pass.8-cell skull+hair≈10-cell silhouette, unchanged rig, black eyes/no
