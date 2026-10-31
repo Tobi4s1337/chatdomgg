@@ -1,6 +1,6 @@
 // Captures the SIMULATED Genesis landmark bench through the production renderer pieces.
 // Run from the repository root:
-//   node packages/content/src/genesis-landmarks/bench/capture.mjs [--scene harbour|river] [--sizes 1920x1080] [--hour 20.4] [--time 42]
+//   node packages/content/src/genesis-landmarks/bench/capture.mjs [--scene harbour|river|mountain] [--sizes 1920x1080] [--hour 20.4] [--time 42]
 //     [--base-url http://127.0.0.1:<port>]
 // It takes the machine-wide capture lock before any server or browser, starts its own Vite dev server on a free
 // capture port unless --base-url is given (the bench is dev-served from the web app's config, never shipped),
@@ -19,7 +19,7 @@ const sizes = (option('--sizes') ?? '1920x1080').split(',').map(size => size.spl
 if (sizes.some(size => size.length !== 2 || !size.every(value => Number.isInteger(value) && value > 0))) throw new Error('Expected --sizes WxH[,WxH]');
 const hour = Number(option('--hour') ?? 20.4), time = Number(option('--time') ?? 42);
 const sceneName = option('--scene') ?? 'harbour';
-if (!['harbour', 'river'].includes(sceneName)) throw new Error('Expected --scene harbour|river');
+if (!['harbour', 'river', 'mountain'].includes(sceneName)) throw new Error('Expected --scene harbour|river|mountain');
 if (!(hour >= 0 && hour < 24) || !(time >= 0)) throw new Error('Expected --hour in [0,24) and --time >= 0');
 const extra = option('--query') ?? '', tag = extra ? `-${extra.replace(/[^a-z0-9]+/gi, '-')}` : '';
 const out = 'shots/genesis-landmarks';

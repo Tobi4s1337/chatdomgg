@@ -6,9 +6,13 @@
 export const SLOTS = [
   'skin', 'eye', 'blush', 'freckle',
   'hair', 'hairDeep', 'hairLight', 'scalp', 'band',
-  'beard', 'beardDeep',
+  'beard', 'beardDeep', 'stubble', 'stache', 'stacheDeep',
+  'hat', 'hatDeep', 'hatTrim', 'hatTrimDeep',
+  'frame', 'lens', 'metal', 'petal', 'petalHeart', 'leaf',
   'top', 'topDeep',
 ] as const;
+/** Slots that are glass: meshed apart and drawn see-through, so the eyes show behind a lens. */
+export const GLASS_SLOTS: readonly Slot[] = ['lens'];
 export type Slot = typeof SLOTS[number];
 export type Cell = readonly [number, number, number];
 

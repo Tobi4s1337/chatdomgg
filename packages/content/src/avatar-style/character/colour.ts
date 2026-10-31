@@ -2,7 +2,7 @@
 export type Hex = `#${string}`;
 export type Rgb = readonly [number, number, number];
 
-const HEX = /^#[0-9a-f]{6}$/;
+const HEX = /^#[0-9a-f]{6}$/i;
 
 export function isHex(value: unknown): value is Hex {
   return typeof value === 'string' && HEX.test(value);

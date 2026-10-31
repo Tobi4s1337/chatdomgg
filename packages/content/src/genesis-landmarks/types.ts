@@ -61,14 +61,19 @@ export type EmitterKind = 'beacon' | 'lantern';
 /** Where a physical flame or lamp sits. Content never lights it; the host feeds its own light result. */
 export interface LandmarkEmitter { readonly id: string; readonly kind: EmitterKind; readonly position: Vec3; readonly reach: number }
 
-export type LandmarkSoundKind = 'beacon-fire' | 'flag' | 'surf' | 'rope-creak' | 'river' | 'bell' | 'mill-wheel';
+export type LandmarkSoundKind = 'beacon-fire' | 'flag' | 'surf' | 'rope-creak' | 'river' | 'bell' | 'mill-wheel' | 'wind';
 /** A point for the host's audio mix. Content supplies the hook only; it never plays sound. */
 export interface LandmarkSound { readonly id: string; readonly kind: LandmarkSoundKind; readonly position: Vec3 }
 
 /** A pivot for a moving part. `position` is the exact pivot in cells; `axis` is the unit axis in local space. */
 export interface LandmarkMount { readonly id: string; readonly position: Vec3; readonly axis: Vec3 }
 
-export type ClearRole = 'doorway' | 'approach' | 'lookout' | 'flag-swing' | 'beacon-flame' | 'waterway' | 'bell-swing' | 'wheel-sweep';
+export type ClearRole =
+  | 'doorway' | 'approach' | 'lookout' | 'flag-swing' | 'beacon-flame' | 'waterway' | 'bell-swing' | 'wheel-sweep'
+  /** The playing surface of a board: nothing stands on it but what a host sets down. */
+  | 'board'
+  /** Land held for a building not yet raised: only the setting-out markers stand in it. */
+  | 'reserve';
 /** A volume that must stay air in the piece itself, and in anything the host puts around it. */
 export interface LandmarkClear { readonly id: string; readonly role: ClearRole; readonly box: CellBox }
 
@@ -78,7 +83,7 @@ export interface LandmarkClear { readonly id: string; readonly role: ClearRole; 
  */
 export interface LandmarkAffordance {
   readonly id: string;
-  readonly kind: 'enter' | 'sit' | 'tend-beacon' | 'look-out' | 'ring-bell';
+  readonly kind: 'enter' | 'sit' | 'tend-beacon' | 'look-out' | 'ring-bell' | 'play-board' | 'raise-cathedral';
   readonly uses: readonly string[];
   readonly status: 'needs-host';
   readonly requires: string;

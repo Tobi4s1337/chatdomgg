@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { compileChannelGenesis } from '../../../world/src/genesis/index';
 import { OBSERVED_GENESIS_FIXTURES } from '../../../world/src/genesis/observed-fixtures';
 import { MAT } from '../materials';
-import { proposeGenesisLandmarks, type HarbourLandmarkProposal, type RiverLandmarkProposal } from './adapter';
+import {
+  proposeGenesisLandmarks, type CathedralSiteProposal, type GenesisLandmarkProposal, type HarbourLandmarkProposal,
+  type MountainLandmarkProposal, type RiverLandmarkProposal,
+} from './adapter';
+import { CATHEDRAL_SITE_AXIS, CATHEDRAL_SITE_SIZE } from './cathedral-site/site';
+import { CROWN_TOWER_AXIS } from './crown-tower/crown';
 import { RIVER_HALL, RIVER_HALL_AXIS } from './river-hall/hall';
-import { HARBOUR_TARGET, RIVER_TARGET, showcaseFixture } from './showcase-fixtures';
+import { HARBOUR_TARGET, MOUNTAIN_TARGET, RIVER_TARGET, showcaseFixture } from './showcase-fixtures';
 
 const { recipe, landscape } = showcaseFixture(HARBOUR_TARGET);
 const [proposal] = proposeGenesisLandmarks(recipe, landscape) as readonly HarbourLandmarkProposal[];
@@ -200,7 +205,7 @@ describe('genesis landmark adapter: river valley', () => {
     expect(sim!.provenance).toEqual({ evidence: 'simulated', label: 'SIMULATED' });
   });
 
-  it('hands main the geometry and the checks, claims no placement, and leaves the mountain to come', () => {
+  it('hands main the geometry and the checks, claims no placement, and gives its pass the crown tower', () => {
     const { piece } = hall!;
     expect(piece.doorways.length).toBe(1);
     expect(piece.water).toEqual({ level: RIVER_HALL.water, bank: RIVER_HALL.bank, channel: expect.any(Object) });
@@ -208,7 +213,179 @@ describe('genesis landmark adapter: river valley', () => {
     expect(hall!.checks.length).toBeGreaterThanOrEqual(5);
     expect(Object.keys(hall!)).not.toEqual(expect.arrayContaining(['placement']));
     expect(piece.affordances.every(a => a.status === 'needs-host')).toBe(true);
+    // A town on its mountain-pass candidate gets the crown tower and no cathedral site.
     const mountain = river.recipe.landscapes.find(l => l.character === 'mountain-pass')!;
-    expect(() => proposeGenesisLandmarks(river.recipe, mountain)).toThrow(/No landmark is authored for the mountain-pass/);
+    expect(proposeGenesisLandmarks(river.recipe, mountain).map(p => p.showcase)).toEqual(['crown-tower']);
+  });
+});
+
+describe('genesis landmark adapter: mountain pass and the city\'s cathedral site', () => {
+  const mountain = showcaseFixture(MOUNTAIN_TARGET);
+  const proposals = proposeGenesisLandmarks(mountain.recipe, mountain.landscape);
+  const tower = proposals[0] as MountainLandmarkProposal, site = proposals[1] as CathedralSiteProposal;
+  const plaza = mountain.landscape.places.find(p => p.purpose === 'plaza')!, gate = mountain.landscape.places.find(p => p.purpose === 'gate')!;
+  const { saddle } = mountain.landscape.mountainPass;
+
+  it('reads the actual mountain showcase recipe, a city', () => {
+    expect(mountain.landscape.character).toBe('mountain-pass');
+    expect(mountain.landscape.id).toBe(mountain.recipe.recommendedLandscapeId);
+    expect(mountain.recipe.identity.landmark).toBe('watchtower');
+    expect(mountain.recipe.identity.styleFamily).toBe('hearth');
+    expect(mountain.recipe.identity.profileColourTargets).toEqual(['#514a98', '#87746f', '#6e5a65', '#3945d8']);
+    expect(mountain.recipe.size.tier).toBe('city');
+    expect(mountain.recipe.size.cathedralSite).toBe(true);
+  });
+
+  it('proposes the crown tower and then the cathedral site, deterministically', () => {
+    expect(JSON.stringify(proposeGenesisLandmarks(mountain.recipe, mountain.landscape))).toBe(JSON.stringify(proposals));
+    expect(proposals.map(p => p.showcase)).toEqual(['crown-tower', 'cathedral-site']);
+    expect(tower.id).toBe(`${mountain.landscape.id}/landmark/crown-tower`);
+    expect(site.id).toBe(`${mountain.landscape.id}/landmark/cathedral-site`);
+    for (const p of proposals) {
+      expect(p.landscapeId).toBe(mountain.landscape.id);
+      expect(p.character).toBe('mountain-pass');
+      expect(p.recipeLandmark).toBe('watchtower');
+      expect(p.piece.blueprint.styleId).toBe('hearth');
+    }
+    expect(tower.head).toBe('watch-fire');
+    expect(tower.piece.emitters.some(e => e.kind === 'beacon')).toBe(true);
+  });
+
+  it('hangs a bell in the head only for a bell-garden kingdom, and never rewrites the recipe', () => {
+    const rung = structuredClone(mountain.recipe) as typeof mountain.recipe;
+    (rung.identity as { landmark: string }).landmark = 'bell-garden';
+    const [bell, again] = proposeGenesisLandmarks(rung, rung.landscapes.find(l => l.id === mountain.landscape.id)!) as readonly [MountainLandmarkProposal, CathedralSiteProposal];
+    expect(bell.head).toBe('bell');
+    expect(bell.recipeLandmark).toBe('bell-garden');
+    expect(bell.piece.emitters.some(e => e.kind === 'beacon')).toBe(false);
+    expect(bell.piece.affordances.map(a => a.kind)).toContain('ring-bell');
+    expect(bell.site).toEqual(tower.site);
+    expect(again.site).toEqual(site.site);
+    expect(mountain.recipe.identity.landmark).toBe('watchtower');
+    expect(Object.isFrozen(mountain.recipe.identity)).toBe(true);
+  });
+
+  it('stands the tower twenty metres from the saddle towards the plaza, its door turned to the town', () => {
+    const { axis, origin } = tower.site;
+    expect(Math.hypot(axis[0] - saddle[0], axis[1] - saddle[2])).toBeCloseTo(20, 9);
+    // On the straight line from the saddle to the plaza, between them.
+    const toPlaza = [plaza.anchor[0] - saddle[0], plaza.anchor[1] - saddle[2]] as const, toAxis = [axis[0] - saddle[0], axis[1] - saddle[2]] as const;
+    expect(toPlaza[0] * toAxis[1] - toPlaza[1] * toAxis[0]).toBeCloseTo(0, 6);
+    expect(toPlaza[0] * toAxis[0] + toPlaza[1] * toAxis[1]).toBeGreaterThan(0);
+    const door = turn([0, 1], tower.quarterTurns);
+    expect(door[0] * (plaza.anchor[0] - axis[0]) + door[1] * (plaza.anchor[1] - axis[1])).toBeGreaterThan(0);
+    // No other quarter turn faces the plaza better.
+    const best = Math.max(...[0, 1, 2, 3].map(t => { const d = turn([0, 1], t); return d[0] * toPlaza[0] + d[1] * toPlaza[1]; }));
+    // and so turned away from the saddle behind it.
+    expect(door[0] * toAxis[0] + door[1] * toAxis[1]).toBeGreaterThan(0);
+    expect(door[0] * toPlaza[0] + door[1] * toPlaza[1]).toBeCloseTo(best, 9);
+    const local = turn([CROWN_TOWER_AXIS.x * 0.125, CROWN_TOWER_AXIS.z * 0.125], tower.quarterTurns);
+    expect(origin[0] + local[0]).toBeCloseTo(axis[0], 9);
+    expect(origin[1] + local[1]).toBeCloseTo(axis[1], 9);
+    expect(tower.site.elevation).toBe(saddle[1]);
+    expect(tower.site.pass).toEqual({ saddle: [...saddle], width: mountain.landscape.mountainPass.width, between: [...mountain.landscape.mountainPass.betweenHillIds] });
+    expect(tower.site.basis).toBe('pass-towards-plaza');
+    expect(tower.site.status).toBe('unvalidated');
+  });
+
+  it('reserves the cathedral across the plaza from the gate, its west front turned back to the plaza', () => {
+    const { axis, origin, footprint } = site.site;
+    const onward = [plaza.anchor[0] - gate.anchor[0], plaza.anchor[1] - gate.anchor[1]] as const, length = Math.hypot(...onward);
+    const half = (CATHEDRAL_SITE_SIZE[2] * 0.125) / 2;
+    expect(axis[0]).toBeCloseTo(plaza.anchor[0] + (onward[0] / length) * (10 + half), 9);
+    expect(axis[1]).toBeCloseTo(plaza.anchor[1] + (onward[1] / length) * (10 + half), 9);
+    expect(site.site.forecourt).toBe(10);
+    const front = turn([0, 1], site.quarterTurns);
+    expect(front[0] * (plaza.anchor[0] - axis[0]) + front[1] * (plaza.anchor[1] - axis[1])).toBeGreaterThan(0);
+    const local = turn([CATHEDRAL_SITE_AXIS.x * 0.125, CATHEDRAL_SITE_AXIS.z * 0.125], site.quarterTurns);
+    expect(origin[0] + local[0]).toBeCloseTo(axis[0], 9);
+    expect(origin[1] + local[1]).toBeCloseTo(axis[1], 9);
+    // The footprint is the turned reserve (24 m × 32 m), round its axis, and inside the recorded settlement reserve.
+    const spans = [footprint.maxX - footprint.minX, footprint.maxZ - footprint.minZ].sort((a, b) => a - b);
+    expect(spans[0]).toBeCloseTo(CATHEDRAL_SITE_SIZE[0] * 0.125, 9);
+    expect(spans[1]).toBeCloseTo(CATHEDRAL_SITE_SIZE[2] * 0.125, 9);
+    expect(axis[0] > footprint.minX && axis[0] < footprint.maxX && axis[1] > footprint.minZ && axis[1] < footprint.maxZ).toBe(true);
+    const reserve = mountain.landscape.settlementReserve;
+    expect(site.site.withinSettlementReserve).toBe(footprint.minX >= reserve.minX && footprint.maxX <= reserve.maxX && footprint.minZ >= reserve.minZ && footprint.maxZ <= reserve.maxZ);
+    expect(site.site.withinSettlementReserve).toBe(true);
+    // It keeps clear of the plaza's anchor and of the tower.
+    expect(plaza.anchor[0] >= footprint.minX && plaza.anchor[0] <= footprint.maxX && plaza.anchor[1] >= footprint.minZ && plaza.anchor[1] <= footprint.maxZ).toBe(false);
+    expect(tower.site.axis[0] >= footprint.minX && tower.site.axis[0] <= footprint.maxX && tower.site.axis[1] >= footprint.minZ && tower.site.axis[1] <= footprint.maxZ).toBe(false);
+    expect(site.site.basis).toBe('plaza-frontage');
+    expect(site.site.status).toBe('unvalidated');
+  });
+
+  it('snaps the channel\'s colours onto cloth once, for the tower and the site alike', () => {
+    expect(tower.palette.field).toEqual({ target: '#514a98', material: MAT.slate });
+    expect(tower.palette.band).toEqual({ target: '#87746f', material: MAT.fabricViolet });
+    expect(site.palette).toEqual(tower.palette);
+    expect(tower.crest).toEqual({ shape: mountain.recipe.identity.crest.shape, charge: mountain.recipe.identity.crest.charge });
+    expect(site.crest).toEqual(tower.crest);
+    expect(tower.bannerCut).toBe(mountain.recipe.identity.banner.cut);
+    for (const p of proposals) {
+      const materials = new Set(p.piece.blueprint.boxes.map(b => b.material));
+      expect(materials.has(MAT.slate) && materials.has(MAT.fabricViolet)).toBe(true);
+      expect(p.provenance).toEqual({ evidence: 'observed', label: null });
+    }
+    const simulated = compileChannelGenesis({ ...OBSERVED_GENESIS_FIXTURES.find(f => f.broadcasterId === MOUNTAIN_TARGET)!, evidence: { kind: 'simulated', sourceId: 'lane-bench', asOf: mountain.recipe.evidence.asOf, label: 'SIMULATED' } });
+    const sim = proposeGenesisLandmarks(simulated, simulated.landscapes.find(l => l.character === 'mountain-pass')!);
+    expect(sim.map(p => p.provenance)).toEqual([{ evidence: 'simulated', label: 'SIMULATED' }, { evidence: 'simulated', label: 'SIMULATED' }]);
+  });
+
+  it('hands main the geometry and the checks for both, and claims no placement', () => {
+    expect(tower.piece.doorways.length).toBe(1);
+    expect(tower.piece.footings.map(f => f.id)).toEqual(['terrace', 'steps', 'outcrop']);
+    expect(tower.piece.affordances.map(a => a.kind)).toEqual(expect.arrayContaining(['enter', 'sit', 'play-board', 'look-out', 'tend-beacon']));
+    expect(tower.checks.length).toBeGreaterThanOrEqual(5);
+    expect(site.piece.doorways.length).toBe(0);
+    expect(site.piece.clear.some(v => v.role === 'reserve')).toBe(true);
+    expect(site.piece.affordances.map(a => a.kind)).toContain('raise-cathedral');
+    expect(site.checks.length).toBeGreaterThanOrEqual(4);
+    for (const p of proposals) {
+      expect(Object.keys(p)).not.toEqual(expect.arrayContaining(['placement']));
+      expect(p.piece.affordances.every(a => a.status === 'needs-host')).toBe(true);
+    }
+  });
+});
+
+describe('genesis landmark adapter: all three showcase proposals', () => {
+  const targets = [HARBOUR_TARGET, RIVER_TARGET, MOUNTAIN_TARGET] as const;
+  const all = targets.map(target => { const f = showcaseFixture(target); return { ...f, proposals: proposeGenesisLandmarks(f.recipe, f.landscape) }; });
+  const flat: GenesisLandmarkProposal[] = all.flatMap(a => [...a.proposals]);
+
+  it('gives each showcase landscape its own landmark, and only the city a cathedral site', () => {
+    expect(all.map(a => a.landscape.character)).toEqual(['coastal-harbour', 'river-valley', 'mountain-pass']);
+    expect(all.map(a => a.proposals.map(p => p.showcase))).toEqual([['harbour-watchtower'], ['river-hall'], ['crown-tower', 'cathedral-site']]);
+    expect(all.map(a => a.recipe.size.cathedralSite)).toEqual([false, false, true]);
+    expect(new Set(flat.map(p => p.id)).size).toBe(flat.length);
+    expect(new Set(flat.map(p => p.piece.blueprint.id)).size).toBe(flat.length);
+  });
+
+  it('keeps every proposal an unvalidated candidate for main, with its own landscape and checks', () => {
+    for (const { landscape, proposals } of all) {
+      for (const p of proposals) {
+        expect(p.landscapeId).toBe(landscape.id);
+        expect(p.character).toBe(landscape.character);
+        expect(p.site.status).toBe('unvalidated');
+        expect(p.checks.length).toBeGreaterThanOrEqual(4);
+        expect([0, 1, 2, 3]).toContain(p.quarterTurns);
+        expect(Object.keys(p)).not.toEqual(expect.arrayContaining(['placement']));
+        expect(p.piece.affordances.every(a => a.status === 'needs-host')).toBe(true);
+        expect(p.piece.blueprint.styleId).toBe(all.find(a => a.landscape.id === landscape.id)!.recipe.identity.styleFamily);
+      }
+    }
+  });
+
+  it('gives a city its cathedral site on whichever landscape is chosen, and a hamlet none on any', () => {
+    const city = all[2]!.recipe;
+    for (const candidate of city.landscapes) {
+      const chosen = proposeGenesisLandmarks(city, candidate);
+      expect(chosen.length).toBe(2);
+      expect(chosen[1]!.showcase).toBe('cathedral-site');
+      expect((chosen[1] as CathedralSiteProposal).site.basis).toBe('plaza-frontage');
+    }
+    expect(city.landscapes.map(l => proposeGenesisLandmarks(city, l)[0]!.showcase).sort()).toEqual(['crown-tower', 'harbour-watchtower', 'river-hall']);
+    const hamlet = all[0]!.recipe;
+    for (const candidate of hamlet.landscapes) expect(proposeGenesisLandmarks(hamlet, candidate).length).toBe(1);
   });
 });
