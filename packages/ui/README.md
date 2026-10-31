@@ -5,7 +5,7 @@ Solid components and one stylesheet. Spec: `work/specs/32-first-look-polish.md`.
 
 ```ts
 import '@chatdom/ui/kit.css';
-import { ProvenanceSeal, provenanceFromSource, provenanceLines, type Provenance } from '@chatdom/ui';
+import { ProvenanceSeal, provenanceFromSource, provenanceLines, CrestChoice, ParchmentField, type Provenance } from '@chatdom/ui';
 ```
 
 ## What is here
@@ -21,6 +21,17 @@ import { ProvenanceSeal, provenanceFromSource, provenanceLines, type Provenance 
 - **`ProvenanceSeal`**: one quiet parchment slip with the wax pressed over its left edge. `role="status"`,
   `aria-atomic`, `data-provenance=<state>` and `data-practice="true"` when a SIMULATED line is present. It infers
   nothing: the owner passes the feed state, whether practice content is on screen, and an optional product note.
+- **`CrestChoice`**: crest seals (hearth, tide, grove; code-native SVG) on a wood rail. A labelled `radiogroup` of
+  `<button role="radio">` with `aria-checked` and one roving tab stop (the chosen crest). Arrows walk and wrap, Home
+  and End jump, a resting crest is skipped; walking never chooses. Space or Enter (native button activation) and a
+  tap choose, and only a real change calls `onChange` and `onCue('wood')`. The cue is the owner's callback, so the
+  owner's audio policy decides whether anything sounds (the kingdom owner can bind its existing sound policy). Chosen = lit parchment plate, raised, brass pin above, doubled ring; focus = the brass
+  wire; resting = flat dark wood, unpainted device and `disabledReason` in words. Crests are at least 44×44 px and
+  wrap on a phone. Keys live in `crest-keys.ts` (pure, tested).
+- **`ParchmentField`**: a ruled parchment slip around a real `<textarea>` (native editing, IME, maxlength). Visible
+  label and allowance (`allowance.ts`, announced politely only within the last 10%/20 letters), `invalid` shown in
+  words with an optional tag and wired through `aria-invalid`/`aria-describedby`, a darker parchment and a `hint`
+  reason when disabled. The brass wire rings the whole slip on focus. Text is 16 px so phones do not zoom on focus.
 - **`provenanceFromSource`** maps exactly `SIMULATED`, `CONNECTING`, `LIVE CHAT`, `STREAM RESTING` and
   `CONNECTION LOST`. Anything else, including near misses and prototype keys, is `lost`, never live.
 - **`provenanceLines`**: every distinct fact is its own line, feed first. A real feed with practice content keeps
@@ -54,9 +65,22 @@ read the first `<strong>`. Capture 1920×1080 and 1280×720.
 
 **Panel** (`apps/panel`, panel owner): import the kit and wrap its source label the same way, then capture 318×496.
 
-**Forge panel / build rack** (FL02/FL03 of this lane): inherit tokens and `.cd-focus`; their SIMULATED words stay
-where they are until those tasks land. The in-world ritual stamp (`forge/ritual-view.ts`) keeps its text until its
+**Forge panel** (`apps/web/src/forge/index.tsx`, `forge.css`, granted, done in FL02): the panel is a `.cd-plate`
+with `CrestChoice` for “Visit another kingdom” (replacing the native select; choosing still calls the same `family`
+callback, then the rail rests with “Taking the road to …”), `ParchmentField` for `#forge-wish` (id kept for
+`packages/testing/forge*.mjs`) and the brass `.forge-submit`. A failed attempt hands the words back and puts the
+private reason on the field (“Only you …”); other private notes keep their own slip. The footnote says “Practice
+Forge · your coals are untouched”, plus “Authored wishes · checks simulated” for the fixture; the kingdom seal keeps
+SIMULATED visible beside the panel. The kingdom owner must bind the optional cue callback under its own grant. Request, fixture, refusal and result state are untouched.
+
+**Build rack** (FL03): inherits tokens and the kit's focus. The in-world ritual stamp (`forge/ritual-view.ts`) keeps its text until its
 owner adopts a persistent seal.
+
+`node packages/ui/src/bench/forge.mjs [--kingdom] [--base-url …]` serves `index.html?kit=forge` (crest rail and
+field in every state, SIMULATED) and drives it with a real keyboard, Tab, Shift+Tab and touch; with `--kingdom` it
+opens the actual Forge panel (both sizes), walks its Tab order, answers `/forge-data` with 503 inside the browser
+(never reaching a host service) to show the genuine cold-forge private error, and taps a crest to travel. Output:
+`shots/first-look/fl02/`.
 
 ## Fonts and credits (for THIRD_PARTY.md)
 

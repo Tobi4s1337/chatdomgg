@@ -38,7 +38,7 @@ concurrent workers modify the same UI entry, planner, source CSS or avatar palet
   simulated, practice coals untouched, local persistence truth intact. Provide isolated kit capture immediately;
   actual surface assertions change only after integrator/owner adoption. · evidence: looked hero/Forge/build at
   both sizes or explicitly labelled isolated surfaces; source-state/mixed-provenance test; exact adoption recipes.
-- [ ] **FL02 — The Forge panel is made of the kingdom.** Under the panel grant, replace the native select with
+- [x] **FL02 — The Forge panel is made of the kingdom.** Under the panel grant, replace the native select with
   the crest-seal radiogroup and the field with a real labelled parchment textarea. Carved materials and readable
   labels replace dark glass. Implement keyboard arrows/Home/End/Space/Enter/Tab, touch, focus/disabled/invalid,
   character allowance and audio callback respecting mute/unlock. Preserve request, fixture, private-error and
