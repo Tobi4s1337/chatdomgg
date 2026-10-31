@@ -14,3 +14,5 @@ PW05: Water life in apps/web/src/places/water/life (createWaterLife, README reci
 follow-up: PW05 Brighten the faint fireflies and lantern glows, and check boat sway with transformed parents when PW01 supplies boats. Review fixed preservation of explicitly placed wheel matrices; regression test passes.
 
 2026-10-31 main merged PW03/PW04 at e6d38ce and mounted the actual v1 lake surface at 3d3ffc7. Looked at candidate-water-dusk-SIMULATED@1440x900.png: reflected trees/sky, no bright rim, bank still bare. Continue existing PW05 fix: one dense overlapping cove reed bed with an open walk-up edge. No guessed mill/bridge or replacement adopted land.
+
+follow-up: PW01 Complete review of the remaining new files, export and register boats and boathouse in the water collection, capture and inspect the required views, and rerun focused tests; review runs were interrupted after extended execution. Root typecheck still fails in pre-existing founded-world validation.
