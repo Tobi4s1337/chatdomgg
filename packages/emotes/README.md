@@ -267,6 +267,64 @@ is bounded by kingdoms and bytes, and is for tests and the workshop only.
 `heraldry`, takes the first frame explicitly and returns the charge geometry, its back-centre mount,
 its front silhouette for appliqué and provenance. It is a charge to compose, not a finished crest.
 
+## Chat in the world (`createEmoteChatPresentation`, `createEmoteWeather`)
+
+The cue is the shared `CitizenChatCue`; nothing else enters. `receive(cue, atMs, positions)` parses
+it, refuses foreign kingdom/epoch/origin, expired, early (more than 2 s ahead), duplicate and absent
+cues (a slot not in this frame's `positions` has no body, so it says nothing and never becomes a
+person), and keeps only what the cue window needs: the newest bubble and pop per slot, one chant
+voice per `emote|slot`, and seen IDs until expiry. No names, no messages after expiry, no archive.
+
+- **Parts.** Twitch emotes come only from fragments (`twitch.<fragment id>`); text stays text and is
+  never matched against Twitch names. Third-party names match only through `setThirdParty(map)`: whole
+  whitespace-separated words, exact case, never inside URLs, longer words or Twitch fragments. An
+  emote resolves through `resolveInlineEmote` (verified bytes, cached per catalogue view); unknown,
+  unavailable and retired ones keep their typed words (`visual: null`).
+- **Pops.** A message that is exactly one emote and optional whitespace lifts that emote above its
+  slot for 2.6 s (never past the cue's expiry) instead of a bubble. Mixed text never pops. The host's
+  body, face and behaviour stay authoritative; the gesture is a lifted token with lift, scale and
+  opacity at caller time.
+- **Chant weather.** At least 3 distinct present slots using one emote within 6 s raise 12 s of
+  weather, then that emote rests 20 s from the start. One message counts once per emote, for at most
+  4 emotes. At most two motifs; particles 72 + 8 per extra voice, capped at half of 256 (desktop) or
+  22 + 3, capped at half of 64 (phone). Weather needs an approved `effect` carving; without one it does
+  not rain. Its seed is a hash of the chant's emote, start time and revision. Starting weather spends
+  those voices.
+- **Deletion and clearing.** `removeCue(id)` drops the bubble, cancels the pending pop and removes the
+  uncounted chant voice, and refuses a redelivery. Weather already raining is not undone by one
+  deletion. `clearSlot(slot)` drops everything from a slot; `clearEpoch(next?)` drops everything,
+  weather and cooldowns included. A catalogue change that retires or replaces the effect revision stops
+  its weather on the next frame; `setCatalogue(view)` is how the host passes a new view.
+- **Bounds.** 64 bubbles, 16 pops, 1,024 voices, 4,096 seen IDs, 2 weathers, 12 spawn points;
+  pruning walks from the oldest entry and stops at the first live one, so a 50,000-cue burst stays
+  constant work per cue.
+- **Sound.** A receipt carries at most one sound: a weather start, or a pop at most every 280 ms.
+  `playEmoteChatSound(audio, sound, {pan, distance})` maps it onto the shared `KingdomAudio.cue`: a
+  pop is the `material` tap (stone or glass in turn), a weather the `wave` chord. Mute and mix stay
+  with that port.
+
+`emoteWeatherParticles(weather, atMs, matrices, fades)` writes the cloud as column-major matrices in
+the space of the positions the host gave (carved emotes about 0.8 m tall lift 2.4–6.2 m above the
+head, spread on one breeze and shrink away; emission spreads over the first 5.6 s). `createEmoteWeather(host,
+{capacity})` drives one batch per raining revision on the emote's own frame timing and disposes
+batches the moment their revision stops raining. A host batch is `{show(frame, matrices, fades, count),
+hide(), dispose()}`; the workshop's three.js binding (`apps/web/src/emotes/weather-batch.ts`) is an
+instanced clay mesh using the material's per-instance dithered `aLodFade`, plus one additive glint per
+carving.
+
+On the web, `apps/web/src/emotes/inline.tsx` draws `EmoteInlineParts`, `EmoteChatBubble` and
+`EmoteChatPop` from these projections: text nodes only, images from `blob:` URLs made from verified
+bytes (`createInlineEmoteImages`, shared per revision and revoked with the last user), alt text on
+every image.
+
+**What main binds.** In `apps/web/src/kingdom/citizen-scene.ts`, call `receive` beside the existing
+`receiveChat` with that frame's present slot positions and the kingdom's public catalogue view;
+call `removeCue`/`clearEpoch` where `clearChat` runs; draw `frame().bubbles` with
+`EmoteInlineParts` in place of the current `static-cdn.jtvnw.net` image URL in the bubble; draw
+`frame().gestures` over the speaker; and add `createEmoteWeather` with a batch host on the kingdom's
+clay material. Herald's sink already sends sanitized fragments; third-party tokenization needs the
+monarch's per-emote opt-in names from the catalogue service.
+
 ## Workspace link
 
 `src/deps.ts` reaches `@chatdom/shared` through the sibling source until main registers this package

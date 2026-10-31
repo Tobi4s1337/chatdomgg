@@ -7,7 +7,8 @@ import { homeLifeAnchors } from '@chatdom/world';
 import { assembleLook, findReviewLook, REST_POSE, type AvatarPose } from '@chatdom/content/avatars';
 import { createCitizen, type Citizen } from '../avatar-bench/stage';
 import { createHomeLife, type HomeLifeSite } from '../kingdom/home-life';
-import { composeStatueFrame, layoutEmoteBanner, layoutEmoteStatue, sampleEmoteFrame, type ApprovedEmoteVisual, type EmoteBannerMaterials } from '../../../../packages/emotes/src/index';
+import { composeStatueFrame, layoutEmoteBanner, layoutEmoteStatue, sampleEmoteFrame, type ApprovedEmoteVisual, type EmoteBannerMaterials, type EmoteCatalogueView } from '../../../../packages/emotes/src/index';
+import { CHAT_CROWD, CHAT_HELD_MS, createKingdomChat, type ChatOverlay, type KingdomChat, type KingdomChatReport } from './kingdom-chat';
 import { clothSwing, splitBannerCloth } from './kingdom-banner';
 import { CITIZENS, DAIS_OUTER_Y, DAIS_Y, GROUND_Y, HOME_PLOTS, PROPS, SQUARE, squareAsset } from './kingdom-square';
 import type { BenchView } from './params';
@@ -57,6 +58,8 @@ export interface KingdomEmoteStageReport {
   readonly post: { readonly hdr: boolean; readonly quality: PostQuality };
   readonly width: number;
   readonly height: number;
+  /** The SIMULATED chat layer, when the square is listening to chat. */
+  readonly chat: KingdomChatReport | null;
 }
 
 export interface KingdomEmoteStage {
@@ -77,6 +80,11 @@ export interface KingdomEmoteStageInput {
   /** A held frame (captures, reduced motion) or null to play. */
   readonly frame: number | null;
   readonly isDisposed: () => boolean;
+  /**
+   * Chat in the square: a SIMULATED crowd and feed through the real chat presentation. The catalogue is
+   * the public view the approved revisions came from; bubbles and pops come back through `onOverlay`.
+   */
+  readonly chat?: { readonly catalogue: EmoteCatalogueView; readonly emoteId: string; readonly emoteAlt: string; readonly kingdomId: string; readonly onOverlay: (overlay: ChatOverlay) => void };
 }
 
 /** Frontmost occupied cell face at one column of a blueprint, so a lamp bracket meets the real wall. */
@@ -107,6 +115,9 @@ const unit = (seed: number) => (seed % 10007) / 10007;
  */
 export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Promise<KingdomEmoteStage | null> {
   const { host, statue, heraldry } = input;
+  // Listening to chat, the square holds a SIMULATED crowd and its own moment; otherwise one or two people for scale.
+  const crowd = input.chat ? CHAT_CROWD : CITIZENS;
+  const heldTime = input.chat ? CHAT_HELD_MS : HELD_TIME_MS;
   const environment = getEnvironment(input.hour);
   const quality: PostQuality = navigator.webdriver ? 'capture' : 'balanced';
   const pool = new VoxelWorkerPool({ size: Math.min(4, Math.max(2, (navigator.hardwareConcurrency || 4) - 1)) });
@@ -132,12 +143,13 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
   const citizens: Citizen[] = [];
   let frameRequest = 0, released = false;
   let windows: ReturnType<typeof createWindowLights> | undefined, homeLife: ReturnType<typeof createHomeLife> | undefined;
+  let chat: KingdomChat | undefined;
   const release = (): void => {
     if (released) return;
     released = true;
     window.cancelAnimationFrame(frameRequest);
     citizens.forEach(c => c.dispose()); geometries.forEach(g => g.dispose()); effects.forEach(e => e.dispose());
-    windows?.dispose(); homeLife?.dispose(); atmosphere.dispose(); post.dispose();
+    chat?.dispose(); windows?.dispose(); homeLife?.dispose(); atmosphere.dispose(); post.dispose();
     shadows.dispose(); clay.dispose(); skin.dispose(); pool.dispose(); renderer.dispose(); renderer.domElement.remove();
   };
 
@@ -187,7 +199,7 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
   };
 
   try {
-    const looks = CITIZENS.map(c => assembleLook(findReviewLook(c.look)).parts);
+    const looks = crowd.map(c => assembleLook(findReviewLook(c.look)).parts);
     const [ground, statueMeshes, bannerParts, lanternMeshes, homeMeshes, lampMeshes, furniture, people] = await Promise.all([
       meshOf({ asset: squareAsset() }, 'square'),
       Promise.all(composites.map((composite, i) => meshOf({ blueprint: composite }, `statue-frame-${i}`))),
@@ -205,7 +217,7 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
         ...PROPS.shrubs.map((_, i) => meshOf({ blueprint: shrub }, `shrub-${i}`)),
         ...PROPS.pots.map((_, i) => meshOf({ blueprint: pot }, `pot-${i}`)),
       ]),
-      Promise.all(CITIZENS.map((c, i) => createCitizen(pool, skin, looks[i]!, c.waving ? WAVE_BACK : REST_POSE, 1))),
+      Promise.all(crowd.map((c, i) => createCitizen(pool, skin, looks[i]!, c.waving ? WAVE_BACK : REST_POSE, 1))),
     ]);
     citizens.push(...people);
     if (input.isDisposed()) { release(); return null; }
@@ -282,7 +294,7 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
 
     // The rig root keeps its own pose matrix (no auto-update), so each citizen is placed by a holder.
     people.forEach((person, i) => {
-      const spec = CITIZENS[i]!, holder = new THREE.Group();
+      const spec = crowd[i]!, holder = new THREE.Group();
       holder.add(person.root);
       holder.position.set(spec.at[0], GROUND_Y, spec.at[1]);
       holder.rotation.y = spec.facing;
@@ -305,6 +317,22 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
     windows.setFrame(presence);
     windows.update(1, input.hour);
     homeLife = createHomeLife(scene, sites);
+
+    // Chat: each present slot's feet in the composition's space; the chat layer never adds a person.
+    if (input.chat) {
+      const positions = new Map(crowd.map((spec, slot) => [slot, [spec.at[0], GROUND_Y, spec.at[1]] as Vec3]));
+      // Weather frames are meshed by the same workers into geometries the chat layer owns and releases.
+      const mesh = async (blueprint: VoxelBlueprint): Promise<THREE.BufferGeometry> => {
+        const result = await pool.submit({ kind: 'blueprint', blueprint, revision: 1, materials: MATERIALS.materials, materialRevision: MATERIALS.revision });
+        if (result?.kind !== 'asset' || !result.chunks.length) throw new Error(`The voxel worker returned no geometry for ${blueprint.id}.`);
+        return geometryFromChunks(result.chunks, 'build');
+      };
+      chat = await createKingdomChat({
+        parent: composition, material: clay.material, mesh, glow, catalogue: input.chat.catalogue, emoteId: input.chat.emoteId, emoteAlt: input.chat.emoteAlt,
+        kingdomId: input.chat.kingdomId, positions, device: host.clientWidth < 720 ? 'phone' : 'desktop', onOverlay: input.chat.onOverlay,
+      });
+      if (input.isDisposed()) { release(); return null; }
+    }
 
     // Lantern flames: a warm cell in the voxel light field for the stone, glow sprites for the eye.
     const flames = lanternMeshes.map(object => object.localToWorld(LANTERN_FLAME_CELLS.clone().multiplyScalar(CELL)));
@@ -358,6 +386,7 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
       });
       for (const swing of swings) swing.hinge.rotation.x = -clothSwing(swing.across, t, swing.seed);
       homeLife!.update(EVENING_AT + timeMs, t, presence, input.hour, camera);
+      chat?.update(timeMs, camera, Math.max(1, host.clientWidth), Math.max(1, host.clientHeight));
     };
 
     let triangles = 0;
@@ -418,39 +447,39 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
     // Held stills show the held frame at a fixed moment; playing follows the emote's own timing.
     const held = input.frame !== null ? Math.min(input.frame, statue.frames.length - 1) : 0;
     const heldElapsed = statue.frames.slice(0, held).reduce((sum, f) => sum + f.durationMs, 0);
-    let playing = false, startedAt = 0, pausedAt = HELD_TIME_MS + heldElapsed;
+    let playing = false, startedAt = 0, pausedAt = heldTime + heldElapsed;
     const tick = (now: number): void => {
       const elapsed = now - startedAt;
       show(sampleEmoteFrame(statue, elapsed).index);
-      animate(elapsed + HELD_TIME_MS);
-      draw(elapsed + HELD_TIME_MS);
+      animate(elapsed + heldTime);
+      draw(elapsed + heldTime);
       if (playing) frameRequest = window.requestAnimationFrame(tick);
     };
 
     aim();
-    animate(HELD_TIME_MS);
+    animate(heldTime);
     show(held);
-    draw(HELD_TIME_MS);
+    draw(heldTime);
     await renderer.compileAsync(scene, camera);
     if (input.isDisposed()) { release(); return null; }
-    draw(HELD_TIME_MS);
+    draw(heldTime);
     await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
     if (input.isDisposed()) { release(); return null; }
-    draw(HELD_TIME_MS);
+    draw(heldTime);
     renderer.getContext().finish();
     const setPlaying = (nextPlaying: boolean): void => {
       if (nextPlaying === playing) return;
       playing = nextPlaying;
       window.cancelAnimationFrame(frameRequest);
-      if (playing) { const now = performance.now(); startedAt = now - (pausedAt - HELD_TIME_MS); frameRequest = window.requestAnimationFrame(tick); }
-      else pausedAt = performance.now() - startedAt + HELD_TIME_MS;
+      if (playing) { const now = performance.now(); startedAt = now - (pausedAt - heldTime); frameRequest = window.requestAnimationFrame(tick); }
+      else pausedAt = performance.now() - startedAt + heldTime;
     };
     if (input.frame === null) setPlaying(true);
 
     const [w, h, d] = statue.frames[0]!.blueprint.size;
     const litWindows = windows.getSources().filter(s => s.strength > 0).length;
     const diagnostics = post.diagnostics();
-    const redraw = () => { animate(playing ? performance.now() - startedAt + HELD_TIME_MS : pausedAt); draw(playing ? performance.now() - startedAt + HELD_TIME_MS : pausedAt); };
+    const redraw = () => { animate(playing ? performance.now() - startedAt + heldTime : pausedAt); draw(playing ? performance.now() - startedAt + heldTime : pausedAt); };
     return {
       environment,
       setView() { aim(); redraw(); },
@@ -458,13 +487,13 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
       resize() { aim(); redraw(); },
       onFrame(listener) { listeners.push(listener); listener(shown); },
       report: () => ({
-        view: 'kingdom', hour: input.hour, statueRevision: statue.revision, heraldryRevision: heraldry.revision,
+        view: input.chat ? 'chat' : 'kingdom', hour: input.hour, statueRevision: statue.revision, heraldryRevision: heraldry.revision,
         statueCells: [w, h, d], plinthCells: layout.footprintCells, statueMetres: h * CELL,
         frameSizes: statue.frames.map(f => f.blueprint.size.join('×')), frames: statue.frames.length, distinctFrameMeshes: statueMeshes.length,
         frameShown: shown, playing, homes: homes.length, litHomes: HOME_PLOTS.filter(p => p.lit).length, litWindows, chimneys,
         banners: bannerParts.length, clothStrips: cloth.strips.length, lanterns: lanternMeshes.length, motes: MOTES, citizens: people.length,
         triangles, draws: renderer.info.render.calls, shadowCasters: shadows.stats.casters, post: { hdr: diagnostics.hdr, quality },
-        width: host.clientWidth, height: host.clientHeight,
+        width: host.clientWidth, height: host.clientHeight, chat: chat?.report() ?? null,
       }),
       dispose: release,
     };

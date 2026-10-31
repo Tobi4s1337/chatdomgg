@@ -10,7 +10,7 @@ import { PersonIdSchema } from '@chatdom/shared';
 import {
   createEmoteCatalogueService, EMOTE_COMPILER_VERSION, createEmoteImageDecoder, createMemoryEmoteBlobStore, createMemoryEmoteRepository, decodeEmoteImage,
   EmoteTransportError, SIMULATED_KINGDOM, toadWaveAnimatedFixture,
-  type ApprovedEmoteVisual, type AuthorizedEmoteTransport, type CompiledEmote, type EmoteMutationResult, type EmotePurpose, type EmoteReviewPort, type EmoteSource,
+  type ApprovedEmoteVisual, type AuthorizedEmoteTransport, type CompiledEmote, type EmoteMutationResult, type EmotePurpose, type EmoteReviewPort, type EmoteSource, type InlineEmoteVisual,
 } from '../../../../packages/emotes/src/index';
 
 export interface BenchCompileRequest { readonly palette: readonly number[]; readonly paletteRevision: number }
@@ -33,7 +33,12 @@ export type BenchCompileReply =
   | { ok: true; source: EmoteSource; bytes: number;
     flat: { width: number; height: number; frames: { rgba: Uint8Array; durationMs: number }[] };
     /** The approved statue as the public catalogue resolved it, with its approval binding. */
-    statue: CompiledEmote; statueMaterials: number[]; heraldry: CompiledEmote; catalogue: BenchCatalogue; decodeMs: number; compileMs: number }
+    statue: CompiledEmote; statueMaterials: number[]; heraldry: CompiledEmote;
+    /** The small carving chant weather rains, approved on its own. */
+    effect: CompiledEmote;
+    /** The verified flat image the public catalogue resolves for chat, or null. */
+    inline: InlineEmoteVisual | null;
+    catalogue: BenchCatalogue; decodeMs: number; compileMs: number }
   | { ok: false; message: string };
 
 interface CompileScope {
@@ -99,23 +104,25 @@ scope.onmessage = event => {
     const decodedAt = performance.now();
 
     const revisions: Partial<Record<EmotePurpose, string>> = {};
-    for (const purpose of ['statue', 'heraldry'] as const) {
+    for (const purpose of ['statue', 'heraldry', 'effect'] as const) {
       applied(await service.selectCandidate({ kingdomId, id: EMOTE_ID, purpose, revision: listed.sourceHash }, THRONE), `Choosing the ${purpose}`);
       const prepared = await service.prepareCandidate({ kingdomId, id: EMOTE_ID, purpose, atMs: 2_000 }, signal);
       applied(prepared, `Carving the ${purpose}`);
       revisions[purpose] = prepared.status === 'applied' ? prepared.candidate! : '';
       applied(await service.reviewCandidate({ kingdomId, id: EMOTE_ID, purpose, revision: revisions[purpose]!, requestId: `bench-${purpose}` }, signal), `Reviewing the ${purpose}`);
     }
-    trail.push({ step: 'Carved', detail: 'statue and banner charge, kingdom palette' });
+    trail.push({ step: 'Carved', detail: 'statue, banner charge and chant weather, kingdom palette' });
     trail.push({ step: 'Luna', detail: `approved the carved geometry · ${sheets} contact sheets` });
     applied(await service.confirmStatue({ kingdomId, id: EMOTE_ID, revision: revisions.statue! }, THRONE), 'Confirming the statue');
     applied(await service.confirmCandidate({ kingdomId, id: EMOTE_ID, purpose: 'heraldry', revision: revisions.heraldry! }, THRONE), 'Confirming the banner');
-    trail.push({ step: 'Monarch', detail: 'confirmed the statue and the banner' });
+    applied(await service.confirmCandidate({ kingdomId, id: EMOTE_ID, purpose: 'effect', revision: revisions.effect! }, THRONE), 'Confirming the chant weather');
+    trail.push({ step: 'Monarch', detail: 'confirmed the statue, the banner and the chant weather' });
     applied(await service.onStreamState({ kingdomId, live: true, epoch: EPOCH, atMs: 3_000 }), 'Going live');
     const [reveal] = await service.pendingReveals(kingdomId);
     const view = await service.publicCatalogue(kingdomId);
-    const statue = view.resolveApprovedEmote(EMOTE_ID, 'statue'), heraldry = view.resolveApprovedEmote(EMOTE_ID, 'heraldry');
-    if (!statue || !heraldry) throw new StepFailed('The public catalogue did not resolve the approved statue and banner.');
+    const statue = view.resolveApprovedEmote(EMOTE_ID, 'statue'), heraldry = view.resolveApprovedEmote(EMOTE_ID, 'heraldry'), effect = view.resolveApprovedEmote(EMOTE_ID, 'effect');
+    if (!statue || !heraldry || !effect) throw new StepFailed('The public catalogue did not resolve the approved statue, banner and weather.');
+    const inline = view.resolveInlineEmote(EMOTE_ID);
     // The workshop is its own host: it commits the reveal by drawing it, then acknowledges once.
     if (reveal) applied(await service.acknowledgeReveal({ kingdomId, revealId: reveal.id, atMs: 3_001 }), 'Acknowledging the reveal');
     trail.push({ step: 'Unveiled', detail: reveal ? `live · ${reveal.streamEpoch}` : 'already unveiled' });
@@ -135,7 +142,7 @@ scope.onmessage = event => {
     const source: EmoteSource = { id: EMOTE_ID, provider: 'twitch', providerId: EMOTE_PROVIDER_ID, kingdomId, name: listed.name, origin: 'simulated', sourceHash: listed.sourceHash, rendition: 'gif' };
     const reply: BenchCompileReply = {
       ok: true, source, bytes: bytes.length, flat: { width: flatDecoded.decoded.width, height: flatDecoded.decoded.height, frames },
-      statue: bound(statue), statueMaterials, heraldry: bound(heraldry),
+      statue: bound(statue), statueMaterials, heraldry: bound(heraldry), effect: bound(effect), inline,
       catalogue: {
         kingdomId, revision: view.revision, health: view.health, statueRevision: statue.revision, heraldryRevision: heraldry.revision,
         reveal: reveal ? { id: reveal.id, streamEpoch: reveal.streamEpoch, acknowledged: (await service.pendingReveals(kingdomId)).length === 0 } : null,

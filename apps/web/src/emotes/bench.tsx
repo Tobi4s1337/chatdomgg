@@ -1,10 +1,13 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createStore, reconcile } from 'solid-js/store';
 import { MAT, MATERIALS } from '@chatdom/content';
 import { getEnvironment } from '@chatdom/render';
-import type { CompiledEmote, EmoteSource } from '../../../../packages/emotes/src/index';
+import { EMOTE_CHAT_TUNING, type ApprovedEmoteVisual, type CompiledEmote, type EmoteCatalogueView, type EmotePurpose, type EmoteSource, type InlineEmoteVisual } from '../../../../packages/emotes/src/index';
 import type { BenchCatalogue, BenchCompileReply, BenchCompileRequest } from './compile-worker';
+import { createInlineEmoteImages, EmoteChatBubble, EmoteChatPop } from './inline';
+import type { ChatOverlay } from './kingdom-chat';
 import { createKingdomEmoteStage, type KingdomEmoteStage, type KingdomEmoteStageReport } from './kingdom-stage';
-import { BENCH_VIEWS, parseEmoteBench, type BenchView, type WorkshopView } from './params';
+import { BENCH_VIEWS, parseEmoteBench, type BenchView, type SquareView, type WorkshopView } from './params';
 import { createEmoteStage, type EmoteStage, type EmoteStageReport } from './stage';
 import './style.css';
 
@@ -25,9 +28,9 @@ const BENCH_PALETTE: readonly number[] = [
   MAT.fabricMutedGreen, MAT.goldLeaf, MAT.fabricGold, MAT.brass, MAT.terracotta, MAT.fabricRed, MAT.petal, MAT.hairBlack, MAT.slate, MAT.timber, MAT.bark,
 ];
 const PALETTE_REVISION = 1;
-const VIEW_LABELS: Record<BenchView, string> = { kingdom: 'Square', front: 'Front', side: 'Side', banner: 'Banner' };
-const WORKSHOP_VIEWS = BENCH_VIEWS.filter((v): v is WorkshopView => v !== 'kingdom');
-const isKingdom = (view: BenchView): view is 'kingdom' => view === 'kingdom';
+const VIEW_LABELS: Record<BenchView, string> = { kingdom: 'Square', chat: 'Chat', front: 'Front', side: 'Side', banner: 'Banner' };
+const WORKSHOP_VIEWS = BENCH_VIEWS.filter((v): v is WorkshopView => v !== 'kingdom' && v !== 'chat');
+const isKingdom = (view: BenchView): view is SquareView => view === 'kingdom' || view === 'chat';
 const material = (id: number) => MATERIALS.materials.find(m => m.id === id);
 const metres = (cells: number) => `${(cells * .125).toFixed(2)} m`;
 
@@ -38,6 +41,8 @@ interface Compiled {
   /** Kingdom materials the approved statue uses, in registry order. */
   materials: readonly number[];
   heraldry: CompiledEmote;
+  effect: CompiledEmote;
+  inline: InlineEmoteVisual | null;
   catalogue: BenchCatalogue;
   decodeMs: number;
   compileMs: number;
@@ -60,10 +65,26 @@ function compileInWorker(signal: AbortSignal): Promise<{ compiled: Compiled; fra
         image: new ImageData(new Uint8ClampedArray(frame.rgba.buffer as ArrayBuffer, frame.rgba.byteOffset, frame.rgba.byteLength), width, height),
         durationMs: frame.durationMs,
       }));
-      resolve({ compiled: { source: reply.source, bytes: reply.bytes, statue: reply.statue, materials: reply.statueMaterials, heraldry: reply.heraldry, catalogue: reply.catalogue, decodeMs: reply.decodeMs, compileMs: reply.compileMs }, frames });
+      resolve({ compiled: { source: reply.source, bytes: reply.bytes, statue: reply.statue, materials: reply.statueMaterials, heraldry: reply.heraldry, effect: reply.effect, inline: reply.inline, catalogue: reply.catalogue, decodeMs: reply.decodeMs, compileMs: reply.compileMs }, frames });
     };
     worker.postMessage({ palette: BENCH_PALETTE, paletteRevision: PALETTE_REVISION } satisfies BenchCompileRequest);
   });
+}
+
+/**
+ * The page's view of the public catalogue the worker resolved: the approved revisions and the verified
+ * flat image, nothing else. Unknown IDs and other purposes resolve to null, exactly as the service does.
+ */
+function benchCatalogue(c: Compiled): EmoteCatalogueView {
+  const approved: Partial<Record<EmotePurpose, ApprovedEmoteVisual>> = {};
+  for (const visual of [c.statue, c.heraldry, c.effect]) {
+    approved[visual.purpose] = { id: visual.id, revision: visual.revision, origin: visual.origin, purpose: visual.purpose, frames: visual.frames, periodMs: visual.periodMs, mask: visual.mask };
+  }
+  return {
+    kingdomId: c.catalogue.kingdomId as EmoteCatalogueView['kingdomId'], revision: c.catalogue.revision, checkedAt: 0, health: c.catalogue.health,
+    resolveApprovedEmote: (id, purpose) => id === c.source.id ? approved[purpose] ?? null : null,
+    resolveInlineEmote: id => id === c.source.id && c.inline ? { ...c.inline, bytes: c.inline.bytes.slice() } : null,
+  };
 }
 
 /** Draws one decoded frame at a given CSS size, smoothly, as chat would show it. */
@@ -99,6 +120,10 @@ export default function EmoteBench() {
   const [playing, setPlaying] = createSignal(heldFrame === null);
   const controller = new AbortController();
   let stage: EmoteStage | KingdomEmoteStage | null = null, disposed = false, mounting = 0;
+  // Chat over the square: bubbles and lifted emotes keyed by cue, so an image is made once per message.
+  const [overlay, setOverlay] = createStore<{ bubbles: ChatOverlay['bubbles'][number][]; pops: ChatOverlay['pops'][number][] }>({ bubbles: [], pops: [] });
+  const showOverlay = (next: ChatOverlay) => { setOverlay('bubbles', reconcile([...next.bubbles], { key: 'cueId' })); setOverlay('pops', reconcile([...next.pops], { key: 'cueId' })); };
+  const images = createInlineEmoteImages();
 
   const publish = (ready: boolean) => {
     const c = compiled();
@@ -118,10 +143,14 @@ export default function EmoteBench() {
     setStatus(isKingdom(next) ? 'Raising the statue in the square…' : 'Setting the statue on its plinth…');
     const alive = () => disposed || ticket !== mounting;
     const common = { host, hour: initial.hour, statue: c.statue, heraldry: c.heraldry, frame: playing() ? null : shown(), isDisposed: alive };
-    const made = isKingdom(next) ? await createKingdomEmoteStage(common) : await createEmoteStage({ ...common, view: next });
+    const chat = next === 'chat' ? { catalogue: benchCatalogue(c), emoteId: c.source.id, emoteAlt: c.source.name, kingdomId: c.catalogue.kingdomId, onOverlay: showOverlay } : undefined;
+    if (!chat) showOverlay({ bubbles: [], pops: [] });
+    const made = isKingdom(next) ? await createKingdomEmoteStage(chat ? { ...common, chat } : common) : await createEmoteStage({ ...common, view: next });
     if (!made || alive()) { made?.dispose(); return; }
     stage = made;
-    host.querySelector('canvas')?.setAttribute('aria-label', isKingdom(next)
+    host.querySelector('canvas')?.setAttribute('aria-label', next === 'chat'
+      ? 'A SIMULATED chat in the lit town square: toadWave lifted above the people who sent it, and a chant of it rising as small carved toads over the statue'
+      : isKingdom(next)
       ? 'The SIMULATED toadWave statue waving in a lit town square at dusk, its standards in the wind'
       : `The SIMULATED toadWave statue waving in the plaza, ${next} view`);
     stage.onFrame(setShown);
@@ -130,7 +159,8 @@ export default function EmoteBench() {
   };
   const choose = (next: BenchView) => {
     if (next === view()) return;
-    const crossing = isKingdom(next) !== isKingdom(view());
+    // The square and the plaza are different stages, and chat brings its own crowd: those rebuild.
+    const crossing = isKingdom(next) || isKingdom(view());
     setView(next);
     const c = compiled();
     if (!stage || !c) return;
@@ -164,6 +194,7 @@ export default function EmoteBench() {
     disposed = true; controller.abort();
     window.removeEventListener('resize', onResize);
     stage?.dispose(); stage = null;
+    images.dispose();
     window.__chatdomReady = false;
   });
 
@@ -177,9 +208,16 @@ export default function EmoteBench() {
   </>;
   return <section class="emote-bench" classList={{ 'is-kingdom': isKingdom(view()) }} style={{ background: `radial-gradient(ellipse at 38% 68%, #ffb86a26, transparent 58%), linear-gradient(180deg, ${grade.zenith} 0%, ${grade.horizon} 74%, ${grade.fog} 100%)` }}>
     <div class="emote-bench-stage" ref={element => { host = element; }} />
+    <Show when={view() === 'chat'}>
+      {/* Speech and lifted emotes over the speakers, in the stage's own pixels; never interactive. */}
+      <div class="emote-chat-layer">
+        <For each={overlay.bubbles}>{bubble => <EmoteChatBubble parts={bubble.parts} images={images} x={bubble.x} y={bubble.y} />}</For>
+        <For each={overlay.pops}>{pop => <EmoteChatPop visual={pop.visual} alt={pop.alt} images={images} x={pop.x} y={pop.y} scale={pop.scale} opacity={pop.opacity} />}</For>
+      </div>
+    </Show>
     <header class="emote-bench-title">
-      <span>{isKingdom(view()) ? 'CHATDOM · THE SQUARE AT DUSK' : 'CHATDOM · EMOTE WORKSHOP'}</span>
-      <strong>{isKingdom(view()) ? 'toadWave, raised in the square' : 'toadWave, carved and waving'}</strong>
+      <span>{view() === 'chat' ? 'CHATDOM · CHAT IN THE SQUARE' : isKingdom(view()) ? 'CHATDOM · THE SQUARE AT DUSK' : 'CHATDOM · EMOTE WORKSHOP'}</span>
+      <strong>{view() === 'chat' ? 'Chat chants toadWave' : isKingdom(view()) ? 'toadWave, raised in the square' : 'toadWave, carved and waving'}</strong>
     </header>
     <small class="simulated" title="Original bench art drawn for this workshop, not a channel’s emote">SIMULATED</small>
     <Show when={isKingdom(view())}>
@@ -189,6 +227,9 @@ export default function EmoteBench() {
         <Show when={compiled()}>{c => <dl class="emote-kingdom-facts">
           <div><dt>Statue</dt><dd>{metres(size()![1])} · {c().statue.frames.length} frames · {(c().statue.periodMs / 1000).toFixed(2)} s</dd></div>
           <div><dt>Source</dt><dd>GIF · {c().bytes.toLocaleString('en')} bytes · <code>{c().source.sourceHash.slice(0, 10)}</code></dd></div>
+          <Show when={view() === 'chat'}>
+            <div><dt>Chant</dt><dd>{EMOTE_CHAT_TUNING.minSlots} people in {EMOTE_CHAT_TUNING.windowMs / 1000} s · rains {EMOTE_CHAT_TUNING.weatherMs / 1000} s · rests {EMOTE_CHAT_TUNING.cooldownMs / 1000} s</dd></div>
+          </Show>
         </dl>}</Show>
         <div class="emote-kingdom-catalogue" data-slot="catalogue-status" />
       </aside>

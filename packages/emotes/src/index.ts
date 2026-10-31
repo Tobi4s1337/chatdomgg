@@ -25,3 +25,11 @@ export { createEmoteCatalogueService, type EmoteAuthority, type EmoteCatalogueSe
 export { createMemoryEmoteRepository, emptyEmoteState, EmoteRepositoryError, type EmoteApprovalBinding, type EmoteCandidateRecord, type EmoteCandidateState, type EmoteRepository, type EmoteRetireReason, type EmoteRevealRecord, type EmoteSelection, type EmoteStoredState } from './catalogue/repository';
 export { decodeCompiledEmote, encodeCompiledEmote } from './catalogue/compiled-codec';
 export { CONTACT_SHEET_LIMITS, encodePngRgb, renderContactSheets } from './catalogue/contact-sheet';
+export { emoteChatParts, soleEmote, type EmoteChatPart, type ThirdPartyEmoteTokens } from './chat/parts';
+export {
+  createEmoteChatPresentation, emoteChatSeed, EMOTE_CHAT_TUNING,
+  type EmoteChatBubble, type EmoteChatDevice, type EmoteChatFrame, type EmoteChatGesture, type EmoteChatInline, type EmoteChatOptions, type EmoteChatPositions,
+  type EmoteChatPresentation, type EmoteChatReceipt, type EmoteChatRejection, type EmoteChatSound, type EmoteChatSource, type EmoteChatStats, type EmoteWeatherInstance,
+} from './chat/presentation';
+export { playEmoteChatSound, type EmoteChatSoundPort } from './chat/sound';
+export { createEmoteWeather, emoteWeatherParticles, EMOTE_WEATHER_SHAPE, type EmoteWeather, type EmoteWeatherBatch, type EmoteWeatherHost, type EmoteWeatherStats } from './render/weather';

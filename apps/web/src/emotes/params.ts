@@ -1,9 +1,14 @@
 /** What a bench URL asks for. Every capture passes these explicitly so shots compare run to run. */
-/** `kingdom` raises the approved statue and standards in a lit town square; the rest are the workshop's close views. */
-export const BENCH_VIEWS = ['kingdom', 'front', 'side', 'banner'] as const;
+/**
+ * `kingdom` raises the approved statue and standards in a lit town square; `chat` is the same square
+ * listening to a SIMULATED chat (bubbles, lifted emotes, chant weather); the rest are the workshop's close views.
+ */
+export const BENCH_VIEWS = ['kingdom', 'chat', 'front', 'side', 'banner'] as const;
 export type BenchView = typeof BENCH_VIEWS[number];
 /** The workshop's close views of the statue and banner on the bench plaza. */
-export type WorkshopView = Exclude<BenchView, 'kingdom'>;
+export type WorkshopView = Exclude<BenchView, 'kingdom' | 'chat'>;
+/** Views drawn in the town square rather than on the workshop plaza. */
+export type SquareView = Extract<BenchView, 'kingdom' | 'chat'>;
 
 export interface EmoteBenchState {
   readonly view: BenchView;
