@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Genesis heraldry · content bench</title>
+  <link rel="icon" href="data:," />
+  <style>
+    html, body { margin: 0; height: 100%; background: #101827; overflow: hidden; }
+    #stage { position: fixed; inset: 0; }
+    #stage canvas { display: block; }
+    .chip { position: fixed; top: 18px; right: 18px; padding: 5px 10px 4px; border-radius: 4px; font: 600 12px/1 Georgia, 'Times New Roman', serif;
+      letter-spacing: .14em; color: #f3dfb0; background: rgba(44, 28, 18, .78); border: 1px solid rgba(214, 170, 96, .7); box-shadow: 0 1px 0 rgba(255, 220, 160, .18) inset; }
+    .plate { position: fixed; left: 22px; bottom: 20px; font: 15px/1.35 Georgia, 'Times New Roman', serif; color: #f1e3c4; text-shadow: 0 1px 2px rgba(0, 0, 0, .7); }
+    .plate small { display: block; font-size: 12px; letter-spacing: .08em; opacity: .78; }
+    .error { position: fixed; inset: auto 20px 20px auto; max-width: 480px; color: #ffd9c9; font: 14px/1.4 system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div class="chip" title="A lane bench, not a kingdom: lantern light and window presence are simulated.">SIMULATED</div>
+  <div class="plate" id="plate"></div>
+  <script type="module" src="./main.mjs"></script>
+</body>
+</html>
