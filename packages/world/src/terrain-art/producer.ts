@@ -1,4 +1,4 @@
-import { seedHash } from '../layout';
+import { seedHash } from '../seed';
 import { expandBounds, pointBounds, rectangleDistance, segmentProjection, SpatialIndex } from '../settlement/geometry';
 import type { BoundsXZ, SettlementPlan, XZ } from '../settlement/types';
 import { createGuards, WATER_BANK } from './guards';

@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { KingdomIdSchema, type KingdomPresenceFrame } from '@chatdom/shared';
 import { generateSettlementPlan } from '../settlement/generator';
 import { homeFrame, rectangleDistance } from '../settlement/geometry';
-import { settlementTerrainHeight } from '../settlement/terrain';
+import { terrainHeight } from '../layout';
 import { createCitizenMotion } from './motion';
 import { REALM_CASTLE_SLOT } from '@chatdom/shared/realm';
 
@@ -58,7 +58,7 @@ it('walks the actual 240-home town, arrives at owned windows, and seeks or leave
   for (const seconds of [0, 2.137, 6.439, 11.193, 17.771, 26.331, 45]) {
     for (const person of motion.sample(start + seconds * 1000)) {
       const [x, y, z] = person.position;
-      expect(y).toBeCloseTo(settlementTerrainHeight(plan, x, z), 6);
+      expect(y).toBeCloseTo(terrainHeight(plan, x, z), 6);
       expect(plan.reservations.every(plot => rectangleDistance(plot.lot, x, z) >= .279)).toBe(true);
       expect(person.walkPhase).toBeCloseTo((person.distance / .75) % 1, 10);
     }
@@ -85,7 +85,7 @@ it('walks the actual 240-home town, arrives at owned windows, and seeks or leave
   for (const seconds of [48.137, 55.349, 70.839, 95.613, 140.331, 230.191]) {
     const person = motion.sample(start + seconds * 1000)[0]!, [x, y, z] = person.position;
     expect(plan.reservations.every(plot => rectangleDistance(plot.lot, x, z) >= .279)).toBe(true);
-    expect(y).toBeCloseTo(settlementTerrainHeight(plan, x, z), 6);
+    expect(y).toBeCloseTo(terrainHeight(plan, x, z), 6);
     expect(person.homeLit).toBe(true);
     expect(person.homeLitAtMs).toBe(first.homeLitAtMs);
   }

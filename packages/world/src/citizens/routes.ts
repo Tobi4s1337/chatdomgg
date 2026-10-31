@@ -1,8 +1,7 @@
 import type { Vec3 } from '@chatdom/shared';
 import { REALM_CASTLE_SLOT } from '@chatdom/shared/realm';
-import { randomUnit, seedHash } from '../layout';
+import { randomUnit, seedHash, terrainHeight } from '../layout';
 import { expandBounds, homeFrame, pointBounds, SpatialIndex, transformCardinalPoint } from '../settlement/geometry';
-import { settlementTerrainHeight } from '../settlement/terrain';
 import type { BoundsXZ, SettlementPlan, StreetEdge, XZ } from '../settlement/types';
 import type { CitizenDestination, CitizenRoute } from './types';
 
@@ -123,7 +122,7 @@ function intersects(a: XZ, b: XZ, bounds: BoundsXZ): boolean {
 /** Every split is inside one rendered 00→11 terrain triangle: linear Y is exact. */
 function conformToTerrain(plan: SettlementPlan, route: readonly XZ[]): Vec3[] {
   const result: Vec3[] = [];
-  const append = (x: number, z: number): void => { result.push([x, settlementTerrainHeight(plan, x, z), z]); };
+  const append = (x: number, z: number): void => { result.push([x, terrainHeight(plan, x, z), z]); };
   append(...route[0]!);
   for (let i = 1; i < route.length; i++) {
     const a = route[i - 1]!, b = route[i]!, splits = [1];
@@ -176,7 +175,7 @@ export function createCitizenRoutes(plan: SettlementPlan, entryDistance?: number
     const x = gate.position[0] + (neighbour[0] - gate.position[0]) / distance * DOOR_CLEARANCE;
     const z = gate.position[2] + (neighbour[2] - gate.position[2]) / distance * DOOR_CLEARANCE;
     const centre = transformCardinalPoint(keep.position, keep.rotation, [keep.size[0] / 2, 0, keep.size[2] / 2]);
-    return { nodeId: gate.id, position: [x, settlementTerrainHeight(plan, x, z), z],
+    return { nodeId: gate.id, position: [x, terrainHeight(plan, x, z), z],
       heading: Math.atan2(centre[0] - x, centre[2] - z) };
   };
   const activeNodes = new Set(activeEdges.flatMap(edge => [edge.from, edge.to]));
