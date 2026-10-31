@@ -68,9 +68,11 @@ the scene already constructs, updates with the hour and feeds with `getEnvironme
   as a faint warmth behind the reflection.
 - **The halo** is `WINDOW_HALO_SCALE` (1.3) × the pane. It is a thin warm spill on the reveal and frame, heavier on the
   sill, and never a blob on the wall. It is drawn only after dusk.
-- **The pool** (`voxel-material.ts`) replaces the squared field with `pow(field, 1.6) × 1.15`, coloured from a warm
-  core through amber. With the flood's linear falloff, it reads about 0.55 at 3 m and 0.2 at 5 m in the 0.5 m local
-  field, then rolls to zero without a ring. It reads fully from night ≥ 0.2 (about 18.5 h in today's grades) and
+- **The pool** (`voxel-material.ts`) replaces the squared field with `pow(field, 1.3) × 1.3`, coloured from a warm
+  core through amber. With the flood's linear falloff, it reads about 0.65 at 3 m and 0.3 at 5 m in the 0.5 m local
+  field, then rolls to zero without a ring. The gentler power is for the ground: the flood is Manhattan, so the
+  grass and path under a window sit a metre or two further from its source than the wall beside it, and a 1.6
+  power left them barely warm. It reads fully from night ≥ 0.2 (about 18.5 h in today's grades) and
   is absent by day. Pool and beacon light share one soft cap (identity to 0.6, then asymptotic to 1.2), so
   overlapping warmth never clips plaster to white. Citizens use the same material, so faces and cloth in a pool
   warm with it.
@@ -80,3 +82,13 @@ the scene already constructs, updates with the hour and feeds with `getEnvironme
 `createVoxelMaterial` gains `uSkyZenith` and `uSkyHorizon`, which `setEnvironment` sets from the existing
 `Environment` fields. If KL02 retunes `night`, keep about 0.2 at 18.5 h, or move the `smoothstep(0., .2, uNight)`
 pool gate with it.
+
+### Evidence (current tree, SIMULATED willowmere town, time 30)
+
+`work/evidence/kingdom-light-kl05/final-*.png`: window and citizen dusk at 1440×900 (the existing `camera=window`
+and `camera=citizen` views); street dusk and night at 1440×900 and 390×844 through `__chatdomKingdom.pose` with
+eye `[-104, 9.4, 64]`, target `[-104, 8.2, 32]` (fov 50 desktop, 64 phone) on the main street by Juniper's home;
+hero night at 1440×900. The lane `capture.mjs` and `kingdomLightViews` belong to KL02/KL08; until then this pose is
+the street recipe. Lit plaster peaks at about 210/255 next to a pane at night, so the cap holds. Still weak: green
+grass takes warm light as olive rather than gold, so the ground pool reads best on paths and steps; the flood's
+diamond shape is not visible at these distances, so no flood change is requested.
