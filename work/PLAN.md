@@ -371,12 +371,20 @@ targets remain anvil/own door/exit; place seats await installed producer geometr
 genuine multiple walkers/GPU acceptance and sleeping-dragon silhouette remain open. Stream arrival director follows
 one witnessed arrival and its actually warm window; fresh speech can frame a resident. Walking/manual/Forge win.
 
-**Services:** managed preview5190, API5196,realm5197(root env),Forge5195,Herald5194; auto-restart on main/env changes,
-one live writer. Leave services alone. Browser origin http://localhost:5190. During this pass realm5197 stopped
-listening (ECONNREFUSED) and5190 founded endpoint returned502; preview/API/Herald/Forge still returned200.
-Stills therefore used the exact previously published persisted artifact, not a test court or a live endpoint claim.
-No managed process/config changed. Recheck after host service recovery. Last healthy Herald observation was offline,
-no actual line observed. Forge status reports Codex CLI judges configured, not successful real-chat run evidence.
+**Services:** preview5190, API5196,realm5197(root env),Forge5195,Herald5194; one live writer. Browser origin
+http://localhost:5190. Fixed a real startup mismatch: REALM_PORT was unset while CHATDOM_REALM_TARGET advertised5197;
+realm had silently defaulted5191. Startup now uses explicit REALM_PORT > target URL port > default5191, with the
+existing development-port bound. Temporary5191 attempt stopped; root-owned live realm is exec session55520 on5197
+until the managed service takes over. Check that handle/health before starting anything; never add another writer.
+No env or host-service configuration edited. Typecheck, scoped lint, one port regression and realm build pass.
+Readiness200; direct and5190-proxied manifests200 at the same scene/revision3. Two actual public SSE observers got
+one live writer/checkpoint(cursor276). Herald recovered: pending0,faultnull,25 delivered. Public stream reached
+genuine ready, resting/offline,0 present citizens,240 homes, all fields settled, no browser errors. Looked at
+shots/kingdom/live-evening/restored-live-stream@1920x1080.png: actual live authority, no simulated feed or clock
+override. Cold empty town is truthful; actual chat and signed-in walkers remain unaccepted. Capture ended/lock released.
+Earlier dusk stills used the SHA-verified saved scene while the realm was down. Saved Forge records include an
+actual Codex CLI approval with both independent gates; no redundant provider run made. No actual chat line supplied.
+
 Walk /?walk=1&kingdom=129634568&hour=19.5 requires genuine Twitch sign-in; read-only
 /stream?source=realm&kingdom=129634568&hour=19.5 observes the same kingdom. Postgres/KingdomRoom owns allocation,
 presence, geometry, coal reservations and Forge commits; migration0007 applied. Herald→room→Codex CLI independent
