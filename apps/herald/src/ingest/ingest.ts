@@ -3,6 +3,9 @@ import {
   AuthorizationRevokeEventSchema, ChatClearEventSchema, ChatClearUserMessagesEventSchema, ChatMessageDeleteEventSchema,
   ChatMessageEventSchema, type DeliveryFrame, matchesRequest, StreamOfflineEventSchema, StreamOnlineEventSchema,
 } from '@chatdom/twitch';
+import { RealmSupportObservationSchema } from '@chatdom/shared/realm';
+import { channelChatNotification } from '../twitch-moments/notices';
+import { IGNORED } from '../twitch-moments/normalizer';
 import { toPresenceInput, type Observation } from '../source/observations';
 import type { PresenceSource, SubmitResult } from '../source/source';
 import type { HeraldEventType, SubscriptionPlan } from './subscriptions';
@@ -182,6 +185,7 @@ export class ChatIngest {
     }
     const at = this.#observedAt(frame.meta.at, receivedAt);
     switch (plan.type) {
+      case 'channel.chat.notification': return this.#support(frame.event, frame.meta.messageId, at, receivedAt);
       case 'channel.chat.message': return this.#chat(frame.event, at, receivedAt);
       case 'channel.chat.message_delete': return this.#delete(frame.event, receivedAt);
       case 'channel.chat.clear': return this.#roomClear(frame.event, at ?? receivedAt);
@@ -221,6 +225,18 @@ export class ChatIngest {
   #observedAt(sentAt: number, receivedAt: number): number | null {
     if (sentAt - receivedAt > CLOCK_SKEW_MS) return null;
     return Math.min(sentAt, receivedAt);
+  }
+
+  #support(raw: unknown, id: string, at: number | null, receivedAt: number): void {
+    if (at === null) { this.#counters.future++; return; }
+    if (!this.#options.covered()) { this.#counters.notCovered++; return; }
+    const notice = channelChatNotification.parse(raw, this.kingdomId);
+    if (notice === IGNORED) return;
+    if (notice === null) { this.#counters.malformed++; return; }
+    const result = RealmSupportObservationSchema.safeParse({ version: 1, id, kingdomId: this.kingdomId,
+      origin: this.#options.source.origin, occurredAt: at, receivedAt, notice });
+    if (!result.success) { this.#counters.malformed++; return; }
+    void this.#options.realm?.support?.(result.data).catch(() => undefined);
   }
 
   #chat(raw: unknown, at: number | null, receivedAt: number): void {

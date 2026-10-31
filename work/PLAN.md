@@ -355,14 +355,20 @@ shots/kingdom/live-evening/adopted-shore-dusk-SIMULATED@1440x900.png:14 reeds/15
 stepped banks. PW03/PW05 next: one dense overlapping cove reed bed, open walk-up edge; complete water-place mount
 replaces this adapter. No unused finished fauna factory exists; wind/water sound already follows the listener.
 
-**Support moments now compose into this world:** existing TM01/TM02 view/controller use real final-solid home
-portals, window metadata, street-graph cart route, revocable camera lease, captions and the one kingdom sound host.
-Optional momentFeed keeps unsupported live sources quiet; live EventSub delivery is not wired. Preparation uses
-four mesh lanes; absent presence removes tint without inventing observations. Typecheck, scoped lint/web build and
-five focused tests pass. Looked at shots/kingdom/live-evening/gifts-moment-SIMULATED@1440x900.png: actual published
-scene SHA checked, one admitted fact/cart/caption, directed camera, no browser errors. This is pre-launch, not
-parcel-arrival evidence. Pony/cart read; parcels are too dark, caption dominates. Existing warm seal/ribbon follow-up
-remains with the lane. TM03 cheer/hype is still open; no new effects authored here.
+**Support moments:** public fact/feed promoted unchanged to `@chatdom/shared/twitch-moments` (spec20).
+Herald's optional chat-notification subscription uses the existing verified chat grant; only stripped support
+observations enter its durable retry queue. Realm commits claims/domain/current/facts/outbox under its held
+writer queue/lease; moment sequence is separate from world fact sequence. Both walkers and public stream use
+one observer feed: quiet checkpoints, then cursor-ordered new beats. Quiet citizens stay anonymous; no rights,
+coals or new payment authority. Additive migration0008 applied to the live realm schema. Typecheck/scoped lint,
+web/realm/Herald/API builds and58 focused tests pass, including real Postgres + two in-process observers and
+writer reopen. This does not prove a real Twitch support delivery or genuine multiplayer session.
+
+**Latest look:** shots/kingdom/live-evening/live-room-moment-feed@1920x1080.png, actually viewed: live published
+SHA checked, ready/settled/two draws, no browser errors. Resting stream,0 active people/events. Wide town feels
+cold/empty; kingdom-light's next visible improvement is warm civic pools at the actual market/gate, independent
+of citizen presence. Prior SIMULATED gift still has a readable pony/cart but dark parcels; existing warm
+seal/ribbon follow-up remains with the lane. No parcel-arrival or TM03 cheer/hype acceptance yet.
 
 **Forge:** d5a91b6 sends opaque ended(activityId) when a staged attempt ends without confirmed commit; no identity,
 wish/verdict/reason. Feed clears only that wait, ignores stale stages, allows later durable commit. Spec36 R8;
@@ -378,8 +384,10 @@ including ad hoc helpers (packages/testing/capture-ports.mjs); screenshot browse
 
 **Next:** actual chat→shared arrival/window/name/bubble, actual wish→Codex judges→owned home when Tobias supplies
 his line. Walk /?walk=1&kingdom=129634568&hour=19.5 needs genuine Twitch sign-in; public
-/stream?source=realm&kingdom=129634568&hour=19.5 observes the same authority. While that waits, finish moment
-transport: Herald has transactional normalizer/feed ports but no live MomentRecordPort or subscription binding;
-Realm has no moment ingress/outbox/observer variant. Main owns that small durable boundary; optional renderer port
-is ready. Do not treat the memory bench as live persistence. No real line/wish, genuine multiplayer walk or GPU
-recording witnessed. Actual Codex approval in private dev records is not real-chat room acceptance.
+/stream?source=realm&kingdom=129634568&hour=19.5 observes the same authority. Do not wait on that line: continue
+the next live-evening core seam. Support binding now carries existing sub/gift notices; badge metadata,
+structured sources, other EventSub families and action executors still need bindings. TM03's cheer/hype
+spectacle is unfinished lane work, not a reviewed visual merge. No newly reviewed lane code in this intake.
+No real line/wish, genuine multiplayer walk or GPU recording witnessed. Actual Codex approval in private dev
+records is not real-chat acceptance. One capture only; browser/lock released. No host/env edits or unexplained
+drop observed. Shared/Herald/realm code changed this turn, so corresponding host service restarts are expected.

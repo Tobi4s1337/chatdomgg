@@ -52,7 +52,7 @@ export class PostgresOutboxStore implements RealmOutboxStore {
     while (after < throughId) {
       const found = await this.db.query<{ id: string; sequence: string; event_id: string; plot_id: string | null; message: string }>(
         `SELECT id, sequence, event_id, plot_id, message FROM realm_outbox
-         WHERE kingdom_id = $1 AND id > $2 AND id <= $3 AND kind IN ('home', 'castle', 'forge') ORDER BY id LIMIT $4`,
+         WHERE kingdom_id = $1 AND id > $2 AND id <= $3 AND kind IN ('home', 'castle', 'forge', 'moment') ORDER BY id LIMIT $4`,
         [kingdomId, after, throughId, OUTBOX_DISPATCH_BATCH]);
       const rows = found.rows.map(r => ({ id: Number(r.id), sequence: Number(r.sequence), eventId: r.event_id, plotId: r.plot_id, message: JSON.parse(r.message) as RealmPublicMessage }));
       const prefix = rows.filter(row => row.id <= throughId);
@@ -70,6 +70,10 @@ export class PostgresOutboxStore implements RealmOutboxStore {
       bases,
       castle: projection.current().find((message): message is RealmPublicCastle => message.type === 'castle') ?? null,
       presence: presence.rows[0] ? JSON.parse(presence.rows[0].message) as RealmPublicPresence : null,
+      moments: (() => {
+        const state = projection.current().find(message => message.type === 'moments.current');
+        return state?.type === 'moments.current' ? { throughSeq: state.throughSeq, facts: state.facts } : { throughSeq: 0, facts: [] };
+      })(),
       sequence: Number(bounds.rows[0]?.sequence ?? 0),
       committed: Number(bounds.rows[0]?.committed ?? 0),
     };
