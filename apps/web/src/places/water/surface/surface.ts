@@ -29,6 +29,8 @@ export interface WaterSurfaceOptions {
   readonly reaches: readonly WaterReach[];
   /** The caller's ground heights; the bed under water. Read, never owned. */
   readonly ground: WaterGround;
+  /** Bed height outside the sampled ground grid; defaults to an occluding height. */
+  readonly outsideGroundHeight?: number;
   readonly contacts?: readonly WaterContact[];
   readonly quality: WaterQuality;
   readonly reflection?: PlanarReflectionOptions;
@@ -68,6 +70,8 @@ interface PlaneSample { readonly id: string; readonly x: number; readonly y: num
 export function createWaterSurface(options: WaterSurfaceOptions) {
   const { bodies, reaches, ground } = options;
   assertGround(ground);
+  const outsideGroundHeight = options.outsideGroundHeight ?? 1e4;
+  if (!Number.isFinite(outsideGroundHeight)) throw new RangeError('Outside ground height must be finite');
   if (!bodies.length && !reaches.length) throw new RangeError('Water needs at least one supplied basin or course');
   for (const body of bodies) {
     if (![body.x, body.z, body.radiusX, body.radiusZ, body.level].every(Number.isFinite) || !(body.radiusX > 0 && body.radiusZ > 0))
@@ -87,6 +91,7 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
   const shared = {
     uHeight: { value: heights }, uOrigin: { value: new THREE.Vector2(...ground.origin) },
     uSize: { value: new THREE.Vector2(ground.width, ground.height) }, uStep: { value: ground.step },
+    uOutsideGroundHeight: { value: outsideGroundHeight },
     uBasins: { value: v4(BASIN_CAP) }, uBasinLevels: { value: new Array<number>(BASIN_CAP).fill(-1e6) }, uBasinCount: { value: bodies.length },
     uWind: { value: new THREE.Vector3() }, uFlowPhase: { value: new THREE.Vector2() },
     uFlowOffset0: { value: new THREE.Vector2() }, uFlowOffset1: { value: new THREE.Vector2() }, uFlowPeriod: { value: FLOW_PERIOD },

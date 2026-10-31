@@ -5,6 +5,7 @@ import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatTime, TIER_NAMES, watchUrl } from './format';
 import { LIVE_CLASS_NAMES } from './live-line';
 import { ShieldIcon } from './marks';
+import { genesisPreviewPath } from '../../genesis/channels';
 
 export type NamesState = 'loading' | 'ready' | 'failed';
 
@@ -105,6 +106,7 @@ export function Card(props: {
         Survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} (UTC). Draft land: this holding may still move before the first edition.
       </p>
       <Show when={missing()}>{(text) => <p class="atlas-card-missing">{text()}</p>}</Show>
+      <Show when={genesisPreviewPath(props.settler.id)}>{href => <a class="atlas-watch" href={href()}>See this kingdom’s land <span aria-hidden="true">↗</span></a>}</Show>
       <Show when={url()}>
         {(href) => (
           <a class="atlas-watch" href={href()} target="_blank" rel="noopener noreferrer">
