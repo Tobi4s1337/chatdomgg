@@ -421,7 +421,7 @@ describe('the window', () => {
     for (const m of materialsOf(glass.blueprint)) expect(allowed.has(m) || m === kit.stone || m === kit.moulding, `unit uses ${m}`).toBe(true);
   });
 
-  it('glazes plain quarries in clear glass when no emote is approved for it', () => {
+  it('glazes plain leaded lights in clear glass when no emote is approved for it', () => {
     const plain = composeGenesisEmoteArt(recipe, land(recipe, 'river-valley'), []).glass;
     expect(plain.kind).toBe('plain');
     expect(plain.emote).toBeNull();

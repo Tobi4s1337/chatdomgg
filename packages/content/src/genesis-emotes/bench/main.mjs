@@ -165,12 +165,12 @@ async function main() {
 
   // The stained-glass light layer: one texel per pane from `glass.light`, lit from within. Light through pot-metal
   // glass is deeper and more saturated than the same glass seen by reflected light, so each pane's registered colour
-  // is pushed toward its own hue before it glows; came stays dark. Plain quarries glow a warm candle amber.
+  // is pushed toward its own hue before it glows; came stays dark. Plain leaded lights glow a warm candle amber.
   const glow = Math.min(1, Math.max(0.15, (Math.abs(hour - 12) - 3.5) / 3));
   const texture = glassTexture(light, art.glass.kind);
   const pane = new THREE.Mesh(
     new THREE.PlaneGeometry(light.width * CELL, light.height * CELL),
-    new THREE.MeshBasicMaterial({ map: texture, color: new THREE.Color(1, 1, 1).multiplyScalar(art.glass.kind === 'emote' ? 3.4 * glow : 2.2 * glow), transparent: true, alphaTest: 0.5, fog: false }),
+    new THREE.MeshBasicMaterial({ map: texture, color: new THREE.Color(1, 1, 1).multiplyScalar(art.glass.kind === 'emote' ? 2.5 * glow : 2.0 * glow), transparent: true, alphaTest: 0.5, fog: false }),
   );
   pane.position.set(...at(windowAt, [light.origin[0] + light.width / 2, light.origin[1] + light.height / 2, light.origin[2] + 0.04]));
   scene.add(pane);
@@ -231,7 +231,7 @@ function transmitted(material, kind) {
   const colour = new THREE.Color(colourOf.get(material));
   const hsl = {};
   colour.getHSL(hsl);
-  colour.setHSL(hsl.h, Math.min(1, hsl.s * 1.9 + 0.12), Math.min(0.62, Math.max(0.34, hsl.l)));
+  colour.setHSL(hsl.h, Math.min(1, hsl.s * 1.9 + 0.12), Math.min(0.56, Math.max(0.34, hsl.l)));
   return colour;
 }
 
