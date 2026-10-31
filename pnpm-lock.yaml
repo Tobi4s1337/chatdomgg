@@ -334,6 +334,9 @@ importers:
       '@chatdom/voxel':
         specifier: workspace:*
         version: link:../voxel
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
 packages:
 
