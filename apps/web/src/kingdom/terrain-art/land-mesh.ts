@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { MAT, MATERIALS } from '@chatdom/content';
 import type { MaterialRegistry } from '@chatdom/shared';
-import type { BoundsXZ, LandCandidate, LandMaterial } from './stand-in';
+import type { SettlementPlan } from '@chatdom/world';
+// Main owns the package export; until it adds one, the fixture reads the lane-owned producer by path.
+import type { TerrainArtCandidate, TerrainArtMaterial } from '../../../../../packages/world/src/terrain-art';
+
+export type BoundsXZ = SettlementPlan['bounds'];
+/** What the draw adapter and the fixture read: a producer candidate, or the accepted ground for comparison. */
+export type LandSource = Pick<TerrainArtCandidate, 'bounds' | 'height' | 'corner' | 'material' | 'protection'>;
 
 /**
  * Draw adapter for a land candidate (fixture only). It never displaces height in a shader: every vertex is
@@ -13,7 +19,7 @@ import type { BoundsXZ, LandCandidate, LandMaterial } from './stand-in';
 /** Fixture palette entries for land the content palette has no swatch for yet. Ids sit far above content's. */
 export const FIXTURE_LAND = { rock: 240, scree: 241, ledge: 242, heath: 243 } as const;
 
-export const LAND_PALETTE: Readonly<Record<LandMaterial, number>> = {
+export const LAND_PALETTE: Readonly<Record<TerrainArtMaterial, number>> = {
   grass: MAT.grass, heath: FIXTURE_LAND.heath, trail: MAT.earth, paving: MAT.paving,
   scree: FIXTURE_LAND.scree, rock: FIXTURE_LAND.rock, ledge: FIXTURE_LAND.ledge, waterbed: MAT.waterbed,
 };
@@ -74,7 +80,7 @@ export interface LandRegion {
 const OPEN_DIRECTIONS = Array.from({ length: 8 }, (_, i) => [Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)] as const);
 
 /** One region of land as indexed metre (or coarser) patches: four vertices each, one material each. */
-export function buildLandGeometry(candidate: LandCandidate, region: LandRegion): THREE.BufferGeometry {
+export function buildLandGeometry(candidate: LandSource, region: LandRegion): THREE.BufferGeometry {
   const { bounds, step, hole } = region;
   const nx = Math.round((bounds.maxX - bounds.minX) / step), nz = Math.round((bounds.maxZ - bounds.minZ) / step);
   if (nx <= 0 || nz <= 0 || nx * step !== bounds.maxX - bounds.minX || nz * step !== bounds.maxZ - bounds.minZ) {
@@ -166,7 +172,7 @@ export function buildLandGeometry(candidate: LandCandidate, region: LandRegion):
 }
 
 /** Corner heights on a regular grid, for consumers (water) that need the same land as a texture. */
-export function landHeightGrid(candidate: LandCandidate, origin: readonly [number, number], width: number, depth: number): Float32Array {
+export function landHeightGrid(candidate: LandSource, origin: readonly [number, number], width: number, depth: number): Float32Array {
   const data = new Float32Array(width * depth);
   for (let z = 0; z < depth; z++) for (let x = 0; x < width; x++) data[x + z * width] = candidate.corner(origin[0] + x, origin[1] + z);
   return data;
