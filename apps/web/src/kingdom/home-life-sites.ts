@@ -3,6 +3,21 @@ import { VOXEL_METRES, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import { homeLifeAnchors, transformCardinalPoint, type RealmFoundedScene } from '@chatdom/world';
 import type { HomeLifeSite } from './home-life';
 import type { RoyalBrazier, RoyalStandard } from './royal-life';
+import type { WindowHouse } from '@chatdom/render';
+
+/** Preview houses use their authored chimney mouths too; no installed lantern means no lantern light. */
+export function generatedHomeLifeSites(houses: readonly WindowHouse[]): HomeLifeSite[] {
+  const anchors = new Map<VoxelBlueprint, ReturnType<typeof homeLifeAnchors>>();
+  return houses.flatMap(home => {
+    let authored = anchors.get(home.blueprint);
+    if (!authored) { authored = homeLifeAnchors(home.blueprint); anchors.set(home.blueprint, authored); }
+    if (!authored.chimneys.length) return [];
+    const cell = VOXEL_METRES[home.blueprint.lattice], c = Math.cos(home.yaw), s = Math.sin(home.yaw);
+    const mouths = authored.chimneys.map(([x, y, z]): Vec3 => [home.position[0] + (x * c + z * s) * cell,
+      home.position[1] + y * cell, home.position[2] + (-x * s + z * c) * cell]);
+    return [{ slot: home.slot, mouths, lantern: null, normal: [s, 0, c] as Vec3 }];
+  });
+}
 
 /** Only installed fixtures can glow. Public geometry supplies both their physical mesh and the light anchors. */
 export function foundedLifeSites(scene: RealmFoundedScene): { homes: HomeLifeSite[]; braziers: RoyalBrazier[]; standard: RoyalStandard | undefined } {
