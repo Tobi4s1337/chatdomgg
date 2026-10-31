@@ -332,18 +332,20 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 **Order:** picture first, one visible fix per turn, before/after obvious at a glance. Keep exposure34ac89a,
 indigo0896044, street warmth96f2d08, beacon, warm pools and gold frame. The wide dusk grade sings: leave it alone.
-Castle lighta1dac83 landed; hills as the land lane lands, then wide-road life. Routine helpers/captures/merges use
+Close castle lighta1dac83 landed; latest GPU feedback asks for a visible wide gate-fire wash next.
+Then hills as the land lane lands and wide-road life. Routine helpers/captures/merges use
 medium effort. Lanes now own whole outcomes and commit checkpoints; merge good checkpoints immediately.
 
-**Current slice:** chimney life in the wide town. Generated homes now supply their actual authored chimney mouths
-to the existing presence-driven smoke; no invented door lights. Founded placement extraction stays intact. Far
-wisps broaden and catch moonlight beyond50m, returning to the accepted close treatment below50m; range fades
-240–320m. They curl/drift and fade within a few metres. No exposure, light source, window or crowd-state changes.
-Viewed native1080p and `shots/magic/chimney-town-pair.png` (before left): smoke plainly rises across the roofs.
-Same SIMULATED stream/time30/hour19.5/hero,214 lit windows/26 walkers, high HDR/ACES, settled/open. Minor hero
-framing drift. Smoke rhythm remains too uniform; walkers still barely read at wide scale. Rejected/reverted the
-far lantern-glint candidate as too subtle. Typecheck, scoped lint,3 home-life tests,17 avatar tests and web build
-pass. Capture resources closed. Baseline `shots/magic/road-lantern-before.png`; final `chimney-town-after.png`.
+**Current slice:** GPU correction to smokea545cfa. That pass was too white/busy on real hardware. Wide smoke
+now comes from a stable~quarter of occupied hearths: smaller thin grey-violet wisps, shorter life/faster fade,
+with a restrained amber tint at the mouth. Close arrival smoke remains active for every arriving home. No window,
+exposure, beacon or source-strength changes. Viewed native1080p and `shots/magic/smoke-soft-pair.png` (a545 left):
+white clutter gone, windows lead again; remaining smoke/base warmth are very subtle at wide scale. Same SIM
+stream/time30/hour19.5/hero,214 lit windows/26 walkers, high HDR/ACES, settled/open. Typecheck, scoped lint,
+2 home-life tests and web build pass; clean browser shader compile. A broad shader replacement initially touched
+the door-lantern shader; capture caught it, corrected before commit. Resources closed. Generated chimneys still
+use their actual authored mouths; no phantom door lights. Rejected far-lantern glints remain reverted.
+Smithy camera work was paused for this feedback before any source edits; no smithy capture was started.
 
 **Avatar:** chosen reference/spec49/PRD committed81eab8f; all old A/B/C studies rejected. Head/portrait checkpoint
 4c333ed merged8ff6f87 and both comparison sheets viewed in `work/evidence/avatar-style/AS03/`. Square face,
@@ -360,7 +362,8 @@ pinned foundations. Heraldry44c948e and river hallb5d3897 viewed/merged, not yet
 Trees/effects had no new checkpoints at turn start. Passport/Genesis content continue; parked systems stop after
 current task. No second forest or emitter stack. Never reapply the rejected global all-pane/2.5x window candidate.
 
-**Still open:** land adoption, readable lantern walkers/cart on wide roads, then smithy lower/tighter with faces
+**Still open:** castle gate-fire wash visible at wide distance (current camera-gated shader leaves it pale),
+then land adoption, readable lantern walkers/cart, and smithy lower/tighter with faces
 on BOTH sides of the pour. Molten02c3494 stays. Court light pair `shots/magic/castle-pair.png`: gatehouse/tower
 bases warmer; upper keep rim weak and court sparse. Real approved chat Forge remains unproved; no waiting
 observer before Tobias announces live. Prior passport/gate/emotes/moments/atlas-w2 merged through47c0ef7;
