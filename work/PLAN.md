@@ -336,19 +336,21 @@ Genesis entry, passport card, raid). One visible fix per turn, committed, same-v
 No new systems/contracts/system lanes or re-planning. Preserve accepted lantern procession, low street camera,
 warm pools, house models, beacon and gold frame. Other system lanes stop after their current task.
 
-**This turn:** lantern cage/glass is larger, with a small flickering flame, using actual renderer gripRight
-transforms rather than guessed hand positions. Shared hand poses cover crowd and present room walkers; no extra
-people. Existing24 nearby field sources/pools retained. Arrival pane gets a short halo pulse from witnessed
-arrival time; fixed captures cannot advance its clock. Public name rises for7s (close inspection stays named).
-Stream now shows that arrival name outside a director climax; it previously suppressed both window/bubble names.
-Typecheck/scoped lint,11 focused tests and isolated web build pass. No new integrator commits at turn start.
+**This turn:** exposure only. Calibrated against `shots/gpu/before-stream-dusk-rtx5080.png`: brighter reflected
+sky fill and evening key, readable cool fronts/roofs/hills, modest exposure lift, glowing dusk sky. First attempt
+was too close to day; reduced it after looking. Window/beacon shaders, lantern pools and cameras unchanged.
+Same-view1080 before/after viewed: `shots/magic/exposure-before-after@3840x1080.png` (left b597382/right current).
+URL `/stream?source=simulated&seed=willowmere&tier=town&hour=19.5&camera=hero&time=30`. High HDR/ACES,
+214 windows, open curtain/settled fields. Detail is readable now; hills remain smooth and the sky still mauve.
+Tobias's matching RTX capture judges the real-GPU balance. NEXT flicker: steady take, actual cause, stable fades.
+Lantern/window b597382 remains: actual grip attachment, brief arrival halo/name; flame detail still small.
 
-**Look / before-after:** `shots/magic/lantern-arrival-before-after@3840x1080.png`, left63b9d02/right current,
-viewed. Both are actual1920×1080 stream frames at14.4756s/citizen/hour19.5; Juniper reached home14.1256s.
-Window lights, name appears once and procession/pools remain. Lantern flame/glass still reads too much as a
-small golden square; house faces/roofs remain crushed and pane core is white. NEXT IS EXPOSURE, not more small
-lantern iterations. Keep pool treatment. Captures exited0, curtain actually open/fields settled; owned
-browser/server/lock closed. Detached before checkout is `../worktrees/look-before-63b9d02` (63b9d02).
+**Merges:** Sol high integrated finished passport, raid-gate, emotes, twitch-moments and atlas-w2; main accepted
+candidate47c0ef7. Narrow blockers only: passport SIMULATED gift fixture follows RG10; Atlas keeps newer renderer
+while taking reviewed hidden-outranks-gone edition correction. Affected391 tests/4 expected skips, fixture34,
+scoped lint, typecheck and web/API/panel/surveyor builds passed. Serial one-frame lane captures live in
+`shots/integration/look-reset/`. Passport/Gate/emotes/moments benches do not prove their missing live bindings;
+accepted modules are merged, not claimed as a complete live raid or passport integration. No new system work.
 
 **Lanes handed to team:** specs46–49, each with PRD/progress, local branch and worktree from this main commit:
 - picture-land — `lane/picture-land`, `../worktrees/picture-land`: ridges/rock/ledges/ragged paths/terraces.
@@ -360,8 +362,8 @@ Passport45 and Genesis content40–44 continue. Merge reviewed picture/content w
 main retains scene/shader/shadow integration. Land cannot silently alter pinned foundations/roads/collision;
 its candidate must be explicitly adopted with the same height for render/contact. No second forest/emitters.
 
-**Next picture weaknesses:** expose readable warm dusk faces/fronts/roofs while retaining glowing sky and pools;
-then diagnose actual flicker in a short steady take, stabilize selection/fades. Smithy crowd must wrap BOTH sides
+**Next picture weaknesses:** confirm exposure on RTX, then diagnose actual flicker in a short steady take,
+stabilize selection/fades. Smithy crowd must wrap BOTH sides
 with faces behind the pour; lower/closer camera and castle lit behind. Soft town-wide height fog for depth.
 The13-person west crescent0c401c6 is progress, not final composition. Accepted molten02c3494 unchanged. Actual
 judged chat words/approved real ritual remain unproved; no waiting observer before Tobias goes live.
