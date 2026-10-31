@@ -32,7 +32,7 @@ assembles the mount/index, and only that lead edits PRD/progress/README. PW06 fo
   labelled production-renderer bench/capture script. First visible result in this task: lake postcard and pier-deck
   at dusk at 1440×900/390×844. Use isolated fixture water/lighting inputs; no fake shared modules. Implement readiness,
   error checks, serial capture lock and owned-server cleanup. Record module counts and actual material/mesher costs.
-- [ ] **PW02 — Give the mill and bridge a silhouette.** Author mill, hub-centred overshot wheel, supported trough,
+- [x] **PW02 — Give the mill and bridge a silhouette.** Author mill, hub-centred overshot wheel, supported trough,
   open-arch bridge, weir and supplied-destination fingerpost; add reeds/lilies/pebbles/rock/stepping stones. Reuse civic
   crest read-only. Validate real support/open bay/arch/walk strip; fixture view mill-wheel and bridge-pond at both web
   sizes. Public text comes from caller. No generated course, trees, keeper, anvil or dragon edits.
