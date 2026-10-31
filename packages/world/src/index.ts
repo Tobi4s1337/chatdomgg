@@ -4,6 +4,9 @@ export * from './layout';
 export * from './citizens';
 export * from './build';
 export type * from './kingdom-land';
+export { naturalLandHeight, sampleLandWater, waterSurfaceAt, waterKeepOut, foundKingdomGeography, createKingdomCastle,
+  reservedByGeography, geographyBounds, LAND_FRAME, KEEP_DOOR_LOCAL_METRES, COURT_ELEVATION, BRIDGE_SPAN, WHEEL_HEAD_METRES,
+  type KingdomGeography } from './kingdom-land';
 export type { LandformPlan, LegacyLandformPlan, LandformBase, XZ, StreetEdge, PublicGroundSample } from './settlement/types';
 export type { CastlePlan, CastleModulePlacement, CardinalTurn, SettlementPlan, SettlementHome } from './settlement/types';
 export { transformCardinalPoint, homeFrame, homeOrigin, currentFootprint } from './settlement/geometry';

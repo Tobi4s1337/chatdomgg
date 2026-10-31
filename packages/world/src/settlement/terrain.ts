@@ -2,8 +2,11 @@ import type { Vec3 } from '@chatdom/shared';
 import { currentFootprint, expandBounds, homeFrame, pointBounds, polygonDistance, rectangleDistance,
   segmentProjection, smoothstep, SpatialIndex, transformCardinalPoint } from './geometry';
 import type { BoundsXZ, LandformPlan, PublicGroundSample, SettlementPlan, XZ } from './types';
+import { naturalLandHeight, sampleLandWater } from '../kingdom-land/surface';
 
+/** Version 1 is the installed sampler, unchanged. Version 2 is the kingdom-land surface. */
 export function naturalTerrainHeight(landform:LandformPlan,x:number,z:number):number {
+  if(landform.version===2)return naturalLandHeight(landform,x,z);
   const {ridge,castleRise,lake}=landform,phase=(landform.seed%6283)/1000;
   const dx=x-ridge.origin[0],dz=z-ridge.origin[1],c=Math.cos(ridge.bearing),s=Math.sin(ridge.bearing);
   const across=dx*c-dz*s-5*Math.sin(z*.021+phase),along=dx*s+dz*c;
@@ -21,12 +24,17 @@ interface Influence {
   id:string;kind:PublicGroundSample['kind']|'foundation';bounds:BoundsXZ;
   rectangle?:BoundsXZ;polygon?:readonly XZ[];segment?:readonly [Vec3,Vec3];
   height:number;width:number;verge:number;paved:boolean;
+  /** Grading reach. Streets and squares blend across 20 m; an earth trail is a shelf on its hillside. */
+  feather:number;
 }
 interface Prepared {
   ground:SpatialIndex<Influence>;foundations:SpatialIndex<Influence>;
   cornerOrigin:XZ;cornerWidth:number;cornerDepth:number;cornerRows:Int32Array;corners:Float32Array;
 }
 const FEATHER=20;
+const TRAIL_FEATHER=5;
+/** Version 2: metres of bank over which authored grading returns to the natural shore. */
+const BANK_GRADE_BAND=4;
 const CACHED_CORNER_ROWS=8;
 const preparedPlans=new WeakMap<SettlementPlan,Prepared>();
 function prepare(plan:SettlementPlan):Prepared {
@@ -34,7 +42,7 @@ function prepare(plan:SettlementPlan):Prepared {
   const ground=new SpatialIndex<Influence>(),foundations=new SpatialIndex<Influence>();
   const rectangle=(id:string,bounds:BoundsXZ,height:number,kind:Influence['kind'],paved:boolean)=>{
     if(kind==='foundation')bounds=expandBounds(bounds,.75);
-    const influence:Influence={id,kind,bounds,rectangle:bounds,height,width:0,verge:0,paved};
+    const influence:Influence={id,kind,bounds,rectangle:bounds,height,width:0,verge:0,paved,feather:FEATHER};
     ground.add(expandBounds(bounds,FEATHER),influence);
     if(kind==='foundation')foundations.add(bounds,influence);
   };
@@ -47,7 +55,7 @@ function prepare(plan:SettlementPlan):Prepared {
   const activeCourts=new Set(plan.homes.map(home=>home.courtId));
   for(const square of [plan.market,plan.castle.court,...plan.courts.filter(court=>activeCourts.has(court.id))]){
     const bounds=pointBounds(square.boundary),influence:Influence={id:square.id,kind:square===plan.market?'market':'court',
-      bounds,polygon:square.boundary,height:square.elevation,width:0,verge:0,paved:true};
+      bounds,polygon:square.boundary,height:square.elevation,width:0,verge:0,paved:true,feather:FEATHER};
     ground.add(expandBounds(bounds,FEATHER),influence);
   }
   for(const module of plan.castle.modules){
@@ -63,8 +71,9 @@ function prepare(plan:SettlementPlan):Prepared {
     for(let i=1;i<street.points.length;i++){
       const a=street.points[i-1]!,b=street.points[i]!;
       const bounds=expandBounds(pointBounds([[a[0],a[2]],[b[0],b[2]]]),street.width/2+street.verge);
-      const influence:Influence={id:street.id,kind:street.kind,bounds,segment:[a,b],height:a[1],width:street.width,verge:street.verge,paved:true};
-      ground.add(expandBounds(bounds,FEATHER),influence);
+      const trail=street.kind==='trail',feather=trail?TRAIL_FEATHER:FEATHER;
+      const influence:Influence={id:street.id,kind:street.kind,bounds,segment:[a,b],height:a[1],width:street.width,verge:street.verge,paved:!trail,feather};
+      ground.add(expandBounds(bounds,feather),influence);
     }
   }
   // Include the chunk-aligned detailed surface and its occupancy halo. The same
@@ -92,6 +101,8 @@ export function samplePublicGround(plan:SettlementPlan,x:number,z:number):Public
   for(const influence of prepare(plan).ground.at(x,z)){
     if(influence.kind==='foundation')continue;
     const value=sample(influence,x,z),reserved=value.distance-influence.verge;
+    // A trail's narrower shelf ends where its own grading does.
+    if(influence.feather!==FEATHER&&reserved>=influence.feather)continue;
     if(reserved<reservedDistance){chosen=influence;height=value.height;reservedDistance=reserved;}
     if(influence.paved)pavingDistance=Math.min(pavingDistance,value.distance);
   }
@@ -101,27 +112,37 @@ export function samplePublicGround(plan:SettlementPlan,x:number,z:number):Public
 
 /** Authored grading at the corners of the conforming metre surface. */
 function gradedHeight(plan:SettlementPlan,prepared:Prepared,x:number,z:number):number {
+  const graded=authoredGrade(plan,prepared,x,z);
+  if(plan.landform.version!==2)return graded;
+  // A road or trail never fills a channel: over wet ground the bridge deck carries the walk. Across the
+  // bank, grading eases back to the natural shore, so nearby fill never stands as a wall at the water.
+  const water=sampleLandWater(plan.landform,x,z);
+  if(!water||water.shoreDistance>=BANK_GRADE_BAND)return graded;
+  const natural=naturalLandHeight(plan.landform,x,z);
+  return water.shoreDistance<0?Math.min(graded,natural):natural+(graded-natural)*smoothstep(0,BANK_GRADE_BAND,water.shoreDistance);
+}
+function authoredGrade(plan:SettlementPlan,prepared:Prepared,x:number,z:number):number {
   const {ground,foundations}=prepared;
   for(const influence of foundations.at(x,z))if(rectangleDistance(influence.rectangle!,x,z)<=0)return influence.height;
   // The square is a single level civic floor. Roads approaching it must not
   // average a dip under the well or the stall feet inside that floor.
   for(const influence of ground.at(x,z))if(influence.kind==='market'&&polygonDistance(influence.polygon!,x,z)<=0)return influence.height;
   // One nearest sample per road avoids giving densely sampled bends extra grading influence.
-  const closest=new Map<string,{distance:number;height:number;weight:number}>();
+  const closest=new Map<string,{distance:number;height:number;weight:number;feather:number}>();
   for(const influence of ground.at(x,z)){
-    const value=sample(influence,x,z);value.distance-=influence.verge;
-    if(value.distance>=FEATHER)continue;
-    const weight=(1-smoothstep(0,FEATHER,Math.max(0,value.distance)))**2 / (Math.max(.01,value.distance) ** 2),previous=closest.get(influence.id);
+    const value=sample(influence,x,z),feather=influence.feather;value.distance-=influence.verge;
+    if(value.distance>=feather)continue;
+    const weight=(1-smoothstep(0,feather,Math.max(0,value.distance)))**2 / (Math.max(.01,value.distance) ** 2),previous=closest.get(influence.id);
     if(weight===0)continue;
     if(previous){previous.height+=value.height*weight;previous.weight+=weight;previous.distance=Math.min(previous.distance,value.distance);}
-    else closest.set(influence.id,{distance:value.distance,height:value.height*weight,weight});
+    else closest.set(influence.id,{distance:value.distance,height:value.height*weight,weight,feather});
   }
   for(const value of closest.values())value.height/=value.weight;
   let weighted=0,weights=0,coreHeight=0,coreCount=0;
   for(const value of closest.values()){
     if(value.distance<=0){coreHeight+=value.height;coreCount++;continue;}
-    if(value.distance>=FEATHER)continue;
-    const w=1-smoothstep(0,FEATHER,value.distance),odds=w/(1-w);
+    if(value.distance>=value.feather)continue;
+    const w=1-smoothstep(0,value.feather,value.distance),odds=w/(1-w);
     weighted+=odds*value.height;weights+=odds;
   }
   if(coreCount)return coreHeight/coreCount;
