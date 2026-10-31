@@ -10,7 +10,10 @@
  *    read against that revision; if that collection has moved on, the reply is `stale` and the surface reopens the
  *    book instead of mixing two snapshots.
  * 4. **Disclosure again.** The card is read once more after the history and before anything leaves, so a hide that
- *    lands mid-read still wins.
+ *    lands mid-read still wins, and the holder's name is the one the card shows now.
+ * 4a. **Never backwards.** The reader remembers the highest card revision it has seen for each citizen. A card source
+ *    older than that (a cache or replica replaying the moment before a hide) is refused as unavailable, so a stale
+ *    "shown" can never undo a newer "hidden".
  * 5. **Checked out.** The reply is re-read with the same boundary reader every surface uses; a corrupt record makes
  *    the read unavailable, never an empty or partial book.
  */
@@ -20,8 +23,9 @@ import { projectCard } from '../citizen-card/project';
 import type { PassportView as GatePassportView, PersonId } from '../raid-gate/contracts';
 import {
   hiddenPassport, readPassportBook, readPassportReply, readPassportRequest,
-  type PassportCollection, type PassportItem, type PassportPageOf, type PassportReply, type PassportRequest,
+  type PassportCollection, type PassportItem, type PassportPageOf, type PassportReply, type PassportRequest, type VisiblePassportBook,
 } from './contracts';
+import { disclosedPlaces, passportDisclosure, samePlaces, type PassportDisclosure } from './disclosure';
 import { enrichGateStamps, type AcceptedGiftRecord, type EnrichmentGap, type WitnessedRoad } from './gate';
 
 /** One page of an authority's records with the revision it was read at. */
@@ -57,15 +61,37 @@ export type PassportReadFault =
   | Readonly<{ kind: 'enrichment'; collection: 'stamps'; missing: EnrichmentGap }>
   | Readonly<{ kind: 'source' | 'origin' | 'subject' | 'record' | 'port'; detail: string }>;
 
+/**
+ * One book read whole for a server-side surface (the share picture), with what the card disclosed at the end of the
+ * read: the places it shows publicly and its disclosure revision. Hidden and unavailable carry nothing else.
+ */
+export type PassportSnapshot =
+  | Readonly<{ kind: 'visible'; book: VisiblePassportBook; places: ReadonlyMap<string, string>; disclosure: PassportDisclosure }>
+  | Readonly<{ kind: 'hidden' }>
+  | Readonly<{ kind: 'unavailable' }>;
+
 export interface PassportReader {
   handle(context: PassportReadContext, request: unknown): Promise<PassportReply>;
+  /** The first book, read exactly as `handle({ op: 'book' })` reads it, with the card's places and disclosure. */
+  snapshot(context: PassportReadContext): Promise<PassportSnapshot>;
+}
+
+/** Same book, same holder, same places and the same disclosure revision: nothing a picture of one could get wrong. */
+export function sameSnapshot(a: Extract<PassportSnapshot, { kind: 'visible' }>, b: Extract<PassportSnapshot, { kind: 'visible' }>): boolean {
+  return a.book.holder.personId === b.book.holder.personId && a.book.holder.name === b.book.holder.name && a.book.revision === b.book.revision
+    && a.book.origin === b.book.origin && a.disclosure.revision === b.disclosure.revision && samePlaces(a.places, b.places);
 }
 
 class Unavailable extends Error {
   constructor(readonly fault: PassportReadFault) { super(fault.kind); this.name = 'PassportUnavailable'; }
 }
 
-type Disclosure = Readonly<{ kind: 'hidden'; origin: 'live' | 'simulated' }> | Readonly<{ kind: 'visible'; origin: 'live' | 'simulated'; holder: { personId: PersonId; name: string } }>;
+type Disclosure =
+  | Readonly<{ kind: 'hidden'; origin: 'live' | 'simulated' }>
+  | Readonly<{ kind: 'visible'; origin: 'live' | 'simulated'; holder: { personId: PersonId; name: string }; places: ReadonlyMap<string, string>; gate: PassportDisclosure }>;
+
+/** How many citizens' highest card revisions one reader remembers (least recently read forgotten first). */
+const REMEMBERED = 4096;
 
 const REVISION = /^p1\.(\d{1,15})\.(\d{1,15})\.(\d{1,15})\.(\d{1,15})$/;
 type Revisions = Readonly<Record<PassportCollection, number>>;
@@ -80,6 +106,16 @@ const isRevisionNumber = (value: unknown): value is number => typeof value === '
 
 export function createPassportReader(ports: PassportPorts, options: { report?: (fault: PassportReadFault) => void } = {}): PassportReader {
   const alive = (signal: AbortSignal) => { if (signal.aborted) throw new Unavailable({ kind: 'port', detail: 'aborted' }); };
+  const highest = new Map<string, number>();
+  /** Refuse a card older than one already read for this citizen; remember the newest. */
+  const forward = (key: CitizenKey, revision: number) => {
+    const mark = `${key.kingdomId}/${key.personId}`;
+    const seen = highest.get(mark);
+    if (seen !== undefined && revision < seen) throw new Unavailable({ kind: 'source', detail: `card revision ${revision} is older than ${seen}, already read` });
+    highest.delete(mark);
+    highest.set(mark, Math.max(seen ?? revision, revision));
+    if (highest.size > REMEMBERED) highest.delete(highest.keys().next().value!);
+  };
 
   async function disclose(context: PassportReadContext): Promise<Disclosure> {
     const source = await ports.card(context.key, context.signal);
@@ -92,8 +128,12 @@ export function createPassportReader(ports: PassportPorts, options: { report?: (
       throw new Unavailable({ kind: 'subject', detail: 'the card source answered for another citizen' });
     }
     if (card.origin !== ports.origin) throw new Unavailable({ kind: 'origin', detail: `a ${ports.origin} passport cannot answer for a ${card.origin} card` });
+    forward(context.key, card.revision.person);
     if (card.passport.hidden) return { kind: 'hidden', origin: card.origin };
-    return { kind: 'visible', origin: card.origin, holder: { personId: context.key.personId, name: card.identity.name } };
+    return {
+      kind: 'visible', origin: card.origin, holder: { personId: context.key.personId, name: card.identity.name },
+      places: disclosedPlaces(card), gate: passportDisclosure(card),
+    };
   }
 
   /** One page of witnessed Gate stamps, enriched. A Gate that reports hidden makes the whole book hidden. */
@@ -158,24 +198,38 @@ export function createPassportReader(ports: PassportPorts, options: { report?: (
     return { kind: 'page', collection: request.collection, revision: request.revision, page: read.page } as PassportReply;
   }
 
+  /** One read in the order the module header gives, answering the reply and the card as it stood at the end. */
+  async function run(context: PassportReadContext, request: PassportRequest): Promise<{ reply: PassportReply; after?: Extract<Disclosure, { kind: 'visible' }> }> {
+    try {
+      const before = await disclose(context);
+      if (before.kind === 'hidden') return { reply: { kind: 'book', book: hiddenPassport(before.origin) } };
+      let reply = request.op === 'book' ? await readBook(context, before) : await readPage(context, request, before.origin);
+      // A hide that landed while the history was read wins over the history.
+      const after = await disclose(context);
+      if (after.kind === 'hidden') return { reply: { kind: 'book', book: hiddenPassport(after.origin) } };
+      // A rename that landed meanwhile: the book carries the name the card shows now.
+      if (reply.kind === 'book' && reply.book.visibility === 'visible') reply = { kind: 'book', book: { ...reply.book, holder: after.holder } };
+      const checked = readPassportReply(reply);
+      if (!checked) throw new Unavailable({ kind: 'record', detail: 'the reply failed its own boundary reader' });
+      return { reply: checked, after };
+    } catch (error) {
+      options.report?.(error instanceof Unavailable ? error.fault : { kind: 'port', detail: error instanceof Error ? error.message : 'port failed' });
+      return { reply: { kind: 'denied', code: 'unavailable' } };
+    }
+  }
+
   return {
     async handle(context, input) {
       const request = readPassportRequest(input);
       if (!request) return { kind: 'denied', code: 'invalid' };
-      try {
-        const before = await disclose(context);
-        if (before.kind === 'hidden') return { kind: 'book', book: hiddenPassport(before.origin) };
-        const reply = request.op === 'book' ? await readBook(context, before) : await readPage(context, request, before.origin);
-        // A hide that landed while the history was read wins over the history.
-        const after = await disclose(context);
-        if (after.kind === 'hidden') return { kind: 'book', book: hiddenPassport(after.origin) };
-        const checked = readPassportReply(reply);
-        if (!checked) throw new Unavailable({ kind: 'record', detail: 'the reply failed its own boundary reader' });
-        return checked;
-      } catch (error) {
-        options.report?.(error instanceof Unavailable ? error.fault : { kind: 'port', detail: error instanceof Error ? error.message : 'port failed' });
-        return { kind: 'denied', code: 'unavailable' };
-      }
+      return (await run(context, request)).reply;
+    },
+    async snapshot(context) {
+      const { reply, after } = await run(context, { op: 'book' });
+      if (reply.kind !== 'book') return { kind: 'unavailable' };
+      if (reply.book.visibility !== 'visible') return { kind: 'hidden' };
+      if (!after) return { kind: 'unavailable' };
+      return { kind: 'visible', book: reply.book, places: after.places, disclosure: after.gate };
     },
   };
 }

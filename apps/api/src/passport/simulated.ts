@@ -34,6 +34,11 @@ export interface SimulatedPassport {
   readonly now: number;
   /** The SIMULATED card source, for hosts that also draw the card (its disclosed homes name road origins). */
   readonly card: () => CardSource;
+  /**
+   * The SIMULATED person authority's "Hide my travels": records the choice and moves the card's person revision on,
+   * as the real authority does, then answers the card source as it now stands.
+   */
+  readonly setTravelsHidden: (hidden: boolean) => CardSource;
 }
 
 const DAY = 86_400_000;
@@ -129,12 +134,14 @@ export function simulatedPassportAuthorities(name: PassportFixtureName, scenario
   const declined = stampsAll.find(stamp => stamp.gifts.length === 0);
   if (declined) gifts.push({ stampId: declined.id, gift: gift(declined, `offer:${declined.id.replace(/^arrival:/, '')}`, 'left', 'refused'), name: 'A tin whistle', keepsakeId: null });
 
+  let travelsHidden = scenario.travelsHidden;
+  let personRevision = 3;
   const card = (): CardSource => ({
     subjectFirstSignedInAt: scenario.signedIn ? FIXTURE_AS_OF - 400 * DAY : null,
-    travelsHidden: scenario.travelsHidden,
+    travelsHidden,
     dependencies: [],
     document: {
-      key, kingdomName: home.name, revision: { person: 3, citizen: 7 }, origin: 'simulated',
+      key, kingdomName: home.name, revision: { person: personRevision, citizen: 7 }, origin: 'simulated',
       identity: { login: home.login, name: book.holder.name, colour: null, office: null, portrait: null },
       tenure: { followedAt: null, subscribedMonths: null, activeTier: null },
       citizenNumber: null,
@@ -169,5 +176,9 @@ export function simulatedPassportAuthorities(name: PassportFixtureName, scenario
     roads: async raidIds => new Map(raidIds.flatMap(id => (roads.has(id) ? [[id, roads.get(id)!] as const] : []))),
     gifts: (person, stampIds) => only(person, () => gifts.filter(record => stampIds.includes(record.stampId))),
   };
-  return { ports, key, now: FIXTURE_AS_OF, card };
+  const setTravelsHidden = (hidden: boolean) => {
+    if (hidden !== travelsHidden) { travelsHidden = hidden; personRevision++; }
+    return card();
+  };
+  return { ports, key, now: FIXTURE_AS_OF, card, setTravelsHidden };
 }

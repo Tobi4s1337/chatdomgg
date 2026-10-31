@@ -5,7 +5,7 @@ import type { CitizenKey } from '../citizen-card/contracts';
 import { createChromiumPassportImageRenderer } from './chromium';
 import type { PassportReply, VisiblePassportBook } from './contracts';
 import type { PersonId } from '../citizen-card/contracts';
-import { createPassportReader, type PassportReader } from './read';
+import { createPassportReader, type PassportReader, type PassportSnapshot } from './read';
 import { PassportRendererBusy, createPassportShareHttp, isShareImage, type PassportImageRenderer, type PassportShareFault } from './share';
 import { simulatedPassportAuthorities, type SimulatedScenario } from './simulated';
 
@@ -34,15 +34,22 @@ function recordingRenderer(during: (call: number) => void | Promise<void> = () =
 
 const KEY = { personId: '930000001', kingdomId: '910000101' } as CitizenKey;
 
+const GORSEHOLD = new Map([['910000101', 'Gorsehold']]);
+/** A snapshot as the reader makes one from a reply: the card's places and disclosure revision alongside. */
+const snapshotOf = (reply: PassportReply, places: ReadonlyMap<string, string> = GORSEHOLD, revision = 3): PassportSnapshot =>
+  reply.kind !== 'book' ? { kind: 'unavailable' }
+  : reply.book.visibility === 'hidden' ? { kind: 'hidden' }
+  : { kind: 'visible', book: reply.book, places, disclosure: { origin: reply.book.origin, travels: 'shown', revision } };
+
 /** A reader stub that answers each book read from a script, so the handler's order of operations can be watched. */
-function scriptedReader(replies: PassportReply[]): PassportReader & { reads: number } {
+function scriptedReader(script: (PassportReply | PassportSnapshot)[]): PassportReader & { reads: number } {
   const stub = {
     reads: 0,
-    async handle(_context: unknown, request: unknown) {
-      expect(request).toEqual({ op: 'book' });
-      const reply = replies[Math.min(stub.reads, replies.length - 1)]!;
+    async handle(): Promise<PassportReply> { throw new Error('the share handler reads snapshots only'); },
+    async snapshot() {
+      const entry = script[Math.min(stub.reads, script.length - 1)]!;
       stub.reads++;
-      return reply;
+      return 'book' in entry && entry.kind === 'book' || entry.kind === 'denied' || entry.kind === 'page' ? snapshotOf(entry as PassportReply) : entry as PassportSnapshot;
     },
   };
   return stub;
@@ -109,6 +116,33 @@ describe('the passport share image over HTTP', () => {
     expect(renderer.drawn.map(share => share.spread.holder.name)).toEqual(['Pellam Rook', 'Pellam of the Rook']);
   });
 
+  it('throws away a picture whose road names a home the card no longer shows, and draws it with the card as it is', async () => {
+    const faults: PassportShareFault[] = [];
+    const renderer = recordingRenderer();
+    const few = book();
+    const moved = new Map([['910000101', 'Gorse Hold on the Moor']]);
+    const answer = await handlerWith(scriptedReader([snapshotOf(few), snapshotOf(few, moved, 4), snapshotOf(few, moved, 4)]), renderer, faults).handle(get());
+    expect(answer.status).toBe(200);
+    expect(renderer.drawn).toHaveLength(2);
+    expect(renderer.drawn[0]!.html).toContain('By the road from <bdi dir="auto">Gorsehold</bdi>');
+    expect(renderer.drawn[1]!.html).toContain('By the road from <bdi dir="auto">Gorse Hold on the Moor</bdi>');
+    expect(renderer.drawn[1]!.html).not.toContain('<bdi dir="auto">Gorsehold</bdi>');
+    expect(new Uint8Array(await answer.arrayBuffer())[39]).toBe(2);
+    expect(faults).toContainEqual({ kind: 'discarded', reason: 'moved' });
+  });
+
+  it('treats a home taken off the card, or any newer disclosure, as another snapshot', async () => {
+    const few = book();
+    const gone = recordingRenderer();
+    await handlerWith(scriptedReader([snapshotOf(few), snapshotOf(few, new Map(), 4), snapshotOf(few, new Map(), 4)]), gone).handle(get());
+    expect(gone.drawn).toHaveLength(2);
+    expect(gone.drawn[1]!.html).not.toContain('By the road from');
+    // Hidden and shown again while the picture was drawn: the same book, but drawn under the newer disclosure.
+    const again = recordingRenderer();
+    await handlerWith(scriptedReader([snapshotOf(few, GORSEHOLD, 3), snapshotOf(few, GORSEHOLD, 5), snapshotOf(few, GORSEHOLD, 5)]), again).handle(get());
+    expect(again.drawn).toHaveLength(2);
+  });
+
   it('answers 503 rather than a picture of a moment that keeps passing', async () => {
     const answer = await handlerWith(scriptedReader([book('p1.1.1.1.1'), book('p1.2.1.1.1'), book('p1.3.1.1.1')]), recordingRenderer()).handle(get());
     expect(answer.status).toBe(503);
@@ -146,8 +180,7 @@ describe('the share image through the real reader and the card’s disclosure', 
     let hide = false;
     const ports = { ...sim.ports, card: async (key: CitizenKey, signal: AbortSignal) => ({ ...await sim.ports.card(key, signal), ...(hide ? { travelsHidden: true } : {}) }) };
     const renderer = recordingRenderer(() => during?.(() => { hide = true; }));
-    const handler = createPassportShareHttp({ reader: createPassportReader(ports), renderer, subject: async () => sim.key, clock: () => sim.now,
-      places: async () => new Map([[sim.key.kingdomId, 'Gorsehold']]) });
+    const handler = createPassportShareHttp({ reader: createPassportReader(ports), renderer, subject: async () => sim.key, clock: () => sim.now });
     return { handler, renderer };
   }
 
@@ -165,6 +198,41 @@ describe('the share image through the real reader and the card’s disclosure', 
     expect(renderer.drawn).toHaveLength(1);
     expect(answer.status).toBe(404);
     expect(answer.headers.get('content-type')).not.toContain('image');
+  });
+
+  it('refuses a stale cached card after a hide: no picture from the moment before', async () => {
+    const sim = simulatedPassportAuthorities('few', { signedIn: true, travelsHidden: false });
+    // A replica that has seen the hide (revision 4) and one that still holds revision 3, answering in turn.
+    let stale = false;
+    const ports = { ...sim.ports, card: async (key: CitizenKey, signal: AbortSignal) => {
+      const source = await sim.ports.card(key, signal);
+      return stale ? source : { ...source, travelsHidden: true, document: { ...source.document, revision: { ...source.document.revision, person: 4 } } };
+    } };
+    const renderer = recordingRenderer();
+    const handler = createPassportShareHttp({ reader: createPassportReader(ports), renderer, subject: async () => sim.key, clock: () => sim.now });
+    expect((await handler.handle(get())).status).toBe(404);
+    stale = true;
+    const answer = await handler.handle(get());
+    expect(answer.status).toBe(503);
+    expect(answer.headers.get('content-type')).not.toContain('image');
+    expect(renderer.drawn).toHaveLength(0);
+  });
+
+  it('a home renamed on the card while the picture is drawn: the old road start is never released', async () => {
+    const sim = simulatedPassportAuthorities('few', { signedIn: true, travelsHidden: false });
+    let renamed = false;
+    const ports = { ...sim.ports, card: async (key: CitizenKey, signal: AbortSignal) => {
+      const source = await sim.ports.card(key, signal);
+      if (!renamed) return source;
+      const document = { ...source.document, kingdomName: 'Gorse Hold', revision: { ...source.document.revision, person: 4 },
+        homes: source.document.homes.map(home => ({ ...home, kingdomName: 'Gorse Hold' })) };
+      return { ...source, document };
+    } };
+    const renderer = recordingRenderer(call => { if (call === 1) renamed = true; });
+    const handler = createPassportShareHttp({ reader: createPassportReader(ports), renderer, subject: async () => sim.key, clock: () => sim.now });
+    expect((await handler.handle(get())).status).toBe(200);
+    expect(renderer.drawn).toHaveLength(2);
+    expect(renderer.drawn[1]!.html).toContain('By the road from <bdi dir="auto">Gorse Hold</bdi>');
   });
 
   it('a shown book is drawn with the card’s disclosed home naming where its roads began', async () => {

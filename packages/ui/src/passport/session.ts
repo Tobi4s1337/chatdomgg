@@ -49,6 +49,68 @@ export interface PassportSession {
   more(collection: PassportCollection): void;
   /** Stop: every read in flight is aborted and nothing that arrives later lands. */
   close(): void;
+  /** The host's card says the travels are hidden: drop the book, abort every read and show it closed. No read is sent. */
+  conceal(origin: 'live' | 'simulated'): void;
+}
+
+/**
+ * What the citizen card's current projection says about this passport (`passportDisclosure` in
+ * `apps/api/src/passport/disclosure.ts`): travels shown or hidden, at the card's person revision.
+ */
+export interface PassportDisclosureView {
+  readonly origin: 'live' | 'simulated';
+  readonly travels: 'shown' | 'hidden';
+  readonly revision: number;
+}
+
+/**
+ * Keeps a session in step with the host's card disclosure, so privacy holds on the page and not only on the server:
+ *
+ * - Hidden closes the book at once and sends nothing, whatever reads were in flight; their replies never land.
+ * - Shown at a newer revision reads the book again from the start (a fresh snapshot, never the old book kept up).
+ * - A "shown" no newer than a "hidden" already followed is a stale answer and is ignored, so a cached card can never
+ *   reopen a book its holder has since closed. Hidden is always followed, even when it looks older.
+ * - Without a disclosure (a host that has none to give) the book is simply opened once.
+ */
+export function followDisclosure(session: PassportSession): (disclosure: PassportDisclosureView | undefined) => void {
+  let opened: number | null | undefined;
+  let hiddenAt = -1, shownAt = -1;
+  return disclosure => {
+    if (!disclosure) {
+      if (opened === undefined) { opened = null; session.open(); }
+      return;
+    }
+    if (disclosure.travels === 'hidden') {
+      hiddenAt = Math.max(hiddenAt, disclosure.revision);
+      opened = -1;
+      return session.conceal(disclosure.origin);
+    }
+    if (disclosure.revision <= hiddenAt || disclosure.revision < shownAt) return;
+    shownAt = disclosure.revision;
+    if (opened === disclosure.revision) return;
+    opened = disclosure.revision;
+    session.open();
+  };
+}
+
+/** The newer of two disclosures; at the same revision, hidden wins. */
+export function newerDisclosure(a: PassportDisclosureView | undefined, b: PassportDisclosureView | undefined): PassportDisclosureView | undefined {
+  if (!a || !b) return a ?? b;
+  if (a.revision !== b.revision) return a.revision > b.revision ? a : b;
+  return a.travels === 'hidden' ? a : b;
+}
+
+/**
+ * Whether an owner's change was acknowledged: the authority answered the card as it now stands, with the travels as
+ * asked, for the same origin and at a newer revision than the one the change was asked from. Anything else is not
+ * an acknowledgement, and the surface must not say the change happened.
+ */
+export function acknowledgesDisclosure(asked: PassportDisclosureView | undefined, travels: 'shown' | 'hidden', answer: unknown): answer is PassportDisclosureView {
+  if (typeof answer !== 'object' || answer === null) return false;
+  const { origin, travels: said, revision } = answer as Record<string, unknown>;
+  if ((origin !== 'live' && origin !== 'simulated') || said !== travels) return false;
+  if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0) return false;
+  return !asked || (origin === asked.origin && revision > asked.revision);
 }
 
 const RECORD_KEY: { readonly [K in PassportCollection]: (item: PassportItemView<K>) => string } = {
@@ -143,5 +205,6 @@ export function createPassportSession(transport: PassportTransport): PassportSes
     open() { abortAll(); generation++; set({ kind: 'pending' }); void readBook(); },
     more(collection) { turn(collection, true); },
     close() { abortAll(); generation++; set({ kind: 'pending' }); },
+    conceal(origin) { hide(origin); },
   };
 }

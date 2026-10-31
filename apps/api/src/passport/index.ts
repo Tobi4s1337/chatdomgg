@@ -6,7 +6,8 @@
  * only.
  */
 export * from './contracts';
-export { createPassportReader, type PassportPorts, type PassportReadContext, type PassportReadFault, type PassportReader, type RevisionedPage } from './read';
+export { createPassportReader, sameSnapshot, type PassportPorts, type PassportReadContext, type PassportReadFault, type PassportReader, type PassportSnapshot, type RevisionedPage } from './read';
+export { disclosedPlaces, passportDisclosure, samePlaces, type PassportDisclosure } from './disclosure';
 export { enrichGateStamps, type AcceptedGiftRecord, type EnrichedStamps, type EnrichmentGap, type StampFacts, type WitnessedRoad } from './gate';
 export { createPassportHttp, type PassportHttpOptions, type PassportSubject } from './http';
 export { simulatedPassportAuthorities, type SimulatedPassport, type SimulatedScenario } from './simulated';

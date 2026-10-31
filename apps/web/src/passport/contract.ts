@@ -1,6 +1,7 @@
 import type { PassportBook as FrozenBook } from '@chatdom/shared/passport';
-import type { HiddenPassportView, PassportReplyView, PassportRequestView, VisiblePassportView } from '@chatdom/ui/passport';
+import type { HiddenPassportView, PassportDisclosureView, PassportReplyView, PassportRequestView, VisiblePassportView } from '@chatdom/ui/passport';
 import type { PassportReply, PassportRequest } from '../../../api/src/passport/contracts';
+import type { PassportDisclosure } from '../../../api/src/passport/disclosure';
 
 /**
  * Compile-time proof that the frozen read projection still fits the views the book's craft reads. If the shared
@@ -17,3 +18,7 @@ export const HIDDEN_VIEW_IS_EXACT: Fits<keyof HiddenPassportView, keyof Hidden> 
 /** Every reply the passport boundary reader accepts is one the reading session understands, and every request it sends is one the reader reads. */
 export const CHECKED_REPLY_FITS: Fits<PassportReply, PassportReplyView> = true;
 export const SESSION_REQUEST_FITS: Fits<PassportRequestView, PassportRequest> = true;
+
+/** The card's disclosure as the server projects it is exactly what a reading follows. */
+export const DISCLOSURE_FITS: Fits<PassportDisclosure, PassportDisclosureView> = true;
+export const DISCLOSURE_VIEW_FITS: Fits<PassportDisclosureView, PassportDisclosure> = true;

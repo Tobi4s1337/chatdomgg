@@ -59,9 +59,9 @@ try {
 
   // The server side, loaded exactly as written: the share handler, the warm renderer, the reader and the authorities.
   const load = path => server.ssrLoadModule(`${root}${path}`);
-  const [share, chromiumRenderer, fonts, read, simulated, project, craft] = await Promise.all([
+  const [share, chromiumRenderer, fonts, read, simulated, craft] = await Promise.all([
     load('apps/api/src/passport/share.ts'), load('apps/api/src/passport/chromium.ts'), load('apps/api/src/passport/fonts.ts'),
-    load('apps/api/src/passport/read.ts'), load('apps/api/src/passport/simulated.ts'), load('apps/api/src/citizen-card/project.ts'),
+    load('apps/api/src/passport/read.ts'), load('apps/api/src/passport/simulated.ts'),
     load('packages/ui/src/passport/craft.ts'),
   ]);
   renderer = chromiumRenderer.createChromiumPassportImageRenderer();
@@ -72,7 +72,6 @@ try {
       const authorities = simulated.simulatedPassportAuthorities(fixture, SCENARIO[state] ?? SCENARIO.shown);
       return share.createPassportShareHttp({
         reader: read.createPassportReader(authorities.ports), subject: async () => authorities.key, renderer, clock: () => authorities.now, fontFaces,
-        places: async () => { const card = project.projectCard(authorities.card()); return new Map(card.homes.map(home => [home.kingdomId, home.kingdomName])); },
         report: fault => report.console.push(`share fault: ${JSON.stringify(fault)}`), ...extra,
       });
     },
@@ -206,11 +205,76 @@ try {
     await page.close();
   }
 
+  // The holder's clasp. The change is asked and the book stays as it is until the authority acknowledges it; then the
+  // book closes, the print goes, the card keeps its homes. Shown again is a fresh read with its own print.
+  {
+    const page = await open({ fixture: 'few', owner: '1' }, [1440, 900]);
+    const look = () => page.evaluate(() => {
+      const section = document.querySelector('.cpc');
+      const clasp = document.querySelector('.cpc-clasp');
+      const words = [section?.textContent ?? '', ...[...(section?.querySelectorAll('[aria-label], [alt], [href], [src]') ?? [])]
+        .flatMap(node => ['aria-label', 'alt', 'href', 'src'].map(name => node.getAttribute(name) ?? ''))].join(' ');
+      return {
+        state: section?.dataset.state, checked: clasp?.getAttribute('aria-checked'), busy: clasp?.getAttribute('aria-busy'),
+        status: document.querySelector('.cpc-owner-status')?.textContent ?? '', shelf: !!document.querySelector('.cpc-share'),
+        print: document.querySelector('.cpc-print img')?.getAttribute('src') ?? null, home: document.querySelector('.ppb-card-kingdom')?.textContent ?? '',
+        exposed: ['Pellam', 'Rook', 'Hollowmere', 'Copperleaf', 'Brindlewick', 'share.png', 'Journeys'].filter(word => words.includes(word)),
+      };
+    });
+    const shoot = async name => {
+      await page.waitForTimeout(450);
+      const path = `${output}/${name}@1440x900.png`;
+      await page.screenshot({ path });
+      report.shots.push({ path: path.slice(root.length) });
+    };
+    const resting = await look();
+    await shoot('card-owner');
+    await page.focus('.cpc-clasp');
+    await page.keyboard.press('Enter');
+    const asking = await look();
+    await shoot('card-owner-asking');
+    await page.waitForSelector('.cpc[data-state="hidden"]', { timeout: 10_000 });
+    const hidden = await look();
+    await shoot('card-owner-private');
+    await page.click('.cpc-clasp');
+    await page.waitForSelector('.cpc[data-state="visible"]', { timeout: 10_000 });
+    await page.waitForFunction(() => document.querySelector('.cpc-print')?.dataset.picture === 'shown', {}, { timeout: 60_000 });
+    const shown = await look();
+    report.checks.owner = { resting, asking, hidden, shown };
+    const problems = [
+      resting.checked !== 'false' && 'the clasp did not start open',
+      (asking.checked !== 'false' || asking.state !== 'visible' || asking.busy !== 'true' || !/Asking/.test(asking.status) || !asking.shelf) && 'the change was shown before it was acknowledged',
+      (hidden.checked !== 'true' || hidden.shelf || hidden.print || hidden.exposed.length || !/no longer shown or served/.test(hidden.status)) && 'the acknowledged hide left something of the travels',
+      hidden.home !== resting.home && 'the card lost its home with the travels',
+      (shown.checked !== 'false' || !shown.print || shown.print === resting.print || !/snapshot=/.test(shown.print)) && 'shown again did not read a fresh snapshot with its own print',
+    ].filter(Boolean);
+    if (problems.length) throw new Error(`Owner change: ${problems.join('; ')}\n${JSON.stringify(report.checks.owner)}`);
+    await page.close();
+  }
+  // A change the authority refuses: nothing moves, and the page says nothing changed.
+  {
+    const page = await open({ fixture: 'few', owner: 'fail' }, [1440, 900]);
+    await page.click('.cpc-clasp');
+    await page.waitForSelector('.cpc-owner[data-ask="failed"]', { timeout: 10_000 });
+    const failed = await page.evaluate(() => ({
+      state: document.querySelector('.cpc')?.dataset.state, checked: document.querySelector('.cpc-clasp')?.getAttribute('aria-checked'),
+      status: document.querySelector('.cpc-owner-status')?.textContent ?? '', shelf: !!document.querySelector('.cpc-share'),
+    }));
+    report.checks.ownerRefused = failed;
+    await page.waitForTimeout(300);
+    const path = `${output}/card-owner-refused@1440x900.png`;
+    await page.screenshot({ path });
+    report.shots.push({ path: path.slice(root.length) });
+    if (failed.state !== 'visible' || failed.checked !== 'false' || !/Nothing changed/.test(failed.status) || !failed.shelf) throw new Error(`Refused change pretended: ${JSON.stringify(failed)}`);
+    await page.close();
+  }
+
   const sheet = (names, file, size) => run('ffmpeg', ['-y', '-loglevel', 'error', ...names.flatMap(name => ['-i', `${output}/${name}.png`]),
     '-filter_complex', `${names.map((_, i) => `[${i}]scale=${size}[s${i}]`).join(';')};[s0][s1]hstack[top];[s2][s3]hstack[bottom];[top][bottom]vstack`, `${output}/${file}`]);
   await sheet(['card-many@1440x900', 'card-few@1440x900', 'card-none@1440x900', 'card-private@1440x900'], 'card-contact@1440x900.png', '720:450');
   await sheet(['share-many@1200x800', 'share-few@1200x800', 'share-none@1200x800', 'share-long-names@1200x800'], 'share-contact@1200x800.png', '600:400');
-  report.shots.push({ path: 'shots/passport/card-contact@1440x900.png' }, { path: 'shots/passport/share-contact@1200x800.png' });
+  await sheet(['card-owner@1440x900', 'card-owner-asking@1440x900', 'card-owner-private@1440x900', 'card-owner-refused@1440x900'], 'card-owner-contact@1440x900.png', '720:450');
+  report.shots.push({ path: 'shots/passport/card-contact@1440x900.png' }, { path: 'shots/passport/share-contact@1200x800.png' }, { path: 'shots/passport/card-owner-contact@1440x900.png' });
 
   await writeFile(`${output}/card-report.json`, `${JSON.stringify(report, null, 2)}\n`);
   if (report.console.length || report.external.length) throw new Error(`Capture problems:\n${[...report.console, ...report.external].join('\n')}`);

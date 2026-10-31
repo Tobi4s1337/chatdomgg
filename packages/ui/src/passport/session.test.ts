@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { simulatedPassport, simulatedPassportPage } from './fixtures';
-import { createPassportSession, type PassportReadState, type PassportReplyView, type PassportRequestView } from './session';
+import {
+  acknowledgesDisclosure, createPassportSession, followDisclosure, newerDisclosure,
+  type PassportDisclosureView, type PassportReadState, type PassportReplyView, type PassportRequestView,
+} from './session';
 import type { PassportCollection, VisiblePassportView } from './types';
 
 /** A transport whose replies the test hands out one by one, recording every request and abort. */
@@ -170,5 +173,100 @@ describe('a passport reading session', () => {
     await flush();
     expect(session.state().kind).toBe('pending');
     expect(seen).toEqual(['pending', 'pending', 'pending']);
+  });
+});
+
+describe('following the card’s disclosure', () => {
+  const shown = (revision: number): PassportDisclosureView => ({ origin: 'simulated', travels: 'shown', revision });
+  const hidden = (revision: number): PassportDisclosureView => ({ origin: 'simulated', travels: 'hidden', revision });
+
+  it('never asks for a book the card already hides', async () => {
+    const wire = scripted();
+    const session = createPassportSession(wire.transport);
+    followDisclosure(session)(hidden(3));
+    await flush();
+    expect(wire.pending).toHaveLength(0);
+    expect(session.state()).toEqual({ kind: 'hidden', origin: 'simulated' });
+  });
+
+  it('a hide that lands while the book is being read wins: the read is aborted and its late reply never lands', async () => {
+    const wire = scripted();
+    const session = createPassportSession(wire.transport);
+    const follow = followDisclosure(session);
+    follow(shown(3));
+    const read = wire.take();
+    follow(hidden(4));
+    expect(read.signal.aborted).toBe(true);
+    read.resolve({ kind: 'book', book: many });
+    await flush();
+    expect(session.state().kind).toBe('hidden');
+    expect(JSON.stringify(session.state())).not.toMatch(/Wren|Tarnwalker|stamp|revision/);
+  });
+
+  it('a hide while older pages are out drops the open book and every page read with it', async () => {
+    const wire = scripted();
+    const session = createPassportSession(wire.transport);
+    const follow = followDisclosure(session);
+    follow(shown(3));
+    wire.take().resolve({ kind: 'book', book: many });
+    await flush();
+    session.more('stamps');
+    session.more('bonds');
+    const pages = [wire.take(isPage('stamps')), wire.take(isPage('bonds'))];
+    follow(hidden(4));
+    expect(pages.every(page => page.signal.aborted)).toBe(true);
+    pages[0]!.resolve(pageOf('stamps'));
+    pages[1]!.resolve(pageOf('bonds'));
+    await flush();
+    expect(session.state()).toEqual({ kind: 'hidden', origin: 'simulated' });
+  });
+
+  it('reads a fresh snapshot when the travels are shown again, and ignores a stale shown from before the hide', async () => {
+    const wire = scripted();
+    const session = createPassportSession(wire.transport);
+    const follow = followDisclosure(session);
+    follow(shown(3));
+    wire.take().resolve({ kind: 'book', book: many });
+    await flush();
+    follow(hidden(4));
+    // A cached card from before the hide: ignored, nothing is read, the book stays closed.
+    follow(shown(3));
+    follow(shown(4));
+    await flush();
+    expect(wire.pending).toHaveLength(0);
+    expect(session.state().kind).toBe('hidden');
+    // Shown again at a newer revision: the book is read from the start, pending until it answers.
+    follow(shown(5));
+    expect(session.state().kind).toBe('pending');
+    expect(wire.take().request).toEqual({ op: 'book' });
+    // The same disclosure again is not a reason to read again.
+    follow(shown(5));
+    expect(wire.pending).toHaveLength(0);
+  });
+
+  it('with no disclosure to follow, the book is read once', () => {
+    const wire = scripted();
+    const follow = followDisclosure(createPassportSession(wire.transport));
+    follow(undefined);
+    follow(undefined);
+    expect(wire.pending).toHaveLength(1);
+  });
+
+  it('takes the newer disclosure, and hidden at the same revision', () => {
+    expect(newerDisclosure(shown(3), hidden(4))).toEqual(hidden(4));
+    expect(newerDisclosure(shown(5), hidden(4))).toEqual(shown(5));
+    expect(newerDisclosure(shown(4), hidden(4))).toEqual(hidden(4));
+    expect(newerDisclosure(hidden(4), shown(4))).toEqual(hidden(4));
+    expect(newerDisclosure(undefined, shown(2))).toEqual(shown(2));
+  });
+
+  it('counts only an answer with the travels as asked, at a newer revision, as an acknowledged change', () => {
+    expect(acknowledgesDisclosure(shown(3), 'hidden', hidden(4))).toBe(true);
+    expect(acknowledgesDisclosure(shown(3), 'hidden', shown(4))).toBe(false);
+    expect(acknowledgesDisclosure(shown(3), 'hidden', hidden(3))).toBe(false);
+    expect(acknowledgesDisclosure(shown(3), 'hidden', { ...hidden(4), origin: 'live' })).toBe(false);
+    expect(acknowledgesDisclosure(shown(3), 'hidden', { ...hidden(4), revision: 4.5 })).toBe(false);
+    for (const nothing of [undefined, null, 'ok', true, {}]) expect(acknowledgesDisclosure(shown(3), 'hidden', nothing)).toBe(false);
+    expect(acknowledgesDisclosure(undefined, 'shown', shown(0))).toBe(true);
   });
 });

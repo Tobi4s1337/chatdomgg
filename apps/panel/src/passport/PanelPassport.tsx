@@ -5,7 +5,7 @@
 import { createEffect, createMemo, For, Show, type JSX } from 'solid-js';
 import {
   PassportReading, createPassportReading,
-  type PassportReadState, type PassportTransport,
+  type PassportDisclosureView, type PassportReadState, type PassportTransport,
 } from '@chatdom/ui/passport';
 import { PANEL_DENSITY, simulatedOrigin } from './model';
 import './panel-passport.css';
@@ -18,6 +18,11 @@ export interface PanelPassportProps {
   readonly transport: PassportTransport;
   /** Kingdom names the panel already shows publicly beside the book (the card's disclosed homes). */
   readonly places?: ReadonlyMap<string, string>;
+  /**
+   * The viewer's card disclosure as the backend last projected it (`passportDisclosure`). Hidden closes the book
+   * without a read, a newer revision reads a fresh snapshot, an older one is ignored. Without it the book is read once.
+   */
+  readonly disclosure?: PassportDisclosureView;
   /** Back to the kingdom. Without it the view has no way out of its own and shows no back button. */
   readonly onClose?: () => void;
   readonly backLabel?: string;
@@ -36,7 +41,7 @@ export function PanelPassport(props: PanelPassportProps): JSX.Element {
 }
 
 function PanelReading(props: PanelPassportProps): JSX.Element {
-  const { state, session } = createPassportReading(props.transport);
+  const { state, session } = createPassportReading(props.transport, { disclosure: () => props.disclosure });
   createEffect(() => props.onState?.(state()));
   const simulated = createMemo(() => simulatedOrigin(state(), props.simulated === true));
   const onKey = (event: KeyboardEvent) => {

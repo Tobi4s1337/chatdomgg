@@ -6,5 +6,7 @@
  */
 export { PassportBook, PassportReading, createPassportReading, type PassportBookProps, type PassportReadingProps } from '@chatdom/ui/passport';
 export { passportHttpTransport, passportLocalTransport } from './transport';
-export { CardPassport, type CardPassportProps, type CardPassportShare } from './CardPassport';
+export { CardPassport, type CardPassportOwner, type CardPassportProps, type CardPassportShare } from './CardPassport';
+export { pictureOf } from './picture';
+export { disclosedPlaces, passportDisclosure, type PassportDisclosure } from '../../../api/src/passport/disclosure';
 export { default } from './PassportBench';

@@ -1,16 +1,27 @@
 // The passport on the citizen card's page: the book lying open on a lamp-lit desk under the card, the same book the
 // panel carries, and beside it the picture this spread makes when it is shared. The adapter decides nothing about
-// whose book it is; main binds the transport (the card's own subject), the disclosed homes and the share route.
+// whose book it is; main binds the transport (the card's own subject), the disclosed homes, the card's current
+// disclosure, the share route and, for the holder themselves, the existing authority behind "Hide my travels".
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
 import {
-  PassportReading, createPassportReading, curateShareSpread, shareAlt,
-  type BookLayout, type PageDensity, type PassportReadState, type PassportTransport, type VisiblePassportView,
+  PassportReading, acknowledgesDisclosure, createPassportReading, curateShareSpread, newerDisclosure, shareAlt,
+  type BookLayout, type PageDensity, type PassportDisclosureView, type PassportReadState, type PassportTransport, type VisiblePassportView,
 } from '@chatdom/ui/passport';
+import { pictureOf } from './picture';
 import './card-passport.css';
 
 export interface CardPassportShare {
   /** Main's share-image route for this card's subject (served by `createPassportShareHttp`), same-origin. */
   readonly imageUrl: string;
+}
+
+/** The holder's own choice, through main's existing person authority. Only the card's own holder is given one. */
+export interface CardPassportOwner {
+  /**
+   * Asks the authority to show or hide the travels. Resolves with the card's disclosure once the change is committed
+   * (`passportDisclosure` of the card projected again), or rejects. Nothing on the page claims the change before then.
+   */
+  setTravels(travels: 'shown' | 'hidden', signal: AbortSignal): Promise<PassportDisclosureView>;
 }
 
 export interface CardPassportProps {
@@ -21,6 +32,13 @@ export interface CardPassportProps {
   readonly transport: PassportTransport;
   /** Kingdom names the card already shows publicly (its disclosed homes), so a road can name where it began. */
   readonly places?: ReadonlyMap<string, string>;
+  /**
+   * The card's current disclosure (`passportDisclosure(projectCard(source))`). Hidden closes the book without a read;
+   * a newer revision reads a fresh snapshot; an older one is ignored. Without it the book is read once.
+   */
+  readonly disclosure?: PassportDisclosureView;
+  /** The holder's own control over their travels. Absent for every other reader. */
+  readonly owner?: CardPassportOwner;
   /** Where the spread's picture is served. Without it there is no share shelf: nothing pretends to share. */
   readonly share?: CardPassportShare;
   /** The whole surface is SIMULATED (a bench), whatever the book says. */
@@ -47,7 +65,10 @@ const SHELF = 280, GAP = 30, TABS = 104;
 export const CARD_DENSITY = { stamps: 2, entries: 5 } as const satisfies PageDensity;
 
 function CardReading(props: CardPassportProps): JSX.Element {
-  const { state, session } = createPassportReading(props.transport);
+  // The newest of what the host says and what the authority acknowledged to the holder here.
+  const [acknowledged, setAcknowledged] = createSignal<PassportDisclosureView>();
+  const disclosure = createMemo(() => newerDisclosure(props.disclosure, acknowledged()));
+  const { state, session } = createPassportReading(props.transport, { disclosure });
   createEffect(() => props.onState?.(state()));
   let root: HTMLElement | undefined;
   const [width, setWidth] = createSignal(0);
@@ -73,6 +94,8 @@ function CardReading(props: CardPassportProps): JSX.Element {
       <h2 id="cpc-title" class="cpc-title">Passport</h2>
       <Rule flip />
     </header>
+    <Show when={props.owner}>{owner =>
+      <TravelChoice owner={owner()} disclosure={disclosure()} state={state()} onAcknowledged={setAcknowledged} />}</Show>
     <div class="cpc-room">
       <div class="cpc-desk">
         <Lamp />
@@ -104,6 +127,82 @@ function Lamp(): JSX.Element {
   </div>;
 }
 
+type Travels = 'shown' | 'hidden';
+type Ask =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'asking' | 'done' | 'failed'; readonly travels: Travels };
+
+const ASKING: Readonly<Record<Travels, string>> = {
+  hidden: 'Asking Chatdom to keep your travels private…',
+  shown: 'Asking Chatdom to show your travels…',
+};
+const DONE: Readonly<Record<Travels, string>> = {
+  hidden: 'Done. Your book and its picture are no longer shown or served. Copies already saved elsewhere stay where they are.',
+  shown: 'Done. Your travels are on your card again.',
+};
+const RESTING: Readonly<Record<Travels, string>> = {
+  hidden: 'No one can open this book or its picture. Your homes stay on your card.',
+  shown: 'Anyone who opens your card can read this book.',
+};
+
+/**
+ * The holder's own "Keep my travels private", as a brass clasp on a leather strap. The switch shows what the
+ * authority last acknowledged, never what was just asked: while the change is out the book stays as it was and
+ * the clasp says it is asking; only an acknowledged answer (`acknowledgesDisclosure`) moves the clasp and closes or
+ * opens the book. A refused or failed change says that nothing changed.
+ */
+function TravelChoice(props: {
+  owner: CardPassportOwner; disclosure: PassportDisclosureView | undefined; state: PassportReadState;
+  onAcknowledged: (disclosure: PassportDisclosureView) => void;
+}): JSX.Element {
+  const [ask, setAsk] = createSignal<Ask>({ kind: 'idle' });
+  let controller: AbortController | undefined;
+  onCleanup(() => controller?.abort());
+  // What is true now: the disclosure, or failing that what the reading itself settled on. Unknown while it opens.
+  const travels = (): Travels | undefined => props.disclosure?.travels
+    ?? (props.state.kind === 'visible' ? 'shown' : props.state.kind === 'hidden' ? 'hidden' : undefined);
+  const asking = () => ask().kind === 'asking';
+
+  const change = async () => {
+    const now = travels();
+    if (asking() || !now) return;
+    const wanted: Travels = now === 'shown' ? 'hidden' : 'shown';
+    const from = props.disclosure;
+    controller = new AbortController();
+    const signal = controller.signal;
+    setAsk({ kind: 'asking', travels: wanted });
+    try {
+      const answer = await props.owner.setTravels(wanted, signal);
+      if (signal.aborted) return;
+      if (!acknowledgesDisclosure(from, wanted, answer)) throw new Error('The change was not acknowledged');
+      props.onAcknowledged(answer);
+      setAsk({ kind: 'done', travels: wanted });
+    } catch {
+      if (!signal.aborted) setAsk({ kind: 'failed', travels: wanted });
+    }
+  };
+
+  const message = () => {
+    const a = ask(), now = travels();
+    if (a.kind === 'asking') return ASKING[a.travels];
+    if (a.kind === 'done' && now === a.travels) return DONE[a.travels];
+    if (a.kind === 'failed' && now) return `Nothing changed: Chatdom could not answer just now. Your travels are still ${now === 'hidden' ? 'private' : 'shown'}.`;
+    return now ? RESTING[now] : '';
+  };
+
+  return <Show when={travels()}>{now =>
+    <div class="cpc-owner" data-ask={ask().kind} data-travels={now()}>
+      <button type="button" class="cpc-clasp" role="switch" aria-checked={now() === 'hidden' ? 'true' : 'false'}
+        aria-describedby="cpc-owner-status" aria-busy={asking() ? 'true' : undefined} aria-disabled={asking() ? 'true' : undefined}
+        onClick={() => void change()}>
+        <span class="cpc-clasp-strap" aria-hidden="true"><span class="cpc-clasp-buckle"><span class="cpc-clasp-hole" /></span></span>
+        <span class="cpc-clasp-label">Keep my travels private</span>
+      </button>
+      <p id="cpc-owner-status" class="cpc-owner-status" role="status" aria-live="polite" data-tone={ask().kind === 'failed' ? 'failed' : undefined}>{message()}</p>
+    </div>}
+  </Show>;
+}
+
 type Copy = { readonly kind: 'idle' } | { readonly kind: 'copying' } | { readonly kind: 'copied' } | { readonly kind: 'failed' };
 
 /**
@@ -113,6 +212,9 @@ type Copy = { readonly kind: 'idle' } | { readonly kind: 'copying' } | { readonl
  */
 function ShareShelf(props: { share: CardPassportShare; book: VisiblePassportView }): JSX.Element {
   const alt = createMemo(() => shareAlt(curateShareSpread(props.book)));
+  // The print is fetched for this snapshot only: a document may reuse an image it already holds for the same URL,
+  // so a book read afresh never shows the picture of the one before it. The link to copy stays the clean one.
+  const print = pictureOf(props.share.imageUrl, props.book);
   const absolute = () => new URL(props.share.imageUrl, window.location.href).href;
   const [copy, setCopy] = createSignal<Copy>({ kind: 'idle' });
   const [picture, setPicture] = createSignal<'loading' | 'shown' | 'failed'>('loading');
@@ -138,7 +240,7 @@ function ShareShelf(props: { share: CardPassportShare; book: VisiblePassportView
     <figure class="cpc-print" data-picture={picture()}>
       <div class="cpc-print-frame">
         <Show when={picture() !== 'failed'} fallback={<p class="cpc-print-missing">The picture could not be drawn just now.</p>}>
-          <img src={props.share.imageUrl} alt={alt()} width="1200" height="800" decoding="async"
+          <img src={print} alt={alt()} width="1200" height="800" decoding="async"
             onLoad={() => setPicture('shown')} onError={() => setPicture('failed')} />
         </Show>
       </div>

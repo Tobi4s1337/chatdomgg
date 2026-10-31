@@ -17,6 +17,54 @@
 .cpc-room { display: grid; gap: 28px; justify-items: center; }
 .cpc[data-beside='true'] .cpc-room { grid-template-columns: minmax(0, 1fr) 280px; align-items: center; gap: 30px; }
 
+/* ---------- The holder's clasp: "Keep my travels private" ---------- */
+
+/* A brass buckle on a stitched oxblood strap. It sits where the authority last left it: asking makes it glow, never
+   move, so the page does not claim a change before it is acknowledged. */
+.cpc-owner { display: grid; justify-items: center; gap: 6px; margin-top: -2px; text-align: center; }
+.cpc-clasp {
+  display: inline-flex; align-items: center; gap: 12px; min-height: 40px; padding: 7px 18px 7px 8px; border: 0; border-radius: 22px; cursor: pointer;
+  color: var(--cd-cream); font: var(--cd-type-body)/1 var(--cd-face-label); letter-spacing: .05em;
+  background: radial-gradient(ellipse 70% 120% at 30% 0, #ffc47a1f, transparent 70%), #1a0f0aa6;
+  box-shadow: inset 0 0 0 1px #e4c27a59, inset 0 1px 0 #ffe1b426, 0 3px 10px #0000005c;
+}
+.cpc-clasp:hover { box-shadow: inset 0 0 0 1px #e4c27a99, inset 0 1px 0 #ffe1b426, 0 3px 12px #0000005c, 0 0 18px #ffb35a26; }
+.cpc-clasp:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
+.cpc-clasp[aria-busy='true'] { cursor: progress; }
+.cpc-clasp-strap {
+  position: relative; flex: none; width: 52px; height: 26px; border-radius: 13px;
+  background:
+    radial-gradient(ellipse 60% 70% at 30% 20%, #c4644a40, transparent 70%),
+    linear-gradient(180deg, #8e3423, #6a2216 55%, #4a160d);
+  box-shadow: inset 0 2px 4px #000a, inset 0 0 0 1px #00000073, 0 1px 0 #ffe1b41f;
+  transition: background .3s;
+}
+/* Saddle stitching along both edges of the strap. */
+.cpc-clasp-strap::before {
+  content: ''; position: absolute; inset: 4px 9px; border-block: 1px dashed #f3d39a70; border-radius: 2px;
+}
+.cpc-clasp-buckle {
+  position: absolute; top: 2px; left: 2px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fff1c4, #e1b867 40%, #a77a35 72%, #5a3c14);
+  box-shadow: inset 0 -1px 2px #5a3c14aa, 0 2px 3px #000a;
+  transition: transform .34s cubic-bezier(.3, 1.35, .5, 1);
+}
+.cpc-clasp-hole {
+  width: 5px; height: 9px; opacity: 0; transition: opacity .2s .15s;
+  background: radial-gradient(circle at 50% 30%, #2a1708 0 2px, transparent 2.4px), linear-gradient(#2a1708, #2a1708) 50% 100% / 2px 5px no-repeat;
+}
+.cpc-clasp[aria-checked='true'] .cpc-clasp-buckle { transform: translateX(26px); }
+.cpc-clasp[aria-checked='true'] .cpc-clasp-hole { opacity: 1; }
+.cpc-clasp[aria-checked='true'] .cpc-clasp-strap { background: radial-gradient(ellipse 60% 70% at 70% 20%, #c4644a33, transparent 70%), linear-gradient(180deg, #7a2c1e, #561a10 55%, #3a1009); }
+.cpc-owner[data-ask='asking'] .cpc-clasp-buckle { animation: cpc-asking 1.4s ease-in-out infinite; }
+@keyframes cpc-asking {
+  0%, 100% { box-shadow: inset 0 -1px 2px #5a3c14aa, 0 2px 3px #000a, 0 0 0 0 #ffd38a00; }
+  50% { box-shadow: inset 0 -1px 2px #5a3c14aa, 0 2px 3px #000a, 0 0 12px 3px #ffd38a99; }
+}
+.cpc-owner-status { max-width: 52ch; min-height: 1.4em; font: italic var(--cd-type-small)/1.4 var(--cd-face-body); color: var(--cd-cream-soft); text-shadow: 0 1px 2px #0009; }
+.cpc-owner-status[data-tone='failed'] { color: #ffd2b0; }
+[data-light='day'] .cpc-owner-status { color: #4a2e10; text-shadow: 0 1px 0 #fff6de99; }
+
 /* ---------- The desk and its lamp ---------- */
 
 .cpc-desk {
@@ -140,4 +188,6 @@
 @media (prefers-reduced-motion: reduce) {
   .cpc-motes i { animation: none; opacity: .5; }
   .cpc-print[data-picture='loading'] .cpc-print-frame { animation: none; }
+  .cpc-clasp-buckle, .cpc-clasp-strap, .cpc-clasp-hole { transition: none; }
+  .cpc-owner[data-ask='asking'] .cpc-clasp-buckle { animation: none; box-shadow: inset 0 -1px 2px #5a3c14aa, 0 2px 3px #000a, 0 0 10px 2px #ffd38a80; }
 }

@@ -11,17 +11,19 @@
  * 2. **Hidden draws nothing.** A hidden book (never signed in, travels kept private, Gate hidden) answers 404 with no
  *    image and no words about travel. The renderer is never asked.
  * 3. **Checked again before release.** After the picture is drawn the book is read once more. If the travels were
- *    hidden meanwhile, the picture is thrown away. If the book moved on (a new journey, another holder), the
- *    picture of the older snapshot is thrown away and the current one is drawn, once; a book that keeps moving
- *    answers 503 rather than an image of a moment that has passed.
+ *    hidden meanwhile, the picture is thrown away. If anything the picture shows moved on (a new journey, a renamed
+ *    holder, a home the card no longer shows that a road named as its start, any newer disclosure), the picture of
+ *    the older snapshot is thrown away and the current one is drawn, once; a snapshot that keeps moving answers 503
+ *    rather than an image of a moment that has passed.
+ * 4. **One gate.** The places a road may name come from the same `projectCard` run as the disclosure (the reader's
+ *    snapshot), never from a second source that could disagree with it.
  *
  * Already downloaded copies cannot be recalled; removal is promised only from what this handler serves.
  */
 import { SHARE_SIZE, composePassportShare, type PassportShare } from '../../../../packages/ui/src/passport/craft';
 import type { CitizenKey } from '../citizen-card/contracts';
-import type { VisiblePassportBook } from './contracts';
 import type { PassportSubject } from './http';
-import type { PassportReader } from './read';
+import { sameSnapshot, type PassportReader, type PassportSnapshot } from './read';
 
 /** Draws a composition to PNG bytes of exactly `SHARE_SIZE`. Main may bind any equivalent worker. */
 export interface PassportImageRenderer {
@@ -45,11 +47,6 @@ export type PassportShareHttpOptions = Readonly<{
   clock: () => number;
   /** `@font-face` rules with embedded bytes (`passportFontFaces()`); the composition never fetches. */
   fontFaces?: string;
-  /**
-   * Kingdom names the public card already shows for this subject (its disclosed homes), so a road can name where it
-   * began. Read through the card's projection by main; never a source the card would not show.
-   */
-  places?: (key: CitizenKey, signal: AbortSignal) => Promise<ReadonlyMap<string, string>>;
   /** The site mark printed on the desk, e.g. `chatdom.gg`. */
   site?: string;
   /** How long one picture may take, in milliseconds. */
@@ -62,7 +59,7 @@ const NO_STORE = { 'cache-control': 'no-store', 'x-content-type-options': 'nosni
 const say = (status: number, text: string, extra: Record<string, string> = {}) =>
   new Response(text, { status, headers: { ...NO_STORE, 'content-type': 'text/plain; charset=utf-8', ...extra } });
 
-type Read = Readonly<{ kind: 'visible'; book: VisiblePassportBook }> | Readonly<{ kind: 'hidden' }> | Readonly<{ kind: 'unavailable' }>;
+type Visible = Extract<PassportSnapshot, { kind: 'visible' }>;
 
 /** A PNG of exactly the share size: signature, then an IHDR naming 1200 × 800. Anything else is not served. */
 export function isShareImage(bytes: Uint8Array): boolean {
@@ -73,27 +70,21 @@ export function isShareImage(bytes: Uint8Array): boolean {
   return type === 'IHDR' && view.getUint32(16) === SHARE_SIZE.width && view.getUint32(20) === SHARE_SIZE.height;
 }
 
-const sameSnapshot = (a: VisiblePassportBook, b: VisiblePassportBook) =>
-  a.holder.personId === b.holder.personId && a.holder.name === b.holder.name && a.revision === b.revision && a.origin === b.origin;
-
 export function createPassportShareHttp(options: PassportShareHttpOptions): { handle(request: Request): Promise<Response> } {
   const deadline = options.deadlineMs ?? 15_000;
 
-  async function read(key: CitizenKey, signal: AbortSignal): Promise<Read> {
+  async function read(key: CitizenKey, signal: AbortSignal): Promise<PassportSnapshot> {
     try {
-      const reply = await options.reader.handle({ key, now: options.clock(), signal }, { op: 'book' });
-      if (reply.kind !== 'book') return { kind: 'unavailable' };
-      return reply.book.visibility === 'visible' ? { kind: 'visible', book: reply.book } : { kind: 'hidden' };
+      return await options.reader.snapshot({ key, now: options.clock(), signal });
     } catch (error) {
       options.report?.({ kind: 'read', detail: error instanceof Error ? error.message : 'read failed' });
       return { kind: 'unavailable' };
     }
   }
 
-  async function draw(key: CitizenKey, book: VisiblePassportBook, signal: AbortSignal): Promise<Uint8Array> {
-    const places = options.places ? await options.places(key, signal) : undefined;
-    const share = composePassportShare(book, {
-      ...(options.fontFaces ? { fontFaces: options.fontFaces } : {}), ...(places ? { places } : {}), ...(options.site ? { site: options.site } : {}),
+  async function draw(snapshot: Visible, signal: AbortSignal): Promise<Uint8Array> {
+    const share = composePassportShare(snapshot.book, {
+      places: snapshot.places, ...(options.fontFaces ? { fontFaces: options.fontFaces } : {}), ...(options.site ? { site: options.site } : {}),
     });
     const bytes = await options.renderer.render(share, signal);
     if (!isShareImage(bytes)) throw new Error('the renderer answered something other than a 1200 × 800 PNG');
@@ -114,7 +105,7 @@ export function createPassportShareHttp(options: PassportShareHttpOptions): { ha
       for (let attempt = 0; attempt < 2; attempt++) {
         let bytes: Uint8Array;
         try {
-          bytes = await draw(key, current.book, AbortSignal.any([signal, AbortSignal.timeout(deadline)]));
+          bytes = await draw(current, AbortSignal.any([signal, AbortSignal.timeout(deadline)]));
         } catch (error) {
           if (error instanceof PassportRendererBusy) return say(503, 'The passport is being drawn for others; try again shortly', { 'retry-after': '5' });
           options.report?.({ kind: error instanceof Error && /PNG/.test(error.message) ? 'image' : 'render', detail: error instanceof Error ? error.message : 'render failed' });
@@ -124,7 +115,7 @@ export function createPassportShareHttp(options: PassportShareHttpOptions): { ha
         const after = await read(key, signal);
         if (after.kind === 'hidden') { options.report?.({ kind: 'discarded', reason: 'hidden' }); return say(404, 'No passport to share'); }
         if (after.kind === 'unavailable') { options.report?.({ kind: 'discarded', reason: 'unavailable' }); return say(503, 'The passport cannot be read just now', { 'retry-after': '30' }); }
-        if (sameSnapshot(current.book, after.book)) {
+        if (sameSnapshot(current, after)) {
           return new Response(bytes as Uint8Array<ArrayBuffer>, { status: 200, headers: {
             ...NO_STORE, 'content-type': 'image/png', 'content-length': String(bytes.byteLength), 'content-disposition': 'inline; filename="passport.png"',
           } });

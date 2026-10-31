@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PassportBookSchema } from '@chatdom/shared/passport';
 import type { CardSource } from '../citizen-card/contracts';
+import { projectCard } from '../citizen-card/project';
+import { disclosedPlaces, passportDisclosure } from './disclosure';
 import { readPassportReply, type PassportReply, type VisiblePassportBook } from './contracts';
 import { createPassportReader, type PassportPorts, type PassportReadFault } from './read';
 import { simulatedPassportAuthorities, type SimulatedScenario } from './simulated';
@@ -85,6 +87,75 @@ describe('the passport reader: disclosure first', () => {
     const corrupt = setup('few', SHOWN, ports => ({ card: async (key, signal) => ({ ...await ports.card(key, signal), travelsHidden: 'no' as unknown as boolean }) }));
     expect(await corrupt.read({ op: 'book' })).toEqual({ kind: 'denied', code: 'unavailable' });
     expect(corrupt.faults[0]?.kind).toBe('source');
+  });
+});
+
+describe('the passport reader: one gate, never backwards', () => {
+  const bump = (source: CardSource, person: number, patch: Partial<CardSource> = {}): CardSource =>
+    ({ ...source, ...patch, document: { ...source.document, revision: { ...source.document.revision, person } } });
+
+  it('snapshots the book with the places and disclosure of the same projection that let it out', async () => {
+    const { reader, sim } = setup('few');
+    const snapshot = await reader.snapshot({ key: sim.key, now: sim.now, signal: new AbortController().signal });
+    if (snapshot.kind !== 'visible') throw new Error(`expected visible, got ${snapshot.kind}`);
+    const card = projectCard(sim.card());
+    expect([...snapshot.places]).toEqual([...disclosedPlaces(card)]);
+    expect(snapshot.places.get(sim.key.kingdomId)).toBe('Gorsehold');
+    expect(snapshot.disclosure).toEqual({ origin: 'simulated', travels: 'shown', revision: 3 });
+    expect(PassportBookSchema.safeParse(snapshot.book).success).toBe(true);
+  });
+
+  it('snapshots hidden with nothing else before sign-in and after a hide, while the card keeps every home', async () => {
+    for (const scenario of [{ signedIn: false, travelsHidden: false }, { signedIn: true, travelsHidden: true }]) {
+      const { reader, sim, calls } = setup('many', scenario);
+      expect(await reader.snapshot({ key: sim.key, now: sim.now, signal: new AbortController().signal })).toEqual({ kind: 'hidden' });
+      expect(calls.filter(call => call !== 'card')).toEqual([]);
+    }
+    // Hiding travels never takes a home off the card: the same homes and places as when they are shown.
+    const shown = simulatedPassportAuthorities('many', SHOWN), hidden = simulatedPassportAuthorities('many', { signedIn: true, travelsHidden: true });
+    const withAbroad = (source: CardSource): CardSource => ({ ...source, document: { ...source.document, homes: [...source.document.homes,
+      { kingdomId: '910000104' as CardSource['document']['key']['kingdomId'], kingdomName: 'Saltmarsh Reach', home: 'The Net Loft', street: 'Quay Steps', image: null, path: null }] } });
+    const a = projectCard(withAbroad(shown.card())), b = projectCard(withAbroad(hidden.card()));
+    expect(b.passport).toEqual({ hidden: true });
+    expect(b.homes).toEqual(a.homes);
+    expect([...disclosedPlaces(b)]).toEqual([...disclosedPlaces(a)]);
+    expect(passportDisclosure(b)).toEqual({ origin: 'simulated', travels: 'hidden', revision: 3 });
+  });
+
+  it('refuses a card source older than one already read, so a stale cache cannot undo a hide', async () => {
+    let script: number[] = [5, 5, 4];
+    let hiddenAt = Infinity;
+    const { read, calls, faults } = setup('few', SHOWN, ports => ({
+      card: async (key, signal) => {
+        const person = script.shift() ?? 4;
+        const source = await ports.card(key, signal);
+        return bump(source, person, person >= hiddenAt ? { travelsHidden: true } : {});
+      },
+    }));
+    expect(visible(await read({ op: 'book' })).holder.name).toBe('Pellam Rook');
+    // The replica now replays revision 4: refused before any history is asked.
+    calls.length = 0;
+    expect(await read({ op: 'book' })).toEqual({ kind: 'denied', code: 'unavailable' });
+    // (The patched card port does not record itself: nothing at all was asked of a history authority.)
+    expect(calls).toEqual([]);
+    expect(faults.at(-1)).toMatchObject({ kind: 'source', detail: expect.stringMatching(/older/) });
+    // The holder hides their travels at revision 6; a cache still answering the shown revision 5 is refused too.
+    hiddenAt = 6;
+    script = [6];
+    expect(await read({ op: 'book' })).toEqual({ kind: 'book', book: { version: 1, origin: 'simulated', visibility: 'hidden' } });
+    script = [5, 5];
+    expect(await read({ op: 'book' })).toEqual({ kind: 'denied', code: 'unavailable' });
+  });
+
+  it('a hide that lands mid-read after a newer revision still wins, and a rename meanwhile is the name the book carries', async () => {
+    let reads = 0;
+    const renamed = setup('few', SHOWN, ports => ({
+      card: async (key, signal) => {
+        const source = await ports.card(key, signal);
+        return ++reads === 1 ? source : bump({ ...source, document: { ...source.document, identity: { ...source.document.identity, name: 'Pellam of the Rook' } } }, 4);
+      },
+    }));
+    expect(visible(await renamed.read({ op: 'book' })).holder.name).toBe('Pellam of the Rook');
   });
 });
 

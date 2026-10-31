@@ -1,9 +1,10 @@
 import { createEffect, createMemo, createSignal, For, Show, type JSX } from 'solid-js';
 import {
   PASSPORT_FIXTURE_NAMES, PASSPORT_FIXTURE_TITLES, PassportReading, createPassportReading,
-  type BookLayout, type PassportFixtureName, type PassportTransport,
+  type BookLayout, type PassportDisclosureView, type PassportFixtureName, type PassportTransport,
 } from '@chatdom/ui/passport';
 import { projectCard } from '../../../api/src/citizen-card/project';
+import { disclosedPlaces, passportDisclosure } from '../../../api/src/passport/disclosure';
 import { createPassportReader } from '../../../api/src/passport/read';
 import { simulatedPassportAuthorities, type SimulatedScenario } from '../../../api/src/passport/simulated';
 import { CardPassport } from './CardPassport';
@@ -18,6 +19,8 @@ import './bench.css';
  * `?layout=spread|page`, `?view=<n>` (0 is the cover) and `?chrome=0` for a frame without the bench header.
  * `?surface=card` shows the book as the citizen card's page carries it, with the share shelf; its picture comes from
  * `/-/passport/share.png`, which only the capture runner serves (through the real share handler and renderer).
+ * `&owner=1` gives the card its holder's clasp, answered by the SIMULATED person authority after a short wait
+ * (`&owner=fail` refuses every change), so the acknowledged change can be watched.
  */
 type BenchState = 'shown' | 'unsigned' | 'hidden' | 'revised' | 'malformed' | 'pending';
 const STATES: readonly BenchState[] = ['shown', 'unsigned', 'hidden', 'revised', 'malformed', 'pending'];
@@ -49,17 +52,30 @@ const isFixture = (value: string | null): value is PassportFixtureName => PASSPO
 const isState = (value: string | null): value is BenchState => STATES.includes(value as BenchState);
 
 /** One SIMULATED reading as a surface would have it: a checked transport and the card's disclosed homes. */
-function benchSource(fixture: PassportFixtureName, bench: BenchState): { transport: PassportTransport; places: ReadonlyMap<string, string>; kingdom: string } {
+function benchSource(fixture: PassportFixtureName, bench: BenchState) {
   const authorities = simulatedPassportAuthorities(fixture, SCENARIO[bench]);
   const reader = createPassportReader(authorities.ports);
   const transport: PassportTransport = bench === 'pending'
     // A read that is genuinely still out: it settles only when the session aborts it.
     ? (_request, signal) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }))
     : passportLocalTransport(reader, { key: authorities.key, now: authorities.now }, bench === 'malformed' ? corrupt : undefined);
-  // The card the book sits beside: its disclosed homes let a road name where it began. Nothing more is taken from it.
+  // The card the book sits beside: its disclosed homes let a road name where it began, and its projection is the
+  // disclosure the surface follows. Nothing more is taken from it.
   const card = projectCard(authorities.card());
-  const places = new Map([[card.key.kingdomId as string, card.kingdomName], ...card.homes.map(home => [home.kingdomId as string, home.kingdomName] as const)]);
-  return { transport, places, kingdom: card.kingdomName };
+  return { authorities, transport, places: disclosedPlaces(card), disclosure: passportDisclosure(card), kingdom: card.kingdomName };
+}
+
+/** The SIMULATED person authority behind the holder's clasp: it answers the card projected again, or refuses. */
+function benchOwner(authorities: ReturnType<typeof benchSource>['authorities'], refuse: boolean) {
+  return {
+    setTravels: (travels: 'shown' | 'hidden', signal: AbortSignal) => new Promise<PassportDisclosureView>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (refuse) return reject(new Error('SIMULATED authority refused the change'));
+        resolve(passportDisclosure(projectCard(authorities.setTravelsHidden(travels === 'hidden'))));
+      }, 900);
+      signal.addEventListener('abort', () => { clearTimeout(timer); reject(new Error('aborted')); }, { once: true });
+    }),
+  };
 }
 
 /** The capture waits for this: fonts in and the first settled state painted (or the deliberately pending one). */
@@ -87,7 +103,8 @@ function BenchReading(props: { fixture: PassportFixtureName; state: BenchState; 
  * print of its shared spread. The picture is the real share handler's answer when the capture runner serves it.
  */
 function BenchCard(props: { fixture: PassportFixtureName; state: BenchState; initialView: number }): JSX.Element {
-  const { transport, places, kingdom } = benchSource(props.fixture, props.state);
+  const { authorities, transport, places, disclosure, kingdom } = benchSource(props.fixture, props.state);
+  const owner = param('owner');
   const [settled, setSettled] = createSignal(props.state === 'pending');
   markReady(settled);
   const imageUrl = `/-/passport/share.png?${new URLSearchParams({ fixture: props.fixture, state: props.state })}`;
@@ -96,7 +113,8 @@ function BenchCard(props: { fixture: PassportFixtureName; state: BenchState; ini
       <span class="ppb-card-mark">Chatdom</span>
       <span class="ppb-card-kingdom">A citizen of {kingdom}</span>
     </header>
-    <CardPassport transport={transport} places={places} share={{ imageUrl }} simulated initialView={props.initialView}
+    <CardPassport transport={transport} places={places} disclosure={disclosure} share={{ imageUrl }} simulated initialView={props.initialView}
+      {...(owner === '1' || owner === 'fail' ? { owner: benchOwner(authorities, owner === 'fail') } : {})}
       onState={state => { if (state.kind !== 'pending') setSettled(true); }} />
     <div class="ppb-card-roofs" aria-hidden="true" />
   </div>;

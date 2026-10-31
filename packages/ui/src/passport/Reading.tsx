@@ -1,10 +1,13 @@
 import '../kit.css';
 import './passport.css';
-import { createSignal, Match, onCleanup, Show, Switch, type Accessor, type JSX } from 'solid-js';
+import { createRenderEffect, createSignal, Match, onCleanup, Show, Switch, type Accessor, type JSX } from 'solid-js';
 import { ProvenanceSeal } from '../ProvenanceSeal';
 import { CoverEmblem, PassportBook } from './Book';
 import type { BookLayout, PageDensity } from './pages';
-import { createPassportSession, type PassportReadState, type PassportSession, type PassportTransport } from './session';
+import {
+  createPassportSession, followDisclosure,
+  type PassportDisclosureView, type PassportReadState, type PassportSession, type PassportTransport,
+} from './session';
 import type { PassportCollection } from './types';
 
 export interface PassportReadingProps {
@@ -74,12 +77,19 @@ function ClosedPassport(props: { state: keyof typeof CLOSED_WORDS; layout: BookL
  * A Solid reading of one passport through a session: opened on creation, closed with its owner. Hosts that change
  * subject create a new reading (or call `session.open()` after their transport points at the new subject); the
  * session drops every late reply from the previous one.
+ *
+ * With `disclosure` (the card's current `passportDisclosure`), the reading follows it (`followDisclosure`): hidden
+ * closes the book without a read, a newer shown reads a fresh snapshot, and a stale shown is ignored.
  */
-export function createPassportReading(transport: PassportTransport): { state: Accessor<PassportReadState>; session: PassportSession } {
+export function createPassportReading(transport: PassportTransport, options: { disclosure?: Accessor<PassportDisclosureView | undefined> } = {}): { state: Accessor<PassportReadState>; session: PassportSession } {
   const session = createPassportSession(transport);
   const [state, setState] = createSignal<PassportReadState>(session.state(), { equals: false });
   const stop = session.subscribe(setState);
-  session.open();
+  const follow = followDisclosure(session);
+  const disclosure = options.disclosure;
+  // A render effect runs now, before anything is sent: a book the card already hides is never even asked for.
+  if (disclosure) createRenderEffect(() => follow(disclosure()));
+  else follow(undefined);
   onCleanup(() => { stop(); session.close(); });
   return { state, session };
 }
