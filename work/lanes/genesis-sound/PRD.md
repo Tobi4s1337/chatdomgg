@@ -11,6 +11,6 @@ are main's.
 Work in checkpoints: if a session ends before the part is done, leave everything building and working, write `next: <id> <what is done, what remains>` and carry on next session. For visual changes, show a before/after of the same view. Hand main exact `needs:` for any seam outside scope and keep going.
 
 ## Tasks
-- [ ] **GENESIS-SOUND-10 — The sound of three landscapes, whole.** Coast, river and mountain beds with nonrepeating deterministic variation, place cues, weather and time layers, clean transitions and lifecycle, a stream mix that leaves room for voices and actions, and complete third-party credit; with listening evidence.
+- [x] **GENESIS-SOUND-10 — The sound of three landscapes, whole.** Coast, river and mountain beds with nonrepeating deterministic variation, place cues, weather and time layers, clean transitions and lifecycle, a stream mix that leaves room for voices and actions, and complete third-party credit; with listening evidence.
 
 ## Backlog
