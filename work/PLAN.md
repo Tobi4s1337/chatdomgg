@@ -334,14 +334,20 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
 beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current:** PT10 a7d5253 merged; the generated kingdom now plants the full picture-tree family on the
+**Current:** the labelled SIMULATED homecoming stages32 late neighbours (15% cap) at16–23.75s,
+on their existing household routes; first Juniper beat/live timestamps unchanged. Same-view HIGH1920×1080
+hour19.5/time25 `shots/magic/road-homecoming-pair.png` viewed: more lantern people read on the left street
+and foreground crossings;104→115 walking of240 supplied citizens. Typecheck/scoped lint/17 presence tests/
+web build pass; no browser errors, captures cleaned. This is opening choreography, NOT sustained live traffic.
+Next: everyday activity around market/forge using only present citizens and approved destinations.
+
+PT10 a7d5253 merged; the generated kingdom now plants the full picture-tree family on the
 same court/grove sites, with willows by water, rare elders, quiet canopy wind and LOD-2 shadows.
 Accepted distant grove air736ee93 inherited. `shots/magic/picture-grove-pair.png` viewed at1920×1080
 HIGH, hour19.5/time25: broader irregular crowns frame the hill; light/camera/roads unchanged. Typecheck,
 scoped lint,18 tree tests and web build pass; no browser errors, capture resources released. Founded
 installed content remains authoritative (no replacement planting); its compiled trees still need the same
-art adoption. Next visible fix: road life at wide scale, actual present people on existing routes, never
-fake live traffic. Current quiet market routines and late SIMULATED arrivals are the existing seams.
+art adoption. Never fake live traffic. Existing quiet market routines remain the everyday-life seam.
 
 AS10 whole citizens0b11c76 adopted in kingdom/stream/observed/self walkers in e2a9100. Six stable
 presence look IDs use exact painted recipes/kingdom light; render-local shoulders±4, two thin cloth capes.
