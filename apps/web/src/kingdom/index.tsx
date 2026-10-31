@@ -121,7 +121,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     <div class="kingdom-vignette" aria-hidden="true" />
     <header class="kingdom-heading">
       <svg class="realm-mark" viewBox="0 0 48 60" aria-hidden="true"><path d="M8 20h8v-6h6v6h4v-6h6v6h8v25L24 55 8 45Z"/><path d="M18 39V28h12v11m-6-26c-7-5-4-10 0-13 0 6 7 7 0 13Z"/><path d="M5 10h4m30 0h4M24 58v2"/></svg>
-      <div><p class="kingdom-eyebrow">A home for your chat</p><h1>{realmName}</h1><p class="kingdom-subtitle">{tier==='hamlet'?'A little kingdom. Every light matters.':'Old streets. Familiar names. A light for everyone.'}</p></div>
+      <div><p class="kingdom-eyebrow">A home for your chat · <a href="/showcase" style={{color:"inherit"}}>Explore Chatdom</a></p><h1>{realmName}</h1><p class="kingdom-subtitle">{tier==='hamlet'?'A little kingdom. Every light matters.':'Old streets. Familiar names. A light for everyone.'}</p></div>
     </header>
     <ProvenanceSeal class="source-ribbon kingdom-seal" state={provenanceFromSource(source())} simulated={practice()} />
     <div class="window-names" aria-live="polite"><For each={names()}>{label=><div class="window-name" style={{left:`${label.x}px`,top:`${label.y}px`}}><span class="name-diamond" />{label.name}<small>home again</small></div>}</For></div>
