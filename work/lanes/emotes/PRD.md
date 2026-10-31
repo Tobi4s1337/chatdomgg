@@ -21,6 +21,7 @@ E01 accepted; feature-local catalogue processing is lane-owned; cross-surface ch
 ## Tasks
 
 - [x] **E01 — One familiar shape becomes a sculpture** · Accepted deterministic compiler and SIMULATED statue/banner bench; preserve its evidence.
+- [x] **E02 — Animated emotes and live catalogues share the same pipeline** · Bounded PNG/GIF/WebP decoders, Twitch plus opt-in 7TV/BTTV/FFZ adapters through the checked pinned transport, outage-preserving refresh, animated SIMULATED statue in the bench; see the history entry for the full brief.
 - [ ] **E07 — Raise a channel emote as statue and banner** · Consume an approved catalogue revision via existing ports, preserving transformed-object approval; render a recognisable statue and banner in the kingdom. Use a labelled SIMULATED source if bindings are unavailable; inspect one stream-first 1920×1080 capture.
 - [ ] **E08 — Chat sends emotes into the world** · Map approved emote fragments from the existing chat feed to bounded, legible expression and weather; preserve source/order and avoid invented people. Test hostile text and bursts; inspect a stream capture.
 - [ ] **E09 — Reconcile source changes and integration** · Verify live/daily catalogue changes, safe removal and actual main-owned catalogue/chat/scene bindings when available. Report missing ports; simulated evidence alone cannot establish the real path.
@@ -31,7 +32,7 @@ E01 accepted; feature-local catalogue processing is lane-owned; cross-surface ch
   bounded palette/extrusion compiler and original asymmetric static fixture. Put the actual clay-rendered
   4–6 m statue, a grounded plinth and a banner/motif preview in the owned bench by this task's end. Make
   **SIMULATED** visible. Evidence: schema/budget/orientation/alpha test, front/side web and phone shots viewed.
-- deferred: **E02 — Animated emotes and live catalogues share the same pipeline** · Implement real bounded
+- done: **E02 — Animated emotes and live catalogues share the same pipeline** · Implement real bounded
   PNG/GIF/WebP decoding, coalesced frames/disposal/timing, worker cancellation and content-addressed hashes.
   Implement Twitch catalogue refresh and opt-in 7TV/BTTV/FFZ adapters through checked injected transport,
   with primary API/license/decoder findings recorded. Preserve outage versus empty/removal. Evidence: actual

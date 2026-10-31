@@ -1,12 +1,15 @@
-// Paints the SIMULATED fixture and compiles it off the render thread, as production compiles run
-// on a worker: the page only receives finished, schema-checked geometry.
+// Decodes the SIMULATED animated fixture from its real GIF bytes and compiles every frame off the
+// render thread, as production compiles run on a worker: the page only receives finished,
+// schema-checked geometry. The owning page terminates this worker to cancel, which releases every
+// buffer at once.
 import { MATERIALS } from '@chatdom/content';
-import { compileEmote, toadWaveFixture, type CompiledEmote, type EmoteCompileStats, type EmoteSource } from '../../../../packages/emotes/src/index';
+import { compileEmote, decodeEmoteImage, toadWaveAnimatedFixture, type CompiledEmote, type EmoteCompileStats, type EmoteSource } from '../../../../packages/emotes/src/index';
 
 export interface BenchCompileRequest { readonly palette: readonly number[]; readonly paletteRevision: number }
 export type BenchCompileReply =
-  | { ok: true; source: EmoteSource; flat: { width: number; height: number; rgba: Uint8Array };
-    statue: CompiledEmote; statueStats: EmoteCompileStats; heraldry: CompiledEmote; elapsedMs: number }
+  | { ok: true; source: EmoteSource; bytes: number;
+    flat: { width: number; height: number; frames: { rgba: Uint8Array; durationMs: number }[] };
+    statue: CompiledEmote; statueStats: EmoteCompileStats; heraldry: CompiledEmote; decodeMs: number; compileMs: number }
   | { ok: false; message: string };
 
 interface CompileScope {
@@ -15,20 +18,23 @@ interface CompileScope {
 }
 const scope = self as unknown as CompileScope;
 scope.onmessage = event => {
-  const started = performance.now();
-  try {
-    const fixture = toadWaveFixture();
-    const statue = compileEmote(fixture, MATERIALS, event.data.palette, { purpose: 'statue', paletteRevision: event.data.paletteRevision });
-    if (!statue.ok) { scope.postMessage({ ok: false, message: statue.message } satisfies BenchCompileReply); return; }
-    const heraldry = compileEmote(fixture, MATERIALS, event.data.palette, { purpose: 'heraldry', paletteRevision: event.data.paletteRevision });
-    if (!heraldry.ok) { scope.postMessage({ ok: false, message: heraldry.message } satisfies BenchCompileReply); return; }
-    const frame = fixture.decoded.frames[0]!;
+  void (async () => {
+    const started = performance.now();
+    const { source, bytes } = toadWaveAnimatedFixture();
+    const decoded = await decodeEmoteImage(bytes, source.rendition, new AbortController().signal);
+    if (!decoded.ok) { scope.postMessage({ ok: false, message: `The GIF could not be decoded: ${decoded.message}` }); return; }
+    if (decoded.sourceHash !== source.sourceHash) { scope.postMessage({ ok: false, message: 'The decoded bytes do not match the source hash.' }); return; }
+    const decodedAt = performance.now();
+    const input = { source, decoded: decoded.decoded };
+    const statue = compileEmote(input, MATERIALS, event.data.palette, { purpose: 'statue', paletteRevision: event.data.paletteRevision });
+    if (!statue.ok) { scope.postMessage({ ok: false, message: statue.message }); return; }
+    const heraldry = compileEmote(input, MATERIALS, event.data.palette, { purpose: 'heraldry', paletteRevision: event.data.paletteRevision });
+    if (!heraldry.ok) { scope.postMessage({ ok: false, message: heraldry.message }); return; }
+    const frames = decoded.decoded.frames.map(frame => ({ rgba: frame.rgba, durationMs: frame.durationMs }));
     const reply: BenchCompileReply = {
-      ok: true, source: fixture.source, flat: { width: fixture.decoded.width, height: fixture.decoded.height, rgba: frame.rgba },
-      statue: statue.emote, statueStats: statue.stats, heraldry: heraldry.emote, elapsedMs: performance.now() - started,
+      ok: true, source, bytes: bytes.length, flat: { width: decoded.decoded.width, height: decoded.decoded.height, frames },
+      statue: statue.emote, statueStats: statue.stats, heraldry: heraldry.emote, decodeMs: decodedAt - started, compileMs: performance.now() - decodedAt,
     };
-    scope.postMessage(reply, [frame.rgba.buffer as ArrayBuffer]);
-  } catch (error) {
-    scope.postMessage({ ok: false, message: error instanceof Error ? error.message : String(error) } satisfies BenchCompileReply);
-  }
+    scope.postMessage(reply, frames.map(frame => frame.rgba.buffer as ArrayBuffer));
+  })().catch(error => scope.postMessage({ ok: false, message: error instanceof Error ? error.message : String(error) }));
 };
