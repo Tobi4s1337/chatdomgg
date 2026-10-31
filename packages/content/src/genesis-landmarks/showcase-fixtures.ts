@@ -27,3 +27,6 @@ export function showcaseFixture(broadcasterId: string): ShowcaseFixture {
 
 /** The coastal target from spec 40: The_AGGman, a coastal hamlet. */
 export const HARBOUR_TARGET = '63920635';
+
+/** The river target from spec 40: PinkKittyRose, a river town. */
+export const RIVER_TARGET = '4363967';

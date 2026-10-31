@@ -6,5 +6,7 @@
 export * from './types';
 export * from './kit';
 export * from './heraldry';
+export * from './parts';
 export * from './harbour-watchtower/tower';
+export * from './river-hall/hall';
 export * from './adapter';

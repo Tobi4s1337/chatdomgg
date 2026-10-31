@@ -61,14 +61,14 @@ export type EmitterKind = 'beacon' | 'lantern';
 /** Where a physical flame or lamp sits. Content never lights it; the host feeds its own light result. */
 export interface LandmarkEmitter { readonly id: string; readonly kind: EmitterKind; readonly position: Vec3; readonly reach: number }
 
-export type LandmarkSoundKind = 'beacon-fire' | 'flag' | 'surf' | 'rope-creak';
+export type LandmarkSoundKind = 'beacon-fire' | 'flag' | 'surf' | 'rope-creak' | 'river' | 'bell' | 'mill-wheel';
 /** A point for the host's audio mix. Content supplies the hook only; it never plays sound. */
 export interface LandmarkSound { readonly id: string; readonly kind: LandmarkSoundKind; readonly position: Vec3 }
 
 /** A pivot for a moving part. `position` is the exact pivot in cells; `axis` is the unit axis in local space. */
 export interface LandmarkMount { readonly id: string; readonly position: Vec3; readonly axis: Vec3 }
 
-export type ClearRole = 'doorway' | 'approach' | 'lookout' | 'flag-swing' | 'beacon-flame';
+export type ClearRole = 'doorway' | 'approach' | 'lookout' | 'flag-swing' | 'beacon-flame' | 'waterway' | 'bell-swing' | 'wheel-sweep';
 /** A volume that must stay air in the piece itself, and in anything the host puts around it. */
 export interface LandmarkClear { readonly id: string; readonly role: ClearRole; readonly box: CellBox }
 
@@ -78,7 +78,7 @@ export interface LandmarkClear { readonly id: string; readonly role: ClearRole; 
  */
 export interface LandmarkAffordance {
   readonly id: string;
-  readonly kind: 'enter' | 'sit' | 'tend-beacon' | 'look-out';
+  readonly kind: 'enter' | 'sit' | 'tend-beacon' | 'look-out' | 'ring-bell';
   readonly uses: readonly string[];
   readonly status: 'needs-host';
   readonly requires: string;
@@ -97,6 +97,28 @@ export interface LandmarkPart {
   readonly pivot: Vec3;
 }
 
+/**
+ * The water a piece stands in, for a piece whose y = 0 is a river bed rather than dry ground. `level` is the water
+ * surface the piece is drawn for and `bank` the ground height it expects at both abutments, both in cells above
+ * y = 0. `channel` is the clear waterway between the abutments, through the arches.
+ */
+export interface LandmarkWater { readonly level: number; readonly bank: number; readonly channel: CellBox }
+
+/**
+ * One glazed pane, in the shape of a content window (`centre` on the glass's outer face, `width` across the face,
+ * `height`, outward `facing`), so a host can hand the hall's glass to its window lights. Panes of one opening share
+ * its `opening` id; a stepped head is several panes. Content never lights them: a host lights them only from real
+ * presence in the room behind.
+ */
+export interface LandmarkGlazing {
+  readonly id: string;
+  readonly opening: string;
+  readonly centre: Vec3;
+  readonly width: number;
+  readonly height: number;
+  readonly facing: LocalFacing;
+}
+
 export interface LandmarkPiece {
   readonly blueprint: VoxelBlueprint;
   readonly parts: readonly LandmarkPart[];
@@ -111,4 +133,8 @@ export interface LandmarkPiece {
   readonly mounts: readonly LandmarkMount[];
   readonly clear: readonly LandmarkClear[];
   readonly affordances: readonly LandmarkAffordance[];
+  /** Glass a host may light from presence; absent on a piece whose glass is all lamps. */
+  readonly glazing?: readonly LandmarkGlazing[];
+  /** Present only on a piece that stands in water. */
+  readonly water?: LandmarkWater;
 }
