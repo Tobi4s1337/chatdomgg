@@ -9,6 +9,7 @@
 import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'vite';
+import { CAPTURE_PORTS } from '../../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock.mjs';
 
 const args = process.argv.slice(2);
@@ -23,14 +24,14 @@ const dressing = option('--dressing') ?? 'on';
 const out = 'shots/ground-dressing';
 
 async function startBenchServer() {
-  for (let port = 5170; port <= 5199; port++) {
+  for (const port of CAPTURE_PORTS) {
     const server = await createServer({ root: 'apps/web', configFile: 'apps/web/vite.config.ts', logLevel: 'error',
       optimizeDeps: { entries: ['src/kingdom/ground-dressing/bench.html'] },
       server: { host: '127.0.0.1', port, strictPort: true, hmr: false } });
     try { await server.listen(); return { server, base: `http://127.0.0.1:${port}` }; }
     catch (error) { await server.close(); if (!/EADDRINUSE|in use/i.test(String(error?.message ?? error))) throw error; }
   }
-  throw new Error('No free port in 5170–5199 for the ground-dressing bench');
+  throw new Error('No safe capture port available.');
 }
 
 let server, browser, release;

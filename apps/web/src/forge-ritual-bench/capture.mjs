@@ -10,6 +10,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { URL, URLSearchParams } from 'node:url';
 import assert from 'node:assert/strict';
+import { CAPTURE_PORTS } from '../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
 import { closeCapturePreview, startCapturePreview } from '../../../../packages/testing/preview.mjs';
 
@@ -18,14 +19,13 @@ const argBase = arg('--base-url'), at = arg('--at');
 const OUT = at ? '/tmp/chatdom-forge-ritual' : 'shots/forge-ritual';
 const report = { port: null, checks: [], errors: [], shots: [] };
 
-/** 5190 is main's preview and 5193/5194 are reserved services; the rest of 5170–5199 is shared. */
+/** Probe only ports available to capture-owned servers. */
 async function freePort() {
-  for (let port = 5175; port <= 5199; port++) {
-    if ([5190, 5191, 5192, 5193, 5194].includes(port)) continue;
+  for (const port of CAPTURE_PORTS) {
     const free = await new Promise(resolve => { const s = createServer().once('error', () => resolve(false)).once('listening', () => s.close(() => resolve(true))).listen(port, '127.0.0.1'); });
     if (free) return port;
   }
-  throw new Error('No free capture port in 5170–5199.');
+  throw new Error('No safe capture port available.');
 }
 
 const release = await acquireCaptureLock();
