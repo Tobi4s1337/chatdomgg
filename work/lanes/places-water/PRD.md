@@ -28,7 +28,7 @@ assembles the mount/index, and only that lead edits PRD/progress/README. PW06 fo
 
 ## Tasks
 
-- [ ] **PW01 — See the pier and lake in the real material.** Build modular supported pier/boathouse/boats and a
+- [x] **PW01 — See the pier and lake in the real material.** Build modular supported pier/boathouse/boats and a
   labelled production-renderer bench/capture script. First visible result in this task: lake postcard and pier-deck
   at dusk at 1440×900/390×844. Use isolated fixture water/lighting inputs; no fake shared modules. Implement readiness,
   error checks, serial capture lock and owned-server cleanup. Record module counts and actual material/mesher costs.
@@ -44,7 +44,7 @@ assembles the mount/index, and only that lead edits PRD/progress/README. PW06 fo
   reflection hook and coherent analytic fallback. Prove renderer state restoration and no recursion; compare same
   full/reduced postcard and bridge-pond at night. Record source cap, texture bytes and actual pass/draw costs. W-M1/3/4
   consumers wait on actual land/light/frame inputs; independent shader experiments stay inside the labelled bench.
-- [ ] **PW05 — Let the water live and people bring the warmth.** Add deterministic out-of-phase boats/wheel, wild
+- [x] **PW05 — Let the water live and people bring the warmth.** Add deterministic out-of-phase boats/wheel, wild
   critters, bounded rings/spray/dust/mist/fireflies and bounded floater presentation. Consume the real people-light
   result once available, no local stand-in. Seek forward/back and verify the same frame, empty/occupied lamp behavior,
   clear walk surfaces and caller resource survival after disposal. Supply sound hooks, never a competing audio engine.

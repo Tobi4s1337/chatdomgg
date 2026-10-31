@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAT } from '@chatdom/content';
 import { cornerAccessibility, haloIndex, unpackVoxelVertex, type AssetChunkMesh } from '@chatdom/voxel';
 import { generateKingdom, generateSettlementPlan, samplePublicGround, terrainHeight } from '@chatdom/world';
-import { buildTerrain, prepareTerrainField, sampleRenderedTerrainHeight, sampleTerrainTriangles, terrainChunkRequest,
+import { buildTerrain, meshTerrainSurface, prepareTerrainField, sampleRenderedTerrainHeight, sampleTerrainTriangles, terrainChunkRequest,
   TERRAIN_SURFACE_BOUNDS_PADDING, type TerrainLayout, type TerrainWorkerResponse } from './terrain-worker';
 import { createSettlementContent } from './settlement-content';
 
@@ -26,6 +26,19 @@ function invariant(condition: boolean, message: string): asserts condition {
 }
 
 describe('conforming terrain surface', () => {
+  it('bounds the shader heights rather than the packed voxel owner on a steep patch', () => {
+    const layout = generateKingdom({ seed: 'terrain-bounds', tier: 'hamlet', firstYear: 2025, year: 2026 });
+    const field = prepareTerrainField({ ...layout, bounds: { minX: 0, maxX: 16, minZ: 0, maxZ: 16 } });
+    field.heights.fill(33);
+    field.renderHeights.fill(field.origin[1] + 26);
+    field.renderHeights[0] = field.origin[1] + 10;
+    const mesh = meshTerrainSurface(field, [0, 1, 0], terrainChunkRequest(field, [0, 1, 0]).stamp,
+      { ao: new Uint8Array(field.heights.length), sky: new Uint16Array(field.heights.length) });
+    expect(mesh.quadCount).toBe(256);
+    expect(mesh.bounds!.min[1]).toBe(-12);
+    expect(mesh.bounds!.max[1]).toBe(20);
+  });
+
   it('samples either rendered triangle from a supplied ground field', () => {
     const ground = (x: number, z: number): number => (x + 2) * (z + 3);
     expect(sampleTerrainTriangles(ground, -1.75, -2.25)).toBeCloseTo(.25, 12);

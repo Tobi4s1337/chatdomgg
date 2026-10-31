@@ -1,4 +1,4 @@
-import { naturalLandHeight, waterSurfaceAt } from '../kingdom-land/surface';
+import { naturalLandHeight, sampleLandWater } from '../kingdom-land/surface';
 import type { DeepReadonly, GenesisLandscape } from './contracts';
 import type { XZ } from '../settlement/types';
 
@@ -6,6 +6,8 @@ export interface GenesisSurfaceSample {
   ground: number;
   waterLevel: number | null;
   water: 'ocean' | 'inland' | null;
+  /** Signed distance to the nearest water boundary, including its dry bank. */
+  shoreDistance: number;
 }
 
 /**
@@ -34,9 +36,10 @@ export function sampleGenesisSurface(landscape: DeepReadonly<GenesisLandscape>, 
       * Math.min(island.radiusX, island.radiusZ);
     if (distance > shoreDistance) { shoreDistance = distance; islandHeight = island.height; }
   }
-  if (shoreDistance <= 0) return { ground: Math.max(-8, shoreDistance * .22), waterLevel: 0, water: 'ocean' };
-  if (islandHeight !== null) return { ground: Math.min(islandHeight, shoreDistance * .3), waterLevel: null, water: null };
+  if (shoreDistance <= 0) return { ground: Math.max(-8, shoreDistance * .22), waterLevel: 0, water: 'ocean', shoreDistance };
+  if (islandHeight !== null) return { ground: Math.min(islandHeight, shoreDistance * .3), waterLevel: null, water: null, shoreDistance };
   const natural = naturalLandHeight(landscape.terrainCore, x, z);
-  const water = waterSurfaceAt(landscape.terrainCore, x, z);
-  return { ground: Math.min(natural, shoreDistance * .22), waterLevel: water, water: water === null ? null : 'inland' };
+  const inland = sampleLandWater(landscape.terrainCore, x, z);
+  const water = inland && inland.shoreDistance < 0 ? inland.surface : null;
+  return { ground: Math.min(natural, shoreDistance * .22), waterLevel: water, water: water === null ? null : 'inland', shoreDistance: Math.min(shoreDistance, inland?.shoreDistance ?? Infinity) };
 }

@@ -43,6 +43,8 @@ export interface LegacyLandformPlan extends LandformBase { version: 1 }
 export type LandformPlan = LegacyLandformPlan | import('../kingdom-land/types').KingdomLandform;
 export interface SettlementPlan {
   version: 2; revision: string; config: KingdomConfig; landform: LandformPlan;
+  /** Read-only potential-land consumer, never an adopted scene or a grant of citizenship. */
+  genesisSurface?: import('../genesis/contracts').DeepReadonly<import('../genesis/contracts').GenesisLandscape>;
   homes: readonly SettlementHome[]; reservations: readonly PlotReservation[];
   quarters: readonly SettlementQuarter[]; nodes: readonly StreetNode[]; streets: readonly StreetEdge[];
   activeStreetIds: readonly string[]; market: PublicSquare; courts: readonly PublicSquare[];
