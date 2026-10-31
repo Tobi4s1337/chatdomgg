@@ -1,16 +1,18 @@
 import type { VoxelBlueprint } from '@chatdom/shared';
-import { STYLES } from '../materials';
+import { MATERIALS, STYLES } from '../materials';
 import { AVATAR_MATERIALS, GARB, KIT_ACCENTS } from '../avatars/palette';
 import type { ClothCut, CrestCharge, CrestShape } from './arms';
 import { GENESIS_CREST, genesisCrest } from './crest';
 import { HERALDIC_KITS, NEUTRAL_COLOURS, type HeraldicColours, type HeraldicStyle, type LandscapeCharacter, type LanternAnchor } from './kit';
-import { snapTargets, type Snap } from './palette';
+import { MIN_CONTRAST, heraldicPalette, snapTargets, type Snap } from './palette';
+import { visionContrasts, type Vision } from './vision';
 import { GENESIS_STANDARD, genesisStandard } from './standard';
 
 export { CHARGES, CLOTH_ROWS, CLOTH_WIDTH, SHIELD_HEIGHT, SHIELD_WIDTH, clothArms, shieldArms, type ClothCut, type CrestCharge, type CrestShape } from './arms';
 export { GENESIS_CREST } from './crest';
 export { GENESIS_STANDARD } from './standard';
-export { MIN_CONTRAST, METALS, TINCTURES, oklab, snapTargets, type Snap, type SnappedColours } from './palette';
+export { FITTINGS, MIN_CONTRAST, METALS, TINCTURES, heraldicPalette, oklab, snapTargets, type Snap, type SnappedColours } from './palette';
+export { VISIONS, readableContrast, visionContrasts, visionLuminance, type Vision } from './vision';
 export { HERALDIC_KITS, NEUTRAL_COLOURS, contrast, luminance, type HeraldicColours, type HeraldicKit, type HeraldicStyle, type LandscapeCharacter, type LanternAnchor } from './kit';
 
 /**
@@ -52,7 +54,7 @@ export type HeraldicTreatment =
 
 /** A kingdom's heraldry proposal: the recipe's crest shape, charge and cloth cut, in honest colours. */
 export interface GenesisHeraldry {
-  readonly version: 'genesis-heraldry-2';
+  readonly version: 'genesis-heraldry-3';
   readonly landscapeId: string;
   readonly character: LandscapeCharacter;
   readonly style: HeraldicStyle;
@@ -67,6 +69,14 @@ export interface GenesisHeraldry {
    * band; a snapped cape is the field, lined in the charge, banded in the border.
    */
   readonly cape: { readonly hem: CapeHem; readonly colours: { readonly cloth: number; readonly lining: number; readonly trim: number } };
+  /**
+   * The palette lock. `materials` lists, ascending, every registered material the standard and crest carve, all
+   * inside the closed palette of kit, colours and fittings (at most sixteen). `revision` is the material registry
+   * revision they were composed against, so a kingdom that keeps this proposal knows when the dyes under it changed.
+   */
+  readonly palette: { readonly revision: number; readonly materials: readonly number[] };
+  /** Field against charge, as a WCAG contrast ratio, for each kind of colour vision. Every value is at least 3. */
+  readonly legibility: Readonly<Record<Vision, number>>;
 }
 
 type CapeHem = 'straight' | 'rounded' | 'notched';
@@ -118,12 +128,25 @@ export function composeGenesisHeraldry(recipe: HeraldryRecipe, landscape: Herald
     ? { cloth: colours.field, lining: colours.charge, trim: colours.border }
     : { cloth: GARB.linen, lining: CAPE_LINING[style], trim: GARB.clasp };
   for (const swatch of Object.values(cape)) if (!AVATAR_MATERIALS.has(swatch)) throw new Error(`Cape swatch ${swatch} is not an avatar material.`);
+  const allowed = heraldicPalette(kit, colours);
+  const used = new Set<number>();
+  for (const box of [...standard.boxes.list, ...crestPiece.boxes.list]) {
+    if (box.material === 0) continue;
+    if (!allowed.has(box.material)) throw new Error(`Material ${box.material} is outside the ${style} heraldic palette.`);
+    used.add(box.material);
+  }
+  const legibility = visionContrasts(colours.field, colours.charge);
+  for (const [vision, ratio] of Object.entries(legibility)) {
+    if (ratio < MIN_CONTRAST) throw new Error(`Field ${colours.field} and charge ${colours.charge} part by only ${ratio.toFixed(2)}:1 for ${vision} vision.`);
+  }
   return {
-    version: 'genesis-heraldry-2', landscapeId: landscape.id, character, style, treatment,
+    version: 'genesis-heraldry-3', landscapeId: landscape.id, character, style, treatment,
     colours: { ...colours },
     device,
     standard: { blueprint: blueprint('standard', GENESIS_STANDARD.size, standard.boxes.list), lanterns: standard.lanterns, arms: standard.arms },
     crest: { blueprint: blueprint('crest', GENESIS_CREST.size, crestPiece.boxes.list), lanterns: crestPiece.lanterns, arms: crestPiece.arms },
     cape: { hem: CAPE_HEM[device.cut], colours: cape },
+    palette: { revision: MATERIALS.revision, materials: [...used].sort((a, b) => a - b) },
+    legibility,
   };
 }

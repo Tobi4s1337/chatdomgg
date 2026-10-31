@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createCastlePlan, type CastlePlan } from '@chatdom/world';
-import { createCastleContent } from './castle-content';
+import { createCastleContent, createCastleCourtContent } from './castle-content';
 
 const fixture: CastlePlan = {
   centre: [10,20,-30], bounds: { minX: -30, maxX: 50, minZ: -70, maxZ: 10 },
@@ -13,6 +13,13 @@ const fixture: CastlePlan = {
 };
 
 describe('placed castle content', () => {
+  it('mounts welcome fires at the real gate flanks, including a rotated gate', () => {
+    const court = createCastleCourtContent(createCastlePlan());
+    expect(court.braziers.map(fire => fire.position)).toEqual([[-10,22,-34.5],[10,22,-34.5]]);
+    const rotated = createCastleCourtContent({ ...fixture, modules: fixture.modules.map(module => module.kind === 'gatehouse' ? { ...module, rotation: 1 } : module) });
+    expect(rotated.braziers.map(fire => fire.position)).toEqual([[11.5,22,2],[11.5,22,-18]]);
+    expect(rotated.props.every(prop => prop.yaw === Math.PI / 2)).toBe(true);
+  });
   it('installs the authoritative compound at its true scale with one real beacon', () => {
     const plan = createCastlePlan();
     const { buildings, beaconPosition } = createCastleContent(plan);
