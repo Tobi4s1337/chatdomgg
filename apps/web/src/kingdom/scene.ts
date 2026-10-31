@@ -24,6 +24,7 @@ import { terrainBatches } from './terrain-batches';
 import { createKingdomBuild, type KingdomBuildSession } from './build-scene';
 import { createKingdomCitizens, type SpeechLabel } from './citizen-scene';
 import { foundedContent } from './founded-content';
+import { royalWindow } from './royal-window';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
 import { createObservedWalkers, walkerSlots } from './observed-walkers';
 import type { RealmWalkerFeed } from '@chatdom/shared/realm';
@@ -71,9 +72,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const geometries:THREE.BufferGeometry[]=[],meshes:THREE.Object3D[]=[],abort=new AbortController();
   earlyCleanups.push(()=>abort.abort());
   const sound=own(createKingdomSound());
-  const crowd=own(createKingdomCitizens(scene,layout,pool,clay));
   const blueprints=new Map<string,VoxelBlueprint>();
   const installed=options.founded?foundedContent(options.founded):undefined;
+  const crowd=own(createKingdomCitizens(scene,layout,pool,clay,!!installed&&!!royalWindow(installed.forgeHosts)));
   const renderKeys=new Map(options.founded?.assets.map(asset=>[asset.blueprint,asset.assetHash]));
   const blueprintKey=(b:VoxelBlueprint)=>renderKeys.get(b)??b.id;
   const {houses,props}=installed??placeSettlementContent(layout.homes,(x,z)=>terrainHeight(layout,x,z));
@@ -83,7 +84,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const {buildings:castleBuildings,beaconPosition}=createCastleContent(layout.castle);
   const buildings=installed?houses:[...houses,...castleBuildings],content=installed?.content??[...buildings,...props];
   for(const {blueprint} of content)blueprints.set(blueprintKey(blueprint),blueprint);
-  const windows=own(createWindowLights(scene,houses));
+  const royal=installed?royalWindow(installed.forgeHosts):undefined;
+  const presenceHouses=royal?[...houses,royal]:[...houses];
+  const windows=own(createWindowLights(scene,presenceHouses));
   // Begin the arrival among neighbours, not alone at the newest edge of town.
   const arrivalHomes=layout.homes.filter(h=>h.tier==='house');
   const arrivalHome=arrivalHomes.sort((a,b)=>{
@@ -94,11 +97,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const source=options.presenceFeed??(options.source==='simulated'?simulation.feed:createHeraldPresence('/presence-data/stream',options.kingdomId,options.presenceOrigin??'live'));
   const ownSimulation=options.source==='simulated'&&!options.presenceFeed;
   const first=houses.find(h=>h.slot===simulation.firstSlot)!;
-  const requestedFocus=houses.some(h=>h.slot===options.focusSlot)?options.focusSlot:undefined;
+  const requestedFocus=presenceHouses.some(h=>h.slot===options.focusSlot)?options.focusSlot:undefined;
   let focusSlot=requestedFocus??(options.source==='simulated'?simulation.firstSlot:houses[0]!.slot);
   const focal=new THREE.Vector3(),homeEye=new THREE.Vector3(),homeTarget=new THREE.Vector3(),citizenEye=new THREE.Vector3();
   function focusHome(slot:number){
-    const home=houses.find(h=>h.slot===slot),route=crowd.motion.routeForSlot(slot);if(!home||!route)return;
+    const home=presenceHouses.find(h=>h.slot===slot),route=crowd.motion.routeForSlot(slot);if(!home||!route)return;
     focusSlot=slot;const pane=home.blueprint.windows[0]??{centre:[home.blueprint.size[0]/2,Math.min(14,home.blueprint.size[1]/2),home.blueprint.size[2]],facing:'south' as const};
     focal.set(...pane.centre).multiplyScalar(.125).applyAxisAngle(new THREE.Vector3(0,1,0),home.yaw).add(new THREE.Vector3(...home.position));
     const angle=({north:Math.PI,east:Math.PI/2,south:0,west:-Math.PI/2}[pane.facing])+home.yaw;
@@ -126,6 +129,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const observer=new ResizeObserver(resize);earlyCleanups.push(()=>observer.disconnect());observer.observe(canvas);resize();
   const blockers=installed?[...houses,...props.map(p=>({...p,slot:65534}))]:buildings;
   const lightBounds=inhabitedLightBounds(layout.homes);
+  // Personal keep warmth belongs to the same field as street windows, outside the street-home bounds.
+  for(const source of windows.getSources()){
+    lightBounds.minX=Math.min(lightBounds.minX,source.position[0]-16);lightBounds.maxX=Math.max(lightBounds.maxX,source.position[0]+16);
+    lightBounds.minZ=Math.min(lightBounds.minZ,source.position[2]-16);lightBounds.maxZ=Math.max(lightBounds.maxZ,source.position[2]+16);
+  }
   const nearBlockers=installed?blockers:[...blockers,...props.map(p=>({...p,slot:65534}))];
   // Half-metre local occupancy resolves the little garden edges. Expanding a
   // sub-two-metre prop into whole distant cells would falsely seal the street.
@@ -133,7 +141,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const farField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setFarLight(volume);fieldUploads++;farBytes=volume.estimatedPeakBytes;farVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom'),{mode:'kingdom',bounds:lightBounds}));
   const beaconField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setBeaconLight(volume);fieldUploads++;beaconBytes=volume.estimatedPeakBytes;beaconVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The castle light could not reach its towers'),{mode:'beacon',position:beaconPosition}));
   let lastField=-Infinity,lastNames=-Infinity,lastActive=0,beaconCue=false;
-  const unsubscribe=source.subscribe(next=>{frame=next;crowd.applyFrame(next);if((options.source==='herald'||next.origin==='live')&&requestedFocus===undefined){const present=next.windows.find(w=>w.present&&houses.some(h=>h.slot===w.slot));if(present)focusHome(present.slot);}lastField=-Infinity;options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{windows.clear();crowd.clear();frame=undefined;lastField=-Infinity;options.onSource('CONNECTION LOST');});
+  const unsubscribe=source.subscribe(next=>{frame=next;crowd.applyFrame(next);if((options.source==='herald'||next.origin==='live')&&requestedFocus===undefined){const present=next.windows.find(w=>w.present&&presenceHouses.some(h=>h.slot===w.slot));if(present)focusHome(present.slot);}lastField=-Infinity;options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{windows.clear();crowd.clear();frame=undefined;lastField=-Infinity;options.onSource('CONNECTION LOST');});
   earlyCleanups.push(unsubscribe);
   const debug:KingdomDebug={citizens:0,walking:0,ready:false,lightingReady:false,workers:pool.stats.size+4,homes:houses.length,activeWindows:0,geometryBuilds:0,fieldUploads:0,drawCalls:0,triangles:0,time:0,hour,camera:camName,fieldBytes:0,source:source.label,fieldSettled:false,shadowUpdates:0,shadowDrawCalls:0,shadowTriangles:0,shadowBytes:0,shadowEnabled:false,windowFieldVisited:0,beaconFieldVisited:0};
   type Placement={position:Vec3;yaw:number;placementId?:string};
@@ -201,6 +209,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
         };
         add(state.to,fading?progress:1);if(fading)add(state.from,-1-progress);
         if('slot' in p)windows.setDetail((p as WindowHouse).slot,state.from,state.to,state.progress);
+        else if(royal&&p.position===royal.position)windows.setDetail(royal.slot,state.from,state.to,state.progress);
       }
       for(const mesh of levels.values()){mesh.visible=mesh.count>0;mesh.instanceMatrix.needsUpdate=true;(mesh.geometry.getAttribute('aLodFade') as THREE.InstancedBufferAttribute).needsUpdate=true;}
     }

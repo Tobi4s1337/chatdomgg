@@ -10,8 +10,9 @@ import { walkerSubject, type WalkerSlots } from './observed-walkers';
 export interface SpeechLabel { slot: number; name: string | null; x: number; y: number; parts: CitizenChatCue['parts'] }
 
 /** Render-side presentation only: the public presence projection remains unchanged. */
-export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan, pool: VoxelWorkerPool, clay: VoxelRenderState) {
-  const motion = createCitizenMotion(layout), behaviours = createCitizenBehaviours();
+export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan, pool: VoxelWorkerPool, clay: VoxelRenderState, castleHome = false) {
+  const motion = createCitizenMotion(layout, { castleHome }), behaviours = createCitizenBehaviours();
+  const capacity = layout.homes.length + Number(castleHome);
   let lastStepMs: number | null = null, answers: CitizenGoalAnswer[] = [];
   const resetBehaviours = () => { behaviours.reset(); lastStepMs=null; answers=[]; };
   const material = createVoxelMaterial(MATERIALS, 'avatar');
@@ -28,13 +29,13 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
   let disposed = false;
   const shadowGeometry = new THREE.CircleGeometry(.29, 12); shadowGeometry.rotateX(-Math.PI / 2);
   const shadowMaterial = new THREE.MeshBasicMaterial({ color: '#252a24', transparent: true, opacity: .22, depthWrite: false });
-  const shadows = new THREE.InstancedMesh(shadowGeometry, shadowMaterial, layout.homes.length);
+  const shadows = new THREE.InstancedMesh(shadowGeometry, shadowMaterial, capacity);
   shadows.count = 0; shadows.frustumCulled = false; scene.add(shadows);
   const shadowMatrix = new THREE.Matrix4();
   return {
     material, motion,
     async prepare() {
-      const instance = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: layout.homes.length, pool });
+      const instance = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity, pool });
       if (disposed) instance.dispose(); else renderer = instance;
     },
     applyFrame(next: KingdomPresenceFrame) {

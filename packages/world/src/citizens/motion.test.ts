@@ -4,6 +4,32 @@ import { generateSettlementPlan } from '../settlement/generator';
 import { homeFrame, rectangleDistance } from '../settlement/geometry';
 import { settlementTerrainHeight } from '../settlement/terrain';
 import { createCitizenMotion } from './motion';
+import { REALM_CASTLE_SLOT } from '@chatdom/shared/realm';
+
+it('brings an observed monarch to the installed castle gate without creating a street plot', () => {
+  const plan = generateSettlementPlan({ seed: 'SIMULATED-royal-homecoming', tier: 'hamlet', firstYear: 2026, year: 2026 });
+  const homes = plan.homes, start = 1_800_000_000_000;
+  const frame: KingdomPresenceFrame = { version: 1, kingdomId: KingdomIdSchema.parse('1'), epoch: 'SIMULATED-castle',
+    origin: 'simulated', sequence: 1, asOf: start, streamLive: false, connection: 'offline',
+    windows: [{ slot: REALM_CASTLE_SLOT, present: true, publicName: 'SIMULATED Monarch', since: start }] };
+  const absent = createCitizenMotion(plan); absent.applyFrame(frame); expect(absent.sample(start)).toEqual([]);
+  const motion = createCitizenMotion(plan, { castleHome: true, entryDistance: 18, speed: 1.2 });
+  motion.applyFrame(frame);
+  const route = motion.routeForSlot(REALM_CASTLE_SLOT)!;
+  expect(route.streetIds).toContain('road:castle');
+  expect(route.streetIds.every(id => plan.activeStreetIds.includes(id))).toBe(true);
+  expect(motion.sample(start + 3_000)).toMatchObject([{ slot: REALM_CASTLE_SLOT, state: 'walking', homeLit: false }]);
+  const arrived = motion.sample(start + 30_000)[0]!;
+  expect(arrived).toMatchObject({ publicName: 'SIMULATED Monarch', state: 'home', homeLit: true });
+  const gate = plan.nodes.find(node => node.id === plan.castle.gateNodeId)!;
+  expect(Math.hypot(arrived.position[0] - gate.position[0], arrived.position[2] - gate.position[2])).toBeCloseTo(.55);
+  expect(plan.homes).toBe(homes); expect(homes.some(home => home.slot === REALM_CASTLE_SLOT)).toBe(false);
+  const destinations = motion.destinationsForSlot(REALM_CASTLE_SLOT);
+  expect(destinations.filter(destination => destination.nodeId === gate.id)).toHaveLength(1);
+  expect(motion.requestGoal({ slot: REALM_CASTLE_SLOT, nodeId: plan.market.nodeId, startAtMs: start + 31_000 })).toEqual({ accepted: true });
+  motion.applyFrame({ ...frame, sequence: 2, asOf: start + 32_000, windows: [] });
+  expect(motion.sample(start + 32_001)).toEqual([]); // Offline expiry hides immediately, not a fabricated departure.
+});
 
 it('walks the actual 240-home town, arrives at owned windows, and seeks or leaves without cutting plots', () => {
   const plan = generateSettlementPlan({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
