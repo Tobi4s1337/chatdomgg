@@ -47,7 +47,7 @@ const REED_LAYOUTS: readonly ReedLayout[] = [
   {
     size: [16, 13, 16],
     fans: [
-      { x: 5, z: 6, axis: 'x', out: -1, height: 10, blades: 5 }, { x: 7, z: 4, axis: 'z', out: -1, height: 9, blades: 4 },
+      { x: 5, z: 6, axis: 'x', out: -1, height: 10, blades: 5 }, { x: 7, z: 5, axis: 'z', out: -1, height: 9, blades: 4 },
       { x: 9, z: 6, axis: 'x', out: 1, height: 10, blades: 5 }, { x: 6, z: 9, axis: 'z', out: 1, height: 8, blades: 4 },
       { x: 9, z: 9, axis: 'x', out: 1, height: 9, blades: 4 },
     ],
@@ -169,9 +169,9 @@ interface LilyLayout { readonly size: Vec3; readonly pads: number; readonly radi
 
 /** 0 is a round raft with two blooms and a bud; 1 a few big pads; 2 a long drift of small ones. */
 const LILY_LAYOUTS: readonly LilyLayout[] = [
-  { size: [20, 3, 18], pads: 7, radius: [2.2, 3.6], blooms: 2, buds: 1 },
-  { size: [16, 3, 16], pads: 5, radius: [2.6, 3.8], blooms: 1, buds: 1 },
-  { size: [24, 3, 14], pads: 8, radius: [1.9, 3.2], blooms: 2, buds: 0 },
+  { size: [22, 3, 20], pads: 7, radius: [2.2, 3.6], blooms: 2, buds: 1 },
+  { size: [18, 3, 18], pads: 5, radius: [2.6, 3.8], blooms: 1, buds: 1 },
+  { size: [24, 3, 14], pads: 8, radius: [1.9, 3.4], blooms: 2, buds: 0 },
 ];
 
 /** Hearth's lilies are pink, Tide's and Grove's white; a second bloom in a raft takes the other colour. */

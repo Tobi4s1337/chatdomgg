@@ -94,11 +94,20 @@ export function pieceFailures(piece: WaterPiece, style: StyleKey, grounded = tru
   if (new Set(solids).size !== solids.length) failures.push(`${b.id}: duplicate solid boxes`);
   if (b.boxes.length > 2000) failures.push(`${b.id}: ${b.boxes.length} boxes`);
   if (grounded) { const n = unsupported(b); if (n) failures.push(`${b.id}: ${n} cells float`); }
-  for (const f of piece.footings) if (f.box.from[1] !== 0 || !occupiedIn(b, { from: f.box.from, to: [f.box.to[0], 1, f.box.to[2]] }).length) {
-    failures.push(`${b.id}/${f.id}: footing is not on y = 0`);
+  for (const f of piece.footings) {
+    // The bearing layer is occupied and nothing of the piece hangs below a raised footing.
+    const y = f.box.from[1];
+    const base = { from: f.box.from, to: [f.box.to[0], y + 1, f.box.to[2]] as Vec3 };
+    const below = { from: [f.box.from[0], 0, f.box.from[2]] as Vec3, to: [f.box.to[0], y, f.box.to[2]] as Vec3 };
+    if (!occupiedIn(b, base).length) failures.push(`${b.id}/${f.id}: footing bears on nothing at y = ${y}`);
+    else if (y > 0 && occupiedIn(b, below).length) failures.push(`${b.id}/${f.id}: cells hang below the raised footing`);
   }
   for (const c of piece.clear) { const hit = occupiedIn(b, c.box); if (hit.length) failures.push(`${b.id}/${c.id}: ${hit.length} cells in clear volume`); }
   for (const w of piece.walks) failures.push(...walkFailures(b, w));
+  // The place-collection budgets in scripts/content-validate.mjs.
+  const cost = meshCost(b);
+  if (cost.occupied > 1_000_000) failures.push(`${b.id}: ${cost.occupied} occupied cells`);
+  if (cost.triangles > 250_000) failures.push(`${b.id}: ${cost.triangles} triangles`);
   const inside = (p: Vec3) => p.every((v, axis) => v >= 0 && v <= b.size[axis]!);
   for (const a of [...piece.emitters, ...piece.sounds, ...piece.texts.map(t => ({ id: t.id, position: t.centre })), ...piece.mounts]) {
     if (!inside(a.position)) failures.push(`${b.id}/${a.id}: anchor outside bounds`);
