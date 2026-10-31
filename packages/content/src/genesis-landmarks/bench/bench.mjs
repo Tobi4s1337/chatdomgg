@@ -1,16 +1,18 @@
 /* global location:readonly, navigator:readonly, requestAnimationFrame:readonly, ResizeObserver:readonly, URLSearchParams:readonly */
-// The Genesis landmark bench: the harbour watchtower the adapter proposes for the coastal showcase recipe, on a
-// SIMULATED headland, drawn through the production voxel mesher, clay and terrain materials, light fields, sun
-// shadows, atmosphere, water surface and post stack. The lanterns burn as they would with people about, the beacon
-// as it would under a full kingdom, and the flag moves on its hoist: all SIMULATED host behaviour shown to judge the
-// piece, not a claim about any kingdom. Served by the Vite dev server only (capture.mjs); the app never loads it.
+// The Genesis landmark bench: a landmark the adapter proposes for a showcase recipe, on SIMULATED ground, drawn
+// through the production voxel mesher, clay and terrain materials, light fields, window lights, sun shadows,
+// atmosphere, water surface and post stack. `?scene=harbour` (the default) is the coastal watchtower on a headland;
+// `?scene=river` is the river hall across a river. The lanterns burn as they would with people about, the harbour
+// beacon as it would under a full kingdom, the hall's windows as if its rooms were full, and the flag moves on its
+// hoist: all SIMULATED host behaviour shown to judge the piece, not a claim about any kingdom. Served by the Vite dev
+// server only (capture.mjs); the app never loads it.
 import * as THREE from 'three';
-import { createAtmosphere, createPostStack, createSunShadows, createVoxelMaterial, geometryFromChunks, getEnvironment } from '@chatdom/render';
+import { createAtmosphere, createPostStack, createSunShadows, createVoxelMaterial, createWindowLights, geometryFromChunks, getEnvironment } from '@chatdom/render';
 import { VoxelWorkerPool, buildLightVolume, rasterizeLightOccluders } from '@chatdom/voxel';
 import { MAT, MATERIALS } from '../../materials';
 import { groundMaterial, meshGround } from '../../../../../apps/web/src/places/water/surface-bench/ground';
 import { createWaterSurface } from '../../../../../apps/web/src/places/water/surface/index';
-import { CELL, harbourBench } from './scene';
+import { CELL, harbourBench, riverBench } from './scene';
 const query = new URLSearchParams(location.search);
 const canvas = document.querySelector('canvas');
 const fail = (error) => {
@@ -41,7 +43,8 @@ function dotTexture(soft) {
 const rand = (i, salt) => { const s = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453; return s - Math.floor(s); };
 try {
     let hour = number('hour', 20.4), time = number('time', 42);
-    const bench = harbourBench(), { proposal } = bench, piece = proposal.piece;
+    const river = query.get('scene') === 'river';
+    const bench = river ? riverBench() : harbourBench(), { proposal } = bench, piece = proposal.piece;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, preserveDrawingBuffer: true });
     renderer.debug.onShaderError = (gl, program, vertex, fragment) => {
         console.error('Bench shader failed', { vertex: gl.getShaderInfoLog(vertex), fragment: gl.getShaderInfoLog(fragment), link: gl.getProgramInfoLog(program) });
@@ -74,24 +77,43 @@ try {
             throw new Error(`Could not mesh ${blueprint.id}`);
         return geometryFromChunks(result.chunks, 'build');
     };
-    const { ground, sea, tower } = bench;
-    const made = groundMaterial(ground, sea.level);
+    const { ground } = bench, sea = river ? null : bench.sea, tower = river ? bench.hall : bench.tower, level = river ? bench.level : sea.level;
+    const made = groundMaterial(ground, level);
     states.push(made.state);
     const sun = createSunShadows(renderer, { bounds: new THREE.Box3(new THREE.Vector3(...bench.shadowBounds.min), new THREE.Vector3(...bench.shadowBounds.max)), resolution: 2048 });
     for (const s of states)
         sun.bindReceiver(s.material);
-    const water = createWaterSurface({ bodies: [sea], reaches: [], ground: { data: ground.data, width: ground.width, height: ground.depth, origin: ground.origin, step: ground.step }, outsideGroundHeight: -8, quality: 'full' });
+    const water = createWaterSurface({ bodies: river ? [] : [sea], reaches: river ? bench.reaches : [], ground: { data: ground.data, width: ground.width, height: ground.depth, origin: ground.origin, step: ground.step }, outsideGroundHeight: -8, quality: 'full' });
     scene.add(water.root);
     // World positions of the piece's own anchors.
     const world = (cells) => [tower[0] + cells[0] * CELL, tower[1] + cells[1] * CELL, tower[2] + cells[2] * CELL];
-    const beacon = world(piece.emitters.find(e => e.id === 'beacon').position);
+    // The harbour's fire burns in its loft; the hall has no beacon, so its point sits on the hall at strength zero.
+    const beacon = river ? world([56, 120, 116]) : world(piece.emitters.find(e => e.id === 'beacon').position);
     const lanterns = piece.emitters.filter(e => e.kind === 'lantern').map(e => world(e.position));
+    // SIMULATED presence for the hall's glazing: every room full, through the production window lights. Content
+    // windows hold at most 64 panes, so the panes are split across bench-only copies of the hall at its origin.
+    let windows = null;
+    if (river) {
+        const houses = [];
+        for (let i = 0; i < piece.glazing.length; i += 64) {
+            const panes = piece.glazing.slice(i, i + 64).map(g => ({ id: g.id.replace(/[^A-Za-z0-9_-]/g, '_'), centre: [...g.centre], width: g.width, height: g.height, facing: g.facing }));
+            houses.push({ slot: houses.length, blueprint: { ...piece.blueprint, id: `${piece.blueprint.id}-glazing-${houses.length}`, windows: panes }, position: tower, yaw: 0 });
+        }
+        windows = createWindowLights(scene, houses, { allWindows: true });
+        const asOf = Date.UTC(2026, 9, 31, 19, 30);
+        windows.setFrame({ version: 1, kingdomId: 'kingdom_simulated_landmark_bench', epoch: 'sim:landmark-bench', sequence: 1, asOf, origin: 'simulated', streamLive: true, connection: 'fresh',
+            windows: houses.map(h => ({ slot: h.slot, present: true, publicName: null, since: asOf - 60_000 })) });
+    }
     // The light fields, through the production flood: the lanterns' warm field round the door and the beacon's
     // coarse field over the headland. Occluders are the tower's own solid boxes.
     const occluders = piece.blueprint.boxes.filter(b => b.material !== MAT.air).map(b => ({ min: world(b.from), max: world(b.to) }));
     const field = (spec, emitters) => buildLightVolume({ ...spec, occupancy: rasterizeLightOccluders(spec, occluders), emitters });
-    const near = field({ revision: 1, origin: [-16, -1, -12], size: [64, 32, 64], cellSize: 0.5 }, lanterns.map(position => ({ position, level: 13 })));
-    const far = field({ revision: 1, origin: [-48, -4, -48], size: [48, 24, 48], cellSize: 2 }, [{ position: [beacon[0], beacon[1] + 0.6, beacon[2]], level: 13 }]);
+    const near = river
+        ? field({ revision: 1, origin: [-20, -3, -26], size: [80, 48, 104], cellSize: 0.5 }, [...lanterns.map(position => ({ position, level: 12 })), ...(windows ? windows.getSources().map(s => ({ position: s.position, level: 9 })) : [])])
+        : field({ revision: 1, origin: [-16, -1, -12], size: [64, 32, 64], cellSize: 0.5 }, lanterns.map(position => ({ position, level: 13 })));
+    const far = river
+        ? field({ revision: 1, origin: [-48, -4, -48], size: [48, 24, 48], cellSize: 2 }, lanterns.map(position => ({ position, level: 10 })))
+        : field({ revision: 1, origin: [-48, -4, -48], size: [48, 24, 48], cellSize: 2 }, [{ position: [beacon[0], beacon[1] + 0.6, beacon[2]], level: 13 }]);
     for (const s of states) {
         s.setLight(near);
         s.setBeaconLight(far);
@@ -117,6 +139,18 @@ try {
         scene.add(flag);
         sun.register(flag);
     }));
+    // A watermill hall's wheel turns on its axle (SIMULATED host behaviour).
+    const wheelPart = piece.parts.find(p => p.id === 'wheel');
+    let wheel = null;
+    if (wheelPart) {
+        const axle = world(piece.mounts.find(m => m.id === wheelPart.mount).position), wheelLocal = wheelPart.pivot.map(v => v * CELL);
+        tasks.push(mesh(wheelPart.blueprint).then(geometry => {
+            wheel = { mesh: new THREE.Mesh(geometry, clay.material), axle, local: wheelLocal };
+            wheel.mesh.matrixAutoUpdate = false;
+            scene.add(wheel.mesh);
+            sun.register(wheel.mesh);
+        }));
+    }
     // SIMULATED lantern floats on the basin, as citizens would set them down: they drift and ride the swell.
     const AVATAR = 0.0625, floats = [];
     for (const f of bench.floats) {
@@ -131,7 +165,7 @@ try {
             floats.push({ ...f, mesh, pivot: body.pivot.map(v => v * AVATAR), light: f.critter.light.map(v => v * AVATAR) });
         }));
     }
-    tasks.push(meshGround(pool, ground, made, (x, z, h) => h < sea.level + 0.05 || water.waterAt(x, z) !== null).then(land => { scene.add(land); land.updateMatrixWorld(true); sun.register(land); }));
+    tasks.push(meshGround(pool, ground, made, (x, z, h) => h < level + 0.05 || water.waterAt(x, z) !== null).then(land => { scene.add(land); land.updateMatrixWorld(true); sun.register(land); }));
     // Glows: each lantern's glass and the beacon's fire, bright enough for the bloom to take them.
     const glowTexture = dotTexture(0.22), glows = [];
     const glow = (at, scale, colour, flicker) => {
@@ -144,13 +178,17 @@ try {
         return made;
     };
     for (const at of lanterns) {
-        glow(at, 0.55, new THREE.Color(5, 2.6, 0.9), 0.06);
-        glow(at, 2.2, new THREE.Color(0.55, 0.28, 0.08), 0.03);
+        glow(at, river ? 0.42 : 0.55, new THREE.Color(5, 2.6, 0.9), 0.06);
+        glow(at, river ? 1.6 : 2.2, new THREE.Color(0.55, 0.28, 0.08), 0.03);
     }
-    glow([beacon[0], beacon[1] + 0.35, beacon[2]], 1.6, new THREE.Color(7, 3.2, 0.8), 0.12);
-    glow([beacon[0], beacon[1] + 0.6, beacon[2]], 6.5, new THREE.Color(0.9, 0.42, 0.1), 0.08);
+    if (!river) {
+        glow([beacon[0], beacon[1] + 0.35, beacon[2]], 1.6, new THREE.Color(7, 3.2, 0.8), 0.12);
+        glow([beacon[0], beacon[1] + 0.6, beacon[2]], 6.5, new THREE.Color(0.9, 0.42, 0.1), 0.08);
+    }
     // Embers lifting off the beacon and smoke that curls away downwind.
-    const EMBERS = 70, SMOKE = 34, wind = new THREE.Vector3(-0.9, 0, -0.25).normalize();
+    const EMBERS = river ? 0 : 70, SMOKE = river ? 48 : 34, wind = new THREE.Vector3(-0.9, 0, -0.25).normalize();
+    // Where the smoke rises: the beacon's fire, or the hall's two chimneys.
+    const vents = river ? bench.chimneys.map(c => ({ at: c, lift: 0.2, puff: 0.7 })) : [{ at: beacon, lift: 2.4, puff: 1 }];
     const emberGeometry = new THREE.BufferGeometry(), emberPositions = new Float32Array(EMBERS * 3);
     emberGeometry.setAttribute('position', new THREE.BufferAttribute(emberPositions, 3));
     const embers = new THREE.Points(emberGeometry, new THREE.PointsMaterial({ map: dotTexture(0.3), size: 0.16, color: new THREE.Color(6, 2.4, 0.5), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }));
@@ -177,13 +215,14 @@ try {
         }
         emberGeometry.attributes.position.needsUpdate = true;
         for (let i = 0; i < SMOKE; i++) {
+            const vent = vents[i % vents.length], from = vent.at;
             const life = 9 + rand(i, 7) * 4, age = (t + rand(i, 8) * life) % life, a = age / life;
-            const curl = Math.sin(age * 0.8 + rand(i, 9) * 6) * (0.4 + a * 1.4);
+            const curl = Math.sin(age * 0.8 + rand(i, 9) * 6) * (0.4 + a * 1.4) * vent.puff;
             const drift = age * age * 0.11 + age * 0.35;
             smokePositions.set([
-                beacon[0] + wind.x * drift + wind.z * curl, beacon[1] + 2.4 + age * 0.95, beacon[2] + wind.z * drift - wind.x * curl,
+                from[0] + wind.x * drift + wind.z * curl, from[1] + vent.lift + age * 0.95 * vent.puff, from[2] + wind.z * drift - wind.x * curl,
             ], i * 3);
-            const grey = 0.32 + rand(i, 10) * 0.08, alpha = 0.34 * Math.sin(Math.PI * Math.min(1, a * 1.15)) * (1 - a * 0.4);
+            const grey = 0.32 + rand(i, 10) * 0.08, alpha = (river ? 0.26 : 0.34) * Math.sin(Math.PI * Math.min(1, a * 1.15)) * (1 - a * 0.4);
             smokeColours.set([grey, grey * 0.95, grey * 0.92, alpha], i * 4);
         }
         smokeGeometry.attributes.position.needsUpdate = true;
@@ -200,7 +239,7 @@ try {
     }
     new ResizeObserver(resize).observe(canvas);
     resize();
-    const stats = { ready: false, proposal: proposal.id, blueprint: piece.blueprint.id, crown: proposal.crown, recipeLandmark: proposal.recipeLandmark, label: 'SIMULATED' };
+    const stats = { ready: false, scene: river ? 'river' : 'harbour', proposal: proposal.id, blueprint: piece.blueprint.id, variant: river ? (proposal.wheel ? 'wheel' : 'still') : proposal.crown, recipeLandmark: proposal.recipeLandmark, label: 'SIMULATED' };
     let loaded = false, drawn = 0, frame = 0, shadowsSet = false;
     void Promise.all(tasks).then(() => { loaded = true; }, fail);
     const beaconVector = new THREE.Vector3(...beacon), target = new THREE.Vector3();
@@ -215,7 +254,7 @@ try {
         camera.lookAt(target);
         camera.updateMatrixWorld();
         // A full kingdom's beacon (SIMULATED), its flicker a pure function of time.
-        const flame = 0.92 + 0.05 * Math.sin(time * 7.3) + 0.03 * Math.sin(time * 13.1);
+        const flame = river ? 0 : 0.92 + 0.05 * Math.sin(time * 7.3) + 0.03 * Math.sin(time * 13.1);
         // The kingdom beacon's sky column is not drawn: this fire burns in a roofed loft, and the column would stand
         // through the spire and hide the flag. The loft's own glow, embers and smoke carry it instead.
         atmosphere.update(hour, time, camera, beaconVector, 0);
@@ -234,7 +273,7 @@ try {
         }
         for (const [i, f] of floats.entries()) {
             const x = f.at[0] + f.drift[0] * time, z = f.at[1] + f.drift[1] * time;
-            const y = sea.level - AVATAR + 0.025 * Math.sin(time * 1.2 + i * 1.7);
+            const y = level - AVATAR + 0.025 * Math.sin(time * 1.2 + i * 1.7);
             const pivot = new THREE.Matrix4().makeTranslation(x, y, z), back = new THREE.Matrix4().makeTranslation(-f.pivot[0], -f.pivot[1], -f.pivot[2]);
             const sway = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.05 * Math.sin(time * 0.9 + i), f.yaw + 0.02 * time, 0.05 * Math.sin(time * 1.1 + i * 2)));
             f.mesh.matrix.copy(pivot).multiply(sway).multiply(back);
@@ -244,6 +283,13 @@ try {
             for (const g of f.glow)
                 g.sprite.position.copy(f.at3);
         }
+        if (windows)
+            windows.update(0, hour);
+        if (wheel) {
+            const spin = new THREE.Matrix4().makeRotationZ(-time * 0.9);
+            wheel.mesh.matrix.copy(new THREE.Matrix4().makeTranslation(...wheel.axle)).multiply(spin).multiply(new THREE.Matrix4().makeTranslation(-wheel.local[0], -wheel.local[1], -wheel.local[2]));
+            wheel.mesh.matrixWorld.copy(wheel.mesh.matrix);
+        }
         if (flag) {
             // The flag streams downwind and swings a little about its hoist.
             const yaw = Math.atan2(wind.z, -wind.x) + Math.PI + 0.12 * Math.sin(time * 0.9) + 0.05 * Math.sin(time * 2.3);
@@ -251,10 +297,9 @@ try {
             flag.matrixWorld.copy(flag.matrix);
             cloth.material.uniforms.uWind.value = time;
         }
-        water.update({ time, environment: grade, camera, sources: [
-                ...lanterns.map(position => ({ position, strength: 0.85, kind: 'window' })),
-                { position: beacon, strength: flame, kind: 'beacon' },
-            ] });
+        water.update({ time, environment: grade, camera, sources: river
+                ? [...lanterns.map(position => ({ position, strength: 0.7, kind: 'window' })), ...windows.getSources().map(s => ({ position: s.position, strength: s.strength * 0.6, kind: 'window', normal: s.normal }))]
+                : [...lanterns.map(position => ({ position, strength: 0.85, kind: 'window' })), { position: beacon, strength: flame, kind: 'beacon' }] });
         water.reflect({ renderer, scene, camera, frame: ++frame, exclusions: [...atmosphere.reflectionExclusions] });
         post.update({ environment: grade, hour, focusDistance: null, beacon: { position: beaconVector, strength: flame } });
         post.render(0);

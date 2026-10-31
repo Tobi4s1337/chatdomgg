@@ -13,3 +13,20 @@ export const PROFILE_TARGETS: Readonly<Record<string, readonly string[]>> = {
   /** MashaD4 */
   '154972160': ['#514A98', '#87746F', '#6E5A65', '#3945D8'],
 };
+
+/** Public display names of the three composition targets, for bench plates only (from the same public metadata). */
+export const DISPLAY_NAMES: Readonly<Record<string, string>> = {
+  '63920635': 'The_AGGman',
+  '4363967': 'PinkKittyRose',
+  '154972160': 'MashaD4',
+};
+
+/**
+ * The landscape a showcase selects, named by its character (spec 39's `OBSERVED_GENESIS_SHOWCASE_CHOICES`): the
+ * recipe's one candidate of that character, chosen explicitly. Two of the three are not the recommendation.
+ */
+export function selectLandscape<L extends { readonly id: string; readonly character: string }>(landscapes: readonly L[], character: string): L {
+  const matches = landscapes.filter(land => land.character === character);
+  if (matches.length !== 1) throw new Error(`Expected exactly one ${character} candidate, found ${matches.length}.`);
+  return matches[0]!;
+}
