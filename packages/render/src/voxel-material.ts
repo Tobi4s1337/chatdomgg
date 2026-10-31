@@ -238,16 +238,16 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         warm=mix(warm,surfaceField(uLight,uLightOrigin,uLightExtent,.5,n),nearBlend);
       }
       // The field is blocked by occupied cells; this adds real warm street/wall illumination, not a decal.
-      // The flood falls off linearly with (Manhattan) distance, so the ground under a window is a metre or two
-      // further from it than the wall. A 1.3 power (not a square) carries the pool 3-5 m onto the wall and
-      // the cobbles below and still rolls to zero without a ring; the soft cap below keeps the core from
-      // clipping. The colour falls from a warm core through amber. It reads fully from dusk (night .2, about
+      // The flood falls off linearly with (Manhattan) distance. Shape that field into a local pool so distant
+      // plaster returns to cool sky light, while retaining its bright core and a softer reach onto the cobbles.
+      // The soft cap below keeps overlapping sources from clipping. The colour falls from a warm core through
+      // amber. It reads fully from dusk (night .2, about
       // 18.5 h) and is absent by day.
-      float pool=pow(warm,1.3);
+      float pool=pow(warm,2.6);
       float poolAmount=pool*smoothstep(0.,.2,uNight)*1.3;
       vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
-      float beaconAmount=beacon*beacon*(.3+.7*uNight)*1.25;
+      float beaconAmount=beacon*beacon*beacon*(.3+.7*uNight)*1.25;
       // Overlapping warm light shares one soft cap, so lit plaster never clips to white.
       float warmTotal=poolAmount+beaconAmount;
       float warmCapped=warmTotal<.6?warmTotal:.6+.6*(1.-exp((.6-warmTotal)/.6));
@@ -269,7 +269,8 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         colour=mix(inside,seen*mix(.62,.42,uNight),fresnel)*ao+poolColour*poolAmount*.12;
       }
       vec2 cell=fract(uv*8.);float bevel=min(min(cell.x,1.-cell.x),min(cell.y,1.-cell.y));
-      if(kind==3.||kind==4.||kind==6.)colour+=base*.018*(1.-smoothstep(.0,.10,bevel))*(.3+.7*diffuse)*vAo*detail;
+      // The carved edge catches the same light as its surface, including local warm pools.
+      if(kind==3.||kind==4.||kind==6.)colour+=base*light*.018*(1.-smoothstep(.0,.10,bevel))*(.3+.7*diffuse)*vAo*detail;
       // Glass is still clay geometry in this opaque pass. Its coverage lets the lit reveal and
       // room behind show through, while it reflects the hour's sky and catches the sun.
       float cover=1.;

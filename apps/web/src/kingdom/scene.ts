@@ -297,7 +297,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const royalPicture=s.slot===65534&&(camName==='window'||arrivalShot?.slot===65534&&arrivalShot.phase==='window');
     if(to.length()>(royalPicture?90:32)||to.dot(new THREE.Vector3(...s.normal))<2)continue;
     if(windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],s.position))continue;
-    p.y+=1.1;p.project(camera);if(p.z>1||p.z<0||Math.abs(p.x)>.91||Math.abs(p.y)>.88)continue;
+    p.y+=royalPicture ? .45 : 1.1;p.project(camera);if(p.z>1||p.z<0||Math.abs(p.x)>.91||Math.abs(p.y)>.88)continue;
     names.push({name:s.name,slot:s.slot,x:(p.x+1)*canvas.clientWidth/2,y:(1-p.y)*canvas.clientHeight/2});
   }options.onNames(names.slice(0,3));}
   const fog=new THREE.FogExp2(0x000000);scene.fog=fog;
