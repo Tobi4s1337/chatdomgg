@@ -92,6 +92,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   const rotation = new THREE.Euler(), translation = new THREE.Vector3(), quaternion = new THREE.Quaternion();
   const scale = new THREE.Vector3(1, 1, 1);
   const poses = new Map<AvatarAttachmentId, THREE.Matrix4>();
+  const grips = new Map<string, THREE.Matrix4>();
   const frustum = new THREE.Frustum(), projectionView = new THREE.Matrix4();
   // A generous radius covers the authored body, gait and short cloak as a
   // single culling unit, including their edges during a stride.
@@ -161,9 +162,11 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     }
   }
   return {
+    get grips(): ReadonlyMap<string, THREE.Matrix4> { return grips; },
     update(samples: readonly CitizenSample[], camera?: THREE.Camera) {
       if (samples.length > capacity) throw new Error(`Citizen count exceeds capacity ${capacity}.`);
       for (const mesh of meshes) mesh.count = 0;
+      grips.clear();
       capes.beginFrame(samples[0]?.time ?? 0);
       if (camera) {
         camera.updateWorldMatrix(true, false);
@@ -188,6 +191,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           if (!frustum.intersectsSphere(citizenBounds)) continue;
         }
         pose(sample, transition.value);
+        grips.set(sample.id, poses.get('gripRight')!.clone());
         if (look.cape) capes.add({ id: sample.id, heading: sample.heading, distance: sample.distance, speed: (sample.speed ?? sample.moving * 1.2) * (1 - transition.value), opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!);
         for (const batch of look.batches) {
           const attachment = poses.get(batch.part.attachment);
@@ -207,6 +211,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
       }
     },
     dispose() {
+      grips.clear();
       capes.dispose(); scene.remove(group);
       for (const geometry of geometries) geometry.dispose();
       for (const mesh of meshes) mesh.dispose();

@@ -70,6 +70,7 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
   const point = new THREE.Vector3();
   return {
     get poses() { return poses; },
+    get grips() { return people.grips; },
     frame(now: number) { poses = presentWalkers(track.sample(now), track.seats, registry); return poses; },
     draw(now: number, visible = true) {
       people.update((visible ? poses : []).filter(pose => known.has(pose.look)).map(pose => ({ id: pose.id, look: pose.look,

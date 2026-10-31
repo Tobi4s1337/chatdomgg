@@ -76,6 +76,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   return {
     controller,
     get poses() { return poses; },
+    get grips() { return people.grips; },
     get connected() { return connected; },
     frame(now: number, selected: boolean) {
       const state = client.room.state;
