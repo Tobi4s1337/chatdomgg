@@ -6,6 +6,7 @@
 // `kingdom`: the E07 stream shot, the statue and standards raised in the lit square at 1920×1080, held at the high wave.
 // `kingdom-sizes`: the same square at web and phone sizes.
 // `chat`: the E08 stream shot, the square listening to a SIMULATED chat: bubbles, lifted emotes and a chant's weather.
+// `check`: the E09 stream shot, the square after a SIMULATED daily read found new art: the plinth draped, standards plain.
 // Without --base-url it builds the bench's own HTML entry into /tmp and serves it with vite preview,
 // so the shared router and build config stay untouched.
 import { chromium } from '@playwright/test';
@@ -29,6 +30,7 @@ const SETS = {
   kingdom: [{ view: 'kingdom', label: 'stream', size: [1920, 1080], hour: HOUR, frame: 3 }],
   'kingdom-sizes': Object.entries(SIZES).map(([label, size]) => ({ view: 'kingdom', label, size, hour: HOUR, frame: 3 })),
   chat: [{ view: 'chat', label: 'stream', size: [1920, 1080], hour: HOUR, frame: 3 }],
+  check: [{ view: 'check', label: 'stream', size: [1920, 1080], hour: HOUR, frame: 0 }],
 };
 const SET = option('--set') ?? 'stream';
 const SHOTS = SETS[SET];
@@ -61,7 +63,7 @@ try {
     await page.waitForFunction(() => window.__chatdomReady === true || typeof window.__chatdomEmotesError === 'string', {}, { timeout: 240_000 });
     const error = await page.evaluate(() => window.__chatdomEmotesError);
     // Inline emotes are decoded from verified bytes by the browser; wait until every one is drawable.
-    if (shot.view === 'chat') await page.waitForFunction(() => [...document.querySelectorAll('.emote-chat-layer img')].every(img => img.complete && img.naturalWidth > 0), {}, { timeout: 20_000 });
+    if (shot.view === 'chat' || shot.view === 'check') await page.waitForFunction(() => [...document.querySelectorAll('.emote-chat-layer img, .emote-check-card img')].every(img => img.complete && img.naturalWidth > 0), {}, { timeout: 20_000 });
     if (error) throw new Error(`${shot.view}/${shot.label}: ${error}`);
     if (errors.length) throw new Error(`${shot.view}/${shot.label}: ${errors.join('\n')}`);
     const measured = await page.evaluate(() => ({
@@ -78,8 +80,19 @@ try {
       },
     }));
     if (measured.view !== shot.view || measured.hour !== shot.hour || measured.frameShown !== shot.frame) throw new Error(`${shot.view}/${shot.label}: the bench reported a different state.`);
-    if (new Set(measured.frameSizes).size !== 1 || measured.frames < 2) throw new Error(`${shot.view}/${shot.label}: the animated frames do not share one grid.`);
-    if (measured.source?.rendition !== 'gif' || measured.flatFrames !== measured.frames) throw new Error(`${shot.view}/${shot.label}: the statue did not come from the decoded GIF.`);
+    if (shot.view === 'check') {
+      // Withdrawn means withdrawn: no carving resolves, the plinth is draped, nothing waits to be unveiled.
+      const check = measured.check;
+      if (!check || check.reason !== 'daily' || !check.changes.changed.length || check.health !== 'current') throw new Error(`${shot.label}: the daily read did not see the change: ${JSON.stringify(check)}`);
+      if (measured.statueRevision !== null || measured.heraldryRevision !== null || !measured.draped) throw new Error(`${shot.label}: a withdrawn carving is still standing.`);
+      if (!['statue', 'heraldry', 'effect'].every(p => check.withdrawn.includes(p)) || check.placementsAfter !== 0 || check.pendingReveals !== 0) throw new Error(`${shot.label}: the square did not withdraw everything: ${JSON.stringify(check)}`);
+      const chatImage = await page.evaluate(() => { const img = document.querySelector('.emote-check-card img'); return img ? { alt: img.getAttribute('alt'), blob: img.getAttribute('src')?.startsWith('blob:'), loaded: img.complete && img.naturalWidth > 0 } : null; });
+      if (!chatImage?.alt || !chatImage.blob || !chatImage.loaded) throw new Error(`${shot.label}: chat's new flat image is missing: ${JSON.stringify(chatImage)}`);
+      if (!(measured.homes >= 4) || !(measured.litWindows > 0) || measured.banners < 2 || !measured.post?.hdr) throw new Error(`${shot.label}: the square lost its town.`);
+    } else {
+      if (new Set(measured.frameSizes).size !== 1 || measured.frames < 2) throw new Error(`${shot.view}/${shot.label}: the animated frames do not share one grid.`);
+      if (measured.source?.rendition !== 'gif' || measured.flatFrames !== measured.frames) throw new Error(`${shot.view}/${shot.label}: the statue did not come from the decoded GIF.`);
+    }
     if (measured.source?.origin !== 'simulated' || !measured.simulatedVisible) throw new Error(`${shot.view}/${shot.label}: the SIMULATED source is not labelled.`);
     if (!(measured.statueMetres >= 4 && measured.statueMetres <= 6)) throw new Error(`${shot.view}/${shot.label}: the statue stands ${measured.statueMetres} m.`);
     if (measured.overflow) throw new Error(`${shot.view}/${shot.label}: the page overflows horizontally.`);
@@ -108,10 +121,10 @@ try {
   }
   const tiles = await Promise.all(taken.map(async shot => ({ ...shot, data: (await readFile(shot.file)).toString('base64') })));
   const sheet = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  await sheet.setContent(`<html><body style="margin:0;background:#292830;color:#eadfc8;font:13px Georgia"><h1 style="font-weight:normal;font-size:20px;margin:16px 20px 4px">Chatdom · Emote workshop · ${SET === 'chat' ? 'E08 · chat in the square' : SET.startsWith('kingdom') ? 'E07 · the square' : 'E02'}</h1><p style="margin:0 20px 12px;color:#c6b493">SIMULATED source (original animated toadWave GIF) · real decoder, compiler, voxel workers, clay material, light field and sun shadows</p><div style="display:flex;flex-wrap:wrap;gap:10px;padding:0 20px 20px">${tiles.map(t => `<figure style="margin:0;width:${t.size[0] < 1000 ? 150 : 660}px"><img style="width:100%;display:block" src="data:image/png;base64,${t.data}"><figcaption style="padding-top:4px">${t.view} · ${t.label}</figcaption></figure>`).join('')}</div></body></html>`);
+  await sheet.setContent(`<html><body style="margin:0;background:#292830;color:#eadfc8;font:13px Georgia"><h1 style="font-weight:normal;font-size:20px;margin:16px 20px 4px">Chatdom · Emote workshop · ${SET === 'check' ? 'E09 · after the daily check' : SET === 'chat' ? 'E08 · chat in the square' : SET.startsWith('kingdom') ? 'E07 · the square' : 'E02'}</h1><p style="margin:0 20px 12px;color:#c6b493">SIMULATED source (original animated toadWave GIF) · real decoder, compiler, voxel workers, clay material, light field and sun shadows</p><div style="display:flex;flex-wrap:wrap;gap:10px;padding:0 20px 20px">${tiles.map(t => `<figure style="margin:0;width:${t.size[0] < 1000 ? 150 : 660}px"><img style="width:100%;display:block" src="data:image/png;base64,${t.data}"><figcaption style="padding-top:4px">${t.view} · ${t.label}</figcaption></figure>`).join('')}</div></body></html>`);
   await sheet.waitForFunction(() => [...document.images].every(image => image.complete && image.naturalWidth > 0));
   // The square's sets keep their own sheet and stats so the stream set's evidence stays beside them.
-  const suffix = SET.startsWith('kingdom') || SET === 'chat' ? `-${SET}` : '';
+  const suffix = SET.startsWith('kingdom') || SET === 'chat' || SET === 'check' ? `-${SET}` : '';
   await sheet.screenshot({ path: `${out}/review-sheet${suffix}@1440.png`, fullPage: true });
   await sheet.close();
   await writeFile(`${out}/capture-stats${suffix}.json`, JSON.stringify(taken.map(({ file, view, label, measured }) => ({ file, view, label, ...measured })), null, 2) + '\n');

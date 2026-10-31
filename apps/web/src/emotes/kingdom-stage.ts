@@ -7,11 +7,11 @@ import { homeLifeAnchors } from '@chatdom/world';
 import { assembleLook, findReviewLook, REST_POSE, type AvatarPose } from '@chatdom/content/avatars';
 import { createCitizen, type Citizen } from '../avatar-bench/stage';
 import { createHomeLife, type HomeLifeSite } from '../kingdom/home-life';
-import { composeStatueFrame, layoutEmoteBanner, layoutEmoteStatue, sampleEmoteFrame, type ApprovedEmoteVisual, type EmoteBannerMaterials, type EmoteCatalogueView } from '../../../../packages/emotes/src/index';
+import { composeDrapedPlinth, composeStatueFrame, createEmoteDrape, layoutEmoteBanner, layoutEmotePlinth, layoutEmoteStatue, sampleEmoteFrame, type ApprovedEmoteVisual, type EmoteBannerMaterials, type EmoteCatalogueView } from '../../../../packages/emotes/src/index';
 import { CHAT_CROWD, CHAT_HELD_MS, createKingdomChat, type ChatOverlay, type KingdomChat, type KingdomChatReport } from './kingdom-chat';
-import { clothSwing, splitBannerCloth } from './kingdom-banner';
+import { clothSwing, furledBannerCloth, splitBannerCloth } from './kingdom-banner';
 import { CITIZENS, DAIS_OUTER_Y, DAIS_Y, GROUND_Y, HOME_PLOTS, PROPS, SQUARE, squareAsset } from './kingdom-square';
-import type { BenchView } from './params';
+import type { BenchView, SquareView } from './params';
 import { cellBox, fitDistance, glowTexture, hash2, LANTERN_FLAME_CELLS, lanternBlueprint, worldBox } from './stage';
 
 const CELL = VOXEL_METRES.build;
@@ -25,14 +25,17 @@ const MOTES = 220;
 const STRIP_CELLS = 2;
 /** The kingdom's livery for its standards: a deep field, gold trim, oak and brass. */
 const LIVERY: EmoteBannerMaterials = { field: MAT.fabricMutedRed, trim: MAT.fabricGold, pole: MAT.timber, finial: MAT.brass, footing: MAT.stone };
+const PLINTH = { footing: MAT.darkStone, body: MAT.limestone, cap: MAT.stone, plate: MAT.brass };
 /** One arm up, the elbow soft: a citizen waving back at the statue. */
 const WAVE_BACK: AvatarPose = { id: 'emote.wave-back', label: 'Waving back at the statue', rotations: { upperArmRight: [0, 0, 148], forearmRight: [0, 0, 18], upperArmLeft: [0, 0, -6], head: [-12, 0, 0] } };
 
 export interface KingdomEmoteStageReport {
   readonly view: BenchView;
   readonly hour: number;
-  readonly statueRevision: string;
-  readonly heraldryRevision: string;
+  /** Null once the carving was withdrawn: the plinth stands draped and the standards fly plain. */
+  readonly statueRevision: string | null;
+  readonly heraldryRevision: string | null;
+  readonly draped: boolean;
   readonly statueCells: readonly [number, number, number];
   readonly plinthCells: readonly [number, number];
   readonly statueMetres: number;
@@ -75,8 +78,14 @@ export interface KingdomEmoteStage {
 export interface KingdomEmoteStageInput {
   readonly host: HTMLElement;
   readonly hour: number;
-  readonly statue: ApprovedEmoteVisual;
-  readonly heraldry: ApprovedEmoteVisual;
+  readonly view?: SquareView;
+  /**
+   * The public catalogue's current resolutions. Null when the carving was withdrawn (its source
+   * changed or left): then `withdrawn` carries the placement's kept sizes, never the old geometry.
+   */
+  readonly statue: ApprovedEmoteVisual | null;
+  readonly heraldry: ApprovedEmoteVisual | null;
+  readonly withdrawn?: { readonly statueCells: readonly [number, number, number]; readonly chargeCells: readonly [number, number] };
   /** A held frame (captures, reduced motion) or null to play. */
   readonly frame: number | null;
   readonly isDisposed: () => boolean;
@@ -116,7 +125,8 @@ const unit = (seed: number) => (seed % 10007) / 10007;
 export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Promise<KingdomEmoteStage | null> {
   const { host, statue, heraldry } = input;
   // Listening to chat, the square holds a SIMULATED crowd and its own moment; otherwise one or two people for scale.
-  const crowd = input.chat ? CHAT_CROWD : CITIZENS;
+  // Nobody waves at a covered plinth: after a withdrawal the same neighbours simply stand by.
+  const crowd = input.chat ? CHAT_CROWD : statue ? CITIZENS : CITIZENS.map(c => ({ ...c, waving: false }));
   const heldTime = input.chat ? CHAT_HELD_MS : HELD_TIME_MS;
   const environment = getEnvironment(input.hour);
   const quality: PostQuality = navigator.webdriver ? 'capture' : 'balanced';
@@ -161,14 +171,25 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
   scene.add(composition);
   const world = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).applyAxisAngle(Y_AXIS, turn);
 
-  // The statue: one composite per distinct carved frame, all on the same plinth and origin.
-  const layout = layoutEmoteStatue(statue.frames, { footing: MAT.darkStone, body: MAT.limestone, cap: MAT.stone, plate: MAT.brass }, `kingdom.plinth.${statue.revision.slice(-8)}`);
-  const frameKeys = statue.frames.map(frame => JSON.stringify(frame.blueprint.boxes));
+  // The statue: one composite per distinct carved frame, all on the same plinth and origin. A
+  // withdrawn carving leaves its plinth exactly as it was, waiting under the kingdom's cloth.
+  const kept = input.withdrawn;
+  if ((!statue || !heraldry) && !kept) throw new Error('A withdrawn carving needs its placement sizes.');
+  const layout = statue
+    ? layoutEmoteStatue(statue.frames, PLINTH, `kingdom.plinth.${statue.revision.slice(-8)}`)
+    : layoutEmotePlinth(kept!.statueCells, PLINTH, 'kingdom.plinth.waiting');
+  const frameKeys = statue ? statue.frames.map(frame => JSON.stringify(frame.blueprint.boxes)) : ['draped'];
   const uniqueKeys = [...new Set(frameKeys)];
-  const composites = uniqueKeys.map(key => composeStatueFrame(layout, statue.frames[frameKeys.indexOf(key)]!, `kingdom.statue.${statue.revision.slice(-8)}.f${frameKeys.indexOf(key)}`));
+  const composites = statue
+    ? uniqueKeys.map(key => composeStatueFrame(layout, statue.frames[frameKeys.indexOf(key)]!, `kingdom.statue.${statue.revision.slice(-8)}.f${frameKeys.indexOf(key)}`))
+    : [composeDrapedPlinth(layout, createEmoteDrape(kept!.statueCells, { cloth: MAT.cream, cord: MAT.fabricGold }, 'kingdom.drape', 2), 'kingdom.plinth.draped')];
   // The standards: the heraldry charge on the kingdom's livery, the cloth cut into swinging columns.
-  const banner = layoutEmoteBanner(heraldry.mask, LIVERY, `kingdom.banner.${heraldry.revision.slice(-8)}`);
+  // Withdrawn, they fly the plain livery at the same size until a new charge is raised.
+  const charge = heraldry?.mask ?? { width: kept!.chargeCells[0], height: kept!.chargeCells[1], materialIds: new Uint16Array(kept!.chargeCells[0] * kept!.chargeCells[1]) };
+  const banner = layoutEmoteBanner(charge, LIVERY, `kingdom.banner.${heraldry?.revision.slice(-8) ?? 'plain'}`);
   const cloth = splitBannerCloth(banner, LIVERY, STRIP_CELLS);
+  // Without a charge the standards are furled at the crossbar rather than flying an empty field.
+  const furled = heraldry ? null : furledBannerCloth(cloth, LIVERY, 'kingdom.banner.furled');
   const lantern = lanternBlueprint();
   const homes = HOME_PLOTS.map(plot => createHearthHome(plot.tier, plot.variant));
   const doorLamp = createDoorLantern('hearth');
@@ -205,7 +226,8 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
       Promise.all(composites.map((composite, i) => meshOf({ blueprint: composite }, `statue-frame-${i}`))),
       Promise.all(PROPS.banners.map(async (_, b) => ({
         frame: await meshOf({ blueprint: cloth.frame }, `banner-${b}`),
-        strips: await Promise.all(cloth.strips.map(strip => meshOf({ blueprint: strip.blueprint }, `banner-${b}-cloth-${strip.x}`))),
+        roll: furled ? await meshOf({ blueprint: furled }, `banner-${b}-furled`) : null,
+        strips: furled ? [] : await Promise.all(cloth.strips.map(strip => meshOf({ blueprint: strip.blueprint }, `banner-${b}-cloth-${strip.x}`))),
       }))),
       Promise.all(PROPS.lanterns.map((_, i) => meshOf({ blueprint: lantern }, `lantern-${i}`))),
       Promise.all(homes.map((home, i) => meshOf({ blueprint: home }, `home-${i}`))),
@@ -238,10 +260,11 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
     // Standards: the rigid frame, and each cloth column on a hinge at the crossbar.
     const [bannerW, , bannerD] = banner.blueprint.size;
     const hangs = cloth.clothTop - cloth.clothBottom;
-    const swings = bannerParts.map(({ frame, strips }, b) => {
+    const swings = bannerParts.map(({ frame, roll, strips }, b) => {
       const spec = PROPS.banners[b]!, holder = new THREE.Group();
       stand(holder, [bannerW, 0, bannerD], spec.at[0], GROUND_Y, spec.at[1], spec.facing);
       holder.add(frame);
+      if (roll) holder.add(roll);
       return strips.map((strip, i) => {
         const column = cloth.strips[i]!, hinge = new THREE.Group();
         hinge.position.set(column.x * CELL, cloth.clothTop * CELL, cloth.hingeZ * CELL);
@@ -304,7 +327,7 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
 
     // Sun shadows: everything that stands still casts once. The statue's shown frame and the cloth are
     // re-registered whenever they change, so a hidden frame never leaves its shadow behind.
-    const still = [ground, ...lanternMeshes, ...homeMeshes, ...lampMeshes, ...furniture, ...bannerParts.map(p => p.frame)];
+    const still = [ground, ...lanternMeshes, ...homeMeshes, ...lampMeshes, ...furniture, ...bannerParts.flatMap(p => p.roll ? [p.frame, p.roll] : [p.frame])];
     for (const object of still) shadows.register(object);
     for (const person of people) person.root.traverse(child => { if (child instanceof THREE.Mesh) shadows.register(child); });
 
@@ -390,7 +413,7 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
     };
 
     let triangles = 0;
-    for (const object of [ground, ...lanternMeshes, ...homeMeshes, ...lampMeshes, ...furniture, ...bannerParts.flatMap(p => [p.frame, ...p.strips])]) triangles += (object.geometry.index?.count ?? 0) / 3;
+    for (const object of [ground, ...lanternMeshes, ...homeMeshes, ...lampMeshes, ...furniture, ...bannerParts.flatMap(p => [p.frame, ...(p.roll ? [p.roll] : []), ...p.strips])]) triangles += (object.geometry.index?.count ?? 0) / 3;
     triangles += people.reduce((sum, p) => sum + p.stats.triangles, 0);
 
     // The stream's frame: the statue the hero a little left of centre, a standard at either hand,
@@ -445,12 +468,12 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
       post.render(1 / 60);
     };
     // Held stills show the held frame at a fixed moment; playing follows the emote's own timing.
-    const held = input.frame !== null ? Math.min(input.frame, statue.frames.length - 1) : 0;
-    const heldElapsed = statue.frames.slice(0, held).reduce((sum, f) => sum + f.durationMs, 0);
+    const held = statue && input.frame !== null ? Math.min(input.frame, statue.frames.length - 1) : 0;
+    const heldElapsed = statue ? statue.frames.slice(0, held).reduce((sum, f) => sum + f.durationMs, 0) : 0;
     let playing = false, startedAt = 0, pausedAt = heldTime + heldElapsed;
     const tick = (now: number): void => {
       const elapsed = now - startedAt;
-      show(sampleEmoteFrame(statue, elapsed).index);
+      show(statue ? sampleEmoteFrame(statue, elapsed).index : 0);
       animate(elapsed + heldTime);
       draw(elapsed + heldTime);
       if (playing) frameRequest = window.requestAnimationFrame(tick);
@@ -476,7 +499,7 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
     };
     if (input.frame === null) setPlaying(true);
 
-    const [w, h, d] = statue.frames[0]!.blueprint.size;
+    const [w, h, d] = statue ? statue.frames[0]!.blueprint.size : kept!.statueCells;
     const litWindows = windows.getSources().filter(s => s.strength > 0).length;
     const diagnostics = post.diagnostics();
     const redraw = () => { animate(playing ? performance.now() - startedAt + heldTime : pausedAt); draw(playing ? performance.now() - startedAt + heldTime : pausedAt); };
@@ -487,11 +510,11 @@ export async function createKingdomEmoteStage(input: KingdomEmoteStageInput): Pr
       resize() { aim(); redraw(); },
       onFrame(listener) { listeners.push(listener); listener(shown); },
       report: () => ({
-        view: input.chat ? 'chat' : 'kingdom', hour: input.hour, statueRevision: statue.revision, heraldryRevision: heraldry.revision,
+        view: input.view ?? (input.chat ? 'chat' : 'kingdom'), hour: input.hour, statueRevision: statue?.revision ?? null, heraldryRevision: heraldry?.revision ?? null, draped: !statue,
         statueCells: [w, h, d], plinthCells: layout.footprintCells, statueMetres: h * CELL,
-        frameSizes: statue.frames.map(f => f.blueprint.size.join('×')), frames: statue.frames.length, distinctFrameMeshes: statueMeshes.length,
+        frameSizes: statue ? statue.frames.map(f => f.blueprint.size.join('×')) : [], frames: statue?.frames.length ?? 0, distinctFrameMeshes: statueMeshes.length,
         frameShown: shown, playing, homes: homes.length, litHomes: HOME_PLOTS.filter(p => p.lit).length, litWindows, chimneys,
-        banners: bannerParts.length, clothStrips: cloth.strips.length, lanterns: lanternMeshes.length, motes: MOTES, citizens: people.length,
+        banners: bannerParts.length, clothStrips: furled ? 0 : cloth.strips.length, lanterns: lanternMeshes.length, motes: MOTES, citizens: people.length,
         triangles, draws: renderer.info.render.calls, shadowCasters: shadows.stats.casters, post: { hdr: diagnostics.hdr, quality },
         width: host.clientWidth, height: host.clientHeight, chat: chat?.report() ?? null,
       }),

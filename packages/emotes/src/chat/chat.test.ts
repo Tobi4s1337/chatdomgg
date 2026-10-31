@@ -145,6 +145,25 @@ describe('Chat emotes in the world', () => {
     expect(chat.frame(T0 + 27_000, positions).weather.map(w => w.slots)).toEqual([3]);
   });
 
+  it('bounds a chant on both sides of a late, out-of-order message', () => {
+    const chat = make(), positions = crowd(6);
+    // A voice from just ahead of the host's clock arrives before a straggler from 6.1 s earlier: the
+    // straggler cannot pull it into a chant that would have started before it spoke.
+    chat.receive(cue(0, [toad], T0 + 6_000), T0 + 10_000, positions);
+    chat.receive(cue(1, [toad], T0 + 11_400), T0 + 10_000, positions);
+    expect(chat.receive(cue(2, [toad], T0 + 5_300), T0 + 10_100, positions)).toMatchObject({ status: 'accepted', weather: null });
+    expect(chat.frame(T0 + 10_200, positions).weather).toEqual([]);
+    // A straggler inside one window with the voices that came before it starts that chant at itself.
+    expect(chat.receive(cue(3, [toad], T0 + 9_000), T0 + 11_600, positions)).toMatchObject({ weather: `weather.twitch.toad.${T0 + 9_000}` });
+    expect(chat.frame(T0 + 11_700, positions).weather).toMatchObject([{ startedAt: T0 + 9_000, slots: 3, spawn: [0, 2, 3].map(slot => positions.get(slot)) }]);
+    // A straggler that only completes a window with later voices: the chant starts at the newest of them.
+    const other = make();
+    other.receive(cue(0, [toad], T0 + 6_000), T0 + 10_000, positions);
+    other.receive(cue(1, [toad], T0 + 11_400), T0 + 10_000, positions);
+    expect(other.receive(cue(2, [toad], T0 + 6_200), T0 + 10_100, positions)).toMatchObject({ weather: `weather.twitch.toad.${T0 + 11_400}` });
+    expect(other.frame(T0 + 11_500, positions).weather).toMatchObject([{ startedAt: T0 + 11_400, endsAt: T0 + 11_400 + T.weatherMs, slots: 3 }]);
+  });
+
   it('keeps independent slots honest per emote, needs an approved effect, and caps two motifs', () => {
     const view = catalogue({ effects: { 'twitch.toad': effect('twitch.toad', 'r1'), 'twitch.frog': effect('twitch.frog', 'r2'), 'twitch.fish': effect('twitch.fish', 'r3') } });
     const chat = make(view), positions = crowd(9);

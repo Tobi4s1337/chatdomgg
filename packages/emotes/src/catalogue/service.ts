@@ -5,11 +5,12 @@ import { sha256Hex, sha256Text } from '../sha256';
 import type {
   ApprovedEmoteVisual, CompiledEmote, EmoteCatalogueView, EmoteImageDecoder, EmoteOrigin, EmotePurpose, EmoteReveal, EmoteSource, InlineEmoteVisual,
 } from '../types';
-import type { EmoteBlobStore } from './blobs';
+import { verifyEmoteBlobStore, type EmoteBlobStore } from './blobs';
 import { decodeCompiledEmote, encodeCompiledEmote } from './compiled-codec';
 import { renderContactSheets } from './contact-sheet';
-import { catalogueHealth, createEmoteCatalogueRefresher, createKingdomJobLimiter, THIRD_PARTY_PROVIDERS, type EmoteCatalogueChanges, type EmoteRefreshReason, type EmoteSourceRecord, type ThirdPartyProvider } from './refresh';
+import { catalogueHealth, createEmoteCatalogueRefresher, createKingdomJobLimiter, THIRD_PARTY_PROVIDERS, type EmoteCatalogueChanges, type EmoteRefreshReason, type EmoteRefreshResult, type EmoteSourceRecord, type ThirdPartyProvider } from './refresh';
 import { emptyEmoteState, type EmoteCandidateRecord, type EmoteRepository, type EmoteRetireReason, type EmoteStoredState } from './repository';
+import { emptyEmoteRefreshSchedule, planEmoteRefresh, refreshLeftGaps, type EmoteRefreshPlan } from './schedule';
 import { createThirdPartyEmoteAdapter } from './third-party';
 import { createTwitchEmoteAdapter } from './twitch';
 import type { AuthorizedEmoteTransport, EmoteCatalogueAdapter } from './types';
@@ -78,8 +79,43 @@ export interface EmoteGenesisFact {
   allowedUses: ('statue' | 'weathervane' | 'stained-glass')[];
 }
 
+/**
+ * One carving standing in public: what a scene host places. Carries no reason, review or source
+ * detail, so a withdrawal looks the same whether the source changed, left or was switched off.
+ */
+export interface EmotePlacement {
+  id: string;
+  purpose: EmotePurpose;
+  revision: string;
+  origin: EmoteOrigin;
+}
+
+/** What a host changes in its world between two placement lists (see `diffEmotePlacements`). */
+export interface EmotePlacementChanges {
+  raise: EmotePlacement[];
+  /** Same emote and purpose, a newer carving: swap it in place, keeping the placement. */
+  replace: { from: EmotePlacement; to: EmotePlacement }[];
+  /** Withdraw quietly: no spectacle, no edit to anyone's home; the host's own hiding policy applies. */
+  withdraw: EmotePlacement[];
+}
+
+/** Pure: the host keeps the list it placed and asks what changed after every catalogue revision. */
+export function diffEmotePlacements(before: readonly EmotePlacement[], after: readonly EmotePlacement[]): EmotePlacementChanges {
+  const key = (p: EmotePlacement) => `${p.id}|${p.purpose}`;
+  const old = new Map(before.map(p => [key(p), p])), next = new Map(after.map(p => [key(p), p]));
+  const changes: EmotePlacementChanges = { raise: [], replace: [], withdraw: [] };
+  for (const [k, placement] of next) {
+    const was = old.get(k);
+    if (!was) changes.raise.push(placement);
+    else if (was.revision !== placement.revision) changes.replace.push({ from: was, to: placement });
+  }
+  for (const [k, placement] of old) if (!next.has(k)) changes.withdraw.push(placement);
+  return changes;
+}
+
 const fail = (code: EmoteServiceFailureCode, message: string): EmoteServiceFailure => ({ status: 'failed', code, message });
 const PURPOSES = new Set<EmotePurpose>(['statue', 'heraldry', 'motif', 'effect']);
+const REASONS = new Set<EmoteRefreshReason>(['genesis', 'go-live', 'daily', 'opt-in']);
 const DECISIONS = new Set(['approve', 'hold', 'refuse', 'cold']);
 const MAX_RETIRED = 256, MAX_REVEALS = 256, CAS_ATTEMPTS = 4;
 const INLINE_LIMITS = { entries: 256, bytes: 16 * 1024 * 1024 };
@@ -147,12 +183,24 @@ function reconcile(state: EmoteStoredState, paletteRevision: number | null, atMs
     if (reason) { candidate.state = 'retired'; candidate.retired = { reason, at: atMs }; }
   }
   state.selections = state.selections.filter(selection => records.get(selection.id)?.sourceHash === selection.sourceHash);
+  withdrawRetiredReveals(state, atMs);
   const retired = state.candidates.filter(c => c.state === 'retired');
   if (retired.length > MAX_RETIRED) {
     const drop = new Set(retired.sort((a, b) => a.retired!.at - b.retired!.at).slice(0, retired.length - MAX_RETIRED));
     state.candidates = state.candidates.filter(c => !drop.has(c));
   }
 }
+
+/** A reveal whose carving retired before the host acknowledged it is never replayed. */
+function withdrawRetiredReveals(state: EmoteStoredState, atMs: number): void {
+  for (const record of state.reveals) {
+    if (record.acknowledgedAt !== null || record.withdrawnAt) continue;
+    const candidate = state.candidates.find(c => c.id === record.reveal.emoteId && c.revision === record.reveal.revision && c.purpose === 'statue');
+    if (!candidate || candidate.state === 'retired') record.withdrawnAt = atMs;
+  }
+}
+
+const isPending = (record: EmoteStoredState['reveals'][number]): boolean => record.acknowledgedAt === null && !record.withdrawnAt;
 
 const revealId = (kingdomId: string, candidate: EmoteCandidateRecord, epoch: string): string =>
   `reveal.${sha256Text(`${kingdomId}|${candidate.id}|${candidate.revision}|${epoch}`).slice(0, 32)}`;
@@ -179,9 +227,10 @@ function publishConfirmed(state: EmoteStoredState, origin: EmoteOrigin, atMs: nu
       state.reveals.push({ reveal: { id, kingdomId: state.kingdomId, emoteId: candidate.id, revision: candidate.revision, streamEpoch: epoch, origin }, createdAt: atMs, acknowledgedAt: null });
     }
   }
+  withdrawRetiredReveals(state, atMs);
   if (state.reveals.length > MAX_REVEALS) {
-    // Only acknowledged reveals are ever dropped; an unacknowledged one is never lost.
-    const acknowledged = state.reveals.filter(r => r.acknowledgedAt !== null);
+    // Only acknowledged or withdrawn reveals are ever dropped; a pending one is never lost.
+    const acknowledged = state.reveals.filter(r => !isPending(r));
     const excess = new Set(acknowledged.slice(0, state.reveals.length - MAX_REVEALS));
     state.reveals = state.reveals.filter(r => !excess.has(r));
   }
@@ -199,7 +248,9 @@ function publishConfirmed(state: EmoteStoredState, origin: EmoteOrigin, atMs: nu
  * reveal → the host acknowledges after its world commit. Approval binds source hash, geometry hash,
  * compiler, palette revision, purpose and scale; any change retires it quietly.
  */
-export function createEmoteCatalogueService(ports: EmoteCatalogueServicePorts) {
+export function createEmoteCatalogueService(bound: EmoteCatalogueServicePorts) {
+  // Every content address is checked here, whatever the bound store does.
+  const ports: EmoteCatalogueServicePorts = { ...bound, blobs: verifyEmoteBlobStore(bound.blobs) };
   const adapters = ports.adapters ?? [createTwitchEmoteAdapter(ports.transport), ...THIRD_PARTY_PROVIDERS.map(p => createThirdPartyEmoteAdapter(p, ports.transport))];
   const refresher = createEmoteCatalogueRefresher({ transport: ports.transport, decoder: ports.decoder, blobs: ports.blobs, adapters, ...(ports.deadline ? { deadline: ports.deadline } : {}) });
   const jobs = createKingdomJobLimiter();
@@ -233,6 +284,14 @@ export function createEmoteCatalogueService(ports: EmoteCatalogueServicePorts) {
     try { return await ports.authority.requireMonarch(session, kingdomId); } catch { return fail('forbidden', 'Only the monarch can do this.'); }
   }
 
+  /** A read that failed outright still counts toward the retry backoff, so the host never hammers. */
+  async function recordFailedRead(kingdomId: KingdomId, atMs: number): Promise<void> {
+    await mutate(kingdomId, draft => {
+      const schedule = draft.schedule ?? emptyEmoteRefreshSchedule();
+      draft.schedule = { ...schedule, failures: schedule.failures + 1, lastAttemptAt: atMs };
+    }).catch(() => undefined);
+  }
+
   async function palette(kingdomId: KingdomId): Promise<{ allowedMaterialIds: readonly number[]; paletteRevision: number } | null> {
     try { return await ports.kingdom.palette(kingdomId); } catch { return null; }
   }
@@ -253,31 +312,84 @@ export function createEmoteCatalogueService(ports: EmoteCatalogueServicePorts) {
   }
 
   const service = {
-    /** Reads every allowed provider and reconciles. `reason` is the host's schedule: Genesis, go-live or the daily check. */
+    /**
+     * Reads every allowed provider and reconciles. `reason` is the host's schedule: Genesis, go-live,
+     * the daily check or a provider the monarch just switched on (`tick` picks it for the host).
+     * The commit re-checks what may have moved while the network was busy: a newer stored read wins,
+     * a changed channel throws this read away, a provider switched off meanwhile stays withdrawn and
+     * one switched on is read again soon. The result's `changes` are exactly what was committed.
+     */
     async refresh(input: { kingdomId: KingdomId; reason: EmoteRefreshReason; atMs: number }, signal: AbortSignal): Promise<EmoteMutationResult & { changes?: EmoteCatalogueChanges }> {
-      if (!checkKingdom(input.kingdomId) || !Number.isFinite(input.atMs)) return fail('invalid', 'The refresh request is malformed.');
+      if (!checkKingdom(input.kingdomId) || !Number.isFinite(input.atMs) || !REASONS.has(input.reason)) return fail('invalid', 'The refresh request is malformed.');
       const channelId = await ports.kingdom.channelId(input.kingdomId).catch(() => null);
       if (!channelId) return fail('unavailable', 'This kingdom has no bound Twitch channel.');
       const before = await load(input.kingdomId);
       if ('status' in before) return before;
       // A different channel never inherits the previous channel's entries, even through an outage.
       const previous = before.snapshot && before.snapshot.channelId !== channelId ? { ...before.snapshot, providers: {} } : before.snapshot;
-      let result;
+      const optIns = { ...before.providers };
+      let result: EmoteRefreshResult;
       try {
-        result = await refresher.refresh({ kingdomId: input.kingdomId, channelId, reason: input.reason, atMs: input.atMs, thirdParty: before.providers, previous }, signal);
+        result = await refresher.refresh({ kingdomId: input.kingdomId, channelId, reason: input.reason, atMs: input.atMs, thirdParty: optIns, previous }, signal);
       } catch {
         signal.throwIfAborted();
+        await recordFailedRead(input.kingdomId, input.atMs);
         return fail('unavailable', 'The catalogue could not be refreshed.');
       }
+      const channelNow = await ports.kingdom.channelId(input.kingdomId).catch(() => null);
+      if (channelNow !== channelId) return fail('stale', 'The kingdom\'s channel changed while its catalogue was read; read it again.');
       const paletteNow = await palette(input.kingdomId);
+      let committed = result.changes;
       const applied = await mutate(input.kingdomId, draft => {
         // A newer refresh committed while this one ran: keep it, never roll it back.
         if (draft.snapshot && draft.snapshot.refreshedAt > input.atMs) return fail('stale', 'A newer refresh has already been stored.');
-        draft.snapshot = result.snapshot;
+        const snapshot = structuredClone(result.snapshot), changes = structuredClone(result.changes);
+        let providersChanged = false;
+        for (const provider of THIRD_PARTY_PROVIDERS) {
+          if (draft.providers[provider] === optIns[provider]) continue;
+          if (draft.providers[provider]) { providersChanged = true; continue; }
+          // Switched off while this read was in flight: what it fetched for the provider is never stored.
+          for (const entry of snapshot.providers[provider]?.entries ?? []) {
+            changes.withdrawn.push(entry.id);
+            for (const list of [changes.added, changes.changed, changes.renamed, changes.unavailable]) { const at = list.indexOf(entry.id); if (at >= 0) list.splice(at, 1); }
+          }
+          snapshot.providers[provider] = { provider, health: 'disabled', lastSuccessAt: null, attemptedAt: null, problem: null, truncated: false, skipped: [], entries: [] };
+        }
+        const schedule = draft.schedule ?? emptyEmoteRefreshSchedule();
+        const gaps = refreshLeftGaps(snapshot);
+        draft.schedule = {
+          goLiveEpoch: draft.stream?.live && snapshot.providers.twitch?.health === 'current' ? draft.stream.epoch : schedule.goLiveEpoch,
+          providersChanged, failures: gaps ? schedule.failures + 1 : 0, lastAttemptAt: input.atMs,
+        };
+        draft.snapshot = snapshot;
         draft.refreshedAt = input.atMs;
         reconcile(draft, paletteNow?.paletteRevision ?? null, input.atMs);
+        committed = changes;
       });
-      return applied.status === 'applied' ? { ...applied, changes: result.changes } : applied;
+      return applied.status === 'applied' ? { ...applied, changes: committed } : applied;
+    },
+
+    /** When this kingdom's catalogue is read next, and why. Pure over the stored state. */
+    async nextRefresh(kingdomId: KingdomId): Promise<EmoteRefreshPlan | EmoteServiceFailure> {
+      if (!checkKingdom(kingdomId)) return fail('invalid', 'Unknown kingdom.');
+      const state = await load(kingdomId);
+      return 'status' in state ? state : planEmoteRefresh(state);
+    },
+
+    /**
+     * The host's clock for one kingdom: call it after every authoritative stream change and on a
+     * timer (`nextAt` says when). Reads the catalogue only when the schedule says so; otherwise it
+     * changes nothing and makes no request.
+     */
+    async tick(input: { kingdomId: KingdomId; atMs: number }, signal: AbortSignal): Promise<(EmoteMutationResult & { reason: EmoteRefreshReason | null; changes?: EmoteCatalogueChanges; nextAt: number | null })> {
+      if (!checkKingdom(input.kingdomId) || !Number.isFinite(input.atMs)) return { ...fail('invalid', 'The tick is malformed.'), reason: null, nextAt: null };
+      const state = await load(input.kingdomId);
+      if ('status' in state) return { ...state, reason: null, nextAt: null };
+      const plan = planEmoteRefresh(state);
+      if (plan.dueAt > input.atMs) return { status: 'applied', revision: state.revision, reason: null, nextAt: plan.dueAt };
+      const result = await service.refresh({ kingdomId: input.kingdomId, reason: plan.reason, atMs: input.atMs }, signal);
+      const after = await load(input.kingdomId);
+      return { ...result, reason: plan.reason, nextAt: 'status' in after ? null : planEmoteRefresh(after).dueAt };
     },
 
     /** The monarch opts a third-party provider in or out. Off withdraws its emotes at once and stops every fetch. */
@@ -288,7 +400,8 @@ export function createEmoteCatalogueService(ports: EmoteCatalogueServicePorts) {
       return mutate(input.kingdomId, draft => {
         if (draft.providers[input.provider] === input.enabled) return 'unchanged';
         draft.providers[input.provider] = input.enabled;
-        if (!input.enabled) reconcile(draft, null, draft.stream?.atMs ?? draft.refreshedAt ?? 0);
+        if (input.enabled) draft.schedule = { ...(draft.schedule ?? emptyEmoteRefreshSchedule()), providersChanged: true };
+        else reconcile(draft, null, draft.stream?.atMs ?? draft.refreshedAt ?? 0);
       });
     },
 
@@ -444,7 +557,7 @@ export function createEmoteCatalogueService(ports: EmoteCatalogueServicePorts) {
     async pendingReveals(kingdomId: KingdomId): Promise<readonly EmoteReveal[]> {
       if (!checkKingdom(kingdomId)) return [];
       const state = await load(kingdomId);
-      return 'status' in state ? [] : state.reveals.filter(r => r.acknowledgedAt === null).map(r => r.reveal);
+      return 'status' in state ? [] : state.reveals.filter(isPending).map(r => r.reveal);
     },
 
     /** Called by the authoritative host after its witnessed world commit. Idempotent. */
@@ -453,7 +566,8 @@ export function createEmoteCatalogueService(ports: EmoteCatalogueServicePorts) {
       return mutate(input.kingdomId, draft => {
         const record = draft.reveals.find(r => r.reveal.id === input.revealId);
         if (!record) return fail('not-found', 'No such reveal.');
-        if (record.acknowledgedAt !== null) return 'unchanged';
+        // Acknowledged before, or withdrawn because its carving retired: nothing left to deliver.
+        if (record.acknowledgedAt !== null || record.withdrawnAt) return 'unchanged';
         record.acknowledgedAt = input.atMs ?? draft.stream?.atMs ?? 0;
       });
     },
@@ -469,7 +583,7 @@ export function createEmoteCatalogueService(ports: EmoteCatalogueServicePorts) {
         status: 'ok', kingdomId, revision: state.revision, health: catalogueHealth(state.snapshot), providers: { ...state.providers },
         sources: [...sourceRecords(state).values()].map(r => ({ id: r.id, provider: r.provider, name: r.name, animated: r.animated, state: r.state, sourceHash: r.sourceHash, frames: r.decoded?.frames ?? null, problem: r.problem?.message ?? null })),
         candidates: state.candidates.map(c => ({ id: c.id, purpose: c.purpose, revision: c.revision, state: c.state, frames: c.frames, periodMs: c.periodMs, geometryHash: c.geometryHash, retired: c.retired?.reason ?? null })),
-        pendingReveals: state.reveals.filter(r => r.acknowledgedAt === null).length,
+        pendingReveals: state.reveals.filter(isPending).length,
         stream: state.stream,
       };
     },
@@ -511,6 +625,23 @@ export function createEmoteCatalogueService(ports: EmoteCatalogueServicePorts) {
           return flat ? { ...flat, bytes: flat.bytes.slice() } : null;
         },
       };
+    },
+
+    /**
+     * Every carving standing in public right now, in a stable order. The scene host diffs this list
+     * against what it placed (`diffEmotePlacements`) after each catalogue revision and withdraws,
+     * replaces or raises; a withdrawal never says why.
+     */
+    async publicPlacements(kingdomId: KingdomId): Promise<readonly EmotePlacement[]> {
+      if (!checkKingdom(kingdomId)) return [];
+      const state = await load(kingdomId);
+      if ('status' in state) return [];
+      const kingdomPalette = await palette(kingdomId);
+      const records = sourceRecords(state);
+      return state.candidates
+        .filter(c => c.state === 'published' && !invalidation(state, c, kingdomPalette?.paletteRevision ?? null, records))
+        .map(c => ({ id: c.id, purpose: c.purpose, revision: c.revision, origin: ports.origin }))
+        .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : a.purpose < b.purpose ? -1 : a.purpose > b.purpose ? 1 : 0);
     },
 
     /** Server facts for Genesis (`ChannelGenesisFacts.approvedEmotes`): published statues whose approval still holds. */

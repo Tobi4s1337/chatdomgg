@@ -3,7 +3,8 @@ export * from './profiles';
 export * from './palette';
 export { compileEmote } from './compile';
 export { sha256Hex, sha256Text, createSha256 } from './sha256';
-export { composeStatueFrame, layoutEmoteStatue, STATUE_CLEARANCE_CELLS, type EmotePlinthMaterials, type EmoteStatueLayout } from './surfaces/statue';
+export { composeStatueFrame, layoutEmotePlinth, layoutEmoteStatue, STATUE_CLEARANCE_CELLS, type EmotePlinthMaterials, type EmoteStatueLayout } from './surfaces/statue';
+export { composeDrapedPlinth, createEmoteDrape, DRAPE_SPREAD_CELLS, type EmoteDrapeMaterials } from './surfaces/drape';
 export { createEmoteHeraldry, type EmoteHeraldryGeometry } from './surfaces/heraldry';
 export { BANNER_CLEARANCE_CELLS, layoutEmoteBanner, type EmoteBannerLayout, type EmoteBannerMaterials } from './surfaces/banner';
 export { toadWaveFixture, paintToadWave, simulatedRasterHash, SIMULATED_KINGDOM, TOAD_WAVE_SIZE } from './fixtures/toad-wave';
@@ -14,14 +15,15 @@ export { checkAssetUrl, emoteKey, isPublicAddress, EMOTE_ASSET_POLICY, EMOTE_API
 export { createTwitchEmoteAdapter, parseTwitchChannelEmotes } from './catalogue/twitch';
 export { createThirdPartyEmoteAdapter, parseBttv, parseFfz, parseSevenTv } from './catalogue/third-party';
 export { createCheckedEmoteTransport, PROVIDER_CATALOGUE_URLS, type CheckedTransportOptions, type PinnedGet } from './catalogue/checked-transport';
-export { createMemoryEmoteBlobStore, EmoteBlobError, type EmoteBlobStore } from './catalogue/blobs';
+export { createMemoryEmoteBlobStore, EmoteBlobError, verifyEmoteBlobStore, type EmoteBlobStore } from './catalogue/blobs';
+export { EMOTE_REFRESH_SCHEDULE, emptyEmoteRefreshSchedule, planEmoteRefresh, refreshLeftGaps, type EmoteRefreshPlan, type EmoteRefreshSchedule } from './catalogue/schedule';
 export {
   catalogueHealth, createEmoteCatalogueRefresher, createKingdomJobLimiter, THIRD_PARTY_PROVIDERS,
   type EmoteCatalogueChanges, type EmoteCatalogueSnapshot, type EmoteRefreshInput, type EmoteRefreshReason, type EmoteRefreshResult,
   type EmoteRefresherPorts, type EmoteSourceRecord, type ProviderCatalogueState, type ProviderHealth, type ThirdPartyProvider,
 } from './catalogue/refresh';
-export { toadWaveAnimatedFixture, toadWaveGifBytes, TOAD_WAVE_FRAMES } from './fixtures/toad-wave-animated';
-export { createEmoteCatalogueService, type EmoteAuthority, type EmoteCatalogueService, type EmoteCatalogueServicePorts, type EmoteGenesisFact, type EmoteKingdomPort, type EmoteMutationResult, type EmotePrivateCatalogue, type EmoteReviewPort, type EmoteServiceFailure, type EmoteServiceFailureCode } from './catalogue/service';
+export { toadWaveAnimatedFixture, toadWaveGifBytes, toadWaveSeasonalGifBytes, TOAD_WAVE_FRAMES } from './fixtures/toad-wave-animated';
+export { createEmoteCatalogueService, diffEmotePlacements, type EmotePlacement, type EmotePlacementChanges, type EmoteAuthority, type EmoteCatalogueService, type EmoteCatalogueServicePorts, type EmoteGenesisFact, type EmoteKingdomPort, type EmoteMutationResult, type EmotePrivateCatalogue, type EmoteReviewPort, type EmoteServiceFailure, type EmoteServiceFailureCode } from './catalogue/service';
 export { createMemoryEmoteRepository, emptyEmoteState, EmoteRepositoryError, type EmoteApprovalBinding, type EmoteCandidateRecord, type EmoteCandidateState, type EmoteRepository, type EmoteRetireReason, type EmoteRevealRecord, type EmoteSelection, type EmoteStoredState } from './catalogue/repository';
 export { decodeCompiledEmote, encodeCompiledEmote } from './catalogue/compiled-codec';
 export { CONTACT_SHEET_LIMITS, encodePngRgb, renderContactSheets } from './catalogue/contact-sheet';

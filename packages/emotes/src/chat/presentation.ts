@@ -214,20 +214,29 @@ export function createEmoteChatPresentation(options: EmoteChatOptions): EmoteCha
     // Only an approved carved effect can rain; checking it first keeps unapproved spam cheap.
     const visual = effect(emoteId);
     if (!visual) return null;
-    const voices = [...contributions.values()].filter(c => c.emoteId === emoteId && c.asOf > asOf - T.windowMs && positions.has(c.slot));
+    // A chant is one window that contains the triggering message: either ending at it, or ending at the
+    // newest voice less than a window after it (a late, out-of-order message). Never both sides at once,
+    // so a straggler cannot borrow later messages into an earlier chant or stretch it past the window.
+    const around = [...contributions.values()].filter(c => c.emoteId === emoteId && Math.abs(c.asOf - asOf) < T.windowMs && positions.has(c.slot));
+    const within = (end: number) => around.filter(c => c.asOf <= end && c.asOf > end - T.windowMs);
+    let start = asOf, voices = within(asOf);
+    if (voices.length < T.minSlots) {
+      const newest = around.reduce((max, c) => Math.max(max, c.asOf), asOf);
+      if (newest > asOf) { start = newest; voices = within(newest); }
+    }
     if (voices.length < T.minSlots) return null;
     const slots = voices.map(v => v.slot).sort((a, b) => a - b);
     const step = Math.max(1, Math.ceil(slots.length / T.maxSpawnPoints));
     const spawn = slots.filter((_, i) => i % step === 0).slice(0, T.maxSpawnPoints).map(slot => positions.get(slot)!);
     const budget = T.particles[device] / T.maxWeathers;
     const particles = Math.min(budget, T.particleBase[device] + T.particlePerSlot[device] * (slots.length - T.minSlots));
-    const id = `weather.${emoteId}.${asOf}`;
+    const id = `weather.${emoteId}.${start}`;
     const instance: EmoteWeatherInstance = {
-      id, emoteId, origin: source.origin, visual, startedAt: asOf, endsAt: asOf + T.weatherMs,
+      id, emoteId, origin: source.origin, visual, startedAt: start, endsAt: start + T.weatherMs,
       slots: slots.length, particles, spawn, seed: emoteChatSeed(`${id}|${visual.revision}`),
     };
     weather.push(instance);
-    cooldowns.set(emoteId, asOf + T.cooldownMs);
+    cooldowns.set(emoteId, start + T.cooldownMs);
     // The chant is spent: its voices start counting toward the next one only after the rest.
     for (const voice of voices) contributions.delete(`${voice.emoteId}|${voice.slot}`);
     return instance;

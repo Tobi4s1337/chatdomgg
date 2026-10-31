@@ -39,8 +39,17 @@ export const STATUE_CLEARANCE_CELLS = 8;
 export function layoutEmoteStatue(frames: readonly EmoteVoxelFrame[], materials: EmotePlinthMaterials, id: string): EmoteStatueLayout {
   const first = frames[0];
   if (!first) throw new Error('A statue needs at least one frame.');
-  const [width, height, depth] = first.blueprint.size;
   if (frames.some(frame => frame.blueprint.size.some((n, axis) => n !== first.blueprint.size[axis]))) throw new Error('Statue frames must share one size and origin.');
+  return layoutEmotePlinth(first.blueprint.size, materials, id);
+}
+
+/**
+ * The same plinth for a statue of a given frame size, without its geometry: a host keeps the
+ * placement's size, so a withdrawn carving's plinth stays exactly where and how it stood.
+ */
+export function layoutEmotePlinth(size: readonly [number, number, number], materials: EmotePlinthMaterials, id: string): EmoteStatueLayout {
+  const [width, height, depth] = size;
+  if (![width, height, depth].every(n => Number.isInteger(n) && n > 0 && n <= 256)) throw new Error('The statue size is malformed.');
   const footW = width + 10, footD = depth + 12, bodyW = width + 4, bodyD = depth + 6, capW = width + 6, capD = depth + 8;
   const centreX = footW / 2, centreZ = footD / 2;
   const span = (size: number, centre: number): [number, number] => [Math.round(centre - size / 2), Math.round(centre - size / 2) + size];

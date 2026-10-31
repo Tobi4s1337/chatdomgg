@@ -45,3 +45,22 @@ export function createMemoryEmoteBlobStore(limits: { maxBytes: number; maxEntrie
     },
   };
 }
+
+/**
+ * Wraps a bound blob store so the catalogue service checks every content address itself: a write
+ * whose bytes do not hash to the address is refused, and a read that comes back different is
+ * treated as absent. The service never relies on the bound implementation to have verified.
+ */
+export function verifyEmoteBlobStore(store: EmoteBlobStore): EmoteBlobStore {
+  return {
+    async put(hash, bytes) {
+      if (!/^[a-f0-9]{64}$/.test(hash) || !(bytes instanceof Uint8Array) || sha256Hex(bytes) !== hash) throw new EmoteBlobError('The blob does not match its content address.');
+      await store.put(hash, bytes);
+    },
+    async get(hash) {
+      if (!/^[a-f0-9]{64}$/.test(hash)) return null;
+      const bytes = await store.get(hash);
+      return bytes instanceof Uint8Array && sha256Hex(bytes) === hash ? bytes : null;
+    },
+  };
+}

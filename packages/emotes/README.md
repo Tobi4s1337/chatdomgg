@@ -71,6 +71,12 @@ with a duration and period of 0.
   and a trimmed swallow-tailed cloth. The cloth hangs from 2.25 m, above head height. The heraldry
   charge is inlaid in the cloth and stands one cell proud. This is a bench and preview composition;
   the checked heraldry factory for crest and banner owners comes with the resolvers.
+- `layoutEmotePlinth(size, materials, id)` is the same plinth from a frame size alone, and
+  `createEmoteDrape(size, {cloth, cord}, id, seed)` with `composeDrapedPlinth(layout, drape, id)`
+  covers it. A host draws this when it withdraws a carving: the plinth keeps its place and size,
+  under cloth with domed crown, vertical pleats, a pooled hem and a tied cord, until a new carving is
+  unveiled there. The covered form is generic and is shaped only by the old frame **size**, so
+  nothing of a withdrawn emote's silhouette survives in public.
 
 ## Fixtures
 
@@ -202,10 +208,16 @@ On 2026-10-31:
 - Back `EmoteRepository` and `EmoteBlobStore` with durable storage.
 - Bind `EmoteReviewPort` to Luna, `EmoteAuthority` to the monarch session and `EmoteKingdomPort` to
   the kingdom record (channel ID, sculpting palette and its revision).
-- Call `refresh` at Genesis, go-live and daily; feed `onStreamState` from the authoritative stream
-  state; drain `pendingReveals` into the world and acknowledge after the commit.
-- Give the kingdom scene `publicCatalogue(kingdomId).resolveApprovedEmote(id, 'statue')` and the
-  banner/crest owner `createEmoteHeraldry`; give Genesis `genesisFacts`.
+- Feed `onStreamState` from the authoritative stream state and call `tick({kingdomId, atMs}, signal)`
+  right after it and whenever `nextAt` (or `nextRefresh(kingdomId).dueAt`) passes. `tick` decides
+  Genesis, go-live, opt-in or daily and makes no request when nothing is due. Drain `pendingReveals`
+  into the world and acknowledge after the commit.
+- After every applied refresh or publication, diff `publicPlacements(kingdomId)` against what the
+  scene placed with `diffEmotePlacements` and raise, replace or withdraw. Resolve geometry through
+  `publicCatalogue(kingdomId).resolveApprovedEmote(id, purpose)`; a withdrawn statue becomes the
+  draped plinth, a withdrawn charge a furled standard. Give the banner/crest owner
+  `createEmoteHeraldry` and Genesis `genesisFacts` (checked against the real
+  `ChannelGenesisFactsSchema.approvedEmotes`).
 
 ## Approval and publication (`createEmoteCatalogueService`)
 
@@ -257,9 +269,29 @@ Every mutation returns `{status: 'applied', revision}` only after its compare-an
 `{status: 'failed', code}` with `unavailable`, `stale`, `forbidden`, `not-found` or `invalid`. A CAS
 conflict reloads and re-evaluates (four attempts).
 
+**Reconciling over the days.** `planEmoteRefresh(state)` is pure: Genesis when nothing was read;
+`go-live` once per live epoch (it counts only when Twitch answered); `opt-in` straight after the
+monarch switches a provider on; otherwise daily, 24 h after Twitch last answered. A read that leaves
+Twitch or an enabled provider without an answer, or fails outright, is retried after 15 min, doubling
+to at most 6 h. An outage is never due again at once and never waits a whole day. `tick` runs the
+plan; `refresh` commits only after re-checking what moved while the network was busy:
+- a newer stored read wins (`stale`);
+- a channel that changed throws the read away (`stale`);
+- a provider switched off meanwhile is stored `disabled`, and its entries count as `withdrawn`;
+- a provider switched on meanwhile is read at the next tick.
+
+The returned `changes` are the committed ones. A carving that retires before the host acknowledged
+its reveal has that reveal **withdrawn**: it is never replayed, and acknowledging it is a no-op.
+`publicPlacements` carries no reason, so a withdrawal looks the same whether the source changed, left
+or was switched off. The service wraps the bound blob store in `verifyEmoteBlobStore`, so it checks
+every content address itself on write and on read. Stored bytes that come back different count as
+absent, whatever the bound store does.
+
 **Stored state** (`EmoteStoredState`) is plain JSON: provider opt-ins, the catalogue snapshot,
 selections, candidates with their review receipts, monarch confirmations, publications and
-tombstones, reveals with acknowledgements, the last stream state and refresh time. No bytes: source
+tombstones, reveals with acknowledgements or withdrawals, the last stream state, refresh time and
+the refresh `schedule` (go-live epoch read, pending opt-in, failure count, last attempt; optional
+for states stored before it existed). No bytes: source
 and compiled blobs are referenced by SHA-256. `createMemoryEmoteRepository` copies through JSON,
 is bounded by kingdoms and bytes, and is for tests and the workshop only.
 

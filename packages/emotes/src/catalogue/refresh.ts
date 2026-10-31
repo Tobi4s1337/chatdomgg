@@ -10,7 +10,8 @@ import { EmoteTransportError, type AuthorizedEmoteTransport, type EmoteCatalogue
 
 export type ThirdPartyProvider = Exclude<EmoteProvider, 'twitch'>;
 export const THIRD_PARTY_PROVIDERS: readonly ThirdPartyProvider[] = ['7tv', 'bttv', 'ffz'];
-export type EmoteRefreshReason = 'genesis' | 'go-live' | 'daily';
+/** The host's schedule (see `planEmoteRefresh`); `opt-in` reads a provider the monarch just switched on. */
+export type EmoteRefreshReason = 'genesis' | 'go-live' | 'daily' | 'opt-in';
 
 /** What one source looked like at its last trustworthy check. Serializable; no bytes inside. */
 export interface EmoteSourceRecord extends EmoteCatalogueEntry {

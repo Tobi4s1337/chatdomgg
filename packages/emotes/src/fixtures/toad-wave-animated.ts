@@ -148,3 +148,23 @@ export function toadWaveAnimatedFixture(): { source: EmoteSource; bytes: Uint8Ar
     bytes,
   };
 }
+
+/**
+ * The same SIMULATED toadWave after its channel re-uploaded seasonal art under the same emote ID:
+ * every green in the global colour table turns pumpkin orange. Same frames, timing and size, new
+ * bytes and a new hash, which is exactly what a catalogue change looks like to the refresher.
+ */
+export function toadWaveSeasonalGifBytes(): Uint8Array {
+  const bytes = toadWaveGifBytes();
+  const packed = bytes[10]!;
+  if (!(packed & 0x80)) throw new Error('The fixture GIF has no global colour table.');
+  const entries = 2 ** ((packed & 7) + 1);
+  for (let i = 0; i < entries; i++) {
+    const at = 13 + i * 3, r = bytes[at]!, g = bytes[at + 1]!, b = bytes[at + 2]!;
+    if (g <= r + 8 || g <= b + 8) continue;
+    bytes[at] = Math.min(255, Math.round(g * 1.08 + 26));
+    bytes[at + 1] = Math.round(g * .56 + r * .1);
+    bytes[at + 2] = Math.round(b * .35);
+  }
+  return bytes;
+}

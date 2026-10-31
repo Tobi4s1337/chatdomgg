@@ -71,3 +71,29 @@ export function clothSwing(across: number, seconds: number, seed: number): numbe
   const wave = Math.sin(seconds * 2.1 - across * 4.4 + seed * 2.3) * .6 + Math.sin(seconds * 3.3 - across * 7.9 + seed) * .4;
   return gust * (.075 + .055 * wave);
 }
+
+/**
+ * The banner's cloth rolled up at the crossbar and tied with two trim bands: how the square flies a
+ * standard that has no charge to show (its emote was withdrawn), instead of a large empty field.
+ * Same size and origin as the banner frame, so it mounts on the same holder.
+ */
+export function furledBannerCloth(parts: BannerParts, materials: EmoteBannerMaterials, id: string): VoxelBlueprint {
+  const [x0, x1] = parts.span, top = parts.clothTop, z = parts.hingeZ, w = x1 - x0;
+  const depth = parts.frame.size[2];
+  const z0 = Math.max(0, z - 1), z1 = Math.min(depth, z + 4);
+  const boxes: VoxelBlueprint['boxes'] = [
+    // A rounded roll five cells across, hanging just under the crossbar.
+    { from: [x0, top - 6, z0 + 1], to: [x1, top - 1, z1 - 1], material: materials.field },
+    { from: [x0, top - 5, z0], to: [x1, top - 2, z1], material: materials.field },
+    // The rolled ends show the trim's spiral edge.
+    { from: [x0, top - 5, z0 + 1], to: [x0 + 1, top - 2, z1 - 1], material: materials.trim },
+    { from: [x1 - 1, top - 5, z0 + 1], to: [x1, top - 2, z1 - 1], material: materials.trim },
+  ];
+  for (const tx of [x0 + Math.round(w * .24), x1 - Math.round(w * .24) - 2]) {
+    // A band round the roll, up over the crossbar, and its loose end hanging in front.
+    boxes.push({ from: [tx, top - 7, z0], to: [tx + 2, top + 1, z1], material: materials.trim });
+    boxes.push({ from: [tx, top - 6, Math.max(0, z0 - 1)], to: [tx + 2, top - 1, Math.min(depth, z1 + 1)], material: materials.trim });
+    boxes.push({ from: [tx + 1, top - 12, Math.min(depth - 1, z1)], to: [tx + 2, top - 6, Math.min(depth, z1 + 1)], material: materials.trim });
+  }
+  return VoxelBlueprintSchema.parse({ version: 1, id, styleId: STYLE, kind: 'prop', lattice: 'build', size: parts.frame.size, boxes, windows: [] });
+}

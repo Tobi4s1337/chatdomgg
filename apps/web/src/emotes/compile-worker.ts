@@ -5,15 +5,42 @@
 // takes the monarch's confirmation of that exact geometry, publishes at the authoritative go-live and
 // resolves the approved statue and heraldry from verified blobs. The page receives only resolved,
 // schema-checked geometry. Terminating this worker cancels it and frees every buffer at once.
+// In `check` mode the same kingdom then lives through its go-live read and the next daily read, in
+// which the SIMULATED channel has re-uploaded toadWave with seasonal art: the service withdraws the
+// carvings, drops nothing it should keep, and the monarch's fresh carving waits privately for review.
 import { MATERIALS } from '@chatdom/content';
 import { PersonIdSchema } from '@chatdom/shared';
 import {
-  createEmoteCatalogueService, EMOTE_COMPILER_VERSION, createEmoteImageDecoder, createMemoryEmoteBlobStore, createMemoryEmoteRepository, decodeEmoteImage,
+  createEmoteCatalogueService, diffEmotePlacements, EMOTE_COMPILER_VERSION, toadWaveSeasonalGifBytes, createEmoteImageDecoder, createMemoryEmoteBlobStore, createMemoryEmoteRepository, decodeEmoteImage,
   EmoteTransportError, SIMULATED_KINGDOM, toadWaveAnimatedFixture,
-  type ApprovedEmoteVisual, type AuthorizedEmoteTransport, type CompiledEmote, type EmoteMutationResult, type EmotePurpose, type EmoteReviewPort, type EmoteSource, type InlineEmoteVisual,
+  type ApprovedEmoteVisual, type AuthorizedEmoteTransport, type EmoteCatalogueChanges, type EmotePurpose as Purpose, type CompiledEmote, type EmoteMutationResult, type EmotePurpose, type EmoteReviewPort, type EmoteSource, type InlineEmoteVisual,
 } from '../../../../packages/emotes/src/index';
 
-export interface BenchCompileRequest { readonly palette: readonly number[]; readonly paletteRevision: number }
+export interface BenchCompileRequest {
+  readonly palette: readonly number[];
+  readonly paletteRevision: number;
+  /** `raised` stops at the live unveiling; `check` goes on through the next daily catalogue read. */
+  readonly mode: 'raised' | 'check';
+}
+
+/** What the daily read found and what the square does about it; no reason ever reaches the public placements. */
+export interface BenchDailyCheck {
+  readonly kingdomId: string;
+  readonly reason: string;
+  readonly changes: EmoteCatalogueChanges;
+  readonly health: 'current' | 'stale' | 'unavailable';
+  /** Purposes the scene withdrew, from `diffEmotePlacements`. */
+  readonly withdrawn: readonly Purpose[];
+  readonly placementsAfter: number;
+  readonly pendingReveals: number;
+  /** The withdrawn statue's frame size and banner charge size: the placement keeps its plinth and standards. */
+  readonly statueCells: readonly [number, number, number];
+  readonly chargeCells: readonly [number, number];
+  /** The monarch's fresh carving of the new art, waiting privately; never public. */
+  readonly nextCarving: string;
+  readonly nextReadAt: number;
+  readonly trail: readonly BenchCatalogueStep[];
+}
 
 /** One step of the approval path, as the plaque shows it. */
 export interface BenchCatalogueStep { readonly step: string; readonly detail: string }
@@ -38,7 +65,10 @@ export type BenchCompileReply =
     effect: CompiledEmote;
     /** The verified flat image the public catalogue resolves for chat, or null. */
     inline: InlineEmoteVisual | null;
-    catalogue: BenchCatalogue; decodeMs: number; compileMs: number }
+    catalogue: BenchCatalogue; decodeMs: number; compileMs: number; check?: undefined }
+  | { ok: true; check: BenchDailyCheck; source: EmoteSource; bytes: number;
+    /** Chat's flat rendition of the new art, verified bytes; flat Twitch use needs no carving approval. */
+    inline: InlineEmoteVisual | null; decodeMs: number; compileMs: number }
   | { ok: false; message: string };
 
 interface CompileScope {
@@ -66,6 +96,8 @@ scope.onmessage = event => {
   void (async () => {
     const started = performance.now();
     const { bytes } = toadWaveAnimatedFixture();
+    // The SIMULATED channel's art; the daily read in `check` mode finds it re-uploaded.
+    let served = bytes;
     const signal = new AbortController().signal;
     const transport: AuthorizedEmoteTransport = {
       async getHelix() {
@@ -77,7 +109,7 @@ scope.onmessage = event => {
       async getProviderCatalogue() { throw new EmoteTransportError('unavailable', 'Third-party providers are off in the workshop.'); },
       async getAsset(_provider, url) {
         if (!url.includes(`/${EMOTE_PROVIDER_ID}/animated/`)) throw new EmoteTransportError('not-found', 'The SIMULATED channel has no such image.');
-        return bytes.slice();
+        return served.slice();
       },
     };
     let sheets = 0;
@@ -126,6 +158,48 @@ scope.onmessage = event => {
     // The workshop is its own host: it commits the reveal by drawing it, then acknowledges once.
     if (reveal) applied(await service.acknowledgeReveal({ kingdomId, revealId: reveal.id, atMs: 3_001 }), 'Acknowledging the reveal');
     trail.push({ step: 'Unveiled', detail: reveal ? `live · ${reveal.streamEpoch}` : 'already unveiled' });
+
+    if (event.data.mode === 'check') {
+      const placedBefore = await service.publicPlacements(kingdomId);
+      // The host's clock: the go-live read for this stream (nothing changed yet), then the next daily read.
+      const live = await service.tick({ kingdomId, atMs: 3_002 }, signal);
+      applied(live, 'The go-live read');
+      if (live.reason !== 'go-live') throw new StepFailed(`The go-live read ran as ${live.reason ?? 'nothing'}.`);
+      served = toadWaveSeasonalGifBytes();
+      const plan = await service.nextRefresh(kingdomId);
+      if ('status' in plan) throw new StepFailed(plan.message);
+      const daily = await service.tick({ kingdomId, atMs: plan.dueAt }, signal);
+      applied(daily, 'The daily read');
+      if (daily.reason !== 'daily' || !daily.changes?.changed.includes(EMOTE_ID)) throw new StepFailed('The daily read did not see the new art.');
+      const placedAfter = await service.publicPlacements(kingdomId);
+      const diff = diffEmotePlacements(placedBefore, placedAfter);
+      const after = await service.publicCatalogue(kingdomId);
+      if (after.resolveApprovedEmote(EMOTE_ID, 'statue') || after.resolveApprovedEmote(EMOTE_ID, 'heraldry') || after.resolveApprovedEmote(EMOTE_ID, 'effect')) throw new StepFailed('A withdrawn carving still resolves in public.');
+      // The monarch chooses the new art for the plinth; its carving waits for Luna, privately.
+      const seen = await service.privateCandidates(kingdomId, THRONE);
+      if (seen.status !== 'ok') throw new StepFailed(seen.message);
+      const fresh = seen.sources.find(s => s.id === EMOTE_ID);
+      if (!fresh?.sourceHash || fresh.sourceHash === listed.sourceHash) throw new StepFailed('The new art was not read.');
+      applied(await service.selectCandidate({ kingdomId, id: EMOTE_ID, purpose: 'statue', revision: fresh.sourceHash }, THRONE), 'Choosing the new art');
+      const carving = await service.prepareCandidate({ kingdomId, id: EMOTE_ID, purpose: 'statue', atMs: plan.dueAt + 1 }, signal);
+      applied(carving, 'Carving the new art');
+      const pending = await service.pendingReveals(kingdomId);
+      const next = await service.nextRefresh(kingdomId);
+      const changes = daily.changes;
+      const check: BenchDailyCheck = {
+        kingdomId, reason: daily.reason, changes, health: after.health, withdrawn: diff.withdraw.map(p => p.purpose), placementsAfter: placedAfter.length,
+        pendingReveals: pending.length, statueCells: statue.frames[0]!.blueprint.size, chargeCells: [heraldry.mask.width, heraldry.mask.height],
+        nextCarving: carving.status === 'applied' ? carving.candidate! : '', nextReadAt: 'status' in next ? 0 : next.dueAt,
+        trail: [
+          { step: 'Read', detail: `daily · Twitch answered · ${changes.changed.length} changed, ${changes.removed.length} removed` },
+          { step: 'Square', detail: `withdrew the ${(['statue', 'heraldry', 'effect'] as const).filter(p => diff.withdraw.some(w => w.purpose === p)).map(p => ({ statue: 'statue', heraldry: 'banner charge', effect: 'chant weather' })[p]).join(', ')} quietly; the plinth waits under cloth` },
+          { step: 'Next', detail: 'a fresh carving, after review and the monarch’s word' },
+        ],
+      };
+      const newSource: EmoteSource = { id: EMOTE_ID, provider: 'twitch', providerId: EMOTE_PROVIDER_ID, kingdomId, name: fresh.name, origin: 'simulated', sourceHash: fresh.sourceHash, rendition: 'gif' };
+      scope.postMessage({ ok: true, check, source: newSource, bytes: served.length, inline: after.resolveInlineEmote(EMOTE_ID), decodeMs: decodedAt - started, compileMs: performance.now() - decodedAt });
+      return;
+    }
 
     const final = await service.privateCandidates(kingdomId, THRONE);
     if (final.status !== 'ok') throw new StepFailed(final.message);

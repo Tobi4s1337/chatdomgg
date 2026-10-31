@@ -3,8 +3,8 @@ import { createStore, reconcile } from 'solid-js/store';
 import { MAT, MATERIALS } from '@chatdom/content';
 import { getEnvironment } from '@chatdom/render';
 import { EMOTE_CHAT_TUNING, type ApprovedEmoteVisual, type CompiledEmote, type EmoteCatalogueView, type EmotePurpose, type EmoteSource, type InlineEmoteVisual } from '../../../../packages/emotes/src/index';
-import type { BenchCatalogue, BenchCompileReply, BenchCompileRequest } from './compile-worker';
-import { createInlineEmoteImages, EmoteChatBubble, EmoteChatPop } from './inline';
+import type { BenchCatalogue, BenchCompileReply, BenchCompileRequest, BenchDailyCheck } from './compile-worker';
+import { createInlineEmoteImages, EmoteChatBubble, EmoteChatPop, EmoteImage } from './inline';
 import type { ChatOverlay } from './kingdom-chat';
 import { createKingdomEmoteStage, type KingdomEmoteStage, type KingdomEmoteStageReport } from './kingdom-stage';
 import { BENCH_VIEWS, parseEmoteBench, type BenchView, type SquareView, type WorkshopView } from './params';
@@ -14,7 +14,7 @@ import './style.css';
 declare global {
   interface Window {
     __chatdomReady?: boolean;
-    __chatdomEmotes?: (EmoteStageReport | KingdomEmoteStageReport) & { source: { id: string; origin: string; sourceHash: string; rendition: string; bytes: number }; decodeMs: number; compileMs: number; flatFrames: number };
+    __chatdomEmotes?: (EmoteStageReport | KingdomEmoteStageReport) & { source: { id: string; origin: string; sourceHash: string; rendition: string; bytes: number }; decodeMs: number; compileMs: number; flatFrames: number; check?: BenchDailyCheck };
     __chatdomEmotesError?: string;
   }
 }
@@ -28,9 +28,11 @@ const BENCH_PALETTE: readonly number[] = [
   MAT.fabricMutedGreen, MAT.goldLeaf, MAT.fabricGold, MAT.brass, MAT.terracotta, MAT.fabricRed, MAT.petal, MAT.hairBlack, MAT.slate, MAT.timber, MAT.bark,
 ];
 const PALETTE_REVISION = 1;
-const VIEW_LABELS: Record<BenchView, string> = { kingdom: 'Square', chat: 'Chat', front: 'Front', side: 'Side', banner: 'Banner' };
-const WORKSHOP_VIEWS = BENCH_VIEWS.filter((v): v is WorkshopView => v !== 'kingdom' && v !== 'chat');
-const isKingdom = (view: BenchView): view is SquareView => view === 'kingdom' || view === 'chat';
+const VIEW_LABELS: Record<BenchView, string> = { kingdom: 'Square', chat: 'Chat', check: 'Daily check', front: 'Front', side: 'Side', banner: 'Banner' };
+const WORKSHOP_VIEWS = BENCH_VIEWS.filter((v): v is WorkshopView => v !== 'kingdom' && v !== 'chat' && v !== 'check');
+/** The raised kingdom's views; the daily check is a later evening of its own, reached by its own URL. */
+const RAISED_VIEWS = BENCH_VIEWS.filter(v => v !== 'check');
+const isKingdom = (view: BenchView): view is SquareView => view === 'kingdom' || view === 'chat' || view === 'check';
 const material = (id: number) => MATERIALS.materials.find(m => m.id === id);
 const metres = (cells: number) => `${(cells * .125).toFixed(2)} m`;
 
@@ -49,8 +51,11 @@ interface Compiled {
 }
 interface FlatFrame { image: ImageData; durationMs: number }
 
+/** The evening after the daily check: what the read found, chat's new flat image and the source it came from. */
+interface Checked { check: BenchDailyCheck; source: EmoteSource; bytes: number; inline: InlineEmoteVisual | null; decodeMs: number; compileMs: number }
+
 /** Decoding and carving run on a worker; aborting terminates it, which frees every buffer at once. */
-function compileInWorker(signal: AbortSignal): Promise<{ compiled: Compiled; frames: FlatFrame[] }> {
+function compileInWorker(signal: AbortSignal, mode: BenchCompileRequest['mode']): Promise<{ compiled: Compiled; frames: FlatFrame[] } | { checked: Checked }> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./compile-worker.ts', import.meta.url), { type: 'module', name: 'emote-compile' });
     const stop = () => { worker.terminate(); reject(new Error('The carving was cancelled.')); };
@@ -60,6 +65,7 @@ function compileInWorker(signal: AbortSignal): Promise<{ compiled: Compiled; fra
       signal.removeEventListener('abort', stop); worker.terminate();
       const reply = event.data;
       if (!reply.ok) { reject(new Error(reply.message)); return; }
+      if (reply.check) { resolve({ checked: { check: reply.check, source: reply.source, bytes: reply.bytes, inline: reply.inline, decodeMs: reply.decodeMs, compileMs: reply.compileMs } }); return; }
       const { width, height } = reply.flat;
       const frames = reply.flat.frames.map(frame => ({
         image: new ImageData(new Uint8ClampedArray(frame.rgba.buffer as ArrayBuffer, frame.rgba.byteOffset, frame.rgba.byteLength), width, height),
@@ -67,7 +73,7 @@ function compileInWorker(signal: AbortSignal): Promise<{ compiled: Compiled; fra
       }));
       resolve({ compiled: { source: reply.source, bytes: reply.bytes, statue: reply.statue, materials: reply.statueMaterials, heraldry: reply.heraldry, effect: reply.effect, inline: reply.inline, catalogue: reply.catalogue, decodeMs: reply.decodeMs, compileMs: reply.compileMs }, frames });
     };
-    worker.postMessage({ palette: BENCH_PALETTE, paletteRevision: PALETTE_REVISION } satisfies BenchCompileRequest);
+    worker.postMessage({ palette: BENCH_PALETTE, paletteRevision: PALETTE_REVISION, mode } satisfies BenchCompileRequest);
   });
 }
 
@@ -115,6 +121,7 @@ export default function EmoteBench() {
   const [status, setStatus] = createSignal('Decoding the GIF and carving every frame…');
   const [failed, setFailed] = createSignal(false);
   const [compiled, setCompiled] = createSignal<Compiled>();
+  const [checked, setChecked] = createSignal<Checked>();
   const [frames, setFrames] = createSignal<FlatFrame[]>([]);
   const [shown, setShown] = createSignal(heldFrame ?? 0);
   const [playing, setPlaying] = createSignal(heldFrame === null);
@@ -126,7 +133,13 @@ export default function EmoteBench() {
   const images = createInlineEmoteImages();
 
   const publish = (ready: boolean) => {
-    const c = compiled();
+    const c = compiled(), k = checked();
+    if (stage && k) {
+      window.__chatdomEmotes = {
+        ...stage.report(), source: { id: k.source.id, origin: k.source.origin, sourceHash: k.source.sourceHash, rendition: k.source.rendition, bytes: k.bytes },
+        decodeMs: Math.round(k.decodeMs), compileMs: Math.round(k.compileMs), flatFrames: 0, check: k.check,
+      };
+    }
     if (stage && c) {
       window.__chatdomEmotes = {
         ...stage.report(), source: { id: c.source.id, origin: c.source.origin, sourceHash: c.source.sourceHash, rendition: c.source.rendition, bytes: c.bytes },
@@ -157,6 +170,20 @@ export default function EmoteBench() {
     setStatus('');
     publish(true);
   };
+  /** The square the evening after the daily check: the withdrawn carving's plinth draped, the standards plain. */
+  const mountChecked = async (k: Checked) => {
+    window.__chatdomReady = false;
+    setStatus('Covering the plinth…');
+    const made = await createKingdomEmoteStage({
+      host, hour: initial.hour, view: 'check', statue: null, heraldry: null, frame: 0, isDisposed: () => disposed,
+      withdrawn: { statueCells: k.check.statueCells, chargeCells: k.check.chargeCells },
+    });
+    if (!made || disposed) { made?.dispose(); return; }
+    stage = made;
+    host.querySelector('canvas')?.setAttribute('aria-label', 'The SIMULATED square at dusk after the daily check: toadWave’s old carving withdrawn, its plinth waiting under a red cloth tied with gold cord, the standards flying plain');
+    setStatus('');
+    publish(true);
+  };
   const choose = (next: BenchView) => {
     if (next === view()) return;
     // The square and the plaza are different stages, and chat brings its own crowd: those rebuild.
@@ -183,10 +210,11 @@ export default function EmoteBench() {
     window.__chatdomReady = false;
     delete window.__chatdomEmotes; delete window.__chatdomEmotesError;
     void (async () => {
-      const result = await compileInWorker(controller.signal);
+      const result = await compileInWorker(controller.signal, initial.view === 'check' ? 'check' : 'raised');
       if (disposed) return;
-      setCompiled(result.compiled); setFrames(result.frames);
       window.addEventListener('resize', onResize);
+      if ('checked' in result) { setChecked(result.checked); await mountChecked(result.checked); return; }
+      setCompiled(result.compiled); setFrames(result.frames);
       await mount(view(), result.compiled);
     })().catch(fail);
   });
@@ -216,14 +244,25 @@ export default function EmoteBench() {
       </div>
     </Show>
     <header class="emote-bench-title">
-      <span>{view() === 'chat' ? 'CHATDOM · CHAT IN THE SQUARE' : isKingdom(view()) ? 'CHATDOM · THE SQUARE AT DUSK' : 'CHATDOM · EMOTE WORKSHOP'}</span>
-      <strong>{view() === 'chat' ? 'Chat chants toadWave' : isKingdom(view()) ? 'toadWave, raised in the square' : 'toadWave, carved and waving'}</strong>
+      <span>{view() === 'check' ? 'CHATDOM · AFTER THE DAILY CHECK' : view() === 'chat' ? 'CHATDOM · CHAT IN THE SQUARE' : isKingdom(view()) ? 'CHATDOM · THE SQUARE AT DUSK' : 'CHATDOM · EMOTE WORKSHOP'}</span>
+      <strong>{view() === 'check' ? 'toadWave has new art' : view() === 'chat' ? 'Chat chants toadWave' : isKingdom(view()) ? 'toadWave, raised in the square' : 'toadWave, carved and waving'}</strong>
     </header>
     <small class="simulated" title="Original bench art drawn for this workshop, not a channel’s emote">SIMULATED</small>
-    <Show when={isKingdom(view())}>
+    <Show when={checked()}>{k => <aside class="emote-kingdom-card emote-check-card" aria-label="The daily check’s card">
+      <dl class="emote-kingdom-facts">
+        <For each={k().check.trail}>{line => <div><dt>{line.step}</dt><dd>{line.detail}</dd></div>}</For>
+        <div><dt>Chat</dt><dd class="emote-check-chat">
+          <Show when={k().inline} keyed fallback={<span>keeps the word toadWave</span>}>{visual => <>
+            <EmoteImage visual={visual} alt={k().source.name} images={images} size={28} />
+            <span>already shows the new art · <code>{k().source.sourceHash.slice(0, 10)}</code></span>
+          </>}</Show>
+        </dd></div>
+      </dl>
+    </aside>}</Show>
+    <Show when={isKingdom(view()) && !checked() && view() !== 'check'}>
       {/* The square's card stays small so the world leads; the catalogue status joins it here. */}
       <aside class="emote-kingdom-card" aria-label="The statue’s card">
-        <div class="emote-kingdom-views" role="group" aria-label="Look at the statue from">{viewButtons(BENCH_VIEWS)}</div>
+        <div class="emote-kingdom-views" role="group" aria-label="Look at the statue from">{viewButtons(RAISED_VIEWS)}</div>
         <Show when={compiled()}>{c => <dl class="emote-kingdom-facts">
           <div><dt>Statue</dt><dd>{metres(size()![1])} · {c().statue.frames.length} frames · {(c().statue.periodMs / 1000).toFixed(2)} s</dd></div>
           <div><dt>Source</dt><dd>GIF · {c().bytes.toLocaleString('en')} bytes · <code>{c().source.sourceHash.slice(0, 10)}</code></dd></div>

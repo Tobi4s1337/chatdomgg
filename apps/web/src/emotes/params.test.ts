@@ -15,6 +15,9 @@ describe('parseEmoteBench', () => {
     expect(parseEmoteBench('?view=chat&hour=18&frame=3')).toEqual({ view: 'chat', hour: 18, frame: 3 });
     expect(parseEmoteBench('?view=Chat')).toEqual({ view: 'front', hour: 16, frame: null });
   });
+  it('reads the square after the daily check as its own view', () => {
+    expect(parseEmoteBench('?view=check&hour=18&frame=0')).toEqual({ view: 'check', hour: 18, frame: 0 });
+  });
   it('falls back to the playing front view at four in the afternoon for anything it does not know', () => {
     expect(parseEmoteBench('')).toEqual({ view: 'front', hour: 16, frame: null });
     expect(parseEmoteBench('?view=back&hour=24&frame=120')).toEqual({ view: 'front', hour: 16, frame: null });

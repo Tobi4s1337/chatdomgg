@@ -1,6 +1,7 @@
 import type { KingdomId, PersonId } from '../deps';
 import type { EmotePurpose, EmoteReveal } from '../types';
 import type { EmoteCatalogueSnapshot, ThirdPartyProvider } from './refresh';
+import { emptyEmoteRefreshSchedule, type EmoteRefreshSchedule } from './schedule';
 
 /**
  * What one candidate's approval binds. Changing any field reopens review (Spec 24 R5): the source
@@ -61,6 +62,11 @@ export interface EmoteRevealRecord {
   reveal: EmoteReveal;
   createdAt: number;
   acknowledgedAt: number | null;
+  /**
+   * Set when the carving retired before the host acknowledged its reveal (its source changed or
+   * left, or a newer carving replaced it). A withdrawn reveal is never replayed.
+   */
+  withdrawnAt?: number | null;
 }
 
 /**
@@ -82,6 +88,8 @@ export interface EmoteStoredState {
   /** The authoritative stream state the host last reported. */
   stream: { live: boolean; epoch: string | null; atMs: number } | null;
   refreshedAt: number | null;
+  /** When the catalogue is read next. Absent in states stored before it existed; read as empty. */
+  schedule?: EmoteRefreshSchedule;
 }
 
 /** Persistence port. Main binds the durable implementation; nothing is exposed before its CAS commits. */
@@ -101,7 +109,7 @@ export class EmoteRepositoryError extends Error {
 export function emptyEmoteState(kingdomId: KingdomId): EmoteStoredState {
   return {
     version: 1, kingdomId, revision: 0, providers: { '7tv': false, bttv: false, ffz: false },
-    snapshot: null, selections: [], candidates: [], reveals: [], stream: null, refreshedAt: null,
+    snapshot: null, selections: [], candidates: [], reveals: [], stream: null, refreshedAt: null, schedule: emptyEmoteRefreshSchedule(),
   };
 }
 

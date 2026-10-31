@@ -187,3 +187,8 @@
   .emote-kingdom-card { left: 10px; right: 10px; bottom: 10px; width: auto; }
   .emote-kingdom-views button { min-height: 44px; font-size: 14px; }
 }
+
+/* After the daily check: the card only reports, so it carries no view buttons. */
+.emote-check-card .emote-kingdom-facts div { grid-template-columns: 58px 1fr; }
+.emote-check-chat { display: flex; align-items: center; gap: 7px; }
+.emote-check-chat img { flex: none; width: 28px; height: 28px; image-rendering: auto; filter: drop-shadow(0 1px 0 #00000040); }
