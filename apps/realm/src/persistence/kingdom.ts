@@ -350,7 +350,8 @@ export class DurableKingdom implements RealmRoomHandle {
   publishWalkers(frame: RealmWalkerFrame): void {
     if (!this.current || this.effects.size !== 1 || frame.kingdomId !== this.kingdomId || frame.origin !== this.origin
       || frame.writerEpoch !== this.writerEpoch || frame.layoutRevision !== this.layoutRevision || frame.collisionRevision !== this.world.revision) return;
-    const parsed = RealmWalkerFrameSchema.safeParse(frame);
+    // The room's seat book owns posture. A movement publisher cannot claim a lease or a seated position.
+    const parsed = RealmWalkerFrameSchema.safeParse({ ...frame, seats: this.interactions?.seats().seats ?? [] });
     if (!parsed.success || Buffer.byteLength(JSON.stringify(parsed.data)) > REALM_WALKER_FRAME_MAX_BYTES) return;
     // A publisher may only describe walkers admitted to this same room, never a simulated crowd or private identity.
     if (parsed.data.walkers.some(walker => !this.walkers.has(walker.id) || ![...this.effects].some(effects => effects.readWalker(walker.id)))) return;
@@ -360,7 +361,7 @@ export class DurableKingdom implements RealmRoomHandle {
 
   private emptyWalkers(): RealmWalkerFrame {
     return { version: 1, kingdomId: this.kingdomId, origin: this.origin, writerEpoch: this.writerEpoch,
-      layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, sampledAt: Date.now(), walkers: [] };
+      layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, sampledAt: Date.now(), walkers: [], seats: [] };
   }
 
   private clearWalkers() { this.walkerFrame = null; this.deliverWalkers(this.emptyWalkers()); }

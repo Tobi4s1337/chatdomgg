@@ -4,7 +4,7 @@ import { createVoxelMaterial, type VoxelRenderState } from '@chatdom/render';
 import { createCitizenMotion, createCitizenBehaviours, dueBehaviourSteps, type CitizenGoalAnswer, type CitizenMotionSample, type SettlementPlan } from '@chatdom/world';
 import { CitizenChatCueSchema, type CitizenChatCue, type KingdomPresenceFrame } from '@chatdom/shared';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
-import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
+import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import { walkerSubject, type WalkerSlots } from './observed-walkers';
 
 export interface SpeechLabel { slot: number; name: string | null; x: number; y: number; parts: CitizenChatCue['parts'] }
@@ -93,7 +93,8 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       for (const sample of samples) {
         const cue = speech.get(sample.slot);
         if (!cue || cue.asOf > atMs || cue.expiresAt <= atMs) continue;
-        const point = new THREE.Vector3(...walkerSubject(sample, walkers).position); point.y += 1.9;
+        const point = new THREE.Vector3(...walkerSubject(sample, walkers).position);
+        point.y += 1.9 + (walkers.get(sample.slot)?.posture ? CITIZEN_SEATED_HEAD_OFFSET_METRES : 0);
         if (point.distanceTo(camera.position) > 28) continue;
         point.project(camera);
         if (point.z < 0 || point.z > 1 || Math.abs(point.x) > .85 || Math.abs(point.y) > .8) continue;

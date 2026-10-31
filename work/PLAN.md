@@ -333,11 +333,12 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 **Order:** Real-chat evening; glassy walk; town with love; hero anvil/dragon; deep interactions; one Twitch moment.
 Goal active. Main carries evening/realm/walk and integrates reviewed work promptly; changed checks plus one looked
 frame, no matrices/full-suite per change. One worker per active world lane, no new lanes. Founder sends the first
-real chat line when available: do not wait, fake people/live state/coals, or ask again. No new reviewed lane delivery
-this turn; parked/incomplete campfire/table work remains outside main.
+real chat line when available: do not wait, fake people/live state/coals, or ask again. FL03 readable carved build
+tools merged and pushed; parked/incomplete campfire/table work remains outside main.
 
 **Integrated:** RS07 district views, IN03 controls, FR03 audio, WB02 body/hair/eyes, BT04 publication, AtlasA03–A05,
-E01 emotes, RG01 gate, founded collision; AH05 anvil exports, KL05 ground warmth, LD02 geography, GD01 meadow kit.
+E01 emotes, RG01 gate, founded collision; AH05 anvil exports, KL05 ground warmth, LD02 geography, GD01 meadow kit,
+FL03 readable build labels/resting controls. Phone disabled-reason words remain the polish lane's next task.
 Passive flowers/tufts now mount over the actual adopted v1 plots/court and occupied geometry, using rendered ground
 and shared lighting. Solid gardens wait for authoritative collision composition; homes/streets never move to a new
 generator. Native founded compilation still consumes adopted v1 land. Market cart/worn planting is the ground
@@ -356,8 +357,12 @@ identity and use reviewed wardrobe parts across chat/walking without private IDs
 replace only their linked representative body/shadow; speech/camera follows the walker, presence still owns its
 window. Bounded public5Hz `walkers` SSE adds no spectator player/socket/crowd transforms; scope/revisions/freshness
 clear stale bodies. Read-only250ms interpolation clamps/cuts on placements; physical Predict is unchanged. Existing
-glassy pass and material footsteps stand. Native targets currently anvil/own door/exit only; seats need installed
-producer anchors and a shared seated-pose resolver, not invented targets or standing bodies drawn over chairs.
+glassy pass and material footsteps stand. One shared seated-pose resolver now uses witnessed room leases and the
+installed registry's rest/facing for walkers, stream, names and speech. Renderer bends knees, plants soles and
+blends posture over280ms; room collision stays at the safe approach. Optional bounded public frame `seats` is copied
+from the actual lease book, never the movement publisher; older writers imply standing. Native targets remain
+anvil/own door/exit only: installed producer anchors still needed. `rest` means sole datum; legacy log examples
+using seat-top height must be corrected before mounting. Main took this runtime seam; interactions owns the places.
 
 **Landscape sound:** Actual feet (stream: camera) now feed shore-distance/direction and outdoor exposure into
 bounded wind/water phrases through the existing audio mixer: two sources/phrase,3.2s lifetime,1.6s cadence,
@@ -375,10 +380,11 @@ observed chat may warm a window offline; beacon/coals/Forge need observed live. 
 room Forge proof. Walk: `/?walk=1&kingdom=129634568&hour=19.5` (genuine Twitch sign-in); watch:
 `/stream?source=realm&kingdom=129634568&hour=19.5`.
 
-**Evidence/next:** Root looked at `shots/kingdom/live-evening/adopted-cover@1440x900.png`: real town ready, zero
-browser errors, flowers soften fronts but too tidy/empty;240homes,0observed people/windows. Looked Forge art frames:
-`shots/forge/room-hot-pour-framed@1440x900.png`, `room-cool@1440x900.png` (same folder), explicitly SIMULATED actual
-adapter/assembly; full pour and hot rune cuts, dragon still weak. Latest typecheck, touched lint, web build and two
-focused ambience/lifecycle tests pass; previous focused content/room/assembly checks stand. No full-verify claim.
+**Evidence/next:** Root looked at `shots/citizens/seated@1440x900.png`: six reviewed looks, explicitly SIMULATED
+bench/people review; planted feet/readable bent knees, hands still stiff, rear cape clearance unproved. FL03's
+looked comparison is `work/evidence/first-look-polish/fl03/zoom-sheet.png`. Previous actual town and Forge frames:
+`shots/kingdom/live-evening/adopted-cover@1440x900.png`, `shots/forge/room-hot-pour-framed@1440x900.png` and
+`shots/forge/room-cool@1440x900.png`. Flowers soften fronts but town too tidy/empty; dragon still weak. Changed
+contract/watch/pose/citizen/footstep checks, typecheck, scoped lint and web/realm builds cover this slice, not a full verify.
 Next acceptance remains real chat→shared arrival/window/bubble, real wish→judged piece→right home, two/three real
 walkers/director, then record and watch60–90seconds. No full evening capture or real-GPU smoothness acceptance yet.

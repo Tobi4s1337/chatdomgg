@@ -16,14 +16,24 @@ export const RealmObservedWalkerSchema = z.strictObject({
   placement: UIntSchema.max(0xffff_ffff),
 });
 export type RealmObservedWalker = z.infer<typeof RealmObservedWalkerSchema>;
+/** The existing public room lease, never a person/session id or a second world-space pose. */
+export const RealmObservedSeatSchema = z.strictObject({
+  targetId: TokenSchema, walkerId: TokenSchema, generation: UIntSchema,
+  status: z.enum(['occupied', 'reconnecting']),
+});
 /** Named SSE event `walkers`: bounded ephemeral view of the SAME room. No replay/event cursor or crowd poses. */
 export const RealmWalkerFrameSchema = z.strictObject({
   version: z.literal(1), kingdomId: KingdomIdSchema, origin: z.enum(['live', 'simulated']),
   writerEpoch: TokenSchema, layoutRevision: TokenSchema, collisionRevision: UIntSchema.max(0xffff_ffff),
   sampledAt: EpochMsSchema, walkers: z.array(RealmObservedWalkerSchema).max(REALM_WALKER_FRAME_LIMIT),
+  /** Present-tense leases for late spectators. Absent on older writers: render standing until witnessed. */
+  seats: z.array(RealmObservedSeatSchema).max(REALM_WALKER_FRAME_LIMIT).optional(),
 }).superRefine((frame, ctx) => {
   if (new Set(frame.walkers.map(walker => walker.id)).size !== frame.walkers.length)
     ctx.addIssue({ code: 'custom', message: 'Duplicate public walker' });
+  if (frame.seats && (new Set(frame.seats.map(seat => seat.targetId)).size !== frame.seats.length
+    || new Set(frame.seats.map(seat => seat.walkerId)).size !== frame.seats.length))
+    ctx.addIssue({ code: 'custom', message: 'Ambiguous public seat' });
 });
 export type RealmWalkerFrame = z.infer<typeof RealmWalkerFrameSchema>;
 export interface RealmWalkerFeed {

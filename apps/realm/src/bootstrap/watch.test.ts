@@ -122,11 +122,12 @@ it('hands the exact checkpoint before new deltas, stays quiet on restored histor
       walkers: [{ id: 'SIMULATED-walker', name: 'SIMULATED Citizen', look: 'tide', homeSlot: REALM_NO_HOME_SLOT, x: 1, y: 0, z: 2, yaw: 0, distance: 0, speed: 0, placement: 0 }] };
     existing.kingdom.publishWalkers({ ...poses, writerEpoch: 'SIMULATED-stale-writer' });
     expect(quiet.events()).toHaveLength(2);
-    existing.kingdom.publishWalkers(poses);
-    expect(quiet.events().at(-1)).toEqual({ event: 'walkers', data: poses });
+    // Movement publication cannot seat someone: the room's existing lease book is the only owner.
+    existing.kingdom.publishWalkers({ ...poses, seats: [{ targetId: 'fire:invented:seat:a', walkerId: 'SIMULATED-walker', generation: 1, status: 'occupied' }] });
+    expect(quiet.events().at(-1)).toEqual({ event: 'walkers', data: { ...poses, seats: [] } });
     const observing = open();
     await vi.waitFor(() => expect(observing.events()).toHaveLength(2));
-    expect(observing.events()[1]).toEqual({ event: 'walkers', data: poses });
+    expect(observing.events()[1]).toEqual({ event: 'walkers', data: { ...poses, seats: [] } });
     expect(observing.chunks.join('')).not.toContain(personId);
     expect(observing.chunks.join('')).not.toContain('SIMULATED-private-entry');
     room();
