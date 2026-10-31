@@ -133,9 +133,18 @@ importers:
 
   apps/realm:
     dependencies:
+      '@chatdom/content':
+        specifier: workspace:*
+        version: link:../../packages/content
+      '@chatdom/forge':
+        specifier: workspace:*
+        version: link:../../packages/forge
       '@chatdom/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@chatdom/voxel':
+        specifier: workspace:*
+        version: link:../../packages/voxel
       '@chatdom/world':
         specifier: workspace:*
         version: link:../../packages/world
@@ -322,6 +331,9 @@ importers:
       '@chatdom/shared':
         specifier: workspace:*
         version: link:../shared
+      '@chatdom/voxel':
+        specifier: workspace:*
+        version: link:../voxel
 
 packages:
 

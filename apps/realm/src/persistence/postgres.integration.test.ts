@@ -44,6 +44,40 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     await Promise.all(pools.map(p => p.end()));
   });
 
+  it('cancellation after the final fence rolls back the complete Forge commit and leaves the writer healthy', async () => {
+    const kingdomId = KingdomIdSchema.parse(String(800_000_000 + randomBytes(3).readUIntBE(0, 3)));
+    const person = PersonIdSchema.parse(String(700_000_000 + randomBytes(3).readUIntBE(0, 3)));
+    const db = pool(), interrupted = interruptible(db);
+    const repository = new PostgresRealmRepository(interrupted.db, { origin: 'simulated' });
+    const home = await settledHome(allocations('simulated'), kingdomId, person);
+    const fixture = forgeFixture(kingdomId, person, home, await dbNow(db));
+    const services = createDurableRealmServices({ repository, outbox: new PostgresOutboxStore(db),
+      auth: { authenticate: async () => { throw new Error('No entry in this SIMULATED test'); }, current: async () => false },
+      kingdom: () => ({ world: REFERENCE_WORLD, layoutRevision: home.layoutRevision, spawn: () => [0, 0, 6] }) });
+    const hold = await services.retain(kingdomId), kingdom = hold.kingdom;
+    try {
+      for (const [id, command, capability] of fixture.setup) expect(await kingdom.execute(id, command, capability)).toMatchObject({ status: 'committed' });
+      if (fixture.commit.type !== 'forge.commitApproved') throw new Error('Expected Forge commit fixture');
+      const command = { ...fixture.commit, attachment: { ...fixture.commit.attachment,
+        provenance: { ...fixture.commit.attachment.provenance, source: 'simulated' as const } } };
+      let callerCurrent = true;
+      interrupted.afterNextFinalFence(() => { callerCurrent = false; });
+      expect(await kingdom.execute('canceled-after-fence', command, 'forge', { current: () => callerCurrent })).toEqual({ status: 'rejected', reason: 'cold' });
+      expect(kingdom.current).toBe(true); expect(kingdom.sequence).toBe(fixture.setup.length);
+      expect(kingdom.privateState.coals[person]).toBe(1); expect(kingdom.privateState.attachments).toEqual({});
+      expect(Object.keys(kingdom.privateState.reservations)).toEqual(['wish:1']);
+      expect(await kingdom.lookup('canceled-after-fence')).toBeNull();
+      for (const table of ['realm_designs', 'realm_outbox']) {
+        expect(Number((await db.query(`SELECT count(*) AS n FROM ${table} WHERE kingdom_id = $1`, [kingdomId])).rows[0].n)).toBe(0);
+      }
+      expect(Number((await db.query('SELECT count(*) AS n FROM realm_facts WHERE kingdom_id = $1', [kingdomId])).rows[0].n)).toBe(fixture.setup.length);
+      expect((await db.query('SELECT delta FROM realm_coal_ledger WHERE kingdom_id = $1 ORDER BY seq', [kingdomId])).rows).toEqual([{ delta: 1 }]);
+      // No rejection was stored: the SAME immutable command ID can be retried by a current caller.
+      expect(await kingdom.execute('canceled-after-fence', command, 'forge', { current: () => true })).toMatchObject({ status: 'committed' });
+      expect(kingdom.privateState.coals[person]).toBe(0); expect(Object.keys(kingdom.privateState.attachments)).toEqual(['run:1']);
+    } finally { await hold.release(); }
+  });
+
   it('two writers race, a COMMIT reply is lost and the stale epoch retries: one spend, one fact, one outcome', async () => {
     const kingdomId = KingdomIdSchema.parse(String(800_000_000 + randomBytes(3).readUIntBE(0, 3)));
     const a = interruptible(pool()), b = interruptible(pool());
@@ -120,6 +154,13 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     expect(outbox.map(r => [r.event_id, r.kind])).toEqual([[`${kingdomId}:${fixture.setup.length + 1}:0`, 'forge']]);
     expect(outbox[0].message).not.toMatch(/PRIVATE|opaque-safety|judges|personId|ownerId|deed:|names:/);
     expect(outbox[0].message).not.toContain(fixture.person);
+    // Recovery uses public rows through the durable cursor, including a first Forge with no home row.
+    const deliveredId = Number((await db.query(`SELECT max(id) AS id FROM realm_outbox WHERE kingdom_id = $1`, [kingdomId])).rows[0].id);
+    const publicStore = new PostgresOutboxStore(db);
+    expect((await publicStore.prefix(kingdomId, deliveredId)).homes).toMatchObject([
+      { plotId: state.attachments['run:1']!.homeId, revision: `r${fixture.setup.length + 1}`, attachments: [{ id: 'run:1' }] },
+    ]);
+    expect((await publicStore.prefix(kingdomId, deliveredId - 1)).homes).toEqual([]);
     const epochs = (await db.query(`SELECT writer_epoch, writer_generation FROM "${schema}".realm_kingdoms WHERE kingdom_id = $1`, [kingdomId])).rows[0];
     expect(epochs).toEqual({ writer_epoch: null, writer_generation: '3' });
   }, 30_000);
@@ -345,6 +386,7 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     const send = (target: RealmIngress, observation: object) => target.accept(bearer, { version: 1, observation });
 
     // Process A owns the kingdom. It dies the instant its transport takes a chosen frame, before acknowledging it.
+    const home = await settledHome(allocations('live'), kingdomId, person);
     const a = faulty(pool()), first = realm(a.db);
     const hold = await first.services.retain(kingdomId), kingdom = hold.kingdom;
     const seenA: RealmPublicDelivery[] = [];
@@ -353,7 +395,6 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     const frames = (list: RealmPublicDelivery[]) => list.flatMap(d => d.message.type === 'presence' ? [d.message.frame] : []);
     const frameAt = async (list: RealmPublicDelivery[], revision: number) => { await waitUntil(() => frames(list).some(f => f.sequence === revision)); };
 
-    const home = await settledHome(allocations('live'), kingdomId, person);
     expect(await kingdom.execute('install-1', { type: 'home.installAllocated', home }, 'allocation')).toMatchObject({ status: 'committed' });
     expect(await kingdom.execute('rights-1', { type: 'citizen.rights', personId: person, rights: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'opaque-safety' } }, 'moderation')).toMatchObject({ status: 'committed' });
 
@@ -466,6 +507,7 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
  */
 function interruptible(target: pg.Pool) {
   let armed: 'lose' | 'die' | null = null, dead = false;
+  let afterFinalFence: (() => void) | undefined;
   const gone = () => Promise.reject(new Error('This process has died'));
   const db: RealmDatabase = {
     query: ((...args: Parameters<pg.Pool['query']>) => dead ? gone() : (target.query as (...a: unknown[]) => unknown)(...args)) as RealmDatabase['query'],
@@ -479,6 +521,9 @@ function interruptible(target: pg.Pool) {
               if (dead) return gone();
               if (armed === 'die' && args[0] === 'COMMIT') { armed = null; dead = true; await object.query('ROLLBACK'); throw new Error('Connection terminated unexpectedly'); }
               const result = await (object.query as (...a: unknown[]) => Promise<unknown>)(...args);
+              if (afterFinalFence && typeof args[0] === 'string' && args[0].startsWith('UPDATE realm_kingdoms SET sequence =')) {
+                const callback = afterFinalFence; afterFinalFence = undefined; callback();
+              }
               if (armed === 'lose' && args[0] === 'COMMIT') { armed = null; throw new Error('Connection terminated unexpectedly'); }
               return result;
             };
@@ -489,7 +534,8 @@ function interruptible(target: pg.Pool) {
       });
     }) as RealmDatabase['connect'],
   };
-  return { db, loseNextCommitReply: () => { armed = 'lose'; }, dieAtNextCommit: () => { armed = 'die'; } };
+  return { db, loseNextCommitReply: () => { armed = 'lose'; }, dieAtNextCommit: () => { armed = 'die'; },
+    afterNextFinalFence: (callback: () => void) => { afterFinalFence = callback; } };
 }
 
 /** A pool whose process can die: from then on nothing reaches the database. Counts the delivery acknowledgements it refused. */

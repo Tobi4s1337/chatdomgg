@@ -43,3 +43,15 @@
   .behaviour-note{font-size:13px;line-height:1.4}
   .behaviour-controls a,.behaviour-controls button{padding:5px 9px;min-height:30px;font-size:12px}
 }
+.behaviour-timeline .listen,.behaviour-legend .listen{background:#9fc39a}
+.behaviour-timeline--chat .listen{top:6px}
+.behaviour-timeline--chat .listen-1{top:8px;opacity:.85}
+.behaviour-timeline--chat .look,.behaviour-timeline--chat .pose{bottom:6px}
+/* The kingdom's own bubble look, labelled: the words are the simulation's, shown only here. */
+.behaviour-speech{position:absolute;inset:0;pointer-events:none;z-index:1}
+.behaviour-bubble{position:absolute;transform:translate(-50%,-100%);max-width:210px;min-width:100px;padding:8px 13px 10px;border:1px solid #b89865;border-radius:14px 14px 14px 3px;background:#f1dfb7;color:#443c32;box-shadow:0 3px 13px #171d2840;text-align:center;font:15px/1.25 Georgia,serif}
+.behaviour-bubble::after{content:'';position:absolute;left:50%;bottom:-7px;width:10px;height:10px;background:#f1dfb7;border-right:1px solid #b89865;border-bottom:1px solid #b89865;transform:rotate(45deg)}
+.behaviour-bubble small{display:block;margin-bottom:3px;font-size:9px;letter-spacing:.14em;color:#886445}
+.behaviour-bubble p{margin:0}
+.behaviour-emote{font-style:italic;color:#886445}
+@media (max-width:760px){.behaviour-bubble{max-width:150px;min-width:80px;padding:6px 10px 8px;font-size:13px}}

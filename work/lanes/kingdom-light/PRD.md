@@ -27,7 +27,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
 
 ## Tasks
 
-- [ ] **KL01 — One real people-lit helper for every place.**
+- [x] **KL01 — One real people-lit helper for every place.**
   Implement `createPeopleLight` in `lights/people-light.ts` using main's actual types. No three.js, civic, land,
   scene, clock or presence-source dependency. Validate input, use caller-space positions, rise/hold/fade, bounded
   pilot/full/capacity, source reuse and `clear()`. Explicit history: same-time calls are idempotent; reverse seek
@@ -44,7 +44,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   **Evidence:** hero noon/dusk at 1440×900 and 390×844, with dusk greyscale. If the adapter is absent, record
   integrated captures pending; a modified bench is not evidence that the real town changed.
 
-- [ ] **KL03 — An honest evening already under way.**
+- [x] **KL03 — An honest evening already under way.**
   Implement `createSimulatedEvening` through the existing reducer and motion contracts. Seed past fixture stays
   so 80–90% of the labelled simulated homes are already settled; witnessed arrivals/departures continue. Explicit
   `replayArrival()` starts the dark → one named window → town wave in a new epoch. Never alter Herald frames,

@@ -1,6 +1,6 @@
 import { Client, type Room } from '@colyseus/sdk';
 import { Predict } from '@colyseus/sdk/predict';
-import { KingdomRoomState, PLAYER_FIELDS, RealmJoinSchema, kingdomRoomId, sanitizeWalkInput, type RealmJoin, type WalkInput } from '@chatdom/shared/realm';
+import { KingdomRoomState, PLAYER_FIELDS, RealmJoinSchema, kingdomRoomId, sanitizeRealmWalkInput, type RealmJoin, type RealmWalkInput, type WalkInput } from '@chatdom/shared/realm';
 import { stepPlayer } from '@chatdom/world/movement';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { CollisionWorld, PlayerState } from '@chatdom/shared/realm';
@@ -43,8 +43,6 @@ export interface RealmClient {
   clearInput(): void;
   dispose(): void;
 }
-/** A correction bigger than this is a placement, not an error: drawn at once, never glided through walls. */
-const PLACEMENT_SNAP_M = 2;
 export async function connectRealm(endpoint: string, entry: RealmEntry, collision: CollisionWorld | RealmCollision, storage?: Storage): Promise<RealmClient> {
   const network = new Client(endpoint);
   const expectedRoom = kingdomRoomId(entry.kingdomId);
@@ -94,19 +92,23 @@ export async function connectRealm(endpoint: string, entry: RealmEntry, collisio
   };
   const predict = Predict.get(room, { name: 'walkers', mode: 'lerp', delay: 250 });
   predict.attachAll('walkers', { mode: 'lerp', fields: ['x', 'y', 'z', 'distance'], snap: 4 });
-  const input = room.input<WalkInput>({ mode: 'reliable' });
+  const input = room.input<RealmWalkInput>({ mode: 'reliable' });
   const self = room.state.walkers.get(room.sessionId)!;
   const reconciler = predict.reconciler(self, {
-    input, fields: [...PLAYER_FIELDS], smoothMs: 80, snap: PLACEMENT_SNAP_M,
+    // SDK snap measures every numeric replay field, including byte yaw and velocity: a small positional
+    // correction must never pop the whole render pose because a different unit exceeded a metre threshold.
+    // Explicit placement/revision changes below reset SDK anchors; ordinary corrections retain interpolation.
+    input, fields: [...PLAYER_FIELDS], smoothMs: 80,
     // The room steps an input only on the walker's own revision; prediction does the same and holds where its
     // world has not arrived, so a replay never runs an input against solids it was not simulated with.
     step: (ctx, state, command) => {
-      const world = command.collisionRevision === state.collisionRevision ? worldAt(command.collisionRevision) : null;
+      const world = command.placement === self.placement && command.collisionRevision === state.collisionRevision ? worldAt(command.collisionRevision) : null;
       if (world) stepPlayer(state, command, ctx.dt, world);
     },
   });
   const predicted = reconciler.state as unknown as Readonly<PlayerState>;
-  let revision = self.collisionRevision, jumpPending = false, jumpDown = false;
+  let revision = self.collisionRevision, placement = self.placement, jumpPending = false, jumpDown = false;
+  const peerContexts = new WeakMap([...room.state.walkers.values()].map(p => [p, { placement: p.placement, revision: p.collisionRevision }]));
   // Fetch a newly published revision as soon as the room announces it.
   const offRevision = room.onMessage('revision', (message: { collisionRevision?: unknown }) => {
     if (typeof message?.collisionRevision === 'number') worldAt(message.collisionRevision);
@@ -119,12 +121,24 @@ export async function connectRealm(endpoint: string, entry: RealmEntry, collisio
     get predicting() { return !disposed && predicted.collisionRevision === room.state.collisionRevision && worldAt(predicted.collisionRevision) !== null; },
     tick(now, sample) {
       if (disposed) return [];
-      if (self.collisionRevision !== revision) {
-        // The room adopted a new revision: it placed the walker safely and dropped every input sent before. Start
-        // again from that placement rather than replaying old inputs against the replaced solids.
+      if (self.collisionRevision !== revision || self.placement !== placement) {
+        // A server-directed placement is discontinuous even across a thin wall under the distance snap threshold.
+        // Reset the SDK's replay/render anchors before ticking or sending; don't reset its reliable input sequence.
         revision = self.collisionRevision;
+        placement = self.placement;
         reconciler.reset(); jumpPending = false;
         for (const known of worlds.keys()) if (known < revision) worlds.delete(known);
+      }
+      for (const [id, p] of room.state.walkers) {
+        if (id === room.sessionId) continue;
+        const prior = peerContexts.get(p);
+        if (!prior || prior.placement !== p.placement || prior.revision !== p.collisionRevision) {
+          if (prior) {
+            // Reattaching the SDK track clears its old snapshot ring. Neighbours also snap across a relocation.
+            predict.attach(p, { mode: 'lerp', fields: ['x', 'y', 'z', 'distance'], snap: 4 });
+          }
+          peerContexts.set(p, { placement: p.placement, revision: p.collisionRevision });
+        }
       }
       worldAt(room.state.collisionRevision);
       const down = (sample.buttons & 2) !== 0;
@@ -132,8 +146,8 @@ export async function connectRealm(endpoint: string, entry: RealmEntry, collisio
       jumpDown = down;
       const steps = predict.tick(now);
       for (let n = 0; n < steps; n++) {
-        Object.assign(input.data, sample, { buttons: (sample.buttons & 1) | (jumpPending ? 2 : 0), collisionRevision: room.state.collisionRevision });
-        sanitizeWalkInput(input.data); input.send(); jumpPending = false;
+        Object.assign(input.data, sample, { buttons: (sample.buttons & 1) | (jumpPending ? 2 : 0), collisionRevision: room.state.collisionRevision, placement: self.placement });
+        sanitizeRealmWalkInput(input.data); input.send(); jumpPending = false;
       }
       return [...room.state.walkers].map(([id, p]) => ({ id, name: p.name, look: p.look,
         x: predict.value(p, 'x'), y: predict.value(p, 'y'), z: predict.value(p, 'z'),

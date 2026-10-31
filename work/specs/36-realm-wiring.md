@@ -75,9 +75,9 @@ Scenes remain owned by main and the team integrator; the lane delivers adapters 
    demo citizen or automatic rights/coal grant. Check current authentication/revocation, live session where
    required, ownership and rights after awaits and again at the commit boundary. Visitors and newcomers do not
    gain free-word rights from subscriptions, walking, a presentation binding or possession of an API key.
-3. **R3 — One founded layout.** Use realm-server's persisted founded manifest and immutable layout/collision
+3. **R3 — One founded layout.** Use `realm-server-world` (spec 38) over realm-server's persisted adopted layout and immutable layout/collision
    revision to map plot IDs, slots, transforms and native homes. Never regenerate live allocation from the current
-   date, client seed/tier query or Herald defaults. The first production consumer uses realm-server's actual
+   date, client seed/tier query or Herald defaults. The first production consumer uses spec 38's actual
    immutable founded collision world at its persisted layout revision, never the reference court or a renderer-
    generated flat plane. A layout mismatch fails closed with a recoverable private state.
    An approved home replacement must enter the server's revision/asset/collision publication path before clients
@@ -180,7 +180,7 @@ Scenes remain owned by main and the team integrator; the lane delivers adapters 
 | API entry | `REALM_AUTH_ROUTES`, `RealmSessionReplySchema`, `RealmTicketRequestSchema`, `RealmTicketReplySchema`, `RealmSignoutReplySchema`, `RealmApiErrorSchema` in `packages/shared/src/realm/auth.ts`; same-origin cookies/CSRF and private no-store replies |
 | Browser → room | `RealmJoinSchema`, `RealmPrincipal`, `RealmAuthenticator`, `RealmIntentSchema`, private `RealmReceipt` in `packages/shared/src/realm/messages.ts`; main freezes, realm-server authenticates |
 | Private domain | `RealmDomainCommand`, `RealmDecisionContext`, `RealmPrivateState`, `RealmRepository`, `RealmIngressCheckpoint`, `RealmIngressTransition`; main's `decideRealm`/`applyRealmFact` in `packages/world/src/realm/reducer.ts`; realm-server fenced `execute`/`loadIngress`/`executeIngress` implementation |
-| Forge | Shared `KingdomForgeAuthority`, attempt/reservation/native home/attachment/outcome; existing `createKingdomForgeApplication` and `ForgeProviders`; Herald `ForgeCommandSink`/cancellation lease |
+| Forge | Shared `KingdomForgeAuthority` with required owning-room `origin`, attempt/reservation/native home/attachment/outcome; existing `createKingdomForgeApplication` and `ForgeProviders`; Herald `ForgeCommandSink`/cancellation lease. Bind `origin` from authority, never wish/browser; genuine model calls in a simulated room retain simulated provenance. |
 | Build | Existing `BuildDraft`, `BuildPublicationCandidate`, `BuildPublicationReviewer`, `BuildPublicationDecision`; room intent validation and authority; no new public approval endpoint |
 | Presence | Private `PresenceInputSchema`; existing world presence reducer, `presenceTick`, projection; public `KingdomPresenceFrame` inside `RealmPublicDelivery` |
 | Client observations | `RealmBootstrap` current public state through `throughCursor`; durable `RealmPublicMessage` / `RealmPublicDelivery`, validated by kingdom/epoch/cursor/event ID; separate `RealmTransientMessage` chat/remove/clear and `CitizenChatCueSchema`; asset hashes fetched through realm-server's approved asset route |
@@ -364,3 +364,8 @@ changes. These boundaries reserve parallel ownership; they do not permit omittin
   an owned home. Wiring consumes those exact contracts and never introduces a replacement context or reducer.
 - 2026-10-30: Auth route constants and strict DTOs are frozen in shared realm/auth. Fact persistence uses the
   actual event envelope; state retains `sequence`. Simulated Forge provenance remains simulated end to end.
+
+- **2026-10-31 — Walk is entry, not a preset.** The kingdom’s Walk the street action enters the room through the
+  main-owned KingdomEntrySource, or resumes its existing controller after an overview. Preserve stream/capture
+  camera presets separately. Only the explicitly simulated spectator selects the simulated source; Herald/live
+  entry never falls back to it.

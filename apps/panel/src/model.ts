@@ -242,6 +242,19 @@ export type Shelf =
   | { readonly kind: 'offered'; readonly products: readonly ShelfProduct[]; readonly request: ShelfRequest; readonly by: 'simulation' }
   | { readonly kind: 'hidden' };
 
+/**
+ * What the streamer chose to show in viewers' panels (`Twitch.md` §16). The window itself is
+ * not a section: lighting it is the panel's heart and free forever, so it always shows. `home`
+ * is the home card; `night` the picture's companion slip and Tonight; `acts` the crowd acts.
+ */
+export interface Sections {
+  readonly night: boolean;
+  readonly home: boolean;
+  readonly acts: boolean;
+  readonly shelf: boolean;
+}
+export const ALL_SECTIONS: Sections = { night: true, home: true, acts: true, shelf: true };
+
 /** Where "Walk in" leads: the kingdom's own entry gate, on chatdom.gg, in a new tab. */
 export type Entry = { readonly kind: 'gate'; readonly path: string } | { readonly kind: 'none' };
 
@@ -261,6 +274,8 @@ export interface PanelSnapshot {
   readonly act: CrowdAct | null;
   readonly shelf: Shelf;
   readonly entry: Entry;
+  /** The streamer's choice of sections, as the kingdom carries it to every panel. */
+  readonly sections: Sections;
 }
 
 /** One adapter per mounted panel. Actions report back only through the snapshot. */

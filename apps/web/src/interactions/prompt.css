@@ -1,0 +1,69 @@
+@font-face { font-family: 'IM Fell English'; font-style: normal; font-weight: 400; font-display: swap; src: url('../atlas/assets/fonts/im-fell-english-regular.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: swap; src: url('../atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English'; font-style: italic; font-weight: 400; font-display: swap; src: url('../atlas/assets/fonts/im-fell-english-italic.woff2') format('woff2'); }
+
+/* The interaction prompt: a parchment strip on a dark wood back, brass key and stem. Lives over the world. */
+.ix-layer { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.ix-prompt {
+  --ix-wood-hi: #6f4a31; --ix-wood: #4f3322; --ix-wood-lo: #2f1d12; --ix-edge: #1d120a;
+  --ix-brass-hi: #f6dfa2; --ix-brass: #c99f5b; --ix-brass-lo: #7c5a2a;
+  --ix-parch: #f4e7c8; --ix-parch-lo: #dfc99b; --ix-ink: #33231a; --ix-ink-soft: #6e5339; --ix-seal: #8f3826;
+  position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center;
+  pointer-events: none; will-change: transform; font-synthesis: none;
+  animation: ix-rise .14s ease-out both;
+}
+.ix-plaque {
+  pointer-events: auto; appearance: none; margin: 0; border: 1px solid var(--ix-edge); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 5px 14px 5px 6px;
+  color: var(--ix-ink); font: 17px/1.1 'IM Fell English', Georgia, serif; letter-spacing: .005em; white-space: nowrap;
+  border-radius: 7px; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  background:
+    radial-gradient(ellipse at 28% 18%, #fff9e6 0, transparent 68%),
+    repeating-linear-gradient(91deg, #8a643a07 0 3px, transparent 3px 11px),
+    linear-gradient(172deg, var(--ix-parch), var(--ix-parch-lo));
+  box-shadow:
+    inset 0 0 0 1px #fffbe955, inset 0 -5px 10px #a0784022,
+    0 0 0 3px var(--ix-wood), 0 0 0 4px var(--ix-edge), 0 1px 0 4px #ffd9a020,
+    0 10px 22px #0a081880, 0 3px 6px #0a081866;
+  transition: filter .16s, transform .12s;
+}
+.ix-plaque:hover:not(:disabled) { filter: brightness(1.04); }
+.ix-plaque:active:not(:disabled) { transform: translateY(1px); }
+.ix-plaque:disabled { cursor: default; }
+.ix-plaque:focus-visible { outline: 2px solid var(--ix-brass-hi); outline-offset: 6px; }
+
+/* The brass key: E struck into it. */
+.ix-key {
+  display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 5px;
+  font: 19px/1 'IM Fell English SC', Georgia, serif; color: #3a2610; text-shadow: 0 1px 0 #ffeec280;
+  background: radial-gradient(circle at 34% 28%, var(--ix-brass-hi), var(--ix-brass) 56%, var(--ix-brass-lo));
+  box-shadow: inset 0 1px 0 #fff3cc, inset 0 -2px 0 #5e421d, 0 0 0 1px #3d2a12, 0 2px 0 #1d120a99;
+}
+.ix-words { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 0 2px; }
+.ix-caption { font: 10.5px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .14em; color: var(--ix-ink-soft); }
+.ix-verb { display: block; }
+
+/* A thin brass stem and diamond point to what is being used. */
+.ix-stem { display: block; width: 2px; height: 16px; margin-top: 4px; background: linear-gradient(var(--ix-brass), #c99f5b00); position: relative; }
+.ix-stem::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 6px; height: 6px; transform: translateX(-50%) rotate(45deg);
+  background: var(--ix-brass-hi); box-shadow: 0 0 8px #f2b65caa, 0 0 0 1px #5e421d; }
+
+/* Waiting for the room: the key gives way to a small ember. */
+.ix-prompt[data-tone='pending'] .ix-plaque { padding-left: 14px; color: var(--ix-ink-soft); font-style: italic; }
+.ix-ember { display: block; flex: none; width: 9px; height: 9px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff2c0, #f0a040 55%, #a8461c); box-shadow: 0 0 10px #f3a24bcc;
+  animation: ix-ember .9s ease-in-out infinite alternate; }
+
+/* The room said no: its sentence, in seal ink, without the key. */
+.ix-prompt[data-tone='refused'] .ix-plaque { padding-left: 14px; color: var(--ix-seal); white-space: normal; max-width: min(320px, calc(100vw - 32px)); text-align: left; font-size: 16px; }
+.ix-prompt[data-tone='refused'] .ix-stem::after { background: #d58a6c; box-shadow: 0 0 0 1px #5e2a1d; }
+
+/* Quiet context: smaller, translucent, never a button you would press. */
+.ix-prompt[data-tone='quiet'] .ix-plaque { min-height: 34px; padding: 4px 12px; font-size: 14.5px; font-style: italic; color: var(--ix-ink-soft); opacity: .82;
+  box-shadow: inset 0 0 0 1px #fffbe955, 0 0 0 2px var(--ix-wood), 0 0 0 3px var(--ix-edge), 0 6px 14px #0a081866; }
+.ix-prompt[data-tone='quiet'] .ix-stem { opacity: .55; height: 12px; }
+
+@keyframes ix-rise { from { opacity: 0; transform-origin: 50% 100%; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+@keyframes ix-ember { from { opacity: .55; scale: .86; } to { opacity: 1; scale: 1.05; } }
+@media (prefers-reduced-motion: reduce) { .ix-prompt, .ix-ember { animation: none; } .ix-plaque { transition: none; } }
+@media (max-width: 520px) { .ix-plaque { font-size: 16px; } .ix-prompt[data-tone='refused'] .ix-plaque { font-size: 15px; } }

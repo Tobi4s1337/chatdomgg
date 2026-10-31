@@ -1,4 +1,4 @@
-import type { KingdomPresenceFrame } from '@chatdom/shared';
+import type { CitizenChatCue, KingdomPresenceFrame } from '@chatdom/shared';
 import type { CitizenMotion, CitizenMotionSample } from '@chatdom/world';
 import type { CitizenSample } from '../citizens';
 // Relative until main adds the policy to the @chatdom/world barrel at merge.
@@ -19,6 +19,15 @@ export interface BehaviourLoopSource {
    * main's reserved action. Returning a result answers the goal without asking motion.
    */
   gate?(request: CitizenGoalAnswer['request']): CitizenGoalAnswer['result'] | null;
+  /**
+   * Chat cues as main's adapter holds them at a step (validated `CitizenChatCue`s, supplied again on every
+   * step). In the kingdom consumer this is `[...speech.values()]`; the bench supplies a labelled simulation.
+   */
+  cuesAt?(atMs: number, samples: readonly CitizenMotionSample[]): readonly CitizenChatCue[];
+  /** True on a step at which the caller's source reconnected: the policy is reset, motion carries on. */
+  resetsAt?(atMs: number): boolean;
+  /** Called when the loop replays from the start, so a stateful simulated source starts again too. */
+  restart?(): void;
 }
 
 export interface BehaviourFrame {
@@ -43,10 +52,13 @@ export function createBehaviourLoop(motion: CitizenMotion, source: BehaviourLoop
       const steps: CitizenBehaviourStep[] = [];
       for (const atMs of dueBehaviourSteps(lastStepMs, nowMs)) {
         lastStepMs = atMs;
+        // Main's consumer resets its policy when the source reconnects; answers to old goals go with it.
+        if (source.resetsAt?.(atMs)) { policy.reset(); answers = []; }
         const frame = source.frameAt(atMs);
         if (frame && frame !== applied) { motion.applyFrame(frame); applied = frame; }
+        const samples = motion.sample(atMs), cues = source.cuesAt?.(atMs, samples);
         const step = policy.step({ kingdomId: source.kingdomId, epoch: source.epoch, origin: source.origin, atMs,
-          samples: motion.sample(atMs), ambientSlots: source.ambientAt(atMs), destinationsFor, answers });
+          samples, ambientSlots: source.ambientAt(atMs), destinationsFor, answers, ...(cues ? { cues } : {}) });
         answers = step.goals.map(request => ({ request, result: source.gate?.(request) ?? motion.requestGoal(request) }));
         steps.push(step);
       }
@@ -58,7 +70,7 @@ export function createBehaviourLoop(motion: CitizenMotion, source: BehaviourLoop
       return { samples, overlays: policy.present(samples, nowMs) };
     },
     /** Source unavailable, navigation away or a replay from the start. */
-    reset(): void { motion.clear(); policy.reset(); lastStepMs = null; answers = []; applied = null; },
+    reset(): void { motion.clear(); policy.reset(); lastStepMs = null; answers = []; applied = null; source.restart?.(); },
   };
 }
 

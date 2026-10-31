@@ -214,6 +214,13 @@ counter or a green isolated bench.
 
 ## References
 
+- `work/references/walk-render-smoothing.md`: exact SDK 0.18.8 render accumulator and reconciliation;
+  all-field snap thresholds are not metre-only thresholds. Preserve replay fields and explicit placement cuts.
+- `work/references/walk-slab-support.md`: actual partial-box tops and sustained support after stepping;
+  compare compiled collision on authority and predictor before changing tolerances.
+- `work/references/walk-multiplayer-characters.md`: fixed body versus render pose and distance-driven gait;
+  the surveyed Defold/NJ examples do not replace our server-authoritative movement law.
+
 - `work/references/walking-voxel-worlds.md`: Voxelize's bounded sweep/slide and supported step trials; HYTOPIA's
   boom/film-offset lessons with stronger near-plane safety; time-based presentation easing and pointer-lock
   warp handling. Its prototype shoulder offset was explicitly not sufficient framing proof.
@@ -233,6 +240,15 @@ editor rig, director policy, interior cutaway art, renderer-wide performance rep
 These ownership boundaries do not excuse a broken walking/camera experience on the places supplied to this lane.
 
 ## Decisions
+
+- **2026-10-30 — Founder’s 360 Hz review governs WC07/08.** Fix visible walking jitter, busy gait,
+  repeated/denied pointer capture and unstable half-slab support before declaring walking ready. Read the
+  three Terra reference notes first. Current camera already reads Predict’s rendered pose: inspect all-field
+  `snap: 2` and exact-height step easing as hypotheses, not established causes. Ordinary corrections blend;
+  explicit placements/revisions cut. Keep one simulation law, one SDK input/replay protocol, and one rendered
+  local pose driving camera/body. Calm distance-driven cadence/bob, real-click-only optional lock with quiet
+  drag fallback, and actual compiled slab walk → stand → jump are the acceptance. Headless FPS is no evidence
+  of 360 Hz feel. Main owns integration; this lane owns fixes 1–4.
 
 - **2026-10-30 — Integrated WC05/WC06 presentation seam.** The reference consumer supplies `REFERENCE_WORLD`
   and forwards the real client's `predicted` getter and `clearInput()`. The controller derives step offsets from
@@ -292,6 +308,19 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
   second try slid the eye along the entry boom and dropped the citizen off the bottom edge. Entry framing at 6.5 m
   is unchanged. Self-fade now measures eye-to-head distance. The controller takes `collision` (a world or a
   function read every frame; null keeps the last world). Obstructions are never faded.
+- **2026-10-30 — WC07 handing the camera back, the pull-in fade and the thumb map.** A boom a solid pulled in
+  fades the local citizen from further out: `selfFade` blends from the wheel's eye-to-head band (.5–1.25 m) to
+  1.5–2.4 m over the first .25–1.5 m the solid took away, so a camera backed against a wall looks past the
+  citizen at the street, while the same short boom chosen with the wheel keeps the over-the-shoulder body.
+  Opacity follows a pull-in at once and returns at 10/s, because a boom springing out of a corner travels most of
+  a metre in one frame; below 5 % the citizen is not drawn, since the renderer's screen-door fade of a body this
+  close reads as specks on the lens. Camera position, shoulder and near-plane clearance are unchanged. Build and
+  the Forge compose with `setViewOffset`; the shoulder rig clears any view offset on every walking frame, because
+  the near-plane footprint assumes the plain frustum and a forgotten offset would let the drawn frustum into a
+  wall. `thumbSlots` is the phone's one thumb map, shared with interactions: the action slot (60 px) sits
+  directly above Jump, both wholly outside the stick region; the HUD positions Jump from the same function.
+  Escape is never consumed by walking. The README's takeover recipe names build's `onBuild`/`onHousewarming`,
+  the Forge's `status.open` and the director calls exactly.
 - **2026-10-30 — WC03 feel constants (one shared law, no client tuning).** Velocity moves toward the input's
   target along the straight line between them, so neither diagonals nor turns gain speed and the target is met
   exactly: `GROUND_ACCEL = 40` m/s² (walk 4 m/s in 3 ticks, sprint 7 m/s in .175 s), `GROUND_BRAKE = 70` m/s²
@@ -329,6 +358,17 @@ These ownership boundaries do not excuse a broken walking/camera experience on t
   client calls the SDK's `reconciler.reset()` (reseed from the room's safe placement, void inputs sent before it,
   clear the latched jump) instead of replaying old inputs against replaced solids, and listens for the room's
   `revision` broadcast to fetch the world early (it also silences the SDK's unregistered-message warning).
-  `snap: 2` m (above sprint × patch, 1.4 m) draws a placement at once instead of gliding it through walls.
+  `snap: 2` m (above sprint × patch, 1.4 m) remains a fallback for large corrections. An explicit authority
+  placement token handles short relocations too, as specified below.
   The local yaw is drawn from the exact predicted byte, since smoothing a wrapping byte spun the citizen the long
   way. `predicted` (full `PlayerState`) and `predicting` are exposed for step easing and evidence.
+- **2026-10-30 — Relocation context belongs to the authority.** `WalkerSchema.placement` is a uint32 starting
+  at zero, incremented with unsigned wrap on every successful `placeWalker` and world adoption, including an
+  identical-coordinate placement. Failed placement changes nothing. `RealmWalkInput extends WalkInput` echoes
+  it only at the wire adapter; physics samples, `PlayerState`, `PLAYER_FIELDS` and `stepPlayer` stay unchanged.
+  The server consumes but ignores old-context input, including packets arriving after its buffer clear. The
+  client stamps decoded authority context after copying sampled controls and gates replay by it. Before SDK
+  ticking/sending, a changed placement/revision calls `reconciler.reset()` and clears pending jump; peers reattach
+  their existing SDK tracks to discard old interpolation rings. Never reset reliable input sequence or detach
+  self. Controller clears step easing and settles the camera at the new place without losing heading/zoom.
+  Ordinary corrections keep SDK smoothing. This is pose context, never another input sequence/acknowledgement.
