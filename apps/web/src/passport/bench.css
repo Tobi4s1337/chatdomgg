@@ -1,0 +1,47 @@
+/* The bench's desk: a night-lit table the book lies on. Only the bench uses this; surfaces bring their own room. */
+html:has(.ppb), html:has(.ppb) body {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 38%, #4a3324 0, transparent 70%),
+    repeating-linear-gradient(92deg, #ffdcae06 0 3px, transparent 3px 11px, #0a040212 11px 12px, transparent 12px 21px),
+    linear-gradient(180deg, #2a1c14, #1a110c 70%, #120b08);
+}
+main.ppb { --pp-max: min(1080px, calc((100svh - 300px) * 1.58)); display: grid; justify-items: center; align-content: start; width: 100%; max-width: none; min-height: 100svh; margin: 0;
+  padding: 12px 120px 40px 24px; gap: 14px; text-align: left; }
+main.ppb[data-chrome='off'] { padding-top: 28px; }
+.ppb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; width: min(100%, 1180px); padding: 10px 18px; }
+.ppb-title { flex: 1 1 320px; display: grid; gap: 3px; }
+.ppb-eyebrow { color: var(--cd-cream-soft); }
+h1.ppb-h1 { margin: 0; font: 400 var(--cd-type-title)/1.1 var(--cd-face-story); letter-spacing: 0; color: var(--cd-cream); }
+.ppb-sim { margin: 0; font: var(--cd-type-small)/1.35 var(--cd-face-body); color: var(--cd-cream-soft); }
+.ppb-sim b { font: var(--cd-type-small)/1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); color: #f0b48a; }
+.ppb-picks { flex: 2 1 520px; display: grid; gap: 6px; }
+.ppb-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.ppb-reading { display: grid; justify-items: center; width: 100%; }
+.ppb-chip { min-height: 36px; padding: 7px 12px; border: 0; border-radius: 18px; cursor: pointer; color: var(--cd-cream);
+  font: var(--cd-type-small)/1.1 var(--cd-face-body); background: #00000038; box-shadow: inset 0 0 0 1px #c99f5b40; }
+.ppb-chip[aria-pressed='true'] { color: #2a1a0e; background: radial-gradient(circle at 34% 28%, #fff1c4, #e1b867 40%, #b58945); box-shadow: inset 0 -1px 2px #5a3c1499; }
+.ppb-chip:focus-visible { outline: 2px solid var(--cd-focus); outline-offset: 3px; }
+.ppb-refusal { color: var(--cd-cream); font: var(--cd-type-body)/1.4 var(--cd-face-body); }
+@media (max-width: 760px) {
+  main.ppb { --pp-max: 100%; padding: 12px 10px 48px; }
+}
+
+/* The card page's room for `?surface=card`: its dusk sky over the kingdom's rooftops, as `CitizenCard` draws it. */
+html:has(.ppb[data-surface='card']) {
+  background:
+    radial-gradient(70% 55% at 50% 100%, rgba(255, 168, 92, .38), rgba(255, 168, 92, 0) 70%),
+    linear-gradient(180deg, #221b33 0%, #3d2a45 34%, #7a4549 64%, #c06f4c 88%, #d98a55 100%);
+}
+html:has(.ppb[data-surface='card']) body { background: transparent; }
+main.ppb[data-surface='card'] { padding: 14px 40px 120px; overflow-x: clip; }
+.ppb-card { position: relative; display: grid; justify-items: center; gap: 6px; width: min(100%, 1360px); }
+.ppb-card-head { display: flex; gap: 14px; align-items: baseline; justify-content: center; flex-wrap: wrap; }
+.ppb-card-mark { font: 400 22px/1 var(--cd-face-label); letter-spacing: .16em; color: #f6d995; text-shadow: 0 1px 0 #0006; }
+.ppb-card-kingdom { font: italic 400 17px/1.2 var(--cd-face-story); color: #f2e2c0; opacity: .9; }
+.ppb-card-roofs {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 96px; z-index: -1; pointer-events: none; opacity: .9;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='466' height='120' viewBox='0 0 466 120'%3E%3Cpath fill='%23170f16' d='M0 120V78l18-14 18 14v-8h10V58l26-22 26 22v20h8V66l14-10 14 10v12h10V48l6-6 6 6v10l22-18 22 18v20h12V70l16-12 16 12v8h10V62l24-20 24 20v16h8V54l12-14 12 14v24h10V68l18-14 18 14v10h12V60l20-16 20 16v18h14V72l10-8 10 8v48z'/%3E%3Cg fill='%23ffbf66'%3E%3Crect x='62' y='66' width='5' height='6'/%3E%3Crect x='76' y='66' width='5' height='6' opacity='.7'/%3E%3Crect x='164' y='64' width='5' height='7'/%3E%3Crect x='252' y='60' width='5' height='7' opacity='.8'/%3E%3Crect x='300' y='62' width='4' height='6'/%3E%3Crect x='420' y='70' width='5' height='6' opacity='.85'/%3E%3C/g%3E%3C/svg%3E") bottom left / 372.8px 96px repeat-x;
+}
+@media (max-width: 760px) {
+  main.ppb[data-surface='card'] { padding: 12px 12px 110px; }
+}

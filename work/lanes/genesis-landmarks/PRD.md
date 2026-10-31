@@ -6,8 +6,8 @@ Follow `$ralph-lane` and the spec. Each task is done only when scoped checks pas
 
 ## Tasks
 
-- [ ] **GENESIS-LANDMARKS-01 — Coastal harbour watchtower with a grounded doorway and adapter** · evidence: shot/test
-- [ ] **GENESIS-LANDMARKS-02 — River civic landmark with Retro-inspired visual rhythm** · evidence: shot/test
+- [x] **GENESIS-LANDMARKS-01 — Coastal harbour watchtower with a grounded doorway and adapter** · evidence: shot/test
+- [x] **GENESIS-LANDMARKS-02 — River civic landmark with Retro-inspired visual rhythm** · evidence: shot/test
 - [ ] **GENESIS-LANDMARKS-03 — Mountain civic landmark and cathedral site; test all three proposals** · evidence: shot/test
 
 ## Backlog

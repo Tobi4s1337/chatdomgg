@@ -7,7 +7,7 @@ import { VoxelWorkerPool, type AssetChunkMesh } from '@chatdom/voxel';
 import { createAtmosphere, getEnvironment, createVoxelMaterial, geometryFromChunks, createWindowLights, createPostStack, type WindowHouse } from '@chatdom/render';
 import { generateSettlementPlan, terrainHeight, samplePublicGround, randomUnit, seedHash, type KingdomTier, type SettlementPlan, type RealmFoundedScene } from '@chatdom/world';
 import type { KingdomId, KingdomPresenceFrame, Vec3, VoxelBlueprint, PresenceFeed } from '@chatdom/shared';
-import { CitizenChatCueSchema } from '@chatdom/shared';
+import { CitizenChatCueSchema, PRESENCE_LEASE_MS } from '@chatdom/shared';
 import { createSimulatedPresence, createHeraldPresence } from './presence-feed';
 import { loadTerrain } from './terrain-client';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from './terrain-worker';
@@ -20,7 +20,7 @@ import { createSunShadows } from '@chatdom/render';
 import { beaconStrength } from './beacon';
 import { placeSettlementContent, placeMarketContent } from './settlement-content';
 import { createForgeSquareContent } from './forge-square-content';
-import { createCastleContent } from './castle-content';
+import { createCastleContent, createCastleCourtContent } from './castle-content';
 import { createGenesisWaterContent } from '../genesis/water-content';
 import { sampleGenesisSurface } from '@chatdom/world/genesis';
 import { inhabitedLightBounds } from './light-bounds';
@@ -33,7 +33,7 @@ import { composeWindowCamera } from './window-camera';
 import { composeRoyalCamera } from './royal-camera';
 import { createHomeLife } from './home-life';
 import { createRoyalLife } from './royal-life';
-import { foundedLifeSites, foundedForgeSites } from './home-life-sites';
+import { foundedLifeSites, foundedForgeSites, generatedHomeLifeSites } from './home-life-sites';
 import { createForgeEmitters } from '../forge/emitters';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
 import { createObservedWalkers, walkerSlots } from './observed-walkers';
@@ -118,11 +118,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   if(options.potential)props.push(...createGenesisWaterContent(layout));
   const {buildings:castleBuildings,beaconPosition}=createCastleContent(layout.castle,options.potential?.style);
+  const simulatedCourt=installed?undefined:createCastleCourtContent(layout.castle,options.potential?.style);
+  if(simulatedCourt)props.push(...simulatedCourt.props);
   const buildings=installed?houses:[...houses,...castleBuildings],content=installed?.content??[...buildings,...props];
   for(const {blueprint} of content)blueprints.set(blueprintKey(blueprint),blueprint);
   const royal=installed?royalWindow(installed.forgeHosts):undefined;
   const presenceHouses=royal?[...houses,royal]:[...houses];
-  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:[],braziers:[],standard:undefined};
+  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:generatedHomeLifeSites(houses),braziers:simulatedCourt?.braziers??[],standard:undefined};
   const homeLife=own(createHomeLife(scene,lifeSites.homes));
   const forgeSites=options.founded?foundedForgeSites(options.founded):simulatedSmithy??{fires:[],noses:[]};
   const forgeHearth=own(createRoyalLife(scene,clay,undefined,forgeSites.fires.filter(site=>site.normal[1]===0),undefined,true));
@@ -196,7 +198,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const farField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setFarLight(volume);fieldUploads++;farBytes=volume.estimatedPeakBytes;farVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom'),{mode:'kingdom',bounds:lightBounds}));
   const beaconField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setBeaconLight(volume);fieldUploads++;beaconBytes=volume.estimatedPeakBytes;beaconVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The castle light could not reach its towers'),{mode:'beacon',position:beaconPosition}));
   let lastField=-Infinity,lastNames=-Infinity,lastActive=0,beaconCue=false;
-  const unsubscribe=source.subscribe(next=>{frame=next;crowd.applyFrame(next);arrivalDirector?.observe(next,Date.now());if((options.source==='herald'||next.origin==='live')&&requestedFocus===undefined){const present=next.windows.find(w=>w.present&&presenceHouses.some(h=>h.slot===w.slot));if(present)focusHome(present.slot);}lastField=-Infinity;options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{windows.clear();crowd.clear();arrivalDirector?.clear();frame=undefined;lastField=-Infinity;options.onSource('CONNECTION LOST');});
+  let presenceInterrupted=false,presenceExpiresAt=0;
+  const unsubscribe=source.subscribe(next=>{presenceInterrupted=false;presenceExpiresAt=Math.min(Date.now()+PRESENCE_LEASE_MS,next.asOf+PRESENCE_LEASE_MS);frame=next;crowd.applyFrame(next);arrivalDirector?.observe(next,Date.now());if((options.source==='herald'||next.origin==='live')&&requestedFocus===undefined){const present=next.windows.find(w=>w.present&&presenceHouses.some(h=>h.slot===w.slot));if(present)focusHome(present.slot);}lastField=-Infinity;options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{presenceInterrupted=true;arrivalDirector?.cancel();options.onSource('CONNECTION LOST');});
   earlyCleanups.push(unsubscribe);
   const debug:KingdomDebug={citizens:0,walking:0,ready:false,lightingReady:false,workers:pool.stats.size+4,homes:houses.length,activeWindows:0,geometryBuilds:0,fieldUploads:0,drawCalls:0,triangles:0,time:0,hour,camera:camName,fieldBytes:0,source:source.label,fieldSettled:false,shadowUpdates:0,shadowDrawCalls:0,shadowTriangles:0,shadowBytes:0,shadowEnabled:false,windowFieldVisited:0,beaconFieldVisited:0};
   type Placement={position:Vec3;yaw:number;placementId?:string};
@@ -368,6 +371,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(disposed)return;try {const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&debug.ready&&!fixedTime)time+=dt;
     if(ownSimulation)simulation.advance(time);
+    // A transport retry does not revoke a still-valid presence lease or send everyone home again.
+    // Keep the last public picture while visibly disconnected; expiry still dims it and forgets names.
+    if(presenceInterrupted&&frame&&Date.now()>=presenceExpiresAt){
+      const expiredAt=Date.now();
+      windows.setFrame({...frame,connection:'stale',asOf:expiredAt,windows:frame.windows.map(window=>({...window,present:false,publicName:null,since:expiredAt}))});
+      crowd.clear();arrivalDirector?.clear();frame=undefined;
+      lastLightFrameKey='';lastField=-Infinity;
+    }
     hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);clay.setEnvironment(grade);ground.setEnvironment(grade);forge.setEnvironment(grade);realmForge?.setEnvironment(grade);crowd.material.setEnvironment({...grade,ambientIntensity:Math.max(.65,grade.ambientIntensity)});
     const presentationMs=ownSimulation?simulation.epochMs+time*1000:Date.now();
     const walking=walk?.frame(now,walkSelected&&!capturePose&&!build.session&&!build.housewarming&&!forge.status().open)??false;

@@ -28,9 +28,9 @@ TM01–TM03 merged; real cheer/hype source binding remains with main. Stream vie
 
 - [x] **TM01–TM02 — Support at the right home** · Merged and composed by main; retain evidence and the real-event qualification in progress.
 - [x] **TM03 — Sky answers a cheer** · Merged spectacle; real cheer/hype ingestion is still main-owned and unproven.
-- [ ] **TM08 — Make the sky and parcels read at dusk** · Replace the equal-height aurora with irregular overlapping curtain folds while keeping names legible; give gift parcels warm seal/ribbon contrast. Capture and inspect the real-kingdom staged scene and sound tails; label rehearsal SIMULATED.
-- [ ] **TM09 — Stage an observed event together** · Consume the existing approved event and director ports to coordinate sky, light, sound and crowd in one beat, then return camera control. Test interruption/deduplication and capture the stream; report absent actual source as `needs:` rather than presenting a rehearsal as live.
-- [ ] **TM10 — Verify the composed event path** · Exercise actual main-provided ingress and observer bindings when available, retaining truthful source identity and delivery/retry semantics. Focused tests plus a viewed stream capture; record separately whether a real Twitch event was witnessed.
+- [x] **TM08 — Make the sky and parcels read at dusk** · Replace the equal-height aurora with irregular overlapping curtain folds while keeping names legible; give gift parcels warm seal/ribbon contrast. Capture and inspect the real-kingdom staged scene and sound tails; label rehearsal SIMULATED.
+- [x] **TM09 — Stage an observed event together** · Consume the existing approved event and director ports to coordinate sky, light, sound and crowd in one beat, then return camera control. Test interruption/deduplication and capture the stream; report absent actual source as `needs:` rather than presenting a rehearsal as live.
+- [x] **TM10 — Verify the composed event path** · Exercise actual main-provided ingress and observer bindings when available, retaining truthful source identity and delivery/retry semantics. Focused tests plus a viewed stream capture; record separately whether a real Twitch event was witnessed.
 
 ## Previous task breakdown (history; not the current queue)
 
