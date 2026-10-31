@@ -7,9 +7,10 @@ import Kingdom from '../kingdom';
 import type { PotentialKingdomView } from '../kingdom/scene';
 import { readRealmJson } from '../realm/adapters/entry';
 import { GENESIS_CHANNELS, PROFILE_CAPTURED_AT } from './channels';
+import { createGenesisWindowPreview } from './window-preview';
 import './preview.css';
 
-type View = { potential: PotentialKingdomView; name: string; feed: PresenceFeed; category: string; average: number; landscape: string };
+type View = { potential: PotentialKingdomView; name: string; feed: PresenceFeed; category: string; average: number; landscape: string; lore: string };
 
 /** Potential land is scenery, not a room, a deed, or a synthetic audience. */
 export default function GenesisPreview() {
@@ -66,11 +67,11 @@ export default function GenesisPreview() {
       asOf: recipe.evidence.asOf, origin: 'simulated', connection: 'offline', streamLive: false, windows: [] };
     const feed: PresenceFeed = { label: 'SIMULATED', subscribe(receive) { receive(empty); return () => {}; } };
     if (!abort.signal.aborted) setView({ potential: { plan, size: recipe.size.tier, style: recipe.identity.styleFamily,
-      camera: { eye, target, fov: 50 } }, name: channel.name, feed, category: observed.categories[0]!.name,
-      average: observed.audience.averageViewers!, landscape: choice.character.replaceAll('-', ' ') });
+      camera: { eye, target, fov: 50 }, windowPreview: createGenesisWindowPreview(id, plan.homes, recipe.evidence.asOf) }, name: channel.name, feed, category: observed.categories[0]!.name,
+      average: observed.audience.averageViewers!, landscape: choice.character.replaceAll('-', ' '), lore: channel.lore });
   }
   return <Show when={view()} fallback={<div class="genesis-wait"><p>CHATDOM · THE LAND BEYOND THE MAP</p><h1>{error() ? 'The road needs a moment.' : 'Unfolding the land…'}</h1><p>{error() ?? 'Reading this channel’s own seed.'}</p><a href="/map">Return to the Atlas</a></div>}>{current => <>
     <Kingdom kingdomName={current().name} potential={current().potential} presenceFeed={current().feed} />
-    <aside class="genesis-caption"><strong>{current().landscape}</strong><span>{current().category} · {current().average} average viewers in the recorded survey</span><p>A glimpse of the kingdom waiting here. Its founding story has yet to begin.</p><a href="/showcase">Compare the three kingdoms ↗</a></aside>
+    <aside class="genesis-caption"><strong>{current().landscape}</strong><span>{current().category} · about {Math.round(current().average)} viewers in the recorded survey</span><p>{current().lore}</p><a href="/map">Return to the Atlas</a> · <a href="/showcase">Compare the three kingdoms ↗</a></aside>
   </>}</Show>;
 }
