@@ -23,14 +23,28 @@ function forgeStandingPlan(plan: SettlementPlan): SettlementPlan {
     return inside && !plan.reservations.some(({ lot }) => x >= lot.minX - .6 && x <= lot.maxX + .6 && z >= lot.minZ - .6 && z <= lot.maxZ + .6);
   };
   const nodes = [...plan.nodes], streets = [...plan.streets], activeStreetIds = [...plan.activeStreetIds];
-  for (const [index, [dx, dz]] of [[-4, 0], [4, 0], [-3, 3], [3, 3], [0, 5], [-5, 2], [-4, 5], [2, 6]].entries()) {
-    const position: Vec3 = [market.position[0] + dx!, market.position[1], market.position[2] + dz!];
-    // Check the whole connector, not just its endpoint, against market and lots.
-    if (!Array.from({ length: 21 }, (_, i) => insideMarket(market.position[0] + dx! * i / 20, market.position[2] + dz! * i / 20)).every(Boolean)) continue;
+  // The smithy occupies the east side of the anvil. Keep its working area and
+  // the camera approach from the south-west open, with the audience beyond it.
+  const standingPoints = [[-6, 10], [-6, 8], [-6, 6], [-6, 4], [-6, 2],
+    [-5, 0], [-3, 0], [-1, 0], [1, 0], [3, 0], [5, 0], [7, 0],
+    [10, 1], [10, 3], [10, 5], [10, 7]];
+  for (const [index, [x, z]] of standingPoints.entries()) {
+    const position: Vec3 = [x!, market.position[1], z!];
+    // Walk around the workshop rather than through the anvil or its working floor.
+    const points: Vec3[] = x! >= 10
+      ? [market.position, [10, market.position[1], 10], position]
+      : z! <= 0 && x! > -3
+        ? [market.position, [-3, market.position[1], 10], [-3, market.position[1], 1], position]
+        : [market.position, [-3, market.position[1], 10], position];
+    // Check every connector segment, not just its endpoint, against market and lots.
+    if (!points.slice(1).every((end, segment) => Array.from({ length: 21 }, (_, i) => {
+      const start = points[segment]!;
+      return insideMarket(start[0] + (end[0] - start[0]) * i / 20, start[2] + (end[2] - start[2]) * i / 20);
+    }).every(Boolean))) continue;
     const id = `forge:watch:${index}`, edgeId = `${id}:path`;
     if (nodes.some(node => node.id === id) || streets.some(edge => edge.id === edgeId)) continue;
     nodes.push({ id, kind: 'junction', position });
-    streets.push({ id: edgeId, from: market.id, to: id, kind: 'lane', name: 'Market', points: [market.position, position], width: 2, verge: 0 });
+    streets.push({ id: edgeId, from: market.id, to: id, kind: 'lane', name: 'Market', points, width: 2, verge: 0 });
     activeStreetIds.push(edgeId);
   }
   return { ...plan, nodes, streets, activeStreetIds };
@@ -68,6 +82,10 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
   let walkers: WalkerSlots = new Map();
   let forge: { anchor: Vec3; atMs: number } | undefined;
   const watchers = new Map<number, string>();
+  let nextForgeGatherMs = 0;
+  // A rebuilt scene can subscribe before the Forge feed replays its activity.
+  let restoredForgeGraceStart: number | undefined;
+  let restoredForgePending = false;
   const speech = new Map<number, CitizenChatCue>();
   let disposed = false;
   const shadowGeometry = new THREE.CircleGeometry(.29, 12); shadowGeometry.rotateX(-Math.PI / 2);
@@ -92,6 +110,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
         saved.used = true;
         motion = saved.motion;
         for (const [slot, destination] of saved.watchers) if (next.windows.some(window => window.slot === slot && window.present && saved.frame.windows.some(previous => previous.slot === slot && previous.present && previous.since === window.since))) watchers.set(slot, destination);
+        restoredForgePending = watchers.size > 0;
         for (const [slot, look] of saved.looks) suppliedLooks.set(slot, look);
       }
       if(frame&&(frame.kingdomId!==next.kingdomId||frame.epoch!==next.epoch||frame.origin!==next.origin||next.asOf<frame.asOf)){resetBehaviours();watchers.clear();suppliedLooks.clear();}
@@ -118,25 +137,34 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       for (const [slot, cue] of speech) if (removed.has(cue.id)) speech.delete(slot);
     },
     watchForge(active: boolean, atMs: number, anchor: Vec3) {
-      if (!active) { forge = undefined; watchers.clear(); return; }
       if (!Number.isFinite(atMs) || !anchor.every(Number.isFinite)) return;
+      if (!active) {
+        if (restoredForgePending) {
+          restoredForgeGraceStart ??= atMs;
+          if (atMs - restoredForgeGraceStart < 3_000) return;
+        }
+        forge = undefined; watchers.clear(); nextForgeGatherMs = 0;
+        restoredForgePending = false; restoredForgeGraceStart = undefined;
+        return;
+      }
+      restoredForgePending = false; restoredForgeGraceStart = undefined;
       forge = { anchor, atMs };
     },
     update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set(), walkerFeet: WalkerSlots = new Map()) {
       walkers = walkerFeet;
-      if (forge && frame && atMs >= forge.atMs) {
+      if (forge && frame && atMs >= forge.atMs && atMs >= nextForgeGatherMs) {
+        nextForgeGatherMs = atMs + 1_000;
         const present = new Set(frame.windows.filter(window => window.present).map(window => window.slot));
         const current = motion.sample(atMs);
         for (const slot of watchers.keys()) if (!present.has(slot) || reservedSlots.has(slot) || walkers.has(slot) || !current.some(sample => sample.slot === slot && sample.homeLit)) watchers.delete(slot);
         const occupied = new Set(watchers.values());
-        const candidates = current.filter(sample => sample.homeLit && present.has(sample.slot) && !watchers.has(sample.slot) && !reservedSlots.has(sample.slot) && !walkers.has(sample.slot)
-          && Math.hypot(sample.position[0] - forge!.anchor[0], sample.position[2] - forge!.anchor[2]) < 70)
+        const candidates = current.filter(sample => sample.homeLit && present.has(sample.slot) && !watchers.has(sample.slot) && !reservedSlots.has(sample.slot) && !walkers.has(sample.slot))
           .sort((a, b) => Math.hypot(a.position[0] - forge!.anchor[0], a.position[2] - forge!.anchor[2]) - Math.hypot(b.position[0] - forge!.anchor[0], b.position[2] - forge!.anchor[2]));
         for (const sample of candidates) {
-          if (watchers.size >= 8) break;
+          if (watchers.size >= 16) break;
           const destination = motion.destinationsForSlot(sample.slot).find(item => item.nodeId.startsWith('forge:watch:') && !occupied.has(item.nodeId)
             && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) >= 3
-            && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) <= 9);
+            && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) <= 13);
           if (destination && motion.requestGoal({ slot: sample.slot, nodeId: destination.nodeId, startAtMs: Math.max(atMs, frame.asOf) }).accepted) {
             watchers.set(sample.slot, destination.nodeId); occupied.add(destination.nodeId);
           }
@@ -188,7 +216,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       }
       return labels;
     },
-    clear() { pendingCheckpoint = undefined; resetBehaviours(); forge = undefined; watchers.clear(); motion.clear(); frame = undefined; samples = []; walkers = new Map(); suppliedLooks.clear(); speech.clear(); renderer?.update([]); shadows.count = 0; },
+    clear() { pendingCheckpoint = undefined; resetBehaviours(); forge = undefined; watchers.clear(); restoredForgePending = false; restoredForgeGraceStart = undefined; motion.clear(); frame = undefined; samples = []; walkers = new Map(); suppliedLooks.clear(); speech.clear(); renderer?.update([]); shadows.count = 0; },
     dispose() { resetBehaviours(); disposed = true; renderer?.dispose(); material.dispose(); scene.remove(shadows); shadows.dispose(); shadowGeometry.dispose(); shadowMaterial.dispose(); },
   };
 }

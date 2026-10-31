@@ -41,10 +41,16 @@ it('continues forge walks across a scene rebuild only under the current presence
   first.watchForge(true, now, [0, 9, 8]);
   first.update(now, 0);
   const checkpoint = first.checkpoint()!;
+  expect(checkpoint.watchers.size).toBe(1);
   const expected = first.motion.sample(now + 5_000);
   first.dispose();
   const restored = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, checkpoint);
   restored.applyFrame({ ...frame, sequence: 2, asOf: now + 1_000 });
+  restored.watchForge(false, now + 1_000, [0, 9, 8]);
+  restored.update(now + 1_000, 0);
+  expect(restored.checkpoint()!.watchers).toEqual(checkpoint.watchers);
+  restored.watchForge(true, now + 1_100, [0, 9, 8]);
+  restored.update(now + 1_100, 0);
   expect(restored.motion.sample(now + 5_000)).toEqual(expected);
   restored.dispose();
   const beforeAbsence = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
@@ -55,4 +61,25 @@ it('continues forge walks across a scene rebuild only under the current presence
   absent.applyFrame({ ...frame, sequence: 2, asOf: now + 1_000, streamLive: false, connection: 'offline', windows: [{ ...frame.windows[0]!, present: false, publicName: null }] });
   expect(absent.motion.sample(now + 5_000)).toEqual([]);
   absent.dispose(); clay.dispose();
+});
+
+it('gathers only present, arrived citizens at distinct forge standing points', () => {
+  const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
+  const layout = generateSettlementPlan({ seed: 'forge-crowd', tier: 'town', firstYear: 2022, year: 2026 });
+  const citizens = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
+  const kingdomId = KingdomIdSchema.parse('129634568'), now = 200_000;
+  const homes = layout.homes.slice(0, 18);
+  try {
+    expect(homes.length).toBeGreaterThanOrEqual(16);
+    citizens.applyFrame({ version: 1, kingdomId, epoch: 'SIMULATED-forge-crowd', sequence: 1, asOf: now,
+      origin: 'simulated', streamLive: true, connection: 'fresh',
+      windows: homes.map((home, index) => ({ slot: home.slot, present: index < 16,
+        publicName: index < 16 ? `SIMULATED ${index}` : null, since: 0 })) });
+    citizens.watchForge(true, now, [0, layout.market.elevation, 8]);
+    citizens.update(now, 0);
+    const watchers = citizens.checkpoint()!.watchers;
+    expect(watchers.size).toBe(16);
+    expect(new Set(watchers.values()).size).toBe(16);
+    expect([...watchers.keys()].every(slot => homes.slice(0, 16).some(home => home.slot === slot))).toBe(true);
+  } finally { citizens.dispose(); clay.dispose(); }
 });
