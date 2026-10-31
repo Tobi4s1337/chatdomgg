@@ -30,3 +30,6 @@ export const HARBOUR_TARGET = '63920635';
 
 /** The river target from spec 40: PinkKittyRose, a river town. */
 export const RIVER_TARGET = '4363967';
+
+/** The mountain target from spec 40: MashaD4, a mountain city. */
+export const MOUNTAIN_TARGET = '154972160';
