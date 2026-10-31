@@ -332,16 +332,17 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 **Order:** picture only, one visible fix/commit per turn, same-view before/after. No new systems/contracts/system
 lanes. Exposure34ac89a is ACCEPTED on Tobias's RTX5080: readable dusk, coloured roofs/fronts/castle, glowing sky.
-Keep that grade, low lantern street camera, warm pools, house models, beacon and gold frame. After flicker:
-restore windows' emissive/halo pull, then soft height fog/aerial depth. Avatar proportions remain Tobias's choice.
+Keep that grade, low lantern street camera, warm pools, house models, beacon and gold frame. Window pull and
+height haze are landed for GPU judging. Avatar proportions remain Tobias's choice.
 
-**Current slice:** window pull restored against the accepted brighter dusk: stronger HDR pane cores and amber
-reveal halos, still bounded to1.3x the pane. Exposure, facade shading, ground pools and presence fades unchanged.
-Viewed native1920x1080 and `shots/magic/window-pull-before-after@3840x1080.png` (left approved34ac89a,
-right current; same hero/hour19.5/time30, slight framing/sky-motion differences). Warm points are more prominent,
-especially left row/right cluster; this is restrained, not a transformation. Far town/hills still flat: depth next.
-High HDR/ACES, SIMULATED, curtain open/fields settled. Typecheck/scoped lint,13 existing render tests and web
-build pass. Capture browser/server/lock closed. Ask Tobias for the same GPU view to confirm bloom strength.
+**Current slice:** soft depth in the existing voxel material fog: clear first 65m, integrated low height haze
+plus aerial perspective above the ridges. No second post fog or exposure change. Rejected an overly dense
+first frame; reduced it before landing. Viewed native 1920x1080 and `shots/magic/depth-before-after@3840x1080.png`
+(left fab08be, right current; hero/hour19.5/time30, slight sky/framing motion). Far hills recede in blue; castle,
+near streets and windows remain readable. Ridge geometry is still too smooth, not solved by haze. High HDR/ACES,
+SIMULATED, curtain open/fields settled. Typecheck/scoped lint, 13 existing render tests and final web build pass.
+Capture resources closed. GPU comparison still needed. fab08be window cores/amber halos stay; its comparison is
+`shots/magic/window-pull-before-after@3840x1080.png`, halo still bounded to 1.3x pane, ground pools unchanged.
 
 **Prior flicker fixes retained:** bc9a54c removed carried-light nearest24 cutoff and added cull fades; Tobias
 says lanterns hold. 7c71b38 keeps the last accepted public picture through a feed retry only until
@@ -366,7 +367,10 @@ labels kept inside frame. One-pass picture/Genesis recon found no new finished l
   lanes finish current task and stop. Main retains scene/shader/shadow integration; no second forest/emitters.
   Land adoption must use the same new height in render/contact, without silently moving pinned foundations.
 
-**Next picture:** soft height fog/aerial perspective, near crisp/far warm-blue haze. Smithy crowd wraps BOTH
+**Next integration first:** avatar-style AS01 (504e1ac), Genesis harbour watchtower (d92e0ff), heraldry
+(df5c42c/aee97df) are now available; short read found no blockers. Content/studies only, no runtime adoption yet.
+Avatar choice remains Tobias's; landmarks need export/placement/light adoption, heraldry colours are proposals.
+**Next picture:** Smithy crowd wraps BOTH
 sides with faces behind pour; lower/closer camera, castle lit behind. Current13-person west crescent isn't final.
 Molten02c3494 stays. Real approved chat ritual remains unproved; no waiting observer before Tobias goes live.
 

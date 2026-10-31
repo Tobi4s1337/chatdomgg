@@ -37,7 +37,7 @@ export function geometryFromChunks(chunks:readonly AssetChunkMesh[],lattice:Voxe
   geometry.boundingBox=bounds;geometry.boundingSphere=bounds.getBoundingSphere(new THREE.Sphere());return geometry;
 }
 
-/** Voxel fog thins with height, so it runs at this share of the scene's `FogExp2` density. */
+/** Base density for the voxel material's height haze and aerial perspective. */
 const VOXEL_FOG_SCALE=.72;
 
 export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLattice):VoxelRenderState {
@@ -298,7 +298,14 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         }
       }
       float distanceToCamera=length(cameraPosition-vWorld);
-      float fogAmount=1.-exp(-distanceToCamera*uFogDensity*exp(-max(vWorld.y,0.)*.019));
+      // Keep the nearby street crisp. Beyond it, integrate the low haze along the
+      // whole sightline: a distant roof is seen through air, not just fog at its height.
+      float heightRay=clamp(-.028*(max(vWorld.y,0.)-max(cameraPosition.y,0.)),-20.,20.);
+      float heightIntegral=abs(heightRay)<.001?1.+heightRay*.5:(exp(heightRay)-1.)/heightRay;
+      float lowHaze=exp(-max(cameraPosition.y,0.)*.028)*heightIntegral;
+      // A little high air remains over the ridges, so their silhouettes recede too.
+      float opticalDepth=max(distanceToCamera-65.,0.)*uFogDensity*(.65+2.2*lowHaze);
+      float fogAmount=1.-exp(-opticalDepth);
       // Distance takes the sky's colour, warmer where the view runs toward a low sun.
       vec3 view=normalize(vec3(vWorld.x-cameraPosition.x,0.,vWorld.z-cameraPosition.z)+vec3(.0001,0.,0.));
       vec3 sunFlat=normalize(vec3(uSunDirection.x,0.,uSunDirection.z)+vec3(.0001,0.,0.));
