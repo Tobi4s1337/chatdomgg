@@ -1,11 +1,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { createHearthHome } from '@chatdom/content';
+import { createCastle, createHearthHome } from '@chatdom/content';
 import { assembleForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
 import { WORLD_FIXTURE_KINGDOM as kingdomId, WORLD_FIXTURE_PERSON as personId } from '@chatdom/shared/world-fixtures';
 import { PersonIdSchema } from '@chatdom/shared';
-import type { ForgeAttachment, ForgeAttempt, ForgeReservation, KingdomForgeLease, RealmFact, RealmOwnedHome, RealmPrivateState,
+import type { ForgeAttachment, ForgeAttempt, ForgeReservation, KingdomForgeLease, RealmFact, RealmOwnedCastle, RealmOwnedForgeHost, RealmPrivateState,
   RealmStoredOutcome } from '@chatdom/shared/realm';
-import { createRealmState } from '@chatdom/world/realm';
+import { applyRealmFact, createRealmState } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import { createDurableRealmServices, RealmCommitUncertainError, type DurableRepository, type RealmCommitGuard } from '../persistence';
 import type { RealmOutboxStore } from '../outbox';
@@ -21,15 +21,19 @@ const caller = () => {
 };
 
 /** SIMULATED command port under the actual DurableKingdom registry/queue; no Postgres or live grant claim. */
-async function fixture(options: { coal?: number; installed?: boolean; anvils?: number } = {}) {
+async function fixture(options: { coal?: number; installed?: boolean; anvils?: number; castle?: boolean } = {}) {
   let now = Date.now();
-  const blueprint = createHearthHome('house', 0);
-  const home: RealmOwnedHome = { id: 'simulated-plot', ownerId: personId, slot: 7, allocationReceipt: 'simulated-deed', layoutRevision: 'founded-test',
-    revision: 'home-initial', digest: forgeHomeDigest(blueprint), family: 'hearth', blueprint,
-    attribution: { makerName: 'Juniper', kingdomName: 'Emberwick', approvalId: 'simulated-names' }, attachments: {} };
-  let state: RealmPrivateState = { ...createRealmState(kingdomId, 'simulated'), homes: { [home.id]: home }, coals: { [personId]: options.coal ?? 2 },
+  const ownerId = options.castle ? PersonIdSchema.parse(kingdomId) : personId;
+  const blueprint = options.castle ? createCastle('hearth') : createHearthHome('house', 0);
+  const common = { ownerId, layoutRevision: 'founded-test', revision: 'home-initial', digest: forgeHomeDigest(blueprint),
+    family: 'hearth' as const, blueprint, attribution: { makerName: 'Juniper', kingdomName: 'Emberwick', approvalId: 'simulated-names' }, attachments: {} };
+  const home: RealmOwnedForgeHost = options.castle ? { ...common, id: 'castle:simulated-keep', moduleId: 'simulated-keep', slot: 65534 }
+    : { ...common, id: 'simulated-plot', slot: 7, allocationReceipt: 'simulated-deed' };
+  let state: RealmPrivateState = { ...createRealmState(kingdomId, 'simulated'),
+    homes: 'moduleId' in home ? {} : { [home.id]: home }, coals: { [ownerId]: options.coal ?? 2 },
     stream: { sessionId: 'simulated-night', startedAt: now - 700_000, liveUntil: now + 900_000 },
-    rights: { [personId]: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'simulated-safe-citizen-identifier' } } };
+    rights: { [ownerId]: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'simulated-safe-citizen-identifier' } } };
+  const initial = structuredClone(state);
   const gate = new ForgeWriteGate(), guards = options.installed === false ? [] : gate.install({ origin: 'simulated' as const }).guards;
   const facts: RealmFact[] = [], receipts = new Map<string, RealmStoredOutcome>();
   let beforeGuard: (() => void | Promise<void>) | undefined;
@@ -64,18 +68,19 @@ async function fixture(options: { coal?: number; installed?: boolean; anvils?: n
     kingdom: () => ({ world: REFERENCE_WORLD, layoutRevision: home.layoutRevision, spawn: () => [0, 0, 6] }) });
   const retained = await services.retain(kingdomId); cleanup.push(() => retained.release());
   vi.spyOn(retained.kingdom, 'databaseNow').mockImplementation(() => now);
+  if (options.castle) await retained.kingdom.execute('simulated:install-castle', { type: 'castle.installNative', castle: home as RealmOwnedCastle }, 'allocation');
   const approvals = { approved: vi.fn(async () => 'simulated-judge-receipt' as string | null) };
   const authority = createForgeAuthority({ kingdomId, origin: 'simulated', retain: () => services.retain(kingdomId) },
     { approvals, gate, ...(options.anvils ? { anvils: options.anvils } : {}) });
   let number = 0;
   const wish = () => { const messageId = `simulated-message-${++number}`; return { key: forgeMessageKey(kingdomId, messageId), attemptId: `attempt-${number}`,
-    kingdomId, personId, messageId, slot: 999, observedAt: now }; };
+    kingdomId, personId: ownerId, messageId, slot: 999, observedAt: now }; };
   const reserve = async (attempt: ReturnType<typeof wish>, lease = caller().lease) => {
     const answer = await authority.reserve(attempt, lease); expect(answer.kind).toBe('reserved');
     if (answer.kind !== 'reserved') throw new Error('Expected SIMULATED reservation');
     return answer.reservation;
   };
-  return { authority, approvals, gate, services, kingdom: retained.kingdom, facts, home, wish, reserve, state: () => state,
+  return { authority, approvals, gate, services, kingdom: retained.kingdom, facts, home, ownerId, initial, wish, reserve, state: () => state,
     replace: (next: RealmPrivateState) => { state = next; }, advance: (ms: number) => { now += ms; },
     pause: (callback: () => void | Promise<void>) => { beforeGuard = callback; },
     lose: (unknown = false) => { loseReply = true; unavailable = unknown; }, recover: () => { unavailable = false; },
@@ -84,9 +89,10 @@ async function fixture(options: { coal?: number; installed?: boolean; anvils?: n
 
 function commitInput(attempt: ForgeAttempt, reservation: ForgeReservation, id = 'simulated-run') {
   const plan = { version: 2, kind: 'chimney', motif: 'sleeping-dragon', finish: 'native', accent: 'none' } as const;
-  const socket = findForgeSockets(reservation.home).find(candidate => candidate.kind === plan.kind)!;
+  const socket = findForgeSockets(reservation.home, reservation.hostProfile).find(candidate => candidate.kind === plan.kind)!;
   const assembled = assembleForge(plan, forgeStyleKit(reservation.family), socket);
   const attachment: ForgeAttachment = { version: 1, id, runId: id, kingdomId, slot: reservation.slot, hostId: reservation.home.id,
+    ...(reservation.hostProfile ? { hostProfile: reservation.hostProfile } : {}),
     hostFingerprint: homeFingerprint(reservation.home), socketId: socket.id, origin: socket.origin, kitId: assembled.kit.id,
     kitRevision: assembled.kit.revision, family: reservation.family, draft: { plan, title: 'The Dreaming Chimney', plaque: 'Warm dreams above the hearth.' },
     provenance: { source: 'simulated', makerName: reservation.attribution.makerName, kingdomName: reservation.attribution.kingdomName, designId: `design-${id}` } };
@@ -190,4 +196,27 @@ it('returns the current owned home on revalidation and atomically retains displa
   expect(f.state().attachments['simulated-second']?.attached).toBe(true);
   expect(f.state().coals[personId]).toBe(0);
   expect(await f.authority.reserve({ ...f.wish(), personId: PersonIdSchema.parse('990000009') }, lease)).toEqual({ kind: 'cold' });
+});
+
+
+it('forges onto the real native keep after evidenced qualification and replays without inventing a street deed', async () => {
+  const f = await fixture({ castle: true, coal: 0 }), wish = f.wish(), lease = caller().lease;
+  expect(await f.authority.reserve(wish, lease)).toEqual({ kind: 'held' });
+  expect(f.state().homes).toEqual({}); expect(f.state().coals[f.ownerId]).toBe(0);
+  const from = f.state().stream.startedAt;
+  const credit = { type: 'coal.creditQualifiedNight' as const, personId: f.ownerId, streamSessionId: 'simulated-night', qualificationReceipt: 'simulated:actual-intervals' };
+  expect(await f.kingdom.execute('simulated:credit-castle', credit, 'presence')).toMatchObject({ status: 'rejected', reason: 'held' });
+  await f.kingdom.execute('simulated:interval-castle', { type: 'presence.confirmInterval', personId: f.ownerId, streamSessionId: 'simulated-night',
+    from, through: from + 600_000, evidenceReceipt: 'simulated:closed-observations' }, 'presence');
+  expect(await f.kingdom.execute('simulated:credit-castle', credit, 'presence')).toMatchObject({ status: 'committed' });
+  const reservation = await f.reserve(wish, lease);
+  expect(reservation).toMatchObject({ slot: 65534, hostProfile: 'castle-keep', home: { id: f.home.blueprint.id, kind: 'civic', size: [256, 248, 256] } });
+  expect(await f.authority.revalidate(wish, reservation.reservationId, lease)).toMatchObject({ kind: 'current', native: { hostProfile: 'castle-keep', slot: 65534 } });
+  const input = commitInput(wish, reservation, 'simulated-castle-run');
+  expect(await f.authority.commit({ ...input, attachment: { ...input.attachment, hostProfile: 'street-home' } }, lease)).toEqual({ kind: 'held' });
+  expect(await f.authority.commit(input, lease)).toMatchObject({ kind: 'committed' });
+  expect(f.state().coals[f.ownerId]).toBe(0); expect(f.state().homes).toEqual({});
+  expect(f.state().castle?.attachments[input.attachment.socketId]).toBe(input.attachment.id);
+  expect(f.state().attachments[input.attachment.id]?.attachment.hostProfile).toBe('castle-keep');
+  expect(f.facts.reduce(applyRealmFact, f.initial)).toEqual(f.state());
 });

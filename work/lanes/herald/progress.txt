@@ -22,3 +22,5 @@ H05 (ticked: acceptance, real reads, captures; repo verify blocked only by load 
 LANE COMPLETE
 
 2026-10-31 founder efficiency decision: PARK after the current task: finish and commit that task, then start no further task. Reviewed work remains eligible for integration. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
+
+2026-10-31 main integration: person-bound Realm delivery committed on main; old SSE remains compatible. needs: restart managed 5194 from main loading the ignored .env (HERALD_REALM_URL=http://127.0.0.1:5197 and matching REALM_INGRESS_HERALD_SECRET); reuse existing grants/data/outbox. The destination/key are ready locally. Latest health is healthy/offline with no source.realm sink; its existing data directory is read-only and its service manager is unreachable here. Main did not start a competing EventSub connection. This is an operational hookup, not another Herald lane task.

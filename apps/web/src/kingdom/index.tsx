@@ -2,6 +2,8 @@ import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
 import { createKingdomScene, type CameraName, type NameLabel } from './scene';
 import type { RealmFoundedScene } from '@chatdom/world';
 import type { PresenceFeed } from '@chatdom/shared';
+import type { RealmChatFeed } from '../realm/adapters/chat';
+import type { RealmForgeFeed } from '../realm/adapters/forge-feed';
 import type { KingdomWalkBinding, WalkerLabel } from './walk-scene';
 import type { SpeechLabel } from './citizen-scene';
 import { BuildTools } from '../build';
@@ -10,9 +12,11 @@ import './kingdom.css';
 import { ForgePanel } from '../forge';
 import type { ForgeStatus } from '../forge/scene';
 import { parseKingdomPresentationParams } from '../stream/params';
+import { ProvenanceSeal, provenanceFromSource } from '@chatdom/ui';
+import '@chatdom/ui/kit.css';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
-export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
+export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
   const query=new URLSearchParams(location.search),tier=props.founded?.plan.config.tier??(query.get('tier')==='hamlet'?'hamlet':'town');
   const presentation=parseKingdomPresentationParams(query,tier);
   const realm=query.get('realm'),realmFamily=realm==='hearth'?'hearth':realm==='grove'?'grove':'tide',realmName=props.kingdomName??(realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere');
@@ -22,12 +26,15 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
   const [names,setNames]=createSignal<NameLabel[]>([]),[speech,setSpeech]=createSignal<SpeechLabel[]>([]),[hour,setHour]=createSignal(initialHour),[view,setView]=createSignal<CameraName>(query.get('camera')==='citizen'?'citizen':query.get('camera')==='window'?'window':'hero');
   const [walkers,setWalkers]=createSignal<readonly WalkerLabel[]>([]),[walking,setWalking]=createSignal(false);
   let host!:HTMLDivElement;
-  const [source,setSource]=createSignal(query.get('source')==='herald'?'CONNECTING':'SIMULATED'),[error,setError]=createSignal(false),[sound,setSound]=createSignal(false);
+  const [source,setSource]=createSignal(props.presenceFeed?.label??(query.get('source')==='herald'?'CONNECTING':'SIMULATED')),[error,setError]=createSignal(false),[sound,setSound]=createSignal(false);
   const stream=location.pathname.endsWith('/stream')||location.pathname==='/stream';
   let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false,openingFrame=0;
   const [buildSession,setBuildSession]=createSignal<KingdomBuildSession|null>(null),[housewarming,setHousewarming]=createSignal<string|null>(null);
   const construction=new AbortController();
+  let unsubscribeChat:(()=>void)|undefined;
   const [forgeStatus,setForgeStatus]=createSignal<ForgeStatus|null>(null);
+  /** Local practice on this screen (Forge, a simulated home build, its housewarming) is its own fact beside the feed. */
+  const practice=()=>!!forgeStatus()?.open||buildSession()?.controller.snapshot().mode==='SIMULATED'||!!housewarming();
   async function attachWalk(binding:KingdomWalkBinding){
     if(!engine||unmounted)return;
     await engine.attachWalk({...binding,hud:host,onSceneNeeded:()=>{
@@ -42,10 +49,16 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
-    void createKingdomScene(canvas,{...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(realm==='hearth'||realm==='grove'?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
+    void createKingdomScene(canvas,{...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(realm==='hearth'||realm==='grove'?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
       onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
+      unsubscribeChat=props.chatFeed?.subscribe(message=>{
+        if(unmounted)return;
+        if(message.type==='chat')instance.receiveChat(message.cue);
+        else if(message.type==='chat.remove')instance.clearChat(message.cueIds);
+        else {instance.clearChat();setSpeech([]);}
+      });
       testWindow.__chatdomKingdom={attachWalk,detachWalk:()=>{instance.detachWalk();delete window.__chatdomWalk;setWalking(false);},walkDebug:instance.walkDebug,stats:instance.debug,build:instance.build,forge:instance.forge,inspect:()=>instance.inspect(),subject:()=>instance.subject(),pose:instance.pose,seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play(),capture:(time:number)=>instance.capture(time)};
       const showReady=()=>{
         if(unmounted||error())return;
@@ -58,7 +71,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       if(!props.founded&&query.get('forge')==='1')instance.forge.open();
     }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(true);});
   });
-  onCleanup(()=>{unmounted=true;cancelAnimationFrame(openingFrame);construction.abort();engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
+  onCleanup(()=>{unmounted=true;cancelAnimationFrame(openingFrame);construction.abort();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
   function tap(action:()=>void){if(!engine)return;if(!sound()){void engine.sound.unlock().then(setSound);}action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setWalking(false);setView(value);tap(()=>engine!.setCamera(value));}
@@ -79,7 +92,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       <svg class="realm-mark" viewBox="0 0 48 60" aria-hidden="true"><path d="M8 20h8v-6h6v6h4v-6h6v6h8v25L24 55 8 45Z"/><path d="M18 39V28h12v11m-6-26c-7-5-4-10 0-13 0 6 7 7 0 13Z"/><path d="M5 10h4m30 0h4M24 58v2"/></svg>
       <div><p class="kingdom-eyebrow">A home for your chat</p><h1>{realmName}</h1><p class="kingdom-subtitle">{tier==='hamlet'?'A little kingdom. Every light matters.':'Old streets. Familiar names. A light for everyone.'}</p></div>
     </header>
-    <div class={`source-ribbon ${source()==='SIMULATED'?'simulation':''}`}><span class="source-pip" />{source()}</div>
+    <ProvenanceSeal class="source-ribbon kingdom-seal" state={provenanceFromSource(source())} simulated={practice()} />
     <div class="window-names" aria-live="polite"><For each={names()}>{label=><div class="window-name" style={{left:`${label.x}px`,top:`${label.y}px`}}><span class="name-diamond" />{label.name}<small>home again</small></div>}</For></div>
     <div class="walker-names" aria-label="People in the street"><Index each={walkers()}>{label=><span class="walker-name" data-walker={label().id} style={{left:`${label().x}px`,top:`${label().y}px`}}>{label().name}<Show when={label().self}><small>you</small></Show></span>}</Index></div>
     <div class="citizen-speech"><For each={speech()}>{label=><div class="citizen-bubble" style={{left:`${label.x}px`,top:`${label.y}px`}}><Show when={label.name}><small>{label.name}</small></Show><p><For each={label.parts}>{part=>part.kind==='text'?part.text:<img src={`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(part.id)}/default/dark/1.0`} alt={part.alt} />}</For></p></div>}</For></div>
@@ -91,7 +104,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     </div></Show>
     <Show when={!stream&&forgeStatus()?.open}><ForgePanel status={forgeStatus()!} submit={words=>engine!.forge.submit(words)} close={()=>engine?.forge.close()} refit={()=>{void engine?.forge.refit();}} family={value=>{location.href=`/?tier=${tier}&hour=${hour()}&forge=1&realm=${value}`;}} /></Show>
     <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} ownerName="Juniper" imports={session().imports}/>}</Show>
-    <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>SIMULATED · welcome to the street</small></div>}</Show>
+    <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>Welcome to the street</small></div>}</Show>
     <Show when={ready()&&walking()&&!error()&&!stream}><button class="walk-overlook" onClick={()=>chooseView('hero')}>Above the streets</button></Show>
     <Show when={ready()&&!walking()&&!error()&&!stream&&!buildSession()&&!forgeStatus()?.open}><nav class="kingdom-controls" aria-label="Kingdom view">
       <div class="time-controls" aria-label="Time of day"><button classList={{selected:hour()<16}} onClick={()=>chooseHour(12)}>Noon</button><button classList={{selected:hour()>=16&&hour()<22}} onClick={()=>chooseHour(19.5)}>Dusk</button><button classList={{selected:hour()>=22}} onClick={()=>chooseHour(23)}>Night</button></div>

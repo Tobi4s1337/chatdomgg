@@ -8,6 +8,13 @@ export const TIER_CODES = ['capital', 'city', 'town', 'village'] as const;
 export type Tier = typeof TIER_CODES[number];
 export const DECOR_KINDS = ['mountain', 'hill', 'forest', 'marsh', 'monster', 'ship'] as const;
 export type DecorKind = typeof DECOR_KINDS[number];
+export const REGION_KINDS = ['continent', 'isle', 'outer'] as const;
+export type RegionKind = typeof REGION_KINDS[number];
+/** The Crossroads at a continent's heart, one realm per family of games, the Wilds at its edge; an isle is one realm. */
+export const REALM_KINDS = ['crossroads', 'family', 'wilds', 'isle', 'outer'] as const;
+export type RealmKind = typeof REALM_KINDS[number];
+/** Which realms each kind of region may hold. */
+const REALMS_OF: Record<RegionKind, readonly RealmKind[]> = { continent: ['crossroads', 'family', 'wilds'], isle: ['isle'], outer: ['outer'] };
 
 export interface FileRef { path: string; sha256: string; bytes: number; records: number }
 
@@ -28,19 +35,36 @@ export interface SettlerColumns {
   average: number[];
   game: number[];
   region: number[];
+  realm: number[];
 }
 
 export interface PreviewRegion {
   index: number;
-  language: string;
+  /** Null only for the Outer Isles, which belong to no language. */
+  language: string | null;
   name: string;
   englishName: string;
-  kind: 'continent' | 'isle';
+  kind: RegionKind;
   x: number;
   y: number;
   r: number;
   members: number;
   chunk: FileRef;
+}
+
+export interface PreviewRealm {
+  index: number;
+  region: number;
+  kind: RealmKind;
+  /** Index into the preview's families for a family realm, otherwise -1. */
+  family: number;
+  name: string;
+  x: number;
+  y: number;
+  r: number;
+  members: number;
+  /** Free hamlet slots in this realm's waiting land. */
+  slots: number;
 }
 
 export interface PreviewWorld {
@@ -56,14 +80,20 @@ export interface PreviewWorld {
   coverage: { sweepFloorViewers: number; candidateMinAverage: number; contentLabels: 'not-collected'; missing: string[] };
   founding: { status: 'not-founded'; edition0EligibleAt: number; editionIEligibleAt: number };
   policy: { gambling: string; excludedGambling: number };
-  counts: { channelsObserved: number; mapped: number; languages: number; capital: number; city: number; town: number; village: number };
+  counts: { channelsObserved: number; mapped: number; languages: number; capital: number; city: number; town: number; village: number; hamletSlots: number };
+  /** The family taxonomy the realms were drawn with. A proposal is never founder approval. */
+  taxonomy: { id: string; status: 'proposed' | 'reviewed'; sha256: string; variety: string; realmThreshold: string };
+  lattice: { id: string; hamletRadius: number; shore: number; gap: number };
   coordScale: number;
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
   tiers: { minAverage: Record<Tier, number>; holdingRadius: Record<Tier, number> };
   regions: PreviewRegion[];
   isles: { name: string; x: number; y: number; r: number } | null;
+  outer: { name: string; x: number; y: number; r: number };
+  families: { id: string; name: string }[];
+  realms: PreviewRealm[];
   games: { gameId: string; name: string | null }[];
-  clusters: { region: number; game: number; x: number; y: number; r: number; members: number }[];
+  clusters: { region: number; realm: number; game: number; x: number; y: number; r: number; members: number }[];
   coasts: { region: number; points: number[] }[];
   decor: number[];
   head: SettlerColumns;
@@ -129,6 +159,12 @@ const literal = (expected: unknown): Check => (value, path) => {
 const nullable = (check: Check): Check => (value, path) => {
   if (value !== null) check(value, path);
 };
+const oneOf = (options: readonly string[]): Check => (value, path) => {
+  if (typeof value !== 'string' || !options.includes(value)) fail(path, `one of ${options.join(', ')}`);
+};
+const positive: Check = (value, path) => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) fail(path, 'a positive number');
+};
 const array = (item: Check, max: number, min = 0): Check => (value, path) => {
   if (!Array.isArray(value) || value.length > max || value.length < min) return fail(path, `an array of ${min}…${max}`);
   value.forEach((entry, i) => item(entry, `${path}[${i}]`));
@@ -160,9 +196,10 @@ const settlerColumns: Check = (value, path) => {
     average: ints(MAX, 0, Number.MAX_SAFE_INTEGER),
     game: ints(MAX, -1, 20_000),
     region: ints(MAX, 0, 65_535),
+    realm: ints(MAX, 0, 65_535),
   });
   const n = (columns.ids as unknown[]).length;
-  for (const key of ['tier', 'x', 'y', 'average', 'game', 'region']) {
+  for (const key of ['tier', 'x', 'y', 'average', 'game', 'region', 'realm']) {
     if ((columns[key] as unknown[]).length !== n) fail(`${path}.${key}`, `${n} entries`);
   }
 };
@@ -192,7 +229,13 @@ export function validateWorld(value: unknown): PreviewWorld {
     coverage: shape({ sweepFloorViewers: int(0), candidateMinAverage: int(0), contentLabels: literal('not-collected'), missing: array(text(300), 20) }),
     founding: shape({ status: literal('not-founded'), edition0EligibleAt: epoch, editionIEligibleAt: epoch }),
     policy: shape({ gambling: text(64), excludedGambling: int(0) }),
-    counts: shape({ channelsObserved: int(0), mapped: int(0), languages: int(0), capital: int(0), city: int(0), town: int(0), village: int(0) }),
+    counts: shape({ channelsObserved: int(0), mapped: int(0), languages: int(0), capital: int(0), city: int(0), town: int(0), village: int(0), hamletSlots: int(0) }),
+    // Rule versions are matched by form, like the algorithm: a newer rule is still drawn, and the key names it.
+    taxonomy: shape({
+      id: text(32, /^families-[0-9]{1,4}$/), status: oneOf(['proposed', 'reviewed']), sha256: text(64, SHA),
+      variety: text(32, /^variety-[0-9]{1,4}$/), realmThreshold: text(32, /^realm-threshold-[0-9]{1,4}$/),
+    }),
+    lattice: shape({ id: text(16, /^hex-[0-9]{1,4}$/), hamletRadius: positive, shore: positive, gap: positive }),
     coordScale: int(1, 1000),
     bounds: shape({ minX: int(), minY: int(), maxX: int(), maxY: int() }),
     tiers: shape({
@@ -200,14 +243,18 @@ export function validateWorld(value: unknown): PreviewWorld {
       holdingRadius: shape({ capital: num, city: num, town: num, village: num }),
     }),
     regions: array(shape({
-      index: int(0, 65_535), language: text(16), name: text(128), englishName: text(128), kind: (v, p) => {
-        if (v !== 'continent' && v !== 'isle') fail(p, 'continent or isle');
-      },
+      index: int(0, 65_535), language: nullable(text(16)), name: text(128), englishName: text(128), kind: oneOf(REGION_KINDS),
       x: int(), y: int(), r: int(0), members: int(0), chunk: fileRef,
     }), 512, 1),
     isles: nullable(shape({ name: text(128), x: int(), y: int(), r: int(0) })),
+    outer: shape({ name: text(128), x: int(), y: int(), r: int(0) }),
+    families: array(shape({ id: text(32, /^[a-z][a-z0-9-]{1,31}$/), name: text(128) }), 32),
+    realms: array(shape({
+      index: int(0, 65_535), region: int(0, 65_535), kind: oneOf(REALM_KINDS), family: int(-1, 31), name: text(128),
+      x: int(), y: int(), r: int(0), members: int(0), slots: int(0),
+    }), 4_096, 1),
     games: array(shape({ gameId: text(20, /^[0-9]+$/), name: nullable(text(256)) }), 20_000),
-    clusters: array(shape({ region: int(0), game: int(-1), x: int(), y: int(), r: int(0), members: int(0) }), 20_000),
+    clusters: array(shape({ region: int(0), realm: int(0), game: int(-1), x: int(), y: int(), r: int(0), members: int(0) }), 20_000),
     coasts: array(shape({ region: int(0), points: ints(400_000) }), 50_000),
     decor: ints(600_000),
     head: settlerColumns,
@@ -217,9 +264,21 @@ export function validateWorld(value: unknown): PreviewWorld {
   if (world.decor.length % 3 !== 0) fail('world.decor', 'triples');
   world.regions.forEach((region, i) => {
     if (region.index !== i) fail(`world.regions[${i}].index`, `${i}`);
+    if ((region.language === null) !== (region.kind === 'outer')) fail(`world.regions[${i}].language`, 'a language unless the region is one of the Outer Isles');
+  });
+  world.realms.forEach((realm, i) => {
+    const path = `world.realms[${i}]`;
+    if (realm.index !== i) fail(`${path}.index`, `${i}`);
+    const region = world.regions[realm.region];
+    if (!region) return fail(`${path}.region`, 'a known region');
+    if (!REALMS_OF[region.kind].includes(realm.kind)) fail(`${path}.kind`, `a realm of a ${region.kind}`);
+    if (realm.kind === 'family' ? realm.family < 0 || realm.family >= world.families.length : realm.family !== -1) fail(`${path}.family`, realm.kind === 'family' ? 'a known family' : '-1');
   });
   for (const coast of world.coasts) if (coast.region >= world.regions.length || coast.points.length % 2) fail('world.coasts', 'rings of known regions');
-  for (const cluster of world.clusters) if (cluster.region >= world.regions.length || cluster.game >= world.games.length) fail('world.clusters', 'known regions and games');
+  world.clusters.forEach((cluster, i) => {
+    if (cluster.region >= world.regions.length || cluster.game >= world.games.length) fail('world.clusters', 'known regions and games');
+    if (world.realms[cluster.realm]?.region !== cluster.region) fail(`world.clusters[${i}].realm`, 'a realm of its own region');
+  });
   checkColumns(world.head, world, 'world.head', [0, 1]);
   return world;
 }
@@ -228,6 +287,7 @@ function checkColumns(columns: SettlerColumns, world: PreviewWorld, path: string
   for (let i = 0; i < columns.ids.length; i++) {
     if (!tiers.includes(columns.tier[i]!)) fail(`${path}.tier[${i}]`, `one of ${tiers.join(',')}`);
     if (columns.region[i]! >= world.regions.length || (region !== undefined && columns.region[i] !== region)) fail(`${path}.region[${i}]`, 'its region');
+    if (world.realms[columns.realm[i]!]?.region !== columns.region[i]) fail(`${path}.realm[${i}]`, 'a realm of its region');
     if (columns.game[i]! >= world.games.length) fail(`${path}.game[${i}]`, 'a known game');
   }
 }

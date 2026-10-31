@@ -14,6 +14,12 @@ export interface RealmOwnedHome {
   readonly attribution: ForgeReservation['attribution'];
   readonly attachments: Readonly<Record<string, string>>;
 }
+/** The monarch's actual adopted keep. It is a seat, not a street deed or one of the three homes. */
+export interface RealmOwnedCastle extends Omit<RealmOwnedHome, 'allocationReceipt' | 'slot'> {
+  readonly moduleId: string;
+  readonly slot: 65534;
+}
+export type RealmOwnedForgeHost = RealmOwnedHome | RealmOwnedCastle;
 export interface RealmForgeReservation {
   readonly attempt: ForgeAttempt; readonly homeId: string; readonly streamSessionId: string;
   readonly homeDigest: string;
@@ -31,6 +37,7 @@ export interface RealmPrivateState {
   readonly stream: { readonly sessionId: string | null; readonly startedAt: number; readonly liveUntil: number };
   readonly rights: Readonly<Record<string, { readonly revision: number; readonly forge: boolean; readonly build: boolean; readonly blocked: boolean; readonly safetyIdentifier: string }>>;
   readonly homes: Readonly<Record<string, RealmOwnedHome>>;
+  readonly castle: RealmOwnedCastle | null;
   /** Total held, INCLUDING reserved coals. Reserve/release do not change this number. */
   readonly coals: Readonly<Record<string, number>>;
   readonly reservations: Readonly<Record<string, RealmForgeReservation>>;
@@ -47,6 +54,7 @@ export type RealmDomainCommand =
   | { readonly type: 'stream.observe'; readonly sessionId: string | null; readonly startedAt: number; readonly liveUntil: number }
   | { readonly type: 'citizen.rights'; readonly personId: PersonId; readonly rights: RealmPrivateState['rights'][string] }
   | { readonly type: 'home.installAllocated'; readonly home: RealmOwnedHome }
+  | { readonly type: 'castle.installNative'; readonly castle: RealmOwnedCastle }
   | { readonly type: 'home.replaceApproved'; readonly homeId: string; readonly expectedRevision: string; readonly home: RealmOwnedHome; readonly approvalReceipt: string;
       readonly attachments: readonly { readonly id: string; readonly placement: Pick<ForgeAttachment, 'hostId' | 'hostFingerprint' | 'socketId' | 'origin'> | null }[] }
   | { readonly type: 'coal.creditQualifiedNight'; readonly personId: PersonId; readonly streamSessionId: string; readonly qualificationReceipt: string }

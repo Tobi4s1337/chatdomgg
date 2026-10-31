@@ -4,8 +4,22 @@ import { RealmIntentSchema, RealmJoinSchema, kingdomRoomId } from './messages';
 import { KingdomRoomState, WalkerSchema, WalkInputSchema } from './schema';
 import { sanitizeWalkInput, sanitizeRealmWalkInput } from './movement';
 import { RealmSessionReplySchema } from './auth';
+import { ForgeRunRequestSchema } from '../forge';
+import { REALM_CASTLE_SLOT, castleHostId } from './hosts';
+import { StyleIdSchema, type VoxelBlueprint } from '../voxel';
 
 describe('realm wire boundary v1', () => {
+  it('bounds the native keep explicitly without widening street hosts or browser authority', () => {
+    const home: VoxelBlueprint = { version: 1, id: 'actual-native-keep', styleId: StyleIdSchema.parse('tide'),
+      kind: 'civic', lattice: 'build', size: [256, 248, 256], boxes: [], windows: [] };
+    const request = { words: 'a chimney shaped like a sleeping dragon', family: 'tide', home };
+    expect(ForgeRunRequestSchema.safeParse(request).success).toBe(false);
+    expect(ForgeRunRequestSchema.safeParse({ ...request, hostProfile: 'castle-keep' }).success).toBe(true);
+    expect(ForgeRunRequestSchema.safeParse({ ...request, hostProfile: 'castle-keep', home: { ...home, size: [257, 248, 256] } }).success).toBe(false);
+    expect(REALM_CASTLE_SLOT).toBe(65534); expect(castleHostId('keep-1')).toBe('castle:keep-1');
+    expect(RealmIntentSchema.safeParse({ version: 1, id: 'wish:1', type: 'forge.wish', words: 'dragon', hostProfile: 'castle-keep' }).success).toBe(false);
+    expect(RealmIntentSchema.safeParse({ version: 1, id: 'install:1', type: 'castle.installNative', castle: home }).success).toBe(false);
+  });
   it('preserves large string kingdom IDs, denies claimed authority and transmits only the public schema', () => {
     expect(kingdomRoomId('9007199254740993123')).toBe('k:9007199254740993123');
     expect(() => kingdomRoomId('tobi4s_')).toThrow();

@@ -15,9 +15,13 @@ export const HousePartPlanSchema=z.union([LegacyHousePartPlanSchema,ComposedHous
 export type HousePartPlan = z.infer<typeof HousePartPlanSchema>;
 export const ForgeDraftSchema=z.strictObject({plan:ComposedHousePartPlanSchema,title:z.string().min(1).max(64),plaque:z.string().min(1).max(120)});
 export type ForgeDraft=z.infer<typeof ForgeDraftSchema>;
+/** Chosen by the owned host authority, never by the words/model. Street bounds remain unchanged. */
+export const ForgeHostProfileSchema=z.enum(['street-home','castle-keep']);
+export type ForgeHostProfile=z.infer<typeof ForgeHostProfileSchema>;
 /** Local development citizens remain simulated even when the spell and judges are real. */
-export const ForgeRunRequestSchema=z.strictObject({words:z.string().trim().min(1).max(240),family:z.enum(['hearth','tide','grove']),home:VoxelBlueprintSchema}).superRefine(({home},ctx)=>{
-  if(home.lattice!=='build'||home.size[0]>64||home.size[1]>160||home.size[2]>128||home.boxes.length>6000)ctx.addIssue({code:'custom',message:'A Forge run needs one bounded house.'});
+export const ForgeRunRequestSchema=z.strictObject({words:z.string().trim().min(1).max(240),family:z.enum(['hearth','tide','grove']),home:VoxelBlueprintSchema,hostProfile:ForgeHostProfileSchema.optional()}).superRefine(({home,hostProfile},ctx)=>{
+  const castle=hostProfile==='castle-keep';
+  if(home.lattice!=='build'||(castle?home.kind!=='civic'||home.size.some(n=>n>256):home.size[0]>64||home.size[1]>160||home.size[2]>128)||home.boxes.length>6000)ctx.addIssue({code:'custom',message:'A Forge run needs one bounded owned host.'});
   if(home.boxes.reduce((sum,b)=>sum+b.to.reduce((volume,n,i)=>volume*(n-b.from[i]!),1),0)>32*1024*1024)ctx.addIssue({code:'custom',message:'This home needs a simpler Forge survey.'});
 });
 export type ForgeRunRequest=z.infer<typeof ForgeRunRequestSchema>;
@@ -35,6 +39,7 @@ export interface ForgeHouseSocket {
   /** Local points where the foundation meets the retained host surface. */
   supports: [number,number,number][];
   hostId:string; hostFingerprint:string; clearanceHeight:number;
+  hostProfile?:ForgeHostProfile;
 }
 export const ForgePlacementSchema=z.strictObject({version:z.literal(1),id:TokenSchema,hostId:TokenSchema,hostFingerprint:TokenSchema,socketId:TokenSchema,kitId:TokenSchema,kitRevision:z.number().int().positive(),plan:HousePartPlanSchema,origin:Cell3Schema,approval:ForgeDraftSchema.omit({plan:true}).extend({runId:TokenSchema}).optional(),provenance:z.strictObject({source:z.literal('simulated'),makerId:TokenSchema,makerName:z.string().min(1).max(64),kingdomKey:TokenSchema,kingdomName:z.string().min(1).max(64),firstForgedAt:z.number().int().nonnegative(),designId:TokenSchema}).optional()});
 export type ForgePlacement=z.infer<typeof ForgePlacementSchema>;

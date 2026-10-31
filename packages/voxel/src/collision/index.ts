@@ -94,10 +94,10 @@ export function compileCollisionWorld(input: CollisionCompilerInput): CollisionW
     }
   }
   return Object.freeze({ revision: input.revision, query(bounds: CollisionBox): readonly CollisionBox[] {
-    if (!finite(bounds.min) || !finite(bounds.max) || bounds.min.some((n, i) => n >= bounds.max[i]!)) throw new Error('Invalid collision query.');
-    const bx0 = Math.floor(bounds.min[0] / BIN), bx1 = Math.ceil(bounds.max[0] / BIN), bz0 = Math.floor(bounds.min[2] / BIN), bz1 = Math.ceil(bounds.max[2] / BIN);
-    const x0 = Math.max(0, Math.floor((bounds.min[0] - ox) * 2)), x1 = Math.min(columns, Math.ceil((bounds.max[0] - ox) * 2));
-    const z0 = Math.max(0, Math.floor((bounds.min[2] - oz) * 2)), z1 = Math.min(rows, Math.ceil((bounds.max[2] - oz) * 2));
+    if (!finite(bounds.min) || !finite(bounds.max) || bounds.min.some((n, i) => n > bounds.max[i]!)) throw new Error('Invalid collision query.');
+    const bx0 = Math.floor(bounds.min[0] / BIN), bx1 = Math.floor(bounds.max[0] / BIN) + 1, bz0 = Math.floor(bounds.min[2] / BIN), bz1 = Math.floor(bounds.max[2] / BIN) + 1;
+    const x0 = Math.max(0, Math.floor((bounds.min[0] - ox) * 2)), x1 = Math.min(columns, Math.floor((bounds.max[0] - ox) * 2) + 1);
+    const z0 = Math.max(0, Math.floor((bounds.min[2] - oz) * 2)), z1 = Math.min(rows, Math.floor((bounds.max[2] - oz) * 2) + 1);
     if ((bx1 - bx0) * (bz1 - bz0) > MAX_QUERY_CELLS || Math.max(0, x1 - x0) * Math.max(0, z1 - z0) > MAX_QUERY_CELLS) return Object.freeze([freezeBox(bounds.min, bounds.max)]);
     const out = new Map<string, CollisionBox>();
     const add = (b: CollisionBox) => { if (intersects(bounds, b)) out.set(keyBox(b), b); };

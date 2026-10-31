@@ -1,0 +1,10 @@
+/* The kingdom's existing parchment speech, projected in the same lens as its people. */
+.stream-speech { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.stream-speech .citizen-bubble { position: absolute; transform: translate(-50%, -100%); max-width: 210px; min-width: 100px; padding: 9px 13px 11px; border: 1px solid #b89865; border-radius: 14px 14px 14px 3px; background: #f1dfb7; color: #443c32; box-shadow: 0 3px 13px #171d2840; text-align: center; font: 15px/1.25 Georgia, serif; }
+.stream-speech .citizen-bubble::after { content: ''; position: absolute; left: 50%; bottom: -7px; width: 10px; height: 10px; background: #f1dfb7; border-right: 1px solid #b89865; border-bottom: 1px solid #b89865; transform: rotate(45deg); }
+.stream-speech .citizen-bubble small { display: block; margin-bottom: 3px; font: var(--cd-type-min)/1.1 var(--cd-face-label); letter-spacing: .06em; color: #765437; }
+.stream-speech .citizen-bubble p { margin: 0; }
+.stream-speech .citizen-bubble img { display: inline-block; width: 24px; height: 24px; vertical-align: middle; }
+/* Match the stream canvas crop, so the strip keeps each bubble over the actual speaker. */
+.layout-strip .stream-speech { height: 28.125cqw; top: calc(50cqh - 28.125cqw * .62); }
+.layout-strip[data-shot='citizen'] .stream-speech { top: calc(50cqh - 28.125cqw * .45); }

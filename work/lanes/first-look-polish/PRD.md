@@ -31,7 +31,7 @@ concurrent workers modify the same UI entry, planner, source CSS or avatar palet
 
 ## Tasks
 
-- [ ] **FL01 — A quiet, truthful provenance seal and a real kit.** Implement @chatdom/ui tokens/type/focus,
+- [x] **FL01 — A quiet, truthful provenance seal and a real kit.** Implement @chatdom/ui tokens/type/focus,
   existing licensed fonts, plate/slip/seal materials and ProvenanceSeal with fail-closed source parsing. Replace
   the kingdom ribbon only under its grant; keep SIMULATED plainly visible. Mixed live-feed/practice or lost-feed
   states retain every distinct fact. Remove only redundant user-facing text; fixture Forge checks remain labelled

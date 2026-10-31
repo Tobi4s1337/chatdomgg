@@ -2,13 +2,15 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { findForgeSockets, forgeStyleKit, homeFingerprint, createNativeForgeHost } from '@chatdom/forge';
 import { KingdomIdSchema, PersonIdSchema, VOXEL_METRES, type VoxelBlueprint } from '@chatdom/shared';
-import type { CommittedForgeAttachment, RealmFoundedManifest, RealmOwnedHome, RealmPrivateState } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, castleHostId, type CommittedForgeAttachment, type RealmFoundedManifest, type RealmOwnedCastle, type RealmOwnedHome, type RealmPrivateState } from '@chatdom/shared/realm';
 import { generateSettlementPlan, homeOrigin, transformCardinalPoint, type RealmFoundedScene, type SettlementPlan } from '@chatdom/world';
 import { createRealmState } from '@chatdom/world/realm';
 import { assetHashOf, canonicalSceneJson, utf8 } from './codec';
 import { FoundedUnavailableError, NativeTownCache, loadAdoptedPlan, type FoundedLayoutSource } from './load';
 import { createNativeTown } from './native';
 import { assembleFoundedScene } from './scene';
+import { foundedCheckpointMatches } from './provider';
+import { PublicProjection } from '../outbox/projection';
 import { FoundedSceneError, decodeFoundedScene, encodeFoundedScene, validateFoundedScene } from './validate';
 
 const kingdomId = KingdomIdSchema.parse('900000002'), owner = PersonIdSchema.parse('900000202');
@@ -85,6 +87,43 @@ describe('founded scene (spec 38 R1-R3)', () => {
     expect(text).not.toContain('run-a');
     expect(build.geometryDigest).not.toBe((await assemble(empty)).geometryDigest);
   });
+
+  it('publishes the owned beacon keep independently and fits its attachment in the actual keep frame without owner leakage', async () => {
+    const moduleId = plan.castle.beaconModuleId, id = castleHostId(moduleId), keep = native.fixtures.find(f => f.id === id)!;
+    const blueprint = keep.blueprint, socket = findForgeSockets(blueprint, 'castle-keep')[0]!;
+    expect(socket).toBeDefined();
+    const digest = await assetHashOf(blueprint);
+    const castle: RealmOwnedCastle = { id, moduleId, ownerId: owner, slot: REALM_CASTLE_SLOT, layoutRevision: plan.revision,
+      revision: 'r2', digest, family: 'tide', blueprint, attachments: { [socket.id]: 'castle-part' },
+      attribution: { makerName: 'Juniper', kingdomName: 'Emberwick', approvalId: 'names:approval' } };
+    const kit = forgeStyleKit(castle.family);
+    const attachment: CommittedForgeAttachment = { version: 1, id: 'castle-part', runId: 'castle-run', kingdomId, slot: REALM_CASTLE_SLOT,
+      hostId: blueprint.id, hostProfile: 'castle-keep', hostFingerprint: homeFingerprint(blueprint), socketId: socket.id, origin: socket.origin,
+      kitId: kit.id, kitRevision: kit.revision, family: castle.family,
+      draft: { plan: { version: 2, kind: socket.kind, motif: 'crescent-moon', finish: 'native', accent: 'none' }, title: 'Moon keep', plaque: 'Made here' },
+      committedAt: 2, provenance: { source: 'simulated', makerName: 'Juniper', kingdomName: 'Emberwick', designId: 'castle-design', firstForgedAt: 2 } };
+    const state: RealmPrivateState = { ...empty, sequence: 2, castle, attachments: { [attachment.id]: { forgeKey: 'PRIVATE WISH', ownerId: owner,
+      homeId: id, attached: true, attachment, creation: { words: 'PRIVATE WISH' }, approvalReceipt: 'judges:private' } } };
+    const build = await assemble(state), fixture = build.scene.placements.filter(p => p.id === id), part = build.scene.placements.find(p => p.id === 'forge:castle-part')!;
+    expect(fixture).toHaveLength(1);
+    expect(fixture[0]).toEqual({ id, assetHash: digest, position: keep.position, rotation: keep.rotation });
+    expect(part.plotId).toBeUndefined();
+    expect(part.position).toEqual(transformCardinalPoint(keep.position, keep.rotation, socket.origin.map(n => n * VOXEL_METRES.build) as [number, number, number]));
+    expect(part.rotation).toBe(keep.rotation);
+    expect(build.homes.every(home => home.source === 'native')).toBe(true);
+    for (const secret of PRIVATE) expect(new TextDecoder().decode(build.bytes), secret).not.toContain(secret);
+    const projection = new PublicProjection({ homes: [], presence: null, cursor: 0, sequence: 0 });
+    projection.rememberHomes({ ...empty, castle: { ...castle, revision: 'r1', attachments: {} } });
+    projection.adopt([{ id: 1, sequence: 1, eventId: 'castle-install', plotId: id, message: { type: 'castle', moduleId, revision: 'r1', assetHash: digest, attachments: [] } },
+      { id: 2, sequence: 2, eventId: 'castle-forge', plotId: id, message: { type: 'forge', event: { type: 'committed', activityId: attachment.runId, attachment } } }]);
+    expect(projection.current()).toEqual([{ type: 'castle', moduleId, revision: 'r2', assetHash: digest, attachments: [attachment] }]);
+    expect(JSON.stringify(projection.current())).not.toContain(owner);
+    const checkpoint = { version: 1 as const, kingdomId, writerEpoch: 'test', throughCursor: 2, throughSequence: 2, layoutRevision: plan.revision,
+      collisionRevision: build.manifest.collisionRevision, current: projection.current() };
+    expect(foundedCheckpointMatches(build, checkpoint)).toBe(true);
+    expect(foundedCheckpointMatches(build, { ...checkpoint, current: [] })).toBe(false);
+    expect(foundedCheckpointMatches(build, { ...checkpoint, current: [{ type: 'castle', moduleId, revision: 'r1', assetHash: digest, attachments: [] }] })).toBe(false);
+  }, 30_000);
 
   it('keeps distinct bytes distinct when an approved edit shares a semantic blueprint ID', async () => {
     const twin = plan.homes.find((home, i) => plan.homes.some((other, j) => j !== i && other.style === home.style && other.tier === home.tier && other.variant === home.variant))!;

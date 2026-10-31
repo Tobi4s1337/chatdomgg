@@ -1,7 +1,7 @@
 import { MATERIALS } from '@chatdom/content';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
 import { KingdomIdSchema, VOXEL_METRES, VoxelBlueprintSchema, type KingdomId, type MaterialRegistry, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
-import type { RealmFoundedManifest, RealmOwnedHome, RealmPrivateState } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, castleHostId, type RealmFoundedManifest, type RealmOwnedForgeHost, type RealmOwnedHome, type RealmPrivateState } from '@chatdom/shared/realm';
 import { homeOrigin, transformCardinalPoint, type CardinalTurn, type RealmFoundedBlueprint, type RealmFoundedPlacement, type RealmFoundedScene, type SettlementPlan } from '@chatdom/world';
 import { assetHashOf, canonicalSceneJson, sha256Hex, utf8 } from './codec';
 import { createNativeTown, type NativeTown } from './native';
@@ -31,6 +31,13 @@ export interface FoundedHomeBinding {
   readonly attachments: readonly string[];
 }
 
+export interface FoundedCastleBinding {
+  readonly moduleId: string;
+  readonly revision: string;
+  readonly digest: string;
+  readonly attachments: readonly string[];
+}
+
 export interface FoundedSceneBuild {
   readonly scene: RealmFoundedScene;
   /** Exact immutable response bytes; `manifest.sceneHash` is their SHA-256. */
@@ -42,6 +49,7 @@ export interface FoundedSceneBuild {
    */
   readonly geometryDigest: string;
   readonly homes: readonly FoundedHomeBinding[];
+  readonly castle: FoundedCastleBinding | null;
   readonly counts: { readonly assets: number; readonly placements: number; readonly boxes: number; readonly ownedHomes: number; readonly attachments: number };
 }
 
@@ -69,6 +77,32 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
   const attachedIds = new Set<string>();
   const pieces: { id: string; blueprint: VoxelBlueprint; position: Vec3; rotation: CardinalTurn; plotId?: string }[] = [];
   const homes: FoundedHomeBinding[] = [];
+  const attach = (home: RealmOwnedForgeHost, origin: Vec3, rotation: CardinalTurn, plotId?: string): string[] => {
+    const profile = 'moduleId' in home ? 'castle-keep' : 'street-home';
+    const blueprint = home.blueprint;
+    const sockets = Object.keys(home.attachments).length ? findForgeSockets(blueprint, profile) : [];
+    const fingerprint = sockets.length ? homeFingerprint(blueprint) : '';
+    const parts: string[] = [];
+    for (const socketId of Object.keys(home.attachments).sort()) {
+      const id = home.attachments[socketId]!, item = Object.hasOwn(state.attachments, id) ? state.attachments[id] : undefined;
+      if (!item || !item.attached || item.homeId !== home.id) fail(`home ${home.id} lists part ${id} that is not attached to it`);
+      const part = item!.attachment;
+      if (part.socketId !== socketId || part.hostId !== blueprint.id || part.slot !== home.slot || part.kingdomId !== kingdomId
+        || part.hostFingerprint !== fingerprint || (part.hostProfile ?? 'street-home') !== profile) fail(`part ${id} does not fit the committed home ${home.id}`);
+      const socket = sockets.find(s => s.id === socketId) ?? fail(`home ${home.id} no longer has socket ${socketId}`);
+      if (socket.origin.some((n, axis) => n !== part.origin[axis])) fail(`part ${id} sits away from its socket`);
+      const kit = forgeStyleKit(part.family);
+      if (kit.id !== part.kitId || kit.revision !== part.kitRevision) fail(`part ${id} names an unregistered kit`);
+      let piece: VoxelBlueprint;
+      try { const assembled = assembleForge(part.draft.plan, kit, socket); checkForge(assembled, blueprint, profile); piece = assembled.blueprint; }
+      catch { return fail(`part ${id} no longer assembles on home ${home.id}`); }
+      const local: Vec3 = [part.origin[0] * VOXEL_METRES.build, part.origin[1] * VOXEL_METRES.build, part.origin[2] * VOXEL_METRES.build];
+      pieces.push({ id: `forge:${part.id}`, blueprint: piece, position: transformCardinalPoint(origin, rotation, local), rotation, ...(plotId === undefined ? {} : { plotId }) });
+      attachedIds.add(id); parts.push(part.id);
+    }
+    return parts;
+  };
+
   for (const plotHome of native.homes.values()) {
     const plot = plotHome.plot, home = owned.get(plot.id);
     if (!home) {
@@ -85,30 +119,24 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
     try { origin = homeOrigin(plot, blueprint.size[2] * VOXEL_METRES.build); }
     catch { return fail(`committed home ${home.id} is deeper than its plot`); }
     pieces.push({ id: plotHome.id, blueprint, position: origin, rotation: plot.rotation, plotId: plot.id });
-    const sockets = Object.keys(home.attachments).length ? findForgeSockets(blueprint) : [];
-    const fingerprint = sockets.length ? homeFingerprint(blueprint) : '';
-    const parts: string[] = [];
-    for (const socketId of Object.keys(home.attachments).sort()) {
-      const id = home.attachments[socketId]!, item = Object.hasOwn(state.attachments, id) ? state.attachments[id] : undefined;
-      if (!item || !item.attached || item.homeId !== home.id) fail(`home ${home.id} lists part ${id} that is not attached to it`);
-      const part = item!.attachment;
-      if (part.socketId !== socketId || part.hostId !== blueprint.id || part.slot !== home.slot || part.kingdomId !== kingdomId
-        || part.hostFingerprint !== fingerprint) fail(`part ${id} does not fit the committed home ${home.id}`);
-      const socket = sockets.find(s => s.id === socketId) ?? fail(`home ${home.id} no longer has socket ${socketId}`);
-      if (socket.origin.some((n, axis) => n !== part.origin[axis])) fail(`part ${id} sits away from its socket`);
-      const kit = forgeStyleKit(part.family);
-      if (kit.id !== part.kitId || kit.revision !== part.kitRevision) fail(`part ${id} names an unregistered kit`);
-      let piece: VoxelBlueprint;
-      try { const assembled = assembleForge(part.draft.plan, kit, socket); checkForge(assembled, blueprint); piece = assembled.blueprint; }
-      catch { return fail(`part ${id} no longer assembles on home ${home.id}`); }
-      const local: Vec3 = [part.origin[0] * VOXEL_METRES.build, part.origin[1] * VOXEL_METRES.build, part.origin[2] * VOXEL_METRES.build];
-      pieces.push({ id: `forge:${part.id}`, blueprint: piece, position: transformCardinalPoint(origin, plot.rotation, local), rotation: plot.rotation, plotId: plot.id });
-      attachedIds.add(id); parts.push(part.id);
-    }
+    const parts = attach(home, origin, plot.rotation, plot.id);
     homes.push({ plotId: plot.id, source: 'owned', revision: home.revision, digest: home.digest, attachments: parts });
   }
-  for (const [id, item] of Object.entries(state.attachments)) if (item.attached && !attachedIds.has(id)) fail(`attached part ${id} is not listed by its home`);
-  for (const fixture of native.fixtures) pieces.push({ id: fixture.id, blueprint: fixture.blueprint, position: fixture.position, rotation: fixture.rotation });
+  let castle: FoundedCastleBinding | null = null;
+  const ownedCastle = state.castle;
+  const keepId = castleHostId(plan.castle.beaconModuleId);
+  const keep = native.fixtures.find(fixture => fixture.id === keepId) ?? fail('the native town has no beacon keep');
+  if (ownedCastle) {
+    if (ownedCastle.id !== keepId || ownedCastle.moduleId !== plan.castle.beaconModuleId || ownedCastle.slot !== REALM_CASTLE_SLOT
+      || ownedCastle.layoutRevision !== plan.revision) fail('the committed castle disagrees with the adopted keep');
+    if (!VoxelBlueprintSchema.safeParse(ownedCastle.blueprint).success || ownedCastle.blueprint.kind !== 'civic') fail('the committed castle is not a civic blueprint');
+    const parts = attach(ownedCastle, keep.position, keep.rotation);
+    castle = { moduleId: ownedCastle.moduleId, revision: ownedCastle.revision, digest: ownedCastle.digest, attachments: parts };
+  }
+  for (const [id, item] of Object.entries(state.attachments)) if (item.attached && !attachedIds.has(id)) fail(`attached part ${id} is not listed by its host`);
+  for (const fixture of native.fixtures) pieces.push({ id: fixture.id,
+    blueprint: ownedCastle && fixture.id === keepId ? ownedCastle.blueprint : fixture.blueprint,
+    position: fixture.position, rotation: fixture.rotation });
 
   // Content identity is the exact bytes; one factory object is hashed once, distinct bytes stay distinct.
   const hashes = new Map<VoxelBlueprint, string>(), assets = new Map<string, RealmFoundedBlueprint>();
@@ -130,7 +158,7 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
   const geometry = { compiler: FOUNDED_PHYSICS_VERSION, version: scene.version, kingdomId: scene.kingdomId, origin: scene.origin, layoutRevision: scene.layoutRevision,
     plan: scene.plan, materials: scene.materials, assets: scene.assets, placements: scene.placements };
   const geometryDigest = await sha256Hex(utf8(canonicalSceneJson(geometry)));
-  return { scene, bytes, manifest, geometryDigest, homes,
+  return { scene, bytes, manifest, geometryDigest, homes, castle,
     counts: { assets: scene.assets.length, placements: scene.placements.length, boxes: scene.assets.reduce((n, a) => n + a.blueprint.boxes.length, 0),
       ownedHomes: owned.size, attachments: attachedIds.size } };
 }

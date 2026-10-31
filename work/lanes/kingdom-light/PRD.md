@@ -36,7 +36,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   Commit this task alone so places-high, places-water and home-interiors can consume its accepted implementation.
   **Evidence:** trace test output, exact import/call recipe and no copied stand-ins.
 
-- [ ] **KL02 — A blue noon and an indigo dusk.**
+- [x] **KL02 — A blue noon and an indigo dusk.**
   Author coherent sky, sun, cloud, ambient, shadow tint, hour-dependent fog and exposure. Noon is clear blue with
   white broken clouds; dusk has lilac sky, gold rims and indigo shadows; night stays cool around warm people.
   Restrain the daylight beacon to its crown. Preserve existing Environment consumers; give the integrator the
@@ -52,7 +52,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   simulated source and binds the existing replay control.
   **Evidence:** one reducer-backed seek/arrival/departure trace; actual town open and replay at 0/30 s after mounting.
 
-- [ ] **KL04 — Glass passes sight and light without losing its frame.**
+- [x] **KL04 — Glass passes sight and light without losing its frame.**
   Implement the complete approved glass path in the spec's narrow files: glass material flags distinct from
   collision solidity, visible interior-facing surfaces, appropriate voxel rendering, presence panes that allow
   sight, sun-shadow transmission and ordered light-field blockers. Reuse existing material flags and formats;

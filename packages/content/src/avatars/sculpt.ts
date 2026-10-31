@@ -106,6 +106,39 @@ export class Sculpt {
     return out;
   }
 
+  /**
+   * Cells outside this workpiece whose centres lie within `distance` (Euclidean, cell centre to cell
+   * centre) of it. Rounder than `shell` over curved crowns, so a thick layer does not terrace.
+   */
+  grow(distance: number, material: number): Sculpt {
+    const out = new Sculpt();
+    const reach = Math.floor(distance), limit = distance * distance + 1e-9;
+    const offsets: [number, number, number][] = [];
+    for (let z = -reach; z <= reach; z++) for (let y = -reach; y <= reach; y++) for (let x = -reach; x <= reach; x++) if ((x || y || z) && x * x + y * y + z * z <= limit) offsets.push([x, y, z]);
+    this.forEachCell((x, y, z) => {
+      for (const [dx, dy, dz] of offsets) if (!this.get(x + dx, y + dy, z + dz)) out.set(x + dx, y + dy, z + dz, material);
+    });
+    return out;
+  }
+
+  /** Occupied face neighbours of a cell (0–6). */
+  neighbours(x: number, y: number, z: number): number {
+    let n = 0;
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const) if (this.get(x + dx, y + dy, z + dz)) n++;
+    return n;
+  }
+
+  /** Remove loose cells (fewer than `min` face neighbours) until none remain: no single-voxel confetti. */
+  tidy(min = 2): this {
+    for (let pass = 0; pass < 4; pass++) {
+      const loose: [number, number, number][] = [];
+      this.forEachCell((x, y, z) => { if (this.neighbours(x, y, z) < min) loose.push([x, y, z]); });
+      if (!loose.length) break;
+      for (const [x, y, z] of loose) this.set(x, y, z, 0);
+    }
+    return this;
+  }
+
   /** Copy another workpiece's cells into this one, optionally only where a test passes. */
   merge(other: Sculpt, where: (x: number, y: number, z: number) => boolean = () => true): this {
     other.forEachCell((x, y, z, m) => { if (where(x, y, z)) this.set(x, y, z, m); });

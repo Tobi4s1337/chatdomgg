@@ -14,6 +14,17 @@ export type Distance = 'world' | 'continent' | 'realm' | 'kingdom';
 /** The deepest zoom: a capital holding is drawn about 400–480 CSS px wide. It stops at a drawing, never a plan. */
 export const MAX_SCALE = 40;
 
+/**
+ * The four distance stops the controls and the 1–4 keys fly to: the geometric middle of each band, so a stop never
+ * sits on a threshold where marks change. The world stop is the opening view of the current screen.
+ */
+export const DISTANCE_STOP = {
+  continent: Math.sqrt(DISTANCE_SCALE.continent * DISTANCE_SCALE.realm),
+  realm: Math.sqrt(DISTANCE_SCALE.realm * DISTANCE_SCALE.kingdom),
+  kingdom: Math.sqrt(DISTANCE_SCALE.kingdom * MAX_SCALE),
+} as const;
+export const DISTANCES: readonly Distance[] = ['world', 'continent', 'realm', 'kingdom'];
+
 export function distanceFor(scale: number): Distance {
   if (scale >= DISTANCE_SCALE.kingdom) return 'kingdom';
   if (scale >= DISTANCE_SCALE.realm) return 'realm';
@@ -98,14 +109,16 @@ export class Camera {
   }
 
   /**
-   * The centre may wander only so far that most of the screen still shows the map. When the whole map fits on an
-   * axis, it may sit anywhere on screen along that axis (so the opening view can clear a side panel).
+   * The centre may wander only so far that most of the screen still shows the map: an edge of the map may come in
+   * a quarter of the screen. When the whole map fits on an axis it may sit anywhere along it (so the opening view can
+   * clear a side panel) and overhang either edge by that same quarter, so a zoom anchored near the map's edge keeps
+   * its point under the pointer. The two rules meet exactly where the map stops fitting.
    */
   clamp(view: Viewport): void {
     this.scale = Math.min(this.maxScale, Math.max(this.minScale, this.scale));
     const axis = (lo: number, hi: number, half: number, value: number) => {
-      if (hi - lo <= half * 2) return Math.min(lo + half, Math.max(hi - half, value));
       const pad = half * 0.5;
+      if (hi - lo <= half * 2) return Math.min(lo + half + pad, Math.max(hi - half - pad, value));
       return Math.min(hi - half + pad, Math.max(lo + half - pad, value));
     };
     this.x = axis(this.bounds.minX, this.bounds.maxX, view.width / 2 / this.scale, this.x);
