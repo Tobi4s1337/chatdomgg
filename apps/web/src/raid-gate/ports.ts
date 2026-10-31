@@ -4,7 +4,7 @@
  * Nothing here carries a token, a role or a person ID the browser could set.
  */
 import type { AtlasChannel } from '@chatdom/shared';
-import type { GateCommand, GateReply, KingdomId } from '../../../api/src/raid-gate/contracts';
+import type { AtlasRaid, GateCommand, GateReply, KingdomId, TravelState } from '../../../api/src/raid-gate/contracts';
 
 export interface RaidGateApi {
   /**
@@ -39,7 +39,28 @@ export interface AtlasGateHost {
   /** How a destination the authority named appears on the map, under the Atlas's own visibility rules. */
   resolve(kingdomId: KingdomId, signal: AbortSignal): Promise<Readonly<{ channel: AtlasChannel; land: GateLand }> | null>;
   subscribe(listener: (event: AtlasGateEvent) => void, signal: AbortSignal): void;
+  /**
+   * The party set out on this witnessed raid: attach the map to its public caravan by the raid's ID, the one the
+   * Atlas draws for everyone. Presentation only. The road itself reaches the Atlas ledger from the server, and a
+   * viewer's map never creates a second caravan or road.
+   */
+  follow(raid: AtlasRaid, signal: AbortSignal): void;
+  /**
+   * One person's journey, stage by stage, so the map can rise from the source, draw the road and reveal the
+   * destination at the pace of the authority's answers (spec 23 R6). Optional until the Atlas implements it; the
+   * gate board tells the same stages either way. Presentation only: nothing here moves anyone.
+   */
+  travel?(stage: AtlasTravelStage, signal: AbortSignal): void;
 }
+
+/**
+ * `rise`: a reservation is being made at `to`; `road`: the destination is readying its world; `drawing`: stepping
+ * through; `arrived`: the destination acknowledged the arrival; `back`: the journey ended and the walker never left.
+ * `state` is the authority's own ticket state at that moment.
+ */
+export type AtlasTravelStage = Readonly<{
+  kind: 'rise' | 'road' | 'drawing' | 'arrived' | 'back'; ticket: string; from: KingdomId; to: KingdomId; state: TravelState;
+}>;
 
 /** The source kingdom's public face, from the kingdom host. */
 export type GateKingdom = Readonly<{ kingdomId: KingdomId; name: string; login: string }>;
@@ -56,4 +77,6 @@ export type RaidGatePorts = Readonly<{
   clock: () => number;
   /** Fresh request IDs; defaults to `crypto.randomUUID`. */
   ids?: () => string;
+  /** Pauses between journey steps; defaults to a timer. Tests inject an instant one. */
+  wait?: (ms: number, signal: AbortSignal) => Promise<void>;
 }>;

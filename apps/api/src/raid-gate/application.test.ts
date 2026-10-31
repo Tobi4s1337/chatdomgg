@@ -31,7 +31,7 @@ function setup(standing: Partial<SourceStanding> = {}) {
   };
   const changes: string[] = [];
   const app = createRaidGateApplication({
-    repository, policy, origin: 'simulated',
+    repository, policy, origin: 'simulated', clock: () => clock,
     tokens: { issue: () => `preview-${++issued}`, hash: async value => value.replace(/\D/g, '').padStart(64, 'a') },
     notifier: { changed: change => changes.push(`${change.requestId}@${change.revision}`) },
   });
@@ -120,10 +120,36 @@ describe('Raid Gate preview and party', () => {
     expect(await monarch({ op: 'preview', requestId: 'r1', target: MIRA })).toEqual({ kind: 'denied', code: 'stale' });
   });
 
-  it('answers commands the gate does not perform yet as unavailable, never as success', async () => {
+  it('lets only the monarch close an unstarted gate, ending every choice and moving nobody', async () => {
+    const { monarch, wren, policy, repository, changes } = setup();
+    await monarch({ op: 'preview', requestId: 'r1', target: MIRA });
+    await wren({ op: 'join', requestId: 'r1' });
+    const calls = policy.readStanding.mock.calls.length;
+    expect(await wren({ op: 'cancel', requestId: 'r1' })).toEqual({ kind: 'denied', code: 'unauthorized' });
+    expect(policy.readStanding.mock.calls.length).toBe(calls);
+    // A withdrawn grant blocks opening the gate, never closing it.
+    policy.readStanding.mockImplementation(async principal => ({ session: 'current', broadcaster: principal.personId === MONARCH, live: true, raids: 'revoked', actions: 'enabled' }));
+    expect(await monarch({ op: 'cancel', requestId: 'r1' })).toMatchObject({ kind: 'action', value: { state: 'cancelled', raid: null } });
+    expect(repository.snapshot().actions[0]).toMatchObject({ endReason: 'closed', optedIn: 1 });
+    expect(repository.snapshot().gates[0]).toMatchObject({ requestId: null });
+    expect(await monarch({ op: 'cancel', requestId: 'r1' })).toMatchObject({ value: { state: 'cancelled' } });
+    expect(repository.snapshot().actions[0]?.revision).toBe(3);
+    expect(await wren({ op: 'gate' })).toMatchObject({ value: { open: null } });
+    expect(await wren({ op: 'join', requestId: 'r1' })).toEqual({ kind: 'denied', code: 'stale' });
+    expect(await wren({ op: 'leave', requestId: 'r1' })).toMatchObject({ value: { joined: false, optedIn: 0 } });
+    expect(changes.at(-1)).toBe('r1@3');
+    policy.readStanding.mockImplementation(async principal => ({ session: 'current', broadcaster: principal.personId === MONARCH, live: true, raids: 'granted', actions: 'enabled' }));
+    expect(await monarch({ op: 'preview', requestId: 'r2', target: FERN })).toMatchObject({ value: { optedIn: 0 } });
+  });
+
+  it('cannot start without a bound Twitch raid authority, and answers later tasks as unavailable, never as success', async () => {
     const { monarch, repository } = setup();
-    expect(await monarch({ op: 'start', requestId: 'r1', previewToken: 'preview-1' })).toEqual({ kind: 'denied', code: 'unavailable' });
-    expect(repository.commits).toBe(0);
+    const preview = await monarch({ op: 'preview', requestId: 'r1', target: MIRA });
+    const commits = repository.commits;
+    expect(await monarch({ op: 'start', requestId: 'r1', previewToken: preview.kind === 'preview' ? preview.value.token : 'x' })).toEqual({ kind: 'denied', code: 'unavailable' });
+    expect(await monarch({ op: 'prepare', ticket: 't1' })).toEqual({ kind: 'denied', code: 'unavailable' });
+    expect(repository.commits).toBe(commits);
+    expect(repository.snapshot().actions[0]).toMatchObject({ state: 'prepared', dispatchedAt: null });
   });
 });
 

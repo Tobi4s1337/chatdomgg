@@ -8,6 +8,7 @@
     "./fixtures": "./src/fixtures.ts",
     "./world-fixtures": "./src/world-fixtures.ts",
     "./realm": "./src/realm/index.ts",
+    "./passport": "./src/passport.ts",
     "./twitch-moments": "./src/twitch-moments.ts"
   },
   "dependencies": {

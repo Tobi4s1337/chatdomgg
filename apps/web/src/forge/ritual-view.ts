@@ -71,6 +71,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
   const blueprint = new THREE.Group(); root.add(blueprint);
   const wordsGroup = new THREE.Group(); root.add(wordsGroup);
   let pieceBounds = new THREE.Box3(new THREE.Vector3(), new THREE.Vector3(1, 1, 1));
+  const castingPosition = new THREE.Vector3();
   const makeText = (text: string, color: string) => {
     const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 96;
     const ctx = canvas.getContext('2d');
@@ -92,6 +93,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     piece.rotation.set(0, 0, 0); piece.scale.set(1, 1, 1);
     const center = bounds.getCenter(new THREE.Vector3());
     piece.position.set(-center.x, 1.6 - bounds.min.y, -center.z);
+    castingPosition.copy(piece.position);
     for (const child of blueprint.children) {
       const line = child as THREE.LineSegments; line.geometry.dispose(); geometries.delete(line.geometry);
     }
@@ -119,7 +121,11 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     // This mesh is the host-owned presentation clone; the attached home mesh remains separate.
     root.updateWorldMatrix(true,true);
     const anvil=root.localToWorld(new THREE.Vector3(0,1.43,0));
-    presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:(landing??anvil).toArray(),piece});
+    // The shared effect captures the real landing pose before it brings a clone to the anvil.
+    const destination=landing??anvil;
+    piece.position.copy(root.worldToLocal(destination.clone()));piece.updateWorldMatrix(true,false);
+    presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:destination.toArray(),piece});
+    piece.position.copy(castingPosition);piece.updateWorldMatrix(true,false);
   }
   /** The room's external casting owns its effects; it still heats this same physical stage. */
   function updateAnvil(frame: ForgeRitualFrame | null, shaping = false) {
@@ -131,7 +137,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
   }
   function update(frame: ForgeRitualFrame | null, shaping = false) {
     const early=frame?.phase==='words'||frame?.phase==='blueprint';
-    if(!early&&presenting){presentation?.update(null);presenting=false;}
+    if(!early&&presenting){presentation?.update(null);piece.position.copy(castingPosition);piece.rotation.set(0,0,0);piece.scale.set(1,1,1);presenting=false;}
     const orbitTime=frame?.elapsed??0;
     const t = frame?.phase==='words'?Math.min(2.99,orbitTime):orbitTime;
     const active = frame !== null;

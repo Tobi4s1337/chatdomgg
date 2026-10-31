@@ -67,7 +67,8 @@ export function createForgeEmitters(scene: THREE.Scene) {
             float core = (1.0 - smoothstep(0.02, 0.23, abs(p.x))) * (1.0 - smoothstep(0.05, 0.95, abs(p.y)));
             float halo = (1.0 - smoothstep(0.0, 0.45, length(p))) * 0.25;
             a = (core * 0.75 + halo) * vAlpha;
-            c = mix(uColour, vec3(1.0, 0.83, 0.52), 0.55);
+            // The hot glint core contributes radiance; its alpha still shapes the tail.
+            c = mix(uColour, vec3(1.0, 0.83, 0.52), 0.55) * 3.4;
           } else if (uMode == 5) {
             float d = min(length(p * vec2(0.96, 1.04)), min(length((p - vec2(-0.27, -0.1)) * 1.25), length((p - vec2(0.25, 0.12)) * 1.32)));
             a = (1.0 - smoothstep(0.2, 1.0, d)) * vAlpha;
@@ -81,12 +82,12 @@ export function createForgeEmitters(scene: THREE.Scene) {
             float d = length(p);
             float star = max((1.0 - smoothstep(0.0, 0.14, abs(p.x))) * (1.0 - smoothstep(0.08, 0.9, abs(p.y))), (1.0 - smoothstep(0.0, 0.14, abs(p.y))) * (1.0 - smoothstep(0.08, 0.9, abs(p.x))));
             a = (star * 0.55 + (1.0 - smoothstep(0.0, 0.55, d)) * 0.35) * vAlpha;
-            c = vec3(1.0, 0.67, 0.25);
+            c = vec3(1.0, 0.67, 0.25) * 4.0;
           } else {
             // Tiny square hot fragments, with a darker amber edge.
             float edge = max(abs(p.x), abs(p.y));
             a = (1.0 - smoothstep(0.78, 1.0, edge)) * vAlpha;
-            c = mix(vec3(0.9, 0.31, 0.055), vec3(1.0, 0.73, 0.28), 1.0 - edge);
+            c = mix(vec3(0.9, 0.31, 0.055), vec3(1.0, 0.73, 0.28), 1.0 - edge) * mix(1.0, 3.5, 1.0 - edge);
           }
           gl_FragColor = vec4(c, a);
           #include <tonemapping_fragment>

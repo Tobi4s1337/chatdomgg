@@ -1,5 +1,6 @@
 import { For, onMount } from 'solid-js';
 import './style.css';
+import { GENESIS_CHANNELS } from '../genesis/channels';
 
 type Place = { number: string; title: string; description: string; status: 'LIVE' | 'SIMULATED' | 'RECORDED' | 'UNAVAILABLE'; href?: string; action?: string };
 const places: Place[] = [
@@ -11,6 +12,12 @@ const places: Place[] = [
   { number: '06', title: 'The Chronicle', description: 'The kingdom’s remembered moments have no public page yet.', status: 'UNAVAILABLE' },
 ];
 
+const kingdoms = [
+  { ...GENESIS_CHANNELS[0], landscape: 'Coastal hamlet', category: 'Counter-Strike', average: '16', note: 'Sixteen proposed homes above the shore, with a harbour lane and a keep on the rise.' },
+  { ...GENESIS_CHANNELS[1], landscape: 'River town', category: 'Retro', average: '140', note: 'A market and winding neighbourhoods beside a river descending from the hills.' },
+  { ...GENESIS_CHANNELS[2], landscape: 'Mountain city', category: 'Chess', average: '852', note: 'Five hundred and twelve proposed homes beneath the keep and the mountain pass.' },
+] as const;
+
 export default function Showcase() {
   onMount(() => { (window as Window & { __chatdomReady?: boolean }).__chatdomReady = true; });
   return <div class="showcase">
@@ -20,7 +27,7 @@ export default function Showcase() {
       <section aria-labelledby="places-heading"><div class="showcase-section-heading"><div><p class="showcase-label">THE OPEN DOORS</p><h2 id="places-heading">Come on in.</h2></div><p>Some places use live services and may ask you to sign in. Simulated experiences are marked.</p></div>
         <div class="showcase-grid"><For each={places}>{place => <article class={`showcase-card showcase-card--${place.status.toLowerCase()}`}><div class="showcase-card-top"><span class="showcase-number">{place.number} / 06</span><span class="showcase-status"><i />{place.status}</span></div><h3>{place.title}</h3><p>{place.description}</p>{place.href ? <a href={place.href}>{place.action}<span aria-hidden="true">↗</span></a> : <span class="showcase-unavailable">Not available yet</span>}</article>}</For></div>
       </section>
-      <section class="showcase-future" aria-labelledby="future-heading"><div><p class="showcase-label">ON THE HORIZON</p><h2 id="future-heading">More kingdoms await.</h2><p>A coastal hamlet, a river town and a mountain city. Their doors open here when ready.</p></div><div class="showcase-future-list"><For each={['Coastal hamlet', 'River town', 'Mountain city']}>{name => <div><span>{name}</span><small>UNAVAILABLE</small></div>}</For></div></section>
+      <section class="showcase-kingdoms" aria-labelledby="kingdoms-heading"><div class="showcase-section-heading"><div><p class="showcase-label">THREE COMMUNITIES · THREE SEEDS</p><h2 id="kingdoms-heading">Different places to belong.</h2></div><p>Unfounded land from real channels. Audience and categories come from the recorded 30 October Atlas survey; these are proposals, with no assigned homes.</p></div><div class="showcase-grid"><For each={kingdoms}>{kingdom => <article class="showcase-card showcase-kingdom-card"><div class="showcase-card-top"><span class="showcase-number">{kingdom.landscape}</span><span class="showcase-status">UNFOUNDED LAND</span></div><h3>{kingdom.name}</h3><p>{kingdom.note}</p><p class="showcase-kingdom-source">{kingdom.category} · about {kingdom.average} viewers in the recorded survey</p><a href={`/kingdom/${kingdom.id}`}>See the land<span aria-hidden="true">↗</span></a></article>}</For></div></section>
     </main><footer class="showcase-footer"><span>CHATDOM</span><p>A kingdom lit by its people.</p><a href="/">Return home ↑</a></footer>
   </div>;
 }

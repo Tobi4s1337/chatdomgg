@@ -57,6 +57,9 @@ importers:
       '@chatdom/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@chatdom/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       jose:
         specifier: 6.2.14
         version: 6.2.14
@@ -120,6 +123,9 @@ importers:
       '@chatdom/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@chatdom/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       solid-js:
         specifier: 1.9.18
         version: 1.9.18

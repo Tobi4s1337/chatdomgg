@@ -1,0 +1,167 @@
+[
+ {
+  "name": "px1-q90",
+  "width": 1,
+  "height": 1,
+  "quality": 90,
+  "method": 4,
+  "options": {},
+  "rgbSha256": "59dfda9f0ec17730dd5dceccc54c4a680875c6b5b0174ff88acd9e246a9e0114",
+  "rgbFile": "px1-q90.rgb.gz"
+ },
+ {
+  "name": "noise-37x19-q50",
+  "width": 37,
+  "height": 19,
+  "quality": 50,
+  "method": 4,
+  "options": {},
+  "rgbSha256": "ab8808f7952d24f706458e9616ab6db5470f9a9776f7ab5db7e36bfc4c9153fa",
+  "rgbFile": "noise-37x19-q50.rgb.gz"
+ },
+ {
+  "name": "grad-17x33-q5",
+  "width": 17,
+  "height": 33,
+  "quality": 5,
+  "method": 4,
+  "options": {},
+  "rgbSha256": "1567421b35883b1a38748e419f41c0239b26d7ba64131a3c9bef01ab6c0da741",
+  "rgbFile": "grad-17x33-q5.rgb.gz"
+ },
+ {
+  "name": "grad-45x29-q40-simple-sharp3",
+  "width": 45,
+  "height": 29,
+  "quality": 40,
+  "method": 4,
+  "options": {
+   "filter_type": 0,
+   "filter_sharpness": 3,
+   "filter_strength": 70
+  },
+  "rgbSha256": "9b6b6f12d3fa36f51cde2e5531832f948c59abf193b93e879eb9796b45c13cbe",
+  "rgbFile": "grad-45x29-q40-simple-sharp3.rgb.gz"
+ },
+ {
+  "name": "cartoon-112-q90",
+  "width": 112,
+  "height": 112,
+  "quality": 90,
+  "method": 4,
+  "options": {},
+  "rgbSha256": "0894f3b88acc176c36a9e5eee63e5579bd2acc7c23acd08d83692f53df674b7d",
+  "rgbFile": "cartoon-112-q90.rgb.gz"
+ },
+ {
+  "name": "cartoon-112-q100",
+  "width": 112,
+  "height": 112,
+  "quality": 100,
+  "method": 6,
+  "options": {},
+  "rgbSha256": "f796cf45a3565b45f87e35dfef4de049fea0451f288ca3ee8faeb0a4afaed3ae",
+  "rgbFile": "cartoon-112-q100.rgb.gz"
+ },
+ {
+  "name": "cartoon-64-q50-sharp7",
+  "width": 64,
+  "height": 64,
+  "quality": 50,
+  "method": 4,
+  "options": {
+   "filter_sharpness": 7,
+   "filter_strength": 80
+  },
+  "rgbSha256": "022b0da1c7f0a3b2181bfad00c0a7a42908ed9076a5b953cadcd7c3225607c9e",
+  "rgbFile": "cartoon-64-q50-sharp7.rgb.gz"
+ },
+ {
+  "name": "cartoon-64-q30-simple",
+  "width": 64,
+  "height": 64,
+  "quality": 30,
+  "method": 4,
+  "options": {
+   "filter_type": 0,
+   "filter_strength": 60,
+   "segments": 1
+  },
+  "rgbSha256": "c96b1440d2498d71293c35a3b2226365c9345569a0eb6bffa4666b331fe798cb",
+  "rgbFile": "cartoon-64-q30-simple.rgb.gz"
+ },
+ {
+  "name": "cartoon-64-q5",
+  "width": 64,
+  "height": 64,
+  "quality": 5,
+  "method": 4,
+  "options": {
+   "filter_strength": 100
+  },
+  "rgbSha256": "0c88ccbd9e5d878a0d1782bb5bac65882a4542f889d21ecf624b077c0a260b66",
+  "rgbFile": "cartoon-64-q5.rgb.gz"
+ },
+ {
+  "name": "cartoon-32x128-q60-parts8",
+  "width": 32,
+  "height": 128,
+  "quality": 60,
+  "method": 2,
+  "options": {
+   "partitions": 3,
+   "segments": 4,
+   "sns_strength": 100
+  },
+  "rgbSha256": "888e0cf98fe7e647349b32625ec866f7acc070f034214dafc96ec30da72daee4",
+  "rgbFile": "cartoon-32x128-q60-parts8.rgb.gz"
+ },
+ {
+  "name": "cartoon-80x48-q70-parts2-nofilter",
+  "width": 80,
+  "height": 48,
+  "quality": 70,
+  "method": 1,
+  "options": {
+   "partitions": 1,
+   "filter_strength": 0,
+   "sns_strength": 0
+  },
+  "rgbSha256": "9e5e384248e6d50cb0a6eac59ae14ec73a54164e8ce67b4dcc91495441a626a5",
+  "rgbFile": "cartoon-80x48-q70-parts2-nofilter.rgb.gz"
+ },
+ {
+  "name": "noise-24x64-q90-parts4",
+  "width": 24,
+  "height": 64,
+  "quality": 90,
+  "method": 2,
+  "options": {
+   "partitions": 2
+  },
+  "rgbSha256": "2d37e8ab90b77878869a084c7eace4d5a4afa269291473eef44993fdfb5c27e2",
+  "rgbFile": "noise-24x64-q90-parts4.rgb.gz"
+ },
+ {
+  "name": "flat-96x64-q75-m0",
+  "width": 96,
+  "height": 64,
+  "quality": 75,
+  "method": 0,
+  "options": {},
+  "rgbSha256": "d971082844d2740cc9a8ac7c3210f77d9917511341a62679141b3c9a4b0abddf",
+  "rgbFile": "flat-96x64-q75-m0.rgb.gz"
+ },
+ {
+  "name": "mix-256-q50",
+  "width": 256,
+  "height": 256,
+  "quality": 50,
+  "method": 6,
+  "options": {
+   "segments": 4
+  },
+  "rgbSha256": "7548f0629d380e87a351a4bc22249aeb88f72092fa5d66faadb54a7ae0b0d8ce",
+  "rgbFile": null
+ }
+]

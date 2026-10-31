@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { generateSettlementPlan } from '@chatdom/world';
-import { enrichNativeForgeHearth } from './forge-hearth-furnishings';
+import { enrichNativeForgeHearth, enrichNativeForgeWorkshop } from './forge-hearth-furnishings';
 import { enrichNativeMarket } from './market-furnishings';
 import { enrichNativeMarketSeats } from './market-seats';
 import { createNativeTown } from './native';
 
 describe('founded forge hearth', () => {
+  it('fits the workshop around the existing hearth and retains the founded streets and plots', () => {
+    const plan = generateSettlementPlan({ seed: 'simulated-founded-town', tier: 'town', firstYear: 2022, year: 2026 });
+    const native = enrichNativeForgeHearth(plan, enrichNativeMarketSeats(plan, enrichNativeMarket(plan, createNativeTown(plan))));
+    const result = enrichNativeForgeWorkshop(plan, native);
+    expect(result.fixtures.at(-1)?.id).toBe('forge:workshop:v1');
+    expect(result.homes).toBe(native.homes);
+    expect(result.fixtures.slice(0, native.fixtures.length)).toEqual(native.fixtures);
+    expect(enrichNativeForgeWorkshop(plan, result)).toBe(result);
+  }, 15_000);
   it('appends a deterministic complete group without altering the adopted fixtures', () => {
     const plan = generateSettlementPlan({ seed: 'simulated-founded-town', tier: 'town', firstYear: 2022, year: 2026 });
     const native = enrichNativeMarketSeats(plan, enrichNativeMarket(plan, createNativeTown(plan)));

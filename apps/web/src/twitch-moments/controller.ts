@@ -13,11 +13,12 @@ import {
   FRIEND, cartLoad, destinationOf, extendGiftBeat, giftSeal, planGiftBeat, recipientLine, type GiftBeat, type GiftDestination, type GiftSeal, type GiftTier,
 } from './gift-beat';
 import {
-  dragonCaption, dragonCues, dragonFocusWindow, dragonFrame, nextBattle, nextTrain, stirCues, stirFrame, trainCaption, trainCues, trainFrame,
+  dragonCaption, dragonCues, dragonFocusWindow, dragonFrame, nextBattle, nextTrain, stirCues, stirFrame, stirWindow, trainCaption, trainCues, trainFrame,
   type BattleState, type TrainState,
 } from './hype-beat';
 import { describeAction } from './previews';
 import { mergeSky, seedOf, skyCaption, skyCues, skyFrame, skyHold, skyLength, type SkyBeat } from './sky-beat';
+import { bannerProfile, battleCandidate, giftProfile, skyProfile, stageCues, stageOf, trainCandidate, type StageCandidate, type StageFrame } from './stage-beat';
 import {
   DEFAULT_CHEER_LADDER, SKY_LIMITS, SKY_MERGE_MS, TRAIN_BEAT, rungFor, type ApprovedEffect, type BattleStatus, type DragonFrame, type KingdomScale,
   type LadderStep, type SkyBeatFrame, type SkyRung, type TrainFrame,
@@ -90,7 +91,9 @@ export type MomentCue = 'horn' | 'cloth-unfurl' | 'gift-bell' | 'cart-roll' | 'p
   // The train and the dragon: whistle, steam pulse, coupling, the festival drum; roar, wingbeat, breath, a strike's
   // hit, the fall, a sleeping rumble; the Wyrm Bell and the victory fanfare.
   | 'train-whistle' | 'train-steam' | 'carriage-couple' | 'festival-drum' | 'dragon-roar' | 'dragon-wings' | 'dragon-breath' | 'dragon-hit'
-  | 'dragon-fall' | 'dragon-snore' | 'wyrm-bell' | 'victory-fanfare';
+  | 'dragon-fall' | 'dragon-snore' | 'wyrm-bell' | 'victory-fanfare'
+  // The town itself: a murmur rising as everyone turns to look, and the cheer that answers the climax.
+  | 'crowd-murmur' | 'crowd-cheer';
 export interface AudioCueFrame { readonly id: string; readonly cue: MomentCue; readonly atMs: number; readonly gain: number }
 export interface FocusFrame {
   readonly id: string;
@@ -153,6 +156,11 @@ export interface MomentFrame {
   readonly dragon: DragonFrame | null;
   /** The earned battle's truthful status beside a train at level 3 or more; null when there is nothing to say. */
   readonly battle: BattleStatus | null;
+  /**
+   * The one observed event the town is attending to: people turn toward it, the lamps hold their breath before its
+   * climax and the crowd answers. Null when nothing is staged or the presentation is hidden.
+   */
+  readonly stage: StageFrame | null;
 }
 
 interface BannerBeat {
@@ -527,6 +535,16 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
           cut: presentation.mood === 'show', wide: true, follow: null, toward: [] };
       }
     }
+    // A short train's ending: the closing fireworks over the castle and, in the hills behind it, the sleeping dragon
+    // stirring. One shot from the town side holds both.
+    const stir = train ? stirWindow(train) : null;
+    if (!focus && train && stir && !presentation.busy) {
+      const from = train.endedAt! + TRAIN_BEAT.closing.fireworks[0], until = Math.max(from + skyLength('festival', 'castle-volley'), stir[1]);
+      if (atMs >= from && atMs < until) {
+        focus = { id: `closing.${train.trainKey}`, subject: { kind: 'place', place: 'castle' }, startAt: from, endAt: until,
+          cut: presentation.mood === 'show', wide: true, follow: null, toward: [] };
+      }
+    }
     for (const beat of live) {
       if (atMs < beat.startAt) continue;
       const t = atMs - beat.startAt;
@@ -536,8 +554,10 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
         // A bubble's dressing is small: it never takes the camera. A balloon is framed as it rises, then drifts on its own.
         const until = beat.sky === 'balloon' ? beat.startAt + 6000 : beat.endAt;
         if (!focus && beat.sky !== 'bubble' && atMs < until && !presentation.busy) {
+          // A spark and a street's fireworks rise from the cheerer's own home: the shot is that home and its sky.
           const intimate = beat.sky === 'cheer' && beat.rung === 'spark' && beat.origin.kind === 'home';
-          const subject: MomentSubject = intimate && beat.origin.kind === 'home' ? { kind: 'home', slot: beat.origin.slot }
+          const fromHome = beat.sky === 'cheer' && (beat.rung === 'spark' || beat.rung === 'street-fireworks') && beat.origin.kind === 'home';
+          const subject: MomentSubject = fromHome && beat.origin.kind === 'home' ? { kind: 'home', slot: beat.origin.slot }
             : { kind: 'place', place: beat.sky === 'balloon' ? 'plaza' : beat.sky === 'confetti' ? 'castle' : 'sky' };
           focus = { id: beat.id, subject, startAt: beat.startAt, endAt: until, cut: presentation.mood === 'show', wide: !intimate, follow: null,
             toward: beat.origin.kind === 'home' ? [{ kind: 'home', slot: beat.origin.slot }] : [] };
@@ -571,12 +591,36 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
         endAt: train.endedAt + TRAIN_BEAT.closing.fireworks[0] + skyLength('festival', 'castle-volley') };
       if (atMs >= festival.startAt && atMs < festival.endAt) { sky.push(skyFrame(festival, atMs)); add(skyCues(festival)); }
     }
+    // The town attends to one observed beat at a time: the highest-ranked one now playing. Its watchers are the
+    // public presence's present people; a stale or absent presence means nobody is known to be there to turn.
+    const candidates: StageCandidate[] = [];
+    if (visible && battle && dragonNow?.key === battle.battleKey) { const c = battleCandidate(battle); if (c) candidates.push(c); }
+    if (trainNow && train) { const c = trainCandidate(train); if (c) candidates.push(c); }
+    for (const beat of live) {
+      if (atMs < beat.startAt) continue;
+      if (beat.kind === 'sky') {
+        const profile = skyProfile(beat);
+        if (!profile) continue;
+        const fromHome = beat.sky === 'cheer' && (beat.rung === 'spark' || beat.rung === 'street-fireworks') && beat.origin.kind === 'home';
+        const subject: MomentSubject = fromHome && beat.origin.kind === 'home' ? { kind: 'home', slot: beat.origin.slot }
+          : { kind: 'place', place: beat.sky === 'balloon' ? 'plaza' : beat.sky === 'confetti' ? 'castle' : 'sky' };
+        candidates.push({ beat: beat.id, subject, startAt: beat.startAt, profile });
+      } else if (beat.kind === 'home-banner') {
+        candidates.push({ beat: beat.id, subject: { kind: 'home', slot: beat.slot }, startAt: beat.startAt, profile: bannerProfile(beat.style) });
+      } else {
+        const subject: MomentSubject = beat.mode === 'cart' ? { kind: 'place', place: 'market' } : subjectOf(beat.parcels[0]!.to);
+        candidates.push({ beat: beat.id, subject, startAt: beat.startAt, profile: giftProfile(beat) });
+      }
+    }
+    const present = presence?.connection === 'fresh' ? presence.windows.filter(w => w.present).length : 0;
+    const stage = visible ? stageOf(candidates, atMs, present) : null;
+    if (stage) add(stageCues(stage));
     metrics.peak.captions = Math.max(metrics.peak.captions, captions.length);
     metrics.peak.audio = Math.max(metrics.peak.audio, audio.length);
     metrics.peak.parcels = Math.max(metrics.peak.parcels, parcels.length);
     metrics.peak.sky = Math.max(metrics.peak.sky, sky.length);
     return { atMs, status, label: expectedOrigin === 'simulated' ? 'SIMULATED' : 'LIVE', visible, homes: homeFrames.sort((a, b) => a.slot - b.slot),
-      parcels, carts, captions, audio, focus, sky, train: trainNow, dragon: dragonNow, battle: battleStatus };
+      parcels, carts, captions, audio, focus, sky, train: trainNow, dragon: dragonNow, battle: battleStatus, stage };
   }
 
   /**
