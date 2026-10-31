@@ -7,6 +7,7 @@ export const GENESIS_CHANNELS = [
     "id": "63920635",
     "name": "The_AGGman",
     "login": "the_aggman",
+    "lore": "At the harbour’s last lantern, there is always room for one more wanderer.",
     "palette": [
       "#C91709",
       "#F8AE04",
@@ -34,6 +35,7 @@ export const GENESIS_CHANNELS = [
     "id": "4363967",
     "name": "PinkKittyRose",
     "login": "pinkkittyrose",
+    "lore": "Old stories find new paths across the rose-lit river.",
     "palette": [
       "#8753DA",
       "#651E8C",
@@ -59,6 +61,7 @@ export const GENESIS_CHANNELS = [
     "id": "154972160",
     "name": "MashaD4",
     "login": "mashad4",
+    "lore": "Above the mountain road, a patient citadel keeps its next move warm.",
     "palette": [
       "#514A98",
       "#87746F",
