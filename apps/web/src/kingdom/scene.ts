@@ -19,6 +19,7 @@ import { createHorizonSurface } from './horizon';
 import { createSunShadows } from '@chatdom/render';
 import { beaconStrength } from './beacon';
 import { placeSettlementContent, placeMarketContent } from './settlement-content';
+import { createForgeSquareContent } from './forge-square-content';
 import { createCastleContent } from './castle-content';
 import { createGenesisWaterContent } from '../genesis/water-content';
 import { sampleGenesisSurface } from '@chatdom/world/genesis';
@@ -100,6 +101,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const renderKeys=new Map(options.founded?.assets.map(asset=>[asset.blueprint,asset.assetHash]));
   const blueprintKey=(b:VoxelBlueprint)=>renderKeys.get(b)??b.id;
   const {houses,props}=installed??placeSettlementContent(layout.homes,(x,z)=>terrainHeight(layout,x,z));
+  const simulatedSmithy=!installed&&!options.potential?createForgeSquareContent(layout.market.elevation):undefined;
+  if(simulatedSmithy)props.push(...simulatedSmithy.props);
   // Keep the meeting of the roads open. The market's well and two stalls sit
   // along its edges, as real voxel geometry in the same shadow/occlusion lists.
   if(!installed){
@@ -117,7 +120,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const presenceHouses=royal?[...houses,royal]:[...houses];
   const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:[],braziers:[],standard:undefined};
   const homeLife=own(createHomeLife(scene,lifeSites.homes));
-  const forgeSites=options.founded?foundedForgeSites(options.founded):{fires:[],noses:[]};
+  const forgeSites=options.founded?foundedForgeSites(options.founded):simulatedSmithy??{fires:[],noses:[]};
   const forgeFire=own(createRoyalLife(scene,clay,undefined,forgeSites.fires,undefined,true));
   const forgeBreath=own(createForgeEmitters(scene));
   const windows=own(createWindowLights(scene,presenceHouses));
@@ -364,7 +367,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const walking=walk?.frame(now,walkSelected&&!capturePose&&!build.session&&!build.housewarming&&!forge.status().open)??false;
     observed?.frame(now);
     const feet=walkerSlots(walk ? walk.poses : observed?.poses??[]);
-    crowd.watchForge(realmForge?.active()??false,presentationMs,[0,layout.market.elevation,8]);
+    crowd.watchForge(!!realmForge?.active()||forge.status().busy,presentationMs,[0,layout.market.elevation,8]);
     const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet):[];
     const lightFrame=loaded?crowd.lightFrame(presentationMs):frame;
     if(lightFrame)build.setFrame(lightFrame);
@@ -434,7 +437,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(loaded)sound.ambienceUpdate(now,ambienceTarget);
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=grade.fogDensity;renderer.toneMappingExposure=grade.exposure;
-    post.update({environment:grade,hour,focusDistance:camName==='window'||forgeDirected?camera.position.distanceTo(forgeDirected&&realmForge?realmForge.focusPoint:target):null,beacon:{position:new THREE.Vector3(...beaconPosition),strength:beacon},forge:{position:new THREE.Vector3(0,layout.market.elevation+1.6,8),strength:realmForge?.active()||forge.status().busy?1:0}});
+    post.update({environment:grade,hour,focusDistance:camName==='window'||forgeDirected||forge.status().busy?camera.position.distanceTo(forgeDirected&&realmForge?realmForge.focusPoint:target):null,beacon:{position:new THREE.Vector3(...beaconPosition),strength:beacon},forge:{position:new THREE.Vector3(0,layout.market.elevation+1.6,8),strength:realmForge?.active()||forge.status().busy?1:0}});
     const nextWaterQuality=canvas.clientWidth<600?'reduced':'full';
     if(nextWaterQuality!==waterQuality){waterQuality=nextWaterQuality;water.setQuality(waterQuality);}
     water.update({time,environment:grade,camera,sources:[

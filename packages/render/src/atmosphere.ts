@@ -28,19 +28,19 @@ export interface Environment {
 type Grade = Omit<Environment, 'sunDirection'> & { hour: number };
 
 // Authored as a sequence, not a physical latitude or clock: the live kingdom can hold dusk as long as
-// its story needs. Noon is a clear summer day with cool blue shadows; dusk is lilac over a gold band
-// with indigo shadows; night is deep blue to violet, so the only warm things are people's lights.
-// Exposure stays at the shipped 1.08 for day and dusk; the dark hours lift it a little.
+// its story needs. Noon is a clear summer day with cool blue shadows; dusk is deep blue over an amber band.
+// Sky fill falls away at night so the warm things are people's lights.
+// Evening exposure falls with the sky fill; authored light sources carry the night.
 const grades: Grade[] = [
-  { hour: 0, zenith: '#0e1745', horizon: '#2e2f66', fog: '#2a2f58', ambient: '#6474b8', shadow: '#1e2458', sun: '#a9bdf2', glow: '#000000', cloud: '#1f2552', cloudShade: '#363d78', cloudCover: 0.26, sunIntensity: 0.28, ambientIntensity: 0.52, night: 1, fogDensity: 0.0012, exposure: 1.16 },
+  { hour: 0, zenith: '#080f28', horizon: '#182643', fog: '#14233c', ambient: '#456092', shadow: '#0b1730', sun: '#a9bdf2', glow: '#000000', cloud: '#111c38', cloudShade: '#263351', cloudCover: 0.26, sunIntensity: 0.18, ambientIntensity: 0.24, night: 1, fogDensity: 0.0012, exposure: 0.60 },
   { hour: 5, zenith: '#3a3d7c', horizon: '#e3a48e', fog: '#8a7c9e', ambient: '#8d89c4', shadow: '#47458a', sun: '#ffb79c', glow: '#5a2a26', cloud: '#8c7bab', cloudShade: '#f2b49e', cloudCover: 0.3, sunIntensity: 0.36, ambientIntensity: 0.6, night: 0.62, fogDensity: 0.0012, exposure: 1.12 },
   { hour: 7, zenith: '#5d86c8', horizon: '#f0d4b4', fog: '#c0c6d6', ambient: '#a3b4df', shadow: '#5a68aa', sun: '#ffe2bc', glow: '#3a2414', cloud: '#fff6ee', cloudShade: '#c6c0d2', cloudCover: 0.3, sunIntensity: 1.12, ambientIntensity: 0.68, night: 0.03, fogDensity: 0.0009, exposure: 1.08 },
   { hour: 12, zenith: '#3f7fd0', horizon: '#a8cdec', fog: '#a4c4e6', ambient: '#8fb0e6', shadow: '#4b63b0', sun: '#fff0d0', glow: '#000000', cloud: '#ffffff', cloudShade: '#b3c3df', cloudCover: 0.32, sunIntensity: 1.34, ambientIntensity: 0.6, night: 0, fogDensity: 0.00064, exposure: 1.08 },
   { hour: 16, zenith: '#577fc4', horizon: '#f2cc98', fog: '#c6b8b0', ambient: '#9aa4d8', shadow: '#5658a2', sun: '#ffcf8e', glow: '#3c2210', cloud: '#fff2de', cloudShade: '#c8aab0', cloudCover: 0.3, sunIntensity: 1.34, ambientIntensity: 0.62, night: 0, fogDensity: 0.0008, exposure: 1.08 },
   { hour: 18, zenith: '#6670b8', horizon: '#f7b878', fog: '#ab95ae', ambient: '#8a8acb', shadow: '#4d4b9a', sun: '#ffb46a', glow: '#64321a', cloud: '#e2bfc8', cloudShade: '#f8b47c', cloudCover: 0.3, sunIntensity: 1.18, ambientIntensity: 0.56, night: 0.1, fogDensity: 0.0009, exposure: 1.08 },
-  { hour: 19.25, zenith: '#242e63', horizon: '#655d85', fog: '#50577e', ambient: '#7187d8', shadow: '#383b80', sun: '#91a7ed', glow: '#39252b', cloud: '#454a70', cloudShade: '#726c8f', cloudCover: 0.3, sunIntensity: 0.48, ambientIntensity: 0.52, night: 0.6, fogDensity: 0.00095, exposure: 1.08 },
-  { hour: 20.5, zenith: '#20285c', horizon: '#504b72', fog: '#3f416f', ambient: '#667fc9', shadow: '#2a2c68', sun: '#91a6ed', glow: '#2c1830', cloud: '#444478', cloudShade: '#81779f', cloudCover: 0.28, sunIntensity: 0.3, ambientIntensity: 0.5, night: 0.76, fogDensity: 0.0012, exposure: 1.12 },
-  { hour: 24, zenith: '#0e1745', horizon: '#2e2f66', fog: '#2a2f58', ambient: '#6474b8', shadow: '#1e2458', sun: '#a9bdf2', glow: '#000000', cloud: '#1f2552', cloudShade: '#363d78', cloudCover: 0.26, sunIntensity: 0.28, ambientIntensity: 0.52, night: 1, fogDensity: 0.0012, exposure: 1.16 },
+  { hour: 19.25, zenith: '#101c43', horizon: '#4b3b4a', fog: '#18273f', ambient: '#4d659f', shadow: '#111e3b', sun: '#91a7ed', glow: '#9f4b15', cloud: '#1c2a4e', cloudShade: '#303952', cloudCover: 0.3, sunIntensity: 0.29, ambientIntensity: 0.26, night: 0.72, fogDensity: 0.00095, exposure: 0.66 },
+  { hour: 20.5, zenith: '#0c1738', horizon: '#302e41', fog: '#14223a', ambient: '#456092', shadow: '#0e1934', sun: '#91a6ed', glow: '#613214', cloud: '#18243f', cloudShade: '#2b3350', cloudCover: 0.28, sunIntensity: 0.20, ambientIntensity: 0.24, night: 0.88, fogDensity: 0.0012, exposure: 0.60 },
+  { hour: 24, zenith: '#080f28', horizon: '#182643', fog: '#14233c', ambient: '#456092', shadow: '#0b1730', sun: '#a9bdf2', glow: '#000000', cloud: '#111c38', cloudShade: '#263351', cloudCover: 0.26, sunIntensity: 0.18, ambientIntensity: 0.24, night: 1, fogDensity: 0.0012, exposure: 0.60 },
 ];
 
 const blendColor = (a: string, b: string, t: number): string =>
@@ -99,7 +99,7 @@ const skyVertex = /* glsl */ `
 
 const skyFragment = /* glsl */ `
   uniform vec3 uZenith, uHorizon, uSunColor, uSunDirection, uMoonDirection, uBeaconDirection, uGlow, uCloud, uCloudShade;
-  uniform float uNight, uTime, uBeaconStrength, uCloudCover;
+  uniform float uNight, uTime, uBeaconStrength, uCloudCover, uBeaconRadiance;
   varying vec3 vDirection;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p) {
@@ -148,7 +148,7 @@ const skyFragment = /* glsl */ `
     // Light catches the underside of the clouds where the beacon reaches them.
     // This is angular and soft, so it remains a patch of sky rather than a wedge.
     float beaconCloud = exp(-pow(acos(clamp(dot(d, uBeaconDirection), -1.0, 1.0)) / 0.11, 2.0));
-    color += vec3(0.44, 0.16, 0.036) * beaconCloud * (0.12 + cloud * 0.88) * uBeaconStrength * uBeaconStrength;
+    color += vec3(0.44, 0.16, 0.036) * beaconCloud * (0.12 + cloud * 0.88) * uBeaconStrength * uBeaconStrength * uBeaconRadiance;
     // Sparse pinpricks anchored to sky direction; no time-dependent shimmer.
     vec2 starUV = vec2(atan(d.z, d.x) * 34.0, asin(clamp(d.y, -1.0, 1.0)) * 34.0);
     vec2 cell = floor(starUV), local = fract(starUV);
@@ -169,7 +169,7 @@ const shaftVertex = /* glsl */ `
   void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
 `;
 const shaftFragment = /* glsl */ `
-  uniform float uStrength, uTime;
+  uniform float uStrength, uTime, uRadiance;
   varying vec2 vUv;
   void main() {
     float x = abs(vUv.x * 2.0 - 1.0);
@@ -180,24 +180,24 @@ const shaftFragment = /* glsl */ `
     float veil = exp(-x*x*9.0) * (0.9 + 0.1*sin(height*10.0-uTime*0.25));
     float alpha = envelope * (core*(0.30 + 0.36*uStrength) + veil*0.16) * uStrength;
     vec3 color = mix(vec3(0.95, 0.42, 0.12), vec3(1.8, 1.02, 0.42), core);
-    gl_FragColor = vec4(color, alpha);
+    gl_FragColor = vec4(color * uRadiance, alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `;
 const haloFragment = /* glsl */ `
-  uniform float uStrength;
+  uniform float uStrength, uRadiance;
   varying vec2 vUv;
   void main() {
     vec2 p = (vUv - 0.5) * 2.0;
     float halo = exp(-dot(p,p)*5.5) * (1.0-smoothstep(0.48, 1.0, length(p)));
-    gl_FragColor = vec4(vec3(0.91, 0.48, 0.22), halo * uStrength * 0.17);
+    gl_FragColor = vec4(vec3(0.91, 0.48, 0.22) * uRadiance, halo * uStrength * 0.17);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
 `;
 const baseFragment = /* glsl */ `
-  uniform float uStrength;
+  uniform float uStrength, uRadiance;
   varying vec2 vUv;
   void main() {
     vec2 p = (vUv - 0.5) * 2.0;
@@ -205,7 +205,7 @@ const baseFragment = /* glsl */ `
     float core = exp(-r2 * 24.0);
     float bloom = exp(-r2 * 5.0) * (1.0-smoothstep(0.5, 1.0, length(p)));
     float alpha = (core * 0.66 + bloom * 0.30) * uStrength * uStrength;
-    gl_FragColor = vec4(mix(vec3(1.0, 0.38, 0.08), vec3(2.3, 1.1, 0.38), core), alpha);
+    gl_FragColor = vec4(mix(vec3(1.0, 0.38, 0.08), vec3(2.3, 1.1, 0.38), core) * uRadiance, alpha);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }
@@ -219,7 +219,7 @@ export function createAtmosphere(scene: THREE.Scene): {
 } {
   const skyGeometry = new THREE.SphereGeometry(1, 48, 24);
   const skyMaterial = new THREE.ShaderMaterial({
-    uniforms: { uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uSunColor: { value: new THREE.Color() }, uSunDirection: { value: new THREE.Vector3() }, uMoonDirection: { value: new THREE.Vector3() }, uBeaconDirection: { value: new THREE.Vector3(0, 1, 0) }, uBeaconStrength: { value: 0 }, uNight: { value: 0 }, uTime: { value: 0 }, uGlow: { value: new THREE.Color() }, uCloud: { value: new THREE.Color() }, uCloudShade: { value: new THREE.Color() }, uCloudCover: { value: 0.3 } },
+    uniforms: { uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uSunColor: { value: new THREE.Color() }, uSunDirection: { value: new THREE.Vector3() }, uMoonDirection: { value: new THREE.Vector3() }, uBeaconDirection: { value: new THREE.Vector3(0, 1, 0) }, uBeaconStrength: { value: 0 }, uBeaconRadiance: { value: 1 }, uNight: { value: 0 }, uTime: { value: 0 }, uGlow: { value: new THREE.Color() }, uCloud: { value: new THREE.Color() }, uCloudShade: { value: new THREE.Color() }, uCloudCover: { value: 0.3 } },
     vertexShader: skyVertex, fragmentShader: skyFragment, side: THREE.BackSide, depthWrite: false, depthTest: false,
   });
   const sky = new THREE.Mesh(skyGeometry, skyMaterial);
@@ -229,7 +229,7 @@ export function createAtmosphere(scene: THREE.Scene): {
 
   const shaftGeometry = new THREE.PlaneGeometry(1, 1);
   const shaftMaterial = new THREE.ShaderMaterial({
-    uniforms: { uStrength: { value: 0 }, uTime: { value: 0 } }, vertexShader: shaftVertex, fragmentShader: shaftFragment,
+    uniforms: { uStrength: { value: 0 }, uRadiance: { value: 1 }, uTime: { value: 0 } }, vertexShader: shaftVertex, fragmentShader: shaftFragment,
     side: THREE.DoubleSide, transparent: true, depthWrite: false, blending: THREE.NormalBlending,
   });
   const shaft = new THREE.Mesh(shaftGeometry, shaftMaterial);
@@ -237,7 +237,7 @@ export function createAtmosphere(scene: THREE.Scene): {
   scene.add(shaft);
   const haloGeometry = new THREE.PlaneGeometry(1, 1);
   const haloMaterial = new THREE.ShaderMaterial({
-    uniforms: { uStrength: { value: 0 } }, vertexShader: shaftVertex, fragmentShader: haloFragment,
+    uniforms: { uStrength: { value: 0 }, uRadiance: { value: 1 } }, vertexShader: shaftVertex, fragmentShader: haloFragment,
     transparent: true, depthWrite: false, blending: THREE.NormalBlending,
   });
   const halo = new THREE.Mesh(haloGeometry, haloMaterial);
@@ -245,7 +245,7 @@ export function createAtmosphere(scene: THREE.Scene): {
   scene.add(halo);
   // A small warm source at the tower gives the column somewhere to begin.
   const baseMaterial = new THREE.ShaderMaterial({
-    uniforms: { uStrength: { value: 0 } }, vertexShader: shaftVertex, fragmentShader: baseFragment,
+    uniforms: { uStrength: { value: 0 }, uRadiance: { value: 1 } }, vertexShader: shaftVertex, fragmentShader: baseFragment,
     transparent: true, depthWrite: false, blending: THREE.NormalBlending,
   });
   const base = new THREE.Mesh(haloGeometry, baseMaterial);
@@ -256,6 +256,13 @@ export function createAtmosphere(scene: THREE.Scene): {
     reflectionExclusions: [sky, shaft, halo, base],
     update(hour, elapsedSeconds, camera, beaconPosition, beaconStrength) {
       const grade = getEnvironment(hour);
+      // Keep the accepted beacon luminous as the town's exposure falls. Its shape,
+      // envelope and alpha stay authored; only source radiance compensates.
+      const beaconRadiance = Math.max(1, 1.08 / grade.exposure);
+      shaftMaterial.uniforms.uRadiance!.value = beaconRadiance;
+      haloMaterial.uniforms.uRadiance!.value = beaconRadiance;
+      baseMaterial.uniforms.uRadiance!.value = beaconRadiance;
+      skyMaterial.uniforms.uBeaconRadiance!.value = beaconRadiance;
       sky.position.copy(camera.position);
       const uniforms = skyMaterial.uniforms;
       uniforms.uZenith!.value.set(grade.zenith);

@@ -112,11 +112,15 @@ export function createKingdomForge(options:Options){
     const size=current?current.bounds.getSize(new THREE.Vector3()):new THREE.Vector3(2,2,2);
     // Fit the complete casting and its anvil in both orientations, including the
     // wide sleeping body. Height alone cropped broad parts on narrow screens.
-    const stageHeight=1.6+size.y,stageTarget=options.anvil.clone().add(new THREE.Vector3(0,stageHeight*.5,0));
+    const stageHeight=Math.max(4.8,1.6+size.y+2.7),stageTarget=options.anvil.clone().add(new THREE.Vector3(3.475,stageHeight*.5,-2.275));
     const halfFov=THREE.MathUtils.degToRad(43*.5),aspect=options.canvas.clientWidth/options.canvas.clientHeight;
-    const radius=Math.hypot(Math.max(3.4,size.x),stageHeight,Math.max(3.4,size.z))*.5;
-    const fit=radius/Math.sin(Math.min(halfFov,Math.atan(Math.tan(halfFov)*aspect)))*1.12;
-    const stageEye=stageTarget.clone().add(new THREE.Vector3(7,3.6,11).normalize().multiplyScalar(Math.max(10,fit)));
+    const backward=new THREE.Vector3(-7,2.4,11).normalize(),right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),backward).normalize(),up=new THREE.Vector3().crossVectors(backward,right);
+    let fit=8;
+    for(const x of [-1.7,8.65])for(const y of [0,stageHeight])for(const z of [-6,1.45]){
+      const corner=new THREE.Vector3(x-3.475,y-stageHeight*.5,z+2.275),depth=corner.dot(backward),tan=Math.tan(halfFov)*.87;
+      fit=Math.max(fit,depth+Math.max(Math.abs(corner.dot(right))/(tan*aspect),Math.abs(corner.dot(up))/tan));
+    }
+    const stageEye=stageTarget.clone().add(backward.multiplyScalar(fit+.6));
     let look=stageTarget,eye=stageEye;
     if(!preparing&&current&&frame&&(frame.phase==='flight'||frame.phase==='landed')){
       const centre=current.bounds.getCenter(new THREE.Vector3()).applyAxisAngle(new THREE.Vector3(0,1,0),current.home.yaw).add(current.destination);
