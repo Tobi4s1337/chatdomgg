@@ -24,11 +24,20 @@ import { terrainBatches } from './terrain-batches';
 import { createKingdomBuild, type KingdomBuildSession } from './build-scene';
 import { createKingdomCitizens, type SpeechLabel } from './citizen-scene';
 import { foundedContent } from './founded-content';
+import { royalWindow } from './royal-window';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
+import { createObservedWalkers, walkerSlots } from './observed-walkers';
+import type { RealmWalkerFeed } from '@chatdom/shared/realm';
+import { createGroundDressing } from './ground-dressing';
+import { planAdoptedCover } from './ground-dressing/adopted-cover';
+import { compileFoundedScene } from '@chatdom/world/founded-collision';
+import { createFoundedInteractionRegistry } from '@chatdom/world/interactions';
+import { sampleKingdomAmbience } from './ambience';
+import type { AmbienceTarget } from './ambience/types';
 
 export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number}
-export interface SceneOptions {founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneOptions {founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -38,6 +47,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // A public feed uses the wall clock even when a capture URL carries a fixture time.
   let fixedTime=options.source==='simulated'&&!options.presenceFeed&&options.time!==null,autoCamera=options.source==='simulated'&&!options.presenceFeed&&!fixedTime&&camName==='hero',frame:KingdomPresenceFrame|undefined,fieldUploads=0,geometryBuilds=0,fieldBytes=0,nearBytes=0,farBytes=0,beaconBytes=0,nearVisited=0,farVisited=0,beaconVisited=0;
   let walk:Awaited<ReturnType<typeof createKingdomWalk>>|undefined,walkSelected=false,walkGeneration=0;
+  let observed:Awaited<ReturnType<typeof createObservedWalkers>>|undefined;
   const earlyCleanups:(()=>void)[]=[];
   let fullDispose:(()=>void)|undefined;
   const own=<T extends {dispose():void}>(resource:T):T=>{earlyCleanups.push(()=>resource.dispose());return resource;};
@@ -62,9 +72,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const geometries:THREE.BufferGeometry[]=[],meshes:THREE.Object3D[]=[],abort=new AbortController();
   earlyCleanups.push(()=>abort.abort());
   const sound=own(createKingdomSound());
-  const crowd=own(createKingdomCitizens(scene,layout,pool,clay));
   const blueprints=new Map<string,VoxelBlueprint>();
   const installed=options.founded?foundedContent(options.founded):undefined;
+  const crowd=own(createKingdomCitizens(scene,layout,pool,clay,!!installed&&!!royalWindow(installed.forgeHosts)));
   const renderKeys=new Map(options.founded?.assets.map(asset=>[asset.blueprint,asset.assetHash]));
   const blueprintKey=(b:VoxelBlueprint)=>renderKeys.get(b)??b.id;
   const {houses,props}=installed??placeSettlementContent(layout.homes,(x,z)=>terrainHeight(layout,x,z));
@@ -74,7 +84,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const {buildings:castleBuildings,beaconPosition}=createCastleContent(layout.castle);
   const buildings=installed?houses:[...houses,...castleBuildings],content=installed?.content??[...buildings,...props];
   for(const {blueprint} of content)blueprints.set(blueprintKey(blueprint),blueprint);
-  const windows=own(createWindowLights(scene,houses));
+  const royal=installed?royalWindow(installed.forgeHosts):undefined;
+  const presenceHouses=royal?[...houses,royal]:[...houses];
+  const windows=own(createWindowLights(scene,presenceHouses));
   // Begin the arrival among neighbours, not alone at the newest edge of town.
   const arrivalHomes=layout.homes.filter(h=>h.tier==='house');
   const arrivalHome=arrivalHomes.sort((a,b)=>{
@@ -85,11 +97,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const source=options.presenceFeed??(options.source==='simulated'?simulation.feed:createHeraldPresence('/presence-data/stream',options.kingdomId,options.presenceOrigin??'live'));
   const ownSimulation=options.source==='simulated'&&!options.presenceFeed;
   const first=houses.find(h=>h.slot===simulation.firstSlot)!;
-  const requestedFocus=houses.some(h=>h.slot===options.focusSlot)?options.focusSlot:undefined;
+  const requestedFocus=presenceHouses.some(h=>h.slot===options.focusSlot)?options.focusSlot:undefined;
   let focusSlot=requestedFocus??(options.source==='simulated'?simulation.firstSlot:houses[0]!.slot);
   const focal=new THREE.Vector3(),homeEye=new THREE.Vector3(),homeTarget=new THREE.Vector3(),citizenEye=new THREE.Vector3();
   function focusHome(slot:number){
-    const home=houses.find(h=>h.slot===slot),route=crowd.motion.routeForSlot(slot);if(!home||!route)return;
+    const home=presenceHouses.find(h=>h.slot===slot),route=crowd.motion.routeForSlot(slot);if(!home||!route)return;
     focusSlot=slot;const pane=home.blueprint.windows[0]??{centre:[home.blueprint.size[0]/2,Math.min(14,home.blueprint.size[1]/2),home.blueprint.size[2]],facing:'south' as const};
     focal.set(...pane.centre).multiplyScalar(.125).applyAxisAngle(new THREE.Vector3(0,1,0),home.yaw).add(new THREE.Vector3(...home.position));
     const angle=({north:Math.PI,east:Math.PI/2,south:0,west:-Math.PI/2}[pane.facing])+home.yaw;
@@ -117,6 +129,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const observer=new ResizeObserver(resize);earlyCleanups.push(()=>observer.disconnect());observer.observe(canvas);resize();
   const blockers=installed?[...houses,...props.map(p=>({...p,slot:65534}))]:buildings;
   const lightBounds=inhabitedLightBounds(layout.homes);
+  // Personal keep warmth belongs to the same field as street windows, outside the street-home bounds.
+  for(const source of windows.getSources()){
+    lightBounds.minX=Math.min(lightBounds.minX,source.position[0]-16);lightBounds.maxX=Math.max(lightBounds.maxX,source.position[0]+16);
+    lightBounds.minZ=Math.min(lightBounds.minZ,source.position[2]-16);lightBounds.maxZ=Math.max(lightBounds.maxZ,source.position[2]+16);
+  }
   const nearBlockers=installed?blockers:[...blockers,...props.map(p=>({...p,slot:65534}))];
   // Half-metre local occupancy resolves the little garden edges. Expanding a
   // sub-two-metre prop into whole distant cells would falsely seal the street.
@@ -124,7 +141,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const farField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setFarLight(volume);fieldUploads++;farBytes=volume.estimatedPeakBytes;farVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom'),{mode:'kingdom',bounds:lightBounds}));
   const beaconField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setBeaconLight(volume);fieldUploads++;beaconBytes=volume.estimatedPeakBytes;beaconVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The castle light could not reach its towers'),{mode:'beacon',position:beaconPosition}));
   let lastField=-Infinity,lastNames=-Infinity,lastActive=0,beaconCue=false;
-  const unsubscribe=source.subscribe(next=>{frame=next;crowd.applyFrame(next);if(options.source==='herald'&&requestedFocus===undefined){const present=next.windows.find(w=>w.present&&houses.some(h=>h.slot===w.slot));if(present)focusHome(present.slot);}lastField=-Infinity;options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{windows.clear();crowd.clear();frame=undefined;lastField=-Infinity;options.onSource('CONNECTION LOST');});
+  const unsubscribe=source.subscribe(next=>{frame=next;crowd.applyFrame(next);if((options.source==='herald'||next.origin==='live')&&requestedFocus===undefined){const present=next.windows.find(w=>w.present&&presenceHouses.some(h=>h.slot===w.slot));if(present)focusHome(present.slot);}lastField=-Infinity;options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{windows.clear();crowd.clear();frame=undefined;lastField=-Infinity;options.onSource('CONNECTION LOST');});
   earlyCleanups.push(unsubscribe);
   const debug:KingdomDebug={citizens:0,walking:0,ready:false,lightingReady:false,workers:pool.stats.size+4,homes:houses.length,activeWindows:0,geometryBuilds:0,fieldUploads:0,drawCalls:0,triangles:0,time:0,hour,camera:camName,fieldBytes:0,source:source.label,fieldSettled:false,shadowUpdates:0,shadowDrawCalls:0,shadowTriangles:0,shadowBytes:0,shadowEnabled:false,windowFieldVisited:0,beaconFieldVisited:0};
   type Placement={position:Vec3;yaw:number;placementId?:string};
@@ -192,6 +209,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
         };
         add(state.to,fading?progress:1);if(fading)add(state.from,-1-progress);
         if('slot' in p)windows.setDetail((p as WindowHouse).slot,state.from,state.to,state.progress);
+        else if(royal&&p.position===royal.position)windows.setDetail(royal.slot,state.from,state.to,state.progress);
       }
       for(const mesh of levels.values()){mesh.visible=mesh.count>0;mesh.instanceMatrix.needsUpdate=true;(mesh.geometry.getAttribute('aLodFade') as THREE.InstancedBufferAttribute).needsUpdate=true;}
     }
@@ -199,6 +217,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // Distant hills use 20 m cells on both sizes; the grounded 1 m collar stays
   // exact. One surface/sampler keeps groves grounded across viewport changes.
   const {geometry:horizonGeometry,sampleHeight:landHeight}=createHorizonSurface(layout,{farStep:20,sampleTerrain:(x,z)=>terrainHeight(layout,x,z)});earlyCleanups.push(()=>horizonGeometry.dispose());
+  const coverInput={ground:landHeight,
+    waterKeepOut:(x:number,z:number,margin:number)=>Math.hypot((x-layout.lake.x)/(layout.lake.radiusX+margin),(z-layout.lake.z)/(layout.lake.radiusZ+margin))<1.19,
+    occupied:content,keepClear:[{x:0,z:8,radius:7}]};
+  const coverPlan=planAdoptedCover(layout,coverInput);
+  const dressing=own(createGroundDressing({...coverInput,land:{plan:layout,sites:[],places:{court:{boundary:layout.castle.court.boundary}}},
+    seed:layout.config.seed,tier:layout.config.tier,plan:coverPlan,scene,camera,pool,clay,signal:abort.signal,
+    registerShadow:mesh=>sunShadows.register(mesh)}));
   const trees=installed?[]:[createTree(0),createTree(1),createTree(2)];
   const treePlaces=trees.map(()=>[] as {position:Vec3;yaw:number}[]);
   const treeCount=options.tier==='hamlet'?115:260;
@@ -258,13 +283,18 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   let lastRenderedKey='',lastLightFrameKey='';
   let announcedReady=false;
   let renderPhase:'preparing'|'drawing'|'drawn'='preparing',renderStartedAt=0,renderCompletedAt=0;
+  let lastAmbience=-Infinity,ambienceTarget:AmbienceTarget={wind:0,water:0,waterPan:0};
+  const listenerRight=new THREE.Vector3();
   function render(now:number){
     if(disposed)return;try {const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&debug.ready&&!fixedTime)time+=dt;
     if(ownSimulation)simulation.advance(time);
     hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);clay.setEnvironment(grade);ground.setEnvironment(grade);forge.setEnvironment(grade);realmForge?.setEnvironment(grade);crowd.material.setEnvironment({...grade,ambientIntensity:Math.max(.65,grade.ambientIntensity)});
     const presentationMs=ownSimulation?simulation.epochMs+time*1000:Date.now();
-    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined):[];
+    const walking=walk?.frame(now,walkSelected&&!capturePose&&!build.session&&!build.housewarming&&!forge.status().open)??false;
+    observed?.frame(now);
+    const feet=walkerSlots(walk ? walk.poses : observed?.poses??[]);
+    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet):[];
     const lightFrame=loaded?crowd.lightFrame(presentationMs):frame;
     if(lightFrame)build.setFrame(lightFrame);
     const lightKey=`${lightFrame?.epoch}:${lightFrame?.sequence}:${lightFrame?.windows.filter(w=>w.present).map(w=>w.slot).join(',')}`;
@@ -277,7 +307,6 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const beacon=beaconStrength(lightFrame,houses.length);
     if(loaded&&active>lastActive){if(lastActive===0)sound.cue('light');else if(lastActive===1)sound.cue('wave');}lastActive=active;
     if(loaded&&beacon>.9&&!beaconCue){sound.cue('beacon');beaconCue=true;}
-    const walking=walk?.frame(now,walkSelected&&!capturePose&&!build.session&&!build.housewarming&&!forge.status().open)??false;
     if(walking){const self=walk!.poses.find(p=>p.self);if(self)target.set(self.x,self.y+1,self.z);}
     else if(autoCamera){
       // Rise inside the street before withdrawing over the opposite roofs.
@@ -293,13 +322,23 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(!installed){build.update(now,dt,hour,target);forge.update(now,target,!!build.session);}
     const forgeDirected=forgeCameraDirected=realmForge?.update(now,!walking&&!build.session&&!capturePose)??false;
     if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
-    if(!walking&&!forgeDirected)camera.lookAt(target);camera.updateMatrixWorld();walk?.draw(now);updateInstances(fixedTime&&autoCamera?time*1000:now);
+    if(!walking&&!forgeDirected)camera.lookAt(target);camera.updateMatrixWorld();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);updateInstances(fixedTime&&autoCamera?time*1000:now);
+    if(loaded&&now-lastAmbience>=160){
+      lastAmbience=now;listenerRight.setFromMatrixColumn(camera.matrixWorld,0);
+      const self=walking?walk?.poses.find(p=>p.self):undefined;
+      const listener:Vec3=self?[self.x,self.y+1.4,self.z]:[camera.position.x,camera.position.y,camera.position.z];
+      ambienceTarget=sampleKingdomAmbience(layout,listener,[listenerRight.x,listenerRight.y,listenerRight.z]);
+    }
+    if(loaded)sound.ambienceUpdate(now,ambienceTarget);
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=.0016;
     water.update(grade,time,camera);
+    dressing.hideLot(buildHidden?simulation.firstSlot:null);
+    dressing.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
     if(now-lastField>240){lastField=now;const centre:Vec3=[target.x,terrainHeight(layout,target.x,target.z),target.z];field.update(centre,[...windows.getSources(),...build.getSources()]);farField.update(centre,[...windows.getSources(),...build.getSources()]);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]}]);}
-    if(walk)options.onWalkers?.(walk.labels().filter(label=>{
-      const person=walk?.poses.find(p=>p.id===label.id);
+    const people=walk??observed;
+    if(people)options.onWalkers?.(people.labels().filter(label=>{
+      const person=people.poses.find(p=>p.id===label.id);
       return person&&!windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],[person.x,person.y+1.95,person.z]);
     }));
     if(now-lastNames>80){labels();options.onSpeech?.(crowd.speechLabels(camera,canvas.clientWidth,canvas.clientHeight,presentationMs));lastNames=now;}
@@ -324,13 +363,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   raf=requestAnimationFrame(render);
   const assets=[...blueprints.values(),...trees],total=assets.length*3;let completed=0;
   // Coarse geometry is available first. Every resolution is prepared in workers; window anchors stay exact.
-  const tasks=([4,2,1] as const).flatMap(factor=>assets.map(async b=>{
+  const tasks:Promise<unknown>[]=([4,2,1] as const).flatMap(factor=>assets.map(async b=>{
     const job={kind:'blueprint' as const,blueprint:b,revision:1,materials:registry.materials,materialRevision:registry.revision,...(factor===1?{}:{lodFactor:factor})};
     const result=await pool.submit(job);if(disposed||result?.kind!=='asset')return;
     const treeIndex=trees.indexOf(b);
     const placements=treeIndex>=0?treePlaces[treeIndex]!:content.filter(h=>blueprintKey(h.blueprint)===blueprintKey(b));
     instance(b,result.chunks,placements,factor);options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
   }));
+  tasks.push(dressing.ready);
   tasks.push(loadTerrain(layout,()=>{}, {signal:abort.signal}).then(({chunks,origin})=>{
     if(disposed)return;
     for(const tile of terrainBatches(chunks)){
@@ -338,7 +378,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
@@ -347,7 +387,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // KHR_parallel_shader_compile is an optional driver completion hint, and can
   // remain pending even while the scene draws. The first fully loaded render
   // opens the gate; background light readiness is reported independently.
-  try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');await crowd.prepare();if(!installed){await build.prepare();await forge.prepare();}if(disposed)throw new Error('Scene closed while preparing citizens');}catch(error){dispose();throw error;}
+  try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');await crowd.prepare();if(!installed){await build.prepare();await forge.prepare();}if(options.walkerFeed&&options.founded){const next=await createObservedWalkers(scene,camera,canvas,pool,crowd.material,options.founded,options.walkerFeed,createFoundedInteractionRegistry(options.founded,compileFoundedScene(options.founded)));if(disposed){next.dispose();throw new Error('Scene closed while preparing walkers');}observed=next;}if(disposed)throw new Error('Scene closed while preparing citizens');}catch(error){dispose();throw error;}
   loaded=true;lastFrame=performance.now();options.onProgress('The gate is opening',1);
   function detachWalk(){walkGeneration++;walkSelected=false;walk?.dispose();walk=undefined;options.onWalkers?.([]);camera.clearViewOffset();camera.filmOffset=0;camera.updateProjectionMatrix();instancesDirty=true;}
   return {layout,debug,sound,build,forge,forgeDirecting:()=>forgeCameraDirected,
@@ -355,16 +395,17 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       if(disposed)throw new Error('The kingdom has closed');
       checkWalkBinding(options.founded,binding);
       detachWalk();const generation=walkGeneration;
-      const next=await createKingdomWalk(scene,camera,canvas,pool,crowd.material,binding);
+      const next=await createKingdomWalk(scene,camera,canvas,pool,crowd.material,binding,options.founded!,sound);
       if(disposed||generation!==walkGeneration){next.dispose();return;}
       try{checkWalkBinding(options.founded,binding);}catch(error){next.dispose();throw error;}
       walk=next;walkSelected=true;capturePose=null;autoCamera=false;poseRevision++;instancesDirty=true;
     },
     detachWalk,
     walkDebug:()=>walk?.controller.debug??null,
+    interactionDebug:()=>walk?.interactionDebug??null,
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
-    inspect:()=>({build:'progressive-light-v1',loaded,renderPhase,renderStartedAt,renderCompletedAt,presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(cue:unknown)=>crowd.receiveChat(cue),clearChat:(cueIds?:readonly string[])=>crowd.clearChat(cueIds),
+    inspect:()=>({build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(cue:unknown)=>crowd.receiveChat(cue),clearChat:(cueIds?:readonly string[])=>crowd.clearChat(cueIds),
     setHour(value:number){targetHour=value;sound.cue('wood');},
     setCamera(value:CameraName){walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
     /** Evidence framing only. Null returns control to the current production camera. */

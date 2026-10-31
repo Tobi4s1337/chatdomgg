@@ -2,11 +2,19 @@ import type { Vec3 } from '@chatdom/shared';
 import type { CardinalTurn, LandformBase, SettlementPlan, XZ } from '../settlement/types';
 
 /** Presentation geography, not a deed, ownership record or authority to move an existing home. */
+/**
+ * A level-topped rise or terrace. Within `plateau` metres the ground is exactly `height` (absolute metres), then
+ * eases to the surrounding land at a gently lobed foot near `radius`. Hills apply in array order.
+ */
 export interface LandHill { id: string; centre: XZ; radius: number; height: number; plateau: number }
+/** Irregular rim: the ellipse scaled by seeded 3/5/7-lobe harmonics of `seed:id`. `level - depth` is the deepest bed. */
 export interface WaterBody {
   id: string; x: number; z: number; radiusX: number; radiusZ: number; level: number; depth: number;
 }
-/** Downstream order; >=2 points, bed < level, positive width, non-increasing level. */
+/**
+ * Downstream order; >=2 points, bed < level, positive width, non-increasing level. Both ends are cut square: a
+ * course begins at a spring, weir or wheel pit and ends inside the water it joins, at that water's level.
+ */
 export interface LandStream {
   id: string; kind: 'stream' | 'leat' | 'tailrace'; bank: number;
   points: readonly { position: XZ; bed: number; level: number; width: number }[];
@@ -21,7 +29,11 @@ export interface LandSite {
   kind: 'statue' | 'forge' | 'well' | 'stall' | 'bench' | 'pier' | 'boathouse' | 'rock' | 'mill' | 'wheel'
     | 'weir' | 'bridge' | 'sign';
   name: string;
-  /** Blueprint placement origin, world metres; local +Z is forward. Structural yaw = turn * PI/2. */
+  /**
+   * Blueprint placement origin, world metres; local +Z is forward. Structural yaw = turn * PI/2. Height datum:
+   * pier, boathouse and rock at the lake surface; weir at the pond surface (crest); wheel at its tailrace surface
+   * (pit floor); bridge at its higher landing; mill, sign and land sites at their level ground.
+   */
   position: Vec3; turn: CardinalTurn; footprint: readonly XZ[];
 }
 export interface LandPlaces {

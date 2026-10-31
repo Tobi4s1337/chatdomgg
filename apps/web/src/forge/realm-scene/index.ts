@@ -11,7 +11,6 @@ import { buildBounds } from '../../build/composition';
 import { createForgeEmitters } from '../emitters';
 import { createForgePresentation, type ForgePresentation } from '../presentation';
 import { createForgeRitualView } from '../ritual-view';
-import { playForgeSound } from '../sound';
 
 export interface RealmForgeSceneOptions {
   scene: THREE.Scene;
@@ -38,7 +37,6 @@ interface Casting {
   presentation: ForgePresentation;
   unshadow: (() => void) | undefined;
   started: number | null;
-  lastPhase: string;
   landed: boolean;
 }
 
@@ -117,7 +115,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       // The shared presentation reads the clone's actual socket pose before moving it to the anvil.
       const presentation = createForgePresentation({ root: effects, anvil: anvilFace.toArray(), landing: destination.toArray(), piece: mesh });
       current = { attachment, home, result, bounds: buildBounds(result.blueprint), destination, mesh, presentation,
-        unshadow: options.registerShadow?.(mesh), started: receivedClock ? now : null, lastPhase: '', landed: false };
+        unshadow: options.registerShadow?.(mesh), started: receivedClock ? now : null, landed: false };
     } catch {
       if (mesh) options.scene.remove(mesh);
       geometry?.dispose();
@@ -133,7 +131,6 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       if (disposed || completedActivities.has(activityId)) return;
       const previous = stages.get(activityId);
       stages.set(activityId, { stage, started: previous?.started ?? now });
-      if (!previous) playForgeSound(options.sound, 'words');
     },
     committed(attachment, activityId) {
       if (disposed || seen.has(attachment.id)) return;
@@ -145,6 +142,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     restored(attachments) { standing.clear(); for (const attachment of attachments) rememberStanding(attachment); },
     unavailable() {
       epoch++; stages.clear(); queue.length = 0;
+      options.sound.forgeUpdate?.(null);
       if (preparing) options.hideAttachment(preparing.id, false);
       preparing = null; clearCurrent();
     },
@@ -153,9 +151,12 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
   function direct(casting: Casting | null, frame: ForgeRitualFrame | null) {
     const width = Math.max(1, options.canvas.clientWidth), height = Math.max(1, options.canvas.clientHeight);
     const size = casting?.bounds.getSize(new THREE.Vector3()) ?? new THREE.Vector3(3, 2, 3);
-    const target = options.anvil.clone().add(new THREE.Vector3(0, (1.6 + size.y) * .5, 0));
+    // Above the casting: 0.9√heft for the lip, arrival/departure lift and the tilted bowl/bail (heft ≤ 1.8).
+    // Hold this envelope throughout the anvil shot so the pour never clips its crucible or pumps the camera.
+    const stageHeight = 1.6 + size.y + 2.7;
+    const target = options.anvil.clone().add(new THREE.Vector3(0, stageHeight * .5, 0));
     const fov = 43, half = THREE.MathUtils.degToRad(fov / 2);
-    const radius = Math.hypot(Math.max(3.4, size.x), 1.6 + size.y, Math.max(3.4, size.z)) / 2;
+    const radius = Math.hypot(Math.max(3.4, size.x), stageHeight, Math.max(3.4, size.z)) / 2;
     const distance = Math.max(10, radius / Math.sin(Math.min(half, Math.atan(Math.tan(half) * width / height))) * 1.15);
     const offset = new THREE.Vector3(7, 3.6, 11).normalize().multiplyScalar(distance);
     if (casting && frame && (frame.phase === 'flight' || frame.phase === 'landed')) {
@@ -186,7 +187,6 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
         current.started ??= now;
         frame = { ...forgeRitualFrame(current.attachment.id, (now - current.started) / 1000), source: current.attachment.provenance.source };
         current.presentation.update(frame);
-        if (current.lastPhase !== frame.phase) { playForgeSound(options.sound, frame.phase); current.lastPhase = frame.phase; }
         if (frame.phase === 'landed') {
           current.mesh.visible = false;
           if (!current.landed) {
@@ -203,6 +203,10 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
         phaseProgress: 0, duration: 21, source: 'live',
       } : null;
       view.update(waiting, !!waiting && pending?.[1].stage === 'drafting');
+      // The external presentation owns the clone, hammer and runes after commit. Heat the physical anvil too,
+      // without starting a second set of effects or exposing a candidate while the judges are still working.
+      if (frame) view.updateAnvil(frame);
+      options.sound.forgeUpdate?.(frame ?? waiting);
       emitters.update({ time: now / 1000, anvil: anvilFace, activity: frame?.phase === 'pour' ? 1 : 0,
         fillHeight: frame?.phase === 'pour' && current ? current.bounds.getSize(new THREE.Vector3()).y * frame.phaseProgress : 0,
         strike: frame?.phase === 'strike' ? 1 - frame.phaseProgress : 0,
@@ -217,6 +221,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     dispose() {
       if (disposed) return;
       disposed = true; epoch++; unsubscribe(); stages.clear(); standing.clear(); queue.length = 0;
+      options.sound.forgeUpdate?.(null);
       if (preparing) options.hideAttachment(preparing.id, false);
       preparing = null; clearCurrent(); view.dispose(); emitters.dispose(); options.scene.remove(effects);
     },

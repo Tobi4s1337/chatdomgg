@@ -62,9 +62,9 @@ try {
       await page.evaluate(hour => window.__chatdomKingdom.hour(hour), HOURS[label]);
       for (const view of views) {
         await page.evaluate(name => window.__chatdomKingdom.view(name), view);
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await page.evaluate(() => new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
         await page.waitForFunction(() => window.__chatdomKingdom.stats.lightingReady && window.__chatdomKingdom.stats.fieldSettled, null, { timeout: 300_000 });
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await page.evaluate(() => new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
         if (errors.length) throw new Error(errors.join('\n'));
         const path = `${out}/${view}-${label}${dressing === 'off' ? '-bare' : ''}@${width}x${height}.png`;
         await page.screenshot({ path, timeout: 180_000 });

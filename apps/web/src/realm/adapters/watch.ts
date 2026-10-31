@@ -1,5 +1,5 @@
 import { KingdomIdSchema, type KingdomId } from '@chatdom/shared';
-import { REALM_WATCH_ROUTE, RealmFoundedManifestSchema, type RealmPublicDelivery, type RealmWatchCheckpoint } from '@chatdom/shared/realm';
+import { REALM_WATCH_ROUTE, REALM_WALKER_FRAME_MAX_BYTES, REALM_WALKER_FRAME_INTERVAL_MS, RealmWalkerFrameSchema, RealmFoundedManifestSchema, type RealmPublicDelivery, type RealmWatchCheckpoint, type RealmWalkerFeed, type RealmWalkerFrame } from '@chatdom/shared/realm';
 import type { RealmObservedRoom } from './observer';
 
 export interface WatchEventSource {
@@ -8,12 +8,13 @@ export interface WatchEventSource {
 }
 export interface RealmWatch {
   readonly room: RealmObservedRoom;
+  readonly walkerFeed: RealmWalkerFeed;
   /** The actual first server checkpoint; geometry is fetched against this exact receipt. */
   readonly checkpoint: Promise<RealmWatchCheckpoint>;
   dispose(): void;
 }
 
-/** Public SSE transport only. It has no session, principal, join, walker or command channel. */
+/** Public SSE transport only. It has no session, principal, join, input or command channel. */
 export function createRealmWatch(options: {
   kingdomId: KingdomId;
   signal: AbortSignal;
@@ -28,6 +29,20 @@ export function createRealmWatch(options: {
   let stream: WatchEventSource | undefined, generation = 0, disposed = false, failed = false;
   let installed = false, initial: RealmWatchCheckpoint | undefined, buffered: RealmPublicDelivery[] = [];
   let bufferBytes = 0, first = true;
+  let current: RealmWatchCheckpoint | undefined, latestWalkers: RealmWalkerFrame | undefined;
+  let lastWalkerSampledAt = -1, walkersReceivedAt = 0;
+  let walkerTimer: ReturnType<typeof setTimeout> | undefined;
+  const walkerListeners = new Set<{ receive(frame: RealmWalkerFrame): void; unavailable(): void }>();
+  function clearWalkers() {
+    clearTimeout(walkerTimer); walkerTimer = undefined; latestWalkers = undefined;
+    for (const listener of [...walkerListeners]) listener.unavailable();
+  }
+  const walkerFeed: RealmWalkerFeed = { subscribe(receive, unavailable) {
+    if (latestWalkers && performance.now() - walkersReceivedAt >= REALM_WALKER_FRAME_INTERVAL_MS * 10) clearWalkers();
+    const listener = { receive, unavailable }; walkerListeners.add(listener);
+    if (latestWalkers) receive(latestWalkers); else unavailable();
+    return () => { walkerListeners.delete(listener); };
+  } };
   let resolve!: (checkpoint: RealmWatchCheckpoint) => void, reject!: (error: Error) => void;
   const checkpoint = new Promise<RealmWatchCheckpoint>((yes, no) => { resolve = yes; reject = no; });
   const emit = (type: string, value: unknown) => { for (const receive of [...handlers.get(type) ?? []]) receive(value as never); };
@@ -35,21 +50,24 @@ export function createRealmWatch(options: {
   function fail() {
     if (disposed || failed) return;
     failed = true; generation++; clearTimeout(timer); stream?.close(); stream = undefined;
-    initial = undefined; buffered = []; bufferBytes = 0;
+    initial = undefined; current = undefined; buffered = []; bufferBytes = 0; clearWalkers();
     reject(new Error('The kingdom’s public watch is unavailable.'));
     options.unavailable();
   }
   function open() {
     if (disposed || failed) return;
-    stream?.close(); initial = undefined; buffered = []; bufferBytes = 0;
+    stream?.close(); initial = undefined; current = undefined; lastWalkerSampledAt = -1; buffered = []; bufferBytes = 0; clearWalkers();
     const own = ++generation;
     const next = (options.source ?? (path => new EventSource(path)))(REALM_WATCH_ROUTE.replace(':kingdomId', encodeURIComponent(kingdomId)));
     stream = next;
     const listen = (type: string, receive: (payload: unknown, length: number) => void) => next.addEventListener(type, event => {
       if (disposed || failed || generation !== own) return;
       const data = (event as MessageEvent<unknown>).data;
-      if (typeof data !== 'string' || data.length > 8_000_000) { fail(); return; }
-      try { receive(JSON.parse(data) as unknown, data.length); } catch { fail(); }
+      const limit = type === 'walkers' ? REALM_WALKER_FRAME_MAX_BYTES : 8_000_000;
+      if (typeof data !== 'string' || data.length > limit) { fail(); return; }
+      const bytes = new TextEncoder().encode(data).byteLength;
+      if (bytes > limit) { fail(); return; }
+      try { receive(JSON.parse(data) as unknown, bytes); } catch { fail(); }
     });
     listen('checkpoint', raw => {
       const c = raw as RealmWatchCheckpoint | null;
@@ -60,6 +78,9 @@ export function createRealmWatch(options: {
         || !Array.isArray(b.current) || b.current.length > 65_536 || !Number.isSafeInteger(b.throughCursor) || b.throughCursor < 0
         || typeof b.writerEpoch !== 'string' || !b.writerEpoch.length || b.writerEpoch.length > 256) { fail(); return; }
       const value: RealmWatchCheckpoint = { version: 1, manifest: manifest.data, checkpoint: b };
+      if (current && (current.checkpoint.writerEpoch !== b.writerEpoch || current.manifest.layoutRevision !== manifest.data.layoutRevision
+        || current.manifest.collisionRevision !== manifest.data.collisionRevision)) { lastWalkerSampledAt = -1; clearWalkers(); }
+      current = value;
       if (first) { first = false; initial = value; clearTimeout(timer); resolve(value); }
       else if (installed) emit('bootstrap', b);
       else initial = value;
@@ -73,14 +94,28 @@ export function createRealmWatch(options: {
     });
     // Speech and present-tense stages received during asset loading are never replayed later.
     listen('transient', raw => { if (installed) emit('transient', raw); });
-    listen('revision', raw => { emit('revision', raw); options.revision(); });
+    listen('walkers', (raw, length) => {
+      if (length > REALM_WALKER_FRAME_MAX_BYTES) { fail(); return; }
+      const parsed = RealmWalkerFrameSchema.safeParse(raw);
+      if (!parsed.success || !current) { clearWalkers(); return; }
+      const next = parsed.data, expected = current;
+      if (next.kingdomId !== kingdomId || next.origin !== expected.manifest.origin || next.writerEpoch !== expected.checkpoint.writerEpoch
+        || next.layoutRevision !== expected.manifest.layoutRevision || next.collisionRevision !== expected.manifest.collisionRevision) { clearWalkers(); return; }
+      if (next.sampledAt <= lastWalkerSampledAt) return;
+      lastWalkerSampledAt = next.sampledAt; walkersReceivedAt = performance.now(); latestWalkers = next; clearTimeout(walkerTimer);
+      // This ephemeral feed has no replay log. Silence removes bodies even while world presence stays fresh.
+      walkerTimer = setTimeout(clearWalkers, REALM_WALKER_FRAME_INTERVAL_MS * 10);
+      for (const listener of [...walkerListeners]) listener.receive(next);
+    });
+    listen('revision', raw => { current = undefined; lastWalkerSampledAt = -1; clearWalkers(); emit('revision', raw); options.revision(); });
     next.addEventListener('closed', fail);
     next.addEventListener('error', fail);
   }
   const dispose = () => {
     if (disposed) return;
     disposed = true; generation++; clearTimeout(timer); stream?.close(); stream = undefined;
-    options.signal.removeEventListener('abort', dispose); handlers.clear(); buffered = []; initial = undefined;
+    options.signal.removeEventListener('abort', dispose); handlers.clear(); buffered = []; initial = undefined; current = undefined;
+    clearWalkers(); walkerListeners.clear();
     reject(new DOMException('Watch was cancelled', 'AbortError'));
   };
   const room: RealmObservedRoom = {
@@ -97,5 +132,5 @@ export function createRealmWatch(options: {
   };
   options.signal.addEventListener('abort', dispose, { once: true });
   if (options.signal.aborted) dispose(); else open();
-  return { room, checkpoint, dispose };
+  return { room, walkerFeed, checkpoint, dispose };
 }

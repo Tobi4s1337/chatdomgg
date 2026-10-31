@@ -1,4 +1,4 @@
-import type { Vec3 } from '@chatdom/shared';
+import { TokenSchema, type Vec3 } from '@chatdom/shared';
 import type { CollisionWorld, RealmInteractionTarget } from '@chatdom/shared/realm';
 import { transformCardinalPoint } from '../settlement/geometry';
 import type { CardinalTurn } from '../settlement/types';
@@ -68,7 +68,10 @@ export function placeHeading(turn: CardinalTurn, local: number): number {
   return Math.atan2(Math.sin(heading), Math.cos(heading));
 }
 
-function zoneValid(zone: string): boolean { return /^(street|tavern:[A-Za-z0-9][A-Za-z0-9_.-]*|home:[A-Za-z0-9][A-Za-z0-9_.-]*)$/.test(zone); }
+function zoneValid(zone: string): boolean {
+  return zone === STREET_ZONE || /^tavern:[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(zone)
+    || zone.startsWith('home:') && TokenSchema.safeParse(zone.slice(5)).success;
+}
 
 /**
  * Build the immutable registry for one founded layout + collision revision from installed producer anchors.

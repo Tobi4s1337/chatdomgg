@@ -1,6 +1,7 @@
 import {
   EpochMsSchema, KingdomIdSchema, PersonIdSchema, PresenceInputSchema, TokenSchema, UIntSchema,
   PRESENCE_LEASE_MS, PRESENCE_MINUTE_MS, STREAM_LEASE_MS,
+  CitizenLookIdSchema, starterCitizenLook,
   type KingdomId, type KingdomPresenceFrame, type PersonId, type PresenceInput, type PresenceSource, type PresenceLossSource,
 } from '@chatdom/shared';
 
@@ -73,6 +74,8 @@ export interface PresenceState {
 export interface PresenceBinding {
   readonly personId: PersonId;
   readonly slot: number;
+  /** A trusted approved choice, never supplied by a public visitor or a chat name. */
+  readonly look?: string;
 }
 
 /**
@@ -408,7 +411,8 @@ export function projectPresence(state: PresenceState, bindings: readonly Presenc
       if (end <= now) since = end;
       if (connection !== 'fresh' && state.stream) since = Math.min(now, state.stream.live ? state.stream.expiresAt : state.stream.observedAt);
     }
-    return { slot: binding.slot, present, publicName: present ? person.publicName : null, since };
+    const look = binding.look === undefined ? starterCitizenLook(binding.personId) : CitizenLookIdSchema.parse(binding.look);
+    return { slot: binding.slot, present, publicName: present ? person.publicName : null, since, look };
   }).sort((a, b) => a.slot - b.slot);
   return { version: 1, kingdomId: state.kingdomId, epoch, sequence, asOf: now, origin: state.origin, streamLive: connection === 'fresh', connection, windows };
 }

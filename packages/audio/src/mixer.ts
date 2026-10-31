@@ -81,6 +81,8 @@ export function placement(options: AudioCueOptions): Placement | undefined {
  * The live instance and the offline render both play through this, so a capture is the shipped mix.
  */
 export class Mixer {
+  /** Stable input to the kingdom's master fader and ceiling for hosted sound layers. */
+  get hostDestination(): AudioNode { return this.mix.master; }
   private readonly voices = new Set<LiveVoice>();
   private readonly lastVariation = new Map<string, number>();
   private readonly lastAt = new Map<string, { at: number; gain: number }>();

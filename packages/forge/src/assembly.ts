@@ -1,4 +1,4 @@
-import { createAnvilHeroDragon } from '@chatdom/content/anvil-hero';
+import { ANVIL_HERO_DRAGON_SURFACE, createAnvilHeroDragon } from '@chatdom/content/anvil-hero';
 import { ForgeRunRequestSchema, ForgeStyleKitSchema, HousePartPlanSchema, type ForgeHostProfile, type ForgeHouseSocket, type ForgeStyleKit, type HousePartPlan, type VoxelBlueprint } from '@chatdom/shared';
 import { MAT, STYLES } from '@chatdom/content/materials';
 import { createForgeMotif } from '@chatdom/content/forge-motifs';
@@ -95,12 +95,16 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
     const finish=plan.finish==='copper'?MAT.forgeCopper:plan.finish==='ceramic'?MAT.cream:null;
     // Finish the broad surface; preserve sleeping eyes, horns, paws and wing
     // ribs so a metal casting keeps the same readable anatomy as native clay.
-    const surfaces=new Set<number>([kit.family==='grove'?MAT.moss:native.roof,MAT.brass,MAT.goldLeaf]);
-    if(finish!==null)for(const box of motif.boxes)if(surfaces.has(box.material))box.material=finish;
+    const surfaces=new Set<number>(plan.motif==='sleeping-dragon'?[ANVIL_HERO_DRAGON_SURFACE[kit.family]]:[kit.family==='grove'?MAT.moss:native.roof,MAT.brass,MAT.goldLeaf]);
+    // Retain authored surface boxes before recolouring: merged order says nothing
+    // about anatomy, and a ceramic finish can share the belly/horn material.
+    const surfaceBoxes=motif.boxes.filter(box=>surfaces.has(box.material));
+    if(finish!==null)for(const box of surfaceBoxes)box.material=finish;
     // Authored enamel inlays sit on existing solid faces, never in empty space.
     if(plan.accent!=='none'){
       const step=plan.accent==='stars'?5:plan.accent==='leaves'?4:3;
-      for(const box of [...motif.boxes].filter(b=>b.material!==MAT.air).slice(0,24)){
+      const inlayBoxes=plan.motif==='sleeping-dragon'?surfaceBoxes:motif.boxes.filter(b=>b.material!==MAT.air);
+      for(const box of inlayBoxes.slice(0,24)){
         const [x,y,z]=box.to;if((box.from[0]+box.from[1]+box.from[2])%step)continue;
         motif.boxes.push({from:[x-1,y-1,z-1],to:[x,y,z],material:plan.accent==='leaves'?MAT.moss:native.trim});
       }

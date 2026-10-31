@@ -18,6 +18,8 @@ const { generateSettlementPlan } = await loader.ssrLoadModule('/packages/world/s
 const { createRealmState } = await loader.ssrLoadModule('/packages/world/src/realm/reducer.ts');
 const { assembleFoundedScene, createFoundedWorld } = await loader.ssrLoadModule('/apps/realm/src/founded/index.ts');
 const { createSimulatedPresence } = await loader.ssrLoadModule('/apps/web/src/kingdom/presence-feed.ts');
+const { createFoundedInteractionRegistry } = await loader.ssrLoadModule('/packages/world/src/interactions/index.ts');
+const { createInteractionAuthority } = await loader.ssrLoadModule('/apps/realm/src/interactions/index.ts');
 // Explicit simulated adoption: choose the plan once, then assemble/serve those exact bytes.
 // Production loads its persisted adopted plan through createFoundedWorldLoader instead.
 const plan = generateSettlementPlan({ seed: 'willowmere', tier: 'town', firstYear: 2022, year: 2026 });
@@ -43,6 +45,15 @@ const services = {
   } },
   open: async kingdomId => {
     const handle = await base.open(kingdomId);
+    // The same interaction authority as the durable room, with this explicitly SIMULATED session source.
+    // No fictional street deed: this rehearsal can use the anvil, but owns no home.
+    const registry = createFoundedInteractionRegistry(fixture.scene, fixture.world);
+    const authority = createInteractionAuthority({ writerEpoch: handle.writerEpoch, clock: Date.now,
+      reconnectGraceMs: 20_000, world: () => fixture.world, registry: () => registry,
+      rights: { current: services.auth.current, permitted: () => true }, homes: { ownedPlotId: () => null } });
+    const relays = new Set();
+    const offDelivery = authority.bindDelivery({ transient: message => { for (const relay of relays) relay.send(message); },
+      owner: (personId, message) => { for (const relay of relays) relay.owner(personId, message); } });
     const publish = next => {
       const nextCursor = ++cursor;
       for (const receive of listeners) receive({ version: 1, kingdomId, writerEpoch: handle.writerEpoch,
@@ -55,10 +66,14 @@ const services = {
       bootstrap: principal => ({ ...handle.bootstrap(principal), throughCursor: cursor,
         layoutRevision: fixture.manifest.layoutRevision, collisionRevision: fixture.world.revision,
         current: [{ type: 'presence', frame }] }),
+      intent: (context, intent) => intent.type === 'interact' ? authority.intent(context, intent) : handle.intent(context, intent),
+      lifecycle: (event, principal, walkerId, now) => { handle.lifecycle(event, principal, walkerId, now); authority.lifecycle(event, principal, walkerId, now); },
+      bindTransient: (send, owner) => { const relay = { send, owner }; relays.add(relay); return () => relays.delete(relay); },
       subscribe: receive => { listeners.add(receive); return () => listeners.delete(receive); },
       recoverWalker: (id, revision) => revision === fixture.world.revision && !!effects?.placeWalker(id, fixture.spawns[0], revision),
-      bindRoom: bound => { effects = bound; const off = handle.bindRoom(bound); return () => { if (effects === bound) effects = undefined; off(); }; },
-      dispose: async () => { globalThis.clearInterval(timer); listeners.clear(); await handle.dispose(); },
+      bindRoom: bound => { effects = bound; const off = handle.bindRoom(bound), offInteractions = authority.bindRoom(bound);
+        return () => { if (effects === bound) effects = undefined; offInteractions(); off(); }; },
+      dispose: async () => { globalThis.clearInterval(timer); listeners.clear(); offDelivery(); authority.dispose(); relays.clear(); await handle.dispose(); },
     };
   },
 };

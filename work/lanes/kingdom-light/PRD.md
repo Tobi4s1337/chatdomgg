@@ -62,7 +62,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   warm field passing glass, an adjacent wall that still blocks and a lit pane that still reads from the street.
   A compact wall/glass/carve test covers actual sky/mesher/field/shadow semantics affected by the change.
 
-- [ ] **KL05 — Windows and faces carry soft warm pools.**
+- [x] **KL05 — Windows and faces carry soft warm pools.**
   Keep one citizen/one presence window, the 0.7 s fade, disclosure, dither and sources. Make the pane brightest
   low/centre and amber at edges, with dark mullions, source-sized halo and cool sky reflection while absent.
   Replace the squared warm falloff with a capped soft knee readable 3–5 m onto the wall and street. Faces and

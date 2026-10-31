@@ -12,6 +12,7 @@ import { ForgeWriteGate, FileForgeApprovals } from './wiring';
 import { RealmEveningBridge, mountEveningRoutes } from './evening';
 import { createRealmCitizens } from './evening/citizens';
 import { createRealmCastle } from './evening/castle';
+import { attachEveningInteractions } from './evening/interactions';
 import { createServer as createPortReservation } from 'node:net';
 
 const simulated = process.env.REALM_SIMULATED === '1';
@@ -71,7 +72,12 @@ async function serveOwnedPort(releasePort: () => Promise<void>) {
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
-    attach: kingdom => evening.attach(kingdom),
+    attach: kingdom => {
+      const detachEvening = evening.attach(kingdom);
+      const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
+        scene: () => boot.loader.current(kingdom.kingdomId)?.scene });
+      return () => { detachInteractions(); detachEvening(); };
+    },
   });
   citizens.use(boot.allocation, boot.services);
   castle.use(boot.allocation, boot.store);
