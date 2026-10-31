@@ -76,6 +76,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
     const signal = AbortSignal.any([incoming.signal, abort.signal]);
     let reservation: ForgeReservation | undefined;
     let committed = false;
+    let staged = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const lease: KingdomForgeLease = {
       signal,
@@ -109,7 +110,9 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         let stopped: Extract<ForgeRunEvent, { type: 'stopped' }> | undefined;
         await bounded(() => runForge(request, options.providers, event => {
           checkCurrent();
-          if (event.type === 'stage') publish({ type: 'stage', activityId, stage: event.stage });
+          if (event.type === 'stage') {
+            if (publish({ type: 'stage', activityId, stage: event.stage })) staged = true;
+          }
           else if (event.type === 'approved') approved = event;
           else stopped = event;
         }, async entry => {
@@ -167,6 +170,9 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
     };
     const outcome = await execute();
     if (!committed) {
+      // End only an observed animation, before cleanup can wait on an unavailable authority.
+      // A lost commit reply may still be followed by the authority's durable outbox reveal.
+      if (staged) publish({ type: 'ended', activityId });
       abort.abort();
       // Cleanup uses no canceled signal. Unknown reserve/commit outcomes are resolved by the same attempt.
       try { await bounded(() => authority.release(attempt), RELEASE_WAIT_MS, () => {}); }

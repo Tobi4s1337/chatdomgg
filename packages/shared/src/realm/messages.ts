@@ -63,7 +63,7 @@ export interface RealmBootstrap {
 
 /** Transient room messages are never appended to history/snapshots or replayed as newly live speech. */
 export type RealmTransientMessage =
-  | { readonly type: 'forge'; readonly event: Extract<ForgeActivity, { type: 'stage' }> }
+  | { readonly type: 'forge'; readonly event: Exclude<ForgeActivity, { type: 'committed' }> }
   | { readonly type: 'chat'; readonly cue: CitizenChatCue }
   | { readonly type: 'chat.remove'; readonly cueIds: readonly string[] }
   | { readonly type: 'chat.clear' }

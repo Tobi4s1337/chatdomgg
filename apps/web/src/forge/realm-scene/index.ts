@@ -132,6 +132,11 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       const previous = stages.get(activityId);
       stages.set(activityId, { stage, started: previous?.started ?? now });
     },
+    ended(activityId) {
+      if (disposed) return;
+      completedActivities.add(activityId);
+      stages.delete(activityId);
+    },
     committed(attachment, activityId) {
       if (disposed || seen.has(attachment.id)) return;
       seen.add(attachment.id); completedActivities.add(activityId); stages.delete(activityId);

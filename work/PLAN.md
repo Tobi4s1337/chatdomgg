@@ -361,16 +361,24 @@ but sparse, dark, stepped banks. PW03/PW05 next: one dense overlapping cove reed
 its complete water-place mount replaces this small adapter, never duplicates it. Screenshot/browser/server/lock
 all finished. TM02 carts/support remain merged; real scene feed/anchor/camera ports and TM03 spectacle remain open.
 
-**Runtime needs host restoration:** configured preview5190, API5196, realm5197, Forge5195, Herald5194;
-browser origin http://localhost:5190. On resume owned session21694 was terminal and5197 unavailable. Root started
-then stopped diagnostic sessions5898/77488 after finding another process renewing the live Postgres writer lease
-(generation23); it was left intact. Later5197 began serving Vite HTML from the twitch-moments sky-flight bench,
-so5190's founded proxy also serves that wrong HTML. Herald queues deliveries; this is not a healthy live evening.
-Host team asked to restore the rightful realm listener and identify its held lease. No unowned process, env or
-host configuration touched. Ignored .realm.local/main-session.json records no currently owned running realm.
-Capture selectors now share packages/testing/capture-ports.mjs: reserve5187 and5190–5197 even when down; explicit
-reserved binds fail, normal OS-selected preview port0 stays available. Temporary benches must follow this too.
-One policy regression covers the actual service-port collision; no extra browser capture for this mechanical fix.
+**Forge waiting ends promptly:** the room now forwards a strict opaque `{type:'ended',activityId}` transient
+when an observed staged attempt finishes without a confirmed commit. No wish/person/verdict/reason enters it.
+The feed clears just that attempt, rejects stale later stages, and still permits a real durable commit after an
+uncertain reply. Confirmed commits and pre-stage denials emit no ending. Spec36 R8 records this small contract.
+35 focused server/client/contract tests pass across scoped runs, plus typecheck, scoped lint and web/realm builds.
+Looked at shots/kingdom/live-evening/forge-rest-SIMULATED@1440x900.png: cold engraved anvil after drafting→ended,
+no phantom attachment/runes, no browser errors; actual published bytes SHA-verified from disk during restart.
+Market backdrop is sparse/dark; this is a waiting-lifecycle fix, not final hero-art or real-chat acceptance.
+
+**Runtime:** preview5190, API5196, realm5197, Forge5195, Herald5194; browser origin http://localhost:5190.
+Founder clarified the drops were host restarts after merge batches. New host policy: restart a service only for
+its own code/used-package changes; every service restarts on .env changes. This Forge slice changes realm/shared,
+so its restart is expected. Report a drop outside that policy. No env/host configuration edits here. Latest owned
+handle/status is ignored .realm.local/main-session.json; poll that handle and actual /readyz before starting
+anything, never trust an old status label or bind over a listener/held live writer lease. The room was healthy at
+turn start (correct live manifest, Herald pending0/faultnull); the last owned process11461 then exited cleanly.
+Capture selectors share packages/testing/capture-ports.mjs: reserve5187 and5190–5197 even when down, including
+ad-hoc benches; explicit reserved binds fail, OS-selected preview port0 remains. ae82f2e covers this collision.
 
 **Next:** check the restored service before any start, then actual chat→shared arrival/window/name/bubble and
 actual wish→independent Codex judges→owned home. Walk /?walk=1&kingdom=129634568&hour=19.5 needs genuine Twitch
