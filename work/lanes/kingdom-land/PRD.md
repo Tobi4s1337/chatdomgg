@@ -27,7 +27,7 @@ lands, then use the actual module. All independent tasks can start without a sce
   dispatch, lake/pond/stream/leat/tailrace, castle rise/court and actual door anchor, lookout and forest envelope.
   Populate typed sites/places early so consumers replace their fixtures. Keep v1 exactly unchanged. Show lake
   beyond roofs and court looking over town. Do not invent warmth or geometry for unbuilt places.
-- [ ] **LD03 — Woods frame the land.** Emit ridge/grove/shore/forest zones and landmark trees, clear of complete
+- [x] **LD03 — Woods frame the land.** Emit ridge/grove/shore/forest zones and landmark trees, clear of complete
   reservations and campfire envelope plus crowns. Draw gaps and crown clearance on the map. Ground-dressing plants.
 - [ ] **LD04 — Walks reveal the kingdom.** Connect place routes and trails, shared water crossing, site furniture
   and pacing beats; preserve open destination footprints. Lake reveal and summit views read. No independent tree,
@@ -40,3 +40,5 @@ lands, then use the actual module. All independent tasks can start without a sce
 ## Backlog
 
 Add findings here; do not pick from this list without the brief changing.
+
+- LD02's `places.forest.path` passes 0.6–0.9 m from the elder oak's trunk (`places.forest.oak`); LD04's forest trail should route around the oak's root/seat envelope (≥4 m) instead of through it.
