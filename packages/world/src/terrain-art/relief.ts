@@ -73,23 +73,28 @@ export function ridges(seed: number): readonly Ridge[] {
   const p = (seed % 6283) / 1000;
   return Object.freeze([
     { crest: (x: number) => -205 + 18 * Math.sin(x * 0.011 + p) + 7 * Math.sin(x * 0.029 + 2.1),
-      height: (x: number) => 28 + 6 * Math.sin(x * 0.0085 + 0.6) + 20 * table(x, -260, -110, 22) + 15 * table(x, 140, 250, 18) - 20 * gauss(x, 12, 60),
-      face: 70, back: 150, step: 7, riser: 0.24 },
+      height: (x: number) => 28 + 6 * Math.sin(x * 0.0085 + 0.6) + 20 * table(x, -260, -110, 11) + 15 * table(x, 140, 250, 9) - 20 * gauss(x, 12, 60),
+      face: 70, back: 150, step: 7, riser: 0.2 },
     { crest: (x: number) => -430 + 30 * Math.sin(x * 0.0062 + 2 + p) + 10 * Math.sin(x * 0.017),
-      height: (x: number) => 84 + 12 * Math.sin(x * 0.0052 + 1.4) + 44 * table(x, 210, 430, 30) + 36 * table(x, -470, -230, 34) + 14 * table(x, 520, 700, 40) - 40 * gauss(x, 0, 120),
-      face: 130, back: 230, step: 14, riser: 0.34 },
+      height: (x: number) => 84 + 12 * Math.sin(x * 0.0052 + 1.4) + 44 * table(x, 210, 430, 14) + 36 * table(x, -470, -230, 16) + 14 * table(x, 520, 700, 20) - 40 * gauss(x, 0, 120),
+      face: 130, back: 230, step: 14, riser: 0.24 },
     { crest: (x: number) => -780 + 45 * Math.sin(x * 0.004 + 4 + p),
-      height: (x: number) => 160 + 20 * Math.sin(x * 0.0037 + 0.3) + 90 * table(x, -620, -300, 50) + 76 * table(x, 330, 640, 46) - 40 * gauss(x, 10, 170),
-      face: 210, back: 320, step: 24, riser: 0.4 },
+      height: (x: number) => 160 + 20 * Math.sin(x * 0.0037 + 0.3) + 90 * table(x, -620, -300, 24) + 76 * table(x, 330, 640, 22) - 40 * gauss(x, 10, 170),
+      face: 210, back: 320, step: 24, riser: 0.28 },
   ]);
 }
 
+/** The rim's rock band: this share of the face drops this share of the ridge's height. */
+const CAPROCK = 0.11, CAPROCK_DROP = 0.36;
+
 function ridgeHeight(r: Ridge, x: number, z: number, seed: number): number {
   const s = z - r.crest(x) + 5 * fbm(x * 0.018, z * 0.018, seed);
-  // A cuesta: a level crest that breaks at a sharp edge into a steep scarp toward the town, easing into a
-  // concave talus at its foot; behind the edge a long, gentle back slope. Never a rounded dome.
+  // A cuesta: a level caprock that breaks at its rim into a sheer rock band, then a concave talus to the
+  // foot; behind the rim the top stays level before a long, gentle back slope. Never a rounded dome.
   const t = Math.min(1, Math.max(0, s / r.face));
-  const shape = s >= 0 ? (1 - t) ** 2.4 : Math.exp(-((Math.max(0, -s - r.face * 0.15) / r.back) ** 2));
+  const shape = s >= 0
+    ? (t < CAPROCK ? 1 - CAPROCK_DROP * (t / CAPROCK) : (1 - CAPROCK_DROP) * (1 - (t - CAPROCK) / (1 - CAPROCK)) ** 1.9)
+    : Math.exp(-((Math.max(0, -s - r.face * 0.3) / r.back) ** 2));
   // Notched crest: shallow cols cut the long line into readable summits.
   const notch = 0.86 + 0.14 * Math.abs(Math.sin(x * 0.0105 + r.face));
   return Math.max(0, r.height(x)) * notch * shape;

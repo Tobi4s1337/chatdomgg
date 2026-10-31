@@ -141,6 +141,54 @@ describe('picture-land producer on the pinned founded town', { timeout: 60_000 }
     expect(ledges).toBeGreaterThan(50);
   });
 
+  it('wears earth trails beside the paving and along streets not yet opened, never moving the ground', () => {
+    const candidate = make(founded);
+    // A ragged fringe: worn earth borders the paving in places and grass reaches it in others.
+    let worn = 0, verge = 0;
+    for (let z = -60; z <= 280; z += 1) for (let x = -180; x <= 250; x += 4) {
+      const sample = samplePublicGround(founded, x + 0.5, z + 0.5);
+      if (!sample || sample.kind === 'trail' || sample.pavingDistance <= 0.4 || sample.pavingDistance > 1.2) continue;
+      const material = candidate.material(x, z);
+      if (material === 'trail') worn++; else if (material === 'grass') verge++;
+    }
+    expect(worn).toBeGreaterThan(200);
+    expect(verge).toBeGreaterThan(200);
+    // The line of every street the plan has not opened yet is a broken earth track on its accepted ground.
+    const active = new Set(founded.activeStreetIds);
+    let track = 0, along = 0;
+    for (const street of founded.streets.filter(item => !active.has(item.id))) {
+      for (let i = 1; i < street.points.length; i++) {
+        const a = street.points[i - 1]!, b = street.points[i]!;
+        for (let t = 0; t <= 1; t += 0.1) {
+          const x = a[0] + (b[0] - a[0]) * t, z = a[2] + (b[2] - a[2]) * t;
+          // Where a planned street meets an open one, the paving and its worn fringe win.
+          if ((samplePublicGround(founded, x, z)?.pavingDistance ?? Infinity) <= 2.5) continue;
+          along++;
+          if (candidate.material(x, z) === 'trail') track++;
+          preserved(candidate, founded, x, z);
+        }
+      }
+    }
+    expect(along).toBeGreaterThan(50);
+    expect(track / along).toBeGreaterThan(0.5);
+    expect(track).toBeLessThan(along);
+  });
+
+  it('steps the climbing ground at the town into level treads with lips', () => {
+    const candidate = make(founded);
+    // The castle bank and the town's edge: inside the town footprint and its first 30 m.
+    let lips = 0, treads = 0;
+    for (let z = founded.bounds.minZ - 30; z <= founded.bounds.maxZ + 30; z += 1) for (let x = founded.bounds.minX - 30; x <= founded.bounds.maxX + 30; x += 2) {
+      const p = candidate.protection(x, z);
+      if (p.distance <= clearance + 1) continue;
+      const ground = settlementTerrainHeight(founded, x, z), here = candidate.height(x, z);
+      if (Math.abs(here - ground) > 0.4 && candidate.material(x, z) !== 'rock') treads++;
+      if (candidate.material(x, z) === 'ledge') lips++;
+    }
+    expect(treads).toBeGreaterThan(300);
+    expect(lips).toBeGreaterThan(100);
+  });
+
   it('derives material from the same corners as height', () => {
     const candidate = make(founded);
     for (let z = -300; z <= 60; z += 7) for (let x = -240; x <= 240; x += 5) {

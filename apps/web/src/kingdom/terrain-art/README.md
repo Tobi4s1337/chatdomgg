@@ -14,7 +14,8 @@ authoritative, and the kingdom scene, collision, light-field occupancy and found
   vertex is a candidate corner on the same diagonal, with no shader height displacement. The town and the first ridge use 1 m patches. The coarser ring is 4 m and has a hidden
   skirt where the two meet. Its material is a copy of the kingdom terrain shader with faceted normals and
   soft strata on rock only (near the camera). Lighting, fog, shadows and light fields are untouched. Rock,
-  scree, ledge lip and heath use fixture palette ids 240–243 because content has no swatch for them yet.
+  scree (turf banks and talus), ledge lip, heath and trodden earth use fixture palette ids 240–244, because
+  content has no swatch for them yet. Strata are drawn on rock faces only.
 - `fixture.ts`, `fixture.html`, `fixture-main.ts`: the scene. These are dev-server only and not an app route.
 - `capture.mjs`: takes stills under the shared capture lock on a free capture port between 5176 and 5186.
 

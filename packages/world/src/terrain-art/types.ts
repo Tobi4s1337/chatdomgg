@@ -7,7 +7,7 @@ import type { BoundsXZ, PublicGroundSample, SettlementPlan } from '../settlement
  */
 
 /** Producer identity. A future change to the land's numbers must change this string. */
-export const TERRAIN_ART_PRODUCER = 'picture-land:1' as const;
+export const TERRAIN_ART_PRODUCER = 'picture-land:2' as const;
 
 /** One classification per metre patch, derived from the candidate's own corners and the plan's ground. */
 export type TerrainArtMaterial = 'grass' | 'heath' | 'trail' | 'paving' | 'scree' | 'rock' | 'ledge' | 'waterbed';
