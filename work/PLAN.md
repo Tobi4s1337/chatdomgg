@@ -335,7 +335,8 @@ Twitch spectacle. Merge reviewed work promptly, short look and changed checks. M
 the owner's next task, never a hold. Main owns evening/realm/walk; world lanes keep one worker each. No new
 lanes, matrices per change, audit commits or reopened accepted work. This goal remains active.
 
-**Merged:** Previous light/glass, PS06, CB03, FR02, AH02, PW02, FL01 and TM01 stand. New: RS07 shared district
+**Merged:** Anvil AH05 exports, KL05 softened pools and LD02 v2 geography are now integrated. Existing founded
+layouts are not automatically moved. Previous light/glass, PS06, CB03, FR02, AH02, PW02, FL01 and TM01 stand. New: RS07 shared district
 views, IN03 contextual controls, FR03 Forge audio, WB02 body/hair/eye contrast, BT04 truthful publication, Atlas
 A03–A05, emotes E01, Raid Gate RG01 and founded-world closed-touch collision queries. Lockfile includes emotes.
 Looked at the producers' Atlas, wardrobe, build-tools, emote and Raid Gate images. No reviewed delivery held;
@@ -362,12 +363,21 @@ alternate writer. Hidden sources release watcher/renderer. No real evening captu
 Willowmere imported without fake people/deeds/standing/coals/Genesis. Real walking:
 `/?walk=1&kingdom=129634568&hour=19.5`. Explicit full-town rehearsal5187:
 `/?walk=1&source=simulated&hour=19.5`. Realm5197 restarted with current interactions/district transport.
-Managed Forge5195 reports CLI judges configured. Herald5194 is healthy/offline, with no room sink: ignored `.env`
-has destination/key ready; host-managed service needs restart from main loading it and preserving its existing
-read-only grants/data. Service manager is unreachable here; no duplicate EventSub source started. Public sign-in
-origin/callback is pending the async question; API still uses localhost. Runtime secrets/bytes remain ignored.
+Managed Forge5195 reports CLI judges configured. The founder restarted the managed services on `dbc1100`,
+with autorestart on main/env changes. Managed realm5191 answers 404/no adopted layout for the real kingdom,
+while the local live `realm` schema contains Willowmere and the known-good main writer5197 serves it. Main
+explicitly set ignored live schema/mode and restored Herald's destination to5197; its actual public watch has
+received the offline checkpoint. Do not invent/re-found the town on5191. Host effective storage settings are
+asked asynchronously, as are public sign-in origin and the founder's first live chat line. Preview config now
+reads ignored root CHATDOM targets (process settings still win), pointing realm to5197/API5196. 5190 supervisor
+reclaimed the port after main stopped its own preview; no competing preview kept. Temporary own realm5197 is
+running until the managed namespace is aligned. Runtime secrets/bytes remain ignored.
 
-**Seen/checked:** Typecheck, touched lint, web/realm builds and 58 changed producer tests pass. Two focused native
+
+**Seen/checked:** New merge typecheck/build and 31 targeted anvil/dragon/geography tests pass; preview target
+config typecheck/lint pass. Sol high read the installed SDK: all 5 real prediction tests pass, including 360 Hz
+render samples and reconciliation; no defect found, no netcode rework made. Perceived glassiness still needs the
+real-GPU check. Earlier touched lint, web/realm builds and 58 changed producer tests pass. Two focused native
 room/browser interaction tests pass (actual opening/pose/deed, lifecycle and mounted bootstrap). One serial
 SIMULATED kingdom walk reached the anvil via WASD, showed its E prompt and got the room's acceptance; Escape
 returned control. Looked at `shots/kingdom/interactions/room-anvil@1440x900.png` and `@390x844.png` (no browser errors):
