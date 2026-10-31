@@ -238,11 +238,13 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         warm=mix(warm,surfaceField(uLight,uLightOrigin,uLightExtent,.5,n),nearBlend);
       }
       // The field is blocked by occupied cells; this adds real warm street/wall illumination, not a decal.
-      // The flood falls off linearly with distance. A 1.6 power (not a square) carries the pool 3-5 m onto
-      // the wall and cobbles and still rolls to zero without a ring; the colour falls from a warm core
-      // through amber. It reads fully from dusk (night .2, about 18.5 h) and is absent by day.
-      float pool=pow(warm,1.6);
-      float poolAmount=pool*smoothstep(0.,.2,uNight)*1.15;
+      // The flood falls off linearly with (Manhattan) distance, so the ground under a window is a metre or two
+      // further from it than the wall. A 1.3 power (not a square) carries the pool 3-5 m onto the wall and
+      // the cobbles below and still rolls to zero without a ring; the soft cap below keeps the core from
+      // clipping. The colour falls from a warm core through amber. It reads fully from dusk (night .2, about
+      // 18.5 h) and is absent by day.
+      float pool=pow(warm,1.3);
+      float poolAmount=pool*smoothstep(0.,.2,uNight)*1.3;
       vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
       float beaconAmount=beacon*beacon*(.3+.7*uNight)*1.25;

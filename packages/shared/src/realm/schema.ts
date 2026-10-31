@@ -1,4 +1,5 @@
 import { schema, t, type SchemaType } from '@colyseus/schema';
+import { REALM_NO_HOME_SLOT } from './hosts';
 
 /** Flat primitives only. Colyseus owns sequence/ack/time; do not add a parallel input sequence. */
 export const WalkInputSchema = schema({
@@ -13,6 +14,8 @@ export const WalkerSchema = schema({
   grounded: t.boolean(), yaw: t.uint8(), distance: t.float64(), collisionRevision: t.uint32(),
   // Server relocation context, never a physics/prediction field or a parallel input sequence. Starts at zero.
   placement: t.uint32().default(0),
+  // Append-only wire field: authority's public street link, never an owner ID or editing right.
+  homeSlot: t.uint16().default(REALM_NO_HOME_SLOT),
 }, 'ChatdomWalkerV1');
 export type WalkerSchema = SchemaType<typeof WalkerSchema>;
 

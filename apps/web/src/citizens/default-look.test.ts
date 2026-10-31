@@ -8,6 +8,10 @@ describe('default citizen wardrobe', () => {
     expect(looks).toHaveLength(6);
     expect(new Set(looks.map(look => look.id)).size).toBe(looks.length);
     expect(looks.filter(look => look.cape)).toHaveLength(2);
+    expect(looks.map(look => look.parts.find(part => part.blueprint.attachment === 'chest')!.blueprint.id.split('.')[1]))
+      .toEqual(['balanced', 'broad', 'slender', 'round', 'broad', 'slender']);
+    expect(looks.map(look => look.parts.find(part => part.blueprint.layer === 'hair')!.blueprint.id.split('.')[1]))
+      .toEqual(['sidePart', 'coiledHighCrown', 'bob', 'roundedCurls', 'longBraid', 'pairedTwists']);
     const materials = (attachment: string) => looks.map(look => {
       const part = look.parts.find(item => item.blueprint.attachment === attachment && item.blueprint.layer === 'body')!;
       expect(part.asset.id).toBe(part.blueprint.id);

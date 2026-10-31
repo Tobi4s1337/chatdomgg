@@ -52,7 +52,12 @@ names, edits, gains, sizes and where each is used): [packages/audio/THIRD_PARTY.
 
 Credit is optional under CC0; Chatdom credits these anyway. Everything else in the kingdom's sound (the resonances,
 glows, wick and fire, the beacon chord, the D major pentatonic palette, the room impulse, the mix and the budget) is
-original synthesis authored here. Phrases played through `playKingdomPhrase` (the Forge's) can only use synthesis.
+original synthesis authored here. Phrases played through `playKingdomPhrase` (the Forge and landscape air/water) can only use synthesis.
+
+Landscape ambience is original filtered-noise synthesis, using the same mixer and mute/voice budget. Its technique
+reference is [MDN Web Audio examples](https://github.com/mdn/webaudio-examples) (`5582dbc`, CC0 1.0 Universal):
+noise filtering, audio-clock gain ramps and stereo panning. No example code or recordings were copied; the study
+is in [work/references/kingdom-ambience.md](work/references/kingdom-ambience.md).
 
 ## Realm networking
 

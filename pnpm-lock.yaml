@@ -256,6 +256,16 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
+  packages/emotes:
+    dependencies:
+      '@chatdom/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@chatdom/content':
+        specifier: workspace:*
+        version: link:../content
+
   packages/forge:
     dependencies:
       '@chatdom/content':

@@ -2,6 +2,7 @@ import { createMemo, createSignal, createUniqueId, For, onCleanup, Show } from '
 import type { BuildToolsController, BuildToolsState } from '@chatdom/shared';
 import { BRUSHES, MIRRORS, TOOLS, materialName, mirrorWord, shelveMaterials } from './copy';
 import { brushMark, drawerMark, leaveMark, mirrorMark, redoMark, toolMarks, undoMark, welcomeMark } from './marks';
+import '@chatdom/ui/kit.css';
 import './build-tools.css';
 
 const count = new Intl.NumberFormat('en-GB');
@@ -64,7 +65,10 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
     event.preventDefault(); event.stopPropagation(); closeDrawer();
   }
 
-  return <aside class="bt-rack" classList={{ 'bt-locked': locked(), 'bt-drawer-open': drawer(), 'bt-drawer-shut': shut() && !drawer() }} aria-label="Build tools" data-build-tools-rack>
+  // A disabled history key says why in words; on the icon-only thumb row the dimmed arrow keeps its place.
+  const why = () => locked() ? 'Not open' : 'Nothing yet';
+
+  return <aside class="bt-rack cd-kit" classList={{ 'bt-locked': locked(), 'bt-drawer-open': drawer(), 'bt-drawer-shut': shut() && !drawer() }} aria-label="Build tools" data-build-tools-rack>
     <header class="bt-head">
       <div class="bt-plate">
         <p class="bt-eyebrow">Build mode</p>
@@ -85,7 +89,9 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
       <For each={TOOLS}>{item => <button class="bt-tool" disabled={locked()} aria-pressed={state().tool === item.id} aria-label={item.name} aria-keyshortcuts={item.key}
         onClick={() => props.controller.tool(item.id)}>{toolMarks[item.id]()}<span class="bt-tool-name">{item.name}</span><kbd>{item.key}</kbd></button>}</For>
     </div>
-    <p class="bt-hint bt-tool-help"><b>{tool().name}.</b> {tool().hint}</p>
+    <p class="bt-hint bt-tool-help">
+      <Show when={!locked()} fallback={<><b>The tools rest.</b> They open when live building opens on this street.</>}><b>{tool().name}.</b> {tool().hint}</Show>
+    </p>
 
     <button ref={el => { opener = el; }} class="bt-opener" aria-expanded={drawer()} aria-controls={palette} onClick={() => drawer() ? closeDrawer() : openDrawer()}>
       <i class="bt-chip" style={{ '--bt-swatch': chosen()?.colour ?? 'transparent' }} />
@@ -101,7 +107,7 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
         </div>
         <button class="bt-key bt-close" onClick={closeDrawer}>{drawerMark(true)}<span>Close</span></button>
       </div>
-      <p class="bt-label">Material<span>{chosenName()}</span><Show when={peeked()}>{name => <em class="bt-peek">{name()}</em>}</Show></p>
+      <p class="bt-label">Material<i class="bt-chip" style={{ '--bt-swatch': chosen()?.colour ?? 'transparent' }} /><span>{chosenName()}</span><Show when={peeked()}>{name => <em class="bt-peek">{name()}</em>}</Show></p>
       <div ref={el => { shelf = el; }} class="bt-swatches" role="group" aria-label="Kingdom materials" onKeyDown={roam} onPointerLeave={() => setPeek(null)}>
         <For each={shelves()}>{group => <div class="bt-shelf" role="group" aria-label={group.name}>
           <span class="bt-shelf-name" aria-hidden="true">{group.name}</span>
@@ -134,10 +140,10 @@ export default function BuildToolsRack(props: { controller: BuildToolsController
 
     <div class="bt-ledger">
       <button class="bt-key bt-history bt-undo" disabled={locked() || !state().canUndo} onClick={() => props.controller.undo()} aria-label="Undo" aria-keyshortcuts="Control+Z Meta+Z">
-        {undoMark()}<span>Undo</span><kbd>{mod} Z</kbd>
+        {undoMark()}<span>Undo</span><Show when={!locked() && state().canUndo} fallback={<small class="bt-why">{why()}</small>}><kbd>{mod} Z</kbd></Show>
       </button>
       <button class="bt-key bt-history bt-redo" disabled={locked() || !state().canRedo} onClick={() => props.controller.redo()} aria-label="Redo" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y">
-        {redoMark()}<span>Redo</span><kbd>{mod} ⇧ Z</kbd>
+        {redoMark()}<span>Redo</span><Show when={!locked() && state().canRedo} fallback={<small class="bt-why">{why()}</small>}><kbd>{mod} ⇧ Z</kbd></Show>
       </button>
       <div class="bt-budget" role="meter" aria-label="Blocks used" aria-valuemin={0} aria-valuemax={state().budget} aria-valuenow={state().occupied}
         aria-valuetext={`${count.format(state().occupied)} of ${count.format(state().budget)} blocks`} classList={{ 'bt-budget-full': used() > .9 }}>

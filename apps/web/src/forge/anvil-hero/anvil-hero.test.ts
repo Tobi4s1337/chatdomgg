@@ -118,10 +118,24 @@ describe('createAnvilHero', () => {
     stage.geometry.addEventListener('dispose', () => disposed.push('stage geometry'));
     stage.material.addEventListener('dispose', () => disposed.push('stage material'));
     (uniforms.uAnvilCells!.value as THREE.Texture).addEventListener('dispose', () => disposed.push('occupancy texture'));
+    (uniforms.uAnvilRunes!.value as THREE.Texture).addEventListener('dispose', () => disposed.push('rune table'));
     hero.dispose();
     hero.dispose();
-    expect(disposed.sort()).toEqual(['occupancy texture', 'stage geometry', 'stage material']);
+    expect(disposed.sort()).toEqual(['occupancy texture', 'rune table', 'stage geometry', 'stage material']);
     expect(parent.children).not.toContain(hero.root);
     expect(caller.parent).toBe(hero.root);
+  });
+});
+
+describe('the README', () => {
+  it('states the mount and rune origin the factory actually returns', () => {
+    const readme = readFileSync(new URL('./README.md', import.meta.url), 'utf8');
+    const point = (name: string) => readme.match(new RegExp(`\`${name} = \\(([^)]+)\\)`))![1]!.split(',').map(Number);
+    const hero = createAnvilHero(new THREE.Group());
+    point('engravingMount.position').forEach((n, i) => expect(n).toBeCloseTo(hero.engravingMount.position.getComponent(i), 5));
+    point('runeOrigin').forEach((n, i) => expect(n).toBeCloseTo(hero.runeOrigin.getComponent(i), 5));
+    expect(readme).toContain(`\`scale = ${hero.engravingMount.scale}\``);
+    expect(readme).toContain(`'${hero.engravingMount.rotation.order}')`);
+    hero.dispose();
   });
 });

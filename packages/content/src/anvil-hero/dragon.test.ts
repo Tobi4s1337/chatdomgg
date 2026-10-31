@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { MAT, MATERIALS, type StyleKey } from '../materials';
+import { MAT, MATERIALS, STYLES, type StyleKey } from '../materials';
 import { createForgeMotif } from '../forge-motifs';
-import { createAnvilHeroDragon, DRAGON_EMITTER } from './index';
+import { ANVIL_HERO_DRAGON_SURFACE, createAnvilHeroDragon, DRAGON_EMITTER } from './index';
 
 const KITS: StyleKey[] = ['hearth', 'tide', 'grove'];
 type Grid = { at: (x: number, y: number, z: number) => number; solid: number; size: [number, number, number] };
@@ -88,5 +88,13 @@ describe('the sleeping dragon chimney', () => {
     expect(backs).not.toContain(MAT.terracotta);
     expect(backs).not.toContain(MAT.slate);
     expect(backs).not.toContain(MAT.thatch);
+  });
+
+  it.each(KITS)('%s names its broad back as the surface a Forge finish recolours, not its roof', style => {
+    const { at } = occupancy(style), surface = ANVIL_HERO_DRAGON_SURFACE[style], cells = new Map<number, number>();
+    for (let z = 0; z < 18; z++) for (let y = 0; y < 16; y++) for (let x = 0; x < 24; x++) if (at(x, y, z)) cells.set(at(x, y, z), (cells.get(at(x, y, z)) ?? 0) + 1);
+    expect(at(16, 2, 4)).toBe(surface);
+    expect(surface).not.toBe(STYLES[style].roof);
+    expect(Math.max(...cells.values())).toBe(cells.get(surface));
   });
 });

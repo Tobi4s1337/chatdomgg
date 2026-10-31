@@ -44,7 +44,7 @@ export function createRealmSpectatorSource(options: { kingdomId: KingdomId; fetc
       offForge = forgeFeed.bind(observer);
       await ready(observer, signal);
       signal.throwIfAborted();
-      return { scene, manifest, kingdomName: info.name, presenceFeed: createRoomPresenceFeed(observer, manifest.origin), chatFeed, forgeFeed, dispose };
+      return { scene, manifest, kingdomName: info.name, presenceFeed: createRoomPresenceFeed(observer, manifest.origin), walkerFeed: watch.walkerFeed, chatFeed, forgeFeed, dispose };
     } catch (error) { dispose(); throw error; }
   };
 }
