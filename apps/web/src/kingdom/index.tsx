@@ -4,6 +4,7 @@ import type { RealmFoundedScene } from '@chatdom/world';
 import type { PresenceFeed } from '@chatdom/shared';
 import type { RealmWalkerFeed } from '@chatdom/shared/realm';
 import type { RealmChatFeed } from '../realm/adapters/chat';
+import { realmEntryFailureMessage } from '../realm/adapters/entry';
 import type { RealmForgeFeed } from '../realm/adapters/forge-feed';
 import type { KingdomWalkBinding, WalkerLabel } from './walk-scene';
 import type { SpeechLabel } from './citizen-scene';
@@ -31,7 +32,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
   const [walkers,setWalkers]=createSignal<readonly WalkerLabel[]>([]),[walking,setWalking]=createSignal(false);
   const [momentCaptions,setMomentCaptions]=createSignal<readonly ScreenCaption[]>([]);
   let host!:HTMLDivElement;
-  const [source,setSource]=createSignal(props.presenceFeed?.label??(query.get('source')==='herald'?'CONNECTING':'SIMULATED')),[error,setError]=createSignal(false),[sound,setSound]=createSignal(false);
+  const [source,setSource]=createSignal(props.presenceFeed?.label??(query.get('source')==='herald'?'CONNECTING':'SIMULATED')),[error,setError]=createSignal<string|null>(null),[sound,setSound]=createSignal(false);
   const stream=location.pathname.endsWith('/stream')||location.pathname==='/stream';
   let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false,openingFrame=0;
   const [buildSession,setBuildSession]=createSignal<KingdomBuildSession|null>(null),[housewarming,setHousewarming]=createSignal<string|null>(null);
@@ -74,7 +75,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
     void createKingdomScene(canvas,{...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(realm==='hearth'||realm==='grove'?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
-      onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onMomentCaptions:setMomentCaptions,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
+      onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onMomentCaptions:setMomentCaptions,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:message=>{setError(message||'The kingdom renderer did not give a reason.');setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
       // OBS may allow autoplay; a browser that requires a gesture stays honestly locked until the retry.
@@ -92,10 +93,10 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
         setReady(true);testWindow.__chatdomReady=true;
       };
       openingFrame=requestAnimationFrame(showReady);
-      if(props.walk)void attachWalk(props.walk).catch(()=>{if(unmounted)return;setError(true);setReady(false);window.__chatdomReady=false;});
+      if(props.walk)void attachWalk(props.walk).catch(cause=>{if(unmounted)return;setError(`Could not start walking: ${realmEntryFailureMessage(cause)}`);setReady(false);window.__chatdomReady=false;});
       if(!props.founded&&query.get('build')==='1')void instance.build.enter();
       if(!props.founded&&query.get('forge')==='1')instance.forge.open();
-    }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(true);});
+    }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(`Could not draw the kingdom: ${realmEntryFailureMessage(cause)}`);});
   });
   onCleanup(()=>{unmounted=true;document.removeEventListener('keydown',unlockWithWalk);cancelAnimationFrame(openingFrame);construction.abort();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
   function tap(action:()=>void){if(!engine)return;if(!sound())unlockSound();action();}
@@ -130,7 +131,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     <Show when={!ready()||error()}><div class="kingdom-gate" role="status">
       <svg viewBox="0 0 80 80" aria-hidden="true"><path d="M17 70V25l12-12h22l12 12v45M26 70V31a14 14 0 0 1 28 0v39M12 70h56M31 13V7h6v6m6 0V7h6v6"/></svg>
       <h2>{error()?'The road needs a moment.':phase()}</h2>
-      <p>{error()?'The kingdom could not open. Try the gate again.':'A place is waiting for you.'}</p>
+      <p>{error()??'A place is waiting for you.'}</p>
       <Show when={!error()} fallback={<button onClick={()=>location.reload()}>Try the gate again</button>}><div class="gate-progress"><i style={{width:`${Math.round(progress()*100)}%`}} /></div></Show>
     </div></Show>
     <Show when={!stream&&forgeStatus()?.open}><ForgePanel status={forgeStatus()!} submit={words=>engine!.forge.submit(words)} close={()=>engine?.forge.close()} refit={()=>{void engine?.forge.refit();}} family={value=>{location.href=`/?tier=${tier}&hour=${hour()}&forge=1&realm=${value}`;}} /></Show>

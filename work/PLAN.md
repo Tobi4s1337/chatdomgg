@@ -343,13 +343,15 @@ and disables it on disposal. Real uWS/SDK delayed-open regression passes. Manage
 no test court: entry metadata, session, founded manifest/scene, ticket, matchmaking all200 JSON. Reload made
 `POST /live-realm-data/matchmake/reconnect/k:129634568`200 JSON; both sockets stayed at
 `/live-realm-data/<process>/k:129634568`, received room frames. No missing-prefix or parser failure reproduced
-after the realm fix. Firefox157 downloaded but cannot launch in this sandbox (namespace/profile failure).
+after the realm fix. Firefox157 also passed actual live session/ticket/matchmaking and received room frames.
+Its profile registry needs an isolated writable XDG_CONFIG_HOME. Headless Firefox has no usable WebGL here;
+a tiny Xvfb/llvmpipe probe provides WebGL2; the full serial Firefox walk uses that display.
 No existing user session/person was changed. Temporary diagnostic sessions must be revoked after the check.
 
 **Entry boundary:** the SDK now pins HTTP/reconnect/WS to the configured proxy origin and prefix, including a
 server-advertised public socket address. Session/metadata/manifest/ticket/matchmaking JSON reads reject HTML,
 plain text or malformed JSON with the actual step/path/status/type; the gate displays unexpected error reasons
-and SDK codes too. A real Chromium page given an intentionally injected200 HTML matchmaking reply displayed
+and SDK codes too. The inner renderer/walking gate now retains its actual failure reason as well. A real Chromium page given an intentionally injected200 HTML matchmaking reply displayed
 that exact route and expected-JSON reason, without a parser exception. This injected case is not the founder’s
 original failure. Return-path whitelist stays strict. Sign-in retries remove callback outcome metadata.
 
@@ -357,9 +359,12 @@ original failure. Return-path whitelist stays strict. Sign-in retries remove cal
 `http://localhost:5190/api/realm/auth/callback`; extra return params400. Callback route303s an invalid attempt
 to `/?signin=expired`. Tobias is registering the callback; actual Twitch consent remains his browser action.
 
-**Interactive evidence:** the single locked SwiftShader check writes
+**Interactive evidence:** the first locked SwiftShader check writes
 `shots/kingdom/live-entry/live-walk-report.json` and `live-walk@1440x900.png` beside it. Inspect the latest
-report/image for actual world drawing, keyboard movement and errors; network-only success does not prove those.
+report/image for actual world drawing. Its fixed2s motion test falsely reported zero because SwiftShader
+had not rendered another frame. The subsequent `chromium-walk-report.json` records trusted W input,
+authoritative z0→0.65503, predicted jump y9→9.83911, no page errors. Do not change accepted movement for
+SwiftShader timing. Firefox full walk is separate; network-only success does not prove its rendering.
 Preview5190/API5196/realm5197/Forge5195/Herald5194 are host-managed; do not change host config or other captures.
 
 **Adopted world:**129634568,settlement:2:43cffdb6,240 homes,v1 terrain,collision6,
