@@ -4,6 +4,7 @@ export * from './palette';
 export { compileEmote } from './compile';
 export { sha256Hex, sha256Text, createSha256 } from './sha256';
 export { composeStatueFrame, layoutEmoteStatue, STATUE_CLEARANCE_CELLS, type EmotePlinthMaterials, type EmoteStatueLayout } from './surfaces/statue';
+export { createEmoteHeraldry, type EmoteHeraldryGeometry } from './surfaces/heraldry';
 export { BANNER_CLEARANCE_CELLS, layoutEmoteBanner, type EmoteBannerLayout, type EmoteBannerMaterials } from './surfaces/banner';
 export { toadWaveFixture, paintToadWave, simulatedRasterHash, SIMULATED_KINGDOM, TOAD_WAVE_SIZE } from './fixtures/toad-wave';
 export { createEmoteImageDecoder, decodeEmoteBytes, decodeEmoteImage, sniffEmoteFormat, EmoteDecodeError, type EmoteDecodeFailureCode, type EmoteDecodeResult } from './decode/index';
@@ -20,3 +21,7 @@ export {
   type EmoteRefresherPorts, type EmoteSourceRecord, type ProviderCatalogueState, type ProviderHealth, type ThirdPartyProvider,
 } from './catalogue/refresh';
 export { toadWaveAnimatedFixture, toadWaveGifBytes, TOAD_WAVE_FRAMES } from './fixtures/toad-wave-animated';
+export { createEmoteCatalogueService, type EmoteAuthority, type EmoteCatalogueService, type EmoteCatalogueServicePorts, type EmoteGenesisFact, type EmoteKingdomPort, type EmoteMutationResult, type EmotePrivateCatalogue, type EmoteReviewPort, type EmoteServiceFailure, type EmoteServiceFailureCode } from './catalogue/service';
+export { createMemoryEmoteRepository, emptyEmoteState, EmoteRepositoryError, type EmoteApprovalBinding, type EmoteCandidateRecord, type EmoteCandidateState, type EmoteRepository, type EmoteRetireReason, type EmoteRevealRecord, type EmoteSelection, type EmoteStoredState } from './catalogue/repository';
+export { decodeCompiledEmote, encodeCompiledEmote } from './catalogue/compiled-codec';
+export { CONTACT_SHEET_LIMITS, encodePngRgb, renderContactSheets } from './catalogue/contact-sheet';

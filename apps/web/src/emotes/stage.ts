@@ -6,7 +6,7 @@ import { StyleIdSchema, VOXEL_METRES, VoxelBlueprintSchema, type VoxelAsset, typ
 import { assembleLook, findReviewLook, REST_POSE } from '@chatdom/content/avatars';
 import { createCitizen, type Citizen } from '../avatar-bench/stage';
 import { composeStatueFrame, layoutEmoteBanner, layoutEmoteStatue, sampleEmoteFrame, type CompiledEmote, type EmoteBannerLayout, type EmoteMask, type EmoteStatueLayout } from '../../../../packages/emotes/src/index';
-import type { BenchView } from './params';
+import type { WorkshopView } from './params';
 
 const CELL = VOXEL_METRES.build;
 /** The plaza disc: radius in build cells and the height of its paved top. */
@@ -23,14 +23,14 @@ const CITIZEN_YAW = .55;
 const HELD_TIME_MS = 4200;
 
 /** Camera directions in the composition's frame, and which props each view frames. */
-const VIEWS: Record<BenchView, { direction: THREE.Vector3; focus: readonly ('statue' | 'citizen' | 'banner' | 'lanterns')[]; fov: number }> = {
+const VIEWS: Record<WorkshopView, { direction: THREE.Vector3; focus: readonly ('statue' | 'citizen' | 'banner' | 'lanterns')[]; fov: number }> = {
   front: { direction: new THREE.Vector3(.16, .26, 1), focus: ['statue', 'citizen', 'lanterns'], fov: 30 },
   side: { direction: new THREE.Vector3(1, .26, .1), focus: ['statue', 'citizen'], fov: 30 },
   banner: { direction: new THREE.Vector3(-.3, .14, 1), focus: ['banner'], fov: 30 },
 };
 
 export interface EmoteStageReport {
-  readonly view: BenchView;
+  readonly view: WorkshopView;
   readonly hour: number;
   readonly statueRevision: string;
   readonly heraldryRevision: string;
@@ -56,7 +56,7 @@ export interface EmoteStageReport {
 }
 
 export interface EmoteStage {
-  setView(view: BenchView): void;
+  setView(view: WorkshopView): void;
   /** Plays from the current moment, or holds the frame on show. */
   setPlaying(playing: boolean): void;
   resize(): void;
@@ -68,7 +68,7 @@ export interface EmoteStage {
 }
 
 /** Deterministic integer hash for sett colours and motes; the plaza looks the same on every run. */
-function hash2(x: number, z: number): number {
+export function hash2(x: number, z: number): number {
   let h = Math.imul(x, 374761393) ^ Math.imul(z, 668265263);
   h = Math.imul(h ^ h >>> 13, 1274126177);
   return (h ^ h >>> 16) >>> 0;
@@ -107,8 +107,8 @@ function plazaAsset(): VoxelAsset {
  * glazed brass cage under a stepped cap. The flame inside is light, not voxels: a warm field cell
  * for the clay and a glow sprite for the eye.
  */
-const LANTERN_FLAME_CELLS = new THREE.Vector3(2.5, 18.5, 2.5);
-function lanternBlueprint(): VoxelBlueprint {
+export const LANTERN_FLAME_CELLS = new THREE.Vector3(2.5, 18.5, 2.5);
+export function lanternBlueprint(): VoxelBlueprint {
   const box = (from: [number, number, number], to: [number, number, number], material: number) => ({ from, to, material });
   const boxes = [
     box([0, 0, 0], [5, 2, 5], MAT.darkStone),
@@ -135,7 +135,7 @@ function frontMask(blueprint: VoxelBlueprint): EmoteMask {
 }
 
 /** A soft round glow: white core, warm falloff; tinted per use. */
-function glowTexture(): THREE.CanvasTexture {
+export function glowTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 128;
   const context = canvas.getContext('2d')!, gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -151,14 +151,14 @@ function glowTexture(): THREE.CanvasTexture {
 }
 
 /** World box of a local box under an object; mesh bounds from voxel chunks are chunk-coarse, so callers pass exact ones. */
-function worldBox(object: THREE.Object3D, local: THREE.Box3): THREE.Box3 {
+export function worldBox(object: THREE.Object3D, local: THREE.Box3): THREE.Box3 {
   object.updateWorldMatrix(true, false);
   return local.clone().applyMatrix4(object.matrixWorld);
 }
-const cellBox = (size: readonly number[]): THREE.Box3 => new THREE.Box3(new THREE.Vector3(), new THREE.Vector3(size[0]!, size[1]!, size[2]!).multiplyScalar(CELL));
+export const cellBox = (size: readonly number[]): THREE.Box3 => new THREE.Box3(new THREE.Vector3(), new THREE.Vector3(size[0]!, size[1]!, size[2]!).multiplyScalar(CELL));
 
 /** Distance at which every corner of the box fits inside `fill` of the frame along this direction. */
-function fitDistance(box: THREE.Box3, target: THREE.Vector3, direction: THREE.Vector3, vfov: number, hfov: number, fill: number): number {
+export function fitDistance(box: THREE.Box3, target: THREE.Vector3, direction: THREE.Vector3, vfov: number, hfov: number, fill: number): number {
   const forward = direction.clone().negate(), right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
   const up = new THREE.Vector3().crossVectors(right, forward);
   let distance = 0;
@@ -171,7 +171,7 @@ function fitDistance(box: THREE.Box3, target: THREE.Vector3, direction: THREE.Ve
 
 export interface EmoteStageInput {
   readonly host: HTMLElement;
-  readonly view: BenchView;
+  readonly view: WorkshopView;
   readonly hour: number;
   readonly statue: CompiledEmote;
   readonly heraldry: CompiledEmote;

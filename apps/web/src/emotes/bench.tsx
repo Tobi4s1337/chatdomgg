@@ -1,16 +1,17 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { MAT, MATERIALS } from '@chatdom/content';
 import { getEnvironment } from '@chatdom/render';
-import type { CompiledEmote, EmoteCompileStats, EmoteSource } from '../../../../packages/emotes/src/index';
-import type { BenchCompileReply, BenchCompileRequest } from './compile-worker';
-import { BENCH_VIEWS, parseEmoteBench, type BenchView } from './params';
+import type { CompiledEmote, EmoteSource } from '../../../../packages/emotes/src/index';
+import type { BenchCatalogue, BenchCompileReply, BenchCompileRequest } from './compile-worker';
+import { createKingdomEmoteStage, type KingdomEmoteStage, type KingdomEmoteStageReport } from './kingdom-stage';
+import { BENCH_VIEWS, parseEmoteBench, type BenchView, type WorkshopView } from './params';
 import { createEmoteStage, type EmoteStage, type EmoteStageReport } from './stage';
 import './style.css';
 
 declare global {
   interface Window {
     __chatdomReady?: boolean;
-    __chatdomEmotes?: EmoteStageReport & { source: { id: string; origin: string; sourceHash: string; rendition: string; bytes: number }; decodeMs: number; compileMs: number; flatFrames: number };
+    __chatdomEmotes?: (EmoteStageReport | KingdomEmoteStageReport) & { source: { id: string; origin: string; sourceHash: string; rendition: string; bytes: number }; decodeMs: number; compileMs: number; flatFrames: number };
     __chatdomEmotesError?: string;
   }
 }
@@ -24,7 +25,9 @@ const BENCH_PALETTE: readonly number[] = [
   MAT.fabricMutedGreen, MAT.goldLeaf, MAT.fabricGold, MAT.brass, MAT.terracotta, MAT.fabricRed, MAT.petal, MAT.hairBlack, MAT.slate, MAT.timber, MAT.bark,
 ];
 const PALETTE_REVISION = 1;
-const VIEW_LABELS: Record<BenchView, string> = { front: 'Front', side: 'Side', banner: 'Banner' };
+const VIEW_LABELS: Record<BenchView, string> = { kingdom: 'Square', front: 'Front', side: 'Side', banner: 'Banner' };
+const WORKSHOP_VIEWS = BENCH_VIEWS.filter((v): v is WorkshopView => v !== 'kingdom');
+const isKingdom = (view: BenchView): view is 'kingdom' => view === 'kingdom';
 const material = (id: number) => MATERIALS.materials.find(m => m.id === id);
 const metres = (cells: number) => `${(cells * .125).toFixed(2)} m`;
 
@@ -32,8 +35,10 @@ interface Compiled {
   source: EmoteSource;
   bytes: number;
   statue: CompiledEmote;
-  stats: EmoteCompileStats;
+  /** Kingdom materials the approved statue uses, in registry order. */
+  materials: readonly number[];
   heraldry: CompiledEmote;
+  catalogue: BenchCatalogue;
   decodeMs: number;
   compileMs: number;
 }
@@ -55,7 +60,7 @@ function compileInWorker(signal: AbortSignal): Promise<{ compiled: Compiled; fra
         image: new ImageData(new Uint8ClampedArray(frame.rgba.buffer as ArrayBuffer, frame.rgba.byteOffset, frame.rgba.byteLength), width, height),
         durationMs: frame.durationMs,
       }));
-      resolve({ compiled: { source: reply.source, bytes: reply.bytes, statue: reply.statue, stats: reply.statueStats, heraldry: reply.heraldry, decodeMs: reply.decodeMs, compileMs: reply.compileMs }, frames });
+      resolve({ compiled: { source: reply.source, bytes: reply.bytes, statue: reply.statue, materials: reply.statueMaterials, heraldry: reply.heraldry, catalogue: reply.catalogue, decodeMs: reply.decodeMs, compileMs: reply.compileMs }, frames });
     };
     worker.postMessage({ palette: BENCH_PALETTE, paletteRevision: PALETTE_REVISION } satisfies BenchCompileRequest);
   });
@@ -93,7 +98,7 @@ export default function EmoteBench() {
   const [shown, setShown] = createSignal(heldFrame ?? 0);
   const [playing, setPlaying] = createSignal(heldFrame === null);
   const controller = new AbortController();
-  let stage: EmoteStage | null = null, disposed = false;
+  let stage: EmoteStage | KingdomEmoteStage | null = null, disposed = false, mounting = 0;
 
   const publish = (ready: boolean) => {
     const c = compiled();
@@ -105,13 +110,41 @@ export default function EmoteBench() {
     }
     window.__chatdomReady = ready;
   };
+  /** The square and the workshop plaza are different stages; moving between them rebuilds the scene. */
+  const mount = async (next: BenchView, c: Compiled) => {
+    const ticket = ++mounting;
+    window.__chatdomReady = false;
+    stage?.dispose(); stage = null;
+    setStatus(isKingdom(next) ? 'Raising the statue in the square…' : 'Setting the statue on its plinth…');
+    const alive = () => disposed || ticket !== mounting;
+    const common = { host, hour: initial.hour, statue: c.statue, heraldry: c.heraldry, frame: playing() ? null : shown(), isDisposed: alive };
+    const made = isKingdom(next) ? await createKingdomEmoteStage(common) : await createEmoteStage({ ...common, view: next });
+    if (!made || alive()) { made?.dispose(); return; }
+    stage = made;
+    host.querySelector('canvas')?.setAttribute('aria-label', isKingdom(next)
+      ? 'The SIMULATED toadWave statue waving in a lit town square at dusk, its standards in the wind'
+      : `The SIMULATED toadWave statue waving in the plaza, ${next} view`);
+    stage.onFrame(setShown);
+    setStatus('');
+    publish(true);
+  };
   const choose = (next: BenchView) => {
     if (next === view()) return;
+    const crossing = isKingdom(next) !== isKingdom(view());
     setView(next);
-    if (!stage) return;
+    const c = compiled();
+    if (!stage || !c) return;
+    if (crossing) { void mount(next, c).catch(fail); return; }
     window.__chatdomReady = false;
-    stage.setView(next);
+    if (!isKingdom(next)) (stage as EmoteStage).setView(next);
     publish(true);
+  };
+  const fail = (error: unknown) => {
+    if (disposed) return;
+    const message = error instanceof Error ? error.message : String(error);
+    window.__chatdomEmotesError = message;
+    setStatus(message); setFailed(true);
+    console.error(message);
   };
   const toggle = () => { const next = !playing(); setPlaying(next); stage?.setPlaying(next); };
   const onResize = () => { if (!stage) return; window.__chatdomReady = false; stage.resize(); publish(true); };
@@ -123,21 +156,9 @@ export default function EmoteBench() {
       const result = await compileInWorker(controller.signal);
       if (disposed) return;
       setCompiled(result.compiled); setFrames(result.frames);
-      setStatus('Setting the statue on its plinth…');
-      stage = await createEmoteStage({ host, view: view(), hour: initial.hour, statue: result.compiled.statue, heraldry: result.compiled.heraldry, frame: heldFrame, isDisposed: () => disposed });
-      if (!stage || disposed) return;
-      host.querySelector('canvas')?.setAttribute('aria-label', `The SIMULATED toadWave statue waving in the plaza, ${view()} view`);
-      stage.onFrame(setShown);
       window.addEventListener('resize', onResize);
-      setStatus('');
-      publish(true);
-    })().catch(error => {
-      if (disposed) return;
-      const message = error instanceof Error ? error.message : String(error);
-      window.__chatdomEmotesError = message;
-      setStatus(message); setFailed(true);
-      console.error(message);
-    });
+      await mount(view(), result.compiled);
+    })().catch(fail);
   });
   onCleanup(() => {
     disposed = true; controller.abort();
@@ -148,20 +169,32 @@ export default function EmoteBench() {
 
   const size = () => compiled()?.statue.frames[0]!.blueprint.size;
   const current = () => frames()[shown()];
-  return <section class="emote-bench" style={{ background: `radial-gradient(ellipse at 38% 68%, #ffb86a26, transparent 58%), linear-gradient(180deg, ${grade.zenith} 0%, ${grade.horizon} 74%, ${grade.fog} 100%)` }}>
+  const viewButtons = (options: readonly BenchView[]) => <>
+    <For each={options}>{option =>
+      <button type="button" aria-pressed={view() === option} onClick={() => choose(option)}>{VIEW_LABELS[option]}</button>}
+    </For>
+    <button type="button" class="play" aria-pressed={playing()} aria-label={playing() ? 'Hold the wave' : 'Play the wave'} onClick={toggle}>{playing() ? 'Hold' : 'Play'}</button>
+  </>;
+  return <section class="emote-bench" classList={{ 'is-kingdom': isKingdom(view()) }} style={{ background: `radial-gradient(ellipse at 38% 68%, #ffb86a26, transparent 58%), linear-gradient(180deg, ${grade.zenith} 0%, ${grade.horizon} 74%, ${grade.fog} 100%)` }}>
     <div class="emote-bench-stage" ref={element => { host = element; }} />
     <header class="emote-bench-title">
-      <span>CHATDOM · EMOTE WORKSHOP</span>
-      <strong>toadWave, carved and waving</strong>
+      <span>{isKingdom(view()) ? 'CHATDOM · THE SQUARE AT DUSK' : 'CHATDOM · EMOTE WORKSHOP'}</span>
+      <strong>{isKingdom(view()) ? 'toadWave, raised in the square' : 'toadWave, carved and waving'}</strong>
     </header>
     <small class="simulated" title="Original bench art drawn for this workshop, not a channel’s emote">SIMULATED</small>
-    <aside class="emote-plaque" aria-label="Sculptor’s card">
-      <div class="emote-plaque-views" role="group" aria-label="Look at the statue from">
-        <For each={BENCH_VIEWS}>{option =>
-          <button type="button" aria-pressed={view() === option} onClick={() => choose(option)}>{VIEW_LABELS[option]}</button>}
-        </For>
-        <button type="button" class="play" aria-pressed={playing()} aria-label={playing() ? 'Hold the wave' : 'Play the wave'} onClick={toggle}>{playing() ? 'Hold' : 'Play'}</button>
-      </div>
+    <Show when={isKingdom(view())}>
+      {/* The square's card stays small so the world leads; the catalogue status joins it here. */}
+      <aside class="emote-kingdom-card" aria-label="The statue’s card">
+        <div class="emote-kingdom-views" role="group" aria-label="Look at the statue from">{viewButtons(BENCH_VIEWS)}</div>
+        <Show when={compiled()}>{c => <dl class="emote-kingdom-facts">
+          <div><dt>Statue</dt><dd>{metres(size()![1])} · {c().statue.frames.length} frames · {(c().statue.periodMs / 1000).toFixed(2)} s</dd></div>
+          <div><dt>Source</dt><dd>GIF · {c().bytes.toLocaleString('en')} bytes · <code>{c().source.sourceHash.slice(0, 10)}</code></dd></div>
+        </dl>}</Show>
+        <div class="emote-kingdom-catalogue" data-slot="catalogue-status" />
+      </aside>
+    </Show>
+    <Show when={!isKingdom(view())}><aside class="emote-plaque" aria-label="Sculptor’s card">
+      <div class="emote-plaque-views" role="group" aria-label="Look at the statue from">{viewButtons(['kingdom', ...WORKSHOP_VIEWS])}</div>
       <Show when={compiled()} fallback={<p class="emote-plaque-wait">The sculptor is at work.</p>}>{c => <>
         <div class="emote-plaque-flat">
           <Show when={current()}>{frame => <>
@@ -189,7 +222,7 @@ export default function EmoteBench() {
         <div class="emote-plaque-palette">
           <span>Kingdom stone and cloth it uses</span>
           <ul>
-            <For each={c().stats.materials}>{id => {
+            <For each={c().materials}>{id => {
               const m = material(id);
               return <li title={m?.name}><i style={{ background: m?.colour }} /><span>{m?.name.replace(/([A-Z])/g, ' $1').toLowerCase()}</span></li>;
             }}</For>
@@ -200,7 +233,7 @@ export default function EmoteBench() {
           <p>No Twitch reader is bound to this workshop, so it carves its own bench art. 7TV, BetterTTV and FrankerFaceZ stay off until the monarch opts in.</p>
         </div>
       </>}</Show>
-    </aside>
+    </aside></Show>
     <Show when={status()}>
       <div class="emote-bench-status" role={failed() ? 'alert' : 'status'}>
         <strong>{failed() ? 'The statue could not be carved' : 'At the sculptor’s bench'}</strong>

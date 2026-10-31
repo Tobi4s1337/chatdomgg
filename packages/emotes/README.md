@@ -199,8 +199,73 @@ On 2026-10-31:
 
 - Register the package in the workspace lockfile (see below).
 - Bind the server transport with the Herald's app token as `helixHeaders`.
-- Back the blob store and snapshots with durable storage.
-- Schedule refreshes at Genesis and on catalogue change.
+- Back `EmoteRepository` and `EmoteBlobStore` with durable storage.
+- Bind `EmoteReviewPort` to Luna, `EmoteAuthority` to the monarch session and `EmoteKingdomPort` to
+  the kingdom record (channel ID, sculpting palette and its revision).
+- Call `refresh` at Genesis, go-live and daily; feed `onStreamState` from the authoritative stream
+  state; drain `pendingReveals` into the world and acknowledge after the commit.
+- Give the kingdom scene `publicCatalogue(kingdomId).resolveApprovedEmote(id, 'statue')` and the
+  banner/crest owner `createEmoteHeraldry`; give Genesis `genesisFacts`.
+
+## Approval and publication (`createEmoteCatalogueService`)
+
+`createEmoteCatalogueService(ports)` owns the lifecycle from channel to plaza. Its ports are the
+capabilities: `repository` (`load` plus atomic `compareAndSwap`), `blobs` (content-addressed), the
+authorized `transport`, `decoder`, `review` (Luna), `authority` (`requireMonarch` from the server's
+session), `kingdom` (`channelId` and the explicit sculpting `palette` with its revision) and `origin`
+(`simulated` for rehearsals; it travels with every source, candidate and reveal).
+
+One statue, step by step:
+1. `refresh({kingdomId, reason, atMs})` runs the refresher and reconciles. A different channel ID
+   never inherits the previous channel's entries, even through an outage.
+2. `selectCandidate({kingdomId, id, purpose, revision}, session)`: the monarch chooses a source.
+   `revision` is the **source hash** they were shown, so a source that changed meanwhile is `stale`.
+   For a third-party emote this is also the per-emote opt-in. It publishes nothing.
+3. `prepareCandidate({kingdomId, id, purpose, atMs})` (server worker): decodes the verified source
+   blob, carves it in the kingdom palette and stores the compiled geometry content-addressed. The
+   candidate record keeps that blob hash, so the bytes reviewed are the bytes later served.
+4. `reviewCandidate({kingdomId, id, purpose, revision, requestId})` (server worker, never a public
+   route): renders `renderContactSheets` (front and side of **every** frame, depth-shaded, with a
+   1.75 m person marker; PNG, at most 16 sheets of 2048²) and asks Luna. Approval counts only when
+   `reviewedGeometryHash` equals the stored geometry hash. Hold, cold and refuse stay private.
+   Repeating a `requestId` returns the recorded verdict.
+5. `confirmStatue({kingdomId, id, revision}, session)` (or `confirmCandidate` with a purpose): the
+   monarch confirms that exact carving. Heraldry needs the same two gates as a statue.
+6. `onStreamState({kingdomId, live, epoch, atMs})` comes from the host's authoritative stream state,
+   never a browser. Going live publishes every confirmed carving once per epoch; confirming while
+   live publishes at once. A newer revision retires the one it replaces.
+7. `pendingReveals(kingdomId)` lists statue reveals not yet acknowledged; it survives restarts and
+   replays until the host calls `acknowledgeReveal({kingdomId, revealId})` after its world commit
+   (idempotent). Heraldry is raised quietly with the statues and has no reveal of its own.
+
+**Approval binding.** A candidate binds source hash, geometry hash, compiler version, palette
+revision, purpose and target height. A changed source, an observed removal, a provider switched off,
+a new palette revision or a new compiler retires it (`source-changed`, `source-removed`,
+`provider-withdrawn`, `palette-changed`, `compiler-changed`); a provider outage does not, so known
+safe statues stay up while Twitch is unreachable. Retiring is quiet: it is a state, never a spectacle,
+and tombstones keep provenance (at most 256).
+
+**Projections.** `publicCatalogue(kingdomId)` returns an `EmoteCatalogueView`. `resolveApprovedEmote`
+serves only published carvings whose binding still holds, loaded from verified blobs and re-checked
+(revision, geometry hash, common frame grid). `resolveInlineEmote` serves Twitch's flat rendition as
+verified bytes (never a URL); a third-party flat needs its own reviewed receipt and resolves to null
+for now. `privateCandidates(kingdomId, session)` is the monarch's plaque. `genesisFacts(kingdomId)`
+returns `ChannelGenesisFacts.approvedEmotes` entries (geometry hash plus Luna receipt) for published
+statues. Compiled visuals and inline bytes sit in caches bounded by entries and bytes.
+
+Every mutation returns `{status: 'applied', revision}` only after its compare-and-swap commits, or
+`{status: 'failed', code}` with `unavailable`, `stale`, `forbidden`, `not-found` or `invalid`. A CAS
+conflict reloads and re-evaluates (four attempts).
+
+**Stored state** (`EmoteStoredState`) is plain JSON: provider opt-ins, the catalogue snapshot,
+selections, candidates with their review receipts, monarch confirmations, publications and
+tombstones, reveals with acknowledgements, the last stream state and refresh time. No bytes: source
+and compiled blobs are referenced by SHA-256. `createMemoryEmoteRepository` copies through JSON,
+is bounded by kingdoms and bytes, and is for tests and the workshop only.
+
+**Heraldry.** `createEmoteHeraldry(visual, kingdomId)` accepts only a visual approved for
+`heraldry`, takes the first frame explicitly and returns the charge geometry, its back-centre mount,
+its front silhouette for appliqué and provenance. It is a charge to compose, not a finished crest.
 
 ## Workspace link
 

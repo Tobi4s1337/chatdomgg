@@ -44,7 +44,7 @@
 }
 .emote-plaque p { margin: 0; }
 
-.emote-plaque-views { display: grid; grid-template-columns: repeat(3, 1fr) .9fr; gap: 6px; }
+.emote-plaque-views { display: grid; grid-template-columns: repeat(4, 1fr) .9fr; gap: 5px; }
 .emote-plaque-views button.play { font-family: 'IM Fell English SC', Georgia, serif; font-size: 14px; letter-spacing: .06em; }
 .emote-plaque-views button {
   min-height: 40px; padding: 6px 4px; font: 15px/1 'IM Fell English', Georgia, serif; color: var(--em-cream); cursor: pointer;
@@ -109,6 +109,38 @@
 .emote-bench-status strong { font: 18px/1.2 'IM Fell English', Georgia, serif; font-weight: 400; }
 .emote-bench-status p { margin: 8px 0 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
 
+/* The square: the world fills the frame; a compact title, the chip and one small card at the corner. */
+.emote-bench.is-kingdom { --em-plaque: 0px; }
+.emote-bench.is-kingdom .emote-bench-stage { inset: 0; }
+.emote-bench.is-kingdom .emote-bench-title { left: 22px; top: 18px; padding: 8px 14px 9px; border-radius: 8px; background: linear-gradient(180deg, #1d1428a8, #1d142866); box-shadow: inset 0 0 0 1px #f4dc9d26; }
+.emote-bench.is-kingdom .emote-bench-title span { font-size: 11px; color: #f4dc9d; }
+.emote-bench.is-kingdom .emote-bench-title strong { font-size: 24px; }
+.emote-bench.is-kingdom .simulated { left: 22px; bottom: 18px; }
+.emote-kingdom-card {
+  position: absolute; right: 22px; bottom: 18px; width: 300px; padding: 9px; display: flex; flex-direction: column; gap: 7px;
+  border: 1px solid var(--em-wood-edge); border-radius: 11px;
+  background: repeating-linear-gradient(93deg, #ffdcae08 0 2px, transparent 2px 9px, #1a0c0410 9px 10px, transparent 10px 17px), linear-gradient(176deg, #7d5538e6, #5b3b27e6 40%, #3d2718e6);
+  box-shadow: inset 0 1px 0 #ffe1b440, inset 0 -2px 0 #0000004d, 0 0 0 1px #c99f5b33, 0 14px 30px #0c0a1c66;
+}
+.emote-kingdom-views { display: grid; grid-template-columns: repeat(4, 1fr) .9fr; gap: 4px; }
+.emote-kingdom-views button {
+  min-height: 32px; padding: 4px 2px; font: 13px/1 'IM Fell English', Georgia, serif; color: var(--em-cream); cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; border: 1px solid var(--em-wood-edge); border-radius: 6px;
+  background: linear-gradient(180deg, #84593b, #684430); box-shadow: inset 0 1px 0 #ffe1b44d, 0 2px 0 var(--em-wood-edge);
+}
+.emote-kingdom-views button.play { font-family: 'IM Fell English SC', Georgia, serif; letter-spacing: .05em; }
+.emote-kingdom-views button[aria-pressed='true'] { color: var(--em-ink); transform: translateY(1px); background: linear-gradient(180deg, var(--em-brass-hi), var(--em-brass) 60%, #a77f43); box-shadow: inset 0 1px 0 #fff6d6, 0 1px 0 var(--em-wood-edge); }
+.emote-kingdom-views button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--em-parch), 0 0 0 4px var(--em-seal); }
+.emote-kingdom-facts {
+  margin: 0; padding: 6px 9px; display: grid; gap: 3px; color: var(--em-ink); border-radius: 4px;
+  background: linear-gradient(170deg, var(--em-parch), var(--em-parch-lo)); box-shadow: inset 0 0 0 1px #ffffff55, 0 2px 0 #0000005c;
+}
+.emote-kingdom-facts div { display: grid; grid-template-columns: 52px 1fr; gap: 6px; align-items: baseline; }
+.emote-kingdom-facts dt { font: 11px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .08em; color: var(--em-ink-soft); }
+.emote-kingdom-facts dd { margin: 0; font-size: 13px; line-height: 1.25; overflow-wrap: anywhere; }
+.emote-kingdom-facts code { font: 11px/1.2 ui-monospace, monospace; color: #5a4430; }
+.emote-kingdom-catalogue:empty { display: none; }
+
 @media (prefers-reduced-motion: reduce) { .emote-plaque-views button, .emote-plaque-frames li { transition: none; } }
 
 /* Phones: the plaza fills the top, the card becomes a sheet below it. */
@@ -124,4 +156,10 @@
   .emote-plaque-views button { min-height: 44px; }
   .emote-plaque-flat { padding: 8px 10px; gap: 10px; }
   .emote-bench-status { left: 50%; top: 28%; }
+  .emote-bench.is-kingdom .emote-bench-stage { inset: 0; height: auto; }
+  .emote-bench.is-kingdom .emote-bench-title { left: 10px; right: auto; top: 10px; padding: 6px 10px 7px; }
+  .emote-bench.is-kingdom .emote-bench-title strong { font-size: 19px; }
+  .emote-bench.is-kingdom .simulated { left: auto; right: 12px; top: 14px; bottom: auto; }
+  .emote-kingdom-card { left: 10px; right: 10px; bottom: 10px; width: auto; }
+  .emote-kingdom-views button { min-height: 44px; font-size: 14px; }
 }

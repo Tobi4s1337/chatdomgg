@@ -1,6 +1,9 @@
 /** What a bench URL asks for. Every capture passes these explicitly so shots compare run to run. */
-export const BENCH_VIEWS = ['front', 'side', 'banner'] as const;
+/** `kingdom` raises the approved statue and standards in a lit town square; the rest are the workshop's close views. */
+export const BENCH_VIEWS = ['kingdom', 'front', 'side', 'banner'] as const;
 export type BenchView = typeof BENCH_VIEWS[number];
+/** The workshop's close views of the statue and banner on the bench plaza. */
+export type WorkshopView = Exclude<BenchView, 'kingdom'>;
 
 export interface EmoteBenchState {
   readonly view: BenchView;
