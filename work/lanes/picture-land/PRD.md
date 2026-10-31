@@ -8,7 +8,7 @@ Every visual fix uses a before/after capture of the same view, shown side by sid
 
 ## Tasks
 
-- [ ] **PL01 — See the land early.** Build a self-contained fixture using an explicit candidate height stand-in and render a composed low street view with layered ridges, exposed rock and climbing ground. Capture and inspect a 1920×1080 still; record its path and weaknesses. No main wiring required.
+- [x] **PL01 — See the land early.** Build a self-contained fixture using an explicit candidate height stand-in and render a composed low street view with layered ridges, exposed rock and climbing ground. Capture and inspect a 1920×1080 still; record its path and weaknesses. No main wiring required.
 - [ ] **PL02 — Make the producer respect the town.** Consume the existing immutable plan and caller-supplied authoritative/public-ground queries; implement the proposed bounded deterministic height and material sampler, protecting accepted roads, homes, reservations and water. Test determinism, finite values, preservation and immutability. Share the exact producer seam with main.
 - [ ] **PL03 — Finish the picture and hand it across.** Refine cliff ledges, irregular earth trails and terraces in the fixture through looked-at iterations. Run spec acceptance checks; record screenshot paths and remaining weaknesses. Supply main the producer API and fixture evidence. Main adopts a new revision only when rendering and collision/contact share the authority, then captures and inspects one actual integrated 1920×1080 stream still. Until that happens, state `needs: main authority/adoption and integrated still`.
 
