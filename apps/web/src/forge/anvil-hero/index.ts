@@ -3,15 +3,20 @@ import { MATERIALS } from '@chatdom/content';
 import { geometryFromChunks, getEnvironment, type Environment } from '@chatdom/render';
 import { executeVoxelJob } from '@chatdom/voxel';
 import { createAnvilMaterial } from './material';
-import { CHEEK_Z, GRID_MIN, H, MARK_WINDOW, sculptAnvilStage, Y_OFFSET } from './sculpt';
+import { MARK_CENTRE } from './runes';
+import { GRID_MIN, H, sculptAnvilStage, Y_OFFSET } from './sculpt';
 
 /** The engraving's SVG units to metres, and its plate's front bevel, from engraving/index.ts. */
 const ENGRAVING_UNIT = .32 / 24;
 const ENGRAVING_FRONT_BEVEL = .13;
 /** Uniform scale for the unchanged engraving root: the cloud is about 0.24 m across. */
 export const MARK_SCALE = .9;
-/** The plate's face stands this far proud of the cheek: no coplanar faces, no visible step. */
-const PLATE_PROUD = .0005;
+/**
+ * The plate's face sits this far behind the cheek, inside the window cut for it. The cheek's own edge
+ * frames the plate and hides its bevelled rim, so no seam outlines the mark; half a millimetre is too
+ * little to see as a step and enough to keep the two planes from fighting.
+ */
+const PLATE_SET_BACK = .0005;
 
 export interface AnvilHero {
   root: THREE.Group;
@@ -44,7 +49,7 @@ export function createAnvilHero(parent: THREE.Object3D): AnvilHero {
   }
   geometry.boundingBox = bounds;
   geometry.boundingSphere = bounds.getBoundingSphere(new THREE.Sphere());
-  const material = createAnvilMaterial();
+  const material = createAnvilMaterial(sculpt);
   material.state.setEnvironment(getEnvironment(19));
 
   const root = new THREE.Group();
@@ -55,13 +60,9 @@ export function createAnvilHero(parent: THREE.Object3D): AnvilHero {
   root.add(stage);
   parent.add(root);
 
-  const centre = new THREE.Vector3(
-    (MARK_WINDOW.x[0] + MARK_WINDOW.x[1]) / 2 * H,
-    (MARK_WINDOW.rows[0] + MARK_WINDOW.rows[1]) / 2 * H + Y_OFFSET,
-    CHEEK_Z * H,
-  );
+  const centre = MARK_CENTRE.clone();
   const engravingMount = {
-    position: centre.clone().setZ(centre.z + PLATE_PROUD - ENGRAVING_FRONT_BEVEL * ENGRAVING_UNIT * MARK_SCALE),
+    position: centre.clone().setZ(centre.z - PLATE_SET_BACK - ENGRAVING_FRONT_BEVEL * ENGRAVING_UNIT * MARK_SCALE),
     rotation: new THREE.Euler(0, 0, 0, 'YXZ'),
     scale: MARK_SCALE,
   };
