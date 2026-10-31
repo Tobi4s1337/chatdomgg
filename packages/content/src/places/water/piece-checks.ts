@@ -26,7 +26,7 @@ export function unsupported(b: VoxelBlueprint, seeds?: readonly Vec3[]): number 
   const seen = new Uint8Array(asset.voxels.length), queue: number[] = [];
   let occupied = 0;
   const seed = (i: number) => { if (asset.voxels[i] && !seen[i]) { seen[i] = 1; queue.push(i); } };
-  asset.voxels.forEach((m, i) => { if (m) occupied++; });
+  for (const m of asset.voxels) if (m) occupied++;
   if (seeds) for (const [x, y, z] of seeds) seed(x + sx * (y + sy * z));
   else asset.voxels.forEach((_, i) => { if (Math.floor(i / sx) % sy === 0) seed(i); });
   const [, , sz] = asset.size;

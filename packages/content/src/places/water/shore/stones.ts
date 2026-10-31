@@ -170,10 +170,11 @@ export function createPebbles(style: StyleKey, variant: number): WaterPiece {
   });
 
   layout.weeds.forEach(([x, z], w) => {
-    // A moss root and three waving blades of waterweed, the tallest four cells with a mossy tip.
+    // A moss root and three waving blades of waterweed, the tallest four cells: weed, not stone, so it may stand
+    // over the stones' three-cell limit while staying under the half metre of water the shoal asks for.
     b.add(x, 0, z, x + 2, 1, z + 1, MAT.moss);
     const lean = hash(variant, w, 50) < 0.5 ? -1 : 1;
-    blade(b, x, z, 'x', -1.6 * lean, 4, y => y >= 3 ? MAT.moss : MAT.leaf);
+    blade(b, x, z, 'x', -1.6 * lean, 4, () => MAT.leaf);
     blade(b, x + 1, z, 'z', 1.4 * lean, 3, () => MAT.leaf);
     blade(b, x + 1, z, 'x', 1.2 * lean, 3, () => MAT.leaf);
   });
@@ -213,7 +214,7 @@ interface RockLayout {
  */
 const ROCK_LAYOUTS: readonly RockLayout[] = [
   {
-    size: [30, 28], body: { cx: 15.5, cz: 13, rx: 11.5, rz: 10.5, power: 2.6 }, slab: { cx: 15.5, cz: 15, rx: 10, rz: 9.5, power: 3 },
+    size: [30, 28], body: { cx: 15.5, cz: 13, rx: 11.5, rz: 10.5, power: 2.6 }, slab: { cx: 15.5, cz: 15, rx: 10, rz: 9.5, power: 2.6 },
     rise: 4, beds: [3, 4, 3], tilt: { axis: 'z', at: 19, jog: 1 }, shade: 'west',
     companions: [{ disc: { cx: 4.5, cz: 8, rx: 4, rz: 3.5, power: 2.2 }, above: 2, lean: [0.35, 0] }],
     crack: { x: 13, z: 9, axis: 'x', length: 7 },
@@ -436,7 +437,7 @@ const STEP_LAYOUTS: readonly (readonly Step[])[] = [
     { rx: 2.5, rz: 2.3, power: 3.3, rise: 1, dx: 1, gap: 1 }, { rx: 2.6, rz: 2.5, power: 3.1, rise: 2, dx: 2, gap: 1 },
   ],
   [
-    { rx: 2.8, rz: 2.6, power: 3, rise: 2, dx: 0, gap: 2 }, { rx: 2.6, rz: 2.8, power: 3.3, rise: 1, dx: -2, gap: 2 },
+    { rx: 2.8, rz: 2.6, power: 3, rise: 2, dx: 0, gap: 1 }, { rx: 2.6, rz: 2.8, power: 3.3, rise: 1, dx: -2, gap: 2 },
     { rx: 2.8, rz: 2.7, power: 2.9, rise: 2, dx: -3, gap: 1 }, { rx: 2.7, rz: 2.8, power: 3.2, rise: 2, dx: -1.5, gap: 1 },
   ],
 ];

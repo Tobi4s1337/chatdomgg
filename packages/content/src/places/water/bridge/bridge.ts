@@ -39,7 +39,6 @@ const NEWEL = 4;
 const DIE_HALF = 7;
 const SHIELD_W = CIVIC_SHIELD[0]!.length;
 const SHIELD_H = CIVIC_SHIELD.length;
-const LANTERN = 7;
 const HEADROOM = 16;
 
 export const BRIDGE = {

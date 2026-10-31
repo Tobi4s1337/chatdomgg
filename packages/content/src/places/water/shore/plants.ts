@@ -95,10 +95,13 @@ export function createReeds(style: StyleKey, variant: number): WaterPiece {
   checkVariant('reeds', variant);
   const layout = REED_LAYOUTS[variant]!, size = layout.size, b = new Boxes();
   const collar = style === 'grove' ? MAT.moss : MAT.earth;
-  layout.fans.forEach((fan, f) => {
-    // A low muddy collar with cut corners, then the sheathed crown the blades rise from.
+  // Low muddy collars with cut corners go down first, so a neighbour's collar never buries another fan's crown.
+  for (const fan of layout.fans) {
     b.add(fan.x - 1, 0, fan.z, fan.x + 3, 1, fan.z + 2, collar);
     b.add(fan.x, 0, fan.z - 1, fan.x + 2, 1, fan.z + 3, collar);
+  }
+  layout.fans.forEach((fan, f) => {
+    // The sheathed crown the blades rise from.
     b.add(fan.x, 0, fan.z, fan.x + 2, 2, fan.z + 2, MAT.leaf);
     FAN_BLADES[fan.blades].forEach(([lean, drop], i) => {
       const seed = [variant, f, i] as const;
@@ -106,10 +109,10 @@ export function createReeds(style: StyleKey, variant: number): WaterPiece {
       const height = fan.height - drop - (hash(...seed, 1) < 0.3 && drop ? 1 : 0);
       const along = outward < 0 ? 0 : 1, across = i % 2;
       const [x, z] = fan.axis === 'x' ? [fan.x + along, fan.z + across] : [fan.x + across, fan.z + along];
-      // The second fan's inward blade is last year's stem, straw from root to tip.
+      // The second fan's inward blade is last year's stem, straw from its green sheath to the tip.
       const dead = f === 1 && i === 0;
       const tip = hash(...seed, 2) < DRYNESS[style] ? height - 2 - (hash(...seed, 3) < 0.5 ? 1 : 0) : height;
-      const end = blade(b, x, z, fan.axis, outward, height, y => dead || y >= tip ? MAT.thatch : MAT.leaf);
+      const end = blade(b, x, z, fan.axis, outward, height, y => (dead && y >= 2) || y >= tip ? MAT.thatch : MAT.leaf);
       if (i === fan.blades - 1) {
         // The outermost blade folds over: two cells further out along the top course, then two cells down.
         const s = fan.out, top = height - 1;
