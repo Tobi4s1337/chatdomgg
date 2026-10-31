@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./genesis": "./src/genesis/index.ts",
     "./movement": "./src/movement/step.ts",
     "./realm-reference": "./src/realm/reference.ts",
     "./realm": "./src/realm/reducer.ts",
