@@ -9,12 +9,15 @@ import { pieceRole, planViews, type GroundBlocker, type GroundDressingInput, typ
 type Level = 1 | 2 | 4;
 /** [level, near, far] in metres, landscape then portrait (R4 bands; the last level of each family is its far cut). */
 type Bands = readonly (readonly [Level, number, number, number, number])[];
-const BANDS: Record<'tufts' | 'clover' | 'flowers' | 'solid', Bands> = {
+const BANDS: Record<'tufts' | 'clover' | 'flowers' | 'flat' | 'solid', Bands> = {
   // Tufts are full detail to the street's end, then a coarse level carries them to where they vanish in grass.
   tufts: [[1, 0, 30, 0, 21], [2, 30, 58, 21, 38]],
   clover: [[1, 0, 30, 0, 21]],
   // Flower drifts keep the town reading flowered from the castle.
   flowers: [[1, 0, 30, 0, 21], [2, 30, 90, 21, 60], [4, 90, 180, 60, 110]],
+  // Flush pieces (a seedling bed, stepping stones) are one course deep: a coarse level would stand them up as slabs,
+  // so they keep full detail and dissolve past the street.
+  flat: [[1, 0, 40, 0, 28]],
   solid: [[1, 0, 32, 0, 22], [2, 32, 95, 22, 55], [4, 95, 180, 55, 110]],
 };
 const TILE = 32;
@@ -47,6 +50,7 @@ interface Batch { blueprint: VoxelBlueprint; family: keyof typeof BANDS; blocks:
 
 function familyOf(blueprint: VoxelBlueprint): keyof typeof BANDS {
   const role = pieceRole(blueprint);
+  if (role.form === 'seedling-bed' || role.form === 'stepping-stones') return 'flat';
   if (!role.cover) return 'solid';
   return role.form.startsWith('wildflowers-') ? 'flowers' : role.form === 'clover-pebbles' ? 'clover' : 'tufts';
 }
@@ -62,7 +66,7 @@ export function pieceMatrix(piece: GroundPiece, level: Level, out = new THREE.Ma
  * Mounts an already computed plan (never replans): instanced batches per form and detail level, indexed in 32 m tiles.
  * Camera or lot-visibility changes reinstall only the prebuilt tile blocks of the levels whose membership changed;
  * distance fades run in the shader, so a still camera rewrites nothing. Solid pieces cast through `registerShadow`
- * at their nearest level; cover casts no sun shadow.
+ * at their nearest level; passive cover and flush stones cast no sun shadow.
  */
 export function createGroundDressing(host: GroundDressingHost): GroundDressing {
   const { plan, scene, camera, pool, clay, signal } = host;
@@ -142,7 +146,7 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
 
   function registerShadows(batch: Batch): void {
     const nearest = batch.levels[0];
-    if (!nearest?.geometry || pieceRole(batch.blueprint).cover || disposed) return;
+    if (!nearest?.geometry || !pieceRole(batch.blueprint).solid || disposed) return;
     batch.shadow?.release(); batch.shadow?.mesh.dispose(); batch.shadow?.geometry.dispose();
     // The caster shares the nearest level's buffers but never fades: the sun sees every solid, wherever the camera is.
     const geometry = new THREE.BufferGeometry();
@@ -194,7 +198,8 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
     return changed;
   }
 
-  function update(_frame: { time: number; walkers: readonly Vec3[] }): void {
+  // The frame's time and walkers drive the wind (GD06); placement visibility needs only the camera.
+  function update(): void {
     if (disposed) return;
     derived.sync();
     if (!cameraChanged() && !dirty) return;

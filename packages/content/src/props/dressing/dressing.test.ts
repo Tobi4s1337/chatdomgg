@@ -2,15 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { VoxelBlueprintSchema, type VoxelAsset, type VoxelBlueprint } from '@chatdom/shared';
 import { meshVoxelChunk, prepareAssetChunks, rasterizeBlueprint } from '../../../../voxel/src/index';
 import { createRenderLodAsset } from '../../../../voxel/src/lod';
-import { MAT, MATERIALS, STYLES } from '../../materials';
-import { BLUEPRINTS, DRESSING_SIZES, createDressing, type DressingForm } from './index';
+import { MAT, MATERIALS, STYLES, type StyleKey } from '../../materials';
+import { BLUEPRINTS, DRESSING_ROLES, DRESSING_SIZES, createDressing, type DressingForm } from './index';
 
 type Cell = readonly [number, number, number];
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
 const parse = (k: string) => k.split(',').map(Number) as unknown as Cell;
 const FLOWERS = { petal: MAT.petal, blue: MAT.blueFlower, gold: MAT.goldLeaf, cream: MAT.cream } as const;
 const GREENS = new Set<number>([MAT.leaf, MAT.moss]);
-const formOf = (b: VoxelBlueprint) => b.id.slice('dressing-'.length) as DressingForm;
+const formOf = (b: VoxelBlueprint) => b.id.slice('dressing-'.length).replace(/^(?:hearth|tide|grove)-/, '') as DressingForm;
+const styleOf = (b: VoxelBlueprint) => DRESSING_ROLES[formOf(b)].kit ? b.styleId as StyleKey : undefined;
 
 /** The final rasterized cells, read from the production rasterizer rather than from the authored boxes. */
 function occupancy(asset: VoxelAsset): Map<string, number> {
@@ -21,7 +22,7 @@ function occupancy(asset: VoxelAsset): Map<string, number> {
   }
   return cells;
 }
-const cellsOf = (form: DressingForm) => occupancy(rasterizeBlueprint(createDressing(form)));
+const cellsOf = (form: DressingForm, style?: StyleKey) => occupancy(rasterizeBlueprint(createDressing(form, style)));
 
 /** Face-connected groups of the cells that pass `keep`. */
 function components(cells: ReadonlyMap<string, number>, keep: (material: number) => boolean = () => true): Cell[][] {
@@ -53,16 +54,18 @@ function columnTops(asset: VoxelAsset): number[] {
 }
 
 describe('ground-dressing blueprints', () => {
-  it('lists the finished cover forms in R1 order', () => {
+  it('lists the finished forms in R1 order, kit forms Hearth, Tide, Grove', () => {
     expect(BLUEPRINTS.map(b => b.id)).toEqual([
       'dressing-meadow-tufts', 'dressing-wildflowers-petal', 'dressing-wildflowers-blue', 'dressing-wildflowers-gold',
-      'dressing-wildflowers-cream', 'dressing-clover-pebbles',
+      'dressing-wildflowers-cream', 'dressing-clover-pebbles', 'dressing-seedling-bed',
+      'dressing-hearth-stepping-stones', 'dressing-tide-stepping-stones', 'dressing-grove-stepping-stones',
     ]);
   });
 
   it.each(BLUEPRINTS.map(b => [b.id, b] as const))('%s is strict, bounded, grounded and cheap', (_, b) => {
     expect(() => VoxelBlueprintSchema.parse(b)).not.toThrow();
-    expect(b).toMatchObject({ version: 1, kind: 'flora', lattice: 'build', styleId: STYLES.grove.id, windows: [] });
+    const style = styleOf(b), role = DRESSING_ROLES[formOf(b)];
+    expect(b).toMatchObject({ version: 1, kind: role.band === 'small' ? 'flora' : 'prop', lattice: 'build', styleId: STYLES[style ?? 'grove'].id, windows: [] });
     const max = DRESSING_SIZES[formOf(b)];
     b.size.forEach((n, axis) => expect(n).toBeLessThanOrEqual(max[axis]!));
     expect(b.boxes.length).toBeLessThanOrEqual(400);
@@ -79,14 +82,14 @@ describe('ground-dressing blueprints', () => {
     for (const group of components(cells)) expect(group.some(c => c[1] === 0), `${b.id} has a floating group`).toBe(true);
     // A one-cell margin of open ground keeps neighbouring patches from fusing into a carpet.
     for (const k of cells.keys()) { const [x, , z] = parse(k); expect(x > 0 && z > 0 && x < b.size[0] - 1 && z < b.size[2] - 1, k).toBe(true); }
-    const allowed = new Set<number>([MAT.leaf, MAT.moss, MAT.goldLeaf, MAT.petal, MAT.blueFlower, MAT.cream, MAT.earth, MAT.bark, MAT.stone]);
+    const allowed = new Set<number>([MAT.leaf, MAT.moss, MAT.goldLeaf, MAT.petal, MAT.blueFlower, MAT.cream, MAT.earth, MAT.bark, style ? STYLES[style].stone : MAT.stone]);
     for (const m of cells.values()) expect(allowed.has(m)).toBe(true);
     let triangles = 0;
     for (const chunk of prepareAssetChunks(asset, MATERIALS.materials, MATERIALS.revision)) triangles += meshVoxelChunk(chunk).indices.length / 3;
     expect(triangles).toBeGreaterThan(0);
     expect(triangles).toBeLessThanOrEqual(1500);
-    expect(createDressing(formOf(b))).toEqual(createDressing(formOf(b)));
-    expect(createDressing(formOf(b))).toEqual(b);
+    expect(createDressing(formOf(b), style)).toEqual(createDressing(formOf(b), style));
+    expect(createDressing(formOf(b), style)).toEqual(b);
   });
 
   it('fails explicitly for unknown, styled or unfinished forms', () => {
@@ -198,5 +201,46 @@ describe('clover and pebbles', () => {
     const mats = components(cells, m => GREENS.has(m));
     expect(mats.length).toBeLessThanOrEqual(3);
     for (const mat of mats) expect(mat.length).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe('seedling bed', () => {
+  const cells = cellsOf('seedling-bed');
+  const seedlings = components(cells, m => m === MAT.leaf || m === MAT.moss);
+
+  it('lies flush: turned earth one course deep, seedlings above it, nothing over three cells', () => {
+    expect(Math.max(...[...cells.keys()].map(k => parse(k)[1]))).toBeLessThanOrEqual(2);
+    expect(new Set(cells.values())).toEqual(new Set([MAT.earth, MAT.leaf, MAT.moss]));
+    for (const [k, m] of cells) if (m !== MAT.earth) expect(parse(k)[1], k).toBeGreaterThanOrEqual(1);
+    // One continuous bed of soil under every seedling.
+    expect(components(cells, m => m === MAT.earth)).toHaveLength(1);
+  });
+
+  it('is part planted: a full back row, a short front row and the heaped soil at its end', () => {
+    const rows = new Map<number, number>();
+    for (const seedling of seedlings) { const z = Math.round(seedling.reduce((n, c) => n + c[2], 0) / seedling.length); rows.set(z, (rows.get(z) ?? 0) + 1); }
+    const [back, front] = [...rows.values()].sort((a, b) => b - a);
+    expect(back).toBeGreaterThanOrEqual(5);
+    expect(front).toBeLessThan(back!);
+    // Every grown seedling is a cross of leaves around a lit heart; one has only just been set.
+    expect(seedlings.filter(s => s.some(c => cells.get(key(...c)) === MAT.moss) && s.length === 6).length).toBeGreaterThanOrEqual(7);
+    expect(seedlings.filter(s => s.length === 1)).toHaveLength(1);
+    expect([...cells].filter(([k, m]) => m === MAT.earth && parse(k)[1] === 1).length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe('stepping stones', () => {
+  it.each(['hearth', 'tide', 'grove'] as const)('%s lays three flush stones of its own kit stone with worn joints', style => {
+    const cells = cellsOf('stepping-stones', style), stone = STYLES[style].stone;
+    // Two courses deep, every column full height, so a bedded stone shows one even top.
+    expect(Math.max(...[...cells.keys()].map(k => parse(k)[1]))).toBe(1);
+    for (const k of cells.keys()) { const [x, y, z] = parse(k); expect(cells.has(key(x, 1 - y, z)), k).toBe(true); }
+    expect(new Set(cells.values())).toEqual(new Set([stone, MAT.earth, MAT.moss]));
+    const stones = components(cells, m => m === stone);
+    expect(stones).toHaveLength(3);
+    // Each is a broad stone of its own shape, not one stamp repeated.
+    for (const s of stones) expect(s.length).toBeGreaterThanOrEqual(40);
+    expect(new Set(stones.map(s => s.length)).size).toBe(3);
+    expect([...cells.values()].filter(m => m !== stone).length).toBeLessThan(24);
   });
 });

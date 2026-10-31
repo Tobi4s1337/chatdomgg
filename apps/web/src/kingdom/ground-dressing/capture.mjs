@@ -6,6 +6,7 @@
 // 5170–5199 unless --base-url is given (the bench page is dev-served, never shipped), waits for the bench's readiness
 // and settled light fields, fails on any page, console or shader error, reuses one loaded scene per size, and stops
 // only what it started. Outputs: shots/ground-dressing/<view>-<hour>@<w>x<h>.png and stats.json.
+/* global requestAnimationFrame */
 import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'vite';
@@ -48,7 +49,8 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => {
       if (message.type() !== 'error') return;
-      const text = message.text() || `console error at ${message.location().url}:${message.location().lineNumber}`;
+      const { url, lineNumber } = message.location();
+      const text = `${message.text() || 'console error'}${url ? ` (${url}:${lineNumber})` : ''}`;
       errors.push(text);
       console.error(text);
     });
