@@ -268,7 +268,7 @@ export default function StreamView() {
     </Show>
     <Show when={mark().kind !== 'live'}>
       <div class={`source-ribbon stream-mark ${mark().kind}`} role="status">
-        <strong>{mark().title}</strong><Show when={layout() === 'stage'}><small>{mark().note}</small></Show>
+        <strong>{mark().title}</strong><Show when={layout() === 'stage' && mark().kind !== 'simulated'}><small>{mark().note}</small></Show>
       </div>
     </Show>
     <div class="stream-curtain" classList={{ open: phase() === 'ready', failed: phase() === 'failed' }} role="status" aria-live="polite">
