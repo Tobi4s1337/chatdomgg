@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { ForgeWriteGate, FileForgeApprovals } from './wiring';
 import { RealmEveningBridge, mountEveningRoutes } from './evening';
 import { createRealmCitizens } from './evening/citizens';
+import { createRealmCastle } from './evening/castle';
 import { createServer as createPortReservation } from 'node:net';
 
 const simulated = process.env.REALM_SIMULATED === '1';
@@ -49,7 +50,8 @@ async function serveOwnedPort(releasePort: () => Promise<void>) {
   const foundedDirectory = process.env.REALM_FOUNDED_DIRECTORY;
   if (!foundedDirectory) throw new Error('REALM_FOUNDED_DIRECTORY must name a persistent ignored host directory for exact approved scene bytes.');
   const origin = simulated ? 'simulated' : 'live';
-  const verifier = new TenureEvidenceVerifier(origin, tenureEvidenceKey());
+  const evidenceKey = tenureEvidenceKey();
+  const verifier = new TenureEvidenceVerifier(origin, evidenceKey);
   const config = realmDatabaseConfig();
   const pool = createRealmPool(config);
   try { await assertRealmSchema(pool); } catch (error) { await pool.end(); throw error; }
@@ -63,14 +65,16 @@ async function serveOwnedPort(releasePort: () => Promise<void>) {
       kingdomId: process.env.REALM_ENTRY_KINGDOM_ID, name: process.env.REALM_ENTRY_KINGDOM_NAME });
     names.set(entry.kingdomId, entry.name);
   }
-  const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names });
+  const castle = createRealmCastle({ origin, kingdomNames: names, safetyKey: evidenceKey });
+  const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
-    repositoryOptions: gate.install({ origin }), furnish: citizens.furnish,
+    repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
     attach: kingdom => evening.attach(kingdom),
   });
   citizens.use(boot.allocation, boot.services);
+  castle.use(boot.allocation, boot.store);
   const evening = new RealmEveningBridge({ origin, ingress: boot.ingress, gate, approvals,
     beforeObservation: input => citizens.observe(input) });
   evening.use(boot.services);

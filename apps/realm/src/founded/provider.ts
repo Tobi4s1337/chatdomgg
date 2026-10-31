@@ -57,14 +57,14 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
   current(kingdomId: KingdomId): FoundedPreparedWorld | undefined;
 } {
   const current = new Map<KingdomId, FoundedPreparedWorld>();
-  const staged = new Map<KingdomId, { homes: RealmPrivateState['homes']; attachments: RealmPrivateState['attachments']; prepared: FoundedPreparedWorld }>();
+  const staged = new Map<KingdomId, { homes: RealmPrivateState['homes']; castle: RealmPrivateState['castle']; attachments: RealmPrivateState['attachments']; prepared: FoundedPreparedWorld }>();
   const publish = (kingdomId: KingdomId, prepared: FoundedPreparedWorld) => {
     current.delete(kingdomId); current.set(kingdomId, prepared);
     while (current.size > 64) current.delete(current.keys().next().value!);
   };
   const stage = async (kingdomId: KingdomId, state: RealmPrivateState): Promise<FoundedPreparedWorld> => {
     const cached = staged.get(kingdomId), head = await source.currentLayout(kingdomId);
-    if (cached && cached.homes === state.homes && cached.attachments === state.attachments
+    if (cached && cached.homes === state.homes && cached.castle === state.castle && cached.attachments === state.attachments
       && head?.revision === cached.prepared.scene.layoutRevision) return cached.prepared;
     const adopted = await loadAdoptedPlan(source, kingdomId, state), native = await store.native(kingdomId, adopted.plan, source.origin);
     const candidate = await assembleFoundedScene({ kingdomId, plan: adopted.plan, state, native, collisionRevision: 0 });
@@ -80,7 +80,7 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
     // Recheck layout head after asynchronous preparation. Caller still checks held writer/poses at adoption.
     const latest = await source.currentLayout(kingdomId);
     if (!latest || latest.revision !== adopted.revision) throw new Error('The adopted layout changed during founded world preparation.');
-    staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, attachments: state.attachments, prepared });
+    staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, prepared });
     while (staged.size > 64) staged.delete(staged.keys().next().value!);
     return prepared;
   };
@@ -107,9 +107,15 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
 }
 
 /** Public checkpoint identity is separate from committed private sequence. Native plots have no owned view. */
-export function foundedCheckpointMatches(build: Pick<FoundedSceneBuild, 'manifest' | 'homes'>, checkpoint: RealmBootstrap): boolean {
+export function foundedCheckpointMatches(build: Pick<FoundedSceneBuild, 'manifest' | 'homes' | 'castle'>, checkpoint: RealmBootstrap): boolean {
   const m = build.manifest;
   if (checkpoint.kingdomId !== m.kingdomId || checkpoint.layoutRevision !== m.layoutRevision || checkpoint.collisionRevision !== m.collisionRevision) return false;
+  const castles = checkpoint.current.filter(v => v.type === 'castle');
+  if (build.castle) {
+    const castle = build.castle, view = castles[0];
+    if (castles.length !== 1 || !view || view.moduleId !== castle.moduleId || view.revision !== castle.revision
+      || view.assetHash !== castle.digest || !equalIds(view.attachments.map(a => a.id), castle.attachments)) return false;
+  } else if (castles.length) return false;
   const owned = build.homes.filter(h => h.source === 'owned'), views = checkpoint.current.filter(v => v.type === 'home');
   if (views.length !== owned.length || new Set(views.map(v => v.plotId)).size !== views.length) return false;
   return owned.every((binding: FoundedHomeBinding) => {

@@ -15,7 +15,7 @@ function observed(parts: readonly CommittedForgeAttachment[] = []) {
   const listeners = new Set<RealmObserverListener>();
   let status: RealmObserverStatus = 'ready';
   const attachments = new Map(parts.map(item => [item.id, item]));
-  const current = (): RealmObserverSnapshot => ({ status, attachments, cursor: 1, writerEpoch: 'writer', presence: null, homes: new Map() });
+  const current = (): RealmObserverSnapshot => ({ status, attachments, cursor: 1, writerEpoch: 'writer', presence: null, castle: null, homes: new Map() });
   const change = (next: RealmObserverStatus) => { status = next; for (const listener of listeners) listener.status?.(next); };
   const observer: RealmObserver = {
     current, subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createNativeForgeHost } from '@chatdom/forge';
 import { KingdomIdSchema, PersonIdSchema, type Vec3 } from '@chatdom/shared';
-import type { RealmBootstrap, RealmFoundedManifest, RealmOwnedHome } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, castleHostId, type RealmBootstrap, type RealmFoundedManifest, type RealmOwnedCastle, type RealmOwnedHome } from '@chatdom/shared/realm';
 import { generateSettlementPlan, terrainHeight } from '@chatdom/world';
 import { createRealmState } from '@chatdom/world/realm';
 import { embeddedSolids, stepPlayer, supported } from '@chatdom/world/movement';
@@ -68,6 +68,19 @@ describe('founded physical town and persisted loader (SIMULATED)', () => {
       const checkpoint: RealmBootstrap = { version: 1, kingdomId, writerEpoch: 'SIMULATED-writer', throughCursor: 0, throughSequence: 0,
         layoutRevision: plan.revision, collisionRevision: first.world.revision, current: [] };
       expect(first.manifestFor(checkpoint)).toEqual(first.build.manifest);
+      const native = await store.native(kingdomId, plan, 'simulated');
+      const moduleId = plan.castle.beaconModuleId, keep = native.fixtures.find(f => f.id === castleHostId(moduleId))!;
+      const castle: RealmOwnedCastle = { id: keep.id, moduleId, ownerId: PersonIdSchema.parse('900001111'), slot: REALM_CASTLE_SLOT,
+        layoutRevision: plan.revision, revision: 'castle:1', digest: 'e'.repeat(64), family: 'tide', blueprint: keep.blueprint, attachments: {},
+        attribution: { makerName: 'PRIVATE-SIMULATED-person', kingdomName: 'PRIVATE-SIMULATED-name', approvalId: 'PRIVATE-SIMULATED-approval' } };
+      const withCastle = await loader.load(kingdomId, { ...empty, castle });
+      expect(withCastle).not.toBe(first); // Metadata-only install must invalidate the staged private-state cache.
+      expect(withCastle.world).toBe(first.world); // Identical native keep bytes retain physical world identity.
+      expect(withCastle.build.manifest).toEqual(first.build.manifest);
+      expect(withCastle.manifestFor(checkpoint)).toBeNull();
+      expect(withCastle.manifestFor({ ...checkpoint, current: [{ type: 'castle', moduleId, revision: castle.revision, assetHash: castle.digest, attachments: [] }] }))
+        .toEqual(withCastle.build.manifest);
+
       expect(first.manifestFor({ ...checkpoint, collisionRevision: 0 })).toBeNull();
       const restarted = createFoundedWorldLoader(source, new FileFoundedStore(directory)), again = await restarted.load(kingdomId, empty);
       expect(again.build.manifest).toEqual(first.build.manifest);

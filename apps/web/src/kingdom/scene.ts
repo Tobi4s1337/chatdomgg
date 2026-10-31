@@ -145,7 +145,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     near.forEach(({window},i)=>crowd.receiveChat({version:1,id:`simulated-forge-${Math.floor(at)}-${i}`,kingdomId:frame!.kingdomId,epoch:frame!.epoch,origin:'simulated',slot:window.slot,asOf:Math.floor(at),expiresAt:Math.floor(at+9000),parts:[{kind:'text',text:i?'It belongs here. ✨':'Oh, look at that!'}]}));
   },onStatus:status=>options.onForge?.(status),registerShadow:mesh=>sunShadows.register(mesh)}));
   const realmForge=options.forgeFeed?own(createRealmForgeScene({scene,camera,canvas,pool,material:clay,
-    anvil:new THREE.Vector3(0,layout.market.elevation,8),home:slot=>houses.find(home=>home.slot===slot),sound,feed:options.forgeFeed,
+    anvil:new THREE.Vector3(0,layout.market.elevation,8),home:slot=>(installed?.forgeHosts??houses).find(home=>home.slot===slot),sound,feed:options.forgeFeed,
     hideAttachment:(id,hidden)=>{if(hidden)hiddenAttachments.add(`forge:${id}`);else hiddenAttachments.delete(`forge:${id}`);instancesDirty=true;sunShadows.invalidate();},
     registerShadow:mesh=>sunShadows.register(mesh),
   })):undefined;

@@ -102,7 +102,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
           || !Number.isSafeInteger(reservation.expiresAt) || reservation.expiresAt <= now()
           || reservation.expiresAt - now() > MAX_RESERVATION_MS) return { kind: 'held' };
         const attribution = AttributionSchema.parse(reservation.attribution);
-        const request = ForgeRunRequestSchema.parse({ words: command.words, family: reservation.family, home: reservation.home });
+        const request = ForgeRunRequestSchema.parse({ words: command.words, family: reservation.family, home: reservation.home, ...(reservation.hostProfile ? { hostProfile: reservation.hostProfile } : {}) });
         const fingerprint = homeFingerprint(request.home), homeDigest = digest(request.home);
         timer = setTimeout(() => abort.abort(), Math.max(1, reservation.expiresAt - now())); timer.unref?.();
         let approved: Extract<ForgeRunEvent, { type: 'approved' }> | undefined;
@@ -131,15 +131,17 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         checkCurrent();
         if (renewed.kind !== 'current') return renewed;
         if (renewed.native.revision !== reservation.revision || renewed.native.slot !== reservation.slot
-          || renewed.native.family !== request.family || digest(renewed.native.home) !== homeDigest
+          || renewed.native.family !== request.family || (renewed.native.hostProfile ?? 'street-home') !== (request.hostProfile ?? 'street-home')
+          || digest(renewed.native.home) !== homeDigest
           || homeFingerprint(renewed.native.home) !== fingerprint) return { kind: 'held' };
-        const socket = findForgeSockets(request.home).find(candidate => candidate.kind === approval.draft.plan.kind);
+        const socket = findForgeSockets(request.home, request.hostProfile).find(candidate => candidate.kind === approval.draft.plan.kind);
         if (!socket) return { kind: 'held' };
         const assembled = assembleForge(approval.draft.plan, forgeStyleKit(request.family), socket);
-        checkForge(assembled, request.home);
+        checkForge(assembled, request.home, request.hostProfile);
         const attachment: ForgeAttachment = {
           version: 1, id: approval.runId, runId: approval.runId, kingdomId: command.kingdomId, slot: reservation.slot,
           hostId: request.home.id, hostFingerprint: fingerprint, socketId: socket.id, origin: [...socket.origin],
+          ...(request.hostProfile === 'castle-keep' ? { hostProfile: request.hostProfile } : {}),
           kitId: assembled.kit.id, kitRevision: assembled.kit.revision, family: request.family, draft: approval.draft,
           provenance: { source: origin, makerName: attribution.makerName, kingdomName: attribution.kingdomName,
             designId: `forge-design-${digest([command.kingdomId, approval.runId])}` },

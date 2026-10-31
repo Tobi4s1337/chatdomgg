@@ -1,5 +1,5 @@
 import { createAnvilHeroDragon } from '@chatdom/content/anvil-hero';
-import { ForgeStyleKitSchema, HousePartPlanSchema, type ForgeHouseSocket, type ForgeStyleKit, type HousePartPlan, type VoxelBlueprint } from '@chatdom/shared';
+import { ForgeRunRequestSchema, ForgeStyleKitSchema, HousePartPlanSchema, type ForgeHostProfile, type ForgeHouseSocket, type ForgeStyleKit, type HousePartPlan, type VoxelBlueprint } from '@chatdom/shared';
 import { MAT, STYLES } from '@chatdom/content/materials';
 import { createForgeMotif } from '@chatdom/content/forge-motifs';
 import { createForgeOrnament } from '@chatdom/content/forge-ornaments';
@@ -7,16 +7,41 @@ import { rasterizeBlueprint } from '@chatdom/voxel';
 import { canonicalSceneJson } from '@chatdom/world/founded-codec';
 
 export function homeFingerprint(home:VoxelBlueprint):string {let hash=2166136261;for(const c of canonicalSceneJson(home))hash=Math.imul(hash^c.charCodeAt(0),16777619);return `home-${(hash>>>0).toString(16)}`;}
-function cellReader(home:VoxelBlueprint){const asset=rasterizeBlueprint(home),[sx,sy,sz]=asset.size;return (x:number,y:number,z:number)=>x<0||y<0||z<0||x>=sx||y>=sy||z>=sz?0:asset.voxels[x+sx*(y+sy*z)]!;}
+interface HostSurvey {
+  cell:(x:number,y:number,z:number)=>number;
+  heights:Int16Array;
+  sockets:Map<ForgeHostProfile,ForgeHouseSocket[]>;
+}
+// Retain at most two dense hosts (a keep is ~32 MiB). Exact canonical content is
+// the cache identity: equal detached snapshots share work; mutations never reuse it.
+const surveys=new Map<string,HostSurvey>();
+function surveyHost(home:VoxelBlueprint):HostSurvey {
+  const identity=canonicalSceneJson(home),cached=surveys.get(identity);
+  if(cached){surveys.delete(identity);surveys.set(identity,cached);return cached;}
+  const asset=rasterizeBlueprint(home),[sx,sy,sz]=asset.size;
+  const cell=(x:number,y:number,z:number)=>x<0||y<0||z<0||x>=sx||y>=sy||z>=sz?0:asset.voxels[x+sx*(y+sy*z)]!;
+  const heights=new Int16Array(sx*sz);
+  for(let z=0;z<sz;z++)for(let x=0;x<sx;x++){let y=sy-1;while(y>=0&&!cell(x,y,z))y--;heights[x+sx*z]=y;}
+  const survey={cell,heights,sockets:new Map<ForgeHostProfile,ForgeHouseSocket[]>()};
+  surveys.set(identity,survey);if(surveys.size>2)surveys.delete(surveys.keys().next().value!);
+  return survey;
+}
+function validateHost(home:VoxelBlueprint,hostProfile:ForgeHostProfile) {
+  // Use the same bounded host contract as the orchestrator, before allocating a raster.
+  ForgeRunRequestSchema.parse({words:'host survey',family:'hearth',home,hostProfile});
+}
 /** Slots are discovered from retained occupancy, not from empty bounding-box corners or a prompt's coordinates. */
-export function findForgeSockets(home:VoxelBlueprint):ForgeHouseSocket[]{
-  const cell=cellReader(home),[sx,sy,sz]=home.size,roof=new Set<number>([MAT.terracotta,MAT.slate,MAT.thatch]),fingerprint=homeFingerprint(home);
-  const heights=new Int16Array(sx*sz);for(let z=0;z<sz;z++)for(let x=0;x<sx;x++){let y=sy-1;while(y>=0&&!cell(x,y,z))y--;heights[x+sx*z]=y;}
+export function findForgeSockets(home:VoxelBlueprint,hostProfile:ForgeHostProfile='street-home'):ForgeHouseSocket[]{
+  validateHost(home,hostProfile);
+  const survey=surveyHost(home),cached=survey.sockets.get(hostProfile);
+  if(cached)return structuredClone(cached);
+  const {cell,heights}=survey,[sx,,sz]=home.size,castle=hostProfile==='castle-keep';
+  const roof=new Set<number>([MAT.terracotta,MAT.slate,MAT.thatch]),fingerprint=homeFingerprint(home);
   const result:ForgeHouseSocket[]=[];
   // Existing masonry outlets are the native chimney socket: crown them instead of growing a duplicate stack.
   let capY=0;const masonry=new Set<number>([MAT.stone,MAT.limestone,MAT.darkStone,MAT.brick]);
   for(let z=8;z<sz-8;z++)for(let x=12;x<sx-12;x++){const y=heights[x+sx*z]!;if(y>28&&masonry.has(cell(x,y,z)))capY=Math.max(capY,y+1);}
-  if(capY){const cap:[number,number,number][]=[];for(let z=8;z<sz-8;z++)for(let x=12;x<sx-12;x++)if(heights[x+sx*z]===capY-1&&masonry.has(cell(x,capY-1,z)))cap.push([x,capY,z]);
+  if(capY&&!castle){const cap:[number,number,number][]=[];for(let z=8;z<sz-8;z++)for(let x=12;x<sx-12;x++)if(heights[x+sx*z]===capY-1&&masonry.has(cell(x,capY-1,z)))cap.push([x,capY,z]);
     if(cap.length>=8){const first=cap[0]!,near=cap.filter(p=>Math.abs(p[0]-first[0])<16&&Math.abs(p[2]-first[2])<16),cx=Math.round((Math.min(...near.map(p=>p[0]))+Math.max(...near.map(p=>p[0])))/2),cz=Math.round((Math.min(...near.map(p=>p[2]))+Math.max(...near.map(p=>p[2])))/2);
       // A low side stack can sit below the adjacent gable. Crown only when the
       // complete dragon footprint clears that roof; otherwise choose a roof saddle.
@@ -30,11 +55,11 @@ export function findForgeSockets(home:VoxelBlueprint):ForgeHouseSocket[]{
       const supports:[number,number,number][]=[];let low=Infinity,high=0,ok=true;
       for(let dz=-3;dz<3&&ok;dz++)for(let dx=-3;dx<3;dx++){
         const y=heights[x+dx+sx*(z+dz)]!;
-        if(y<1||!(roof.has(cell(x+dx,y,z+dz))||y>28&&[MAT.timber,MAT.bark].includes(cell(x+dx,y,z+dz) as typeof MAT.timber))){ok=false;break;}
+        if(y<1||!(roof.has(cell(x+dx,y,z+dz))||!castle&&y>28&&[MAT.timber,MAT.bark].includes(cell(x+dx,y,z+dz) as typeof MAT.timber))){ok=false;break;}
         supports.push([x+dx,y+1,z+dz]);low=Math.min(low,y+1);high=Math.max(high,y+1);
       }
       if(!ok||high-low>20||result.some(s=>Math.hypot(x-(s.origin[0]+16),z-(s.origin[2]+16))<22))continue;
-      const targetX=sx*(kind==='chimney'?.68:kind==='lantern'?.72:.25),targetZ=sz*(kind==='lantern'?.8:.5);
+      const targetX=sx*(castle?(kind==='chimney'?.82:kind==='lantern'?.66:.18):(kind==='chimney'?.68:kind==='lantern'?.72:.25)),targetZ=sz*(castle?(kind==='lantern'?.65:.82):(kind==='lantern'?.8:.5));
       const rx=kind==='chimney'?12:kind==='lantern'?4:7,rz=kind==='chimney'?10:4;
       let crown=high;for(let Z=Math.max(0,z-rz);Z<Math.min(sz,z+rz);Z++)for(let X=Math.max(0,x-rx);X<Math.min(sx,x+rx);X++)crown=Math.max(crown,heights[X+sx*Z]!+1);
       if(crown-high>24)continue;
@@ -44,6 +69,7 @@ export function findForgeSockets(home:VoxelBlueprint):ForgeHouseSocket[]{
     if(best)result.push({id:`roof-${kind}`,kind,profile:'roof',origin:[best.x-16,best.low,best.z-16],supports:best.supports,hostId:home.id,hostFingerprint:fingerprint,clearanceHeight:best.crown-best.low+2});
   }
   // Front is +Z in the content contract. Keep the bracket clear of every existing pane.
+  if(!castle){
   outer:for(let x=Math.floor(sx*.2);x<sx-4;x++)for(let y=30;y>=12;y--){
     let z=sz-1;while(z>=0&&!cell(x,y,z))z--;
     if(z<0||z+13>sz||![MAT.plaster,MAT.cream,MAT.timber,MAT.bark,MAT.brick].includes(cell(x,y,z) as typeof MAT.plaster))continue;
@@ -54,6 +80,9 @@ export function findForgeSockets(home:VoxelBlueprint):ForgeHouseSocket[]{
     const old=result.findIndex(s=>s.kind==='lantern');if(old>=0)result.splice(old,1);
     result.push({id:'front-lantern',kind:'lantern',profile:'wall',origin:[x-16,y-5,z+1],supports:[[x-1,y-1,z],[x,y,z]],hostId:home.id,hostFingerprint:fingerprint,clearanceHeight:0});break outer;
   }
+  }
+  if(castle)for(const socket of result)socket.hostProfile='castle-keep';
+  survey.sockets.set(hostProfile,structuredClone(result));
   return result;
 }
 export interface AssembledForge {blueprint:VoxelBlueprint;emitter:[number,number,number];emitterKind:'smoke'|'glow'|null;socket:ForgeHouseSocket;plan:HousePartPlan;kit:ForgeStyleKit}
@@ -102,19 +131,22 @@ export function assembleForge(input:HousePartPlan,style:ForgeStyleKit,socket:For
   return {blueprint,emitter:motif.emitter.map((n,i)=>n+offset[i]!) as [number,number,number],emitterKind:plan.kind==='chimney'?'smoke':plan.kind==='lantern'?'glow':null,socket,plan,kit};
 }
 /** Craft/fit checks are deterministic geometry checks, explicitly not moderation verdicts. */
-export function checkForge(result:AssembledForge,home:VoxelBlueprint):{solidCells:number;palette:number[]} {
+export function checkForge(result:AssembledForge,home:VoxelBlueprint,hostProfile:ForgeHostProfile='street-home'):{solidCells:number;palette:number[]} {
+  validateHost(home,hostProfile);
+  if((result.socket.hostProfile??'street-home')!==hostProfile)throw new Error('The piece belongs to a different host profile.');
   if(result.socket.hostId!==home.id||result.socket.hostFingerprint!==homeFingerprint(home))throw new Error('The house changed. Find a new socket before forging.');
-  const socket=findForgeSockets(home).find(s=>s.id===result.socket.id);
+  const socket=findForgeSockets(home,hostProfile).find(s=>s.id===result.socket.id);
   if(!socket||JSON.stringify(socket)!==JSON.stringify(result.socket))throw new Error('The house no longer supports this socket.');
   const canonical=assembleForge(result.plan,result.kit,socket);
   if(JSON.stringify(canonical.blueprint)!==JSON.stringify(result.blueprint))throw new Error('The shape differs from its registered plan.');
-  const asset=rasterizeBlueprint(result.blueprint),host=cellReader(home),[sx,sy,sz]=asset.size;
+  const asset=rasterizeBlueprint(result.blueprint),host=surveyHost(home).cell,[sx,sy,sz]=asset.size;
   const palette=new Set<number>();let solidCells=0;
+  const maxX=hostProfile==='castle-keep'?home.size[0]:64,maxY=hostProfile==='castle-keep'?Math.min(352,home.size[1]+96):160;
   for(let z=0;z<sz;z++)for(let y=0;y<sy;y++)for(let x=0;x<sx;x++){
     const material=asset.voxels[x+sx*(y+sy*z)]!;if(!material)continue;solidCells++;palette.add(material);
     const X=x+result.socket.origin[0],Y=y+result.socket.origin[1],Z=z+result.socket.origin[2];
     if(host(X,Y,Z))throw new Error(`The ${result.plan.kind} would cover ${home.id} at ${X},${Y},${Z}; origin ${result.socket.origin}; local ${x},${y},${z}.`);
-    if(X<0||X>=64||Y<0||Y>=160||Z<0||Z>=home.size[2])throw new Error('The piece reaches beyond this home.');
+    if(X<0||X>=maxX||Y<0||Y>=maxY||Z<0||Z>=home.size[2])throw new Error('The piece reaches beyond this home.');
     for(const w of home.windows)if(w.facing==='south'&&Math.abs(X-w.centre[0])<=w.width/2&&Math.abs(Y-w.centre[1])<=w.height/2&&Z>=w.centre[2]&&Z<w.centre[2]+3)throw new Error('Keep the window clear.');
   }
   if(solidCells<80||solidCells>15000||palette.size>9||result.blueprint.boxes.length>600)throw new Error('The shape needs a quieter, better balanced finish.');

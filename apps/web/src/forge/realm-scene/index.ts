@@ -3,7 +3,7 @@ import { MATERIALS } from '@chatdom/content';
 import { assembleForge, checkForge, findForgeSockets, forgeRitualFrame, forgeStyleKit, homeFingerprint, type AssembledForge } from '@chatdom/forge';
 import { geometryFromChunks, type VoxelRenderState, type WindowHouse } from '@chatdom/render';
 import { VOXEL_METRES, type ForgeRitualFrame } from '@chatdom/shared';
-import type { CommittedForgeAttachment } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, type CommittedForgeAttachment } from '@chatdom/shared/realm';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import type { RealmForgeFeed } from '../../realm/adapters/forge-feed';
 import type { createKingdomSound } from '../../kingdom/sound';
@@ -59,12 +59,15 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
   let preparing: CommittedForgeAttachment | null = null, current: Casting | null = null;
 
   function assembled(attachment: CommittedForgeAttachment) {
+    if ((attachment.hostProfile === 'castle-keep') !== (attachment.slot === REALM_CASTLE_SLOT)) throw new Error('The committed host profile does not match its slot.');
     const home = options.home(attachment.slot);
     if (!home || home.blueprint.id !== attachment.hostId || homeFingerprint(home.blueprint) !== attachment.hostFingerprint) throw new Error('The committed home is no longer visible.');
-    const socket = findForgeSockets(home.blueprint).find(s => s.id === attachment.socketId);
+    const socket = findForgeSockets(home.blueprint, attachment.hostProfile).find(s => s.id === attachment.socketId);
     const kit = forgeStyleKit(attachment.family);
     if (!socket || socket.origin.some((n, axis) => n !== attachment.origin[axis]) || kit.id !== attachment.kitId || kit.revision !== attachment.kitRevision) throw new Error('The committed socket or style has changed.');
-    return { home, result: assembleForge(attachment.draft.plan, kit, socket) };
+    const result = assembleForge(attachment.draft.plan, kit, socket);
+    checkForge(result, home.blueprint, attachment.hostProfile);
+    return { home, result };
   }
 
   function rememberStanding(attachment: CommittedForgeAttachment) {
@@ -99,7 +102,6 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     let mesh: THREE.Mesh | undefined;
     try {
       const { home, result } = assembled(attachment);
-      checkForge(result, home.blueprint);
       const output = await options.pool.submit({ kind: 'blueprint', blueprint: result.blueprint, materials: MATERIALS.materials, materialRevision: MATERIALS.revision, revision: ++revision });
       if (disposed || generation !== epoch) return;
       const latest = options.home(attachment.slot);

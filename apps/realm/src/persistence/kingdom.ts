@@ -100,7 +100,7 @@ export class DurableKingdom implements RealmRoomHandle {
   private geometry: Pick<DurableKingdomOptions, 'world' | 'layoutRevision' | 'spawn'>;
   private preparingWorld: Promise<void> | null = null;
   private worldNeeded = false;
-  private preparedGeometry: { readonly homes: RealmPrivateState['homes']; readonly attachments: RealmPrivateState['attachments']; readonly candidate: DurableWorldAdoption } | null = null;
+  private preparedGeometry: { readonly homes: RealmPrivateState['homes']; readonly castle: RealmPrivateState['castle']; readonly attachments: RealmPrivateState['attachments']; readonly candidate: DurableWorldAdoption } | null = null;
 
   static async open(repository: DurableRepository, outbox: RealmOutboxStore, kingdomId: KingdomId,
     options: DurableKingdomOptions | ((state: RealmPrivateState) => DurableKingdomOptions | Promise<DurableKingdomOptions>)): Promise<DurableKingdom> {
@@ -407,13 +407,13 @@ export class DurableKingdom implements RealmRoomHandle {
         const state = this.state;
         try {
           const cached = this.preparedGeometry;
-          const candidate = cached?.homes === state.homes && cached.attachments === state.attachments
+          const candidate = cached?.homes === state.homes && cached.castle === state.castle && cached.attachments === state.attachments
             ? cached.candidate : await this.options.prepareWorld!(state);
           if (!this.current) return;
-          if (state.homes !== this.state.homes || state.attachments !== this.state.attachments) {
+          if (state.homes !== this.state.homes || state.castle !== this.state.castle || state.attachments !== this.state.attachments) {
             this.worldNeeded = true; continue;
           }
-          this.preparedGeometry = { homes: state.homes, attachments: state.attachments, candidate };
+          this.preparedGeometry = { homes: state.homes, castle: state.castle, attachments: state.attachments, candidate };
           if (!candidate.matches(this.publicCheckpoint())) continue;
           if (candidate.world === this.world) { candidate.adopted(); continue; }
           const walkers: { id: string; position: Vec3 }[] = [];
