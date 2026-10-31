@@ -7,3 +7,4 @@ export { createHearthHome } from './homes/hearth';
 export { createStreetProp, STREET_PROP_FORMS, STREET_PROP_SIZES, type StreetPropForm, type StreetStyle } from './props/street';
 export { createTideHome } from './homes/tide';
 export { createCivicProp, CIVIC_FORMS, CIVIC_STYLES, FOOTBRIDGE, type CivicForm, type CivicStyle } from './civic';
+export { createDoorLantern, createGateBrazier, DOOR_LANTERN_MOUNT, DOOR_LANTERN_GLASS, GATE_BRAZIER_MOUNT, GATE_BRAZIER_FLAME } from './arrival-lights';
