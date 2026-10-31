@@ -36,7 +36,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   Commit this task alone so places-high, places-water and home-interiors can consume its accepted implementation.
   **Evidence:** trace test output, exact import/call recipe and no copied stand-ins.
 
-- [ ] **KL02 — A blue noon and an indigo dusk.**
+- [x] **KL02 — A blue noon and an indigo dusk.**
   Author coherent sky, sun, cloud, ambient, shadow tint, hour-dependent fog and exposure. Noon is clear blue with
   white broken clouds; dusk has lilac sky, gold rims and indigo shadows; night stays cool around warm people.
   Restrain the daylight beacon to its crown. Preserve existing Environment consumers; give the integrator the

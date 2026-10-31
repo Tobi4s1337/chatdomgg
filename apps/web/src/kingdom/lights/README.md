@@ -54,6 +54,39 @@ History is explicit:
 The trace test (`people-light.test.ts`) covers a crossing, partial capacity, the fade, the pilot, repeated time,
 reverse seek, replay after clear and input validation.
 
+## The hours (KL02)
+
+`getEnvironment(hour)` in `packages/render/src/atmosphere.ts` carries the whole grade. Noon is a saturated blue
+zenith over a sky-blue horizon, with broken white clouds over about a third of the upper sky, a warm sun and blue
+shadows. Dusk (19.25 h) is a lilac zenith over a gold band, with the sun low in the west-north-west, gold on the
+west faces and indigo shadow sides. Night is deep blue to violet with a high moon. Besides the existing fields,
+`Environment` gains `shadow` (what unlit surfaces sink toward), `glow` (the warm horizon band), `cloud`, `cloudShade`,
+`cloudCover`, `fogDensity` and `exposure`. No field was removed, so every existing consumer still compiles and
+reads the same values. By day the beacon is a small fire on the crown; its column and sky halo grow with dusk.
+
+Most of the grade reaches the town through code the scene already runs: `createAtmosphere().update` (sky, clouds,
+beacon), `clay/ground/forge.setEnvironment(grade)` (shadow tint, the hour's voxel fog, read straight from
+`grade.fogDensity`) and `water.update(grade, …)`. Two scene lines are still constants. The integrator replaces them in
+`apps/web/src/kingdom/scene.ts`:
+
+```ts
+// In the frame loop, after `const grade = getEnvironment(hour);` (scene.ts:257):
+renderer.toneMappingExposure = grade.exposure;   // replaces the fixed 1.08 at scene.ts:49 (keep it as the initial value)
+// scene.ts:289, beside the existing fog colour:
+fog.color.set(grade.fog); fog.density = grade.fogDensity;   // was .0016
+```
+
+Day and dusk exposure stay at the shipped 1.08, so the noon and dusk frames below are already the integrated
+look; night gains the 1.12–1.16 lift once the first line is in. Only three.js's built-in fogged materials
+(today, the citizens' contact shadows) read the scene `FogExp2`, so the second line changes nothing else.
+
+Evidence, captured from the real town (simulated Willowmere, `time=30`) with
+`node apps/web/src/kingdom/lights/capture.mjs --views hero --hours noon,dusk --sizes desktop,phone`:
+`work/evidence/kingdom-light-kl02/hero-{noon,dusk,dusk-grey}@{1440x900,390x844}.png`. The dusk greyscale has three
+value groups: sky and beacon brightest, gold west faces and roofs in the middle, indigo shadow streets and grass
+dark. Still weak: from the hero, the lit windows do not yet stand among the brightest values (KL05's pane and
+pool), and the castle reads as a cool silhouette under its beacon until KL07 wakes its openings.
+
 ## Windows and warm pools (KL05)
 
 No adapter change is needed: this lives inside the existing `createWindowLights` and `createVoxelMaterial`, which
