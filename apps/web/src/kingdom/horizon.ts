@@ -8,6 +8,8 @@ const CHUNK_METRES = 16;
 export interface HorizonSurfaceOptions {
   /** Distant cell size in metres; the detailed-terrain join always remains at 1 m. */
   readonly farStep?: 10 | 20;
+  /** Procedural Genesis already supplies its complete distant land and ocean bed. */
+  readonly distantRelief?: boolean;
 }
 
 type HorizonBounds = Pick<KingdomLayout, 'bounds'>;
@@ -25,7 +27,7 @@ export function createHorizonSurface(layout: HorizonBounds, options: HorizonSurf
 export function createHorizonSurface(layout: HorizonBounds, options: HorizonSurfaceOptions & { sampleTerrain?: HeightSampler } = {}): HorizonSurface {
   const { farStep = 10 } = options;
   const heightAt = options.sampleTerrain ?? ((x: number, z: number): number => terrainHeight(layout as KingdomLayout, x, z));
-  return makeHorizonSurface(layout, farStep, heightAt);
+  return makeHorizonSurface(layout, farStep, heightAt, options.distantRelief ?? true);
 }
 
 interface HorizonSurface {
@@ -35,7 +37,7 @@ interface HorizonSurface {
   sampleHeight(x: number, z: number): number;
 }
 
-function makeHorizonSurface(layout: HorizonBounds, farStep: 10 | 20, heightAt: HeightSampler): HorizonSurface {
+function makeHorizonSurface(layout: HorizonBounds, farStep: 10 | 20, heightAt: HeightSampler, distantRelief: boolean): HorizonSurface {
   if (farStep !== 10 && farStep !== 20) throw new Error('Horizon distant step must be 10 or 20 metres.');
   const { minX, maxX, minZ, maxZ } = layout.bounds;
   if (![minX, maxX, minZ, maxZ].every(Number.isFinite) || minX >= maxX || minZ >= maxZ) {
@@ -58,8 +60,8 @@ function makeHorizonSurface(layout: HorizonBounds, farStep: 10 | 20, heightAt: H
     const key = `${x},${z}`, cached = coarseHeights.get(key);
     if (cached !== undefined) return cached;
     const d = Math.hypot(x, z - 50);
-    const height = Math.fround(heightAt(x, z) - 0.55 + Math.max(0, d - 350) * 0.025
-      + (Math.sin(x * 0.009) + Math.sin(z * 0.013)) * Math.min(22, Math.max(0, d - 330) * 0.05));
+    const height = Math.fround(heightAt(x, z) - 0.55 + (distantRelief ? Math.max(0, d - 350) * 0.025
+      + (Math.sin(x * 0.009) + Math.sin(z * 0.013)) * Math.min(22, Math.max(0, d - 330) * 0.05) : 0));
     coarseHeights.set(key, height);
     return height;
   };

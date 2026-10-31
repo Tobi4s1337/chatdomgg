@@ -17,3 +17,8 @@
 .walk-overlook{position:absolute;right:24px;bottom:24px;z-index:3;padding:9px 13px;border:1px solid #a8875855;border-radius:4px;background:#32291ee8;color:#edd4ad;font:12px Georgia,serif;cursor:pointer;box-shadow:0 3px 0 #1b1a1a99}
 .walk-overlook:focus-visible{outline:2px solid #edc98e;outline-offset:3px}
 @media(max-width:700px){.kingdom-walking .kingdom-seal{top:72px}.kingdom-walking .kingdom-heading h1{font-size:25px}.walk-overlook{right:16px;bottom:20px;font-size:11px}.walker-name{font-size:12px}}
+
+/* A simulated feed has one quiet corner disclosure; other feed warnings retain their seal. */
+.kingdom .kingdom-seal[data-provenance='simulated']{padding:5px 8px;border:1px solid #d2ae7766;border-radius:3px;background:#2b2424df;box-shadow:none}
+.kingdom .kingdom-seal[data-provenance='simulated'] .cd-seal{display:none}
+.kingdom .kingdom-seal[data-provenance='simulated'] .cd-provenance-word{color:#f3dfbb;font:700 11px/1 Georgia,serif;letter-spacing:.1em}

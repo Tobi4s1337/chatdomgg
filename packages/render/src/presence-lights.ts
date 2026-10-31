@@ -162,6 +162,10 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       float lit = presence * mix(0.07, 1.0, night);
       // Tiny distant panes retain amber chroma instead of averaging into pale stone.
       room = mix(room, vec3(1.15, 0.38, 0.055) * 1.35, distant);
+      // A lit lamp is a source of light, not just a pale pigment. Keep the core above
+      // display white in linear space so it survives pane transparency and feeds HDR bloom.
+      // The distant average already carries extra energy; temper the core there.
+      room *= 1.0 + 4.8 * night * core * (1.0 - 0.6 * distant);
       vec3 glass = mix(reflection, room * mix(0.9, 1.25, night), lit);
       // Mullions and frame stay dark; their inner edges catch the room's light.
       float catchLight = frame * (1.0 - smoothstep(0.455, 0.49, max(p.x, p.y))) * lit;

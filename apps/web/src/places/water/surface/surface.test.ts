@@ -109,6 +109,20 @@ function motion(surface: WaterSurface) {
   };
 }
 
+describe('water surface: outside ground', () => {
+  it('uses the occluding default or a finite caller-supplied bed for all materials', () => {
+    const normal = createWaterSurface(options());
+    const ocean = createWaterSurface(options({ outsideGroundHeight: -8 }));
+    expect(uniformsOf(normal).uOutsideGroundHeight!.value).toBe(1e4);
+    for (const mesh of ocean.root.children as THREE.Mesh[]) {
+      expect((mesh.material as THREE.ShaderMaterial).uniforms.uOutsideGroundHeight!.value).toBe(-8);
+    }
+    expect(() => createWaterSurface(options({ outsideGroundHeight: Infinity }))).toThrow(/finite/);
+    expect(() => createWaterSurface(options({ outsideGroundHeight: NaN }))).toThrow(/finite/);
+    normal.dispose(); ocean.dispose();
+  });
+});
+
 describe('water surface: time', () => {
   it('gives the same frame for the same time, whether reached forward, by seeking back or fresh', () => {
     const surface = createWaterSurface(options());

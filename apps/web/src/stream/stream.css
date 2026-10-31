@@ -88,6 +88,14 @@ html.stream-document, html.stream-document body { margin: 0; width: 100%; height
 .layout-strip .stream-mark:not(.simulated) strong { font-size: 15px; }
 .layout-window .stream-mark strong::before, .layout-strip .stream-mark strong::before { width: 5px !important; height: 5px !important; margin: 0 8px 2px 0 !important; }
 
+/* A rehearsal needs one legible disclosure, kept out of the picture's way. */
+.stream-mark.simulated strong, .layout-window .stream-mark.simulated strong, .layout-strip .stream-mark.simulated strong {
+  padding: 5px 8px; border: 1px solid #d2ae7766; border-radius: 3px; clip-path: none;
+  color: #f3dfbb; background: #2b2424df; filter: none;
+  font: 700 11px/1 Alegreya, Georgia, serif; letter-spacing: .1em;
+}
+.layout-strip .stream-mark.simulated { top: 12px; transform: none; }
+
 /* Shutters: show cuts behind two plank leaves that swing in from the frame and out again.
    A thread of lamplight leaks where they meet. Calm dips through dusk instead. */
 .stream-shutters { position: absolute; inset: var(--edge); z-index: 2; pointer-events: none; perspective: 160cqmax; overflow: hidden; }

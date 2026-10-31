@@ -330,44 +330,43 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Order:** Twitch first: real chat/shared arrival → stream director → real !forge → event physics → three
-channel kingdoms/Atlas/raids → earned growth/Chronicle → chat-led fire → panel/emotes. Walking stays accepted.
-Short turns; delegate reads. No world/walking polish detours. Parked world lanes finish current work and stop.
+**Order / team review:** night lit by its people → visible life → lower street-led composition at30–35°,
+voxel terraces/three atmospheric ridges and sky-backed Forge landing. Keep the accepted beacon shape, house
+models and gold frame/crest. No new systems. One piece per turn, scoped checks and viewed1920×1080 evidence;
+no matrices, audit-only commits or budget-proof work. No new reviewed integration candidate beyond e81a71b.
 
-**Actual evening:** Tobias re-granted the bot incl. user:write:chat; posting works. “evening, Willowmere”13:11
-and weathervane wish13:13:02 reached realm. The wish stopped cold/offline: stream:offline was committed4.8s
-before it; zero Forge reservation rows or approval audit. Server Forge retains the room and runs without a
-browser. Do not bypass live-only eligibility. Tobias will go live and say when; do not wait with an observer open.
-Public watch through5190 returns200 SSE/live, collision6, checkpoint cursor728 with presence/castle facts.
-No observed real approved Forge attachment, recorded ritual or shared arrival yet.
+**This turn — night paint:** deeper blue evening sky/fill, lower exposure, amber horizon. Presence panes carry
+more HDR radiance; ground warmth reaches farther while wall warmth is restrained. Absent panes still follow
+actual presence; no new ambient inhabitants. Beacon source radiance compensates the exposure drop without
+changing its shape, and its local surface/cloud light is stronger. First still lost too much castle shape;
+slightly eased cool fill/key before the final still. Day grades unchanged. Existing shot draw guard now allows
+the furnished smithy/HDR passes (observed266draws; limit280), without adding any new rendering work.
 
-**Observer:** stopped at pause; owned process42199 exited130 and released the capture lock. No observer or
-capture stays open awaiting Twitch. Tobias will explicitly say when live and send the next real wish; only then
-attach a bounded viewer. Existing stream still is an honestly resting/offline town, not a completed real ritual.
+**Viewed:** `shots/magic/night-people@1920x1080.png`, actual SIMULATED gold-framed stream hero at19.5,
+214 lit panes/240 homes, high HDR/bloom, no browser errors. Windows and path pools lead the picture; away homes
+fall dark. Castle and foreground still too subdued, and roads/layout dominate. Do not call the whole magic
+pass or team fix1 finished. Three Genesis previews still need explicitly SIMULATED anonymous window lighting
+at the same dusk; their existing empty feed stays honest. Typecheck, scoped lint,12 render tests and isolated
+web build pass. Browser/preview/capture lock closed. Real-GPU check next at5190 `/stream?source=simulated&tier=town&hour=19.5&time=30&camera=hero`:
+judge pane halos/pools, cool roof readability and beacon,1920×1080; software fps means nothing.
 
-**Showcase:** `/showcase`, linked from the kingdom heading. Real walk URL keeps ONLY walk=1 and kingdom.
-Real room stream, SIMULATED Forge/panel, RECORDED Atlas (30October snapshot), unavailable Chronicle and three
-kingdoms. Root viewed `shots/showcase/showcase@1440x900.png`; readable, intro too tall for a directory.
-Build/typecheck/scoped lint passed. Keep links and provenance current as destinations become real.
+**Smithy e81a71b:** real versioned timber workshop around the existing hearth/anvil, tool rail/billets/barrel,
+central roof opening; adopted-scene provider handles collision/revision. Room pour camera includes crucible
+and workshop. Viewed again `shots/magic/room-smithy-pour@1920x1080.png`: five watchers, actual room-fed effect,
+prospective SIM furnishings/attachment, muted; not real chat approval or OBS-frame evidence. Blueprint too white,
+hearth dragon still a grey cluster. Anvil-hero progress has the one next sculpt fix: separated muzzle/forepaws.
+The old stream-wide used hero and does NOT prove a wide view; actual wider composition remains to build.
+Renderer544d55a: linear HDR/original depth/contact AO/bloom/one ACES output; existing material height fog stays
+on; optional analytic post fog stays off until transparent water migrates consistently.
 
-**Genesis:** architect’s one pass complete; main carries on Sol. 3a774f8 exposes `@chatdom/world/genesis`,
-local composition contract/spec39 and reference note. Four focused tests, lint/typecheck pass. Pure seeded
-coast/river/mountain candidates, surface sampler, Atlas size bands, channel-bound approved derivatives,
-adopted-world precedence; no scene adoption/render wiring yet. Three real Atlas fixtures (cutoff30Oct16:32UTC):
-The_AGGman63920635/Counter-Strike/avg16 → coastal hamlet; PinkKittyRose4363967/Retro/avg139.98 → river town;
-MashaD4 154972160/Chess/avg852.12 → mountain city. These showcase selections are art direction, not source facts.
-Profile colours/descriptions/approved emotes missing; fetch real sources, never invent channel-specific content.
-Next: compose three finished previews and wire their Atlas holdings. Specs40–44 hand the five content families to the team; main owns composition, exports, facts/approval binding and Atlas route integration.
+**Preserved:** unfinished Genesis city/camera/count/art briefs remain in stash
+`7c6f1f9d324042998fff71e4d5ea7863ea46cf0a` (7files), do not drop. The separate `work/night-paint` worktree
+contains the superseded initial three-file paint; main now owns the reviewed revision, do not reapply it.
+Genesis specs40–44/passport45 are with the team; Atlas still needs three real holding entries/under25-viewer dabs.
 
-**Lanes:** specs40–44 and their PRDs are ready for independent landmarks, heraldry, emote art, keepers and sound. One worker each; no dependency between their asset work. Missing main-owned mounts are explicit integration needs, not reasons to stop independent tasks. 5efc270 refreshed Atlas/Gate/Moments/Emotes/Campfire handoffs. Atlas/Gate/Emotes/Campfire branches
-include main at that commit. Twitch-moments has active uncommitted work: do not overwrite it; sync at checkpoint.
-Raid road tasks independent of Genesis entry dependency; welcome+gift included. No new reviewed delta identified.
-
-**Live setup:** host-managed preview5190/API5196/realm5197/Forge5195/Herald5194; source edits trigger relevant
-service restarts after settling. Ensure stable before asking for a wish. Only use `conductor/state/services.log`;
-NEVER host journals or other services’ logs. Temporary sign-in test sessions revoked; entry/movement accepted
-in Firefox+Chromium at fd5c319. Adopted129634568: settlement:2:43cffdb6,240 homes,v1,collision6,
-scene134778eb60ac5414858df3c7cee5ed2abc4d65ba4331e45a259c5cc75294d4b3. Do not reseat plots.
-Monarch65534 owns keep pane, no invented street deed. Landing03/04 rehearsals are SIMULATED; latest14s take
-reviewed all56frames, still roof-occluded/two competing horn shapes. No image-judge waiver. Remaining bindings:
-real cheer/hype, durable solid gardens, raid journey; no guessed land/places or manufactured population.
+**Live seams:** greeting/wish reached realm but wish arrived4.8s after stream:offline; approved real ritual
+unproved. Forge is server-side/no browser required. Tobias announces live/sends next wish; no waiting observer.
+Actual words still need a transient post-word-judge-pass cue (codex/run→room→ritual); never log rejected speech.
+Managed5190web/5196API/5197realm/5195Forge/5194Herald; relevant-code restarts only, all on.env. Read ONLY
+`../conductor/state/services.log`, never host journals. Adopted layout43cffdb6/240homes/v1 stays pinned;
+workshop receives its collision revision through provider. Monarch65534 owns keep pane, no street deed/coal.
