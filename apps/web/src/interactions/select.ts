@@ -1,11 +1,13 @@
 import type { Vec3 } from '@chatdom/shared';
 import type { CollisionWorld, RealmInteractionAction, RealmSeat } from '@chatdom/shared/realm';
-import { horizontalDistance, interactionLegality, standingClear, withinReach, type InteractionActor, type InteractionBlock, type InteractionRecord } from '../../../../packages/world/src/interactions';
-import type { LookFrame } from './ports';
+import { horizontalDistance, interactionLegality, segmentClear, standingClear, withinReach, type InteractionActor, type InteractionBlock, type InteractionRecord } from '../../../../packages/world/src/interactions';
+import type { LookFrame, PointerRay } from './ports';
 
 /**
- * Per-frame choice of the one thing E would use. Pure: explicit frame, records, collision and seats in, one
- * decision out; no DOM, clock or authority. The room checks the same reach and occlusion again on its own pose.
+ * Which one thing E (or a click, a tap, a gamepad press) would use. Pure: explicit frame, records, collision and
+ * seats in, one decision out; no DOM, clock or authority. Look and pointer both judge a target with the same
+ * `assessTarget`, so every input resolves through one registry and one set of rules. The room checks reach and
+ * occlusion again on its own pose.
  */
 
 /** A target must lie within this half-angle of the view to be chosen (34°). */
@@ -14,6 +16,8 @@ export const LOOK_CONE = Math.cos(34 * Math.PI / 180);
 export const KEEP_CONE = Math.cos(42 * Math.PI / 180);
 /** …and is no more than this much farther than the best new candidate, so the prompt never flickers on a tie. */
 export const KEEP_SLACK = .4;
+/** A click or tap within this many metres of a target's authored point means that target. */
+export const PICK_RADIUS = .5;
 /** Closer than this the target is underfoot and counts as straight ahead. */
 const UNDERFOOT = .3;
 
@@ -23,9 +27,11 @@ export interface InteractionCandidate {
   readonly distance: number;
   readonly alignment: number;
 }
+/** Why a seen target is not offered. Only `occupied` and `not-yours` are ever said on the look; a pick can say `far`. */
+export type InteractionHold = Extract<InteractionBlock, 'occupied' | 'not-yours'> | 'far';
 export interface InteractionQuiet {
   readonly record: InteractionRecord;
-  readonly reason: Extract<InteractionBlock, 'occupied' | 'not-yours'>;
+  readonly reason: InteractionHold;
   readonly distance: number;
 }
 export interface InteractionSelection {
@@ -34,14 +40,28 @@ export interface InteractionSelection {
   /** When nothing is actionable: the nearest visible target that is taken or someone else's, said quietly. */
   readonly quiet: InteractionQuiet | null;
 }
-export interface SelectInput {
-  readonly frame: LookFrame;
+interface Situation {
   readonly records: readonly InteractionRecord[];
   readonly world: CollisionWorld | null;
   readonly actor: InteractionActor;
   readonly seats: readonly RealmSeat[];
+}
+export interface SelectInput extends Situation {
+  readonly frame: LookFrame;
   /** Last frame's focus ID, for hysteresis. */
   readonly previous: string | null;
+}
+export interface PickInput extends Situation {
+  /** The body's feet this frame (the same feet the look uses). */
+  readonly feet: Vec3;
+  /** The camera ray under the cursor or finger. */
+  readonly ray: PointerRay;
+}
+/** What a click or tap landed on: the target it meant, and the candidate if it can be used now. */
+export interface InteractionPick {
+  readonly record: InteractionRecord;
+  readonly candidate: InteractionCandidate | null;
+  readonly hold: InteractionHold | null;
 }
 
 /** Cosine between the horizontal view direction and the horizontal direction from the feet to the target. */
@@ -60,6 +80,27 @@ function better(a: InteractionCandidate, b: InteractionCandidate): boolean {
   return a.record.target.id < b.record.target.id;
 }
 
+export type TargetAssessment =
+  | { readonly usable: true; readonly action: RealmInteractionAction; readonly distance: number }
+  | { readonly usable: false; readonly hold: InteractionHold | null; readonly distance: number };
+
+/**
+ * The physical and legal judgement of one target from these feet, shared by the look and the pointer: reach with a
+ * clear eye line, the family/state law, and a supported, full-body-clear approach. Seated, only your own seat (to
+ * stand) is usable.
+ */
+export function assessTarget(world: CollisionWorld, feet: Vec3, record: InteractionRecord, actor: InteractionActor, occupant: RealmSeat | null): TargetAssessment {
+  const distance = horizontalDistance(feet, record.target.position);
+  if (actor.state.mode === 'seated') {
+    return actor.state.targetId === record.target.id ? { usable: true, action: 'stand', distance } : { usable: false, hold: null, distance };
+  }
+  if (!withinReach(world, feet, record.target)) return { usable: false, hold: 'far', distance };
+  const legality = interactionLegality(actor, record, occupant);
+  if (!legality.legal) return { usable: false, hold: legality.reason === 'occupied' || legality.reason === 'not-yours' ? legality.reason : null, distance };
+  if (!standingClear(world, record.target.approach)) return { usable: false, hold: null, distance };
+  return { usable: true, action: legality.action, distance };
+}
+
 export function selectInteraction(input: SelectInput): InteractionSelection {
   const { frame, actor, world } = input;
   const seatOf = new Map(input.seats.map(seat => [seat.targetId, seat]));
@@ -75,18 +116,46 @@ export function selectInteraction(input: SelectInput): InteractionSelection {
     const alignment = viewAlignment(frame, target.position);
     const previous = target.id === input.previous;
     if (alignment < (previous ? KEEP_CONE : LOOK_CONE)) continue;
-    if (!withinReach(world, frame.feet, target)) continue;
-    const distance = horizontalDistance(frame.feet, target.position);
-    const legality = interactionLegality(actor, record, seatOf.get(target.id) ?? null);
-    if (!legality.legal) {
-      if ((legality.reason === 'occupied' || legality.reason === 'not-yours') && alignment >= LOOK_CONE && (!quiet || distance < quiet.distance)) quiet = { record, reason: legality.reason, distance };
+    const judged = assessTarget(world, frame.feet, record, actor, seatOf.get(target.id) ?? null);
+    if (!judged.usable) {
+      // Out of reach says nothing on the look: only what you could reach but may not use is said, quietly.
+      if (judged.hold && judged.hold !== 'far' && alignment >= LOOK_CONE && (!quiet || judged.distance < quiet.distance)) quiet = { record, reason: judged.hold, distance: judged.distance };
       continue;
     }
-    if (!standingClear(world, target.approach)) continue;
-    const candidate: InteractionCandidate = { record, action: legality.action, distance, alignment };
+    const candidate: InteractionCandidate = { record, action: judged.action, distance: judged.distance, alignment };
     if (previous) kept = candidate;
     if (alignment >= LOOK_CONE && (!best || better(candidate, best))) best = candidate;
   }
   const focus = kept && (!best || kept.distance <= best.distance + KEEP_SLACK) ? kept : best;
   return { focus, quiet: focus ? null : quiet };
+}
+
+/**
+ * The target a click/tap/ray meant: the nearest authored point within `PICK_RADIUS` of the ray, seen from the
+ * camera without a solid in between. It is usable only if the same judgement as the look allows it from the feet.
+ */
+export function pickInteraction(input: PickInput): InteractionPick | null {
+  const { ray, world, feet } = input;
+  if (!world) return null;
+  const length = Math.hypot(ray.direction[0], ray.direction[1], ray.direction[2]);
+  if (!(length > 1e-9)) return null;
+  const d: Vec3 = [ray.direction[0] / length, ray.direction[1] / length, ray.direction[2] / length];
+  const seatOf = new Map(input.seats.map(seat => [seat.targetId, seat]));
+  let hit: { record: InteractionRecord; t: number } | null = null;
+  for (const record of input.records) {
+    const p = record.target.position;
+    const ox = p[0] - ray.origin[0], oy = p[1] - ray.origin[1], oz = p[2] - ray.origin[2];
+    const t = ox * d[0] + oy * d[1] + oz * d[2];
+    if (t <= 0) continue;
+    const miss = Math.hypot(ox - d[0] * t, oy - d[1] * t, oz - d[2] * t);
+    if (miss > PICK_RADIUS || (hit && t >= hit.t)) continue;
+    if (!segmentClear(world, ray.origin, p)) continue;
+    hit = { record, t };
+  }
+  if (!hit) return null;
+  const { record } = hit;
+  const judged = assessTarget(world, feet, record, input.actor, seatOf.get(record.target.id) ?? null);
+  if (!judged.usable) return { record, candidate: null, hold: judged.hold };
+  const alignment = viewAlignment({ feet, forward: d }, record.target.position);
+  return { record, candidate: { record, action: judged.action, distance: judged.distance, alignment }, hold: null };
 }

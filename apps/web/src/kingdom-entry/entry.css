@@ -1,6 +1,8 @@
 .kingdom-entry{position:fixed;inset:0;color:#f5e4c5;font-family:Georgia,'Times New Roman',serif}
-.kingdom-entry-gate button{padding:11px 18px;border:1px solid #c49f6a;border-radius:4px;color:#f1dcba;font:13px Georgia,serif;cursor:pointer;box-shadow:0 3px 0 #211f22}
-.kingdom-entry-gate button:hover{background:#544735}
-.kingdom-entry-gate button:focus-visible{outline:2px solid #edc98e;outline-offset:4px}
+.kingdom-entry-gate button,.kingdom-entry-signin{padding:11px 18px;border:1px solid #c49f6a;border-radius:4px;color:#f1dcba;font:13px Georgia,serif;cursor:pointer;box-shadow:0 3px 0 #211f22}
+.kingdom-entry-gate button:hover,.kingdom-entry-signin:hover{background:#544735}
+.kingdom-entry-gate button:focus-visible,.kingdom-entry-signin:focus-visible{outline:2px solid #edc98e;outline-offset:4px}
 .kingdom-entry-notice{position:fixed;z-index:3;left:50%;top:112px;transform:translateX(-50%);width:max-content;max-width:min(620px,calc(100% - 40px));box-sizing:border-box;padding:9px 14px;border:1px solid #ba966263;border-radius:4px;background:#342b25ed;box-shadow:0 3px 14px #080e2440;color:#e9d2ad;font:12px/1.5 Georgia,serif;text-align:center;pointer-events:none}
 @media(max-width:700px){.kingdom-entry-notice{top:116px;max-width:calc(100% - 32px);font-size:11px;padding:8px 12px}}
+
+.kingdom-entry-signin{display:inline-block;margin:18px;background:#423b30;text-decoration:none}

@@ -20,12 +20,12 @@ serially; no independent Chromium alongside another capture. Keep every fixture 
   finished rune gathering, silhouette blueprint, calm held-stage behavior, clear/dispose and reduced-motion
   foundations. Expose only the stages actually completed; do not wire empty later cues as success. Capture and
   inspect this first visible result immediately. Establish that 30 s of pending blueprint never stamps or strikes.
-- [ ] **FR02 — Pour, strike, cool and land with weight** · evidence: eight-stage timed sheet + ownership regression.
+- [x] **FR02 — Pour, strike, cool and land with weight** · evidence: eight-stage timed sheet + ownership regression.
   Finish the whole supplied-stage choreography: layered molten fill, wax stamp, hammer anticipation/impact/settle,
   short highlight, cooling to the real kit and flight to the exact host socket. Reuse bounded emitter seams where
   appropriate. Verify clone/material ownership, repeated/seek/null frames and resource cleanup in one focused
   temporal regression; no approval, attachment or permanent emission is authored here. Inspect stream and phone.
-- [ ] **FR03 — Hear a complete physical forge through the host graph** · evidence: audible ceremony + browser behavior.
+- [x] **FR03 — Hear a complete physical forge through the host graph** · evidence: audible ceremony + browser behavior.
   Build Forge-only procedural/permissive sound behind the approved context/destination API. Finish every stage
   cue and the generic cough/sulk cue; bound voices/tails/sources, skip duplicate or expired attacks, support mute,
   zero volume, suspension and disposal without replay. Listen in isolation and two-anvil overlap, tune under

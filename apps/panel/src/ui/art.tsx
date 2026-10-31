@@ -223,3 +223,14 @@ export function CoalArt(props: { held: boolean; damp?: boolean }) {
     </Show>
   </svg>;
 }
+
+/** A small hand bell: the panel's sound. Muted, it is struck through and cannot ring. */
+export function BellGlyph(props: { muted: boolean }) {
+  return <svg class="cp-glyph bell" classList={{ muted: props.muted }} viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 4.2v1.4M7.2 15.8c1-1.2 1-3 1-5.2a3.8 3.8 0 0 1 7.6 0c0 2.2 0 4 1 5.2Z" />
+    <path d="M5.8 15.8h12.4" />
+    <Show when={!props.muted} fallback={<path class="strike" d="M4.8 4.8 19.2 19.2" />}>
+      <path d="M10.8 18.2a1.3 1.3 0 0 0 2.4 0M18.6 9.6c.9.9 1.3 2 1.3 3.2M5.4 9.6c-.9.9-1.3 2-1.3 3.2" />
+    </Show>
+  </svg>;
+}

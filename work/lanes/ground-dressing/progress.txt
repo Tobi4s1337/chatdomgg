@@ -6,3 +6,7 @@ Note from Tobias (Sat 01:10, applies to every task from here): the world needs m
 
 follow-up: GD01 Complete the requested market/castle approach garden vignette and capture and inspect its visual evidence; the web placement test was interrupted after several minutes without a result and needs a practical runtime.
 2026-10-31 review GD01: pnpm typecheck passed; dressing content tests 21 passed; targeted web test interrupted after several minutes. Cover planner and isolated SIMULATED bench are prepared for integration; no screenshot inspected in this review.
+
+2026-10-31 main looked/next task: Main looked at shots/kingdom/founded-walk@1440x900.png and @390x844.png. Next concrete task: break the uninterrupted dark-green bank at the market/castle approach with one authored garden vignette (flowers, worn verge and low planting) along the existing accepted approach; keep the road/plot frames unchanged. Full-town collision is mounted now; clean geometry alone still looks empty.
+
+2026-10-31 main merged/looked next task: shots/kingdom/evening-street@1440x900.png now has warm plaster and readable people, but the rectangular front strips are still empty. Make one tended verge vignette between the near Juniper/Finch fronts: flowers, a worn doorstep path and one small gardening story, preserving adopted footprint/door keep-outs. This is the next task; accepted work remains merged.

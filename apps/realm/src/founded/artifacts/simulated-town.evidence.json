@@ -1,0 +1,68 @@
+{
+  "label": "SIMULATED",
+  "note": "SIMULATED fixture authority: kingdom, adopted plan, citizen, tenure, names approval and judge receipts are SIMULATED. Not live founding, naming, sign-in or Twitch evidence.",
+  "kingdomId": "900000001",
+  "origin": "simulated",
+  "layoutRevision": "settlement:2:23b3c1b5",
+  "config": {
+    "seed": "simulated-founded-town",
+    "tier": "town",
+    "firstYear": 2022,
+    "year": 2026
+  },
+  "manifest": {
+    "version": 1,
+    "kingdomId": "900000001",
+    "origin": "simulated",
+    "layoutRevision": "settlement:2:23b3c1b5",
+    "collisionRevision": 1,
+    "sceneHash": "6ead01954728f974a1969ed835a9888df858519db1ec0ae87298c82347421a99"
+  },
+  "geometryDigest": "8f1122605164f55c39724a58c1dd6096b602d4ff649dca47a97425c14474d905",
+  "sceneBytes": 1390717,
+  "planBytes": 804412,
+  "counts": {
+    "assets": 49,
+    "placements": 924,
+    "boxes": 8241,
+    "ownedHomes": 1,
+    "attachments": 1,
+    "planHomes": 240,
+    "nativeFixtures": 683,
+    "castleModules": 12,
+    "trees": 260,
+    "gardenEdges": 408
+  },
+  "owned": [
+    {
+      "plotId": "plot:2023:8",
+      "attachments": [
+        "simulated-run-2"
+      ]
+    }
+  ],
+  "displacedPart": "simulated-run-1",
+  "attachedPart": "simulated-run-2",
+  "decoded": {
+    "placements": 924,
+    "assets": 49
+  },
+  "timingsMs": {
+    "foundSimulated": 1604.5,
+    "loadAdoptedPlan": 15,
+    "nativeContent": 899,
+    "assembleValidateEncode": 285.6,
+    "decodeVerify": 76
+  },
+  "memory": {
+    "rssDeltaBytes": 59437056,
+    "heapUsedBytes": 106058832
+  },
+  "absentDependencies": [
+    "pier: no accepted pier/landing site or content exists in the adopted SettlementPlan or @chatdom/content; plaza->pier acceptance waits for it",
+    "anvil: the Forge anvil is a browser presentation (apps/web/src/forge/anvil-hero), not an accepted content blueprint or adopted site; not a static solid in this scene",
+    "civic places (footbridge, gateway, noticeboard, benches, lantern posts): reviewed blueprints exist in @chatdom/content/civic but no accepted site places them in an adopted plan",
+    "tavern, campfire and home interiors: no accepted static site or interior content is adopted",
+    "kingdom name: no kingdom-level approved public name exists in realm authority; only per-home attribution carries approved names"
+  ]
+}

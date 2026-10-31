@@ -69,7 +69,7 @@ export function buildField(layout: Layout): LandField {
   // Smooth union (log-sum-exp) of each community's disc, so neighbouring communities share one landmass.
   for (const cluster of layout.clusters) {
     const region = layout.regions[cluster.region]!;
-    const inflate = region.kind === 'isle' ? 3 : 4.5;
+    const inflate = region.kind === 'continent' ? 4.5 : 3;
     const radius = cluster.r + inflate;
     const x0 = Math.max(0, Math.floor((cluster.x - radius - reach - bounds.minX) / CELL));
     const x1 = Math.min(width - 1, Math.ceil((cluster.x + radius + reach - bounds.minX) / CELL));

@@ -82,6 +82,8 @@
 
 /* ── Key ─────────────────────────────────────────────────────────────────────────────────────── */
 .atlas-key { position: absolute; left: 20px; bottom: 20px; width: 340px; padding: 4px 16px 12px; }
+/* On a short laptop window the key scrolls rather than climbing over the title cartouche above it. */
+.atlas[data-layout='laptop'] .atlas-key { max-height: calc(100% - var(--atlas-cartouche-bottom, 245px) - 34px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--ink-faint) transparent; }
 .atlas-key-toggle { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border: 0; background: none; padding: 6px 0 4px; font: 400 15px/1 var(--caps) !important; letter-spacing: 0.3em; text-transform: lowercase; cursor: default; }
 .atlas-key-toggle svg { display: none; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; }
 .atlas-key-tiers { list-style: none; margin: 4px 0 0; padding: 0 0 8px; border-bottom: 1px solid var(--ink-faint); display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; row-gap: 4px; }
@@ -94,6 +96,8 @@
 .atlas-key-notes li { display: grid; grid-template-columns: 36px 1fr; column-gap: 10px; align-items: center; padding: 3px 0; }
 .atlas-key-notes .atlas-key-mark { grid-row: auto; min-height: 0; }
 .atlas-key-swatch { width: 30px; height: 18px; border: 1px solid var(--ink); border-radius: 40% 55% 45% 60% / 60% 45% 55% 40%; background: linear-gradient(120deg, #cfd5a8, #e2c99a 55%, #d3c0cf); }
+.atlas-key-swatch[data-kind='realms'] { background: radial-gradient(circle at 50% 50%, #ece2c2 0 22%, transparent 24%), linear-gradient(90deg, #c8cd9b 0 34%, #d5c39c 34% 67%, #b9c3ad 67%); }
+.atlas-key-swatch[data-kind='outer'] { background: #ddd8c8; border-style: dashed; border-color: var(--ink-soft); }
 .atlas-key-survey { margin-top: 7px !important; font-size: 12px; line-height: 1.38; color: var(--ink-soft); }
 
 /* ── Bottom bar: scale and controls ──────────────────────────────────────────────────────────── */
@@ -106,11 +110,25 @@
 .atlas-controls button:active:not(:disabled) { background: rgba(59, 47, 37, 0.14); }
 .atlas-controls button:disabled { opacity: 0.35; cursor: default; }
 .atlas-controls svg { width: 22px; height: 22px; fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+/* The distance ladder: four notches on a rail between zoom in and out, the nearest distance at the top. */
+.atlas-ladder { position: relative; display: flex; flex-direction: column; padding: 5px 0; border-top: 1px solid var(--ink-faint); }
+.atlas-ladder::before { content: ''; position: absolute; left: 50%; top: 11px; bottom: 11px; width: 1px; background: rgba(59, 47, 37, 0.42); }
+.atlas-ladder + button { border-top: 1px solid var(--ink-faint); }
+.atlas-controls .atlas-notch { position: relative; height: 17px; border-top: 0; }
+.atlas-notch span { position: absolute; left: 50%; top: 50%; width: 12px; height: 1.5px; background: var(--ink); opacity: 0.62; transform: translate(-50%, -50%); transition: width 140ms ease-out, height 140ms ease-out, transform 140ms ease-out, opacity 140ms; }
+.atlas-notch:hover span { width: 16px; opacity: 0.9; }
+.atlas-notch[aria-pressed='true'] span { width: 8px; height: 8px; opacity: 1; background: var(--ink); box-shadow: 0 0 0 1.5px var(--paper-light), 0 0 0 2.5px rgba(59, 47, 37, 0.7); transform: translate(-50%, -50%) rotate(45deg); }
+.atlas-scalebar-distance { font-style: normal; font-variant: small-caps; letter-spacing: 0.06em; opacity: 0.78; }
 .atlas-scalebar { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 6px 10px; background: rgba(246, 238, 219, 0.72); border-radius: 2px; }
 .atlas-scalebar-bar { display: flex; height: 6px; border: 1px solid var(--ink); }
 .atlas-scalebar-bar span { flex: 1; }
 .atlas-scalebar-bar span:first-child { background: var(--ink); }
 .atlas-scalebar-text { font: italic 400 13px/1 var(--display); color: var(--ink); }
+
+/* While a lost WebGL context comes back, the last frame stays on screen with this quiet line over it. */
+/* A lost context leaves a blank (or broken) canvas: the paper shows until the map is redrawn. */
+.atlas[data-context='lost'] .atlas-map canvas { visibility: hidden; }
+.atlas-redraw { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; padding: 10px 18px; font: italic 400 16px/1.2 var(--display); color: var(--ink); background: var(--paper-light); border: 1px solid rgba(59, 47, 37, 0.55); box-shadow: inset 0 0 0 3px var(--paper-light), inset 0 0 0 4px rgba(59, 47, 37, 0.22); pointer-events: none; }
 
 /* ── Card ────────────────────────────────────────────────────────────────────────────────────── */
 .atlas-card { position: absolute; top: 20px; right: 20px; width: 360px; max-height: calc(100% - 40px); overflow: auto; padding: 22px 22px 20px; animation: atlas-card-in 200ms ease-out both; }
@@ -180,6 +198,7 @@
 .atlas[data-layout='phone'] .atlas-bottom { right: 10px; bottom: 10px; flex-direction: column-reverse; align-items: flex-end; gap: 10px; }
 .atlas[data-layout='phone'] .atlas-key[data-open='true'] ~ .atlas-bottom { display: none; }
 .atlas[data-layout='phone'] .atlas-controls button { width: 44px; height: 44px; }
+.atlas[data-layout='phone'] .atlas-controls .atlas-notch { height: 19px; }
 .atlas[data-layout='phone'] .atlas-card {
   top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 56%; padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
   border-left: 0; border-right: 0; border-bottom: 0; animation-name: atlas-sheet-in;
@@ -193,3 +212,21 @@
   .atlas *, .atlas *::before, .atlas *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
   .atlas-quill { stroke-dashoffset: 0; }
 }
+
+/* ── Live: the seal under the title, the key's pennant and the card's on-air line ─────────────── */
+.atlas { --vermilion: #c23a22; }
+.atlas-live { margin: 9px -6px 0 !important; padding-top: 8px; border-top: 1px solid var(--ink-faint); text-align: center; font-size: 12.5px; line-height: 1.35; color: var(--ink); text-wrap: balance; }
+.atlas-live-mark { display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: -0.5px; border-radius: 48% 56% 52% 44% / 54% 46% 58% 42%; background: var(--vermilion); opacity: 0.85; }
+.atlas-live[data-tone='held'] { color: var(--ink-soft); }
+.atlas-live[data-tone='held'] .atlas-live-mark { background: none; border: 1.4px solid var(--vermilion); }
+.atlas-live[data-tone='quiet'] { color: var(--ink-soft); font-style: italic; }
+.atlas-live[data-tone='quiet'] .atlas-live-mark { background: none; border: 1px dashed var(--ink-soft); opacity: 0.7; }
+.atlas-key-live ellipse { fill: var(--vermilion); opacity: 0.32; }
+.atlas-key-live .staff { stroke: var(--ink); stroke-width: 1.3; stroke-linecap: round; fill: none; }
+.atlas-key-live .pennant { fill: var(--vermilion); stroke: var(--ink); stroke-width: 0.7; stroke-linejoin: round; }
+.atlas-card-live dd { color: var(--ink); }
+.atlas-card-live[data-live='true'] dt { color: var(--vermilion); }
+.atlas-card-flag { flex: none; }
+.atlas-card-flag path:first-child { stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; fill: none; }
+.atlas-card-flag path:last-child { fill: var(--vermilion); fill-opacity: 0.2; stroke: var(--ink-soft); stroke-width: 1.1; stroke-linejoin: round; }
+.atlas[data-layout='phone'] .atlas-live { margin-top: 5px !important; padding-top: 5px; font-size: 11.5px; }

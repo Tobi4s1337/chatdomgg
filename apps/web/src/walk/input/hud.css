@@ -2,7 +2,7 @@
 .walk-hud[hidden]{display:none}
 
 /* Mouse look: one small carved plaque under the kingdom title, clear of the bottom controls, quiet until it changes. */
-.walk-look{position:absolute;left:38px;top:140px;display:flex;align-items:center;gap:9px;max-width:min(330px,calc(100% - 76px));padding:7px 12px 7px 8px;border-radius:4px;border:1px solid #c19b6550;background:repeating-linear-gradient(1.5deg,transparent 0 5px,#e2bd8606 5px 6px),linear-gradient(#4a3d2fe8,#30271fec);box-shadow:0 3px 0 #1b1a1ad0,0 8px 20px #090d1d44,inset 0 1px 0 #e3c08f24;opacity:.72;transition:opacity .4s,transform .18s}
+.walk-look{appearance:none;text-align:left;cursor:pointer;pointer-events:auto;position:absolute;left:38px;top:140px;display:flex;align-items:center;gap:9px;max-width:min(330px,calc(100% - 76px));padding:7px 12px 7px 8px;border-radius:4px;border:1px solid #c19b6550;background:repeating-linear-gradient(1.5deg,transparent 0 5px,#e2bd8606 5px 6px),linear-gradient(#4a3d2fe8,#30271fec);box-shadow:0 3px 0 #1b1a1ad0,0 8px 20px #090d1d44,inset 0 1px 0 #e3c08f24;opacity:.72;transition:opacity .4s,transform .18s}
 .walk-look.is-fresh,.walk-look.is-locked,.walk-look.is-fallback{opacity:1}
 .walk-look-key{flex:none;min-width:24px;height:22px;padding:0 6px;display:grid;place-items:center;border-radius:3px;font:600 11px/1 Georgia,serif;letter-spacing:.04em;color:#3a2a17;background:linear-gradient(#f1d9a6,#c9a46c);border:1px solid #f6e2b7;box-shadow:0 2px 0 #7d5c31,inset 0 -1px 0 #a98451}
 .walk-look-text{display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -41,3 +41,6 @@
 .walk-jump.is-pressed{transform:translateY(3px);box-shadow:0 0 0 4px #f0b55240,0 1px 0 #19140f,0 4px 10px #0b0a1650,inset 0 1px 0 #e9c99044}
 .walk-jump:focus-visible{outline:2px solid #edc98e;outline-offset:4px}
 @media (prefers-reduced-motion:reduce){.walk-look,.walk-stick-ring,.walk-jump{transition:none}}
+
+.walk-look:focus-visible{outline:2px solid #edc98e;outline-offset:4px}
+.walk-look:disabled{cursor:default}

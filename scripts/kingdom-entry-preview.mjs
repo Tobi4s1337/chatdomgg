@@ -1,5 +1,6 @@
-/** Explicit stand-in for spec38/wiring: real KingdomRoom, SIMULATED identities and bounded market ground. */
+/** Explicit stand-in for spec38/wiring: real KingdomRoom, SIMULATED identities and the complete receipt-matched founded town. */
 import { createServer } from 'vite';
+import { TextDecoder } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createServer as createPortReservation } from 'node:net';
 
@@ -12,10 +13,18 @@ await new Promise((resolve, reject) => { reservation.once('error', reject); rese
 const repo = fileURLToPath(new URL('../', import.meta.url));
 const loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false } });
 const { createRealmServer } = await loader.ssrLoadModule('/apps/realm/src/server.ts');
-const { referenceServices } = await loader.ssrLoadModule('/apps/realm/src/reference.ts');
-const { createSimulatedKingdomWalkFixture } = await loader.ssrLoadModule('/packages/testing/fixtures/kingdom-walk.ts');
+const { referenceServices, REFERENCE_KINGDOM } = await loader.ssrLoadModule('/apps/realm/src/reference.ts');
+const { generateSettlementPlan } = await loader.ssrLoadModule('/packages/world/src/index.ts');
+const { createRealmState } = await loader.ssrLoadModule('/packages/world/src/realm/reducer.ts');
+const { assembleFoundedScene, createFoundedWorld } = await loader.ssrLoadModule('/apps/realm/src/founded/index.ts');
 const { createSimulatedPresence } = await loader.ssrLoadModule('/apps/web/src/kingdom/presence-feed.ts');
-const fixture = createSimulatedKingdomWalkFixture(), base = referenceServices();
+// Explicit simulated adoption: choose the plan once, then assemble/serve those exact bytes.
+// Production loads its persisted adopted plan through createFoundedWorldLoader instead.
+const plan = generateSettlementPlan({ seed: 'willowmere', tier: 'town', firstYear: 2022, year: 2026 });
+const build = await assembleFoundedScene({ kingdomId: REFERENCE_KINGDOM, plan, state: createRealmState(REFERENCE_KINGDOM, 'simulated'), collisionRevision: 1 });
+const founded = createFoundedWorld(build.scene);
+const fixture = { scene: build.scene, manifest: build.manifest, sceneBytes: new TextDecoder().decode(build.bytes), world: founded.world, spawns: founded.anchors };
+const base = referenceServices();
 const simulation = createSimulatedPresence(fixture.scene.plan);
 const started = Date.now();
 const settledSeconds = 600, clockOffset = started - simulation.epochMs - settledSeconds * 1000;
@@ -56,8 +65,8 @@ const services = {
 const { server, transport } = createRealmServer(services);
 const json = (response, body) => response.writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(body));
 transport.app.get('/preview/entry', response => json(response, { kingdomId: fixture.manifest.kingdomId,
-  kingdomName: 'Willowmere', origin: 'simulated', floor: fixture.floor,
-  notice: 'SIMULATED · Market square only · Nothing is saved.' }));
+  kingdomName: 'Willowmere', origin: 'simulated', geometry: 'founded-v1',
+  notice: 'SIMULATED · Whole kingdom · Nothing is saved.' }));
 transport.app.get(`/api/realm/founded/${fixture.manifest.kingdomId}`, response => json(response, fixture.manifest));
 transport.app.get(`/api/realm/founded/scenes/${fixture.manifest.sceneHash}`, response => response.writeHeader('Cache-Control', 'no-store')
   .writeHeader('Content-Type', 'application/json').end(fixture.sceneBytes));
@@ -67,5 +76,5 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { void st
 try {
   await new Promise(resolve => reservation.close(resolve));
   await server.listen(port, '127.0.0.1');
-  console.info(`SIMULATED kingdom entry on ${port}; memory only, bounded market collision. Open /?walk=1&source=simulated on 5190.`);
+  console.info(`SIMULATED kingdom entry on ${port}; memory only, complete founded collision. Open /?walk=1&source=simulated on 5190.`);
 } catch (error) { await loader.close(); throw error; }

@@ -216,12 +216,11 @@ describe('authoritative worker light geometry', () => {
       expect(Math.max(...exterior)).toBe(15);
       expect(lit.visited).toBeGreaterThan(500);
       expect(lit.visited).toBeGreaterThanOrEqual(unprojected.visited);
-      // Glazed openings resolve exactly, so the real air before the glass is open and an open light wider than
-      // a half-metre cell passes the warmth into the room. Emberfold's mullion leaves two 0.375 m lights: closed.
+      // Glazed openings resolve exactly, so the real air before the glass is open and the warmth crosses into the
+      // room through every authored light, including Emberfold's two 0.375 m lights beside its mullion.
       const room = [1.25, 1.5].map(distance => sampleLightVolume(lit,
         window.position.map((value, axis) => value - window.normal[axis]! * distance) as unknown as Vec3));
-      if (variant === 0) expect(Math.max(...room)).toBe(0);
-      else expect(Math.min(...room)).toBeGreaterThanOrEqual(10);
+      expect(Math.min(...room)).toBeGreaterThanOrEqual(10);
       expect(lit.estimatedPeakBytes).toBeLessThanOrEqual(LIGHT_FIELD_BUDGET);
       const removed = solver.solve({ ...request(3), emitters: [] });
       expect(removed.volume.visited).toBe(0);

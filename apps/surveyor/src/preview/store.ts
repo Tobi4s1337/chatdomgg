@@ -186,7 +186,11 @@ export function verifyPreviewDir(dir: string, expected?: { id: string; revision:
   return problems;
 }
 
-/** Writes a preview into staging, verifies it, then renames it into place. An existing preview is verified, not rewritten. */
+/**
+ * Writes a preview into staging, verifies it, then renames it into place. An existing preview is verified, not
+ * rewritten, and must be byte-identical to what its revision draws now: a session may have pinned it, so the same
+ * preview ID can never come to mean different land.
+ */
 export function writePreview(dataDir: string, preview: PreviewFiles): 'written' | 'existing' {
   const root = previewsRoot(dataDir);
   mkdirSync(root, { recursive: true });
@@ -194,7 +198,13 @@ export function writePreview(dataDir: string, preview: PreviewFiles): 'written' 
   const expected = { id: preview.id, revision: preview.manifest.revision };
   if (existsSync(target)) {
     const problems = verifyPreviewDir(target, expected);
-    if (problems.length === 0) return 'existing';
+    if (problems.length === 0) {
+      const stored = readPreviewManifest(dataDir, preview.id);
+      if (stored.world.sha256 !== preview.manifest.world.sha256 || stored.names.sha256 !== preview.manifest.names.sha256) {
+        throw new Error(`Survey preview ${preview.id} is not reproducible: its revision now draws different bytes under the same preview ID.`);
+      }
+      return 'existing';
+    }
     rmSync(target, { recursive: true, force: true });
   }
   const staging = join(dataDir, '.staging-preview');

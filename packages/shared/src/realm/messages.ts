@@ -48,7 +48,8 @@ export type RealmReceipt =
 export type RealmPublicMessage =
   | { readonly type: 'presence'; readonly frame: KingdomPresenceFrame }
   | { readonly type: 'forge'; readonly event: ForgeActivity }
-  | { readonly type: 'home'; readonly plotId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] };
+  | { readonly type: 'home'; readonly plotId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] }
+  | { readonly type: 'castle'; readonly moduleId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] };
 export interface RealmPublicDelivery {
   readonly version: 1; readonly kingdomId: KingdomId; readonly writerEpoch: string;
   readonly sequence: number; readonly cursor: number; readonly eventId: string; readonly message: RealmPublicMessage;
@@ -62,6 +63,7 @@ export interface RealmBootstrap {
 
 /** Transient room messages are never appended to history/snapshots or replayed as newly live speech. */
 export type RealmTransientMessage =
+  | { readonly type: 'forge'; readonly event: Extract<ForgeActivity, { type: 'stage' }> }
   | { readonly type: 'chat'; readonly cue: CitizenChatCue }
   | { readonly type: 'chat.remove'; readonly cueIds: readonly string[] }
   | { readonly type: 'chat.clear' }

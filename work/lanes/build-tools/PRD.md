@@ -36,7 +36,7 @@ work or repeat town proof captures. Main handles `pnpm verify` and integration. 
   canvas gestures remain core-owned. Clean up subscriptions/listeners. Finish material-appropriate press/drawer
   feedback, using a supplied sound hook only if main adds one. Preserve repeated input and reduced motion.
   · evidence: 390×844 target/palette shots + touch/keyboard tour
-- [ ] **BT04 — Make status truthful and look at the complete working rack.** Present actual `dirty`, `status`,
+- [x] **BT04 — Make status truthful and look at the complete working rack.** Present actual `dirty`, `status`,
   `publishing` and `mode` states. `publish()` fulfillment is not live approval: LIVE authority is unavailable;
   the real SIMULATED local street replacement/Housewarming stays labelled SIMULATED and browser-local. Do not
   invent a receipt or review queue. Add the small scoped

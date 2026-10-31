@@ -227,11 +227,28 @@ describe('Camera.panBy and clamp', () => {
         camera.panBy((random() - 0.5) * 1e6, (random() - 0.5) * 1e6, view);
         const share = coverage(camera, view);
         const box = camera.visibleBox(view);
-        const wantX = Math.min(0.75, (BOUNDS.maxX - BOUNDS.minX) / (box.maxX - box.minX));
-        const wantY = Math.min(0.75, (BOUNDS.maxY - BOUNDS.minY) / (box.maxY - box.minY));
+        // A map wider than the screen keeps at least three quarters of it; a map that fits may overhang by a quarter.
+        const wantX = Math.min(0.75, (BOUNDS.maxX - BOUNDS.minX) / (box.maxX - box.minX) - 0.25);
+        const wantY = Math.min(0.75, (BOUNDS.maxY - BOUNDS.minY) / (box.maxY - box.minY) - 0.25);
         expect(share.x).toBeGreaterThanOrEqual(wantX - 1e-9);
         expect(share.y).toBeGreaterThanOrEqual(wantY - 1e-9);
       }
+    }
+  });
+
+  it('holds the anchor of a zoom near the map edge while the whole map still fits', () => {
+    for (const view of [LAPTOP, PHONE]) {
+      const camera = new Camera(BOUNDS);
+      camera.home(view);
+      // A point a little inside the map's right edge, zoomed by three wheel notches.
+      const edge = camera.worldToScreen(BOUNDS.maxX, (BOUNDS.minY + BOUNDS.maxY) / 2, view);
+      const sx = Math.min(view.width - 10, edge.x - 60);
+      const sy = view.height / 2;
+      const anchor = camera.screenToWorld(sx, sy, view);
+      camera.zoomAt(1.88, sx, sy, view);
+      const held = camera.worldToScreen(anchor.x, anchor.y, view);
+      expect(held.x).toBeCloseTo(sx, 6);
+      expect(held.y).toBeCloseTo(sy, 6);
     }
   });
 

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { geographyOf, type GeoRealm } from '../data/model';
+import { makeWorld } from '../data/fixtures.test-support';
 import { DISTANCE_SCALE, MAX_SCALE } from './camera';
-import { MARKED_TIERS, markedTiers, STAMP_SCALE, stampPx, stampVisible } from './overlay';
+import {
+  clusterLabelFade, clusterLabelPx, labelledRealms, MARKED_TIERS, markedTiers, REALM_LABEL_FROM, realmLabelFade, realmLabelPx, realmLines, regionLabelFade,
+  STAMP_SCALE, stampPx, stampVisible,
+} from './overlay';
 import { decorBand, DECOR_SPACING } from './pyramid';
 
 const HOLDING_RADIUS = [6, 3.4, 1.8, 1.25] as const; // world units, as in a real survey preview
@@ -68,5 +73,92 @@ describe('markedTiers', () => {
       expect(marked).toBe(MARKED_TIERS[decorBand(scale)]);
       for (let tier = 0; tier < 4; tier++) if (stampVisible(tier, scale)) expect(tier, `scale ${scale}`).toBeLessThan(marked);
     }
+  });
+});
+
+const scales = (step = 1.02) => {
+  const out: number[] = [];
+  for (let scale = 0.05; scale <= MAX_SCALE; scale *= step) out.push(scale);
+  return out;
+};
+
+describe('label fades across the four distances', () => {
+  it('writes no realm name at world distance, where the continents are named', () => {
+    for (const scale of scales()) if (scale <= REALM_LABEL_FROM) expect(realmLabelFade(scale), `scale ${scale}`).toBe(0);
+    expect(regionLabelFade(DISTANCE_SCALE.continent)).toBe(1);
+  });
+
+  it('names realms fully across the continent distance and lets them go before kingdom distance', () => {
+    expect(realmLabelFade(REALM_LABEL_FROM * 1.5)).toBe(1);
+    expect(realmLabelFade(DISTANCE_SCALE.continent)).toBe(1);
+    expect(realmLabelFade(DISTANCE_SCALE.realm)).toBe(1);
+    expect(realmLabelFade(DISTANCE_SCALE.realm * 2)).toBeGreaterThan(0);
+    expect(realmLabelFade(DISTANCE_SCALE.realm * 2)).toBeLessThan(1);
+    expect(realmLabelFade(DISTANCE_SCALE.kingdom)).toBe(0);
+    expect(realmLabelFade(MAX_SCALE)).toBe(0);
+  });
+
+  it('keeps game patches unnamed until realm distance, then names them until well into kingdom distance', () => {
+    for (const scale of scales()) if (scale < DISTANCE_SCALE.realm * 0.85) expect(clusterLabelFade(scale), `scale ${scale}`).toBe(0);
+    expect(clusterLabelFade(DISTANCE_SCALE.realm * 1.15)).toBe(1);
+    expect(clusterLabelFade(DISTANCE_SCALE.kingdom)).toBe(1);
+    expect(clusterLabelFade(DISTANCE_SCALE.kingdom + 8)).toBe(0);
+  });
+
+  it('never fades a label in and out again: each rises once and falls once', () => {
+    for (const fade of [regionLabelFade, realmLabelFade, clusterLabelFade]) {
+      let turns = 0;
+      let previous = fade(0.05);
+      let rising = true;
+      for (const scale of scales(1.01)) {
+        const value = fade(scale);
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(1);
+        if (rising && value < previous - 1e-12) {
+          rising = false;
+          turns++;
+        } else if (!rising && value > previous + 1e-12) turns++;
+        previous = value;
+      }
+      expect(turns, fade.name).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('sets a patch name smaller than any realm name, whatever their size on screen', () => {
+    let largestPatch = 0;
+    let smallestRealm = Infinity;
+    for (let r = 0; r <= 2000; r += 5) {
+      largestPatch = Math.max(largestPatch, clusterLabelPx(r));
+      smallestRealm = Math.min(smallestRealm, realmLabelPx(r));
+    }
+    expect(largestPatch).toBeLessThan(smallestRealm);
+    expect(realmLabelPx(50)).toBeLessThanOrEqual(realmLabelPx(400));
+  });
+});
+
+describe('labelledRealms', () => {
+  it('names the family realms, the Crossroads and the Wilds, never an isle or the Outer Isles', () => {
+    const names = labelledRealms(geographyOf(makeWorld()).realms).map((realm) => realm.name);
+    expect(names).toEqual(['Just Chatting & IRL', 'The Crossroads', 'Arenas & MOBAs', 'The Wilds']);
+  });
+
+  it('places the biggest first and breaks ties by index, whatever order they arrive in', () => {
+    const realm = (index: number, members: number): GeoRealm => ({ index, region: 0, kind: 'family', family: index, name: `R${index}`, x: 0, y: 0, r: 1, members });
+    const realms = [realm(0, 5), realm(1, 9), realm(2, 5), realm(3, 9), realm(4, 1)];
+    const order = labelledRealms(realms).map((r) => r.index);
+    expect(order).toEqual([1, 3, 0, 2, 4]);
+    expect(labelledRealms([...realms].reverse()).map((r) => r.index)).toEqual(order);
+  });
+});
+
+describe('realmLines', () => {
+  it('breaks a long name near its middle, before the ampersand where it can', () => {
+    expect(realmLines('Sports, Racing & Simulators')).toBe('Sports, Racing\n& Simulators');
+    expect(realmLines('Roleplay & Open Worlds')).toBe('Roleplay\n& Open Worlds');
+    expect(realmLines('Online Worlds')).toBe('Online\nWorlds');
+  });
+
+  it('leaves a single word whole', () => {
+    expect(realmLines('Shooters')).toBe('Shooters');
   });
 });
