@@ -332,19 +332,24 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 **Order:** picture only, one visible fix/commit per turn, same-view before/after. No new systems/contracts/system
 lanes. Exposure34ac89a is ACCEPTED on Tobias's RTX5080: readable dusk, coloured roofs/fronts/castle, glowing sky.
-Keep that grade, low lantern street camera, warm pools, house models, beacon and gold frame. After flicker:
-restore windows' emissive/halo pull, then soft height fog/aerial depth. Avatar proportions remain Tobias's choice.
+Keep that grade, low lantern street camera, warm pools, house models, beacon and gold frame. Window pull and
+height haze are landed for GPU judging. Avatar proportions remain Tobias's choice.
 
-**Current slice:** remove the arbitrary nearest24 carried-light cutoff. These are emitters baked into a bounded
-voxel field, not individual point-light draws; every rendered lantern now contributes. Culling retains the last
-source and fades it over0.6s. Render time drives fades, so a paused story/capture cannot freeze a handoff.
-Three focused tests cover distance changes, culling fade and >24 lanterns; typecheck/scoped lint/web build pass.
-A first hysteresis-only attempt weakened the distant pool and was rejected by eye, never committed.
-Comparison: `shots/magic/flicker-before-after.mp4`, matched fixed street, simulated10.25–12.75s,4fps;
-`shots/magic/flicker-before-after@3840x1080.png` and `flicker-paired-contact.png` in the same folder.
-Matched frames retain both pools and look nearly identical: no clear baseline pop was reproduced. This
-settled4fps take does NOT prove a smooth fade or resolve all reported flicker. Native continuous motion remains
-the check; flicker is still open, not declared fixed. No SwiftShader fps claims. Approved exposure/pool shaders unchanged.
+**Current slice:** soft depth in the existing voxel material fog: clear first 65m, integrated low height haze
+plus aerial perspective above the ridges. No second post fog or exposure change. Rejected an overly dense
+first frame; reduced it before landing. Viewed native 1920x1080 and `shots/magic/depth-before-after@3840x1080.png`
+(left fab08be, right current; hero/hour19.5/time30, slight sky/framing motion). Far hills recede in blue; castle,
+near streets and windows remain readable. Ridge geometry is still too smooth, not solved by haze. High HDR/ACES,
+SIMULATED, curtain open/fields settled. Typecheck/scoped lint, 13 existing render tests and final web build pass.
+Capture resources closed. GPU comparison still needed. fab08be window cores/amber halos stay; its comparison is
+`shots/magic/window-pull-before-after@3840x1080.png`, halo still bounded to 1.3x pane, ground pools unchanged.
+
+**Prior flicker fixes retained:** bc9a54c removed carried-light nearest24 cutoff and added cull fades; Tobias
+says lanterns hold. 7c71b38 keeps the last accepted public picture through a feed retry only until
+`min(receipt+90s, frame.asOf+90s)`, then fades windows over0.7s and clears citizens/names. Real SSE adapter,
+SIMULATED smoke: old240→0 immediately; fixed240 remain, same-epoch reconnect0walking, +91s outage0/0.
+Evidence `shots/magic/presence-drop-before-after@3840x1080.png`, `presence-drop-smoke.json`. Separate GPU
+shimmer remains unlocalized; don't repeat slow software takes without an exact repro.
 
 **Merges:** passport, raid-gate, emotes, twitch-moments, atlas-w2 through47c0ef7 are on main. All5 captures now
 complete/viewed: `shots/integration/look-reset/contact@1920x800.png`. First4 are SIMULATED benches; Atlas is
@@ -362,7 +367,13 @@ labels kept inside frame. One-pass picture/Genesis recon found no new finished l
   lanes finish current task and stop. Main retains scene/shader/shadow integration; no second forest/emitters.
   Land adoption must use the same new height in render/contact, without silently moving pinned foundations.
 
-**Next picture:** windows must pop against accepted dusk, near crisp/far warm-blue haze. Smithy crowd wraps BOTH
+**Art merges:** avatar-style AS01 (504e1ac), Genesis harbour watchtower (d92e0ff), heraldry
+(df5c42c/aee97df) merged after a short look. Content/studies only, no runtime adoption yet.
+Avatar choice remains Tobias's; landmarks need export/placement/light adoption, heraldry colours are proposals.
+Viewed the avatar contact sheet and all three native1080p options, harbour and snapped river arms lane renders.
+56 scoped tests, typecheck, scoped lint and web build pass. Storybook shoulder gap, bright quay grass and dark
+violet/sable arms remain lane followups; merge not held. Avatar evidence: `work/evidence/avatar-style/AS01/`.
+**Next picture:** Smithy crowd wraps BOTH
 sides with faces behind pour; lower/closer camera, castle lit behind. Current13-person west crescent isn't final.
 Molten02c3494 stays. Real approved chat ritual remains unproved; no waiting observer before Tobias goes live.
 

@@ -1,0 +1,24 @@
+{
+  "styles": [
+    "current",
+    "hearthling",
+    "blockwright",
+    "storybook"
+  ],
+  "size": {
+    "width": 1920,
+    "height": 1080
+  },
+  "hour": 12,
+  "band": {
+    "top": 170,
+    "bottom": 942
+  },
+  "fixtures": [
+    "hearth",
+    "tide",
+    "grove",
+    "clay",
+    "dusk"
+  ]
+}
