@@ -1,0 +1,15 @@
+{
+  "name": "@chatdom/emotes",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@chatdom/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@chatdom/content": "workspace:*"
+  }
+}
