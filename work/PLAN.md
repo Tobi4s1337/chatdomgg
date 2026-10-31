@@ -337,15 +337,13 @@ Short turns; delegate reads. No world/walking polish detours. Parked world lanes
 **Actual evening:** Tobias re-granted the bot incl. user:write:chat; posting works. “evening, Willowmere”13:11
 and weathervane wish13:13:02 reached realm. The wish stopped cold/offline: stream:offline was committed4.8s
 before it; zero Forge reservation rows or approval audit. Server Forge retains the room and runs without a
-browser. Do not bypass live-only eligibility. Asked Tobias whether Twitch is actually live; await answer.
+browser. Do not bypass live-only eligibility. Tobias will go live and say when; do not wait with an observer open.
 Public watch through5190 returns200 SSE/live, collision6, checkpoint cursor728 with presence/castle facts.
 No observed real approved Forge attachment, recorded ritual or shared arrival yet.
 
-**Observer:** Terra live_stream_check owns attached session42199, public `/stream?source=realm&kingdom=129634568`.
-Earlier viewer reached ready with watch/entry/scene200, then closed because the capture helper misread stats.
-Corrected helper ready12:33:38UTC, watch/entry/scene200, no browser errors, source resting. Asked Tobias to go live and send a fresh greeting/wish; retain viewer,
-record actual90s at1920×1080, inspect it. Root viewed `shots/stream/live-realm@1920x1080.png`: blue, quiet offline town. Never restart solely for a poll timeout or another agent’s unknown
-session handle. Browser sessions are agent-scoped. Shared capture lock; no parallel or force-unlocked capture.
+**Observer:** stopped at pause; owned process42199 exited130 and released the capture lock. No observer or
+capture stays open awaiting Twitch. Tobias will explicitly say when live and send the next real wish; only then
+attach a bounded viewer. Existing stream still is an honestly resting/offline town, not a completed real ritual.
 
 **Showcase:** `/showcase`, linked from the kingdom heading. Real walk URL keeps ONLY walk=1 and kingdom.
 Real room stream, SIMULATED Forge/panel, RECORDED Atlas (30October snapshot), unavailable Chronicle and three
@@ -359,9 +357,9 @@ adopted-world precedence; no scene adoption/render wiring yet. Three real Atlas 
 The_AGGman63920635/Counter-Strike/avg16 → coastal hamlet; PinkKittyRose4363967/Retro/avg139.98 → river town;
 MashaD4 154972160/Chess/avg852.12 → mountain city. These showcase selections are art direction, not source facts.
 Profile colours/descriptions/approved emotes missing; fetch real sources, never invent channel-specific content.
-Next: compose three gorgeous complete previews, wire their Atlas holdings, then spec the five content families.
+Next: compose three finished previews and wire their Atlas holdings. Specs40–44 hand the five content families to the team; main owns composition, exports, facts/approval binding and Atlas route integration.
 
-**Lanes:** 5efc270 refreshed Atlas/Gate/Moments/Emotes/Campfire handoffs. Atlas/Gate/Emotes/Campfire branches
+**Lanes:** specs40–44 and their PRDs are ready for independent landmarks, heraldry, emote art, keepers and sound. One worker each; no dependency between their asset work. Missing main-owned mounts are explicit integration needs, not reasons to stop independent tasks. 5efc270 refreshed Atlas/Gate/Moments/Emotes/Campfire handoffs. Atlas/Gate/Emotes/Campfire branches
 include main at that commit. Twitch-moments has active uncommitted work: do not overwrite it; sync at checkpoint.
 Raid road tasks independent of Genesis entry dependency; welcome+gift included. No new reviewed delta identified.
 
