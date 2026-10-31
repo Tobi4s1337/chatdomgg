@@ -55,8 +55,14 @@
   animation: ix-ember .9s ease-in-out infinite alternate; }
 
 /* The room said no: its sentence, in seal ink, without the key. */
-.ix-prompt[data-tone='refused'] .ix-plaque { padding-left: 14px; color: var(--ix-seal); white-space: normal; max-width: min(320px, calc(100vw - 32px)); text-align: left; font-size: 16px; }
+.ix-prompt[data-tone='refused'] .ix-plaque { padding-left: 14px; color: var(--ix-seal); white-space: normal; text-wrap: balance; max-width: min(320px, calc(100vw - 32px)); text-align: left; font-size: 16px; }
 .ix-prompt[data-tone='refused'] .ix-stem::after { background: #d58a6c; box-shadow: 0 0 0 1px #5e2a1d; }
+
+/* The room could not answer (closed, no host, no reply): its sentence in faded ink on cooler parchment, an unlit stem. */
+.ix-prompt[data-tone='unavailable'] .ix-plaque { padding-left: 14px; color: var(--ix-ink-soft); white-space: normal; text-wrap: balance; max-width: min(320px, calc(100vw - 32px)); text-align: left; font-size: 16px;
+  background: radial-gradient(ellipse at 28% 18%, #f7f1e2 0, transparent 68%), linear-gradient(172deg, #e9e0cb, #cdbf9f); }
+.ix-prompt[data-tone='unavailable'] .ix-stem { background: linear-gradient(#8d7a5c, #8d7a5c00); }
+.ix-prompt[data-tone='unavailable'] .ix-stem::after { background: #a89676; box-shadow: 0 0 0 1px #4a3a24; }
 
 /* Quiet context: smaller, translucent, never a button you would press. */
 .ix-prompt[data-tone='quiet'] .ix-plaque { min-height: 34px; padding: 4px 12px; font-size: 14.5px; font-style: italic; color: var(--ix-ink-soft); opacity: .82;
@@ -66,4 +72,4 @@
 @keyframes ix-rise { from { opacity: 0; transform-origin: 50% 100%; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
 @keyframes ix-ember { from { opacity: .55; scale: .86; } to { opacity: 1; scale: 1.05; } }
 @media (prefers-reduced-motion: reduce) { .ix-prompt, .ix-ember { animation: none; } .ix-plaque { transition: none; } }
-@media (max-width: 520px) { .ix-plaque { font-size: 16px; } .ix-prompt[data-tone='refused'] .ix-plaque { font-size: 15px; } }
+@media (max-width: 520px) { .ix-plaque { font-size: 16px; } .ix-prompt[data-tone='refused'] .ix-plaque, .ix-prompt[data-tone='unavailable'] .ix-plaque { font-size: 15px; } }

@@ -114,11 +114,11 @@ export class OutboxDispatcher {
     return true;
   }
 
-  /** The public allowlist, checked again at the door: only the three public kinds, and presence frames by their schema. */
+  /** The public allowlist, checked again at the door: only approved public kinds, and presence frames by their schema. */
   private delivery(row: RealmOutboxRow): RealmPublicDelivery | null {
     const message = row.message;
     if (message.type === 'presence' && !KingdomPresenceFrameSchema.safeParse(message.frame).success) return null;
-    if (message.type !== 'presence' && message.type !== 'forge' && message.type !== 'home') return null;
+    if (message.type !== 'presence' && message.type !== 'forge' && message.type !== 'home' && message.type !== 'castle') return null;
     return { version: 1, kingdomId: this.options.kingdomId, writerEpoch: this.options.writerEpoch, sequence: row.sequence, cursor: row.id, eventId: row.eventId, message };
   }
 

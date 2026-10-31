@@ -36,6 +36,9 @@ export function geometryFromChunks(chunks:readonly AssetChunkMesh[],lattice:Voxe
   geometry.boundingBox=bounds;geometry.boundingSphere=bounds.getBoundingSphere(new THREE.Sphere());return geometry;
 }
 
+/** Voxel fog thins with height, so it runs at this share of the scene's `FogExp2` density. */
+const VOXEL_FOG_SCALE=.72;
+
 export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLattice):VoxelRenderState {
   const palette=new Float32Array(65536*4);
   const kinds=['air','earth','grass','stone','wood','plaster','roof','leaf','metal','fabric','glass'];
@@ -45,7 +48,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
   let farLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);farLightTexture.format=THREE.RedFormat;farLightTexture.needsUpdate=true;
   let beaconLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);beaconLightTexture.format=THREE.RedFormat;beaconLightTexture.needsUpdate=true;
   let heightTexture=new THREE.DataTexture(new Float32Array(1),1,1,THREE.RedFormat,THREE.FloatType);heightTexture.needsUpdate=true;
-  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
+  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
   const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,alphaToCoverage:true,vertexShader:`
     in uint aPacked; in uint aMaterial;
     out float vLodFade;
@@ -75,13 +78,16 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     #define gl_FragColor voxelColour
     precision highp sampler3D;
     uniform sampler2D uPalette;uniform sampler3D uLight,uFarLight,uBeaconLight;
-    uniform vec3 uSun,uAmbient,uSunDirection,uFog,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent;
-    uniform float uSunIntensity,uAmbientIntensity,uNight,uFarCell,uBeaconCell,uTerrain,uShoreLevel;
-    // Shared uniforms: materials derived from this shader text carry them with the uniforms object.
+    uniform vec3 uSun,uAmbient,uSunDirection,uFog,uShadow,uGlow,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent;
+    uniform float uSunIntensity,uAmbientIntensity,uFogDensity,uNight,uFarCell,uBeaconCell,uTerrain,uShoreLevel;
     uniform float uGlassKind,uGlassDither;
     uniform vec3 uTerrainSoil,uTerrainGrass;uniform vec4 uShoreBounds;
     in vec3 vWorld,vNormal;in float vAo,vSky,vLodFade;flat in uint vMaterial;
     const int BAYER[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+    // Forty-eight half-metre cell steps reach 14-24 m toward the sun: across a room, its eaves and its lane.
+    const int SUN_LINE_CELLS=48;
+    // Blocked path, in cells, an opening's edge may cross; below the one cell every solid slab costs.
+    const float SUN_LINE_EDGE=.8;
     float hash(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}
     float packedSample(sampler3D field,ivec3 cell){return floor(texelFetch(field,cell,0).r*255.+.5);}
     bool fieldInside(vec3 p,vec3 size){return all(greaterThanEqual(p,vec3(0)))&&all(lessThan(p,size));}
@@ -125,6 +131,51 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       if(any(lessThan(cell,ivec3(0)))||any(greaterThanEqual(cell,size)))return 0.;
       return step(128.,packedSample(field,cell));
     }
+    // Direct sun indoors. The town-wide sun map is too coarse to find a window or a doorway, and the baked sky
+    // term that hides its leaks through walls also dims the sun that really comes in. The near field's half-metre
+    // light blockers (glass and open carves are clear) answer the actual line to the sun instead, walking whole
+    // cells from the receiver's own air cell and giving up as clear past the field. Crossing any slab of blocker
+    // cells costs at least one cell of path, so under one cell of blocked path is an opening's quantised edge:
+    // it fades the line rather than closing it, and a real 0.4 m reveal is not read as a one-metre tunnel.
+    // reach returns the metres the line covered, so the map need only answer for casters beyond it.
+    float sunLine(vec3 normal,vec3 direction,out float reach){
+      reach=0.;
+      ivec3 size=ivec3(round(uLightExtent/.5));
+      if(any(lessThanEqual(size,ivec3(0)))||any(notEqual(textureSize(uLight,0),size+ivec3(1))))return 0.;
+      vec3 q=(vWorld+normal*.025-uLightOrigin)/.5;
+      if(!fieldInside(q,vec3(size)))return 0.;
+      ivec3 cell=ivec3(floor(q));
+      if(packedSample(uLight,cell)>=128.){
+        vec3 end=vec3(cell)+step(vec3(0.),normal),distanceToFace=vec3(1e10);
+        if(abs(normal.x)>.0001)distanceToFace.x=(end.x-q.x)/normal.x;
+        if(abs(normal.y)>.0001)distanceToFace.y=(end.y-q.y)/normal.y;
+        if(abs(normal.z)>.0001)distanceToFace.z=(end.z-q.z)/normal.z;
+        q+=normal*(max(0.,min(distanceToFace.x,min(distanceToFace.y,distanceToFace.z)))+.005);
+        if(!fieldInside(q,vec3(size)))return 0.;
+        cell=ivec3(floor(q));
+        if(packedSample(uLight,cell)>=128.)return 0.;
+      }
+      ivec3 stepTo=ivec3(sign(direction));
+      vec3 delta=vec3(abs(direction.x)>1e-5?1./abs(direction.x):1e10,abs(direction.y)>1e-5?1./abs(direction.y):1e10,abs(direction.z)>1e-5?1./abs(direction.z):1e10);
+      vec3 next=vec3(abs(direction.x)>1e-5?(float(cell.x)+step(0.,direction.x)-q.x)/direction.x:1e10,
+        abs(direction.y)>1e-5?(float(cell.y)+step(0.,direction.y)-q.y)/direction.y:1e10,
+        abs(direction.z)>1e-5?(float(cell.z)+step(0.,direction.z)-q.z)/direction.z:1e10);
+      float blocked=0.,start=dot(q-(vWorld-uLightOrigin)/.5,direction),walked=0.;
+      for(int i=0;i<SUN_LINE_CELLS;i++){
+        float enter=min(next.x,min(next.y,next.z));walked=enter;
+        if(next.x<=enter){cell.x+=stepTo.x;next.x+=delta.x;}
+        else if(next.y<=enter){cell.y+=stepTo.y;next.y+=delta.y;}
+        else{cell.z+=stepTo.z;next.z+=delta.z;}
+        if(any(lessThan(cell,ivec3(0)))||any(greaterThanEqual(cell,size)))break;
+        if(packedSample(uLight,cell)>=128.){
+          float leave=min(next.x,min(next.y,next.z));
+          blocked+=leave-enter;
+          if(blocked>=SUN_LINE_EDGE)return 0.;
+        }
+      }
+      reach=(start+walked)*.5;
+      return 1.-smoothstep(.25,SUN_LINE_EDGE,blocked);
+    }
     // Ground contact comes from the same authored blockers, sampled just above
     // the ground. It is independent of presence and adds no decorative splats.
     float groundContact(sampler3D field,vec3 origin,vec3 extent,float cellSize,vec3 normal){
@@ -160,8 +211,24 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       edge=mix(kind==3.?.96:kind==4.?.94:kind==6.?.95:1.,edge,detail);
       float ao=mix(.49,1.,vAo);float sky=mix(.24,1.,vSky);
       float diffuse=max(dot(n,normalize(uSunDirection)),0.);
-      vec3 cool=uAmbient*uAmbientIntensity*(.5+.5*max(n.y,0.))*sky;
-      vec3 light=cool+uSun*uSunIntensity*diffuse*(.15+.85*vSky) /* sun-visibility */;
+      // Open faces take the hour's sky fill; occluded ones sink toward its shadow tint, so a shadowed
+      // wall reads blue at noon and indigo at dusk rather than grey.
+      float facing=.5+.5*max(n.y,0.);
+      vec3 cool=mix(uShadow*.62,uAmbient,sky)*uAmbientIntensity*facing*(.4+.6*sky);
+      float sunSeen=1. /* sun-visibility */;
+      float sunLit=sunSeen*(.15+.85*vSky);
+      // Under a roof the near field's own line to the sun decides. The town map, whose texels would blur the
+      // window frame across the patch, is asked only about casters beyond the line, in the air where it ended.
+      float sheltered=1.-smoothstep(.55,.85,vSky);
+      if(sheltered>0.&&diffuse>0.&&uSunIntensity>0.){
+        vec3 toSun=normalize(uSunDirection);float reach;
+        float line=sunLine(n,toSun,reach);
+        #ifdef SUN_SHADOW_RECEIVER
+          if(line>0.)line*=sunShadowInAir(vWorld+toSun*reach);
+        #endif
+        sunLit=max(sunLit,sheltered*line);
+      }
+      vec3 light=cool+uSun*uSunIntensity*diffuse*sunLit;
       vec3 uvw=(vWorld-uLightOrigin)/uLightExtent;
       float warm=surfaceField(uFarLight,uFarOrigin,uFarExtent,uFarCell,n);
       float nearBlend=0.;
@@ -171,11 +238,13 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         warm=mix(warm,surfaceField(uLight,uLightOrigin,uLightExtent,.5,n),nearBlend);
       }
       // The field is blocked by occupied cells; this adds real warm street/wall illumination, not a decal.
-      // The flood falls off linearly with distance. A 1.6 power (not a square) carries the pool 3-5 m onto
-      // the wall and cobbles and still rolls to zero without a ring; the colour falls from a warm core
-      // through amber. It reads fully from dusk (night .2, about 18.5 h) and is absent by day.
-      float pool=pow(warm,1.6);
-      float poolAmount=pool*smoothstep(0.,.2,uNight)*1.15;
+      // The flood falls off linearly with (Manhattan) distance, so the ground under a window is a metre or two
+      // further from it than the wall. A 1.3 power (not a square) carries the pool 3-5 m onto the wall and
+      // the cobbles below and still rolls to zero without a ring; the soft cap below keeps the core from
+      // clipping. The colour falls from a warm core through amber. It reads fully from dusk (night .2, about
+      // 18.5 h) and is absent by day.
+      float pool=pow(warm,1.3);
+      float poolAmount=pool*smoothstep(0.,.2,uNight)*1.3;
       vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
       float beaconAmount=beacon*beacon*(.3+.7*uNight)*1.25;
@@ -207,9 +276,8 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       if(abs(kind-uGlassKind)<.5){
         vec3 eye=normalize(vWorld-cameraPosition),r=reflect(eye,n);
         float fresnel=pow(1.-abs(dot(eye,n)),4.);
-        vec3 skyTint=mix(uFog,uAmbient*uAmbientIntensity*.9,smoothstep(-.05,.55,r.y))*mix(.62,1.,vSky);
         float glint=pow(max(dot(r,normalize(uSunDirection)),0.),140.)*uSunIntensity*(1.-uNight);
-        colour=skyTint*mix(.46,.92,fresnel)+uSun*glint*1.4+vec3(1.,.57,.26)*min(warm,1.)*.28;
+        colour+=uSun*glint*1.4;
         cover=clamp(mix(.24,.9,fresnel)+glint*.6,0.,1.);
         if(uGlassDither>.5){
           // Without multisampling, an ordered screen pattern stands in for fractional coverage.
@@ -219,8 +287,12 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         }
       }
       float distanceToCamera=length(cameraPosition-vWorld);
-      float fogAmount=1.-exp(-distanceToCamera*.00115*exp(-max(vWorld.y,0.)*.019));
-      colour=mix(colour,uFog,min(.86,fogAmount));
+      float fogAmount=1.-exp(-distanceToCamera*uFogDensity*exp(-max(vWorld.y,0.)*.019));
+      // Distance takes the sky's colour, warmer where the view runs toward a low sun.
+      vec3 view=normalize(vec3(vWorld.x-cameraPosition.x,0.,vWorld.z-cameraPosition.z)+vec3(.0001,0.,0.));
+      vec3 sunFlat=normalize(vec3(uSunDirection.x,0.,uSunDirection.z)+vec3(.0001,0.,0.));
+      vec3 fogColour=uFog+uGlow*pow(max(dot(view,sunFlat),0.),3.)*.8;
+      colour=mix(colour,fogColour,min(.86,fogAmount));
       gl_FragColor=vec4(colour,1.);
       gl_FragColor.a=cover;
       #include <tonemapping_fragment>
@@ -235,7 +307,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     const samples=target?target.samples:renderer.getContext().getContextAttributes()?.antialias?4:0;
     uniforms.uGlassDither.value=samples>0?0:1;
   };
-return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSkyZenith.value.set(g.zenith);uniforms.uSkyHorizon.value.set(g.horizon);uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},
+return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSkyZenith.value.set(g.zenith);uniforms.uSkyHorizon.value.set(g.horizon);uniforms.uShadow.value.set(g.shadow);uniforms.uGlow.value.set(g.glow);uniforms.uFogDensity.value=g.fogDensity*VOXEL_FOG_SCALE;uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},
     setLight(v){lightTexture=uploadVolume(lightTexture,v);uniforms.uLight.value=lightTexture;uniforms.uLightOrigin.value.set(...v.origin);uniforms.uLightExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);},
     setFarLight(v){farLightTexture=uploadVolume(farLightTexture,v);uniforms.uFarLight.value=farLightTexture;uniforms.uFarOrigin.value.set(...v.origin);uniforms.uFarExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uFarCell.value=v.cellSize;},
     setBeaconLight(v){beaconLightTexture=uploadVolume(beaconLightTexture,v);uniforms.uBeaconLight.value=beaconLightTexture;uniforms.uBeaconOrigin.value.set(...v.origin);uniforms.uBeaconExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uBeaconCell.value=v.cellSize;},

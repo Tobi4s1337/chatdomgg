@@ -1,4 +1,4 @@
-import { KingdomIdSchema, PRESENCE_LEASE_MS, type KingdomId } from '@chatdom/shared';
+import { KingdomIdSchema, PersonIdSchema, PRESENCE_LEASE_MS, type KingdomId } from '@chatdom/shared';
 import {
   AuthorizationRevokeEventSchema, ChatClearEventSchema, ChatClearUserMessagesEventSchema, ChatMessageDeleteEventSchema,
   ChatMessageEventSchema, type DeliveryFrame, matchesRequest, StreamOfflineEventSchema, StreamOnlineEventSchema,
@@ -8,6 +8,7 @@ import type { PresenceSource, SubmitResult } from '../source/source';
 import type { HeraldEventType, SubscriptionPlan } from './subscriptions';
 import { TtlMap } from './ttl';
 import { extractForgeWords, ForgeCommandHandoff, type ForgeCommandApplication } from '../forge/commands';
+import { speechParts, type RealmDeliverySink } from '../realm-delivery/sink';
 
 /** Twitch redelivers within minutes; ten minutes of keys covers a reconnect handover and its resends. */
 export const DEDUPE_TTL_MS = 600_000;
@@ -89,6 +90,7 @@ interface PendingActivity {
 }
 
 export interface IngestOptions {
+  readonly realm?: RealmDeliverySink;
   readonly source: PresenceSource;
   readonly conduitId: string;
   readonly clientId: string;
@@ -192,6 +194,7 @@ export class ChatIngest {
 
   /** Shutdown or revocation: cancel everything waiting and forget every transient key. */
   clear(): void {
+    this.#options.realm?.clear(this.kingdomId);
     this.#forge?.clear();
     for (const pending of this.#pending.values()) pending.canceled = true;
     this.#pending.clear();
@@ -267,12 +270,16 @@ export class ChatIngest {
     this.#pending.set(event.message_id, pending);
     this.#counters.chatSubmitted++;
     this.#lastChatAt = receivedAt;
-    const words = this.#forge ? extractForgeWords(raw) : null;
+    const words = this.#forge || this.#options.realm ? extractForgeWords(raw) : null;
+    const parts = this.#options.realm ? speechParts(raw) : [];
     const valid = () => !pending.canceled && this.#options.covered();
     const broadcast = this.#options.forge?.broadcast, generation = broadcast?.generation, liveAtReceipt = broadcast?.live;
     const forgeValid = () => valid() && liveAtReceipt === true && broadcast?.generation === generation;
     void this.#options.source.submit(input, valid).then(result => {
       this.#settled(event.message_id, pending, result);
+      if (result === 'applied' && valid()) this.#options.realm?.speech({ kingdomId: this.kingdomId,
+        personId: PersonIdSchema.parse(event.chatter_user_id), messageId: event.message_id,
+        observedAt: at, parts, words }, valid);
       if (result === 'applied' && words !== null && forgeValid()) this.#forge?.offer({
         personId: event.chatter_user_id, messageId: event.message_id, words, observedAt: at,
       }, forgeValid);
@@ -297,6 +304,7 @@ export class ChatIngest {
     this.#counters.deletes++;
     // Delete alone withdraws that one message's activity; it does not hide its author.
     this.#deleted.set(parsed.data.message_id, true, receivedAt);
+    this.#options.realm?.remove(this.kingdomId, parsed.data.message_id);
     this.#forge?.cancel(parsed.data.message_id);
     const pending = this.#pending.get(parsed.data.message_id);
     if (pending) pending.canceled = true;
@@ -311,6 +319,7 @@ export class ChatIngest {
     this.#counters.roomClears++;
     // A room clear withdraws waiting activity only. Nobody's identity is erased and no light goes out.
     this.#roomClearedAt = Math.max(this.#roomClearedAt, at);
+    this.#options.realm?.clear(this.kingdomId);
     this.#forge?.clear();
     for (const pending of this.#pending.values()) pending.canceled = true;
   }
@@ -322,6 +331,7 @@ export class ChatIngest {
       return;
     }
     const target = parsed.data.target_user_id;
+    this.#options.realm?.clear(this.kingdomId, PersonIdSchema.parse(target));
     this.#forge?.cancelAuthor(target);
     const clearedAt = at ?? receivedAt;
     this.#counters.userClears++;

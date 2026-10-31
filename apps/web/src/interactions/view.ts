@@ -4,7 +4,7 @@ import { PENDING, QUIET, SEATED, VERB } from './copy';
 import type { InteractionSelection } from './select';
 import type { InteractionSnapshot } from './session';
 
-export type PromptTone = 'ready' | 'pending' | 'refused' | 'quiet';
+export type PromptTone = 'ready' | 'pending' | 'refused' | 'unavailable' | 'quiet';
 /** Everything the carved prompt draws. Built from the selection and the room's answers only. */
 export interface PromptView {
   readonly tone: PromptTone;
@@ -33,7 +33,7 @@ export function promptView(selection: InteractionSelection, snapshot: Interactio
   }
   if (phase.kind === 'refused') {
     const record = byId(phase.targetId) ?? selection.focus?.record;
-    if (record) return { tone: 'refused', words: phase.message, caption: null, actionable: false, targetId: record.target.id, anchor: lift(record) };
+    if (record) return { tone: phase.outcome, words: phase.message, caption: null, actionable: false, targetId: record.target.id, anchor: lift(record) };
   }
   if (selection.focus) {
     const { record, action } = selection.focus;

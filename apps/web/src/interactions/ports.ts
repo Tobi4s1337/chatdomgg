@@ -1,5 +1,6 @@
 import type { Vec3 } from '@chatdom/shared';
-import type { RealmIntent, RealmPrivateMessage, RealmReceipt, RealmTransientMessage } from '@chatdom/shared/realm';
+import type { RealmInteractionAction, RealmIntent, RealmPrivateMessage, RealmReceipt, RealmTransientMessage } from '@chatdom/shared/realm';
+import type { InteractionRecord } from '../../../../packages/world/src/interactions';
 
 /**
  * Browser-side seams. Each is satisfied by an existing owner's export; the integrator binds them (README).
@@ -26,9 +27,37 @@ export interface InteractionRealm {
   send(intent: InteractIntent): void;
 }
 
-/** The existing audio bus's small UI cues. No new AudioContext and never a microphone prompt. */
+/** What a cue answers: the press itself, the room's yes, its no, or its "not now". */
+export type InteractionCueKind = 'pending' | 'accepted' | 'refused' | 'unavailable';
+/** The existing audio bus's small UI cues (`interactionSound` adapts the kingdom's). No new AudioContext, no microphone. */
 export interface InteractionFeedback {
-  cue(kind: 'pending' | 'accepted' | 'refused'): void;
+  cue(kind: InteractionCueKind, action: RealmInteractionAction): void;
+}
+
+/**
+ * A place that takes the framing once the room accepted its action: the campfire's seated view, the table host's
+ * table, the existing Forge (IN04 binds the actual producers). `open` returns the place's own close, or null when
+ * that place has no view of its own, in which case the walking camera simply stays. `closed` is for the place to
+ * call when it closes itself (Forge closed, table left); the controller then hands the camera back.
+ */
+export interface InteractionPlaces {
+  open(accepted: { readonly action: RealmInteractionAction; readonly record: InteractionRecord }, closed: () => void): InteractionView | null;
+}
+export interface InteractionView {
+  /** Close presentation only. Never cancels durable work (a Forge request in flight, a game in progress). */
+  close(): void;
+}
+
+/** A camera ray in world space, from the scene's camera through a point on the surface. */
+export interface PointerRay {
+  readonly origin: Vec3;
+  readonly direction: Vec3;
+}
+
+/** The parts of the Gamepad API the controller reads, polled once per frame. */
+export interface GamepadLike {
+  readonly connected: boolean;
+  readonly buttons: readonly { readonly pressed: boolean }[];
 }
 
 /**

@@ -31,7 +31,7 @@ concurrent workers modify the same UI entry, planner, source CSS or avatar palet
 
 ## Tasks
 
-- [ ] **FL01 — A quiet, truthful provenance seal and a real kit.** Implement @chatdom/ui tokens/type/focus,
+- [x] **FL01 — A quiet, truthful provenance seal and a real kit.** Implement @chatdom/ui tokens/type/focus,
   existing licensed fonts, plate/slip/seal materials and ProvenanceSeal with fail-closed source parsing. Replace
   the kingdom ribbon only under its grant; keep SIMULATED plainly visible. Mixed live-feed/practice or lost-feed
   states retain every distinct fact. Remove only redundant user-facing text; fixture Forge checks remain labelled
@@ -44,7 +44,7 @@ concurrent workers modify the same UI entry, planner, source CSS or avatar palet
   character allowance and audio callback respecting mute/unlock. Preserve request, fixture, private-error and
   actual result state; no “connected smith” or fake approval. · evidence: looked desktop/phone Forge and keyboard
   focus/error state; real keyboard/touch/Tab selection test; no native select in that consumer.
-- [ ] **FL03 — A builder can read every word.** After build-tools acceptance and precise grant, raise rack and
+- [x] **FL03 — A builder can read every word.** After build-tools acceptance and precise grant, raise rack and
   fallback labels/hints to the type scale; show selected material name, legible disabled reason and clear draft/
   persistence state. Keep controls reachable with phone keyboard/zoom; do not change tool/input/import/save
   behavior or disable movement. Coordinate status wording with its owner and keep practice provenance visible.

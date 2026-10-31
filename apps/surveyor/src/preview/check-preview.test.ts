@@ -7,6 +7,9 @@ import { readManifest } from '../store/revisions';
 import { FixtureSource, RECENT, clock, configFor, fakeSurveyor, sweepAt, tempDataDir } from '../test/fixture-source';
 import { previewIdFor } from './build';
 import { PREVIEW_MANIFEST, previewDir } from './store';
+import { allowRealImports } from '../test/timeouts';
+
+allowRealImports();
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {

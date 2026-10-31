@@ -282,6 +282,17 @@ try {
   report.checks.push(`Rejection: after ${slabs} X+Z gestures the core said “${refused.to.status}”; one more click left revision ${refused.to.revision} and ${refused.to.occupied}/${refused.to.budget} blocks unchanged, Place still seated`);
   await page.mouse.move(380, 640);
   await page.screenshot({ path: `${out}/refused@1440x900.png`, timeout: 120000 });
+  // The same refusal on a phone: the core's reason sits in the slip above the thumb rack, the home above both.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(150); await frame(page); await frame(page);
+  const phoneRefusal = await layout(page, '390x844 refused');
+  assert.equal(await rack(page).locator('.bt-slip-text').innerText(), refused.to.status);
+  const slip = await rack(page).locator('.bt-slip').boundingBox();
+  assert.ok(slip.y >= phoneRefusal.rack.top && slip.y + slip.height <= 844, 'the reason is fully in view');
+  await still(page);
+  await page.screenshot({ path: `${out}/refused@390x844.png`, timeout: 120000 });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(150); await frame(page); await frame(page);
   for (let i = 0; i < slabs; i++) { await button(page, 'Undo').click(); await frame(page); }
   const restored = await core(page);
   assert.equal(restored.occupied, before.occupied, 'undoing the slabs restores the home exactly');
@@ -373,7 +384,49 @@ try {
   await page.keyboard.press('Control+Z'); await frame(page);
   assert.equal((await core(page)).occupied, reopened.from.occupied, 'one undo puts the whole box back');
   report.checks.push(`Close/reopen: media listeners ${held} → ${after} → ${held}; one rack; Erase tapped on the new rack, one click erased ${reopened.from.occupied - reopened.to.occupied} blocks as revision ${reopened.from.revision} → ${reopened.to.revision}, one undo restored them`);
+
+  // The SIMULATED local street: the rack says what it is, one double tap is one publication, and what it stores stays in this browser.
+  const welcome = rack(page).locator('.bt-welcome');
+  assert.match(await welcome.innerText(), /SIMULATED/, 'the welcome plate is labelled SIMULATED');
+  assert.equal(await rack(page).locator('.bt-slip-note').isVisible(), true, 'the edited draft is marked as not yet on the local street');
+  await page.evaluate(() => { const c = window.__chatdomKingdom.build.session.controller, real = c.publish; window.__btPublishes = 0; c.publish = () => { window.__btPublishes++; return real.call(c); }; });
+  const plate = await welcome.boundingBox();
+  for (let i = 0; i < 2; i++) {
+    await finger.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: plate.x + plate.width / 2, y: plate.y + plate.height / 2 }] });
+    await finger.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  }
+  await page.waitForFunction(() => !!window.__chatdomKingdom.build.housewarming, null, { timeout: 120000 });
+  assert.equal(await page.evaluate(() => window.__btPublishes), 1, 'two quick taps reached the core once');
+  await page.locator('.housewarming-name').waitFor({ state: 'visible' });
+  const sign = await page.locator('.housewarming-name').innerText();
+  assert.match(sign, /SIMULATED/, 'the housewarming is labelled SIMULATED');
+  assert.equal(await page.locator('[data-build-tools-rack]').count(), 0, 'the core closed build mode for the housewarming');
+  const stored = await page.evaluate(() => Object.keys(window.localStorage).filter(k => k.startsWith("chatdom:build:")).map(k => ({ key: k, published: !!JSON.parse(window.localStorage.getItem(k)).published })));
+  assert.ok(stored.length === 1 && stored[0].key.startsWith('chatdom:build:SIMULATED:') && stored[0].published, 'one SIMULATED browser-local save holds the publication');
+  assert.ok(await page.evaluate(() => !!window.__chatdomKingdom.build.streetHome), 'the local street shows the new version');
+  // No shot here: under SwiftShader the six-second housewarming has ended before a frame can be written.
+  await page.waitForFunction(() => !window.__chatdomKingdom.build.housewarming, null, { timeout: 60000 });
+  await tap(page, page.getByRole('button', { name: 'Build my home' }));
+  await rack(page).waitFor({ state: 'visible', timeout: 60000 });
+  await page.waitForFunction(() => window.__chatdomKingdom?.build.session?.debug.meshedRevision >= 0, null, { timeout: 120000 }); await frame(page);
+  assert.equal(await rack(page).locator('.bt-slip-note').count(), 0, 'the reopened draft matches the local street');
+  const fresh = await rack(page).locator('.bt-slip-text').innerText();
+  report.checks.push(`Publication: welcome plate “${(await welcome.innerText()).replace(/\s+/g, ' ')}”; two quick taps → ${await page.evaluate(() => window.__btPublishes)} publish() call; core closed build for the housewarming (“${sign.replace(/\s+/g, ' ')}”); storage ${stored.map(s => s.key).join(', ')} (browser-local, holds the published version); reopened draft shows no unpublished note, slip “${fresh}”`);
   assert.deepEqual(report.errors, []);
+
+  // LIVE: there is no draft or review service yet, so the kingdom offers no build mode at all and the core declines to open one.
+  const live = await context.newPage();
+  const liveErrors = [];
+  live.on('pageerror', error => liveErrors.push(error.message));
+  await live.setViewportSize({ width: 1440, height: 900 });
+  await live.goto(url.replace('source=simulated', 'source=herald'));
+  await live.waitForFunction(() => window.__chatdomReady === true && !!window.__chatdomKingdom?.build, null, { timeout: 240000 });
+  assert.equal(await live.getByRole('button', { name: 'Build my home' }).count(), 0, 'LIVE offers no build entry');
+  assert.equal(await live.evaluate(() => window.__chatdomKingdom.build.enter()), false, 'the core will not open a LIVE draft');
+  assert.equal(await live.locator('[data-build-tools-rack]').count(), 0);
+  assert.deepEqual(liveErrors, []);
+  report.checks.push(`LIVE (source=herald): no “Build my home”, build.enter() → false, no rack; ribbon “${await live.locator('.source-ribbon').innerText()}”. The rack's own LIVE branch (locked fittings, “Needs the kingdom’s review service”) cannot be reached through the integration`);
+  await live.close();
   report.result = 'passed';
 } catch (error) {
   report.result = 'failed'; report.failure = String(error?.stack ?? error); process.exitCode = 1;

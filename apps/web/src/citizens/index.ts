@@ -4,6 +4,9 @@ import { geometryFromChunks, type VoxelRenderState } from '@chatdom/render';
 import { VoxelWorkerPool } from '@chatdom/voxel';
 import { createCitizenCapeRenderer } from './capes';
 
+/** Vertical displacement of the seated head from its standing position. */
+export const CITIZEN_SEATED_HEAD_OFFSET_METRES = -4 * VOXEL_METRES.avatar;
+
 /** A compiled wardrobe part. The asset must be the ordered raster of the blueprint. */
 export interface CitizenPart { readonly blueprint: AvatarPartBlueprint; readonly asset: VoxelAsset }
 export interface CitizenLook { readonly id: string; readonly parts: readonly CitizenPart[]; readonly cape?: AvatarCapeBlueprint }
@@ -21,6 +24,8 @@ export interface CitizenSample {
   readonly speed?: number;
   /** Entrance/exit visibility; the voxel shader applies a screen-door fade. */
   readonly opacity?: number;
+  /** Seated position is still the feet/sole datum, not the pelvis. */
+  readonly posture?: 'seated';
   readonly gesture?: 'none' | 'nod' | 'wave';
   /** Shared simulation time in seconds, for gesture timing. */
   readonly time?: number;
@@ -89,21 +94,26 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   // A generous radius covers the authored body, gait and short cloak as a
   // single culling unit, including their edges during a stride.
   const citizenBounds = new THREE.Sphere(new THREE.Vector3(), 2.5);
-  function pose(sample: CitizenSample) {
-    const phase = sample.distance * Math.PI * 2 / .75;
-    const gait = Math.max(0, Math.min(1, sample.moving));
+  const postureById = new Map<string, { value: number; last: number }>();
+  function pose(sample: CitizenSample, seated: number) {
+    // One full left/right stride over 1.8 metres. The old .75 m cycle made ordinary 4 m/s walking
+    // churn through more than five cycles a second; distance still keeps stops and corrections planted.
+    const phase = sample.distance * Math.PI * 2 / 1.8;
+    const gait = Math.max(0, Math.min(1, sample.moving)) * (1 - seated);
     const stride = Math.sin(phase) * gait;
     // Slight counterrotation and opposing arms make the small silhouette read at street scale.
     const wave = sample.gesture === 'wave';
     const gestureTime = sample.time ?? 0;
+    const sitAngle = -Math.PI / 2 * seated;
+    const breath = Math.sin(gestureTime * 1.7) * .012 * seated;
     const rotations: Partial<Record<AvatarBoneId, readonly [number, number, number]>> = {
-      chest: [0, -stride * .055, stride * .025],
+      chest: [breath, -stride * .055, stride * .025],
       head: [sample.gesture === 'nod' ? .14 + .12 * Math.sin(gestureTime * 6) : 0, (sample.lookYaw ?? 0) + stride * .035, -stride * .025],
-      upperArmLeft: [-stride * .43, 0, .06], upperArmRight: [wave ? -.18 : stride * .43, 0, wave ? 1.75 + .22 * Math.sin(gestureTime * 8) : -.06],
-      thighLeft: [stride * .50, 0, 0], thighRight: [-stride * .50, 0, 0],
-      shinLeft: [Math.max(0, stride) * .55, 0, 0], shinRight: [Math.max(0, -stride) * .55, 0, 0],
-      footLeft: [-stride * .50 - Math.max(0, stride) * .55, 0, 0],
-      footRight: [stride * .50 - Math.max(0, -stride) * .55, 0, 0],
+      upperArmLeft: [-stride * .30 - seated * .18, 0, .06 + seated * .08], upperArmRight: [wave ? -.18 : stride * .30 - seated * .18, 0, wave ? 1.75 + .22 * Math.sin(gestureTime * 8) : -.06 - seated * .08],
+      thighLeft: [sitAngle + stride * .42, 0, 0], thighRight: [sitAngle - stride * .42, 0, 0],
+      shinLeft: [-sitAngle + Math.max(0, stride) * .38, 0, 0], shinRight: [-sitAngle + Math.max(0, -stride) * .38, 0, 0],
+      footLeft: [-stride * .42 - Math.max(0, stride) * .38, 0, 0],
+      footRight: [stride * .42 - Math.max(0, -stride) * .38, 0, 0],
     };
     root.makeRotationY(sample.heading); root.setPosition(...sample.position);
     poses.clear();
@@ -111,15 +121,21 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
       const angles = rotations[bone.id] ?? [0, 0, 0];
       rotation.set(...angles); quaternion.setFromEuler(rotation);
       translation.set(...bone.offset).multiplyScalar(VOXEL_METRES.avatar);
+      if (bone.id === 'pelvis') {
+        // The four-cell thigh moves forward as it rises; move the body back and
+        // down by the same amount so the vertical shins and feet stay planted.
+        translation.y -= 4 * (1 - Math.cos(sitAngle)) * VOXEL_METRES.avatar;
+        translation.z += 4 * Math.sin(sitAngle) * VOXEL_METRES.avatar;
+      }
       if (bone.id === 'thighLeft' || bone.id === 'thighRight') {
         // The authored rig has separate thigh, shin and foot. Keep the sole level
         // and solve the hip's vertical offset from both rotating segments. The
         // planted foot stays at the datum; the swing foot clears the street.
         const legStride = bone.id === 'thighLeft' ? stride : -stride;
-        const hip = legStride * .5;
-        const knee = Math.max(0, legStride) * .55;
-        const soleHeightCells = 7 - 4 * Math.cos(hip) - 3 * Math.cos(hip + knee);
-        translation.y += (-soleHeightCells + Math.max(0, legStride) * 1.2) * VOXEL_METRES.avatar;
+        const hip = legStride * .42;
+        const knee = Math.max(0, legStride) * .38;
+        const soleHeightCells = 4 * (Math.cos(sitAngle) - Math.cos(sitAngle + hip)) + 3 * (1 - Math.cos(hip + knee));
+        translation.y += (-soleHeightCells + Math.max(0, legStride) * .9) * VOXEL_METRES.avatar;
       }
       local.compose(translation, quaternion, scale);
       const parent = bone.parent ? poses.get(bone.parent) : root;
@@ -142,7 +158,16 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
         projectionView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
         frustum.setFromProjectionMatrix(projectionView, camera.coordinateSystem);
       }
+      const now = performance.now();
+      const seen = new Set<string>();
       for (const sample of samples) {
+        seen.add(sample.id);
+        const target = sample.posture === 'seated' ? 1 : 0;
+        let transition = postureById.get(sample.id);
+        if (!transition) { transition = { value: target, last: now }; postureById.set(sample.id, transition); }
+        const step = Math.max(0, now - transition.last) / 280;
+        transition.value += Math.max(-step, Math.min(step, target - transition.value));
+        transition.last = now;
         const look = looks.get(sample.look);
         if (!look) throw new Error(`Unknown citizen look ${sample.look}.`);
         if (![...sample.position, sample.heading, sample.distance, sample.moving, sample.opacity ?? 1, sample.lookYaw ?? 0, sample.time ?? 0].every(Number.isFinite)) throw new Error(`Invalid citizen sample ${sample.id}.`);
@@ -150,8 +175,8 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           citizenBounds.center.set(sample.position[0], sample.position[1] + .75, sample.position[2]);
           if (!frustum.intersectsSphere(citizenBounds)) continue;
         }
-        pose(sample);
-        if (look.cape) capes.add({ id: sample.id, heading: sample.heading, distance: sample.distance, speed: sample.speed ?? sample.moving * 1.2, opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!);
+        pose(sample, transition.value);
+        if (look.cape) capes.add({ id: sample.id, heading: sample.heading, distance: sample.distance, speed: (sample.speed ?? sample.moving * 1.2) * (1 - transition.value), opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!);
         for (const batch of look.batches) {
           const attachment = poses.get(batch.part.attachment);
           if (!attachment) throw new Error(`Unknown avatar attachment ${batch.part.attachment}.`);
@@ -162,6 +187,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           fades.setX(index, Math.max(0, Math.min(1, sample.opacity ?? 1)));
         }
       }
+      for (const id of postureById.keys()) if (!seen.has(id)) postureById.delete(id);
       capes.endFrame();
       for (const mesh of meshes) {
         mesh.instanceMatrix.needsUpdate = true;

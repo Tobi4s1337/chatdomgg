@@ -3,8 +3,11 @@ import { KingdomPresenceFrameSchema, type PresenceFeed, type KingdomPresenceFram
 import { RealmFoundedManifestSchema, RealmJoinSchema, REALM_FOUNDED_ROUTES, type RealmBootstrap, type RealmPublicDelivery } from '@chatdom/shared/realm';
 import type { RealmFoundedScene } from '@chatdom/world';
 import { connectRealm } from '../realm/client';
-import { queryLimitedMarketFloor, type LimitedMarketFloor } from '../../../../packages/testing/fixtures/market-floor';
+import { compileFoundedScene } from '@chatdom/world/founded-collision';
 import type { KingdomEntrySource } from './types';
+import { observeRealm, observedRoom } from '../realm/adapters/observer';
+import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
+import { createRoomChatFeed } from '../realm/adapters/chat';
 
 const endpoint = () => `${location.origin}/realm-data`;
 async function read(path: string, signal: AbortSignal) {
@@ -14,18 +17,18 @@ async function read(path: string, signal: AbortSignal) {
 }
 
 export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
-  const info: { kingdomId: string; kingdomName: string; origin: string; floor: LimitedMarketFloor; notice: string } = await (await read('/preview/entry', signal)).json();
+  const info: { kingdomId: string; kingdomName: string; origin: string; geometry: string; notice: string } = await (await read('/preview/entry', signal)).json();
   if (info.origin !== 'simulated' || !info.kingdomName || !info.notice?.includes('SIMULATED')) throw new Error('The preview must describe its simulated source.');
   const manifest = RealmFoundedManifestSchema.parse(await (await read(REALM_FOUNDED_ROUTES.manifest.replace(':kingdomId', encodeURIComponent(info.kingdomId)), signal)).json());
-  if (manifest.origin !== 'simulated' || manifest.kingdomId !== info.kingdomId || manifest.collisionRevision !== info.floor.revision) throw new Error('The preview ground does not match its town.');
+  if (manifest.origin !== 'simulated' || manifest.kingdomId !== info.kingdomId || info.geometry !== 'founded-v1') throw new Error('The preview ground does not match its town.');
   const bytes = await (await read(REALM_FOUNDED_ROUTES.scene.replace(':sceneHash', manifest.sceneHash), signal)).arrayBuffer();
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n => n.toString(16).padStart(2, '0')).join('');
   if (hash !== manifest.sceneHash) throw new Error('The preview town bytes have changed.');
   const scene: RealmFoundedScene = JSON.parse(new TextDecoder().decode(bytes));
   if (scene.kingdomId !== manifest.kingdomId || scene.origin !== manifest.origin || scene.layoutRevision !== manifest.layoutRevision
     || scene.collisionRevision !== manifest.collisionRevision) throw new Error('The preview scene does not match its receipt.');
-  const collision = { revision: info.floor.revision, query: (bounds: Parameters<typeof queryLimitedMarketFloor>[1]) => queryLimitedMarketFloor(info.floor, bounds) };
-  const scopeKey = 'chatdom:simulated-market-scope';
+  const collision = compileFoundedScene(scene);
+  const scopeKey = 'chatdom:simulated-founded-scope';
   let resumeScope = sessionStorage.getItem(scopeKey);
   if (!resumeScope) { resumeScope = crypto.randomUUID(); sessionStorage.setItem(scopeKey, resumeScope); }
   signal.throwIfAborted();
@@ -37,6 +40,11 @@ export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
     },
   }, collision, sessionStorage);
   if (signal.aborted) { client.dispose(); signal.throwIfAborted(); }
+  const room = observedRoom(client.room);
+  const observer = observeRealm(room, { kingdomId: manifest.kingdomId, origin: 'simulated',
+    collisionRevision: manifest.collisionRevision, layoutRevision: manifest.layoutRevision });
+  const forgeFeed = createRealmForgeFeed(), offForge = forgeFeed.bind(observer);
+  const chatFeed = createRoomChatFeed(room, observer);
   let frame: KingdomPresenceFrame | undefined, cursor = -1, disposed = false;
   const listeners = new Set<{ receive: (frame: KingdomPresenceFrame) => void; unavailable: () => void }>();
   let ready: () => void = () => {};
@@ -65,7 +73,7 @@ export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
   const dispose = () => {
     if (disposed) return; disposed = true; signal.removeEventListener('abort', dispose);
     offBootstrap(); offWorld(); client.room.onDrop.remove(dropped); client.room.onLeave.remove(dropped); client.room.onReconnect.remove(reconnect);
-    listeners.clear(); client.dispose();
+    listeners.clear(); offForge(); forgeFeed.unavailable(); chatFeed.dispose(); observer.dispose(); client.dispose();
   };
   signal.addEventListener('abort', dispose, { once: true });
   client.room.send('bootstrap');
@@ -79,5 +87,5 @@ export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
     if (frame) receive(frame); else unavailable();
     return () => listeners.delete(listener);
   } };
-  return { scene, manifest, collision, client, presenceFeed, kingdomName: info.kingdomName, notice: info.notice, dispose };
+  return { scene, manifest, collision, client, presenceFeed, forgeFeed, chatFeed, kingdomName: info.kingdomName, notice: info.notice, dispose };
 };

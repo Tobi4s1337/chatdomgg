@@ -118,33 +118,69 @@ Decisions:
 ## Browser (`apps/web/src/interactions`)
 
 ```ts
-selectInteraction({ frame: LookFrame, records, world, actor, seats, previous }): InteractionSelection
+mountInteractionController({ host, surface, session, camera, places?, keyboard?, page?, gamepads?, coarse? }): InteractionController
+createInteractionController({ prompt: onUse => PromptMount, surface, session, camera, … })   // DOM-free core (tests)
+interface InteractionController { frame(frame: InteractionFrame): void; use(): boolean; leave(): boolean; readonly debug; dispose(): void }
+interface InteractionFrame { now; look: LookFrame; records; world; actor: { walkerId, zone, ownedPlotId }; project(point); ray?(x, y) }
+interface InteractionPlaces { open({ action, record }, closed: () => void): { close(): void } | null }
 createInteractionSession({ realm: { send(intent) }, clock, nextId?, feedback? }): InteractionSession
-promptView(selection, snapshot, records): PromptView | null
-mountInteractionPrompt(host, { onUse, coarse? }): { update(view, placement), dispose() }
-bindUseKey(onUse, { keyboard?, owned? }): () => void
+interactionSound(kingdomSound): InteractionFeedback
+selectInteraction(…) · pickInteraction({ ray, feet, records, world, actor, seats }) · assessTarget(…) · promptView(…)
+bindUseKey(onUse, { keyboard?, owned?, page? }): () => void
 ```
 
-- **Selection** (pure, every frame): candidates within 34° of the camera's horizontal view, in reach with a clear
-  eye line, approach supported and clear, legal now. Nearest wins, then alignment, then ID. The current focus is
-  kept while within 42° and no more than 0.4 m farther than the best; an occluded or illegal one is never kept.
-  Seated: your own seat offers `stand` wherever you look. Taken logs and other people's doors are a quiet line
-  only when nothing is actionable.
+The **controller** is the one browser interaction owner per kingdom view. It owns the look, picks, E, Escape, the
+gamepad, the prompt and one camera token; the session owns requests; the room owns every answer.
+
+- **Selection** (pure, every frame): candidates within 34° of the camera's horizontal view, judged by
+  `assessTarget`: in reach with a clear eye line, legal now, approach supported and clear. Nearest wins, then
+  alignment, then ID. The current focus is kept while within 42° and no more than 0.4 m farther than the best; an
+  occluded or illegal one is never kept. Seated: your own seat offers `stand` wherever you look. Taken logs and
+  other people's doors are a quiet line only when nothing is actionable.
+- **One registry for every input.** E, a tap on the prompt and gamepad West use the focus. A click or tap on the
+  world (walk-camera's `isClickPress`: < 8 px, < 300 ms) casts `frame.ray(x, y)` and `pickInteraction` takes the
+  nearest authored point within 0.5 m of the ray, seen from the camera without a solid between, then judges it
+  with the same `assessTarget` from the feet. A target out of reach says "Walk a little closer" quietly for 1.8 s
+  and sends nothing; taken or someone else's says its quiet line.
+- **Gamepad** (standard mapping, polled in `frame`, edge-triggered): West (X / Square) = E, East (B / Circle) =
+  Escape. South stays free for jumping.
+- **E is one-shot.** `KeyE`, not repeating, not composing (`isComposing`, `Process`), no Ctrl/Cmd/Alt, not in a
+  field/textbox/combobox/dialog, not on another keyboard-focused control (walk-camera's `isKeyboardControl`,
+  except the prompt itself), and only while interactions own input (walking, or holding a seat's view). A press
+  that went down anywhere else stays spent until keyup (blur/hidden page reset it), so leaving a field with E held
+  cannot fire it. Walk-camera never reads E.
+- **The camera token.** On the room's acceptance (never before) of `sit`/`tavern`/`forge`, and only while
+  walk-camera is `walking`, `places.open` may return the place's own view; the controller then calls
+  `camera.release()`. A place with no view of its own (`null`) leaves the walking camera alone. The token ends,
+  with `view.close()` and `camera.resume()` in the same call, on: Escape/gamepad East (`leave()`), E/tap "Stand
+  up", the first W/A/S/D/arrow while seated, the room's self state no longer seating you there (stand, revoke,
+  host end, expiry), a disconnect, the place calling `closed()`, and `dispose()`. Escape while seated releases at
+  once and asks to stand; the prompt says "Getting up…" until the room's state arrives. Escape while pending
+  `abandon()`s: a late yes updates the truth (seated, "Stand up") but cannot open a view or take the camera.
+  While the Forge's view is held, the prompt is hidden and E is the Forge's; an Escape the Forge already handled
+  (`defaultPrevented`) is left to it. **Blur and a hidden page** abandon a pending request and drop held E/press
+  state, but do not close an accepted seat or Forge view (spec 37 decision: alt-tab to copy a line must not close
+  the Forge; the room still says you sit).
 - **Session**: one request at a time (a held key or repeat sends nothing more); pending is set synchronously with
   the press; only the room's receipt/self state ends it. Drops outdated self revisions and older seat revisions; a
-  new writer epoch resets. `abandon()` (Escape/blur/Leave) lets go locally and its late reply can no longer fire
-  `onAccepted`, so it cannot take the camera back. `disconnect()` clears everything actionable. An unanswered
-  request stops blocking after 8 s and says nothing is assumed.
+  new writer epoch resets. `abandon()` lets go locally and its late reply can no longer fire `onAccepted`.
+  `disconnect()` clears everything actionable. `refused` and `unavailable` receipts keep their own outcome; an
+  unanswered request becomes `unavailable` after 8 s and says nothing is assumed.
 - **Prompt**: parchment strip on dark wood, brass key with E, a brass stem to the target; ≥ 44 px tap target, no
-  key on coarse pointers, refusal in seal ink, quiet line smaller and italic. Reduced motion removes the rise and
-  the ember pulse. It never takes focus from the world.
-- **E**: `KeyE`, not repeating, not composing, no Ctrl/Cmd/Alt, not in a field/dialog; walk-camera never reads E.
+  key on coarse pointers. Tones: `ready`, `pending` (ember, italic), `refused` (seal ink), `unavailable` (faded ink
+  on cool parchment, unlit stem), `quiet` (smaller, italic, translucent). Reduced motion removes the rise and the
+  ember pulse. It never takes focus from the world. Local response (use → pending in the DOM) is synchronous.
+- **Feedback** on the existing kingdom bus (`createKingdomSound().cue`), finished families only: press →
+  `wood`/brass; accepted → `place` wood (log, chair), `place` metal (anvil), `remove` wood (stand), `wood` (door);
+  refused/unavailable → `wood`/parchment. A locked or muted bus stays quiet; no new AudioContext.
 
 ## Bench and capture
 
 `/src/interactions/bench/index.html` (vite dev; not in the production build) runs the real selector, session,
 prompt and `createInteractionAuthority` against a SIMULATED court, two SIMULATED people and a simulated room
-delay, all labelled on screen. Params: `look`, `latency`, `rival=<seat>`, `race=<seat>`, `motion=reduce`.
+delay, all labelled on screen, through `mountInteractionController`. A bench camera token stands in for
+walk-camera's and a seated framing for the campfire's; the anvil has no Forge view there, so its acceptance keeps
+the walking camera. Params: `look`, `latency`, `rival=<seat>`, `race=<seat>`, `motion=reduce`, `room=closed`.
 
 ```sh
 cd apps/web && pnpm exec vite --host 127.0.0.1 --port <free 5170–5199> --strictPort   # an owned dev server
@@ -152,7 +188,7 @@ node apps/web/src/interactions/capture.mjs --base-url http://127.0.0.1:<port>
 ```
 
 It takes the shared capture lock, fails on page/console errors, checks the 44 px target and viewport fit, and
-writes `shots/interactions/{prompt,look-anvil,pending,seated,refused}@1440x900.png`, `{prompt,seated}@390x844.png`,
+writes `shots/interactions/{prompt,look-anvil,pending,seated,refused,unavailable}@1440x900.png`, `{prompt,seated}@390x844.png`,
 both contact sheets and `report.json` (local pending response: DOM time is judged < 100 ms; the next paint is
 SwiftShader frame time, reported only).
 
@@ -178,15 +214,18 @@ Realm (in the kingdom room's handle wiring, after the founded layout and its col
 
 Web (in the kingdom scene, with the realm client and walk controller connected):
 
-1. Create order: registry (same placements, same revision as the room) → `createInteractionSession({ realm: { send:
-   intent => room.send('intent', intent) } , clock: performance.now, feedback })` → `session.connect(bootstrap.writerEpoch)`
-   → forward `private` receipts/interaction and `transient` seats into `session.receive` → `mountInteractionPrompt(
-   kingdomRoot, { onUse })` → `bindUseKey(onUse, { owned: () => walk.owner === 'walking' || seated })`.
-2. Per frame, after `walk.frame(now)`: `selectInteraction({ frame: { feet: predicted feet, forward: camera
-   direction }, records, world: current collision world, actor: { walkerId, zone, state: snapshot.self, ownedPlotId },
-   seats: snapshot.seats, previous })` → `promptView` → `prompt.update(view, project(view.anchor))`; `session.tick(now)`.
-3. Camera/input priority: E belongs to interactions (walk-camera input table). On an accepted seat/Forge/table:
-   `walk.release()` and hand the framing to the place's own seated/table/Forge view; on stand/Escape/Leave/blur/
-   disconnect: `session.abandon()` where pending, `walk.resume()` at once (authoritative pose stays pending until
-   the room's state arrives).
-4. Teardown: unbind key → dispose prompt → `session.disconnect()` → (walk/realm as their owners say).
+1. Create order: registry (same placements, same revision as the room) → `const session = createInteractionSession({
+   realm: { send: intent => room.send('intent', intent) }, clock: () => performance.now(), feedback:
+   interactionSound(sound) })` → `session.connect(bootstrap.writerEpoch)` → forward `private` receipts/interaction
+   and `transient` seats into `session.receive` → after `createWalkController`: `const interactions =
+   mountInteractionController({ host: kingdomRoot, surface: canvas, session, camera: walk, places })`. `places` is
+   IN04's adapter to the campfire seated framing, the table host and the existing Forge.
+2. Per frame, after `walk.frame(now)` and the camera is placed: `interactions.frame({ now, look: { feet: walk.debug.self
+   feet, forward: camera.getWorldDirection() }, records, world: current collision world, actor: { walkerId:
+   walk.debug.selfId, zone, ownedPlotId }, project: point → CSS px in kingdomRoot, ray: (x, y) →
+   Raycaster.setFromCamera(ndc(x, y), camera).ray })`. It ticks the session itself.
+3. Camera/input priority: E, Escape-while-interacting and gamepad West/East belong to interactions (walk-camera input
+   table). The controller calls `walk.release()`/`walk.resume()` itself; build mode or a menu that releases walk
+   first simply makes interactions inactive (no prompt, no E) until walk is back.
+4. Disconnect: `session.disconnect()` (the controller hands back any held camera on its next notification).
+   Teardown: `interactions.dispose()` → `session.disconnect()` → (walk/realm as their owners say).

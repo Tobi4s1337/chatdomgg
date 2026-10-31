@@ -5,6 +5,7 @@ import {
 } from '@chatdom/world';
 import { randomBytes } from 'node:crypto';
 import { BindingStoreError, type BindingStore, type BindingStoreFault } from './bindings';
+import type { RealmDeliverySink } from '../realm-delivery/sink';
 
 /**
  * Herald's source conditions (Spec 03 R14). `connection` in the public frame says what the kingdom may
@@ -56,6 +57,7 @@ export interface SourceCounters {
 }
 
 export interface PresenceSourceOptions {
+  readonly realm?: RealmDeliverySink;
   readonly kingdomId: KingdomId;
   readonly origin: 'live' | 'simulated';
   /** The presentation's home slots (`presentKingdom(config).slots`). */
@@ -98,6 +100,9 @@ export class PresenceSource {
   readonly #slots: readonly number[];
   readonly #slotSet: ReadonlySet<number>;
   readonly #store: BindingStore;
+  readonly #realm: RealmDeliverySink | undefined;
+  #lastLoss: UnavailableReason | null = null;
+  #lossSerial = 0;
   readonly #clock: () => number;
   readonly #tickMs: number;
   readonly #queueLimit: number;
@@ -129,6 +134,7 @@ export class PresenceSource {
     this.#slots = [...new Set(options.slots)].sort((a, b) => a - b);
     this.#slotSet = new Set(this.#slots);
     this.#store = options.store;
+    this.#realm = options.realm;
     const now = options.now ?? Date.now;
     this.#clock = () => {
       this.#last = Math.max(this.#last, now());
@@ -179,6 +185,7 @@ export class PresenceSource {
   setAvailable(available: boolean, reason: UnavailableReason | null = null): void {
     if (this.#closed || this.#storageFault) return;
     if (!available) {
+      if (this.#available || this.#lastLoss !== (reason ?? 'chat_delivery_down')) this.#lost(reason ?? 'chat_delivery_down');
       this.#reason = reason ?? 'chat_delivery_down';
       this.#condition = this.#reason === 'unauthorized' ? 'unauthorized' : this.#reason === 'stopped' ? 'stopped'
         : this.#reason === 'conduit_unconfigured' ? 'configured' : 'connecting';
@@ -189,6 +196,7 @@ export class PresenceSource {
       return;
     }
     this.#reason = null;
+    this.#lastLoss = null;
     const was = this.#available;
     this.#available = true;
     this.#refreshCondition();
@@ -239,6 +247,7 @@ export class PresenceSource {
    * not this source's to touch; only the private slot table and transient presence go.
    */
   async erase(): Promise<void> {
+    this.#lost('unauthorized', true);
     await this.#queue;
     this.#state = createPresenceState(this.kingdomId, this.origin);
     this.#setBindings([]);
@@ -285,6 +294,7 @@ export class PresenceSource {
   /** Stops timers, tells subscribers, and drops all transient presence. Durable bindings stay on disk. */
   async close(): Promise<void> {
     if (this.#closed) return;
+    this.#lost('stopped');
     this.#closed = true;
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = null;
@@ -335,6 +345,9 @@ export class PresenceSource {
       return 'rejected';
     }
     this.#counters.applied++;
+    if (event.kind === 'stream' && !event.live) this.#realm?.clear(this.kingdomId);
+    // Only normalized accepted evidence crosses this private port, before any public slot projection.
+    if (this.#realm) await this.#realm.observation(event).catch(() => undefined);
     this.#publish();
     return 'applied';
   }
@@ -447,6 +460,7 @@ export class PresenceSource {
   }
 
   #fail(error: unknown): void {
+    this.#lost('storage');
     this.#storageFault = error instanceof BindingStoreError ? error.fault : 'unwritable';
     this.#reason = 'storage';
     this.#condition = 'stopped';
@@ -455,5 +469,14 @@ export class PresenceSource {
     const wasAvailable = this.#available;
     this.#available = false;
     if (wasAvailable) this.#notifyUnavailable();
+  }
+
+  #lost(reason: UnavailableReason, revoked = false): void {
+    this.#lastLoss = reason;
+    this.#realm?.clear(this.kingdomId);
+    void this.#realm?.observation({ version: 1, id: `loss:${this.epoch}:${++this.#lossSerial}`,
+      kingdomId: this.kingdomId, observedAt: this.#clock(), origin: this.origin, kind: 'source-lost',
+      sources: revoked ? ['chat', 'chatters', 'stream'] : ['chat'], reason: revoked ? 'revoked' : 'unavailable',
+    }).catch(() => undefined);
   }
 }

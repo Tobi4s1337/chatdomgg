@@ -5,7 +5,7 @@ import { stepPlayer } from '@chatdom/world/movement';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { CollisionWorld, PlayerState } from '@chatdom/shared/realm';
 
-export interface RealmWalkerPose { readonly id: string; readonly name: string; readonly look: string; readonly x: number; readonly y: number; readonly z: number; readonly yaw: number; readonly distance: number; readonly speed: number; readonly self: boolean }
+export interface RealmWalkerPose { readonly id: string; readonly name: string; readonly look: string; readonly homeSlot: number; readonly x: number; readonly y: number; readonly z: number; readonly yaw: number; readonly distance: number; readonly speed: number; readonly self: boolean }
 export interface RealmEntry {
   readonly kingdomId: RealmJoin['kingdomId'];
   /** API session's opaque, stable browser partition. A different account/session uses a different scope. */
@@ -43,8 +43,6 @@ export interface RealmClient {
   clearInput(): void;
   dispose(): void;
 }
-/** Fallback for large corrections; explicit authority placements snap regardless of distance. */
-const PLACEMENT_SNAP_M = 2;
 export async function connectRealm(endpoint: string, entry: RealmEntry, collision: CollisionWorld | RealmCollision, storage?: Storage): Promise<RealmClient> {
   const network = new Client(endpoint);
   const expectedRoom = kingdomRoomId(entry.kingdomId);
@@ -97,7 +95,10 @@ export async function connectRealm(endpoint: string, entry: RealmEntry, collisio
   const input = room.input<RealmWalkInput>({ mode: 'reliable' });
   const self = room.state.walkers.get(room.sessionId)!;
   const reconciler = predict.reconciler(self, {
-    input, fields: [...PLAYER_FIELDS], smoothMs: 80, snap: PLACEMENT_SNAP_M,
+    // SDK snap measures every numeric replay field, including byte yaw and velocity: a small positional
+    // correction must never pop the whole render pose because a different unit exceeded a metre threshold.
+    // Explicit placement/revision changes below reset SDK anchors; ordinary corrections retain interpolation.
+    input, fields: [...PLAYER_FIELDS], smoothMs: 80,
     // The room steps an input only on the walker's own revision; prediction does the same and holds where its
     // world has not arrived, so a replay never runs an input against solids it was not simulated with.
     step: (ctx, state, command) => {
@@ -148,7 +149,7 @@ export async function connectRealm(endpoint: string, entry: RealmEntry, collisio
         Object.assign(input.data, sample, { buttons: (sample.buttons & 1) | (jumpPending ? 2 : 0), collisionRevision: room.state.collisionRevision, placement: self.placement });
         sanitizeRealmWalkInput(input.data); input.send(); jumpPending = false;
       }
-      return [...room.state.walkers].map(([id, p]) => ({ id, name: p.name, look: p.look,
+      return [...room.state.walkers].filter(([, p]) => p.collisionRevision === room.state.collisionRevision).map(([id, p]) => ({ id, name: p.name, look: p.look, homeSlot: p.homeSlot,
         x: predict.value(p, 'x'), y: predict.value(p, 'y'), z: predict.value(p, 'z'),
         // A yaw byte wraps at 256; smoothing it would spin the citizen the long way round.
         yaw: id === room.sessionId ? predicted.yaw : p.yaw,

@@ -1,4 +1,4 @@
-import { DECOR_KINDS, TIER_CODES, type DecorKind, type PreviewChunk, type PreviewWorld, type ServedNames, type SettlerColumns, type Tier } from './preview';
+import { DECOR_KINDS, TIER_CODES, type DecorKind, type PreviewChunk, type PreviewWorld, type RealmKind, type RegionKind, type ServedNames, type SettlerColumns, type Tier } from './preview';
 
 /**
  * One drawn holding, in world units. Its login and name come from the names projection and are held only while
@@ -7,6 +7,8 @@ import { DECOR_KINDS, TIER_CODES, type DecorKind, type PreviewChunk, type Previe
  */
 export interface Settler {
   index: number;
+  /** Global settler ordinal (Spec 01 R11): `world.head` order, then each region's chunk in region order. Live bytes are indexed by it. */
+  ordinal: number;
   id: string;
   login: string | null;
   name: string | null;
@@ -19,6 +21,9 @@ export interface Settler {
   average: number;
   game: string | null;
   region: number;
+  realm: number;
+  /** The realm's map name: its family of games, the Crossroads, the Wilds, or the isle's language. */
+  realmName: string;
 }
 
 export interface Ring {
@@ -32,12 +37,19 @@ export interface Ring {
 
 export interface DecorMark { kind: DecorKind; bands: number; variant: number; x: number; y: number }
 
+export interface Circle { name: string; x: number; y: number; r: number }
+
+export interface GeoRealm { index: number; region: number; kind: RealmKind; family: number; name: string; x: number; y: number; r: number; members: number }
+
 /** The preview's geometry in world units (the file stores fixed-point integers at `coordScale`). */
 export interface Geography {
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
-  regions: { index: number; name: string; englishName: string; kind: 'continent' | 'isle'; x: number; y: number; r: number; members: number }[];
-  clusters: { region: number; name: string | null; x: number; y: number; r: number; members: number }[];
-  isles: { name: string; x: number; y: number; r: number } | null;
+  regions: { index: number; name: string; englishName: string; kind: RegionKind; x: number; y: number; r: number; members: number }[];
+  realms: GeoRealm[];
+  clusters: { region: number; realm: number; name: string | null; x: number; y: number; r: number; members: number }[];
+  isles: Circle | null;
+  /** The empty islands kept for overflow, labelled once as one archipelago. */
+  outer: Circle;
 }
 
 export function geographyOf(world: PreviewWorld): Geography {
@@ -48,11 +60,16 @@ export function geographyOf(world: PreviewWorld): Geography {
       index: region.index, name: region.name, englishName: region.englishName, kind: region.kind,
       x: region.x / s, y: region.y / s, r: region.r / s, members: region.members,
     })),
+    realms: world.realms.map((realm) => ({
+      index: realm.index, region: realm.region, kind: realm.kind, family: realm.family, name: realm.name,
+      x: realm.x / s, y: realm.y / s, r: realm.r / s, members: realm.members,
+    })),
     clusters: world.clusters.map((cluster) => ({
-      region: cluster.region, name: cluster.game >= 0 ? world.games[cluster.game]?.name ?? null : null,
+      region: cluster.region, realm: cluster.realm, name: cluster.game >= 0 ? world.games[cluster.game]?.name ?? null : null,
       x: cluster.x / s, y: cluster.y / s, r: cluster.r / s, members: cluster.members,
     })),
     isles: world.isles ? { name: world.isles.name, x: world.isles.x / s, y: world.isles.y / s, r: world.isles.r / s } : null,
+    outer: { name: world.outer.name, x: world.outer.x / s, y: world.outer.y / s, r: world.outer.r / s },
   };
 }
 
@@ -102,6 +119,10 @@ export class SettlerStore {
   readonly byLogin = new Map<string, Settler>();
   private readonly grid = new Map<number, Settler[]>();
   private readonly loadedRegions = new Set<number>();
+  private readonly ordinals = new Map<number, Settler>();
+  private readonly offsets: number[];
+  /** Every holding of the preview, loaded or not: the length of a live frame. */
+  readonly total: number;
   private readonly cols: number;
   private names = new Map<string, { login: string; name: string; freshUntil: number }>();
   private withheld = new Set<string>();
@@ -111,7 +132,14 @@ export class SettlerStore {
 
   constructor(private readonly world: PreviewWorld, private readonly now: () => number = Date.now, private readonly cell = 24) {
     this.cols = Math.ceil((world.bounds.maxX - world.bounds.minX) / world.coordScale / cell) + 1;
-    this.add(world.head);
+    this.offsets = [];
+    let next = world.head.ids.length;
+    for (const region of world.regions) {
+      this.offsets.push(next);
+      next += region.chunk.records;
+    }
+    this.total = next;
+    this.add(world.head, 0);
   }
 
   /** Take a new names projection: it replaces the previous one entirely (a name it omits is no longer shown). */
@@ -165,7 +193,7 @@ export class SettlerStore {
   addChunk(chunk: PreviewChunk): void {
     if (this.loadedRegions.has(chunk.region)) return;
     this.loadedRegions.add(chunk.region);
-    this.add(chunk.settlers);
+    this.add(chunk.settlers, this.offsets[chunk.region]!);
   }
 
   private key(x: number, y: number): number {
@@ -174,15 +202,22 @@ export class SettlerStore {
     return gy * this.cols + gx;
   }
 
-  private add(columns: SettlerColumns): void {
+  /** The holding at a settler ordinal, if its region has been loaded. */
+  byOrdinal(ordinal: number): Settler | undefined {
+    return this.ordinals.get(ordinal);
+  }
+
+  private add(columns: SettlerColumns, firstOrdinal: number): void {
     const scale = this.world.coordScale;
     for (let i = 0; i < columns.ids.length; i++) {
       const id = columns.ids[i]!;
       if (this.byId.has(id)) continue;
       const tierRank = columns.tier[i]!;
       const gameIndex = columns.game[i]!;
+      const realm = columns.realm[i]!;
       const settler: Settler = {
         index: this.all.length,
+        ordinal: firstOrdinal + i,
         id,
         login: null,
         name: null,
@@ -195,10 +230,13 @@ export class SettlerStore {
         average: columns.average[i]!,
         game: gameIndex >= 0 ? this.world.games[gameIndex]?.name ?? null : null,
         region: columns.region[i]!,
+        realm,
+        realmName: this.world.realms[realm]?.name ?? '',
       };
       this.label(settler);
       this.all.push(settler);
       this.byId.set(id, settler);
+      this.ordinals.set(settler.ordinal, settler);
       const key = this.key(settler.x, settler.y);
       const bucket = this.grid.get(key);
       if (bucket) bucket.push(settler);

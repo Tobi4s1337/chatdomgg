@@ -51,7 +51,7 @@ integrator composition. Capture work is serial under the shared lock even when c
   seat state reveals only opaque occupancy; no paid priority, durable seat facts or second avatar. No new shots
   for this server-only task; state traces are evidence. Existing match host controls admission and revocation.
 
-- [ ] **IN03 — Looking tells you what E will do.** Complete per-frame nearest-reachable-visible selection with
+- [x] **IN03 — Looking tells you what E will do.** Complete per-frame nearest-reachable-visible selection with
   occlusion, legal-action filtering, stable ties/hysteresis and the shared click/tap/gamepad registry. Add the
   small carved prompt, one-shot E suppression during typing/UI focus, 44 px context action, pending/refused/
   unavailable states and existing-bus feedback. Looking from log to anvil/chair changes the prompt without

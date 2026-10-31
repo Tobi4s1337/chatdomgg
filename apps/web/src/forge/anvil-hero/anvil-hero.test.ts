@@ -66,11 +66,11 @@ describe('createAnvilHero', () => {
     expect(scale).toBe(MARK_SCALE);
     expect(rotation.order).toBe('YXZ');
     expect([rotation.x, rotation.y, rotation.z]).toEqual([0, 0, 0]);
-    // Plate front (its 0.13-unit bevel) stands a hair proud of the cheek; never behind it, never floating.
+    // Plate front (its 0.13-unit bevel) sits a hair inside its window, so the cheek's edge hides its rim; never floating.
     const unit = .32 / 24 * scale;
     const front = position.z + .13 * unit;
-    expect(front - CHEEK_Z * H).toBeGreaterThan(0);
-    expect(front - CHEEK_Z * H).toBeLessThan(.001);
+    expect(CHEEK_Z * H - front).toBeGreaterThan(0);
+    expect(CHEEK_Z * H - front).toBeLessThan(.001);
     // Every point of the source paths, placed by the mount, lies in the open window behind the cut.
     const svg = readFileSync(new URL('../engraving/codex.svg', import.meta.url), 'utf8');
     const numbers = [...svg.matchAll(/ d="([^"]+)"/g)].flatMap(m => m[1]!.match(/-?\d+(?:\.\d+)?/g)!.map(Number));
@@ -90,7 +90,7 @@ describe('createAnvilHero', () => {
     // The rune origin is just outside the centre of the cut.
     expect(hero.runeOrigin.x).toBeCloseTo(position.x, 6);
     expect(hero.runeOrigin.y).toBeCloseTo(position.y, 6);
-    expect(hero.runeOrigin.z - front).toBeGreaterThan(.005);
+    expect(hero.runeOrigin.z - CHEEK_Z * H).toBeGreaterThan(.005);
     expect(hero.runeOrigin.z - front).toBeLessThan(.04);
     hero.dispose();
   });
@@ -117,10 +117,25 @@ describe('createAnvilHero', () => {
     callerMaterial.addEventListener('dispose', () => disposed.push('caller material'));
     stage.geometry.addEventListener('dispose', () => disposed.push('stage geometry'));
     stage.material.addEventListener('dispose', () => disposed.push('stage material'));
+    (uniforms.uAnvilCells!.value as THREE.Texture).addEventListener('dispose', () => disposed.push('occupancy texture'));
+    (uniforms.uAnvilRunes!.value as THREE.Texture).addEventListener('dispose', () => disposed.push('rune table'));
     hero.dispose();
     hero.dispose();
-    expect(disposed.sort()).toEqual(['stage geometry', 'stage material']);
+    expect(disposed.sort()).toEqual(['occupancy texture', 'rune table', 'stage geometry', 'stage material']);
     expect(parent.children).not.toContain(hero.root);
     expect(caller.parent).toBe(hero.root);
+  });
+});
+
+describe('the README', () => {
+  it('states the mount and rune origin the factory actually returns', () => {
+    const readme = readFileSync(new URL('./README.md', import.meta.url), 'utf8');
+    const point = (name: string) => readme.match(new RegExp(`\`${name} = \\(([^)]+)\\)`))![1]!.split(',').map(Number);
+    const hero = createAnvilHero(new THREE.Group());
+    point('engravingMount.position').forEach((n, i) => expect(n).toBeCloseTo(hero.engravingMount.position.getComponent(i), 5));
+    point('runeOrigin').forEach((n, i) => expect(n).toBeCloseTo(hero.runeOrigin.getComponent(i), 5));
+    expect(readme).toContain(`\`scale = ${hero.engravingMount.scale}\``);
+    expect(readme).toContain(`'${hero.engravingMount.rotation.order}')`);
+    hero.dispose();
   });
 });

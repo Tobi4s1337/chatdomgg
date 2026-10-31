@@ -13,9 +13,13 @@ import { GameIdSchema, RevisionIdSchema } from '../export/schema';
  * request (withheld channels removed, names older than a day dropped) with a short cache (R16).
  */
 export const PREVIEW_KIND = 'chatdom-atlas-survey-preview';
-export const PREVIEW_ALGORITHM = 'survey-preview-3';
+export const PREVIEW_ALGORITHM = 'survey-preview-4';
 export const PREVIEW_LABEL = 'Survey preview · land awaiting founding';
 export const ISLES_NAME = 'The Isles of Many Tongues';
+export const OUTER_NAME = 'The Outer Isles';
+export const CROSSROADS_NAME = 'The Crossroads';
+export const WILDS_NAME = 'The Wilds';
+export const REALM_KINDS = ['crossroads', 'family', 'wilds', 'isle', 'outer'] as const;
 export const PreviewIdSchema = z.string().regex(/^pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$/);
 export const TIER_CODES = ['capital', 'city', 'town', 'village'] as const;
 
@@ -33,9 +37,10 @@ export const SettlerColumnsSchema = z.strictObject({
   /** Index into the preview's games table, or -1 when the source recorded no category. */
   game: z.array(z.number().int().min(-1)).max(MAX_SETTLERS),
   region: z.array(z.number().int().min(0).max(65_535)).max(MAX_SETTLERS),
+  realm: z.array(z.number().int().min(0).max(65_535)).max(MAX_SETTLERS),
 }).superRefine((columns, ctx) => {
   const n = columns.ids.length;
-  for (const key of ['tier', 'x', 'y', 'average', 'game', 'region'] as const) {
+  for (const key of ['tier', 'x', 'y', 'average', 'game', 'region', 'realm'] as const) {
     if (columns[key].length !== n) ctx.addIssue({ code: 'custom', path: [key], message: 'Settler columns must have equal lengths.' });
   }
 });
@@ -47,6 +52,61 @@ const FileRefSchema = z.strictObject({
   bytes: UIntSchema,
   records: UIntSchema,
 });
+
+/** One region of land: a language's continent or isle, or one of the Outer Isles. */
+export const RegionFields = {
+  index: UIntSchema,
+  /** Null only for the Outer Isles, which belong to no language. */
+  language: z.string().min(1).max(16).nullable(),
+  /** The language's own name for itself (an observed fact, not an invented community name). */
+  name: DisplayNameSchema,
+  englishName: DisplayNameSchema,
+  kind: z.enum(['continent', 'isle', 'outer']),
+  x: Int, y: Int, r: Int,
+  members: UIntSchema,
+};
+
+/** The drawn world: what an edition freezes and what a survey preview draws from one revision. */
+export const GeometryFields = {
+  /** The family taxonomy and placement rules the realms were drawn with. A proposal is never founder approval. */
+  taxonomy: z.strictObject({
+    id: z.string().regex(/^families-[0-9]{1,4}$/),
+    status: z.enum(['proposed', 'reviewed']),
+    sha256: Sha256Schema,
+    variety: z.literal('variety-1'),
+    realmThreshold: z.literal('realm-threshold-1'),
+  }),
+  lattice: z.strictObject({ id: z.literal('hex-1'), hamletRadius: z.number().positive(), shore: z.number().positive(), gap: z.number().positive() }),
+  coordScale: z.literal(20),
+  bounds: z.strictObject({ minX: Int, minY: Int, maxX: Int, maxY: Int }),
+  tiers: z.strictObject({
+    minAverage: z.strictObject({ capital: UIntSchema, city: UIntSchema, town: UIntSchema, village: UIntSchema }),
+    holdingRadius: z.strictObject({ capital: z.number(), city: z.number(), town: z.number(), village: z.number() }),
+  }),
+  isles: z.strictObject({ name: z.literal(ISLES_NAME), x: Int, y: Int, r: Int }).nullable(),
+  outer: z.strictObject({ name: z.literal(OUTER_NAME), x: Int, y: Int, r: Int }),
+  /** The families of the taxonomy, by index: plain map labels. */
+  families: z.array(z.strictObject({ id: z.string().regex(/^[a-z][a-z0-9-]{1,31}$/), name: DisplayNameSchema })).max(32),
+  realms: z.array(z.strictObject({
+    index: UIntSchema,
+    region: UIntSchema,
+    kind: z.enum(REALM_KINDS),
+    /** Index into families for a family realm, otherwise -1. */
+    family: z.number().int().min(-1),
+    name: DisplayNameSchema,
+    x: Int, y: Int, r: Int,
+    members: UIntSchema,
+    /** Free hamlet slots in this realm's waiting land. */
+    slots: UIntSchema,
+  })).min(1).max(4_096),
+  games: z.array(z.strictObject({ gameId: GameIdSchema, name: z.string().min(1).max(256).nullable() })).max(20_000),
+  /** Patches of ground inside a realm: one main category, a mixed group, or empty waiting land (game -1). */
+  clusters: z.array(z.strictObject({ region: UIntSchema, realm: UIntSchema, game: z.number().int().min(-1), x: Int, y: Int, r: Int, members: UIntSchema })).max(20_000),
+  /** Delta-encoded closed rings: [x0, y0, dx1, dy1, …] in 1/coordScale units. */
+  coasts: z.array(z.strictObject({ region: UIntSchema, points: z.array(Int).min(6).max(400_000) })).max(50_000),
+  /** Triples [code, x, y]; code = kind << 12 | band mask << 7 | variant (0–127). Kinds: mountain, hill, forest, marsh, monster, ship. */
+  decor: z.array(Int).max(600_000),
+};
 
 export const PreviewWorldSchema = z.strictObject({
   version: z.literal(1),
@@ -72,31 +132,11 @@ export const PreviewWorldSchema = z.strictObject({
   counts: z.strictObject({
     channelsObserved: UIntSchema, mapped: UIntSchema, languages: UIntSchema,
     capital: UIntSchema, city: UIntSchema, town: UIntSchema, village: UIntSchema,
+    /** Free hamlet slots on the drawn land: room for later settlers without moving any border. */
+    hamletSlots: UIntSchema,
   }),
-  coordScale: z.literal(20),
-  bounds: z.strictObject({ minX: Int, minY: Int, maxX: Int, maxY: Int }),
-  tiers: z.strictObject({
-    minAverage: z.strictObject({ capital: UIntSchema, city: UIntSchema, town: UIntSchema, village: UIntSchema }),
-    holdingRadius: z.strictObject({ capital: z.number(), city: z.number(), town: z.number(), village: z.number() }),
-  }),
-  regions: z.array(z.strictObject({
-    index: UIntSchema,
-    language: z.string().min(1).max(16),
-    /** The language's own name for itself (an observed fact, not an invented community name). */
-    name: DisplayNameSchema,
-    englishName: DisplayNameSchema,
-    kind: z.enum(['continent', 'isle']),
-    x: Int, y: Int, r: Int,
-    members: UIntSchema,
-    chunk: FileRefSchema,
-  })).min(1).max(512),
-  isles: z.strictObject({ name: z.literal(ISLES_NAME), x: Int, y: Int, r: Int }).nullable(),
-  games: z.array(z.strictObject({ gameId: GameIdSchema, name: z.string().min(1).max(256).nullable() })).max(20_000),
-  clusters: z.array(z.strictObject({ region: UIntSchema, game: z.number().int().min(-1), x: Int, y: Int, r: Int, members: UIntSchema })).max(20_000),
-  /** Delta-encoded closed rings: [x0, y0, dx1, dy1, …] in 1/coordScale units. */
-  coasts: z.array(z.strictObject({ region: UIntSchema, points: z.array(Int).min(6).max(400_000) })).max(50_000),
-  /** Triples [code, x, y]; code = kind << 12 | band mask << 7 | variant (0–127). Kinds: mountain, hill, forest, marsh, monster, ship. */
-  decor: z.array(Int).max(600_000),
+  ...GeometryFields,
+  regions: z.array(z.strictObject({ ...RegionFields, chunk: FileRefSchema })).min(1).max(512),
   /** Capitals and cities of every region, so the world view draws before any region chunk arrives. */
   head: SettlerColumnsSchema,
 });

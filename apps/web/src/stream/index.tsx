@@ -4,7 +4,11 @@ import { createSceneMount, type KingdomScene, type StreamPhase } from './mount';
 import { parseStreamParams, safeAreaName, SAFE_PRESETS, type SafeArea, type StreamLayout, type StreamMood, type StreamSeam } from './params';
 import { createDirector, planNight, type DirectorState, type Shot } from './director';
 import { Corner, Crest, Flame, StreamDefs } from './fittings';
+import { createRealmSpectatorSource } from '../kingdom-entry/spectator';
+import type { SpeechLabel } from '../kingdom/citizen-scene';
+import type { WalkerLabel } from '../kingdom/walk-scene';
 import './stream.css';
+import './speech.css';
 
 type SourceKind = 'simulated' | 'connecting' | 'live' | 'resting' | 'lost';
 interface SourceMark { kind: SourceKind; title: string; note: string }
@@ -54,11 +58,14 @@ export default function StreamView() {
   const [fonts, setFonts] = createSignal(false);
   const [scale, setScale] = createSignal(1);
   const [names, setNames] = createSignal<NameLabel[]>([]);
+  const [speech, setSpeech] = createSignal<SpeechLabel[]>([]);
+  const [walkers, setWalkers] = createSignal<readonly WalkerLabel[]>([]);
+  const [kingdomName, setKingdomName] = createSignal(params.kingdomName);
   const mark = () => sourceMark(label());
   // Only a fresh projection may carry a person's name or give a close shot its subject.
   const fresh = () => mark().kind === 'simulated' || mark().kind === 'live';
   const stageSafe = () => layout() === 'stage' ? safe() : null;
-  const named = params.kingdomName !== 'Kingdom';
+  const named = () => kingdomName() !== 'Kingdom';
   let hour = params.hour, picture!: HTMLDivElement, lens!: HTMLDivElement, holder: HTMLDivElement | undefined, retryTimer = 0, attempts = 0, obsVisible = true;
 
   const plan = () => planNight({ layout: layout(), mood: mood(), seam: layout() === 'stage' ? seam() : null, camera: params.camera, hour: params.hour });
@@ -79,11 +86,22 @@ export default function StreamView() {
   });
   hour = director.hour(hour);
 
+  const spectator = params.source === 'realm' && params.kingdomId ? createRealmSpectatorSource({ kingdomId: params.kingdomId }) : undefined;
+
   const mount = createSceneMount({
     host: () => lens,
-    settings: () => ({ tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time, camera: director.shot, source: params.source, presenceOrigin: params.presenceOrigin }),
+    settings: () => ({ tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time, camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin, onWalkers: setWalkers }),
+    ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
+      if (!spectator) throw new Error('Choose a founded kingdom to watch.');
+      const connection = await spectator(signal, revision, unavailable);
+      setKingdomName(connection.kingdomName);
+      return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId,
+        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, forgeFeed: connection.forgeFeed, walkerFeed: connection.walkerFeed,
+        realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed, dispose: connection.dispose };
+    } } : {}),
     onPhase: next => {
       setPhase(next);
+      if (next !== 'ready') setWalkers([]);
       if (next === 'ready') { attempts = 0; director.start(); } else director.stop();
       if (next === 'failed') scheduleRetry();
     },
@@ -95,12 +113,16 @@ export default function StreamView() {
       if (next.length !== current.length || next.some((name, i) => name.slot !== current[i]!.slot || Math.abs(name.x - current[i]!.x) > .5 || Math.abs(name.y - current[i]!.y) > .5)) setNames(next);
     },
     onScene: publishDebug,
+    onSpeech: setSpeech,
+    onDirecting: directing => { if (directing) director.stop(); else if (phase() === 'ready') director.start(); },
   });
 
   function publishDebug(scene: KingdomScene | undefined): void {
     if (!scene) { delete window.__chatdomKingdom; return; }
     window.__chatdomKingdom = {
       stats: scene.debug,
+      inspect: scene.inspect,
+      pose: scene.pose,
       seek: (time: number, view?: Shot) => scene.seek(time, view),
       hour: (value: number) => { hour = value; scene.setHour(value); },
       capture: (time: number) => scene.capture(time),
@@ -197,7 +219,16 @@ export default function StreamView() {
     style={area() ? { left: `${area()![0]}%`, top: `${area()![1]}%`, width: `${area()![2]}%`, height: `${area()![3]}%` } : undefined}>
     <div class="stream-picture" ref={element => { picture = element; }}>
       <div class="stream-lens" ref={element => { lens = element; }}>
+        <div class="stream-speech citizen-speech"><For each={speech()}>{label =>
+          <div class="citizen-bubble" style={{ left: `${label.x}px`, top: `${label.y}px` }}>
+            <Show when={label.name}><small>{label.name}</small></Show>
+            <p><For each={label.parts}>{part => part.kind === 'text' ? part.text :
+              <img src={`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(part.id)}/default/dark/1.0`} alt={part.alt} />}</For></p>
+          </div>
+        }</For></div>
         <div class="stream-names" aria-live="polite">
+          <For each={walkers()}>{walker => <span class="stream-walker-name" data-walker={walker.id}
+            style={{ left: `${walker.x}px`, top: `${walker.y}px` }}>{walker.name}</span>}</For>
           <Show when={shownName()}>{name =>
             <div class="stream-name" classList={{ shown: !!climaxName() }}
               style={{ left: `${Math.min(Math.max(name().x, 70), picture.clientWidth - 70)}px`, top: `${Math.max(name().y, 46)}px` }}>
@@ -217,8 +248,8 @@ export default function StreamView() {
       <Corner at="tl" /><Corner at="tr" /><Corner at="bl" /><Corner at="br" />
     </div>
     <Show when={layout() === 'stage'}>
-      <Show when={seam()} fallback={<div class="stream-signature"><Crest /><span>{params.kingdomName}</span></div>}>{current => {
-        const words = () => seamWords(current(), params.kingdomName, named);
+      <Show when={seam()} fallback={<div class="stream-signature"><Crest /><span>{kingdomName()}</span></div>}>{current => {
+        const words = () => seamWords(current(), kingdomName(), named());
         return <div class={`stream-seam ${current()}`}>
           <Crest class="seam" />
           <div>
@@ -239,13 +270,13 @@ export default function StreamView() {
       <Switch>
         <Match when={phase() === 'failed'}>
           <div class="stream-gate kingdom-gate">
-            <h2>{params.kingdomName} needs a moment</h2>
+            <h2>{kingdomName()} needs a moment</h2>
             <p>The gate will open again shortly.</p>
             <button type="button" onClick={open}>Try again now</button>
           </div>
         </Match>
         <Match when={true}>
-          <h2>{params.kingdomName}</h2>
+          <h2>{kingdomName()}</h2>
           <p>The lamps are being lit</p>
           <div class="stream-progress"><i style={{ transform: `scaleX(${Math.max(.04, progress())})` }} /></div>
         </Match>
@@ -267,7 +298,7 @@ export default function StreamView() {
         <header class="stream-bench-head">
           <div>
             <p class="stream-bench-eyebrow">Stream preview</p>
-            <h1>{params.kingdomName}</h1>
+            <h1>{kingdomName()}</h1>
           </div>
           <nav class="stream-bench-layouts" aria-label="Stream shape">
             <For each={['stage', 'window', 'strip'] as const}>{shape =>

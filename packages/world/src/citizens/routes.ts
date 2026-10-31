@@ -1,6 +1,7 @@
 import type { Vec3 } from '@chatdom/shared';
+import { REALM_CASTLE_SLOT } from '@chatdom/shared/realm';
 import { randomUnit, seedHash } from '../layout';
-import { expandBounds, homeFrame, pointBounds, SpatialIndex } from '../settlement/geometry';
+import { expandBounds, homeFrame, pointBounds, SpatialIndex, transformCardinalPoint } from '../settlement/geometry';
 import { settlementTerrainHeight } from '../settlement/terrain';
 import type { BoundsXZ, SettlementPlan, StreetEdge, XZ } from '../settlement/types';
 import type { CitizenDestination, CitizenRoute } from './types';
@@ -145,7 +146,7 @@ function conformToTerrain(plan: SettlementPlan, route: readonly XZ[]): Vec3[] {
   return result;
 }
 
-export function createCitizenRoutes(plan: SettlementPlan, entryDistance?: number): {
+export function createCitizenRoutes(plan: SettlementPlan, entryDistance?: number, castleHome = false): {
   routeForSlot(slot: number): CitizenRoute | undefined;
   destinationsForSlot(slot: number): readonly CitizenDestination[];
   routeTo(slot: number, position: Vec3, nodeId: string): CitizenRoute | undefined;
@@ -153,6 +154,31 @@ export function createCitizenRoutes(plan: SettlementPlan, entryDistance?: number
   const homes = new Map(plan.homes.map(home => [home.slot, home])), { parents } = shortestPaths(plan);
   const active = new Set(plan.activeStreetIds), activeEdges = plan.streets.filter(edge => active.has(edge.id));
   const nodes = new Map(plan.nodes.map(node => [node.id, node]));
+  // The route's presentation home is an installed graph anchor, independent of street tenure/ownership.
+  const anchor = (slot: number): { nodeId: string; position: Vec3; heading: number } | undefined => {
+    const home = homes.get(slot);
+    if (home) {
+      const approach = activeEdges.find(edge => edge.id === home.approachId);
+      if (!approach) return undefined;
+      const nodeId = nodes.get(approach.from)?.kind === 'frontage' ? approach.from : approach.to;
+      const { front, outward } = homeFrame(home);
+      return { nodeId, position: [front[0] + outward[0] * DOOR_CLEARANCE, front[1], front[2] + outward[2] * DOOR_CLEARANCE],
+        heading: Math.atan2(-outward[0], -outward[2]) };
+    }
+    if (!castleHome || slot !== REALM_CASTLE_SLOT) return undefined;
+    const gate = nodes.get(plan.castle.gateNodeId), keep = plan.castle.modules.find(module => module.id === plan.castle.beaconModuleId);
+    const road = activeEdges.find(edge => edge.from === gate?.id || edge.to === gate?.id);
+    if (!gate || !keep || !road) return undefined;
+    const neighbour = road.from === gate.id ? road.points[1] : road.points.at(-2);
+    if (!neighbour) return undefined;
+    const distance = Math.hypot(neighbour[0] - gate.position[0], neighbour[2] - gate.position[2]);
+    if (distance < EPSILON) return undefined;
+    const x = gate.position[0] + (neighbour[0] - gate.position[0]) / distance * DOOR_CLEARANCE;
+    const z = gate.position[2] + (neighbour[2] - gate.position[2]) / distance * DOOR_CLEARANCE;
+    const centre = transformCardinalPoint(keep.position, keep.rotation, [keep.size[0] / 2, 0, keep.size[2] / 2]);
+    return { nodeId: gate.id, position: [x, settlementTerrainHeight(plan, x, z), z],
+      heading: Math.atan2(centre[0] - x, centre[2] - z) };
+  };
   const activeNodes = new Set(activeEdges.flatMap(edge => [edge.from, edge.to]));
   const publicDestinations: CitizenDestination[] = plan.nodes.filter(node => activeNodes.has(node.id) && node.kind !== 'frontage')
     .map(node => ({ nodeId: node.id, kind: node.id === plan.market.nodeId ? 'market' : 'street', position: node.position }));
@@ -186,30 +212,22 @@ export function createCitizenRoutes(plan: SettlementPlan, entryDistance?: number
       const a = points[i - 1]!, b = points[i]!;
       cumulativeDistances[i] = cumulativeDistances[i - 1]! + Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
     }
-    const outward = homeFrame(homes.get(slot)!).outward;
     const a = points[Math.max(0, points.length - 2)]!, b = points.at(-1)!;
     return { slot, streetIds, points, cumulativeDistances, length: cumulativeDistances.at(-1)!,
-      homeHeading: destination.kind === 'home' ? Math.atan2(-outward[0], -outward[2]) : Math.atan2(b[0] - a[0], b[2] - a[2]),
+      homeHeading: destination.kind === 'home' ? anchor(slot)!.heading : Math.atan2(b[0] - a[0], b[2] - a[2]),
       destinationNodeId: destination.nodeId, destinationKind: destination.kind };
   };
   const destinationsForSlot = (slot: number): readonly CitizenDestination[] => {
     const cached = destinations.get(slot); if (cached) return cached;
-    const home = homes.get(slot); if (!home) return [];
-    const approach = activeEdges.find(edge => edge.id === home.approachId);
-    if (!approach) return [];
-    const nodeId = nodes.get(approach.from)?.kind === 'frontage' ? approach.from : approach.to;
-    const { front, outward } = homeFrame(home);
-    const list: readonly CitizenDestination[] = [{ nodeId, kind: 'home',
-      position: [front[0] + outward[0] * DOOR_CLEARANCE, front[1], front[2] + outward[2] * DOOR_CLEARANCE] }, ...publicDestinations];
+    const home = anchor(slot); if (!home) return [];
+    const list: readonly CitizenDestination[] = [{ nodeId: home.nodeId, kind: 'home', position: home.position },
+      ...publicDestinations.filter(destination => destination.nodeId !== home.nodeId)];
     destinations.set(slot, list); return list;
   };
   const routeForSlot = (slot: number): CitizenRoute | undefined => {
     const cached = routes.get(slot); if (cached) return cached;
-    const home = homes.get(slot); if (!home) return undefined;
-    const approach = plan.streets.find(edge => edge.id === home.approachId);
-    if (!approach) throw new Error(`Missing home approach for slot ${slot}`);
-    const front = nodes.get(approach.from)?.kind === 'frontage' ? approach.from : approach.to;
-    let node = front;
+    const home = anchor(slot); if (!home) return undefined;
+    let node = home.nodeId;
     const edges: { edge: StreetEdge; reverse: boolean }[] = [];
     while (node !== plan.market.nodeId) {
       const parent = parents.get(node);
