@@ -344,7 +344,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     float course=vWorld.y*.72+.45*sin(vWorld.x*.13+vWorld.z*.09)+1.1*sin((vWorld.x-vWorld.z)*.027);
     rock*=.88+.16*fract(sin(floor(course)*12.9898)*43758.5453);
     base=mix(base,rock,exposed);
-    n=normalize(mix(n,faceNormal*sign(dot(faceNormal,n)),exposed*.6));`),vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
+    n=normalize(mix(n,faceNormal*sign(dot(faceNormal,n)),exposed*.6));`).replace('colour=mix(colour,fogColour,min(.86,fogAmount));', `colour=mix(colour,fogColour,min(.86,fogAmount));
+    // Only the distant land takes this evening air. Keep the town's accepted light
+    // untouched; sightline depth and low valleys separate successive rock ridges.
+    float duskAir=smoothstep(.15,.65,uNight);
+    float ridgeDistance=max(distanceToCamera-220.,0.);
+    float valleyAir=.45+.55*exp(-max(vWorld.y-12.,0.)*.012);
+    float ridgeHaze=(1.-exp(-ridgeDistance*.0009*valleyAir))*duskAir;
+    vec3 lilacAir=vec3(${new THREE.Color('#9685ad').multiplyScalar(.65).toArray().join(',')});
+    colour=mix(colour,lilacAir,min(.34,ridgeHaze));`),vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
   // The v1 lake has no body record. Its terrain carves the shoreline within this
   // envelope; the supplied height grid clips the surface to the actual bed.
   const landform=layout.landform;

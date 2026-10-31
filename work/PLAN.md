@@ -335,15 +335,17 @@ chosen avatar/builder remains authorised. Keep wide exposure34ac89a, indigo08960
 beacon, warm pools, gold frame, softer smoke7c16789 and castle lighta1dac83/32633a8. Merge useful art checkpoints
 first; medium-effort helpers for routine recon/captures/fixes. No new runtime/content checkpoints this turn.
 
-**Current slice:** the coastal Genesis preview (`/kingdom/63920635`) mounts the reviewed harbour watchtower
-instead of the oversized generic castle. Actual footing checked on the existing level castle parcel, with its
-flag, lamps and beacon anchor; the proposed shoreline site is dry but ungraded and disconnected, so unused.
-Only read-only potential Genesis changes: adopted/founded kingdoms and royal presence stay untouched. Viewed
-`shots/magic/harbour-seat-pair.png` and `harbour-seat-after.png`,1920×1080 HIGH, hour19.5/time30, same view.
-Clear silhouette/scale improvement; tower still isolated, road ends beside it, caption overlaps the base. No
-light/camera/terrain edits. Focused actual-channel test, typecheck, scoped lint and web build pass. No new
-committed art checkpoints to merge. Grove and body/clothes remain with their lanes. Before any live seat
-adoption, landmark content needs a real high chamber glass pane/window anchor; this tower has none.
+**Current slice:** distant horizon alone gets dusk-gated lilac aerial perspective, beginning220m away,
+stronger through low valleys. Town/castle/pools/exposure unchanged. Viewed `shots/magic/ridge-haze-pair.png`
+at1920×1080 HIGH, hour19.5/time30: clear ridge separation, facets preserved after reducing an overly pale
+first pass. Typecheck, scoped lint,4 existing shadow receiver tests and web build pass. Strict art checkpoint
+scan found no new usable code: grove families/adapter and avatar body/clothes remain with their lanes.
+Next: grove on existing sites as it lands; readable lantern walkers in the wide view. Roads still feel empty.
+
+**Previous coast slice:**a6fcf9a mounts the reviewed harbour watchtower in `/kingdom/63920635`, on the valid
+castle parcel with flag/lamps/beacon. Proposed shoreline site remains ungraded/disconnected. Potential Genesis
+only; founded/royal presence untouched. `shots/magic/harbour-seat-pair.png` viewed: better hamlet scale, still
+isolated and road ends beside it. Live adoption needs real high chamber glass/window anchor; tower has none.
 
 **Previous Forge slice:**64efb0f gathers16 existing present citizens across the pour in staggered west/north
 arcs, preserving walks, inward headings, barrel perch and tiptoe. Viewed `shots/magic/forge-ring-pair.png`:
