@@ -356,8 +356,18 @@ coast/river/mountain candidates, surface sampler, Atlas size bands, channel-boun
 adopted-world precedence; no scene adoption/render wiring yet. Three real Atlas fixtures (cutoff30Oct16:32UTC):
 The_AGGman63920635/Counter-Strike/avg16 → coastal hamlet; PinkKittyRose4363967/Retro/avg139.98 → river town;
 MashaD4 154972160/Chess/avg852.12 → mountain city. These showcase selections are art direction, not source facts.
-Profile colours/descriptions/approved emotes missing; fetch real sources, never invent channel-specific content.
-Next: compose three finished previews and wire their Atlas holdings. Specs40–44 hand the five content families to the team; main owns composition, exports, facts/approval binding and Atlas route integration.
+Helix31Oct supplied real profile descriptions, chat colours and33/50/107 emotes. Public safe colour/name metadata is in the pending client consumer; emote/lore derivatives still need approval, never invent channel-specific content.
+Core consumer: `compileGenesisSettlement` reserves16/160/512 unowned proposed homes on the selected land,
+with dry full lots, connected frontage streets and castle approach. Shared coast/island sampler now dispatches
+through settlement terrain; adopted plans unchanged. Five focused Genesis tests, typecheck/lint and web build pass.
+Client `/kingdom/<id>` and Atlas card links are pending visual review in the tree, served from root-owned
+preview5170/session74158 with no HMR. Terra `genesis_capture` queued a bounded serial three-shot run; no browser
+held for real chat. Resume its existing handle, not a duplicate capture. No three-kingdom completion claim yet.
+Specs40–44 are committed at5016549; all five Genesis branches/worktrees exist. Atlas/Gate/Emotes/Campfire also
+include5016549 and are ready. Team owns content; main owns composition, exports, facts/approval and route binding.
+Actual Atlas serves older obs-20261030T054103Z with NONE of the three holding IDs. A19 progress has the concrete
+need: publish the newer observed data, include below25-viewer hamlets, and bind actual holding entry/return.
+Until then direct preview URLs are not evidence that the Atlas journey works.
 
 **Lanes:** specs40–44 and their PRDs are ready for independent landmarks, heraldry, emote art, keepers and sound. One worker each; no dependency between their asset work. Missing main-owned mounts are explicit integration needs, not reasons to stop independent tasks. 5efc270 refreshed Atlas/Gate/Moments/Emotes/Campfire handoffs. Atlas/Gate/Emotes/Campfire branches
 include main at that commit. Twitch-moments has active uncommitted work: do not overwrite it; sync at checkpoint.

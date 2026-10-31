@@ -3,6 +3,7 @@ import { currentFootprint, expandBounds, homeFrame, pointBounds, polygonDistance
   segmentProjection, smoothstep, SpatialIndex, transformCardinalPoint } from './geometry';
 import type { BoundsXZ, LandformPlan, PublicGroundSample, SettlementPlan, XZ } from './types';
 import { naturalLandHeight, sampleLandWater } from '../kingdom-land/surface';
+import { sampleGenesisSurface } from '../genesis/surface';
 
 /** Version 1 is the installed sampler, unchanged. Version 2 is the kingdom-land surface. */
 export function naturalTerrainHeight(landform:LandformPlan,x:number,z:number):number {
@@ -116,6 +117,13 @@ function gradedHeight(plan:SettlementPlan,prepared:Prepared,x:number,z:number):n
   if(plan.landform.version!==2)return graded;
   // A road or trail never fills a channel: over wet ground the bridge deck carries the walk. Across the
   // bank, grading eases back to the natural shore, so nearby fill never stands as a wall at the water.
+  if(plan.genesisSurface){
+    const surface=sampleGenesisSurface(plan.genesisSurface,x,z);
+    // Potential land shares its exact coast/island sampler in workers and display.
+    // Grading may never fill the ocean or a river with a road's feather.
+    if(surface.waterLevel!==null&&surface.ground<surface.waterLevel)return Math.min(graded,surface.ground);
+    return graded;
+  }
   const water=sampleLandWater(plan.landform,x,z);
   if(!water||water.shoreDistance>=BANK_GRADE_BAND)return graded;
   const natural=naturalLandHeight(plan.landform,x,z);
@@ -146,7 +154,8 @@ function authoredGrade(plan:SettlementPlan,prepared:Prepared,x:number,z:number):
     weighted+=odds*value.height;weights+=odds;
   }
   if(coreCount)return coreHeight/coreCount;
-  return (naturalTerrainHeight(plan.landform,x,z)+weighted)/(1+weights);
+  const natural=plan.genesisSurface?sampleGenesisSurface(plan.genesisSurface,x,z).ground:naturalTerrainHeight(plan.landform,x,z);
+  return (natural+weighted)/(1+weights);
 }
 
 /**
