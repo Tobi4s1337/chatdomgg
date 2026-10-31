@@ -446,3 +446,22 @@ part of acceptance, not permission to replace them or defer the gate's full trav
 - **2026-10-31 — Current handoff: one witnessed raid journey.** Deliver streamer-led gate, consent, witnessed departure, Atlas road and entry/return as one comprehensible stream journey. Existing RG01 is a simulated standalone foundation, not a connected real gate. Preserve the accepted feature-local work; main owns authentication, durable infrastructure, Twitch/room transports and host bindings and must approve any missing shared or local seam. Do not claim a Twitch write, arrival or passport from a fixture, timer or HTTP success. The destination welcomes the party and includes the existing visitor-gift policy, transactional idempotence and honest receipt; use existing approved ports and report missing authority seams without inventing a contract.
 
 - **2026-10-31 — Current handoff verification and ownership.** For each visual change inspect one stream-first 1920×1080 capture; use typecheck and affected tests for the step. This supersedes the older per-task capture matrix for this handoff. The lane implements feature-local durable adapters and runtime behavior against existing ports; main owns shared contracts and cross-surface authority and integration bindings. Report only actual missing authority or contract seams.
+
+- **2026-10-31 — RG07: the monarch can close an unstarted gate.** `{op:'cancel'}` on a `prepared` request is the
+  monarch's close: refused for anyone but the verified broadcaster before any policy call, allowed even when the
+  raid grant is missing or withdrawn (closing sends nothing to Twitch), recorded as `cancelled` with the new
+  `endReason: 'closed'` (or `expired` if the window had already run out), and it clears the gate pointer in the same
+  transaction. Every walker's choice ends with it; repeating the close answers with the settled action. A request
+  Twitch already holds (`dispatching | pending | unknown`) answers `unavailable` until RG08's Twitch cancel and
+  reconcile exist; it is never forgotten locally.
+- **2026-10-31 — RG07: endings are told, not stored.** A walker who chose to march learns why: the monarch closed
+  the gate, the call ran out, or the monarch picked another destination (their choice ended; join again). The
+  browser derives this farewell from consecutive authority views (no new server fact or contract field) and shows
+  it for five minutes. The monarch sees only their own close; their lapse keeps its own phase.
+- **2026-10-31 — RG07: durable adapters against the realm schema.** The gate URL is `/api/raid-gate/<kingdomId>`:
+  the kingdom rides in the path because the stream refuses extra query keys, and the role is derived on the
+  server (monarch by Twitch identity, citizen by a non-void deed, otherwise guest). The session principal reads
+  realm-auth's own session row by handle hash; records live in three realm tables (migration text in
+  `apps/api/src/raid-gate/realm-migration.sql` for main to register as `0009`). The live policy takes every
+  main-owned fact (live channels, raid grant, write consent, Atlas classification/permission) as a required port;
+  there is no fallback that pretends a grant exists.

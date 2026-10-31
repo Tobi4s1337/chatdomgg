@@ -18,8 +18,11 @@ export type RecordOrigin = 'live' | 'simulated';
 /** One open gate per source kingdom. Moving this pointer is what supersedes an older, unstarted preview. */
 export type GatePointerRecord = Readonly<{ kingdomId: KingdomId; revision: number; requestId: string | null; updatedAt: number }>;
 
-/** Why an action closed before Twitch was ever asked. Later states record Twitch's own answer instead. */
-export type ActionEndReason = 'superseded' | 'expired';
+/**
+ * Why an action closed before Twitch was ever asked: a newer preview replaced it, its window ran out, or the
+ * monarch closed the gate. Later states record Twitch's own answer instead.
+ */
+export type ActionEndReason = 'superseded' | 'expired' | 'closed';
 
 export type RaidActionRecord = Readonly<{
   requestId: string;
@@ -93,7 +96,7 @@ export function readActionRecord(value: unknown): RaidActionRecord | undefined {
   const target = t && { kingdomId: kingdom(t.kingdomId), founded: bool(t.founded), live: bool(t.live), classification: oneOf(t.classification, CLASSIFICATIONS) };
   const parsedRaid = f.raid === null ? null : AtlasRaidSchema.safeParse(f.raid);
   const raid = parsedRaid === null ? null : parsedRaid.success ? parsedRaid.data : undefined;
-  const endReason = f.endReason === null ? null : oneOf(f.endReason, ['superseded', 'expired'] as const);
+  const endReason = f.endReason === null ? null : oneOf(f.endReason, ['superseded', 'expired', 'closed'] as const);
   const record = {
     requestId: token(f.requestId), revision: positive(f.revision), actorId: person(f.actorId), sessionId: token(f.sessionId),
     from: kingdom(f.from), to: kingdom(f.to), state: oneOf(f.state, ACTION_STATES),

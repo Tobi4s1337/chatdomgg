@@ -37,6 +37,8 @@ export type GateBench = Readonly<{
   finder: Readonly<{ open: () => boolean; entries: typeof DESTINATIONS; pick: (kingdomId: KingdomId) => void; close: () => void; onChange: (listener: () => void) => void }>;
   /** Runs the monarch's own preview as the monarch, for a walker bench. */
   monarchPreview(target: KingdomId): Promise<GateReply>;
+  /** Runs the monarch's own close as the monarch, for a walker bench. */
+  monarchClose(requestId: string): Promise<GateReply>;
   /** SIMULATED: the monarch renews the raid grant, as the throne's Twitch connection would. */
   reconnect(): void;
   /** SIMULATED walkers send their own join commands. */
@@ -128,6 +130,7 @@ export function createGateBench(options: GateBenchOptions): GateBench {
       for (const subscriber of subscribers) subscriber();
     },
     monarchPreview: target => as(SOURCE.kingdomId, { op: 'preview', requestId: crypto.randomUUID(), target }),
+    monarchClose: requestId => as(SOURCE.kingdomId, { op: 'cancel', requestId }),
     async walkersJoin(count, requestId) {
       for (const personId of WALKERS.slice(options.viewer === 'walker' ? 1 : 0, (options.viewer === 'walker' ? 1 : 0) + count)) await as(personId, { op: 'join', requestId });
     },

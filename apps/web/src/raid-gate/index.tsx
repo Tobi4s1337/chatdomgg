@@ -15,7 +15,7 @@ import { Seal } from './Seal';
 import './raid-gate.css';
 
 export { createRaidGateController, RaidGatePane };
-export type { GatePhase, GateSnapshot, RaidGateController } from './controller';
+export type { GateFarewell, GatePhase, GateSnapshot, RaidGateController } from './controller';
 export type { AtlasGateEvent, AtlasGateHost, GateAccount, GateKingdom, GateLand, RaidGateApi, RaidGatePorts } from './ports';
 
 type GateWindow = Window & { __chatdomReady?: boolean; __chatdomRaidGate?: unknown };
@@ -83,6 +83,10 @@ export default function RaidGateRoute() {
         const requestId = gate.snapshot().requestId;
         if (requestId && walkers > 0) { await made.walkersJoin(walkers, requestId); await gate.refresh(); }
         if (query.get('join') === '1') await gate.join();
+        if (requestId && query.get('close') === '1') {
+          if (viewer === 'monarch') await gate.cancel();
+          else { await made.monarchClose(requestId); await gate.refresh(); }
+        }
       }
       gateWindow.__chatdomRaidGate = { snapshot: () => gate.snapshot(), controller: gate, bench: made, ready: false };
       setStaged(true);

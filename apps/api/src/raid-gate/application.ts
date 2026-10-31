@@ -7,6 +7,8 @@
  *   request is never superseded (R2, R3).
  * - Joining is one person's explicit choice, scoped to one request, and ends when that request closes (R4).
  *
+ * - The monarch may close an unstarted preview; its party ends and nobody moves (R3, R4).
+ *
  * Commands that later tasks own (start, travel, passport, gifts) answer `unavailable`: honest, never success.
  */
 import { kingdomForBroadcaster } from '../../../../packages/shared/src/identity';
@@ -221,6 +223,37 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
     return { kind: 'party', value: party };
   }
 
+  /**
+   * The monarch closes the gate before anything was sent to Twitch. The request ends, the gate pointer clears and
+   * every walker's choice ends with it; nobody moves. Closing again answers with the settled action. A request
+   * Twitch already holds is cancelled through Twitch, never by quietly forgetting it here.
+   */
+  async function close(context: GateContext, requestId: string): Promise<GateReply> {
+    const { principal, now } = context;
+    if (kingdomForBroadcaster(principal.personId) !== principal.sourceKingdomId) return denied('unauthorized');
+    // Closing sends nothing to Twitch, so a missing or withdrawn raid grant never traps a preview open.
+    if (!isMonarch(principal, await standingOf(context))) return denied('unauthorized');
+    const changed: RaidActionRecord[] = [];
+    const action = await atomically(context, async tx => {
+      changed.length = 0;
+      const action = await tx.getAction(requestId);
+      if (!action) throw new Denied('stale');
+      if (action.from !== principal.sourceKingdomId || action.actorId !== principal.personId) throw new Denied('unauthorized');
+      if (LIVE_STATES.has(action.state)) throw new Denied('unavailable');
+      if (action.state !== 'prepared' || action.endReason !== null) return action;
+      const ended = stored(await tx.putAction({
+        ...action, revision: action.revision + 1, state: 'cancelled', updatedAt: now, observedAt: now,
+        endReason: now < action.previewExpiresAt ? 'closed' : 'expired',
+      }, action.revision));
+      const gate = await tx.getGate(action.from);
+      if (gate?.requestId === requestId) stored(await tx.putGate({ ...gate, revision: gate.revision + 1, requestId: null, updatedAt: now }, gate.revision));
+      changed.push(ended);
+      return ended;
+    });
+    for (const each of changed) announce(each);
+    return { kind: 'action', value: actionView(action) };
+  }
+
   async function readAction(context: GateContext, requestId: string): Promise<GateReply> {
     await standingOf(context);
     const action = await atomically(context, tx => tx.getAction(requestId));
@@ -244,6 +277,7 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
           case 'join': return await choose(scoped, command.requestId, true);
           case 'leave': return await choose(scoped, command.requestId, false);
           case 'read-action': return await readAction(scoped, command.requestId);
+          case 'cancel': return await close(scoped, command.requestId);
           default: return denied('unavailable');
         }
       } catch (error) {

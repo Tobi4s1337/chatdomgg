@@ -1,6 +1,6 @@
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import type { GateDenial } from '../../../api/src/raid-gate/contracts';
-import type { GateDestination, GateNotice, GateSnapshot, RaidGateController } from './controller';
+import type { GateDestination, GateFarewell, GateNotice, GateSnapshot, RaidGateController } from './controller';
 import { Seal } from './Seal';
 
 /**
@@ -52,6 +52,7 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
             <AuthorityState snap={s()} controller={props.controller} />
           </Match>
           <Match when={s().phase === 'idle'}>
+            <Show when={s().farewell}>{farewell => <Farewell farewell={farewell()} snap={s()} />}</Show>
             <p class="rg-lede">Pick a live kingdom on the Atlas. You'll see who has chosen to march before anything happens on Twitch.</p>
             <div class="rg-actions"><button class="rg-button rg-primary" onClick={() => props.controller.open()}><MapGlyph />Choose where to ride</button></div>
             <p class="rg-quiet">Opening the map changes nothing. Only people who choose to march will travel.</p>
@@ -64,6 +65,7 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
             <p class="rg-lede rg-waiting"><Quill />Asking the road to {s().asking?.displayName ?? 'that kingdom'}…</p>
           </Match>
           <Match when={(s().phase === 'preview' || s().phase === 'gathering') && s().destination}>
+            <Show when={s().farewell}>{farewell => <Farewell farewell={farewell()} snap={s()} />}</Show>
             <Journey snap={s()} destination={s().destination!} now={now()} />
             <Party snap={s()} controller={props.controller} />
             <Show when={s().phase === 'preview'}>
@@ -71,12 +73,19 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
                 <li><Glyph kind="hourglass" /><span>When you open the gate, Twitch counts down <b>90 seconds</b> before the raid begins.</span></li>
                 <li><Glyph kind="seal" /><span>This preview holds for <b class="rg-numeral">{remaining(s().expiresAt, now())}</b>. Pick again any time.</span></li>
               </ul>
-              <div class="rg-actions"><button class="rg-button" onClick={() => props.controller.open()}><MapGlyph />Choose another</button></div>
+              <div class="rg-actions">
+                <button class="rg-button" disabled={s().busy !== null} onClick={() => props.controller.open()}><MapGlyph />Choose another</button>
+                <button class="rg-button rg-subtle" disabled={s().busy !== null} aria-busy={s().busy === 'close'} onClick={() => void props.controller.cancel()}><Glyph kind="bar" />{s().busy === 'close' ? 'Closing the gate…' : 'Close the gate'}</button>
+              </div>
             </Show>
           </Match>
           <Match when={s().phase === 'lapsed'}>
             <p class="rg-lede">The preview ran out before the gate opened. Everyone who chose to march is free again.</p>
             <div class="rg-actions"><button class="rg-button rg-primary" onClick={() => props.controller.open()}><MapGlyph />Choose where to ride</button></div>
+          </Match>
+          <Match when={s().phase === 'quiet' && s().farewell}>
+            <Farewell farewell={s().farewell!} snap={s()} />
+            <p class="rg-quiet">When {name()}'s monarch calls the realm to the gate again, you can choose to march with them. Staying is always fine.</p>
           </Match>
           <Match when={s().phase === 'quiet'}>
             <p class="rg-lede">When {name()}'s monarch calls the realm to the gate, you can choose to march with them.</p>
@@ -96,12 +105,12 @@ function title(s: GateSnapshot): string {
     case 'loading': return 'At the gate';
     case 'unreachable': return 'The gatekeeper is away';
     case 'authority': return AUTHORITY_TITLES[s.authority ?? 'unavailable'];
-    case 'idle': return 'Call your people to the gate';
+    case 'idle': return s.farewell ? 'You closed the gate' : 'Call your people to the gate';
     case 'choosing': return 'The Atlas is open';
     case 'previewing': return 'Asking the road';
     case 'preview': return `Ride to ${destination ?? 'a neighbour'}?`;
     case 'lapsed': return 'The preview ran out';
-    case 'quiet': return 'The gate is quiet';
+    case 'quiet': return s.farewell?.reason === 'lapsed' ? 'The call has ended' : s.farewell ? 'The gate has closed' : 'The gate is quiet';
     case 'gathering': return `${s.source.name} gathers at the gate`;
   }
 }
@@ -156,6 +165,23 @@ function Journey(props: { snap: GateSnapshot; destination: GateDestination; now:
       <p class="rg-quiet">{d().channel?.displayName ?? 'This channel'} has no kingdom yet. The road ends at their waiting land, and the raid still lands on Twitch.</p>
     </Show>
   </section>;
+}
+
+/** A gate that ended with nobody leaving, told once and calmly. Nobody is at fault and nothing was lost. */
+function Farewell(props: { farewell: GateFarewell; snap: GateSnapshot }) {
+  const f = () => props.farewell;
+  const where = () => destinationName(f().destination);
+  const choice = () => f().joined ? ', and your choice to march ended with it' : '';
+  const text = () => {
+    if (f().reason === 'changed') return `The monarch now calls the realm to ${props.snap.destination ? destinationName(props.snap.destination) : 'another kingdom'} instead of ${where()}, so your choice to march ended. Join again if you'd like to come.`;
+    if (props.snap.viewer === 'monarch') return `You closed the gate before the ride to ${where()}. Nothing was sent to Twitch, nobody left, and everyone who chose to march is home.`;
+    if (f().reason === 'lapsed') return `The call to ${where()} ran out before the gate opened. Nobody left${choice()}.`;
+    return `${props.snap.source.name}'s monarch closed the gate before the ride to ${where()}. Nobody left${choice()}.`;
+  };
+  return <p class="rg-farewell" role="status">
+    <Seal kingdomId={f().destination.target.kingdomId} size={34} wax={f().destination.land === 'founded' ? 'crimson' : 'umber'} />
+    <span>{text()}</span>
+  </p>;
 }
 
 function Party(props: { snap: GateSnapshot; controller: RaidGateController }) {
@@ -219,13 +245,15 @@ export function GateDefs() {
   </svg>;
 }
 
-function Glyph(props: { kind: 'hourglass' | 'seal' | 'key' | 'boot' | 'check' }) {
+function Glyph(props: { kind: 'hourglass' | 'seal' | 'key' | 'boot' | 'check' | 'bar' }) {
   const paths: Record<typeof props.kind, string[]> = {
     hourglass: ['M6 3h12M6 21h12', 'M7 3c0 6 10 6 10 9s-10 3-10 9', 'M17 3c0 6-10 6-10 9s10 3 10 9'],
     seal: ['M12 3a9 9 0 1 0 .1 0Z', 'M12 7.5 13.4 11l3.6.2-2.8 2.3 1 3.5-3.2-2-3.2 2 1-3.5L7 11.2l3.6-.2Z'],
     key: ['M14.5 4a5.5 5.5 0 1 1-4.2 9.1L4 19.5V21h3v-2h2v-2h2l1.6-1.6', 'M16.5 7.5h.01'],
     boot: ['M8 3h5v9l6 3.5c1.3.8 2 1.8 2 3.2V20H4V14c2.5 0 4-1.4 4-4Z', 'M4 17h17'],
     check: ['m5 12.5 4.5 4.5L19 7'],
+    // Two gate leaves and the bar laid across them.
+    bar: ['M5 4v16M19 4v16', 'M5 4c2.3-1 4.7-1 7 0s4.7 1 7 0', 'M3 12.5h18', 'M12 4v16'],
   };
   return <svg class="rg-glyph" viewBox="0 0 24 24" aria-hidden="true"><For each={paths[props.kind]}>{d => <path d={d} />}</For></svg>;
 }

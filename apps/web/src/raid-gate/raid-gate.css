@@ -72,6 +72,9 @@
 .rg-waiting { display: flex; align-items: center; gap: 10px; font-style: italic; }
 .rg-quill { animation: rg-write 1.6s ease-in-out infinite; transform-origin: 20% 90%; }
 @keyframes rg-write { 50% { transform: rotate(-9deg) translateX(2px); } }
+.rg-farewell { display: flex; gap: 12px; align-items: center; margin: 0 0 14px; padding: 10px 12px 10px 10px; border-left: 3px solid #8d6537;
+  background: linear-gradient(90deg, #8d653720, #8d653708); font-size: 16px; line-height: 1.42; color: var(--ink); }
+.rg-farewell > :first-child { flex: none; }
 .rg-notice { margin: 0 0 14px; padding: 9px 12px; border-left: 3px solid #9b3a2b; background: #c45a3c18; font-size: 15px; color: #5a2216; }
 
 /* Wooden buttons that press in a millimetre. */
@@ -87,6 +90,10 @@
 .rg-primary { color: #2d1c0e; border-color: #5b3d1c;
   background: linear-gradient(180deg, #f4d79f, #d3a865 55%, #b48546); box-shadow: inset 0 1px 0 #fff3d2, inset 0 -2px 0 #8d6233, 0 3px 0 #4b3018, 0 5px 10px #5a3a1a44; }
 .rg-primary:active:not(:disabled) { box-shadow: inset 0 1px 0 #fff3d2aa, inset 0 -1px 0 #8d6233, 0 1px 0 #4b3018; }
+/* A quiet secondary act on the parchment: inked outline, no timber. */
+.rg-subtle { background: none; border-color: #6b4a2c99; box-shadow: none; color: var(--ink); }
+.rg-subtle:hover { background: #6b4a2c14; filter: none; }
+.rg-subtle:active:not(:disabled) { box-shadow: none; }
 .rg-button kbd { font: 12px Alegreya, Georgia, serif; padding: 1px 6px; border: 1px solid #e3c49360; border-radius: 3px; color: #e8d0a6; }
 .rg-glyph { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 

@@ -215,7 +215,8 @@ export function createRaidGateHttp(options: RaidGateHttpOptions): RaidGateHttp {
   return {
     async handle(request) {
       if (foreign(request)) return refuse('unauthorized', 403);
-      if (request.method === 'POST') return command(request);
+      // Every browser names its origin on a POST; a command without one did not come from our pages.
+      if (request.method === 'POST') return request.headers.has('origin') ? command(request) : refuse('unauthorized', 403);
       if (request.method === 'GET' && /\btext\/event-stream\b/.test(request.headers.get('accept') ?? '')) return stream(request);
       return new Response(null, { status: 405, headers: { allow: 'GET, POST' } });
     },

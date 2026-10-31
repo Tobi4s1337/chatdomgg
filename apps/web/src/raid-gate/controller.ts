@@ -5,7 +5,7 @@
  */
 import type { AtlasChannel } from '@chatdom/shared';
 import type {
-  GateAuthority, GateCommand, GateDenial, GatePreview, GateReply, GateStatusView, GateTarget, KingdomId,
+  GateAuthority, GateCommand, GateDenial, GatePreview, GateReply, GateStatusView, GateTarget, KingdomId, OpenGateView,
 } from '../../../api/src/raid-gate/contracts';
 import type { GateKingdom, GateLand, RaidGatePorts } from './ports';
 
@@ -32,6 +32,11 @@ export type GatePhase =
   | 'gathering';
 
 export type GateDestination = Readonly<{ target: GateTarget; channel: AtlasChannel | null; land: GateLand | null }>;
+/**
+ * How the last gate this viewer saw came to an end without anyone leaving: the monarch closed it, its preview ran
+ * out, or the monarch chose a different destination. `joined` is whether this viewer had chosen to march.
+ */
+export type GateFarewell = Readonly<{ reason: 'closed' | 'lapsed' | 'changed'; destination: GateDestination; joined: boolean }>;
 export type GateNotice =
   | Readonly<{ kind: 'denied'; code: GateDenial }>
   | Readonly<{ kind: 'unreachable' }>
@@ -49,7 +54,9 @@ export type GateSnapshot = Readonly<{
   optedIn: number;
   joined: boolean;
   expiresAt: number | null;
-  busy: 'preview' | 'join' | 'leave' | null;
+  busy: 'preview' | 'join' | 'leave' | 'close' | null;
+  /** The gate this viewer last saw ended and nobody moved. Shown for a few minutes, then ordinary life resumes. */
+  farewell: GateFarewell | null;
   /** The destination a preview is being asked for, as the map named it. Not yet the authority's answer. */
   asking: AtlasChannel | null;
   notice: GateNotice | null;
@@ -63,6 +70,8 @@ export interface RaidGateController {
   open(): void;
   close(): void;
   preview(target: KingdomId): Promise<void>;
+  /** The monarch closes an unstarted gate. Every walker's choice ends and nobody moves. */
+  cancel(): Promise<void>;
   join(): Promise<void>;
   leave(): Promise<void>;
   reconnect(): void;
@@ -71,6 +80,10 @@ export interface RaidGateController {
 }
 
 type Pick = Readonly<{ channel: AtlasChannel; land: GateLand }>;
+type Ended = Readonly<{ reason: 'closed' | 'changed'; target: GateTarget; joined: boolean; at: number }>;
+
+/** A farewell is news, not a state: after this long the gate is simply quiet again. */
+export const FAREWELL_MS = 5 * 60_000;
 
 export function createRaidGateController(ports: RaidGatePorts): RaidGateController {
   const { api, atlas, source, clock } = ports;
@@ -87,12 +100,25 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
   let unreachable = false;
   let busy: GateSnapshot['busy'] = null;
   let notice: GateNotice | null = null;
+  /** The newest open gate the authority showed us, and how the one before it ended. */
+  let seen: OpenGateView | null = null;
+  let ended: Ended | null = null;
   /** Each kind of request only lets its newest reply land. */
-  const generation = { status: 0, preview: 0, party: 0 };
+  const generation = { status: 0, preview: 0, party: 0, close: 0 };
 
   function destinationFor(target: GateTarget): GateDestination {
     const pick = known.get(target.kingdomId);
     return { target, channel: pick?.channel ?? null, land: pick?.land ?? (target.founded ? 'founded' : null) };
+  }
+
+  function farewellAt(now: number, live: OpenGateView | null, viewer: GateSnapshot['viewer']): GateFarewell | null {
+    let end: Readonly<{ reason: GateFarewell['reason']; target: GateTarget; joined: boolean; at: number }> | null = null;
+    if (!live && seen && now >= seen.expiresAt) end = { reason: 'lapsed', target: seen.target, joined: seen.joined, at: seen.expiresAt };
+    else if (ended && (ended.reason === 'changed') === (live !== null)) end = ended;
+    // The monarch sees their own lapse as its own phase, and chose any new destination themselves.
+    if (!end || now - end.at >= FAREWELL_MS || (viewer === 'monarch' && end.reason !== 'closed')) return null;
+    if (end.reason === 'changed' && !end.joined) return null;
+    return { reason: end.reason, destination: destinationFor(end.target), joined: end.joined };
   }
 
   function snapshot(): GateSnapshot {
@@ -116,7 +142,7 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
       phase, origin: api?.origin ?? null, mapOrigin: atlas?.origin ?? null, viewer, authority: status?.authority ?? null, source,
       destination: target && (phase === 'preview' || phase === 'gathering' || phase === 'lapsed' || phase === 'previewing') ? destinationFor(target) : null,
       requestId: live?.requestId ?? null, optedIn: live?.optedIn ?? 0, joined: live?.joined ?? false, expiresAt: live?.expiresAt ?? (phase === 'lapsed' ? preview?.expiresAt ?? null : null),
-      busy, asking: busy === 'preview' ? asking : null, notice: unreachable && status ? { kind: 'unreachable' } : notice, canReconnect: ports.account !== undefined,
+      busy, farewell: status ? farewellAt(now, live, viewer) : null, asking: busy === 'preview' ? asking : null, notice: unreachable && status ? { kind: 'unreachable' } : notice, canReconnect: ports.account !== undefined,
     };
   }
 
@@ -138,8 +164,22 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
     const held = status?.open;
     if (held && next.open && held.requestId === next.open.requestId && next.open.revision < held.revision) return;
     status = next;
+    track(next.open);
     if (preview && next.open?.requestId !== preview.requestId && clock() < preview.expiresAt) preview = null;
     if (next.open) resolve(next.open.to);
+  }
+
+  /** Notices a gate that ended without a lapse: closed by the monarch, or replaced by another destination. */
+  function track(open: OpenGateView | null): void {
+    const now = clock();
+    const before = seen && now < seen.expiresAt ? seen : null;
+    if (open) {
+      if (open.requestId !== seen?.requestId) ended = before ? { reason: 'changed', target: before.target, joined: before.joined, at: now } : null;
+      seen = open;
+    } else if (before) {
+      ended = { reason: 'closed', target: before.target, joined: before.joined, at: now };
+      seen = null;
+    }
   }
 
   function absorb(reply: GateReply): void {
@@ -184,6 +224,7 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
       const held = status?.open?.requestId === reply.value.requestId ? status.open : null;
       // Shown at once; the authority's next status (revision ≥ 1) replaces this provisional one.
       if (status) status = { ...status, open: { requestId: reply.value.requestId, revision: held?.revision ?? 0, to: reply.value.to, target: reply.value.target, state: 'prepared', optedIn: reply.value.optedIn, expiresAt: reply.value.expiresAt, joined: held?.joined ?? false } };
+      track(status?.open ?? null);
       resolve(target);
     } else if (reply?.kind === 'denied') {
       notice = { kind: 'denied', code: reply.code };
@@ -202,6 +243,25 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
     busy = null;
     if (reply?.kind === 'party' && status?.open?.requestId === reply.value.requestId) {
       status = { ...status, open: { ...status.open, joined: reply.value.joined, optedIn: reply.value.optedIn, expiresAt: reply.value.expiresAt } };
+      seen = status.open; ended = null;
+    } else if (reply?.kind === 'denied') {
+      notice = { kind: 'denied', code: reply.code };
+    }
+    emit();
+    void refresh();
+  }
+
+  async function close(): Promise<void> {
+    const open = status?.open;
+    if (status?.viewer !== 'monarch' || !open || busy) return;
+    const mine = ++generation.close;
+    busy = 'close'; notice = null; emit();
+    const reply = await request({ op: 'cancel', requestId: open.requestId });
+    if (mine !== generation.close || life.signal.aborted) return;
+    busy = null;
+    if (reply?.kind === 'action' && reply.value.requestId === open.requestId && reply.value.state === 'cancelled') {
+      preview = null;
+      if (status?.open?.requestId === open.requestId) { status = { ...status, open: null }; track(null); }
     } else if (reply?.kind === 'denied') {
       notice = { kind: 'denied', code: reply.code };
     }
@@ -230,6 +290,7 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
     },
     close() { if (choosing) { choosing = false; atlas?.close(); emit(); } },
     preview: choosePreview,
+    cancel: close,
     join: () => choose(true),
     leave: () => choose(false),
     reconnect() { ports.account?.reconnect(); },

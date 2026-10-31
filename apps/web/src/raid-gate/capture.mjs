@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
 import { startCapturePreview, closeCapturePreview } from '../../../../packages/testing/preview.mjs';
 
-const DESKTOP = { width: 1440, height: 900 }, PHONE = { width: 390, height: 844 };
+const DESKTOP = { width: 1440, height: 900 }, PHONE = { width: 390, height: 844 }, STREAM = { width: 1920, height: 1080 };
 const FERN = '41000002', OAKEN = '41000003';
 const FRAMES = [
   { name: 'gate-desktop', size: DESKTOP, query: `bench=simulated&pick=${FERN}&walkers=3`, expect: { phase: 'preview', optedIn: 3 } },
@@ -20,6 +20,8 @@ const FRAMES = [
   { name: 'authority-desktop', size: DESKTOP, query: 'bench=simulated&authority=not-connected', expect: { phase: 'authority', authority: 'not-connected' } },
   { name: 'authority-revoked-phone', size: PHONE, query: 'bench=simulated&authority=revoked', expect: { phase: 'authority', authority: 'revoked' } },
   { name: 'unbound-phone', size: PHONE, query: '', expect: { phase: 'unbound' } },
+  { name: 'gate-preview-stream', size: STREAM, query: `bench=simulated&pick=${FERN}&walkers=5`, expect: { phase: 'preview', optedIn: 5 } },
+  { name: 'gate-closed-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&close=1`, expect: { phase: 'quiet', optedIn: 0, joined: false } },
 ];
 
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1].split(',') : null;
