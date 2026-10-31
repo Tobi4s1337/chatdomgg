@@ -330,65 +330,53 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Order:** picture first, one visible fix per turn with an obvious before/after. No new systems/contracts;
-chosen avatar/builder remains authorised. Keep wide exposure34ac89a, indigo0896044, street warmth96f2d08,
-beacon, warm pools, gold frame, softer smoke7c16789 and castle lighta1dac83/32633a8. Merge useful art checkpoints
-first; medium-effort helpers for routine recon/captures/fixes. Latest runtime/content checkpoint merges and their consumer are below.
+**Order:** picture first, one obvious before/after per turn. No new systems/contracts; chosen avatar/builder
+remains authorised. Keep exposure34ac89a, indigo0896044, street warmth96f2d08, beacon/pools/gold frame,
+soft smoke7c16789 and castle lighta1dac83/32633a8. Merge good checkpoints; medium helpers for routine work.
 
-**Current slice:** narrow reviewed GD02 birch/alder/fir replace generic tree crowns through `createTree`,
-shared by the stream scene and native compiler. Same sites, eight-metre origin/footprint, actual build lattice;
-only padding, no scale/new planting. Viewed `shots/magic/grove-pair.png` and `grove-after.png`,1920×1080 HIGH,
-hour19.5/time30, against the identical prior wide frame. Clear conifer/white-bark variation; distant tree contact
-still hard to read through haze. Preserve accepted light. Grove remains a checkpoint, not the full seeded
-family/wind pass. Roads still empty; readable lantern walkers next. Avatar body/clothes still with their lane.
+**Current slice:** the labelled SIMULATED rehearsal lets12 actual foreground neighbours join16–21s after
+its main wave. First Juniper unchanged; existing routes, window-on-arrival, live presence timing and all light/
+camera settings unchanged. Viewed `shots/magic/wide-homecoming-pair.png`,1920×1080 HIGH,hour19.5/time25:
+visible foreground group,104 walking/136 lit versus93/147. Still small at wide scale, not a busy evening yet;
+this is rehearsal staging, NOT a claim of improved live traffic.17 presence tests, typecheck, scoped lint and
+web build pass. Real road life and avatar body/clothes remain open. No waiting live observer.
 
-**Merged:** effects d535804 (21 tests), emote art40aeb18 (31), ground-dressing92421d5 (160). Root viewed their
-existing evidence; emote eye/mouth still clip locally, follow-up in lane progress. Effects vocabulary is available
-but accepted home smoke is NOT replaced. Integration checks: typecheck, scoped lint,51 core assets validated,
-web build. Picture-trees foundation remains20c87a9; its oak/willow/seeded adapter/wind work stays with team.
+**Merged this turn:** keeper content7eff5d8 (193 focused tests; root viewed court evidence), additive only,
+not mounted into authority/world. Hero lantern has a triangular mesh shard; concrete follow-up in lane log.
+Prior merges: effects d535804, emote art40aeb18, ground-dressing92421d5. Accepted home smoke NOT replaced.
+Emote glass central eye/mouth still clip; lane follow-up recorded. Their focused suites/evidence were checked.
 
-**Previous coast slice:**a6fcf9a mounts the reviewed harbour watchtower in `/kingdom/63920635`, on the valid
-castle parcel with flag/lamps/beacon. Proposed shoreline site remains ungraded/disconnected. Potential Genesis
-only; founded/royal presence untouched. `shots/magic/harbour-seat-pair.png` viewed: better hamlet scale, still
-isolated and road ends beside it. Live adoption needs real high chamber glass/window anchor; tower has none.
+**Land/grove:**975af2f adopts picture-land:2 through worker/height texture/horizon/light occupancy/citizen
+contact/founded collision. Plan identity unchanged; producer is in existing physics revision.44de84b adds rock
+strata/facets; near-ground classified adapter remains separate.9f843d7 adds horizon-only lilac dusk air beyond220m.
+aa7baeb mounts reviewed GD02 birch/alder/fir through shared `createTree`, same sites/eight-metre footprint,
+no scaling/new forest. `land-adopted-pair.png`, `land-rock-pair.png`, `ridge-haze-pair.png`, `grove-pair.png`
+in shots/magic viewed. Distant tree contact hard to read; full seeded oak/willow/family/wind stays with trees.
+Land lane next: lower saddle behind beacon, ridges to sides; break up parallel pink trench banks.
 
-**Previous Forge slice:**64efb0f gathers16 existing present citizens across the pour in staggered west/north
-arcs, preserving walks, inward headings, barrel perch and tiptoe. Viewed `shots/magic/forge-ring-pair.png`:
-two warm faces right of pour, still a little left-heavy. Pour/camera/light unchanged;3 focused tests pass.
+**Other picture checkpoints:**64efb0f gathers16 existing present citizens in west/north Forge arcs, inward
+headings/barrel/tiptoe intact. `forge-ring-pair.png` viewed: faces both sides, still left-heavy. Pour02c3494 and
+smithy cameraf0112c6 stay. be6ab51 market cart/wares viewed in `market-life-pair.png`, square still empty.
+a6fcf9a mounts harbour watchtower in `/kingdom/63920635` potential Genesis only, valid castle footing, flag/
+lamps/beacon. `harbour-seat-pair.png` viewed: better scale but isolated/road dead end; live adoption needs actual
+high chamber glass/window anchor, currently absent. River/mountain mounting and3 actual Atlas entries remain.
 
-**Previous market slice:**be6ab51 puts reviewed civic cart/wares beside generated stalls, matching furnishings
-already used by founded markets. Road/reservation audit clear in both sizes. `shots/magic/market-life-pair.png`
-viewed from street: tangible detail, still empty square, not proof of wide impact. Wide-road activity/well remain
-open. Keep accepted wide camera and light; grove/avatar integration follows usable lane checkpoints.
+**Avatar/content:** chosen reference/spec49/PRD81eab8f; A/B/C rejected. AS03 head4c333ed and AS04 hair/accessories
+5e6352f merged/viewed;38 focused tests.8-cell skull+hair≈10, unchanged rig, black eyes/no mouth. Tall hats need
+portrait headroom; lighter uneven fringe follow-up. Swap kingdom/stream/card/passport once body/clothes land.
+No rig/socket proposal yet; exact changes go in contract-proposal.md for main. Recipe content-local until consumer;
+real save/earned authority stays main. Effects vocabulary merged, accepted smoke kept. Other Genesis content
+mostly unmounted. Passport/gate/emotes/moments/atlas-w2 through47c0ef7 lack some live host bindings; no new wiring now.
 
-**Land:**975af2f adopts picture-land:2 consistently through workers/height texture/horizon/light occupancy/citizen
-contact/founded collision. Plan identity unchanged; existing physics revision includes producer.44de84b applies
-rock colour/strata/faceted normals to steep horizon faces. Near-ground classified fixture adapter still separate.9f843d7 adds horizon-only lilac dusk air beyond220m;
-`shots/magic/ridge-haze-pair.png` viewed, facets retained, town unchanged.
-Viewed `shots/magic/land-adopted-pair.png` and `land-rock-pair.png`; silhouette obvious, faces coarse. Land lane
-has concrete next fix: lower saddle behind beacon/keep, ridges to either side; irregular-bank follow-up remains.
-Narrow GD02 forms now mounted; full tree family/planting adapter remains with picture-trees. Keep existing sites.
-
-**Avatar/art:** chosen reference/spec49/PRD81eab8f; A/B/C rejected. AS03 head4c333ed and AS04 hair/accessories
-5e6352f merged/viewed;38 focused tests pass.8-cell skull+hair≈10-cell silhouette, unchanged rig, black eyes/no
-mouth. Tall hats need portrait headroom; lighter uneven fringe follow-up. Body/clothes/builder stay with team;
-swap kingdom/stream/card/passport once ready. No rig/socket proposal yet; exact proposals go in
-contract-proposal.md for main. Look recipe content-local until consumer, real save/earned authority stays main.
-Effects EL01 merged66d5244/viewed, not adopted; ember drift/brightness follow-up. Mountain landmarks95c21e6,
-carved emote art5778aa5 merged/viewed,134 focused tests pass; not yet mounted on Genesis pages. Glass bloom
-obscures emote face: lane follow-up. Harbour tower mounted in coastal preview; river hall/heraldry runtime mounting remains open.
-
-**Rejected/open:** road-routine tuning and far-lantern enlargement/HDR boost fully reverted. Viewed
-`shots/magic/road-lantern-lived-pair.png`: continuous SIM30→95 has57 walking/240 lit, still no obvious improvement.
-Do not repeat brightness nudges/idle-policy retuning. Capture-only instance.render bypass can warm actual scene
-history cheaply, restoring actual high-quality render/settled fields for final still; prototype patch cannot.
-Smithy cameraf0112c6 and molten02c3494 stay; current audience correction is the viewed checkpoint above.
-Real approved chat ritual unproved; no observer waiting before Tobias announces live. Passport/gate/emotes/
-moments/atlas-w2 through47c0ef7: first4 SIM benches still lack live host bindings. No new system wiring now.
+**Rejected:** far lantern scale/HDR boost and the new bounded halo both visually ineffective, fully reverted.
+Idle-policy retune reverted. Longer44m approaches traded34 warm homes for only3 extra roughly visible walkers;
+not adopted. Real culprit in the25s wide frame: only35/93 walkers in view, many behind houses. Current staging
+uses existing roads and identities; never fake coordinates or live traffic. Continuous SIM30→95 previously57
+walking/240 lit but little visible improvement. Cheap capture warm-up can bypass instance.render then restore
+actual HIGH draw/settled fields; prototype patch cannot. Captures lean/serial, hard deadlines/finally cleanup.
 
 **Continuity:** lantern cull fadesbc9a54c accepted;7c71b38 holds valid presence through retries until
 min(receipt+90s,frame.asOf+90s), then0.7s fade. Other shimmer unlocalized. Royal65534 is keep pane, never a deed.
-Layout43cffdb6/240homes/v1 pinned. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a (7files) stays; retain
-rounded copy. Superseded night-paint stays superseded. Genesis still needs actual3 Atlas entries. Managed5190web/
-5196API/5197realm/5195Forge/5194herald; only affected code restarts, all on.env. Logs ONLY
-`../conductor/state/services.log`; never journals/other services. Helpers clean owned captures/locks.
+Layout43cffdb6/240homes/v1 pinned. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a stays; retain rounded copy.
+Superseded night-paint stays superseded. Managed5190web/5196API/5197realm/5195Forge/5194herald; affected-code
+restarts only, all on.env. Logs ONLY `../conductor/state/services.log`, never journals/other services.

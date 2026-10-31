@@ -1,11 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { KingdomIdSchema, KingdomPresenceFrameSchema, PRESENCE_LEASE_MS, type KingdomPresenceFrame } from '@chatdom/shared';
 import { PRESENCE_FIXTURES, WORLD_FIXTURE_KINGDOM, WORLD_FIXTURE_TIME } from '@chatdom/shared/world-fixtures';
-import { generateKingdom } from '@chatdom/world';
+import { createCitizenMotion, generateKingdom, generateSettlementPlan } from '@chatdom/world';
 import { createHeraldPresence, createSimulatedPresence } from './presence-feed';
 
 describe('SIMULATED presence scenario', () => {
   const layout = generateKingdom({ seed: 'lanternmere', tier: 'town', firstYear: 2022, year: 2026 });
+
+  it('lets a late neighbourhood walk home while the rest of the rehearsal is warm', () => {
+    const plan = generateSettlementPlan({ seed: 'willowmere', tier: 'town', firstYear: 2022, year: 2026 });
+    const simulation = createSimulatedPresence(plan, { firstSlot: plan.homes[0]!.slot, waveSeconds: 6 });
+    const motion = createCitizenMotion(plan);
+    let latest: KingdomPresenceFrame;
+    const unsubscribe = simulation.feed.subscribe(frame => { latest = frame; motion.applyFrame(frame); }, vi.fn());
+    simulation.advance(8, true);
+    const early = latest!.windows.filter(window => window.present);
+    expect(early.length).toBeGreaterThan(plan.homes.length * .8);
+    expect(early.length).toBeLessThan(plan.homes.length);
+    expect(early.find(window => window.slot === simulation.firstSlot)?.since).toBe(WORLD_FIXTURE_TIME + 1000);
+    simulation.advance(25, true);
+    expect(latest!.origin).toBe('simulated');
+    expect(latest!.windows.filter(window => window.present)).toHaveLength(plan.homes.length);
+    const late = new Set(latest!.windows.filter(window => window.since >= WORLD_FIXTURE_TIME + 16_000).map(window => window.slot));
+    expect(late.size).toBeGreaterThan(0);
+    const street = motion.sample(WORLD_FIXTURE_TIME + 25_000);
+    expect(street.some(person => late.has(person.slot) && person.state === 'walking' && !person.homeLit)).toBe(true);
+    expect(street.some(person => !late.has(person.slot) && person.homeLit)).toBe(true);
+    expect(motion.sample(WORLD_FIXTURE_TIME + 120_000).every(person => person.homeLit && person.state === 'home')).toBe(true);
+    unsubscribe();
+  });
 
   it('starts dark, names the first arrival at one second and ripples through actual home slots', () => {
     const simulation = createSimulatedPresence(layout);
