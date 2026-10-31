@@ -1,4 +1,4 @@
-import { enrichNativeForgeHearth } from '../../../apps/realm/src/founded/forge-hearth-furnishings';
+import { enrichNativeForgeHearth, enrichNativeForgeWorkshop } from '../../../apps/realm/src/founded/forge-hearth-furnishings';
 import type { NativeTown } from '../../../apps/realm/src/founded/native';
 import { assetHashOf } from '../../world/src/founded-world/codec';
 import { validateFoundedScene } from '../../world/src/founded-world/validate';
@@ -10,8 +10,8 @@ export async function prepareForgeRehearsal(scene: RealmFoundedScene): Promise<R
   const native: NativeTown = { revision: scene.layoutRevision, homes: new Map(), fixtures: scene.placements.map(piece => ({
     id: piece.id, blueprint: assets.get(piece.assetHash)!, position: piece.position, rotation: piece.rotation,
   })) };
-  const furnished = enrichNativeForgeHearth(scene.plan, native);
-  if (furnished === native) throw new Error('The adopted town cannot receive the rehearsal forge hearth');
+  const furnished = enrichNativeForgeWorkshop(scene.plan, enrichNativeForgeHearth(scene.plan, native));
+  if (furnished === native) return scene;
   const nextAssets = [...scene.assets], placements = [...scene.placements];
   for (const piece of furnished.fixtures.slice(native.fixtures.length)) {
     const assetHash = await assetHashOf(piece.blueprint);

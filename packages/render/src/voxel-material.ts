@@ -243,11 +243,11 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       // The soft cap below keeps overlapping sources from clipping. The colour falls from a warm core through
       // amber. It reads fully from dusk (night .2, about
       // 18.5 h) and is absent by day.
-      float pool=pow(warm,2.6);
-      float poolAmount=pool*smoothstep(0.,.2,uNight)*1.3;
+      float pool=pow(warm,uTerrain>.5?1.8:3.4);
+      float poolAmount=pool*smoothstep(0.,.2,uNight)*(uTerrain>.5?2.15:.44);
       vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
-      float beaconAmount=beacon*beacon*beacon*(.3+.7*uNight)*1.25;
+      float beaconAmount=beacon*beacon*beacon*(.3+.7*uNight)*2.1;
       // Overlapping warm light shares one soft cap, so lit plaster never clips to white.
       float warmTotal=poolAmount+beaconAmount;
       float warmCapped=warmTotal<.6?warmTotal:.6+.6*(1.-exp((.6-warmTotal)/.6));
