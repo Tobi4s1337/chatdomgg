@@ -4,6 +4,7 @@
 // Every frame is SIMULATED: the bench previews an already-admitted beat; nothing is requested or judged.
 import { chromium } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { CAPTURE_PORTS } from '../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
 import { closeCapturePreview, startCapturePreview } from '../../../../packages/testing/preview.mjs';
 
@@ -11,8 +12,6 @@ const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 const OUT = 'shots/forge-refusals';
 const LINES = ['The forge is in a mood tonight.', 'The bellows need a little breather.', 'Even the anvil has its moments.'];
-// Lane ports inside 5170–5199; 5190 belongs to main, 5193/5194/5195 to the map, presence and forge services.
-const PORTS = [5186, 5187, 5188, 5189, 5196, 5197, 5198, 5199];
 const SIZES = { desktop: [1440, 900], phone: [390, 844] };
 /** Each run is one timed sequence. Full motion is forced so headless defaults cannot change the shot. */
 const RUNS = [
@@ -24,12 +23,12 @@ const RUNS = [
 const TIMES = [0.18, 0.42, 0.7, 1.2, 1.68, 2.55, 3.2, 3.62, 4.0];
 
 async function preview() {
-  for (const port of PORTS) {
+  for (const port of CAPTURE_PORTS) {
     process.env.CHATDOM_FORGE_REFUSAL_PORT = String(port);
     try { return await startCapturePreview('CHATDOM_FORGE_REFUSAL_PORT'); }
     catch (error) { if (!/EADDRINUSE|in use/i.test(String(error?.message ?? error))) throw error; }
   }
-  throw new Error(`No free lane port among ${PORTS.join(', ')}.`);
+  throw new Error('No safe capture port available.');
 }
 
 let server, browser, release;

@@ -132,7 +132,11 @@ Scenes remain owned by main and the team integrator; the lane delivers adapters 
    or successful receipt. Original `creation.words`, person/source-message IDs, private owner linkage, held/refused
    drafts and judge/provider bodies never enter public schema, replay, health, generic audit or logs. Keep approved
    creation words privately with their item as Safety §5 requires. Route private outcomes to the authenticated
-   maker only. Stage messages carry opaque activity IDs/stages and no candidate. Deduplicate coordinator publish
+   maker only. Stage messages carry opaque activity IDs/stages and no candidate. `ForgeTransientActivitySchema`
+   also permits `{type:'ended',activityId}` to cool an observed attempt as soon as noncommitted work stops,
+   before reservation cleanup waits. It carries no outcome, reason or person, is never persisted/replayed, and
+   does not suppress a later genuine durable commit after an uncertain reply. Ignore subsequent stale stages.
+   No ending is broadcast for work that never published a stage or for a confirmed commit. Deduplicate coordinator publish
    notifications against the durable outbox so callbacks cannot replay the ritual. If reserve/commit times out or
    the reply is lost, look up the stable command/attempt key in the repository before reporting an outcome. A known
    committed result stays committed even after cancellation; an unknown result stays privately pending/recovery-

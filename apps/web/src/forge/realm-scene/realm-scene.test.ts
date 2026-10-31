@@ -53,6 +53,11 @@ describe('room-fed Forge scene', () => {
       expect(Math.abs(smoke!.geometry.getAttribute('position').getX(0) - emission.x)).toBeLessThan(.21);
       handlers.stage?.('opaque-activity', 'drafting'); adapter.update(1000, false);
       expect(submit).not.toHaveBeenCalled(); expect(adapter.activeAttachmentId).toBeNull();
+      expect(adapter.update(1100, true)).toBe(true);
+      handlers.ended?.('opaque-activity');
+      expect(adapter.update(1150, true)).toBe(false);
+      handlers.stage?.('opaque-activity', 'judging-piece');
+      expect(adapter.update(1200, true)).toBe(false);
       handlers.committed?.(attachment, 'opaque-activity');
       await vi.waitFor(() => expect(scene.getObjectByName('realm-forge-clone:approved-dragon')).toBeDefined());
       expect(submit).toHaveBeenCalledOnce();
@@ -75,14 +80,14 @@ describe('room-fed Forge scene', () => {
       }
       expect(smokeAlpha()).toBe(false);
       expect(hide).toHaveBeenCalledWith(attachment.id, true); expect(settled).not.toHaveBeenCalled();
-      expect(adapter.update(20000, true)).toBe(true);
+      expect(adapter.update(20200, true)).toBe(true);
       expect(hide).toHaveBeenLastCalledWith(attachment.id, false); expect(settled).toHaveBeenCalledExactlyOnceWith(attachment.id);
       expect(clone.visible).toBe(false);
       expect(smokeAlpha()).toBe(true);
-      adapter.update(22000, false);
+      adapter.update(23000, false);
       handlers.committed?.(attachment, 'opaque-activity'); expect(submit).toHaveBeenCalledOnce();
       expect(adapter.activeAttachmentId).toBeNull();
-      expect(adapter.update(23000, true)).toBe(false);
+      expect(adapter.update(24000, true)).toBe(false);
     } finally { adapter.dispose(); material.dispose(); }
     expect(unsubscribe).toHaveBeenCalledOnce(); expect(settled).toHaveBeenCalledOnce();
   });

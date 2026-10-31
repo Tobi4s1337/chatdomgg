@@ -7,15 +7,16 @@ export function royalWindow(forgeHosts: readonly WindowHouse[]): WindowHouse | u
   const keep = forgeHosts.find(host => host.slot === REALM_CASTLE_SLOT);
   if (!keep) return undefined;
   // The central keep already has these authored upper lancets, below the separate beacon chamber.
-  // The crown of this lancet clears the keep's pitched roof. Designate that existing surface as the monarch's light without changing any host/collision bytes.
+  // The upper body of the western lancet clears the pitched roof and is large enough to read from the court.
+  // Designate that existing surface as the monarch's light without changing any host/collision bytes.
   const lancet = keep.blueprint.boxes.find(box => box.material === MAT.darkStone
     && box.from[0] === 115 && box.from[1] === 128 && box.from[2] === 134
     && box.to[0] === 120 && box.to[1] === 159 && box.to[2] === 139);
   const last = [...keep.blueprint.boxes].reverse().find(box => box.from[0] <= 117 && box.to[0] > 117
-    && box.from[1] <= 145 && box.to[1] > 145 && box.from[2] <= 138 && box.to[2] > 138);
+    && box.from[1] <= 155 && box.to[1] > 155 && box.from[2] <= 138 && box.to[2] > 138);
   if (/^castle-(hearth|tide|grove)$/.test(keep.blueprint.id) && lancet && last?.material === MAT.darkStone) {
     return { ...keep, blueprint: { ...keep.blueprint, windows: [
-      { id: 'monarch-upper-lancet', centre: [117.5, 160, 139.04], width: 3, height: 6, facing: 'south' },
+      { id: 'monarch-upper-lancet', centre: [117.5, 155, 139.04], width: 5, height: 8, facing: 'south' },
     ] } };
   }
   const angles = { north: Math.PI, east: Math.PI / 2, south: 0, west: -Math.PI / 2 } as const;

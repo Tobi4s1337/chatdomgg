@@ -29,7 +29,7 @@ continue independent presentation work. Never choose from Backlog without main i
   test rather than a schema snapshot suite. Demonstrate expired/recovered/duplicate/private-extra input rejection,
   source reset and cleanup. Ask main for `/-/twitch-moments` route, never edit its router. R1–R3, R11–R12.
 
-- [ ] **TM02 — Support arrives at the right door with truthful names** · evidence: sub/gift sequence contact sheet.
+- [x] **TM02 — Support arrives at the right door with truthful names** · evidence: sub/gift sequence contact sheet.
   Complete the real sub/gift notice/badge normalizers, canonical source selection, transactional entitlement/
   wrapping updates and group correlation. Complete all tiers/month ribbons, quiet lapses/rejoins and constant
   warm-core tint; build single parcels, gift

@@ -109,14 +109,15 @@ export function wheelBlueprint(kit: BannerKit): VoxelBlueprint {
 }
 
 /**
- * The pony, facing +x. Body x 0..11, y 6..11, z 0..5 with a kingdom saddle cloth and a brass collar; neck and
- * head reach forward to x 16; legs and tail are separate parts. Pivot: (5.5, 0, 2.5) on the ground.
+ * The pony, facing +x. Body x 0..11, y 6..11, z 1..6 with a kingdom saddle cloth falling to a gold edge one cell
+ * proud of each flank (z 0 and 6) and a brass collar; neck and head reach forward to x 17; legs and tail are
+ * separate parts. Pivot: (5.5, 0, 3.5) on the ground, under the middle of the body.
  */
 export const PONY_CELLS = {
-  size: [17, 15, 5] as const, pivot: [5.5, 0, 2.5] as const,
-  /** Hip cells of the four legs: front pair then back pair. Each leg hangs 6 cells from its hip. */
-  legs: [[9, 6, 0.5], [9, 6, 3.5], [2, 6, 0.5], [2, 6, 3.5]] as const,
-  tail: [-0.5, 10.5, 2.5] as const,
+  size: [17, 16, 7] as const, pivot: [5.5, 0, 3.5] as const,
+  /** Hip cells of the four legs: front pair then back pair, under each flank. Each leg hangs 6 cells from its hip. */
+  legs: [[9, 6, 1.5], [9, 6, 5.5], [2, 6, 1.5], [2, 6, 5.5]] as const,
+  tail: [-0.5, 10.5, 3.5] as const,
 } as const;
 
 export function ponyBlueprint(kit: BannerKit): VoxelBlueprint {
@@ -134,7 +135,7 @@ export function ponyBlueprint(kit: BannerKit): VoxelBlueprint {
   boxes.push(box(12, 15, 1, 13, 16, 2, coat), box(12, 15, 3, 13, 16, 4, coat));
   // The mane along the crest.
   boxes.push(box(9, 12, 2, 13, 13, 3, mane), box(10, 14, 2, 12, 16, 3, mane), box(12, 13, 2, 13, 15, 3, mane));
-  return blueprint(`moment-pony-${kit}`, kit, [17, 16, 6], boxes.map(b => ({ ...b, from: [b.from[0], b.from[1], b.from[2] + 1], to: [b.to[0], b.to[1], b.to[2] + 1] })));
+  return blueprint(`moment-pony-${kit}`, kit, [17, 16, 7], boxes.map(b => ({ ...b, from: [b.from[0], b.from[1], b.from[2] + 1], to: [b.to[0], b.to[1], b.to[2] + 1] })));
 }
 
 /** One leg, 2 × 6 × 1 cells: coat above a dark hoof. Pivot at the hip, (1, 6, 0.5). */

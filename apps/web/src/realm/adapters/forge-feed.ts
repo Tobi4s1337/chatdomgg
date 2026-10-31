@@ -11,6 +11,7 @@ export interface RealmForgeFeed {
 
 type Stage = Extract<ForgeActivity, { type: 'stage' }>['stage'];
 const STAGES: readonly Stage[] = ['judging-words', 'drafting', 'assembling', 'judging-piece'];
+const ENDED = STAGES.length, COMMITTED = ENDED + 1;
 const WAIT_MS = 120_000, HANDOFF_MS = 90_000, MAX_PENDING = 32, MAX_SEEN = 1024;
 
 /** One closure per entry UI, never persisted to browser storage or shared with a new visitor. */
@@ -60,11 +61,16 @@ export function createRealmForgeFeed(clock = Date.now): RealmForgeFeed & {
       if (waiting.size + pending.size >= MAX_PENDING && !waiting.has(event.activityId)) cancel();
       waiting.set(event.activityId, { stage: event.stage, expiresAt: clock() + WAIT_MS });
       emit(handlers => handlers.stage?.(event.activityId, event.stage));
+    } else if (event.type === 'ended') {
+      if ((seen.get(event.activityId) ?? -1) >= ENDED) return;
+      remember(event.activityId, ENDED);
+      waiting.delete(event.activityId);
+      emit(handlers => handlers.ended?.(event.activityId));
     } else {
-      if (committedIds.has(event.attachment.id) || seen.get(event.activityId) === STAGES.length) return;
+      if (committedIds.has(event.attachment.id) || seen.get(event.activityId) === COMMITTED) return;
       committedIds.add(event.attachment.id);
       if (committedIds.size > MAX_SEEN) committedIds.delete(committedIds.values().next().value!);
-      remember(event.activityId, STAGES.length);
+      remember(event.activityId, COMMITTED);
       waiting.delete(event.activityId);
       if (waiting.size + pending.size >= MAX_PENDING) cancel();
       standing.set(event.attachment.id, event.attachment);

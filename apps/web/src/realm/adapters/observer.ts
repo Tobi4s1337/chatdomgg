@@ -1,5 +1,5 @@
-import { ForgeDraftSchema, ForgeRunEventSchema, KingdomPresenceFrameSchema, TokenSchema, type KingdomId, type KingdomPresenceFrame } from '@chatdom/shared';
-import { REALM_CASTLE_SLOT, type CommittedForgeAttachment, type ForgeActivity, type KingdomRoomState, type RealmPublicDelivery } from '@chatdom/shared/realm';
+import { ForgeDraftSchema, KingdomPresenceFrameSchema, type KingdomId, type KingdomPresenceFrame } from '@chatdom/shared';
+import { ForgeTransientActivitySchema, REALM_CASTLE_SLOT, type CommittedForgeAttachment, type ForgeActivity, type KingdomRoomState, type RealmPublicDelivery } from '@chatdom/shared/realm';
 import type { Room } from '@colyseus/sdk';
 
 /** The slice of a Colyseus room these adapters need. Use `observedRoom` for an actual SDK room. */
@@ -213,14 +213,10 @@ export function observeRealm(room: RealmObservedRoom, expected: RealmObserverExp
   const unbind = [
     room.onMessage('transient', (payload: never) => {
       if (status !== 'ready') return;
-      const message = payload as { type?: unknown; event?: { type?: unknown; activityId?: unknown; stage?: unknown } } | null;
-      const event = message?.event;
-      if (message?.type !== 'forge' || event?.type !== 'stage') return;
-      const id = TokenSchema.safeParse(event.activityId), stage = ForgeRunEventSchema.safeParse({ type: 'stage', stage: event.stage });
-      if (id.success && stage.success && stage.data.type === 'stage') {
-        const activity: ForgeActivity = { type: 'stage', activityId: id.data, stage: stage.data.stage };
-        emit(l => l.forge?.(activity));
-      }
+      const message = payload as { type?: unknown; event?: unknown } | null;
+      if (message?.type !== 'forge') return;
+      const event = ForgeTransientActivitySchema.safeParse(message.event);
+      if (event.success) emit(l => l.forge?.(event.data));
     }),
     room.onMessage('world', (payload: never) => apply(payload)),
     room.onMessage('bootstrap', (payload: never) => install(payload)),

@@ -13,7 +13,7 @@ import { placeMarketContent, placeSettlementContent } from '../kingdom/settlemen
 import { loadTerrain } from '../kingdom/terrain-client';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from '../kingdom/terrain-worker';
 import { terrainBatches } from '../kingdom/terrain-batches';
-import type { CameraPose, HomeAnchor } from '../twitch-moments';
+import type { CameraPose, DoorAnchor, GiftRoute, HomeAnchor, PlaceAnchor, WindowAnchor } from '../twitch-moments';
 
 /**
  * The bench's kingdom: a real generated hamlet, composed from the same settlement, content, voxel worker,
@@ -28,6 +28,10 @@ export interface MomentStage {
   readonly camera: THREE.PerspectiveCamera;
   mesh(blueprint: VoxelBlueprint): Promise<THREE.BufferGeometry>;
   homeAnchor(slot: number): HomeAnchor | null;
+  doorAnchor(slot: number): DoorAnchor | null;
+  windowAnchor(slot: number): WindowAnchor | null;
+  placeAnchor(place: 'market' | 'gate'): PlaceAnchor | null;
+  giftRoute(): GiftRoute | null;
   setPresence(frame: KingdomPresenceFrame): void;
   setPose(pose: CameraPose): void;
   readonly pose: CameraPose;
@@ -70,6 +74,62 @@ function bannerMount(house: WindowHouse): HomeAnchor | null {
     return { mount: mount.toArray(), normal: normal.toArray(), right: right.toArray(), doorstep: doorstep.toArray() };
   }
   return null;
+}
+
+const yawed = (house: WindowHouse, x: number, z: number) => new THREE.Vector3(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw);
+const toWorld = (house: WindowHouse, cell: Vec3) => new THREE.Vector3(...cell).multiplyScalar(VOXEL_METRES.build).applyAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw)
+  .add(new THREE.Vector3(...house.position));
+
+/** The doorstep in front of the authored entrance (or the façade's middle), on the lot's floor. */
+function doorOf(house: WindowHouse): DoorAnchor {
+  const [sx, , sz] = house.blueprint.size, entrance = ENTRANCES[house.blueprint.id]?.entrance;
+  const doorX = entrance && entrance[2] > sz / 2 ? entrance[0] : sx / 2, floor = entrance ? entrance[1] - 11 : 4;
+  return { doorstep: toWorld(house, [doorX, floor, sz + 3]).toArray(), normal: yawed(house, 0, 1).toArray(), right: yawed(house, 1, 0).toArray() };
+}
+
+/** The presence window (the first authored one, as the window lights use), on its exterior glass face. */
+function windowOf(house: WindowHouse): WindowAnchor | null {
+  const window = house.blueprint.windows[0];
+  if (!window) return null;
+  const angle = { north: Math.PI, east: Math.PI / 2, south: 0, west: -Math.PI / 2 }[window.facing] + house.yaw;
+  const normal = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle)), right = new THREE.Vector3(Math.cos(angle), 0, -Math.sin(angle));
+  return { centre: toWorld(house, window.centre).addScaledVector(normal, 0.006).toArray(), normal: normal.toArray(), right: right.toArray(),
+    width: window.width * VOXEL_METRES.build, height: window.height * VOXEL_METRES.build };
+}
+
+/**
+ * The gift cart's real route along active streets: in along the lane whose far junction lies nearest 55 m of road
+ * from the market, and on up the castle road. Street points are the plan's own ground points.
+ */
+function giftRouteOf(layout: SettlementPlan): GiftRoute | null {
+  const active = new Set(layout.activeStreetIds), market = layout.market.nodeId;
+  const node = new Map(layout.nodes.map(n => [n.id, n]));
+  const edges = layout.streets.filter(s => active.has(s.id) && s.kind !== 'approach' && s.kind !== 'trail');
+  const length = (points: readonly Vec3[]) => points.reduce((sum, p, i) => i ? sum + Math.hypot(p[0] - points[i - 1]![0], p[2] - points[i - 1]![2]) : 0, 0);
+  // Shortest road from the market to every junction.
+  const best = new Map<string, { distance: number; points: Vec3[] }>([[market, { distance: 0, points: [node.get(market)!.position] }]]);
+  const open = [market];
+  while (open.length) {
+    open.sort((a, b) => best.get(a)!.distance - best.get(b)!.distance);
+    const here = open.shift()!, from = best.get(here)!;
+    for (const edge of edges) {
+      if (edge.from !== here && edge.to !== here) continue;
+      const there = edge.from === here ? edge.to : edge.from, points = edge.from === here ? [...edge.points] : [...edge.points].reverse();
+      const distance = from.distance + length(points);
+      if ((best.get(there)?.distance ?? Infinity) <= distance) continue;
+      best.set(there, { distance, points: [...from.points, ...points.slice(1)] });
+      if (!open.includes(there)) open.push(there);
+    }
+  }
+  const gate = layout.castle.gateNodeId;
+  const entries = [...best.entries()].filter(([id]) => id !== market && id !== gate && !id.startsWith('road:') && best.get(id)!.distance > 30);
+  const [, entry] = entries.sort((a, b) => Math.abs(a[1].distance - 55) - Math.abs(b[1].distance - 55))[0] ?? [];
+  const castle = best.get(gate);
+  if (!entry || !castle) return null;
+  // On out up the castle road, as far as the first 60 m of it.
+  let run = 0, end = castle.points.length;
+  for (let i = 1; i < castle.points.length; i++) { run += Math.hypot(castle.points[i]![0] - castle.points[i - 1]![0], castle.points[i]![2] - castle.points[i - 1]![2]); if (run > 60) { end = i + 1; break; } }
+  return { inbound: [...entry.points].reverse(), outbound: castle.points.slice(0, Math.max(2, end)) };
 }
 
 export async function createMomentStage(canvas: HTMLCanvasElement, options: { seed: string; hour: number; signal: AbortSignal; onProgress(fraction: number): void }): Promise<MomentStage> {
@@ -155,6 +215,7 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
     if (options.signal.aborted) throw new DOMException('The bench closed while loading', 'AbortError');
 
     const anchors = new Map<number, HomeAnchor | null>();
+    const route = giftRouteOf(layout);
     let pose: CameraPose = { eye: [0, 40, 80], target: [0, 0, 0], fov: 46 }, lastField = -Infinity;
     const resize = () => { renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); camera.aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
@@ -176,6 +237,16 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
         if (!anchors.has(slot)) { const house = houses.find(h => h.slot === slot); anchors.set(slot, house ? bannerMount(house) : null); }
         return anchors.get(slot)!;
       },
+      doorAnchor(slot) { const house = houses.find(h => h.slot === slot); return house ? doorOf(house) : null; },
+      windowAnchor(slot) { const house = houses.find(h => h.slot === slot); return house ? windowOf(house) : null; },
+      placeAnchor(place) {
+        if (!route) return null;
+        // The gate is where the cart's lane enters the hamlet; the market is where it stops.
+        const [a, b] = place === 'gate' ? [route.inbound[0]!, route.inbound[1]!] : [route.inbound.at(-1)!, route.inbound.at(-2)!];
+        const facing = new THREE.Vector3(b[0] - a[0], 0, b[2] - a[2]).normalize();
+        return { position: a, facing: (place === 'gate' ? facing : facing.negate()).toArray() };
+      },
+      giftRoute: () => route,
       setPresence(frame) { windows.setFrame(frame); windows.update(1, options.hour); lastField = -Infinity; },
       setPose(next) { pose = next; },
       get pose() { return pose; },

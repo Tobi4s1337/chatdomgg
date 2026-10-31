@@ -160,7 +160,8 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       room = mix(room, vec3(1.0, 0.80, 0.50), smoothstep(0.5, 1.0, core));
       // By day the glass stays glass, with only a hint of the room behind it.
       float lit = presence * mix(0.07, 1.0, night);
-      room = mix(room, vec3(1.0, 0.70, 0.36) * 1.15, distant);
+      // Tiny distant panes retain amber chroma instead of averaging into pale stone.
+      room = mix(room, vec3(1.15, 0.38, 0.055) * 1.35, distant);
       vec3 glass = mix(reflection, room * mix(0.9, 1.25, night), lit);
       // Mullions and frame stay dark; their inner edges catch the room's light.
       float catchLight = frame * (1.0 - smoothstep(0.455, 0.49, max(p.x, p.y))) * lit;

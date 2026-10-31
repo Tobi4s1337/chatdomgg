@@ -4,7 +4,7 @@ import type { KingdomPresenceFrame, Vec3 } from '@chatdom/shared';
 export interface HomeLifeSite { readonly slot: number; readonly mouths: readonly Vec3[]; readonly lantern: Vec3; readonly normal: Vec3 }
 export interface HomeLifeSource { readonly id: string; readonly slot: number; readonly position: Vec3; readonly normal: Vec3; level: number; readonly name: null; strength: number }
 
-const MAX_STACKS = 96, PUFFS = 10, LIFE = 4.8;
+const MAX_STACKS = 96, PUFFS = 5, LIFE = 3.6;
 const clamp = THREE.MathUtils.clamp;
 const fract = (n: number) => n - Math.floor(n);
 const hash = (n: number) => fract(Math.sin(n * 127.1 + 13.7) * 43758.5453);
@@ -43,11 +43,12 @@ export function createHomeLife(scene: THREE.Scene, sites: readonly HomeLifeSite[
   const centre = new THREE.InstancedBufferAttribute(new Float32Array(MAX_STACKS * PUFFS * 3), 3);
   const size = new THREE.InstancedBufferAttribute(new Float32Array(MAX_STACKS * PUFFS), 1);
   const opacity = new THREE.InstancedBufferAttribute(new Float32Array(MAX_STACKS * PUFFS), 1);
-  puffGeometry.setAttribute('aCentre', centre); puffGeometry.setAttribute('aSize', size); puffGeometry.setAttribute('aOpacity', opacity);
+  const shape = new THREE.InstancedBufferAttribute(new Float32Array(MAX_STACKS * PUFFS), 1);
+  puffGeometry.setAttribute('aCentre', centre); puffGeometry.setAttribute('aSize', size); puffGeometry.setAttribute('aOpacity', opacity); puffGeometry.setAttribute('aShape', shape);
   puffGeometry.instanceCount = 0;
   const puffMaterial = new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
-    vertexShader: `attribute vec3 aCentre;attribute float aSize;attribute float aOpacity;varying vec2 vP;varying float vOpacity;void main(){vP=position.xy;vOpacity=aOpacity;vec4 mv=viewMatrix*vec4(aCentre,1.);mv.xy+=position.xy*aSize;gl_Position=projectionMatrix*mv;}`,
-    fragmentShader: `varying vec2 vP;varying float vOpacity;void main(){float d=min(length(vP*vec2(.94,1.05)),min(length((vP-vec2(-.32,-.08))*1.23),length((vP-vec2(.29,.12))*1.3)));float a=(1.-smoothstep(.38,1.,d))*vOpacity;gl_FragColor=vec4(.55,.52,.62,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}` });
+    vertexShader: `attribute vec3 aCentre;attribute float aSize;attribute float aOpacity;attribute float aShape;varying vec2 vP;varying float vOpacity;varying float vShape;void main(){vP=position.xy;vOpacity=aOpacity;vShape=aShape;vec4 mv=viewMatrix*vec4(aCentre,1.);mv.xy+=position.xy*aSize;gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: `varying vec2 vP;varying float vOpacity;varying float vShape;void main(){vec2 p=vP;float angle=atan(p.y,p.x);float edge=1.+.12*sin(angle*3.+vShape*6.28)+.08*sin(angle*5.-vShape*9.);float d=length(p*vec2(1.,1.12))/edge;float a=(1.-smoothstep(.12,1.,d))*vOpacity;gl_FragColor=vec4(.16,.17,.19,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}` });
   const smoke = new THREE.Mesh(puffGeometry, puffMaterial); smoke.frustumCulled = false; smoke.renderOrder = 3; scene.add(smoke);
   const frustum = new THREE.Frustum(), projection = new THREE.Matrix4(), sample = new THREE.Vector3(), sphere = new THREE.Sphere(sample, 4);
   const windows = new Map<number, { present: boolean; since: number }>();
@@ -90,15 +91,17 @@ export function createHomeLife(scene: THREE.Scene, sites: readonly HomeLifeSite[
           const phase = fract(age / LIFE - j / PUFFS);
           // Do not backfill smoke before the first puff would have been emitted.
           const started = age >= j * LIFE / PUFFS;
-          const rise = phase * 3;
-          const sway = Math.sin(timeSeconds * .45 + stackSeed * .3 + phase * 2.5) * .12 * phase;
-          centre.setXYZ(count, c.mouth[0] + phase * 1.05 + sway, c.mouth[1] + .08 + rise, c.mouth[2] + phase * .3 + Math.cos(timeSeconds * .35 + stackSeed * .3 + phase * 2) * .08 * phase);
-          size.setX(count, .27 + phase * .37 + hash(seed) * .035);
-          opacity.setX(count, started ? THREE.MathUtils.smoothstep(phase, 0, .12) * (1 - THREE.MathUtils.smoothstep(phase, .65, 1)) * .17 * Math.min(1, age / .7) : 0);
+          // A shared wind bends every plume; the growing eddy offsets keep individual puffs from forming a stripe.
+          const eddy = timeSeconds * .38 + stackSeed * .3 + phase * 5 + hash(seed) * 2;
+          const curl = .22 * phase;
+          centre.setXYZ(count, c.mouth[0] + phase * 1.65 + Math.sin(eddy) * curl, c.mouth[1] + .08 + phase * 1.8, c.mouth[2] + phase * .55 + Math.cos(eddy) * curl);
+          size.setX(count, .20 + phase * .28 + hash(seed) * .07);
+          shape.setX(count, hash(seed + 17));
+          opacity.setX(count, started ? THREE.MathUtils.smoothstep(phase, 0, .1) * (1 - THREE.MathUtils.smoothstep(phase, .42, 1)) * .15 * Math.min(1, age / .7) : 0);
           count++;
         }
       }
-      puffGeometry.instanceCount = count; centre.needsUpdate = size.needsUpdate = opacity.needsUpdate = true;
+      puffGeometry.instanceCount = count; centre.needsUpdate = size.needsUpdate = opacity.needsUpdate = shape.needsUpdate = true;
     },
     sources() { return sources; },
     dispose() { if (disposed) return; disposed = true; scene.remove(lanterns, smoke); lanterns.dispose(); lanternGeometry.dispose(); lanternMaterial.dispose(); puffGeometry.dispose(); puffMaterial.dispose(); },
