@@ -3,7 +3,9 @@
 // changes this fixture alone, the shelf never uses Bits, and every snapshot it
 // produces carries the SIMULATED mark. Its words are authored fixture copy standing
 // in for what a kingdom service would one day supply.
-import type { ActStatus, Ballad, Coals, CrowdAct, Earned, Forge, Home, Light, LightChoice, PanelAdapter, PanelSnapshot, Picture, Raising, Shelf, ShelfProduct, ShelfRequest, SourceMark, Tavern, Tonight } from '../model';
+import { ALL_SECTIONS, type ActStatus, type Ballad, type Coals, type CrowdAct, type Earned, type Forge, type Home, type Light, type LightChoice, type PanelAdapter, type PanelSnapshot, type Picture, type Raising, type Sections, type Shelf, type ShelfRequest, type SourceMark, type Tavern, type Tonight } from '../model';
+import { DEFAULT_SHELF, SHELF_MENU, shelfProducts } from '../shelf-menu';
+import { openSimulationWire } from './simulation';
 import { FIXTURE_PROVENANCE } from '../assets/fixture/provenance';
 import kingdomStill from '../assets/fixture/willowmere-kingdom.webp';
 import portraitStill from '../assets/fixture/willowmere-portrait.webp';
@@ -16,6 +18,8 @@ export const FIXTURE_STATES = [
   // Tonight's shared moments: a world vote, the King's Errand, the earned dragon, a vote that has closed,
   // and a vote seen by someone who has not shared who they are.
   'vote', 'errand', 'dragon', 'act-ended', 'act-unshared',
+  // A kingdom and a viewer with the longest names the panel must still set well.
+  'long-names',
 ] as const;
 export type FixtureState = typeof FIXTURE_STATES[number];
 
@@ -28,6 +32,8 @@ export const FIXTURE_ACT_MS = 700;
 export const FIXTURE_BITS_MS = 1600;
 /** The simulated viewer. A Twitch display name, as the kingdom would supply it once identity is shared. */
 const VIEWER = 'Wrenfeather';
+/** The long-names case: a kingdom name near its 64-character limit and a full 25-character Twitch name. */
+const LONG = { kingdom: 'Saint Wilhelmina’s Rest under the Thornwood Hills', viewer: 'Bartholomew_Featherstone7', street: 'The Lamplighters’ Long Walk' } as const;
 const LOST_AT = '9:12 pm';
 
 function still(id: 'kingdom' | 'window' | 'resting', url: string, portrait: string | null = null, caption = 'Simulated still'): Picture {
@@ -52,6 +58,7 @@ function initialLight(state: FixtureState): Light {
     case 'logged-out': return { kind: 'logged-out' };
     case 'refused': return { kind: 'refused' };
     case 'named': case 'unnamed': return { kind: 'lit', choice: state, as: 'citizen', by: 'simulation' };
+    case 'long-names': return { kind: 'lit', choice: 'named', as: 'citizen', by: 'simulation' };
     case 'vote': case 'errand': case 'dragon': case 'act-ended': return { kind: 'lit', choice: 'named', as: 'citizen', by: 'simulation' };
     case 'guest': return { kind: 'lit', choice: 'named', as: 'guest', by: 'simulation' };
     case 'resting': return { kind: 'resting', choice: 'named' };
@@ -111,10 +118,11 @@ const CITIZEN_HISTORY: readonly Earned[] = [
 ];
 
 function homeFor(state: FixtureState, light: Light): Home {
+  const long = state === 'long-names';
   const citizen = (named: boolean): Home => ({
-    kind: 'citizen', street: 'Lantern Row', place: 'Fourth house on the left, two doors from the lane',
+    kind: 'citizen', street: long ? LONG.street : 'Lantern Row', place: 'Fourth house on the left, two doors from the lane',
     description: 'A cream-walled house with a flower box under the front window.',
-    displayName: named ? VIEWER : null, picture: still('window', windowStill),
+    displayName: named ? (long ? LONG.viewer : VIEWER) : null, picture: still('window', windowStill),
     tenure: { kind: 'known', since: '3 October' }, history: CITIZEN_HISTORY,
   });
   switch (light.kind) {
@@ -215,32 +223,43 @@ function actFor(state: FixtureState, light: Light): CrowdAct | null {
   }
 }
 
-/** A fixed menu of moments for the whole kingdom. Nothing lasts past a day; nothing brings light, rank or a place. */
-const PRODUCTS: readonly ShelfProduct[] = [
-  { sku: 'bard-song', title: 'A song from the bard', bits: 300, what: 'Lark sings four lines about you, from what the kingdom knows of you.', stays: { kind: 'day', until: '8:40 pm tomorrow', what: 'The verse hangs on your door' } },
-  { sku: 'dress-home', title: 'Dress my home', bits: 300, what: 'Bunting and festival banners in your colours, shown as the stream passes by.', stays: { kind: 'day', until: '8:40 pm tomorrow', what: 'The bunting stays up' } },
-  { sku: 'parade', title: 'Lead a parade', bits: 1000, what: 'You lead a parade round the market square, and the Hearthbeast follows.', stays: { kind: 'moment' } },
-  { sku: 'feast', title: 'The royal feast', bits: 2500, what: 'Long tables fill the square and every citizen raises a cup in your name.', stays: { kind: 'day', until: '8:40 pm tomorrow', what: 'The tables stand' } },
-];
-
 /** The shelf shows only while the stream is live, to someone Twitch lets use Bits. */
-function shelfFor(state: FixtureState, light: Light, request: ShelfRequest): Shelf {
+function shelfFor(state: FixtureState, light: Light, request: ShelfRequest, settings: FixtureSettings): Shelf {
   if (state === 'resting' || state === 'disconnected' || state === 'missing' || light.kind === 'logged-out') return { kind: 'hidden' };
-  return { kind: 'offered', products: PRODUCTS, request, by: 'simulation' };
+  if (settings.hidden || !settings.sections.shelf) return { kind: 'hidden' };
+  const products = shelfProducts(settings.products, '8:40 pm tomorrow');
+  return products.length ? { kind: 'offered', products, request, by: 'simulation' } : { kind: 'hidden' };
+}
+
+/**
+ * The streamer's side of the simulated night: which sections show, which shelf items are
+ * offered, and whether Hide has paused the panel's moments. Hide clears the crowd act and
+ * the shelf from the panel at once; what was under way resumes as it was when shown again.
+ */
+export interface FixtureSettings {
+  readonly sections: Sections;
+  readonly products: readonly string[];
+  readonly hidden: boolean;
+}
+export const DEFAULT_SETTINGS: FixtureSettings = { sections: ALL_SECTIONS, products: DEFAULT_SHELF, hidden: false };
+
+/** The fixture also takes the streamer's settings; nothing else ever can. */
+export interface FixtureAdapter extends PanelAdapter {
+  configure(next: Partial<FixtureSettings>): void;
 }
 
 interface Night { readonly light: Light; readonly act: CrowdAct | null; readonly request: ShelfRequest; readonly raised: number }
 
-function snapshotFor(state: FixtureState, night: Night): PanelSnapshot {
+function snapshotFor(state: FixtureState, night: Night, settings: FixtureSettings): PanelSnapshot {
   const resting = state === 'resting', light = night.light;
   const home = homeFor(state, light);
   const tonight = tonightFor(state);
   const raise = (raising: Raising | null): Raising | null => raising && { ...raising, progress: Math.min(1, raising.progress + night.raised) };
-  const act = night.act && { ...night.act, raising: raise(night.act.raising) };
+  const act = night.act && !settings.hidden && settings.sections.acts ? { ...night.act, raising: raise(night.act.raising) } : null;
   return {
     source: SIMULATED,
     connection: state === 'disconnected' ? { kind: 'lost', asOf: LOST_AT } : { kind: 'fixture' },
-    kingdom: { name: 'Willowmere', tier: 'town', motto: resting ? 'Resting between streams' : 'A town at dusk' },
+    kingdom: { name: state === 'long-names' ? LONG.kingdom : 'Willowmere', tier: 'town', motto: resting ? 'Resting between streams' : 'A town at dusk' },
     stream: resting ? 'resting' : 'live',
     picture: resting ? still('resting', restingStill, null, 'Simulated still · between streams') : still('kingdom', kingdomStill, portraitStill),
     light,
@@ -249,30 +268,40 @@ function snapshotFor(state: FixtureState, night: Night): PanelSnapshot {
     tavern: tavernFor(state),
     forge: forgeFor(state, home),
     act,
-    shelf: shelfFor(state, light, night.request),
+    shelf: shelfFor(state, light, night.request, settings),
     entry: { kind: 'gate', path: '/?source=simulated&seed=willowmere&tier=town' },
+    sections: settings.sections,
   };
 }
 
-export function createFixtureAdapter(state: FixtureState = 'unshared'): PanelAdapter {
+export function createFixtureAdapter(state: FixtureState = 'unshared', initial: Partial<FixtureSettings> = {}): FixtureAdapter {
   const listeners = new Set<(snapshot: PanelSnapshot) => void>();
   const light = initialLight(state);
   let night: Night = { light, act: actFor(state, light), request: { kind: 'idle' }, raised: 0 };
-  let snapshot = snapshotFor(state, night);
+  let settings: FixtureSettings = { ...DEFAULT_SETTINGS, ...initial };
+  let snapshot = snapshotFor(state, night, settings);
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const later = (ms: number, run: () => void) => { const timer = setTimeout(() => { timers.delete(timer); run(); }, ms); timers.add(timer); };
   // The simulated viewer struck from chat a moment before opening the panel, so the dragon's first tap meets chat's own pause.
   let struckFromChat = state === 'dragon';
-  const set = (next: Partial<Night>) => {
-    night = { ...night, ...next };
-    snapshot = snapshotFor(state, night);
+  const publish = () => {
+    snapshot = snapshotFor(state, night, settings);
     for (const listener of listeners) listener(snapshot);
   };
+  const set = (next: Partial<Night>) => { night = { ...night, ...next }; publish(); };
+  const configure = (next: Partial<FixtureSettings>) => {
+    settings = { ...settings, ...next, products: (next.products ?? settings.products).filter(sku => SHELF_MENU.some(item => item.sku === sku)) };
+    publish();
+  };
+  // The streamer's simulated Hide, from the live dashboard in any view beside this one.
+  const wire = openSimulationWire(message => { if (message.kind === 'hide' && message.hidden !== settings.hidden) configure({ hidden: message.hidden }); });
+  wire?.post({ kind: 'ask' });
   const setLight = (next: Light) => set({ light: next, act: night.act && { ...night.act, status: gateFor(next, night.act.status) } });
   const setAct = (status: ActStatus) => { if (night.act) set({ act: { ...night.act, status } }); };
   return {
     get: () => snapshot,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    configure,
     // The simulated journey: Twitch shares who you are, then the kingdom answers. Nothing leaves the page.
     requestLight(choice: LightChoice) {
       if (snapshot.light.kind !== 'unshared' && snapshot.light.kind !== 'refused') return;
@@ -284,8 +313,9 @@ export function createFixtureAdapter(state: FixtureState = 'unshared'): PanelAda
     },
     // One tap, one command, counted by the simulated kingdom under chat's limits. It changes only this fixture.
     requestAct(option: string) {
+      // A hidden act is not there to tap: the panel shows none, and a stray call counts nothing.
       const act = night.act;
-      if (!act || act.status.kind !== 'open' || !act.options.some(o => o.id === option)) return;
+      if (!act || !snapshot.act || act.status.kind !== 'open' || !act.options.some(o => o.id === option)) return;
       setAct({ kind: 'pending', option });
       later(FIXTURE_ACT_MS, () => {
         const rest = REST_MS[act.kind];
@@ -302,10 +332,10 @@ export function createFixtureAdapter(state: FixtureState = 'unshared'): PanelAda
     },
     // Twitch's own window would ask to confirm. In the simulation it never opens and is always closed: no Bits are used.
     requestProduct(sku: string) {
-      if (snapshot.shelf.kind !== 'offered' || night.request.kind === 'confirming' || !PRODUCTS.some(p => p.sku === sku)) return;
+      if (snapshot.shelf.kind !== 'offered' || night.request.kind === 'confirming' || !snapshot.shelf.products.some(p => p.sku === sku)) return;
       set({ request: { kind: 'confirming', sku } });
       later(FIXTURE_BITS_MS, () => set({ request: { kind: 'cancelled', sku } }));
     },
-    dispose() { for (const timer of timers) clearTimeout(timer); timers.clear(); listeners.clear(); },
+    dispose() { for (const timer of timers) clearTimeout(timer); timers.clear(); listeners.clear(); wire?.close(); },
   };
 }

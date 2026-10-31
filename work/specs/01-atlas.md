@@ -459,3 +459,150 @@ content-label collection expansion or production migration is inferred from a gr
   names (fail closed). The browser also drops each name locally at its `freshUntil`. Every Atlas read has a bounded
   timeout covering headers and body (pointer 10 s, names 15 s, chunk 30 s, world 45 s) and ends in the designed
   failure state with its retry; the first view waits for land and names, or for names to fail on their own.
+- **2026-10-30 — A03 stable geography and editions.** Algorithm `survey-preview-4`, taxonomy `families-1`
+  (`apps/surveyor/src/cartography/families-1.json`, 14 families, 91 games left unassigned with reasons, **proposed**
+  until the founder reviews it; the map shows plain family names, the `realmName` proposals wait for that review).
+  - **Realms.** A continent has the Crossroads at its heart (variety rule `variety-1`: ≥120 min, top community
+    <50 %, ≥3 communities ≥12 %, a family counting as one community), one realm per family with
+    ≥max(24, 1.5 %) of its channels (`realm-threshold-1`), and the Wilds at its edge. An isle is one realm. Game
+    patches sit inside a realm.
+  - **Contiguous land.** Nested circle packing left voids that became sea and split continents into realm
+    islands, so all of a region's patches are relaxed together. Each patch is pulled to its realm's centre and
+    gently to the heart, then pushed apart with a wider gap between realms. Realm circles are area-equivalent and
+    serve as the power-distance membership for later slots.
+  - **The Outer Isles.** Six empty, lobed islands of no language (about 5 % of the land) take overflow.
+  - **Hamlet lattice `hex-1`.** Fixed point in 1/20 units, pitch 1.6 × 1.4 with odd rows offset, shore 0.9, gap
+    0.6. A slot is `s:i:j`, a founding holding `f:<ordinal>` in channel ID order.
+  - **Editions.** An edition is `editions/<ed-0|ed-1>/` (edition, founding, taxonomy bytes, world) plus a
+    hash-chained, canonically encoded `ledger.ndjson` (settle / tombstone / restore / night). `heads.ndjson`
+    acknowledges every head, so any earlier address is provably unchanged. Withheld channels get a hidden
+    tombstone and gone channels a gone tombstone (30 days abandoned, then waiting land). Land is never re-granted.
+    The holding tier is fixed and the map may draw one tier of growth. Edition I alone grants land by raid, and
+    only to observed targets.
+  - **Founding.** Founding needs the source's own window (48 h / 7 d), a reviewed taxonomy for Edition I, and an
+    Ed25519 founder authorization over {edition, revision, taxonomy hash, issuedAt, issuedBy} that verifies
+    against `ATLAS_FOUNDER_PUBLIC_KEY`. Every refusal is logged. Nothing founds by itself.
+  - **Withheld at founding (review fix).** A channel on the withheld list when an edition is founded keeps the
+    land it was drawn on (the world stays the preview's drawing), and its holding gets a `hidden` tombstone in the
+    founding night itself, so it is waiting land from the first read and nobody else can be granted it. The founding
+    reads the list once and fails closed when it is unreadable; `founding.json` records `withheld: {key, hidden}`
+    and `check` proves it matches the founding night. A tombstone is lifted only when the revision observed the
+    channel, neither gone nor withheld: leaving the list while missing from the sweep restores nothing.
+  - **Every settle run reads moderation (second review fix).** `atlas:settle` reads the withheld list (once,
+    fail-closed) before it decides anything. Without a newer revision it no longer stops at "up to date": newly
+    withheld holdings get `hidden` tombstones in that run (`at` = the run, `revision` = the last settled night),
+    with no night line and nothing else changed. Hiding is immediate; lifting still waits for a revision that
+    observed the channel. Every append, night or moderation, is first verified as the whole edition it would make
+    (old ledger + new lines, every head + the new one, founder key) from the exact bytes that were verified; only
+    an edition that passes is renamed over the old ledger, otherwise ledger and heads stay untouched.
+  - **Proof.** `atlas:check` rebuilds the preview byte for byte and verifies every edition.
+  - **Real-data evidence (2026-10-30).** A rehearsal on three real revisions settled two nights with 0 holdings
+    moved. Edition 0 and Edition I foundings were both refused (13.9 h observed, proposal taxonomy, no key, no
+    authorization).
+
+- **2026-10-30 — A04 live paint, pennants and dabs.** Producer `atlas:live` (`apps/surveyor/src/live/`), consumer
+  `apps/web/src/atlas/live/` and `map/wash.ts`, both on the frozen shared `live-v2` / `live-starts-v1` / `dabs-v1`.
+  - **Target and order.** Until an edition is founded, the live target is each retained survey preview: edition id
+    = preview id, world hash = sha256(world.json), settler order = `world.head` then each region chunk in region
+    order. The world pins every chunk hash, so the order hash binds the exact land the browser draws. The client
+    pins the order hash of the first manifest it accepts and refuses any other for the life of the page.
+  - **Sweep rule `sweep-complete-1`.** Publish only when every live row was touched by the latest sweep, the sweep
+    reached its floor, it did not collapse below 60 % of the median of the previous ten, and it is not more than
+    60 s in the future (real minimum ratio over 400 sweeps was 0.93). Otherwise `live/state.json` records the state
+    and the last complete frame stays with its own `asOf`. Live-v2 cannot say "unknown", so a partial sweep is never
+    written at all.
+  - **One gate.** `publicVisibility` (gone, gambling, withheld) runs on every live channel before a byte is written;
+    the withheld list is read once per run and fails closed. Dabs carry realm, hash and start only.
+  - **Dab realm.** Language region; on a continent the cartography's own placement of the channel's categories
+    (variety → Crossroads, its family's realm if drawn, else the Wilds); an isle is its realm; an unknown language
+    goes to an Outer Isles realm by FNV of the ID. The browser computes the pencil place on the `hex-1` lattice
+    (nearest free slot to the hash target inside the realm, after holdings and earlier dabs), placing the regions
+    in view first a few milliseconds per frame. A place may move between frames until land is granted.
+  - **Transport.** `GET /map-data/v1/live/<preview>` pointer (no-cache) + one SSE subscription + a 60 s reconcile;
+    frame files are immutable. A refused, partial, misaligned, corrupt, older or unreachable read keeps the last
+    frame and its time. The client also waits up to 4 s for the first frame before the first reveal, so the paint
+    does not flash in after it.
+  - **Wash.** Blots accumulate in one render texture with ordinary alpha and are multiplied into the paper once,
+    between the land and the overlay, so overlaps deepen toward vermilion and stop there. From afar each live holding
+    is a soft rimless stain graded by class, capped at 64 % pigment: one density layer. From just before realm
+    distance each holding has its own seeded watercolour bloom (irregular rim, mottled body, pooled tide line), at
+    about half strength under the pennants; at most 2,000 (phone) / 4,000 close washes. Towns and villages are read
+    in the background after the first view, nearest first, so their washes exist even far out.
+  - **Time.** Bloom eases in over 15 minutes from the real `started_at` (unknown start = full; reduced motion =
+    full); a holding that left the air dries over 40 s from the frame that showed it. A stale or clock-skewed frame
+    is held: nothing blooms past its `asOf`, and the seal under the title says "Live as of …" and why.
+  - **Marks.** From realm distance every shield carries its standard: bare when offline, pennants by class (double
+    long, long, medium, short); small streams (5–24) are graphite pencil flags with a touch of wash, unnamed, and
+    open a card that says where and since when, nothing more. Nothing is drawn as a standard before the first frame.
+  - **Spectacle.** `chooseSpectacle` picks one founded spectacle in view by crown > dragon > Hype Train fireworks >
+    Hype Train > festival > raid gathering. The producer writes 0 everywhere: none is founded.
+  - **Review fixes.** A live row that fails validation makes the whole sweep incoherent: dropping it would paint
+    that channel offline. A withheld holding never dries back into view when the re-gated frame drops it, and a
+    holding withheld while drying goes at once. A dab back on air while its old flag dries is drawn once, live.
+    Frames are pruned by sweep stamp, so the re-gated frame's predecessor from the same sweep stays for readers
+    who hold its manifest. A feed disposed mid-read leaves no reconcile timer behind.
+  - **needs:** a founded-record and public pulse producer for spectacle (unchanged); a card API to name dabs on hover
+    (A06); content labels are still not collected, so mature channels cannot yet be held back to kingdom zoom.
+
+- **2026-10-30 — A05 motion and tile loading.** One float64 camera; every move goes through it.
+  - **Gestures** (`map/gestures.ts`): a DOM-free state machine fed local CSS-px positions and a clock. One pointer
+    pans with the grabbed point held under it; two pointers pinch, solved every move from the pinch's start (world
+    point under the first centroid follows the centroid, scale follows the spread), so it never drifts. Lifting one
+    finger hands over to a pan from that finger's current position: no jump, no tap, no inertia from the pinch. A
+    third finger is ignored. Inertia uses the samples of the last 100 ms, none after a 60 ms rest, capped at
+    2.6 px/ms with a 300 ms decay. A notched wheel (lines, pages or whole 100/120 px steps) glides 200 ms around the
+    latest pointer and successive notches extend one glide; trackpad deltas and ctrl-pinch apply at once. Pointer
+    cancel, lost capture, blur, a hidden page, resize, context loss and unmount reset every gesture.
+  - **Flights** (`map/motion.ts`): van Wijk–Nuij with ρ 1.36 and speed 1.25, bounded to 0.42–2.6 s; the arc's peak
+    is held inside the whole map by lowering ρ (MapLibre's minZoom idea); equal centres are a pure zoom; reduced
+    motion makes one 200 ms composed move with no arc. Flights are planned in **focus space** (the world point at the
+    middle of the free area: the view minus chrome, card and sheet) and converted every frame with that frame's
+    insets, so a resize or a sheet opening mid-flight still lands the target where promised. Any press, wheel or key
+    stops a flight where it is; a flight's destination tiles are baked right after the visible ones.
+  - **Four distances.** Stops at the geometric middle of each band (continent 2.37, realm 6.63, kingdom 20.98; the
+    world stop is the opening view), reached by a four-notch ladder between zoom in and out and keys 1–4; the scale
+    bar names the distance.
+  - **Cards, sheet, back and focus.** The page measures the open card (laptop right panel, phone bottom sheet) and
+    gives it to the view as insets; a chosen mark outside the free area (56 px margin) is flown to its middle at the
+    same scale, and a sheet that grows over it moves the map again. Opening a card pushes one history entry (same
+    URL until A06's channel routes) holding the camera from before; Back closes the card and flies back there.
+    Closing on the page (button, Escape, bare paper) steps over that entry quietly and returns focus to where it
+    was, so a later Back leaves the map as expected.
+  - **Context loss.** Pixi keeps texture sources and re-uploads on restore; the map pauses drawing, shows "Redrawing
+    the map…", and repaints (the wash is redrawn every frame). If the context is not back in 2.5 s the page rebuilds
+    the map on a new canvas from the saved camera, selection and live paint.
+  - **WebGL-free still.** Without WebGL the page draws a still of the same revision with Canvas2D (the same tile
+    painter and scene, the live density wash when a frame exists) and real DOM buttons for the holdings marked at
+    that distance, opening the same cards; `data-state="still"` so checks never mistake it for the map. Search joins
+    this DOM path in A06.
+    The page's notice hangs from the ribbon's banner (below it where the ribbon is at the top, above it where it is at
+    the bottom), so the two stack at every width, and the marks are one layer under both. On a phone the still's
+    compass steps to the right of the ribbon. On a laptop the key gives way to the cartouche's measured height and
+    scrolls on short windows (1280×720) instead of climbing over it.
+  - **Tiles** (`map/tile-plan.ts`, `map/tiles.ts`): a pure planner decides each frame. Current-level tiles fade in
+    over 240 ms from the frame they are first shown; under any missing, failed or fading tile lie its ancestors up to
+    the nearest opaque one plus cached descendants up to two levels down (sharper on zoom-out), coarse to fine. The
+    root tile is wanted first and never evicted, so every tile always has a stand-in. A stand-in more than two levels
+    up shows its decor magnified into a smear (a sea beast across the screen), so a **bridge** tile, the missing
+    tile's ancestor two levels up, is wanted right after the root: one covers up to sixteen screen tiles, and the
+    coarse moment between levels is never softer than 4×. The **home tiles** (the opening view's tiles and their
+    ancestors, 5–21 tiles) are kept once baked and baked last when missing, so the way home and every deep view's
+    coarsest stand-in is the home drawing itself; without this the phone's 48 MiB evicted them at realm distance and
+    the flight home showed a magnified root. Wanted order: root, bridges, visible nearest the centre, a flight's
+    destination within the cache room left, then missing home tiles. `uncovered` counts visible tiles not
+    fully covered by something opaque and must stay 0 after the first view. Textures live in a byte-bounded LRU
+    (48 MiB phone, 112 MiB laptop; tiles drawn this frame are never evicted) and evicted ImageBitmaps are closed.
+    A failed bake retries after 1.5 s and 6 s, then stays failed (its stand-in drawn) until the reader asks to ink it
+    again; a crashed worker fails its tile and is replaced up to three times, then painting moves to the main thread.
+    A worker that hangs without erroring counts as a crash: a watchdog gives it 20 s to get ready (scene and stamp
+    sheet) and each bake 8 s from the moment it is ready (a tile paints in tens of milliseconds), so no tile waits
+    forever behind a silent worker; a device too starved to meet that paints no worse on the main thread.
+  - **Camera clamp.** A map that fits the screen may now overhang a quarter screen on each side instead of being held
+    fully in view: otherwise a wheel or pinch anchored near the map's edge drifts (the anchor slid 125 px). A map
+    larger than the screen still keeps at most a quarter screen of margin past its edge.
+  - **Evidence.** `apps/web/src/atlas/checks/atlas-checks.mjs` drives real Chrome (SwiftShader) at 1440×900, 390×844
+    with touch, and with WebGL off: anchors, coasting, handover, the four distances, `uncovered` 0 on every frame,
+    overlay and cache budgets, card clearance, Back/Escape/focus, context restore and rebuild, resize mid-flight, and
+    the still (buttons, keyboard card, its live frame). It writes the motion filmstrips reviewed for A05.
+  - **Pre-baking.** R10's server-baked z0–z6 belongs to a founded edition (Edition 0 is not founded); survey previews
+    keep worker baking with the fallback, cache and retry rules above.

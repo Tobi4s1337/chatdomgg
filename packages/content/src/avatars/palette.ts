@@ -46,6 +46,8 @@ export const GARB = {
   /** Eyes read as the darkest registered hair brown-black, lit by a linen catch-light. */
   eye: MAT.hairBlack,
   catchLight: MAT.cream,
+  /** The white of the eye beside the pupil. */
+  sclera: MAT.cream,
   blush: MAT.petal,
   clasp: MAT.brass,
 } as const;

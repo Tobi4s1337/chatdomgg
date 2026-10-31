@@ -90,7 +90,9 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   // single culling unit, including their edges during a stride.
   const citizenBounds = new THREE.Sphere(new THREE.Vector3(), 2.5);
   function pose(sample: CitizenSample) {
-    const phase = sample.distance * Math.PI * 2 / .75;
+    // One full left/right stride over 1.8 metres. The old .75 m cycle made ordinary 4 m/s walking
+    // churn through more than five cycles a second; distance still keeps stops and corrections planted.
+    const phase = sample.distance * Math.PI * 2 / 1.8;
     const gait = Math.max(0, Math.min(1, sample.moving));
     const stride = Math.sin(phase) * gait;
     // Slight counterrotation and opposing arms make the small silhouette read at street scale.
@@ -99,11 +101,11 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     const rotations: Partial<Record<AvatarBoneId, readonly [number, number, number]>> = {
       chest: [0, -stride * .055, stride * .025],
       head: [sample.gesture === 'nod' ? .14 + .12 * Math.sin(gestureTime * 6) : 0, (sample.lookYaw ?? 0) + stride * .035, -stride * .025],
-      upperArmLeft: [-stride * .43, 0, .06], upperArmRight: [wave ? -.18 : stride * .43, 0, wave ? 1.75 + .22 * Math.sin(gestureTime * 8) : -.06],
-      thighLeft: [stride * .50, 0, 0], thighRight: [-stride * .50, 0, 0],
-      shinLeft: [Math.max(0, stride) * .55, 0, 0], shinRight: [Math.max(0, -stride) * .55, 0, 0],
-      footLeft: [-stride * .50 - Math.max(0, stride) * .55, 0, 0],
-      footRight: [stride * .50 - Math.max(0, -stride) * .55, 0, 0],
+      upperArmLeft: [-stride * .30, 0, .06], upperArmRight: [wave ? -.18 : stride * .30, 0, wave ? 1.75 + .22 * Math.sin(gestureTime * 8) : -.06],
+      thighLeft: [stride * .42, 0, 0], thighRight: [-stride * .42, 0, 0],
+      shinLeft: [Math.max(0, stride) * .38, 0, 0], shinRight: [Math.max(0, -stride) * .38, 0, 0],
+      footLeft: [-stride * .42 - Math.max(0, stride) * .38, 0, 0],
+      footRight: [stride * .42 - Math.max(0, -stride) * .38, 0, 0],
     };
     root.makeRotationY(sample.heading); root.setPosition(...sample.position);
     poses.clear();
@@ -116,10 +118,10 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
         // and solve the hip's vertical offset from both rotating segments. The
         // planted foot stays at the datum; the swing foot clears the street.
         const legStride = bone.id === 'thighLeft' ? stride : -stride;
-        const hip = legStride * .5;
-        const knee = Math.max(0, legStride) * .55;
+        const hip = legStride * .42;
+        const knee = Math.max(0, legStride) * .38;
         const soleHeightCells = 7 - 4 * Math.cos(hip) - 3 * Math.cos(hip + knee);
-        translation.y += (-soleHeightCells + Math.max(0, legStride) * 1.2) * VOXEL_METRES.avatar;
+        translation.y += (-soleHeightCells + Math.max(0, legStride) * .9) * VOXEL_METRES.avatar;
       }
       local.compose(translation, quaternion, scale);
       const parent = bone.parent ? poses.get(bone.parent) : root;

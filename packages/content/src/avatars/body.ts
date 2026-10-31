@@ -3,39 +3,90 @@ import { GARB, materialName, resolveSkin, type SkinSwatchId } from './palette';
 import { Sculpt } from './sculpt';
 
 /** Body silhouettes, named for shape. All share the frozen rig, joints, sockets and ground datum. */
-export const BODY_FAMILIES = ['balanced'] as const;
+export const BODY_FAMILIES = ['balanced', 'slender', 'broad', 'round'] as const;
 export type BodyFamily = (typeof BODY_FAMILIES)[number];
 
+/** One horizontal slice of the torso: half-width from the centre line, back and front faces (cells). */
+export interface Section { readonly half: number; readonly back: number; readonly front: number }
+
 /**
- * Contours in root-local avatar cells. Half-widths are measured from the centre line; the rig's
- * joints never move, so a family changes volume around the bones, never bone length or height.
+ * Contours in root-local avatar cells. The rig's joints never move: shoulders stay at x = ±5, hips at
+ * x = ±2, and every family keeps the same head, so a family changes the volume around the bones,
+ * never a bone's length, the head or the height.
  */
-interface Contour {
-  /** Chest and shoulder half-width, chest depth back/front. */
-  readonly chest: { readonly half: number; readonly back: number; readonly front: number };
-  /** Waist (belt row) and hip (tunic hem) half-widths and depths. */
-  readonly waist: { readonly half: number; readonly back: number; readonly front: number };
-  readonly hip: { readonly half: number; readonly back: number; readonly front: number };
+export interface Contour {
+  /** Torso slices for rows 8–15, bottom first: hips 8–9, waist 10–11 (belt on 10), chest 12–15. */
+  readonly torso: readonly Section[];
+  /** Widest/deepest extent over the chest (12–15), waist (10–11) and hip (8–9) rows, for fitting garments. */
+  readonly chest: Section;
+  readonly waist: Section;
+  readonly hip: Section;
   /** Leg columns: outer and inner X edges of the left leg (mirrored), and depth. */
   readonly leg: { readonly outer: number; readonly inner: number; readonly back: number; readonly front: number };
-  /** Arm column X edges (right side; mirrored) and depth. */
-  readonly arm: { readonly inner: number; readonly outer: number; readonly back: number; readonly front: number };
+  /**
+   * Arm column X edges (right side; mirrored) and depth. `top` is the arm's highest row: 15 on a square
+   * shoulder, lower where the shoulder slopes; `cap` widens the arm inward at its top rows so it meets a
+   * sloping chest instead of leaving daylight under the collar.
+   */
+  readonly arm: { readonly inner: number; readonly outer: number; readonly back: number; readonly front: number; readonly top: number; readonly cap: number };
 }
 
+const rows = (...slices: readonly (readonly [half: number, back: number, front: number])[]): readonly Section[] =>
+  slices.map(([half, back, front]) => ({ half, back, front }));
+
+/** Author a family by its torso slices; the summary sections are derived so they never disagree. */
+function contour(torso: readonly Section[], leg: Contour['leg'], arm: Contour['arm']): Contour {
+  if (torso.length !== 8) throw new Error('A torso has eight rows, 8–15.');
+  const extent = (from: number, to: number): Section => {
+    const band = torso.slice(from - 8, to - 8);
+    return { half: Math.max(...band.map(s => s.half)), back: Math.min(...band.map(s => s.back)), front: Math.max(...band.map(s => s.front)) };
+  };
+  return { torso, chest: extent(12, 16), waist: extent(10, 12), hip: extent(8, 10), leg, arm };
+}
+
+/**
+ * Four families that read apart as unlit silhouettes, across the arms at shoulder height:
+ * - balanced: an even column, twelve cells across the arms, shoulders as wide as the hips.
+ * - slender: a narrow column the width of the head, shallow through the body, with two-cell legs.
+ * - broad: square shoulders eighteen cells across a deep chest, tapering to the waist; thick arms
+ *   hang clear of the waist, so daylight shows under them.
+ * - round: shoulders that slope from the collar, widening to a soft forward belly and full hips over
+ *   a sturdy four-cell stance; the arms rest against the belly.
+ */
 const CONTOURS: Record<BodyFamily, Contour> = {
-  balanced: {
-    chest: { half: 4, back: -3, front: 3 },
-    waist: { half: 4, back: -3, front: 3 },
-    hip: { half: 4, back: -3, front: 3 },
-    leg: { outer: -4, inner: -1, back: -2, front: 2 },
-    arm: { inner: 4, outer: 6, back: -1, front: 1 },
-  },
+  balanced: contour(
+    rows([4, -3, 3], [4, -3, 3], [4, -3, 3], [4, -3, 3], [4, -3, 3], [4, -3, 3], [4, -3, 3], [4, -3, 3]),
+    { outer: -4, inner: -1, back: -2, front: 2 },
+    { inner: 4, outer: 6, back: -1, front: 1, top: 15, cap: 0 },
+  ),
+  slender: contour(
+    rows([3, -2, 2], [3, -2, 2], [3, -2, 2], [3, -2, 2], [3, -2, 3], [3, -2, 3], [3, -2, 3], [3, -2, 2]),
+    { outer: -3, inner: -1, back: -1, front: 1 },
+    { inner: 3, outer: 5, back: -1, front: 1, top: 15, cap: 0 },
+  ),
+  broad: contour(
+    rows([4, -3, 3], [4, -3, 3], [4, -3, 3], [5, -3, 3], [5, -3, 4], [6, -4, 4], [6, -4, 4], [6, -4, 3]),
+    { outer: -4, inner: -1, back: -2, front: 2 },
+    { inner: 6, outer: 9, back: -2, front: 1, top: 15, cap: 0 },
+  ),
+  round: contour(
+    rows([5, -3, 3], [5, -3, 4], [5, -3, 5], [5, -3, 5], [5, -3, 4], [5, -3, 4], [4, -3, 3], [3, -2, 2]),
+    { outer: -5, inner: -1, back: -2, front: 2 },
+    { inner: 5, outer: 7, back: -1, front: 1, top: 14, cap: 1 },
+  ),
 };
 
 export function bodyContour(family: BodyFamily): Contour {
-  const contour = CONTOURS[family];
-  if (!contour) throw new Error(`Unknown body family ${String(family)}.`);
-  return contour;
+  const found = Object.hasOwn(CONTOURS, family) ? CONTOURS[family] : undefined;
+  if (!found) throw new Error(`Unknown body family ${String(family)}.`);
+  return found;
+}
+
+/** The torso slice at a row (8–15). */
+export function torsoRow(c: Contour, y: number): Section {
+  const section = c.torso[y - 8];
+  if (!section) throw new Error(`Row ${y} is not a torso row.`);
+  return section;
 }
 
 /**
@@ -53,11 +104,17 @@ export function headVolume(material: number): Sculpt {
   return head;
 }
 
-/** Face details sit on the front plane: catch-lit eyes and warm cheeks, readable at street distance. */
+/**
+ * Face details sit on the front plane: catch-lit eyes and warm cheeks, readable at street distance.
+ * Each eye has a linen white on its outer side. On pale skin it nearly vanishes; on the darkest skins,
+ * where the pupil is as dark as the face, it is what draws the eye.
+ */
 function paintFace(head: Sculpt): void {
   for (const side of [-1, 1]) {
     const x0 = side < 0 ? -3 : 1;
     head.box([x0, 19, 3], [x0 + 2, 21, 4], GARB.eye);
+    const white = side < 0 ? x0 - 1 : x0 + 2;
+    head.box([white, 19, 3], [white + 1, 21, 4], GARB.sclera);
     // The catch-light faces the same way on both eyes, like a single lamp.
     head.set(x0, 20, 3, GARB.catchLight);
     const cheek = side < 0 ? -4 : 3;
@@ -66,29 +123,41 @@ function paintFace(head: Sculpt): void {
   head.box([-1, 17, 3], [1, 18, 4], GARB.blush);
 }
 
-function torso(c: Contour): { chest: Sculpt; pelvis: Sculpt } {
+/** One torso row with its vertical corners cut, so every slice is a softened ring rather than a slab. */
+function slice(s: Sculpt, c: Contour, y: number, material: number, inset = 0): void {
+  const { half, back, front } = torsoRow(c, y);
+  s.rounded([-half + inset, y, back + inset], [half - inset, y + 1, front - inset], material, 1, [true, true, false, false, true, true]);
+}
+
+function torso(c: Contour, skin: SkinSwatchId): { chest: Sculpt; pelvis: Sculpt } {
   const chest = new Sculpt();
-  chest.rounded([-c.chest.half, 12, c.chest.back], [c.chest.half, 16, c.chest.front], GARB.linen, 1, [true, true, false, true, true, true]);
+  for (let y = 12; y < 16; y++) slice(chest, c, y, GARB.linen);
+  // An open collar shows a little skin under the chin, so the body carries its skin, not only the head.
+  const collar = torsoRow(c, 15);
+  chest.box([-1, 15, collar.front - 1], [1, 16, collar.front], skin);
   // Hidden tongue into the pelvis keeps the waist closed when the chest bows.
-  chest.box([-c.chest.half + 1, 10, c.chest.back + 1], [c.chest.half - 1, 12, c.chest.front - 1], GARB.linen);
+  for (let y = 10; y < 12; y++) slice(chest, c, y, GARB.linen, 1);
 
   const pelvis = new Sculpt();
-  pelvis.rounded([-c.waist.half, 10, c.waist.back], [c.waist.half, 12, c.waist.front], GARB.linen, 1, [true, true, false, false, true, true]);
-  pelvis.rounded([-c.hip.half, 8, c.hip.back], [c.hip.half, 10, c.hip.front], GARB.breeches, 1, [true, true, false, false, true, true]);
+  for (let y = 8; y < 12; y++) slice(pelvis, c, y, y < 10 ? GARB.breeches : GARB.linen);
   // Belt at the waist, with a brass buckle a little off-centre.
-  pelvis.paint([-c.waist.half, 10, c.waist.back], [c.waist.half, 11, c.waist.front], GARB.leather);
-  pelvis.box([1, 10, c.waist.front - 1], [3, 11, c.waist.front], GARB.clasp);
+  const belt = torsoRow(c, 10);
+  pelvis.paint([-belt.half, 10, belt.back], [belt.half, 11, belt.front], GARB.leather);
+  pelvis.box([1, 10, belt.front - 1], [3, 11, belt.front], GARB.clasp);
   return { chest, pelvis };
 }
 
 function leftArm(c: Contour, skin: SkinSwatchId): { upper: Sculpt; fore: Sculpt; hand: Sculpt } {
-  const [x0, x1] = [-c.arm.outer, -c.arm.inner];
-  const upper = new Sculpt().box([x0, 11, c.arm.back], [x1, 16, c.arm.front], GARB.linen);
+  const { outer, inner, back, front, top, cap } = c.arm;
+  const [x0, x1] = [-outer, -inner];
+  const upper = new Sculpt().box([x0, 11, back], [x1, top + 1, front], GARB.linen);
+  // A sloping shoulder: the top of the sleeve reaches in to meet the collar.
+  if (cap) upper.box([x1, top, back], [x1 + cap, top + 1, front], GARB.linen);
   // Round the shoulder cap outward.
-  upper.set(x0, 15, c.arm.back, 0).set(x0, 15, c.arm.front - 1, 0);
-  const fore = new Sculpt().box([x0, 8, c.arm.back], [x1, 11, c.arm.front], GARB.linen);
-  const hand = new Sculpt().box([x0, 6, c.arm.back], [x1, 8, c.arm.front + 1], skin);
-  hand.set(x0, 6, c.arm.front, 0);
+  upper.set(x0, top, back, 0).set(x0, top, front - 1, 0);
+  const fore = new Sculpt().box([x0, 8, back], [x1, 11, front], GARB.linen);
+  const hand = new Sculpt().box([x0, 6, back], [x1, 8, front + 1], skin);
+  hand.set(x0, 6, front, 0);
   return { upper, fore, hand };
 }
 
@@ -98,8 +167,8 @@ function leftLeg(c: Contour): { thigh: Sculpt; shin: Sculpt; foot: Sculpt } {
   // Hip cap: a half disc about the hip axis inside the pelvis keeps the seat closed through a stride.
   for (let y = 8; y < 10; y++) for (let z = back; z < front; z++) if ((y + .5 - 8) ** 2 + (z + .5) ** 2 <= 4.5) thigh.box([outer + 1, y, z], [inner, y + 1, z + 1], GARB.breeches);
   const shin = new Sculpt().box([outer, 2, back], [inner, 4, front], GARB.breeches);
-  // Knee cap inside the thigh, same reasoning for the walk's bent knee.
-  for (let y = 4; y < 6; y++) for (let z = back; z < front; z++) if ((y + .5 - 4) ** 2 + (z + .5) ** 2 <= 3.2) shin.box([outer + 1, y, z], [inner - 1, y + 1, z + 1], GARB.breeches);
+  // Knee cap inside the thigh, same reasoning for the walk's bent knee. A two-cell leg has no room for one.
+  if (inner - outer > 2) for (let y = 4; y < 6; y++) for (let z = back; z < front; z++) if ((y + .5 - 4) ** 2 + (z + .5) ** 2 <= 3.2) shin.box([outer + 1, y, z], [inner - 1, y + 1, z + 1], GARB.breeches);
   const foot = new Sculpt();
   foot.rounded([outer, 0, back], [inner, 2, front + 2], GARB.leather, 1, [false, false, false, true, true, true]);
   // A darker welt is the shoe's sole line; soft shoes keep it flush.
@@ -117,7 +186,7 @@ export function createBodyParts(family: BodyFamily, skin: SkinSwatchId): readonl
   const tag = `${family}.${materialName(swatch)}`;
   const head = headVolume(swatch);
   paintFace(head);
-  const { chest, pelvis } = torso(c);
+  const { chest, pelvis } = torso(c, swatch);
   const parts: AvatarPartBlueprint[] = [
     pelvis.toPart(`body.${tag}.pelvis`, 'pelvis', 'body'),
     chest.toPart(`body.${tag}.chest`, 'chest', 'body'),

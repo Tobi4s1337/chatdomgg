@@ -1,11 +1,13 @@
 // The Chatdom panel: the kingdom under the video. A warm picture, your own window,
 // a little of tonight, and one drawer at a time. It is a window into belonging,
 // never a second game client.
-import { createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
+import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch, type JSX } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { selectAdapter } from './adapters/select';
 import type { Connection, Earned, Home, Light, LightChoice, PanelAdapter, PanelSnapshot, Picture } from './model';
+import { createPanelSound, type PanelCue } from './sound';
 import { ActSlip } from './ui/act';
-import { BackGlyph, ForgeGlyph, HomeGlyph, PanelDefs, Seal, Shutters, TavernGlyph, TonightGlyph, WindowGlyph } from './ui/art';
+import { BackGlyph, BellGlyph, ForgeGlyph, HomeGlyph, PanelDefs, Seal, Shutters, TavernGlyph, TonightGlyph, WindowGlyph } from './ui/art';
 import { ForgeSheet, RaisingMeter, TavernSheet } from './ui/places';
 import { ShelfSheet } from './ui/shelf';
 import './panel.css';
@@ -26,8 +28,36 @@ const DRAWERS: readonly { id: Exclude<Drawer, 'light' | 'shelf'>; label: string;
   { id: 'forge', label: 'Forge', glyph: ForgeGlyph },
 ];
 
-export default function Panel(props: { adapter?: PanelAdapter }) {
+/**
+ * The sound an adapter's answer makes, if the viewer's own gesture led to it. Waiting ticks,
+ * a refusal or a closed window knocks dully, and only a confirmed light or a counted tap rings.
+ */
+function answerCue(before: PanelSnapshot, after: PanelSnapshot): PanelCue | null {
+  const was = before.light, now = after.light;
+  if (now.kind === 'lit' && was.kind === 'pending') return 'kindle';
+  if (now.kind === 'pending' && (was.kind !== 'pending' || was.step !== now.step)) return 'pending';
+  if (was.kind === 'pending' && now.kind !== 'pending') return 'dull';
+  const actWas = before.act?.status.kind, actNow = after.act?.status.kind;
+  if (actNow && actNow !== actWas) {
+    if (actNow === 'accepted') return 'counted';
+    if (actNow === 'limited') return 'dull';
+  }
+  const askedWas = before.shelf.kind === 'offered' ? before.shelf.request.kind : 'idle';
+  const askedNow = after.shelf.kind === 'offered' ? after.shelf.request.kind : 'idle';
+  if (askedNow !== askedWas) return askedNow === 'confirming' ? 'pending' : askedNow === 'cancelled' ? 'dull' : null;
+  return null;
+}
+
+/**
+ * `embedded` mounts the panel inside another page (the streamer's preview): it then sizes to
+ * its own frame and leaves the page's scrolling, keys and readiness alone.
+ */
+export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolean; onReady?: () => void }) {
   const adapter = props.adapter ?? selectAdapter();
+  const embedded = props.embedded === true;
+  const sound = createPanelSound();
+  const [muted, setMuted] = createSignal(sound.muted());
+  onCleanup(sound.subscribe(setMuted));
   const [snap, setSnap] = createSignal<PanelSnapshot>(adapter.get());
   const [drawer, setDrawer] = createSignal<Drawer | null>(null);
   const [ready, setReady] = createSignal(false);
@@ -40,15 +70,18 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
       clearTimeout(kindleTimer);
       kindleTimer = setTimeout(() => setKindling(false), KINDLE_MS);
     }
+    const cue = answerCue(snap(), next);
+    if (cue) sound.play(cue);
     setSnap(next);
   });
-  let drawerEl: HTMLElement | undefined, lightEl: HTMLElement | undefined, actEl: HTMLElement | undefined, pictureEl: HTMLImageElement | undefined, disposed = false;
+  let frameEl: HTMLDivElement | undefined, drawerEl: HTMLElement | undefined, lightEl: HTMLElement | undefined, actEl: HTMLElement | undefined, pictureEl: HTMLImageElement | undefined, disposed = false;
   // Who opened each drawer, so Back returns focus there. A nested drawer keeps its parent's opener.
   const openers = new Map<Drawer, HTMLElement | null>();
 
   const open = (next: Drawer, from: EventTarget | null) => {
     if (drawer() !== PARENT[next]) openers.clear();
     openers.set(next, from instanceof HTMLElement ? from : null);
+    sound.play('page');
     setDrawer(current => current === next ? null : next);
     // Every drawer opens at its head; the page element is shared, so its scroll would carry over.
     const page = drawerEl?.querySelector<HTMLElement>('.cp-drawer-page');
@@ -60,6 +93,7 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
     const back = current ? openers.get(current) ?? null : null;
     const parent = current ? PARENT[current] : undefined;
     if (current) openers.delete(current);
+    if (current) sound.play('page');
     setDrawer(parent ?? null);
     const page = drawerEl?.querySelector<HTMLElement>('.cp-drawer-page');
     if (page) page.scrollTop = 0;
@@ -69,16 +103,36 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
       : parent ? drawerEl?.querySelector<HTMLElement>(`[data-opens="${current}"]`) ?? drawerEl?.querySelector<HTMLElement>('[data-autofocus]')
       : lightEl)?.focus());
   };
-  const choose = (choice: LightChoice) => { adapter.requestLight(choice); close(); };
+  const choose = (choice: LightChoice) => { sound.play('tap'); adapter.requestLight(choice); close(); };
   // The tapped button gives way to the kingdom's answer; focus waits on the act, where the answer is read out.
-  const act = (option: string) => { adapter.requestAct(option); queueMicrotask(() => actEl?.focus()); };
+  const act = (option: string) => { sound.play('tap'); adapter.requestAct(option); queueMicrotask(() => actEl?.focus()); };
+  const useProduct = (sku: string) => { sound.play('tap'); adapter.requestProduct(sku); };
+  const toggleSound = () => {
+    const next = !muted();
+    sound.setMuted(next);
+    // Turning sound on is itself a gesture: answer it with the press, so the choice is heard.
+    if (!next) { sound.gesture(); sound.play('tap'); }
+  };
   const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape' && drawer()) { event.preventDefault(); close(); } };
+  // Only a gesture inside the panel may wake its sound. Captured first, so the press that wakes it is heard.
+  const onGesture = () => sound.gesture();
+
+  // The streamer's sections can change while a drawer is open; a drawer that is no longer offered closes.
+  createEffect(() => {
+    const current = drawer(), now = snap();
+    if (current === 'shelf' && now.shelf.kind !== 'offered') setDrawer(now.sections.night ? 'tonight' : null);
+    else if ((current === 'home' && !now.sections.home) || (current === 'tonight' && !now.sections.night)) setDrawer(null);
+  });
+  const tabs = () => DRAWERS.filter(item => item.id === 'home' ? snap().sections.home : item.id === 'tonight' ? snap().sections.night : true);
 
   onMount(() => {
     const testWindow = window as ReadyWindow;
-    testWindow.__chatdomReady = false;
-    document.documentElement.classList.add('cp-document');
-    window.addEventListener('keydown', onKey);
+    if (!embedded) {
+      testWindow.__chatdomReady = false;
+      document.documentElement.classList.add('cp-document');
+    }
+    (embedded ? frameEl! : window).addEventListener('keydown', onKey as EventListener);
+    for (const type of ['pointerdown', 'keydown', 'click']) frameEl!.addEventListener(type, onGesture, true);
     // Ready means the first view is really drawn: faces loaded and the picture decoded,
     // or a settled connection state. A knock still waiting for Twitch is not ready.
     const settle = async () => {
@@ -87,7 +141,11 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
       if (disposed) return;
       if (snap().connection.kind === 'knocking') return;
       setReady(true);
-      requestAnimationFrame(() => { if (!disposed) testWindow.__chatdomReady = true; });
+      requestAnimationFrame(() => {
+        if (disposed) return;
+        if (embedded) props.onReady?.();
+        else testWindow.__chatdomReady = true;
+      });
     };
     void settle();
     onCleanup(adapter.subscribe(next => { if (!ready() && next.connection.kind !== 'knocking') void settle(); }));
@@ -97,33 +155,42 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
     clearTimeout(kindleTimer);
     unsubscribe();
     adapter.dispose();
-    window.removeEventListener('keydown', onKey);
-    document.documentElement.classList.remove('cp-document');
-    (window as ReadyWindow).__chatdomReady = false;
+    sound.dispose();
+    (embedded ? frameEl : window)?.removeEventListener('keydown', onKey as EventListener);
+    for (const type of ['pointerdown', 'keydown', 'click']) frameEl?.removeEventListener(type, onGesture, true);
+    if (!embedded) {
+      document.documentElement.classList.remove('cp-document');
+      (window as ReadyWindow).__chatdomReady = false;
+    }
   });
 
   const kingdomName = () => snap().kingdom?.name ?? 'The kingdom';
   const motto = () => snap().kingdom?.motto ?? connectionMotto(snap().connection);
 
-  return <div class="cp" data-chatdom-panel data-source={snap().source.kind} data-connection={snap().connection.kind}
+  return <div class="cp-frame" classList={{ embedded }} ref={element => { frameEl = element; }}><div class="cp" data-chatdom-panel data-source={snap().source.kind} data-connection={snap().connection.kind}
     data-light={snap().light.kind} data-stream={snap().stream} data-home={snap().home.kind} data-drawer={drawer() ?? 'none'} data-ready={ready() ? 'true' : 'false'}
-    data-view={snap().picture.kind === 'still' ? 'kingdom' : 'connection'}>
+    data-view={snap().picture.kind === 'still' ? 'kingdom' : 'connection'} data-muted={muted() ? 'true' : 'false'}
+    data-act={snap().act?.status.kind ?? 'none'} data-shelf={snap().shelf.kind}>
     <PanelDefs />
     <header class="cp-head">
       <Seal blank={!snap().kingdom} />
-      <div class="cp-title">
-        <h1 class="cp-name" classList={{ long: kingdomName().length > 15 }}>{kingdomName()}</h1>
+      <div class="cp-title" classList={{ long: kingdomName().length > 15, longer: kingdomName().length > 26 }}>
+        <h1 class="cp-name" title={kingdomName().length > 26 ? kingdomName() : undefined}>{kingdomName()}</h1>
         <p class="cp-motto">{motto()}</p>
       </div>
       <Show when={snap().source.kind === 'simulated'} fallback={<span class="cp-tag quiet">{snap().connection.kind === 'knocking' ? 'Connecting' : 'Not connected'}</span>}>
         <span class="cp-tag simulated" title={snap().source.kind === 'simulated' ? (snap().source as { detail: string }).detail : undefined}>Simulated</span>
       </Show>
+      <button type="button" class="cp-sound" aria-label="Panel sounds" aria-pressed={!muted()} title={muted() ? 'Sounds off: tap to hear the panel' : 'Sounds on: tap to silence the panel'} onClick={toggleSound}>
+        <BellGlyph muted={muted()} />
+      </button>
     </header>
 
     <main class="cp-main" aria-hidden={drawer() ? 'true' : undefined} inert={drawer() ? true : undefined}>
-      <PictureFrame picture={snap().picture} connection={snap().connection} ref={element => { pictureEl = element; }} />
-      <LightAction snap={snap()} kindling={kindling()} ref={element => { lightEl = element; }} onChoose={event => open('light', event.currentTarget)} onHome={event => open('home', event.currentTarget)} />
-      <Show when={snap().act} fallback={<TonightSlip snap={snap()} />}>{current =>
+      <PictureFrame picture={snap().picture} connection={snap().connection} embedded={embedded} ref={element => { pictureEl = element; }} />
+      <LightAction snap={snap()} kindling={kindling()} ref={element => { lightEl = element; }} onChoose={event => open('light', event.currentTarget)}
+        onHome={snap().sections.home ? event => open('home', event.currentTarget) : null} />
+      <Show when={snap().act} fallback={<Show when={snap().sections.night}><TonightSlip snap={snap()} /></Show>}>{current =>
         <div class="cp-act-wrap" ref={element => { actEl = element; }} tabindex="-1">
           <ActSlip snap={snap()} act={current()} onAct={act} onLight={event => open('light', event.currentTarget)} />
         </div>}
@@ -143,20 +210,20 @@ export default function Panel(props: { adapter?: PanelAdapter }) {
             <Match when={current() === 'tonight'}><TonightSheet snap={snap()} onShelf={event => open('shelf', event.currentTarget)} /></Match>
             <Match when={current() === 'tavern'}><TavernSheet snap={snap()} empty={reason => <Empty text={reason} detail="When it does, its tables and who sits at them show here." />} /></Match>
             <Match when={current() === 'forge'}><ForgeSheet snap={snap()} empty={reason => <Empty text={reason} detail="When it does, its fire, its anvils and your coals show here." />} /></Match>
-            <Match when={current() === 'shelf'}><ShelfSheet snap={snap()} onUse={sku => adapter.requestProduct(sku)} /></Match>
+            <Match when={current() === 'shelf'}><ShelfSheet snap={snap()} onUse={useProduct} /></Match>
           </Switch>
         </div>
       </section>}
     </Show>
 
-    <nav class="cp-nav" aria-label="Panel">
-      <For each={DRAWERS}>{item =>
+    <nav class="cp-nav" aria-label="Panel" style={{ '--tabs': tabs().length }}>
+      <For each={tabs()}>{item =>
         <button type="button" class="cp-tab" aria-pressed={drawer() === item.id || PARENT[drawer() ?? 'home'] === item.id} onClick={event => open(item.id, event.currentTarget)}>
           {item.glyph()}<span>{item.label}</span>
         </button>}
       </For>
     </nav>
-  </div>;
+  </div></div>;
 }
 
 function connectionMotto(connection: Connection): string {
@@ -179,14 +246,24 @@ type Lit = Extract<Light, { kind: 'lit' }>;
 type Still = Extract<Picture, { kind: 'still' }>;
 type Click = (event: MouseEvent & { currentTarget: HTMLButtonElement }) => void;
 
-function PictureFrame(props: { picture: Picture; connection: Connection; ref: (element: HTMLImageElement) => void }) {
+function PictureFrame(props: { picture: Picture; connection: Connection; embedded: boolean; ref: (element: HTMLImageElement) => void }) {
   const lost = () => props.connection.kind === 'lost' ? props.connection : null;
-  return <figure class="cp-picture" classList={{ stale: !!lost() }}>
-    <Show when={props.picture.kind === 'still' ? props.picture : null} fallback={<ClosedShutters connection={props.connection} />}>{still =>
+  // A picture that does not arrive closes the shutters with a way to ask again; it is never left as a broken image.
+  const [failed, setFailed] = createSignal(false);
+  const [attempt, setAttempt] = createSignal(0);
+  const again = (url: string) => attempt() ? `${url}${url.includes('?') ? '&' : '?'}again=${attempt()}` : url;
+  const shown = () => props.picture.kind === 'still' && !failed() ? props.picture : null;
+  return <figure class="cp-picture" classList={{ stale: !!lost() }} data-picture={failed() ? 'failed' : props.picture.kind === 'still' ? 'shown' : 'none'}>
+    <Show when={shown()} fallback={failed()
+      ? <Shut title="The picture did not arrive" body="Your window and tonight are still here. The picture may come on a second knock.">
+        <button type="button" class="cp-inline-action" onClick={() => { setAttempt(n => n + 1); setFailed(false); }}>Try again</button>
+      </Shut>
+      : <ClosedShutters connection={props.connection} />}>{still =>
       <>
         <picture>
-          <Show when={still().portrait}>{portrait => <source media="(min-width: 340px) and (max-aspect-ratio: 4/5)" srcset={portrait().url} width={portrait().width} height={portrait().height} />}</Show>
-          <img ref={props.ref} src={still().url} alt={still().alt} width={still().width} height={still().height} decoding="async" />
+          {/* A preview inside a wider page is the 318 px panel, whatever the page's width: it keeps the landscape still. */}
+          <Show when={props.embedded ? null : still().portrait}>{portrait => <source media="(min-width: 340px) and (max-aspect-ratio: 4/5)" srcset={again(portrait().url)} width={portrait().width} height={portrait().height} />}</Show>
+          <img ref={props.ref} src={again(still().url)} alt={still().alt} width={still().width} height={still().height} decoding="async" onError={() => setFailed(true)} />
         </picture>
         <Show when={lost()}>{gone =>
           <p class="cp-stale" role="status"><strong>Out of reach</strong><span>Picture from {gone().asOf}</span></p>}
@@ -195,6 +272,17 @@ function PictureFrame(props: { picture: Picture; connection: Connection; ref: (e
       </>}
     </Show>
   </figure>;
+}
+
+function Shut(props: { title: string; body: string; children?: JSX.Element }) {
+  return <div class="cp-closed" role="status">
+    <Shutters />
+    <div class="cp-notice">
+      <p class="cp-notice-title">{props.title}</p>
+      <p class="cp-notice-body">{props.body}</p>
+      {props.children}
+    </div>
+  </div>;
 }
 
 function ClosedShutters(props: { connection: Connection }) {
@@ -207,19 +295,14 @@ function ClosedShutters(props: { connection: Connection }) {
       default: return { title: 'The shutters are closed', body: 'Twitch is connected, but this kingdom is not sharing its picture with the panel yet.' };
     }
   };
-  return <div class="cp-closed" role="status">
-    <Shutters />
-    <div class="cp-notice">
-      <p class="cp-notice-title">{words().title}</p>
-      <p class="cp-notice-body">{words().body}</p>
-      <Show when={props.connection.kind === 'no-answer'}>
-        <button type="button" class="cp-inline-action" onClick={() => location.reload()}>Knock again</button>
-      </Show>
-      <Show when={props.connection.kind === 'outside-twitch'}>
-        <a class="cp-inline-action" href="?source=simulated">See a simulated night</a>
-      </Show>
-    </div>
-  </div>;
+  return <Shut title={words().title} body={words().body}>
+    <Show when={props.connection.kind === 'no-answer'}>
+      <button type="button" class="cp-inline-action" onClick={() => location.reload()}>Knock again</button>
+    </Show>
+    <Show when={props.connection.kind === 'outside-twitch'}>
+      <a class="cp-inline-action" href="?source=simulated">See a simulated night</a>
+    </Show>
+  </Shut>;
 }
 
 /** The words on the window plate for every state that is not a button. */
@@ -239,7 +322,13 @@ function lightNote(snap: PanelSnapshot): { title: string; detail: string; glyph:
   }
 }
 
-function LightAction(props: { snap: PanelSnapshot; kindling: boolean; ref: (element: HTMLElement) => void; onChoose: Click; onHome: Click }) {
+/** The lit or resting plate opens the home card; when the streamer hides that card, the plate is words only. */
+function Plate(props: { class: string; classList?: Record<string, boolean>; onHome: Click | null; children: JSX.Element }) {
+  return <Dynamic component={props.onHome ? 'button' : 'div'} class={props.class} classList={props.classList}
+    {...(props.onHome ? { type: 'button', onClick: props.onHome } : {})}>{props.children}</Dynamic>;
+}
+
+function LightAction(props: { snap: PanelSnapshot; kindling: boolean; ref: (element: HTMLElement) => void; onChoose: Click; onHome: Click | null }) {
   const light = () => props.snap.light;
   const home = () => props.snap.home;
   const homeName = () => { const h = home(); return h.kind === 'citizen' || h.kind === 'guest' ? h.displayName : null; };
@@ -265,7 +354,7 @@ function LightAction(props: { snap: PanelSnapshot; kindling: boolean; ref: (elem
         </button>
       </Match>
       <Match when={lit()}>{current =>
-        <button type="button" class="cp-light-button lit" classList={{ kindling: props.kindling, guest: current().as === 'guest' }} onClick={props.onHome}>
+        <Plate class="cp-light-button lit" classList={{ kindling: props.kindling, guest: current().as === 'guest', plain: !props.onHome }} onHome={props.onHome}>
           <WindowGlyph lit kindling={props.kindling} />
           <span class="cp-light-words">
             <strong>{current().as === 'guest' ? 'Your light burns here' : 'Your window is lit'}</strong>
@@ -274,13 +363,13 @@ function LightAction(props: { snap: PanelSnapshot; kindling: boolean; ref: (elem
               : `${current().choice === 'named' ? homeName() ?? 'With your name' : 'Unnamed'} · ${street() ?? 'Your home'}`}</small>
           </span>
           <Show when={props.kindling}><span class="cp-kindle" aria-hidden="true"><i /><i /><i /></span></Show>
-        </button>}
+        </Plate>}
       </Match>
       <Match when={light().kind === 'resting'}>
-        <button type="button" class="cp-light-button resting" onClick={props.onHome}>
+        <Plate class="cp-light-button resting" classList={{ plain: !props.onHome }} onHome={props.onHome}>
           <WindowGlyph lit={false} ember />
           <span class="cp-light-words"><strong>Your window is resting</strong><small>It lights again with the next stream.</small></span>
-        </button>
+        </Plate>
       </Match>
     </Switch>
   </div>;

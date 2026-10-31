@@ -1,11 +1,14 @@
-import { Room, ServerError, type Client } from '@colyseus/core';
-import { StateView } from '@colyseus/schema';
+import { ClientState, Room, ServerError, type Client } from '@colyseus/core';
 import { KingdomIdSchema } from '@chatdom/shared';
 import { KingdomRoomState, WalkerSchema, WalkInputSchema, RealmJoinSchema, RealmIntentSchema, kingdomRoomId,
   sanitizeRealmWalkInput, type RealmPrincipal, type RealmReceipt } from '@chatdom/shared/realm';
 import { stepPlayer, bodyStuck, embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmRoomHandle, RealmRoomServices } from './ports';
 import { RealmSeats, RealmSeatRefusedError, REALM_SESSION_CHECK_MS } from './auth/seats';
+import { RealmDistricts } from './limits/districts';
+
+/** Colyseus's own join-time full-state send (pinned core 0.18.23), reused to rebaseline one decoder on a crossing. */
+type FullStateSender = { sendFullState(client: Client): void };
 import { REALM_ROOM_LIMITS as LIMITS, within } from './limits';
 import type { RealmRoomObserver } from './diagnostics';
 
@@ -25,8 +28,10 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     private handle!: RealmRoomHandle;
     private accepting = true;
     private recoveryRequests = new Map<string, number>();
-    /** One court district in the reference; the server lane adds shared district groups and handoff. */
-    private district = new StateView();
+    /** Shared district views: one per occupied district, each holding that district and its neighbour ring. */
+    private districts = new RealmDistricts<WalkerSchema>();
+    /** The latest client object per walker, including a dropped one: Colyseus copies its view onto the reconnecting socket. */
+    private viewers = new Map<string, Client<{ auth: RealmPrincipal }>>();
     private control = new Map<string, string>();
     private unbind: (() => void)[] = [];
     private walking = new Map<string, boolean>();
@@ -49,6 +54,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       this.state.origin = this.handle.origin; this.state.layoutRevision = this.handle.layoutRevision;
       this.state.collisionRevision = this.handle.world.revision; this.state.factSequence = this.handle.sequence;
       this.world = this.handle.world;
+      if (typeof (this as unknown as Partial<FullStateSender>).sendFullState !== 'function') throw new Error('District handoff needs Colyseus full-state resync');
       this.seats = new RealmSeats({ auth: services.auth, close: (id, code, reason) => this.clients.getById(id)?.leave(code, reason) });
       const readWalker = (id: string) => { const p = this.state.walkers.get(id); return p ? { x:p.x,y:p.y,z:p.z,vx:p.vx,vy:p.vy,vz:p.vz,grounded:p.grounded,yaw:p.yaw,distance:p.distance,collisionRevision:p.collisionRevision } : null; };
       const safePose = (world: RealmRoomHandle['world'], position: readonly [number, number, number]) => {
@@ -72,7 +78,9 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         },
         allowWalking: (id, allowed) => { this.walking.set(id,allowed); if(!allowed)this.inputs.get(id).clear(); },
         adoptWorld: (world, layoutRevision, positions) => {
-          if(world.revision <= this.world.revision) throw new Error('Collision revisions must advance');
+          // Revisions identify immutable geometry. Returning to previously approved exact bytes may reuse an
+          // older identity; it still needs the same complete safe-pose validation as any other adoption.
+          if(world.revision === this.world.revision) throw new Error('Collision adoption must change geometry identity');
           for(const [id,p] of this.state.walkers) {
             const position=positions.get(id); if(!position || !safePose(world,position)) throw new Error('Every walker needs a safe revision pose');
             // Validation is completed for every pose before publishing a new world below.
@@ -164,11 +172,12 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       const position = resume ? [resume.x, resume.y, resume.z] as const : this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
       if (!position.every(Number.isFinite) || embeddedSolids(body,this.world).length || !supported(body,this.world)) throw new ServerError(503,'The kingdom gate has no safe arrival yet');
       this.seats.seat(auth, client.sessionId);
-      const walker = new WalkerSchema({ name: auth.publicName, look: auth.look, district: 'court', x: position[0], y: position[1], z: position[2],
+      const walker = new WalkerSchema({ name: auth.publicName, look: auth.look, district: '', x: position[0], y: position[1], z: position[2],
         vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
       this.state.walkers.set(client.sessionId, walker);
-      this.district.add(walker);
-      client.view = this.district;
+      // Attached to state first, then shared: Colyseus sends this socket the full state of its view after the join.
+      client.view = this.districts.enter(client.sessionId, walker);
+      this.viewers.set(client.sessionId, client);
       this.control.set(auth.personId, client.sessionId);
       this.handle.lifecycle('join',auth,client.sessionId,Date.now());
     }
@@ -197,6 +206,11 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         throw new ServerError(error instanceof RealmSeatRefusedError ? error.code : 4410, error instanceof RealmSeatRefusedError ? error.message : 'This seat has ended. Walk in again to continue.');
       }
       if (!this.accepting) throw new ServerError(403,'Entry expired');
+      // Colyseus copied the dropped socket's view; the walker may have crossed meanwhile, so hand over the current one.
+      // The reconnected socket then receives the full state of that view, which the SDK reconciles against its decoder.
+      const view = this.districts.viewOf(client.sessionId);
+      if (view) client.view = view;
+      this.viewers.set(client.sessionId, client);
       this.handle.lifecycle('reconnect',client.auth,client.sessionId,Date.now());
     }
     onLeave(client: Client<{ auth: RealmPrincipal }>, code?: number) {
@@ -204,10 +218,27 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       if(client.auth)this.handle.lifecycle('leave',client.auth,client.sessionId,Date.now());
       this.walking.delete(client.sessionId);this.recoveryRequests.delete(client.sessionId);
       const p = this.state.walkers.get(client.sessionId);
-      if (p) { this.district.remove(p); this.state.walkers.delete(client.sessionId); }
+      if (p) { this.districts.leave(client.sessionId); this.state.walkers.delete(client.sessionId); }
+      if (this.viewers.get(client.sessionId) === client) this.viewers.delete(client.sessionId);
       if (client.auth && this.control.get(client.auth.personId) === client.sessionId) this.control.delete(client.auth.personId);
       this.seats.left(client.sessionId);
     }
-    async onDispose() { this.seats?.dispose(); for (const unbind of this.unbind) unbind(); await this.handle?.dispose(); }
+    /**
+     * District membership moves only here, right before Colyseus encodes the patch, so every queued view change is
+     * encoded in that same patch. A crossing client takes the shared view of its new district and is rebaselined
+     * with that view's full state: the SDK's resync decode drops the old district's walkers from this decoder only,
+     * adds the new district's existing ones, and leaves every other client's shared view and decoder untouched.
+     */
+    onBeforePatch() {
+      if (!this.accepting) return;
+      for (const crossing of this.districts.sweep()) {
+        const client = this.viewers.get(crossing.id);
+        if (!client) continue;
+        client.view = crossing.view;
+        // A joining or reconnecting socket gets this view's full state when it acknowledges the join.
+        if (client.state === ClientState.JOINED) (this as unknown as FullStateSender).sendFullState(client);
+      }
+    }
+    async onDispose() { this.districts.dispose(); this.seats?.dispose(); for (const unbind of this.unbind) unbind(); await this.handle?.dispose(); }
   };
 }

@@ -43,8 +43,6 @@ export interface RealmClient {
   clearInput(): void;
   dispose(): void;
 }
-/** Fallback for large corrections; explicit authority placements snap regardless of distance. */
-const PLACEMENT_SNAP_M = 2;
 export async function connectRealm(endpoint: string, entry: RealmEntry, collision: CollisionWorld | RealmCollision, storage?: Storage): Promise<RealmClient> {
   const network = new Client(endpoint);
   const expectedRoom = kingdomRoomId(entry.kingdomId);
@@ -97,7 +95,10 @@ export async function connectRealm(endpoint: string, entry: RealmEntry, collisio
   const input = room.input<RealmWalkInput>({ mode: 'reliable' });
   const self = room.state.walkers.get(room.sessionId)!;
   const reconciler = predict.reconciler(self, {
-    input, fields: [...PLAYER_FIELDS], smoothMs: 80, snap: PLACEMENT_SNAP_M,
+    // SDK snap measures every numeric replay field, including byte yaw and velocity: a small positional
+    // correction must never pop the whole render pose because a different unit exceeded a metre threshold.
+    // Explicit placement/revision changes below reset SDK anchors; ordinary corrections retain interpolation.
+    input, fields: [...PLAYER_FIELDS], smoothMs: 80,
     // The room steps an input only on the walker's own revision; prediction does the same and holds where its
     // world has not arrived, so a replay never runs an input against solids it was not simulated with.
     step: (ctx, state, command) => {

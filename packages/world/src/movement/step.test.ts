@@ -268,6 +268,24 @@ describe('stepPlayer half-metre steps', () => {
     expect(up.x).toBeGreaterThan(5);
   });
 
+  it('climbs and remains on a slab when the broad phase rejects zero-volume queries', () => {
+    const boxes = [box([-4, -1, -2], [4, 0, 2]), box([1, 0, -1], [3, .5, 1])];
+    const w: CollisionWorld = { revision: 1, query: q => {
+      if (q.min.some((n, axis) => n >= q.max[axis]!)) return [];
+      return boxes.filter(b => b.min.every((n, axis) => n < q.max[axis]! && b.max[axis]! > q.min[axis]!));
+    } };
+    const a = at(.5, 0, 0), replay = { ...a };
+    for (let tick = 0; tick < 90; tick++) {
+      const command = input(tick < 10 ? 127 : 0, 0);
+      stepPlayer(a, command, DT, w); stepPlayer(replay, command, DT, w);
+      expect(a).toEqual(replay);
+      expect(insideAny(a, w)).toBe(false);
+      if (tick >= 10) expect([a.y, a.vy, a.grounded]).toEqual([.5, 0, true]);
+    }
+    expect(a.x).toBeGreaterThan(1);
+    expect(a.x).toBeLessThan(3 - R);
+  });
+
   it('refuses a step higher than half a metre and keeps the slide along it', () => {
     const w = world([...floor(), box([2, 0, -6], [6, STEP_HEIGHT + .01, 6])]);
     const s = walkInto(w, at(0, 0, 0), input(127, 0), 30);

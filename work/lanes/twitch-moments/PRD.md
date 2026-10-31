@@ -20,7 +20,7 @@ continue independent presentation work. Never choose from Backlog without main i
 
 ## Tasks
 
-- [ ] **TM01 — A real home banner answers one validated sub** · evidence: contract/privacy scenario + first shots.
+- [x] **TM01 — A real home banner answers one validated sub** · evidence: contract/privacy scenario + first shots.
   Build the precise local catalogue/action/result schemas on shared helpers, pure clocked controller, unavailable
   real ports and explicit SIMULATED transport. Freeze the server subscription/record/principal/Helix ports and
   implement the first actual subscription normalizer through private identity/record projection into the view;

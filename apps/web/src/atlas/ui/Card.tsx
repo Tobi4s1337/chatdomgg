@@ -2,16 +2,17 @@ import { createEffect, onCleanup, Show } from 'solid-js';
 import { blazon, shieldDesign } from '../heraldry';
 import type { Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
-import { formatCount, formatDayRange, TIER_NAMES, watchUrl } from './format';
+import { formatCount, formatDayRange, formatTime, TIER_NAMES, watchUrl } from './format';
+import { LIVE_CLASS_NAMES } from './live-line';
 import { ShieldIcon } from './marks';
 
 export type NamesState = 'loading' | 'ready' | 'failed';
 
 /**
- * A mapped channel's public card. Everything on it is observed survey data: the holding's tier, its land, the
- * observed average audience and main category over the survey window. It is mapped, not founded. Its name and
- * Watch link come from the names projection and are shown only while fresh; without them the card still reads
- * as the holding it is, and says why the name is missing.
+ * A mapped channel's public card. Everything on it is observed survey data: the holding's tier, its realm and
+ * land, the observed average audience and main category over the survey window. It is mapped, not founded. Its
+ * name and Watch link come from the names projection and are shown only while fresh; without them the card still
+ * reads as the holding it is, and says why the name is missing.
  */
 export function Card(props: {
   settler: Settler;
@@ -20,6 +21,8 @@ export function Card(props: {
   login: string | null;
   names: NamesState;
   world: PreviewWorld;
+  /** What the live frame shown says of this holding, or null before any frame was taken. */
+  live: { liveClass: number; startedAt: number | null; asOf: number } | null;
   onClose: () => void;
 }) {
   let closeButton: HTMLButtonElement | undefined;
@@ -67,16 +70,34 @@ export function Card(props: {
         <Show when={region()}>
           {(r) => (
             <div>
-              <dt>Land</dt>
+              <dt>Realm</dt>
               <dd>
-                <span lang={r().language}>{r().name}</span>
+                {/* An isle is one realm and the Outer Isles one archipelago: their realm is the land itself. */}
+                <Show when={r().kind === 'continent' && props.settler.realmName}>{props.settler.realmName} · </Show>
+                <span lang={r().language ?? undefined}>{r().name}</span>
                 <Show when={r().englishName !== r().name}><span class="atlas-quiet"> · {r().englishName}</span></Show>
-                <span class="atlas-quiet"> · {r().kind === 'continent' ? 'continent' : 'isle'}</span>
+                <Show when={r().kind === 'isle'}><span class="atlas-quiet"> · isle</span></Show>
               </dd>
             </div>
           )}
         </Show>
         <div><dt>Observed</dt><dd>{formatCount(props.settler.average)} average viewers</dd></div>
+        <Show when={props.live}>
+          {(live) => (
+            <div class="atlas-card-live" data-live={live().liveClass > 0 ? 'true' : 'false'}>
+              <dt>On air</dt>
+              <Show
+                when={live().liveClass > 0}
+                fallback={<dd class="atlas-quiet">Not in the sweep of {formatTime(live().asOf)}; its standard flies bare.</dd>}
+              >
+                <dd>
+                  {live().startedAt !== null ? `Live since ${formatTime(live().startedAt!)}` : 'Live; start not known'}
+                  <span class="atlas-quiet"> · {LIVE_CLASS_NAMES[live().liveClass]}</span>
+                </dd>
+              </Show>
+            </div>
+          )}
+        </Show>
         <Show when={props.settler.game}><div><dt>Most streamed</dt><dd>{props.settler.game}</dd></div></Show>
         <div><dt>Arms</dt><dd class="atlas-blazon">{arms()}</dd></div>
       </dl>
