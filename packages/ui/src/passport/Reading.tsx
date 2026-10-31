@@ -3,13 +3,14 @@ import './passport.css';
 import { createSignal, Match, onCleanup, Show, Switch, type Accessor, type JSX } from 'solid-js';
 import { ProvenanceSeal } from '../ProvenanceSeal';
 import { CoverEmblem, PassportBook } from './Book';
-import type { BookLayout } from './pages';
+import type { BookLayout, PageDensity } from './pages';
 import { createPassportSession, type PassportReadState, type PassportSession, type PassportTransport } from './session';
 import type { PassportCollection } from './types';
 
 export interface PassportReadingProps {
   readonly state: PassportReadState;
   readonly layout?: BookLayout;
+  readonly density?: PageDensity;
   readonly initialView?: number;
   /** Kingdom names this surface already shows publicly beside the book, such as the card's disclosed homes. */
   readonly places?: ReadonlyMap<string, string>;
@@ -29,7 +30,7 @@ export function PassportReading(props: PassportReadingProps): JSX.Element {
   const visible = () => (props.state.kind === 'visible' ? props.state : undefined);
   return <Switch>
     <Match when={visible()}>{read => <PassportBook book={read().book} shelf={read().shelf} layout={props.layout ?? 'spread'}
-      {...(props.initialView === undefined ? {} : { initialView: props.initialView })} {...(props.places ? { places: props.places } : {})}
+      {...(props.density ? { density: props.density } : {})} {...(props.initialView === undefined ? {} : { initialView: props.initialView })} {...(props.places ? { places: props.places } : {})}
       {...(props.onMore ? { onMore: props.onMore } : {})} {...(props.class ? { class: props.class } : {})} />}</Match>
     <Match when={props.state.kind === 'hidden' ? props.state : undefined}>{hidden =>
       <ClosedPassport state="private" layout={props.layout ?? 'spread'} simulated={hidden().origin === 'simulated'} class={props.class} />}</Match>

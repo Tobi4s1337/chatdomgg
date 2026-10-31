@@ -8,7 +8,7 @@ import { folio, initialOf, isoDay, longDate, monthSpan } from './format';
 import { inkFor } from './ink';
 import {
   DENSITY, buildLeaves, buildViews, sectionOfView, sectionTabs, shelfOf, viewCaption,
-  type BookLayout, type Leaf, type PassportPage, type PassportShelf,
+  type BookLayout, type Leaf, type PageDensity, type PassportPage, type PassportShelf,
 } from './pages';
 import type { BondView, KeepsakeView, PassportCollection, StampView, VisiblePassportView, VisitView } from './types';
 
@@ -19,6 +19,8 @@ export interface PassportBookProps {
   readonly shelf?: PassportShelf;
   /** Two facing pages (card page, bench) or one at a time (panel, phone). */
   readonly layout?: BookLayout;
+  /** How many records sit on one page; the layout's own density when absent (the panel keeps one stamp to a leaf). */
+  readonly density?: PageDensity;
   /** 0 is the closed cover; 1 opens on the flyleaf. */
   readonly initialView?: number;
   /** Ask the owner for the next page of one collection. Without it, the leaf says the history continues elsewhere. */
@@ -46,7 +48,7 @@ const MORE_WORDS: Readonly<Record<PassportCollection, { title: string; action: s
 export function PassportBook(props: PassportBookProps): JSX.Element {
   const layout = () => props.layout ?? 'spread';
   const shelf = () => props.shelf ?? shelfOf(props.book);
-  const leaves = createMemo(() => buildLeaves(props.book, shelf(), DENSITY[layout()]));
+  const leaves = createMemo(() => buildLeaves(props.book, shelf(), props.density ?? DENSITY[layout()]));
   const views = createMemo(() => buildViews(leaves(), layout()));
   const tabs = createMemo(() => sectionTabs(views()));
   const [view, setView] = createSignal(Math.max(0, props.initialView ?? 0));
