@@ -335,14 +335,18 @@ chosen avatar/builder remains authorised. Keep wide exposure34ac89a, indigo08960
 beacon, warm pools, gold frame, softer smoke7c16789 and castle lighta1dac83/32633a8. Merge useful art checkpoints
 first; medium-effort helpers for routine recon/captures/fixes. No new runtime/content checkpoints this turn.
 
-**Current slice:** generated stream market now includes reviewed civic gift-cart and market-stores beside the
-existing stalls, matching furnishings already used by founded markets. Cart[-13.5,y,3.5], stores[-13,y,14.5];
-active-road/reservation audit clear in Willowmere hamlet/town, central crossing/Forge audience stay open. Viewed
-`shots/magic/market-life-after.png` and `market-life-pair.png`: cart and wares visibly furnish the square, but
-remain dark and the square still empty. Street view only, not evidence of wide-view impact. Identical pose
-[14,12.5,26]→[-10,10.5,5],48°FOV,time30,hour19.5,1920×1080 high HDR/ACES, SIMULATED; no page/shader errors.
-Typecheck, scoped lint,3 focused adopted-cover/shore tests and web build pass; capture resources closed. Default
-camera/light/terrain untouched. Wide-road activity remains open: people still too small to read, well needs life.
+**Current slice:** Forge spectators now gather across the pour in staggered west/north arcs.16 existing present
+slots only, actual walks, inward headings, barrel perch and back-row tiptoe preserved. First southeast branch
+put a large back in the foreground; rejected. Corrected far-side sites show two warm faces right of the pour.
+Viewed `shots/magic/forge-ring-after.png` and `forge-ring-pair.png` at1920×1080 high HDR/ACES, same hash-verified
+adopted scene and60s SIMULATED gather. Pour/camera/light unchanged; still a little left-heavy, rightmost partly
+hidden by smithy post.3 focused tests (including actual arrivals across camera halves and barrel), typecheck,
+scoped lint and web build pass. No harness errors; owned resources/locks closed. No fresh art code checkpoints.
+
+**Previous market slice:**be6ab51 puts reviewed civic cart/wares beside generated stalls, matching furnishings
+already used by founded markets. Road/reservation audit clear in both sizes. `shots/magic/market-life-pair.png`
+viewed from street: tangible detail, still empty square, not proof of wide impact. Wide-road activity/well remain
+open. Keep accepted wide camera and light; grove/avatar integration follows usable lane checkpoints.
 
 **Land:**975af2f adopts picture-land:2 consistently through workers/height texture/horizon/light occupancy/citizen
 contact/founded collision. Plan identity unchanged; existing physics revision includes producer.44de84b applies
@@ -364,7 +368,7 @@ obscures emote face: lane follow-up. Harbour tower/river hall/heraldry merged/vi
 `shots/magic/road-lantern-lived-pair.png`: continuous SIM30→95 has57 walking/240 lit, still no obvious improvement.
 Do not repeat brightness nudges/idle-policy retuning. Capture-only instance.render bypass can warm actual scene
 history cheaply, restoring actual high-quality render/settled fields for final still; prototype patch cannot.
-Smithy cameraf0112c6 viewed: lower/tighter pour/faces, castle behind; crowd still leans left. Molten02c3494 stays.
+Smithy cameraf0112c6 and molten02c3494 stay; current audience correction is the viewed checkpoint above.
 Real approved chat ritual unproved; no observer waiting before Tobias announces live. Passport/gate/emotes/
 moments/atlas-w2 through47c0ef7: first4 SIM benches still lack live host bindings. No new system wiring now.
 
