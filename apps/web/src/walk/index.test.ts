@@ -31,8 +31,8 @@ function realm(at: { x: number; y: number; z: number; yaw: number }) {
     tick(_now, input) {
       sent.push({ ...input });
       const poses: RealmWalkerPose[] = [
-        { id: 'me', name: 'Juniper', look: 'a', ...self, distance: 0, self: true },
-        { id: 'other', name: 'Wren', look: 'b', x: 4, y: 0, z: 4, yaw: 0, distance: 0, speed: 0, self: false },
+        { id: 'me', name: 'Juniper', look: 'a', homeSlot: 65535, ...self, distance: 0, self: true },
+        { id: 'other', name: 'Wren', look: 'b', homeSlot: 65535, x: 4, y: 0, z: 4, yaw: 0, distance: 0, speed: 0, self: false },
       ];
       return poses;
     },

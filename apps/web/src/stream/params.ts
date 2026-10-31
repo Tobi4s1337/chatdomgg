@@ -24,7 +24,7 @@ export function parseKingdomPresentationParams(query: URLSearchParams, tier: Kin
 export type StreamLayout = 'stage' | 'window' | 'strip';
 export type StreamMood = 'calm' | 'show';
 export type StreamSeam = 'starting' | 'break' | 'ending';
-export type StreamSource = 'simulated' | 'herald';
+export type StreamSource = 'simulated' | 'herald' | 'realm';
 /** The composition rectangle on the stage, in percent of the output: x, y, width, height. */
 export type SafeArea = readonly [number, number, number, number];
 
@@ -83,9 +83,9 @@ export function parseStreamParams(search: string): StreamParams {
     time: query.has('time') && Number.isFinite(rawTime) ? Math.max(0, Math.min(3600, rawTime)) : null,
     // The small formats are close views of a window and its street; the stage may hold any supported shot.
     camera: layout !== 'stage' ? 'window' : pick(query.get('camera'), ['hero', 'window', 'citizen'] as const, 'hero'),
-    source: query.get('source') === 'simulated' ? 'simulated' : 'herald',
+    source: pick(query.get('source'), ['simulated', 'herald', 'realm'] as const, 'herald'),
     presenceOrigin: query.get('presenceOrigin') === 'simulated' ? 'simulated' : 'live',
-    kingdomName: query.get('source') !== 'simulated' && !query.has('seed')
+    kingdomName: query.get('source') === 'realm' || (query.get('source') !== 'simulated' && !query.has('seed'))
       ? 'Kingdom'
       : seed.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' '),
   };

@@ -104,7 +104,7 @@ try {
           return (stats.ready && stats.lightingReady && stats.fieldSettled) || !!document.querySelector('.kingdom-gate button');
         }, null, { timeout: 180_000 });
         if (await page.locator('.kingdom-gate button').count()) fail(`kingdom error gate: ${await page.locator('.kingdom-gate').innerText()}`);
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await page.evaluate(() => new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))));
         if (!(await page.locator('.source-ribbon').innerText()).includes('SIMULATED')) fail('missing SIMULATED source label');
         if (errors.length) fail('console or page error');
         const name = `${view}-${hourName}@${w}x${h}.png`, path = `${out}/${name}`;

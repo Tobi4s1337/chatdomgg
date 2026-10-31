@@ -1,4 +1,4 @@
-import type { ForgeDraft, ForgeRunEvent } from '../forge';
+import type { ForgeDraft, ForgeRunEvent, ForgeHostProfile } from '../forge';
 import type { KingdomId, PersonId } from '../identity';
 import type { VoxelBlueprint } from '../voxel';
 
@@ -26,6 +26,7 @@ export interface NativeForgeHome {
   readonly revision: string;
   readonly family: 'hearth' | 'tide' | 'grove';
   readonly home: VoxelBlueprint;
+  readonly hostProfile?: ForgeHostProfile;
 }
 export interface ForgeReservation extends NativeForgeHome {
   readonly reservationId: string;
@@ -52,6 +53,7 @@ export interface ForgeAttachment {
   readonly kitId: string;
   readonly kitRevision: number;
   readonly family: NativeForgeHome['family'];
+  readonly hostProfile?: ForgeHostProfile;
   readonly draft: ForgeDraft;
   readonly provenance: {
     readonly source: 'live' | 'simulated';
@@ -64,6 +66,7 @@ export type CommittedForgeAttachment = Omit<ForgeAttachment, 'provenance'> & {
   readonly committedAt: number;
   readonly provenance: ForgeAttachment['provenance'] & { readonly firstForgedAt: number };
 };
+/** activityId is the opaque attemptId throughout stages and the durable reveal; runId identifies the model run. */
 export type ForgeActivity =
   | { readonly type: 'stage'; readonly activityId: string; readonly stage: Extract<ForgeRunEvent, { type: 'stage' }>['stage'] }
   | { readonly type: 'committed'; readonly activityId: string; readonly attachment: CommittedForgeAttachment };

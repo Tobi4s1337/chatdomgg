@@ -65,7 +65,7 @@ export function createCodexEngraving(parent: THREE.Object3D): {
       float edge = pow(1.0 - abs(n.z), 2.0);
       float sweep = exp(-pow((vPos.x + vPos.y * .35 - sin(uTime * .85) * 14.0) * .18, 2.0)) * uShaping;
       vec3 iron = vec3(.008,.009,.010) + vec3(.018,.020,.022) * key + vec3(.025,.023,.021) * edge;
-      iron += vec3(.19,.075,.023) * uHeat * (.16 + edge * .55 + sweep * .25);
+      iron += vec3(.19,.075,.023) * uHeat * edge * (.55 + sweep * .25);
       gl_FragColor = vec4(iron, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>

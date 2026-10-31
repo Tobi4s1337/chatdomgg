@@ -54,6 +54,39 @@ History is explicit:
 The trace test (`people-light.test.ts`) covers a crossing, partial capacity, the fade, the pilot, repeated time,
 reverse seek, replay after clear and input validation.
 
+## The hours (KL02)
+
+`getEnvironment(hour)` in `packages/render/src/atmosphere.ts` carries the whole grade. Noon is a saturated blue
+zenith over a sky-blue horizon, with broken white clouds over about a third of the upper sky, a warm sun and blue
+shadows. Dusk (19.25 h) is a lilac zenith over a gold band, with the sun low in the west-north-west, gold on the
+west faces and indigo shadow sides. Night is deep blue to violet with a high moon. Besides the existing fields,
+`Environment` gains `shadow` (what unlit surfaces sink toward), `glow` (the warm horizon band), `cloud`, `cloudShade`,
+`cloudCover`, `fogDensity` and `exposure`. No field was removed, so every existing consumer still compiles and
+reads the same values. By day the beacon is a small fire on the crown; its column and sky halo grow with dusk.
+
+Most of the grade reaches the town through code the scene already runs: `createAtmosphere().update` (sky, clouds,
+beacon), `clay/ground/forge.setEnvironment(grade)` (shadow tint, the hour's voxel fog, read straight from
+`grade.fogDensity`) and `water.update(grade, …)`. Two scene lines are still constants. The integrator replaces them in
+`apps/web/src/kingdom/scene.ts`:
+
+```ts
+// In the frame loop, after `const grade = getEnvironment(hour);` (scene.ts:257):
+renderer.toneMappingExposure = grade.exposure;   // replaces the fixed 1.08 at scene.ts:49 (keep it as the initial value)
+// scene.ts:289, beside the existing fog colour:
+fog.color.set(grade.fog); fog.density = grade.fogDensity;   // was .0016
+```
+
+Day and dusk exposure stay at the shipped 1.08, so the noon and dusk frames below are already the integrated
+look; night gains the 1.12–1.16 lift once the first line is in. Only three.js's built-in fogged materials
+(today, the citizens' contact shadows) read the scene `FogExp2`, so the second line changes nothing else.
+
+Evidence, captured from the real town (simulated Willowmere, `time=30`) with
+`node apps/web/src/kingdom/lights/capture.mjs --views hero --hours noon,dusk --sizes desktop,phone`:
+`work/evidence/kingdom-light-kl02/hero-{noon,dusk,dusk-grey}@{1440x900,390x844}.png`. The dusk greyscale has three
+value groups: sky and beacon brightest, gold west faces and roofs in the middle, indigo shadow streets and grass
+dark. Still weak: from the hero, the lit windows do not yet stand among the brightest values (KL05's pane and
+pool), and the castle reads as a cool silhouette under its beacon until KL07 wakes its openings.
+
 ## Windows and warm pools (KL05)
 
 No adapter change is needed: this lives inside the existing `createWindowLights` and `createVoxelMaterial`, which
@@ -68,9 +101,11 @@ the scene already constructs, updates with the hour and feeds with `getEnvironme
   as a faint warmth behind the reflection.
 - **The halo** is `WINDOW_HALO_SCALE` (1.3) × the pane. It is a thin warm spill on the reveal and frame, heavier on the
   sill, and never a blob on the wall. It is drawn only after dusk.
-- **The pool** (`voxel-material.ts`) replaces the squared field with `pow(field, 1.6) × 1.15`, coloured from a warm
-  core through amber. With the flood's linear falloff, it reads about 0.55 at 3 m and 0.2 at 5 m in the 0.5 m local
-  field, then rolls to zero without a ring. It reads fully from night ≥ 0.2 (about 18.5 h in today's grades) and
+- **The pool** (`voxel-material.ts`) replaces the squared field with `pow(field, 1.3) × 1.3`, coloured from a warm
+  core through amber. With the flood's linear falloff, it reads about 0.65 at 3 m and 0.3 at 5 m in the 0.5 m local
+  field, then rolls to zero without a ring. The gentler power is for the ground: the flood is Manhattan, so the
+  grass and path under a window sit a metre or two further from its source than the wall beside it, and a 1.6
+  power left them barely warm. It reads fully from night ≥ 0.2 (about 18.5 h in today's grades) and
   is absent by day. Pool and beacon light share one soft cap (identity to 0.6, then asymptotic to 1.2), so
   overlapping warmth never clips plaster to white. Citizens use the same material, so faces and cloth in a pool
   warm with it.
@@ -80,3 +115,42 @@ the scene already constructs, updates with the hour and feeds with `getEnvironme
 `createVoxelMaterial` gains `uSkyZenith` and `uSkyHorizon`, which `setEnvironment` sets from the existing
 `Environment` fields. If KL02 retunes `night`, keep about 0.2 at 18.5 h, or move the `smoothstep(0., .2, uNight)`
 pool gate with it.
+
+### Evidence (current tree, SIMULATED willowmere town, time 30)
+
+`work/evidence/kingdom-light-kl05/final-*.png`: window and citizen dusk at 1440×900 (the existing `camera=window`
+and `camera=citizen` views); street dusk and night at 1440×900 and 390×844 through `__chatdomKingdom.pose` with
+eye `[-104, 9.4, 64]`, target `[-104, 8.2, 32]` (fov 50 desktop, 64 phone) on the main street by Juniper's home;
+hero night at 1440×900. The lane `capture.mjs` and `kingdomLightViews` belong to KL02/KL08; until then this pose is
+the street recipe. Lit plaster peaks at about 210/255 next to a pane at night, so the cap holds. Still weak: green
+grass takes warm light as olive rather than gold, so the ground pool reads best on paths and steps; the flood's
+diamond shape is not visible at these distances, so no flood change is requested.
+## Glass (KL04)
+
+No adapter change is needed: glass lives inside the registry, the mesher, the field worker, `createVoxelMaterial` and
+`createSunShadows`, which the scene already constructs. The near field must stay on `clay.setLight(volume)` (it is).
+
+- **Registry** (`packages/content/src/materials.ts`, revision 4): glass stays `solid` for collision and is the only
+  material with `occludesFaces`, `occludesAo` and `blocksLight` false. The mesher draws the reveal and room behind it,
+  baked sky reaches the floor through it, and a wall in its place closes both.
+- **Clay pass:** glass stays in the one opaque pass. Its fragments write fractional alpha-to-coverage (sky reflection,
+  Fresnel, sun glint); without a multisampled target the same coverage becomes a 4×4 ordered pattern. No blending,
+  no sorting, no second shell.
+- **Sight:** visibility rays treat `surface: glass` as air; the wall and mullion beside it still occlude.
+- **Field:** a half-metre cell that a glazed opening reaches is open when at least half its face has a clear straight
+  line of build cells along the glass's wall normal; unglazed carves keep the conservative rule.
+- **Sun casters** discard the glass kind, so frames and walls still cast.
+- **Sun indoors** (`sunLine` in `voxel-material.ts`). The town sun map is 0.375 m per texel (0.75 m on phones), too
+  coarse to find a window, and the baked sky factor `(.15+.85*vSky)` that hides its leaks also dimmed real sun. Under
+  a roof (`vSky` below 0.85, fully below 0.55) a sun-facing fragment walks the near field's half-metre blockers toward
+  the sun for up to 48 cells. A slab of whole blocker cells always costs at least one cell of path, so under 0.8
+  cells of blocked path is treated as an opening's quantised edge and fades the line (a real 0.4 m reveal is not
+  read as a one-metre tunnel; a solid wall or roof never leaks). The map then answers only for casters beyond where
+  the line stopped (`sunShadowInAir`, no receiver plane, safe in the branch). The result can only raise the existing
+  sun term. Fields without corner samples (ground, horizon, citizens) return 0 and keep today's light.
+- **Cost:** one branch for every fragment; only sheltered, sun-facing ones pay up to 48 `texelFetch` steps plus one
+  16-tap map read. No new render target, texture or draw. Wanted on a real GPU: frame time with the camera inside
+  a sunlit room at 16 h (the `sun` pose of the evidence command) against the same pose at noon.
+
+Evidence: `node apps/web/src/kingdom/lights/glass-capture.mjs --hours noon,afternoon,dusk --views street,room,sun`
+after `pnpm build` (slot 44, the emberfold cottage, the deepest presence window facing the late sun).

@@ -1,5 +1,5 @@
 import { createNativeForgeHost } from '@chatdom/forge';
-import { PRESENCE_LEASE_MS, type KingdomId, type PresenceInput } from '@chatdom/shared';
+import { PRESENCE_LEASE_MS, type KingdomId, type PresenceInput, type PersonId } from '@chatdom/shared';
 import { approvedPublicName, DISPLAY_NAME_APPROVAL } from '../../../api/src/realm-auth/presentation';
 import { AllocationUnavailableError, type AllocationService, type HomeFurnisher } from '../allocation';
 import type { DurableKingdom, DurableRealmServices, RealmDatabase } from '../persistence';
@@ -10,6 +10,8 @@ export interface RealmCitizensOptions {
   readonly origin: 'live' | 'simulated';
   /** Explicit host-approved names, the same map used by the kingdom entry surface. */
   readonly kingdomNames: ReadonlyMap<KingdomId, string>;
+  /** Same retained writer, after provider-name persistence; never open a second authority. */
+  readonly castle?: (kingdom: DurableKingdom, personId: PersonId, name: string) => Promise<void>;
 }
 
 /**
@@ -77,6 +79,10 @@ export function createRealmCitizens(options: RealmCitizensOptions) {
         await allocation.recover(kingdom);
         for (const person of input.people) {
           const result = await allocation.allocate({ kingdomId: input.kingdomId, personId: person.personId, evidence: [] });
+          if (result.status === 'castle' && person.disclosure === 'named') {
+            const name = approvedPublicName(person.displayName);
+            if (name && name.length <= 64) await options.castle?.(kingdom, person.personId, name);
+          }
           if (result.status !== 'deed') continue; // The existing service owns castle, guest-cap and origin rules.
           const installed = await allocation.install(kingdom, result.deed);
           if (installed.status !== 'installed') throw new AllocationUnavailableError(`The citizen home remains ${installed.status}.`);

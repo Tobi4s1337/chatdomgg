@@ -23,7 +23,7 @@ Missing live approval is pending, never a fake name approval or a reason to inst
 
 ## Tasks
 
-- [ ] **FW01 — Hand integration the actual founded town early** · evidence: artifact/log. Load the exact adopted
+- [x] **FW01 — Hand integration the actual founded town early** · evidence: artifact/log. Load the exact adopted
   plan through AllocationService and assemble/validate/serialize the public `RealmFoundedScene` with accepted
   native home/castle/prop/tree factories and actual committed approved home/attachment overrides. Preserve
   plot IDs, slots, origins, cardinal frames and ordered carvings; no regenerating or copying private state.
@@ -34,7 +34,7 @@ Missing live approval is pending, never a fake name approval or a reason to inst
   for consuming this plan/placement list instead of regenerating; main/integrator edits the browser mount.
   Name absent accepted place/site dependencies. Do this before furnishing/HTTP volume. The independent compiler
   worker may start FW02 now with the disjoint voxel write set; the lead commits/ticks tasks one at a time.
-- [ ] **FW02 — The same scene is solid in browser and server** · evidence: test/log. Implement the pure indexed
+- [x] **FW02 — The same scene is solid in browser and server** · evidence: test/log. Implement the pure indexed
   compiler under voxel `collision/**`, with explicit registry/blueprint placements/sampled terrain inputs and
   `CollisionWorld` output. Resolve final ordered air/solid cells, glass, all cardinal turns, real 0.5 m terrain,
   supported step geometry and blocking unknown bounds. Preserve openings and bounded stable immutable queries;

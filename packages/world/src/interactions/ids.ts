@@ -19,8 +19,8 @@ const PATTERNS: Readonly<Record<InteractionKind, RegExp>> = {
   'campfire-seat': /^fire:([^:]+):seat:([^:]+)$/,
   anvil: /^anvil:([^:]+)$/,
   'tavern-seat': /^tavern:([^:]+):seat:([^:]+)$/,
-  'home-door': /^home:([^:]+):door$/,
-  'home-exit': /^home:([^:]+):exit$/,
+  'home-door': /^home:(.+):door$/,
+  'home-exit': /^home:(.+):exit$/,
 };
 
 function segment(value: string, label: string): string {
@@ -41,8 +41,9 @@ export const interactionTargetId = {
   campfireSeat: (site: string, seat: string) => token(`fire:${segment(site, 'site')}:seat:${segment(seat, 'seat')}`),
   anvil: (site: string) => token(`anvil:${segment(site, 'site')}`),
   tavernSeat: (table: string, seat: string) => token(`tavern:${segment(table, 'table')}:seat:${segment(seat, 'seat')}`),
-  homeDoor: (plot: string) => token(`home:${segment(plot, 'plot')}:door`),
-  homeExit: (plot: string) => token(`home:${segment(plot, 'plot')}:exit`),
+  // Real adopted plot IDs contain colons; the final suffix keeps the namespace unambiguous.
+  homeDoor: (plot: string) => token(`home:${token(plot)}:door`),
+  homeExit: (plot: string) => token(`home:${token(plot)}:exit`),
 } as const;
 
 /** The kind an ID's namespace promises, or null for anything outside the frozen five families. */
@@ -50,12 +51,12 @@ export function kindOfTargetId(id: string): InteractionKind | null {
   if (!TokenSchema.safeParse(id).success) return null;
   for (const kind of INTERACTION_KINDS) {
     const match = PATTERNS[kind].exec(id);
-    if (match && match.slice(1).every(part => SEGMENT.test(part))) return kind;
+    if (match && match.slice(1).every(part => PLOT_KINDS.has(kind) ? TokenSchema.safeParse(part).success : SEGMENT.test(part))) return kind;
   }
   return null;
 }
 /** The plot named by a home-door/home-exit ID. */
 export function plotOfTargetId(id: string): string | null {
-  const match = /^home:([^:]+):(?:door|exit)$/.exec(id);
-  return match && SEGMENT.test(match[1]!) ? match[1]! : null;
+  const match = /^home:(.+):(?:door|exit)$/.exec(id);
+  return match && TokenSchema.safeParse(match[1]).success ? match[1]! : null;
 }

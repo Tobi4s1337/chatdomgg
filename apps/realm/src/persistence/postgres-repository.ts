@@ -1,3 +1,4 @@
+import { castleHostId } from '@chatdom/shared/realm';
 import { randomBytes } from 'node:crypto';
 import type pg from 'pg';
 import { KingdomIdSchema, type KingdomId } from '@chatdom/shared';
@@ -328,7 +329,9 @@ export class PostgresRealmRepository implements RealmRepository {
     if (snap) {
       if (snap.version !== 1) throw new RealmRecoveryError(kingdomId, `unsupported snapshot version ${snap.version}`);
       if (sha256Hex(snap.state) !== snap.digest) throw new RealmRecoveryError(kingdomId, `snapshot ${snap.seq} fails its digest`);
-      state = JSON.parse(snap.state) as RealmPrivateState;
+      const restored = JSON.parse(snap.state) as RealmPrivateState;
+      // Version-one snapshots predate the monarch's separate keep host.
+      state = { ...restored, castle: restored.castle ?? null };
       if (state.version !== 1 || state.kingdomId !== kingdomId || state.sequence !== Number(snap.seq) || state.origin !== this.origin) throw new RealmRecoveryError(kingdomId, `snapshot ${snap.seq} does not belong to this kingdom`);
     } else state = createRealmState(kingdomId, this.origin);
     const tail = await tx.query<{ seq: string; fact: string; digest: string }>('SELECT seq, fact, digest FROM realm_facts WHERE kingdom_id = $1 AND seq > $2 AND seq <= $3 ORDER BY seq', [kingdomId, state.sequence, through]);
@@ -424,6 +427,7 @@ const claimDesign: RealmCommitGuard = async (tx, fact) => {
 
 function plotOf(message: RealmPublicMessage, state: RealmPrivateState): string | null {
   if (message.type === 'home') return message.plotId;
+  if (message.type === 'castle') return castleHostId(message.moduleId);
   if (message.type === 'forge' && message.event.type === 'committed') return state.attachments[message.event.attachment.id]?.homeId ?? null;
   return null;
 }

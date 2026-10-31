@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { PRESENCE_LEASE_MS, STREAM_LEASE_MS, type PersonId, type PresenceInput, type PresenceSource } from '@chatdom/shared';
+import { REALM_CASTLE_SLOT, forgeHostForPerson } from '@chatdom/shared/realm';
 import type { RealmCapability, RealmDomainCommand, RealmIngressCheckpoint, RealmIngressTransition, RealmPrivateState } from '@chatdom/shared/realm';
 import { applyPresence, createPresenceState, projectPresence, type PresenceBinding } from '@chatdom/world';
 import { decideRealm } from '@chatdom/world/realm';
@@ -29,7 +30,7 @@ type Planned = RealmIngressTransition['commands'][number];
  * stream night, close one evidenced interval. Nothing else does: no sample counting, no open interval carried across a
  * gap, a complete roster that omits someone, a moderation hold, the stream going offline or a writer restart. The
  * reducer unions those intervals, so overlap from several sources or a retried observation never adds time. Once a
- * person's union reaches ten minutes and they hold a home here, the same transaction credits that night's coal.
+ * person's union reaches ten minutes and they hold a home or their own castle here, the same transaction credits that night's coal.
  *
  * Every command is simulated against the reducer first and only proposed if it would be accepted, so the repository's
  * authoritative run records facts rather than a trail of predictable refusals. The function is pure: same state,
@@ -109,12 +110,15 @@ export function presenceTransition({ service, observation, writerEpoch }: Presen
     for (const personId of [...touched].sort()) {
       const night = s.stream.sessionId, key = `${personId}:${night}`;
       if (night === null || s.creditedNights[key] || (s.qualification[key]?.coveredMs ?? 0) < QUALIFIED_NIGHT_MS) continue;
-      if (!Object.values(s.homes).some(home => home.ownerId === personId)) continue;
+      if (!forgeHostForPerson(s, personId)) continue;
       propose({ type: 'coal.creditQualifiedNight', personId, streamSessionId: night, qualificationReceipt: receipt }, commandId('night', key));
     }
 
-    // Lit windows are owned homes. A visual slot is never a deed; it only shows a deed that already exists.
-    const bindings: PresenceBinding[] = Object.values(s.homes).map(home => ({ personId: home.ownerId, slot: home.slot })).sort((a, b) => a.slot - b.slot);
+    // Each person's light belongs to their actual home or keep. A visual slot never grants a street deed.
+    const bindings: PresenceBinding[] = Object.values(s.homes).filter(home => home.ownerId !== s.castle?.ownerId)
+      .map(home => ({ personId: home.ownerId, slot: home.slot }));
+    if (s.castle) bindings.push({ personId: s.castle.ownerId, slot: REALM_CASTLE_SLOT });
+    bindings.sort((a, b) => a.slot - b.slot);
     const revision = (checkpoint?.revision ?? 0) + 1;
     return {
       checkpoint: { version: 1, revision, codec: 'presence-v1', data: encodeIngressCheckpoint({ presence, writerEpoch, runs: [...runs.values()] }) },

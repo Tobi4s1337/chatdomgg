@@ -9,6 +9,7 @@ import { nameFreshUntil, withheldReader } from './policy/visibility';
 import { PREVIEW_KIND, PreviewIdSchema, PreviewWorldSchema, ServedNamesSchema, type PreviewNames } from './preview/schema';
 import { previewDir, readPreviewManifest, readPreviewNames } from './preview/store';
 import { layout, readCurrent, readManifest } from './store/revisions';
+import { LIVE_FILES, liveRoot, liveTargetDir, readLiveManifest, readLiveState } from './live/store';
 
 /**
  * The Atlas data service. It serves a fixed set of routes below /map-data from the current revision and nothing
@@ -38,6 +39,15 @@ interface PreviewFile {
 const PREVIEW_FILE = /^\/map-data\/v1\/preview\/(pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12})\/(world\.json|region-[0-9]{1,5}\.json)$/;
 const PREVIEW_NAMES = /^\/map-data\/v1\/preview\/(pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12})\/names$/;
 const MAX_CACHED_PREVIEWS = 3;
+const LIVE_POINTER = /^\/map-data\/v1\/live\/(pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12})$/;
+const LIVE_EVENTS = /^\/map-data\/v1\/live\/(pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12})\/events$/;
+const LIVE_FILE = /^\/map-data\/v1\/live\/(pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12})\/(lf-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12})\/(live\.bin|starts\.json|dabs\.bin)$/;
+/** One shared watcher looks for a new live manifest this often and tells every open event stream. */
+const LIVE_WATCH_MS = 2_000;
+const LIVE_HEARTBEAT_MS = 20_000;
+/** Open event streams this process will hold; beyond it a reader falls back to its 60 s reconcile. */
+export const MAX_LIVE_STREAMS = 4_000;
+const MAX_CACHED_FRAMES = 12;
 /** A served names projection is rebuilt at least this often, and whenever a name in it goes stale or the withheld list changes. */
 const NAMES_REBUILD_MS = 60_000;
 
@@ -55,6 +65,8 @@ interface NamesBody {
 export interface AtlasServiceOptions {
   /** Injected clock for name freshness. */
   now?: () => number;
+  /** How often the live watcher looks for a new frame (tests shorten it). */
+  liveWatchMs?: number;
 }
 
 /**
@@ -205,6 +217,121 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     return entry;
   }
 
+  /**
+   * The live pointer of one land: its current complete frame (or null before the first), and what the producer last
+   * saw of the source, published separately so a partial or stale sweep is visible without touching the frame.
+   * Reasons stay in the producer's log; readers learn the state and its times only.
+   */
+  let livePointers = new Map<string, { key: string; body: string; etag: string }>();
+  function livePointer(id: string): { body: string; etag: string } | null {
+    if (!PreviewIdSchema.safeParse(id).success || !existsSync(previewDir(dataDir, id))) return null;
+    const stamp = (path: string) => {
+      try {
+        const stat = statSync(path);
+        return `${stat.mtimeMs}:${stat.size}:${stat.ino}`;
+      } catch {
+        return '-';
+      }
+    };
+    const key = `${stamp(join(liveTargetDir(dataDir, id), 'manifest.json'))}|${stamp(join(liveRoot(dataDir), 'state.json'))}`;
+    const cached = livePointers.get(id);
+    if (cached?.key === key) return cached;
+    let manifest = null;
+    try {
+      manifest = readLiveManifest(dataDir, id);
+    } catch {
+      // A damaged manifest publishes nothing; the reader keeps the frame it has.
+      if (cached) return cached;
+    }
+    let state: ReturnType<typeof readLiveState> = null;
+    try {
+      state = readLiveState(dataDir);
+    } catch {
+      // An unreadable state file reads as an unavailable source, never as a complete one.
+    }
+    const body = JSON.stringify({
+      version: 1,
+      kind: 'chatdom-atlas-live-pointer',
+      preview: id,
+      manifest,
+      source: state
+        ? { state: state.state, checkedAt: state.checkedAt, sweepAt: state.sweepAt, completeAt: state.completeAt, gapBefore: state.gapBefore, rule: state.rule }
+        : { state: 'unavailable', checkedAt: null, sweepAt: null, completeAt: null, gapBefore: false, rule: null },
+    });
+    const entry = { key, body, etag: `"${sha256(body).slice(0, 32)}"` };
+    livePointers.set(id, entry);
+    if (livePointers.size > 16) livePointers = new Map([...livePointers].slice(-8));
+    return entry;
+  }
+
+  const frameCache = new Map<string, Buffer>();
+  function liveFile(id: string, frame: string, name: string): Buffer | null {
+    const key = `${id}/${frame}/${name}`;
+    const hit = frameCache.get(key);
+    if (hit) return hit;
+    if (!Object.values(LIVE_FILES).includes(name as never)) return null;
+    const path = join(liveTargetDir(dataDir, id), frame, name);
+    if (!existsSync(path)) return null;
+    const body = readFileSync(path);
+    frameCache.set(key, body);
+    while (frameCache.size > MAX_CACHED_FRAMES) frameCache.delete(frameCache.keys().next().value!);
+    return body;
+  }
+
+  /** Open event streams by land, each with the pointer it was last sent. One timer serves them all, only while any are open. */
+  const streams = new Map<string, Map<ServerResponse, string>>();
+  let streamCount = 0;
+  let lastBeat = now();
+  const watcher = setInterval(() => {
+    if (streamCount === 0) return;
+    const beat = now() - lastBeat >= LIVE_HEARTBEAT_MS;
+    if (beat) lastBeat = now();
+    for (const [id, clients] of streams) {
+      const pointer = livePointer(id);
+      if (!pointer) {
+        for (const res of clients.keys()) res.end();
+        continue;
+      }
+      // Each stream is judged on its own: one reader connecting must never mark a change as sent to another.
+      for (const [res, sent] of clients) {
+        if (sent !== pointer.etag) {
+          clients.set(res, pointer.etag);
+          res.write(`event: live\ndata: ${pointer.body}\n\n`);
+        } else if (beat) {
+          res.write(': still here\n\n');
+        }
+      }
+    }
+  }, options.liveWatchMs ?? LIVE_WATCH_MS);
+  watcher.unref();
+
+  function openStream(req: IncomingMessage, res: ServerResponse, id: string): void {
+    const pointer = livePointer(id);
+    if (!pointer) return send(res, 404, JSON.stringify({ error: 'not-found' }));
+    if (streamCount >= MAX_LIVE_STREAMS) return send(res, 503, JSON.stringify({ error: 'busy' }), { 'retry-after': '60' });
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache, no-transform',
+      'x-content-type-options': 'nosniff',
+      'x-accel-buffering': 'no',
+      connection: 'keep-alive',
+    });
+    // A dropped stream reconnects after 15 s; meanwhile the reader's own 60 s reconcile carries on.
+    res.write(`retry: 15000\nevent: live\ndata: ${pointer.body}\n\n`);
+    let clients = streams.get(id);
+    if (!clients) {
+      clients = new Map();
+      streams.set(id, clients);
+    }
+    clients.set(res, pointer.etag);
+    streamCount++;
+    req.socket.setTimeout(0);
+    res.on('close', () => {
+      if (clients.delete(res)) streamCount--;
+      if (clients.size === 0) streams.delete(id);
+    });
+  }
+
   function send(res: ServerResponse, status: number, body: string, headers: Record<string, string> = {}, head = false): void {
     res.writeHead(status, {
       'content-type': 'application/json; charset=utf-8',
@@ -262,6 +389,42 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
       });
       return void res.end(head ? undefined : gzip ? names.gzip : names.body);
     }
+    const livePointerMatch = LIVE_POINTER.exec(path);
+    if (livePointerMatch) {
+      const pointer = livePointer(livePointerMatch[1]!);
+      if (!pointer) return send(res, 404, JSON.stringify({ error: 'not-found' }), {}, head);
+      if (req.headers['if-none-match'] === pointer.etag) {
+        res.writeHead(304, { etag: pointer.etag, 'cache-control': 'no-cache' });
+        return void res.end();
+      }
+      return send(res, 200, pointer.body, { etag: pointer.etag }, head);
+    }
+    const liveEvents = LIVE_EVENTS.exec(path);
+    if (liveEvents) {
+      if (head) return send(res, 200, '', { 'content-type': 'text/event-stream' }, true);
+      return openStream(req, res, liveEvents[1]!);
+    }
+    const liveMatch = LIVE_FILE.exec(path);
+    if (liveMatch) {
+      const body = liveFile(liveMatch[1]!, liveMatch[2]!, liveMatch[3]!);
+      if (!body) return send(res, 404, JSON.stringify({ error: 'not-found' }), {}, head);
+      // Content addressed by frame: the reader checks every byte against the manifest's hash anyway.
+      const etag = `"${liveMatch[2]!}:${liveMatch[3]!}"`;
+      const immutable = { etag, 'cache-control': 'public, max-age=31536000, immutable', vary: 'accept-encoding' };
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304, immutable);
+        return void res.end();
+      }
+      const gzip = /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? '')) && liveMatch[3] !== 'dabs.bin';
+      const payload = gzip ? gzipSync(body, { level: 6 }) : body;
+      res.writeHead(200, {
+        'content-type': liveMatch[3] === 'starts.json' ? 'application/json; charset=utf-8' : 'application/octet-stream',
+        'x-content-type-options': 'nosniff', ...immutable,
+        ...(gzip ? { 'content-encoding': 'gzip' } : {}),
+        'content-length': String(payload.byteLength),
+      });
+      return void res.end(head ? undefined : payload);
+    }
     const match = PREVIEW_FILE.exec(path);
     if (match) {
       const file = previewFile(match[1]!, match[2]!);
@@ -297,6 +460,8 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     server,
     revision: () => current()?.survey.revision ?? null,
     close: () => new Promise((done) => {
+      clearInterval(watcher);
+      for (const clients of streams.values()) for (const res of clients.keys()) res.end();
       server.close(() => done());
       server.closeAllConnections();
     }),

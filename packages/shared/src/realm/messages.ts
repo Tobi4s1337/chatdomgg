@@ -48,7 +48,8 @@ export type RealmReceipt =
 export type RealmPublicMessage =
   | { readonly type: 'presence'; readonly frame: KingdomPresenceFrame }
   | { readonly type: 'forge'; readonly event: ForgeActivity }
-  | { readonly type: 'home'; readonly plotId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] };
+  | { readonly type: 'home'; readonly plotId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] }
+  | { readonly type: 'castle'; readonly moduleId: string; readonly revision: string; readonly assetHash: string; readonly attachments: readonly CommittedForgeAttachment[] };
 export interface RealmPublicDelivery {
   readonly version: 1; readonly kingdomId: KingdomId; readonly writerEpoch: string;
   readonly sequence: number; readonly cursor: number; readonly eventId: string; readonly message: RealmPublicMessage;
@@ -68,6 +69,8 @@ export type RealmTransientMessage =
   | { readonly type: 'chat.clear' }
   | { readonly type: 'seats'; readonly writerEpoch: string; readonly revision: number; readonly seats: readonly RealmSeat[] };
 export type RealmPrivateMessage =
+  /** The authenticated viewer's own street plot, never the other homes' ownership table. */
+  | { readonly type: 'home.owned'; readonly plotId: string | null }
   | { readonly type: 'receipt'; readonly receipt: RealmReceipt }
   | { readonly type: 'interaction'; readonly requestId: string | null; readonly writerEpoch: string; readonly state: RealmInteractionState };
 

@@ -22,6 +22,10 @@ export const SOURCE_SQL = Object.freeze({
   raidObservations: `SELECT at, from_id, to_id, viewers, kept FROM rec_raids ORDER BY at, from_id, to_id`,
   settlers: `SELECT count(*) AS n FROM settlers`,
   recorder: `SELECT count(*) AS frames, min(at) AS first_at, max(at) AS last_at FROM rec_frames`,
+  // The live reader (every 30 s): the latest sweeps, and only the channels the latest sweep left live.
+  liveSweeps: `SELECT at, streams, calls, ms FROM sweeps ORDER BY at DESC LIMIT 11`,
+  liveChannels: `SELECT id, lang, viewers, started_at, game_id, live_min, viewer_min, last_live, gone_at FROM channels WHERE live = 1`,
+  liveCategories: `SELECT m.channel, m.game_id, m.minutes FROM cat_minutes m JOIN channels c ON c.id = m.channel WHERE c.live = 1`,
 });
 
 /** The columns this adapter relies on. A source without them is a different collector, not something to guess at. */
@@ -64,6 +68,72 @@ export interface SnapshotOptions {
   now?: () => number;
   /** Test seam: runs inside the read transaction after the first inventory is read. */
   afterFirstRead?: () => void;
+}
+
+/** The tables the live reader touches; a subset of REQUIRED_COLUMNS, checked the same way. */
+const LIVE_TABLES = ['sweeps', 'channels', 'cat_minutes'] as const;
+
+export interface SourceLiveRow {
+  id: unknown; lang: unknown; viewers: unknown; started_at: unknown; game_id: unknown; live_min: unknown; viewer_min: unknown;
+  last_live: unknown; gone_at: unknown;
+}
+
+/** What one live read sees: the newest sweeps (newest first) and the channels left live, from one consistent snapshot. */
+export interface SourceLiveSnapshot {
+  openedAt: number;
+  readMs: number;
+  sweeps: { at: unknown; streams: unknown; calls: unknown; ms: unknown }[];
+  channels: SourceLiveRow[];
+  categories: { channel: unknown; game_id: unknown; minutes: unknown }[];
+}
+
+function checkColumns(db: DatabaseSync, tables: readonly string[]): void {
+  const present = new Set((db.prepare(SOURCE_SQL.tables).all() as { name: string }[]).map((row) => row.name));
+  const missing: string[] = [];
+  for (const table of tables) {
+    if (!present.has(table)) {
+      missing.push(`table ${table}`);
+      continue;
+    }
+    const columns = new Set((db.prepare(SOURCE_SQL.columns).all(table) as { name: string }[]).map((row) => row.name));
+    for (const column of REQUIRED_COLUMNS[table] ?? []) if (!columns.has(column)) missing.push(`${table}.${column}`);
+  }
+  if (missing.length) throw new AtlasError('source-schema', 'The source database is not the expected Surveyor schema.', missing);
+}
+
+/**
+ * The small read behind the live layer: the latest sweeps and the channels that sweep left live, inside one
+ * deferred read transaction. The collector writes a sweep's channels and its sweeps row in one transaction, so a
+ * snapshot never holds half a sweep; whether that sweep itself was complete is judged from what it recorded.
+ */
+export function readLiveSource(path: string | null, options: { now?: () => number } = {}): SourceLiveSnapshot {
+  if (!path) throw new AtlasError('inventory-missing', 'The live layer reads the Surveyor database: set SURVEYOR_DB_PATH, opened read-only.');
+  if (sizeOf(path) === null) throw new AtlasError('inventory-missing', `No source database at SURVEYOR_DB_PATH (${path}).`);
+  const now = options.now ?? Date.now;
+  const openedAt = now();
+  let db: DatabaseSync;
+  try {
+    db = new DatabaseSync(path, { readOnly: true });
+  } catch (error) {
+    throw new AtlasError('inventory-missing', `The source database could not be opened read-only: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    db.exec('BEGIN DEFERRED');
+    try {
+      checkColumns(db, LIVE_TABLES);
+      const sweeps = db.prepare(SOURCE_SQL.liveSweeps).all() as SourceLiveSnapshot['sweeps'];
+      const channels = db.prepare(SOURCE_SQL.liveChannels).all() as unknown as SourceLiveRow[];
+      const categories = db.prepare(SOURCE_SQL.liveCategories).all() as SourceLiveSnapshot['categories'];
+      return { openedAt, readMs: Math.max(0, now() - openedAt), sweeps, channels, categories };
+    } finally {
+      if (db.isTransaction) db.exec('ROLLBACK');
+    }
+  } catch (error) {
+    if (error instanceof AtlasError) throw error;
+    throw new AtlasError('inventory-missing', `The source database could not be read: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    db.close();
+  }
 }
 
 function sizeOf(path: string): number | null {

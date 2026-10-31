@@ -147,13 +147,21 @@ export async function createPlinth(pool: VoxelWorkerPool, material: VoxelRenderS
 
 /** Orthographic framing of a world-space box seen along `direction`, filling `fill` of the frame height. */
 export function frameCamera(camera: THREE.OrthographicCamera, bounds: THREE.Box3, direction: THREE.Vector3, aspect: number, fill: number, lift = 0): void {
-  const centre = bounds.getCenter(new THREE.Vector3());
-  const radius = bounds.getSize(new THREE.Vector3()).length() + 2;
+  const corners: THREE.Vector3[] = [];
+  for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) corners.push(new THREE.Vector3(x, y, z));
+  framePoints(camera, corners, direction, aspect, fill, lift);
+}
+
+/** Orthographic framing of world-space points (for example a turned box's corners) seen along `direction`. */
+export function framePoints(camera: THREE.OrthographicCamera, points: readonly THREE.Vector3[], direction: THREE.Vector3, aspect: number, fill: number, lift = 0): void {
+  const box = new THREE.Box3().setFromPoints(points as THREE.Vector3[]);
+  const centre = box.getCenter(new THREE.Vector3());
+  const radius = box.getSize(new THREE.Vector3()).length() + 2;
   camera.position.copy(centre).addScaledVector(direction, radius * 3);
   camera.lookAt(centre);
   camera.updateMatrixWorld(true);
   const projected = new THREE.Box3();
-  for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) projected.expandByPoint(new THREE.Vector3(x, y, z).applyMatrix4(camera.matrixWorldInverse));
+  for (const point of points) projected.expandByPoint(point.clone().applyMatrix4(camera.matrixWorldInverse));
   const half = Math.max(projected.max.y - projected.min.y, (projected.max.x - projected.min.x) / aspect) / 2 / fill;
   const offsetX = (projected.max.x + projected.min.x) / 2, offsetY = (projected.max.y + projected.min.y) / 2 + lift * half;
   camera.left = -half * aspect + offsetX; camera.right = half * aspect + offsetX; camera.top = half + offsetY; camera.bottom = -half + offsetY;

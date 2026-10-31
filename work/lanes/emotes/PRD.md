@@ -14,7 +14,7 @@ keep making independent progress. Do not claim a simulated judge or in-memory re
 
 ## Tasks
 
-- [ ] **E01 — One familiar shape becomes a real sculpture** · Build the owned package types, deterministic
+- [x] **E01 — One familiar shape becomes a real sculpture** · Build the owned package types, deterministic
   bounded palette/extrusion compiler and original asymmetric static fixture. Put the actual clay-rendered
   4–6 m statue, a grounded plinth and a banner/motif preview in the owned bench by this task's end. Make
   **SIMULATED** visible. Evidence: schema/budget/orientation/alpha test, front/side web and phone shots viewed.
