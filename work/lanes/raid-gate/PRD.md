@@ -20,7 +20,7 @@ unblocked work. A bench cannot replace real integration. Do not pick from Backlo
 
 ## Tasks
 
-- [ ] **RG01 — Gather at a real gate and preview a destination** · evidence: service-backed gate + desktop/phone shots.
+- [x] **RG01 — Gather at a real gate and preview a destination** · evidence: service-backed gate + desktop/phone shots.
   Define approved feature-local contracts/repository records, implement application eligibility/preview and
   party join/leave handlers, and mount the controller/gate pane through main's kingdom/Atlas route bindings.
   Show real service-returned source/target, opted-in count and clear no-authority state. Finish keyboard/touch
