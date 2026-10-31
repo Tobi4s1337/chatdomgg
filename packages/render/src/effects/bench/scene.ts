@@ -5,7 +5,7 @@
 // Every input here is SIMULATED and deterministic: no wall clock and no randomness; `render(time)` is a pure
 // function of the supplied time, hour and view. Served by the bench's own Vite dev server, never shipped.
 import * as THREE from 'three';
-import { KingdomPresenceFrameSchema, VOXEL_METRES, type VoxelBlueprint } from '@chatdom/shared';
+import { KingdomPresenceFrameSchema, VOXEL_METRES, type KingdomPresenceFrame, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import {
   buildLightVolume, meshVoxelChunk, prepareAssetChunks, rasterizeBlueprint, rasterizeLightOccluders,
   type AssetChunkMesh, type LightVolume, type OccluderBox, type VoxelAsset,
@@ -23,7 +23,8 @@ import { createAnvilHeroDragon, DRAGON_MOUNT } from '../../../../content/src/anv
 import { createDressing } from '../../../../content/src/props/dressing/index';
 import { homeLifeAnchors } from '../../../../world/src/home-life/index';
 
-export type BenchView = 'street' | 'wide';
+export type BenchView = 'street' | 'wide' | 'stream';
+export const BENCH_VIEWS: readonly BenchView[] = ['street', 'wide', 'stream'];
 type Point = [number, number, number];
 export type BenchSource = { id: string; position: Point };
 export interface BenchAnchors {
@@ -33,12 +34,20 @@ export interface BenchAnchors {
   fireflySources: BenchSource[];
   /** The actual open flue mouth on top of each home chimney pot (see `chimneyMouths` below). */
   chimneyMouths: BenchSource[];
+  /** Every placed home with its window slot and real chimney mouths, for the presence adapter. */
+  homes: { slot: number; mouths: Vec3[] }[];
+  /** The SIMULATED presence frame lighting the windows: who is home decides whose hearth smokes. */
+  presence: KingdomPresenceFrame;
+  /** Real light leaving real openings: the near hut's lit window and the forge's open firebox, as shaft volumes. */
+  shafts: { id: string; position: Point; direction: Point; length: number; radius: number }[];
+  /** Where a strike on the forge's fire throws its sparks: just outside the firebox mouth. */
+  strike: Point;
+  /** Where a forged piece lands: the ridge of the near hut's roof. */
+  landing: Point;
   /** The forge firebox flame anchor itself (`FORGE_HEARTH_FLAME`). */
   forgeFlame: Point;
   /** The sleeping dragon's nose on the forge flue (`FORGE_HEARTH_CHIMNEY_NOSE`), where the forge's own smoke leaves. */
   forgeNose: Point;
-  /** No anvil asset stands in this corner; reserved for a later Forge-flight origin. */
-  anvil?: Point;
 }
 export interface BenchScene {
   renderer: THREE.WebGLRenderer;
@@ -48,6 +57,8 @@ export interface BenchScene {
   setView(name: BenchView): void;
   setHour(hour: number): void;
   render(time: number): void;
+  /** Shows the SIMULATED flying piece at its position this frame, or hides it. */
+  setPiece(position: readonly number[] | null): void;
   anchors: BenchAnchors;
   stats(): { drawCalls: number; triangles: number };
   dispose(): void;
@@ -292,6 +303,8 @@ const VIEWS: Record<BenchView, Pose> = {
   street: { eye: [1.4, 1.72, 11.2], target: [1.3, 2.2, -4.5], fov: 44 },
   // A little higher and further back over the hedge, the whole corner in one frame.
   wide: { eye: [8.5, 5.6, 17.5], target: [-1.2, 1.6, -3.2], fov: 46 },
+  // The stream's distance: high over the meadow, the smithy, the gate fires and the homes behind in one dusk frame.
+  stream: { eye: [24, 15.5, 36], target: [-3.5, 2.4, -16], fov: 38 },
 };
 
 export async function createBenchScene(canvas: HTMLCanvasElement, options: { hour: number }): Promise<BenchScene> {
@@ -347,6 +360,14 @@ export async function createBenchScene(canvas: HTMLCanvasElement, options: { hou
   const braziers = [add(placeAt(brazier, GATE_BRAZIER_MOUNT, [-7.1, 0, 2.9])), add(placeAt(brazier, GATE_BRAZIER_MOUNT, [1.15, 0, 2.9]))];
   const nearHome = add({ blueprint: hearthHut, position: [3.2, 0, -20.6], turn: 0 });
   const farHome = add({ blueprint: crossHut, position: [-16.2, 0, -26.4], turn: 0 });
+  // The rest of the street, seen from the stream's distance: real hearth homes of a few sizes, set back in a loose row.
+  const town = [
+    add({ blueprint: createHearthHome('cottage', 2), position: [15.5, 0, -33], turn: 0 }),
+    add({ blueprint: createHearthHome('house', 1), position: [-5.5, 0, -44], turn: 0 }),
+    add({ blueprint: createHearthHome('cottage', 0), position: [-28.5, 0, -40], turn: 0 }),
+    add({ blueprint: createHearthHome('hut', 2), position: [27, 0, -47], turn: 0 }),
+    add({ blueprint: crossHut, position: [6, 0, -58], turn: 0 }),
+  ];
   // Under the near hut's lit window: a flower trough on the sill line and a bed against the wall.
   add({ blueprint: bed, position: [nearHome.position[0] + 1.2, 0, -4.6], turn: 0 });
   add({ blueprint: woodpile, position: [-0.4, 0, -3.2], turn: 0 });
@@ -362,7 +383,8 @@ export async function createBenchScene(canvas: HTMLCanvasElement, options: { hou
   for (const [blueprint, p] of meadow) add({ blueprint, position: p, turn: 0 });
   add({ blueprint: trough, position: [nearHome.position[0] + 1.6, 0, -4.15], turn: 0 });
   // Old trees behind the homes close the view, so the land never ends against the sky.
-  const treeSpots: [number, Point][] = [[0, [10.5, 0, -17.5]], [1, [-4.5, 0, -19]], [2, [-25, 0, -14]], [0, [16, 0, -6]], [1, [-21, 0, 2]], [2, [21, 0, -26]], [0, [-8, 0, -36]], [1, [4, 0, -38]]];
+  const treeSpots: [number, Point][] = [[0, [10.5, 0, -17.5]], [1, [-4.5, 0, -19]], [2, [-25, 0, -14]], [0, [16, 0, -6]], [1, [-21, 0, 2]], [2, [21, 0, -26]], [0, [-10, 0, -31]], [1, [36, 0, -38]],
+    [2, [-17, 0, -52]], [0, [20, 0, -64]], [1, [-36, 0, -26]]];
   for (const [variant, p] of treeSpots) add({ blueprint: trees[variant]!, position: [p[0] - 4, 0, p[2] - 4], turn: ((variant + 1) % 4) as Turn });
 
   // --- Real voxel meshes, one instanced draw per blueprint ------------------------------------------------
@@ -386,15 +408,15 @@ export async function createBenchScene(canvas: HTMLCanvasElement, options: { hou
     scene.add(mesh); meshes.push(mesh);
   }
 
-  // --- Window presence (SIMULATED): both huts' first authored windows are lit, as two people at home ------
-  const houses: WindowHouse[] = [
-    { slot: 1, blueprint: hearthHut, position: [...nearHome.position], yaw: 0 },
-    { slot: 2, blueprint: crossHut, position: [...farHome.position], yaw: 0 },
-  ];
+  // --- Window presence (SIMULATED): five of the seven homes have someone in; two stand dark and cold -------
+  const homePlacements = [nearHome, farHome, ...town];
+  const houses: WindowHouse[] = homePlacements.map((home, i) => ({ slot: i + 1, blueprint: home.blueprint, position: [...home.position], yaw: 0 }));
+  const away = new Set([4, 6]);
   const windows = createWindowLights(scene, houses);
-  windows.setFrame(KingdomPresenceFrameSchema.parse({ version: 1, kingdomId: '1', epoch: 'effects-bench', sequence: 1, asOf: 10_000,
+  const presence = KingdomPresenceFrameSchema.parse({ version: 1, kingdomId: '1', epoch: 'effects-bench', sequence: 1, asOf: 10_000,
     origin: 'simulated', streamLive: true, connection: 'fresh',
-    windows: [{ slot: 1, present: true, publicName: null, since: 0 }, { slot: 2, present: true, publicName: null, since: 0 }] }));
+    windows: houses.map(house => ({ slot: house.slot, present: !away.has(house.slot), publicName: null, since: 0 })) });
+  windows.setFrame(presence);
   windows.update(0, hour);
 
   // --- Anchors (world metres) -----------------------------------------------------------------------------
@@ -421,8 +443,22 @@ export async function createBenchScene(canvas: HTMLCanvasElement, options: { hou
     // is an open flue; its mouth is the top centre of that box. Transformed by the home's placement.
     chimneyMouths: [nearHome, farHome].flatMap((home, h) => homeLifeAnchors(home.blueprint).chimneys
       .map((mouth, i) => ({ id: `home:${h === 0 ? 'near' : 'far'}:chimney:${i}`, position: at(home, mouth) }))),
+    homes: homePlacements.map((home, i) => ({ slot: i + 1, mouths: homeLifeAnchors(home.blueprint).chimneys.map(mouth => at(home, mouth) as Vec3) })),
+    presence,
+    shafts: [],
+    // A hand in front of the firebox mouth, where a strike on the coals throws its sparks out over the apron.
+    strike: at(hearth, [FORGE_HEARTH_FLAME[0], FORGE_HEARTH_FLAME[1] + 1, 18]),
+    landing: [nearHome.position[0] + 3.4, 9.1, nearHome.position[2] + 9.5],
     forgeFlame, forgeNose,
   };
+  // The near hut's lit window pours its light out and down over the garden bed; the open firebox pours across the
+  // apron. Each shaft starts just outside its real opening and runs along the light's real direction.
+  const nearWindow = windows.getSources().find(source => source.slot === 1);
+  if (nearWindow) {
+    const [nx, , nz] = nearWindow.normal, [px, py, pz] = nearWindow.position;
+    anchors.shafts.push({ id: 'home:1:window:shaft', position: [px + nx * .12, py, pz + nz * .12], direction: [nx, -.42, nz], length: 2.8, radius: .42 });
+  }
+  anchors.shafts.push({ id: 'forge:hearth:mouth:shaft', position: at(hearth, [FORGE_HEARTH_FLAME[0], FORGE_HEARTH_FLAME[1] + 2, 17.5]), direction: [0, -.3, 1], length: 2.6, radius: .5 });
 
   // --- Warm light: the forge mouth, the two brazier bowls and the lit windows --------------------------------
   const spec = { revision: 1, origin: LIGHT.origin, size: LIGHT.size, cellSize: LIGHT.cell };
@@ -442,6 +478,14 @@ export async function createBenchScene(canvas: HTMLCanvasElement, options: { hou
     ...brazierFlames.map((anchor, i): Fire => ({ kind: 'brazier', anchor, lateral: [1, 0], depth: [0, 1], phase: 2.1 + i * 3.7 })),
   ]);
 
+  // The SIMULATED forged piece in flight: a small hot-iron finial, drawn only while the bench's flight cue runs.
+  const pieceGeometry = new THREE.BoxGeometry(.28, .36, .28);
+  const pieceMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.1, .82, .26), fog: true });
+  const piece = new THREE.Mesh(pieceGeometry, pieceMaterial);
+  piece.name = 'bench forged piece (SIMULATED)';
+  piece.visible = false;
+  scene.add(piece);
+
   // --- Frame ------------------------------------------------------------------------------------------------
   let pose = VIEWS.street, disposed = false;
   const target = new THREE.Vector3(), beaconAway = new THREE.Vector3(0, -500, 0), forgeLight = new THREE.Vector3(...forgeFlame);
@@ -460,6 +504,10 @@ export async function createBenchScene(canvas: HTMLCanvasElement, options: { hou
       pose = VIEWS[name];
     },
     setHour(next) { if (Number.isFinite(next)) hour = next; },
+    setPiece(position) {
+      piece.visible = !!position;
+      if (position) { piece.position.set(position[0]!, position[1]!, position[2]!); piece.rotation.set(.3, position[0]! * .9, .2); }
+    },
     render(time) {
       if (disposed) return;
       const t = Number.isFinite(time) ? time : 0;
@@ -482,6 +530,7 @@ export async function createBenchScene(canvas: HTMLCanvasElement, options: { hou
       if (disposed) return;
       disposed = true;
       fires.dispose(); windows.dispose(); atmosphere.dispose();
+      scene.remove(piece); pieceGeometry.dispose(); pieceMaterial.dispose();
       for (const mesh of meshes) { scene.remove(mesh); mesh.geometry.dispose(); mesh.dispose(); }
       clay.dispose(); land.dispose(); post.dispose(); renderer.dispose();
     },

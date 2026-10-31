@@ -13,6 +13,6 @@ Work in checkpoints: if a session ends before the part is done, leave everything
 
 ## Tasks
 - [x] **EL01 — A visible, deterministic effects bench and the factory** · Seed/clock, source lifecycle, quality and disposal; show sparse fireflies and embers in the existing HDR scene.
-- [ ] **EL10 — The whole effects library, handed across.** Smoke from real chimneys, dust in real shafts, sparks and the Forge flight trail on real events, fireflies and embers; deterministic and bounded on every quality tier, no leaks; a concrete adapter for an existing stream cue so main can switch each one on; bench stills at stream distance that make the town feel alive.
+- [x] **EL10 — The whole effects library, handed across.** Smoke from real chimneys, dust in real shafts, sparks and the Forge flight trail on real events, fireflies and embers; deterministic and bounded on every quality tier, no leaks; a concrete adapter for an existing stream cue so main can switch each one on; bench stills at stream distance that make the town feel alive.
 
 ## Backlog
