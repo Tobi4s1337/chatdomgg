@@ -7,9 +7,10 @@ That scene is the town people walk: its castle, streets, homes, garden edges, ma
 approved home with its attached Forge parts. The bytes are immutable and identified by SHA-256. The browser decodes
 those exact bytes and renders them. It never regenerates the town.
 
-FW01 (this state) covers the scene, its validation, its bytes and the current-town artifact. Still to come: the
-collision compiler (`packages/voxel/src/collision`, FW02), the loaded-state provider with its store, revisions and
-anchors (FW03), and the furnisher and GET handlers (FW04).
+FW01 covers the scene, its validation, its bytes and the current-town artifact. FW02 adds the collision compiler
+(`packages/voxel/src/collision`) and this folder's one collision adapter (`collision.ts`), so server and browser walk
+the same solids. Still to come: the loaded-state provider with its store, revisions and anchors (FW03), and the
+furnisher and GET handlers (FW04).
 
 ## Exports (`apps/realm/src/founded/index.ts`)
 
@@ -169,7 +170,8 @@ gardens. Every one of those is a placement here, so nothing else needs adding.
    const manifest = RealmFoundedManifestSchema.parse(await (await fetch(`/api/realm/founded/${kingdomId}`, { cache: 'no-store' })).json());
    const bytes = new Uint8Array(await (await fetch(`/api/realm/founded/scenes/${manifest.sceneHash}`)).arrayBuffer());
    const scene = await decodeFoundedScene(bytes, manifest);   // throws on any mismatch; never regenerate
-   // then compile the same scene's CollisionWorld (FW02) and join with the actual ticket
+   const collision = compileFoundedCollision(scene, { terrain: terrainFromRenderField(field) }); // see "Collision"
+   // then join with the actual ticket, with collision.revision === manifest.collisionRevision
    ```
 
 3. **Entry, now (SIMULATED).** Read the two artifact files instead of fetching, then call the same
@@ -178,9 +180,144 @@ gardens. Every one of those is a placement here, so nothing else needs adding.
 4. **Transforms.** A placement sets `yaw = rotation × π/2` about the blueprint's local origin, then translates by
    `position`, in metres. This matches `transformCardinalPoint` and the existing `foundedContent`.
 5. **Terrain.** The renderer keeps sampling `terrainHeight(scene.plan, x, z)` from the exact plan. Its existing 1 m
-   surface, half-metre worker occupancy, water, horizon and warm materials stay as they are. FW02 gives server and
-   browser the same terrain/collision adapter.
+   surface, half-metre worker occupancy, water, horizon and warm materials stay as they are. Collision reuses the
+   renderer's own sampled field (below), so both ends stand on the same half-metre ground.
 6. **Do not** add the procedural anvil, local saved homes or parts, or a seed or tier from a URL to a founded mount.
+
+## Collision (FW02)
+
+The same decoded scene compiles to the same immutable `CollisionWorld` on both ends. The pure compiler lives in
+`packages/voxel/src/collision/` and imports only `@chatdom/shared` and `@chatdom/shared/realm`, with no world, content,
+web, Three or Node modules. `collision.ts` in this folder is the one founded adapter. It is browser-safe too: a trial
+browser bundle is 164 KB minified with no `node:` imports.
+
+```ts
+// packages/voxel/src/collision/index.ts (main registers it as @chatdom/voxel/collision)
+COLLISION_COMPILER_VERSION = 1;  COLLISION_LIMITS;  class CollisionCompileError { code: 'voxel.collision-compile' }
+collisionSolidity(materials: readonly { id: number; solid: boolean }[]): CollisionSolidity
+compileCollisionAsset(blueprint: CollisionBlueprint, solidity: CollisionSolidity): CollisionAsset
+class CollisionAssetCache { constructor(limit = 512); resolve(key, blueprint, solidity): CollisionAsset; readonly size }
+terrainFootprint(terrain: SampledTerrain): TerrainFootprint;  terrainBoxes(terrain, out: number[]): number
+compileCollisionWorld(input: { revision: number; materials; blueprints: ReadonlyMap<string, CollisionBlueprint>;
+  placements: readonly { id; blueprint; position: Vec3; rotation }[]; terrain: SampledTerrain; cache?: CollisionAssetCache }): CompiledCollisionWorld
+interface CompiledCollisionWorld extends CollisionWorld { footprint: TerrainFootprint; stats: CollisionWorldStats }
+interface SampledTerrain { cellMetres; originX; originZ; columns; rows; heights /* tops in cells */; bottom; ceiling }
+
+// apps/realm/src/founded/collision.ts (also in this folder's barrel)
+FOUNDED_TERRAIN_SAMPLER = 1;  FOUNDED_TERRAIN  // 0.5 m cells, 16 m chunks, bottom -16, ceiling 496, ground > -4
+class FoundedCollisionError { code: 'realm.founded-collision' }
+sampleFoundedTerrain(plan: SettlementPlan): SampledTerrain       // server: pure, cache per plan revision
+terrainFromRenderField(field: RenderedTerrainField): SampledTerrain // browser: reuse prepareTerrainField(plan)
+compileFoundedCollision(scene: RealmFoundedScene, options?: { terrain?: SampledTerrain; cache?: CollisionAssetCache }): CompiledCollisionWorld
+foundedCollisionKey(geometryDigest: string): string             // `${digest}:c${compiler}:t${sampler}`
+```
+
+What the compiler guarantees:
+
+- **Final cells decide.** Each blueprint's ordered operations resolve on a coordinate-compressed grid. That grid is
+  cut only where an operation starts or ends, so it is exact at the asset's own lattice (build 0.125 m, avatar
+  0.0625 m) and never larger than the asset's dense volume.
+  - Later operations overwrite earlier ones, and material zero carves.
+  - Solidity is `VoxelMaterial.solid` of the final material, so glass is solid to bodies.
+  - An unknown material ID anywhere in a blueprint refuses it.
+- **Openings survive.** Final solid cells are coalesced greedily: along X, then Z, then Y, only over solid cells. The
+  boxes are disjoint and cover exactly the solid cells, so a door, passage or one-cell pane stays as authored.
+  Boxes are rotated by the placement's cardinal turn (`transformCardinalPoint`) and translated, never resnapped.
+- **Terrain.** Equal-height half-metre columns merge into rectangles. Each is solid from `bottom` to its own top,
+  so every half-metre step keeps its face. Water is the real lake bed with the visible sheet above it, never a
+  floor and never filled in.
+- **Unknown space blocks.** Six barriers enclose the known volume: west, east, south and north of the terrain
+  footprint, below `bottom` and above `ceiling`. Their outer faces are at ±Infinity, which the solver and camera
+  occlusion handle. Bounds that cannot be read (NaN, or min > max) return the barriers, never air.
+- **Queries.** A query returns every box that intersects or touches its bounds, without duplicates. The order is
+  stable: placements by ID in code-unit order, each in asset order, then terrain, then barriers. Boxes and arrays
+  are frozen and created once per box.
+  - The index is a horizontal bucket grid with 4 m buckets. Its edge doubles if the grid would pass 1M buckets.
+  - A query's only workspace is one mark per box, allocated with the world. There is no dense fine grid over the
+    kingdom.
+- **Identity.** `revision` must be a uint32. A cache key is the caller's immutable asset key (`assetHash`), the
+  compiler version and the set of solid material IDs. A change in solidity therefore recompiles, and FW03's
+  recompile after one home changes reuses every other asset.
+
+**Terrain: occupancy versus the visible ground.** Collision samples exactly what the renderer's terrain worker
+samples, with the same recipe:
+
+- 16 m chunks from the floored plan bounds.
+- 0.5 m columns sampled at their centres with `terrainHeight`.
+- Tops rounded to the half-metre lattice.
+- A base at -16 m and a ceiling 32 chunks above it.
+
+The visible ground is a 1 m tessellation of the continuous `terrainHeight`, so it can sit up to about a quarter
+metre above or below a column top. Walking eases the feet onto the visible surface; collision never turns a step
+into a ramp.
+
+Home plinths keep the rounded terrain at or below every interior floor. In the artifact this holds for all 240
+homes, sampled under every floor-level carve, and in the worst case the two are exactly level. The parity test's
+walker stands on the owned home's floor at `position.y + 0.25`.
+
+Only plan v2 with landform v1 has a sampler. Anything else is `FoundedCollisionError`, never flattened ground.
+`foundedCollisionKey` binds the compiler and sampler versions to FW01's `geometryDigest`. That digest already covers
+the plan, materials, assets and placements. FW03 maps one key to one uint32 and never reuses it. The FW01 digest
+formula and the artifact are unchanged.
+
+### Browser recipe (main/integrator)
+
+1. Register `"./collision": "./src/collision/index.ts"` in `packages/voxel/package.json`. Then change the single
+   relative import at the top of `collision.ts` to `@chatdom/voxel/collision`.
+2. Give the browser `collision.ts` by the same route chosen for `validate.ts`/`codec.ts`. Either move it with them
+   into `packages/world/src/founded-world/`, which adds `@chatdom/voxel` as a world dependency (voxel does not depend
+   on world, so there is no cycle), or add the realm subpath `"./founded-collision": "./src/founded/collision.ts"`.
+3. In the entry adapter, after `decodeFoundedScene`:
+   - Take the field the terrain worker already builds for this plan: `prepareTerrainField(scene.plan)` in
+     `apps/web/src/kingdom/terrain-worker.ts`.
+   - Call `compileFoundedCollision(scene, { terrain: terrainFromRenderField(field) })`. Reusing the field avoids a
+     second sampling pass.
+   - Without a field, `compileFoundedCollision(scene)` samples the plan itself and gives the identical world.
+4. Pass the result as `KingdomWalkBinding.collision` / `KingdomEntryConnection.collision`. Its `revision` is
+   `manifest.collisionRevision`. It replaces the test-only market-floor `CollisionWorld`. No other change to
+   movement or the room is needed.
+
+### Evidence (SIMULATED authority, actual town geometry)
+
+`parity.test.ts` decodes the FW01 artifact bytes twice:
+
+- as the server would: it samples the plan itself.
+- as a browser would: a separate copy of the bytes, the renderer's own terrain field and its own asset cache.
+
+It compiles both and checks:
+
+- **Same world.** The terrain, stats and 3,000 deterministic queries across the footprint and past its edges are
+  identical on both ends. Queries are stable and duplicate-free.
+- **Doorway.** `stepPlayer` carries a walker from the owned home's front garden (`plot:2023:8`, the approved
+  rebuild) through its carved doorway. The walker lands grounded on the interior floor and is not stuck. Two
+  metres along, the same walk stops at the solid front wall. Both ends give bit-identical states.
+- **Glass and the attached part.** Every one-cell glass pane of that home is solid. The attached part
+  `forge:simulated-run-2` adds solids only inside its own bounds; a world compiled without it lacks them.
+- **Cardinal turns.** For each of turns 0 to 3, the smallest placement standing clear of all others matches its
+  replayed final cells, cell for cell, above the ground.
+- **Terrain and edges.** A walker climbs and descends a real half-metre step in open ground. At the west edge it
+  stops exactly at `minX + 0.28`. Space beyond the footprint, below the bottom and above the ceiling is solid.
+
+Measured on this shared host, with load average 12 to 19 on 9 cores:
+
+| Measure | Value |
+|---|---|
+| Boxes | 174,392: 155,787 structure, 18,599 terrain, 6 barriers |
+| Placements and assets | 924 placements, 49 assets |
+| Index | 15,946 buckets of 4 m, 327,647 entries, 10.4 MB packed |
+| Heap growth | about 27–29 MB, including decode |
+| Terrain sampling (`sampleFoundedTerrain`) | 7.1–12.3 s for 772,096 columns |
+| Compile with sampled terrain | 0.48–0.77 s |
+| Recompile, cold asset cache | 0.38 s |
+| Body-sized query | 2.2 µs mean, 3 boxes mean, 56 at most (200,000 queries) |
+| Renderer's `prepareTerrainField` in Node | about 41 s (the browser already pays this to draw the ground) |
+
+**For FW03.**
+
+- Terrain sampling dominates, because `terrainHeight` grades about 193k corners. Sample once per plan revision,
+  outside an opening's critical window, and keep it, for example next to `NativeTownCache`. An opening then
+  compiles in under a second.
+- Keep one `CollisionAssetCache` per kingdom, so a home or Forge change recompiles only its own assets.
 
 ## Needs and absent dependencies
 
