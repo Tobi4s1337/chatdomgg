@@ -402,6 +402,43 @@ describe('Twitch moments: one sub travels from Twitch to a named home and nowher
     expect(moments.sample(now + 6000).carts).toEqual([]);
     expect(moments.sample(now + 6000).parcels.some(p => p.key === 'm-fern-late' && p.elapsed === null)).toBe(true);
 
+    // A capital-shaped gift of 200 with 60 disclosed recipients: one cart, waves of six street by street, at most 48 flights
+    // and six knocks, no per-recipient caption or cut, and every disclosed parcel resting exactly once afterwards.
+    {
+      now += 10_000;
+      const ward = Array.from({ length: 60 }, (_, i) => person(String(70_000 + i)));
+      ward.slice(0, 12).forEach((id, i) => people.set(id, { disclosure: 'named', displayName: `Warden ${i + 1}`, homeSlot: 100 + i }));
+      local.deliver(notice(now, ROWAN, 'community_sub_gift', { id: 'cg-ward', total: 200, sub_tier: '1000' }));
+      ward.forEach((id, i) => local.deliver(notice(now + i * 10, ROWAN, 'sub_gift',
+        { duration_months: 1, cumulative_total: null, recipient_user_id: id, recipient_user_name: `Wayfarer${i}`, recipient_user_login: `wayfarer${i}`, sub_tier: '1000', community_gift_id: 'cg-ward' },
+        `m-ward-${i}`)));
+      await settle(later);
+      const begins = firstAt(now, now + 10_000, at => moments.sample(at).carts.length > 0);
+      let flying = 0, homeCaptions = 0;
+      const launched = new Set<string>();
+      for (let at = begins; at < begins + 40_000; at += 100) {
+        const frame = moments.sample(at);
+        expect(frame.carts.length).toBeLessThanOrEqual(1);
+        const air = frame.parcels.filter(p => p.elapsed !== null);
+        for (const p of air) launched.add(p.key);
+        flying = Math.max(flying, air.length);
+        homeCaptions += frame.captions.filter(c => c.at.kind === 'home').length;
+      }
+      expect(launched.size).toBe(48);
+      expect(flying).toBeLessThanOrEqual(48);
+      expect(homeCaptions).toBe(0);
+      const gathering = moments.sample(begins + 4000);
+      expect(gathering.captions[0]).toMatchObject({ title: 'Rowan', line: 'sends 200 gifts' });
+      expect(gathering.captions[0]!.detail).toMatch(/^for [^,]+, [^,]+, [^,]+ and 197 others$/u);
+      expect(gathering.audio.filter(a => a.cue === 'parcel-land').length).toBeLessThanOrEqual(6);
+      const after = moments.sample(firstAt(begins, begins + 45_000, at => moments.sample(at).carts.length === 0) + 1000);
+      const resting = after.parcels.filter(p => p.key.startsWith('m-ward-'));
+      expect(resting.every(p => p.elapsed === null)).toBe(true);
+      expect(new Set(resting.map(p => p.key)).size).toBe(60);
+      expect(resting.filter(p => p.to.kind === 'home')).toHaveLength(12);
+      now = begins + 46_000;
+    }
+
     // Writes stay honestly unavailable without a bound service; nothing is dispatched.
     const decree = { kind: 'poll-create', title: 'Where shall the new well go?', choices: ['By the bridge', 'In the market'], durationSeconds: 120 };
     const preview = moments.previewAction(decree);

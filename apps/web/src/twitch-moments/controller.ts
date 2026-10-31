@@ -71,6 +71,8 @@ export interface FocusFrame {
    * settles on its own doorstep in frame. Null keeps the one shot.
    */
   readonly follow: { readonly subject: MomentSubject; readonly at: number } | null;
+  /** Where the beat's located parcels are bound (at most twelve), so a gathering shot looks toward them. */
+  readonly toward: readonly MomentSubject[];
 }
 /** One parcel: in flight (`elapsed` ms since its launch) or resting at its destination (`elapsed` null). */
 export interface ParcelFrame {
@@ -154,6 +156,17 @@ function followOf(beat: GiftBeat): FocusFrame['follow'] {
   const first = beat.parcels.filter(p => p.to.kind === 'home' && p.launchAt !== null).sort((a, b) => a.launchAt! - b.launchAt!)[0];
   if (!first || first.to.kind !== 'home') return null;
   return { subject: { kind: 'home', slot: first.to.slot }, at: first.launchAt! + PARCEL_BEAT.lift + first.flight * 0.4 };
+}
+/** The distinct places a cart's parcels fly to, in launch order, bounded for the shot's composition. */
+function towardOf(beat: GiftBeat): MomentSubject[] {
+  if (beat.mode !== 'cart') return [];
+  const seen = new Set<string>(), out: MomentSubject[] = [];
+  for (const p of beat.parcels) {
+    const id = p.to.kind === 'home' ? `home:${p.to.slot}` : 'gate';
+    if (p.launchAt === null || seen.has(id) || out.length >= 12) continue;
+    seen.add(id); out.push(subjectOf(p.to));
+  }
+  return out;
 }
 /** Gift groups already celebrated in this session; a later update to one is state only. Bounded, oldest first out. */
 const CELEBRATED_LIMIT = 256;
@@ -367,12 +380,12 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
       if (beat.kind === 'home-banner') {
         const opacity = beat.style === 'unfurl' ? bannerPose(t).caption : flourishPose(t).caption;
         caption({ id: beat.id, at: { kind: 'home', slot: beat.slot }, title: beat.name, line: beat.line, detail: null, opacity });
-        if (!focus && !presentation.busy) focus = { id: beat.id, subject: { kind: 'home', slot: beat.slot }, startAt: beat.startAt, endAt: beat.endAt, cut: presentation.mood === 'show', wide: false, follow: null };
+        if (!focus && !presentation.busy) focus = { id: beat.id, subject: { kind: 'home', slot: beat.slot }, startAt: beat.startAt, endAt: beat.endAt, cut: presentation.mood === 'show', wide: false, follow: null, toward: [] };
         continue;
       }
       for (const frame of giftCaptions(beat, atMs)) caption(frame);
       const subject: MomentSubject = beat.mode === 'cart' ? { kind: 'place', place: 'market' } : subjectOf(beat.parcels[0]!.to);
-      if (!focus && !presentation.busy) focus = { id: beat.id, subject, startAt: beat.startAt, endAt: beat.endAt, cut: presentation.mood === 'show', wide: beat.mode === 'cart', follow: followOf(beat) };
+      if (!focus && !presentation.busy) focus = { id: beat.id, subject, startAt: beat.startAt, endAt: beat.endAt, cut: presentation.mood === 'show', wide: beat.mode === 'cart', follow: followOf(beat), toward: towardOf(beat) };
     }
 
     // Every cue of a live beat is listed with its absolute time; the view plays each ID once and cancels on removal.

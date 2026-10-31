@@ -30,6 +30,12 @@ const RUNS = [
   ['cart', PHONE, [['anticipation', 3800], ['action', 7000], ['settle', 11800]]],
   ['cart', STREAM, [['anticipation', 3800], ['action', 7000], ['settle', 11800]]],
   ['tiers', STREAM, [['anticipation', 500], ['action', 1500], ['settle', 5200]]],
+  ['neighbours', DESKTOP, [['anticipation', 600], ['action', 2200], ['settle', 6000]]],
+  ['cloak', PHONE, [['anticipation', 500], ['action', 1500], ['settle', 5200]]],
+  ['lapse', PHONE, [['anticipation', 400], ['action', 1300], ['settle', 3400]]],
+  ['rejoin', STREAM, [['anticipation', 600], ['action', 2200], ['settle', 6000]]],
+  ['friend', DESKTOP, [['anticipation', 3800], ['action', 7000], ['settle', 11800]]],
+  ['ward', STREAM, [['anticipation', 3800], ['action', 6800], ['settle', 14000]]],
 ].filter(([scenario]) => !only || only.includes(scenario));
 
 let server, browser, release;

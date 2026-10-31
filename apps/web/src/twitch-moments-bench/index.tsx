@@ -16,9 +16,10 @@ const START = Date.UTC(2026, 9, 30, 19, 40);
 interface LogLine { readonly id: number; readonly text: string; readonly tone: 'public' | 'refused' | 'source' }
 
 /** Bench scenarios: each opens on one deterministic beat so a capture can seek straight into it. */
-const SCENARIOS = ['banner', 'neighbours', 'restored', 'idle', 'resub', 'tiers', 'lapse', 'rejoin', 'gift', 'forward', 'cart', 'friend'] as const;
+const SCENARIOS = ['banner', 'neighbours', 'restored', 'idle', 'resub', 'tiers', 'lapse', 'rejoin', 'cloak', 'gift', 'forward', 'cart', 'friend', 'ward'] as const;
 type Scenario = typeof SCENARIOS[number];
 const HEADINGS: Partial<Record<Scenario, string>> = { gift: 'A gift at the door', forward: 'A gift paid forward', cart: 'The gift cart', friend: 'From a friend of the realm',
+  ward: 'Parcels for the whole street', cloak: 'A rose cloak',
   resub: 'Seven months under the banner', tiers: 'A finer cloth', lapse: 'A banner furled', rejoin: 'The banner, again' };
 
 const DECREE = { kind: 'poll-create', title: 'Where shall the new well be dug?', choices: ['By the old bridge', 'In the market square', 'Up on Heather Hill'], durationSeconds: 180 } as const;
@@ -76,6 +77,17 @@ export default function TwitchMomentsBench() {
       // Named in chat, but without a home in Willowmere yet: support for Moss is welcomed at the gate.
       { id: benchPerson(9), name: 'Moss', slot: null, disclosure: 'named' },
     ];
+  }
+
+  /**
+   * More named neighbours for the capital-shaped gift: every other home with a doorstep, in street order. They are
+   * SIMULATED citizens of the bench hamlet like the rest, entered into the same directory and presence frame.
+   */
+  function wardCitizens(s: MomentStage, taken: readonly BenchCitizen[]): BenchCitizen[] {
+    const used = new Set(taken.flatMap(c => (c.slot === null ? [] : [c.slot])));
+    const names = ['Alder', 'Bramble', 'Clover', 'Dunlin', 'Ember', 'Fennel', 'Garnet', 'Heron', 'Ivy', 'Jasper', 'Kestrel', 'Linden', 'Marigold', 'Nettle', 'Oriel', 'Plover'];
+    return s.layout.homes.filter(h => !used.has(h.slot) && s.doorAnchor(h.slot)).slice(0, names.length)
+      .map((h, i) => ({ id: benchPerson(20 + i), name: names[i]!, slot: h.slot, disclosure: 'named' as const }));
   }
 
   function framing(s: MomentStage, people: readonly BenchCitizen[]): CameraPose {
@@ -175,8 +187,9 @@ export default function TwitchMomentsBench() {
       try {
         stage = await createMomentStage(canvas, { seed: query.get('seed') ?? 'willowmere', hour, signal: construction.signal, onProgress: f => { setProgress(f); if (f > 0.6) setPhase('Hanging the lanterns'); } });
         if (disposed) { stage.dispose(); return; }
-        const people = chooseCitizens(stage);
-        setCitizens(people);
+        const chosen = chooseCitizens(stage);
+        const people = scenario === 'ward' ? [...chosen, ...wardCitizens(stage, chosen)] : chosen;
+        setCitizens(chosen);
         basePose = framing(stage, people);
         stage.setPresence(presenceFor(people, stage.layout.homes.map(h => h.slot)));
         moments = createTwitchMoments({ kingdomId: BENCH_KINGDOM, expectedOrigin: live ? 'live' : 'simulated', clock });
@@ -200,11 +213,11 @@ export default function TwitchMomentsBench() {
           await settle();
           const [juniper, quiet] = people, rowan = people.find(p => p.name === 'Rowan'), hazel = people.find(p => p.name === 'Hazel'), moss = people.find(p => p.name === 'Moss')!;
           const giver = rowan ?? juniper!, other = hazel ?? quiet!;
-          if (scenario === 'resub' || scenario === 'tiers' || scenario === 'lapse' || scenario === 'rejoin') {
+          if (scenario === 'resub' || scenario === 'tiers' || scenario === 'cloak' || scenario === 'lapse' || scenario === 'rejoin') {
             // An hour earlier Juniper already flew a banner: the beat now is the change, not the first raising.
             now = START - 3_600_000; await deliver('subscribe', juniper!);
             if (scenario === 'rejoin') { now = START - 1_800_000; await deliver('lapse', juniper!); }
-            now = START; await deliver(scenario === 'resub' ? 'resub' : scenario === 'tiers' ? 'tier-3' : scenario === 'lapse' ? 'lapse' : 'rejoin', juniper!);
+            now = START; await deliver(scenario === 'resub' ? 'resub' : scenario === 'tiers' ? 'tier-3' : scenario === 'cloak' ? 'tier-2' : scenario === 'lapse' ? 'lapse' : 'rejoin', juniper!);
             setBeatAt(START);
           } else if (scenario === 'gift') {
             await gift(s => s.giftOne(giver, juniper!), `${giver.name} gifts a sub to Juniper`);
@@ -214,6 +227,10 @@ export default function TwitchMomentsBench() {
             await gift(s => s.giftGroup(giver, 6, [juniper!, other, moss, quiet!]), `${giver.name} gifts 6 subs · 4 recipients disclosed`);
           } else if (scenario === 'friend') {
             await gift(s => s.giftGroup('anonymous', 3, [juniper!], '2000'), 'An anonymous gifter gives 3 subs · 1 recipient disclosed');
+          } else if (scenario === 'ward') {
+            // Thirty gifts, eighteen recipients disclosed: waves of parcels street by street, the rest ride on unnamed.
+            const disclosed = people.filter(p => p !== giver);
+            await gift(s => s.giftGroup(giver, 30, disclosed), `${giver.name} gifts 30 subs · ${disclosed.length} recipients disclosed`);
           } else if (scenario === 'restored') {
             now = START - 3_600_000; await deliver('subscribe', juniper!); await deliver('subscribe', quiet!);
             now = START - 3_000_000; await gift(s => s.giftOne(rowan ?? juniper!, juniper!), 'A gift an hour ago');

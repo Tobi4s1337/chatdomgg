@@ -4,8 +4,8 @@ import { CELL, type BannerKit } from './banner';
 import { cartPose, GIFT_LIMITS, parcelPose } from './choreography';
 import type { CartFrame, MomentFrame, ParcelFrame } from './controller';
 import {
-  CANOPY_CELLS, CART_CELLS, PARCEL_CELLS, PONY_CELLS, canopyBlueprint, cartBlueprint, parcelBlueprint, ponyBlueprint, ponyLegBlueprint, ponyTailBlueprint,
-  wheelBlueprint, type GiftTier, type SealKind,
+  CANOPY_CELLS, CART_CELLS, PARCEL_CELLS, PONY_CELLS, canopyBlueprint, cartBlueprint, giftParts, parcelBlueprint, ponyBlueprint, ponyLegBlueprint, ponyTailBlueprint,
+  wheelBlueprint,
 } from './gift-art';
 import type { GiftDestination } from './gift-beat';
 
@@ -28,11 +28,8 @@ const UP = new THREE.Vector3(0, 1, 0);
 const cells = (x: number, y: number, z: number) => new THREE.Vector3(x * CELL, y * CELL, z * CELL);
 const v3 = (p: Vec3) => new THREE.Vector3(p[0], p[1], p[2]);
 
-export function giftBlueprints(kit: BannerKit): VoxelBlueprint[] {
-  const tiers: GiftTier[] = ['1', '2', '3'], seals: SealKind[] = ['named', 'friend', 'forward'];
-  return [...tiers.flatMap(t => seals.map(s => parcelBlueprint(t, s, kit))), canopyBlueprint(kit), cartBlueprint(kit), wheelBlueprint(kit), ponyBlueprint(kit),
-    ponyLegBlueprint(kit), ponyTailBlueprint(kit)];
-}
+/** Every gift part, meshed once up front: parcels for each tier and seal, canopy, cart, wheel and pony. */
+export const giftBlueprints = giftParts;
 
 /** A polyline sampled by arc length, extended straight past either end so a pony can lead a cart off the map edge. */
 class Path {

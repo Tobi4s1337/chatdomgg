@@ -302,23 +302,29 @@ export function createTwitchMomentView(host: MomentViewHost) {
     return checked(eye, subject, portrait ? 56 : 44);
   }
 
-  /** The gathering: the cart's stop seen across its street, raised enough to watch parcels lift over the roofs. */
-  function placeShot(place: 'market' | 'gate', prior: CameraPose, toward: MomentSubject | null): CameraPose | null {
+  /**
+   * The gathering: the cart's stop seen from behind it, looking toward where its parcels are bound, raised enough to
+   * watch the waves lift over the roofs. A wide spread of homes pulls the shot back so the whole street stays in it.
+   */
+  function placeShot(place: 'market' | 'gate', prior: CameraPose, toward: readonly MomentSubject[]): CameraPose | null {
     const { width, height } = host.viewport(), portrait = height > width;
     let point: THREE.Vector3, across: THREE.Vector3;
     if (place === 'market') {
       const stop = gifts.stop();
       if (!stop) return null;
       point = stop.position; across = new THREE.Vector3().crossVectors(stop.tangent, new THREE.Vector3(0, 1, 0)).normalize();
-      // Stand behind the cart, looking toward the home the shot will follow, so the wave lifts away over the roofs in frame.
-      const bound = toward?.kind === 'home' ? gifts.destination({ kind: 'home', slot: toward.slot }) : null;
-      const direction = bound ? bound.sub(point).setY(0) : null;
-      if (direction && direction.lengthSq() > 4) {
-        const toward = direction.normalize();
-        const side = new THREE.Vector3().crossVectors(toward, new THREE.Vector3(0, 1, 0)).normalize();
-        const target = point.clone().addScaledVector(toward, portrait ? 7 : 9).add(new THREE.Vector3(0, portrait ? 3.6 : 3.2, 0));
-        const eye = point.clone().addScaledVector(toward, portrait ? -14 : -12).addScaledVector(side, portrait ? 2.5 : 5).add(new THREE.Vector3(0, portrait ? 7.5 : 6, 0));
-        const aimed = checked(eye, target, portrait ? 62 : 50);
+      const bound = toward.flatMap(t => { const d = t.kind === 'home' ? gifts.destination({ kind: 'home', slot: t.slot }) : gifts.destination({ kind: 'gate' }); return d ? [d] : []; });
+      const centre = bound.length ? bound.reduce((sum, d) => sum.add(d), new THREE.Vector3()).divideScalar(bound.length) : null;
+      const direction = centre ? centre.clone().sub(point).setY(0) : null;
+      if (centre && direction && direction.lengthSq() > 4) {
+        const ahead = direction.normalize();
+        const side = new THREE.Vector3().crossVectors(ahead, new THREE.Vector3(0, 1, 0)).normalize();
+        // How far the destinations fan out across the line of sight: a ward needs a wider, higher view than one door.
+        const spread = Math.min(1, Math.max(...bound.map(d => Math.abs(d.clone().sub(centre).dot(side)))) / 24);
+        const back = (portrait ? 14 : 12) + spread * 6, rise = (portrait ? 7.5 : 6) + spread * 3.5;
+        const target = point.clone().addScaledVector(ahead, (portrait ? 7 : 9) + spread * 3).add(new THREE.Vector3(0, (portrait ? 3.6 : 3.2) + spread, 0));
+        const eye = point.clone().addScaledVector(ahead, -back).addScaledVector(side, portrait ? 2.5 : 5).add(new THREE.Vector3(0, rise, 0));
+        const aimed = checked(eye, target, (portrait ? 62 : 50) + spread * 6);
         if (aimed) return aimed;
       }
     } else {
@@ -333,7 +339,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
     return checked(eye, target, portrait ? 60 : 48);
   }
 
-  const shotFor = (subject: MomentSubject, prior: CameraPose, toward: MomentSubject | null = null) =>
+  const shotFor = (subject: MomentSubject, prior: CameraPose, toward: readonly MomentSubject[] = []) =>
     subject.kind === 'home' ? homeShot(subject.slot) : placeShot(subject.place, prior, toward);
 
   /** World point a caption hangs above. */
@@ -345,7 +351,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
       return d ? new THREE.Vector3(...d.doorstep).add(new THREE.Vector3(0, 2.4, 0)) : null;
     }
     const point = subject.place === 'market' ? gifts.stop()?.position : (() => { const g = host.placeAnchor?.('gate'); return g ? new THREE.Vector3(...g.position) : null; })();
-    return point ? point.clone().add(new THREE.Vector3(0, subject.place === 'market' ? 3.4 : 2.6, 0)) : null;
+    // Just over the cart's pennant (2.1 m), so the card reads as the cart's, not the stall's behind it.
+    return point ? point.clone().add(new THREE.Vector3(0, 2.6, 0)) : null;
   }
 
   const mix = (a: CameraPose, b: CameraPose, t: number): CameraPose => {
@@ -369,7 +376,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
     }
     if (!director && focus && host.camera && atMs < focus.endAt) {
       const abort = new AbortController(), lease = host.camera.acquire('twitch-moments', DIRECTOR_PRIORITY, abort.signal);
-      const prior = lease?.read(), shot = lease && prior ? shotFor(focus.subject, prior, focus.follow?.subject ?? null) : null;
+      const prior = lease?.read(), shot = lease && prior ? shotFor(focus.subject, prior, focus.follow ? [focus.follow.subject] : focus.toward) : null;
       // No legal shot of a supplied subject: hand the camera straight back rather than guess one.
       if (lease && prior && shot) director = { focus, lease, prior, shot, abort, leaving: null, from: null };
       else if (lease) { lease.release(); abort.abort(); }
