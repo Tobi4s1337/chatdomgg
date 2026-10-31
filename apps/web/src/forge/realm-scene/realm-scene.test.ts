@@ -36,13 +36,15 @@ describe('room-fed Forge scene', () => {
     const settled = vi.fn(), unsubscribe = vi.fn(), hide = vi.fn(), phrase = vi.fn(() => true);
     const feed = { subscribe(next: ForgeObservationHandlers) { handlers = next; return unsubscribe; }, settled };
     const submit = vi.fn(async (job: VoxelJobInput) => executeVoxelJob({ ...job, id: 1 }));
-    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1, .1, 300), material = createVoxelMaterial(MATERIALS, 'build');
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, 1440 / 900, .1, 300), material = createVoxelMaterial(MATERIALS, 'build');
+    const canvas = { clientWidth: 1440, clientHeight: 900 };
     const adapter = createRealmForgeScene({ scene, camera, material, pool: { submit } as unknown as VoxelWorkerPool,
-      canvas: { clientWidth: 1440, clientHeight: 900 } as HTMLCanvasElement, anvil: new THREE.Vector3(5, 0, 8), home: slot => slot === 7 ? home : undefined,
+      canvas: canvas as HTMLCanvasElement, anvil: new THREE.Vector3(5, 0, 8), home: slot => slot === 7 ? home : undefined,
       sound: { phrase } as unknown as ReturnType<typeof createKingdomSound>, feed, hideAttachment: hide });
     try {
       handlers.restored?.([attachment]); adapter.update(0, false);
       expect(submit).not.toHaveBeenCalled(); expect(settled).not.toHaveBeenCalled(); expect(phrase).not.toHaveBeenCalled();
+      expect(adapter.sources()).toEqual([]); expect(adapter.active()).toBe(false);
       let smoke: THREE.Points | undefined;
       scene.traverse(object => { const points = object as THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>; if (points.isPoints && points.material.uniforms.uMode?.value === 1) smoke = points; });
       expect(smoke).toBeDefined();
@@ -52,8 +54,15 @@ describe('room-fed Forge scene', () => {
         .applyAxisAngle(new THREE.Vector3(0, 1, 0), home.yaw).add(new THREE.Vector3(...home.position));
       expect(Math.abs(smoke!.geometry.getAttribute('position').getX(0) - emission.x)).toBeLessThan(.21);
       handlers.stage?.('opaque-activity', 'drafting'); adapter.update(1000, false);
+      expect(adapter.active()).toBe(true);
       expect(submit).not.toHaveBeenCalled(); expect(adapter.activeAttachmentId).toBeNull();
       expect(adapter.update(1100, true)).toBe(true);
+      camera.updateMatrixWorld(true);
+      // The waiting view must hold the anvil and neighbouring 4.625 m hearth/dragon together.
+      for (const x of [-1.7, 8.65]) for (const y of [-.125, 4.8]) for (const z of [-5, 1.45]) {
+        const p = new THREE.Vector3(x + 5, y, z + 8).project(camera);
+        expect(Math.abs(p.x)).toBeLessThan(.9); expect(Math.abs(p.y)).toBeLessThan(.9);
+      }
       handlers.ended?.('opaque-activity');
       expect(adapter.update(1150, true)).toBe(false);
       handlers.stage?.('opaque-activity', 'judging-piece');
@@ -84,6 +93,31 @@ describe('room-fed Forge scene', () => {
       expect(hide).toHaveBeenLastCalledWith(attachment.id, false); expect(settled).toHaveBeenCalledExactlyOnceWith(attachment.id);
       expect(clone.visible).toBe(false);
       expect(smokeAlpha()).toBe(true);
+      expect(adapter.sources().every(source => source.strength === 0)).toBe(true);
+      adapter.update(20350, true);
+      expect(adapter.sources()).toHaveLength(2);
+      expect(Math.max(...adapter.sources().map(source => source.strength))).toBeCloseTo(.85);
+      const normal = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), home.yaw);
+      expect(new THREE.Vector3(...adapter.sources()[0]!.normal).distanceTo(normal)).toBeLessThan(1e-8);
+      // Both standard canvases show the entire receiving home and its real mounted piece, including the foundation.
+      for (const [width, height] of [[1440, 900], [390, 844]]) {
+        canvas.clientWidth = width!; canvas.clientHeight = height!; camera.aspect = width! / height!;
+        adapter.update(20400, true); camera.updateMatrixWorld(true);
+        for (const [blueprint, origin] of [[decodedBlueprint, [0, 0, 0]], [expected.blueprint, socket.origin]] as const) {
+          for (const box of blueprint.boxes) if (box.material) for (const x of [box.from[0], box.to[0]]) for (const y of [box.from[1], box.to[1]]) for (const z of [box.from[2], box.to[2]]) {
+            const p = new THREE.Vector3(x + origin[0], y + origin[1], z + origin[2]).multiplyScalar(VOXEL_METRES.build)
+              .applyAxisAngle(new THREE.Vector3(0, 1, 0), home.yaw).add(new THREE.Vector3(...home.position)).project(camera);
+            expect(Math.abs(p.x)).toBeLessThan(.9); expect(Math.abs(p.y)).toBeLessThan(.9);
+          }
+        }
+        const localEye = camera.position.clone().sub(new THREE.Vector3(...home.position)).applyAxisAngle(new THREE.Vector3(0, 1, 0), -home.yaw);
+        expect(localEye.z).toBeGreaterThan(decodedBlueprint.size[2] * VOXEL_METRES.build);
+      }
+      const landedEye = camera.position.clone();
+      expect(adapter.update(23000, true)).toBe(true);
+      expect(camera.position.distanceTo(landedEye)).toBeLessThan(1e-8);
+      expect(settled).toHaveBeenCalledOnce();
+      adapter.update(23200, true); expect(adapter.sources()).toEqual([]);
       adapter.update(23000, false);
       handlers.committed?.(attachment, 'opaque-activity'); expect(submit).toHaveBeenCalledOnce();
       expect(adapter.activeAttachmentId).toBeNull();

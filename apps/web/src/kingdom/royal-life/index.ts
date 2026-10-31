@@ -82,7 +82,7 @@ function standardBannerMaterial(clay: VoxelRenderState, standard: RoyalStandard 
   return material;
 }
 
-export function createRoyalLife(scene: THREE.Scene, clay: VoxelRenderState, keep: WindowHouse | undefined, braziers: readonly RoyalBrazier[], standard?: RoyalStandard): {
+export function createRoyalLife(scene: THREE.Scene, clay: VoxelRenderState, keep: WindowHouse | undefined, braziers: readonly RoyalBrazier[], standard?: RoyalStandard, hearth = false): {
   keepMaterial: THREE.ShaderMaterial | undefined;
   standardMaterial: THREE.ShaderMaterial | undefined;
   update(timeSeconds: number, frame: KingdomPresenceFrame | undefined, hour: number): void;
@@ -139,7 +139,7 @@ export function createRoyalLife(scene: THREE.Scene, clay: VoxelRenderState, keep
       uniforms.uTime.value = timeSeconds;
       if (keepMaterial) keepMaterial.uniforms.uRoyalTime!.value = timeSeconds;
       if (standardMaterial) standardMaterial.uniforms.uRoyalTime!.value = timeSeconds;
-      const live = !!frame?.streamLive && frame.connection === 'fresh';
+      const live = hearth || (!!frame?.streamLive && frame.connection === 'fresh');
       root.visible = live;
       for (const source of lightSources) source.strength = live ? .8 : 0;
     },

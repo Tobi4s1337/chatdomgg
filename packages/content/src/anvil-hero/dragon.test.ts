@@ -66,24 +66,24 @@ describe('the sleeping dragon chimney', () => {
     expect(deep).toBeGreaterThanOrEqual(4);
   });
 
-  it.each(KITS)('%s reads asleep: chin on paws with air beneath, a neck dip and a folded wing below the stack', style => {
+  it.each(KITS)('%s has two separated paws supporting the long muzzle and wings below the stack', style => {
     const { at } = occupancy(style);
-    const height = (x: number) => { let h = 0; for (let z = 0; z < 18; z++) for (let y = 0; y < 16; y++) if (at(x, y, z)) h = Math.max(h, y + 1); return h; };
-    // Air under the tip of the chin, and between the forearms under the jaw.
-    expect(at(1, 1, 9)).toBe(0);
-    expect(at(1, 0, 9)).toBe(0);
-    expect([at(4, 0, 11), at(4, 1, 11)]).toEqual([0, 0]);
-    expect(at(4, 2, 11)).not.toBe(0);
-    // The neck dips well below the crown of the head and the shoulder hump either side of it.
-    let neck = 16;
-    for (let z = 7; z <= 11; z++) { let h = 0; for (let y = 0; y < 16; y++) if (at(8, y, z) && at(8, y, z) !== MAT.limestone && at(8, y, z) !== MAT.cream && at(8, y, z) !== MAT.goldLeaf) h = y + 1; neck = Math.min(neck, h); }
-    expect(neck).toBeLessThanOrEqual(4);
-    // Nothing but the stack rises above the wing's 9-cell peak.
-    for (let x = 0; x < 24; x++) if (x < 11 || x > 17) expect(height(x)).toBeLessThanOrEqual(9);
+    // Paws contact opposite sides of the jaw, with open air below its middle.
+    for (const z of [6, 11]) {
+      expect(at(5, 1, z)).not.toBe(0);
+      expect(at(5, 2, z)).not.toBe(0);
+    }
+    for (let x = 2; x <= 4; x++) for (const z of [8, 9, 10]) expect(at(x, 1, z)).toBe(0);
+    expect(at(3, 2, 9)).not.toBe(0);
+    // The paired wings rise over the coil on both flanks, but below the stack mouth.
+    expect(at(17, 7, 14)).not.toBe(0);
+    expect(at(17, 6, 3)).not.toBe(0);
+    for (let x = 0; x < 24; x++) if (x < 11 || x > 17)
+      for (let z = 0; z < 18; z++) for (let y = 12; y < 16; y++) expect(at(x, y, z)).toBe(0);
   });
 
   it('gives each kit its own materials, never its roof\'s as the back', () => {
-    const backs = KITS.map(style => { const { at } = occupancy(style); return at(16, 2, 4); });
+    const backs = KITS.map(style => { const { at } = occupancy(style); return at(20, 2, 8); });
     expect(new Set(backs).size).toBe(3);
     expect(backs).not.toContain(MAT.terracotta);
     expect(backs).not.toContain(MAT.slate);
@@ -93,7 +93,7 @@ describe('the sleeping dragon chimney', () => {
   it.each(KITS)('%s names its broad back as the surface a Forge finish recolours, not its roof', style => {
     const { at } = occupancy(style), surface = ANVIL_HERO_DRAGON_SURFACE[style], cells = new Map<number, number>();
     for (let z = 0; z < 18; z++) for (let y = 0; y < 16; y++) for (let x = 0; x < 24; x++) if (at(x, y, z)) cells.set(at(x, y, z), (cells.get(at(x, y, z)) ?? 0) + 1);
-    expect(at(16, 2, 4)).toBe(surface);
+    expect(at(20, 2, 8)).toBe(surface);
     expect(surface).not.toBe(STYLES[style].roof);
     expect(Math.max(...cells.values())).toBe(cells.get(surface));
   });

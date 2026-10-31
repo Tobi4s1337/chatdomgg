@@ -28,3 +28,31 @@ it('keeps the citizen name once when their home tag and speech are both visible'
     expect(citizens.speechLabels(camera, 900, 900, now, new Set())[0]?.name).toBe('SIMULATED Juniper');
   } finally { citizens.dispose(); clay.dispose(); }
 });
+
+it('continues forge walks across a scene rebuild only under the current presence authority', () => {
+  const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
+  const layout = generateSettlementPlan({ seed: 'forge-checkpoint', tier: 'hamlet', firstYear: 2025, year: 2026 });
+  const kingdomId = KingdomIdSchema.parse('129634568'), slot = layout.homes[0]!.slot, now = 200_000;
+  const frame = { version: 1 as const, kingdomId, epoch: 'SIMULATED-checkpoint', sequence: 1, asOf: now,
+    origin: 'simulated' as const, streamLive: true, connection: 'fresh' as const,
+    windows: [{ slot, present: true, publicName: 'SIMULATED Juniper', since: 0 }] };
+  const first = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
+  first.applyFrame(frame);
+  first.watchForge(true, now, [0, 9, 8]);
+  first.update(now, 0);
+  const checkpoint = first.checkpoint()!;
+  const expected = first.motion.sample(now + 5_000);
+  first.dispose();
+  const restored = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, checkpoint);
+  restored.applyFrame({ ...frame, sequence: 2, asOf: now + 1_000 });
+  expect(restored.motion.sample(now + 5_000)).toEqual(expected);
+  restored.dispose();
+  const beforeAbsence = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
+  beforeAbsence.applyFrame(frame);
+  const absentCheckpoint = beforeAbsence.checkpoint()!;
+  beforeAbsence.dispose();
+  const absent = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, absentCheckpoint);
+  absent.applyFrame({ ...frame, sequence: 2, asOf: now + 1_000, streamLive: false, connection: 'offline', windows: [{ ...frame.windows[0]!, present: false, publicName: null }] });
+  expect(absent.motion.sample(now + 5_000)).toEqual([]);
+  absent.dispose(); clay.dispose();
+});

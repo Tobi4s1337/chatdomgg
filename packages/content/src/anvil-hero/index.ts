@@ -33,7 +33,7 @@ const KITS: Record<StyleKey, Kit> = {
 };
 
 /**
- * The broad surface a composed Forge finish (copper, ceramic) recolours: the coil's back and folded wing.
+ * The broad surface a composed Forge finish (copper, ceramic) recolours: the coil and head.
  * Never the roof material, so a finish keyed on `STYLES[style].roof` misses this dragon's body. The belly
  * band, horns, lids, plates, stack and lip keep their kit colours, so a cast dragon keeps its anatomy and
  * its chimney stays masonry.
@@ -50,25 +50,20 @@ type Node = [x: number, z: number, top: number, radius: number];
  * wrapping the near side back toward the sleeping head. One continuous centreline, one even band.
  */
 const COIL: Node[] = [
-  [12.0, 4.6, 7.0, 2.0],
-  [14.5, 3.0, 5.6, 2.0],
-  [18.0, 3.0, 5.6, 2.0],
-  [20.4, 6.2, 6.0, 2.5],
-  [20.2, 10.0, 4.4, 2.0],
-  [18.8, 13.4, 3.2, 1.25],
-  [15.0, 15.4, 2.6, .95],
-  [10.0, 15.6, 2.1, .8],
-  [6.6, 14.9, 1.6, .7],
+  [12.0, 4.0, 6.0, 1.8],
+  [16.0, 3.0, 6.0, 2.0],
+  [20.0, 4.0, 6.0, 2.0],
+  [21.0, 8.0, 5.5, 2.1],
+  [19.8, 12.2, 4.5, 1.8],
+  [17.0, 14.5, 3.0, 1.3],
+  [13.0, 16.0, 2.0, .8],
+  [9.0, 16.0, 1.2, .65],
 ];
-/** The low neck between shoulder and head: the dip the eye reads as "asleep". */
-const NECK: Node[] = [
-  [12.0, 4.6, 4.0, 1.8],
-  [9.4, 8.2, 3.0, 1.9],
-  [7.4, 9.3, 3.0, 1.7],
-];
-/** Forearms cross under the chin: an X seen from above, with air in the crook between them. */
-const FAR_ARM: Node[] = [[9.4, 6.6, 2.2, 1.05], [2.6, 10.6, 2.0, 0.95]];
-const NEAR_ARM: Node[] = [[9.4, 12.2, 2.2, 1.1], [2.6, 7.6, 2.0, 0.95]];
+/** The lowered neck extends forward from the shoulder. */
+const NECK: Node[] = [[12.0, 4.0, 4.0, 1.7], [9.0, 6.0, 3.5, 1.5], [7.0, 9.0, 3.0, 1.5]];
+/** Separate forelegs reach forward beside the muzzle, leaving an open crook below the chin. */
+const FAR_ARM: Node[] = [[11.0, 4.5, 2.5, 1.0], [7.0, 6.0, 2.0, .8], [3.0, 6.5, 2.0, .8]];
+const NEAR_ARM: Node[] = [[16.0, 13.0, 2.5, 1.0], [10.0, 13.0, 2.0, .8], [3.0, 12.5, 2.0, .8]];
 
 class Lattice {
   readonly cells = new Uint8Array(W * H * D);
@@ -132,12 +127,9 @@ class Lattice {
   }
 }
 
-/** Mirror a far-side cell to the near side of the head, which lies along z = 9. */
-const mirror = (z: number) => 18 - z;
-
 /**
- * The Forge's sleeping dragon chimney, curled like a cat around its own crooked stack: chin on
- * two paws, wing folded flat along the far flank, tail wrapping the near side, smoke escaping
+ * The Forge's sleeping dragon chimney, curled around its own crooked stack: chin on
+ * two paws, wing folded along the flank, tail wrapping the near side, smoke escaping
  * the nose. A carved house part on the build lattice, never a creature. Deterministic per kit.
  */
 export function createAnvilHeroDragon(style: StyleKey): MotifGeometry {
@@ -154,49 +146,57 @@ export function createAnvilHeroDragon(style: StyleKey): MotifGeometry {
   g.box(14, 9, 8, 16, 14, 10, MAT.air);
   g.box(13, 13, 7, 17, 14, 11, MAT.air);
 
-  // The body: one band round the stack, the low neck and the crossed forearms.
+  // The body: one band round the stack, the low neck and the resting forearms.
   g.tube(COIL, kit.back);
   g.tube(NECK, kit.back);
   g.tube(FAR_ARM, kit.back);
   g.tube(NEAR_ARM, kit.back);
+  // The neck and coil meet the chimney shaft under its near corner.
+  g.box(9, 0, 6, 13, 3, 8, kit.back);
 
-  // The head: a long wedge lying on the crossed paws, chin at y = 2. A low snout steps up at the
-  // stop to a wider skull with heavy brows and jowls, so it reads as a head from any side.
-  g.box(1, 2, 8, 4, 4, 11, kit.back);
-  g.box(4, 2, 7, 8, 6, 12, kit.back);
-  for (const z of [7, 11]) { g.set(4, 5, z, MAT.air); g.box(5, 6, z, 7, 7, z + 1, kit.back); }
-  g.box(6, 2, 6, 8, 4, 7, kit.back);
-  g.box(6, 2, 12, 8, 4, 13, kit.back);
-  // Flared nostrils on the snout's tip, and the light jaw line along both sides.
-  g.set(2, 4, 8, kit.back); g.set(2, 4, 10, kit.back);
-  for (let x = 1; x < 8; x++) for (const z of x < 4 ? [8, 10] : x < 6 ? [7, 11] : [6, 12]) g.set(x, 2, z, kit.belly);
-  // Closed lids: a dark seam under each brow.
-  for (const z of [7, 11]) { g.set(5, 4, z, kit.lid); g.set(6, 4, z, kit.lid); }
-  // Horns sweep back off the crown over the neck's dip and taper: two cells at the root, one at the
-  // tip, which splays outward. Their top is at 8 cells.
-  for (const z of [7, mirror(7)]) {
+  // A large, chamfered skull and long low muzzle carry the sleeping expression.
+  // The jaw actually meets both forepaws; the open space between them remains visible.
+  g.box(1, 2, 7, 5, 5, 12, kit.back);
+  g.box(4, 2, 5, 10, 7, 13, kit.back);
+  g.box(5, 7, 6, 10, 8, 12, kit.back);
+  g.box(6, 8, 7, 9, 9, 11, kit.back);
+  for (let x = 1; x < 5; x++) for (const z of [7, 11]) g.set(x, 2, z, kit.belly);
+  // Heavy brows and long, closed eyes give the head its sleeping pose from both sides.
+  for (const z of [5, 12]) {
+    g.box(5, 5, z, 8, 6, z + 1, kit.lid);
+    g.box(5, 6, z, 9, 7, z + 1, kit.back);
+  }
+  // Two individually separated paws rest beside the muzzle and support the jaw.
+  for (const z of [5, 11]) {
+    g.box(2, 0, z, 6, 2, z + 2, kit.back);
+    g.set(2, 0, z, kit.horn);
+    g.set(2, 0, z + 1, kit.horn);
+  }
+  // Back-swept horns rise above the skull on either side, stopping short of
+  // the chimney. Their bold silhouette stays legible at the size of a roof part.
+  for (const z of [5, 12]) {
     const out = z < 9 ? z - 1 : z + 1;
-    g.box(7, 5, z, 9, 7, z + 1, kit.horn);
-    g.box(9, 6, z, 10, 8, z + 1, kit.horn);
-    g.set(10, 7, z, kit.horn);
-    g.set(10, 7, out, kit.horn);
-    g.set(11, 7, out, kit.horn);
+    g.box(7, 7, z, 9, 9, z + 1, kit.horn);
+    g.box(8, 8, out, 10, 10, out + 1, kit.horn);
+    g.box(9, 9, out, 11, 11, out + 1, kit.horn);
+    g.box(10, 10, out, 12, 12, out + 1, kit.horn);
   }
 
-  // The folded wing lies flat along the far flank, one cell proud of it: a clean triangle peaking
-  // at 9 cells just clear of the stack. Its membrane is the body's colour; the leading spar and two
-  // finger ribs fanning from the shoulder are the plate colour, so it reads as a wing, not a wall.
-  const peak = 18, wingTop = (x: number) => Math.round(x <= peak ? 5 + (x - 12) * 4 / (peak - 12) : 9 - (x - peak) * (style === 'tide' ? .8 : 1));
-  for (let x = 12; x < 23; x++) {
-    const top = wingTop(x);
-    if (top <= 3) continue;
-    for (let y = 2; y < top; y++) g.set(x, y, 0, kit.back);
-    g.set(x, top - 1, 0, x <= peak ? kit.plate : kit.back);
-    // Each kit cuts its own trailing edge: hearth scallops, grove a leaf vein, tide one long sweep.
-    if (style === 'hearth' && x > peak && (x - peak) % 2 === 0) g.set(x, top - 1, 0, MAT.air);
-    if (style === 'grove' && x > peak - 3 && top > 4) g.set(x, top - 2, 0, kit.horn);
+  // The wings lie folded low along the haunch. Their swept triangular outlines
+  // support the larger head and horns instead of rising like walls around it.
+  const wingOutline: [number, number][] = [
+    [13, 4], [14, 5], [15, 6], [16, 7], [17, 8], [18, 8],
+    [19, 7], [20, 6], [21, 5], [22, 4],
+  ];
+  for (const [x, top] of wingOutline) {
+    for (let y = 2; y < top; y++) {
+      const spread = Math.max(0, 2 - Math.floor((y - 2) / 2));
+      for (let z = 14 - spread; z <= 14 + spread; z++) g.set(x, y, z, y === top - 1 ? kit.back : kit.plate);
+      const farTop = Math.max(3, top - 1);
+      const farSpread = Math.max(0, spread - 1);
+      if (y < farTop) for (let z = 3 - farSpread; z <= 3 + farSpread; z++) g.set(x, y, z, y === farTop - 1 ? kit.back : kit.plate);
+    }
   }
-  for (const [tx, ty] of [[17, 7], [21, 5]] as const) for (let x = 13; x <= tx; x++) g.set(x, Math.round(3 + (x - 13) * (ty - 3) / (tx - 13)), 0, kit.plate);
 
   // Five spine plates shrinking toward the tail, sawteeth standing on the ridge where they fall.
   // Each runs along the coil there; tide's lean back toward the tail, grove's split like leaves.
@@ -209,11 +209,10 @@ export function createAnvilHeroDragon(style: StyleKey): MotifGeometry {
     if (style === 'grove' && i < 3) { const [px, pz] = step(0); g.set(px, base, pz, kit.horn); }
   });
 
-  // The spade tail-tip lies in front of the crossed paws and curls up toward the nose.
-  g.box(3, 0, 13, 5, 1, 16, kit.back);
-  g.box(2, 0, 14, 6, 1, 15, kit.back);
-  g.set(2, 1, 14, kit.back);
-  g.set(2, 1, 13, kit.belly);
+  // A tapered spade at the end of the coil, kept low behind the forepaws.
+  g.box(7, 0, 15, 10, 1, 17, kit.back);
+  g.box(6, 0, 16, 9, 1, 17, kit.back);
+  g.set(7, 1, 16, kit.plate);
 
   // The light belly band where the coil and limbs meet the roof, and the claws. The thin tail
   // stays one colour, so it reads as a tail and never as a kerb.
