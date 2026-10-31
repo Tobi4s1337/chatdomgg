@@ -331,6 +331,9 @@ importers:
       '@chatdom/shared':
         specifier: workspace:*
         version: link:../shared
+      '@chatdom/voxel':
+        specifier: workspace:*
+        version: link:../voxel
 
 packages:
 
