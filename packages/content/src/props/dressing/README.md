@@ -134,6 +134,8 @@ Field runs are solid kit pieces laid along +X.
     `darkStone` at two feet and ferns.
 
   Neighbouring lots' fences stand 1 m or more apart, so the ends need no overlap.
+  On the garden side the planner runs one flower drift (4.4–6 m, the home's kit colours) 1.9 m behind it, tagged
+  with the lot, so it moves with the fence and hides with the lot; Old Row and the arrival home almost always have one.
 
 ## Path
 

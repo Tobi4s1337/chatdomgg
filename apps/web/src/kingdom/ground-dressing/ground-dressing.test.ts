@@ -300,6 +300,36 @@ describe('planGroundDressing', () => {
     expect(fences.size).toBeGreaterThan(land.plan.homes.length * 0.9);
   });
 
+  it('runs one flower colour along the garden side of a back fence, inside its lot, more often in Old Row', () => {
+    const drifts = new Map<string, GroundPiece[]>();
+    for (const piece of all(plan).filter(piece => piece.id.includes(':fence-drift:'))) {
+      const key = piece.id.split(':fence-drift:')[0]!, list = drifts.get(key);
+      if (list) list.push(piece); else drifts.set(key, [piece]);
+    }
+    const years = land.plan.homes.map(h => h.quarterYear), oldest = Math.min(...years), newest = Math.max(...years);
+    const share = (year: number) => {
+      const homes = land.plan.homes.filter(h => h.quarterYear === year && all(plan).some(p => p.id === `lot:${h.id}:back-fence`));
+      return homes.filter(h => drifts.has(`lot:${h.id}`)).length / homes.length;
+    };
+    expect(drifts.size).toBeGreaterThan(5);
+    expect(share(oldest)).toBeGreaterThan(share(newest));
+    for (const [key, patches] of drifts) {
+      const home = land.plan.homes.find(h => `lot:${h.id}` === key)!, frame = frameOf(home);
+      const fence = all(plan).find(piece => piece.id === `${key}:back-fence`)!;
+      const fenceBack = Math.max(...footprintCorners(fence.blueprint, fence.position, fence.yaw).map(frame.depth));
+      expect(patches.length, key).toBeGreaterThanOrEqual(5);
+      expect(new Set(patches.map(p => p.blueprint.id)).size, key).toBe(1);
+      expect(pieceRole(patches[0]!.blueprint).cover).toBe(true);
+      for (const patch of patches) {
+        expect(patch.lotSlot, patch.id).toBe(home.slot);
+        // Its planted part (a quarter metre in from the box) wholly behind the fence, and its box inside the lot.
+        const planted = footprintCorners(patch.blueprint, patch.position, patch.yaw, 0.25).map(frame.depth);
+        expect(Math.min(...planted), patch.id).toBeGreaterThan(fenceBack);
+        expect(Math.max(...footprintCorners(patch.blueprint, patch.position, patch.yaw).map(frame.depth)), patch.id).toBeLessThanOrEqual(home.lot.depth + 1e-6);
+      }
+    }
+  });
+
   it('changes only the grown lot when a home grows deeper, moving its back fence, and omits a fence a full home leaves no room for', () => {
     const home = land.plan.homes.find(h => h.allowedDepth <= 10 && builtRear(h) + 0.5 <= h.allowedDepth && all(plan).some(p => p.lotSlot === h.slot))!;
     const full = land.plan.homes.find(h => h !== home && h.allowedDepth < 16 && all(plan).some(p => p.id === `lot:${h.id}:back-fence`))!;

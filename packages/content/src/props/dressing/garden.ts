@@ -122,7 +122,9 @@ export function woodpile(): Piece {
   s.fill(2, 11, 1, 6, 12, 2, moss); s.fill(3, 11, 2, 5, 12, 3, moss); s.fill(1, 10, 3, 5, 11, 4, moss);
   /**
    * A round log end-on: a bark body three cells across whose end shows a plus of end grain inside its bark rind. The
-   * rinds of neighbouring logs meet, so the stack reads packed tight, with no daylight through it.
+   * rinds of neighbouring logs meet, so the stack reads packed tight, with no daylight through it. The exposed end's
+   * corners are weathered brown sapwood rather than black bark, so from the garden each end reads as a round tan
+   * disc and not a pale cross.
    */
   const log = (cx: number, cy: number, front: number, end: number) => {
     for (let z = 1; z <= front; z++) {
@@ -131,6 +133,7 @@ export function woodpile(): Piece {
       const material = z === front ? end : thatch;
       s.set(cx, cy, z, material);
       for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) s.set(cx + dx, cy + dy, z, material);
+      if (z === front) for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) s.set(cx + dx, cy + dy, z, earth);
     }
   };
   const ends: [number, number, number, number][] = [

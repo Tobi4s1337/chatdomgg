@@ -423,3 +423,8 @@ with channel points; benches, gates, stiles and anything sat on or opened.
   along the cardinal axis with the least relief, two to five 4 m lengths at a 3.75 m pitch. Each length is level, and
   ends nest or stack rather than share faces. Every solid is a cardinal blocker and collision piece.
   `planAdoptedCover(plan, input, { solids: true })` returns them for the integrator to bind; the default stays passive.
+- **2026-10-31 — A colour runs along the back fence.** The quality bar's "drift of one flower colour along the
+  fence" is planned with the fence: a lot-tagged loose drift of the home's kit colour on the tended-meadow side,
+  1.9 m behind the fence and measured from it (chance 0.35 + 0.55 × age; the arrival home always). It is cover
+  only, inside its lot, so growth moves it with the fence and `hideLot` hides it; a home whose fence stands too
+  near the lot line has none.

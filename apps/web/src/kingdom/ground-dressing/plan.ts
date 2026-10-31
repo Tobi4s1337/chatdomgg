@@ -618,7 +618,15 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
     const depth = fence.size[2] * CELL, at = Math.max(home.allowedDepth, area.rear + 0.5);
     if (at + depth > home.lot.depth + EPSILON) { omissions.push(`${id}: the home fills its lot, leaving no rear strip that holds the fence 0.5 m clear`); continue; }
     const piece = fitSolid(id, fence, inFrame(area, 0, at + depth / 2), home.rotation, { lot: home.id, assembly: area, fence: true }, home.slot);
-    if (typeof piece === 'string') omissions.push(`${id}: ${piece}`); else commit(piece);
+    if (typeof piece === 'string') { omissions.push(`${id}: ${piece}`); continue; }
+    commit(piece);
+    // The tended meadow keeps one colour along the fence's garden side, fuller and likelier in Old Row. It belongs to
+    // the lot and is measured from the fence, so it moves with the fence when the home grows and nowhere else.
+    const key = `lot:${home.id}:fence-drift`, age = ageOf(home);
+    if (home !== arrival && ctx.rand(key) > 0.35 + 0.55 * age) continue;
+    const blooms = BLOOMS[home.style], bloom = blooms[Math.floor(ctx.rand(key, 'bloom') * blooms.length)]!;
+    drifts.push({ id: key, centre: inFrame(area, (ctx.rand(key, 'side') - 0.5) * 1.6, at + depth + 1.9), along: [area.right[0], area.right[2]],
+      length: 4.4 + age * 1.6, width: 1.3, bloom, lot: home.id, slot: home.slot });
   }
 
   /**
@@ -857,7 +865,7 @@ export function gardenHome(plan: SettlementPlan, quarter: 'oldest' | 'newest', d
  * From above the back of a lot, a little to one side, across its meadow to the back fence and the house. With the
  * plan, the frame takes in the home's garden vignette too: aimed between it and the fence, from its side.
  */
-export function gardenView(home: SettlementHome, ground: (x: number, z: number) => number, dressing?: GroundDressingPlan): GroundView {
+export function gardenView(home: SettlementHome, ground: (x: number, z: number) => number, dressing?: GroundDressingPlan, portrait = false): GroundView {
   const g = homeFrame(home), at = (side: number, depth: number, up: number): Vec3 => {
     const x = g.front[0] + g.right[0] * side - g.outward[0] * depth, z = g.front[2] + g.right[2] * side - g.outward[2] * depth;
     return [x, ground(x, z) + up, z];
@@ -869,8 +877,10 @@ export function gardenView(home: SettlementHome, ground: (x: number, z: number) 
     return [dx * g.right[0] + dz * g.right[2], -(dx * g.outward[0] + dz * g.outward[2])] as const;
   });
   const side = local.reduce((n, l) => n + l[0], 0) / local.length, depth = local.reduce((n, l) => n + l[1], 0) / local.length;
-  const toward = side < -1 ? -1 : 1, aimSide = side / 2, aimDepth = (depth + home.allowedDepth) / 2;
-  return { eye: at(aimSide + toward * 6, Math.max(home.lot.depth, depth) + 6.5, 5), target: at(aimSide, aimDepth, 0.6) };
+  const toward = side < -1 ? -1 : 1;
+  // A narrow portrait frame aims at the vignette itself, with the fence behind it, from a little further back.
+  const aimSide = portrait ? side * 0.85 : side / 2, aimDepth = portrait ? depth * 0.75 + home.allowedDepth * 0.25 : (depth + home.allowedDepth) / 2;
+  return { eye: at(aimSide + toward * (portrait ? 3 : 6), Math.max(home.lot.depth, depth) + (portrait ? 8.5 : 6.5), portrait ? 5.6 : 5), target: at(aimSide, aimDepth, 0.6) };
 }
 
 export function planViews(land: GroundDressingLand, ground: (x: number, z: number) => number, dressing?: GroundDressingPlan): GroundViews {
