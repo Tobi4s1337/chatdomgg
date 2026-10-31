@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
 import { rasterizeBlueprint } from '@chatdom/voxel';
+import { DRAGON_EMITTER, DRAGON_SIZE } from '@chatdom/content/anvil-hero';
 import { checkMountedDragon, mountSleepingDragon } from './roof';
 import type { BenchStyle, BenchView } from './params';
 
 const CELL = .125;
-/** The motif's emitter sits at cell [0,2,9]; its middle at [12,6,9]. */
-const EMITTER_TO_CENTRE = new THREE.Vector3(12, 4, 0).multiplyScalar(CELL);
+/** From the exported nose anchor to the middle of the dragon's envelope, whatever the sculpt's nose. */
+const EMITTER_TO_CENTRE = new THREE.Vector3(...DRAGON_SIZE).multiplyScalar(.5).sub(new THREE.Vector3(...DRAGON_EMITTER)).multiplyScalar(CELL);
 
 export interface RoofDragon {
   piece: { blueprint: VoxelBlueprint; position: Vec3 };
@@ -36,7 +37,9 @@ export function placeRoofDragon(style: BenchStyle, host: { blueprint: VoxelBluep
   checkMountedDragon(mounted, host.blueprint);
   const origin = new THREE.Vector3(...mounted.socket.origin).multiplyScalar(CELL).add(new THREE.Vector3(...host.position));
   const emitter = new THREE.Vector3(...mounted.emitter).multiplyScalar(CELL).add(new THREE.Vector3(...host.position));
-  const side = mounted.emitter[2] < ridgeZ(host.blueprint, mounted.emitter[0], mounted.emitter[0] + 24) ? 'lane' : 'street';
+  // The envelope's first cell in the host's frame, from the nose anchor: its columns and its middle decide the side.
+  const first = mounted.emitter.map((n, i) => n - DRAGON_EMITTER[i]!);
+  const side = first[2]! + DRAGON_SIZE[2] / 2 < ridgeZ(host.blueprint, first[0]!, first[0]! + DRAGON_SIZE[0]) ? 'lane' : 'street';
   return { piece: { blueprint: mounted.blueprint, position: origin.toArray() as Vec3 }, emitter, centre: emitter.clone().add(EMITTER_TO_CENTRE), side };
 }
 

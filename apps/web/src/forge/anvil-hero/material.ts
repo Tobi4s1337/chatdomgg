@@ -207,6 +207,13 @@ export function createAnvilMaterial(sculpt: AnvilSculpt): AnvilMaterial {
         // Use has rounded every outer edge a little: a narrow cool line, brighter where it faces the sky.
         float arris=anvilArris(vAnvilLocal,ln),worn=1.-smoothstep(.0015,.0065,arris);
         colour+=(vec3(.016,.017,.02)+anvilSky*(.05+.07*max(n.y,0.)))*worn*shade;
+        // Dusk rim: the worn upper arrises catch the sky's lilac and the low sun's gold. Up close it is
+        // the same 6 mm sheen; from across the square it never drops below about one pixel, so the
+        // anvil's top line and horn still draw themselves against the houses when the iron is cold.
+        float footprint=length(fwidth(vAnvilLocal)),reach=max(.0065,footprint*1.15);
+        float rim=(1.-smoothstep(reach*.3,reach,arris))*smoothstep(.95,1.25,vAnvilLocal.y)*mix(.45,1.,max(ln.y,0.));
+        float far=smoothstep(.004,.02,footprint);
+        colour+=(anvilSky*.42+anvilSun*.3+${linear('#3a2f4a')}*.12)*rim*mix(.35,1.,far)*mix(.6,1.,shade);
         // At pour, the working face's edges warm a little, and only within two centimetres of them.
         colour+=${linear('#5a2a18')}*.2*ANVIL_GLOW*smoothstep(.6,.85,uAnvilHeat)*(1.-smoothstep(0.,.02,arris))*step(.5,ln.y)*step(${(1.3).toFixed(2)},vAnvilLocal.y);
         vec3 hitN;float depth,core;int rune;

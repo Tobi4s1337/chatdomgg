@@ -27,7 +27,7 @@ seams rather than expanding scope. The five tasks are an execution order for the
   preserving existing bounds/mount and registered materials; use the exported front-facing nose anchor. Show chin on paws, a continuous coil,
   folded wings and useful negative space; validate real final occupancy/support and open flue. Add actual roof
   context and existing nose smoke to the bench. · evidence: focused geometry tests + looked three-angle sheets
-- [ ] **AH04 — Make both silhouettes survive the square and the phone.** Refine the iron, stone and dragon from
+- [x] **AH04 — Make both silhouettes survive the square and the phone.** Refine the iron, stone and dragon from
   fixed street cameras and close views. Capture the eight primary spec views at 1440×900 and 390×844 at dusk, one heated
   close view and three-kit contact sheets, under the shared capture lock. Open every shot and fix what looks weak, including smoke origin and framing.
   Record actual costs and remaining visual doubts; do not invent numeric beauty gates. · evidence: final looked set
