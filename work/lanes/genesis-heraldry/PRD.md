@@ -6,9 +6,9 @@ Follow `$ralph-lane` and the spec. Each task is done only when scoped checks pas
 
 ## Tasks
 
-- [ ] **GENESIS-HERALDRY-01 — Neutral sculpted crest and standard using the existing kit** · evidence: shot/test
-- [ ] **GENESIS-HERALDRY-02 — Complete crest charges, shapes and cloth cuts with deterministic palette snapping** · evidence: shot/test
-- [ ] **GENESIS-HERALDRY-03 — Showcase all three selected landscapes and verify accessible contrast and palette lock** · evidence: shot/test
+- [x] **GENESIS-HERALDRY-01 — Neutral sculpted crest and standard using the existing kit** · evidence: shot/test
+- [x] **GENESIS-HERALDRY-02 — Complete crest charges, shapes and cloth cuts with deterministic palette snapping** · evidence: shot/test
+- [x] **GENESIS-HERALDRY-03 — Showcase all three selected landscapes and verify accessible contrast and palette lock** · evidence: shot/test
 
 ## Backlog
 
