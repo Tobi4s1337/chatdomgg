@@ -168,20 +168,21 @@ function authoredGenesisGrade(plan:SettlementPlan,prepared:Prepared,x:number,z:n
   const roads=new Map<string,{distance:number;height:number;weights:number;feather:number}>();
   for(const influence of influences){
     const value=sample(influence,x,z);
+    const feather=influence.feather;
     if(influence.kind==='foundation'||influence.kind==='market'){
       if(value.distance<=0)return value.height;
-      if(value.distance>=influence.feather)continue;
-      const weight=(1-smoothstep(0,influence.feather,value.distance))**2/Math.max(.001,value.distance)**2;
+      if(value.distance>=feather)continue;
+      const weight=(1-smoothstep(0,feather,value.distance))**2/Math.max(.001,value.distance)**2;
       anchorDistance=Math.min(anchorDistance,value.distance);anchorWeighted+=value.height*weight;anchorWeights+=weight;
       continue;
     }
     value.distance-=influence.verge;
-    if(value.distance>=influence.feather)continue;
+    if(value.distance>=feather)continue;
     // Aggregate a road once. Its sampling density cannot make it dominate a bend.
-    const weight=(1-smoothstep(0,influence.feather,Math.max(0,value.distance)))**2/Math.max(1,value.distance)**2;
+    const weight=(1-smoothstep(0,feather,Math.max(0,value.distance)))**2/Math.max(1,value.distance)**2;
     const previous=roads.get(influence.id);
     if(previous){previous.distance=Math.min(previous.distance,value.distance);previous.height+=value.height*weight;previous.weights+=weight;}
-    else roads.set(influence.id,{distance:value.distance,height:value.height*weight,weights:weight,feather:influence.feather});
+    else roads.set(influence.id,{distance:value.distance,height:value.height*weight,weights:weight,feather});
   }
   const natural=sampleGenesisSurface(plan.genesisSurface!,x,z).ground;
   let weighted=0,weights=0,naturalWeight=1;

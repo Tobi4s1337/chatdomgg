@@ -34,7 +34,7 @@ export const waterFragment = /* glsl */ `
 
   uniform sampler2D uHeight;
   uniform vec2 uOrigin, uSize;
-  uniform float uStep;
+  uniform float uStep, uOutsideGroundHeight;
   uniform int uMode;            // 0 basin, 1 course
   uniform vec4 uBasin;          // this basin: centre xz, radii
   uniform float uFeather;       // metres past the outline a basin may still draw
@@ -65,7 +65,7 @@ export const waterFragment = /* glsl */ `
 
   float bedHeight(vec2 world) {
     vec2 grid = (world - uOrigin) / uStep;
-    if (any(lessThan(grid, vec2(0.0))) || any(greaterThan(grid, uSize - 1.0))) return 1e4;
+    if (any(lessThan(grid, vec2(0.0))) || any(greaterThan(grid, uSize - 1.0))) return uOutsideGroundHeight;
     grid = min(grid, uSize - 1.001);
     ivec2 p = ivec2(floor(grid));
     vec2 f = fract(grid);
