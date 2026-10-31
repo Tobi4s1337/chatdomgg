@@ -335,19 +335,20 @@ lanes. Exposure34ac89a is ACCEPTED on Tobias's RTX5080: readable dusk, coloured 
 Keep that grade, low lantern street camera, warm pools, house models, beacon and gold frame. After flicker:
 restore windows' emissive/halo pull, then soft height fog/aerial depth. Avatar proportions remain Tobias's choice.
 
-**Current slice:** confirmed live feed-retry blackout fixed. An unavailable callback used to clear all windows,
-citizens and arrival history immediately. The renderer now keeps its last accepted public picture only until
-`min(receipt+90s, frame.asOf+90s)`, shows Connection lost/Reconnecting, and preserves arrived citizens across a
-same-epoch retry. True lease expiry begins the existing0.7s window fade and clears citizen/name/camera state.
-No source contract, room authority or presence duration changed. Approved exposure/pool shaders untouched.
+**Current slice:** window pull restored against the accepted brighter dusk: stronger HDR pane cores and amber
+reveal halos, still bounded to1.3x the pane. Exposure, facade shading, ground pools and presence fades unchanged.
+Viewed native1920x1080 and `shots/magic/window-pull-before-after@3840x1080.png` (left approved34ac89a,
+right current; same hero/hour19.5/time30, slight framing/sky-motion differences). Warm points are more prominent,
+especially left row/right cluster; this is restrained, not a transformation. Far town/hills still flat: depth next.
+High HDR/ACES, SIMULATED, curtain open/fields settled. Typecheck/scoped lint,13 existing render tests and web
+build pass. Capture browser/server/lock closed. Ask Tobias for the same GPU view to confirm bloom strength.
 
-**Evidence:** real SSE adapter, SIMULATED fixture: before240→0 windows/citizens on disconnect; after240 remain,
-reconnect240 with0walking; +91s local clock during outage yields0/0. No page errors. Viewed actual1080p frames
-and `shots/magic/presence-drop-before-after@3840x1080.png`; telemetry `presence-drop-smoke.json` alongside.
-Typecheck/scoped lint,25 focused tests and web build pass. Temporary capture resources closed. SIM fixture
-badge overlaps the connection note in evidence only. Prior continuous SwiftShader take completed4renders/18s
-and did not reproduce a separate GPU flicker; don't repeat slow captures without an exact repro. Other shimmer
-is unlocalized, not declared fixed. bc9a54c also removed the carried-light nearest24 cutoff and added cull fades.
+**Prior flicker fixes retained:** bc9a54c removed carried-light nearest24 cutoff and added cull fades; Tobias
+says lanterns hold. 7c71b38 keeps the last accepted public picture through a feed retry only until
+`min(receipt+90s, frame.asOf+90s)`, then fades windows over0.7s and clears citizens/names. Real SSE adapter,
+SIMULATED smoke: old240→0 immediately; fixed240 remain, same-epoch reconnect0walking, +91s outage0/0.
+Evidence `shots/magic/presence-drop-before-after@3840x1080.png`, `presence-drop-smoke.json`. Separate GPU
+shimmer remains unlocalized; don't repeat slow software takes without an exact repro.
 
 **Merges:** passport, raid-gate, emotes, twitch-moments, atlas-w2 through47c0ef7 are on main. All5 captures now
 complete/viewed: `shots/integration/look-reset/contact@1920x800.png`. First4 are SIMULATED benches; Atlas is
@@ -365,7 +366,7 @@ labels kept inside frame. One-pass picture/Genesis recon found no new finished l
   lanes finish current task and stop. Main retains scene/shader/shadow integration; no second forest/emitters.
   Land adoption must use the same new height in render/contact, without silently moving pinned foundations.
 
-**Next picture:** windows must pop against accepted dusk, near crisp/far warm-blue haze. Smithy crowd wraps BOTH
+**Next picture:** soft height fog/aerial perspective, near crisp/far warm-blue haze. Smithy crowd wraps BOTH
 sides with faces behind pour; lower/closer camera, castle lit behind. Current13-person west crescent isn't final.
 Molten02c3494 stays. Real approved chat ritual remains unproved; no waiting observer before Tobias goes live.
 
