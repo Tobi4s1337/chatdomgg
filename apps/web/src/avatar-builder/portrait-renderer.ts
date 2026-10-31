@@ -128,6 +128,48 @@ function gradientTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+/** The highest a silhouette may reach in the frame (normalised device y). */
+const HEADROOM = .84;
+/** How far the frame may rise for a tall hat before it widens instead, in cells. */
+const MAX_LIFT = 2.4;
+
+/**
+ * Every portrait uses the same framing, except that a tall silhouette (a pompom, a pointed hat, a top knot under
+ * a beanie) never touches the top edge: the frame first rises with it, losing a little chest, and only past
+ * `MAX_LIFT` widens. Short silhouettes keep the bust framing exactly.
+ */
+function frameSubject(camera: THREE.PerspectiveCamera, subject: THREE.Object3D): void {
+  const { target, fovDegrees, halfHeight } = PORTRAIT.camera;
+  const eye = new THREE.Vector3(...portraitEye()), aim = new THREE.Vector3(...target);
+  const points: THREE.Vector3[] = [];
+  subject.traverse(o => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const position = (o.geometry as THREE.BufferGeometry).getAttribute('position');
+    for (let i = 0; i < position.count; i++) if (position.getY(i) > target[1]) points.push(new THREE.Vector3().fromBufferAttribute(position, i));
+  });
+  const top = () => {
+    camera.updateMatrixWorld(true);
+    let max = -Infinity;
+    for (const p of points) max = Math.max(max, p.clone().project(camera).y);
+    return max;
+  };
+  const place = (lift: number, fov: number) => {
+    camera.fov = fov;
+    camera.position.copy(eye).add(new THREE.Vector3(0, lift, 0));
+    camera.lookAt(aim.clone().add(new THREE.Vector3(0, lift, 0)));
+    camera.updateProjectionMatrix();
+  };
+  let lift = 0, fov = fovDegrees;
+  place(lift, fov);
+  for (let i = 0; i < 4; i++) {
+    const over = top() - HEADROOM;
+    if (over <= 0) break;
+    if (lift < MAX_LIFT) lift = Math.min(MAX_LIFT, lift + over * halfHeight * 1.05);
+    else fov *= 1 + over * .55;
+    place(lift, fov);
+  }
+}
+
 export interface PortraitRenderer {
   /** A new canvas of `size` × `size` with the look's bust portrait. */
   render(look: CitizenLook, size: number): HTMLCanvasElement;
@@ -172,6 +214,7 @@ export function createPortraitRenderer(): PortraitRenderer {
       const inner = size * PORTRAIT.supersample;
       renderer.setSize(inner, inner, false);
       const subject = citizenObject(look, {}, material, glass);
+      frameSubject(camera, subject);
       scene.add(subject);
       renderer.render(scene, camera);
       scene.remove(subject);

@@ -80,6 +80,30 @@ export function fringe(g: VoxelGrid, rows: readonly (readonly [number, readonly 
   for (const [y, spans] of rows) for (const [a, b] of spans) g.fill([a, y, z], [b, y + 1, z + 1], slot);
 }
 
+/** One column of the hairline: the lowest row of hair on the face plane, and the lowest proud row, if any. */
+export type HairlineColumn = readonly [flush: number, proud?: number];
+
+const ON_HEAD: readonly Slot[] = ['hair', 'hairDeep', 'hairLight', 'scalp'];
+
+/**
+ * Redraws the front of a head of hair column by column, from the person's right (x = -4) to their left. Each
+ * column says where the hair meets the forehead and where the fringe stands proud of it, so no fringe is one
+ * straight shelf: it parts, steps and sweeps, and the forehead shows through it as in the reference. A flush
+ * row of `TOP` shows forehead up to the crown (a parting). `guardFace` still runs after it.
+ */
+export function hairline(g: VoxelGrid, cols: readonly HairlineColumn[], slot: Slot = 'hair'): void {
+  cols.forEach(([flush, proud], i) => {
+    const x = X0 + i;
+    for (let y = Y0; y < TOP; y++) {
+      const face = g.get(x, y, FACE_Z), front = g.get(x, y, FRONT);
+      if (y >= flush && face === 'skin') g.set(x, y, FACE_Z, slot);
+      else if (y < flush && face && ON_HEAD.includes(face)) g.set(x, y, FACE_Z, 'skin');
+      if (proud !== undefined && y >= proud) { if (!front) g.set(x, y, FRONT, slot); }
+      else if (front && ON_HEAD.includes(front)) g.delete(x, y, FRONT);
+    }
+  });
+}
+
 /** Breaks the outer surface of a big volume into locks: some outside cells go, a few push one cell out. */
 export function locks(g: VoxelGrid, below: number, salt: number, gone = .24, out = .1): void {
   const outside = (x: number, z: number) => x < X0 - 1 || x >= X1 + 1 || z < Z0 - 1;

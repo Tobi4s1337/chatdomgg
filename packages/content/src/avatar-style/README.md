@@ -8,7 +8,7 @@ The three-option study further down (AS01) is superseded and kept only as a reco
 
 | File | What it is |
 |---|---|
-| `recipe.ts` | `CitizenLook`, the saved recipe: skin, eyes (shape, spacing), freckles, blush, hair (style, colour), beard, moustache, hat (style, colour, trim), glasses (style, frame, lens), earrings, flower, top. Every colour is a `#rrggbb` (either case in, lower-case stored). `parseLook` validates untrusted input and refuses unknown keys at every level; a look saved before the accessories existed reads as wearing none. `seedLook(personId)` gives a newcomer a complete, varied default |
+| `recipe.ts` | `CitizenLook`, the saved recipe: skin, eyes (shape, spacing), freckles, blush, hair (style, colour), beard, moustache, hat (style, colour, trim), glasses (style, frame, lens), earrings, flower, and the wardrobe: top, outer (or none), bottom, neckwear (or none), shoes. A garment is `{ style, dye, pattern, accent }`. Every colour is a `#rrggbb` (either case in, lower-case stored). `parseLook` validates untrusted input and refuses unknown keys at every level; a look saved before the accessories existed reads as wearing none, one saved before the wardrobe as a plain top over default trousers and shoes. `seedLook(personId)` gives a newcomer a complete, varied default |
 | `palette.ts` | Twenty skin tones, fourteen natural and nine wild hair swatches, eighteen dyes, straw, metals, lens tints, petals, eye ink, blush pink, freckle brown |
 | `grid.ts` | `VoxelGrid`, a sparse grid of paint slots in root-local avatar cells (the frozen rig's frame) |
 | `head.ts` | The 8 × 8 × 8 skull and the face: eye cells, blush, freckles, the blink frame |
@@ -16,7 +16,8 @@ The three-option study further down (AS01) is superseded and kept only as a reco
 | `hair.ts` | The first eight styles, the registry of all eighteen plus bald, four beards (full, chinstrap, goatee, stubble) and three moustaches (walrus, handlebar, horseshoe) |
 | `hair-cuts.ts` | Ten more styles: side part, slicked, spiky, side shave, mohawk, wild tuft, locs, braids, pigtails, top knot |
 | `accessories.ts` | Hats (cap, cap backwards, beanie, straw hat, pointed hat), glasses (round, square, goggles), earrings (stud, hoop, drop), a flower |
-| `bust.ts` | The neck, the compact torso, short upper arms and a plain tee |
+| `body.ts` | The short compact body in skin: neck, six-wide torso, hips, one-cell arm columns with hands, two-cell legs. 24 cells tall with the head a third of it, on the frozen rig's joint rows |
+| `wardrobe.ts` | Tops (tee, tank, shirt, hoodie, sweater, robe), open outer layers (jacket, vest, overshirt, coat), bottoms (trousers, shorts, skirt, overalls with a bib), neckwear (scarf, tie, bowtie, bandana), shoes (sneakers, boots, shoes) and painted patterns (stripes, plaid, dots, print) |
 | `build.ts` | `buildCitizen(look)` draws everything into one grid in dressing order. `slotColours(look)` resolves every slot to a colour |
 | `mesh.ts` | `meshCitizen(grid, colours, 'solid' \| 'glass')` gives engine-free arrays: quads with corner occlusion, convex-edge flags and in-face coordinates for the bevel. Lenses are meshed apart for a see-through material |
 | `portrait.ts` | The fixed portrait composition: camera, lights, gradient, bevel width, sizes 128 and 512 |
@@ -49,6 +50,13 @@ the bust portrait.
   a few pushed out. The afro is a lumpy ellipsoid. `guardFace` runs last for every style, and the tests hold
   every style × beard × eye variant to it: nothing proud in front of the face below the hairline, the eyes
   never covered, the face between the eyes always skin.
+- **No straight fringe shelf.** Every fringe is drawn column by column with `hairline` (`hair-kit.ts`), so it
+  parts, steps and sweeps and the forehead shows through, as in the reference; a uniform proud slab across
+  the brow read as a helmet visor. Partings differ by style (buns on the right, long waves just off centre,
+  pigtails in the middle, braids at the painted parting), the row above a fringe steps back a cell so a fringe
+  face is at most three rows tall, and below row 21 hair only lies flat on the outer face columns.
+- **Bald is a stepped dome:** the top row steps in by a cell on the sides, back and the face's top corners.
+  The face stays square, the footprint 8 cells, and hats are unaffected.
 - **Bevel only where an edge is truly convex.** The mesher flags each quad edge as convex when both the
   in-plane neighbour and the cell diagonally in front are empty. The shader tilts the normal over 13 % of the
   cell at those edges only. Coplanar neighbours never show a seam, and a colour change stays flat paint, as in
@@ -76,15 +84,48 @@ the bust portrait.
   above, with a 24° field of view, framing y 9.4–29.8. The image is rendered at 2× and filtered down. The
   gradient runs #cfaaff → #b089f7 → #6a39e0, top left to bottom right, sampled from the reference.
 
+- **The body is 24 cells, the head a third of it.** That is the founder's chibi proportion and the frozen
+  rig's rows: hips at y 8, knees at y 4, ankles at y 1, the head at y 16. The torso is six wide, narrower than
+  the head as in the reference; arms are one-cell columns, legs two-cell columns with a two-cell gap so a
+  stride reads at stream distance. Shoes have a toe one cell out in front.
+- **Every garment paints its own four slots** (base, deep, accent, mix), so a pattern is painted once on that
+  garment's cells and a layer over it never inherits it. Plaid is a buffalo check: rows crossed with columns
+  that wrap round the body (x on the front and back, z on the sides), the accent where they cross and a blend
+  where one passes. Stripes are rows. Dots are a hashed scatter (the loud overshirt). Print is a 2 × 2 block on
+  the chest, as on the reference's tee.
+- **Layers are worn open.** An outer layer repaints the torso, then keeps the middle two front columns of what
+  is under it, and stands its front panels one cell proud either side. The top shows recessed down the
+  middle, with a crease of shade either side: that is how the reference's jackets and vests read as layers. A
+  jacket and coat have a collar standing round the back of the neck and long sleeves; a vest leaves the top's
+  sleeves; an overshirt has short ones. A coat closes below the waist.
+- **Dressing order:** bottom, top, the bib of overalls, outer, neckwear, shoes, then the head. A tee or shirt
+  stops at the waistband, so the trousers show at the foot of the portrait as in the reference; a hoodie or
+  sweater hangs over it with a ribbed hem. A robe reaches the shins and flares.
+- **Drawstrings and trims** take white on dark or mid cloth and near-black on light (`topTrim`), never the
+  pattern accent: an accent block on a hoodie read as a big black square.
+- **Seeded outfits** layer about a third of a town; patterns go where they belong (plaid on shirts and
+  skirts, stripes on tees and sweaters, a scatter on an overshirt); an outer layer, a bottom and neckwear are
+  always picked apart from what they sit against (lightness or hue).
+- **Tall hats keep their headroom.** The portrait frame rises with a tall silhouette (a pompom, a pointed hat)
+  until it clears the top by 8 %, losing a little chest, and only widens past 2.4 cells of lift. Short
+  silhouettes keep the bust framing exactly.
+
 ### Bench and capture
 
-`apps/web/src/avatar-builder/portraits.html?set=fixtures|seeded|hair|hats|faces` renders twenty SIMULATED
+`apps/web/src/avatar-builder/portraits.html?set=fixtures|seeded|hair|hats|faces|wardrobe` renders twenty SIMULATED
 citizens at 512 px (shown at 256) and at 128 px (shown at actual size). `hair` is every style once, `hats`
-every hat over four hair lengths, `faces` glasses, beards, moustaches, earrings and flowers.
+every hat over four hair lengths, `faces` glasses, beards, moustaches, earrings and flowers, `wardrobe` every
+top, outer layer, pattern, neckwear and overalls.
+
+`apps/web/src/avatar-builder/lineup.html?set=fixtures|seeded&view=stream|close&hour=19.25` stands twenty
+SIMULATED citizens full-body on a cobbled square in the kingdom's light for the hour (`getEnvironment` from
+`@chatdom/render`, dusk by default) with lanterns: `stream` at stream distance, `close` large enough to judge
+clothes.
 
 ```sh
 node apps/web/src/avatar-builder/capture.mjs --out shots/avatar-style/portraits [--sets fixtures,hair]
 node apps/web/src/avatar-builder/capture.mjs --compare <before-dir> <after-dir>          # same-view pairs
+node apps/web/src/avatar-builder/capture.mjs --sets '' --lineups fixtures:stream,fixtures:close,seeded:stream
 ```
 
 For each set it writes `<set>-sheet.png` (4 × 5 at 500 px cells, the reference's layout),
@@ -93,9 +134,8 @@ port 5189 under the shared capture lock.
 
 ### Contract notes for main
 
-- The bust's torso is 6 cells wide with 1-cell arms just outside it, narrower than the head as in the
-  reference. Today's `AVATAR_RIG` puts the shoulders at x ±5, which fits an 8-wide torso. The full body is
-  AS05; any rig proposal goes to `work/lanes/avatar-style/contract-proposal.md` then.
+- The body fits the frozen rig's rows and leg joints. The shoulders are proposed at x ∓4 instead of ∓5, in
+  `work/lanes/avatar-style/contract-proposal.md`, with the recipe freeze and per-citizen colours.
 - The kingdom renderer registers voxel materials by id. Citizens need per-instance colours: either per-vertex
   colour (as `citizenObject` does) or a per-citizen palette texture. Main decides when it wires the character.
 - `@chatdom/content` does not export `./avatar-style` yet. The web imports it by relative path, as the AS01

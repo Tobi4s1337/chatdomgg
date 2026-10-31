@@ -9,7 +9,11 @@ export const SLOTS = [
   'beard', 'beardDeep', 'stubble', 'stache', 'stacheDeep',
   'hat', 'hatDeep', 'hatTrim', 'hatTrimDeep',
   'frame', 'lens', 'metal', 'petal', 'petalHeart', 'leaf',
-  'top', 'topDeep',
+  'top', 'topDeep', 'topAccent', 'topMix', 'topTrim',
+  'outer', 'outerDeep', 'outerAccent', 'outerMix',
+  'bottom', 'bottomDeep', 'bottomAccent', 'bottomMix',
+  'neck', 'neckDeep', 'neckAccent',
+  'shoe', 'shoeDeep', 'sole', 'button',
 ] as const;
 /** Slots that are glass: meshed apart and drawn see-through, so the eyes show behind a lens. */
 export const GLASS_SLOTS: readonly Slot[] = ['lens'];

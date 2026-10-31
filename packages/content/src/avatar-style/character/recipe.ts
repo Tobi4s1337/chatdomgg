@@ -1,5 +1,5 @@
 import { isHex, luma, rgb, type Hex } from './colour';
-import { DYES, LENS_TINTS, METALS, NATURAL_HAIR, PETALS, SKIN_TONES, STRAW, WILD_HAIR } from './palette';
+import { BOTTOM_CLOTH, DYES, LEATHER, LENS_TINTS, METALS, NATURAL_HAIR, PETALS, SKIN_TONES, STRAW, WILD_HAIR } from './palette';
 
 /*
  * The citizen look recipe (spec 49). A recipe is what a person saves and what everyone else receives: pure
@@ -33,8 +33,32 @@ export const GLASSES_STYLE_IDS = ['round', 'square', 'goggles'] as const;
 export type GlassesStyleId = typeof GLASSES_STYLE_IDS[number];
 export const EARRING_STYLE_IDS = ['stud', 'hoop', 'drop'] as const;
 export type EarringStyleId = typeof EARRING_STYLE_IDS[number];
-export const TOP_STYLE_IDS = ['tee'] as const;
+/** What is worn next to the skin (spec L5). A robe is a top that reaches the shins. */
+export const TOP_STYLE_IDS = ['tee', 'tank', 'shirt', 'hoodie', 'sweater', 'robe'] as const;
 export type TopStyleId = typeof TOP_STYLE_IDS[number];
+/** Worn open over the top, so the top shows down the front: the reference's layered look. */
+export const OUTER_STYLE_IDS = ['jacket', 'vest', 'overshirt', 'coat'] as const;
+export type OuterStyleId = typeof OUTER_STYLE_IDS[number];
+export const BOTTOM_STYLE_IDS = ['trousers', 'shorts', 'skirt', 'overalls'] as const;
+export type BottomStyleId = typeof BOTTOM_STYLE_IDS[number];
+export const NECKWEAR_STYLE_IDS = ['scarf', 'tie', 'bowtie', 'bandana'] as const;
+export type NeckwearStyleId = typeof NECKWEAR_STYLE_IDS[number];
+export const SHOE_STYLE_IDS = ['sneakers', 'boots', 'shoes'] as const;
+export type ShoeStyleId = typeof SHOE_STYLE_IDS[number];
+/**
+ * Painted voxel patterns. `stripes` are rows of the accent, `plaid` a buffalo check (the accent where the bands
+ * cross, a blend where one passes), `dots` a scatter of accent cells, `print` a block on the chest.
+ */
+export const PATTERN_IDS = ['plain', 'stripes', 'plaid', 'dots', 'print'] as const;
+export type PatternId = typeof PATTERN_IDS[number];
+
+/** A dyed garment: its cut, its dye, its pattern and the pattern's second colour. */
+export interface Garment<S extends string> {
+  readonly style: S;
+  readonly dye: Hex;
+  readonly pattern: PatternId;
+  readonly accent: Hex;
+}
 
 export interface CitizenLook {
   readonly version: 1;
@@ -51,11 +75,28 @@ export interface CitizenLook {
   readonly earrings: { readonly style: EarringStyleId; readonly colour: Hex } | null;
   /** A flower tucked over the ear, or into the hat band when the hat has one. */
   readonly flower: { readonly colour: Hex } | null;
-  readonly top: { readonly style: TopStyleId; readonly dye: Hex };
+  readonly top: Garment<TopStyleId>;
+  /** Worn open over the top; null for none. */
+  readonly outer: Garment<OuterStyleId> | null;
+  readonly bottom: Garment<BottomStyleId>;
+  /** A scarf's stripes and a bandana's dots use `accent`; a tie's stripes too. */
+  readonly neckwear: { readonly style: NeckwearStyleId; readonly dye: Hex; readonly accent: Hex } | null;
+  readonly shoes: { readonly style: ShoeStyleId; readonly dye: Hex };
+}
+
+/** What a look saved before the wardrobe existed is wearing below the waist. */
+export const DEFAULT_BOTTOM: Garment<BottomStyleId> = { style: 'trousers', dye: '#2f4f86', pattern: 'plain', accent: '#1e1d22' };
+export const DEFAULT_SHOES: CitizenLook['shoes'] = { style: 'shoes', dye: '#4a3426' };
+
+/** The accent a garment gets when none was chosen: white on dark cloth, near-black on light. */
+export function defaultAccent(dye: Hex): Hex {
+  return luma(rgb(dye)) < .45 ? '#f3f1ee' : '#1e1d22';
 }
 
 /** The parts a look may leave out. A saved look from before they existed reads as wearing none of them. */
-const OPTIONAL_PARTS = ['moustache', 'hat', 'glasses', 'earrings', 'flower'] as const;
+const OPTIONAL_PARTS = ['moustache', 'hat', 'glasses', 'earrings', 'flower', 'outer', 'neckwear'] as const;
+/** Parts a look always wears; an older look without them gets the defaults above. */
+const WARDROBE_PARTS = ['bottom', 'shoes'] as const;
 
 const oneOf = <T extends string>(list: readonly T[], value: unknown, what: string): T => {
   if (typeof value !== 'string' || !(list as readonly string[]).includes(value)) throw new Error(`Unknown ${what}: ${String(value)}.`);
@@ -76,10 +117,9 @@ const part = <T>(value: unknown, read: (v: unknown) => T): T | null => (value ==
 
 /** Validates untrusted input (a saved look, a realm message) into a recipe. Unknown keys are refused. */
 export function parseLook(input: unknown): CitizenLook {
-  const v = record(input, 'Look', ['version', 'skin', 'eyes', 'freckles', 'blush', 'hair', 'beard', 'top', ...OPTIONAL_PARTS]);
+  const v = record(input, 'Look', ['version', 'skin', 'eyes', 'freckles', 'blush', 'hair', 'beard', 'top', ...OPTIONAL_PARTS, ...WARDROBE_PARTS]);
   if (v.version !== 1) throw new Error('Unsupported look version.');
   const eyes = record(v.eyes, 'Eyes', ['shape', 'spacing']), hair = record(v.hair, 'Hair', ['style', 'colour']);
-  const top = record(v.top, 'Top', ['style', 'dye']);
   if (typeof v.blush !== 'boolean') throw new Error('Blush must be true or false.');
   if (v.beard === undefined) throw new Error('Beard must be a beard or null.');
   return {
@@ -110,7 +150,30 @@ export function parseLook(input: unknown): CitizenLook {
       return { style: oneOf(EARRING_STYLE_IDS, r.style, 'earrings'), colour: colour(r.colour, 'Earring colour') };
     }),
     flower: part(v.flower, f => ({ colour: colour(record(f, 'Flower', ['colour']).colour, 'Flower colour') })),
-    top: { style: oneOf(TOP_STYLE_IDS, top.style, 'top'), dye: colour(top.dye, 'Top dye') },
+    top: garment(v.top, 'Top', TOP_STYLE_IDS),
+    outer: part(v.outer, o => garment(o, 'Outer layer', OUTER_STYLE_IDS)),
+    bottom: v.bottom === undefined ? DEFAULT_BOTTOM : garment(v.bottom, 'Bottom', BOTTOM_STYLE_IDS),
+    neckwear: part(v.neckwear, n => {
+      const r = record(n, 'Neckwear', ['style', 'dye', 'accent']);
+      const dye = colour(r.dye, 'Neckwear dye');
+      return { style: oneOf(NECKWEAR_STYLE_IDS, r.style, 'neckwear'), dye, accent: r.accent === undefined ? defaultAccent(dye) : colour(r.accent, 'Neckwear accent') };
+    }),
+    shoes: v.shoes === undefined ? DEFAULT_SHOES : (() => {
+      const r = record(v.shoes, 'Shoes', ['style', 'dye']);
+      return { style: oneOf(SHOE_STYLE_IDS, r.style, 'shoes'), dye: colour(r.dye, 'Shoe dye') };
+    })(),
+  };
+}
+
+/** A garment; a look saved before patterns existed reads as plain, with the default accent. */
+function garment<S extends string>(value: unknown, what: string, styles: readonly S[]): Garment<S> {
+  const r = record(value, what, ['style', 'dye', 'pattern', 'accent']);
+  const dye = colour(r.dye, `${what} dye`);
+  return {
+    style: oneOf(styles, r.style, what.toLowerCase()),
+    dye,
+    pattern: r.pattern === undefined ? 'plain' : oneOf(PATTERN_IDS, r.pattern, 'pattern'),
+    accent: r.accent === undefined ? defaultAccent(dye) : colour(r.accent, `${what} accent`),
   };
 }
 
@@ -197,6 +260,64 @@ export function seedLook(seed: string): CitizenLook {
     glasses,
     earrings,
     flower,
-    top: { style: 'tee', dye: pick(random, DYES).hex },
+    ...seedClothes(random),
   };
+}
+
+/** Two dyes that read as different garments: apart in lightness or clearly apart in hue. */
+function distinct(a: Hex, b: Hex): boolean {
+  const [x, y] = [rgb(a), rgb(b)];
+  return Math.abs(luma(x) - luma(y)) > .16 || Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]) > .45;
+}
+const pickApart = (random: () => number, list: readonly { hex: Hex }[], from: readonly Hex[]): Hex => {
+  const options = list.filter(c => from.every(f => distinct(c.hex, f)));
+  return pick(random, options.length ? options : list).hex;
+};
+
+/**
+ * A seeded outfit: a top, often a layer over it (the reference's open jackets and vests), something below,
+ * sometimes a scarf or a tie, and shoes. Patterns go where they belong: plaid on shirts and skirts, stripes on
+ * tees and sweaters, a loud scatter on an open overshirt. Layers always differ from what they are worn over.
+ */
+function seedClothes(random: () => number): Pick<CitizenLook, 'top' | 'outer' | 'bottom' | 'neckwear' | 'shoes'> {
+  const topStyle = weighted<TopStyleId>(random, [['tee', 5], ['tank', 1.4], ['shirt', 2.6], ['hoodie', 2], ['sweater', 2], ['robe', .5]]);
+  const topPatterns: Record<TopStyleId, readonly (readonly [PatternId, number])[]> = {
+    tee: [['plain', 6], ['stripes', 1.6], ['print', 1.6], ['dots', .3]],
+    tank: [['plain', 4], ['stripes', 1.2]],
+    shirt: [['plain', 2], ['plaid', 2.6], ['stripes', .8], ['dots', .8]],
+    hoodie: [['plain', 5], ['print', 1.2]],
+    sweater: [['plain', 4], ['stripes', 2]],
+    robe: [['plain', 1]],
+  };
+  const topDye = pick(random, DYES).hex;
+  const topPattern = weighted(random, topPatterns[topStyle]);
+  const accentFor = (pattern: PatternId, dye: Hex): Hex =>
+    pattern === 'plaid' ? (random() < .6 ? '#1e1d22' : pickApart(random, DYES, [dye]))
+      : pattern === 'stripes' && random() < .55 ? defaultAccent(dye) : pickApart(random, DYES, [dye]);
+  const top: Garment<TopStyleId> = { style: topStyle, dye: topDye, pattern: topPattern, accent: accentFor(topPattern, topDye) };
+
+  const outerStyle = random() < (topStyle === 'robe' ? .08 : topStyle === 'hoodie' ? .2 : .36)
+    ? weighted<OuterStyleId>(random, [['jacket', 3], ['vest', 2.6], ['overshirt', 2], ['coat', 1]]) : null;
+  let outer: Garment<OuterStyleId> | null = null;
+  if (outerStyle) {
+    const dye = pickApart(random, DYES, [topDye]);
+    const pattern = outerStyle === 'overshirt' ? weighted<PatternId>(random, [['plain', 1], ['dots', 1.6], ['plaid', 1.4]])
+      : outerStyle === 'vest' ? weighted<PatternId>(random, [['plain', 5], ['plaid', 1]]) : 'plain';
+    outer = { style: outerStyle, dye, pattern, accent: accentFor(pattern, dye) };
+  }
+
+  const bottomStyle = topStyle === 'robe' ? 'trousers' : weighted<BottomStyleId>(random, [['trousers', 5], ['shorts', 2], ['skirt', 2], ['overalls', 1.2]]);
+  const bottomDye = random() < .65 ? pickApart(random, BOTTOM_CLOTH, [topDye]) : pickApart(random, DYES, [topDye, outer?.dye ?? topDye]);
+  const bottomPattern = bottomStyle === 'skirt' && random() < .3 ? 'plaid' : 'plain';
+  const bottom: Garment<BottomStyleId> = { style: bottomStyle, dye: bottomDye, pattern: bottomPattern, accent: accentFor(bottomPattern, bottomDye) };
+
+  const neckStyle = random() < .15
+    ? weighted<NeckwearStyleId>(random, [['scarf', 3], ['tie', topStyle === 'shirt' ? 3 : .6], ['bowtie', .8], ['bandana', 1.4]]) : null;
+  const neckDye = neckStyle && pickApart(random, DYES, [topDye, outer?.dye ?? topDye]);
+  const neckwear = neckStyle && neckDye
+    ? { style: neckStyle, dye: neckDye, accent: neckStyle === 'tie' && random() < .5 ? neckDye : pickApart(random, DYES, [neckDye]) } : null;
+
+  const shoeStyle = weighted<ShoeStyleId>(random, [['sneakers', 4], ['boots', 2], ['shoes', 3]]);
+  const shoes = { style: shoeStyle, dye: shoeStyle === 'sneakers' ? pick(random, [...DYES, DYES[13], DYES[13]]).hex : pick(random, LEATHER).hex };
+  return { top, outer, bottom, neckwear, shoes };
 }

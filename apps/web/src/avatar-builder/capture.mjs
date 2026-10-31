@@ -2,6 +2,7 @@
 //
 //   node apps/web/src/avatar-builder/capture.mjs [--out shots/avatar-style/portraits] [--sets fixtures,seeded]
 //   node apps/web/src/avatar-builder/capture.mjs --compare <before-dir> <after-dir> [--out <dir>]
+//   node apps/web/src/avatar-builder/capture.mjs --sets '' --lineups fixtures:stream,fixtures:close,seeded:stream [--hour 19.25]
 //
 // For each set writes the bench page (`<set>-bench@1440.png`), every portrait at 512 and 128 px
 // (`<set>/<nn>@512.png`, `@128.png`), `<set>-sheet.png` (4 × 5 at 500 px cells, the reference's layout) and
@@ -20,7 +21,10 @@ const args = process.argv.slice(2);
 const flag = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : fallback; };
 const compare = args.includes('--compare') ? [args[args.indexOf('--compare') + 1], args[args.indexOf('--compare') + 2]] : null;
 const out = flag('--out', compare ? `${compare[1]}/compare` : 'shots/avatar-style/portraits');
-const sets = flag('--sets', 'fixtures,seeded').split(',');
+const sets = flag('--sets', 'fixtures,seeded').split(',').filter(Boolean);
+// Full-body lineups as <set>:<view>, e.g. fixtures:stream,fixtures:close (lineup.html, 1920×1080, dusk).
+const lineups = flag('--lineups', '').split(',').filter(Boolean);
+const hour = flag('--hour', '19.25');
 const PORT = assertCapturePort(5189);
 const REFERENCE = 'work/references/avatar-style/reference.png';
 const LAUNCH = { channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] };
@@ -53,7 +57,7 @@ try {
       console.log(`[portraits] ${join(out, `compare-${set}.png`)}`);
     }
   } else {
-    server = await createServer({ root: 'apps/web', configFile: 'apps/web/vite.config.ts', logLevel: 'error', optimizeDeps: { entries: ['src/avatar-builder/portraits.html'] }, server: { host: '127.0.0.1', port: PORT, strictPort: true } });
+    server = await createServer({ root: 'apps/web', configFile: 'apps/web/vite.config.ts', logLevel: 'error', optimizeDeps: { entries: ['src/avatar-builder/portraits.html', 'src/avatar-builder/lineup.html'] }, server: { host: '127.0.0.1', port: PORT, strictPort: true } });
     await server.listen();
     const reference = await dataUrl(REFERENCE);
     for (const set of sets) {
@@ -80,6 +84,19 @@ try {
         <div>${label(`OURS · ${set.toUpperCase()} · SIMULATED`)}${grid(urls, 250)}</div>
         <div>${label('REFERENCE')}<img src="${reference}" style="display:block;width:1250px;height:1000px"></div></div></body>`, 2560, join(out, `${set}-vs-reference.png`));
       console.log(`[portraits] ${join(out, `${set}-vs-reference.png`)}`);
+    }
+    for (const entry of lineups) {
+      const [set, view] = entry.split(':');
+      const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+      const errors = [];
+      page.on('pageerror', e => errors.push(e.message));
+      await page.goto(`http://127.0.0.1:${PORT}/src/avatar-builder/lineup.html?set=${set}&view=${view}&hour=${hour}`, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => window.__chatdomReady === true, {}, { timeout: 300000 });
+      if (errors.length) throw new Error(`${entry}: ${errors.join('\n')}`);
+      const path = join(out, `lineup-${set}-${view}@1920x1080.png`);
+      await page.screenshot({ path });
+      await page.close();
+      console.log(`[lineup] ${path}`);
     }
   }
 } finally {

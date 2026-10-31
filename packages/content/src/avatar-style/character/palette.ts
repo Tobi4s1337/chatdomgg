@@ -75,3 +75,17 @@ export const PETALS = [
 ] as const satisfies readonly { id: string; hex: Hex }[];
 export const FLOWER_HEART: Hex = '#ffd23a';
 export const LEAF_GREEN: Hex = '#3fae4a';
+
+/** Cloth for trousers, shorts, skirts and overalls besides the garment dyes: denims, drill and cord. */
+export const BOTTOM_CLOTH = [
+  { id: 'indigo', hex: '#2f4f86' }, { id: 'stonewash', hex: '#6d8fc4' }, { id: 'raw-denim', hex: '#1f2f55' },
+  { id: 'khaki', hex: '#c2a774' }, { id: 'olive', hex: '#5f6b3a' }, { id: 'cord', hex: '#8a5a32' }, { id: 'slate', hex: '#4a4d58' },
+] as const satisfies readonly { id: string; hex: Hex }[];
+
+/** Leathers for boots and shoes. */
+export const LEATHER = [
+  { id: 'tan', hex: '#a8693a' }, { id: 'brown', hex: '#5e3a22' }, { id: 'oxblood', hex: '#6a2228' }, { id: 'black', hex: '#24211f' },
+] as const satisfies readonly { id: string; hex: Hex }[];
+
+/** Buttons and buckles: brass reads on every cloth. */
+export const BRASS: Hex = '#d9a441';
