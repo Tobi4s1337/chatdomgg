@@ -24,7 +24,7 @@ walk from fire to anvil to tavern to home and back outside, using the actual exi
   version, request id, stable `targetId` and `action: sit | forge | tavern | enter-home | exit-home | stand`.
   It contains no actor, position, rotation, home owner, seat winner or client claim of reachability.
 - `packages/shared/src/realm/messages.ts:49` exports `RealmInteractionTarget` with `id`, `kind`, `position`,
-  `approach`, `reach`, optional `plotId`; kinds are campfire-seat, anvil, tavern-seat, home-door and home-exit.
+  `approach`, `reach`, optional `plotId`; kinds are bench-seat, campfire-seat, anvil, tavern-seat, home-door and home-exit.
   IDs must satisfy `TokenSchema`, not be display labels or render-object indices.
 - `packages/shared/src/realm/{schema,movement}.ts` define `WalkerSchema`, `KingdomRoomState`, `PlayerState`,
   `CollisionWorld`, `WALK_BODY`, the 30 Hz simulation and 200 ms room patches. `realm/interactions.ts` now defines
@@ -304,6 +304,15 @@ citizen cards, extra seat families, Twitch writes, production deploys or infrast
 responsibilities consumed here. Their absence blocks the corresponding integrated acceptance, not the scope.
 
 ## Decisions
+
+- **2026-10-31 — Installed street benches.** Main freezes optional bounded `VoxelBlueprint.seats` on civic
+  assets: local build-cell position/approach/seated-root and quarter-turn facing, with unique local IDs.
+  `bench:<placement-token>:seat:<local-segment>` is a separate `bench-seat` family using existing `sit`/`stand`
+  authority. Its prompt is “Sit for a moment”, not a claim that a fire or tavern exists. Only an actual installed
+  approved asset supplies anchors; supported approaches, reach, occupancy and current writer rules still apply.
+  Main's market composition adds the reviewed CF01 log through the existing fenced founded-world adoption,
+  retaining the adopted plan, original native pieces and committed home/Forge bytes. This is public seating,
+  not a game/voice lease. Other place producers may use the same bench metadata without inventing a new solver.
 
 - **2026-10-30 — E use is the brief's current control decision.** Tech's older Q/E orbit and F use cannot both
   remain active on E; walk-camera and integrator resolve the bindings once. Free cursor/camera follow remains.

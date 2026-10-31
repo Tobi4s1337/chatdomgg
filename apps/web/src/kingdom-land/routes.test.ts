@@ -99,5 +99,5 @@ describe('kingdom walks', () => {
     expect(content.placed.map(item => item.blueprint.id)).toEqual(['civic-hearth-footbridge']);
     expect(content.placed[0]!.yaw).toBeCloseTo(routes.dressings[0]!.turn * Math.PI / 2);
     expect(content.pending).toEqual(seats);
-  });
+  }, 20_000); // Founding plus exhaustive route samples can exceed 5 s on the shared capture host.
 });

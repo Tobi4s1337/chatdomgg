@@ -28,7 +28,7 @@ agent writes the web planner at a time. Never label two tasks independent while 
 
 ## Tasks
 
-- [ ] **GD01 — A tended meadow visible through the real renderer.** Author meadow tufts, four single-colour
+- [x] **GD01 — A tended meadow visible through the real renderer.** Author meadow tufts, four single-colour
   wildflower drifts and clover/pebbles. Build pure deterministic clear-ground/density/drift planning, renderer
   mount, actual shadow release/cleanup, capture script and a typed SIMULATED fixture bench with production voxel
   mesher/material. Preserve calm open meadow and street/window clearance. Use bounded visible batching; measure the representative result once, without a synthetic future-family budget proof. Keep planner output
@@ -40,7 +40,7 @@ agent writes the web planner at a time. Never label two tasks independent while 
   clump. Root flare, taper, broad asymmetric crowns, credible branch support; no lollipops or noisy voxels.
   Keep every final component grounded and within R1 budgets. Readable full/LOD4 silhouettes in one compact representative-angle sheet and one dusk elder-oak detail. Publish forms early for places-high, without transferring planting ownership.
   · evidence: opened sheets and 160 px/greyscale silhouettes; whole-collection support/meshed-budget checks.
-- [ ] **GD03 — Gardens with age, and a back fence that follows growth.** Author the full garden/field kit in
+- [x] **GD03 — Gardens with age, and a back fence that follows growth.** Author the full garden/field kit in
   Hearth/Tide/Grove: bed, woodpile, closed barrels, crates/sack, empty parked garden cart, field wall, rail fence,
   back fence. Place vignettes by tenure/real footprint, preserving existing doorstep props and front aprons.
   Back fence follows SettlementHome.allowedDepth in its local frame with actual rear clearance; omit only the

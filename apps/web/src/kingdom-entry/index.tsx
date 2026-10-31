@@ -1,7 +1,7 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import Kingdom from '../kingdom';
-import { RealmEntryError, realmSignInUrl } from '../realm/adapters/entry';
+import { RealmEntryError, realmEntryFailureMessage, realmSignInUrl } from '../realm/adapters/entry';
 import type { KingdomEntryConnection, KingdomEntrySource } from './types';
 import './entry.css';
 
@@ -41,6 +41,7 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
       connection = next;
       unmount = render(() => <Kingdom founded={next.scene} presenceFeed={next.presenceFeed} {...(next.chatFeed ? { chatFeed: next.chatFeed } : {})}
         {...(next.forgeFeed ? { forgeFeed: next.forgeFeed } : {})}
+        {...(next.momentFeed ? { momentFeed: next.momentFeed } : {})}
         kingdomName={next.kingdomName} walk={{ client: next.client, collision: next.collision,
           manifest: next.manifest, onSceneNeeded: () => {
             // Finish the current scene frame before disposing its renderer and controller.
@@ -52,7 +53,7 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
       if (closed || current !== generation) return;
       release();
       const unauthenticated = error instanceof RealmEntryError && error.status === 'unauthenticated';
-      setMessage(error instanceof RealmEntryError ? error.message : undefined);
+      setMessage(realmEntryFailureMessage(error));
       setState(unauthenticated ? 'unauthenticated' : 'refused');
     }
   }

@@ -19,6 +19,17 @@ export async function resolveCredit(directory: CitizenDirectory, kingdomId: King
   return providerName === null ? null : publicCredit(providerName, null);
 }
 
+/**
+ * Twitch's public stand-in accounts for anonymous acts: AnAnonymousCheerer (407665396) and AnAnonymousGifter
+ * (274598607). Some payloads carry a null user for an anonymous act and some carry one of these accounts, so both
+ * the account ID and its fixed login are checked. A stand-in is never resolved, credited or kept.
+ */
+const ANONYMOUS_ACCOUNTS: ReadonlySet<string> = new Set(['407665396', '274598607']);
+const ANONYMOUS_LOGINS: ReadonlySet<string> = new Set(['ananonymouscheerer', 'ananonymousgifter']);
+export function isAnonymousAccount(userId: string | null, login: string | null): boolean {
+  return userId === null || ANONYMOUS_ACCOUNTS.has(userId) || (login !== null && ANONYMOUS_LOGINS.has(login.toLowerCase()));
+}
+
 /** Two independent FNV-1a passes: a stable short digest for an over-long provider ID. Not a security hash. */
 function digest(text: string): string {
   let a = 0x811c9dc5, b = 0x050c5d1f;

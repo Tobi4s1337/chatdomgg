@@ -37,6 +37,12 @@ export function createFoundedInteractionRegistry(scene: RealmFoundedScene, world
   const assets = new Map(scene.assets.map(a => [a.assetHash, a.blueprint]));
   for (const placement of scene.placements) {
     const blueprint = assets.get(placement.assetHash), plot = placement.plotId;
+    if (blueprint?.kind === 'civic' && blueprint.lattice === 'build' && blueprint.seats?.length) {
+      placements.push({ source: placement.id, origin: placement.position, turn: placement.rotation, cell: VOXEL_METRES.build,
+        anchors: blueprint.seats.map(seat => ({ id: interactionTargetId.benchSeat(placement.id, seat.id), kind: 'bench-seat',
+          zone: 'street', position: seat.position, approach: seat.approach, rest: seat.rest,
+          facing: seat.facing * Math.PI / 2, reach: 3 })) });
+    }
     if (!plot || blueprint?.kind !== 'home') continue;
     const at = (local: Vec3) => transformCardinalPoint(placement.position, placement.rotation,
       [local[0] * VOXEL_METRES.build, local[1] * VOXEL_METRES.build, local[2] * VOXEL_METRES.build]);

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createServer as createPortProbe } from 'node:net';
 import assert from 'node:assert/strict';
+import { CAPTURE_PORTS } from './capture-ports.mjs';
 import { acquireCaptureLock } from './capture-lock.mjs';
 
 const { values } = parseArgs({ options: { out: { type: 'string', default: 'shots/kingdom/walk' }, 'look-only': { type: 'boolean', default: false } } });
@@ -32,13 +33,13 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
 // Bind only free development ports, never the user's 5190/5191/5192 services. A competing bind fails closed.
 const freePorts = async count => {
   const found = [];
-  for (let port = 5170; port <= 5199 && found.length < count; port++) {
-    if ([5190, 5191, 5192].includes(port)) continue;
+  for (const port of CAPTURE_PORTS) {
+    if (found.length === count) break;
     const probe = createPortProbe();
     const free = await new Promise(resolve => { probe.once('error', () => resolve(false)); probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true))); });
     if (free) found.push(port);
   }
-  assert.equal(found.length, count, 'Two free development ports are required');
+  assert.equal(found.length, count, 'No safe capture port available.');
   return found;
 };
 try {

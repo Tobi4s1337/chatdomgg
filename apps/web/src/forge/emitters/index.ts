@@ -5,8 +5,10 @@ export interface ForgeEmitterInput {
   anvil: THREE.Vector3;
   activity: number;
   fillHeight?: number;
-  landed?: { position: THREE.Vector3; kind: 'smoke' | 'glow' }[];
+  landed?: { position: THREE.Vector3; kind: 'smoke' | 'glow'; direction?: THREE.Vector3 }[];
   strike?: number;
+  /** One welcome beat, in world coordinates; age is seconds since landing. */
+  landingBeat?: { position: THREE.Vector3; age: number; colour?: THREE.ColorRepresentation };
 }
 
 const MAX_LANDED = 18;
@@ -22,7 +24,7 @@ export function createForgeEmitters(scene: THREE.Scene) {
   root.frustumCulled = false;
   scene.add(root);
 
-  function pool(count: number, mode: 0 | 1 | 2) {
+  function pool(count: number, mode: 0 | 1 | 2 | 3 | 4 | 5) {
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
@@ -33,41 +35,59 @@ export function createForgeEmitters(scene: THREE.Scene) {
     const material = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
-      blending: mode === 1 ? THREE.NormalBlending : THREE.AdditiveBlending,
-      uniforms: { uMode: { value: mode } },
+      blending: mode === 1 || mode === 5 ? THREE.NormalBlending : THREE.AdditiveBlending,
+      uniforms: { uMode: { value: mode }, uColour: { value: new THREE.Color(0xffba60) }, uPixelScale: { value: 300 } },
       vertexShader: `
         attribute float aSize;
         attribute float aAlpha;
         varying float vAlpha;
+        uniform float uPixelScale;
         void main() {
           vAlpha = aAlpha;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mv;
-          gl_PointSize = min(96.0, aSize * (300.0 / max(0.1, -mv.z)));
+          gl_PointSize = min(96.0, aSize * (uPixelScale / max(0.1, -mv.z)));
         }
       `,
       fragmentShader: `
         uniform int uMode;
+        uniform vec3 uColour;
         varying float vAlpha;
         void main() {
           vec2 p = gl_PointCoord * 2.0 - 1.0;
           float a;
           vec3 c;
-          if (uMode == 1) {
+          if (uMode == 3) {
+            // A diffuse breath, with no hard rim or solid luminous centre.
+            float d = length(p);
+            a = pow(max(0.0, 1.0 - d), 2.8) * vAlpha;
+            c = uColour;
+          } else if (uMode == 4) {
+            // Fine glints, their tails tapering into the air.
+            float core = (1.0 - smoothstep(0.02, 0.23, abs(p.x))) * (1.0 - smoothstep(0.05, 0.95, abs(p.y)));
+            float halo = (1.0 - smoothstep(0.0, 0.45, length(p))) * 0.25;
+            a = (core * 0.75 + halo) * vAlpha;
+            // The hot glint core contributes radiance; its alpha still shapes the tail.
+            c = mix(uColour, vec3(1.0, 0.83, 0.52), 0.55) * 3.4;
+          } else if (uMode == 5) {
+            float d = min(length(p * vec2(0.96, 1.04)), min(length((p - vec2(-0.27, -0.1)) * 1.25), length((p - vec2(0.25, 0.12)) * 1.32)));
+            a = (1.0 - smoothstep(0.2, 1.0, d)) * vAlpha;
+            c = vec3(0.62, 0.61, 0.59);
+          } else if (uMode == 1) {
             // A soft union of offset lobes makes a puff rather than a flat disc.
             float d = min(length(p * vec2(0.94, 1.05)), min(length((p - vec2(-0.32, -0.08)) * 1.23), length((p - vec2(0.29, 0.12)) * 1.3)));
             a = (1.0 - smoothstep(0.42, 1.0, d)) * vAlpha;
-            c = vec3(0.58, 0.52, 0.47);
+            c = vec3(0.37, 0.39, 0.43);
           } else if (uMode == 2) {
             float d = length(p);
             float star = max((1.0 - smoothstep(0.0, 0.14, abs(p.x))) * (1.0 - smoothstep(0.08, 0.9, abs(p.y))), (1.0 - smoothstep(0.0, 0.14, abs(p.y))) * (1.0 - smoothstep(0.08, 0.9, abs(p.x))));
             a = (star * 0.55 + (1.0 - smoothstep(0.0, 0.55, d)) * 0.35) * vAlpha;
-            c = vec3(1.0, 0.67, 0.25);
+            c = vec3(1.0, 0.67, 0.25) * 4.0;
           } else {
             // Tiny square hot fragments, with a darker amber edge.
             float edge = max(abs(p.x), abs(p.y));
             a = (1.0 - smoothstep(0.78, 1.0, edge)) * vAlpha;
-            c = mix(vec3(0.9, 0.31, 0.055), vec3(1.0, 0.73, 0.28), 1.0 - edge);
+            c = mix(vec3(0.9, 0.31, 0.055), vec3(1.0, 0.73, 0.28), 1.0 - edge) * mix(1.0, 3.5, 1.0 - edge);
           }
           gl_FragColor = vec4(c, a);
           #include <tonemapping_fragment>
@@ -76,6 +96,14 @@ export function createForgeEmitters(scene: THREE.Scene) {
       `,
     });
     const points = new THREE.Points(geometry, material);
+    if (mode === 1 || mode === 5) {
+      const viewport = new THREE.Vector2();
+      points.onBeforeRender = (renderer, _scene, camera) => {
+        const perspective = camera as THREE.PerspectiveCamera;
+        if (perspective.isPerspectiveCamera) material.uniforms.uPixelScale!.value =
+          renderer.getDrawingBufferSize(viewport).y / (2 * Math.tan(THREE.MathUtils.degToRad(perspective.fov * .5)));
+      };
+    }
     points.frustumCulled = false;
     root.add(points);
     return { geometry, material, positions, sizes, alphas };
@@ -85,7 +113,10 @@ export function createForgeEmitters(scene: THREE.Scene) {
   const pour = pool(16, 0);
   const smoke = pool(MAX_LANDED * PER_LANDING, 1);
   const glow = pool(MAX_LANDED * PER_LANDING, 2);
-  const pools = [spark, pour, smoke, glow];
+  const breath = pool(2, 3);
+  const embers = pool(12, 4);
+  const landingSmoke = pool(6, 5);
+  const pools = [spark, pour, smoke, glow, breath, embers, landingSmoke];
 
   function update(input: ForgeEmitterInput) {
     const time = Number.isFinite(input.time) ? input.time : 0;
@@ -126,11 +157,12 @@ export function createForgeEmitters(scene: THREE.Scene) {
         const phase = fract(time / (entry.kind === 'smoke' ? 3.8 : 1.7) + hash(seed + 500));
         const j = i * 3;
         if (entry.kind === 'smoke') {
-          target.positions[j] = entry.position.x + Math.sin(time * 0.35 + seed) * 0.045 + phase * 0.16;
-          target.positions[j + 1] = entry.position.y + phase * 0.85;
-          target.positions[j + 2] = entry.position.z + Math.cos(seed * 1.3) * phase * 0.08;
-          target.sizes[i] = 0.255 + phase * 0.33;
-          target.alphas[i] = Math.sin(Math.PI * phase) * 0.24;
+          const exhale = Math.sin(phase * Math.PI * .5) * .7;
+          target.positions[j] = entry.position.x + (entry.direction?.x ?? 0) * exhale + Math.sin(time * 0.45 + seed + phase * 3.0) * phase * 0.2 + phase * 0.18;
+          target.positions[j + 1] = entry.position.y + phase * 2.0;
+          target.positions[j + 2] = entry.position.z + (entry.direction?.z ?? 0) * exhale + Math.cos(seed * 1.3 + phase * 3.0) * phase * 0.18;
+          target.sizes[i] = 0.24 + phase * 0.42;
+          target.alphas[i] = Math.sin(Math.PI * phase) * 0.42;
         } else {
           const angle = hash(seed + 600) * Math.PI * 2;
           const radius = 0.07 + hash(seed + 700) * 0.28;
@@ -140,6 +172,46 @@ export function createForgeEmitters(scene: THREE.Scene) {
           target.sizes[i] = 0.045 + hash(seed + 800) * 0.065;
           target.alphas[i] = Math.sin(Math.PI * phase) * 0.52;
         }
+      }
+    }
+    breath.alphas.fill(0);
+    embers.alphas.fill(0);
+    landingSmoke.alphas.fill(0);
+    const beat = input.landingBeat;
+    if (beat && Number.isFinite(beat.age) && beat.age >= 0 && beat.age < 2.5) {
+      const age = beat.age;
+      const origin = beat.position;
+      const fade = Math.pow(1 - age / 2.5, 1.5);
+      const bloom = Math.min(1, age / 0.16);
+      breath.material.uniforms.uColour!.value.set(beat.colour ?? 0xffba60);
+      embers.material.uniforms.uColour!.value.set(beat.colour ?? 0xffba60);
+      for (let i = 0; i < 2; i++) {
+        const j = i * 3;
+        breath.positions[j] = origin.x + (i ? 0.17 : -0.12);
+        breath.positions[j + 1] = origin.y + 0.18 + age * 0.13 + i * 0.16;
+        breath.positions[j + 2] = origin.z + (i ? -0.12 : 0.08);
+        breath.sizes[i] = (i ? 1.05 : 1.45) + age * 0.2;
+        breath.alphas[i] = bloom * fade * (i ? 0.18 : 0.26);
+      }
+      for (let i = 0; i < 12; i++) {
+        const j = i * 3;
+        const angle = hash(i + 1200) * Math.PI * 2;
+        const distance = (0.12 + age * (0.35 + hash(i + 1300) * 0.55));
+        embers.positions[j] = origin.x + Math.cos(angle) * distance;
+        embers.positions[j + 1] = origin.y + 0.14 + age * (0.28 + hash(i + 1400) * 0.55) - age * age * 0.055;
+        embers.positions[j + 2] = origin.z + Math.sin(angle) * distance;
+        embers.sizes[i] = 0.055 + hash(i + 1500) * 0.085;
+        embers.alphas[i] = bloom * fade * (0.45 + hash(i + 1600) * 0.4);
+      }
+      for (let i = 0; i < 6; i++) {
+        const j = i * 3;
+        const angle = hash(i + 1700) * Math.PI * 2;
+        const drift = 0.08 + age * (0.12 + hash(i + 1800) * 0.15);
+        landingSmoke.positions[j] = origin.x + Math.cos(angle + age * 0.32) * drift;
+        landingSmoke.positions[j + 1] = origin.y + 0.1 + i * 0.035 + age * (0.22 + hash(i + 1900) * 0.2);
+        landingSmoke.positions[j + 2] = origin.z + Math.sin(angle + age * 0.32) * drift;
+        landingSmoke.sizes[i] = 0.25 + hash(i + 2000) * 0.18 + age * 0.18;
+        landingSmoke.alphas[i] = bloom * fade * 0.16;
       }
     }
     for (const p of pools) {

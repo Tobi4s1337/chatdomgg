@@ -1,6 +1,7 @@
 import { EpochMsSchema, PersonIdSchema, TokenSchema, UIntSchema, type PersonId } from '@chatdom/shared';
 import {
-  CreditSchema, MOMENT_CURRENT_LIMIT, PublicNameSchema, PublicRecipientSchema, SlotSchema, TwitchMomentFactSchema, type TwitchMomentFact,
+  CreditSchema, MOMENT_CURRENT_LIMIT, PublicNameSchema, PublicRecipientSchema, SlotSchema, StatePhaseSchema, TwitchMomentFactSchema,
+  type TwitchMomentFact,
 } from '../../../web/src/twitch-moments/contracts';
 import { z } from '../../../web/src/twitch-moments/zod';
 import type { MomentRecordTransaction } from './ports';
@@ -89,6 +90,56 @@ export const GifterWindowRecordSchema = z.strictObject({
 });
 export type GifterWindowRecord = z.infer<typeof GifterWindowRecordSchema>;
 
+export const DragonFormSchema = z.enum(['young', 'elder', '10', '25', '50', '100', 'record', 'golden']);
+/** Named contributors kept for one train; the public list carries the same bound. */
+export const HYPE_CONTRIBUTOR_LIMIT = 32;
+
+/**
+ * One Hype Train, keyed by the provider train's own token. The newest state is chosen by provider state (total,
+ * level, expiry, phase), never by receipt order; once `end` is recorded nothing can reopen it. `allTimeHighLevel`
+ * is exactly what `begin` reported (only begin carries it) and `recordFromRead` only what a status read proved;
+ * neither is ever inferred. `contributors` holds the named people Twitch showed as top contributors, never quiet
+ * or anonymous ones and never their amounts. `summoned` is the last dragon form requested for this train.
+ */
+export const HypeTrainRecordSchema = z.strictObject({
+  version: z.literal(1),
+  trainKey: TokenSchema,
+  phase: StatePhaseSchema,
+  level: UIntSchema.min(1).max(100_000),
+  total: UIntSchema,
+  progress: UIntSchema,
+  goal: UIntSchema.min(1),
+  startedAt: EpochMsSchema,
+  endsAt: EpochMsSchema,
+  golden: z.boolean(),
+  treasure: z.boolean(),
+  /** A stable token for a shared train's one battle identity; null when the train is not shared. */
+  sharedSessionKey: TokenSchema.nullable(),
+  allTimeHighLevel: UIntSchema.nullable(),
+  recordFromRead: z.boolean(),
+  contributors: z.array(z.strictObject({ personId: PersonIdSchema, credit: NamedCreditSchema })).max(HYPE_CONTRIBUTOR_LIMIT),
+  summoned: DragonFormSchema.nullable(),
+  /** Provider time of the newest applied delivery. */
+  changedAt: EpochMsSchema,
+});
+export type HypeTrainRecord = z.infer<typeof HypeTrainRecordSchema>;
+
+/** The last authoritative battle state applied: its revision orders later reports; a finished battle stays finished. */
+export const BattleRecordSchema = z.strictObject({
+  version: z.literal(1),
+  battleKey: TokenSchema,
+  revision: UIntSchema,
+  phase: z.enum(['summoning', 'active', 'victory', 'retreat']),
+  observedAt: EpochMsSchema,
+});
+export type BattleRecord = z.infer<typeof BattleRecordSchema>;
+
+/** Families with at most one current public fact. `order` (a start time) decides which occupant is newest. */
+export type CurrentSlot = 'hype' | 'battle';
+export const CurrentSlotRecordSchema = z.strictObject({ version: z.literal(1), key: TokenSchema, order: EpochMsSchema });
+/** Claim families claimed only once their delivery changed something. */
+export type ChangeClaimFamily = 'observation' | 'battle-revision';
+
 export const CurrentIndexSchema = z.strictObject({ version: z.literal(1), keys: z.array(TokenSchema).max(MOMENT_CURRENT_LIMIT) });
 export const WatermarkSchema = z.strictObject({ version: z.literal(1), throughSeq: UIntSchema });
 
@@ -109,11 +160,32 @@ async function read<T>(tx: MomentRecordTransaction, recordKey: string, schema: z
 
 /** Typed, namespaced access for one transaction. */
 export function momentRepository(tx: MomentRecordTransaction) {
+  /** Replace the current public state for one semantic key; returns false when the bounded index is full. */
+  async function setCurrent(fact: TwitchMomentFact): Promise<boolean> {
+    const index = await read(tx, key('current-index'), CurrentIndexSchema) ?? { version: 1 as const, keys: [] };
+    if (!index.keys.includes(fact.body.key)) {
+      if (index.keys.length >= MOMENT_CURRENT_LIMIT) return false;
+      index.keys.push(fact.body.key);
+      await tx.put(key('current-index'), CurrentIndexSchema.parse(index));
+    }
+    await tx.put(key('current', fact.body.key), TwitchMomentFactSchema.parse(fact));
+    return true;
+  }
+  /** Drop one key from the current public state; the domain records behind it stay. */
+  async function dropCurrent(factKey: string): Promise<void> {
+    const index = await read(tx, key('current-index'), CurrentIndexSchema);
+    if (!index?.keys.includes(factKey)) return;
+    await tx.put(key('current-index'), CurrentIndexSchema.parse({ version: 1, keys: index.keys.filter(k => k !== factKey) }));
+    await tx.put(key('current', factKey), null);
+  }
   return {
     claimDelivery: (deliveryId: string) => tx.claim(key('delivery', TokenSchema.parse(deliveryId))),
-    /** Chat metadata IDs live in their own family, so they can never collide with an EventSub delivery ID. */
-    observationClaimed: async (deliveryId: string) => ((await tx.get(key('observation', TokenSchema.parse(deliveryId)))) ?? null) !== null,
-    claimObservation: (deliveryId: string) => tx.claim(key('observation', TokenSchema.parse(deliveryId))),
+    /**
+     * Families claimed only once their work changed something: chat metadata IDs and authoritative battle
+     * revisions each live in their own family, so they never collide with an EventSub delivery ID or each other.
+     */
+    claimedIn: async (family: ChangeClaimFamily, id: string) => ((await tx.get(key(family, TokenSchema.parse(id)))) ?? null) !== null,
+    claimIn: (family: ChangeClaimFamily, id: string) => tx.claim(key(family, TokenSchema.parse(id))),
     subscriber: (personId: PersonId) => read(tx, key('subscriber', personId), SubscriberRecordSchema),
     putSubscriber: (record: SubscriberRecord) => tx.put(key('subscriber', record.personId), SubscriberRecordSchema.parse(record)),
     giftGroup: (groupKey: string) => read(tx, key('gift-group', groupKey), GiftGroupRecordSchema),
@@ -123,6 +195,12 @@ export function momentRepository(tx: MomentRecordTransaction) {
     putForward: (record: ForwardRecord) => tx.put(key('forward', record.giverId), ForwardRecordSchema.parse(record)),
     gifterWindow: (giverId: PersonId) => read(tx, key('gifter-window', giverId), GifterWindowRecordSchema),
     putGifterWindow: (record: GifterWindowRecord) => tx.put(key('gifter-window', record.giverId), GifterWindowRecordSchema.parse(record)),
+    hypeTrain: (trainKey: string) => read(tx, key('hype-train', TokenSchema.parse(trainKey)), HypeTrainRecordSchema),
+    putHypeTrain: (record: HypeTrainRecord) => tx.put(key('hype-train', record.trainKey), HypeTrainRecordSchema.parse(record)),
+    /** One dragon request per train and form, claimed in the same transaction that decided to send it. */
+    claimSummon: (requestKey: string) => tx.claim(key('summon', TokenSchema.parse(requestKey))),
+    battle: (battleKey: string) => read(tx, key('battle', TokenSchema.parse(battleKey)), BattleRecordSchema),
+    putBattle: (record: BattleRecord) => tx.put(key('battle', record.battleKey), BattleRecordSchema.parse(record)),
     /** The published current fact for one semantic key, if any. */
     currentFact: (factKey: string) => read(tx, key('current', TokenSchema.parse(factKey)), TwitchMomentFactSchema),
     async currentFacts(): Promise<TwitchMomentFact[]> {
@@ -134,16 +212,26 @@ export function momentRepository(tx: MomentRecordTransaction) {
       }
       return facts;
     },
-    /** Replace the current public state for one semantic key; returns false when the bounded index is full. */
-    async setCurrent(fact: TwitchMomentFact): Promise<boolean> {
-      const index = await read(tx, key('current-index'), CurrentIndexSchema) ?? { version: 1 as const, keys: [] };
-      if (!index.keys.includes(fact.body.key)) {
-        if (index.keys.length >= MOMENT_CURRENT_LIMIT) return false;
-        index.keys.push(fact.body.key);
-        await tx.put(key('current-index'), CurrentIndexSchema.parse(index));
-      }
-      await tx.put(key('current', fact.body.key), TwitchMomentFactSchema.parse(fact));
-      return true;
+    setCurrent,
+    /**
+     * Make `fact` the one current fact of its slot, replacing the previous occupant. A fact whose `order` is older
+     * than the occupant's is still published but stays out of current state (`superseded`), so a late report of
+     * an earlier train never displaces the newer one; `full` means the bounded index has no room.
+     */
+    async setSlotCurrent(slot: CurrentSlot, fact: TwitchMomentFact, order: number): Promise<'current' | 'superseded' | 'full'> {
+      const occupant = await read(tx, key('current-slot', slot), CurrentSlotRecordSchema);
+      if (occupant && occupant.key !== fact.body.key && occupant.order > order) return 'superseded';
+      if (occupant && occupant.key !== fact.body.key) await dropCurrent(occupant.key);
+      if (!await setCurrent(fact)) return 'full';
+      await tx.put(key('current-slot', slot), CurrentSlotRecordSchema.parse({ version: 1, key: fact.body.key, order }));
+      return 'current';
+    },
+    /** A finished occupant leaves its slot and the current state; anyone else's occupancy is untouched. */
+    async releaseSlot(slot: CurrentSlot, factKey: string): Promise<void> {
+      const occupant = await read(tx, key('current-slot', slot), CurrentSlotRecordSchema);
+      if (occupant?.key !== factKey) return;
+      await dropCurrent(factKey);
+      await tx.put(key('current-slot', slot), null);
     },
     watermark: async () => (await read(tx, key('watermark'), WatermarkSchema))?.throughSeq ?? 0,
     putWatermark: (throughSeq: number) => tx.put(key('watermark'), WatermarkSchema.parse({ version: 1, throughSeq })),

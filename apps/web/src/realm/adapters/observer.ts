@@ -1,6 +1,7 @@
-import { ForgeDraftSchema, ForgeRunEventSchema, KingdomPresenceFrameSchema, TokenSchema, type KingdomId, type KingdomPresenceFrame } from '@chatdom/shared';
-import { REALM_CASTLE_SLOT, type CommittedForgeAttachment, type ForgeActivity, type KingdomRoomState, type RealmPublicDelivery } from '@chatdom/shared/realm';
+import { ForgeDraftSchema, KingdomPresenceFrameSchema, type KingdomId, type KingdomPresenceFrame } from '@chatdom/shared';
+import { ForgeTransientActivitySchema, REALM_CASTLE_SLOT, type CommittedForgeAttachment, type ForgeActivity, type KingdomRoomState, type RealmPublicDelivery } from '@chatdom/shared/realm';
 import type { Room } from '@colyseus/sdk';
+import { MOMENT_CURRENT_LIMIT, TwitchMomentFactSchema, type TwitchMomentFact } from '@chatdom/shared/twitch-moments';
 
 /** The slice of a Colyseus room these adapters need. Use `observedRoom` for an actual SDK room. */
 export interface RealmObservedRoom {
@@ -34,6 +35,7 @@ export interface RealmObserverListener {
   castle?(castle: RealmCastleView, cause: RealmObservationCause): void;
   /** Live Forge activity only. A restored snapshot never replays a ritual. */
   forge?(event: ForgeActivity): void;
+  moment?(fact: TwitchMomentFact): void;
   status?(status: RealmObserverStatus): void;
 }
 export interface RealmObserverSnapshot {
@@ -43,6 +45,7 @@ export interface RealmObserverSnapshot {
   readonly presence: KingdomPresenceFrame | null; readonly castle: RealmCastleView | null; readonly homes: ReadonlyMap<string, RealmHomeView>;
   /** Every committed part known now: restored from the checkpoint or delivered live since. */
   readonly attachments: ReadonlyMap<string, CommittedForgeAttachment>;
+  readonly moments?: { readonly throughSeq: number; readonly current: ReadonlyMap<string, TwitchMomentFact> } | null;
 }
 export interface RealmObserver {
   current(): RealmObserverSnapshot;
@@ -82,6 +85,12 @@ export function observeRealm(room: RealmObservedRoom, expected: RealmObserverExp
   const listeners = new Set<RealmObserverListener>(), retired = new Set<string>();
   let status: RealmObserverStatus = 'installing', epoch: string | null = null, cursor = -1, frame: KingdomPresenceFrame | null = null;
   let castle: RealmCastleView | null = null;
+  let moments: { throughSeq: number; current: Map<string, TwitchMomentFact> } | null = null;
+  const momentFact = (value: unknown): TwitchMomentFact | null => {
+    const parsed = TwitchMomentFactSchema.safeParse(value);
+    return parsed.success && parsed.data.kingdomId === expected.kingdomId && (parsed.data.origin === expected.origin || parsed.data.origin === 'recovered') ? parsed.data : null;
+  };
+  const momentKey = (fact: TwitchMomentFact) => `${fact.body.kind}:${fact.body.key}`;
   let homes = new Map<string, RealmHomeView>(), attached = new Map<string, CommittedForgeAttachment>(), buffer: RealmPublicDelivery[] = [], seen = new Set<string>(), tries = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -138,7 +147,7 @@ export function observeRealm(room: RealmObservedRoom, expected: RealmObserverExp
     clearTimeout(timer); tries = 0;
     // A new writer starts a new delivery stream: its event IDs and cursor owe nothing to the old one.
     if (epoch !== null && epoch !== b.writerEpoch) { retire(epoch); seen = new Set(); }
-    epoch = b.writerEpoch; cursor = b.throughCursor; homes = new Map(); castle = null; attached = new Map(); frame = null;
+    epoch = b.writerEpoch; cursor = b.throughCursor; homes = new Map(); castle = null; attached = new Map(); frame = null; moments = { throughSeq: 0, current: new Map() };
     for (const message of b.current as unknown[]) {
       const m = message as { type?: unknown; frame?: unknown } | null;
       if (m?.type === 'home') {
@@ -150,6 +159,18 @@ export function observeRealm(room: RealmObservedRoom, expected: RealmObserverExp
         if (view) { castle = view; for (const part of view.attachments) attached.set(part.id, part); }
       }
       else if (m?.type === 'presence') frame = presenceFrame(m.frame) ?? frame;
+      else if (m?.type === 'moments.current') {
+        const current = m as { throughSeq?: unknown; facts?: unknown };
+        if (!count(current.throughSeq) || !Array.isArray(current.facts) || current.facts.length > MOMENT_CURRENT_LIMIT) continue;
+        const facts = current.facts.map(momentFact);
+        if (facts.some(f => !f || f.seq > (current.throughSeq as number))) continue;
+        const map = new Map<string, TwitchMomentFact>();
+        for (const fact of facts as TwitchMomentFact[]) {
+          const key = momentKey(fact), previous = map.get(key);
+          if (!previous || previous.seq < fact.seq) map.set(key, fact);
+        }
+        moments = { throughSeq: current.throughSeq, current: map };
+      }
       // A checkpoint is present state. Any historical Forge activity in it is ignored, never replayed.
     }
     const pending = buffer; buffer = [];
@@ -195,6 +216,14 @@ export function observeRealm(room: RealmObservedRoom, expected: RealmObserverExp
       replaceAttachments(castle?.attachments ?? [], view.attachments);
       castle = view;
       emit(l => l.castle?.(view, 'delivery'));
+    } else if (message.type === 'moment') {
+      const fact = momentFact(message.fact);
+      if (!moments || !fact || typeof message.current !== 'boolean' || fact.seq <= moments.throughSeq) return;
+      const key = momentKey(fact);
+      if (message.current && !moments.current.has(key) && moments.current.size >= MOMENT_CURRENT_LIMIT) { moments = null; emit(l => l.status?.('unavailable')); return; }
+      moments.throughSeq = fact.seq;
+      if (message.current) moments.current.set(key, fact);
+      emit(l => l.moment?.(fact));
     } else if (message.type === 'forge') {
       const event = message.event;
       if (event?.type === 'stage' && text(event.activityId)) emit(l => l.forge?.(event));
@@ -213,14 +242,10 @@ export function observeRealm(room: RealmObservedRoom, expected: RealmObserverExp
   const unbind = [
     room.onMessage('transient', (payload: never) => {
       if (status !== 'ready') return;
-      const message = payload as { type?: unknown; event?: { type?: unknown; activityId?: unknown; stage?: unknown } } | null;
-      const event = message?.event;
-      if (message?.type !== 'forge' || event?.type !== 'stage') return;
-      const id = TokenSchema.safeParse(event.activityId), stage = ForgeRunEventSchema.safeParse({ type: 'stage', stage: event.stage });
-      if (id.success && stage.success && stage.data.type === 'stage') {
-        const activity: ForgeActivity = { type: 'stage', activityId: id.data, stage: stage.data.stage };
-        emit(l => l.forge?.(activity));
-      }
+      const message = payload as { type?: unknown; event?: unknown } | null;
+      if (message?.type !== 'forge') return;
+      const event = ForgeTransientActivitySchema.safeParse(message.event);
+      if (event.success) emit(l => l.forge?.(event.data));
     }),
     room.onMessage('world', (payload: never) => apply(payload)),
     room.onMessage('bootstrap', (payload: never) => install(payload)),
@@ -231,7 +256,7 @@ export function observeRealm(room: RealmObservedRoom, expected: RealmObserverExp
   ];
   request();
   return {
-    current: () => ({ status, writerEpoch: epoch, cursor, presence: frame, castle, homes: new Map(homes), attachments: new Map(attached) }),
+    current: () => ({ status, writerEpoch: epoch, cursor, presence: frame, castle, homes: new Map(homes), attachments: new Map(attached), moments: moments ? { throughSeq: moments.throughSeq, current: new Map(moments.current) } : null }),
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     resync() { tries = 0; if (status !== 'mismatch') request(); },
     unavailable() { if (status === 'disposed') return; clearTimeout(timer); buffer = []; frame = null; setStatus('unavailable'); },

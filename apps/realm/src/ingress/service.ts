@@ -7,6 +7,7 @@ import { REALM_ANONYMOUS_PRESENTATION } from '../auth/authenticator';
 import { IngressGate, type AdmittedObservation, type IngressCredentials } from './gate';
 import { INGRESS_DRAIN_BATCH, PostgresIngressInbox, type PendingObservation } from './inbox';
 import { presenceTransition } from './transition';
+import { RealmSupportIngress } from '../moments/service';
 
 /** A kingdom opened for ingress stays held this long after its last accepted observation (Herald beats every minute). */
 export const INGRESS_KEEP_OPEN_MS = 180_000;
@@ -37,15 +38,18 @@ export class RealmIngress {
   private readonly retaining = new Set<KingdomId>();
   private sweep: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
+  private readonly support: RealmSupportIngress;
 
   constructor(db: RealmDatabase, private readonly origin: 'live' | 'simulated', credentials: IngressCredentials, private readonly log: (line: string) => void = () => {}) {
     this.gate = new IngressGate(credentials, origin);
     this.inbox = new PostgresIngressInbox(db, origin);
+    this.support = new RealmSupportIngress(db, origin, log);
   }
 
   /** Late binding: the registry calls `attach` for each kingdom it opens, and ingress opens kingdoms through it. */
   use(services: DurableRealmServices) {
     this.services = services;
+    this.support.use(services);
     // Observations accepted while no writer was running (or by a process that has since stopped) are picked up here.
     this.sweep ??= setInterval(() => void this.adopt(), INGRESS_POLL_MS * 5);
     this.sweep.unref?.();
@@ -58,6 +62,9 @@ export class RealmIngress {
       ? { http: 401, body: { version: 1, status: 'unauthenticated', message: admission.message } }
       : { http: 400, body: { version: 1, status: 'refused', message: admission.message } };
     const admitted = admission.admitted;
+    if (admitted.kind === 'support') return this.stopped
+      ? { http: 503, body: { version: 1, status: 'unavailable', message: 'The realm is stopping; send this act again.' } }
+      : this.support.accept(admitted.observation);
     if (admitted.kind === 'cue') {
       const kingdom = this.services?.kingdoms.get(admitted.kingdomId);
       const relayed = kingdom?.transient({ type: 'chat', cue: admitted.cue }) ?? false;

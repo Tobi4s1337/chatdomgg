@@ -133,6 +133,15 @@ it('revokes pending provider work on authenticated cleanup and keeps unauthentic
   expect(await running).toEqual({ kind: 'canceled' });
   expect(f.state().coals[personId]).toBe(1); expect(f.state().reservations).toEqual({});
   expect(f.rows).toHaveLength(0);
+  const stage = f.transient[0];
+  expect(stage).toMatchObject({ type: 'forge', event: { type: 'stage', stage: 'judging-words' } });
+  expect(f.transient.at(-1)).toEqual({ type: 'forge', event: {
+    type: 'ended', activityId: stage?.type === 'forge' ? stage.event.activityId : undefined,
+  } });
+  const publicBytes = JSON.stringify(f.transient);
+  for (const privateValue of [f.command.words, f.command.messageId, 'personId', 'source-lost', 'unavailable', 'canceled']) {
+    expect(publicBytes).not.toContain(privateValue);
+  }
 });
 
 it('authenticates private Herald speech, maps the actual owned slot, hashes public IDs, and removes speech without storing text', async () => {

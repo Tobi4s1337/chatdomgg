@@ -38,8 +38,8 @@ const grades: Grade[] = [
   { hour: 12, zenith: '#3f7fd0', horizon: '#a8cdec', fog: '#a4c4e6', ambient: '#8fb0e6', shadow: '#4b63b0', sun: '#fff0d0', glow: '#000000', cloud: '#ffffff', cloudShade: '#b3c3df', cloudCover: 0.32, sunIntensity: 1.34, ambientIntensity: 0.6, night: 0, fogDensity: 0.00064, exposure: 1.08 },
   { hour: 16, zenith: '#577fc4', horizon: '#f2cc98', fog: '#c6b8b0', ambient: '#9aa4d8', shadow: '#5658a2', sun: '#ffcf8e', glow: '#3c2210', cloud: '#fff2de', cloudShade: '#c8aab0', cloudCover: 0.3, sunIntensity: 1.34, ambientIntensity: 0.62, night: 0, fogDensity: 0.0008, exposure: 1.08 },
   { hour: 18, zenith: '#6670b8', horizon: '#f7b878', fog: '#ab95ae', ambient: '#8a8acb', shadow: '#4d4b9a', sun: '#ffb46a', glow: '#64321a', cloud: '#e2bfc8', cloudShade: '#f8b47c', cloudCover: 0.3, sunIntensity: 1.18, ambientIntensity: 0.56, night: 0.1, fogDensity: 0.0009, exposure: 1.08 },
-  { hour: 19.25, zenith: '#5a52a2', horizon: '#f3b26c', fog: '#76709f', ambient: '#7478c8', shadow: '#3e3f8c', sun: '#ffaa5a', glow: '#7a3a1c', cloud: '#a58cc8', cloudShade: '#f6b07a', cloudCover: 0.3, sunIntensity: 1.06, ambientIntensity: 0.58, night: 0.28, fogDensity: 0.00085, exposure: 1.08 },
-  { hour: 20.5, zenith: '#2b2e72', horizon: '#86679a', fog: '#3f416f', ambient: '#6672b6', shadow: '#2a2c68', sun: '#b6bbe8', glow: '#2c1830', cloud: '#3f3e78', cloudShade: '#8a6c9c', cloudCover: 0.28, sunIntensity: 0.3, ambientIntensity: 0.5, night: 0.76, fogDensity: 0.0012, exposure: 1.12 },
+  { hour: 19.25, zenith: '#242e63', horizon: '#655d85', fog: '#50577e', ambient: '#7187d8', shadow: '#383b80', sun: '#91a7ed', glow: '#39252b', cloud: '#454a70', cloudShade: '#726c8f', cloudCover: 0.3, sunIntensity: 0.48, ambientIntensity: 0.52, night: 0.6, fogDensity: 0.00095, exposure: 1.08 },
+  { hour: 20.5, zenith: '#20285c', horizon: '#504b72', fog: '#3f416f', ambient: '#667fc9', shadow: '#2a2c68', sun: '#91a6ed', glow: '#2c1830', cloud: '#444478', cloudShade: '#81779f', cloudCover: 0.28, sunIntensity: 0.3, ambientIntensity: 0.5, night: 0.76, fogDensity: 0.0012, exposure: 1.12 },
   { hour: 24, zenith: '#0e1745', horizon: '#2e2f66', fog: '#2a2f58', ambient: '#6474b8', shadow: '#1e2458', sun: '#a9bdf2', glow: '#000000', cloud: '#1f2552', cloudShade: '#363d78', cloudCover: 0.26, sunIntensity: 0.28, ambientIntensity: 0.52, night: 1, fogDensity: 0.0012, exposure: 1.16 },
 ];
 
@@ -214,6 +214,7 @@ const baseFragment = /* glsl */ `
 /** The sky follows camera translation but retains world orientation. Dispose when the scene is torn down. */
 export function createAtmosphere(scene: THREE.Scene): {
   update(hour: number, elapsedSeconds: number, camera: THREE.Camera, beaconPosition: THREE.Vector3, beaconStrength: number): void;
+  readonly reflectionExclusions: readonly THREE.Object3D[];
   dispose(): void;
 } {
   const skyGeometry = new THREE.SphereGeometry(1, 48, 24);
@@ -252,6 +253,7 @@ export function createAtmosphere(scene: THREE.Scene): {
   scene.add(base);
   const beaconLift = new THREE.Vector3();
   return {
+    reflectionExclusions: [sky, shaft, halo, base],
     update(hour, elapsedSeconds, camera, beaconPosition, beaconStrength) {
       const grade = getEnvironment(hour);
       sky.position.copy(camera.position);

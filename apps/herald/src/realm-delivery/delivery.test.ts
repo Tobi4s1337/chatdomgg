@@ -87,3 +87,49 @@ it('signs person-bound transient delivery, sends cleanup immediately, and retrie
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+
+it('persists only verified normalized support and retries it after restart', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'chatdom-support-delivery-'));
+  const kingdomId = KingdomIdSchema.parse('123'), now = 1_800_000_000_000;
+  let available = false, covered = true;
+  const attempts: Record<string, unknown>[] = [];
+  const request: typeof fetch = async (_url, init) => {
+    attempts.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return Response.json({ status: available ? 'accepted' : 'busy' }, { status: available ? 202 : 503 });
+  };
+  const options = { url: 'http://127.0.0.1:5191', secret: 'simulated-service-secret-000000000000', directory,
+    origin: 'live' as const, fetch: request, now: () => now, retryMs: 60_000 };
+  let sender = await RealmDelivery.open(options);
+  const source = new PresenceSource({ kingdomId, origin: 'live', slots: [], store: new MemoryBindingStore(), now: () => now, tickMs: 0 });
+  const plans = planSubscriptions({ broadcasterId: kingdomId, readerId: '456', clientId: 'simulated-client' });
+  const ingest = new ChatIngest({ source, conduitId: 'conduit', clientId: 'simulated-client', plans, realm: sender,
+    covered: () => covered, onAuthorizationRevoked: () => {}, onSubscriptionRevoked: () => {}, now: () => now });
+  const plan = plans.find(p => p.type === 'channel.chat.notification')!;
+  expect(plan.required).toBe(false);
+  const event = { broadcaster_user_id: kingdomId, chatter_user_id: '789', chatter_user_name: 'Supporter', chatter_is_anonymous: false,
+    message_id: 'notice-1', notice_type: 'sub', sub: { sub_tier: '1000', is_prime: false },
+    message: { text: 'private raw text' }, system_message: 'private system text' };
+  const frame = (id: string, condition = plan.condition) => ({ kind: 'notification' as const, meta: { messageId: id, at: now },
+    subscription: { id: 'subscription', status: 'enabled', type: plan.type, version: plan.version, condition, conduitId: 'conduit' }, event });
+  try {
+    ingest.handle(frame('wrong', { ...plan.condition, user_id: '999' }));
+    covered = false; ingest.handle(frame('uncovered'));
+    covered = true; ingest.handle(frame('valid')); ingest.handle(frame('valid'));
+    await vi.waitFor(() => expect(sender.health().counters.accepted).toBe(1));
+    await vi.waitFor(() => expect(sender.health().fault).toBe('delivery'));
+    await sender.close();
+    const files = (await readdir(directory)).filter(file => file.endsWith('.json'));
+    expect(files).toHaveLength(1);
+    const retained = await readFile(join(directory, files[0]!), 'utf8');
+    expect(retained).not.toContain('private');
+    expect(JSON.parse(retained)).toMatchObject({ version: 1, support: { id: 'valid', notice: { kind: 'entitlement', personId: '789' } } });
+    expect(ingest.health().counters).toMatchObject({ unverified: 1, notCovered: 1, duplicateDeliveries: 1 });
+    available = true; const before = attempts.length;
+    sender = await RealmDelivery.open(options); await sender.flush();
+    expect(sender.health().pending).toBe(0);
+    expect(attempts.slice(before)).toEqual([JSON.parse(retained)]);
+  } finally {
+    await sender.close(); await rm(directory, { recursive: true, force: true });
+  }
+});

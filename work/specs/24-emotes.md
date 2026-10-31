@@ -399,3 +399,7 @@ surfaces remain in scope through working factories and adapters; their host inte
 - **2026-10-30 — Production behavior through ports.** Real catalogue parsers, bounded decoders, approval
   lifecycle, replayable reveals and visual consumers are implemented by the lane. Main supplies authenticated
   durable/network/reviewer bindings and joins the actual surfaces. A fixture-only implementation is incomplete.
+
+- **2026-10-31 — Current handoff: emotes belong to the channel and its chat.** Build from the accepted E01 compiler and SIMULATED statue/banner bench toward approved channel emotes as statues, banners and chat-originated expression. Use actual observed chat and approved catalogue when main provides them; label simulated sources in every visible rehearsal. Existing source approval and transformed-object review rules still apply. The lane implements feature-local catalogue and processing adapters against existing ports; main owns shared contract changes and cross-surface auth/scene/chat bindings; no invented channel data or extra runtime authority.
+
+- **2026-10-31 — Current handoff verification and ownership.** For each visual change inspect one stream-first 1920×1080 capture; use typecheck and affected tests for the step. This supersedes the older per-task capture matrix for this handoff. The lane implements feature-local durable adapters and runtime behavior against existing ports; main owns shared contracts and cross-surface authority and integration bindings. Report only actual missing authority or contract seams.

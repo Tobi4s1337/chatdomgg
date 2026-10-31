@@ -1,9 +1,10 @@
 import { type EventSubAdmin, type EventSubSubscription, isTwitchFailure, matchesRequest, type SubscriptionRequest } from '@chatdom/twitch';
 import type { Capability } from '../auth/grants';
 
-/** The seven v1 subscriptions Herald reads (Spec 03 R5). Nothing else is ever created. */
+/** The eight v1 subscriptions Herald reads (Spec 03 R5). Nothing else is ever created. */
 export const HERALD_EVENT_TYPES = [
   'channel.chat.message',
+  'channel.chat.notification',
   'channel.chat.message_delete',
   'channel.chat.clear',
   'channel.chat.clear_user_messages',
@@ -35,6 +36,7 @@ export function planSubscriptions(ids: PlanIds): SubscriptionPlan[] {
   const stream = { broadcaster_user_id: ids.broadcasterId };
   return [
     { type: 'channel.chat.message', version: '1', condition: chat, capability: 'chat', required: true },
+    { type: 'channel.chat.notification', version: '1', condition: chat, capability: 'chat', required: false },
     { type: 'channel.chat.message_delete', version: '1', condition: chat, capability: 'chat', required: true },
     { type: 'channel.chat.clear', version: '1', condition: chat, capability: 'chat', required: true },
     { type: 'channel.chat.clear_user_messages', version: '1', condition: chat, capability: 'chat', required: true },

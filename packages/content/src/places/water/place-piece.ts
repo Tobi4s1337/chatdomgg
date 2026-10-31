@@ -54,7 +54,11 @@ export type ClearRole = 'arch-opening' | 'wheel-pit' | 'tailrace' | 'spillway' |
 /** A volume that must stay air in the piece itself (the stream under an arch, the wheel's swing). */
 export interface ClearVolume { readonly id: string; readonly role: ClearRole; readonly box: CellBox }
 
-/** A footprint where the piece bears on its foundation at y = 0 (bed, bank or yard, per the land site). */
+/**
+ * A footprint where the piece bears on its foundation (bed, bank or yard, per the land site). `box.from[1]` is
+ * the foundation height in cells above the piece's y = 0: zero for the main bearing, higher where a trestle foot
+ * or ramp end lands on supplied ground that rises above the datum. The host checks it against its sampler.
+ */
 export interface Footing { readonly id: string; readonly box: CellBox }
 
 export interface WaterPiece {

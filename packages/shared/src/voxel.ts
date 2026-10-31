@@ -72,11 +72,24 @@ export const ContentWindowSchema = z.strictObject({
   id: TokenSchema, centre: Cell3Schema, width: z.number().int().positive(), height: z.number().int().positive(),
   facing: z.enum(['north', 'east', 'south', 'west']),
 });
+/** Authored bench contacts, in build cells at the asset's local origin; not a client sit request. */
+export const ContentSeatSchema = z.strictObject({
+  id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$/),
+  position: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
+  approach: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
+  /** Seated animation root (drawn feet), independent of the authoritative standing approach. */
+  rest: z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]),
+  facing: z.number().int().min(0).max(3),
+}).superRefine((seat, ctx) => {
+  if ([...seat.position, ...seat.approach, ...seat.rest].some(n => Math.abs(n) > 512))
+    ctx.addIssue({ code: 'custom', message: 'Seat anchors must stay in the asset neighbourhood' });
+});
 export const VoxelBlueprintSchema = z.strictObject({
   version: z.literal(1), id: TokenSchema, styleId: StyleIdSchema,
   kind: z.enum(['home', 'prop', 'civic', 'flora']), lattice: z.literal('build'),
   size: Cell3Schema, boxes: z.array(VoxelBoxSchema).max(20000),
   windows: z.array(ContentWindowSchema).max(64),
+  seats: z.array(ContentSeatSchema).max(8).optional(),
 }).superRefine((asset, ctx) => {
   if (asset.size.some(n => n < 1 || n > 256)) ctx.addIssue({ code: 'custom', path: ['size'], message: 'Each dimension must be 1..256 build cells' });
   if (asset.size.reduce((n, axis) => n * (axis + 2), 1) > MAX_ASSET_PADDED_CELLS) ctx.addIssue({ code: 'custom', path: ['size'], message: 'Padded asset exceeds allocation budget' });
@@ -84,6 +97,8 @@ export const VoxelBlueprintSchema = z.strictObject({
     if (box.from.some((v, d) => v < 0 || v >= box.to[d]! || box.to[d]! > asset.size[d]!)) ctx.addIssue({ code: 'custom', path: ['boxes', index], message: 'Box must be non-empty and inside bounds' });
   }
   if (new Set(asset.windows.map(w => w.id)).size !== asset.windows.length) ctx.addIssue({ code: 'custom', message: 'Window IDs must be unique' });
+  if (asset.seats && (asset.kind !== 'civic' || new Set(asset.seats.map(s => s.id)).size !== asset.seats.length))
+    ctx.addIssue({ code: 'custom', message: 'Seat anchors belong to civic assets and have unique IDs' });
   for (const window of asset.windows) {
     if (window.centre.some((v, d) => v < 0 || v > asset.size[d]!)) ctx.addIssue({ code: 'custom', message: 'Window centre outside bounds' });
     const horizontal = window.facing === 'north' || window.facing === 'south' ? 0 : 2;
