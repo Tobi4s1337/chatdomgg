@@ -89,7 +89,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
         present: window.present && arrived.has(window.slot), publicName: window.present && arrived.has(window.slot) ? window.publicName : null })) };
     },
     subject(slot: number) { const sample = samples.find(s => s.slot === slot); return sample ? walkerSubject(sample, walkers) : undefined; },
-    speechLabels(camera: THREE.Camera, width: number, height: number, atMs: number): SpeechLabel[] {
+    speechLabels(camera: THREE.Camera, width: number, height: number, atMs: number, namedHomes: ReadonlySet<number> = new Set()): SpeechLabel[] {
       const labels: SpeechLabel[] = [];
       for (const sample of samples) {
         const cue = speech.get(sample.slot);
@@ -99,7 +99,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
         if (point.distanceTo(camera.position) > 28) continue;
         point.project(camera);
         if (point.z < 0 || point.z > 1 || Math.abs(point.x) > .85 || Math.abs(point.y) > .8) continue;
-        labels.push({ slot: sample.slot, name: sample.publicName, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2, parts: cue.parts });
+        labels.push({ slot: sample.slot, name: namedHomes.has(sample.slot) ? null : sample.publicName, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2, parts: cue.parts });
         if (labels.length >= 3) break;
       }
       return labels;
