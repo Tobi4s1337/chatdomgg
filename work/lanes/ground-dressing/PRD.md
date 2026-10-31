@@ -35,7 +35,7 @@ agent writes the web planner at a time. Never label two tasks independent while 
   identical between occupancy preparation and mount. Add only this collection's validator palette/manifest branch.
   First result: tufts catch window spill and flower drifts lead toward a home, without an even carpet.
   · evidence: looked street/hero dusk at 1440×900 + 390×844; deterministic-clearance/density test; measured costs.
-- [ ] **GD02 — Tree silhouettes worth a place in the kingdom.** Author old oaks A/B, beech, elder oak and its
+- [x] **GD02 — Tree silhouettes worth a place in the kingdom.** Author old oaks A/B, beech, elder oak and its
   exact seat transform, wind-bent pine, fir, birch, alder, staked sapling, bramble hedge, pear espalier and woodland
   clump. Root flare, taper, broad asymmetric crowns, credible branch support; no lollipops or noisy voxels.
   Keep every final component grounded and within R1 budgets. Readable full/LOD4 silhouettes in one compact representative-angle sheet and one dusk elder-oak detail. Publish forms early for places-high, without transferring planting ownership.

@@ -57,7 +57,7 @@ export interface GenesisEmoteArt {
   /** `SIMULATED` whenever the recipe's evidence is simulated: every view of this art must carry it. */
   readonly label: 'SIMULATED' | null;
   readonly monument: EmoteMonument | null;
-  /** Always a window: the approved emote's, or plain quarries that claim nothing. */
+  /** Always a window: the approved emote's, or plain leaded lights that claim nothing. */
   readonly glass: EmoteGlass;
   readonly vane: EmoteVane | null;
   readonly absences: readonly EmoteArtAbsence[];

@@ -29,7 +29,7 @@ export interface EmoteGlassLight {
 
 /** A leaded lancet window in a stone surround, ready to set into a wall up to six cells thick. */
 export interface EmoteGlass {
-  /** `emote`: an approved emote's window. `plain`: clear diamond quarries, the honest window while none is approved. */
+  /** `emote`: an approved emote's window. `plain`: clear upright leaded lights, the honest window while none is approved. */
   readonly kind: 'emote' | 'plain';
   readonly blueprint: VoxelBlueprint;
   readonly light: EmoteGlassLight;
@@ -127,15 +127,21 @@ function leadEmote(w: number, h: number, spring: number, inside: (x: number, y: 
   return grid;
 }
 
-/** Clear glass in diamond quarries, with one came ring at the edge: plain glazing that claims nothing. */
+/**
+ * Clear glass in upright leaded lights: came at the edge, a clear margin, a second came, then panes five cells wide
+ * and seven tall, centred on the lancet and following its arch. Plain glazing that claims nothing. Upright leading
+ * stays a crisp lattice on the build grid; one-cell diagonal leading over one clear glass breaks into a checkerboard at plaza distance.
+ */
 function leadPlain(w: number, h: number, inside: (x: number, y: number) => boolean): Uint16Array {
   const grid = new Uint16Array(w * h);
   const depth = depthField(w, h, inside);
+  const PANE_W = 6, PANE_H = 8;
+  const x0 = Math.floor(w / 2) % PANE_W;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const d = depth[x + w * y]!;
     if (d < 1) continue;
-    const a = x + y, b = x - y + 600;
-    grid[x + w * y] = d === 1 || a % 5 === 0 || b % 5 === 0 ? CAME : MAT.glass;
+    const lead = d === 1 || d === 3 || (d > 3 && ((x - x0 + PANE_W) % PANE_W === 0 || (y - 3) % PANE_H === 0));
+    grid[x + w * y] = lead ? CAME : MAT.glass;
   }
   return grid;
 }

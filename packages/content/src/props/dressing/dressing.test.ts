@@ -13,6 +13,8 @@ const GREENS = new Set<number>([MAT.leaf, MAT.moss]);
 const formOf = (b: VoxelBlueprint) => b.id.slice('dressing-'.length).replace(/^(?:hearth|tide|grove)-/, '') as DressingForm;
 const styleOf = (b: VoxelBlueprint) => DRESSING_ROLES[formOf(b)].kit ? b.styleId as StyleKey : undefined;
 const KITS = ['hearth', 'tide', 'grove'] as const;
+/** The tree, hedge and woodland forms, budgeted as trees (R1). */
+const TREES = new Set<DressingForm>(['oak-old-a', 'oak-old-b', 'beech', 'elder-oak', 'pine-windbent', 'fir', 'birch', 'alder', 'sapling-staked', 'bramble-hedge', 'pear-espalier', 'woodland-clump']);
 /** The validator's ground-dressing palette: the kit's trim and these, plus a stone (its own for kit forms). */
 const PALETTE = [MAT.earth, MAT.bark, MAT.leaf, MAT.moss, MAT.petal, MAT.blueFlower, MAT.grass, MAT.goldLeaf, MAT.cream, MAT.thatch, MAT.terracotta];
 const top = (cells: ReadonlyMap<string, number>) => Math.max(...[...cells.keys()].map(k => parse(k)[1]));
@@ -70,6 +72,9 @@ describe('ground-dressing blueprints', () => {
       'dressing-hearth-rail-fence', 'dressing-tide-rail-fence', 'dressing-grove-rail-fence',
       'dressing-hearth-back-fence', 'dressing-tide-back-fence', 'dressing-grove-back-fence',
       'dressing-hearth-stepping-stones', 'dressing-tide-stepping-stones', 'dressing-grove-stepping-stones',
+      'dressing-oak-old-a', 'dressing-oak-old-b', 'dressing-beech', 'dressing-elder-oak', 'dressing-pine-windbent',
+      'dressing-fir', 'dressing-birch', 'dressing-alder', 'dressing-sapling-staked', 'dressing-bramble-hedge',
+      'dressing-pear-espalier', 'dressing-woodland-clump',
     ]);
   });
 
@@ -96,18 +101,21 @@ describe('ground-dressing blueprints', () => {
     // Kit forms keep their own kit's stone; natural pieces may use any kit's stone.
     const allowed = new Set<number>([...PALETTE, kit.trim, ...(role.kit ? [kit.stone] : Object.values(STYLES).map(k => k.stone))]);
     for (const m of cells.values()) expect(allowed.has(m)).toBe(true);
+    // R1 budgets at the level each form is mounted at: the woodland clump is made for the far hills and is only
+    // ever drawn at LOD 4; everything else is measured at full detail.
+    const form = formOf(b), far = form === 'woodland-clump';
     let triangles = 0;
-    for (const chunk of prepareAssetChunks(asset, MATERIALS.materials, MATERIALS.revision)) triangles += meshVoxelChunk(chunk).indices.length / 3;
+    for (const chunk of prepareAssetChunks(far ? createRenderLodAsset(asset, 4, MATERIALS.materials) : asset, MATERIALS.materials, MATERIALS.revision)) triangles += meshVoxelChunk(chunk).indices.length / 3;
     expect(triangles).toBeGreaterThan(0);
-    expect(triangles).toBeLessThanOrEqual(cover ? 1500 : 6000);
+    expect(triangles).toBeLessThanOrEqual(cover ? 1500 : far ? 8000 : form === 'elder-oak' ? 40000 : TREES.has(form) ? 24000 : 6000);
     expect(createDressing(formOf(b), style)).toEqual(createDressing(formOf(b), style));
     expect(createDressing(formOf(b), style)).toEqual(b);
-  });
+  }, 60_000);
 
   it('fails explicitly for unknown, styled or unfinished forms', () => {
     expect(() => createDressing('dandelions' as DressingForm)).toThrow('Unknown dressing form');
     expect(() => createDressing('meadow-tufts', 'hearth')).toThrow('takes no style');
-    expect(() => createDressing('oak-old-a')).toThrow('not part of the finished');
+    expect(() => createDressing('edge-stones', 'hearth')).toThrow('not part of the finished');
     expect(() => createDressing('heather-drift')).toThrow('not part of the finished');
     expect(() => createDressing('garden-bed')).toThrow('kit form');
     expect(() => createDressing('woodpile', 'grove')).toThrow('takes no style');

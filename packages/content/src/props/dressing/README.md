@@ -1,17 +1,20 @@
 # Ground dressing
 
-The living and garden forms that dress open ground (spec 28, R1). `index.ts` exports `createDressing(form, style?)`,
-`BLUEPRINTS` (finished forms only, in R1 table order; kit forms Hearth, Tide, Grove), `DRESSING_FORMS`,
-`DRESSING_ROLES` and `DRESSING_SIZES`. Non-kit forms are built in Grove. Cover and canopy forms have
-`kind: 'flora'`; garden, field and path pieces have `kind: 'prop'`. All units below are 0.125 m build cells,
-half-open, with y=0 the ground.
+The living and garden forms that dress open ground (spec 28, R1). `registry.ts` exports `createDressing(form, style?)`,
+`DRESSING_FORMS`, `DRESSING_ROLES`, `DRESSING_SIZES` and `ELDER_OAK_SEAT`; `index.ts` re-exports it and adds
+`BLUEPRINTS` (finished forms only, in R1 table order; kit forms Hearth, Tide, Grove). Import the registry where
+only a few forms are wanted (the kingdom's planner and the tree sheet do): `BLUEPRINTS` grows every form at once,
+about a second of work for the trees alone, while `createDressing` grows a form the first time it is asked for
+and hands every caller its own copy after that. Non-kit forms are built in Grove. Cover and canopy forms have
+`kind: 'flora'`; garden, field and path pieces and the trained pear have `kind: 'prop'`. All units below are
+0.125 m build cells, half-open, with y=0 the ground.
 
 So far the collection holds the six meadow cover forms, the `seedling-bed` and the `cutting-bed` in `cover.ts`;
 the garden pieces (`garden-bed`, `woodpile`, `barrels`, `crates`, `handcart`) in `garden.ts`; the field runs
-(`field-wall`, `rail-fence`, `back-fence`) in `field.ts`; and the `stepping-stones` kit form in `path.ts`. The
-seedling bed and stones make the tended doorstep; with the cutting bed they make the market stall's garden. The
-heather, fern, edge-stone, tree and woodland forms will join the same index as they are authored and reviewed.
-Until then `createDressing` throws for them.
+(`field-wall`, `rail-fence`, `back-fence`) in `field.ts`; the `stepping-stones` kit form in `path.ts`; and the
+twelve trees, hedges and woods in `trees/`. The seedling bed and stones make the tended doorstep; with the
+cutting bed they make the market stall's garden. The heather, fern and edge-stone forms will join the same index
+as they are authored and reviewed. Until then `createDressing` throws for them.
 
 **Palette.** The validator's ground-dressing palette applies to every form: the kit's trim and stone, plus
 `earth`, `bark`, `leaf`, `moss`, `petal`, `blueFlower`, `grass`, `goldLeaf`, `cream`, `thatch` and `terracotta`.
@@ -145,6 +148,50 @@ Field runs are solid kit pieces laid along +X.
   joints. It is passive: walked over, never a blocker. The planter beds it so only a worn lip shows,
   even where up to 0.14 m of grade relief runs under it.
 
+## Trees
+
+`trees/grammar.ts` grows a tree in a cell grid, and `trees/forms.ts` holds one builder per form. A builder
+lays a trunk and limbs (`limb`, `bough`: evenly tapered capsules), roots (`root` arches from the bole to a
+foot; `flare` spreads a set of them), then the crown (`lobe` is a flat-bellied ellipsoid; `cloud` is a lobe
+with bumps around its upper shoulder). `light` warms the sunlit top of the crown, and `overgrow` lays moss in
+patches on roots and limbs. `piece()` tidies, buries and merges the cells into boxes:
+
+- **Crown grain.** A crown is grown in blocks, never single cells, so its surface steps like terraces, not
+  noise. The four big broadleaf crowns (`oak-old-a`, `oak-old-b`, `beech`, `elder-oak`) and the
+  `woodland-clump` use 0.5 m blocks. The smaller crowns use 0.25 m blocks. Every crown ends up with about the
+  same number of steps across. A lobe that the form's box would slice throws; it never ships flattened.
+- **Limbs.** Limbs of radius 2.5 cells and more are laid in 2-cell blocks on the same lattice, and twigs taper
+  to a single cell. A limb that leaves the box throws, and so does one thinner than 0.9 cells.
+- **Tidy and bury.** Foliage fragments under 8 cells (4 for the espalier) take the wood they rest on, so no
+  confetti or floating leaves survive. Wood buried deep inside foliage takes the foliage colour, so the merger
+  never cuts a crown into stripes around a hidden branch. Boxes merge greedily, up Y, then X, then Z.
+
+| Form | Size (cells) | What makes it |
+|---|---|---|
+| oak-old-a | 96×112×96 | Short, thick bole with mossy root flare, five limbs, one broad asymmetric fused crown and satellite clouds; its crown base sits low |
+| oak-old-b | 96×112×96 | Twin-stemmed and wider than it is tall, a flatter crown pushed to one side |
+| beech | 96×112×96 | Smooth stone-grey bole and limbs under a high dome crown |
+| elder-oak | 128×144×128 | The forest-edge landmark: a crooked 2.5 m bole, seven flare roots, a great level limb to the west, 18 m tall. Two arm roots hold a worn thatch-topped root seat on its +Z side, with a few small marks cut in the bark above it |
+| pine-windbent | 72×88×72 | Leans along +X with roots braced on the windward side, terracotta upper bark, flat cloud pads on bare branches |
+| fir | 56×96×56 | Seven whorled skirts narrowing to a spire, sunlit tips |
+| birch | 48×80×48 | Two cream stems banded in dark stone over a dark foot, a light moss-green crown touched with gold |
+| alder | 56×72×56 | A rounded, leaning crown with side clouds |
+| sapling-staked | 16×28×16 | A one-cell stake with a cream tie, in a turned earth ring |
+| bramble-hedge | 32×12×10 | Arching canes and five humps, lower at both ends, below stile height |
+| pear-espalier | 48×40×6 (`prop`) | Trained flat in four tiers of arms with spurs and a little cream blossom, no fruit |
+| woodland-clump | 192×120×192 | Six fused crowns (one a birch) and a fir spire on seven short trunks: one mass at LOD 4 |
+
+**The elder seat.** `ELDER_OAK_SEAT` is a `ContentSeat` (`{ id: 'root-seat', position: [64, 4, 68], approach:
+[64, 0, 80], rest: [64, 0, 72], facing: 0 }`, build cells, facing +Z) for the place that binds it. Seats belong
+to civic blueprints, so it is published as a constant, not on the blueprint. The kingdom turns the oak by its
+landmark yaw so the seat faces its meadow; the tests check the worn top, the bole behind the sitter, open air
+above the sitter, and clear rest and approach cells.
+
+**LOD.** The trees, hedge and espalier are made to mount at full detail with LOD 2 and LOD 4 from
+`createRenderLodAsset`; the tests hold the LOD-4 silhouette to the full one, and the sheet's lower row is the
+LOD-4 copy. The woodland clump stands only far from the eye, so it mounts at LOD 4 only, and its budget is
+measured there. Planting (GD04) owns where each form stands; places-high binds the elder seat.
+
 ## LOD design
 
 Render LODs (`packages/voxel/src/lod.ts`) keep the non-air mode of each 2×2×2 or 4×4×4 block, and ties go to
@@ -182,8 +229,26 @@ Full detail, from the mesher (confirmed by `render-stats.json`); each renders in
 | back-fence Hearth / Tide / Grove | 584 / 544 / 586 | 1,716 / 1,558 / 1,818 | 245 / 213 / 254 |
 | stepping-stones (each kit) | 182 | 324 | 37 |
 
+Trees, from `trees-stats.json` (the sheet's own meshes):
+
+| Form | Triangles full | Triangles LOD 4 | Boxes |
+|---|---|---|---|
+| oak-old-a | 17,878 | 3,094 | 784 |
+| oak-old-b | 20,502 | 3,358 | 771 |
+| beech | 13,716 | 2,356 | 585 |
+| elder-oak | 35,888 | 5,790 | 1,597 |
+| pine-windbent | 13,092 | 1,384 | 677 |
+| fir | 13,300 | 1,244 | 551 |
+| birch | 8,960 | 780 | 383 |
+| alder | 11,434 | 1,020 | 513 |
+| sapling-staked | 1,114 | 134 | 64 |
+| bramble-hedge | 658 | 94 | 83 |
+| pear-espalier | 4,778 | 410 | 139 |
+| woodland-clump | (38,192, never mounted) | 7,374 | 953 |
+
 The back fence spans two mesher chunks; it is still one model draw. Budget: ≤ 1,500 triangles and ≤ 400 boxes
-per cover form, ≤ 6,000 triangles and ≤ 2,000 boxes per garden, field or path form. The flush forms are mounted at full detail
+per cover form, ≤ 6,000 triangles and ≤ 2,000 boxes per garden, field or path form, ≤ 24,000 triangles per tree,
+hedge or espalier, ≤ 40,000 for the elder oak and ≤ 8,000 for the woodland clump at LOD 4, all ≤ 2,000 boxes. The flush forms are mounted at full detail
 only: a coarse level would stand a one-course stone up as a slab.
 
 ## Commands
@@ -191,7 +256,12 @@ only: a coarse level would stand a one-course stone up as a slab.
 ```sh
 pnpm exec vitest run packages/content/src/props/dressing
 pnpm build && pnpm content:render --collection ground-dressing --hour 19   # and --hour 12
+node apps/web/src/kingdom/ground-dressing/capture.mjs --trees   # tree sheets: trees-sheet, -grey, -silhouette, elder-dusk
 ```
+
+The tree sheet is `apps/web/src/kingdom/ground-dressing/trees.html`, served by the Vite dev server only:
+`?mode=sheet` (full detail above, LOD 4 below, one representative angle, true scale), `mode=silhouette`,
+`mode=elder` (the oak at 18:00, turned so its seat looks into the low sun), `grey=1` and `forms=a,b`.
 
 ## Review rounds
 

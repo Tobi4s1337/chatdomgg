@@ -37,13 +37,25 @@ export function createSimulatedPresence(layout: Pick<KingdomLayout, 'homes' | 'c
   const first = layout.homes.find(home => home.slot === arrival?.firstSlot) ?? layout.homes.find(home => home.quarterYear === newestYear && home.position[0] > 0)
     ?? layout.homes.find(home => home.quarterYear === newestYear)!;
   const ordered = [first, ...layout.homes.filter(home => home !== first).sort((a, b) => a.slot - b.slot)];
+  // Let one small neighbourhood come home after the main wave. Their actual
+  // street walks remain visible while the rest of the labelled rehearsal is warm.
+  // This stages only the SIMULATED feed; live observations keep their own times.
+  const lateNeighbours = new Map<number, number>();
+  if (arrival && ordered.length > 8) {
+    const x = Math.min(...ordered.map(home => home.position[0])) * .3;
+    const z = Math.max(...ordered.map(home => home.position[2])) * .3;
+    const distance = (home: typeof first) => Math.hypot(home.position[0] - x, home.position[2] - z);
+    const neighbours = ordered.filter(home => home !== first).sort((a, b) => distance(a) - distance(b) || a.slot - b.slot)
+      .slice(0, Math.min(12, Math.max(2, Math.round(ordered.length * .05))));
+    neighbours.forEach((home, index) => lateNeighbours.set(home.slot, 16_000 + index * 450));
+  }
   const bindings: PresenceBinding[] = [];
   const furthest = Math.max(1, ...ordered.map(home => Math.hypot(home.position[0] - first.position[0], home.position[2] - first.position[2])));
   const arrivals: Arrival[] = ordered.map((home, index) => {
     const personId = PersonIdSchema.parse((900_000_000_000_001_000n + BigInt(home.slot)).toString());
     bindings.push({ personId, slot: home.slot });
     const distance = Math.hypot(home.position[0] - first.position[0], home.position[1] - first.position[1], home.position[2] - first.position[2]);
-    const at = index === 0 ? 1000 : Math.round((arrival ? 2 + Math.min(1, distance / furthest) * arrival.waveSeconds : Math.min(20, 4 + distance / 18)) * 1000);
+    const at = index === 0 ? 1000 : lateNeighbours.get(home.slot) ?? Math.round((arrival ? 2 + Math.min(1, distance / furthest) * arrival.waveSeconds : Math.min(20, 4 + distance / 18)) * 1000);
     const name = index % 3 === 0 ? NAMES[index / 3] : undefined;
     const person: PresencePerson = name ? { personId, disclosure: 'named', displayName: name } : { personId, disclosure: 'anonymous' };
     return { at, person };
