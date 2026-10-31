@@ -7,6 +7,9 @@ import { runImport } from './import';
 import { createAtlasService, type AtlasService } from './serve';
 import { layout } from './store/revisions';
 import { FixtureSource, RECENT, clock, configFor, fakeSurveyor, sweepAt, tempDataDir } from './test/fixture-source';
+import { allowRealImports } from './test/timeouts';
+
+allowRealImports();
 
 const cleanup: (() => void | Promise<void>)[] = [];
 afterEach(async () => {

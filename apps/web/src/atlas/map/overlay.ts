@@ -1,10 +1,13 @@
 import { CanvasSource, Container, Graphics, Rectangle, Sprite, Text, Texture, type TextStyleOptions, type TextureSource } from 'pixi.js';
 import { drawShield, shieldDesign, SHIELD_ASPECT } from '../heraldry';
-import type { Geography, Settler, SettlerStore } from '../data/model';
+import type { Circle, Geography, GeoRealm, Settler, SettlerStore } from '../data/model';
+import type { Dab, LivePaint } from '../live/paint';
+import { pencilFlagImage, standardImage, type StandardImage } from './live-marks';
 import type { PreviewWorld } from '../data/preview';
 import { DISTANCE_SCALE, type Camera, type Viewport } from './camera';
 import { CollisionGrid, comparePriority, type Rect } from './collide';
 import type { Stamp } from './paint';
+import { HoldingLabels, onScreen, Placer, SHIELD_PAD, type Placed } from './placement';
 import { decorBand } from './pyramid';
 import { INK, LAND, PAPER } from './theme';
 
@@ -20,8 +23,11 @@ export const MARKED_TIERS = [1, 2, 3, 4, 4] as const;
 const STAMP_PX: readonly (readonly [number, number])[] = [[30, 132], [18, 108], [16, 84], [14, 64]];
 const LABEL_PX = [15, 13, 12, 11.5] as const;
 const SHIELD_PX = [15, 13, 12, 11] as const;
-/** Shields in view at once, Spec 01 R7. */
-export const SHIELD_LIMIT = 300;
+export { SHIELD_LIMIT } from './placement';
+/** Standards (bare or flying a pennant) are raised from here, as the wash softens (R7: realm distance). */
+export const STANDARD_FROM = DISTANCE_SCALE.realm * 0.85;
+/** Pencil flags of small live channels in view at once, by layout (R7: at most 2,000 near live marks on a phone). */
+export const PENCIL_LIMIT = { phone: 600, laptop: 1_500 } as const;
 
 export function stampPx(tierRank: number, radius: number, scale: number): number {
   const [min, max] = STAMP_PX[tierRank]!;
@@ -36,8 +42,69 @@ export function markedTiers(scale: number): number {
   return MARKED_TIERS[decorBand(scale)]!;
 }
 
+const ramp = (value: number, from: number, to: number) => Math.min(1, Math.max(0, (value - from) / (to - from)));
+
+/** Language names: full across the world distance, fading out as a continent fills the screen. */
+export function regionLabelFade(scale: number): number {
+  return 1 - ramp(scale, DISTANCE_SCALE.continent * 1.6, DISTANCE_SCALE.realm);
+}
+
+/** Realm names are written in from here: a large continent fills the screen and its realms are big enough to name. */
+export const REALM_LABEL_FROM = DISTANCE_SCALE.continent * 0.4;
+
+/**
+ * Realm names (R7: "Continent: realms, cities"): absent at world distance, written in on the way to continent
+ * distance (once a continent fills the screen), and giving way to the patches inside a realm on the way to kingdom
+ * distance.
+ */
+export function realmLabelFade(scale: number): number {
+  return ramp(scale, REALM_LABEL_FROM, REALM_LABEL_FROM * 1.5) * (1 - ramp(scale, DISTANCE_SCALE.realm * 1.5, DISTANCE_SCALE.kingdom));
+}
+
+/** Game patches inside a realm: from realm distance on, quieter than the realm names, gone when holdings take over. */
+export function clusterLabelFade(scale: number): number {
+  return ramp(scale, DISTANCE_SCALE.realm * 0.85, DISTANCE_SCALE.realm * 1.15) * (1 - ramp(scale, DISTANCE_SCALE.kingdom, DISTANCE_SCALE.kingdom + 8));
+}
+
+/** Type sizes in CSS px for a realm and for a patch of a given screen radius; a patch is always set smaller. */
+export function realmLabelPx(screenR: number): number {
+  return Math.round(Math.max(13, Math.min(21, screenR * 0.1)));
+}
+export function clusterLabelPx(screenR: number): number {
+  return Math.round(Math.max(10.5, Math.min(12.5, screenR * 0.06)) * 2) / 2;
+}
+
+/**
+ * The realms that get a name on the map, biggest first, ties by index. An isle's single realm is not named (the
+ * isle's own name already says it), nor are the Outer Isles, which are named once as an archipelago.
+ */
+export function labelledRealms(realms: readonly GeoRealm[]): GeoRealm[] {
+  return realms.filter((realm) => realm.kind === 'crossroads' || realm.kind === 'family' || realm.kind === 'wilds')
+    .sort((a, b) => b.members - a.members || a.index - b.index);
+}
+
+/** A long realm name in two lines, broken near the middle and preferably before an ampersand. */
+export function realmLines(name: string): string {
+  let best = -1;
+  let bestScore = Infinity;
+  for (let i = 1; i < name.length - 1; i++) {
+    if (name[i] !== ' ') continue;
+    const score = Math.abs(i - name.length / 2) - (name[i + 1] === '&' ? 3 : 0);
+    if (score < bestScore) {
+      best = i;
+      bestScore = score;
+    }
+  }
+  return best < 0 ? name : `${name.slice(0, best)}\n${name.slice(best + 1)}`;
+}
+
+/** Counts from the last overlay update. */
+export interface OverlayStats { stamps: number; marks: number; shields: number; labels: number; standards: number; pencils: number }
+
 /** Something drawn that a pointer can pick: a stamp or a survey mark. */
 export interface Drawn { settler: Settler; x: number; y: number; r: number }
+/** A pencil flag in view: a small live channel at its pencil place. */
+export interface DrawnDab { dab: Dab; x: number; y: number; r: number }
 
 class Pool<T extends Sprite | Text> {
   private readonly items: T[] = [];
@@ -61,6 +128,8 @@ class Pool<T extends Sprite | Text> {
     for (let i = this.used; i < this.items.length; i++) this.items[i]!.visible = false;
   }
 }
+
+const phoneLayout = (view: Viewport) => Math.min(view.width, view.height) < 600;
 
 function hashId(id: string): number {
   let h = 2166136261;
@@ -107,10 +176,12 @@ interface LabelEntry { text: Text; usedAt: number }
 const PAPER_HEX = parseInt(PAPER.slice(1), 16);
 const INK_HEX = parseInt(INK.slice(1), 16);
 const LAND_HEX = parseInt('f6eed8', 16);
+/** Patch names: a softer sepia than the realm names above them. */
+const CLUSTER_HEX = 0x6b5a48;
 
 /**
  * Everything drawn above the land tiles: holdings (survey marks or settlement stamps), seeded shields, names,
- * language-region names, community (category) names and the selection ring. Positions are recomputed in screen
+ * language-region names, realm names, community (category) names and the selection ring. Positions are recomputed in screen
  * space whenever the camera moves, so stamps and type keep their size while the land zooms beneath them.
  */
 export class Overlay {
@@ -120,23 +191,40 @@ export class Overlay {
   private readonly fills = new Container();
   private readonly inks = new Container();
   private readonly shields = new Container();
+  private readonly standards = new Container();
+  private readonly pencils = new Container();
   private readonly labels = new Container();
   private readonly selection = new Graphics();
   private readonly markPool: Pool<Sprite>;
   private readonly fillPool: Pool<Sprite>;
   private readonly inkPool: Pool<Sprite>;
   private readonly shieldPool: Pool<Sprite>;
+  private readonly standardPool: Pool<Sprite>;
+  private readonly pencilPool: Pool<Sprite>;
+  private readonly standardTextures = new Map<string, { texture: Texture; image: StandardImage }>();
+  private live: LivePaint | null = null;
   private readonly markTextures: Texture[];
   private readonly stampsByTier: StampTextures[][];
   private readonly textCache = new Map<string, LabelEntry>();
   private readonly shieldCache = new Map<string, { texture: Texture; usedAt: number }>();
   private readonly scratch: Settler[] = [];
+  private readonly realmOrder: GeoRealm[];
+  private readonly placer = new Placer();
+  private readonly names = new HoldingLabels(this.placer);
   private frame = 0;
+  /** Show newly placed things at once instead of fading them in (prefers-reduced-motion); the view keeps it current. */
+  reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   /** Pickable things from the last update, highest priority first. */
   drawn: Drawn[] = [];
+  drawnDabs: DrawnDab[] = [];
+  /** Pennants and pencil flags drawn in the last update, by live class 1–5 (evidence and budgets). */
+  pennants = [0, 0, 0, 0, 0, 0];
+  /** What the last update put on the paper (evidence and budgets): stamps, survey marks, shields, text, standards, pencil flags. */
+  stats: OverlayStats = { stamps: 0, marks: 0, shields: 0, labels: 0, standards: 0, pencils: 0 };
 
   constructor(private readonly world: PreviewWorld, private readonly geo: Geography, private readonly store: SettlerStore, sheet: TextureSource | null, stamps: Stamp[], private readonly pixelRatio: number) {
-    this.container.addChild(this.marks, this.fills, this.inks, this.selection, this.regionLayer, this.shields, this.labels);
+    this.container.addChild(this.marks, this.pencils, this.fills, this.inks, this.selection, this.regionLayer, this.standards, this.shields, this.labels);
+    this.realmOrder = labelledRealms(geo.realms);
     this.markTextures = [0, 1, 2, 3].map((tier) => markTexture(tier, pixelRatio));
     this.markPool = new Pool(this.marks, () => {
       const sprite = new Sprite();
@@ -146,6 +234,8 @@ export class Overlay {
     this.fillPool = new Pool(this.fills, () => new Sprite());
     this.inkPool = new Pool(this.inks, () => new Sprite());
     this.shieldPool = new Pool(this.shields, () => new Sprite());
+    this.standardPool = new Pool(this.standards, () => new Sprite());
+    this.pencilPool = new Pool(this.pencils, () => new Sprite());
     const groups = ['capital', 'city', 'town', 'village'];
     this.stampsByTier = groups.map((group) => {
       if (!sheet) return [];
@@ -157,6 +247,41 @@ export class Overlay {
         anchorY: stamp.anchor.y,
       }));
     });
+  }
+
+  setLive(live: LivePaint | null): void {
+    this.live = live;
+  }
+
+  /** A standard's image: bare (0), a pennant (1–4) or the pencil flag (5), drawn once per class and variant. */
+  private standard(liveClass: number, variant: number): { texture: Texture; image: StandardImage } {
+    const key = `${liveClass}:${liveClass >= 1 && liveClass <= 4 ? variant % 3 : 0}`;
+    let entry = this.standardTextures.get(key);
+    if (!entry) {
+      const image = liveClass === 5 ? pencilFlagImage(this.pixelRatio) : standardImage(liveClass, variant % 3, this.pixelRatio);
+      entry = { image, texture: new Texture({ source: new CanvasSource({ resource: image.canvas, resolution: this.pixelRatio }) }) };
+      this.standardTextures.set(key, entry);
+    }
+    return entry;
+  }
+
+  /** Raises a holding's standard on the top of its shield: bare when offline, its pennant when live (R8). */
+  private raise(settler: Settler, x: number, y: number, alpha: number, grid: CollisionGrid): void {
+    const liveClass = this.live?.liveClass(settler) ?? 0;
+    // Before the first live frame nothing is known about who is live: no standard rather than a falsely bare one.
+    if (!this.live?.frame && liveClass === 0) return;
+    const { texture, image } = this.standard(liveClass, hashId(settler.id));
+    const sprite = this.standardPool.next();
+    sprite.texture = texture;
+    sprite.width = image.width;
+    sprite.height = image.height;
+    const left = Math.round(x - image.anchorX * image.width);
+    const top = Math.round(y - image.height);
+    sprite.position.set(left, top);
+    sprite.alpha = alpha;
+    grid.claim({ x: left, y: top, w: image.width, h: image.height - 2 });
+    this.pennants[liveClass]!++;
+    this.stats.standards++;
   }
 
   private text(key: string, value: string, style: TextStyleOptions): Text {
@@ -190,8 +315,18 @@ export class Overlay {
     return entry.texture;
   }
 
-  update(camera: Camera, view: Viewport, focus: { selected: Settler | null; hovered: Settler | null }): void {
+  /** True while something placed in the last update is still fading in; the view keeps drawing until it settles. */
+  get animating(): boolean {
+    return this.placer.fading;
+  }
+
+  update(camera: Camera, view: Viewport, focus: { selected: Settler | null; hovered: Settler | null }, now: number): void {
     this.frame++;
+    // The first view arrives whole with the map's own reveal; after that, whatever newly finds room fades in.
+    this.placer.begin(now, this.reduceMotion || this.frame === 1);
+    this.names.begin();
+    const stats: OverlayStats = { stamps: 0, marks: 0, shields: 0, labels: 0, standards: 0, pencils: 0 };
+    this.stats = stats;
     const scale = camera.scale;
     const grid = new CollisionGrid(view.width, view.height);
     const margin = 160;
@@ -209,20 +344,24 @@ export class Overlay {
     this.fillPool.begin();
     this.inkPool.begin();
     this.shieldPool.begin();
+    this.standardPool.begin();
+    this.pencilPool.begin();
+    this.pennants = [0, 0, 0, 0, 0, 0];
+    const raising = scale >= STANDARD_FROM;
     for (const entry of this.textCache.values()) entry.text.visible = false;
     const drawn: Drawn[] = [];
     const radius = this.world.tiers.holdingRadius;
     const radii = [radius.capital, radius.city, radius.town, radius.village];
+    const kingdom = scale >= DISTANCE_SCALE.kingdom;
 
     // Each holding's name and shield go down right after its stamp, so a stronger holding's name is never pushed
-    // aside by a weaker holding's stamp. Below the stamp first, then beside it, then above. A holding whose name is
-    // stale or not yet received keeps its shield alone: the arms come from the channel ID, not from raw content.
-    let shields = 0;
-    const placeName = (item: { settler: Settler; sx: number; sy: number; w: number; h: number }): void => {
-      const { settler } = item;
+    // aside by a weaker holding's stamp. Below the stamp first, then beside it, then above, the side it held last
+    // frame before any other. A holding whose name is stale or not yet received keeps its shield alone: the arms
+    // come from the channel ID, not from raw content.
+    const placeName = (settler: Settler, sx: number, sy: number, w: number, h: number): void => {
       const tier = settler.tierRank;
-      const size = LABEL_PX[tier]! + (scale >= DISTANCE_SCALE.kingdom ? 1.5 : 0);
-      const shieldW = SHIELD_PX[tier]! + (scale >= DISTANCE_SCALE.kingdom ? 3 : 0);
+      const size = LABEL_PX[tier]! + (kingdom ? 1.5 : 0);
+      const shieldW = SHIELD_PX[tier]! + (kingdom ? 3 : 0);
       const label = settler.name === null ? null : this.text(`n:${settler.id}:${size}:${settler.name}`, settler.name, {
         fontFamily: FACE_TEXT,
         fontSize: size,
@@ -231,53 +370,62 @@ export class Overlay {
         stroke: { color: PAPER_HEX, width: 3.2, join: 'round' },
         padding: 4,
       });
-      const withShield = shields < SHIELD_LIMIT;
-      if (!label && !withShield) return;
-      const gap = withShield ? shieldW + (label ? 4 : 0) : 0;
-      const totalW = (label?.width ?? 0) + gap;
-      const height = Math.max(label?.height ?? 0, withShield ? shieldW * SHIELD_ASPECT : 0);
-      const mid = item.sy - item.h / 2;
-      const candidates: Rect[] = [
-        { x: item.sx - totalW / 2, y: item.sy + 2, w: totalW, h: height },
-        { x: item.sx + item.w * 0.42, y: mid - height / 2, w: totalW, h: height },
-        { x: item.sx - item.w * 0.42 - totalW, y: mid - height / 2, w: totalW, h: height },
-        { x: item.sx - totalW / 2, y: item.sy - item.h - height - 1, w: totalW, h: height },
-      ];
-      const isForced = forced.has(settler);
-      const rect = candidates.find((candidate) => grid.free(candidate)) ?? (isForced ? candidates[0]! : null);
-      if (!rect) {
+      const placed = this.names.place(grid, `n:${settler.id}`, { x: sx, y: sy, w, h }, label && { w: label.width, h: label.height }, { w: shieldW, h: shieldW * SHIELD_ASPECT }, forced.has(settler));
+      if (!placed) {
         if (label) label.visible = false;
         return;
       }
-      grid.claim(rect);
-      const top = rect.y;
-      label?.position.set(Math.round(rect.x + gap), Math.round(top + (rect.h - label.height) / 2));
-      if (withShield) {
-        shields++;
+      if (label && placed.label) {
+        label.position.set(placed.label.x, placed.label.y);
+        label.alpha = placed.alpha;
+        stats.labels++;
+      }
+      if (placed.shield) {
+        stats.shields++;
         const shield = this.shieldPool.next();
         shield.texture = this.shieldTexture(settler, shieldW);
-        shield.position.set(Math.round(rect.x - 3), Math.round(top + (rect.h - shieldW * SHIELD_ASPECT) / 2 - 3));
-        shield.width = shieldW + 6;
-        shield.height = shieldW * SHIELD_ASPECT + 6;
+        shield.position.set(placed.shield.x, placed.shield.y);
+        shield.width = shieldW + SHIELD_PAD * 2;
+        shield.height = shieldW * SHIELD_ASPECT + SHIELD_PAD * 2;
+        shield.alpha = placed.alpha;
+        if (raising && placed.standard) this.raise(settler, placed.standard.x, placed.standard.y, placed.alpha, grid);
       }
+    };
+    const placeMark = (settler: Settler, x: number, y: number, alpha: number): void => {
+      const mark = this.markPool.next();
+      mark.texture = this.markTextures[settler.tierRank]!;
+      mark.position.set(Math.round(x * this.pixelRatio) / this.pixelRatio, Math.round(y * this.pixelRatio) / this.pixelRatio);
+      mark.scale.set(1);
+      mark.alpha = (settler.tierRank === 3 ? 0.75 : 1) * alpha;
     };
 
     // 1. Language regions: the largest type on the map, written across the land at world and continent distance.
     this.placeRegions(camera, view, grid);
 
-    // 2. Stamps and names, in priority order; a stamp that would crowd a stronger one stays a survey mark.
+    // 2. Stamps and names, in priority order; a stamp that would crowd a stronger one stays a survey mark. Realm
+    // names go down after the capitals and before every smaller holding.
+    let realmsPlaced = false;
     for (const settler of visible) {
+      if (!realmsPlaced && settler.tierRank > 0 && !forced.has(settler)) {
+        this.placeRealms(camera, view, grid);
+        realmsPlaced = true;
+      }
       const s = camera.worldToScreen(settler.x, settler.y, view);
       const r = radii[settler.tierRank]!;
-      const wantsStamp = forced.has(settler) || stampVisible(settler.tierRank, scale);
+      const isForced = forced.has(settler);
+      const marked = settler.tierRank < tiers || isForced;
+      const wantsStamp = isForced || stampVisible(settler.tierRank, scale);
       const choices = this.stampsByTier[settler.tierRank]!;
       if (wantsStamp && choices.length) {
         const w = stampPx(settler.tierRank, r, scale);
         const choice = choices[hashId(settler.id) % choices.length]!;
         const h = w * choice.aspect;
         const rect: Rect = { x: s.x - w * choice.anchorX + w * 0.12, y: s.y - h * choice.anchorY + h * 0.18, w: w * 0.76, h: h * 0.76 };
-        if (forced.has(settler) || grid.free(rect)) {
-          grid.claim(rect);
+        const placed = this.placer.choose(grid, `s:${settler.id}`, [rect], isForced);
+        if (placed) {
+          stats.stamps++;
+          // A stamp taking over from its survey mark: the mark gives way as the stamp is inked in.
+          if (placed.alpha < 1 && marked) placeMark(settler, s.x, s.y, 1 - placed.alpha);
           if (choice.fill) {
             const fill = this.fillPool.next();
             fill.texture = choice.fill;
@@ -285,6 +433,7 @@ export class Overlay {
             fill.position.set(s.x - w * choice.anchorX, s.y - h * choice.anchorY);
             fill.width = w;
             fill.height = h;
+            fill.alpha = placed.alpha;
           }
           const ink = this.inkPool.next();
           ink.texture = choice.ink;
@@ -292,24 +441,27 @@ export class Overlay {
           ink.position.set(s.x - w * choice.anchorX, s.y - h * choice.anchorY);
           ink.width = w;
           ink.height = h;
-          placeName({ settler, sx: s.x, sy: s.y, w, h: h * choice.anchorY });
+          ink.alpha = placed.alpha;
+          placeName(settler, s.x, s.y, w, h * choice.anchorY);
           drawn.push({ settler, x: s.x, y: s.y - h * choice.anchorY * 0.45, r: Math.max(w, h) * 0.45 });
           continue;
         }
       }
-      if (settler.tierRank >= tiers && !forced.has(settler)) continue;
-      const mark = this.markPool.next();
-      mark.texture = this.markTextures[settler.tierRank]!;
-      mark.position.set(Math.round(s.x * this.pixelRatio) / this.pixelRatio, Math.round(s.y * this.pixelRatio) / this.pixelRatio);
-      mark.scale.set(1);
-      mark.alpha = settler.tierRank === 3 ? 0.75 : 1;
+      if (!marked) continue;
+      stats.marks++;
+      placeMark(settler, s.x, s.y, 1);
       drawn.push({ settler, x: s.x, y: s.y, r: Math.max(5, r * scale) });
     }
+    if (!realmsPlaced) this.placeRealms(camera, view, grid);
 
-    // 3. Community names (the observed main category of a cluster) once a realm is close.
+    // 3. Pencil flags of the small live channels at their pencil places, after every holding and its name.
+    this.drawnDabs = raising ? this.placePencils(camera, view, grid, phoneLayout(view)) : [];
+    stats.pencils = this.drawnDabs.length;
+
+    // 4. Community names (the observed main category of a cluster) once a realm is close.
     this.placeClusters(camera, view, grid);
 
-    // 4. Selection: a double ink ring with four ticks, like a surveyor's mark.
+    // 5. Selection: a double ink ring with four ticks, like a surveyor's mark.
     this.selection.clear();
     if (focus.selected) {
       const target = drawn.find((item) => item.settler === focus.selected);
@@ -330,20 +482,75 @@ export class Overlay {
     this.fillPool.end();
     this.inkPool.end();
     this.shieldPool.end();
+    this.standardPool.end();
+    this.pencilPool.end();
+    this.placer.end();
     this.drawn = drawn;
     this.evict();
   }
 
+  /** Pencil flags never push a name aside: each takes free paper or waits for a closer view. */
+  private placePencils(camera: Camera, view: Viewport, grid: CollisionGrid, phone: boolean): DrawnDab[] {
+    const live = this.live;
+    if (!live?.frame) return [];
+    const { texture, image } = this.standard(5, 0);
+    // A flag stands above its place: one whose foot is just below the screen still shows its top.
+    const box = camera.visibleBox(view, image.height + 4);
+    const limit = phone ? PENCIL_LIMIT.phone : PENCIL_LIMIT.laptop;
+    const out: DrawnDab[] = [];
+    for (const dab of live.dabs) {
+      if (out.length >= limit) break;
+      if (!dab.placed || dab.x < box.minX || dab.x > box.maxX || dab.y < box.minY || dab.y > box.maxY) continue;
+      const s = camera.worldToScreen(dab.x, dab.y, view);
+      const left = Math.round(s.x - image.anchorX * image.width);
+      const top = Math.round(s.y - image.height);
+      const placed = this.placer.choose(grid, `p:${dab.hash}`, [{ x: left, y: top, w: image.width - 2, h: image.height }]);
+      if (!placed) continue;
+      const sprite = this.pencilPool.next();
+      sprite.texture = texture;
+      sprite.width = image.width;
+      sprite.height = image.height;
+      sprite.position.set(left, top);
+      sprite.alpha = (0.55 + 0.45 * live.bloom(dab.startedAt)) * placed.alpha;
+      out.push({ dab, x: s.x + 2, y: s.y - image.height * 0.6, r: 7 });
+      this.pennants[5]!++;
+    }
+    return out;
+  }
+
+  /**
+   * Places an area name (region, realm, patch) on the first free of its candidates, the one it held last frame first,
+   * or hides it. Returns the placement so the caller can set the alpha.
+   */
+  private placeArea(grid: CollisionGrid, key: string, candidates: readonly Rect[], ...texts: (Text | null)[]): Placed | null {
+    const placed = this.placer.choose(grid, key, candidates);
+    for (const text of texts) {
+      if (!text) continue;
+      if (placed) this.stats.labels++;
+      else text.visible = false;
+    }
+    return placed;
+  }
+
   private placeRegions(camera: Camera, view: Viewport, grid: CollisionGrid): void {
     const scale = camera.scale;
-    const fade = scale >= DISTANCE_SCALE.realm ? 0 : scale >= DISTANCE_SCALE.continent * 1.6 ? 1 - (scale - DISTANCE_SCALE.continent * 1.6) / (DISTANCE_SCALE.realm - DISTANCE_SCALE.continent * 1.6) : 1;
+    const fade = regionLabelFade(scale);
     if (fade <= 0.02) return;
-    const regions = [...this.geo.regions].sort((a, b) => b.members - a.members || a.index - b.index);
+    // The Outer Isles share one name, written once over the archipelago below.
+    const regions = this.geo.regions.filter((region) => region.kind !== 'outer').sort((a, b) => b.members - a.members || a.index - b.index);
+    const dys = [0, -0.34, 0.34, -0.6, 0.6];
     for (const region of regions) {
       const screenR = region.r * scale;
       if (screenR < (region.kind === 'continent' ? 26 : 16)) continue;
       const continent = region.kind === 'continent';
       const size = Math.round(Math.max(continent ? 15 : 11.5, Math.min(continent ? 34 : 17, screenR * (continent ? 0.16 : 0.2))));
+      const subtitle = region.englishName !== region.name && continent ? region.englishName : null;
+      const subSize = Math.max(11, Math.round(size * 0.42));
+      const c = camera.worldToScreen(region.x, region.y, view);
+      // Culled before any type is set: a generous reach (about an em per letter) around every candidate.
+      const reachW = Math.max(region.name.length * size * 0.62, (subtitle?.length ?? 0) * subSize * 0.62) + 8;
+      const reachH = screenR * 0.6 + size * 1.6 + subSize * 1.4;
+      if (!onScreen({ x: c.x - reachW, y: c.y - reachH, w: reachW * 2, h: reachH * 2 }, view.width, view.height, 40)) continue;
       const label = this.text(`r:${region.index}:${size}`, region.name, {
         fontFamily: continent ? FACE_CAPS : FACE_ITALIC,
         fontStyle: continent ? 'normal' : 'italic',
@@ -353,65 +560,106 @@ export class Overlay {
         stroke: { color: PAPER_HEX, width: continent ? 4 : 3, join: 'round' },
         padding: 6,
       });
-      const subtitle = region.englishName !== region.name && continent ? region.englishName : null;
       const sub = subtitle ? this.text(`rs:${region.index}:${size}`, subtitle, {
         fontFamily: FACE_ITALIC,
         fontStyle: 'italic',
-        fontSize: Math.max(11, Math.round(size * 0.42)),
+        fontSize: subSize,
         fill: INK_HEX,
         letterSpacing: 1,
         stroke: { color: PAPER_HEX, width: 3, join: 'round' },
         padding: 4,
       }) : null;
-      const c = camera.worldToScreen(region.x, region.y, view);
       const height = label.height + (sub ? sub.height - 4 : 0);
       const width = Math.max(label.width, sub?.width ?? 0);
-      let placed = false;
-      for (const dy of [0, -0.34, 0.34, -0.6, 0.6]) {
+      // Candidates up to the first that lies wholly off the screen: a name is not moved off the paper to find room.
+      const candidates: Rect[] = [];
+      for (const dy of dys) {
         const rect: Rect = { x: c.x - width / 2, y: c.y + dy * screenR - height / 2, w: width, h: height };
-        if (rect.x + rect.w < -40 || rect.x > view.width + 40 || rect.y + rect.h < -40 || rect.y > view.height + 40) break;
-        if (!grid.free(rect)) continue;
-        grid.claim(rect);
-        label.position.set(Math.round(c.x - label.width / 2), Math.round(rect.y));
-        label.alpha = 0.78 * fade;
-        if (sub) {
-          sub.position.set(Math.round(c.x - sub.width / 2), Math.round(rect.y + label.height - 4));
-          sub.alpha = 0.72 * fade;
-        }
-        placed = true;
-        break;
+        if (!onScreen(rect, view.width, view.height, 40)) break;
+        candidates.push(rect);
       }
-      if (!placed) {
-        label.visible = false;
-        if (sub) sub.visible = false;
+      const placed = this.placeArea(grid, `r:${region.index}`, candidates, label, sub);
+      if (!placed) continue;
+      label.position.set(Math.round(c.x - label.width / 2), Math.round(placed.rect.y));
+      label.alpha = 0.78 * fade * placed.alpha;
+      if (sub) {
+        sub.position.set(Math.round(c.x - sub.width / 2), Math.round(placed.rect.y + label.height - 4));
+        sub.alpha = 0.72 * fade * placed.alpha;
       }
     }
-    const isles = this.geo.isles;
-    if (isles && isles.r * scale > 30) {
-      const size = Math.round(Math.max(13, Math.min(24, isles.r * scale * 0.09)));
-      const label = this.text(`isles:${size}`, isles.name, {
+    if (this.geo.isles) this.placeArchipelago('isles', this.geo.isles, camera, view, grid, fade);
+    this.placeArchipelago('outer', this.geo.outer, camera, view, grid, fade);
+  }
+
+  /** A group of islands named once, along the top of the circle that holds them. */
+  private placeArchipelago(key: string, circle: Circle, camera: Camera, view: Viewport, grid: CollisionGrid, fade: number): void {
+    const scale = camera.scale;
+    if (circle.r * scale <= 30) return;
+    const size = Math.round(Math.max(13, Math.min(24, circle.r * scale * 0.09)));
+    const top = Math.max(circle.y - circle.r * 0.92, this.geo.bounds.minY + 40);
+    const c = camera.worldToScreen(circle.x, top, view);
+    const reachW = circle.name.length * size * 0.8 + 8;
+    if (!onScreen({ x: c.x - reachW, y: c.y, w: reachW * 2, h: size * 1.8 }, view.width, view.height, 40)) return;
+    const label = this.text(`${key}:${size}`, circle.name, {
+      fontFamily: FACE_ITALIC,
+      fontStyle: 'italic',
+      fontSize: size,
+      fill: INK_HEX,
+      letterSpacing: size * 0.18,
+      stroke: { color: PAPER_HEX, width: 3.5, join: 'round' },
+      padding: 6,
+    });
+    const placed = this.placeArea(grid, `a:${key}`, [{ x: c.x - label.width / 2, y: c.y, w: label.width, h: label.height }], label);
+    if (!placed) return;
+    label.position.set(Math.round(placed.rect.x), Math.round(placed.rect.y));
+    label.alpha = 0.8 * fade * placed.alpha;
+  }
+
+  /** Realm names across a continent: the families of games, the Crossroads at its heart and the Wilds at its edge. */
+  private placeRealms(camera: Camera, view: Viewport, grid: CollisionGrid): void {
+    const scale = camera.scale;
+    const fade = realmLabelFade(scale);
+    if (fade <= 0.02) return;
+    const box = camera.visibleBox(view, 40);
+    for (const realm of this.realmOrder) {
+      const screenR = realm.r * scale;
+      // A realm's name may run a little past its circle (up to 2.4 r wide), so the reach is 1.2 r.
+      const reach = realm.r * 1.2;
+      if (screenR < 30 || realm.x + reach < box.minX || realm.x - reach > box.maxX || realm.y + reach < box.minY || realm.y - reach > box.maxY) continue;
+      const size = realmLabelPx(screenR);
+      const style: TextStyleOptions = {
         fontFamily: FACE_ITALIC,
         fontStyle: 'italic',
         fontSize: size,
         fill: INK_HEX,
-        letterSpacing: size * 0.18,
-        stroke: { color: PAPER_HEX, width: 3.5, join: 'round' },
-        padding: 6,
-      });
-      const top = Math.max(isles.y - isles.r * 0.92, this.geo.bounds.minY + 40);
-      const c = camera.worldToScreen(isles.x, top, view);
-      const rect: Rect = { x: c.x - label.width / 2, y: c.y, w: label.width, h: label.height };
-      if (grid.take(rect)) {
-        label.position.set(Math.round(rect.x), Math.round(rect.y));
-        label.alpha = 0.8 * fade;
-      } else label.visible = false;
+        letterSpacing: size * 0.12,
+        stroke: { color: PAPER_HEX, width: 3.2, join: 'round' },
+        padding: 5,
+        align: 'center',
+        lineHeight: size * 1.08,
+      };
+      let label = this.text(`m:${realm.index}:${size}`, realm.name, style);
+      if (label.width > screenR * 1.9 && realm.name.includes(' ')) {
+        label.visible = false;
+        label = this.text(`m2:${realm.index}:${size}`, realmLines(realm.name), style);
+      }
+      // A name much wider than its realm would read as its neighbour's; it waits for a closer view.
+      if (label.width > screenR * 2.4) {
+        label.visible = false;
+        continue;
+      }
+      const c = camera.worldToScreen(realm.x, realm.y, view);
+      const candidates = [0, 0.42, -0.42, 0.7, -0.7].map((dy): Rect => ({ x: c.x - label.width / 2, y: c.y + dy * screenR - label.height / 2, w: label.width, h: label.height }));
+      const placed = this.placeArea(grid, `m:${realm.index}`, candidates, label);
+      if (!placed) continue;
+      label.position.set(Math.round(placed.rect.x), Math.round(placed.rect.y));
+      label.alpha = 0.86 * fade * placed.alpha;
     }
   }
 
   private placeClusters(camera: Camera, view: Viewport, grid: CollisionGrid): void {
     const scale = camera.scale;
-    if (scale < DISTANCE_SCALE.continent) return;
-    const fade = Math.min(1, (scale - DISTANCE_SCALE.continent) / 0.8) * (scale > DISTANCE_SCALE.kingdom ? Math.max(0, 1 - (scale - DISTANCE_SCALE.kingdom) / 8) : 1);
+    const fade = clusterLabelFade(scale);
     if (fade <= 0.02) return;
     const box = camera.visibleBox(view, 80);
     const clusters = this.geo.clusters
@@ -421,29 +669,23 @@ export class Overlay {
     for (const { cluster, index } of clusters) {
       const name = cluster.name;
       if (!name) continue;
-      const size = Math.round(Math.max(12, Math.min(19, cluster.r * scale * 0.08)));
+      const size = clusterLabelPx(cluster.r * scale);
       const label = this.text(`c:${index}:${size}`, name, {
         fontFamily: FACE_ITALIC,
         fontStyle: 'italic',
         fontSize: size,
-        fill: 0x5a4a3a,
-        letterSpacing: size * 0.22,
-        stroke: { color: PAPER_HEX, width: 3, join: 'round' },
+        fill: CLUSTER_HEX,
+        letterSpacing: size * 0.16,
+        stroke: { color: PAPER_HEX, width: 2.6, join: 'round' },
         padding: 4,
       });
       const c = camera.worldToScreen(cluster.x, cluster.y, view);
       const r = cluster.r * scale;
-      let placed = false;
-      for (const dy of [-0.92, 0.92, -0.5, 0.5, 0]) {
-        const rect: Rect = { x: c.x - label.width / 2, y: c.y + dy * r - label.height / 2, w: label.width, h: label.height };
-        if (!grid.free(rect)) continue;
-        grid.claim(rect);
-        label.position.set(Math.round(rect.x), Math.round(rect.y));
-        label.alpha = 0.82 * fade;
-        placed = true;
-        break;
-      }
-      if (!placed) label.visible = false;
+      const candidates = [-0.92, 0.92, -0.5, 0.5, 0].map((dy): Rect => ({ x: c.x - label.width / 2, y: c.y + dy * r - label.height / 2, w: label.width, h: label.height }));
+      const placed = this.placeArea(grid, `c:${index}`, candidates, label);
+      if (!placed) continue;
+      label.position.set(Math.round(placed.rect.x), Math.round(placed.rect.y));
+      label.alpha = 0.7 * fade * placed.alpha;
     }
   }
 
@@ -464,6 +706,20 @@ export class Overlay {
     }
   }
 
+  /** The pencil flag nearest a screen point, if any lies within reach. */
+  pickDab(x: number, y: number, slop: number): Dab | null {
+    let best: DrawnDab | null = null;
+    let bestD = Infinity;
+    for (const item of this.drawnDabs) {
+      const d = Math.hypot(item.x - x, item.y - y);
+      if (d <= item.r + slop && d < bestD) {
+        best = item;
+        bestD = d;
+      }
+    }
+    return best?.dab ?? null;
+  }
+
   /** The pickable thing nearest a screen point, if any lies within reach (more generous for touch). */
   pick(x: number, y: number, slop: number): Settler | null {
     let best: Drawn | null = null;
@@ -480,6 +736,7 @@ export class Overlay {
 
   dispose(): void {
     for (const entry of this.shieldCache.values()) entry.texture.destroy(true);
+    for (const entry of this.standardTextures.values()) entry.texture.destroy(true);
     for (const texture of this.markTextures) texture.destroy(true);
     this.container.destroy({ children: true });
   }
