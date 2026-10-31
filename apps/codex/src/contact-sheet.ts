@@ -6,7 +6,7 @@ import { rasterizeBlueprint } from '@chatdom/voxel';
 type Vector = readonly [number, number, number];
 type Colour = readonly [number, number, number];
 interface View { name: string; right: Vector; up: Vector; camera: Vector }
-const WIDTH = 768, HEIGHT = 512;
+const WIDTH = 768, HEIGHT = 800;
 const BACKGROUND: Colour = [245, 245, 245];
 const INK: Colour = [55, 55, 55];
 const MAX_RASTER_WRITES = 64 * 1024 * 1024;
@@ -24,6 +24,15 @@ const VIEWS: readonly View[] = [
   { name: 'RIGHT', right: [0, 0, -1], up: [0, 1, 0], camera: [1, 0, 0] },
   { name: 'STREET', right: [a, 0, -a], up: [-b, 2 * b, -b], camera: [c, c, c] },
 ];
+// The opposite three-quarter view exposes -X faces that the flat street view cannot see.
+const HERO: View = { name: 'SHADED LEFT FRONT', right: [a, 0, a], up: [b, 2 * b, -b], camera: [-c, c, c] };
+const KEY: Vector = [-0.45, 0.86, 0.25];
+
+function faceColour(base: Colour, axis: number, normal: number): Colour {
+  const direct = KEY[axis]! * normal;
+  const light = 0.52 + 0.47 * Math.max(0, direct) + 0.08 * Math.max(0, -direct);
+  return [Math.round(base[0] * light), Math.round(base[1] * light), Math.round(base[2] * light)];
+}
 
 function canvas(width: number, height: number): Uint8Array {
   const pixels = new Uint8Array(width * height * 3);
@@ -32,8 +41,8 @@ function canvas(width: number, height: number): Uint8Array {
 }
 
 /** Front is +Z; the street camera sees +X, +Y and +Z without lighting or perspective. */
-function renderView(asset: VoxelAsset, min: Vector, max: Vector, view: View): Uint8Array {
-  const width = 232, height = 184, pixels = canvas(width, height);
+function renderView(asset: VoxelAsset, min: Vector, max: Vector, view: View, width = 232, height = 184, shaded = false): Uint8Array {
+  const pixels = canvas(width, height);
   const centre = min.map((n, axis) => (n + max[axis]!) / 2);
   const extent = max.map((n, axis) => n - min[axis]!);
   const span = (axis: Vector) => extent.reduce((sum, n, i) => sum + n * Math.abs(axis[i]!), 0);
@@ -46,14 +55,15 @@ function renderView(asset: VoxelAsset, min: Vector, max: Vector, view: View): Ui
     const horizontal = (px + 0.5 - width / 2) / scale;
     const vertical = (height / 2 - py - 0.5) / scale;
     const origin = centre.map((n, axis) => n + horizontal * view.right[axis]! + vertical * view.up[axis]! + distance * view.camera[axis]!);
-    let near = 0, far = Infinity;
+    let near = 0, far = Infinity, hitAxis = 0;
     for (let axis = 0; axis < 3; axis++) {
       const d = direction[axis]!, o = origin[axis]!;
       if (d === 0) {
         if (o < min[axis]! || o >= max[axis]!) far = -1;
       } else {
         const t0 = (min[axis]! - o) / d, t1 = (max[axis]! - o) / d;
-        near = Math.max(near, Math.min(t0, t1));
+        const entry = Math.min(t0, t1);
+        if (entry > near) { near = entry; hitAxis = axis; }
         far = Math.min(far, Math.max(t0, t1));
       }
     }
@@ -65,11 +75,13 @@ function renderView(asset: VoxelAsset, min: Vector, max: Vector, view: View): Ui
     for (let step = 0; step < maxSteps; step++) {
       const material = asset.voxels[cells[0]! + cells[1]! * stride[1]! + cells[2]! * stride[2]!]!;
       if (material !== 0) {
-        pixels.set(palette.get(material)!, (px + py * width) * 3);
+        const base = palette.get(material)!;
+        pixels.set(shaded ? faceColour(base, hitAxis, -steps[hitAxis]!) : base, (px + py * width) * 3);
         break;
       }
       const next = Math.min(...crossing);
       if (next >= far) break;
+      hitAxis = crossing.indexOf(next);
       // Advance every tied axis to avoid treating edge/corner contacts as a visible face.
       for (let axis = 0; axis < 3; axis++) if (crossing[axis]! <= next + 1e-9) {
         cells[axis]! += steps[axis]!;
@@ -151,7 +163,7 @@ function pngChunk(type: string, data: Uint8Array): Buffer {
   return bytes;
 }
 
-/** Trusted server raster only: no browser image input, shaders, lighting, GPU or external encoder. */
+/** Trusted CPU raster only: flat palette views plus labelled face-lit geometry; no browser input or GPU. */
 export function renderForgeContactSheet(input: VoxelBlueprint): string {
   const blueprint = VoxelBlueprintSchema.parse(input);
   const writes = blueprint.boxes.reduce((sum, box) => sum + box.to.reduce((volume, n, axis) => volume * (n - box.from[axis]!), 1), 0);
@@ -175,6 +187,8 @@ export function renderForgeContactSheet(input: VoxelBlueprint): string {
     if (view.name === 'STREET') paste(pixels, distanceTile(tile), 64, 64, 696, 448);
   }
   label(pixels, 'DISTANCE 64PX', 584, 472);
+  label(pixels, HERO.name, 16, 520);
+  paste(pixels, renderView(asset, min, max, HERO, 736, 256, true), 736, 256, 16, 540);
   const header = Buffer.alloc(13);
   header.writeUInt32BE(WIDTH, 0); header.writeUInt32BE(HEIGHT, 4);
   header[8] = 8; header[9] = 2; // Eight-bit RGB; no interlace or palette indirection.
