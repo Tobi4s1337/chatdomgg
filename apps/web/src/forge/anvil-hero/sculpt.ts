@@ -94,8 +94,9 @@ export function ironCell(x: number, row: number, z: number): boolean {
   // Horn and throat: one continuous belly from the waist up to the drooping point.
   if (x >= 3 && x < HORN.x[1] && row <= hornTop(x) && row + .5 >= belly(x + .5)) {
     const half = x < HORN.x[0] ? 3 : hornHalf(x + .5);
-    // Round the belly: the lowest course of each column is one h narrower.
-    const lowest = row + .5 < belly(x + .5) + 1 && x >= HORN.x[0];
+    // Round the belly: the lowest course of each column is one h narrower, until the horn is too
+    // slight to round; its point then thins to a single course over the last column.
+    const lowest = row + .5 < belly(x + .5) + 1 && x >= HORN.x[0] && (half >= 2 || x === HORN.x[1] - 1);
     if (ax <= half - (lowest ? 1 : 0) + .01) return true;
   }
   const waist = WAIST[row];

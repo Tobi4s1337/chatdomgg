@@ -24,7 +24,7 @@ owns the remaining look. A beautiful fixture is art evidence, never evidence tha
   terminal paths. Its initial transform and returned origin assume the old octagonal hearth. Main remounts it using
   the contract below; do not edit or replace its source SVG.
 - `packages/content/src/forge-motifs/index.ts` exports `MotifGeometry = {size, boxes, mount, emitter}` and the
-  sleeping dragon's existing build-cell envelope `[24,16,18]`, mount `[12,0,9]`, emitter `[0,2,9]`. Main chooses
+  sleeping dragon's existing build-cell envelope `[24,16,18]`, mount `[12,0,9]`, front-facing nose emitter `DRAGON_EMITTER` (currently `[0,3,12]`). Main chooses
   this lane's replacement for that one motif. Existing moon/owl and motif-lane folders stay read-only.
 - `apps/web/src/forge/emitters` already renders seekable anvil sparks and landed smoke/glow from supplied world
   anchors. Spec 17 owns transient ritual presentation/audio; spec 18 owns refusal presentation. Neither is this lane.
@@ -199,3 +199,14 @@ transient ritual effects, audio, refusal logic, generated images, package regist
   mark; shaping runs a fuse through them 0.12 s apart on the caller's clock. The worn sheen on convex arrises comes
   from a small occupancy texture, not a decal. The bench adds `shaping=0|1` and the `anvil-mark` face-on view, whose
   capture writes a crop beside, and overlaid with, the untouched SVG.
+- **2026-10-31 — The dragon is drawn as a skyline, its head in profile (AH04).** In real dusk renders the street
+  sees the roof backlit against the sky, and a muzzle pointing at the viewer foreshortened into a box. The head now
+  lies in profile along the front-left of the roof with the nose at −X, so `DRAGON_EMITTER` moves to `[0,3,12]`;
+  every consumer (bench, assembler, forge hearth) reads the exported constant, so none needed a change. The
+  crooked grey stack (cells x 13–18, z 2–8 at its corbel; 12 rows) stands behind the body as the tallest shape, over the forge
+  hearth's top flue course. The horns stay short and low (ending at row 8, x 10) so they never merge with the
+  pale stack. Each kit cuts its own spine plates and wing edge. Envelope and mount are unchanged.
+- **2026-10-31 — A pixel-aware dusk rim on the anvil's worn top (AH04).** From the square the cold anvil's top line
+  sank into the paving and the worn sheen was sub-pixel. The rim widens with the screen footprint (`fwidth`) on the
+  upper arrises only, takes sky and sun colour, and fades up close where the sheen already reads. The horn's lowest
+  course tapers to a 2×1 tip instead of ending as a square stick. No numeric beauty gate: the shots are judged.

@@ -79,10 +79,12 @@ fragments near a rune. SwiftShader timings say nothing about a device; see the d
 
 ## The dragon: `createAnvilHeroDragon(style)`
 
-A drop-in for `createForgeMotif('sleeping-dragon', style)`: the same envelope `[24,16,18]`, mount `[12,0,9]` and
-emitter `[0,2,9]`, 170–183 non-overlapping boxes per kit, fresh objects on every call (the assembler recolours and
-mirrors them in place). `ANVIL_HERO_DRAGON_SURFACE[style]` is the coil's back: the broad surface a composed
-finish should recolour (see the checklist).
+The `sleeping-dragon` chimney motif: envelope `[24,16,18]` and mount `[12,0,9]` as before, about 140 non-overlapping
+boxes per kit, fresh objects on every call (the assembler recolours them in place). Its smoke anchor is the exported
+`DRAGON_EMITTER`, now `[0,3,12]`: the head lies in profile along the front-left of the roof with its nose at the left
+end, because at dusk the street reads the roof as a silhouette and a muzzle pointing at the viewer disappears into
+the skull. `ANVIL_HERO_DRAGON_SURFACE[style]` is the coil's back, the broad surface a composed finish recolours.
+The pose and kits are in `packages/content/src/anvil-hero/README.md`.
 
 ## Bench and capture
 
@@ -97,7 +99,8 @@ With the web dev server running (`pnpm --filter @chatdom/web dev`, port 5170):
 - `/src/forge/anvil-hero/bench/sheet.html?hour=19`: the three kits' dragons from four angles, as a contact sheet.
 
 `node apps/web/src/forge/anvil-hero/capture.mjs` takes the machine-wide capture lock, starts its own Vite server
-on the first free port in 5170–5199 (or uses `--base-url`), and stops only that server. A full run writes to
+on the first free capture port (5170–5186, 5188, 5189, 5198, 5199; never a service port), or uses `--base-url`,
+and stops only that server. A full run writes to
 `shots/anvil-hero/` (ignored):
 
 - `<view>-hearth-h19@1440x900.png` and `@390x844.png` for the four primary views;
@@ -127,37 +130,41 @@ Main already mounts both exports. Checked against this branch on 2026-10-31:
 - [x] `packages/forge/src/assembly.ts` takes `createAnvilHeroDragon` for `sleeping-dragon` only; moon, owl and
   ornaments are untouched. The SVG and the engraving, motif and emitter folders are unchanged from `main`.
 
+Done in main since AH05 (main's progress notes, 2026-10-31): composed finishes and accent inlays select
+`ANVIL_HERO_DRAGON_SURFACE` boxes; the engraving's heat stays in the cut (no plate badge at pour); the room ritual
+heats the physical anvil through pour and cooling.
+
 Still open, all in main's files:
 
-- [ ] **Composed finishes miss the body.** `assembleForge` recolours `kit.family==='grove' ? moss : native.roof`
-  plus brass and goldLeaf. This dragon's back is never the roof, so today a copper hearth dragon is still
-  brick (only its 16 terracotta plate boxes turn copper), a copper tide dragon turns its slate plates *and its
-  chimney lip* copper, and a copper grove dragon loses its goldLeaf horns. For the sleeping dragon, use
-  `new Set([ANVIL_HERO_DRAGON_SURFACE[kit.family]])`. Ceramic tide/grove dragons then match their cream belly
-  band, which flattens the band; a darker glaze would keep it.
-- [ ] **Accent inlays land anywhere.** The accent takes the first 24 boxes in array order. This dragon's boxes
-  are merged, so their order says nothing about where they are: inlays can fall on the stack or the horns.
-  Filter to boxes of `ANVIL_HERO_DRAGON_SURFACE[kit.family]` first.
-- [ ] **The ritual's heat curve hides the flow.** `ritual-view.ts` steps heat from 0.2 to 1 at t = 3 s (and holds 1
-  whenever `shaping` is set), so all
-  19 runes ignite in one frame and pour already sits at strike brightness. Ramp 0.2 → 0.85 over about 1.2 s
-  from t = 3 (the runes then ignite outward from the mark), hold 0.85 through the pour, give 1.0 for 0.15 s at
-  the strike (t 12.2 s), then cool. The brief asks for 5 s of cooling; the code takes 2.8 s.
-- [ ] **The plate glows as a badge at pour** (from AH02). The engraving's own shader warms its whole plate
-  (`uHeat*(.16+edge*.55)`), so a brown square shows round the mark. Keep that heat inside the cut.
+- [ ] **The forge hearth's dragon** (`packages/content/src/forge-square`). It places the dragon unchanged, 21 cells
+  up, and reads the nose from `DRAGON_EMITTER`, so smoke follows the new nose with no change. The stack's foot now
+  covers motif cells x 13–16, z 3–7 (its corbel x 13–18, z 2–8), so only its front rows sit over the hearth's top
+  flue course (x 10–17, z 6–12): look at its back from the lane, and extend that course to z 3 if the stack's rear
+  corner shows daylight under it.
 - [ ] **Hearth dragons face the lane** (from AH03). Hearth chimney sockets sit on the rear slope, so the street
   never sees that dragon.
 - [ ] **The dragon has no motion seam** (from AH03): breath on a 4.5 s cycle with a 1.5% rib swell, a tail
   twitch every ~20 s, a warm lid slit and a triple puff at the strike.
 - [ ] **Decide the dragon off the chimney.** Composed plans allow `sleeping-dragon` on a lantern or weathervane.
-  This dragon is a chimney with an open flue, and a weathervane mirrors it so the wing swaps flanks. Restrict
-  it to chimneys, or accept that.
+  This dragon is a chimney with an open flue, and a weathervane mirrors it front to back. Restrict it to
+  chimneys, or accept that.
+
+## Costs (AH04 capture, SwiftShader, so no frame times)
+
+- Anvil: 2106 triangles, 19 draw calls on the anvil views, occupancy cast 43–80 ms once at build, plate set
+  0.50 mm back. The dusk rim and the horn taper added no geometry.
+- Dragon: 137 (hearth), 143 (tide) and 145 (grove) merged boxes; 2034, 2018 and 2032 triangles. In a roof scene
+  with the dragon, 21–24 draw calls.
 
 ## Doubts
 
-- Near-black iron, the worn sheen and the cut glow need a real GPU against lit cobbles. Please open the bench at
-  `anvil-close`, `anvil-square` and `anvil-close&heat=0.85&time=1.3` at 1440×900 and 390×844 and look at the cold
-  body against the paving and whether the hot runes read without a halo; measure frame time there.
+- Near-black iron, the worn sheen, the dusk rim and the cut glow need a real GPU against lit cobbles. Please open
+  the bench at `anvil-close`, `anvil-square` and `anvil-close&heat=0.85&time=1.3` at 1440×900 and 390×844 and look
+  at whether the rim reads as worn steel catching the sky rather than as a chalk outline, and whether the hot runes
+  read without a halo; measure frame time there.
 - Cold runes are crisp up close but a fine dark row from the square; the 45° foot flare still shows voxel
-  terraces up close; faint vertical shading seams cross the cheek at 5 m.
-- The dragons are small at 24 m: tide reads as a creature, grove only as a lump. AH04 is refining both.
+  terraces up close. In the mark comparison the rendered mark sits a hair down and left of the SVG.
+- At 19:00 the street sides of the dragon are in shade, so from the square it reads as a silhouette (head left,
+  stack behind, plates on the back), not as detail. The contact sheet's front and flank are dark for the same reason.
+- Hearth homes put the chimney on the rear slope, so the street never sees the hearth dragon; from the lane the
+  stack stands in front of the coil. That is main's socket choice (see the checklist).
