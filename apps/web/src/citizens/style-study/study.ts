@@ -7,7 +7,7 @@ import { VOXEL_METRES, type AvatarAttachmentId, type AvatarCapeBlueprint, type A
 import { VoxelWorkerPool } from '@chatdom/voxel';
 import { AVATAR_STYLE_IDS, STYLE_STUDY_FIXTURES, avatarStyle, convertLook, currentRig, rigOffset, type AvatarStyleId, type StyleRig } from '../../../../../packages/content/src/avatar-style';
 import { createCitizenCapeRenderer } from '../capes';
-import { createDefaultCitizenLooks } from '../index';
+import { createLegacyCitizenLooks } from '../legacy-look';
 import { checkFixture, readStyleSource } from './identity';
 
 /*
@@ -46,7 +46,7 @@ material.setEnvironment(getEnvironment(hour));
 
 interface StudyCitizen { readonly parts: readonly AvatarPartBlueprint[]; readonly rig: StyleRig; readonly cape: AvatarCapeBlueprint | null }
 
-const looks = createDefaultCitizenLooks();
+const looks = createLegacyCitizenLooks();
 const citizens = STYLE_STUDY_FIXTURES.map((fixture): StudyCitizen => {
   const look = looks.find(item => item.id === fixture.look);
   if (!look) throw new Error(`No everyday look ${fixture.look}.`);

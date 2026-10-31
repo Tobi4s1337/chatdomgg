@@ -1,0 +1,40 @@
+{
+  "grove-picture-t30@1920x1080": {
+    "ready": true,
+    "lightingReady": true,
+    "fieldSettled": true,
+    "drawCalls": 639,
+    "triangles": 5344096,
+    "hour": 19.5,
+    "time": 30,
+    "trees": 260,
+    "counts": {
+      "birch": 50,
+      "oak": 103,
+      "pine": 91,
+      "willow": 5,
+      "elder": 11
+    },
+    "forms": 17,
+    "shadowCasters": 658
+  },
+  "grove-picture-t31.6@1920x1080": {
+    "ready": true,
+    "lightingReady": true,
+    "fieldSettled": true,
+    "drawCalls": 639,
+    "triangles": 5344096,
+    "hour": 19.5,
+    "time": 31.6,
+    "trees": 260,
+    "counts": {
+      "birch": 50,
+      "oak": 103,
+      "pine": 91,
+      "willow": 5,
+      "elder": 11
+    },
+    "forms": 17,
+    "shadowCasters": 658
+  }
+}

@@ -39,25 +39,28 @@ export class Sculpt {
   fill(x: number, y: number, z: number, m: number): void { if (this.inside(x, y, z) && !this.cells[this.index(x, y, z)]) this.cells[this.index(x, y, z)] = m; }
   block(bx: number, by: number, bz: number): number { return this.get(bx, by, bz); }
   setBlock(bx: number, by: number, bz: number, m: number, overwrite = false): void {
-    for (let z = bz; z < bz + 2; z++) for (let y = by; y < by + 2; y++) for (let x = bx; x < bx + 2; x++) overwrite ? this.set(x, y, z, m) : this.fill(x, y, z, m);
+    for (let z = bz; z < bz + 2; z++) for (let y = by; y < by + 2; y++) for (let x = bx; x < bx + 2; x++) { if (overwrite) this.set(x, y, z, m); else this.fill(x, y, z, m); }
   }
 
   /**
    * A tapered limb from `a` (radius `ra`) to `b` (radius `rb`), positions relative to the trunk column. Cells whose
    * centre lies within the swept radius become `m`. Wood overwrites foliage, so limbs read where they enter a crown.
+   * `grain` 2 decides whole 2-cell blocks on even cells: heavy old wood that keeps its shape at every detail level.
    */
-  limb(a: V3, b: V3, ra: number, rb: number, m: number): void {
+  limb(a: V3, b: V3, ra: number, rb: number, m: number, grain: 1 | 2 = 1): void {
     const ax = a[0] + this.cx, az = a[2] + this.cz, bx = b[0] + this.cx, bz = b[2] + this.cz;
-    const r = Math.max(ra, rb) + 1;
-    const x0 = Math.floor(Math.min(ax, bx) - r), x1 = Math.ceil(Math.max(ax, bx) + r);
-    const y0 = Math.max(0, Math.floor(Math.min(a[1], b[1]) - r)), y1 = Math.ceil(Math.max(a[1], b[1]) + r);
-    const z0 = Math.floor(Math.min(az, bz) - r), z1 = Math.ceil(Math.max(az, bz) + r);
-    const dx = bx - ax, dy = b[1] - a[1], dz = bz - az, length = dx * dx + dy * dy + dz * dz;
-    for (let z = z0; z <= z1; z++) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      const px = x + 0.5 - ax, py = y + 0.5 - a[1], pz = z + 0.5 - az;
+    const r = Math.max(ra, rb) + 2;
+    const snap = (v: number) => Math.floor(v / grain) * grain;
+    const x0 = snap(Math.min(ax, bx) - r), x1 = Math.ceil(Math.max(ax, bx) + r);
+    const y0 = Math.max(0, snap(Math.min(a[1], b[1]) - r)), y1 = Math.ceil(Math.max(a[1], b[1]) + r);
+    const z0 = snap(Math.min(az, bz) - r), z1 = Math.ceil(Math.max(az, bz) + r);
+    const dx = bx - ax, dy = b[1] - a[1], dz = bz - az, length = dx * dx + dy * dy + dz * dz, c = grain / 2;
+    for (let z = z0; z <= z1; z += grain) for (let y = y0; y <= y1; y += grain) for (let x = x0; x <= x1; x += grain) {
+      const px = x + c - ax, py = y + c - a[1], pz = z + c - az;
       const t = length ? Math.max(0, Math.min(1, (px * dx + py * dy + pz * dz) / length)) : 0;
       const qx = px - t * dx, qy = py - t * dy, qz = pz - t * dz, radius = ra + (rb - ra) * t;
-      if (qx * qx + qy * qy + qz * qz <= radius * radius) this.set(x, y, z, m);
+      if (qx * qx + qy * qy + qz * qz > radius * radius) continue;
+      if (grain === 1) this.set(x, y, z, m); else this.setBlock(x, y, z, m, true);
     }
   }
 
@@ -110,28 +113,39 @@ export class Sculpt {
 
   /**
    * Crops to a square footprint centred on the trunk (half-width a multiple of 4, so 2-cell blocks stay on even
-   * cells and LOD 4 blocks stay whole) and decomposes it into boxes. Greedy along X, then Z, then Y: each cell is
-   * written exactly once and nothing is carved.
+   * cells and LOD 4 blocks stay whole) and decomposes it into boxes. Each cell is written exactly once and nothing
+   * is carved. The greedy sweep runs along X then Z, and along Z then X; the shorter list is kept, so the same
+   * cells always produce the same boxes.
    */
   toBlueprint(): { size: [number, number, number]; boxes: Box[] } {
     this.ground();
     const { half, top } = this.extent();
     const r = Math.ceil(half / 4) * 4, ox = this.cx - r, oz = this.cz - r, size: [number, number, number] = [2 * r, Math.ceil(top / 2) * 2, 2 * r];
     if (ox < 0 || oz < 0) throw new Error('A tree outgrew its working volume.');
-    const [sx, sy, sz] = size, done = new Uint8Array(sx * sy * sz), at = (x: number, y: number, z: number) => x + sx * (y + sy * z);
-    const m = (x: number, y: number, z: number) => this.get(x + ox, y, z + oz);
-    const free = (x: number, y: number, z: number, mat: number) => !done[at(x, y, z)] && m(x, y, z) === mat;
+    const a = this.sweep(size, ox, oz, false), b = this.sweep(size, ox, oz, true);
+    return { size, boxes: b.length < a.length ? b : a };
+  }
+
+  private sweep(size: readonly [number, number, number], ox: number, oz: number, zFirst: boolean): Box[] {
+    const [sx, sy, sz] = size, done = new Uint8Array(sx * sy * sz);
+    // u is the first run axis, v the second; both map back to x and z.
+    const [su, sv] = zFirst ? [sz, sx] : [sx, sz];
+    const xz = (u: number, v: number): [number, number] => (zFirst ? [v, u] : [u, v]);
+    const at = (u: number, y: number, v: number) => { const [x, z] = xz(u, v); return x + sx * (y + sy * z); };
+    const m = (u: number, y: number, v: number) => { const [x, z] = xz(u, v); return this.get(x + ox, y, z + oz); };
+    const free = (u: number, y: number, v: number, mat: number) => !done[at(u, y, v)] && m(u, y, v) === mat;
     const boxes: Box[] = [];
-    for (let y = 0; y < sy; y++) for (let z = 0; z < sz; z++) for (let x = 0; x < sx; x++) {
-      const mat = m(x, y, z);
-      if (!mat || done[at(x, y, z)]) continue;
-      let x1 = x + 1; while (x1 < sx && free(x1, y, z, mat)) x1++;
-      let z1 = z + 1; rows: while (z1 < sz) { for (let i = x; i < x1; i++) if (!free(i, y, z1, mat)) break rows; z1++; }
-      let y1 = y + 1; layers: while (y1 < sy) { for (let k = z; k < z1; k++) for (let i = x; i < x1; i++) if (!free(i, y1, k, mat)) break layers; y1++; }
-      for (let yy = y; yy < y1; yy++) for (let k = z; k < z1; k++) for (let i = x; i < x1; i++) done[at(i, yy, k)] = 1;
-      boxes.push({ from: [x, y, z], to: [x1, y1, z1], material: mat });
+    for (let y = 0; y < sy; y++) for (let v = 0; v < sv; v++) for (let u = 0; u < su; u++) {
+      const mat = m(u, y, v);
+      if (!mat || done[at(u, y, v)]) continue;
+      let u1 = u + 1; while (u1 < su && free(u1, y, v, mat)) u1++;
+      let v1 = v + 1; rows: while (v1 < sv) { for (let i = u; i < u1; i++) if (!free(i, y, v1, mat)) break rows; v1++; }
+      let y1 = y + 1; layers: while (y1 < sy) { for (let k = v; k < v1; k++) for (let i = u; i < u1; i++) if (!free(i, y1, k, mat)) break layers; y1++; }
+      for (let yy = y; yy < y1; yy++) for (let k = v; k < v1; k++) for (let i = u; i < u1; i++) done[at(i, yy, k)] = 1;
+      const [x0, z0] = xz(u, v), [x1, z1] = xz(u1, v1);
+      boxes.push({ from: [x0, y, z0], to: [x1, y1, z1], material: mat });
     }
-    return { size, boxes };
+    return boxes;
   }
 
   /** Foliage blocks open to the sky directly above: the lit tops of each clump. */

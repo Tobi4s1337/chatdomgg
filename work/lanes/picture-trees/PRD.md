@@ -13,6 +13,6 @@ existing sites, never a second forest. Keep the lantern procession, street camer
 Work in checkpoints: if a session ends before the part is done, leave everything building and working, write `next: <id> <what is done, what remains>` and carry on next session. For visual changes, show a before/after of the same view. Hand main exact `needs:` for any seam outside scope and keep going.
 
 ## Tasks
-- [ ] **PT10 — The grove, planted and judged in the stream.** The whole tree family with seeded variation and stable ids, the adapter for the existing planting sites with canopy data and quiet wind, the exact exports main needs to swap it in, and a 1920×1080 stream still where the grove makes the town look like a place you'd want to live.
+- [x] **PT10 — The grove, planted and judged in the stream.** The whole tree family with seeded variation and stable ids, the adapter for the existing planting sites with canopy data and quiet wind, the exact exports main needs to swap it in, and a 1920×1080 stream still where the grove makes the town look like a place you'd want to live.
 
 ## Backlog

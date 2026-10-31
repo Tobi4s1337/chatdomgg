@@ -37,8 +37,8 @@ export function createSimulatedPresence(layout: Pick<KingdomLayout, 'homes' | 'c
   const first = layout.homes.find(home => home.slot === arrival?.firstSlot) ?? layout.homes.find(home => home.quarterYear === newestYear && home.position[0] > 0)
     ?? layout.homes.find(home => home.quarterYear === newestYear)!;
   const ordered = [first, ...layout.homes.filter(home => home !== first).sort((a, b) => a.slot - b.slot)];
-  // Let one small neighbourhood come home after the main wave. Their actual
-  // street walks remain visible while the rest of the labelled rehearsal is warm.
+  // Stage a small late procession through the neighbourhood after the main wave.
+  // Their street walks remain visible while the labelled rehearsal is warm.
   // This stages only the SIMULATED feed; live observations keep their own times.
   const lateNeighbours = new Map<number, number>();
   if (arrival && ordered.length > 8) {
@@ -46,8 +46,8 @@ export function createSimulatedPresence(layout: Pick<KingdomLayout, 'homes' | 'c
     const z = Math.max(...ordered.map(home => home.position[2])) * .3;
     const distance = (home: typeof first) => Math.hypot(home.position[0] - x, home.position[2] - z);
     const neighbours = ordered.filter(home => home !== first).sort((a, b) => distance(a) - distance(b) || a.slot - b.slot)
-      .slice(0, Math.min(12, Math.max(2, Math.round(ordered.length * .05))));
-    neighbours.forEach((home, index) => lateNeighbours.set(home.slot, 16_000 + index * 450));
+      .slice(0, Math.min(32, Math.max(2, Math.round(ordered.length * .15))));
+    neighbours.forEach((home, index) => lateNeighbours.set(home.slot, 16_000 + index * 250));
   }
   const bindings: PresenceBinding[] = [];
   const furthest = Math.max(1, ...ordered.map(home => Math.hypot(home.position[0] - first.position[0], home.position[2] - first.position[2])));

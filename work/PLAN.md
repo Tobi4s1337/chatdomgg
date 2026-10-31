@@ -330,59 +330,52 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Order:** picture first, one obvious before/after per turn. No new systems/contracts; chosen avatar/builder
-remains authorised. Keep exposure34ac89a, indigo0896044, street warmth96f2d08, beacon/pools/gold frame,
-soft smoke7c16789 and castle lighta1dac83/32633a8. Merge good checkpoints; medium helpers for routine work.
+**Order:** picture only, one obvious same-view before/after per turn. Merge good art checkpoints first;
+medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
+beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current slice:** carried lanterns now use existing exact-air upward projection in the light field.
-The coarse terrain grid had rounded up around low flames and rejected sources without an outward normal;
-no strength/budget/exposure change. One regression test uses the actual carried source: rounded street cell
-lights, genuinely buried flame stays blocked. Viewed `shots/magic/lantern-road-pools-pair.png`,1920×1080 HIGH,
-hour19.5/time25: distinct warm pools now follow foreground walkers. Beacon/castle/window light preserved;
-faces too small to judge. Typecheck, scoped lint, focused test and web build pass. No pending captures/locks.
+**Current:** the labelled SIMULATED homecoming stages32 late neighbours (15% cap) at16–23.75s,
+on their existing household routes; first Juniper beat/live timestamps unchanged. Same-view HIGH1920×1080
+hour19.5/time25 `shots/magic/road-homecoming-pair.png` viewed: more lantern people read on the left street
+and foreground crossings;104→115 walking of240 supplied citizens. Typecheck/scoped lint/17 presence tests/
+web build pass; no browser errors, captures cleaned. This is opening choreography, NOT sustained live traffic.
+Next: everyday activity around market/forge using only present citizens and approved destinations.
 
-**Previous rehearsal slice:**73dc36e lets12 SIMULATED foreground neighbours join16–21s after the main wave.
-First Juniper/existing routes/window-on-arrival/live times unchanged. `wide-homecoming-pair.png` viewed:
-104 walking/136 lit versus93/147. Still small, not a busy evening; actual live traffic not demonstrated by SIM.
-Avatar body/clothes remain with team. Keepers retreat under real crowd counts; never use them as fake audience.
+PT10 a7d5253 merged; the generated kingdom now plants the full picture-tree family on the
+same court/grove sites, with willows by water, rare elders, quiet canopy wind and LOD-2 shadows.
+Accepted distant grove air736ee93 inherited. `shots/magic/picture-grove-pair.png` viewed at1920×1080
+HIGH, hour19.5/time25: broader irregular crowns frame the hill; light/camera/roads unchanged. Typecheck,
+scoped lint,18 tree tests and web build pass; no browser errors, capture resources released. Founded
+installed content remains authoritative (no replacement planting); its compiled trees still need the same
+art adoption. Never fake live traffic. Existing quiet market routines remain the everyday-life seam.
 
-**Merges:** Genesis sound1ed6865 additive only (17 focused tests), not mounted or listening-approved; accepted
-ambience unchanged. Keepers7eff5d8 merged (193 tests), unmounted; hero lantern shard follow-up in lane log.
-Effects d535804, emote art40aeb18, ground-dressing92421d5 merged/viewed; accepted smoke NOT replaced. Central
-emote glass clips; follow-up recorded. Separate kingdom-land6f60ae2 is a parked v2 layout candidate, NOT a
-picture-land checkpoint or permission to replace the accepted streets. No new tree/body/clothes checkpoint.
+AS10 whole citizens0b11c76 adopted in kingdom/stream/observed/self walkers in e2a9100. Six stable
+presence look IDs use exact painted recipes/kingdom light; render-local shoulders±4, two thin cloth capes.
+`avatar-runtime-pair.png` and `avatar-runtime-card.png` viewed. Live card/panel portrait asset delivery
+still needs host binding; only painter/bench updated. Goggled deep-skin eyes need clearer contrast;
+ankle joins need a motion look. Builder stays with the avatar lane. Reference/spec49/PRD81eab8f,
+A/B/C rejected; decisions in avatar-style/contract-proposal.md. Shared save/equip authority unchanged.
 
-**Land/grove:**975af2f adopts picture-land:2 through worker/height texture/horizon/light occupancy/citizen
-contact/founded collision. Plan identity unchanged; producer is in existing physics revision.44de84b adds rock
-strata/facets; near-ground classified adapter remains separate.9f843d7 adds horizon-only lilac dusk air beyond220m.
-aa7baeb mounts reviewed GD02 birch/alder/fir through shared `createTree`, same sites/eight-metre footprint,
-no scaling/new forest. `land-adopted-pair.png`, `land-rock-pair.png`, `ridge-haze-pair.png`, `grove-pair.png`
-in shots/magic viewed. Distant tree contact hard to read; full seeded oak/willow/family/wind stays with trees.
-Land lane next: lower saddle behind beacon, ridges to sides; break up parallel pink trench banks.
+**Picture carried forward:**736ee93 gives static groves horizon dusk air beyond220m; `grove-air-pair.png`
+viewed, far-right grove loses definition.2f854d9 restores carried pools using existing exact-air projection,
+no strength/budget retune (`lantern-road-pools-pair.png`).73dc36e stages12 SIMULATED foreground arrivals
+16–21s:104 walking/136lit vs93/147, still small (`wide-homecoming-pair.png`); live traffic not demonstrated.
+975af2f/44de84b adopt sculpted picture-land consistently through render/light/contact/founded collision;
+9f843d7 ridge haze, aa7baeb birch/alder/fir at existing sites. Full tree families/wind remain team-owned.
+Land next: lower saddle behind beacon, break parallel pink trench banks. Accepted layout stays43cffdb6.
 
-**Other picture checkpoints:**64efb0f gathers16 existing present citizens in west/north Forge arcs, inward
-headings/barrel/tiptoe intact. `forge-ring-pair.png` viewed: faces both sides, still left-heavy. Pour02c3494 and
-smithy cameraf0112c6 stay. be6ab51 market cart/wares viewed in `market-life-pair.png`, square still empty.
-a6fcf9a mounts harbour watchtower in `/kingdom/63920635` potential Genesis only, valid castle footing, flag/
-lamps/beacon. `harbour-seat-pair.png` viewed: better scale but isolated/road dead end; live adoption needs actual
-high chamber glass/window anchor, currently absent. River/mountain mounting and3 actual Atlas entries remain.
+**Mounted/merged:** Forge64efb0f16 present spectators, still left-heavy; pour02c3494/cameraf0112c6 stay.
+Market be6ab51 cart/wares; square sparse. Harbour a6fcf9a watchtower potential `/kingdom/63920635` only:
+better scale, isolated; needs actual royal glass anchor before live adoption. River/mountain seats remain.
+Effects d535804 merged; accepted smoke NOT replaced. Flight seam next: realm-scene after presentation.update,
+actual mesh world pose+ForgeRitualFrame; retire only old stage flight trail loop. Keepers7eff5d8/sound1ed6865
+additive, unmounted/unheard; never fake crowds. Emote40aeb18 glass clips, follow-up in lane log. Kingdom-land
+6f60ae2 is parked layout v2, NOT picture-land. Passport/gate/emotes/moments/atlas-w2 merged through47c0ef7,
+some live host bindings absent. Genesis content mostly unmounted. Do not reopen these as systems now.
 
-**Avatar/content:** chosen reference/spec49/PRD81eab8f; A/B/C rejected. AS03 head4c333ed and AS04 hair/accessories
-5e6352f merged/viewed;38 focused tests.8-cell skull+hair≈10, unchanged rig, black eyes/no mouth. Tall hats need
-portrait headroom; lighter uneven fringe follow-up. Swap kingdom/stream/card/passport once body/clothes land.
-No rig/socket proposal yet; exact changes go in contract-proposal.md for main. Recipe content-local until consumer;
-real save/earned authority stays main. Effects vocabulary merged, accepted smoke kept. Other Genesis content
-mostly unmounted. Passport/gate/emotes/moments/atlas-w2 through47c0ef7 lack some live host bindings; no new wiring now.
-
-**Rejected:** far lantern scale/HDR boost and the new bounded halo both visually ineffective, fully reverted.
-Idle-policy retune reverted. Longer44m approaches traded34 warm homes for only3 extra roughly visible walkers;
-not adopted. Real culprit in the25s wide frame: only35/93 walkers in view, many behind houses. Current staging
-uses existing roads and identities; never fake coordinates or live traffic. Continuous SIM30→95 previously57
-walking/240 lit but little visible improvement. Cheap capture warm-up can bypass instance.render then restore
-actual HIGH draw/settled fields; prototype patch cannot. Captures lean/serial, hard deadlines/finally cleanup.
-
-**Continuity:** lantern cull fadesbc9a54c accepted;7c71b38 holds valid presence through retries until
-min(receipt+90s,frame.asOf+90s), then0.7s fade. Other shimmer unlocalized. Royal65534 is keep pane, never a deed.
-Layout43cffdb6/240homes/v1 pinned. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a stays; retain rounded copy.
-Superseded night-paint stays superseded. Managed5190web/5196API/5197realm/5195Forge/5194herald; affected-code
-restarts only, all on.env. Logs ONLY `../conductor/state/services.log`, never journals/other services.
+**Do not repeat:** ineffective far lantern scale/HDR/halo and idle retunes reverted;44m approaches lost34
+warm homes for3 visible walkers. Keep existing roads/identities, never fake live traffic. Captures serial,
+actual HIGH/settled fields, hard deadlines/finally. Lantern fadesbc9a54c; presence7c71b38 holds valid lease
+through retries then0.7s fade. Royal65534 is keep pane. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a
+stays; retain rounded copy. Managed5190web/5196API/5197realm/5195Forge/5194herald, affected-code restarts,
+all on.env. Logs ONLY `../conductor/state/services.log`, never journals/other services.

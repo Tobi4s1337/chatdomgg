@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./trees": "./src/trees/index.ts",
     "./materials": "./src/materials.ts",
+    "./avatar-style": "./src/avatar-style/character/index.ts",
     "./avatars": "./src/avatars/index.ts",
     "./forge-motifs": "./src/forge-motifs/index.ts",
     "./forge-ornaments": "./src/forge-ornaments/index.ts",

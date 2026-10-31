@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { createKingdomForge, type ForgeStatus } from '../forge/scene';
 import { createRealmForgeScene } from '../forge/realm-scene';
 import type { RealmForgeFeed } from '../realm/adapters/forge-feed';
-import { createTree, MATERIALS } from '@chatdom/content';
+import { MATERIALS } from '@chatdom/content';
+import { attachCanopy, createCanopyMaterial, groveBatches, plantGrove, type TreeSite } from './trees';
 import { VoxelWorkerPool, type AssetChunkMesh } from '@chatdom/voxel';
 import { createAtmosphere, getEnvironment, createVoxelMaterial, geometryFromChunks, createWindowLights, createPostStack, type WindowHouse } from '@chatdom/render';
 import { generateSettlementPlan, terrainHeight, samplePublicGround, randomUnit, seedHash, type KingdomTier, type SettlementPlan, type RealmFoundedScene } from '@chatdom/world';
@@ -51,6 +52,18 @@ import { createKingdomMoments } from './moments';
 import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
 import { createWaterSurface } from '../places/water/surface';
 import { deriveWaterReaches } from '../../../../packages/world/src/places/water/reaches';
+
+const distantAirAnchor='colour=mix(colour,fogColour,min(.86,fogAmount));';
+const distantAir=`colour=mix(colour,fogColour,min(.86,fogAmount));
+    // Distant land and groves share this evening air. Keep the town's accepted light
+    // untouched; sightline depth and low valleys separate successive rock ridges.
+    float duskAir=smoothstep(.15,.65,uNight);
+    float ridgeDistance=max(distanceToCamera-220.,0.);
+    float valleyAir=.45+.55*exp(-max(vWorld.y-12.,0.)*.012);
+    float ridgeHaze=(1.-exp(-ridgeDistance*.0009*valleyAir))*duskAir;
+    vec3 lilacAir=vec3(${new THREE.Color('#9685ad').multiplyScalar(.65).toArray().join(',')});
+    colour=mix(colour,lilacAir,min(.34,ridgeHaze));`;
+function withDistantAir(shader:string){if(!shader.includes(distantAirAnchor))throw new Error('Distant air shader anchor missing');return shader.replace(distantAirAnchor,distantAir);}
 
 // One short-lived presentation handoff keeps a scene revision from sending neighbours back home.
 let citizenHandoff: { at: number; checkpoint: CitizenSceneCheckpoint } | undefined;
@@ -181,6 +194,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   const sunShadows=own(createSunShadows(renderer,{bounds:new THREE.Box3(new THREE.Vector3(layout.bounds.minX-40,-8,layout.bounds.minZ-70),new THREE.Vector3(layout.bounds.maxX+40,60,layout.bounds.maxZ+20)),resolution:portrait()?1024:2048}));
   sunShadows.bindReceiver(clay.material);sunShadows.bindReceiver(ground.material);sunShadows.bindReceiver(crowd.material.material);
+  const floraMaterial=own(new THREE.ShaderMaterial({glslVersion:clay.material.glslVersion,uniforms:clay.material.uniforms,defines:clay.material.defines,alphaToCoverage:clay.material.alphaToCoverage,vertexShader:clay.material.vertexShader,fragmentShader:withDistantAir(clay.material.fragmentShader)}));
+  sunShadows.bindReceiver(floraMaterial);
+  const canopy=own(createCanopyMaterial(floraMaterial));
   const royalLife=own(createRoyalLife(scene,clay,installed?.forgeHosts.find(home=>home.slot===65534),lifeSites.braziers,lifeSites.standard));
   if(royalLife.keepMaterial)sunShadows.bindReceiver(royalLife.keepMaterial);
   if(royalLife.standardMaterial)sunShadows.bindReceiver(royalLife.standardMaterial);
@@ -235,9 +251,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   function instance(blueprint:VoxelBlueprint,chunks:readonly AssetChunkMesh[],placements:readonly Placement[],factor:1|2|4=1){
     const geometry=geometryFromChunks(chunks,'build');geometry.setAttribute('aLodFade',new THREE.InstancedBufferAttribute(new Float32Array(placements.length).fill(1),1));geometries.push(geometry);
+    const treeBatch=treeBatches.find(batch=>batch.blueprint===blueprint);
+    if(treeBatch)attachCanopy(geometry,treeBatch.canopy,[blueprint.size[0]/2,0,blueprint.size[2]/2]);
     const keepMesh=installed?.forgeHosts.some(home=>home.slot===65534&&blueprintKey(home.blueprint)===blueprintKey(blueprint));
     const standardMesh=lifeSites.standard&&blueprintKey(lifeSites.standard.blueprint)===blueprintKey(blueprint);
-    const mesh=new THREE.InstancedMesh(geometry,standardMesh&&royalLife.standardMaterial?royalLife.standardMaterial:keepMesh&&royalLife.keepMaterial?royalLife.keepMaterial:clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
+    const mesh=new THREE.InstancedMesh(geometry,treeBatch?canopy.material:blueprint.kind==='flora'?floraMaterial:standardMesh&&royalLife.standardMaterial?royalLife.standardMaterial:keepMesh&&royalLife.keepMaterial?royalLife.keepMaterial:clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
     placements.forEach((p,i)=>{m.compose(v.set(...p.position),q.setFromAxisAngle(new THREE.Vector3(0,1,0),p.yaw),new THREE.Vector3(factor,factor,factor));mesh.setMatrixAt(i,m);});
     mesh.instanceMatrix.needsUpdate=true;mesh.frustumCulled=false;mesh.name=blueprint.id;scene.add(mesh);meshes.push(mesh);geometryBuilds++;
     if(factor===(blueprint.kind==='flora'?2:1))sunShadows.register(mesh);
@@ -286,8 +304,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const dressing=own(createGroundDressing({...coverInput,land:{plan:layout,sites:[],places:{court:{boundary:layout.castle.court.boundary}}},
     seed:layout.config.seed,tier:layout.config.tier,plan:coverPlan,scene,camera,pool,clay,signal:abort.signal,
     registerShadow:mesh=>sunShadows.register(mesh)}));
-  const trees=installed?[]:[createTree(0),createTree(1),createTree(2)];
-  const treePlaces=trees.map(()=>[] as {position:Vec3;yaw:number}[]);
+  const sites:TreeSite[]=[];
   const treeCount=options.tier==='hamlet'?115:260;
   const planted:THREE.Vector2[]=[];
   const rootHeight=(x:number,z:number)=>{
@@ -304,7 +321,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const key=`${x},${z}`,entries=reservationCells.get(key)??[];entries.push(reservation);reservationCells.set(key,entries);
     }
   }
-  const plant=(x:number,z:number,variant:number)=>{
+  const plant=(id:string,kind:'court'|'grove',x:number,z:number)=>{
     if(layout.genesisSurface){
       const shore=sampleGenesisSurface(layout.genesisSurface,x,z);
       if(shore.waterLevel!==null||shore.shoreDistance<crown)return;
@@ -316,16 +333,20 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(x>castle.minX-crown&&x<castle.maxX+crown&&z>castle.minZ-crown&&z<castle.maxZ+crown)return;
     if(Math.hypot((x-layout.lake.x)/layout.lake.radiusX,(z-layout.lake.z)/layout.lake.radiusZ)<1.19)return;
     if(planted.some(p=>p.distanceToSquared(new THREE.Vector2(x,z))<8))return;
-    planted.push(new THREE.Vector2(x,z));treePlaces[variant]!.push({position:[x-4,rootHeight(x,z),z-4],yaw:0});
+    planted.push(new THREE.Vector2(x,z));
+    const lake=Math.hypot((x-layout.lake.x)/layout.lake.radiusX,(z-layout.lake.z)/layout.lake.radiusZ);
+    const lot=Math.min(Infinity,...layout.reservations.map(({lot:l})=>Math.hypot(Math.max(l.minX-x,0,x-l.maxX),Math.max(l.minZ-z,0,z-l.maxZ))));
+    const keep=Math.hypot(Math.max(castle.minX-x,0,x-castle.maxX),Math.max(castle.minZ-z,0,z-castle.maxZ));
+    sites.push({id,zone:lake<1.55?'water':kind,position:[x,rootHeight(x,z),z],yaw:randomUnit(seedHash(`${options.seed}:tree-yaw:${id}`))*Math.PI*2,style:options.potential?.style??options.nativeStyle??options.forgeFamily??layout.homes[0]?.style??'hearth',seed:options.seed,room:Math.min(lot,samplePublicGround(layout,x,z)?.reservedDistance??Infinity,keep)+1});
   };
   const activeCourts=new Set(installed?[]:layout.homes.map(home=>home.courtId));
-  for(const [i,court] of layout.courts.entries()){
+  for(const court of layout.courts){
     if(!activeCourts.has(court.id))continue;
     const anchor=layout.nodes.find(node=>node.id===court.nodeId)!;
     const radius=Math.max(...court.boundary.map(([x,z])=>Math.hypot(x-anchor.position[0],z-anchor.position[2])))+7;
     for(let side=0;side<8;side++){
       const angle=side*Math.PI/4;
-      plant(anchor.position[0]+Math.cos(angle)*radius,anchor.position[2]+Math.sin(angle)*radius,(i+side)%3);
+      plant(`court:${court.id}:${side}`,'court',anchor.position[0]+Math.cos(angle)*radius,anchor.position[2]+Math.sin(angle)*radius);
     }
   }
   for(let i=0;!installed&&i<treeCount*12&&planted.length<treeCount;i++) {
@@ -333,10 +354,12 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const cx=layout.bounds.minX-35+rand(`${group}:x`)*(layout.bounds.maxX-layout.bounds.minX+70);
     const cz=layout.bounds.minZ-65+rand(`${group}:z`)*(layout.bounds.maxZ-layout.bounds.minZ+45);
     const angle=rand(`${i}:angle`)*Math.PI*2,radius=Math.sqrt(rand(`${i}:radius`))*10;
-    plant(cx+Math.cos(angle)*radius,cz+Math.sin(angle)*radius,group%3);
+    plant(`grove:${i}`,'grove',cx+Math.cos(angle)*radius,cz+Math.sin(angle)*radius);
   }
+  const treeBatches=groveBatches(plantGrove(sites));
+  const trees=treeBatches.map(batch=>batch.blueprint);
   // A continuous distant land silhouette lies beyond the detailed editable terrain.
-  const horizonMaterial=own(new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:ground.material.uniforms,fragmentShader:ground.material.fragmentShader.replace('vec3 n=normalize(vNormal);',`vec3 n=normalize(vNormal);
+  const horizonMaterial=own(new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:ground.material.uniforms,fragmentShader:withDistantAir(ground.material.fragmentShader.replace('vec3 n=normalize(vNormal);',`vec3 n=normalize(vNormal);
     // Exposed faces belong to the sculpted terrain, never to houses or the town's light grade.
     vec3 faceNormal=normalize(cross(dFdx(vWorld),dFdy(vWorld)));
     float exposed=(1.-smoothstep(.64,.9,abs(faceNormal.y)));
@@ -344,15 +367,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     float course=vWorld.y*.72+.45*sin(vWorld.x*.13+vWorld.z*.09)+1.1*sin((vWorld.x-vWorld.z)*.027);
     rock*=.88+.16*fract(sin(floor(course)*12.9898)*43758.5453);
     base=mix(base,rock,exposed);
-    n=normalize(mix(n,faceNormal*sign(dot(faceNormal,n)),exposed*.6));`).replace('colour=mix(colour,fogColour,min(.86,fogAmount));', `colour=mix(colour,fogColour,min(.86,fogAmount));
-    // Only the distant land takes this evening air. Keep the town's accepted light
-    // untouched; sightline depth and low valleys separate successive rock ridges.
-    float duskAir=smoothstep(.15,.65,uNight);
-    float ridgeDistance=max(distanceToCamera-220.,0.);
-    float valleyAir=.45+.55*exp(-max(vWorld.y-12.,0.)*.012);
-    float ridgeHaze=(1.-exp(-ridgeDistance*.0009*valleyAir))*duskAir;
-    vec3 lilacAir=vec3(${new THREE.Color('#9685ad').multiplyScalar(.65).toArray().join(',')});
-    colour=mix(colour,lilacAir,min(.34,ridgeHaze));`),vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
+    n=normalize(mix(n,faceNormal*sign(dot(faceNormal,n)),exposed*.6));`)),vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
   // The v1 lake has no body record. Its terrain carves the shoreline within this
   // envelope; the supplied height grid clips the surface to the actual bed.
   const landform=layout.landform;
@@ -465,6 +480,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
     momentCameraDirected=loaded&&!!moments?.update(presentationMs,frame,!walking&&!build.session&&!capturePose&&!forgeDirected&&!arrivalCameraDirected);
     if(!walking&&!forgeDirected&&!momentCameraDirected)camera.lookAt(target);camera.updateMatrixWorld();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);crowd.drawLanterns(time,night,camera,walk?.grips??observed?.grips);updateInstances(fixedTime&&autoCamera?time*1000:now);
+    canopy.sync();canopy.setWind(time,[0.8,0.6],0.8);
     homeLife.update(presentationMs,time,lightFrame,hour,camera);royalLife.update(time,frame,hour);
     forgeFire.update(time,frame,hour);forgeHearth.update(time,frame,hour);
     forgeBreath.update({time,anvil:new THREE.Vector3(0,layout.market.elevation,8),activity:0,landed:forgeSites.noses.map(position=>({position:new THREE.Vector3(...position),kind:'smoke' as const}))});
@@ -522,7 +538,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const job={kind:'blueprint' as const,blueprint:b,revision:1,materials:registry.materials,materialRevision:registry.revision,...(factor===1?{}:{lodFactor:factor})};
     const result=await pool.submit(job);if(disposed||result?.kind!=='asset')return;
     const treeIndex=trees.indexOf(b);
-    const placements=treeIndex>=0?treePlaces[treeIndex]!:content.filter(h=>blueprintKey(h.blueprint)===blueprintKey(b));
+    const placements=treeIndex>=0?treeBatches[treeIndex]!.placements:content.filter(h=>blueprintKey(h.blueprint)===blueprintKey(b));
     instance(b,result.chunks,placements,factor);options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
     }
   });
@@ -535,7 +551,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();

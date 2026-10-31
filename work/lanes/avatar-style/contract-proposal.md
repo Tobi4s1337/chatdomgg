@@ -72,3 +72,15 @@ needs: main to freeze and wire the following; the lane builds against them as wr
 6. **Mount `AvatarBuilder layout="panel"`** in `apps/panel` and `layout="page"` in the web home/passport.
 7. **Wire the entry points:** `citizenObject(wornIn(look, e), { dim: subLapsed(e) })` in the kingdom and stream
    view, `createPortraitRenderer().renderBlob` for the citizen card and passport, per kingdom.
+## Main decision — runtime adoption, 2026-10-31
+
+The new citizen is now a `paint-grid` renderer input beside legacy compiled looks.
+The six presence appearance IDs remain unchanged. The painted rig uses shoulders at x ±4;
+`AVATAR_RIG`, its sockets and legacy wardrobe/keeper binding stay unchanged. Exact recipe dyes
+become linear per-vertex albedo; the renderer inherits the kingdom's live light, fog and output uniforms.
+Capes remain the existing separate thin cloth. Continuous garment hems pivot onto the seated lap.
+
+The content recipe is exported as `@chatdom/content/avatar-style`; kingdom/stream defaults and card
+portraits consume the same canonical recipes. This freezes the renderer seam, not a new saved/equip
+protocol. Proposal 3 remains pending its persistence consumer: no shared schema, ownership or earned-item
+authority changed in this picture slice.
