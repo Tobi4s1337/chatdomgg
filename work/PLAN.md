@@ -336,15 +336,19 @@ beacon, warm pools, gold frame and wide dusk grade. Close/wide castle lighta1dac
 lane checkpoints immediately; medium-effort helpers for routine recon/captures/merges. Check merges BEFORE
 starting the turn's capture, so a newly ready producer cannot strand an unnecessary render.
 
-**Current slice:** PL03 sculpted land adopted in the actual stream scene. One memoized picture-land:2 surface
-now feeds terrain workers, height texture, horizon, light-field occupancy, citizen contact and founded collision;
-base settlement sampler stays private to generation/preservation. Plan identity unchanged; existing physics
-revision now includes producer identity. Removed the old added sinusoidal horizon relief. No grade, windows,
-castle light or smoke changes. Viewed `shots/magic/land-adopted-after.png` and `land-adopted-pair.png` at1080p:
-stepped layered ridges replace smooth blobs at a glance. Central mountain too heavy behind beacon; concrete
-saddle/breathing-room follow-up sent to land lane. Existing foreground-bank follow-up remains. Material palette
-still uses current production terrain treatment; the lane's fixture-only rock/strata adapter is not mounted.
-Typecheck, scoped lint, web build and26 focused world/terrain/horizon tests pass; capture high HDR/ACES, no errors.
+**Current slice:** exposed-rock treatment on sculpted horizon faces. Lane rock colour#7a6857, restrained strata
+and faceted normals now replace grass on steep faces; town material, grade, geometry, castle light and smoke
+unchanged. Viewed native1080p `shots/magic/land-rock-after.png` and `land-rock-pair.png` (975af2f before left):
+purple-brown cliff faces/grass shelves distinguish the ridges, but broad flat patches still read coarse. Saddle
+behind beacon and irregular banks remain lane follow-ups. Typecheck, scoped lint and web build pass; capture high
+HDR/ACES settled, no page/shader errors. Land sampler adoption975af2f remains shared by render/light/contact/
+collision, plan identity unchanged, physics revision includes picture-land:2.26 focused agreement/terrain tests
+passed at adoption. Fixture's complete classified-material adapter is still separate from production near ground.
+
+**Merged this turn:** Genesis mountain landmarks95c21e6 and carved emote art5778aa5,134 focused tests pass;
+existing1080p fixtures viewed. Additive content, not yet mounted on Genesis pages. Emote glass central bloom
+needs reducing so the face remains legible; next-task note in lane progress. Landmark fixture is too empty around
+the tower; actual land/planting context remains main integration work, not a new landmark content request.
 
 **Next:** grove on existing planting sites when its families/adapter arrive, then visible wide-road life. Tree
 sculpt foundation20c87a9 merged; no replacement grove ready yet. Keep existing planting positions and accepted

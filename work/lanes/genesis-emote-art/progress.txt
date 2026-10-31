@@ -4,3 +4,5 @@ follow-up: GENESIS-EMOTE-ART-10 implement the scoped artwork and capture the req
 next: GENESIS-EMOTE-ART-10 monument, stained glass, vane, use matching and simulated bench landed; visual before/after and main integration remain.
 follow-up: GENESIS-EMOTE-ART-10 capture and review the required same-view before/after evidence at the standard sizes.
 needs: GENESIS-EMOTE-ART-10 main register the emotes package dependency and bind the art, glass light and animation to the kingdom.
+
+2026-10-31 main checkpoint integration: carved art5778aa5 merged, focused suite green and simulated1080p bench viewed. Next visible fix: soften the central stained-glass emission/bloom enough to retain the emote eye and mouth details; keep the warm surrounding glass. Actual Genesis mounting remains main integration.
