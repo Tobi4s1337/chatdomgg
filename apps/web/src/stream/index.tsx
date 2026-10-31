@@ -20,7 +20,7 @@ function sourceMark(label: string): SourceMark {
     case 'SIMULATED': return { kind: 'simulated', title: 'SIMULATED', note: 'A demonstration night' };
     case 'LIVE CHAT': return { kind: 'live', title: '', note: '' };
     case 'STREAM RESTING': return { kind: 'resting', title: 'Stream resting', note: 'Every home keeps its place' };
-    case 'CONNECTION LOST': return { kind: 'lost', title: 'Connection lost', note: 'Windows return when the kingdom answers' };
+    case 'CONNECTION LOST': return { kind: 'lost', title: 'Connection lost', note: 'Reconnecting to the kingdom' };
     default: return { kind: 'connecting', title: 'Finding the kingdom', note: 'Windows wait for chat' };
   }
 }

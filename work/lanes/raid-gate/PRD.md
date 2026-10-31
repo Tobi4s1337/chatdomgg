@@ -27,11 +27,11 @@ RG01 is a simulated foundation, not real integration. Stream view is the stage; 
 ## Tasks
 
 - [x] **RG01 — Gate foundation** · Accepted feature-local implementation and labelled simulated bench only; authenticated host bindings remain outstanding as recorded in progress.
-- [ ] **RG07 — Bind a streamer-led gate and consent** · Use the approved service and host ports to preview a real destination and let walkers opt in. Exercise authority, lapse and cancellation; inspect the gate in the real kingdom when main supplies the bindings. Record exact unavailable ports as `needs:`.
-- [ ] **RG08 — Depart only on a witnessed raid** · Implement/reconcile the authorized request and verified observation with idempotent recovery; connect the existing Atlas road seam. Test lost response, duplicate observation and cancellation. A fixture must say SIMULATED.
-- [ ] **RG09 — Arrive or return without losing the party** · Connect the existing coordinator to destination readiness, fenced transfer and return/rollback; test ambiguous acknowledgements and one authoritative location. Inspect one stream-first 1920×1080 capture; implement feature-local durable adapters against existing ports, with main supplying missing cross-surface room authority and bindings.
+- [x] **RG07 — Bind a streamer-led gate and consent** · Use the approved service and host ports to preview a real destination and let walkers opt in. Exercise authority, lapse and cancellation; inspect the gate in the real kingdom when main supplies the bindings. Record exact unavailable ports as `needs:`.
+- [x] **RG08 — Depart only on a witnessed raid** · Implement/reconcile the authorized request and verified observation with idempotent recovery; connect the existing Atlas road seam. Test lost response, duplicate observation and cancellation. A fixture must say SIMULATED.
+- [x] **RG09 — Arrive or return without losing the party** · Connect the existing coordinator to destination readiness, fenced transfer and return/rollback; test ambiguous acknowledgements and one authoritative location. Inspect one stream-first 1920×1080 capture; implement feature-local durable adapters against existing ports, with main supplying missing cross-surface room authority and bindings.
 
-- [ ] **RG10 — Welcome the party and give a visitor gift** · Stage the destination welcome and use existing gift policy and transactional ports for offer, acceptance and idempotent receipt; prove retries cannot duplicate or lose an item. Implement feature-local adapters against existing ports and report missing shared authority seams. Inspect one stream-first 1920×1080 capture; label simulated fixtures.
+- [x] **RG10 — Welcome the party and give a visitor gift** · Stage the destination welcome and use existing gift policy and transactional ports for offer, acceptance and idempotent receipt; prove retries cannot duplicate or lose an item. Implement feature-local adapters against existing ports and report missing shared authority seams. Inspect one stream-first 1920×1080 capture; label simulated fixtures.
 
 ## Previous task breakdown (history; not the current queue)
 

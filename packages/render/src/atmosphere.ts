@@ -29,18 +29,18 @@ type Grade = Omit<Environment, 'sunDirection'> & { hour: number };
 
 // Authored as a sequence, not a physical latitude or clock: the live kingdom can hold dusk as long as
 // its story needs. Noon is a clear summer day with cool blue shadows; dusk is deep blue over an amber band.
-// Sky fill falls away at night so the warm things are people's lights.
-// Evening exposure falls with the sky fill; authored light sources carry the night.
+// Evening keeps enough reflected sky to read faces, plaster and roof colours on a compressed stream.
+// Warm sources carry the accents; they are not the only way to see the town. Midnight is cooler and quieter.
 const grades: Grade[] = [
-  { hour: 0, zenith: '#080f28', horizon: '#182643', fog: '#14233c', ambient: '#456092', shadow: '#0b1730', sun: '#a9bdf2', glow: '#000000', cloud: '#111c38', cloudShade: '#263351', cloudCover: 0.26, sunIntensity: 0.27, ambientIntensity: 0.36, night: 1, fogDensity: 0.0012, exposure: 0.85 },
+  { hour: 0, zenith: '#080f28', horizon: '#182643', fog: '#14233c', ambient: '#6c81a5', shadow: '#2d3c58', sun: '#aabce4', glow: '#000000', cloud: '#111c38', cloudShade: '#263351', cloudCover: 0.26, sunIntensity: 0.36, ambientIntensity: 0.60, night: 1, fogDensity: 0.0012, exposure: 1.04 },
   { hour: 5, zenith: '#3a3d7c', horizon: '#e3a48e', fog: '#8a7c9e', ambient: '#8d89c4', shadow: '#47458a', sun: '#ffb79c', glow: '#5a2a26', cloud: '#8c7bab', cloudShade: '#f2b49e', cloudCover: 0.3, sunIntensity: 0.36, ambientIntensity: 0.6, night: 0.62, fogDensity: 0.0012, exposure: 1.12 },
   { hour: 7, zenith: '#5d86c8', horizon: '#f0d4b4', fog: '#c0c6d6', ambient: '#a3b4df', shadow: '#5a68aa', sun: '#ffe2bc', glow: '#3a2414', cloud: '#fff6ee', cloudShade: '#c6c0d2', cloudCover: 0.3, sunIntensity: 1.12, ambientIntensity: 0.68, night: 0.03, fogDensity: 0.0009, exposure: 1.08 },
   { hour: 12, zenith: '#3f7fd0', horizon: '#a8cdec', fog: '#a4c4e6', ambient: '#8fb0e6', shadow: '#4b63b0', sun: '#fff0d0', glow: '#000000', cloud: '#ffffff', cloudShade: '#b3c3df', cloudCover: 0.32, sunIntensity: 1.34, ambientIntensity: 0.6, night: 0, fogDensity: 0.00064, exposure: 1.08 },
   { hour: 16, zenith: '#577fc4', horizon: '#f2cc98', fog: '#c6b8b0', ambient: '#9aa4d8', shadow: '#5658a2', sun: '#ffcf8e', glow: '#3c2210', cloud: '#fff2de', cloudShade: '#c8aab0', cloudCover: 0.3, sunIntensity: 1.34, ambientIntensity: 0.62, night: 0, fogDensity: 0.0008, exposure: 1.08 },
   { hour: 18, zenith: '#6670b8', horizon: '#f7b878', fog: '#ab95ae', ambient: '#8a8acb', shadow: '#4d4b9a', sun: '#ffb46a', glow: '#64321a', cloud: '#e2bfc8', cloudShade: '#f8b47c', cloudCover: 0.3, sunIntensity: 1.18, ambientIntensity: 0.56, night: 0.1, fogDensity: 0.0009, exposure: 1.08 },
-  { hour: 19.25, zenith: '#101c43', horizon: '#4b3b4a', fog: '#18273f', ambient: '#4d659f', shadow: '#111e3b', sun: '#91a7ed', glow: '#9f4b15', cloud: '#1c2a4e', cloudShade: '#303952', cloudCover: 0.3, sunIntensity: 0.42, ambientIntensity: 0.40, night: 0.72, fogDensity: 0.00095, exposure: 0.93 },
-  { hour: 20.5, zenith: '#0c1738', horizon: '#302e41', fog: '#14223a', ambient: '#456092', shadow: '#0e1934', sun: '#91a6ed', glow: '#613214', cloud: '#18243f', cloudShade: '#2b3350', cloudCover: 0.28, sunIntensity: 0.30, ambientIntensity: 0.36, night: 0.88, fogDensity: 0.0012, exposure: 0.85 },
-  { hour: 24, zenith: '#080f28', horizon: '#182643', fog: '#14233c', ambient: '#456092', shadow: '#0b1730', sun: '#a9bdf2', glow: '#000000', cloud: '#111c38', cloudShade: '#263351', cloudCover: 0.26, sunIntensity: 0.27, ambientIntensity: 0.36, night: 1, fogDensity: 0.0012, exposure: 0.85 },
+  { hour: 19.25, zenith: '#25345a', horizon: '#655063', fog: '#3a4b6a', ambient: '#8794b5', shadow: '#344261', sun: '#bac1da', glow: '#9f4b15', cloud: '#1c2a4e', cloudShade: '#303952', cloudCover: 0.3, sunIntensity: 0.55, ambientIntensity: 0.70, night: 0.72, fogDensity: 0.00095, exposure: 1.08 },
+  { hour: 20.5, zenith: '#182b50', horizon: '#51445a', fog: '#304564', ambient: '#778db0', shadow: '#303e5c', sun: '#adc0e6', glow: '#613214', cloud: '#18243f', cloudShade: '#2b3350', cloudCover: 0.28, sunIntensity: 0.44, ambientIntensity: 0.68, night: 0.88, fogDensity: 0.0012, exposure: 1.06 },
+  { hour: 24, zenith: '#080f28', horizon: '#182643', fog: '#14233c', ambient: '#6c81a5', shadow: '#2d3c58', sun: '#aabce4', glow: '#000000', cloud: '#111c38', cloudShade: '#263351', cloudCover: 0.26, sunIntensity: 0.36, ambientIntensity: 0.60, night: 1, fogDensity: 0.0012, exposure: 1.04 },
 ];
 
 const blendColor = (a: string, b: string, t: number): string =>

@@ -330,44 +330,48 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Latest order / holds until the look is right:** finish lantern/window piece, then1 exposure,2 flicker,3 Tobias's
-avatar choice, then beauty on the fixed six views (town stream wave, lantern street, smithy/pour/flight, Atlas
-Genesis entry, passport card, raid). One visible fix per turn, committed, same-view before/after side by side.
-No new systems/contracts/system lanes or re-planning. Preserve accepted lantern procession, low street camera,
-warm pools, house models, beacon and gold frame. Other system lanes stop after their current task.
+**Order:** picture only, one visible fix/commit per turn, same-view before/after. No new systems/contracts/system
+lanes. Exposure34ac89a is ACCEPTED on Tobias's RTX5080: readable dusk, coloured roofs/fronts/castle, glowing sky.
+Keep that grade, low lantern street camera, warm pools, house models, beacon and gold frame. After flicker:
+restore windows' emissive/halo pull, then soft height fog/aerial depth. Avatar proportions remain Tobias's choice.
 
-**This turn:** lantern cage/glass is larger, with a small flickering flame, using actual renderer gripRight
-transforms rather than guessed hand positions. Shared hand poses cover crowd and present room walkers; no extra
-people. Existing24 nearby field sources/pools retained. Arrival pane gets a short halo pulse from witnessed
-arrival time; fixed captures cannot advance its clock. Public name rises for7s (close inspection stays named).
-Stream now shows that arrival name outside a director climax; it previously suppressed both window/bubble names.
-Typecheck/scoped lint,11 focused tests and isolated web build pass. No new integrator commits at turn start.
+**Current slice:** window pull restored against the accepted brighter dusk: stronger HDR pane cores and amber
+reveal halos, still bounded to1.3x the pane. Exposure, facade shading, ground pools and presence fades unchanged.
+Viewed native1920x1080 and `shots/magic/window-pull-before-after@3840x1080.png` (left approved34ac89a,
+right current; same hero/hour19.5/time30, slight framing/sky-motion differences). Warm points are more prominent,
+especially left row/right cluster; this is restrained, not a transformation. Far town/hills still flat: depth next.
+High HDR/ACES, SIMULATED, curtain open/fields settled. Typecheck/scoped lint,13 existing render tests and web
+build pass. Capture browser/server/lock closed. Ask Tobias for the same GPU view to confirm bloom strength.
 
-**Look / before-after:** `shots/magic/lantern-arrival-before-after@3840x1080.png`, left63b9d02/right current,
-viewed. Both are actual1920×1080 stream frames at14.4756s/citizen/hour19.5; Juniper reached home14.1256s.
-Window lights, name appears once and procession/pools remain. Lantern flame/glass still reads too much as a
-small golden square; house faces/roofs remain crushed and pane core is white. NEXT IS EXPOSURE, not more small
-lantern iterations. Keep pool treatment. Captures exited0, curtain actually open/fields settled; owned
-browser/server/lock closed. Detached before checkout is `../worktrees/look-before-63b9d02` (63b9d02).
+**Prior flicker fixes retained:** bc9a54c removed carried-light nearest24 cutoff and added cull fades; Tobias
+says lanterns hold. 7c71b38 keeps the last accepted public picture through a feed retry only until
+`min(receipt+90s, frame.asOf+90s)`, then fades windows over0.7s and clears citizens/names. Real SSE adapter,
+SIMULATED smoke: old240→0 immediately; fixed240 remain, same-epoch reconnect0walking, +91s outage0/0.
+Evidence `shots/magic/presence-drop-before-after@3840x1080.png`, `presence-drop-smoke.json`. Separate GPU
+shimmer remains unlocalized; don't repeat slow software takes without an exact repro.
 
-**Lanes handed to team:** specs46–49, each with PRD/progress, local branch and worktree from this main commit:
-- picture-land — `lane/picture-land`, `../worktrees/picture-land`: ridges/rock/ledges/ragged paths/terraces.
-- picture-trees — `lane/picture-trees`, `../worktrees/picture-trees`: oak/pine/birch/willow/elders, clumps/wind.
-- effects-library — `lane/effects-library`, `../worktrees/effects-library`: shared visual effect factory, real anchors.
-- avatar-style — `lane/avatar-style`, `../worktrees/avatar-style`: SAME five citizens/outfits/poses, three proportion
-  choices on1080p bench; Tobias picks, then main applies across wardrobe. No default choice or production rollout.
-Passport45 and Genesis content40–44 continue. Merge reviewed picture/content work quickly. New folders disjoint;
-main retains scene/shader/shadow integration. Land cannot silently alter pinned foundations/roads/collision;
-its candidate must be explicitly adopted with the same height for render/contact. No second forest/emitters.
+**Merges:** passport, raid-gate, emotes, twitch-moments, atlas-w2 through47c0ef7 are on main. All5 captures now
+complete/viewed: `shots/integration/look-reset/contact@1920x800.png`. First4 are SIMULATED benches; Atlas is
+shipped/map with real survey data. Missing live bindings remain passport API/card/panel, gate world/item hosts,
+emote catalogue/scene, moments crowd/hush/cheer/hype. No new bindings built under this picture pass. Visible
+followups: larger passport small type, varied gate welcome poses, gathered plinth cloth, lit gift cart, Atlas
+labels kept inside frame. One-pass picture/Genesis recon found no new finished lane commits; no repeated audits.
 
-**Next picture weaknesses:** expose readable warm dusk faces/fronts/roofs while retaining glowing sky and pools;
-then diagnose actual flicker in a short steady take, stabilize selection/fades. Smithy crowd must wrap BOTH sides
-with faces behind the pour; lower/closer camera and castle lit behind. Soft town-wide height fog for depth.
-The13-person west crescent0c401c6 is progress, not final composition. Accepted molten02c3494 unchanged. Actual
-judged chat words/approved real ritual remain unproved; no waiting observer before Tobias goes live.
+**Team picture lanes ready (spec/PRD/branch/worktree):**
+- 46 picture-land — `lane/picture-land`, `../worktrees/picture-land`: ridges/rock/ledges/ragged paths/terraces.
+- 47 picture-trees — `lane/picture-trees`, `../worktrees/picture-trees`: oak/pine/birch/willow/elders, clumps/wind.
+- 48 effects-library — `lane/effects-library`, `../worktrees/effects-library`: visual effects from actual anchors.
+- 49 avatar-style — `lane/avatar-style`, `../worktrees/avatar-style`: same5 citizens/outfits/poses in3proportions
+  on1080p bench; Tobias chooses, then apply. No default choice. Passport45/Genesis40–44 keep going; other system
+  lanes finish current task and stop. Main retains scene/shader/shadow integration; no second forest/emitters.
+  Land adoption must use the same new height in render/contact, without silently moving pinned foundations.
 
-**Preserved / live:** unfinished city in stash `7c6f1f9d324042998fff71e4d5ea7863ea46cf0a` (7files), do not drop;
-retain current rounded copy on overlap. `work/night-paint` superseded, never reapply. Genesis Atlas still needs
-actual3 holding entries/under25 dabs. Adopted layout43cffdb6/240homes/v1 pinned; provider owns fixture revisions.
-Monarch65534 is keep window, never a street deed. Managed5190web/5196API/5197realm/5195Forge/5194Herald;
-relevant-code restarts only, all on.env. Read ONLY `../conductor/state/services.log`, never host journals.
+**Next picture:** soft height fog/aerial perspective, near crisp/far warm-blue haze. Smithy crowd wraps BOTH
+sides with faces behind pour; lower/closer camera, castle lit behind. Current13-person west crescent isn't final.
+Molten02c3494 stays. Real approved chat ritual remains unproved; no waiting observer before Tobias goes live.
+
+**Preserved/live:** unfinished city stash `7c6f1f9d324042998fff71e4d5ea7863ea46cf0a` (7files), retain rounded
+copy on overlap; don't drop. `work/night-paint` superseded, never reapply. Genesis needs actual3 Atlas entries.
+Layout43cffdb6/240homes/v1 pinned; provider owns fixture revision. Monarch65534 is keep window, never a deed.
+Managed5190web/5196API/5197realm/5195Forge/5194Herald; restart only relevant code, all on.env. Read ONLY
+`../conductor/state/services.log`, never host journals. Capture helpers own/clean their temporary servers/locks.

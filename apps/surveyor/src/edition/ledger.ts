@@ -55,7 +55,12 @@ export function applyEvent(state: LedgerState, line: LedgerLine): void {
     case 'tombstone': {
       const ordinal = state.owners.get(line.kingdomId);
       if (ordinal === undefined || state.settlers[ordinal]!.holdingId !== line.holdingId) throw new Error(`tombstone for ${line.kingdomId} does not name its holding.`);
-      if (state.tombstones.has(line.kingdomId)) throw new Error(`channel ${line.kingdomId} is already tombstoned.`);
+      // Hidden outranks gone: a gone holding that is then withheld waits from now on instead of lying abandoned, so a
+      // hidden tombstone may replace a gone one. Nothing replaces a hidden tombstone, and no cause is laid twice.
+      const current = state.tombstones.get(line.kingdomId);
+      if (current && !(current.cause === 'gone' && line.cause === 'hidden')) {
+        throw new Error(`channel ${line.kingdomId} is already tombstoned as ${current.cause}.`);
+      }
       state.tombstones.set(line.kingdomId, { cause: line.cause, at: line.at });
       return;
     }
