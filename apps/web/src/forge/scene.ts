@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MATERIALS, type StyleKey } from '@chatdom/content';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, forgeTitle, planLocalForge, forgeRitualFrame, createForgeRefusalGate, homeFingerprint, type AssembledForge } from '@chatdom/forge';
-import { ForgePlacementSchema, type ForgePlacement, type ForgePhase, type HousePartPlan } from '@chatdom/shared';
+import { ForgePlacementSchema, type ForgePlacement, type ForgePhase, type ForgeRitualFrame, type Vec3, type HousePartPlan } from '@chatdom/shared';
 import { geometryFromChunks, type VoxelRenderState, type WindowHouse } from '@chatdom/render';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { buildBounds } from '../build/composition';
@@ -14,7 +14,7 @@ import {requestForgeRun,ForgeRunStopped} from './run-client';
 import type { createKingdomSound } from '../kingdom/sound';
 
 export interface ForgeStatus {open:boolean;busy:boolean;phase:ForgePhase|'idle'|'preparing'|'refusal';title:string;message:string;privateError:string|null;maker:string|null;placed:number;kept:number;family:StyleKey;plaque:string|null;runtime:'codex'|'fixture'}
-interface Options {scene:THREE.Scene;camera:THREE.PerspectiveCamera;canvas:HTMLCanvasElement;pool:VoxelWorkerPool;material:VoxelRenderState;anvil:THREE.Vector3;home:()=>WindowHouse;source:'simulated'|'herald';seed:string;kingdomName:string;family:StyleKey;sound:ReturnType<typeof createKingdomSound>;onStatus?:(status:ForgeStatus)=>void;onArrival?:(home:WindowHouse)=>void;registerShadow?:(mesh:THREE.Mesh)=>()=>void}
+interface Options {onFlight?:(frame:ForgeRitualFrame|null,position:Vec3|null)=>void;scene:THREE.Scene;camera:THREE.PerspectiveCamera;canvas:HTMLCanvasElement;pool:VoxelWorkerPool;material:VoxelRenderState;anvil:THREE.Vector3;home:()=>WindowHouse;source:'simulated'|'herald';seed:string;kingdomName:string;family:StyleKey;sound:ReturnType<typeof createKingdomSound>;onStatus?:(status:ForgeStatus)=>void;onArrival?:(home:WindowHouse)=>void;registerShadow?:(mesh:THREE.Mesh)=>()=>void}
 type Placed={mesh:THREE.Mesh;result:AssembledForge;receipt:ForgePlacement;emitter:THREE.Vector3;unshadow?:()=>void};
 export function createKingdomForge(options:Options){
   const pieceMaterial=new THREE.ShaderMaterial({glslVersion:options.material.material.glslVersion,uniforms:options.material.material.uniforms,vertexShader:options.material.material.vertexShader,fragmentShader:options.material.material.fragmentShader.replace('vec3 colour=base*edge*light*ao;','vec3 colour=base*edge*(light+vec3(.32,.25,.17))*ao;if(vMaterial==14u)colour+=vec3(1.6,.65,.12)*uNight;')});
@@ -102,9 +102,14 @@ export function createKingdomForge(options:Options){
         const world=from.lerp(current.destination,t);world.y+=Math.sin(Math.PI*t)*Math.min(28,10+options.anvil.distanceTo(current.destination)*.15);
         view.piece.position.copy(view.root.worldToLocal(world));view.piece.rotation.y=current.home.yaw*t;view.piece.visible=true;
       }
+      if(open&&!hidden&&!preparing&&(frame.phase==='flight'||frame.phase==='landed')&&options.onFlight){
+        const reduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if(reduced)options.onFlight(null,null);else{view.piece.updateWorldMatrix(true,false);const at=current.bounds.getCenter(new THREE.Vector3()).setY(current.bounds.max.y+.15).applyMatrix4(view.piece.matrixWorld);options.onFlight(frame,[at.x,at.y,at.z]);}
+      }
       if(frame.phase==='landed'&&!current.committed){try{install(current);options.onArrival?.(current.home);}catch(error){privateError=String(error);current.geometry.dispose();current=null;}view.piece.visible=false;}
       if(frame.phase==='landed')view.piece.visible=false;
     }
+    if(!open||hidden||preparing||!frame||(frame.phase!=='flight'&&frame.phase!=='landed'))options.onFlight?.(null,null);
     const landed=[...placed.values()].filter(p=>p.result.emitterKind).map(p=>({position:p.emitter,kind:p.result.emitterKind!}));
     emitters.update({time:fixed??now/1000,anvil:options.anvil.clone().add(new THREE.Vector3(0,1.6,0)),activity:open&&frame?.phase==='pour'?1:0,fillHeight:current&&frame?.phase==='pour'?current.bounds.getSize(new THREE.Vector3()).y*frame.phaseProgress:0,landed:hidden?[]:landed,strike:frame?.phase==='strike'?1-frame.phaseProgress:0});
     if(!open||hidden)return;
@@ -147,6 +152,6 @@ export function createKingdomForge(options:Options){
     open(){if(options.source!=='simulated')return;clearStale();open=true;options.sound.unlock();options.sound.cue('wood');publishStatus();},
     close(){if(now<refusalUntil||preparing||current&&!current.committed)return;open=false;options.camera.clearViewOffset();publishStatus();},
     seek(seconds:number){if(options.source!=='simulated'||!current)return;fixed=Math.max(0,seconds);revision++;},
-    dispose(){disposed=true;runAbort.abort();for(const p of placed.values()){p.unshadow?.();p.mesh.geometry.dispose();options.scene.remove(p.mesh);}if(current&&!current.committed)current.geometry.dispose();mood.dispose();options.scene.remove(moodRoot);moodCaption.remove();view.dispose();emitters.dispose();pieceMaterial.dispose();},
+    dispose(){disposed=true;options.onFlight?.(null,null);runAbort.abort();for(const p of placed.values()){p.unshadow?.();p.mesh.geometry.dispose();options.scene.remove(p.mesh);}if(current&&!current.committed)current.geometry.dispose();mood.dispose();options.scene.remove(moodRoot);moodCaption.remove();view.dispose();emitters.dispose();pieceMaterial.dispose();},
   };
 }

@@ -130,6 +130,8 @@ export default function StreamView() {
       seek: (time: number, view?: Shot) => scene.seek(time, view),
       hour: (value: number) => { hour = value; scene.setHour(value); },
       capture: (time: number) => scene.capture(time),
+      // Offline ritual capture uses the existing, explicitly SIMULATED fixture.
+      ...(params.source === 'simulated' && new URLSearchParams(location.search).get('forgeFixture') === '1' ? { forge: scene.forge } : {}),
     };
   }
 

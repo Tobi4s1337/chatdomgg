@@ -8,7 +8,7 @@ import {
 } from './index';
 import { emberPose, emptyPose, fireflyPose } from './ambient';
 import { emptySmoke, smokePose } from './smoke';
-import { sparkPose } from './cues';
+import { createTrack, emitFlight, sparkPose } from './cues';
 
 function fixture(quality: EffectsQuality = 'balanced', seed = 7) {
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(43, 16 / 9, .15, 2200);
@@ -250,6 +250,15 @@ describe('effects library: cues', () => {
     expect(drawn(ids.scene)).not.toEqual(drawn(other.scene));
   });
 
+  it('orients flight trail streaks along the recorded tangent', () => {
+    const track = createTrack(2);
+    track.n = 2; track.times.set([0, 1]); track.xs.set([0, 10]);
+    const streaks: number[][] = [];
+    emitFlight(7, track, null, 0, .9, { trail: 10, step: 1, motes: 0 }, emptyPose(), p => streaks.push([p.sx, p.sy, p.sz]));
+    expect(streaks.length).toBeGreaterThan(2);
+    for (const [x, y, z] of streaks) { expect(x).toBeGreaterThan(0); expect(y).toBe(0); expect(z).toBe(0); }
+  });
+
   it('the flight glints at the piece and trails only along the recorded path, never ahead of the clock', () => {
     const { scene, effects } = fixture('high');
     // No history: only the piece's glint and its motes, all at the piece.
@@ -265,7 +274,10 @@ describe('effects library: cues', () => {
     expect(effects.diagnostics().glow.flightGlints).toBe(trail.length);
     expect(trail.length).toBeGreaterThan(alone.length + 10);
     const path = [...cue.history!.map(s => s.position), cue.position];
-    for (const p of trail) expect(Math.min(...path.map(q => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])))).toBeLessThan(.45);
+    for (const p of trail) {
+      expect(Math.min(...path.map(q => Math.hypot(p[0] - q[0], p[2] - q[2])))).toBeLessThan(.45);
+      expect(Math.min(...path.map(q => Math.abs(p[1] - q[1])))).toBeLessThan(1.1);
+    }
     // A recorded future (after a seek back) and junk samples change nothing; nor does the history's order.
     const future = { time: 17.2, position: [40, 40, 40] as Vec3 };
     const junk = [{ time: NaN, position: [0, 0, 0] }, { time: 16, position: [0, NaN, 0] }, null] as unknown as typeof cue.history;

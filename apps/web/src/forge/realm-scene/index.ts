@@ -14,6 +14,7 @@ import { createForgeRitualView } from '../ritual-view';
 import { createLandingMaterial } from './landing-light';
 
 export interface RealmForgeSceneOptions {
+  onFlight?: import('../presentation/stage').ForgePresentationOptions['onFlight'];
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   canvas: HTMLCanvasElement;
@@ -124,7 +125,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       mesh.position.copy(destination); mesh.rotation.y = home.yaw; mesh.frustumCulled = false;
       options.scene.add(mesh); mesh.updateMatrixWorld(true);
       // The shared presentation reads the clone's actual socket pose before moving it to the anvil.
-      const presentation = createForgePresentation({ root: effects, anvil: anvilFace.toArray(), landing: destination.toArray(), piece: mesh });
+      const presentation = createForgePresentation({ root: effects, anvil: anvilFace.toArray(), landing: destination.toArray(), piece: mesh, ...(options.onFlight ? { onFlight: options.onFlight } : {}) });
       const bounds = buildBounds(result.blueprint);
       const homeBounds = buildBounds(home.blueprint).union(bounds.clone().translate(new THREE.Vector3(...attachment.origin).multiplyScalar(VOXEL_METRES.build)));
       current = { attachment, home, result, bounds, homeBounds, destination, mesh, presentation,

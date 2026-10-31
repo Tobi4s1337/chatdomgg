@@ -1,1 +1,1 @@
-{"name":"@chatdom/render","private":true,"version":"0.0.0","type":"module","exports":{".":"./src/index.ts"},"dependencies":{"@chatdom/shared":"workspace:*","@chatdom/voxel":"workspace:*","three":"0.186.1"},"devDependencies":{"@types/three":"0.186.0"}}
+{"name":"@chatdom/render","private":true,"version":"0.0.0","type":"module","exports":{".":"./src/index.ts","./effects":"./src/effects/index.ts"},"dependencies":{"@chatdom/shared":"workspace:*","@chatdom/voxel":"workspace:*","three":"0.186.1"},"devDependencies":{"@types/three":"0.186.0"}}

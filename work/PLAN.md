@@ -334,7 +334,14 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
 beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current:** AS11 09f0267 merged (ebde8de). Builder reachable from `/showcase` at `/-/avatar-builder`,
+**Current:** Forge flight effects mounted in the actual kingdom/stream, both room and SIM paths.
+One scene pool reads the posed piece history; warm streaks rise/fade, reduced motion clears them,
+and only the old flight trail is replaced. Pour/runes/impact/home smoke and accepted lighting stay.
+`shots/magic/forge-flight-pair.png` viewed at1920×1080, same SIM fixture/time17.3. Gold glints
+are visible, but still too scattered for a sweeping trail: this is a checkpoint, not visual signoff.
+Typecheck/scoped lint/33 focused tests and web build passed. No new art lane commits waiting.
+
+AS11 09f0267 merged (ebde8de). Builder reachable from `/showcase` at `/-/avatar-builder`,
 SIMULATED with browser-local saves. Real saved/equip/entitlement authority remains pending; no shared
 v2 freeze. Additive local earned recipe accepted in avatar-style/contract-proposal.md; rig/sockets stay.
 `shots/magic/avatar-builder-main.png` viewed at1440×900; hair click changes portrait, Save says
@@ -361,8 +368,7 @@ on open foreground routes. Never fake live traffic or replace actual observation
 **Picture carried:**975af2f/44de84b sculpted land consistent across render/light/contact/collision;
 9f843d7 ridge haze. Keep layout43cffdb6; kingdom-land6f60ae2 is parked v2. Forge64efb0f16 present
 spectators still left-heavy; pour02c3494/cameraf0112c6 stay. Market be6ab51 cart/wares. Effects d535804
-merged/unmounted; flight seam is realm-scene after presentation.update with actual piece world pose;
-retire only old stage flight trail, not sparks/runes/impact. Accepted home smoke stays. Harbour a6fcf9a
+flight now mounted (above); other emitters remain unmounted. Accepted home smoke stays. Harbour a6fcf9a
 potential `/kingdom/63920635` seat needs real royal glass anchor before live adoption. River/mountain
 seats remain. Keepers7eff5d8/sound1ed6865 additive/unmounted; emote40aeb18 glass clips. Some passport/
 gate/moments/Atlas host bindings absent. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a stays.

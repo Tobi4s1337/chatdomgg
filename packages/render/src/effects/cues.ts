@@ -73,13 +73,13 @@ export function sampleTrack(track: Track, time: number, out: { x: number; y: num
 /** How long a trail glint lives, and the trail clock: one base tick per high-tier glint. */
 export const TRAIL_SECONDS = .75;
 export const TRAIL_TICK = TRAIL_SECONDS / 27;
-const at = { x: 0, y: 0, z: 0 };
-const GOLD = [1, .8, .44] as const, ROSE = [1, .42, .2] as const, RUNE = [.58, .96, .9] as const;
+const at = { x: 0, y: 0, z: 0 }, previous = { x: 0, y: 0, z: 0 };
+const GOLD = [1, .8, .44] as const, ROSE = [1, .42, .2] as const;
 
 export interface FlightBudget { trail: number; step: number; motes: number }
 
 /**
- * The Forge flight: the piece's own glint, a few rune-pale motes circling it while it flies, and a warm trail of
+ * The Forge flight: the piece's own glint, a few warm motes circling it while it flies, and a warm trail of
  * glints left where it has actually been. Trail glints are pinned to absolute ticks of the effect clock, so each
  * stays where it was dropped and fades in place; lower tiers keep every `step`-th tick of the same clock.
  */
@@ -100,7 +100,7 @@ export function emitFlight(key: number, track: Track, head: { x: number; y: numb
       out.x = head.x + Math.cos(a) * radius; out.z = head.z + Math.sin(a) * radius;
       out.y = head.y + .1 * Math.sin(time * 3.1 + TAU * unit(key, 4, m));
       const twinkle = .55 + .45 * Math.sin(time * 7 + m * 2.1) ** 2;
-      out.r = RUNE[0] * 2.2 * twinkle; out.g = RUNE[1] * 2.2 * twinkle; out.b = RUNE[2] * 2.2 * twinkle;
+      out.r = GOLD[0] * 2.2 * twinkle; out.g = GOLD[1] * 2.2 * twinkle; out.b = GOLD[2] * 2.2 * twinkle;
       out.alpha = .9; out.size = .045;
       out.sx = 0; out.sy = 0; out.sz = 0;
       push(out);
@@ -114,17 +114,22 @@ export function emitFlight(key: number, track: Track, head: { x: number; y: numb
     const dropped = index * TRAIL_TICK - unit(key, 8, index) * tick;
     if (age > TRAIL_SECONDS || dropped < startedAt || !sampleTrack(track, dropped, at)) continue;
     const life = age / TRAIL_SECONDS, fade = (1 - life) ** 1.6;
-    // Each glint keeps its own drift for its whole life: it loosens from the path and settles a little.
+    // Each glint keeps its own drift for its whole life and rises gently from the recorded path.
     const a = TAU * unit(key, 5, index), loosen = (.1 + .42 * unit(key, 6, index)) * age + .06 * unit(key, 9, index);
     out.x = at.x + Math.cos(a) * loosen; out.z = at.z + Math.sin(a) * loosen;
-    out.y = at.y + (unit(key, 7, index) - .5) * .2 - .3 * age * age;
+    out.y = at.y + (unit(key, 7, index) - .5) * .2 + (.8 + .4 * unit(key, 7, index)) * age;
     const twinkle = .6 + .4 * Math.sin(age * (14 + 10 * unit(key, 10, index)) + TAU * unit(key, 11, index)) ** 2;
     const level = (2 * fade + .35) * twinkle * (.7 + .5 * unit(key, 12, index));
     out.r = (GOLD[0] + (ROSE[0] - GOLD[0]) * life) * level;
     out.g = (GOLD[1] + (ROSE[1] - GOLD[1]) * life) * level;
     out.b = (GOLD[2] + (ROSE[2] - GOLD[2]) * life) * level;
     out.alpha = fade; out.size = (.045 + .05 * unit(key, 13, index)) * (1 - .5 * life);
-    out.sx = 0; out.sy = 0; out.sz = 0;
+    // Point back along recorded history; never invent a continuation before the first sample.
+    const earlier = Math.max(track.times[0]!, dropped - tick * 1.5);
+    const hasPrevious = sampleTrack(track, earlier, previous);
+    out.sx = hasPrevious ? at.x - previous.x : 0;
+    out.sy = hasPrevious ? at.y - previous.y : 0;
+    out.sz = hasPrevious ? at.z - previous.z : 0;
     if (out.alpha > .004) push(out);
   }
 }

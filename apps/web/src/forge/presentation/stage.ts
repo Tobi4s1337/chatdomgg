@@ -20,6 +20,7 @@ export interface ForgePresentationOptions {
   landing: Point3;
   /** A disposable presentation clone supplied and owned by the host; never the placed piece. */
   piece: THREE.Object3D;
+  onFlight?(frame: ForgeRitualFrame | null, position: Point3 | null): void;
 }
 export interface ForgePresentation { update(frame: ForgeRitualFrame | null): void; dispose(): void }
 /** What the host device asks of motion and particle budgets. Tests and the bench supply fixed answers. */
@@ -438,7 +439,7 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
     if (crouch > 0) squashed(anvilPose, crouch, pose);
     placePiece(pose);
     // A short warm trail marks where it has been.
-    for (let i = 1; i <= share(16) && u > 0; i++) {
+    for (let i = 1; !options.onFlight && i <= share(16) && u > 0; i++) {
       const back = s - i * .012;
       if (back <= 0) break;
       arc.getPoint(back, scratch);
@@ -448,6 +449,7 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
   }
 
   function clear() {
+    options.onFlight?.(null, null);
     last = null;
     cells.uFill.value = 0;
     blueprint.set({ ...look, visible: false });
@@ -471,6 +473,13 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
       if (!read) return;
       last = read;
       render(read);
+      if (options.onFlight) {
+        if (!environment.reducedMotion() && (read.phase === 'flight' || read.phase === 'landed')) {
+          piece.updateWorldMatrix(true, false);
+          const world = centre.clone().setY(silhouette.bounds.max.y + .15).applyMatrix4(piece.matrixWorld);
+          options.onFlight(frame, [world.x, world.y, world.z]);
+        } else options.onFlight(null, null);
+      }
     },
     dispose() {
       if (disposed) return;

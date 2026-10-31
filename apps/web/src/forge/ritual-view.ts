@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import type { VoxelRenderState } from '@chatdom/render';
-import type { ForgeRitualFrame } from '@chatdom/shared';
+import type { ForgeRitualFrame, Vec3 } from '@chatdom/shared';
 import { createCodexEngraving } from './engraving';
 import { createAnvilHero } from './anvil-hero';
 import { createForgePresentation, type ForgePresentation } from './presentation';
 
 /** The stage owns its decorative resources; the voxel geometry and lighting textures remain with their callers. */
-export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderState) {
+export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderState, onFlight?: (frame: ForgeRitualFrame | null, position: Vec3 | null) => void) {
   const effects = new THREE.Group(); scene.add(effects);
   let presentation: ForgePresentation | undefined, presenting = false;
   const root = new THREE.Group();
@@ -124,7 +124,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     // The shared effect captures the real landing pose before it brings a clone to the anvil.
     const destination=landing??anvil;
     piece.position.copy(root.worldToLocal(destination.clone()));piece.updateWorldMatrix(true,false);
-    presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:destination.toArray(),piece});
+    presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:destination.toArray(),piece,...(onFlight ? {onFlight} : {})});
     piece.position.copy(castingPosition);piece.updateWorldMatrix(true,false);
   }
   /** The room's external casting owns its effects; it still heats this same physical stage. */

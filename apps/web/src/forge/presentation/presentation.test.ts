@@ -58,6 +58,20 @@ const shown = (root: THREE.Object3D) => root.children.filter(o => o.visible).map
 const uniform = (root: THREE.Object3D, mesh: string, name: string) => ((root.getObjectByName(mesh) as THREE.Mesh).material as THREE.ShaderMaterial).uniforms[name]!.value as number;
 
 describe('Forge ritual presentation', () => {
+  it('reports the posed clone upper surface and clears the sink on reset', () => {
+    const h = host();
+    let reported: readonly number[] | null = null;
+    const stage = createForgeStage({ root: h.root, anvil: h.anvil, landing: h.landing, piece: h.piece,
+      onFlight: (_frame, position) => { reported = position; } }, environment());
+    stage.update(frame('flight', .45, 18));
+    h.piece.updateWorldMatrix(true, false);
+    const actual = new THREE.Vector3(0, 1.15, 0).applyMatrix4(h.piece.matrixWorld);
+    expect(reported).not.toBeNull();
+    expect(new THREE.Vector3(...reported!).distanceTo(actual)).toBeLessThan(1e-6);
+    stage.update(null);
+    expect(reported).toBeNull();
+    stage.dispose();
+  });
   it('holds a pending blueprint for thirty seconds without sealing, striking, landing or escalating', () => {
     const h = host(), saved = snapshot(new THREE.Group(), h.piece);
     const stage = createForgeStage({ root: h.root, anvil: h.anvil, landing: h.landing, piece: h.piece }, environment());
