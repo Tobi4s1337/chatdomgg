@@ -17,8 +17,14 @@ export interface GroundPiece {
   slope?: readonly [number, number];
 }
 export interface GroundBlocker extends GroundPiece { turn: CardinalTurn }
+/** Cover needs the adopted plots and real keep-outs, not a replacement v2 landscape. */
+export interface GroundDressingLand {
+  plan: SettlementPlan;
+  sites: readonly Pick<KingdomLand['sites'][number], 'footprint'>[];
+  places: { court: Pick<KingdomLand['places']['court'], 'boundary'> };
+}
 export interface GroundDressingInput {
-  land: KingdomLand; seed: string; tier: KingdomTier;
+  land: GroundDressingLand; seed: string; tier: KingdomTier;
   ground(x: number, z: number): number;
   waterKeepOut(x: number, z: number, margin: number): boolean;
   occupied: readonly Pick<GroundPiece, 'blueprint' | 'position' | 'yaw'>[];
@@ -453,7 +459,9 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
 
   placed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   const pieces = new Map<string, GroundPiece[]>(), counts: Record<string, number> = {};
-  for (const { key: _key, ...piece } of placed) {
+  for (const placement of placed) {
+    const { key, ...piece } = placement;
+    void key;
     const list = pieces.get(piece.blueprint.id);
     if (list) list.push(piece); else pieces.set(piece.blueprint.id, [piece]);
     counts[piece.blueprint.id] = (counts[piece.blueprint.id] ?? 0) + 1;
@@ -477,7 +485,7 @@ export function arrivalHome(plan: SettlementPlan): SettlementHome {
     || Math.hypot(a.position[0], a.position[2]) - Math.hypot(b.position[0], b.position[2]))[0]!;
 }
 
-export function planViews(land: KingdomLand, ground: (x: number, z: number) => number): GroundViews {
+export function planViews(land: GroundDressingLand, ground: (x: number, z: number) => number): GroundViews {
   const plan = land.plan;
   const at = (x: number, z: number, up: number): Vec3 => [x, ground(x, z) + up, z];
   // Street: 1.6 m above the arrival home's street, looking along the frontage at its door and forecourt.

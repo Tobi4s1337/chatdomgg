@@ -194,7 +194,7 @@ export function createGroundDressing(host: GroundDressingHost): GroundDressing {
     return changed;
   }
 
-  function update(_frame: { time: number; walkers: readonly Vec3[] }): void {
+  function update(): void {
     if (disposed) return;
     derived.sync();
     if (!cameraChanged() && !dirty) return;

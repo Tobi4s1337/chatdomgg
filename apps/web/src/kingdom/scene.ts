@@ -27,6 +27,8 @@ import { foundedContent } from './founded-content';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
 import { createObservedWalkers, walkerSlots } from './observed-walkers';
 import type { RealmWalkerFeed } from '@chatdom/shared/realm';
+import { createGroundDressing } from './ground-dressing';
+import { planAdoptedCover } from './ground-dressing/adopted-cover';
 
 export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number}
@@ -202,6 +204,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // Distant hills use 20 m cells on both sizes; the grounded 1 m collar stays
   // exact. One surface/sampler keeps groves grounded across viewport changes.
   const {geometry:horizonGeometry,sampleHeight:landHeight}=createHorizonSurface(layout,{farStep:20,sampleTerrain:(x,z)=>terrainHeight(layout,x,z)});earlyCleanups.push(()=>horizonGeometry.dispose());
+  const coverInput={ground:landHeight,
+    waterKeepOut:(x:number,z:number,margin:number)=>Math.hypot((x-layout.lake.x)/(layout.lake.radiusX+margin),(z-layout.lake.z)/(layout.lake.radiusZ+margin))<1.19,
+    occupied:content,keepClear:[{x:0,z:8,radius:7}]};
+  const coverPlan=planAdoptedCover(layout,coverInput);
+  const dressing=own(createGroundDressing({...coverInput,land:{plan:layout,sites:[],places:{court:{boundary:layout.castle.court.boundary}}},
+    seed:layout.config.seed,tier:layout.config.tier,plan:coverPlan,scene,camera,pool,clay,signal:abort.signal,
+    registerShadow:mesh=>sunShadows.register(mesh)}));
   const trees=installed?[]:[createTree(0),createTree(1),createTree(2)];
   const treePlaces=trees.map(()=>[] as {position:Vec3;yaw:number}[]);
   const treeCount=options.tier==='hamlet'?115:260;
@@ -302,6 +311,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=.0016;
     water.update(grade,time,camera);
+    dressing.hideLot(buildHidden?simulation.firstSlot:null);
+    dressing.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
     if(now-lastField>240){lastField=now;const centre:Vec3=[target.x,terrainHeight(layout,target.x,target.z),target.z];field.update(centre,[...windows.getSources(),...build.getSources()]);farField.update(centre,[...windows.getSources(),...build.getSources()]);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]}]);}
     const people=walk??observed;
     if(people)options.onWalkers?.(people.labels().filter(label=>{
@@ -330,13 +341,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   raf=requestAnimationFrame(render);
   const assets=[...blueprints.values(),...trees],total=assets.length*3;let completed=0;
   // Coarse geometry is available first. Every resolution is prepared in workers; window anchors stay exact.
-  const tasks=([4,2,1] as const).flatMap(factor=>assets.map(async b=>{
+  const tasks:Promise<unknown>[]=([4,2,1] as const).flatMap(factor=>assets.map(async b=>{
     const job={kind:'blueprint' as const,blueprint:b,revision:1,materials:registry.materials,materialRevision:registry.revision,...(factor===1?{}:{lodFactor:factor})};
     const result=await pool.submit(job);if(disposed||result?.kind!=='asset')return;
     const treeIndex=trees.indexOf(b);
     const placements=treeIndex>=0?treePlaces[treeIndex]!:content.filter(h=>blueprintKey(h.blueprint)===blueprintKey(b));
     instance(b,result.chunks,placements,factor);options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
   }));
+  tasks.push(dressing.ready);
   tasks.push(loadTerrain(layout,()=>{}, {signal:abort.signal}).then(({chunks,origin})=>{
     if(disposed)return;
     for(const tile of terrainBatches(chunks)){
@@ -371,7 +383,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     interactionDebug:()=>walk?.interactionDebug??null,
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
-    inspect:()=>({build:'progressive-light-v1',loaded,renderPhase,renderStartedAt,renderCompletedAt,presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(cue:unknown)=>crowd.receiveChat(cue),clearChat:(cueIds?:readonly string[])=>crowd.clearChat(cueIds),
+    inspect:()=>({build:'progressive-light-v1',loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(cue:unknown)=>crowd.receiveChat(cue),clearChat:(cueIds?:readonly string[])=>crowd.clearChat(cueIds),
     setHour(value:number){targetHour=value;sound.cue('wood');},
     setCamera(value:CameraName){walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
     /** Evidence framing only. Null returns control to the current production camera. */

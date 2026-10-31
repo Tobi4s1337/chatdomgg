@@ -121,6 +121,8 @@ export default function StreamView() {
     if (!scene) { delete window.__chatdomKingdom; return; }
     window.__chatdomKingdom = {
       stats: scene.debug,
+      inspect: scene.inspect,
+      pose: scene.pose,
       seek: (time: number, view?: Shot) => scene.seek(time, view),
       hour: (value: number) => { hour = value; scene.setHour(value); },
       capture: (time: number) => scene.capture(time),
