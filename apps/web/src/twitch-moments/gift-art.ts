@@ -6,9 +6,11 @@ import { blueprint, box, field, type BannerKit, type Box } from './banner';
  * Gift pieces in build cells (0.125 m), authored for this lane. Every blueprint's origin is its minimum corner;
  * the `*_CELLS` constants say where its pivot sits so the view can place and animate it.
  *
- * - Parcel: kraft paper box, the tier's ribbon crossed over it with a bow on top, and the giver's wax seal on the
- *   front: red wax for a named giver, cream wax for "a friend of the realm", red and brass side by side when a
- *   gift is paid forward. +z is the front.
+ * - Parcel: cream paper (the lightest warm cloth in the kit, so it still reads against dusk roofs and the cart's
+ *   timber), banded in the kingdom's own field colour, a bow in the tier's hue (gold, rose, rainbow; tier 3 runs
+ *   the rainbow along the band too), and the giver's wax seal large on the front: a red roundel with a gold
+ *   impression for a named giver, violet with a cream heart for "a friend of the realm", red and brass stamps side
+ *   by side when a gift is paid forward. +z is the front.
  * - Canopy: a small striped cloth canopy on four cords that carries a parcel down onto a doorstep.
  * - Gift cart: an open wagon in timber with the kingdom's cloth band, a pennant and room for twelve parcels,
  *   drawn by a chestnut pony. Wheels, pony legs and tail are separate parts so they can turn and step.
@@ -20,26 +22,32 @@ export const SEAL_KINDS: readonly SealKind[] = ['named', 'friend', 'forward'];
 export const GIFT_TIERS: readonly GiftTier[] = ['1', '2', '3'];
 
 const RAINBOW = AVATAR_PALETTE.rainbow;
+/** The bow carries the tier, matching the window edge hue: gold, rose, rainbow. */
 const ribbon = (tier: GiftTier, i: number) => tier === '3' ? RAINBOW[i % RAINBOW.length]! : tier === '2' ? MAT.petal : MAT.fabricGold;
+/** The band carries the kingdom: its field colour on cream paper, the rainbow for tier 3. */
+const band = (tier: GiftTier, kit: BannerKit, i: number) => tier === '3' ? RAINBOW[i % RAINBOW.length]! : field(kit);
 
 /** Parcel: 5 × 3 × 5 body, bow on top (y 3), seal one cell proud of the front (z 5). Pivot: bottom centre. */
 export const PARCEL_CELLS = { size: [5, 4, 6] as const, pivot: [2.5, 0, 2.5] as const, top: 3 } as const;
 
 export function parcelBlueprint(tier: GiftTier, seal: SealKind, kit: BannerKit): VoxelBlueprint {
-  const paper = MAT.thatch, boxes: Box[] = [box(0, 0, 0, 5, 3, 5, paper)];
-  // The ribbon crosses the box on both axes; tier 3 runs the rainbow along it.
-  for (let i = 0; i < 5; i++) {
-    boxes.push(box(2, i < 3 ? i : 2, 0, 3, i < 3 ? i + 1 : 3, 5, ribbon(tier, i)));
-    boxes.push(box(i, 2, 2, i + 1, 3, 3, ribbon(tier, i + 2)));
-  }
-  boxes.push(box(2, 0, 0, 3, 3, 1, ribbon(tier, 1)), box(2, 0, 4, 3, 3, 5, ribbon(tier, 3)));
-  boxes.push(box(0, 0, 2, 1, 3, 3, ribbon(tier, 4)), box(4, 0, 2, 5, 3, 3, ribbon(tier, 5)));
-  // The bow: two loops and a brass knot.
+  const paper = MAT.cream, boxes: Box[] = [box(0, 0, 0, 5, 3, 5, paper)];
+  // The band crosses the box on both axes: over the top, down the front, back and both sides.
+  for (let i = 0; i < 5; i++) boxes.push(box(2, 2, i, 3, 3, i + 1, band(tier, kit, i)), box(i, 2, 2, i + 1, 3, 3, band(tier, kit, i + 2)));
+  boxes.push(box(2, 0, 0, 3, 2, 1, band(tier, kit, 1)), box(2, 0, 4, 3, 2, 5, band(tier, kit, 3)));
+  boxes.push(box(0, 0, 2, 1, 2, 3, band(tier, kit, 4)), box(4, 0, 2, 5, 2, 3, band(tier, kit, 5)));
+  // The bow in the tier's hue: two loops across the knot and two tails, a brass knot in the middle.
   boxes.push(box(1, 3, 2, 2, 4, 3, ribbon(tier, 0)), box(3, 3, 2, 4, 4, 3, ribbon(tier, 2)), box(2, 3, 2, 3, 4, 3, MAT.brass));
   boxes.push(box(1, 3, 3, 2, 4, 4, ribbon(tier, 1)), box(3, 3, 1, 4, 4, 2, ribbon(tier, 3)));
-  // The giver's seal, pressed over the ribbon on the front face.
-  if (seal === 'forward') boxes.push(box(1, 1, 5, 2, 2, 6, MAT.fabricRed), box(3, 1, 5, 4, 2, 6, MAT.brass));
-  else boxes.push(box(2, 1, 5, 3, 2, 6, seal === 'named' ? MAT.fabricRed : MAT.cream));
+  // The giver's seal, pressed over the band on the front face and standing one cell proud of it.
+  if (seal === 'forward') {
+    // Two stamps, the giver's red low on the left and the forwarded brass high on the right, the band between.
+    boxes.push(box(0, 0, 5, 2, 2, 6, MAT.fabricRed), box(3, 1, 5, 5, 3, 6, MAT.brass));
+  } else {
+    // A roundel: a plus of wax three cells across with its impression at the heart.
+    const wax = seal === 'named' ? MAT.fabricRed : MAT.fabricViolet, heart = seal === 'named' ? MAT.goldLeaf : MAT.cream;
+    boxes.push(box(1, 1, 5, 4, 2, 6, wax), box(2, 0, 5, 3, 3, 6, wax), box(2, 1, 5, 3, 2, 6, heart));
+  }
   return blueprint(`moment-parcel-${kit}-${tier}-${seal}`, kit, [5, 4, 6], boxes);
 }
 

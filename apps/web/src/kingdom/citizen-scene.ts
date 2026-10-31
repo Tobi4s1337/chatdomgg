@@ -90,6 +90,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
   const knownLooks = new Set(looks.map(look => look.id)), suppliedLooks = new Map<number, string>();
   let renderer: Awaited<ReturnType<typeof createCitizenRenderer>> | undefined;
   let samples: readonly CitizenMotionSample[] = [], frame: KingdomPresenceFrame | undefined;
+  let carrying: readonly CitizenMotionSample[] = [];
   let walkers: WalkerSlots = new Map();
   let forge: { anchor: Vec3; atMs: number } | undefined;
   const watchers = new Map<number, string>(), watcherArrivals = new Map<number, number>();
@@ -162,7 +163,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       restoredForgePending = false; restoredForgeGraceStart = undefined;
       forge = { anchor, atMs };
     },
-    update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set(), walkerFeet: WalkerSlots = new Map(), night = 0) {
+    update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set(), walkerFeet: WalkerSlots = new Map()) {
       walkers = walkerFeet;
       if (forge && frame && atMs >= forge.atMs && atMs >= nextForgeGatherMs) {
         nextForgeGatherMs = atMs + 1_000;
@@ -204,11 +205,10 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
           ? smooth((atMs - (watcherArrivals.get(sample.slot) ?? atMs) - 500) / 900) * (.82 + .18 * Math.sin(time * 1.3 + sample.slot)) : 0,
         lookYaw:watchers.has(sample.slot) ? 0 : overlays.get(sample.slot)?.lookYaw??0,
         gesture: reservedSlots.has(sample.slot) || watchers.has(sample.slot)?'none' as const:speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : overlays.get(sample.slot)?.gesture??'none' as const })), camera);
-      const carrying = [...bodies, ...samples.filter(sample => {
+      carrying = [...bodies, ...samples.filter(sample => {
         const walker = walkers.get(sample.slot);
         return walker && knownLooks.has(walker.look) && !walker.posture;
       }).map(sample => walkerSubject(sample, walkers))];
-      lanterns.update(carrying, time, night, camera);
       shadows.count = 0;
       for (const sample of bodies) {
         shadowMatrix.makeScale(1, 1, .8); shadowMatrix.setPosition(sample.position[0], sample.position[1] + .018, sample.position[2]);
@@ -217,6 +217,15 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       shadows.instanceMatrix.needsUpdate = true;
       for (const [slot, cue] of speech) if (cue.expiresAt <= atMs || cue.asOf > atMs || !samples.some(s => s.slot === slot)) speech.delete(slot);
       return samples;
+    },
+    drawLanterns(time: number, night: number, camera?: THREE.Camera, walkerGrips?: ReadonlyMap<string, THREE.Matrix4>) {
+      const grips = new Map<number, THREE.Matrix4>();
+      for (const sample of carrying) {
+        const walker = walkers.get(sample.slot);
+        const grip = walker ? walkerGrips?.get(walker.id) : renderer?.grips.get(String(sample.slot));
+        if (grip) grips.set(sample.slot, grip);
+      }
+      lanterns.update(carrying, time, night, camera, grips);
     },
     sources: () => lanterns.sources(),
     lightFrame(atMs: number): KingdomPresenceFrame | undefined {
@@ -242,7 +251,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       }
       return labels;
     },
-    clear() { pendingCheckpoint = undefined; resetBehaviours(); forge = undefined; watchers.clear();watcherArrivals.clear(); restoredForgePending = false; restoredForgeGraceStart = undefined; motion.clear(); frame = undefined; samples = []; walkers = new Map(); suppliedLooks.clear(); speech.clear(); renderer?.update([]); lanterns.update([], 0, 0); shadows.count = 0; },
+    clear() { pendingCheckpoint = undefined; resetBehaviours(); forge = undefined; watchers.clear();watcherArrivals.clear(); restoredForgePending = false; restoredForgeGraceStart = undefined; motion.clear(); frame = undefined; samples = []; carrying = []; walkers = new Map(); suppliedLooks.clear(); speech.clear(); renderer?.update([]); lanterns.update([], 0, 0); shadows.count = 0; },
     dispose() { resetBehaviours(); disposed = true; renderer?.dispose(); lanterns.dispose(); material.dispose(); scene.remove(shadows); shadows.dispose(); shadowGeometry.dispose(); shadowMaterial.dispose(); },
   };
 }

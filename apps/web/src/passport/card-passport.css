@@ -1,0 +1,193 @@
+/* The passport on the citizen card's page: the open book on a desk under a lamp, and the print of its shared spread
+   beside it. It sits in the card page's dusk (or night, or day): text on the room is cream or worn gilt (>4.5:1 on
+   the darkest of those skies), text on parchment is the kit's ink. */
+
+.cpc {
+  position: relative; display: grid; gap: 14px; width: 100%; color: var(--cd-cream); text-align: start;
+  font: var(--cd-type-body)/1.4 var(--cd-face-body);
+}
+.cpc :where(h2, h3, p, figure) { margin: 0; }
+
+.cpc-head { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.cpc-title { font: 400 30px/1 var(--cd-face-story); letter-spacing: .02em; color: #f6d995; text-shadow: 0 1px 0 #0006, 0 0 18px #ffb35a40; }
+.cpc-rule { width: 120px; height: 16px; fill: none; stroke: #e4c27a; stroke-width: 1.2; opacity: .8; }
+.cpc-rule circle { fill: #e4c27a; stroke: none; }
+.cpc-rule[data-flip='true'] { transform: scaleX(-1); }
+
+.cpc-room { display: grid; gap: 28px; justify-items: center; }
+.cpc[data-beside='true'] .cpc-room { grid-template-columns: minmax(0, 1fr) 280px; align-items: center; gap: 30px; }
+
+/* ---------- The holder's clasp: "Keep my travels private" ---------- */
+
+/* A brass buckle on a stitched oxblood strap. It sits where the authority last left it: asking makes it glow, never
+   move, so the page does not claim a change before it is acknowledged. */
+.cpc-owner { display: grid; justify-items: center; gap: 6px; margin-top: -2px; text-align: center; }
+.cpc-clasp {
+  display: inline-flex; align-items: center; gap: 12px; min-height: 40px; padding: 7px 18px 7px 8px; border: 0; border-radius: 22px; cursor: pointer;
+  color: var(--cd-cream); font: var(--cd-type-body)/1 var(--cd-face-label); letter-spacing: .05em;
+  background: radial-gradient(ellipse 70% 120% at 30% 0, #ffc47a1f, transparent 70%), #1a0f0aa6;
+  box-shadow: inset 0 0 0 1px #e4c27a59, inset 0 1px 0 #ffe1b426, 0 3px 10px #0000005c;
+}
+.cpc-clasp:hover { box-shadow: inset 0 0 0 1px #e4c27a99, inset 0 1px 0 #ffe1b426, 0 3px 12px #0000005c, 0 0 18px #ffb35a26; }
+.cpc-clasp:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
+.cpc-clasp[aria-busy='true'] { cursor: progress; }
+.cpc-clasp-strap {
+  position: relative; flex: none; width: 52px; height: 26px; border-radius: 13px;
+  background:
+    radial-gradient(ellipse 60% 70% at 30% 20%, #c4644a40, transparent 70%),
+    linear-gradient(180deg, #8e3423, #6a2216 55%, #4a160d);
+  box-shadow: inset 0 2px 4px #000a, inset 0 0 0 1px #00000073, 0 1px 0 #ffe1b41f;
+  transition: background .3s;
+}
+/* Saddle stitching along both edges of the strap. */
+.cpc-clasp-strap::before {
+  content: ''; position: absolute; inset: 4px 9px; border-block: 1px dashed #f3d39a70; border-radius: 2px;
+}
+.cpc-clasp-buckle {
+  position: absolute; top: 2px; left: 2px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fff1c4, #e1b867 40%, #a77a35 72%, #5a3c14);
+  box-shadow: inset 0 -1px 2px #5a3c14aa, 0 2px 3px #000a;
+  transition: transform .34s cubic-bezier(.3, 1.35, .5, 1);
+}
+.cpc-clasp-hole {
+  width: 5px; height: 9px; opacity: 0; transition: opacity .2s .15s;
+  background: radial-gradient(circle at 50% 30%, #2a1708 0 2px, transparent 2.4px), linear-gradient(#2a1708, #2a1708) 50% 100% / 2px 5px no-repeat;
+}
+.cpc-clasp[aria-checked='true'] .cpc-clasp-buckle { transform: translateX(26px); }
+.cpc-clasp[aria-checked='true'] .cpc-clasp-hole { opacity: 1; }
+.cpc-clasp[aria-checked='true'] .cpc-clasp-strap { background: radial-gradient(ellipse 60% 70% at 70% 20%, #c4644a33, transparent 70%), linear-gradient(180deg, #7a2c1e, #561a10 55%, #3a1009); }
+.cpc-owner[data-ask='asking'] .cpc-clasp-buckle { animation: cpc-asking 1.4s ease-in-out infinite; }
+@keyframes cpc-asking {
+  0%, 100% { box-shadow: inset 0 -1px 2px #5a3c14aa, 0 2px 3px #000a, 0 0 0 0 #ffd38a00; }
+  50% { box-shadow: inset 0 -1px 2px #5a3c14aa, 0 2px 3px #000a, 0 0 12px 3px #ffd38a99; }
+}
+.cpc-owner-status { max-width: 52ch; min-height: 1.4em; font: italic var(--cd-type-small)/1.4 var(--cd-face-body); color: var(--cd-cream-soft); text-shadow: 0 1px 2px #0009; }
+.cpc-owner-status[data-tone='failed'] { color: #ffd2b0; }
+[data-light='day'] .cpc-owner-status { color: #4a2e10; text-shadow: 0 1px 0 #fff6de99; }
+
+/* ---------- The desk and its lamp ---------- */
+
+.cpc-desk {
+  position: relative; width: 100%; container-type: inline-size; padding: 14px 0 6px;
+}
+/* Leave room on the fore-edge for the thumb tabs; the book never grows past a comfortable reading size. */
+.cpc[data-layout='spread'] .cpc-desk { padding-right: 104px; --pp-max: min(1040px, 100cqw); }
+.cpc[data-layout='page'] .cpc-desk { --pp-max: 100%; }
+.cpc-desk .pp-book { z-index: 1; }
+/* The card page shows one small corner chip instead of the book's own slip. */
+.cpc .pp-provenance { display: none; }
+
+.cpc-lamp { position: absolute; inset: -40px 0 -20px; pointer-events: none; z-index: 0; overflow: hidden; }
+.cpc-pool {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 46% 42% at 46% 44%, #ffc47a3d, #ff9a4a14 52%, transparent 74%),
+    radial-gradient(ellipse 30% 22% at 46% 92%, #2a120a66, transparent 72%);
+}
+.cpc-motes { position: absolute; inset: 0; mix-blend-mode: screen; }
+.cpc-motes i {
+  position: absolute; width: 3px; height: 3px; border-radius: 50%;
+  background: radial-gradient(circle, #fff3d6, #ffd38a99 45%, transparent 72%);
+  animation: cpc-mote 13s linear infinite; animation-delay: calc(var(--i) * -1.3s); opacity: 0;
+}
+.cpc-motes i:nth-child(1) { left: 18%; top: 14%; }
+.cpc-motes i:nth-child(2) { left: 31%; top: 6%; width: 2px; height: 2px; animation-duration: 16s; }
+.cpc-motes i:nth-child(3) { left: 44%; top: 10%; animation-duration: 11s; }
+.cpc-motes i:nth-child(4) { left: 58%; top: 4%; width: 2px; height: 2px; animation-duration: 15s; }
+.cpc-motes i:nth-child(5) { left: 69%; top: 12%; animation-duration: 12s; }
+.cpc-motes i:nth-child(6) { left: 82%; top: 8%; width: 2px; height: 2px; animation-duration: 14s; }
+.cpc-motes i:nth-child(7) { left: 9%; top: 40%; width: 2px; height: 2px; animation-duration: 17s; }
+.cpc-motes i:nth-child(8) { left: 92%; top: 36%; animation-duration: 12.5s; }
+.cpc-motes i:nth-child(9) { left: 52%; top: 2%; width: 4px; height: 4px; animation-duration: 18s; }
+.cpc-motes i:nth-child(10) { left: 4%; top: 72%; width: 2px; height: 2px; animation-duration: 15.5s; }
+@keyframes cpc-mote {
+  0% { transform: translate(0, 0); opacity: 0; }
+  15% { opacity: .85; }
+  60% { opacity: .55; }
+  100% { transform: translate(26px, 120px); opacity: 0; }
+}
+
+/* ---------- The print of the shared spread ---------- */
+
+/* A walnut board the print is pinned to, so its words read on any sky the card page has. */
+.cpc-share {
+  display: grid; gap: 18px; width: min(100%, 280px); align-content: center; padding: 22px 18px 18px; border-radius: 8px;
+  background:
+    repeating-linear-gradient(93deg, #ffdcae08 0 2px, transparent 2px 9px, #1a0c0412 9px 10px, transparent 10px 17px),
+    radial-gradient(ellipse 80% 50% at 50% 0, #ffc47a1c, transparent 70%),
+    linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood) 40%, var(--cd-wood-lo));
+  box-shadow: inset 0 1px 0 #ffe1b440, inset 0 -2px 0 #0000004d, 0 0 0 1px var(--cd-wood-edge), 0 14px 30px #0c0a1c80;
+}
+.cpc:not([data-beside='true']) .cpc-share { width: min(100%, 680px); grid-template-columns: minmax(0, 290px) minmax(0, 1fr); align-items: center; gap: 22px; }
+
+.cpc-print { position: relative; transform: rotate(1.4deg); transform-origin: 50% 0; }
+.cpc-print::before {
+  /* A brass pin through the top of the print. */
+  content: ''; position: absolute; top: -7px; left: calc(50% - 7px); z-index: 2; width: 14px; height: 14px; border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #fff1c4, #e1b867 38%, #a77a35 70%, #5a3c14);
+  box-shadow: 0 2px 2px #0008;
+}
+.cpc-print-frame {
+  position: relative; aspect-ratio: 3 / 2; padding: 7px; border-radius: 2px;
+  background: linear-gradient(170deg, #fbf3dd, #eadbb5);
+  box-shadow: 0 1px 0 #fff8e6 inset, 0 14px 28px #0b0614a0, 0 4px 8px #0b061470;
+}
+.cpc-print-frame img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 1px; background: #2a1c14; }
+.cpc-print[data-picture='loading'] .cpc-print-frame img { opacity: .0; }
+.cpc-print[data-picture='loading'] .cpc-print-frame {
+  background: linear-gradient(110deg, #f2e5c4 30%, #fff6dc 45%, #f2e5c4 60%) 0 0 / 300% 100%, #f2e5c4;
+  animation: cpc-gleam 1.8s linear infinite;
+}
+@keyframes cpc-gleam { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+.cpc-print-missing { display: grid; place-items: center; height: 100%; padding: 16px; text-align: center; color: var(--cd-ink-soft);
+  font: italic var(--cd-type-body)/1.4 var(--cd-face-body); }
+.cpc-print-caption { margin-top: 10px; text-align: center; font: italic var(--cd-type-small)/1.3 var(--cd-face-body); color: var(--cd-cream-soft); }
+
+.cpc-share-words { display: grid; gap: 10px; }
+.cpc-share-title { font: 400 22px/1.1 var(--cd-face-story); color: #f6d995; }
+.cpc-share-note { font: var(--cd-type-small)/1.45 var(--cd-face-body); color: var(--cd-cream); }
+.cpc-share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cpc-button {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 16px; border: 0; border-radius: 20px; cursor: pointer;
+  color: #2a1a0e; text-decoration: none; font: var(--cd-type-body)/1 var(--cd-face-label); letter-spacing: .05em;
+  background: radial-gradient(circle at 34% 24%, #fff1c4, #e1b867 40%, #b58945);
+  box-shadow: inset 0 1px 0 #fff6d8, inset 0 -2px 3px #5a3c1499, 0 2px 0 #24160d, 0 4px 10px #0000005c;
+}
+.cpc-button:hover { filter: brightness(1.06); }
+.cpc-button:active { transform: translateY(1px); }
+.cpc-button[data-busy='true'] { cursor: progress; filter: saturate(.7); }
+.cpc-button-quiet { color: var(--cd-cream); background: #1a0f0a80; box-shadow: inset 0 0 0 1px #e4c27a73, 0 2px 6px #0000004d; }
+.cpc-button:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
+.cpc-glyph { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.cpc-share-status { min-height: 1.4em; font: italic var(--cd-type-small)/1.4 var(--cd-face-body); color: var(--cd-cream-soft); }
+.cpc-share-status:empty { display: none; }
+.cpc-share-field input {
+  width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; color: var(--cd-ink); background: var(--cd-parch);
+  font: var(--cd-type-small)/1.3 var(--cd-face-body); box-shadow: inset 0 1px 3px #0000004d;
+}
+.cpc-share-field input:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: 2px; }
+.cpc-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* One small corner chip: SIMULATED, never a banner. */
+.cpc-chip {
+  position: absolute; top: 2px; left: 0; padding: 5px 10px 6px; border-radius: 5px; color: #fbe9d6;
+  font: var(--cd-type-min)/1 var(--cd-face-label); letter-spacing: .1em; text-transform: uppercase;
+  background: linear-gradient(180deg, #a1402a, #7a2c1c); box-shadow: inset 0 1px 0 #ffd0b040, 0 2px 6px #0008;
+}
+
+/* By day the card page's sky is pale: the heading takes the card page's dark gilt. */
+[data-light='day'] .cpc-title { color: #5a3a12; text-shadow: 0 1px 0 #fff6de99; }
+[data-light='day'] .cpc-rule { stroke: #7a5424; }
+[data-light='day'] .cpc-rule circle { fill: #7a5424; }
+
+@media (max-width: 720px) {
+  .cpc:not([data-beside='true']) .cpc-share { grid-template-columns: 1fr; width: min(100%, 380px); }
+  .cpc-print { transform: rotate(.8deg); }
+  .cpc-rule { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cpc-motes i { animation: none; opacity: .5; }
+  .cpc-print[data-picture='loading'] .cpc-print-frame { animation: none; }
+  .cpc-clasp-buckle, .cpc-clasp-strap, .cpc-clasp-hole { transition: none; }
+  .cpc-owner[data-ask='asking'] .cpc-clasp-buckle { animation: none; box-shadow: inset 0 -1px 2px #5a3c14aa, 0 2px 3px #000a, 0 0 10px 2px #ffd38a80; }
+}

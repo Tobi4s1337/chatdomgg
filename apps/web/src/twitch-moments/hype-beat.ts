@@ -151,7 +151,7 @@ export function nextBattle(previous: BattleState | undefined, body: MomentBodyOf
 
 const PHASE_END: Readonly<Record<'victory' | 'retreat', number>> = { victory: DRAGON_BEAT.victory.end, retreat: DRAGON_BEAT.retreat.end };
 /** The Wyrm Bell rings first; the free dragon then wakes on the same summoning clock. */
-const bellLead = (battle: BattleState) => (battle.source === 'wyrm-bell' ? WYRM_BELL.end : 0);
+export const bellLead = (battle: BattleState) => (battle.source === 'wyrm-bell' ? WYRM_BELL.end : 0);
 
 export function dragonFrame(battle: BattleState, atMs: number): DragonFrame | null {
   const t = atMs - battle.phaseAt;
@@ -175,6 +175,13 @@ export function dragonFrame(battle: BattleState, atMs: number): DragonFrame | nu
 }
 
 /** Below level 3, the dragon in the hills lifts its head and sleeps again. Presentation only: no battle exists. */
+/** When a short train's sleeping dragon stirs, as [start, end] kingdom ms; null while the train runs or once it earned a battle. */
+export function stirWindow(train: TrainState): readonly [number, number] | null {
+  if (train.endedAt === null || !Number.isFinite(train.endedAt) || train.level >= 3) return null;
+  const from = train.endedAt + STIR_DELAY_MS;
+  return [from, from + DRAGON_BEAT.stir.end];
+}
+
 export function stirFrame(train: TrainState, atMs: number): DragonFrame | null {
   if (train.endedAt === null || !Number.isFinite(train.endedAt) || train.level >= 3) return null;
   const t = atMs - train.endedAt - STIR_DELAY_MS;
