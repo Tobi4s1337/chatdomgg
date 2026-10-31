@@ -1,5 +1,5 @@
-import { seedHash } from '../layout';
-import { rectangleDistance } from '../settlement/geometry';
+import { seedHash } from '../seed';
+import { expandBounds, pointBounds, rectangleDistance, segmentProjection, SpatialIndex } from '../settlement/geometry';
 import type { BoundsXZ, SettlementPlan, XZ } from '../settlement/types';
 import { createGuards, WATER_BANK } from './guards';
 import { CANONICAL_BACK, fbm, ledge, noise, relief, ridges, smoothstep } from './relief';
@@ -21,6 +21,8 @@ export const TERRAIN_ART_LIMITS = Object.freeze({
   clearance: 1.5,
   /** Metres over which sculpted land eases back to the authoritative ground. */
   band: 9,
+  /** Terraces ease back over a shorter run, so their treads stay level up to a footprint's edge. */
+  terraceBand: 4,
   /** The candidate never sits more than this below the authoritative ground… */
   maxCut: 3,
   /** …or more than this above it. */
@@ -30,6 +32,14 @@ export const TERRAIN_ART_LIMITS = Object.freeze({
   /** Landscape relief fades in over this many metres beyond a water body's dry bank. */
   waterRelief: 60,
 });
+
+/**
+ * A town terrace riser climbs about this much per metre, so it stands as a turf bank rather than a face.
+ * Only where the ground itself is steeper than its share allows does the riser become rock.
+ */
+const TOWN_BANK = 0.8;
+/** Half width of the worn earth track along a planned street that is not open yet. */
+const TRACK_HALF = 1.6;
 
 /** Corner cache margin around the town; one Float32 and one Float64 per metre (≈3 MB for the founded town). */
 const CACHE_MARGIN = 48;
@@ -58,7 +68,7 @@ export function terrainArtBackdrop(plan: SettlementPlan): TerrainArtBackdrop {
 
 export function createTerrainArtCandidate(inputs: TerrainArtInputs): TerrainArtCandidate {
   const { plan, ground, publicGround } = inputs;
-  const { clearance, band, maxCut, maxLift, maxExtent, waterRelief } = TERRAIN_ART_LIMITS;
+  const { clearance, band, terraceBand, maxCut, maxLift, maxExtent, waterRelief } = TERRAIN_ART_LIMITS;
   const bounds: Readonly<BoundsXZ> = Object.freeze({ minX: inputs.bounds.minX, maxX: inputs.bounds.maxX, minZ: inputs.bounds.minZ, maxZ: inputs.bounds.maxZ });
   if (![bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ].every(Number.isFinite) || bounds.minX >= bounds.maxX || bounds.minZ >= bounds.maxZ
     || Math.max(-bounds.minX, bounds.maxX, -bounds.minZ, bounds.maxZ) > maxExtent) {
@@ -68,6 +78,16 @@ export function createTerrainArtCandidate(inputs: TerrainArtInputs): TerrainArtC
   const list = ridges(seed >>> 0);
   const town = plan.bounds;
   const guards = createGuards(plan, publicGround, clearance + band + 1, WATER_BANK + waterRelief);
+
+  // Planned streets not yet opened: their line is already worn into an earth track where the town will grow.
+  const active = new Set(plan.activeStreetIds), futureTracks = new SpatialIndex<{ a: XZ; b: XZ }>(16);
+  for (const street of plan.streets) {
+    if (active.has(street.id)) continue;
+    for (let i = 1; i < street.points.length; i++) {
+      const a: XZ = [street.points[i - 1]![0], street.points[i - 1]![2]], b: XZ = [street.points[i]![0], street.points[i]![2]];
+      futureTracks.add(expandBounds(pointBounds([a, b]), TRACK_HALF + 2), { a, b });
+    }
+  }
 
   // The canonical frame of the ridges: its north is the town's back, x = 0 the keep's line.
   const backdrop = terrainArtBackdrop(plan), back = DIRECTIONS[backdrop], across: XZ = [-back[1], back[0]];
@@ -98,28 +118,34 @@ export function createTerrainArtCandidate(inputs: TerrainArtInputs): TerrainArtC
     const b = base(ix, iz);
     const p = guards.protection(ix, iz).distance;
     if (p <= clearance) return b;
-    const w = smoothstep(clearance, clearance + band, p);
+    const w = smoothstep(clearance, clearance + band, p), wTerrace = smoothstep(clearance, clearance + terraceBand, p);
     // Landscape relief grows outside the town footprint and stays clear of water; inside the town only the
     // ground between guarded footprints terraces.
     const r = smoothstep(-12, 150, rectangleDistance(town, ix, iz)) * smoothstep(WATER_BANK, WATER_BANK + waterRelief, guards.waterDistance(ix, iz));
     const lifted = reliefAt(ix, iz);
-    const natural = b + r * lifted.height;
+    // The relief eases in over the long band; ledges step whatever that eased land is.
+    const natural = b + r * lifted.height * w;
     // The land's slope before ledging decides where ledges belong; quiet meadows stay quiet.
     const gx = (base(ix + 2, iz) - base(ix - 2, iz)) / 4, gz = (base(ix, iz + 2) - base(ix, iz - 2)) / 4;
     const rx = r * (reliefAt(ix + 2, iz).height - reliefAt(ix - 2, iz).height) / 4;
     const rz = r * (reliefAt(ix, iz + 2).height - reliefAt(ix, iz - 2).height) / 4;
     const slope = Math.hypot(gx + rx, gz + rz);
     // The ledge line wanders: low-frequency drift and a finer break along its edge.
-    const offset = 0.42 * fbm(ix * 0.03, iz * 0.03, seed + 101) + 0.14 * noise(ix * 0.13, iz * 0.13, seed + 202);
-    const townStep = 1.7 + 0.5 * noise(ix * 0.02, iz * 0.02, seed + 303);
+    // Town banks keep a clean, slowly wandering line; wild ledges also break along their edge.
+    const offset = 0.42 * fbm(ix * 0.03, iz * 0.03, seed + 101) + (r > 0.5 ? 0.14 * noise(ix * 0.13, iz * 0.13, seed + 202) : 0);
+    // Terraces between the town's footprints: low banks on gentle ground, few tall ones where it climbs,
+    // so every tread is wide enough to read as a field and every riser stands as a bank, never a slab.
+    const steep = smoothstep(0.12, 0.5, slope);
+    const townStep = (1.6 + 1.7 * steep) * (1 + 0.14 * noise(ix * 0.02, iz * 0.02, seed + 303));
     const step = r > 0.5 ? lifted.step * (0.85 + 0.3 * noise(ix * 0.015, iz * 0.015, seed + 404)) : townStep;
-    // Ledges outcrop in bands with quiet grass slopes between them, never as contour hatching everywhere.
-    const outcrop = r > 0.5 ? smoothstep(-0.3, 0.12, fbm(ix * 0.007, iz * 0.007, seed + 707)) : 1;
-    const amount = smoothstep(0.07, 0.2, slope) * (r > 0.5 ? outcrop : 0.9);
-    const ledged = natural + (ledge(natural, step, r > 0.5 ? lifted.riser : 0.13, offset) - natural) * amount;
+    // Ledges outcrop in bands with quiet grass slopes between them, never as contour hatching everywhere;
+    // the high ridges always show their rock.
+    const outcrop = r > 0.5 ? Math.max(0.6 * smoothstep(24, 70, lifted.height), smoothstep(-0.3, 0.12, fbm(ix * 0.007, iz * 0.007, seed + 707))) : 1;
+    const amount = smoothstep(0.07, 0.2, slope) * (r > 0.5 ? outcrop : 0.95);
+    const ledged = natural + (ledge(natural, step, r > 0.5 ? lifted.riser : Math.min(0.6, Math.max(0.2, slope / TOWN_BANK)), offset) - natural) * amount * wTerrace;
     // A little broken relief on the high ground only, never as per-metre noise.
     const rough = r * 1.2 * fbm(ix * 0.05, iz * 0.05, seed + 505) * smoothstep(8, 40, lifted.height);
-    const value = b + (ledged + rough - b) * w;
+    const value = ledged + rough * w;
     return Math.min(b + maxLift, Math.max(b - maxCut, value));
   };
 
@@ -163,6 +189,13 @@ export function createTerrainArtCandidate(inputs: TerrainArtInputs): TerrainArtC
     // Paving keeps the installed rule: the designed width plus a continuous worn edge, never the verge.
     const wear = 0.22 * Math.sin(cx * 0.12 + cz * 0.09) + 0.1 * Math.sin(cx * 0.29 - cz * 0.17);
     if (sample && sample.kind !== 'trail' && sample.pavingDistance <= Math.max(0, wear)) return 'paving';
+    // Feet leave the paving: a ragged fringe of trodden earth, wider at corners and gates, gone in places.
+    const fray = 1.3 * Math.max(0, fbm(cx * 0.19, cz * 0.19, seed + 808) + 0.05);
+    if (sample && sample.kind !== 'trail' && sample.pavingDistance <= Math.max(0, wear) + fray) return 'trail';
+    // The worn line of a street that is planned but not yet open, broken by grass where few have walked.
+    let track = Infinity;
+    for (const { a, b } of futureTracks.at(cx, cz)) track = Math.min(track, segmentProjection(a, b, cx, cz).distance);
+    if (track < TRACK_HALF * (0.55 + 0.45 * noise(cx * 0.17, cz * 0.17, seed + 909)) && fbm(cx * 0.06, cz * 0.06, seed + 919) > -0.35) return 'trail';
     const level = guards.waterLevel(cx, cz);
     if (level !== null && (h00 + h10 + h01 + h11) / 4 < level + 0.25) return 'waterbed';
     // The patch's own triangles decide, so material and contact agree. A face reads as one band: a
@@ -173,11 +206,14 @@ export function createTerrainArtCandidate(inputs: TerrainArtInputs): TerrainArtC
       const touching = Math.max(patchRise(ix + 1, iz), patchRise(ix - 1, iz), patchRise(ix, iz + 1), patchRise(ix, iz - 1));
       return touching >= 1.05 ? 'rock' : 'scree';
     }
-    // A lip: level ground that ends at a drop within a metre or two.
+    // A lip: the last metre of a level tread, where the next patch falls away as a bank or a face.
     const low = Math.min(h00, h10, h01, h11), high = Math.max(h00, h10, h01, h11);
     let drop = 0;
-    for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2]] as const) drop = Math.max(drop, low - corner(ix + (dx > 0 ? 1 : 0) + dx, iz + (dz > 0 ? 1 : 0) + dz));
-    if (drop >= 1.6 && rise < 0.35) return 'ledge';
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const fx = dx > 0 ? ix + 2 : dx < 0 ? ix - 1 : ix, fz = dz > 0 ? iz + 2 : dz < 0 ? iz - 1 : iz;
+      drop = Math.max(drop, low - Math.min(corner(fx, fz), corner(fx + (dz !== 0 ? 1 : 0), fz + (dx !== 0 ? 1 : 0))));
+    }
+    if (drop >= 0.9 && rise < 0.5) return 'ledge';
     if (rectangleDistance(town, cx, cz) > 30 && high - base(ix, iz) > 18 + 6 * noise(cx * 0.02, cz * 0.02, seed + 606)) return 'heath';
     return 'grass';
   };

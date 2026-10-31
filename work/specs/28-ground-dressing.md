@@ -428,3 +428,22 @@ with channel points; benches, gates, stiles and anything sat on or opened.
   1.9 m behind the fence and measured from it (chance 0.35 + 0.55 × age; the arrival home always). It is cover
   only, inside its lot, so growth moves it with the fence and `hideLot` hides it; a home whose fence stands too
   near the lot line has none.
+- **2026-10-31 — Crowns are grown in blocks sized to the crown.** The four big broadleaf crowns (old oaks A/B,
+  beech, elder oak) and the woodland clump are grown on a 0.5 m lattice and the smaller crowns on 0.25 m, so
+  every crown has about the same number of steps across. Production renders settled it: single cells read as
+  noise, 0.25 m terraces on a 12 m crown read as contour lines, and the coarse lattice reads as stacked leaf
+  plates while keeping the oaks at 14–21k meshed triangles. Limbs of radius ≥ 2.5 cells are laid in 2-cell blocks;
+  twigs taper to one cell.
+- **2026-10-31 — No confetti.** Moss grows only in patches (a level 3×3 core and its rim); foliage fragments under
+  8 cells take the wood they rest on; wood buried in foliage takes the foliage colour. A lobe the form's box
+  would slice, or a limb that leaves it, throws instead of shipping clipped.
+- **2026-10-31 — The woodland clump mounts at LOD 4 only.** It is a far-ridge mass; its budget (≤ 8,000) is
+  measured at LOD 4, where it is 7.4k. Its full-detail mesh (38k) is never mounted.
+- **2026-10-31 — The elder seat is a published constant.** `ContentSeatSchema` seats belong to civic
+  blueprints, so `ELDER_OAK_SEAT` (root-seat, build cells, facing +Z) is exported beside the flora blueprint for
+  places-high to bind under the landmark's yaw. Planting ownership stays with GD04.
+- **2026-10-31 — The elder's dusk detail is lit at 18:00, seat to the sun.** At 19:30 the isolated sheet has
+  no field or window light and the oak reads as a cut-out; the detail view turns the oak about its seat (as a
+  landmark yaw does) so the seat looks into the low sun.
+- **2026-10-31 — The registry stands apart from `BLUEPRINTS`.** Growing all trees takes about a second, so the
+  kingdom imports `registry.ts`, where `createDressing` grows each form once on first use and returns copies.

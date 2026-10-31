@@ -20,8 +20,9 @@ import { createSunShadows } from '@chatdom/render';
 import { beaconStrength } from './beacon';
 import { placeSettlementContent, placeMarketContent } from './settlement-content';
 import { createForgeSquareContent } from './forge-square-content';
-import { createCastleContent } from './castle-content';
+import { createCastleContent, createCastleCourtContent } from './castle-content';
 import { createGenesisWaterContent } from '../genesis/water-content';
+import type { GenesisSeatContent } from '../genesis/seat-content';
 import { sampleGenesisSurface } from '@chatdom/world/genesis';
 import { inhabitedLightBounds } from './light-bounds';
 import { terrainBatches } from './terrain-batches';
@@ -33,7 +34,7 @@ import { composeWindowCamera } from './window-camera';
 import { composeRoyalCamera } from './royal-camera';
 import { createHomeLife } from './home-life';
 import { createRoyalLife } from './royal-life';
-import { foundedLifeSites, foundedForgeSites } from './home-life-sites';
+import { foundedLifeSites, foundedForgeSites, generatedHomeLifeSites } from './home-life-sites';
 import { createForgeEmitters } from '../forge/emitters';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
 import { createObservedWalkers, walkerSlots } from './observed-walkers';
@@ -56,7 +57,7 @@ let citizenHandoff: { at: number; checkpoint: CitizenSceneCheckpoint } | undefin
 
 export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number;arrivalAgeSeconds?:number}
-export interface PotentialKingdomView {plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
+export interface PotentialKingdomView {seat?:GenesisSeatContent;plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
 export interface SceneOptions {potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
@@ -117,12 +118,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }else props.push(...marketProps);
   }
   if(options.potential)props.push(...createGenesisWaterContent(layout));
-  const {buildings:castleBuildings,beaconPosition}=createCastleContent(layout.castle,options.potential?.style);
+  const potentialSeat=installed?undefined:options.potential?.seat;
+  const {buildings:castleBuildings,beaconPosition}=potentialSeat??createCastleContent(layout.castle,options.potential?.style);
+  const simulatedCourt=installed?undefined:potentialSeat??createCastleCourtContent(layout.castle,options.potential?.style);
+  if(simulatedCourt)props.push(...simulatedCourt.props);
   const buildings=installed?houses:[...houses,...castleBuildings],content=installed?.content??[...buildings,...props];
   for(const {blueprint} of content)blueprints.set(blueprintKey(blueprint),blueprint);
   const royal=installed?royalWindow(installed.forgeHosts):undefined;
   const presenceHouses=royal?[...houses,royal]:[...houses];
-  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:[],braziers:[],standard:undefined};
+  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:generatedHomeLifeSites(houses),braziers:simulatedCourt?.braziers??[],standard:undefined};
   const homeLife=own(createHomeLife(scene,lifeSites.homes));
   const forgeSites=options.founded?foundedForgeSites(options.founded):simulatedSmithy??{fires:[],noses:[]};
   const forgeHearth=own(createRoyalLife(scene,clay,undefined,forgeSites.fires.filter(site=>site.normal[1]===0),undefined,true));
@@ -274,7 +278,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   // Distant hills use 20 m cells on both sizes; the grounded 1 m collar stays
   // exact. One surface/sampler keeps groves grounded across viewport changes.
-  const {geometry:horizonGeometry,sampleHeight:landHeight}=createHorizonSurface(layout,{farStep:20,distantRelief:!layout.genesisSurface,sampleTerrain:(x,z)=>terrainHeight(layout,x,z)});earlyCleanups.push(()=>horizonGeometry.dispose());
+  const {geometry:horizonGeometry,sampleHeight:landHeight}=createHorizonSurface(layout,{farStep:20,distantRelief:false,sampleTerrain:(x,z)=>terrainHeight(layout,x,z)});earlyCleanups.push(()=>horizonGeometry.dispose());
   const coverInput={ground:landHeight,
     waterKeepOut:(x:number,z:number,margin:number)=>Math.hypot((x-layout.lake.x)/(layout.lake.radiusX+margin),(z-layout.lake.z)/(layout.lake.radiusZ+margin))<1.19,
     occupied:content,keepClear:[{x:0,z:8,radius:7}]};
@@ -332,7 +336,23 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     plant(cx+Math.cos(angle)*radius,cz+Math.sin(angle)*radius,group%3);
   }
   // A continuous distant land silhouette lies beyond the detailed editable terrain.
-  const horizonMaterial=own(new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:ground.material.uniforms,fragmentShader:ground.material.fragmentShader,vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
+  const horizonMaterial=own(new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:ground.material.uniforms,fragmentShader:ground.material.fragmentShader.replace('vec3 n=normalize(vNormal);',`vec3 n=normalize(vNormal);
+    // Exposed faces belong to the sculpted terrain, never to houses or the town's light grade.
+    vec3 faceNormal=normalize(cross(dFdx(vWorld),dFdy(vWorld)));
+    float exposed=(1.-smoothstep(.64,.9,abs(faceNormal.y)));
+    vec3 rock=vec3(${new THREE.Color('#7a6857').toArray().join(',')});
+    float course=vWorld.y*.72+.45*sin(vWorld.x*.13+vWorld.z*.09)+1.1*sin((vWorld.x-vWorld.z)*.027);
+    rock*=.88+.16*fract(sin(floor(course)*12.9898)*43758.5453);
+    base=mix(base,rock,exposed);
+    n=normalize(mix(n,faceNormal*sign(dot(faceNormal,n)),exposed*.6));`).replace('colour=mix(colour,fogColour,min(.86,fogAmount));', `colour=mix(colour,fogColour,min(.86,fogAmount));
+    // Only the distant land takes this evening air. Keep the town's accepted light
+    // untouched; sightline depth and low valleys separate successive rock ridges.
+    float duskAir=smoothstep(.15,.65,uNight);
+    float ridgeDistance=max(distanceToCamera-220.,0.);
+    float valleyAir=.45+.55*exp(-max(vWorld.y-12.,0.)*.012);
+    float ridgeHaze=(1.-exp(-ridgeDistance*.0009*valleyAir))*duskAir;
+    vec3 lilacAir=vec3(${new THREE.Color('#9685ad').multiplyScalar(.65).toArray().join(',')});
+    colour=mix(colour,lilacAir,min(.34,ridgeHaze));`),vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
   // The v1 lake has no body record. Its terrain carves the shoreline within this
   // envelope; the supplied height grid clips the surface to the actual bed.
   const landform=layout.landform;
