@@ -11,13 +11,14 @@ import { createLightField } from '../light-field';
 import { inhabitedLightBounds } from '../light-bounds';
 import { createSimulatedPresence } from '../presence-feed';
 import { beaconStrength } from '../beacon';
-import { createLandCandidate, PROTECTION_CLEARANCE, type BoundsXZ, type LandCandidate } from './stand-in';
-import { buildLandGeometry, createLandMaterial, landHeightGrid, landRegistry } from './land-mesh';
+import { createTerrainArtCandidate, TERRAIN_ART_LIMITS } from '../../../../../packages/world/src/terrain-art';
+import { buildLandGeometry, createLandMaterial, landHeightGrid, landRegistry, type BoundsXZ, type LandSource } from './land-mesh';
 
 /**
  * PICTURE-LAND FIXTURE (spec 46). The accepted founded geography (seed `simulated-founded-town`, 240 homes,
- * v1 landform) drawn on an explicit candidate land stand-in. Homes, market and castle use the real content
- * and the real kingdom materials, light field and sky; presence is the labelled SIMULATED scenario.
+ * v1 landform) drawn on the picture-land producer's candidate (`packages/world/src/terrain-art`). Homes,
+ * market and castle use the real content and the real kingdom materials, light field and sky; presence is
+ * the labelled SIMULATED scenario.
  * It proves appearance only. It is not wired into the kingdom, its collision or any founded revision.
  */
 
@@ -57,7 +58,7 @@ export async function createPictureLandFixture(canvas: HTMLCanvasElement, option
   try {
     const plan = foundedPlan();
     options.onProgress('Shaping the land');
-    const accepted: LandCandidate = {
+    const accepted: LandSource = {
       bounds: LAND_BOUNDS,
       height: (x, z) => terrainHeight(plan, x, z), corner: (x, z) => Math.fround(terrainHeight(plan, x, z)),
       // The installed worker's own rule: designed paving width plus its worn edge, the lake bed, else grass.
@@ -67,9 +68,9 @@ export async function createPictureLandFixture(canvas: HTMLCanvasElement, option
         if ((samplePublicGround(plan, cx, cz)?.pavingDistance ?? Infinity) <= Math.max(0, wear)) return 'paving';
         return terrainHeight(plan, cx, cz) < plan.lake.level + .25 ? 'waterbed' : 'grass';
       },
-      protection: () => -PROTECTION_CLEARANCE,
+      protection: () => ({ distance: -TERRAIN_ART_LIMITS.clearance, guard: 'none' }),
     };
-    const candidate = createLandCandidate({ plan, bounds: LAND_BOUNDS,
+    const candidate = createTerrainArtCandidate({ plan, bounds: LAND_BOUNDS,
       ground: (x, z) => terrainHeight(plan, x, z), publicGround: (x, z) => samplePublicGround(plan, x, z) });
 
     const renderer = own(new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: true }));
@@ -123,7 +124,7 @@ export async function createPictureLandFixture(canvas: HTMLCanvasElement, option
     const trees = [createTree(0), createTree(1), createTree(2)], treePlaces = trees.map(() => [] as { position: Vec3; yaw: number }[]);
     const planted: [number, number][] = [], crown = 4.25;
     const plant = (x: number, z: number, variant: number): void => {
-      if (source.protection(x, z) < crown + 1) return;
+      if (source.protection(x, z).distance < crown + 1) return;
       if (plan.reservations.some(({ lot }) => x > lot.minX - crown && x < lot.maxX + crown && z > lot.minZ - crown && z < lot.maxZ + crown)) return;
       if ((samplePublicGround(plan, x, z)?.reservedDistance ?? Infinity) < crown) return;
       for (const dx of [-1.5, 0, 1.5]) for (const dz of [-1.5, 0, 1.5]) if (!['grass', 'heath'].includes(source.material(x + dx, z + dz))) return;
