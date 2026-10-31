@@ -14,6 +14,9 @@ export const SLOTS = [
   'bottom', 'bottomDeep', 'bottomAccent', 'bottomMix',
   'neck', 'neckDeep', 'neckAccent',
   'shoe', 'shoeDeep', 'sole', 'button',
+  // Earned pieces: the month ribbons, the tenure hood, two pins, the raid scarf, the forged hat's motif.
+  'ribbon1', 'ribbon2', 'hood', 'hoodDeep', 'hoodTrim',
+  'pin1a', 'pin1b', 'pin1m', 'pin2a', 'pin2b', 'pin2m', 'raidA', 'raidB', 'raidDeep', 'forgeMetal',
 ] as const;
 /** Slots that are glass: meshed apart and drawn see-through, so the eyes show behind a lens. */
 export const GLASS_SLOTS: readonly Slot[] = ['lens'];

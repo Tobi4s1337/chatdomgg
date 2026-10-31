@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { getEnvironment } from '@chatdom/render';
-import { PORTRAIT_FIXTURES, seedLook, type CitizenLook } from '../../../../packages/content/src/avatar-style';
+import {
+  PORTRAIT_FIXTURES, SIMULATED_ENTITLEMENTS, earnedOffers, seedLook, subLapsed, twitchDefaultLook, wearPiece, type CitizenLook,
+} from '../../../../packages/content/src/avatar-style';
 import { citizenGlassMaterial, citizenMaterial, citizenObject } from './portrait-renderer';
 
 /*
  * Full-body lineup (spec 49 acceptance): twenty SIMULATED citizens standing on a cobbled square in the
  * kingdom's own light for the hour. `?view=stream` frames them at stream distance (a citizen is about a tenth of
- * a 1080p frame tall); `?view=close` frames them large enough to judge clothes. `?set=fixtures|seeded`,
+ * a 1080p frame tall); `?view=close` frames them large enough to judge clothes. `?set=fixtures|seeded|earned`,
  * `?hour=19.25` (dusk by default).
  */
 declare global { interface Window { __chatdomReady?: boolean } }
@@ -14,11 +16,33 @@ declare global { interface Window { __chatdomReady?: boolean } }
 const params = new URLSearchParams(location.search);
 const view = params.get('view') === 'close' ? 'close' : 'stream';
 const hour = Number(params.get('hour') ?? 19.25);
-const set = params.get('set') === 'seeded' ? 'seeded' : 'fixtures';
-const people: readonly { name: string; look: CitizenLook }[] = set === 'seeded'
+const set = params.get('set') === 'seeded' ? 'seeded' : params.get('set') === 'earned' ? 'earned' : 'fixtures';
+
+/**
+ * `?set=earned`: twenty SIMULATED people from the bench's earning records, each in their Twitch default look
+ * wearing a different handful of what they have earned (ribbons, hood, pins, scarf, capes, forged hat), so the
+ * pieces can be judged at the size chat sees them. Lapsed subscribers wear theirs dimmed.
+ */
+function earnedLineup(): { name: string; look: CitizenLook; dim: boolean }[] {
+  const personas = [SIMULATED_ENTITLEMENTS.veteran, SIMULATED_ENTITLEMENTS.regular, SIMULATED_ENTITLEMENTS.lapsed, SIMULATED_ENTITLEMENTS.veteran];
+  const names = ['#8A2BE2', '#1E90FF', '#2E8B57', '#FF7F50', '#DAA520'];
+  return Array.from({ length: 20 }, (_, i) => {
+    const e = personas[i % personas.length]!;
+    let look = twitchDefaultLook({ personId: `simulated-earner-${i + 1}`, nameColour: names[i % names.length]!, entitlements: e });
+    const owned = earnedOffers(e).filter(o => o.unlocked);
+    // A different selection per person: walk the owned pieces with a stride so neighbours differ.
+    for (let k = 0; k < 3; k++) {
+      const offer = owned[(i * 3 + k * (i % 3 + 1)) % owned.length];
+      if (offer) look = wearPiece(look, offer.piece);
+    }
+    return { name: `Simulated earner ${i + 1}`, look, dim: subLapsed(e) };
+  });
+}
+const people: readonly { name: string; look: CitizenLook; dim?: boolean }[] = set === 'seeded'
   ? Array.from({ length: 20 }, (_, i) => ({ name: `Simulated viewer ${i + 1}`, look: seedLook(`simulated-viewer-${i + 1}`) }))
-  : PORTRAIT_FIXTURES;
-document.querySelector('#what')!.textContent = `${set === 'seeded' ? 'Twenty seeded default looks' : 'Twenty hand-made citizens'} · ${view === 'stream' ? 'stream distance' : 'close'} · hour ${hour}`;
+  : set === 'earned' ? earnedLineup() : PORTRAIT_FIXTURES;
+const title = { seeded: 'Twenty seeded default looks', earned: 'Twenty SIMULATED people wearing what they earned', fixtures: 'Twenty hand-made citizens' }[set];
+document.querySelector('#what')!.textContent = `${title} · ${view === 'stream' ? 'stream distance' : 'close'} · hour ${hour}`;
 
 const env = getEnvironment(hour);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -95,9 +119,9 @@ for (const [x, z] of lanterns as [number, number][]) {
 // The citizens, in two staggered rows, each turned a little toward the camera.
 const material = citizenMaterial(), glass = citizenGlassMaterial();
 const perRow = 10, spacing = view === 'stream' ? 1.55 : 1.25;
-people.forEach(({ look }, i) => {
+people.forEach(({ look, dim }, i) => {
   const row = Math.floor(i / perRow), col = i % perRow;
-  const citizen = citizenObject(look, {}, material, glass);
+  const citizen = citizenObject(look, { dim: !!dim }, material, glass);
   citizen.scale.setScalar(1 / 16);
   citizen.position.set((col - (perRow - 1) / 2) * spacing + (row ? spacing / 2 : 0), 0, row ? -1.8 : 0);
   citizen.rotation.y = -.35 + Math.sin(i * 2.3) * .18;

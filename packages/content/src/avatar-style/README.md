@@ -141,6 +141,70 @@ port 5189 under the shared capture lock.
 - `@chatdom/content` does not export `./avatar-style` yet. The web imports it by relative path, as the AS01
   study did.
 
+## Earned pieces, Twitch defaults and the builder (AS11)
+
+### Earned pieces (`character/earned*.ts`)
+
+A look's `earned` part holds what a person wears of what they have earned. Nothing here is ever bought.
+
+| Piece | Family | Earned by | Drawn as |
+|---|---|---|---|
+| Month ribbons | tenure | sub months, newest two marks (1, 3, 6 … 60) | a two-cell lapel bar at the chest, one cell proud of what is worn |
+| Tenure hood | tenure | following the kingdom for 12 months | a collar round the back of the neck and a hood hanging down the back to a point |
+| Keepsake pins | keepsake | being there for a passport moment | a 3 × 3 badge in the kingdom's crest shape and colours |
+| Founder's pin | keepsake | being a founder of the kingdom | a brass star badge |
+| Forged pins and hats | forged | a Forge piece of one's own | the motif as a pin, or a felt slouch cap with the motif badge |
+| Raid scarf | moment | riding a raid | a two-colour striped scarf (home and the raided kingdom), a tail and a fringe |
+| Cheer cape | moment | being present for a cheer storm | a cloth sheet (frozen `AvatarCapeBlueprint`), notched hem |
+| Tier cloak, rainbow cape | sub | a tier 2 / tier 3 sub | cloth sheets; the rainbow shimmers |
+
+- **Verified, never client-granted.** `earnedOffers(entitlements)` lists every piece with `unlocked`, how it
+  is earned and progress. `checkEarned(look, entitlements)` refuses any worn piece that is not exactly one an
+  unlocked offer gives (recoloured pins and `preview` ids are refused). The builder's save path runs it again.
+- **Where a piece shows.** `wornIn(look, entitlements)` strips tenure and sub pieces outside their kingdom;
+  keepsakes, forged pieces and moment drops travel. `subLapsed` dims sub pieces, it never removes them.
+- **Limits.** Two pins. A forged hat replaces a hat; a raid scarf replaces neckwear. `parseLook` refuses
+  either pair worn together.
+
+### Twitch defaults and variety
+
+- `favouriteDye(nameColour)` snaps a Twitch name colour to the nearest dye in OKLab (a chromatic name never
+  becomes grey). `twitchDefaultLook` seeds a look from the person id, settles it against the town, puts the
+  favourite dye on the outermost garment and adds tenure garb (ribbons, hood, the sub cape).
+- `settleLook` re-seeds (`<id>#1`, `#2` …) until no one in the town is within `NEAR_DUPLICATE` of
+  `lookDistance`; it runs once when a person settles, so a look never changes under them later.
+  `randomLook` is the builder's roll: it keeps earned pieces and avoids the town.
+
+### The builder (`apps/web/src/avatar-builder/`)
+
+`AvatarBuilder` (Solid) at `layout="page"` and `layout="panel"` (318 × 496): a live turntable (drag, arrow
+keys, momentum, idle turn, blink), the portrait plaque, nine tabs whose tiles are real renders in the view
+that shows the part (face close, bust, chest, nape, back, lower), dye swatches with any colour, Roll, back to
+the default, undo/redo (Ctrl+Z, Ctrl+Shift+Z, Ctrl+S saves) and Save. Earned shows tenure, pins, moments and
+the Forge, and sub pieces; locked pieces show a lock, how they are earned and progress, and cannot be tried
+on. A save goes through the `LookAuthority` main supplies; a draft is never a saved look.
+
+Bench: `builder.html?who=newcomer|regular|veteran|lapsed&layout=page|panel&tab=…` runs on SIMULATED people and
+records with a SIMULATED authority (localStorage only), sealed SIMULATED on screen. Capture:
+`node apps/web/src/avatar-builder/capture-builder.mjs [--only page-earned]`. `lineup.html?set=earned` stands
+twenty SIMULATED earners wearing their pieces.
+
+### Entry points for main (`apps/web/src/avatar-builder/index.ts`)
+
+- recipe → mesh: `citizenObject(wornIn(look, e), { dim: subLapsed(e) })`, a three.js group with the cape.
+- recipe → portrait: `createPortraitRenderer().renderBlob(look, size, { view: 'bust' })` for the card and
+  passport; `figure` and `back` views as well.
+- `createTurntable`, `AvatarBuilder`, `LookAuthority`.
+
+### Decisions (AS11)
+
+- Ribbons are a two-cell lapel bar on the person's left chest: a three-cell bar straddled the open jacket.
+- At most two pins, 3 × 3 badges: more read as noise at stream distance.
+- Locked pieces cannot be tried on: the builder shows how they are earned, never a tease to buy.
+- Sub pieces (tier cloak, rainbow cape, ribbons) are included as true signs of support, as the vision allows.
+- The cheer cape goes to everyone present for the storm, not to who cheered most.
+- The favourite dye is snapped to the dye list so it sits in the palette.
+
 ---
 
 # Avatar style study (AS01, superseded)

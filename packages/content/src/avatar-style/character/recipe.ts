@@ -52,6 +52,50 @@ export type ShoeStyleId = typeof SHOE_STYLE_IDS[number];
 export const PATTERN_IDS = ['plain', 'stripes', 'plaid', 'dots', 'print'] as const;
 export type PatternId = typeof PATTERN_IDS[number];
 
+/**
+ * Earned pieces (spec B3): never bought, only shown. Each worn piece carries the render data it needs, so a look
+ * stays self-contained on every client, plus the id of the record it was earned by, so the look authority can
+ * check it. `earned.ts` derives the exact piece each record allows; a worn piece must equal one of them.
+ */
+/** The month ribbons' marks (Twitch.md §5): a ribbon for each mark reached. */
+export const MONTH_MARKS = [1, 3, 6, 9, 12, 18, 24, 36, 48, 60] as const;
+export type MonthMark = typeof MONTH_MARKS[number];
+/** The Forge's motifs, as in `@chatdom/shared` `FORGE_MOTIFS`. */
+export const FORGED_MOTIFS = ['sleeping-dragon', 'crescent-moon', 'watchful-owl', 'sleeping-fox', 'sunflower', 'scallop-shell', 'shooting-star'] as const;
+export type ForgedMotif = typeof FORGED_MOTIFS[number];
+/** A passport keepsake's crest shape, as in `@chatdom/shared` `PassportCrestSchema`. */
+export const CREST_SHAPES = ['heater', 'round', 'swallowtail'] as const;
+export type CrestShape = typeof CREST_SHAPES[number];
+export const CAPE_KINDS = ['cheer', 'tier-cloak', 'rainbow'] as const;
+export type CapeKind = typeof CAPE_KINDS[number];
+/** How many pins fit on a chest without crowding it. */
+export const MAX_PINS = 2;
+
+/** A pin on the chest: a keepsake in its kingdom's crest, a forged piece's motif, or the founder's pin. */
+export type EarnedPin =
+  | { readonly kind: 'keepsake'; readonly id: string; readonly shape: CrestShape; readonly colours: readonly [Hex, Hex] }
+  | { readonly kind: 'forged'; readonly id: string; readonly motif: ForgedMotif; readonly colours: readonly [Hex, Hex] }
+  | { readonly kind: 'founder'; readonly id: string };
+
+export interface EarnedLook {
+  /** The month ribbons up to the highest mark worn, a bar on the left breast. Sub tenure. */
+  readonly ribbons: { readonly months: MonthMark } | null;
+  /** The tenure hood, worn down on the shoulders, in the kingdom's colours. A year of following. */
+  readonly hood: { readonly cloth: Hex; readonly trim: Hex } | null;
+  readonly pins: readonly EarnedPin[];
+  /**
+   * A cape: thin cloth from the back socket (the frozen cloth treatment, never voxels). The cheer cape is a
+   * moment drop; the tier cloak and the rainbow cape are sub pieces. `id` names the record.
+   */
+  readonly cape: { readonly kind: CapeKind; readonly id: string; readonly cloth: Hex; readonly lining: Hex; readonly trim: Hex } | null;
+  /** The raid scarf, knitted in the two kingdoms' colours: worn instead of neckwear. */
+  readonly scarf: { readonly id: string; readonly colours: readonly [Hex, Hex] } | null;
+  /** A forged hat, in the forged piece's palette with its motif on the front: worn instead of a hat. */
+  readonly forgedHat: { readonly id: string; readonly motif: ForgedMotif; readonly colours: readonly [Hex, Hex] } | null;
+}
+
+export const NO_EARNED: EarnedLook = { ribbons: null, hood: null, pins: [], cape: null, scarf: null, forgedHat: null };
+
 /** A dyed garment: its cut, its dye, its pattern and the pattern's second colour. */
 export interface Garment<S extends string> {
   readonly style: S;
@@ -82,6 +126,8 @@ export interface CitizenLook {
   /** A scarf's stripes and a bandana's dots use `accent`; a tie's stripes too. */
   readonly neckwear: { readonly style: NeckwearStyleId; readonly dye: Hex; readonly accent: Hex } | null;
   readonly shoes: { readonly style: ShoeStyleId; readonly dye: Hex };
+  /** What this person has earned and chose to wear. A look saved before earned pieces existed wears none. */
+  readonly earned: EarnedLook;
 }
 
 /** What a look saved before the wardrobe existed is wearing below the waist. */
@@ -96,7 +142,7 @@ export function defaultAccent(dye: Hex): Hex {
 /** The parts a look may leave out. A saved look from before they existed reads as wearing none of them. */
 const OPTIONAL_PARTS = ['moustache', 'hat', 'glasses', 'earrings', 'flower', 'outer', 'neckwear'] as const;
 /** Parts a look always wears; an older look without them gets the defaults above. */
-const WARDROBE_PARTS = ['bottom', 'shoes'] as const;
+const WARDROBE_PARTS = ['bottom', 'shoes', 'earned'] as const;
 
 const oneOf = <T extends string>(list: readonly T[], value: unknown, what: string): T => {
   if (typeof value !== 'string' || !(list as readonly string[]).includes(value)) throw new Error(`Unknown ${what}: ${String(value)}.`);
@@ -122,7 +168,7 @@ export function parseLook(input: unknown): CitizenLook {
   const eyes = record(v.eyes, 'Eyes', ['shape', 'spacing']), hair = record(v.hair, 'Hair', ['style', 'colour']);
   if (typeof v.blush !== 'boolean') throw new Error('Blush must be true or false.');
   if (v.beard === undefined) throw new Error('Beard must be a beard or null.');
-  return {
+  const look: CitizenLook = {
     version: 1,
     skin: colour(v.skin, 'Skin'),
     eyes: { shape: oneOf(EYE_SHAPES, eyes.shape, 'eye shape'), spacing: oneOf(EYE_SPACINGS, eyes.spacing, 'eye spacing') },
@@ -162,6 +208,64 @@ export function parseLook(input: unknown): CitizenLook {
       const r = record(v.shoes, 'Shoes', ['style', 'dye']);
       return { style: oneOf(SHOE_STYLE_IDS, r.style, 'shoes'), dye: colour(r.dye, 'Shoe dye') };
     })(),
+    earned: v.earned === undefined ? NO_EARNED : parseEarned(v.earned),
+  };
+  if (look.hat && look.earned.forgedHat) throw new Error('A look wears a hat or a forged hat, not both.');
+  if (look.neckwear && look.earned.scarf) throw new Error('A look wears neckwear or the raid scarf, not both.');
+  return look;
+}
+
+/** A record id: the same token grammar as `@chatdom/shared` ids. */
+const token = (value: unknown, what: string): string => {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) throw new Error(`${what} must be a record id.`);
+  return value;
+};
+const pair = (value: unknown, what: string): readonly [Hex, Hex] => {
+  if (!Array.isArray(value) || value.length !== 2) throw new Error(`${what} must be two colours.`);
+  return [colour(value[0], what), colour(value[1], what)];
+};
+
+function parseEarned(input: unknown): EarnedLook {
+  const v = record(input, 'Earned', ['ribbons', 'hood', 'pins', 'cape', 'scarf', 'forgedHat']);
+  if (v.pins !== undefined && !Array.isArray(v.pins)) throw new Error('Pins must be a list.');
+  const pins = ((v.pins ?? []) as unknown[]).map((p): EarnedPin => {
+    const kind = record(p, 'Pin', ['kind', 'id', 'shape', 'motif', 'colours']).kind;
+    if (kind === 'keepsake') {
+      const r = record(p, 'Pin', ['kind', 'id', 'shape', 'colours']);
+      return { kind, id: token(r.id, 'Pin id'), shape: oneOf(CREST_SHAPES, r.shape, 'crest shape'), colours: pair(r.colours, 'Pin colours') };
+    }
+    if (kind === 'forged') {
+      const r = record(p, 'Pin', ['kind', 'id', 'motif', 'colours']);
+      return { kind, id: token(r.id, 'Pin id'), motif: oneOf(FORGED_MOTIFS, r.motif, 'motif'), colours: pair(r.colours, 'Pin colours') };
+    }
+    if (kind === 'founder') return { kind, id: token(record(p, 'Pin', ['kind', 'id']).id, 'Pin id') };
+    throw new Error(`Unknown pin: ${String(kind)}.`);
+  });
+  if (pins.length > MAX_PINS) throw new Error(`At most ${MAX_PINS} pins.`);
+  if (new Set(pins.map(p => p.id)).size !== pins.length) throw new Error('The same pin twice.');
+  return {
+    ribbons: part(v.ribbons, r => {
+      const months = record(r, 'Ribbons', ['months']).months;
+      if (!(MONTH_MARKS as readonly unknown[]).includes(months)) throw new Error(`Unknown month mark: ${String(months)}.`);
+      return { months: months as MonthMark };
+    }),
+    hood: part(v.hood, h => {
+      const r = record(h, 'Hood', ['cloth', 'trim']);
+      return { cloth: colour(r.cloth, 'Hood cloth'), trim: colour(r.trim, 'Hood trim') };
+    }),
+    pins,
+    cape: part(v.cape, c => {
+      const r = record(c, 'Cape', ['kind', 'id', 'cloth', 'lining', 'trim']);
+      return { kind: oneOf(CAPE_KINDS, r.kind, 'cape'), id: token(r.id, 'Cape id'), cloth: colour(r.cloth, 'Cape cloth'), lining: colour(r.lining, 'Cape lining'), trim: colour(r.trim, 'Cape trim') };
+    }),
+    scarf: part(v.scarf, s => {
+      const r = record(s, 'Scarf', ['id', 'colours']);
+      return { id: token(r.id, 'Scarf id'), colours: pair(r.colours, 'Scarf colours') };
+    }),
+    forgedHat: part(v.forgedHat, h => {
+      const r = record(h, 'Forged hat', ['id', 'motif', 'colours']);
+      return { id: token(r.id, 'Forged hat id'), motif: oneOf(FORGED_MOTIFS, r.motif, 'motif'), colours: pair(r.colours, 'Forged hat colours') };
+    }),
   };
 }
 
@@ -261,6 +365,7 @@ export function seedLook(seed: string): CitizenLook {
     earrings,
     flower,
     ...seedClothes(random),
+    earned: NO_EARNED,
   };
 }
 

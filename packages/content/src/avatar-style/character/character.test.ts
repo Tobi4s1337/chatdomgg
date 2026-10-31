@@ -14,14 +14,14 @@ import { ARM, CHEST_Z, LEG, PROUD_Z, TORSO, armX, legX } from './body';
 import {
   BEARD_STYLE_IDS, EARRING_STYLE_IDS, EYE_SHAPES, EYE_SPACINGS, FRECKLES, GLASSES_STYLE_IDS, HAIR_STYLE_IDS, HAT_STYLE_IDS,
   BOTTOM_STYLE_IDS, DEFAULT_BOTTOM, DEFAULT_SHOES, MOUSTACHE_STYLE_IDS, NECKWEAR_STYLE_IDS, OUTER_STYLE_IDS, PATTERN_IDS, SHOE_STYLE_IDS,
-  TOP_STYLE_IDS, parseLook, seedLook, type CitizenLook,
+  TOP_STYLE_IDS, NO_EARNED, parseLook, seedLook, type CitizenLook,
 } from './recipe';
 
 /** A plain citizen: short black hair, a sky tee, nothing worn. */
 const base: CitizenLook = {
   version: 1, skin: '#b57d4c', eyes: { shape: 'dot', spacing: 'set' }, freckles: 'none', blush: false,
   hair: { style: 'short-crop', colour: '#1c191c' }, beard: null, moustache: null, hat: null, glasses: null, earrings: null, flower: null,
-  top: { style: 'tee', dye: '#43b6ec', pattern: 'plain', accent: '#1e1d22' }, outer: null, bottom: DEFAULT_BOTTOM, neckwear: null, shoes: DEFAULT_SHOES,
+  top: { style: 'tee', dye: '#43b6ec', pattern: 'plain', accent: '#1e1d22' }, outer: null, bottom: DEFAULT_BOTTOM, neckwear: null, shoes: DEFAULT_SHOES, earned: NO_EARNED,
 };
 const variant = (patch: Partial<CitizenLook>): CitizenLook => ({ ...base, ...patch });
 const rest = (id: string): number => {

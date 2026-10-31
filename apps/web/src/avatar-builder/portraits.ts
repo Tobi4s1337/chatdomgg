@@ -1,6 +1,6 @@
 import {
   BEARD_STYLE_IDS, HAIR_STYLE_IDS, HAT_STYLE_IDS, MOUSTACHE_STYLE_IDS, NATURAL_HAIR, PORTRAIT_FIXTURES, SKIN_TONES, WILD_HAIR, DYES,
-  DEFAULT_BOTTOM, DEFAULT_SHOES, NECKWEAR_STYLE_IDS, OUTER_STYLE_IDS, TOP_STYLE_IDS, defaultAccent, seedLook, type CitizenLook, type Hex, type PatternId,
+  DEFAULT_BOTTOM, DEFAULT_SHOES, NO_EARNED, NECKWEAR_STYLE_IDS, OUTER_STYLE_IDS, TOP_STYLE_IDS, defaultAccent, seedLook, type CitizenLook, type Hex, type PatternId,
 } from '../../../../packages/content/src/avatar-style';
 import { createPortraitRenderer } from './portrait-renderer';
 
@@ -16,7 +16,7 @@ const plain = (i: number, patch: Partial<CitizenLook>): CitizenLook => ({
   version: 1, skin: SKIN_TONES[(i * 7) % SKIN_TONES.length]!.hex, eyes: { shape: 'dot', spacing: 'set' }, freckles: 'none', blush: false,
   hair: { style: 'short-crop', colour: NATURAL_HAIR[i % NATURAL_HAIR.length]!.hex }, beard: null, moustache: null, hat: null, glasses: null,
   earrings: null, flower: null, top: { style: 'tee', dye: DYES[(i * 5) % DYES.length]!.hex, pattern: 'plain', accent: '#1e1d22' },
-  outer: null, bottom: DEFAULT_BOTTOM, neckwear: null, shoes: DEFAULT_SHOES, ...patch,
+  outer: null, bottom: DEFAULT_BOTTOM, neckwear: null, shoes: DEFAULT_SHOES, earned: NO_EARNED, ...patch,
 });
 const hairColour = (i: number): Hex => (i % 4 === 3 ? WILD_HAIR[i % WILD_HAIR.length]! : NATURAL_HAIR[(i * 3) % NATURAL_HAIR.length]!).hex;
 const covered = ['short-crop', 'curls', 'long-waves', 'ponytail'] as const;
