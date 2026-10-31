@@ -45,7 +45,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
   let farLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);farLightTexture.format=THREE.RedFormat;farLightTexture.needsUpdate=true;
   let beaconLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);beaconLightTexture.format=THREE.RedFormat;beaconLightTexture.needsUpdate=true;
   let heightTexture=new THREE.DataTexture(new Float32Array(1),1,1,THREE.RedFormat,THREE.FloatType);heightTexture.needsUpdate=true;
-  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
+  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
   const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,alphaToCoverage:true,vertexShader:`
     in uint aPacked; in uint aMaterial;
     out float vLodFade;
@@ -75,7 +75,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     #define gl_FragColor voxelColour
     precision highp sampler3D;
     uniform sampler2D uPalette;uniform sampler3D uLight,uFarLight,uBeaconLight;
-    uniform vec3 uSun,uAmbient,uSunDirection,uFog,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent;
+    uniform vec3 uSun,uAmbient,uSunDirection,uFog,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent;
     uniform float uSunIntensity,uAmbientIntensity,uNight,uFarCell,uBeaconCell,uTerrain,uShoreLevel;
     // Shared uniforms: materials derived from this shader text carry them with the uniforms object.
     uniform float uGlassKind,uGlassDither;
@@ -171,15 +171,34 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         warm=mix(warm,surfaceField(uLight,uLightOrigin,uLightExtent,.5,n),nearBlend);
       }
       // The field is blocked by occupied cells; this adds real warm street/wall illumination, not a decal.
-      light+=vec3(1.,.57,.26)*warm*warm*(.4+.6*uNight)*.95;
+      // The flood falls off linearly with distance. A 1.6 power (not a square) carries the pool 3-5 m onto
+      // the wall and cobbles and still rolls to zero without a ring; the colour falls from a warm core
+      // through amber. It reads fully from dusk (night .2, about 18.5 h) and is absent by day.
+      float pool=pow(warm,1.6);
+      float poolAmount=pool*smoothstep(0.,.2,uNight)*1.15;
+      vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
-      light+=vec3(1.,.64,.32)*beacon*beacon*(.3+.7*uNight)*1.25;
+      float beaconAmount=beacon*beacon*(.3+.7*uNight)*1.25;
+      // Overlapping warm light shares one soft cap, so lit plaster never clips to white.
+      float warmTotal=poolAmount+beaconAmount;
+      float warmCapped=warmTotal<.6?warmTotal:.6+.6*(1.-exp((.6-warmTotal)/.6));
+      light+=(poolColour*poolAmount+vec3(1.,.64,.32)*beaconAmount)*(warmCapped/max(warmTotal,1e-4));
       if(uTerrain>.5){
         float contact=groundContact(uFarLight,uFarOrigin,uFarExtent,uFarCell,n);
         if(nearBlend>0.)contact=mix(contact,groundContact(uLight,uLightOrigin,uLightExtent,.5,n),nearBlend);
         ao*=1.-contact*.24;
       }
       vec3 colour=base*edge*light*ao;
+      if(kind==10.){
+        // Glass reflects the sky it faces: dark blue-grey at night, pale sky by day, never a black hole
+        // and never its own warm albedo. A lit room is the presence pane's job, not every pane's.
+        vec3 view=normalize(vWorld-cameraPosition),mirror=reflect(view,n);
+        vec3 seen=mix(uSkyHorizon,uSkyZenith,smoothstep(.0,.65,mirror.y));
+        seen=mix(uFog*.42,seen,smoothstep(-.3,.04,mirror.y));
+        float fresnel=.42+.5*pow(1.-max(dot(-view,n),0.),3.);
+        vec3 inside=base*.1*light;
+        colour=mix(inside,seen*mix(.62,.42,uNight),fresnel)*ao+poolColour*poolAmount*.12;
+      }
       vec2 cell=fract(uv*8.);float bevel=min(min(cell.x,1.-cell.x),min(cell.y,1.-cell.y));
       if(kind==3.||kind==4.||kind==6.)colour+=base*.018*(1.-smoothstep(.0,.10,bevel))*(.3+.7*diffuse)*vAo*detail;
       // Glass is still clay geometry in this opaque pass. Its coverage lets the lit reveal and
@@ -216,7 +235,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     const samples=target?target.samples:renderer.getContext().getContextAttributes()?.antialias?4:0;
     uniforms.uGlassDither.value=samples>0?0:1;
   };
-  return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},
+return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSkyZenith.value.set(g.zenith);uniforms.uSkyHorizon.value.set(g.horizon);uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},
     setLight(v){lightTexture=uploadVolume(lightTexture,v);uniforms.uLight.value=lightTexture;uniforms.uLightOrigin.value.set(...v.origin);uniforms.uLightExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);},
     setFarLight(v){farLightTexture=uploadVolume(farLightTexture,v);uniforms.uFarLight.value=farLightTexture;uniforms.uFarOrigin.value.set(...v.origin);uniforms.uFarExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uFarCell.value=v.cellSize;},
     setBeaconLight(v){beaconLightTexture=uploadVolume(beaconLightTexture,v);uniforms.uBeaconLight.value=beaconLightTexture;uniforms.uBeaconOrigin.value.set(...v.origin);uniforms.uBeaconExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uBeaconCell.value=v.cellSize;},

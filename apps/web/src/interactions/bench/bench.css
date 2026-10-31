@@ -1,0 +1,19 @@
+@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: swap; src: url('../../atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: swap; src: url('../../atlas/assets/fonts/alegreya-roman-latin.woff2') format('woff2'); }
+.ix-bench { position: fixed; inset: 0; overflow: hidden; color: #f2e2c2; font: 14px/1.4 Alegreya, Georgia, serif; user-select: none; }
+.ix-bench-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.ix-bench::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 55%, transparent 52%, #0a0d1a8c); }
+.ix-bench-plate { position: absolute; top: 20px; left: 20px; max-width: 360px; padding: 9px 13px 10px; z-index: 4; pointer-events: none;
+  background: linear-gradient(176deg, #3f2c1fe8, #2a1d14ee); border: 1px solid #1d120a; border-radius: 6px;
+  box-shadow: inset 0 1px 0 #ffe1b42e, 0 0 0 1px #c99f5b33, 0 10px 24px #05060f80; }
+.ix-bench-eyebrow { margin: 0 0 3px; font: 11px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .14em; color: #e7c98d; }
+.ix-bench-line { margin: 0; font-size: 12.5px; color: #dccbb0; }
+.ix-bench-keys { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); margin: 0; z-index: 4; white-space: nowrap; pointer-events: none;
+  font-size: 12px; color: #d9c7a8cc; display: flex; align-items: center; gap: 7px; text-shadow: 0 1px 4px #05060f; }
+.ix-bench-keys span { font: 10.5px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .08em; padding: 4px 6px; border: 1px solid #c99f5b66; border-radius: 3px; color: #f1d9a6; background: #2a1d14b3; }
+.ix-bench-keys i { width: 3px; height: 3px; background: #c99f5b; transform: rotate(45deg); }
+.ix-bench-note { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-style: italic; color: #d8c6a6; z-index: 5; }
+@media (max-width: 520px) {
+  .ix-bench-plate { top: 12px; left: 12px; right: 12px; max-width: none; }
+  .ix-bench-keys { display: none; }
+}

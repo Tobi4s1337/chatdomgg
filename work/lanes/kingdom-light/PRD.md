@@ -27,7 +27,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
 
 ## Tasks
 
-- [ ] **KL01 — One real people-lit helper for every place.**
+- [x] **KL01 — One real people-lit helper for every place.**
   Implement `createPeopleLight` in `lights/people-light.ts` using main's actual types. No three.js, civic, land,
   scene, clock or presence-source dependency. Validate input, use caller-space positions, rise/hold/fade, bounded
   pilot/full/capacity, source reuse and `clear()`. Explicit history: same-time calls are idempotent; reverse seek
