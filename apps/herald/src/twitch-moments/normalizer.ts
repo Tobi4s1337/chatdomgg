@@ -1,9 +1,9 @@
 import type { KingdomId } from '@chatdom/shared';
 import type { TwitchMomentBody } from '../../../web/src/twitch-moments/contracts';
 import type { SupportSource } from './plan';
-import type { CitizenDirectory } from './ports';
+import type { CitizenDirectory, DragonSummonRequest } from './ports';
 import type { ProviderNotification } from './provider';
-import type { MomentRepository } from './records';
+import type { CurrentSlot, MomentRepository } from './records';
 
 export interface NormalizerContext {
   readonly kingdomId: KingdomId;
@@ -14,11 +14,25 @@ export interface NormalizerContext {
   readonly support: SupportSource;
   /** True only when no `channel.subscription.end` is planned, so a missing subscriber badge is the lapse signal. */
   readonly lapseFromBadges: boolean;
+  /** True only when a dragon battle port is bound; without one no dragon request is ever claimed. */
+  readonly summonable: boolean;
 }
 
-/** What one delivery changes publicly. `current` facts replace the public state for their key. */
-export interface NormalizedFact { readonly body: TwitchMomentBody; readonly current: boolean }
-export type NormalizeResult = { readonly outcome: 'applied'; readonly facts: readonly NormalizedFact[] } | { readonly outcome: 'stale' };
+/**
+ * What one delivery changes publicly. `current` facts replace the public state for their key. A fact with a `slot`
+ * belongs to a family with one current fact: current takes the slot (when `order` is not older than its
+ * occupant's), not current releases it.
+ */
+export interface NormalizedFact {
+  readonly body: TwitchMomentBody;
+  readonly current: boolean;
+  readonly slot?: { readonly name: CurrentSlot; readonly order: number };
+}
+/** A dragon request claimed inside the transaction; the ingest sends it only after that transaction commits. */
+export type ClaimedSummon = Omit<DragonSummonRequest, 'origin'>;
+export type NormalizeResult =
+  | { readonly outcome: 'applied'; readonly facts: readonly NormalizedFact[]; readonly summons?: readonly ClaimedSummon[] }
+  | { readonly outcome: 'stale' };
 
 /**
  * A well-formed, correctly addressed event this ingest deliberately does not project: a notice another family

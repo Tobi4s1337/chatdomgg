@@ -3,10 +3,11 @@ import { REALM_FOUNDED_ROUTES, RealmFoundedManifestSchema } from '@chatdom/share
 import { compileFoundedScene } from '@chatdom/world/founded-collision';
 import { decodeFoundedScene, FOUNDED_SCENE_LIMITS } from '@chatdom/world/founded-scene';
 import { connectRealm } from '../realm/client';
-import { openRealmApiSession, RealmEntryError, type RealmFetch } from '../realm/adapters/entry';
+import { openRealmApiSession, RealmEntryError, realmEntryFailureMessage, readRealmJson, type RealmFetch } from '../realm/adapters/entry';
 import { createRoomChatFeed } from '../realm/adapters/chat';
 import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
 import { observeRealm, observedRoom, type RealmObserver } from '../realm/adapters/observer';
+import { createRoomMomentFeed } from '../realm/adapters/moments';
 import { createRoomPresenceFeed } from '../realm/adapters/presence';
 import type { KingdomEntrySource } from './types';
 
@@ -31,6 +32,8 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
   if (origin === 'simulated' && !options.notice?.includes('SIMULATED')) throw new RealmEntryError('refused', 'This rehearsal must be labelled SIMULATED.');
   const forgeFeed = createRealmForgeFeed();
   const open: KingdomEntrySource = async signal => {
+    let step = 'reading your sign-in';
+    try {
     signal.throwIfAborted();
     const fetcher = options.fetcher ?? ((input, init) => fetch(input, init));
     const session = await openRealmApiSession(kingdomId, fetcher, signal);
@@ -40,19 +43,25 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
       if (!response.ok) throw new RealmEntryError('unavailable', 'The kingdom’s founded streets are not ready for visitors yet.');
       return response;
     };
-    const manifest = RealmFoundedManifestSchema.parse(await (await read(REALM_FOUNDED_ROUTES.manifest.replace(':kingdomId', encodeURIComponent(kingdomId)))).json());
+    step = 'loading the founded streets';
+    const manifestPath = REALM_FOUNDED_ROUTES.manifest.replace(':kingdomId', encodeURIComponent(kingdomId));
+    const manifest = RealmFoundedManifestSchema.parse(await readRealmJson(await read(manifestPath), `Loading the founded streets (${manifestPath})`));
     if (manifest.kingdomId !== kingdomId || manifest.origin !== origin) throw new RealmEntryError('unavailable', 'The gate and the founded kingdom do not agree.');
     const response = await read(REALM_FOUNDED_ROUTES.scene.replace(':sceneHash', manifest.sceneHash));
     const bytes = await boundedBytes(response, FOUNDED_SCENE_LIMITS.bytes);
+    step = 'checking the founded streets';
     const scene = await decodeFoundedScene(bytes, manifest);
     signal.throwIfAborted();
+    step = 'preparing the walkable streets';
     const collision = compileFoundedScene(scene);
     signal.throwIfAborted();
+    step = 'joining the live kingdom';
     const client = await connectRealm(options.endpoint ?? `${location.origin}/realm-data`, session.entry, collision, options.storage ?? sessionStorage);
     if (signal.aborted) { client.dispose(); signal.throwIfAborted(); }
     const state = client.room.state;
     if (state.kingdomId !== kingdomId || state.origin !== origin || state.layoutRevision !== manifest.layoutRevision
       || state.collisionRevision !== manifest.collisionRevision) { client.dispose(); throw new RealmEntryError('unavailable', 'The kingdom’s streets changed while the gate was opening. Try again.'); }
+    step = 'confirming your place in the room';
     const room = observedRoom(client.room);
     const observer = observeRealm(room, { kingdomId, origin, collisionRevision: manifest.collisionRevision, layoutRevision: manifest.layoutRevision });
     const chatFeed = createRoomChatFeed(room, observer);
@@ -73,8 +82,12 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
     signal.addEventListener('abort', aborted, { once: true });
     try { await readyCheckpoint(observer, signal); signal.throwIfAborted(); }
     catch (error) { dispose(); throw error; }
-    return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), chatFeed, forgeFeed,
+    return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), chatFeed, forgeFeed, momentFeed: createRoomMomentFeed(observer, origin),
       kingdomName, ...(options.notice ? { notice: options.notice } : {}), dispose };
+    } catch (error) {
+      if (signal.aborted || error instanceof RealmEntryError) throw error;
+      throw new RealmEntryError('unavailable', `Could not finish ${step}: ${realmEntryFailureMessage(error)}`);
+    }
   };
   return async signal => {
     try { return await open(signal); }

@@ -132,7 +132,7 @@ Use `max` effort only for a problem that has already beaten `xhigh`. Don't use `
 - Linux server with no GPU. Headless Chrome renders WebGL through SwiftShader: screenshots are fine, fps numbers
   mean nothing. Real-GPU checks happen on Tobias's machine. When you need one (frame timing, the real look of
   light and post-processing), ask for it in your evidence block: the path, the sizes and what to measure. Serve
-  the build on port 5190 (`vite preview --port 5190 --strictPort`; 5191 and 5192 for realm and api) so it can be
+  the build on port 5190 (`vite preview --port 5190 --strictPort`; live realm 5197 and API 5196) so it can be
   opened there.
 - Available: Node 22, pnpm 10, Playwright 1.64 with Chrome, ffmpeg, sqlite3, uv. Docker is not reachable from
   the sandbox. If you need infrastructure (Postgres, a public URL, a tunnel), ask for it in your evidence block
@@ -147,7 +147,9 @@ Use `max` effort only for a problem that has already beaten `xhigh`. Don't use `
 - Images: the built-in `image_gen` tool, through `$chatdom-art`, for paintings, interiors and UI art. Never use
   it for voxel models, fonts or icons. The Replicate MCP is the fallback.
 - This host runs other production services. Never touch containers, ports, files or processes you did not
-  create. Run dev servers on ports 5170–5199 and write down which.
+  create. Run dev servers on ports 5170–5199 and write down which. Capture-owned servers use
+  `packages/testing/capture-ports.mjs`: 5187 and 5190–5197 stay reserved even when their services are down.
+  This applies to temporary/ad-hoc benches too; a free service port is not a free capture port.
 
 ## Hard rules
 

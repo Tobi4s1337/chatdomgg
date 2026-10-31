@@ -4,7 +4,7 @@ import { samplePublicGround, type RealmFoundedScene } from '@chatdom/world';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import type { VoxelRenderState } from '@chatdom/render';
 import { MATERIALS } from '@chatdom/content';
-import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
+import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import type { RealmClient, RealmCollision, RealmWalkerPose } from '../realm/client';
 import { createWalkController } from '../walk';
 import { createFoundedInteractionRegistry, homeZone, STREET_ZONE } from '@chatdom/world/interactions';
@@ -12,6 +12,7 @@ import { interactionSound, mountInteractionController, type InteractionPlaces } 
 import { bindWalkInteractions } from './walk-interactions';
 import { createHomeStepMaterial, createWalkFootsteps } from './walk-footsteps';
 import type { createKingdomSound } from './sound';
+import { presentWalkers, type WalkerPresentation } from './walker-presentation';
 
 export interface KingdomWalkBinding {
   readonly client: RealmClient;
@@ -65,7 +66,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   const resetFootsteps = () => footsteps.reset();
   document.addEventListener('visibilitychange', resetFootsteps);
   window.addEventListener('blur', resetFootsteps);
-  let poses: readonly RealmWalkerPose[] = [], connected = true, waiting = false;
+  let poses: readonly WalkerPresentation[] = [], walkingPoses: readonly RealmWalkerPose[] = [], connected = true, waiting = false;
   const left = () => { connected = false; poses = []; footsteps.reset(); controller.release(); people.update([]); };
   const reconnected = () => { connected = true; };
   client.room.onLeave(left);
@@ -88,7 +89,8 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       // A place's accepted view holds the same walk token until the interaction controller returns it.
       if (active && controller.owner === 'released' && !interactions.debug.held) { footsteps.reset(); camera.clearViewOffset(); controller.resume(); }
       else if (!active) { if (interactions.debug.held) interactions.leave(); controller.release(); }
-      poses = connected && !waiting ? controller.frame(now) : [];
+      walkingPoses = connected && !waiting ? controller.frame(now) : [];
+      poses = presentWalkers(walkingPoses, connection.session.snapshot().seats, registry);
       return active;
     },
     /** After the scene's final camera transform, before drawing: all input paths use these native targets. */
@@ -123,8 +125,9 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
         look: pose.look,
         position: [pose.x, pose.y, pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
         distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed,
+        ...(pose.posture ? { posture: pose.posture } : {}),
         opacity: pose.self && controller.owner === 'walking' ? controller.selfOpacity : 1, time: now / 1000 })) : [], camera);
-      const self = poses.find(pose => pose.self), state = client.room.state;
+      const self = walkingPoses.find(pose => pose.self), state = client.room.state;
       const interaction = connection.session.snapshot().self;
       const contact = footsteps.update({ now, pose: self,
         active: connected && !waiting && controller.owner === 'walking' && !interactions.debug.held
@@ -150,7 +153,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       const labels: WalkerLabel[] = [];
       for (const pose of poses) {
         if ((pose.self && controller.owner === 'walking' && controller.selfOpacity < .1) || camera.position.distanceToSquared(point.set(pose.x, pose.y, pose.z)) > 40 ** 2) continue;
-        point.set(pose.x, pose.y + 1.95, pose.z).project(camera);
+        point.set(pose.x, pose.y + 1.95 + (pose.posture ? CITIZEN_SEATED_HEAD_OFFSET_METRES : 0), pose.z).project(camera);
         if (point.z < -1 || point.z > 1 || Math.abs(point.x) > .95 || Math.abs(point.y) > .94) continue;
         labels.push({ id: pose.id, name: pose.name, self: pose.self, x: (point.x + 1) * canvas.clientWidth / 2, y: (1 - point.y) * canvas.clientHeight / 2 });
       }

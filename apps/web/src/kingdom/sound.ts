@@ -3,13 +3,31 @@ import {
   type AudioCue, type AudioCueOptions, type ForgeAudio, type KingdomPhrase, type KingdomPhraseOptions,
 } from '@chatdom/audio';
 import type { ForgeRitualFrame } from '@chatdom/shared';
+import { createKingdomAmbience } from './ambience';
+import type { AmbienceTarget } from './ambience/types';
+import { createProceduralMomentSound, CUE_LENGTH_MS } from '../twitch-moments/sound';
+import type { MomentSoundPort } from '../twitch-moments/view';
 
 /** The scene's one sound owner. Context, sources and the master stay inside the shared engine. */
 export function createKingdomSound() {
   const audio = createKingdomAudio();
+  const ambience = createKingdomAmbience(phrase => playKingdomPhrase(audio, phrase));
   let requested = false, disposed = false, explicitlyMuted = false;
   let forge: ForgeAudio | undefined, forgeContext: AudioContext | undefined;
   let forgeAudible = false, catchUp = true;
+  let hiddenMuted = false;
+  const momentVoices = new Set<() => void>();
+  const momentCues = createProceduralMomentSound({ context: () => !disposed && canSound() ? kingdomAudioHost(audio) : null,
+    now: Date.now, gain: () => canSound() ? 1 : 0 });
+  const moments: MomentSoundPort = { play(cue, atMs, gain) {
+    const stop = momentCues.play(cue, atMs, gain);
+    const cancel = () => { clearTimeout(timer); momentVoices.delete(cancel); stop(); };
+    momentVoices.add(cancel);
+    // Each cue has a finite tail. Retain cancellation only while that tail can still be sounding.
+    const timer = setTimeout(() => momentVoices.delete(cancel), Math.max(0, atMs - Date.now()) + CUE_LENGTH_MS[cue] + 200);
+    return cancel;
+  } };
+  function silenceMoments() { for (const stop of momentVoices) stop(); momentVoices.clear(); }
 
   function canSound() {
     const { status, settings } = audio.getState();
@@ -21,9 +39,19 @@ export function createKingdomSound() {
     if (forgeAudible) forge?.setMix({ muted: true, volume: 1 });
     forgeAudible = false;
   }
-  function onVisibility() { if (document.hidden) silenceForge(); }
+  function onVisibility() {
+    hiddenMuted = document.hidden;
+    // The shared mixer drains every voice and its room tail, including environmental phrases.
+    // Restoring visibility preserves the user's explicit mute choice and starts only fresh observations.
+    audio.setSettings({ muted: hiddenMuted || explicitlyMuted });
+    if (hiddenMuted) silenceForge();
+    if (hiddenMuted) silenceMoments();
+  }
   function onContextState() { if (forgeContext?.state !== 'running') silenceForge(); }
-  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibility);
+    if (document.hidden) onVisibility();
+  }
 
   function forgeUpdate(frame: ForgeRitualFrame | null) {
     if (disposed) return;
@@ -52,6 +80,7 @@ export function createKingdomSound() {
 
   return {
     unlock,
+    moments,
     ...({ forgeUpdate } as { forgeUpdate?: typeof forgeUpdate }),
     get enabled() {
       const { status, settings } = audio.getState();
@@ -63,9 +92,10 @@ export function createKingdomSound() {
         requested = false; explicitlyMuted = true;
         audio.setSettings({ muted: true });
         silenceForge();
+        silenceMoments();
         return false;
       }
-      explicitlyMuted = false; audio.setSettings({muted:false});
+      explicitlyMuted = false; audio.setSettings({muted:hiddenMuted});
       void unlock();
       return true;
     },
@@ -75,12 +105,17 @@ export function createKingdomSound() {
     phrase(phrase: KingdomPhrase, options?: KingdomPhraseOptions): boolean {
       return playKingdomPhrase(audio, phrase, options);
     },
+    ambienceUpdate(now: number, target: AmbienceTarget): void {
+      ambience.update(now, target, !disposed && canSound());
+    },
     dispose() {
       disposed = true;
       requested = false;
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
       forgeContext?.removeEventListener('statechange', onContextState);
       forge?.dispose();
+      silenceMoments();
+      ambience.dispose();
       audio.dispose();
     },
   };

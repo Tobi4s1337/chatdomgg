@@ -7,12 +7,13 @@ import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { assertCapturePort } from '../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
 
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 const port = Number(option('--port') ?? 5188);
-if (!Number.isInteger(port) || port < 5170 || port > 5199) throw new Error('--port must be a development port in 5170–5199.');
+assertCapturePort(port, { name: '--port' });
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${root}shots/citizen-card`;
 

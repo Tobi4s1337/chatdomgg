@@ -31,7 +31,7 @@ export function interactionLegality(actor: InteractionActor, record: Pick<Intera
   }
   if (record.zone !== actor.zone) return { legal: false, action, reason: 'wrong-zone' };
   switch (target.kind) {
-    case 'campfire-seat': case 'tavern-seat':
+    case 'bench-seat': case 'campfire-seat': case 'tavern-seat':
       return occupant && occupant.walkerId !== actor.walkerId ? { legal: false, action, reason: 'occupied' } : { legal: true, action };
     case 'anvil':
       return { legal: true, action };

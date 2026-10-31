@@ -10,8 +10,16 @@ import { RealmWalkerFrameSchema } from './watch';
 import { PersonIdSchema } from '../identity';
 import { CITIZEN_STARTER_LOOKS, starterCitizenLook } from '../citizen-look';
 import { StyleIdSchema, type VoxelBlueprint } from '../voxel';
+import { ForgeTransientActivitySchema } from './forge-authority';
 
 describe('realm wire boundary v1', () => {
+  it('ends an observed Forge animation without publishing a verdict or private wish', () => {
+    const ended = { type: 'ended', activityId: 'attempt:opaque' };
+    expect(ForgeTransientActivitySchema.parse(ended)).toEqual(ended);
+    for (const field of ['words', 'personId', 'makerName', 'reason', 'outcome', 'attachment']) {
+      expect(ForgeTransientActivitySchema.safeParse({ ...ended, [field]: 'private' }).success).toBe(false);
+    }
+  });
   it('patches only a public street link and free look without disclosing identity or granting browser authority', () => {
     const privatePerson = PersonIdSchema.parse('9007199254740993123');
     const look = starterCitizenLook(privatePerson);
@@ -28,6 +36,10 @@ describe('realm wire boundary v1', () => {
       walkers: [{ id: 'opaque:walker', name: copy.name, look: copy.look, homeSlot: copy.homeSlot,
         x: 0, y: 0, z: 0, yaw: 0, distance: 0, speed: 0, placement: 0 }] };
     expect(RealmWalkerFrameSchema.safeParse(frame).success).toBe(true);
+    const seat = { targetId: 'fire:market:seat:west', walkerId: 'opaque:walker', generation: 1, status: 'occupied' };
+    expect(RealmWalkerFrameSchema.safeParse({ ...frame, seats: [seat] }).success).toBe(true);
+    expect(RealmWalkerFrameSchema.safeParse({ ...frame, seats: [{ ...seat, personId: privatePerson }] }).success).toBe(false);
+    expect(RealmWalkerFrameSchema.safeParse({ ...frame, seats: [seat, { ...seat, targetId: 'fire:market:seat:east' }] }).success).toBe(false);
     expect(JSON.stringify(frame)).not.toContain(privatePerson);
     expect(RealmWalkerFrameSchema.safeParse({ ...frame, walkers: [{ ...frame.walkers[0], personId: privatePerson }] }).success).toBe(false);
     expect(RealmWalkerFrameSchema.safeParse({ ...frame, walkers: Array(301).fill(frame.walkers[0]) }).success).toBe(false);

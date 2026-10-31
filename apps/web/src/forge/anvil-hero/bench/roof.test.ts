@@ -16,8 +16,8 @@ describe('the sleeping dragon on real roofs', () => {
     const asset = rasterizeBlueprint(mounted.blueprint), [sx, sy] = asset.size, local = mounted.emitter.map((n, i) => n - mounted.socket.origin[i]!);
     const at = (x: number, y: number, z: number) => asset.voxels[x + sx * (y + sy * z)]!;
     expect(at(local[0]!, local[1]!, local[2]!)).toBe(0);
-    expect(at(local[0]! + 1, local[1]!, local[2]!)).toBe(0);
-    expect(at(local[0]! + 1, local[1]! + 1, local[2]!)).not.toBe(0);
+    expect(at(local[0]!, local[1]!, local[2]! + 1)).toBe(0);
+    expect(at(local[0]! + 1, local[1]!, local[2]! - 1)).not.toBe(0);
   });
 
   it('names honestly which side of the ridge each kit\'s socket puts the dragon', () => {

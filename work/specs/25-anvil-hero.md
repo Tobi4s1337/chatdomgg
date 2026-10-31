@@ -24,7 +24,7 @@ owns the remaining look. A beautiful fixture is art evidence, never evidence tha
   terminal paths. Its initial transform and returned origin assume the old octagonal hearth. Main remounts it using
   the contract below; do not edit or replace its source SVG.
 - `packages/content/src/forge-motifs/index.ts` exports `MotifGeometry = {size, boxes, mount, emitter}` and the
-  sleeping dragon's existing build-cell envelope `[24,16,18]`, mount `[12,0,9]`, emitter `[0,2,9]`. Main chooses
+  sleeping dragon's existing build-cell envelope `[24,16,18]`, mount `[12,0,9]`, front-facing nose emitter `DRAGON_EMITTER` (currently `[7,3,17]`). Main chooses
   this lane's replacement for that one motif. Existing moon/owl and motif-lane folders stay read-only.
 - `apps/web/src/forge/emitters` already renders seekable anvil sparks and landed smoke/glow from supplied world
   anchors. Spec 17 owns transient ritual presentation/audio; spec 18 owns refusal presentation. Neither is this lane.

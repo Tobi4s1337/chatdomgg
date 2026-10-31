@@ -11,4 +11,4 @@ export const PENDING: Readonly<Record<RealmInteractionAction, string>> = {
 /** Quiet context when nothing is actionable. It never wins over something you can use. */
 export const QUIET = { occupied: 'Someone is sitting here', 'not-yours': 'A neighbour’s home', far: 'Walk a little closer' } as const;
 /** Where you are, while seated. */
-export const SEATED: Readonly<Partial<Record<RealmInteractionTarget['kind'], string>>> = { 'campfire-seat': 'By the fire', 'tavern-seat': 'At the table' };
+export const SEATED: Readonly<Partial<Record<RealmInteractionTarget['kind'], string>>> = { 'bench-seat': 'Watching the square', 'campfire-seat': 'By the fire', 'tavern-seat': 'At the table' };

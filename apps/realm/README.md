@@ -319,7 +319,8 @@ does not run migrations of its own.
 ## Running locally
 
 Configuration comes from the ignored root `.env`: `DATABASE_URL`, plus optional `REALM_DATABASE_SCHEMA` (default
-`realm`) and `REALM_PORT` (default 5191). The server never prints the connection string.
+`realm`). The listen port uses explicit `REALM_PORT`, otherwise the port in `CHATDOM_REALM_TARGET` (the same target
+the web preview uses), otherwise 5191. The server never prints the connection string.
 
 ```bash
 # Apply migrations to the schema (creates it if needed; never drops or rewrites anything).

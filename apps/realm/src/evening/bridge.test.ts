@@ -3,16 +3,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHearthHome } from '@chatdom/content';
+import { PersonIdSchema, starterCitizenLook } from '@chatdom/shared';
 import { WORLD_FIXTURE_KINGDOM as kingdomId, WORLD_FIXTURE_PERSON as personId } from '@chatdom/shared/world-fixtures';
-import type { KingdomForgeCommand, RealmFact, RealmPrivateState, RealmStoredOutcome, RealmTransientMessage } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, REALM_NO_HOME_SLOT, type KingdomForgeCommand, type RealmFact, type RealmHeraldChat, type RealmPrivateState, type RealmStoredOutcome, type RealmTransientMessage } from '@chatdom/shared/realm';
 import { createRealmState } from '@chatdom/world/realm';
-import { applyPresence, createPresenceState, projectPresence } from '@chatdom/world';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { ForgeProviders, JudgeVerdict } from '../../../codex/src/providers';
 import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions } from '../../../codex/src/providers/policy';
 import { createDurableRealmServices, type DurableRepository, type RealmOutboxRow } from '../persistence';
 import type { RealmOutboxStore } from '../outbox';
-import { encodeIngressCheckpoint, IngressGate } from '../ingress';
+import { IngressGate, presenceTransition } from '../ingress';
 import { FileForgeApprovals, ForgeWriteGate, forgeHomeDigest } from '../wiring';
 import { RealmEveningBridge } from './bridge';
 
@@ -29,23 +29,33 @@ function pass(image: boolean): JudgeVerdict {
 }
 
 /** Controlled SIMULATED repository; the production bridge, coordinator, gates and registry run unchanged. */
-async function fixture() {
+async function fixture(royal = false) {
   const now = Date.now(), blueprint = createHearthHome('house', 0), gate = new ForgeWriteGate();
+  const ownerId = royal ? PersonIdSchema.parse(kingdomId) : personId;
   const guards = gate.install({ origin: 'simulated' as const }).guards;
-  const home = { id: 'simulated-home', ownerId: personId, slot: 7, allocationReceipt: 'simulated-deed', layoutRevision: 'simulated-layout',
+  const home = { id: 'simulated-home', ownerId, slot: 7, allocationReceipt: 'simulated-deed', layoutRevision: 'simulated-layout',
     revision: 'simulated-revision', digest: forgeHomeDigest(blueprint), family: 'hearth' as const, blueprint,
     attribution: { makerName: 'SIMULATED maker', kingdomName: 'SIMULATED kingdom', approvalId: 'simulated-names' }, attachments: {} };
-  let state: RealmPrivateState = { ...createRealmState(kingdomId, 'simulated'), homes: { [home.id]: home }, coals: { [personId]: 1 },
-    stream: { sessionId: 'simulated-night', startedAt: now - 600_000, liveUntil: now + 180_000 },
-    rights: { [personId]: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'simulated-safety-identifier' } } };
-  const command: KingdomForgeCommand = { kingdomId, personId, messageId: 'simulated-message', observedAt: now, slot: 999,
+  const castle = { id: 'castle:simulated-keep', moduleId: 'simulated-keep', ownerId,
+    slot: REALM_CASTLE_SLOT, layoutRevision: home.layoutRevision, revision: home.revision, digest: home.digest,
+    family: home.family, blueprint, attribution: home.attribution, attachments: {} };
+  let state: RealmPrivateState = { ...createRealmState(kingdomId, 'simulated'), homes: royal ? {} : { [home.id]: home },
+    castle: royal ? castle : null, coals: royal ? {} : { [ownerId]: 1 },
+    stream: royal ? { sessionId: null, startedAt: 0, liveUntil: 0 } : { sessionId: 'simulated-night', startedAt: now - 600_000, liveUntil: now + 180_000 },
+    rights: { [ownerId]: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'simulated-safety-identifier' } } };
+  const command: KingdomForgeCommand = { kingdomId, personId: ownerId, messageId: 'simulated-message', observedAt: now, slot: 999,
     words: 'PRIVATE SIMULATED sleeping dragon chimney' };
-  const live = applyPresence(createPresenceState(kingdomId, 'simulated'), { version: 1, kind: 'stream', origin: 'simulated',
-    id: 'simulated-stream', kingdomId, observedAt: now - 1_000, live: true, sessionId: 'simulated-night' }, now - 1_000);
-  const presence = applyPresence(live, { version: 1, kind: 'observe', origin: 'simulated',
-    id: 'chat:simulated-message', kingdomId, observedAt: now, source: 'chat', coverage: 'activity', people: [{ personId, disclosure: 'anonymous' }] }, now);
-  const checkpoint = { version: 1 as const, revision: 1, codec: 'presence-v1' as const,
-    data: encodeIngressCheckpoint({ presence, writerEpoch: 'simulated-writer', runs: [] }) };
+  const stream = presenceTransition({ service: 'herald', writerEpoch: 'simulated-writer', observation: {
+    version: 1, kind: 'stream', origin: 'simulated', id: 'simulated-stream', kingdomId, observedAt: now - 1_000,
+    live: !royal, sessionId: royal ? null : 'simulated-night',
+  } })(state, null, now - 1_000);
+  const observed = presenceTransition({ service: 'herald', writerEpoch: 'simulated-writer', observation: {
+    version: 1, kind: 'observe', origin: 'simulated', id: 'chat:simulated-message', kingdomId, observedAt: now,
+    source: 'chat', coverage: 'activity', people: [royal
+      ? { personId: ownerId, disclosure: 'named', displayName: 'SIMULATED Monarch' }
+      : { personId: ownerId, disclosure: 'anonymous' }],
+  } })(state, stream.checkpoint, now);
+  const checkpoint = observed.checkpoint;
   const rows: RealmOutboxRow[] = [], facts: RealmFact[] = [], receipts = new Map<string, RealmStoredOutcome>();
   const repository: DurableRepository = {
     leaseMs: 15_000, acquire: vi.fn(async () => ({ kingdomId, epoch: 'simulated-writer', expiresAt: Date.now() + 15_000 })),
@@ -68,7 +78,7 @@ async function fixture() {
     executeIngress: async () => ({ status: 'unchanged', reason: 'unused' }),
   };
   const outbox: RealmOutboxStore = { open: async () => 0, prefix: async () => ({ homes: [],
-    presence: { type: 'presence', frame: projectPresence(presence, [{ personId, slot: home.slot }], now, 1, `realm:${kingdomId}`) }, sequence: 0, committed: 0 }),
+    presence: { type: 'presence', frame: observed.presence }, sequence: 0, committed: 0 }),
     read: async (_id, after) => rows.filter(row => row.id > after), acknowledge: async () => {} };
   const directory = await mkdtemp(join(tmpdir(), 'chatdom-evening-')); cleanups.push(() => rm(directory, { recursive: true, force: true }));
   const providers: ForgeProviders = { judgeWords: vi.fn(async () => pass(false)), judgeResult: vi.fn(async () => pass(true)),
@@ -84,7 +94,7 @@ async function fixture() {
   const transient: RealmTransientMessage[] = [], delivered: unknown[] = [];
   hold.kingdom.bindTransient(message => transient.push(message), () => {});
   hold.kingdom.subscribe(message => delivered.push(message));
-  return { bridge, command, providers, repository, state: () => state, facts, rows, transient, delivered, ingress, kingdom: hold.kingdom };
+  return { bridge, command, providers, repository, state: () => state, facts, rows, transient, delivered, ingress, kingdom: hold.kingdom, castle };
 }
 
 it('uses one held writer and real coordinator; stages are transient, audited attachments survive in the durable outbox, and retries never spend twice', async () => {
@@ -123,6 +133,15 @@ it('revokes pending provider work on authenticated cleanup and keeps unauthentic
   expect(await running).toEqual({ kind: 'canceled' });
   expect(f.state().coals[personId]).toBe(1); expect(f.state().reservations).toEqual({});
   expect(f.rows).toHaveLength(0);
+  const stage = f.transient[0];
+  expect(stage).toMatchObject({ type: 'forge', event: { type: 'stage', stage: 'judging-words' } });
+  expect(f.transient.at(-1)).toEqual({ type: 'forge', event: {
+    type: 'ended', activityId: stage?.type === 'forge' ? stage.event.activityId : undefined,
+  } });
+  const publicBytes = JSON.stringify(f.transient);
+  for (const privateValue of [f.command.words, f.command.messageId, 'personId', 'source-lost', 'unavailable', 'canceled']) {
+    expect(publicBytes).not.toContain(privateValue);
+  }
 });
 
 it('authenticates private Herald speech, maps the actual owned slot, hashes public IDs, and removes speech without storing text', async () => {
@@ -162,4 +181,34 @@ it('runs the observation prerequisite only after Herald admission and leaves fai
   expect(await bridge.observation(`Bearer ${'h'.repeat(32)}`, body)).toMatchObject({ http: 503, body: { status: 'unavailable' } });
   expect(beforeObservation).toHaveBeenCalledOnce();
   expect(f.ingress.accept).not.toHaveBeenCalled();
+});
+
+it('links the actual monarch walker and offline named chat to the owned keep, with ordinary moderation and no street deed or coal (SIMULATED)', async () => {
+  const f = await fixture(true), monarch = f.command.personId, now = f.command.observedAt;
+  const presentWalker = vi.fn(), placeWalker = vi.fn(() => true), allowWalking = vi.fn();
+  const detach = f.kingdom.bindRoom({ close: vi.fn(), readWalker: () => null, placeWalker, allowWalking, presentWalker, adoptWorld: vi.fn() });
+  cleanups.push(async () => detach());
+  const principal = { kingdomId, personId: monarch, origin: 'simulated' as const, sessionId: 'SIMULATED-royal-session',
+    expiresAt: now + 60_000, publicName: 'SIMULATED Monarch', look: 'neutral' };
+  f.kingdom.lifecycle('join', principal, 'SIMULATED-royal-walker', now);
+  expect(presentWalker).toHaveBeenLastCalledWith('SIMULATED-royal-walker', { homeSlot: REALM_CASTLE_SLOT, look: starterCitizenLook(monarch) });
+  f.kingdom.lifecycle('join', { ...principal, personId }, 'SIMULATED-visitor-walker', now);
+  expect(presentWalker).toHaveBeenLastCalledWith('SIMULATED-visitor-walker', { homeSlot: REALM_NO_HOME_SLOT, look: starterCitizenLook(personId) });
+  expect(placeWalker).not.toHaveBeenCalled(); expect(allowWalking).not.toHaveBeenCalled();
+  const frame = f.kingdom.publicCheckpoint().current.find(message => message.type === 'presence')?.frame;
+  expect(frame).toMatchObject({ streamLive: false, connection: 'offline', windows: [
+    { slot: REALM_CASTLE_SLOT, present: true, publicName: 'SIMULATED Monarch' },
+  ] });
+  const chat: RealmHeraldChat = { version: 1, id: 'SIMULATED-royal-chat', kingdomId, personId: monarch, origin: 'simulated',
+    asOf: now, expiresAt: now + 5_000, parts: [{ kind: 'text', text: 'SIMULATED royal hello' }] };
+  const authorization = `Bearer ${'h'.repeat(32)}`;
+  expect(await f.bridge.accept(authorization, { version: 1, chat })).toMatchObject({ body: { status: 'relayed' } });
+  const cue = f.transient.at(-1);
+  expect(cue).toMatchObject({ type: 'chat', cue: { slot: REALM_CASTLE_SLOT, origin: 'simulated' } });
+  expect(f.bridge.speech(personId, { ...chat, id: 'SIMULATED-unowned-cue', epoch: `realm:${kingdomId}`, slot: REALM_CASTLE_SLOT })).toBe(false);
+  await f.bridge.accept(authorization, { version: 1, chatCleanup: { type: 'clear', origin: 'simulated', kingdomId, personId: monarch } });
+  expect(f.transient.at(-1)).toEqual({ type: 'chat.remove', cueIds: [cue?.type === 'chat' ? cue.cue.id : 'missing'] });
+  expect(f.bridge.chat({ ...chat, id: 'SIMULATED-hidden-royal-chat', origin: 'simulated', version: 1, parts: [{ kind: 'text', text: 'SIMULATED hidden' }] })).toBe(false);
+  expect(f.state().homes).toEqual({}); expect(f.state().coals).toEqual({});
+  expect(f.facts).toEqual([]); expect(f.rows).toEqual([]);
 });

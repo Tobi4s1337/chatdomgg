@@ -1,6 +1,6 @@
 // Ground-dressing evidence from the SIMULATED-land bench, through the production renderer pieces.
 // Run from the repository root:
-//   node apps/web/src/kingdom/ground-dressing/capture.mjs [--views street,hero] [--hours dusk] [--sizes 1440x900,390x844]
+//   node apps/web/src/kingdom/ground-dressing/capture.mjs [--views street,hero,market] [--hours dusk] [--sizes 1440x900,390x844]
 //     [--dressing on|off] [--base-url http://127.0.0.1:<port>]
 // It takes the machine-wide capture lock before any server or browser, starts its own Vite dev server on a free port in
 // 5170–5199 unless --base-url is given (the bench page is dev-served, never shipped), waits for the bench's readiness
@@ -9,6 +9,7 @@
 import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createServer } from 'vite';
+import { CAPTURE_PORTS } from '../../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock.mjs';
 
 const args = process.argv.slice(2);
@@ -23,14 +24,14 @@ const dressing = option('--dressing') ?? 'on';
 const out = 'shots/ground-dressing';
 
 async function startBenchServer() {
-  for (let port = 5170; port <= 5199; port++) {
+  for (const port of CAPTURE_PORTS) {
     const server = await createServer({ root: 'apps/web', configFile: 'apps/web/vite.config.ts', logLevel: 'error',
       optimizeDeps: { entries: ['src/kingdom/ground-dressing/bench.html'] },
       server: { host: '127.0.0.1', port, strictPort: true, hmr: false } });
     try { await server.listen(); return { server, base: `http://127.0.0.1:${port}` }; }
     catch (error) { await server.close(); if (!/EADDRINUSE|in use/i.test(String(error?.message ?? error))) throw error; }
   }
-  throw new Error('No free port in 5170–5199 for the ground-dressing bench');
+  throw new Error('No safe capture port available.');
 }
 
 let server, browser, release;
@@ -48,7 +49,8 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => {
       if (message.type() !== 'error') return;
-      const text = message.text() || `console error at ${message.location().url}:${message.location().lineNumber}`;
+      const { url, lineNumber } = message.location();
+      const text = `${message.text() || 'console error'}${url ? ` (${url}:${lineNumber})` : ''}`;
       errors.push(text);
       console.error(text);
     });

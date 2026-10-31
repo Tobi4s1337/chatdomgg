@@ -69,8 +69,9 @@ export function prepareTerrainField(layout: TerrainLayout): TerrainField {
   if (![minX, maxX, minZ, maxZ].every(Number.isFinite) || minX >= maxX || minZ >= maxZ) {
     throw new Error('Terrain needs finite, nonempty bounds.');
   }
+  const bottomY='version' in layout&&layout.genesisSurface?-16:BOTTOM_Y;
   const origin: Vec3 = [Math.floor(minX / CHUNK_METRES) * CHUNK_METRES,
-    Math.floor(BOTTOM_Y / CHUNK_METRES) * CHUNK_METRES, Math.floor(minZ / CHUNK_METRES) * CHUNK_METRES];
+    Math.floor(bottomY / CHUNK_METRES) * CHUNK_METRES, Math.floor(minZ / CHUNK_METRES) * CHUNK_METRES];
   const countX = Math.ceil((maxX - origin[0]) / CHUNK_METRES);
   const countZ = Math.ceil((maxZ - origin[2]) / CHUNK_METRES);
   if (countX > MAX_CHUNK_COORDINATE + 1 || countZ > MAX_CHUNK_COORDINATE + 1) {
@@ -85,7 +86,7 @@ export function prepareTerrainField(layout: TerrainLayout): TerrainField {
     const worldX = origin[0] + (x - 0.5) * CELL_METRES;
     const worldZ = origin[2] + (z - 0.5) * CELL_METRES;
     const height = terrainHeight(layout, worldX, worldZ);
-    if (!Number.isFinite(height) || height <= BOTTOM_Y || height >= origin[1] + 512) {
+    if (!Number.isFinite(height) || height <= bottomY || height >= origin[1] + 512) {
       throw new Error('Terrain height exceeds the reserved vertical volume.');
     }
     const top = Math.round(height / CELL_METRES) - origin[1] / CELL_METRES;

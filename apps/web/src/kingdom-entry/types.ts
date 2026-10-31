@@ -1,4 +1,5 @@
 import type { PresenceFeed } from '@chatdom/shared';
+import type { TwitchMomentFeed } from '@chatdom/shared/twitch-moments';
 import type { CollisionWorld, RealmFoundedManifest } from '@chatdom/shared/realm';
 import type { RealmFoundedScene } from '@chatdom/world';
 import type { RealmClient, RealmCollision } from '../realm/client';
@@ -14,6 +15,7 @@ export interface KingdomEntryConnection {
   readonly presenceFeed: PresenceFeed;
   readonly chatFeed?: RealmChatFeed;
   readonly forgeFeed?: RealmForgeFeed;
+  readonly momentFeed?: TwitchMomentFeed;
   readonly kingdomName: string;
   readonly notice?: string;
   dispose(reason?: 'scene-revision'): void;

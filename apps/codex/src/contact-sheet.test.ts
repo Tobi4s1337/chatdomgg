@@ -48,11 +48,12 @@ function decode(uri: string) {
 }
 
 describe('trusted Forge contact sheet', () => {
-  it('encodes 768x512 PNG with six nonempty flat-colour views and a blurred 64px street tile', () => {
+  it('encodes a bounded 768x800 PNG with six nonempty flat-colour views and the unchanged blurred 64px street tile', () => {
     const uri = renderForgeContactSheet(colouredBlocks);
     expect(renderForgeContactSheet(colouredBlocks)).toBe(uri);
     const image = decode(uri);
-    expect([image.width, image.height]).toEqual([768, 512]);
+    expect([image.width, image.height]).toEqual([768, 800]);
+    expect(uri.length).toBeLessThan(4 * 1024 * 1024);
     const allowed = [background, ...[MAT.fabricGold, MAT.fabricGreen, MAT.fabricRed, MAT.fabricBlue].map(colour)];
     for (let view = 0; view < 6; view++) {
       const x = view % 3 * 256 + 12, y = Math.floor(view / 3) * 224 + 28;
@@ -97,6 +98,36 @@ describe('trusted Forge contact sheet', () => {
     const { pixel } = decode(renderForgeContactSheet(blueprint));
     expect(pixel(256 + 74, 120)).toEqual(colour(MAT.fabricGold));
     expect(pixel(256 + 182, 120)).toEqual(colour(MAT.fabricBlue));
+  });
+
+  it('shows whole geometry from -X/+Y/+Z with deterministic shading of the actual hit faces, including air cuts', () => {
+    const cube = VoxelBlueprintSchema.parse({ ...colouredBlocks, size: [3, 3, 3], boxes: [
+      { from: [0, 0, 0], to: [3, 3, 3], material: MAT.fabricGold },
+    ] });
+    const uri = renderForgeContactSheet(cube);
+    expect(renderForgeContactSheet(cube)).toBe(uri);
+    const solid = decode(uri);
+    // Known interior points on the top, -X and +Z faces of a solid cube.
+    const top = Buffer.from([200, 175, 96]), left = Buffer.from([158, 138, 76]), front = Buffer.from([138, 120, 66]);
+    expect(solid.pixel(384, 600)).toEqual(top);
+    expect(solid.pixel(330, 670)).toEqual(left);
+    expect(solid.pixel(440, 670)).toEqual(front);
+    for (let x = 16; x < 752; x++) {
+      expect(solid.pixel(x, 540)).toEqual(background);
+      expect(solid.pixel(x, 795)).toEqual(background);
+    }
+    for (let y = 540; y < 796; y++) {
+      expect(solid.pixel(16, y)).toEqual(background);
+      expect(solid.pixel(751, y)).toEqual(background);
+    }
+    // Removing an upper front-left corner exposes a recessed wall and the cut's floor.
+    const cut = decode(renderForgeContactSheet({ ...cube, boxes: [
+      ...cube.boxes, { from: [0, 1, 2], to: [1, 3, 3], material: MAT.air },
+    ] }));
+    expect(solid.pixel(384, 650)).toEqual(top);
+    expect(cut.pixel(384, 650)).toEqual(left);
+    expect(solid.pixel(384, 720)).toEqual(front);
+    expect(cut.pixel(384, 720)).toEqual(top);
   });
 
   it('rejects unknown final materials, empty geometry, invalid bounds and excessive raster work', () => {

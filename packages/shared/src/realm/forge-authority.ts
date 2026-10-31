@@ -1,4 +1,6 @@
-import type { ForgeDraft, ForgeRunEvent, ForgeHostProfile } from '../forge';
+import type { ForgeDraft, ForgeHostProfile } from '../forge';
+import { z } from 'zod';
+import { TokenSchema } from '../identity';
 import type { KingdomId, PersonId } from '../identity';
 import type { VoxelBlueprint } from '../voxel';
 
@@ -66,9 +68,15 @@ export type CommittedForgeAttachment = Omit<ForgeAttachment, 'provenance'> & {
   readonly committedAt: number;
   readonly provenance: ForgeAttachment['provenance'] & { readonly firstForgedAt: number };
 };
+/** Present-tense only. Ending the animation reveals no verdict, identity, wish or dependency failure. */
+export const ForgeTransientActivitySchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('stage'), activityId: TokenSchema, stage: z.enum(['judging-words', 'drafting', 'assembling', 'judging-piece']) }),
+  z.strictObject({ type: z.literal('ended'), activityId: TokenSchema }),
+]);
+export type ForgeTransientActivity = z.infer<typeof ForgeTransientActivitySchema>;
 /** activityId is the opaque attemptId throughout stages and the durable reveal; runId identifies the model run. */
 export type ForgeActivity =
-  | { readonly type: 'stage'; readonly activityId: string; readonly stage: Extract<ForgeRunEvent, { type: 'stage' }>['stage'] }
+  | ForgeTransientActivity
   | { readonly type: 'committed'; readonly activityId: string; readonly attachment: CommittedForgeAttachment };
 
 export interface KingdomForgeAuthority {
@@ -113,7 +121,7 @@ export interface KingdomForgeAuthority {
   release(attempt: ForgeAttempt): Promise<void>;
 }
 
-/** Private response; a refusal or hold has no public event. */
+/** Private response; no public verdict. An observed animation may end through the opaque transient above. */
 export type KingdomForgeOutcome =
   | { readonly kind: 'committed'; readonly attachment: CommittedForgeAttachment; readonly published: boolean }
   | { readonly kind: 'already-committed' }

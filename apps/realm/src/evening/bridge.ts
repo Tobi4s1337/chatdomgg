@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { CitizenChatCueSchema, PRESENCE_LEASE_MS, type CitizenChatCue, type KingdomId, type PresenceInput } from '@chatdom/shared';
-import { RealmHeraldEnvelopeSchema, RealmHeraldForgeCommandSchema, type KingdomForgeCommand, type KingdomForgeLease, type KingdomForgeOutcome, type RealmHeraldChat, type RealmPrivateMessage } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, RealmHeraldEnvelopeSchema, RealmHeraldForgeCommandSchema, type KingdomForgeCommand, type KingdomForgeLease, type KingdomForgeOutcome, type RealmHeraldChat, type RealmPrivateMessage } from '@chatdom/shared/realm';
 import { createKingdomForgeApplication } from '../../../codex/src/kingdom-forge/application';
 import { createForgeProviders, type ForgeProviders } from '../../../codex/src/providers';
 import { decodeIngressCheckpoint, presenceEpoch, presencePerson, type IngressReply, type RealmIngress } from '../ingress';
@@ -31,7 +31,7 @@ interface Pending { readonly command: KingdomForgeCommand; readonly abort: Abort
 
 /**
  * Herald's evening consumer. The registry remains the only owner of a writer; this module takes counted
- * holds, runs the existing coordinator and authority, and sends only transient stage/owner messages.
+ * holds, runs the existing coordinator and authority, and sends only transient activity/owner messages.
  * An approved attachment is published exclusively by the authority's durable transaction/outbox.
  */
 export class RealmEveningBridge {
@@ -75,7 +75,7 @@ export class RealmEveningBridge {
       publish: event => {
         // The committed event has already been persisted and queued by the authority. Re-emitting it
         // here would race the delivery cursor and repeat the reveal after reconnect.
-        if (event.type === 'stage') kingdom.transient({ type: 'forge', event });
+        if (event.type !== 'committed') kingdom.transient({ type: 'forge', event });
       },
     });
     const off = kingdom.onClosed(() => stop());
@@ -222,7 +222,7 @@ export class RealmEveningBridge {
     return relayed;
   }
 
-  /** Private person identity selects the owned home. Herald's presentation slot never becomes a deed. */
+  /** Private person identity selects the owned home or keep. Herald's presentation slot never becomes a deed. */
   speech(personId: string, cue: CitizenChatCue): boolean {
     const host = this.speechHost(personId, cue);
     if (!host) return false;
@@ -236,12 +236,14 @@ export class RealmEveningBridge {
     if (!kingdom?.current || kingdom.origin !== cue.origin || kingdom.origin !== this.options.origin) return null;
     const now = kingdom.databaseNow();
     if (cue.asOf > now || cue.expiresAt <= now) return null;
-    const home = Object.values(kingdom.privateState.homes).find(home => home.ownerId === personId);
-    if (!home) return null;
+    const state = kingdom.privateState;
+    const slot = state.castle?.ownerId === personId ? REALM_CASTLE_SLOT
+      : Object.values(state.homes).find(home => home.ownerId === personId)?.slot;
+    if (slot === undefined) return null;
     const frame = kingdom.publicCheckpoint().current.find(message => message.type === 'presence')?.frame;
     if (!frame || now - frame.asOf >= PRESENCE_LEASE_MS
-      || !frame.windows.some(window => window.slot === home.slot && window.present && window.since <= cue.asOf)) return null;
-    return { kingdom, slot: home.slot };
+      || !frame.windows.some(window => window.slot === slot && window.present && window.since <= cue.asOf)) return null;
+    return { kingdom, slot };
   }
 
   private async waitForChat(input: RealmHeraldChat): Promise<boolean> {

@@ -202,6 +202,19 @@ export class DurableKingdom implements RealmRoomHandle {
   }
 
   loadIngress(): Promise<RealmIngressCheckpoint | null> { return this.repository.loadIngress(this.lease); }
+  /** Trusted normalized moments share this writer's queue and lease; no external writer or domain command. */
+  writeMoments<T>(work: (lease: RealmWriterLease, current: () => boolean) => Promise<T>): Promise<T> {
+    return this.serial(async () => {
+      try {
+        const result = await work(this.lease, () => this.current);
+        void this.dispatcher.kick();
+        return result;
+      } catch (error) {
+        if (error instanceof RealmWriterFencedError) this.close('fenced');
+        throw error;
+      }
+    });
+  }
   lookup(commandId: string): Promise<RealmStoredOutcome | null> { return this.repository.lookup(this.kingdomId, commandId); }
 
   // RealmRoomHandle -------------------------------------------------------------------------------------------------
@@ -350,7 +363,8 @@ export class DurableKingdom implements RealmRoomHandle {
   publishWalkers(frame: RealmWalkerFrame): void {
     if (!this.current || this.effects.size !== 1 || frame.kingdomId !== this.kingdomId || frame.origin !== this.origin
       || frame.writerEpoch !== this.writerEpoch || frame.layoutRevision !== this.layoutRevision || frame.collisionRevision !== this.world.revision) return;
-    const parsed = RealmWalkerFrameSchema.safeParse(frame);
+    // The room's seat book owns posture. A movement publisher cannot claim a lease or a seated position.
+    const parsed = RealmWalkerFrameSchema.safeParse({ ...frame, seats: this.interactions?.seats().seats ?? [] });
     if (!parsed.success || Buffer.byteLength(JSON.stringify(parsed.data)) > REALM_WALKER_FRAME_MAX_BYTES) return;
     // A publisher may only describe walkers admitted to this same room, never a simulated crowd or private identity.
     if (parsed.data.walkers.some(walker => !this.walkers.has(walker.id) || ![...this.effects].some(effects => effects.readWalker(walker.id)))) return;
@@ -360,7 +374,7 @@ export class DurableKingdom implements RealmRoomHandle {
 
   private emptyWalkers(): RealmWalkerFrame {
     return { version: 1, kingdomId: this.kingdomId, origin: this.origin, writerEpoch: this.writerEpoch,
-      layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, sampledAt: Date.now(), walkers: [] };
+      layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, sampledAt: Date.now(), walkers: [], seats: [] };
   }
 
   private clearWalkers() { this.walkerFrame = null; this.deliverWalkers(this.emptyWalkers()); }
@@ -372,8 +386,9 @@ export class DurableKingdom implements RealmRoomHandle {
 
   private presentWalker(walkerId: string, principal: RealmPrincipal) {
     const home = Object.values(this.state.homes).find(home => home.ownerId === principal.personId && home.layoutRevision === this.layoutRevision);
+    const homeSlot = this.state.castle?.ownerId === principal.personId ? this.state.castle.slot : home?.slot ?? REALM_NO_HOME_SLOT;
     const look = principal.look && principal.look !== 'neutral' && principal.look !== 'reference' ? principal.look : starterCitizenLook(principal.personId);
-    for (const effects of this.effects) effects.presentWalker?.(walkerId, { homeSlot: home?.slot ?? REALM_NO_HOME_SLOT, look });
+    for (const effects of this.effects) effects.presentWalker?.(walkerId, { homeSlot, look });
   }
 
   private refreshPresentations() { for (const [id, principal] of this.principals) this.presentWalker(id, principal); }
@@ -499,7 +514,7 @@ export class DurableKingdom implements RealmRoomHandle {
           if (before !== plotId) this.toOwner(owner, { type: 'home.owned', plotId });
         }
       }
-      if (previous.homes !== committed.homes) this.refreshPresentations();
+      if (previous.homes !== committed.homes || previous.castle !== committed.castle) this.refreshPresentations();
       // A durable moderation decision ends occupancy and cancels pending admission in the same refresh turn.
       for (const principal of this.principals.values()) if (committed.rights[principal.personId]?.blocked) this.interactions?.revoke(principal.personId);
     } catch (error) {
