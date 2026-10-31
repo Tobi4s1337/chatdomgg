@@ -3,7 +3,7 @@ import { KingdomPresenceFrameSchema, type PresenceFeed, type KingdomPresenceFram
 import { RealmFoundedManifestSchema, RealmJoinSchema, REALM_FOUNDED_ROUTES, type RealmBootstrap, type RealmPublicDelivery } from '@chatdom/shared/realm';
 import type { RealmFoundedScene } from '@chatdom/world';
 import { connectRealm } from '../realm/client';
-import { queryLimitedMarketFloor, type LimitedMarketFloor } from '../../../../packages/testing/fixtures/market-floor';
+import { compileFoundedScene } from '@chatdom/world/founded-collision';
 import type { KingdomEntrySource } from './types';
 
 const endpoint = () => `${location.origin}/realm-data`;
@@ -14,18 +14,18 @@ async function read(path: string, signal: AbortSignal) {
 }
 
 export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
-  const info: { kingdomId: string; kingdomName: string; origin: string; floor: LimitedMarketFloor; notice: string } = await (await read('/preview/entry', signal)).json();
+  const info: { kingdomId: string; kingdomName: string; origin: string; geometry: string; notice: string } = await (await read('/preview/entry', signal)).json();
   if (info.origin !== 'simulated' || !info.kingdomName || !info.notice?.includes('SIMULATED')) throw new Error('The preview must describe its simulated source.');
   const manifest = RealmFoundedManifestSchema.parse(await (await read(REALM_FOUNDED_ROUTES.manifest.replace(':kingdomId', encodeURIComponent(info.kingdomId)), signal)).json());
-  if (manifest.origin !== 'simulated' || manifest.kingdomId !== info.kingdomId || manifest.collisionRevision !== info.floor.revision) throw new Error('The preview ground does not match its town.');
+  if (manifest.origin !== 'simulated' || manifest.kingdomId !== info.kingdomId || info.geometry !== 'founded-v1') throw new Error('The preview ground does not match its town.');
   const bytes = await (await read(REALM_FOUNDED_ROUTES.scene.replace(':sceneHash', manifest.sceneHash), signal)).arrayBuffer();
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n => n.toString(16).padStart(2, '0')).join('');
   if (hash !== manifest.sceneHash) throw new Error('The preview town bytes have changed.');
   const scene: RealmFoundedScene = JSON.parse(new TextDecoder().decode(bytes));
   if (scene.kingdomId !== manifest.kingdomId || scene.origin !== manifest.origin || scene.layoutRevision !== manifest.layoutRevision
     || scene.collisionRevision !== manifest.collisionRevision) throw new Error('The preview scene does not match its receipt.');
-  const collision = { revision: info.floor.revision, query: (bounds: Parameters<typeof queryLimitedMarketFloor>[1]) => queryLimitedMarketFloor(info.floor, bounds) };
-  const scopeKey = 'chatdom:simulated-market-scope';
+  const collision = compileFoundedScene(scene);
+  const scopeKey = 'chatdom:simulated-founded-scope';
   let resumeScope = sessionStorage.getItem(scopeKey);
   if (!resumeScope) { resumeScope = crypto.randomUUID(); sessionStorage.setItem(scopeKey, resumeScope); }
   signal.throwIfAborted();

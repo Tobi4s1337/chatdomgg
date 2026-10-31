@@ -140,7 +140,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   const look = createWalkLook(surface, options.lockDocument ?? document, keyboard, options.clock);
   const coarse = options.coarse ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
   let touchJump = false;
-  const hud: WalkHud | null = options.hud ? createWalkHud(options.hud, () => { if (owner === 'walking') touchJump = true; }) : null;
+  const hud: WalkHud | null = options.hud ? createWalkHud(options.hud, () => { if (owner === 'walking') touchJump = true; }, event => look.toggle(event)) : null;
   const rig = createShoulderRig(options.heading ?? 0);
   const stepEase = createStepEase();
   let stepRevision: number | null = null;
@@ -236,9 +236,11 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
         if (predicted.collisionRevision !== stepRevision || authority?.placement !== stepPlacement) {
           stepEase.reset(); rig.settle(); stepRevision = predicted.collisionRevision; stepPlacement = authority?.placement;
         }
-        const eased = stepEase.update(predicted.y, predicted.grounded, dt);
-        bodyY += eased.body - predicted.y;
-        cameraY = self.y + eased.camera - predicted.y;
+        // SDK interpolation is the single presentation clock for feet and camera. Sampling exact fixed-step
+        // height here injects a 30 Hz offset into an otherwise smoothly interpolated render pose.
+        const eased = stepEase.update(self.y, predicted.grounded, dt);
+        bodyY = eased.body;
+        cameraY = eased.camera;
         // Further horizontal travel can carry the eased head under a new lintel: retain the actual body there.
         if (bodyY !== self.y && world && embeddedSolids({ x: self.x, y: bodyY, z: self.z }, world).length) bodyY = self.y;
         poses = poses.map(p => p.self ? { ...p, y: bodyY } : p);

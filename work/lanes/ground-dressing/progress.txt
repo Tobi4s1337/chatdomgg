@@ -1,2 +1,4 @@
 
 2026-10-31 founder efficiency decision: PARK after the current task: finish and commit that task, then start no further task. Reviewed work remains eligible for integration. No new lanes while the live-evening set is open. Trust reviewed work: typecheck + changed tests, one looked-at screenshot only for visual work; full two-browser/Forge/real-chat checks at milestones. Existing accepted decisions stand unless visibly broken.
+
+2026-10-31 main looked/next task: Main looked at shots/kingdom/founded-walk@1440x900.png and @390x844.png. Next concrete task: break the uninterrupted dark-green bank at the market/castle approach with one authored garden vignette (flowers, worn verge and low planting) along the existing accepted approach; keep the road/plot frames unchanged. Full-town collision is mounted now; clean geometry alone still looks empty.
