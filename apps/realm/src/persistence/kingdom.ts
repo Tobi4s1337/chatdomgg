@@ -373,8 +373,9 @@ export class DurableKingdom implements RealmRoomHandle {
 
   private presentWalker(walkerId: string, principal: RealmPrincipal) {
     const home = Object.values(this.state.homes).find(home => home.ownerId === principal.personId && home.layoutRevision === this.layoutRevision);
+    const homeSlot = this.state.castle?.ownerId === principal.personId ? this.state.castle.slot : home?.slot ?? REALM_NO_HOME_SLOT;
     const look = principal.look && principal.look !== 'neutral' && principal.look !== 'reference' ? principal.look : starterCitizenLook(principal.personId);
-    for (const effects of this.effects) effects.presentWalker?.(walkerId, { homeSlot: home?.slot ?? REALM_NO_HOME_SLOT, look });
+    for (const effects of this.effects) effects.presentWalker?.(walkerId, { homeSlot, look });
   }
 
   private refreshPresentations() { for (const [id, principal] of this.principals) this.presentWalker(id, principal); }
@@ -500,7 +501,7 @@ export class DurableKingdom implements RealmRoomHandle {
           if (before !== plotId) this.toOwner(owner, { type: 'home.owned', plotId });
         }
       }
-      if (previous.homes !== committed.homes) this.refreshPresentations();
+      if (previous.homes !== committed.homes || previous.castle !== committed.castle) this.refreshPresentations();
       // A durable moderation decision ends occupancy and cancels pending admission in the same refresh turn.
       for (const principal of this.principals.values()) if (committed.rights[principal.personId]?.blocked) this.interactions?.revoke(principal.personId);
     } catch (error) {

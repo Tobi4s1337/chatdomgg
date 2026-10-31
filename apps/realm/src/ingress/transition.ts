@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { PRESENCE_LEASE_MS, STREAM_LEASE_MS, type PersonId, type PresenceInput, type PresenceSource } from '@chatdom/shared';
-import { forgeHostForPerson } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, forgeHostForPerson } from '@chatdom/shared/realm';
 import type { RealmCapability, RealmDomainCommand, RealmIngressCheckpoint, RealmIngressTransition, RealmPrivateState } from '@chatdom/shared/realm';
 import { applyPresence, createPresenceState, projectPresence, type PresenceBinding } from '@chatdom/world';
 import { decideRealm } from '@chatdom/world/realm';
@@ -114,8 +114,11 @@ export function presenceTransition({ service, observation, writerEpoch }: Presen
       propose({ type: 'coal.creditQualifiedNight', personId, streamSessionId: night, qualificationReceipt: receipt }, commandId('night', key));
     }
 
-    // Lit windows are owned homes. A visual slot is never a deed; it only shows a deed that already exists.
-    const bindings: PresenceBinding[] = Object.values(s.homes).map(home => ({ personId: home.ownerId, slot: home.slot })).sort((a, b) => a.slot - b.slot);
+    // Each person's light belongs to their actual home or keep. A visual slot never grants a street deed.
+    const bindings: PresenceBinding[] = Object.values(s.homes).filter(home => home.ownerId !== s.castle?.ownerId)
+      .map(home => ({ personId: home.ownerId, slot: home.slot }));
+    if (s.castle) bindings.push({ personId: s.castle.ownerId, slot: REALM_CASTLE_SLOT });
+    bindings.sort((a, b) => a.slot - b.slot);
     const revision = (checkpoint?.revision ?? 0) + 1;
     return {
       checkpoint: { version: 1, revision, codec: 'presence-v1', data: encodeIngressCheckpoint({ presence, writerEpoch, runs: [...runs.values()] }) },
