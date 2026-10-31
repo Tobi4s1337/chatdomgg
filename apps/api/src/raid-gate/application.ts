@@ -8,25 +8,53 @@
  * - Joining is one person's explicit choice, scoped to one request, and ends when that request closes (R4).
  *
  * - The monarch may close an unstarted preview; its party ends and nobody moves (R3, R4).
+ * - Start re-checks everything at the press, then writes Twitch through an outbox: the intent is stored first, claimed
+ *   once, and a claimed write that lost its answer is only ever reconciled, never sent again (R3).
+ * - Twitch's acceptance is a countdown, not a departure. The party leaves only on a verified `channel.raid` that main's
+ *   ingress correlated to this request, for this pair, inside this request's window. That raid goes on to the Atlas's
+ *   road ingestion through the same outbox (R3, R11).
  *
- * Commands that later tasks own (start, travel, passport, gifts) answer `unavailable`: honest, never success.
+ * Commands that later tasks own (travel, passport, gifts) answer `unavailable`: honest, never success.
  */
+import { AtlasRaidSchema } from '../../../../packages/shared/src/atlas-raids';
 import { kingdomForBroadcaster } from '../../../../packages/shared/src/identity';
 import {
   GATE_LIMITS, readGateCommand,
-  type GateActionView, type GateAuthority, type GateCommand, type GateContext, type GateDenial, type GatePreview, type GatePrincipal,
-  type GateReply, type GateStatusView, type OpenGateView, type PartyView,
+  type GateActionState, type GateActionView, type GateAuthority, type GateCommand, type GateContext, type GateDenial, type GatePreview,
+  type GatePrincipal, type GateReply, type GateStatusView, type OpenGateView, type PartyView,
 } from './contracts';
-import { fields, kingdom, oneOf, person, token } from './guard';
-import type { GateNotifier, RaidGateDeps, SourceStanding } from './ports';
-import type { GatePointerRecord, PartyMemberRecord, RaidActionRecord, RaidGateTransaction, Stored } from './repository';
+import { epoch, fields, kingdom, oneOf, person, token } from './guard';
+import type {
+  GateNotifier, RaidGateDeps, RaidGateRecovery, RaidObservationReceipt, RaidWrite, RaidWriteOutcome, SourceStanding, TrustedRaidObservation,
+} from './ports';
+import {
+  outboxId,
+  type GatePointerRecord, type OutboxKind, type PartyMemberRecord, type RaidActionRecord, type RaidGateTransaction, type RaidOutboxRecord, type Stored,
+} from './repository';
 
 export interface RaidGateApplication {
   handle(context: GateContext, command: unknown): Promise<GateReply>;
+  /**
+   * A verified `channel.raid` from main's ingress. Lands the correlated request once, then hands the raid to the
+   * Atlas's road ingestion. Server-only; never reachable from a viewer command.
+   */
+  ingestRaid(observation: TrustedRaidObservation): Promise<RaidObservationReceipt>;
+  /**
+   * One recovery pass, for main to run on a timer and at start-up: reconcile possibly-sent Twitch writes without
+   * sending them again, send or abandon provably unsent ones, retry road handoffs, and mark overdue countdowns.
+   */
+  recover(now: number, limit: number): Promise<RaidGateRecovery>;
 }
 
 const CONFLICT_RETRIES = 3;
-const LIVE_STATES = new Set(['dispatching', 'pending', 'unknown']);
+const DISPATCH_TIMEOUT_MS = 15_000;
+/** A claimed Twitch write that nobody can explain after this long stops being asked about; only a raid can settle it now. */
+const RECONCILE_GIVE_UP_MS = 6 * 60 * 60_000;
+/** A road handoff that has not been confirmed is retried no sooner than this. */
+const ROAD_RETRY_MS = 30_000;
+/** States in which Twitch holds, or may hold, this request. */
+const TWITCH_HOLDS: ReadonlySet<GateActionState> = new Set(['dispatching', 'pending', 'unknown']);
+const OWN = new AbortController().signal;
 
 class Denied extends Error {
   constructor(readonly code: GateDenial) { super(code); }
@@ -60,46 +88,106 @@ function authorityOf(standing: SourceStanding): GateAuthority {
   return standing.live ? 'ready' : 'offline';
 }
 
-/** An action still gathering people: a live preview, or a request Twitch has not settled. */
-function isOpen(action: RaidActionRecord, gate: GatePointerRecord | null, now: number): boolean {
-  if (gate?.requestId !== action.requestId) return false;
-  return action.state === 'prepared' ? now < action.previewExpiresAt : LIVE_STATES.has(action.state);
+/** Twitch's countdown end plus the time a verified raid may take to reach us. Past this, a pending raid is unexplained. */
+function overdueAt(action: RaidActionRecord): number {
+  return (action.acceptedAt ?? action.dispatchedAt ?? action.observedAt) + GATE_LIMITS.twitchCountdownMs + GATE_LIMITS.observationGraceMs;
 }
 
-function partyExpiry(action: RaidActionRecord): number {
-  return action.state === 'prepared' ? action.previewExpiresAt : action.observedAt + GATE_LIMITS.twitchCountdownMs;
+/** The state a viewer is told: a countdown that ran out without a witnessed raid is "checking", never still "pending". */
+function viewState(action: RaidActionRecord, now: number): GateActionState {
+  return action.state === 'pending' && now >= overdueAt(action) ? 'unknown' : action.state;
 }
 
-function actionView(action: RaidActionRecord): GateActionView {
-  return { requestId: action.requestId, revision: action.revision, from: action.from, to: action.to, state: action.state, observedAt: action.observedAt, raid: action.raid };
+/** Until when this action is the gate's news. Zero for a gate that closed before it started. */
+function shownUntil(action: RaidActionRecord): number {
+  switch (action.state) {
+    case 'prepared': return action.endReason === null ? action.previewExpiresAt : 0;
+    case 'dispatching': return action.observedAt + GATE_LIMITS.unknownHoldMs;
+    case 'pending': return overdueAt(action) + GATE_LIMITS.unknownHoldMs;
+    case 'unknown': return action.observedAt + GATE_LIMITS.unknownHoldMs;
+    case 'landed': case 'rejected': return action.observedAt + GATE_LIMITS.settledShowMs;
+    case 'cancelled': return action.endReason === 'withdrawn' ? action.observedAt + GATE_LIMITS.settledShowMs : 0;
+  }
 }
 
-function partyView(action: RaidActionRecord, member: PartyMemberRecord | null, open: boolean): PartyView {
-  return { requestId: action.requestId, joined: open && member?.joined === true, optedIn: open ? action.optedIn : 0, expiresAt: partyExpiry(action) };
+/** The gate's current news: a live preview, a raid Twitch holds or may hold, or one that settled minutes ago. */
+function isShown(action: RaidActionRecord, gate: GatePointerRecord | null, now: number): boolean {
+  return gate?.requestId === action.requestId && now < shownUntil(action);
 }
 
-function openView(action: RaidActionRecord, member: PartyMemberRecord | null): OpenGateView {
+/** People may still choose to march: a live preview, or a raid that has not left or been called off. */
+function isGathering(action: RaidActionRecord, gate: GatePointerRecord | null, now: number): boolean {
+  return isShown(action, gate, now) && (action.state === 'prepared' || TWITCH_HOLDS.has(action.state));
+}
+
+function actionView(action: RaidActionRecord, now: number): GateActionView {
+  return { requestId: action.requestId, revision: action.revision, from: action.from, to: action.to, state: viewState(action, now), observedAt: action.observedAt, raid: action.raid };
+}
+
+function partyView(action: RaidActionRecord, member: PartyMemberRecord | null, shown: boolean): PartyView {
+  return { requestId: action.requestId, joined: shown && member?.joined === true, optedIn: shown ? action.optedIn : 0, expiresAt: Math.max(1, shownUntil(action)) };
+}
+
+function openView(action: RaidActionRecord, member: PartyMemberRecord | null, now: number): OpenGateView {
+  const state = viewState(action, now);
   return {
-    requestId: action.requestId, revision: action.revision, to: action.to, target: action.target, state: action.state,
-    optedIn: action.optedIn, expiresAt: partyExpiry(action), joined: member?.joined === true,
+    requestId: action.requestId, revision: action.revision, to: action.to, target: action.target, state,
+    optedIn: action.optedIn, expiresAt: shownUntil(action), joined: member?.joined === true,
+    countdownEndsAt: state === 'pending' ? action.acceptedAt! + GATE_LIMITS.twitchCountdownMs : null, raid: action.raid,
   };
 }
 
-export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplication {
-  const { repository, policy, tokens } = deps;
-  const notifier: GateNotifier | undefined = deps.notifier;
+/** A transport's answer, re-read: anything outside the contract is an answer nobody can vouch for. */
+function readOutcome(value: unknown): RaidWriteOutcome {
+  const kind = typeof value === 'object' && value !== null ? (value as { kind?: unknown }).kind : undefined;
+  if (kind === 'accepted') {
+    const f = fields(value, ['kind', 'createdAt']);
+    const createdAt = f && epoch(f.createdAt);
+    return createdAt ? { kind, createdAt } : { kind: 'unknown' };
+  }
+  if (kind === 'rejected') {
+    const f = fields(value, ['kind', 'code']);
+    if (!f) return { kind: 'unknown' };
+    return { kind, code: token(f.code) ?? 'refused' };
+  }
+  return { kind: 'unknown' };
+}
 
-  /** Runs `work` atomically, retrying a lost compare-and-set race a few times before calling the view stale. */
-  async function atomically<T>(context: GateContext, work: (tx: RaidGateTransaction) => Promise<T>): Promise<T> {
+function readObservation(value: unknown): TrustedRaidObservation | undefined {
+  const f = fields(value, ['raid', 'upstreamEventId', 'actionRequestId', 'receivedAt']);
+  if (!f) return undefined;
+  const raid = AtlasRaidSchema.safeParse(f.raid);
+  const upstreamEventId = f.upstreamEventId === null ? null : token(f.upstreamEventId);
+  const actionRequestId = f.actionRequestId === null ? null : token(f.actionRequestId);
+  const receivedAt = epoch(f.receivedAt);
+  if (!raid.success || upstreamEventId === undefined || actionRequestId === undefined || receivedAt === undefined) return undefined;
+  return { raid: raid.data, upstreamEventId, actionRequestId, receivedAt };
+}
+
+export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplication {
+  const { repository, policy, tokens, clock } = deps;
+  const raids = deps.raids ?? null, roads = deps.roads ?? null;
+  const notifier: GateNotifier | undefined = deps.notifier;
+  const dispatchTimeoutMs = deps.dispatchTimeoutMs ?? DISPATCH_TIMEOUT_MS;
+  if (typeof clock !== 'function') throw new Error('The Raid Gate needs main\'s server clock.');
+  // A live gate never talks to a controlled transport, and a simulated one never reaches Twitch or the real Atlas.
+  for (const [name, port] of [['raid transport', raids], ['road ingestion', roads]] as const) {
+    if (port && port.origin !== deps.origin) throw new Error(`The Raid Gate is ${deps.origin}, but its ${name} is ${port.origin}.`);
+  }
+
+  async function transact<T>(work: (tx: RaidGateTransaction) => Promise<T>, signal: AbortSignal): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       try {
-        return await repository.transaction(work, context.signal);
+        return await repository.transaction(work, signal);
       } catch (error) {
         if (!(error instanceof Conflict)) throw error;
         if (attempt + 1 >= CONFLICT_RETRIES) throw new Denied('stale');
       }
     }
   }
+
+  /** Runs `work` atomically for a viewer's request, retrying a lost compare-and-set race before calling the view stale. */
+  const atomically = <T>(context: GateContext, work: (tx: RaidGateTransaction) => Promise<T>) => transact(work, context.signal);
 
   async function standingOf(context: GateContext): Promise<SourceStanding> {
     let standing: SourceStanding;
@@ -117,6 +205,163 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
     notifier?.changed({ kingdomId: action.from, requestId: action.requestId, revision: action.revision });
   }
 
+  /** Writes the next revision of an action. */
+  async function advance(tx: RaidGateTransaction, action: RaidActionRecord, change: Partial<RaidActionRecord>, now: number): Promise<RaidActionRecord> {
+    return stored(await tx.putAction({ ...action, ...change, revision: action.revision + 1, updatedAt: Math.max(now, action.updatedAt) }, action.revision));
+  }
+
+  async function advanceOutbox(tx: RaidGateTransaction, item: RaidOutboxRecord, change: Partial<RaidOutboxRecord>): Promise<RaidOutboxRecord> {
+    return stored(await tx.putOutbox({ ...item, ...change, revision: item.revision + 1 }, item.revision));
+  }
+
+  function queue(tx: RaidGateTransaction, requestId: string, kind: OutboxKind, now: number): Promise<RaidOutboxRecord> {
+    return tx.putOutbox({
+      id: outboxId(requestId, kind), revision: 1, requestId, kind, state: 'queued', createdAt: now,
+      claimedAt: null, settledAt: null, outcome: null, attempts: 0, origin: deps.origin,
+    }, 0).then(stored);
+  }
+
+  // ---- Twitch writes through the outbox ----------------------------------------------------------------------------
+
+  const writeFor = (item: RaidOutboxRecord, action: RaidActionRecord): RaidWrite => ({ key: item.id, requestId: action.requestId, from: action.from, to: action.to });
+
+  /**
+   * Applies Twitch's answer to a claimed write. `unknown` changes nothing durable but the action's honesty: a start
+   * whose answer was lost is `unknown`, and the write stays claimed for reconciliation.
+   */
+  async function settle(id: string, outcome: RaidWriteOutcome): Promise<void> {
+    const changed = await transact(async tx => {
+      const item = await tx.getOutbox(id);
+      if (!item || item.state !== 'claimed') return null;
+      const action = await tx.getAction(item.requestId);
+      if (!action) throw new Error('A Raid Gate outbox record has no action.');
+      const now = clock();
+      if (outcome.kind === 'unknown') {
+        return item.kind === 'start' && action.state === 'dispatching' ? advance(tx, action, { state: 'unknown', observedAt: now }, now) : null;
+      }
+      await advanceOutbox(tx, item, { state: 'settled', settledAt: now, outcome: outcome.kind });
+      if (!TWITCH_HOLDS.has(action.state)) return null;
+      if (item.kind === 'start') {
+        if (action.state === 'pending') return null;
+        return advance(tx, action, outcome.kind === 'accepted'
+          ? { state: 'pending', acceptedAt: outcome.createdAt, observedAt: now }
+          : { state: 'rejected', rejection: outcome.code, observedAt: now }, now);
+      }
+      // Twitch confirmed the cancel: the party turns back. Twitch held nothing to cancel: the raid may already have
+      // left, so only a witnessed raid (or its absence, reconciled) can say what happened.
+      return advance(tx, action, outcome.kind === 'accepted'
+        ? { state: 'cancelled', endReason: 'withdrawn', observedAt: now }
+        : { state: 'unknown', observedAt: now }, now);
+    }, OWN);
+    if (changed) announce(changed);
+  }
+
+  /** Claims a provably unsent write and hands it to Twitch once. Whatever happens next, it is never sent again. */
+  async function send(id: string): Promise<boolean> {
+    if (!raids) return false;
+    const claim = await transact(async tx => {
+      const item = await tx.getOutbox(id);
+      if (!item || item.state !== 'queued' || item.kind === 'road') return null;
+      const action = await tx.getAction(item.requestId);
+      if (!action) throw new Error('A Raid Gate outbox record has no action.');
+      const claimed = await advanceOutbox(tx, item, { state: 'claimed', claimedAt: clock(), attempts: 1 });
+      return { item: claimed, action };
+    }, OWN);
+    if (!claim) return false;
+    const call = claim.item.kind === 'start' ? raids.start : raids.cancel;
+    let outcome: RaidWriteOutcome;
+    try {
+      outcome = readOutcome(await call.call(raids, writeFor(claim.item, claim.action), AbortSignal.timeout(dispatchTimeoutMs)));
+    } catch {
+      outcome = { kind: 'unknown' };
+    }
+    await settle(id, outcome);
+    return true;
+  }
+
+  /** Asks the transport what became of a claimed write. Never writes to Twitch. */
+  async function reconcileWrite(id: string, now: number): Promise<boolean> {
+    if (!raids) return false;
+    const found = await transact(async tx => {
+      const item = await tx.getOutbox(id);
+      if (!item || item.state !== 'claimed' || item.kind === 'road') return null;
+      const action = await tx.getAction(item.requestId);
+      if (!action) throw new Error('A Raid Gate outbox record has no action.');
+      if (now - item.claimedAt! >= RECONCILE_GIVE_UP_MS) {
+        // Nobody can explain this write any more. It stays unexplained; a verified raid can still land the request.
+        await advanceOutbox(tx, item, { state: 'settled', settledAt: now, outcome: 'unknown' });
+        return null;
+      }
+      return { item, action };
+    }, OWN);
+    if (!found) return false;
+    let outcome: RaidWriteOutcome;
+    try {
+      outcome = readOutcome(await raids.reconcile(writeFor(found.item, found.action), AbortSignal.timeout(dispatchTimeoutMs)));
+    } catch {
+      outcome = { kind: 'unknown' };
+    }
+    if (outcome.kind !== 'unknown') await settle(id, outcome);
+    return outcome.kind !== 'unknown';
+  }
+
+  /** A start that never reached Twitch and whose preview has run out: nothing was sent, and the party is released. */
+  async function lapse(id: string, now: number): Promise<boolean> {
+    const changed = await transact(async tx => {
+      const item = await tx.getOutbox(id);
+      if (!item || item.state !== 'queued' || item.kind !== 'start') return null;
+      const action = await tx.getAction(item.requestId);
+      if (!action) throw new Error('A Raid Gate outbox record has no action.');
+      await advanceOutbox(tx, item, { state: 'settled', settledAt: now, outcome: 'lapsed' });
+      if (action.state !== 'dispatching') return null;
+      const ended = await advance(tx, action, { state: 'cancelled', endReason: 'expired', observedAt: now }, now);
+      const gate = await tx.getGate(action.from);
+      if (gate?.requestId === action.requestId) stored(await tx.putGate({ ...gate, revision: gate.revision + 1, requestId: null, updatedAt: now }, gate.revision));
+      return ended;
+    }, OWN);
+    if (changed) announce(changed);
+    return changed !== null;
+  }
+
+  /** Hands a witnessed raid to the Atlas's road ingestion. Idempotent there, so a retry is safe. */
+  async function deliver(id: string, now: number): Promise<boolean> {
+    if (!roads) return false;
+    const claim = await transact(async tx => {
+      const item = await tx.getOutbox(id);
+      if (!item || item.kind !== 'road' || item.state === 'settled') return null;
+      if (item.state === 'claimed' && now - item.claimedAt! < ROAD_RETRY_MS) return null;
+      const action = await tx.getAction(item.requestId);
+      if (!action?.raid) throw new Error('A Raid Gate road handoff has no witnessed raid.');
+      await advanceOutbox(tx, item, { state: 'claimed', claimedAt: now, attempts: item.attempts + 1 });
+      return action.raid;
+    }, OWN);
+    if (!claim) return false;
+    try {
+      await roads.observe(claim, AbortSignal.timeout(dispatchTimeoutMs));
+    } catch {
+      return false;
+    }
+    return transact(async tx => {
+      const item = await tx.getOutbox(id);
+      if (!item || item.state !== 'claimed') return false;
+      await advanceOutbox(tx, item, { state: 'settled', settledAt: clock(), outcome: 'delivered' });
+      return true;
+    }, OWN);
+  }
+
+  /** A countdown that ran out with no witnessed raid becomes `unknown` on record, as viewers were already told. */
+  async function markOverdue(requestId: string, now: number): Promise<boolean> {
+    const changed = await transact(async tx => {
+      const action = await tx.getAction(requestId);
+      if (!action || action.state !== 'pending' || now < overdueAt(action)) return null;
+      return advance(tx, action, { state: 'unknown', observedAt: overdueAt(action) }, now);
+    }, OWN);
+    if (changed) announce(changed);
+    return changed !== null;
+  }
+
+  // ---- Viewer commands ---------------------------------------------------------------------------------------------
+
   async function status(context: GateContext): Promise<GateReply> {
     const { principal, now } = context;
     const standing = await standingOf(context);
@@ -124,74 +369,134 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
     const open = await atomically(context, async tx => {
       const gate = await tx.getGate(principal.sourceKingdomId);
       const action = gate?.requestId ? await tx.getAction(gate.requestId) : null;
-      if (!action || !isOpen(action, gate, now)) return null;
-      return openView(action, await tx.getMember(action.requestId, principal.personId));
+      if (!action || !isShown(action, gate, now)) return null;
+      return openView(action, await tx.getMember(action.requestId, principal.personId), now);
     });
     const value: GateStatusView = { kingdomId: principal.sourceKingdomId, viewer: monarch ? 'monarch' : 'walker', authority: monarch ? authorityOf(standing) : null, open };
     return { kind: 'gate', value };
   }
 
+  /** The broadcaster check before any policy call, then the authority's own verdict. */
+  async function monarchStanding(context: GateContext): Promise<SourceStanding | null> {
+    const { principal } = context;
+    if (kingdomForBroadcaster(principal.personId) !== principal.sourceKingdomId) return null;
+    const standing = await standingOf(context);
+    return isMonarch(principal, standing) ? standing : null;
+  }
+
+  /** The destination's verdict right now, or the denial that stops the preview or start. */
+  async function verdictFor(context: GateContext, target: RaidActionRecord['to']) {
+    let verdict;
+    try {
+      verdict = await policy.readTarget(context.principal.sourceKingdomId, target, context.now, context.signal);
+    } catch {
+      context.signal.throwIfAborted();
+      throw new Denied('unavailable');
+    }
+    if (!verdict || verdict.target.kingdomId !== target) throw new Denied('invalid');
+    if (!verdict.target.live) throw new Denied('unavailable');
+    if (!verdict.permitted || verdict.target.classification === 'excluded') throw new Denied('unauthorized');
+    return verdict;
+  }
+
+  function requireReady(standing: SourceStanding): void {
+    const authority = authorityOf(standing);
+    if (authority === 'offline' || authority === 'unavailable') throw new Denied('unavailable');
+    if (authority !== 'ready') throw new Denied('unauthorized');
+  }
+
   async function preview(context: GateContext, command: Extract<GateCommand, { op: 'preview' }>): Promise<GateReply> {
-    const { principal, now, signal } = context;
+    const { principal, now } = context;
     const from = principal.sourceKingdomId;
     // Refuse a non-broadcaster before asking anyone anything.
     if (kingdomForBroadcaster(principal.personId) !== from) return denied('unauthorized');
     if (command.target === from) return denied('invalid');
-    const standing = await standingOf(context);
-    if (!isMonarch(principal, standing)) return denied('unauthorized');
-    const authority = authorityOf(standing);
-    if (authority === 'offline' || authority === 'unavailable') return denied('unavailable');
-    if (authority !== 'ready') return denied('unauthorized');
-
-    let verdict;
-    try {
-      verdict = await policy.readTarget(from, command.target, now, signal);
-    } catch {
-      signal.throwIfAborted();
-      return denied('unavailable');
-    }
-    if (!verdict || verdict.target.kingdomId !== command.target) return denied('invalid');
-    if (!verdict.target.live) return denied('unavailable');
-    if (!verdict.permitted || verdict.target.classification === 'excluded') return denied('unauthorized');
+    const standing = await monarchStanding(context);
+    if (!standing) return denied('unauthorized');
+    requireReady(standing);
+    const verdict = await verdictFor(context, command.target);
 
     const secret = tokens.issue();
     const hash = await tokens.hash(secret);
     const expiresAt = now + GATE_LIMITS.previewMs;
+    const changed: RaidActionRecord[] = [];
     const action = await atomically(context, async tx => {
+      changed.length = 0;
       const gate = await tx.getGate(from);
       const existing = await tx.getAction(command.requestId);
       if (existing) {
         // A request ID is one monarch's one decision, never a shared handle.
         if (existing.from !== from || existing.actorId !== principal.personId) throw new Denied('unauthorized');
         if (existing.to !== command.target) throw new Denied('invalid');
-        if (!isOpen(existing, gate, now) || existing.state !== 'prepared') throw new Denied('stale');
+        if (existing.state !== 'prepared' || !isGathering(existing, gate, now)) throw new Denied('stale');
         // Same decision, fresh window: a new token replaces the old one and the gathered party stays.
-        return stored(await tx.putAction({
-          ...existing, revision: existing.revision + 1, sessionId: principal.sessionId, target: verdict.target,
-          previewTokenHash: hash, previewExpiresAt: expiresAt, updatedAt: now, observedAt: now,
-        }, existing.revision));
+        return advance(tx, existing, {
+          sessionId: principal.sessionId, target: verdict.target, previewTokenHash: hash, previewExpiresAt: expiresAt, observedAt: now,
+        }, now);
       }
       const current = gate?.requestId ? await tx.getAction(gate.requestId) : null;
       if (current && current.state === 'prepared' && current.endReason === null) {
         // An unstarted preview for another destination closes; its party's choice ended with it.
-        stored(await tx.putAction({
-          ...current, revision: current.revision + 1, state: 'cancelled', updatedAt: now, observedAt: now,
-          endReason: now < current.previewExpiresAt ? 'superseded' : 'expired',
-        }, current.revision));
-      } else if (current && LIVE_STATES.has(current.state)) {
+        changed.push(await advance(tx, current, {
+          state: 'cancelled', observedAt: now, endReason: now < current.previewExpiresAt ? 'superseded' : 'expired',
+        }, now));
+      } else if (current && TWITCH_HOLDS.has(current.state) && isGathering(current, gate, now)) {
+        // A raid Twitch holds, or may hold, is settled through Twitch, never replaced by a new idea.
         throw new Denied('stale');
       }
       const created = stored(await tx.putAction({
         requestId: command.requestId, revision: 1, actorId: principal.personId, sessionId: principal.sessionId, from, to: command.target,
         target: verdict.target, state: 'prepared', previewTokenHash: hash, previewExpiresAt: expiresAt, optedIn: 0,
         createdAt: now, updatedAt: now, observedAt: now, raid: null, endReason: null, origin: deps.origin,
+        dispatchedAt: null, acceptedAt: null, rejection: null, raidEventId: null,
       }, 0));
       stored(await tx.putGate({ kingdomId: from, revision: (gate?.revision ?? 0) + 1, requestId: created.requestId, updatedAt: now }, gate?.revision ?? 0));
       return created;
     });
+    for (const each of changed) announce(each);
     announce(action);
     const value: GatePreview = { token: secret, requestId: action.requestId, from, to: action.to, expiresAt, optedIn: action.optedIn, target: action.target };
     return { kind: 'preview', value };
+  }
+
+  /**
+   * The monarch opens the gate. Everything is checked again at the press: session, broadcaster, live, grant, consent,
+   * the preview's own token and window, and the destination's current verdict. The intent is stored before Twitch is
+   * asked; a repeated press, a reload or a lost reply finds that intent and never asks Twitch twice.
+   */
+  async function start(context: GateContext, command: Extract<GateCommand, { op: 'start' }>): Promise<GateReply> {
+    const { principal, now } = context;
+    const standing = await monarchStanding(context);
+    if (!standing) return denied('unauthorized');
+    const hash = await tokens.hash(command.previewToken);
+    const check = (action: RaidActionRecord | null): RaidActionRecord => {
+      if (!action) throw new Denied('stale');
+      if (action.from !== principal.sourceKingdomId || action.actorId !== principal.personId) throw new Denied('unauthorized');
+      // The token is the proof of this one preview; a rotated or foreign one opens nothing.
+      if (action.previewTokenHash !== hash) throw new Denied('stale');
+      return action;
+    };
+    const seen = check(await atomically(context, tx => tx.getAction(command.requestId)));
+    if (seen.state !== 'prepared') return { kind: 'action', value: actionView(seen, now) };
+    if (!raids) return denied('unavailable');
+    requireReady(standing);
+    const verdict = await verdictFor(context, seen.to);
+
+    const id = outboxId(command.requestId, 'start');
+    const queued = await atomically(context, async tx => {
+      const action = check(await tx.getAction(command.requestId));
+      if (action.state !== 'prepared') return { action, fresh: false };
+      if (!isGathering(action, await tx.getGate(action.from), now)) throw new Denied('stale');
+      const next = await advance(tx, action, { state: 'dispatching', target: verdict.target, dispatchedAt: now, observedAt: now }, now);
+      await queue(tx, action.requestId, 'start', now);
+      return { action: next, fresh: true };
+    });
+    if (!queued.fresh) return { kind: 'action', value: actionView(queued.action, now) };
+    announce(queued.action);
+    // The viewer's request may end now; the write and its answer belong to the server from here.
+    await send(id);
+    const after = await transact(tx => tx.getAction(command.requestId), OWN);
+    return { kind: 'action', value: actionView(after ?? queued.action, clock()) };
   }
 
   async function choose(context: GateContext, requestId: string, join: boolean): Promise<GateReply> {
@@ -205,8 +510,9 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
       if (action.from !== principal.sourceKingdomId) throw new Denied('unauthorized');
       const gate = await tx.getGate(action.from);
       const member = await tx.getMember(requestId, principal.personId);
-      if (!isOpen(action, gate, now)) {
-        // Leaving a closed request is already true; joining one is not possible.
+      const shown = isShown(action, gate, now);
+      // Joining needs a gate still gathering; staying home is always possible, even after the party set out.
+      if (join ? !isGathering(action, gate, now) : !shown) {
         if (join) throw new Denied('stale');
         return partyView(action, member, false);
       }
@@ -215,7 +521,7 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
         requestId, personId: principal.personId, kingdomId: action.from, sessionId: principal.sessionId, joined: join,
         revision: (member?.revision ?? 0) + 1, joinedAt: join ? now : null, updatedAt: now,
       }, member?.revision ?? 0));
-      const nextAction = stored(await tx.putAction({ ...action, revision: action.revision + 1, optedIn: action.optedIn + (join ? 1 : -1), updatedAt: now }, action.revision));
+      const nextAction = await advance(tx, action, { optedIn: action.optedIn + (join ? 1 : -1) }, now);
       changed.push(nextAction);
       return partyView(nextAction, nextMember, true);
     });
@@ -224,34 +530,67 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
   }
 
   /**
-   * The monarch closes the gate before anything was sent to Twitch. The request ends, the gate pointer clears and
-   * every walker's choice ends with it; nobody moves. Closing again answers with the settled action. A request
-   * Twitch already holds is cancelled through Twitch, never by quietly forgetting it here.
+   * The monarch closes the gate. Before starting, nothing was sent: the request ends here, the gate pointer clears
+   * and every walker's choice ends with it. Once Twitch holds the raid, the cancel goes to Twitch through the outbox,
+   * once; the party turns back only when Twitch confirms it.
    */
   async function close(context: GateContext, requestId: string): Promise<GateReply> {
     const { principal, now } = context;
-    if (kingdomForBroadcaster(principal.personId) !== principal.sourceKingdomId) return denied('unauthorized');
-    // Closing sends nothing to Twitch, so a missing or withdrawn raid grant never traps a preview open.
-    if (!isMonarch(principal, await standingOf(context))) return denied('unauthorized');
+    // Closing an unstarted preview sends nothing to Twitch, so a missing or withdrawn raid grant never traps it open.
+    if (!await monarchStanding(context)) return denied('unauthorized');
     const changed: RaidActionRecord[] = [];
-    const action = await atomically(context, async tx => {
+    const result = await atomically(context, async tx => {
       changed.length = 0;
       const action = await tx.getAction(requestId);
       if (!action) throw new Denied('stale');
       if (action.from !== principal.sourceKingdomId || action.actorId !== principal.personId) throw new Denied('unauthorized');
-      if (LIVE_STATES.has(action.state)) throw new Denied('unavailable');
-      if (action.state !== 'prepared' || action.endReason !== null) return action;
-      const ended = stored(await tx.putAction({
-        ...action, revision: action.revision + 1, state: 'cancelled', updatedAt: now, observedAt: now,
-        endReason: now < action.previewExpiresAt ? 'closed' : 'expired',
-      }, action.revision));
+      if (action.state === 'pending' || action.state === 'unknown') {
+        if (!raids) throw new Denied('unavailable');
+        // One cancel per request. A second press finds the first.
+        if (await tx.getOutbox(outboxId(requestId, 'cancel'))) return { action, cancel: false };
+        await queue(tx, requestId, 'cancel', now);
+        return { action, cancel: true };
+      }
+      // Twitch is being asked to start right now; the monarch can call it off once it answers.
+      if (action.state !== 'prepared' || action.endReason !== null) return { action, cancel: false };
+      const ended = await advance(tx, action, {
+        state: 'cancelled', observedAt: now, endReason: now < action.previewExpiresAt ? 'closed' : 'expired',
+      }, now);
       const gate = await tx.getGate(action.from);
       if (gate?.requestId === requestId) stored(await tx.putGate({ ...gate, revision: gate.revision + 1, requestId: null, updatedAt: now }, gate.revision));
       changed.push(ended);
-      return ended;
+      return { action: ended, cancel: false };
     });
     for (const each of changed) announce(each);
-    return { kind: 'action', value: actionView(action) };
+    if (!result.cancel) return { kind: 'action', value: actionView(result.action, now) };
+    await send(outboxId(requestId, 'cancel'));
+    const after = await transact(tx => tx.getAction(requestId), OWN);
+    return { kind: 'action', value: actionView(after ?? result.action, clock()) };
+  }
+
+  /**
+   * Resumes a request after a lost reply or a reload. The monarch's reconcile asks the transport what became of each
+   * claimed write (never sending it again) and sends a write that provably never left. A walker only reads.
+   */
+  async function reconcile(context: GateContext, requestId: string): Promise<GateReply> {
+    const { principal, now } = context;
+    const monarch = kingdomForBroadcaster(principal.personId) === principal.sourceKingdomId && await monarchStanding(context) !== null;
+    if (!monarch) await standingOf(context);
+    const action = await atomically(context, tx => tx.getAction(requestId));
+    if (!action) return denied('stale');
+    if (action.from !== principal.sourceKingdomId) return denied('unauthorized');
+    if (monarch && action.actorId === principal.personId) {
+      for (const kind of ['start', 'cancel'] as const) {
+        const id = outboxId(requestId, kind);
+        const item = await atomically(context, tx => tx.getOutbox(id));
+        if (item?.state === 'claimed') await reconcileWrite(id, now);
+        else if (item?.state === 'queued' && kind === 'start') await (now < action.previewExpiresAt ? send(id) : lapse(id, now));
+        else if (item?.state === 'queued') await send(id);
+      }
+      await markOverdue(requestId, now);
+    }
+    const after = await transact(tx => tx.getAction(requestId), OWN);
+    return { kind: 'action', value: actionView(after ?? action, now) };
   }
 
   async function readAction(context: GateContext, requestId: string): Promise<GateReply> {
@@ -259,7 +598,77 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
     const action = await atomically(context, tx => tx.getAction(requestId));
     if (!action) return denied('stale');
     if (action.from !== context.principal.sourceKingdomId) return denied('unauthorized');
-    return { kind: 'action', value: actionView(action) };
+    return { kind: 'action', value: actionView(action, context.now) };
+  }
+
+  // ---- Server-only ingress and recovery ----------------------------------------------------------------------------
+
+  const ignored = (reason: Extract<RaidObservationReceipt, { kind: 'ignored' }>['reason']): RaidObservationReceipt => ({ kind: 'ignored', reason });
+
+  async function ingestRaid(input: TrustedRaidObservation): Promise<RaidObservationReceipt> {
+    const observation = readObservation(input);
+    if (!observation) return ignored('invalid');
+    const { raid, upstreamEventId, actionRequestId } = observation;
+    // A live gate lands only on Chatdom's own verified EventSub; a simulated one only on a labelled simulation.
+    // Replays and legacy feeds are history, never a departure.
+    const trusted = deps.origin === 'live' ? raid.source === 'herald' && raid.evidence.kind === 'observed' : raid.source === 'simulation';
+    if (!trusted) return ignored('untrusted');
+    if (actionRequestId === null || upstreamEventId === null) return ignored('uncorrelated');
+    const now = clock();
+    const outcome = await transact(async (tx): Promise<Readonly<{ receipt: RaidObservationReceipt; landed: RaidActionRecord | null }>> => {
+      const action = await tx.getAction(actionRequestId);
+      if (!action) return { receipt: ignored('unknown-request'), landed: null };
+      if (action.from !== raid.fromKingdomId || action.to !== raid.toKingdomId) return { receipt: ignored('mismatch'), landed: null };
+      if (action.state === 'landed') {
+        const same = action.raidEventId === upstreamEventId || action.raid?.id === raid.id;
+        return { receipt: same ? { kind: 'duplicate', requestId: action.requestId } : ignored('conflict'), landed: null };
+      }
+      // A confirmed cancel or a refusal already settled this request; a raid seen now is not the one it asked for.
+      if (!TWITCH_HOLDS.has(action.state) || action.dispatchedAt === null) return { receipt: ignored('settled'), landed: null };
+      const startItem = await tx.getOutbox(outboxId(action.requestId, 'start'));
+      // Twitch cannot have acted on a write that never left.
+      if (!startItem || startItem.attempts === 0) return { receipt: ignored('uncorrelated'), landed: null };
+      // The raid happened after this press and no later than this request's countdown allows.
+      const at = raid.occurredAt ?? raid.observedAt;
+      const base = Math.max(action.acceptedAt ?? 0, action.dispatchedAt);
+      const latest = base + GATE_LIMITS.twitchCountdownMs + (raid.occurredAt === null ? GATE_LIMITS.observationGraceMs : GATE_LIMITS.clockSkewMs);
+      if (at < action.dispatchedAt - GATE_LIMITS.clockSkewMs || at > latest) return { receipt: ignored('out-of-window'), landed: null };
+
+      const landed = await advance(tx, action, { state: 'landed', raid, raidEventId: upstreamEventId, observedAt: now, endReason: null }, now);
+      if (startItem.state === 'claimed') await advanceOutbox(tx, startItem, { state: 'settled', settledAt: now, outcome: 'accepted' });
+      const cancelItem = await tx.getOutbox(outboxId(action.requestId, 'cancel'));
+      // The raid left before any cancel could hold it: there was nothing left to cancel.
+      if (cancelItem?.state === 'claimed') await advanceOutbox(tx, cancelItem, { state: 'settled', settledAt: now, outcome: 'rejected' });
+      else if (cancelItem?.state === 'queued') await advanceOutbox(tx, cancelItem, { state: 'settled', settledAt: now, outcome: 'lapsed' });
+      await queue(tx, action.requestId, 'road', now);
+      return { receipt: { kind: 'landed', requestId: action.requestId }, landed };
+    }, OWN);
+    if (outcome.landed) {
+      announce(outcome.landed);
+      await deliver(outboxId(outcome.landed.requestId, 'road'), now);
+    }
+    return outcome.receipt;
+  }
+
+  async function recover(now: number, limit: number): Promise<RaidGateRecovery> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('A Raid Gate recovery pass takes 1–100 records per kind.');
+    const report = { reconciled: 0, sent: 0, lapsed: 0, delivered: 0, overdue: 0 };
+    // First what may already have happened: ask about it, never repeat it.
+    for (const item of await transact(tx => tx.listOutbox('claimed', null, limit), OWN)) {
+      if (item.kind === 'road') { if (await deliver(item.id, now)) report.delivered++; }
+      else if (await reconcileWrite(item.id, now)) report.reconciled++;
+    }
+    // Then what provably never left.
+    for (const item of await transact(tx => tx.listOutbox('queued', null, limit), OWN)) {
+      if (item.kind === 'road') { if (await deliver(item.id, now)) report.delivered++; continue; }
+      const action = await transact(tx => tx.getAction(item.requestId), OWN);
+      if (item.kind === 'start' && (!action || now >= action.previewExpiresAt)) { if (await lapse(item.id, now)) report.lapsed++; }
+      else if (await send(item.id)) report.sent++;
+    }
+    for (const action of await transact(tx => tx.listActions('pending', null, limit), OWN)) {
+      if (await markOverdue(action.requestId, now)) report.overdue++;
+    }
+    return report;
   }
 
   return {
@@ -274,9 +683,11 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
         switch (command.op) {
           case 'gate': return await status(scoped);
           case 'preview': return await preview(scoped, command);
+          case 'start': return await start(scoped, command);
           case 'join': return await choose(scoped, command.requestId, true);
           case 'leave': return await choose(scoped, command.requestId, false);
           case 'read-action': return await readAction(scoped, command.requestId);
+          case 'reconcile': return await reconcile(scoped, command.requestId);
           case 'cancel': return await close(scoped, command.requestId);
           default: return denied('unavailable');
         }
@@ -285,5 +696,7 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
         throw error;
       }
     },
+    ingestRaid,
+    recover,
   };
 }

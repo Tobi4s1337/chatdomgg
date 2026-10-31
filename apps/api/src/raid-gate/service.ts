@@ -4,8 +4,10 @@
  * four policy ports; everything else is built here.
  *
  *   const gate = createRaidGateService({ pool, origin, issuer: provider.issuer, sessionCookie, publicOrigin,
- *     origins: [publicOrigin], clock: Date.now, policyPorts: { live, grants, consent, directory } });
+ *     origins: [publicOrigin], clock: Date.now, policyPorts: { live, grants, consent, directory }, raids, roads });
  *   if (gate.matches(request.url)) return gate.serve(request, response);
+ *   // main's verified EventSub ingress, for each channel.raid it correlated (or not) to a gate request:
+ *   await gate.application.ingestRaid({ raid, upstreamEventId, actionRequestId, receivedAt });
  */
 import { createHash, randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -14,7 +16,7 @@ import type { KingdomId } from '../../../../packages/shared/src/identity';
 import { createRaidGateApplication, type RaidGateApplication } from './application';
 import { createGateFanout, createRaidGateHttp, type RaidGateHttp } from './http';
 import { createRealmGatePolicy, type LiveChannels, type RaidGrants, type TargetDirectory, type WriteConsent } from './policy';
-import type { PreviewTokens } from './ports';
+import type { AtlasRoadIngress, AuthorizedRaidTransport, PreviewTokens, RaidGateRecovery } from './ports';
 import { createPostgresRaidGateRepository, type SqlPool } from './postgres-repository';
 import type { RecordOrigin } from './repository';
 import { createRealmSessionAuthenticator, gateKingdomFromPath, kingdomFromGatePath, type SqlQueryable } from './session';
@@ -35,10 +37,21 @@ export type RaidGateServiceDeps = Readonly<{
   origins: readonly string[];
   clock: () => number;
   policyPorts: Readonly<{ live: LiveChannels; grants: RaidGrants; consent: WriteConsent; directory: TargetDirectory }>;
+  /** The source broadcaster's authorized Start/Cancel a Raid transport. Absent: the gate gathers but cannot start. */
+  raids?: AuthorizedRaidTransport | null;
+  /** The Atlas's road ingestion. Absent: witnessed raids wait in the outbox until it is bound. */
+  roads?: AtlasRoadIngress | null;
+  /** How often recovery runs (reconcile, resend the provably unsent, retry roads, mark overdue). 0 turns it off. */
+  recoverEveryMs?: number;
+  /** Told about a recovery pass that did something, or failed. */
+  onRecovery?: (outcome: Readonly<{ kind: 'report'; report: RaidGateRecovery }> | Readonly<{ kind: 'error'; error: unknown }>) => void;
   pathPrefix?: string;
   tokens?: PreviewTokens;
   heartbeatMs?: number;
 }>;
+
+export const RAID_GATE_RECOVER_EVERY_MS = 15_000;
+const RECOVERY_PAGE = 50;
 
 export interface RaidGateService {
   readonly http: RaidGateHttp;
@@ -47,7 +60,9 @@ export interface RaidGateService {
   matches(url: string | undefined): boolean;
   /** Answers one node request end to end, streaming the live gate and ending it when the client leaves. */
   serve(request: IncomingMessage, response: ServerResponse): Promise<void>;
-  /** Ends every open stream. The pool is main's. */
+  /** One recovery pass now; the timer runs the same thing. */
+  recover(): Promise<RaidGateRecovery>;
+  /** Ends every open stream and the recovery timer. The pool is main's. */
   close(): void;
 }
 
@@ -121,15 +136,31 @@ export function createRaidGateService(deps: RaidGateServiceDeps): RaidGateServic
   const repository = createPostgresRaidGateRepository({ pool: deps.pool });
   const policy = createRealmGatePolicy({ pool: deps.pool, origin: deps.origin, issuer: deps.issuer, ...deps.policyPorts });
   const fanout = createGateFanout();
-  const application = createRaidGateApplication({ repository, policy, tokens: deps.tokens ?? createPreviewTokens(), notifier: fanout, origin: deps.origin });
+  const application = createRaidGateApplication({
+    repository, policy, tokens: deps.tokens ?? createPreviewTokens(), notifier: fanout, origin: deps.origin, clock: deps.clock,
+    raids: deps.raids ?? null, roads: deps.roads ?? null,
+  });
   const http = createRaidGateHttp({
     application, changes: fanout, clock: deps.clock, origins: deps.origins,
     authenticate: createRealmSessionAuthenticator({ pool: deps.pool, origin: deps.origin, sessionCookie: deps.sessionCookie, kingdomOf }),
     ...(deps.heartbeatMs === undefined ? {} : { heartbeatMs: deps.heartbeatMs }),
   });
 
+  let recovering: Promise<RaidGateRecovery> | null = null;
+  const recover = () => recovering ??= application.recover(deps.clock(), RECOVERY_PAGE).finally(() => { recovering = null; });
+  const every = deps.recoverEveryMs ?? RAID_GATE_RECOVER_EVERY_MS;
+  const tick = () => {
+    recover().then(report => {
+      if (Object.values(report).some(count => count > 0)) deps.onRecovery?.({ kind: 'report', report });
+    }, error => deps.onRecovery?.({ kind: 'error', error }));
+  };
+  const timer = every > 0 ? setInterval(tick, every) : null;
+  timer?.unref?.();
+  // A restart picks up whatever the last process left half-done.
+  if (timer) queueMicrotask(tick);
+
   return {
-    http, application,
+    http, application, recover,
     matches(url) {
       const path = pathOf(url);
       return path !== null && kingdomFromGatePath(prefix, path) !== null;
@@ -137,6 +168,6 @@ export function createRaidGateService(deps: RaidGateServiceDeps): RaidGateServic
     async serve(request, response) {
       await writeWebResponse(await http.handle(toWebRequest(request, response, publicOrigin)), response);
     },
-    close: () => http.close(),
+    close: () => { if (timer) clearInterval(timer); http.close(); },
   };
 }

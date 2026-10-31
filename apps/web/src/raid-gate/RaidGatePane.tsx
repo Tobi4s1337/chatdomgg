@@ -1,5 +1,5 @@
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
-import type { GateDenial } from '../../../api/src/raid-gate/contracts';
+import { GATE_LIMITS, type GateDenial } from '../../../api/src/raid-gate/contracts';
 import type { GateDestination, GateFarewell, GateNotice, GateSnapshot, RaidGateController } from './controller';
 import { Seal } from './Seal';
 
@@ -70,13 +70,57 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
             <Party snap={s()} controller={props.controller} />
             <Show when={s().phase === 'preview'}>
               <ul class="rg-facts">
-                <li><Glyph kind="hourglass" /><span>When you open the gate, Twitch counts down <b>90 seconds</b> before the raid begins.</span></li>
+                <li><Glyph kind="hourglass" /><span>When you open the gate, Twitch counts down <b>90 seconds</b> before the raid begins. The party sets out only when Twitch confirms it.</span></li>
                 <li><Glyph kind="seal" /><span>This preview holds for <b class="rg-numeral">{remaining(s().expiresAt, now())}</b>. Pick again any time.</span></li>
               </ul>
               <div class="rg-actions">
+                <Show when={s().canStart} fallback={
+                  <button class="rg-button rg-primary" disabled={s().busy !== null} onClick={() => void props.controller.preview(s().destination!.target.kingdomId)}><Glyph kind="seal" />Renew this preview</button>
+                }>
+                  <button class="rg-button rg-primary" disabled={s().busy !== null} onClick={() => void props.controller.start()}><Glyph kind="gate" />Open the gate</button>
+                </Show>
                 <button class="rg-button" disabled={s().busy !== null} onClick={() => props.controller.open()}><MapGlyph />Choose another</button>
                 <button class="rg-button rg-subtle" disabled={s().busy !== null} aria-busy={s().busy === 'close'} onClick={() => void props.controller.cancel()}><Glyph kind="bar" />{s().busy === 'close' ? 'Closing the gate…' : 'Close the gate'}</button>
               </div>
+            </Show>
+          </Match>
+          <Match when={(s().phase === 'starting' || s().phase === 'countdown' || s().phase === 'checking') && s().destination}>
+            <Journey snap={s()} destination={s().destination!} now={now()} />
+            <Switch>
+              <Match when={s().phase === 'starting'}>
+                <p class="rg-lede rg-waiting"><Quill />{s().viewer === 'monarch' ? 'Asking Twitch to start the raid…' : 'The monarch is opening the gate…'}</p>
+              </Match>
+              <Match when={s().phase === 'countdown'}>
+                <Countdown endsAt={s().countdownEndsAt} now={now()} />
+              </Match>
+              <Match when={s().phase === 'checking'}>
+                <p class="rg-checking" role="status"><Quill /><span>{s().checking === 'countdown'
+                  ? "Twitch's countdown has ended, but the raid hasn't been seen on Twitch yet. Nobody has left, and staying home is always fine."
+                  : "We haven't seen the raid begin on Twitch yet, so we're checking. Nobody has left, and nothing is sent to Twitch twice."}</span></p>
+              </Match>
+            </Switch>
+            <Party snap={s()} controller={props.controller} />
+            <div class="rg-actions">
+              <Show when={s().phase === 'checking'}>
+                <button class="rg-button" disabled={s().busy !== null} aria-busy={s().busy === 'reconcile'} onClick={() => void props.controller.reconcile()}>{s().busy === 'reconcile' ? 'Checking…' : 'Check again'}</button>
+              </Show>
+              <Show when={s().viewer === 'monarch' && s().phase !== 'starting'}>
+                <button class="rg-button rg-subtle" disabled={s().busy !== null} aria-busy={s().busy === 'close'} onClick={() => void props.controller.cancel()}><Glyph kind="bar" />{s().busy === 'close' ? 'Calling it off…' : 'Call off the raid'}</button>
+              </Show>
+            </div>
+          </Match>
+          <Match when={s().phase === 'departed' && s().destination && s().raid}>
+            <Departure snap={s()} destination={s().destination!} />
+          </Match>
+          <Match when={(s().phase === 'called-off' || s().phase === 'refused') && s().destination}>
+            <p class="rg-farewell" role="status">
+              <Seal kingdomId={s().destination!.target.kingdomId} size={34} wax={s().destination!.land === 'founded' ? 'crimson' : 'umber'} />
+              <span>{s().phase === 'called-off'
+                ? `Twitch confirmed the raid to ${destinationName(s().destination!)} was called off. Nobody left, and everyone is home.`
+                : `Twitch didn't start the raid to ${destinationName(s().destination!)}. Nothing left the kingdom, and everyone is home.`}</span>
+            </p>
+            <Show when={s().viewer === 'monarch'} fallback={<p class="rg-quiet">When the monarch calls the realm to the gate again, you can choose to march. Staying is always fine.</p>}>
+              <div class="rg-actions"><button class="rg-button rg-primary" disabled={s().authority !== 'ready'} onClick={() => props.controller.open()}><MapGlyph />Choose where to ride</button></div>
             </Show>
           </Match>
           <Match when={s().phase === 'lapsed'}>
@@ -93,7 +137,7 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
           </Match>
         </Switch>
       </div>
-      <Show when={simulated()}><p class="rg-simulated"><span class="rg-pip" />SIMULATED · bench authority and walkers, no Twitch</p></Show>
+      <Show when={simulated()}><p class="rg-simulated" title="Bench authority, walkers and Twitch answers; nothing reaches Twitch"><span class="rg-pip" />SIMULATED</p></Show>
     </div>
   </aside>;
 }
@@ -112,6 +156,12 @@ function title(s: GateSnapshot): string {
     case 'lapsed': return 'The preview ran out';
     case 'quiet': return s.farewell?.reason === 'lapsed' ? 'The call has ended' : s.farewell ? 'The gate has closed' : 'The gate is quiet';
     case 'gathering': return `${s.source.name} gathers at the gate`;
+    case 'starting': return 'The gate is opening';
+    case 'countdown': return `The road to ${destination ?? 'a neighbour'} is open`;
+    case 'checking': return 'Checking whether the raid began';
+    case 'departed': return `The party set out for ${destination ?? 'a neighbour'}`;
+    case 'called-off': return 'The raid was called off';
+    case 'refused': return "Twitch didn't start the raid";
   }
 }
 
@@ -147,7 +197,7 @@ function destinationName(destination: GateDestination): string {
 function Journey(props: { snap: GateSnapshot; destination: GateDestination; now: number }) {
   const d = () => props.destination;
   const land = () => d().land ?? (d().target.founded ? 'founded' : 'waiting');
-  return <section class="rg-journey" aria-label="The road">
+  return <section class="rg-journey" data-stage={props.snap.phase} aria-label="The road">
     <div class="rg-road">
       <figure class="rg-end"><Seal kingdomId={props.snap.source.kingdomId} size={64} /><figcaption>{props.snap.source.name}</figcaption></figure>
       <svg class="rg-ink-road" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true">
@@ -188,7 +238,7 @@ function Party(props: { snap: GateSnapshot; controller: RaidGateController }) {
   const s = () => props.snap;
   const count = () => s().optedIn;
   const others = () => count() - (s().joined ? 1 : 0);
-  const line = () => count() === 0 ? 'No one has chosen to march yet.'
+  const line = () => count() === 0 ? (s().phase === 'gathering' || s().phase === 'preview' ? 'No one has chosen to march yet.' : 'No one has chosen to march.')
     : s().joined ? (others() === 0 ? 'You are the first to choose to march.' : `You and ${others()} ${others() === 1 ? 'other' : 'others'} have chosen to march.`)
     : `${count() === 1 ? 'One walker has' : `${count()} walkers have`} chosen to march.`;
   return <section class="rg-party" aria-label="Who is marching">
@@ -208,6 +258,54 @@ function Party(props: { snap: GateSnapshot; controller: RaidGateController }) {
   </section>;
 }
 
+/** Twitch's own countdown, read from Twitch's acceptance time; the party still waits for Twitch's raid after it. */
+function Countdown(props: { endsAt: number | null; now: number }) {
+  const left = () => props.endsAt === null ? 0 : Math.max(0, props.endsAt - props.now);
+  return <div class="rg-countdown" role="timer" aria-label={`Twitch counts down ${remaining(props.endsAt, props.now)}`}>
+    <svg class="rg-countdown-ring" viewBox="0 0 44 44" aria-hidden="true">
+      <circle cx="22" cy="22" r="19" class="rg-ring-track" />
+      <circle cx="22" cy="22" r="19" class="rg-ring-ink" pathLength="100" stroke-dasharray={`${(left() / GATE_LIMITS.twitchCountdownMs) * 100} 100`} />
+    </svg>
+    <div>
+      <p class="rg-countdown-time rg-numeral">{remaining(props.endsAt, props.now)}</p>
+      <p class="rg-countdown-words">{left() > 0 ? 'Twitch is counting down. The party sets out when Twitch confirms the raid.' : 'The countdown has ended. Waiting for Twitch to confirm the raid.'}</p>
+    </div>
+  </div>;
+}
+
+/** The party set out on Twitch's verified raid. The Atlas carries the public caravan; the board tells this viewer's part. */
+function Departure(props: { snap: GateSnapshot; destination: GateDestination }) {
+  const s = () => props.snap;
+  const raid = () => s().raid!;
+  const where = () => destinationName(props.destination);
+  const others = () => s().optedIn - (s().joined ? 1 : 0);
+  const land = () => props.destination.land ?? (props.destination.target.founded ? 'founded' : 'waiting');
+  const when = () => new Date(raid().occurredAt ?? raid().observedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return <section class="rg-departure" aria-label="The party set out">
+    <div class="rg-road rg-road-departed">
+      <figure class="rg-end"><Seal kingdomId={s().source.kingdomId} size={64} /><figcaption>{s().source.name}</figcaption></figure>
+      <svg class="rg-ink-road rg-ink-road-set" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true">
+        <path class="rg-road-trace" d="M2 26C22 6 38 34 60 20s36-10 58 2" />
+        <path class="rg-road-inked" pathLength="100" d="M2 26C22 6 38 34 60 20s36-10 58 2" />
+      </svg>
+      <figure class="rg-end"><Seal kingdomId={props.destination.target.kingdomId} size={64} wax={land() === 'founded' ? 'crimson' : 'umber'} /><figcaption>{where()}</figcaption></figure>
+    </div>
+    <p class="rg-witnessed"><Glyph kind="seal" /><span>Twitch confirmed the raid at <b class="rg-numeral">{when()}</b>, with <b class="rg-numeral">{raid().viewers.toLocaleString()}</b> {raid().viewers === 1 ? 'viewer' : 'viewers'} riding along on stream.</span></p>
+    <div class="rg-party rg-party-set">
+      <div class="rg-count"><span class="rg-numeral rg-count-number">{s().optedIn}</span><span class="rg-count-label">{s().optedIn === 1 ? 'walker' : 'walkers'}<br />marched</span></div>
+      <div class="rg-party-words">
+        <p>{s().joined
+          ? (others() === 0 ? `You marched out for ${where()}.` : `You marched out with ${others()} ${others() === 1 ? 'other' : 'others'}.`)
+          : s().optedIn === 0 ? 'Nobody chose to march this time; the raid rode on Twitch.' : `${s().optedIn === 1 ? 'One walker' : `${s().optedIn} walkers`} marched out. You stayed home, and your door is right where you left it.`}</p>
+        <Show when={land() !== 'founded'}><p class="rg-quiet">{props.destination.channel?.displayName ?? 'This channel'} has no kingdom yet. The road ends at their waiting land.</p></Show>
+      </div>
+    </div>
+    <Show when={props.destination.channel}>{channel =>
+      <a class="rg-button rg-watch" href={`https://www.twitch.tv/${channel().login}`} target="_blank" rel="noopener noreferrer"><Glyph kind="eye" />Watch {channel().displayName} on Twitch</a>
+    }</Show>
+  </section>;
+}
+
 function remaining(expiresAt: number | null, now: number): string {
   if (expiresAt === null) return '0:00';
   const seconds = Math.max(0, Math.ceil((expiresAt - now) / 1000));
@@ -224,6 +322,7 @@ const DENIALS: Record<GateDenial, (s: GateSnapshot) => string> = {
 
 function noticeText(notice: GateNotice, s: GateSnapshot): string {
   if (notice.kind === 'denied') return DENIALS[notice.code](s);
+  if (notice.kind === 'not-sent') return "Your press didn't reach the gate, so nothing was sent to Twitch. Open the gate again when you're ready.";
   if (notice.kind === 'no-map') return "The Atlas isn't open in this view.";
   return "Couldn't reach the gatekeeper. Nothing changed.";
 }
@@ -245,7 +344,7 @@ export function GateDefs() {
   </svg>;
 }
 
-function Glyph(props: { kind: 'hourglass' | 'seal' | 'key' | 'boot' | 'check' | 'bar' }) {
+function Glyph(props: { kind: 'hourglass' | 'seal' | 'key' | 'boot' | 'check' | 'bar' | 'gate' | 'eye' }) {
   const paths: Record<typeof props.kind, string[]> = {
     hourglass: ['M6 3h12M6 21h12', 'M7 3c0 6 10 6 10 9s-10 3-10 9', 'M17 3c0 6-10 6-10 9s10 3 10 9'],
     seal: ['M12 3a9 9 0 1 0 .1 0Z', 'M12 7.5 13.4 11l3.6.2-2.8 2.3 1 3.5-3.2-2-3.2 2 1-3.5L7 11.2l3.6-.2Z'],
@@ -254,6 +353,9 @@ function Glyph(props: { kind: 'hourglass' | 'seal' | 'key' | 'boot' | 'check' | 
     check: ['m5 12.5 4.5 4.5L19 7'],
     // Two gate leaves and the bar laid across them.
     bar: ['M5 4v16M19 4v16', 'M5 4c2.3-1 4.7-1 7 0s4.7 1 7 0', 'M3 12.5h18', 'M12 4v16'],
+    // An arch with both leaves swung outward.
+    gate: ['M4 21V10a8 8 0 0 1 16 0v11', 'M4 21h16', 'M8 21v-8l-3-2', 'M16 21v-8l3-2'],
+    eye: ['M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z', 'M12 9.2a2.8 2.8 0 1 0 .01 0Z'],
   };
   return <svg class="rg-glyph" viewBox="0 0 24 24" aria-hidden="true"><For each={paths[props.kind]}>{d => <path d={d} />}</For></svg>;
 }

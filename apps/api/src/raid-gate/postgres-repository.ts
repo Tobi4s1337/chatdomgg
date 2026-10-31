@@ -12,9 +12,11 @@
  * - A serialization failure or deadlock reruns the whole transaction, up to three attempts in all.
  */
 import type { KingdomId, PersonId } from '../../../../packages/shared/src/identity';
+import type { GateActionState } from './contracts';
 import {
-  readActionRecord, readGatePointer, readMemberRecord,
-  type GatePointerRecord, type PartyMemberRecord, type RaidActionRecord, type RaidGateRepository, type RaidGateTransaction, type Stored,
+  RAID_GATE_LIST_LIMIT, readActionRecord, readGatePointer, readMemberRecord, readOutboxRecord,
+  type GatePointerRecord, type PartyMemberRecord, type RaidActionRecord, type RaidGateRepository, type RaidGateTransaction, type RaidOutboxRecord,
+  type Stored,
 } from './repository';
 
 /** The part of `pg.PoolClient` this adapter uses. */
@@ -69,6 +71,12 @@ const MEMBERS: TableSpec<PartyMemberRecord> = {
   columns: ['joined'], columnsOf: record => [record.joined],
 };
 
+const OUTBOX: TableSpec<RaidOutboxRecord> = {
+  name: 'realm_raid_gate_outbox', read: readOutboxRecord,
+  key: ['outbox_id'], keyOf: record => [record.id],
+  columns: ['request_id', 'kind', 'state'], columnsOf: record => [record.requestId, record.kind, record.state],
+};
+
 function where(key: readonly string[]): string {
   return key.map((column, index) => `${column} = $${index + 1}`).join(' and ');
 }
@@ -116,6 +124,25 @@ async function put<T extends { revision: number }>(client: SqlClient, spec: Tabl
   return { kind: 'conflict', current: await select(client, spec, key) };
 }
 
+/** Rows of one state in key order after a cursor; every row passes its reader, as `select` does. */
+async function listBy<T extends { revision: number }>(client: SqlClient, spec: TableSpec<T>, state: string, after: string | null, limit: number): Promise<T[]> {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > RAID_GATE_LIST_LIMIT) throw new RaidGateStorageError('A Raid Gate listing takes 1–100 records.');
+  const [key] = spec.key;
+  const result = await client.query(
+    `select ${key} as key, revision::text as revision, record from ${spec.name} where state = $1 and ($2::text is null or ${key} collate "C" > $2) order by ${key} collate "C" limit $3`,
+    [state, after, limit]);
+  return result.rows.map(raw => {
+    const row = raw as { key?: unknown; revision?: unknown; record?: unknown };
+    let parsed: unknown;
+    try { parsed = typeof row.record === 'string' ? JSON.parse(row.record) : undefined; } catch { parsed = undefined; }
+    const record = spec.read(parsed);
+    if (!record || String(record.revision) !== row.revision || spec.keyOf(record)[0] !== row.key) {
+      throw new RaidGateStorageError(`A stored ${spec.name} row failed its reader; refusing to skip it.`);
+    }
+    return record;
+  });
+}
+
 function transactionOn(client: SqlClient): RaidGateTransaction {
   return {
     getGate: (kingdomId: KingdomId) => select(client, POINTERS, [kingdomId]),
@@ -124,6 +151,10 @@ function transactionOn(client: SqlClient): RaidGateTransaction {
     putAction: (record, expected) => put(client, ACTIONS, record, expected),
     getMember: (requestId: string, personId: PersonId) => select(client, MEMBERS, [requestId, personId]),
     putMember: (record, expected) => put(client, MEMBERS, record, expected),
+    getOutbox: (id: string) => select(client, OUTBOX, [id]),
+    putOutbox: (record, expected) => put(client, OUTBOX, record, expected),
+    listOutbox: (state: 'queued' | 'claimed', after: string | null, limit: number) => listBy(client, OUTBOX, state, after, limit),
+    listActions: (state: GateActionState, after: string | null, limit: number) => listBy(client, ACTIONS, state, after, limit),
   };
 }
 

@@ -3,11 +3,11 @@
  * repository, a controlled policy and a stand-in for the Atlas finder. Everything it produces is SIMULATED and the
  * pane says so. It exists to exercise the gate before main binds authenticated transports; it is never the default.
  */
-import { AtlasChannelSchema, type AtlasChannel } from '@chatdom/shared';
+import { AtlasChannelSchema, AtlasRaidSchema, type AtlasChannel, type AtlasRaid } from '@chatdom/shared';
 import { createRaidGateApplication } from '../../../api/src/raid-gate/application';
 import type { GateAuthority, GateContext, GatePrincipal, GateReply, KingdomId } from '../../../api/src/raid-gate/contracts';
 import { createMemoryRaidGateRepository } from '../../../api/src/raid-gate/memory-repository';
-import type { SourceStanding, TargetVerdict } from '../../../api/src/raid-gate/ports';
+import type { AtlasRoadIngress, AuthorizedRaidTransport, RaidObservationReceipt, RaidWriteOutcome, SourceStanding, TargetVerdict } from '../../../api/src/raid-gate/ports';
 import type { AtlasGateEvent, AtlasGateHost, GateKingdom, GateLand, RaidGateApi } from './ports';
 
 const SOURCE = { kingdomId: '41000001' as KingdomId, name: 'Willowmere', login: 'willowmere' } satisfies GateKingdom;
@@ -27,7 +27,12 @@ const STANDINGS: Readonly<Record<GateAuthority, Partial<SourceStanding>>> = {
 /** SIMULATED walkers of Willowmere, so the bench can show a real count growing through real join commands. */
 const WALKERS = ['52000001', '52000002', '52000003', '52000004', '52000005', '52000006', '52000007'];
 
-export type GateBenchOptions = Readonly<{ viewer: 'monarch' | 'walker'; authority: GateAuthority; clock: () => number }>;
+/**
+ * How the SIMULATED Twitch answers a start: accept it, accept it but lose the reply on the way back (the gate must
+ * check rather than press again), or refuse it.
+ */
+export type BenchTwitch = 'accept' | 'lose' | 'refuse';
+export type GateBenchOptions = Readonly<{ viewer: 'monarch' | 'walker'; authority: GateAuthority; clock: () => number; twitch?: BenchTwitch }>;
 
 export type GateBench = Readonly<{
   source: GateKingdom;
@@ -43,6 +48,12 @@ export type GateBench = Readonly<{
   reconnect(): void;
   /** SIMULATED walkers send their own join commands. */
   walkersJoin(count: number, requestId: string): Promise<void>;
+  /** Runs the monarch's own start as the monarch, with the token their last bench preview received. */
+  monarchStart(requestId: string): Promise<GateReply>;
+  /** SIMULATED: Twitch's `channel.raid` for this request arrives through the verified-ingress path. */
+  witness(requestId: string, viewers?: number): Promise<RaidObservationReceipt>;
+  /** SIMULATED Twitch writes, in order, and the roads handed to the stand-in Atlas ledger. */
+  readonly log: Readonly<{ writes: readonly string[]; roads: readonly AtlasRaid[]; followed: readonly string[] }>;
 }>;
 
 async function sha256Hex(text: string): Promise<string> {
@@ -54,8 +65,37 @@ export function createGateBench(options: GateBenchOptions): GateBench {
   const repository = createMemoryRaidGateRepository();
   let authority = options.authority;
   const subscribers = new Set<() => void>();
+  const log = { writes: [] as string[], roads: [] as AtlasRaid[], followed: [] as string[] };
+  /** SIMULATED Twitch: keeps its own record of each write by key so reconcile can answer for a lost reply. */
+  const ledger = new Map<string, RaidWriteOutcome>();
+  const accepted: Map<string, number> = new Map();
+  const twitch = options.twitch ?? 'accept';
+  const raids: AuthorizedRaidTransport = {
+    origin: 'simulated',
+    async start(write) {
+      log.writes.push(`start ${write.requestId}`);
+      const outcome: RaidWriteOutcome = twitch === 'refuse' ? { kind: 'rejected', code: 'simulated-refusal' } : { kind: 'accepted', createdAt: options.clock() };
+      ledger.set(write.key, outcome);
+      if (outcome.kind === 'accepted') accepted.set(write.requestId, outcome.createdAt);
+      if (twitch === 'lose') throw new Error('SIMULATED: the reply was lost on the way back');
+      return outcome;
+    },
+    async cancel(write) {
+      log.writes.push(`cancel ${write.requestId}`);
+      const outcome: RaidWriteOutcome = { kind: 'accepted', createdAt: options.clock() };
+      ledger.set(write.key, outcome);
+      return outcome;
+    },
+    async reconcile(write) { return ledger.get(write.key) ?? { kind: 'unknown' }; },
+  };
+  /** Stand-in for the Atlas road ledger: idempotent by raid ID. */
+  const roads: AtlasRoadIngress = {
+    origin: 'simulated',
+    async observe(raid) { if (!log.roads.some(each => each.id === raid.id)) log.roads.push(raid); },
+  };
+  const tokens = new Map<string, string>();
   const app = createRaidGateApplication({
-    repository, origin: 'simulated',
+    repository, origin: 'simulated', clock: options.clock, raids, roads,
     policy: {
       async readStanding(principal) {
         return { session: 'current', broadcaster: String(principal.personId) === String(SOURCE.kingdomId), live: true, raids: 'granted', actions: 'enabled', ...STANDINGS[authority] };
@@ -101,6 +141,7 @@ export function createGateBench(options: GateBenchOptions): GateBench {
     origin: 'simulated',
     open() { open = true; changed(); },
     close() { if (open) { open = false; changed(); emit({ kind: 'closed' }); } },
+    follow(raid) { log.followed.push(raid.id); },
     async resolve(kingdomId) {
       const entry = DESTINATIONS.find(each => each.channel.kingdomId === kingdomId);
       return entry ? { channel: entry.channel, land: entry.land } : null;
@@ -129,7 +170,24 @@ export function createGateBench(options: GateBenchOptions): GateBench {
       authority = 'ready';
       for (const subscriber of subscribers) subscriber();
     },
-    monarchPreview: target => as(SOURCE.kingdomId, { op: 'preview', requestId: crypto.randomUUID(), target }),
+    async monarchPreview(target) {
+      const reply = await as(SOURCE.kingdomId, { op: 'preview', requestId: crypto.randomUUID(), target });
+      if (reply.kind === 'preview') tokens.set(reply.value.requestId, reply.value.token);
+      return reply;
+    },
+    monarchStart: requestId => as(SOURCE.kingdomId, { op: 'start', requestId, previewToken: tokens.get(requestId) ?? 'none' }),
+    async witness(requestId, viewers = 23) {
+      const action = await as(SOURCE.kingdomId, { op: 'read-action', requestId });
+      if (action.kind !== 'action') return { kind: 'ignored', reason: 'unknown-request' };
+      const at = options.clock();
+      const raid = AtlasRaidSchema.parse({
+        version: 1, id: `simulated-raid-${requestId}`, fromKingdomId: action.value.from, toKingdomId: action.value.to, viewers,
+        observedAt: at, occurredAt: at, evidence: { kind: 'simulated', asOf: at, label: 'SIMULATED' }, delivery: 'resumable', source: 'simulation',
+      });
+      // As main's verified ingress would: correlated to the request its transport sent, with an upstream event ID.
+      return app.ingestRaid({ raid, upstreamEventId: `simulated-event-${requestId}`, actionRequestId: accepted.has(requestId) ? requestId : null, receivedAt: at });
+    },
+    log,
     monarchClose: requestId => as(SOURCE.kingdomId, { op: 'cancel', requestId }),
     async walkersJoin(count, requestId) {
       for (const personId of WALKERS.slice(options.viewer === 'walker' ? 1 : 0, (options.viewer === 'walker' ? 1 : 0) + count)) await as(personId, { op: 'join', requestId });

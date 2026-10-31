@@ -52,3 +52,23 @@ CREATE TABLE realm_raid_gate_members (
   CHECK ((record::jsonb ->> 'joined')::boolean = joined),
   CHECK ((record::jsonb ->> 'revision')::bigint = revision)
 );
+CREATE INDEX realm_raid_gate_actions_state ON realm_raid_gate_actions (state, request_id COLLATE "C");
+
+-- One external effect per request and kind (start, cancel, road), written in the same transaction as the decision
+-- that wants it. Its ID is the idempotency key handed to the Twitch or Atlas transport. A `claimed` Twitch write may
+-- have happened and is only ever reconciled, never sent again.
+CREATE TABLE realm_raid_gate_outbox (
+  outbox_id  text PRIMARY KEY CHECK (length(outbox_id) BETWEEN 3 AND 140),
+  request_id text NOT NULL REFERENCES realm_raid_gate_actions (request_id) DEFERRABLE INITIALLY DEFERRED,
+  kind       text NOT NULL CHECK (kind IN ('start', 'cancel', 'road')),
+  state      text NOT NULL CHECK (state IN ('queued', 'claimed', 'settled')),
+  revision   bigint NOT NULL CHECK (revision > 0 AND revision <= 9007199254740991),
+  record     text NOT NULL CHECK (octet_length(record) <= 4096),
+  CHECK (outbox_id = request_id || '/' || kind),
+  CHECK (record::jsonb ->> 'id' = outbox_id),
+  CHECK (record::jsonb ->> 'requestId' = request_id),
+  CHECK (record::jsonb ->> 'kind' = kind),
+  CHECK (record::jsonb ->> 'state' = state),
+  CHECK ((record::jsonb ->> 'revision')::bigint = revision)
+);
+CREATE INDEX realm_raid_gate_outbox_state ON realm_raid_gate_outbox (state, outbox_id COLLATE "C");

@@ -15,6 +15,14 @@ export const GATE_LIMITS = Object.freeze({
   previewMs: 120_000,
   /** Twitch's own countdown between an accepted Start a Raid and the raid itself. */
   twitchCountdownMs: 90_000,
+  /** After Twitch's countdown, how long a verified `channel.raid` may take to reach us before we say we are checking. */
+  observationGraceMs: 60_000,
+  /** How far event clocks may disagree when matching a raid to the press that asked for it. */
+  clockSkewMs: 10_000,
+  /** How long an unresolved raid keeps the party at the gate ("checking whether the raid began"). */
+  unknownHoldMs: 15 * 60_000,
+  /** How long a settled raid (departed, called off, refused) stays the gate's news. */
+  settledShowMs: 5 * 60_000,
   passportPage: 50,
   passportSessionCap: 200,
   cursor: 256,
@@ -40,9 +48,15 @@ export type PartyView = Readonly<{ requestId: string; joined: boolean; optedIn: 
  * walkers learn that a gate is open, never the state of someone else's Twitch grant.
  */
 export type GateAuthority = 'ready' | 'offline' | 'not-connected' | 'revoked' | 'disabled' | 'unavailable';
+/**
+ * The gate as one viewer sees it. `expiresAt` is when this view stops being the gate's news: the preview's end, the
+ * end of the wait for an unresolved raid, or a few minutes after a settled one. `countdownEndsAt` is Twitch's own
+ * countdown, only while Twitch holds the request (`pending`). `raid` is the verified public observation that set the
+ * party out, only once `landed`.
+ */
 export type OpenGateView = Readonly<{
   requestId: string; revision: number; to: KingdomId; target: GateTarget; state: GateActionState;
-  optedIn: number; expiresAt: number; joined: boolean;
+  optedIn: number; expiresAt: number; joined: boolean; countdownEndsAt: number | null; raid: AtlasRaid | null;
 }>;
 export type GateStatusView = Readonly<{
   kingdomId: KingdomId; viewer: 'monarch' | 'walker'; authority: GateAuthority | null; open: OpenGateView | null;
@@ -209,13 +223,18 @@ function readParty(value: unknown): PartyView | undefined {
 }
 
 function readOpenGate(value: unknown): OpenGateView | undefined {
-  const f = fields(value, ['requestId', 'revision', 'to', 'target', 'state', 'optedIn', 'expiresAt', 'joined']);
-  const open = f && {
+  const f = fields(value, ['requestId', 'revision', 'to', 'target', 'state', 'optedIn', 'expiresAt', 'joined', 'countdownEndsAt', 'raid']);
+  if (!f) return undefined;
+  const countdownEndsAt = nullable(f.countdownEndsAt, positive), raid = nullable(f.raid, readRaid);
+  const open = {
     requestId: token(f.requestId), revision: positive(f.revision), to: kingdom(f.to), target: readTarget(f.target),
     state: oneOf(f.state, ACTION_STATES), optedIn: uint(f.optedIn), expiresAt: positive(f.expiresAt), joined: bool(f.joined),
   };
-  if (!open || !complete(open) || open.target.kingdomId !== open.to) return undefined;
-  return !open.joined || open.optedIn > 0 ? open : undefined;
+  if (!complete(open) || countdownEndsAt === undefined || raid === undefined || open.target.kingdomId !== open.to) return undefined;
+  // A countdown exists only while Twitch holds the request; a raid only once it is witnessed, and only to this gate's destination.
+  if ((open.state === 'pending') !== (countdownEndsAt !== null) || (open.state === 'landed') !== (raid !== null)) return undefined;
+  if (raid && raid.toKingdomId !== open.to) return undefined;
+  return !open.joined || open.optedIn > 0 ? { ...open, countdownEndsAt, raid } : undefined;
 }
 
 function readStatus(value: unknown): GateStatusView | undefined {
@@ -226,6 +245,7 @@ function readStatus(value: unknown): GateStatusView | undefined {
   if (!kingdomId || !viewer || authority === undefined || open === undefined) return undefined;
   // A walker never learns the monarch's grant state.
   if ((viewer === 'monarch') !== (authority !== null)) return undefined;
+  if (open?.raid && open.raid.fromKingdomId !== kingdomId) return undefined;
   return open && open.to === kingdomId ? undefined : { kingdomId, viewer, authority, open };
 }
 

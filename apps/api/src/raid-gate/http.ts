@@ -45,7 +45,7 @@ export function createGateFanout(): GateFanout {
 }
 
 export type RaidGateHttpOptions = Readonly<{
-  application: RaidGateApplication;
+  application: Pick<RaidGateApplication, 'handle'>;
   changes: GateFanout;
   authenticate: GateAuthenticator;
   /** The server clock; the browser's clock is never consulted. */

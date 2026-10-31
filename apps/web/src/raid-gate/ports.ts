@@ -4,7 +4,7 @@
  * Nothing here carries a token, a role or a person ID the browser could set.
  */
 import type { AtlasChannel } from '@chatdom/shared';
-import type { GateCommand, GateReply, KingdomId } from '../../../api/src/raid-gate/contracts';
+import type { AtlasRaid, GateCommand, GateReply, KingdomId } from '../../../api/src/raid-gate/contracts';
 
 export interface RaidGateApi {
   /**
@@ -39,6 +39,12 @@ export interface AtlasGateHost {
   /** How a destination the authority named appears on the map, under the Atlas's own visibility rules. */
   resolve(kingdomId: KingdomId, signal: AbortSignal): Promise<Readonly<{ channel: AtlasChannel; land: GateLand }> | null>;
   subscribe(listener: (event: AtlasGateEvent) => void, signal: AbortSignal): void;
+  /**
+   * The party set out on this witnessed raid: attach the map to its public caravan by the raid's ID, the one the
+   * Atlas draws for everyone. Presentation only. The road itself reaches the Atlas ledger from the server, and a
+   * viewer's map never creates a second caravan or road.
+   */
+  follow(raid: AtlasRaid, signal: AbortSignal): void;
 }
 
 /** The source kingdom's public face, from the kingdom host. */

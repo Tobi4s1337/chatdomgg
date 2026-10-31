@@ -22,6 +22,9 @@ const FRAMES = [
   { name: 'unbound-phone', size: PHONE, query: '', expect: { phase: 'unbound' } },
   { name: 'gate-preview-stream', size: STREAM, query: `bench=simulated&pick=${FERN}&walkers=5`, expect: { phase: 'preview', optedIn: 5 } },
   { name: 'gate-closed-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&close=1`, expect: { phase: 'quiet', optedIn: 0, joined: false } },
+  { name: 'countdown-stream', size: STREAM, query: `bench=simulated&pick=${FERN}&walkers=4&join=1&start=1`, expect: { phase: 'countdown', state: 'pending', optedIn: 5, joined: true } },
+  { name: 'departure-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&start=1&witness=1`, expect: { phase: 'departed', state: 'landed', optedIn: 5, joined: true } },
+  { name: 'checking-phone', size: PHONE, query: `bench=simulated&pick=${FERN}&walkers=2&start=1&twitch=lose`, expect: { phase: 'checking', state: 'unknown' } },
 ];
 
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1].split(',') : null;

@@ -19,10 +19,11 @@ export type RecordOrigin = 'live' | 'simulated';
 export type GatePointerRecord = Readonly<{ kingdomId: KingdomId; revision: number; requestId: string | null; updatedAt: number }>;
 
 /**
- * Why an action closed before Twitch was ever asked: a newer preview replaced it, its window ran out, or the
- * monarch closed the gate. Later states record Twitch's own answer instead.
+ * Why an action ended as `cancelled`: a newer preview replaced it, its window ran out (before or, on recovery, just
+ * after the press, but always before anything reached Twitch), the monarch closed the gate before starting, or
+ * Twitch confirmed the monarch's cancel of a pending raid (`withdrawn`).
  */
-export type ActionEndReason = 'superseded' | 'expired' | 'closed';
+export type ActionEndReason = 'superseded' | 'expired' | 'closed' | 'withdrawn';
 
 export type RaidActionRecord = Readonly<{
   requestId: string;
@@ -46,7 +47,46 @@ export type RaidActionRecord = Readonly<{
   raid: AtlasRaid | null;
   endReason: ActionEndReason | null;
   origin: RecordOrigin;
+  /** When the monarch's start was accepted here and queued for Twitch. Null while still a preview. */
+  dispatchedAt: number | null;
+  /** Twitch's own time for the accepted request; its countdown runs from here. Pending and later only. */
+  acceptedAt: number | null;
+  /** Twitch's refusal code for a rejected start. Kept for the monarch and the log, never shown to walkers. */
+  rejection: string | null;
+  /** The upstream event identity of the `channel.raid` observation that landed this request. */
+  raidEventId: string | null;
 }>;
+
+/** The three external effects the gate asks for. Each has one durable record whose ID is also its idempotency key. */
+export type OutboxKind = 'start' | 'cancel' | 'road';
+
+/**
+ * One external effect, written in the same transaction as the decision that wants it.
+ *
+ * - `queued`: decided, provably not sent. Recovery may send it.
+ * - `claimed`: about to be sent, or sent with no answer yet. A Twitch write here may have happened, so recovery only
+ *   asks the transport what became of it (`reconcile`), never sends it again. A road handoff is idempotent at the
+ *   Atlas and may be retried.
+ * - `settled`: the answer is known (`accepted`, `rejected`, `delivered`), it was abandoned before sending (`lapsed`),
+ *   or reconciliation gave up (`unknown`) and only a verified observation can still settle the action.
+ */
+export type RaidOutboxRecord = Readonly<{
+  id: string;
+  revision: number;
+  requestId: string;
+  kind: OutboxKind;
+  state: 'queued' | 'claimed' | 'settled';
+  createdAt: number;
+  claimedAt: number | null;
+  settledAt: number | null;
+  outcome: 'accepted' | 'rejected' | 'unknown' | 'delivered' | 'lapsed' | null;
+  /** How many times this effect was handed to its transport. A Twitch write is handed over at most once. */
+  attempts: number;
+  origin: RecordOrigin;
+}>;
+
+/** The outbox ID of a request's one effect of each kind. */
+export const outboxId = (requestId: string, kind: OutboxKind): string => `${requestId}/${kind}`;
 
 /** One person's choice for one request. Unique on (requestId, personId). */
 export type PartyMemberRecord = Readonly<{
@@ -69,7 +109,16 @@ export interface RaidGateTransaction {
   putAction(record: RaidActionRecord, expectedRevision: number): Promise<Stored<RaidActionRecord>>;
   getMember(requestId: string, personId: PersonId): Promise<PartyMemberRecord | null>;
   putMember(record: PartyMemberRecord, expectedRevision: number): Promise<Stored<PartyMemberRecord>>;
+  getOutbox(id: string): Promise<RaidOutboxRecord | null>;
+  putOutbox(record: RaidOutboxRecord, expectedRevision: number): Promise<Stored<RaidOutboxRecord>>;
+  /** Unsettled outbox records in this state, ordered by ID, strictly after `after`. At most `limit` (1–100). */
+  listOutbox(state: 'queued' | 'claimed', after: string | null, limit: number): Promise<RaidOutboxRecord[]>;
+  /** Actions in this state, ordered by request ID, strictly after `after`. At most `limit` (1–100). */
+  listActions(state: GateActionState, after: string | null, limit: number): Promise<RaidActionRecord[]>;
 }
+
+/** The largest page a recovery listing returns. */
+export const RAID_GATE_LIST_LIMIT = 100;
 
 export interface RaidGateRepository {
   /** Serializable and atomic. Rejects with the signal's reason if aborted before commit. */
@@ -89,14 +138,17 @@ export function readGatePointer(value: unknown): GatePointerRecord | undefined {
 }
 
 export function readActionRecord(value: unknown): RaidActionRecord | undefined {
+  // The start fields arrived with RG08; a record written before them reads them as null.
   const f = fields(value, ['requestId', 'revision', 'actorId', 'sessionId', 'from', 'to', 'target', 'state', 'previewTokenHash',
-    'previewExpiresAt', 'optedIn', 'createdAt', 'updatedAt', 'observedAt', 'raid', 'endReason', 'origin']);
+    'previewExpiresAt', 'optedIn', 'createdAt', 'updatedAt', 'observedAt', 'raid', 'endReason', 'origin'], START_FIELDS);
   if (!f) return undefined;
   const t = fields(f.target, ['kingdomId', 'founded', 'live', 'classification']);
   const target = t && { kingdomId: kingdom(t.kingdomId), founded: bool(t.founded), live: bool(t.live), classification: oneOf(t.classification, CLASSIFICATIONS) };
   const parsedRaid = f.raid === null ? null : AtlasRaidSchema.safeParse(f.raid);
   const raid = parsedRaid === null ? null : parsedRaid.success ? parsedRaid.data : undefined;
-  const endReason = f.endReason === null ? null : oneOf(f.endReason, ['superseded', 'expired', 'closed'] as const);
+  const endReason = f.endReason === null ? null : oneOf(f.endReason, ['superseded', 'expired', 'closed', 'withdrawn'] as const);
+  const dispatchedAt = optional(f.dispatchedAt, epoch), acceptedAt = optional(f.acceptedAt, epoch);
+  const rejection = optional(f.rejection, token), raidEventId = optional(f.raidEventId, token);
   const record = {
     requestId: token(f.requestId), revision: positive(f.revision), actorId: person(f.actorId), sessionId: token(f.sessionId),
     from: kingdom(f.from), to: kingdom(f.to), state: oneOf(f.state, ACTION_STATES),
@@ -105,10 +157,48 @@ export function readActionRecord(value: unknown): RaidActionRecord | undefined {
     observedAt: epoch(f.observedAt), origin: oneOf(f.origin, ['live', 'simulated'] as const),
   };
   if (!target || !complete(target) || !complete(record) || raid === undefined || endReason === undefined) return undefined;
+  if (dispatchedAt === undefined || acceptedAt === undefined || rejection === undefined || raidEventId === undefined) return undefined;
   if (record.from === record.to || target.kingdomId !== record.to || record.updatedAt < record.createdAt) return undefined;
-  if ((record.state === 'landed') !== (raid !== null)) return undefined;
+  if ((record.state === 'landed') !== (raid !== null) || (record.state === 'landed') !== (raidEventId !== null)) return undefined;
+  if (raid && (raid.fromKingdomId !== record.from || raid.toKingdomId !== record.to)) return undefined;
   if (endReason !== null && record.state !== 'cancelled') return undefined;
-  return { ...record, target, raid, endReason };
+  // Twitch states and a withdrawn raid were started; a preview, a superseded or closed gate never was. A start that
+  // recovery abandoned before sending ends `expired` and keeps its press time.
+  const mustStart = STARTED.has(record.state) || endReason === 'withdrawn';
+  if (mustStart ? dispatchedAt === null : dispatchedAt !== null && endReason !== 'expired') return undefined;
+  if (record.state === 'pending' && acceptedAt === null) return undefined;
+  if ((record.state === 'rejected') !== (rejection !== null)) return undefined;
+  return { ...record, target, raid, endReason, dispatchedAt, acceptedAt, rejection, raidEventId };
+}
+
+const START_FIELDS = ['dispatchedAt', 'acceptedAt', 'rejection', 'raidEventId'] as const;
+const STARTED: ReadonlySet<GateActionState> = new Set(['dispatching', 'pending', 'unknown', 'landed', 'rejected']);
+/** A field added after a record was first written: absent reads as null, present must read cleanly. */
+function optional<T>(value: unknown, read: (value: unknown) => T | undefined): T | null | undefined {
+  return value === undefined || value === null ? null : read(value);
+}
+
+const OUTBOX_KINDS = ['start', 'cancel', 'road'] as const;
+const OUTBOX_STATES = ['queued', 'claimed', 'settled'] as const;
+const OUTBOX_OUTCOMES = ['accepted', 'rejected', 'unknown', 'delivered', 'lapsed'] as const;
+
+export function readOutboxRecord(value: unknown): RaidOutboxRecord | undefined {
+  const f = fields(value, ['id', 'revision', 'requestId', 'kind', 'state', 'createdAt', 'claimedAt', 'settledAt', 'outcome', 'attempts', 'origin']);
+  if (!f) return undefined;
+  const claimedAt = optional(f.claimedAt, epoch), settledAt = optional(f.settledAt, epoch), outcome = optional(f.outcome, value => oneOf(value, OUTBOX_OUTCOMES));
+  const record = {
+    id: typeof f.id === 'string' ? f.id : undefined, revision: positive(f.revision), requestId: token(f.requestId), kind: oneOf(f.kind, OUTBOX_KINDS),
+    state: oneOf(f.state, OUTBOX_STATES), createdAt: epoch(f.createdAt), attempts: uint(f.attempts), origin: oneOf(f.origin, ['live', 'simulated'] as const),
+  };
+  if (!complete(record) || claimedAt === undefined || settledAt === undefined || outcome === undefined) return undefined;
+  if (record.id !== outboxId(record.requestId, record.kind)) return undefined;
+  if ((record.state === 'settled') !== (settledAt !== null) || (record.state === 'settled') !== (outcome !== null)) return undefined;
+  if (record.state === 'queued' ? claimedAt !== null || record.attempts !== 0 : record.state === 'claimed' && (claimedAt === null || record.attempts === 0)) return undefined;
+  // A Twitch write is handed to its transport at most once; only the idempotent road handoff may repeat.
+  if (record.kind !== 'road' && record.attempts > 1) return undefined;
+  if (outcome === 'lapsed' ? record.attempts !== 0 : outcome !== null && record.attempts === 0) return undefined;
+  if (outcome === 'delivered' ? record.kind !== 'road' : record.kind === 'road' && outcome !== null) return undefined;
+  return { ...record, claimedAt, settledAt, outcome };
 }
 
 export function readMemberRecord(value: unknown): PartyMemberRecord | undefined {

@@ -63,7 +63,8 @@ export default function RaidGateRoute() {
       let made: GateBench | null = null;
       if (benchMode) {
         const { createGateBench } = await import('./bench');
-        made = createGateBench({ viewer, authority, clock });
+        const twitch = (['accept', 'lose', 'refuse'] as const).find(each => each === query.get('twitch')) ?? 'accept';
+        made = createGateBench({ viewer, authority, clock, twitch });
         made.finder.onChange(() => setFinderOpen(made!.finder.open()));
         ports = { api: made.api, atlas: made.atlas, source: made.source, clock, account: { reconnect: () => made!.reconnect() } };
       }
@@ -83,6 +84,11 @@ export default function RaidGateRoute() {
         const requestId = gate.snapshot().requestId;
         if (requestId && walkers > 0) { await made.walkersJoin(walkers, requestId); await gate.refresh(); }
         if (query.get('join') === '1') await gate.join();
+        if (requestId && query.get('start') === '1') {
+          if (viewer === 'monarch') await gate.start();
+          else { await made.monarchStart(requestId); await gate.refresh(); }
+        }
+        if (requestId && query.get('witness') === '1') { await made.witness(requestId); await gate.refresh(); }
         if (requestId && query.get('close') === '1') {
           if (viewer === 'monarch') await gate.cancel();
           else { await made.monarchClose(requestId); await gate.refresh(); }

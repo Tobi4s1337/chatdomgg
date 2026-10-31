@@ -123,11 +123,77 @@ describe('Raid Gate controller', () => {
       token: `token-${index}`, requestId: `request-${index + 1}`, from: SOURCE.kingdomId, to, expiresAt: 121_000, optedIn: 0,
       target: { kingdomId: to, founded: to === FERN, live: true, classification: 'general' },
     } });
-    open = { requestId: 'request-2', revision: 1, to: OAKEN, target: { kingdomId: OAKEN, founded: false, live: true, classification: 'general' }, state: 'prepared', optedIn: 0, expiresAt: 121_000, joined: false };
+    open = { requestId: 'request-2', revision: 1, to: OAKEN, target: { kingdomId: OAKEN, founded: false, live: true, classification: 'general' }, state: 'prepared', optedIn: 0, expiresAt: 121_000, joined: false, countdownEndsAt: null, raid: null };
     pending[1]!.resolve(reply(1, OAKEN));
     await settled();
     pending[0]!.resolve(reply(0, FERN));
     await settled();
     expect(controller.snapshot()).toMatchObject({ phase: 'preview', requestId: 'request-2', destination: { target: { kingdomId: OAKEN } } });
+  });
+
+  it('opens the gate once, counts down with Twitch, and sets out only on the witnessed raid', async () => {
+    let now = 1_800_000_000_000;
+    const clock = () => now;
+    const bench = createGateBench({ viewer: 'monarch', authority: 'ready', clock });
+    const controller = createRaidGateController({ api: bench.api, atlas: bench.atlas, source: bench.source, clock });
+    await until(controller, s => s.phase === 'idle');
+    controller.open();
+    bench.finder.pick(FERN);
+    const preview = await until(controller, s => s.phase === 'preview' && s.canStart);
+    await controller.join();
+    const starting = controller.start();
+    expect(controller.snapshot()).toMatchObject({ phase: 'starting', busy: 'start' });
+    await starting;
+    expect(await until(controller, s => s.phase === 'countdown' && s.busy === null)).toMatchObject({ state: 'pending', countdownEndsAt: now + 90_000, joined: true, canStart: false });
+    await controller.start();
+    expect(bench.log.writes).toEqual([`start ${preview.requestId}`]);
+    now += 40_000;
+    expect(await bench.witness(preview.requestId!)).toMatchObject({ kind: 'landed' });
+    const departed = await until(controller, s => s.phase === 'departed');
+    expect(departed).toMatchObject({ raid: { viewers: 23, evidence: { label: 'SIMULATED' } }, joined: true, optedIn: 1, destination: { target: { kingdomId: FERN } } });
+    await controller.refresh();
+    expect(bench.log.followed).toEqual([`simulated-raid-${preview.requestId}`]);
+    expect(bench.log.roads).toHaveLength(1);
+    // After the news, the monarch can call the realm again; the old preview does not come back as lapsed.
+    now += 5 * 60_000;
+    expect(await until(controller, s => s.phase === 'idle')).toMatchObject({ farewell: null });
+    controller.dispose();
+  });
+
+  it('checks rather than pressing again when Twitch\'s reply is lost', async () => {
+    const clock = () => 1_800_000_000_000;
+    const bench = createGateBench({ viewer: 'monarch', authority: 'ready', clock, twitch: 'lose' });
+    const controller = createRaidGateController({ api: bench.api, atlas: bench.atlas, source: bench.source, clock });
+    await until(controller, s => s.phase === 'idle');
+    controller.open();
+    bench.finder.pick(FERN);
+    await until(controller, s => s.canStart);
+    await controller.start();
+    expect(await until(controller, s => s.phase === 'checking' && s.busy === null)).toMatchObject({ state: 'unknown', countdownEndsAt: null });
+    await controller.reconcile();
+    expect(await until(controller, s => s.phase === 'countdown')).toMatchObject({ state: 'pending' });
+    expect(bench.log.writes).toHaveLength(1);
+    controller.dispose();
+  });
+
+  it('asks what became of a press whose request was lost, and says plainly when nothing was sent', async () => {
+    const bench = createGateBench({ viewer: 'monarch', authority: 'ready', clock: () => 1_800_000_000_000 });
+    let dropStart = true;
+    const api: RaidGateApi = {
+      ...bench.api,
+      request: (command, signal) => command.op === 'start' && dropStart ? Promise.reject(new Error('offline')) : bench.api.request(command, signal),
+    };
+    const controller = createRaidGateController({ api, atlas: bench.atlas, source: bench.source, clock: () => 1_800_000_000_000 });
+    await until(controller, s => s.phase === 'idle');
+    controller.open();
+    bench.finder.pick(FERN);
+    await until(controller, s => s.canStart);
+    await controller.start();
+    expect(await until(controller, s => s.busy === null)).toMatchObject({ phase: 'preview', notice: { kind: 'not-sent' }, canStart: true });
+    expect(bench.log.writes).toEqual([]);
+    dropStart = false;
+    await controller.start();
+    expect(await until(controller, s => s.phase === 'countdown')).toMatchObject({ notice: null });
+    expect(bench.log.writes).toHaveLength(1);
   });
 });

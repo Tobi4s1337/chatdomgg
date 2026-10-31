@@ -465,3 +465,31 @@ part of acceptance, not permission to replace them or defer the gate's full trav
   `apps/api/src/raid-gate/realm-migration.sql` for main to register as `0009`). The live policy takes every
   main-owned fact (live channels, raid grant, write consent, Atlas classification/permission) as a required port;
   there is no fallback that pretends a grant exists.
+- **2026-10-31 — RG08: Twitch writes go through a durable outbox.** Start and cancel each have one outbox record
+  (`<requestId>/start`, `<requestId>/cancel`), written in the same transaction as the decision; its ID is the idempotency
+  key handed to `AuthorizedRaidTransport`. `queued` is provably unsent, so recovery may send it (a start only while its
+  preview window is open, otherwise it ends `cancelled/expired` with nothing sent). `claimed` may have reached Twitch:
+  it is handed over at most once (the reader refuses `attempts > 1`) and afterwards only `reconcile`d, which never
+  writes. The write and its answer use a server-owned signal and `deps.clock`, so a dropped HTTP request cannot abort
+  them. A claimed write nobody can explain after six hours stops being asked about; only a witnessed raid can settle it.
+- **2026-10-31 — RG08: what each state means to the party.** `pending` is Twitch's countdown (shown from Twitch's own
+  `createdAt`), never a departure. Past countdown plus 60 s grace without a witnessed raid, viewers are told `unknown`
+  ("checking whether the raid began") at once and recovery writes it down. Unresolved, the party may wait 15 minutes,
+  then the gate goes quiet without claiming anything; the action stays `unknown` on record. A confirmed Twitch cancel
+  is `cancelled` with the new `endReason: 'withdrawn'`; a cancel Twitch had nothing for turns the request `unknown`,
+  because the raid may already have left. One cancel per request. People may join while Twitch holds the raid and may
+  always leave, also after departure (RG09's travel reserves only those still marching). Landed, called-off and refused
+  stay the gate's news for five minutes; the monarch may preview anew over them.
+- **2026-10-31 — RG08: landing rule.** `ingestRaid` lands a request only when every one holds: a live gate's raid is
+  `source: 'herald'` with observed evidence (a simulated gate takes only `simulation`); main's ingress correlated it to
+  the request (`actionRequestId`) and it carries an upstream event ID; the pair matches; the request is one Twitch holds
+  or may hold, and its start was actually handed over; the raid's event time is no earlier than the press (−10 s skew)
+  and no later than Twitch's countdown allows (+10 s, or +60 s for a receipt-time-only source). Replays, legacy feeds,
+  stale same-pair raids and raids after a confirmed cancel are ignored with a reason. A repeat of the same event (or
+  raid ID) is `duplicate`; a different event for a landed request is `conflict`.
+- **2026-10-31 — RG08: the road reaches the Atlas from the server, the caravan from the browser.** Landing queues a
+  `<requestId>/road` outbox record handing the exact `AtlasRaid` to `AtlasRoadIngress.observe` (idempotent by raid ID
+  at the Atlas ledger, so it is retried every 30 s until it resolves). The browser's `AtlasGateHost.follow(raid)` only
+  attaches the viewer's map to that raid's public caravan, once per raid. `OpenGateView` gains `countdownEndsAt`
+  (pending only) and `raid` (landed only); both are checked by the strict reader. Records written before RG08 read
+  their new start fields as null.

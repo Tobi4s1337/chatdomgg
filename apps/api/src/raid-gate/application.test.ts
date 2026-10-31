@@ -31,7 +31,7 @@ function setup(standing: Partial<SourceStanding> = {}) {
   };
   const changes: string[] = [];
   const app = createRaidGateApplication({
-    repository, policy, origin: 'simulated',
+    repository, policy, origin: 'simulated', clock: () => clock,
     tokens: { issue: () => `preview-${++issued}`, hash: async value => value.replace(/\D/g, '').padStart(64, 'a') },
     notifier: { changed: change => changes.push(`${change.requestId}@${change.revision}`) },
   });
@@ -142,11 +142,14 @@ describe('Raid Gate preview and party', () => {
     expect(await monarch({ op: 'preview', requestId: 'r2', target: FERN })).toMatchObject({ value: { optedIn: 0 } });
   });
 
-  it('answers commands the gate does not perform yet as unavailable, never as success', async () => {
+  it('cannot start without a bound Twitch raid authority, and answers later tasks as unavailable, never as success', async () => {
     const { monarch, repository } = setup();
-    expect(await monarch({ op: 'start', requestId: 'r1', previewToken: 'preview-1' })).toEqual({ kind: 'denied', code: 'unavailable' });
-    expect(await monarch({ op: 'reconcile', requestId: 'r1' })).toEqual({ kind: 'denied', code: 'unavailable' });
-    expect(repository.commits).toBe(0);
+    const preview = await monarch({ op: 'preview', requestId: 'r1', target: MIRA });
+    const commits = repository.commits;
+    expect(await monarch({ op: 'start', requestId: 'r1', previewToken: preview.kind === 'preview' ? preview.value.token : 'x' })).toEqual({ kind: 'denied', code: 'unavailable' });
+    expect(await monarch({ op: 'prepare', ticket: 't1' })).toEqual({ kind: 'denied', code: 'unavailable' });
+    expect(repository.commits).toBe(commits);
+    expect(repository.snapshot().actions[0]).toMatchObject({ state: 'prepared', dispatchedAt: null });
   });
 });
 

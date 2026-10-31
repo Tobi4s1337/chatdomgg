@@ -3,13 +3,15 @@
 Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server application lives in
 `apps/api/src/raid-gate/`. The browser imports only `apps/api/src/raid-gate/contracts.ts` (plus the in-page bench).
 
-## What exists (RG01, RG07)
+## What exists (RG01, RG07, RG08)
 
 | Piece | File | State |
 |---|---|---|
 | Feature-local contract: commands, replies, strict readers | `apps/api/src/raid-gate/contracts.ts` | All spec 23 shapes, plus `{op:'gate'}` → `GateStatusView` (see spec Decisions) |
 | Durable records and the CAS transaction port | `apps/api/src/raid-gate/repository.ts` | Gate pointer, raid action, party member |
-| Application: gate status, preview, join, leave, read-action, close (`cancel` before start) | `apps/api/src/raid-gate/application.ts` | Real. Start, Twitch cancel and later ops answer `denied: unavailable` until their task lands |
+| Application: gate status, preview, join, leave, read-action, close, start, Twitch cancel, reconcile | `apps/api/src/raid-gate/application.ts` | Real. Travel, passport and gift ops answer `denied: unavailable` until their task lands |
+| Witnessed departure: `ingestRaid`, `recover` | `apps/api/src/raid-gate/application.ts` | Server-only; lands a correlated raid once and hands it to the Atlas road ingestion |
+| Outbox for Twitch writes and the road handoff | `apps/api/src/raid-gate/repository.ts` | `queued` sendable, `claimed` reconcile-only, `settled` |
 | Durable repository over the realm schema | `apps/api/src/raid-gate/postgres-repository.ts`, `realm-migration.sql` | Serializable CAS; every row passes its strict reader |
 | Session principal from realm-auth's cookie | `apps/api/src/raid-gate/session.ts` | Role derived on the server: monarch by Twitch identity, citizen by deed, otherwise guest |
 | Live policy | `apps/api/src/raid-gate/policy.ts` | Session and broadcaster from the realm; live, grant, consent and Atlas verdict are required ports |
@@ -41,7 +43,16 @@ Short version, with the pieces above:
    // stop(): raidGate.close();
    ```
    `live` = `createHelixLiveChannels(new HelixReader(...))` (needs `@chatdom/twitch` in `apps/api` and an app-token
-   session). `grants` (the source's `channel:manage:raids` state, telling revoked apart from never connected),
+   session). Pass `raids` (an `AuthorizedRaidTransport`: Start/Cancel a Raid with the source's `channel:manage:raids`
+   user token, recording each write by `key` before calling Twitch so `reconcile(key)` can answer for a lost reply and
+   says `unknown` when it cannot tell) and `roads` (the Atlas's `AtlasRoadIngress`, idempotent by raid ID). Without
+   `raids` the gate gathers but `start` answers `unavailable`; without `roads` witnessed raids wait in the outbox.
+   The service runs `recover()` every 15 s and once at start-up; `close()` stops it.
+   In the verified EventSub ingress, for every `channel.raid` whose `from_broadcaster_user_id` is a kingdom with a
+   gate request the transport sent, call
+   `raidGate.application.ingestRaid({ raid, upstreamEventId: messageId, actionRequestId, receivedAt })` with
+   `raid.source = 'herald'` and observed evidence. `actionRequestId` is the request whose start the transport sent
+   for that source and target; pass `null` when it cannot tell, and the gate will not land anything on it. `grants` (the source's `channel:manage:raids` state, telling revoked apart from never connected),
    `consent` (the monarch's Twitch-write switch) and `directory` (Atlas classification and whether this source may
    raid the target) have no store yet; they are main's.
 3. In the kingdom host, give the controller `createHttpRaidGateApi({ url: `/api/raid-gate/${kingdomId}`, origin })`,
@@ -79,7 +90,8 @@ The longer contract each port honours:
    - `api`: a `RaidGateApi` whose `request` POSTs the command and whose `subscribe(null, …)` listens to (2).
      Set `origin` to match the server.
    - `atlas`: the Atlas lane's `AtlasGateHost`, which opens gate mode at the source, reports the pick as
-     `{kind:'target', channel, land}`, reports `{kind:'closed'}`, and resolves a named destination.
+     `{kind:'target', channel, land}`, reports `{kind:'closed'}`, resolves a named destination, and `follow(raid)`
+     attaches the map to that witnessed raid's public caravan (presentation only; the road comes from the server).
    - `source`: the kingdom's `{kingdomId, name, login}`.
    - `account`: `{reconnect}` to the throne's Twitch connection, when the host has one.
 

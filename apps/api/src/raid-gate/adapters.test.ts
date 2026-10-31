@@ -26,6 +26,7 @@ const action = (revision: number, requestId = 'r1'): RaidActionRecord => ({
   target: { kingdomId: MIRA, founded: true, live: true, classification: 'general' }, state: 'prepared',
   previewTokenHash: 'a'.repeat(64), previewExpiresAt: 1_800_000_120_000, optedIn: 0,
   createdAt: 1_800_000_000_000, updatedAt: 1_800_000_000_000, observedAt: 1_800_000_000_000, raid: null, endReason: null, origin: 'simulated',
+  dispatchedAt: null, acceptedAt: null, rejection: null, raidEventId: null,
 });
 const row = (record: { revision: number }) => ({ revision: String(record.revision), record: JSON.stringify(record) });
 
