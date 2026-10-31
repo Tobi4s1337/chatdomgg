@@ -3,6 +3,8 @@ import { AVATAR_RIG, AVATAR_SOCKETS, VOXEL_METRES, type AvatarAttachmentId, type
 import { geometryFromChunks, type VoxelRenderState } from '@chatdom/render';
 import { VoxelWorkerPool } from '@chatdom/voxel';
 import { createCitizenCapeRenderer } from './capes';
+import { meshStyledCitizen, STYLED_CITIZEN_RIG, type StyledCitizenLook } from './style-adapter';
+import { createStyledCitizenMaterial, styledCitizenGeometry } from './style-material';
 
 /** Vertical displacement of the seated head from its standing position. */
 export const CITIZEN_SEATED_HEAD_OFFSET_METRES = -4 * VOXEL_METRES.avatar;
@@ -10,6 +12,7 @@ export const CITIZEN_SEATED_HEAD_OFFSET_METRES = -4 * VOXEL_METRES.avatar;
 /** A compiled wardrobe part. The asset must be the ordered raster of the blueprint. */
 export interface CitizenPart { readonly blueprint: AvatarPartBlueprint; readonly asset: VoxelAsset }
 export interface CitizenLook { readonly id: string; readonly parts: readonly CitizenPart[]; readonly cape?: AvatarCapeBlueprint }
+export type CitizenRenderLook = CitizenLook | StyledCitizenLook;
 export interface CitizenSample {
   readonly id: string;
   readonly look: string;
@@ -37,12 +40,12 @@ export interface CitizenSample {
 export interface CitizenRendererOptions {
   readonly registry: MaterialRegistry;
   readonly material: VoxelRenderState;
-  readonly looks: readonly CitizenLook[];
+  readonly looks: readonly CitizenRenderLook[];
   readonly capacity?: number;
   readonly pool?: VoxelWorkerPool;
 }
-interface Batch { readonly part: AvatarPartBlueprint; readonly mesh: THREE.InstancedMesh; readonly pivot: THREE.Matrix4 }
-interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined }
+interface Batch { readonly attachment: AvatarAttachmentId; readonly mesh: THREE.InstancedMesh; readonly pivot: THREE.Matrix4; readonly seatedHem: boolean }
+interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined; readonly rig: typeof AVATAR_RIG }
 
 /**
  * Meshed voxel parts share one draw per part/look, not one draw per person.
@@ -52,43 +55,62 @@ interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarC
 export async function createCitizenRenderer(scene: THREE.Scene, options: CitizenRendererOptions) {
   const capacity = options.capacity ?? 256;
   if (!Number.isSafeInteger(capacity) || capacity < 1) throw new Error('Citizen capacity must be a positive integer.');
-  const pool = options.pool ?? new VoxelWorkerPool({ size: 2 });
+  let pool = options.pool;
   const ownsPool = !options.pool;
   const group = new THREE.Group();
   const looks = new Map<string, LookBatch>();
   const geometries: THREE.BufferGeometry[] = [];
   const meshes: THREE.InstancedMesh[] = [];
+  const paintedMaterials = new Map<'solid' | 'glass', THREE.ShaderMaterial>();
+  function addBatch(geometry: THREE.BufferGeometry, material: THREE.Material, attachment: AvatarAttachmentId, pivotCells: readonly number[], name: string, seatedHem = false): Batch {
+    geometry.setAttribute('aLodFade', new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1));
+    const mesh = new THREE.InstancedMesh(geometry, material, capacity);
+    mesh.name = name;
+    mesh.count = 0;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // Instance bounds change with every sample; cull the complete citizen below.
+    mesh.frustumCulled = false;
+    mesh.castShadow = false;
+    if (material.transparent) mesh.renderOrder = 1;
+    group.add(mesh); geometries.push(geometry); meshes.push(mesh);
+    const pivot = new THREE.Matrix4().makeTranslation(...pivotCells.map(n => -n * VOXEL_METRES.avatar) as [number, number, number]);
+    return { attachment, mesh, pivot, seatedHem };
+  }
   try {
     for (const look of options.looks) {
       if (looks.has(look.id)) throw new Error(`Duplicate citizen look ${look.id}.`);
       const batches: Batch[] = [];
+      if ('kind' in look) {
+        for (const part of meshStyledCitizen(look)) {
+          let material = paintedMaterials.get(part.surface);
+          if (!material) { material = createStyledCitizenMaterial(options.material, part.surface); paintedMaterials.set(part.surface, material); }
+          batches.push(addBatch(styledCitizenGeometry(part.mesh, part.surface), material, part.attachment, part.pivot, `Citizen ${look.id} ${part.seatedHem ? 'hem' : part.attachment} ${part.surface}`, part.seatedHem));
+        }
+        looks.set(look.id, { batches, cape: look.cape, rig: STYLED_CITIZEN_RIG });
+        continue;
+      }
+      // Painted-only scenes need no voxel worker. Legacy assets keep their
+      // established worker/registry path, including keepers and saved v1 looks.
+      pool ??= new VoxelWorkerPool({ size: 2 });
       for (const { blueprint, asset } of look.parts) {
         if (asset.lattice !== 'avatar' || blueprint.lattice !== 'avatar' || asset.id !== blueprint.id) throw new Error(`Invalid avatar asset ${blueprint.id}.`);
         // Worker transfers its input; retain the caller's source for other consumers.
         const result = await pool.submit({ kind: 'asset', asset: { ...asset, voxels: asset.voxels.slice() }, materials: options.registry.materials, materialRevision: options.registry.revision });
         if (!result || result.kind !== 'asset') throw new Error(`Could not mesh avatar part ${blueprint.id}.`);
-        const geometry = geometryFromChunks(result.chunks, 'avatar');
-        geometry.setAttribute('aLodFade', new THREE.InstancedBufferAttribute(new Float32Array(capacity).fill(1), 1));
-        const mesh = new THREE.InstancedMesh(geometry, options.material.material, capacity);
-        mesh.count = 0;
-        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-        // Instance bounds change with every sample; avoid stale geometry bounds culling moving citizens.
-        mesh.frustumCulled = false;
-        mesh.castShadow = false;
-        group.add(mesh); geometries.push(geometry); meshes.push(mesh);
-        const pivot = new THREE.Matrix4().makeTranslation(...blueprint.pivot.map(n => -n * VOXEL_METRES.avatar) as [number, number, number]);
-        batches.push({ part: blueprint, mesh, pivot });
+        batches.push(addBatch(geometryFromChunks(result.chunks, 'avatar'), options.material.material, blueprint.attachment, blueprint.pivot, `Citizen ${look.id} ${blueprint.id}`));
       }
-      looks.set(look.id, { batches, cape: look.cape });
+      looks.set(look.id, { batches, cape: look.cape, rig: AVATAR_RIG });
     }
   } catch (error) {
     for (const geometry of geometries) geometry.dispose();
-    if (ownsPool) pool.dispose();
+    for (const mesh of meshes) mesh.dispose();
+    for (const material of paintedMaterials.values()) material.dispose();
+    if (ownsPool) pool?.dispose();
     throw error;
   }
   scene.add(group);
   const capes = createCitizenCapeRenderer(scene, { registry: options.registry, material: options.material, capacity });
-  const local = new THREE.Matrix4(), root = new THREE.Matrix4(), matrix = new THREE.Matrix4();
+  const local = new THREE.Matrix4(), root = new THREE.Matrix4(), matrix = new THREE.Matrix4(), hemRotation = new THREE.Matrix4();
   const rotation = new THREE.Euler(), translation = new THREE.Vector3(), quaternion = new THREE.Quaternion();
   const scale = new THREE.Vector3(1, 1, 1);
   const poses = new Map<AvatarAttachmentId, THREE.Matrix4>();
@@ -98,7 +120,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   // single culling unit, including their edges during a stride.
   const citizenBounds = new THREE.Sphere(new THREE.Vector3(), 2.5);
   const postureById = new Map<string, { value: number; last: number }>();
-  function pose(sample: CitizenSample, seated: number) {
+  function pose(sample: CitizenSample, seated: number, rig: typeof AVATAR_RIG) {
     // One full left/right stride over 1.8 metres. The old .75 m cycle made ordinary 4 m/s walking
     // churn through more than five cycles a second; distance still keeps stops and corrections planted.
     const phase = sample.distance * Math.PI * 2 / 1.8;
@@ -130,7 +152,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     root.elements[13]! += toeLift;
     root.elements[14]! += Math.cos(sample.heading) * toeShift;
     poses.clear();
-    for (const bone of AVATAR_RIG) {
+    for (const bone of rig) {
       const angles = rotations[bone.id] ?? [0, 0, 0];
       rotation.set(...angles); quaternion.setFromEuler(rotation);
       translation.set(...bone.offset).multiplyScalar(VOXEL_METRES.avatar);
@@ -190,13 +212,19 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           citizenBounds.center.set(sample.position[0], sample.position[1] + .75, sample.position[2]);
           if (!frustum.intersectsSphere(citizenBounds)) continue;
         }
-        pose(sample, transition.value);
+        pose(sample, transition.value, look.rig);
         grips.set(sample.id, poses.get('gripRight')!.clone());
         if (look.cape) capes.add({ id: sample.id, heading: sample.heading, distance: sample.distance, speed: (sample.speed ?? sample.moving * 1.2) * (1 - transition.value), opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!);
         for (const batch of look.batches) {
-          const attachment = poses.get(batch.part.attachment);
-          if (!attachment) throw new Error(`Unknown avatar attachment ${batch.part.attachment}.`);
-          matrix.multiplyMatrices(attachment, batch.pivot);
+          const attachment = poses.get(batch.attachment);
+          if (!attachment) throw new Error(`Unknown avatar attachment ${batch.attachment}.`);
+          if (batch.seatedHem) {
+            // A continuous voxel skirt follows the lap during the same seated
+            // blend as the thighs, instead of sinking into the floor or tearing
+            // into separate leg columns. This is not a shared rig/socket change.
+            hemRotation.makeRotationX(-Math.PI / 2 * transition.value);
+            matrix.multiplyMatrices(attachment, hemRotation).multiply(batch.pivot);
+          } else matrix.multiplyMatrices(attachment, batch.pivot);
           const index = batch.mesh.count++;
           batch.mesh.setMatrixAt(index, matrix);
           const fades = batch.mesh.geometry.getAttribute('aLodFade') as THREE.InstancedBufferAttribute;
@@ -215,9 +243,11 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
       capes.dispose(); scene.remove(group);
       for (const geometry of geometries) geometry.dispose();
       for (const mesh of meshes) mesh.dispose();
-      if (ownsPool) pool.dispose();
+      for (const material of paintedMaterials.values()) material.dispose();
+      if (ownsPool) pool?.dispose();
     },
   };
 }
 
 export { createDefaultCitizenLooks } from './default-look';
+export { createStyledCitizenLook, type StyledCitizenLook, type StyledCitizenRecipe } from './style-adapter';

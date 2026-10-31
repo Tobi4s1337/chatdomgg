@@ -50,3 +50,16 @@ freezes it into `@chatdom/shared` as `citizen-look` v2, the ids lists in `recipe
 ## Also needed
 
 - `@chatdom/content` package export `./avatar-style` (the web imports it by relative path today).
+
+## Main decision — runtime adoption, 2026-10-31
+
+The new citizen is now a `paint-grid` renderer input beside legacy compiled looks.
+The six presence appearance IDs remain unchanged. The painted rig uses shoulders at x ±4;
+`AVATAR_RIG`, its sockets and legacy wardrobe/keeper binding stay unchanged. Exact recipe dyes
+become linear per-vertex albedo; the renderer inherits the kingdom's live light, fog and output uniforms.
+Capes remain the existing separate thin cloth. Continuous garment hems pivot onto the seated lap.
+
+The content recipe is exported as `@chatdom/content/avatar-style`; kingdom/stream defaults and card
+portraits consume the same canonical recipes. This freezes the renderer seam, not a new saved/equip
+protocol. Proposal 3 remains pending its persistence consumer: no shared schema, ownership or earned-item
+authority changed in this picture slice.
