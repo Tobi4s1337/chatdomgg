@@ -70,7 +70,9 @@ export type LightFieldResponse = { readonly kind: 'ready' }
 
 /** `solid` here means "blocks light": glass is walked against but passes light like the air it fills. */
 interface WorldBox { readonly min: Vec3; readonly max: Vec3; readonly solid: boolean; readonly glass: boolean }
-interface LightHouse { readonly min: Vec3; readonly max: Vec3; readonly boxes: readonly WorldBox[]; readonly glazed: readonly number[] }
+/** A glazed opening's box and the axes its glass faces along (the wall normal). */
+interface GlazedOpening { readonly index: number; readonly axes: readonly number[] }
+interface LightHouse { readonly min: Vec3; readonly max: Vec3; readonly boxes: readonly WorldBox[]; readonly glazed: readonly GlazedOpening[] }
 
 const blocksLight = new Uint8Array(65536).fill(1), passesAsGlass = new Uint8Array(65536);
 blocksLight[0] = 0;
@@ -173,8 +175,17 @@ export function compileLightHouses(houses: readonly WindowHouse[]): readonly Lig
       };
     };
     const boxes = blueprint.boxes.map(box => ({ ...transformed(box.from, box.to), solid: blocksLight[box.material] === 1, glass: passesAsGlass[box.material] === 1 }));
-    // A glazed opening is its glass and every air carve that meets that glass (the reveal through the wall).
-    const glazed = boxes.flatMap((box, index) => !box.solid && (box.glass || boxes.some(other => other.glass && touches(box, other))) ? [index] : []);
+    // A glazed opening is its glass and every air carve that meets that glass (the reveal through the wall). Its
+    // glass is thinnest along the wall normal; that is the direction light crosses the wall.
+    const glazed = boxes.flatMap((box, index) => {
+      if (box.solid) return [];
+      const panes = box.glass ? [box] : boxes.filter(other => other.glass && touches(box, other));
+      const axes = [...new Set(panes.flatMap(pane => {
+        const extent = pane.max.map((value, axis) => value - pane.min[axis]!);
+        return [0, 1, 2].filter(axis => extent[axis]! <= Math.min(...extent) + 1e-6);
+      }))];
+      return axes.length ? [{ index, axes }] : [];
+    });
     return { ...transformed([0, 0, 0], blueprint.size), boxes, glazed };
   });
 }
@@ -184,27 +195,46 @@ function touches(a: WorldBox, b: WorldBox): boolean {
 }
 
 /**
- * Half-metre cells cannot hold a 0.375 m wall and the window in it apart. A cell that a glazed opening reaches
- * is open only if no light blocker survives anywhere inside it once every box has painted in order. Build cells
- * lie on the house's 0.125 m lattice, so one sample at each build-cell centre decides the cell exactly.
+ * Half-metre cells cannot hold a 0.375 m wall and the window in it apart, nor a mullion and the lights beside it.
+ * A cell that a glazed opening reaches is open when light can cross it along the wall normal through at least half
+ * of its face: each line of build cells along that axis is clear only if no light blocker survives anywhere on it
+ * once every box has painted in order. A cell of unbroken wall has no clear line, so walls still close; a light
+ * beside a mullion or a frame passes. Build cells lie on the house's 0.125 m lattice, so one sample at each
+ * build-cell centre decides each line exactly.
  */
-function glazedCellOpen(house: LightHouse, candidates: readonly WorldBox[], min: Vec3, cellSize: number): boolean {
+function glazedCellOpen(house: LightHouse, candidates: readonly WorldBox[], min: Vec3, cellSize: number, axes: Iterable<number>): boolean {
   const step = VOXEL_METRES.build;
   const local = candidates.filter(box => box.min.every((value, axis) => value < min[axis]! + cellSize && box.max[axis]! > min[axis]!));
   if (!local.some(box => !box.solid)) return false;
   // Every build cell with any volume in this cell, including ones straddling its faces.
   const first = min.map((value, axis) => Math.floor((value - house.min[axis]!) / step + 1e-6));
   const last = min.map((value, axis) => Math.ceil((value + cellSize - house.min[axis]!) / step - 1e-6));
-  for (let k = first[2]!; k < last[2]!; k++) for (let j = first[1]!; j < last[1]!; j++) for (let i = first[0]!; i < last[0]!; i++) {
-    const x = house.min[0] + (i + 0.5) * step, y = house.min[1] + (j + 0.5) * step, z = house.min[2] + (k + 0.5) * step;
+  const point = [0, 0, 0];
+  const blocked = (): boolean => {
     for (let b = local.length - 1; b >= 0; b--) {
       const box = local[b]!;
-      if (x < box.min[0] || x >= box.max[0] || y < box.min[1] || y >= box.max[1] || z < box.min[2] || z >= box.max[2]) continue;
-      if (box.solid) return false;
-      break;
+      if (point[0]! < box.min[0] || point[0]! >= box.max[0] || point[1]! < box.min[1] || point[1]! >= box.max[1]
+        || point[2]! < box.min[2] || point[2]! >= box.max[2]) continue;
+      return box.solid;
     }
+    return false;
+  };
+  for (const axis of axes) {
+    const u = (axis + 1) % 3, v = (axis + 2) % 3;
+    const lines = (last[u]! - first[u]!) * (last[v]! - first[v]!);
+    let clear = 0;
+    for (let j = first[v]!; j < last[v]!; j++) for (let i = first[u]!; i < last[u]!; i++) {
+      point[u] = house.min[u]! + (i + 0.5) * step; point[v] = house.min[v]! + (j + 0.5) * step;
+      let open = true;
+      for (let k = first[axis]!; k < last[axis]! && open; k++) {
+        point[axis] = house.min[axis]! + (k + 0.5) * step;
+        open = !blocked();
+      }
+      if (open) clear++;
+    }
+    if (clear * 2 >= lines) return true;
   }
-  return true;
+  return false;
 }
 
 function overlaps(min: Vec3, max: Vec3, origin: Vec3, config: LightFieldConfig): boolean {
@@ -254,18 +284,32 @@ export function createLightFieldSolver(layout: LightFieldLayout, houses: readonl
           scratch.fill(box.solid ? 1 : 0, row + from[0]!, row + to[0]!);
         }
       }
-      // Unglazed partial carves keep the conservative rule above; glazed openings resolve exactly.
-      if (cellSize <= 0.5) for (const index of house.glazed) {
-        const opening = house.boxes[index]!;
-        if (!overlaps(opening.min, opening.max, origin, config)) continue;
-        const candidates = house.boxes.filter(box => touches(box, { min: opening.min.map(v => v - cellSize) as unknown as Vec3, max: opening.max.map(v => v + cellSize) as unknown as Vec3, solid: false, glass: false }));
-        const from = opening.min.map((value, axis) => Math.max(0, Math.floor((value - origin[axis]!) / cellSize)));
-        const to = opening.max.map((value, axis) => Math.min(size[axis]!, Math.ceil((value - origin[axis]!) / cellSize)));
-        for (let z = from[2]!; z < to[2]!; z++) for (let y = from[1]!; y < to[1]!; y++) for (let x = from[0]!; x < to[0]!; x++) {
-          const index = x + sx * (y + sy * z);
-          if (scratch[index] !== 1) continue;
+      // Unglazed partial carves keep the conservative rule above; cells a glazed opening reaches resolve exactly,
+      // once each, along every wall normal of the openings that reach them (a corner window has two).
+      if (cellSize <= 0.5) {
+        const reached = new Map<number, Set<number>>();
+        const near = new Set<WorldBox>();
+        for (const { index, axes } of house.glazed) {
+          const opening = house.boxes[index]!;
+          if (!overlaps(opening.min, opening.max, origin, config)) continue;
+          const from = opening.min.map((value, axis) => Math.max(0, Math.floor((value - origin[axis]!) / cellSize)));
+          const to = opening.max.map((value, axis) => Math.min(size[axis]!, Math.ceil((value - origin[axis]!) / cellSize)));
+          for (let z = from[2]!; z < to[2]!; z++) for (let y = from[1]!; y < to[1]!; y++) for (let x = from[0]!; x < to[0]!; x++) {
+            const cell = x + sx * (y + sy * z);
+            if (scratch[cell] !== 1) continue;
+            const normals = reached.get(cell) ?? new Set<number>();
+            for (const axis of axes) normals.add(axis);
+            reached.set(cell, normals);
+          }
+          const reach: WorldBox = { min: opening.min.map(v => v - cellSize) as unknown as Vec3, max: opening.max.map(v => v + cellSize) as unknown as Vec3, solid: false, glass: false };
+          for (const box of house.boxes) if (touches(box, reach)) near.add(box);
+        }
+        // Keep paint order: a later box must still override an earlier one inside each cell.
+        const candidates = reached.size ? house.boxes.filter(box => near.has(box)) : [];
+        for (const [cell, normals] of reached) {
+          const x = cell % sx, y = Math.floor(cell / sx) % sy, z = Math.floor(cell / (sx * sy));
           const min: Vec3 = [origin[0] + x * cellSize, origin[1] + y * cellSize, origin[2] + z * cellSize];
-          scratch[index] = glazedCellOpen(house, candidates, min, cellSize) ? 0 : 2;
+          if (glazedCellOpen(house, candidates, min, cellSize, normals)) scratch[cell] = 0;
         }
       }
       const from = house.min.map((value, axis) => Math.max(0, Math.floor((value - origin[axis]!) / cellSize)));
