@@ -4,7 +4,7 @@ import {
   currentFootprint, homeFrame, randomUnit, samplePublicGround, seedHash, transformCardinalPoint,
   type CardinalTurn, type KingdomLand, type KingdomTier, type SettlementHome, type SettlementPlan, type XZ,
 } from '@chatdom/world';
-import { createDressing, DRESSING_ROLES, DRESSING_FORMS, type DressingForm } from '../../../../../packages/content/src/props/dressing';
+import { createDressing, DRESSING_ROLES, DRESSING_FORMS, type DressingForm } from '../../../../../packages/content/src/props/dressing/registry';
 
 const CELL = 0.125;
 

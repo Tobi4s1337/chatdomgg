@@ -31,16 +31,25 @@ export type EffectsDiagnostics = {
   disposed: boolean;
   /** The frame was rejected (non-finite clock) and nothing is drawn. */
   idle: boolean;
+  /** Glints: fireflies, embers, dust motes, sparks and the flight, in one draw. */
   glow: {
     capacity: number;
     count: number;
     fireflySources: number;
     emberSources: number;
-    /** Sources dropped as malformed, duplicate, out of reach or over budget this frame. */
+    dustShafts: number;
+    sparkBursts: number;
+    /** Glints drawn for the flight cue (its glint, motes and trail); 0 without a cue. */
+    flightGlints: number;
+    /** Inputs dropped as malformed, duplicate, out of reach or over budget this frame. */
     skipped: number;
-    /** Upper bound of covered screen pixels: drawn quads × the largest permitted quad. */
-    maxCoveragePixels: number;
   };
+  /** Chimney smoke voxels, in one draw. */
+  smoke: { capacity: number; count: number; sources: number; skipped: number };
+  /** Bursts whose start is remembered so an unchanged burst can never restart; cleared by `reset`. */
+  rememberedBursts: number;
+  /** Upper bound of covered screen pixels: every drawn particle at its largest permitted size. */
+  maxCoveragePixels: number;
 };
 
 export interface Effects {

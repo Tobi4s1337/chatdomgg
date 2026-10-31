@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { MAT } from '@chatdom/content/materials';
 import { AVATAR_STYLE_IDS, STYLE_STUDY_FIXTURES, convertLook } from '../../../../../packages/content/src/avatar-style';
-import { createDefaultCitizenLooks } from '../default-look';
+import { createLegacyCitizenLooks } from '../legacy-look';
 import { checkFixture, readStyleSource } from './identity';
 
 describe('style study fixtures', () => {
-  const looks = createDefaultCitizenLooks();
+  const looks = createLegacyCitizenLooks();
   const find = (id: string) => looks.find(look => look.id === id)!;
 
   it('shows five real everyday looks, each read from its own parts', () => {

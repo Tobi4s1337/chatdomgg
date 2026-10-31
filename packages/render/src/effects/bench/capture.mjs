@@ -1,6 +1,6 @@
 // Deterministic stills of the effects bench, through the production renderer pieces and the effects library.
 // Run from the repository root:
-//   node packages/render/src/effects/bench/capture.mjs [--views street,wide] [--sizes 1920x1080] [--time 12]
+//   node packages/render/src/effects/bench/capture.mjs [--views street,wide,stream] [--sizes 1920x1080] [--time 12]
 //     [--hour 20] [--quality balanced] [--effects on|off] [--seed 7] [--name <suffix>]
 // It takes the machine-wide capture lock before any server or browser, starts its own Vite dev server on the first
 // free safe capture port, opens headless Chrome on SwiftShader, waits for the bench's first full frame, fails on any
@@ -18,8 +18,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../../../../..');
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
-const views = (option('--views') ?? 'street,wide').split(',');
-if (views.some(view => view !== 'street' && view !== 'wide')) throw new Error('Expected --views from street,wide');
+const views = (option('--views') ?? 'street,wide,stream').split(',');
+if (views.some(view => !['street', 'wide', 'stream'].includes(view))) throw new Error('Expected --views from street,wide,stream');
 const sizes = (option('--sizes') ?? '1920x1080').split(',').map(size => size.split('x').map(Number));
 if (sizes.some(size => size.length !== 2 || !size.every(value => Number.isInteger(value) && value > 0))) throw new Error('Expected --sizes WxH[,WxH]');
 const time = Number(option('--time') ?? 12), hour = Number(option('--hour') ?? 20), seed = Number(option('--seed') ?? 7);
@@ -79,7 +79,8 @@ try {
       const path = `${out}/${view}-t${time}-${quality}${name ? `-${name}` : ''}@${width}x${height}.png`;
       await page.screenshot({ path, timeout: 180_000 });
       const stats = await page.evaluate(() => window.__chatdomEffects.stats());
-      console.log(`Captured ${path} (draws ${stats.drawCalls}, triangles ${stats.triangles}, effects ${stats.effects ? 'on' : 'off'})`);
+      const d = stats.diagnostics;
+      console.log(`Captured ${path} (draws ${stats.drawCalls}, triangles ${stats.triangles}, effects ${stats.effects ? 'on' : 'off'}${d ? `, glints ${d.glow.count}/${d.glow.capacity}, smoke ${d.smoke.count}/${d.smoke.capacity}, smoke sources ${d.smoke.sources}, shafts ${d.glow.dustShafts}, bursts ${d.glow.sparkBursts}, flight ${d.glow.flightGlints}` : ''})`);
     }
     await page.close();
   }

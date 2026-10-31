@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,">
+  <title>Chatdom · Ground dressing · tree forms</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #1d2228; overflow: hidden; font-family: Georgia, serif; }
+    canvas { display: block; width: 100vw; height: 100vh; }
+    body.grey canvas { filter: grayscale(1); }
+    [data-title] { position: fixed; left: 18px; top: 12px; color: #eadfc8; font-size: 15px; letter-spacing: .05em; }
+    [data-title] small { display: block; color: #c6b493; font-size: 11px; margin-top: 3px; letter-spacing: .03em; }
+    [data-label] { position: fixed; transform: translateX(-50%); color: #eadfc8; font-size: 10px; letter-spacing: .03em;
+      white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+    [data-row] { position: fixed; left: 18px; color: #c6b493; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    body.silhouette [data-title], body.silhouette [data-label], body.silhouette [data-row] { display: none; }
+  </style>
+</head>
+<body>
+  <canvas></canvas>
+  <div data-title></div>
+  <script type="module" src="./trees.ts"></script>
+</body>
+</html>

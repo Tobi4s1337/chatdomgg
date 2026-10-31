@@ -2,6 +2,8 @@ import type { ChannelKingdomRecipe, DeepReadonly, GenesisLandmark, GenesisLandsc
 import { VOXEL_METRES } from '@chatdom/shared';
 import { WATCHTOWER_AXIS, createHarbourWatchtower, type WatchtowerCrown } from './harbour-watchtower/tower';
 import { RIVER_HALL, RIVER_HALL_AXIS, createRiverHall } from './river-hall/hall';
+import { CROWN_TOWER_AXIS, createCrownTower, type CrownTowerHead } from './crown-tower/crown';
+import { CATHEDRAL_SITE_AXIS, CATHEDRAL_SITE_SIZE, createCathedralSite } from './cathedral-site/site';
 import { LANDMARK_KITS, snapToCloth } from './kit';
 import type { LandmarkPiece } from './types';
 
@@ -12,11 +14,15 @@ import type { LandmarkPiece } from './types';
  * nothing and asserts no valid placement.
  *
  * The landscape character picks the showcase landmark (explicit art direction for the three landscapes): the coast
- * gets the harbour watchtower, the river valley the river hall. The recipe's own `identity.landmark` is a separate
- * input: it is passed through untouched and only shapes a detail of the showcase, so a lighthouse kingdom's harbour
- * tower carries a lamp room and a watermill kingdom's river hall turns a wheel.
+ * gets the harbour watchtower, the river valley the river hall, the mountain pass the crown tower. The recipe's own
+ * `identity.landmark` is a separate input: it is passed through untouched and only shapes a detail of the showcase,
+ * so a lighthouse kingdom's harbour tower carries a lamp room, a watermill kingdom's river hall turns a wheel and a
+ * bell-garden kingdom's crown tower hangs a bell where the others keep a watch fire.
+ *
+ * A recipe whose size reserves a cathedral site (a city or a capital) also gets that site, on any landscape: the
+ * land held and set out for a cathedral its people may raise, never a building and never a population.
  */
-export type GenesisShowcase = 'harbour-watchtower' | 'river-hall';
+export type GenesisShowcase = 'harbour-watchtower' | 'river-hall' | 'crown-tower' | 'cathedral-site';
 type XZ = readonly [number, number];
 type Turn = 0 | 1 | 2 | 3;
 
@@ -74,10 +80,46 @@ export interface RiverLandmarkProposal extends ProposalBase {
   };
 }
 
-export type GenesisLandmarkProposal = HarbourLandmarkProposal | RiverLandmarkProposal;
+export interface MountainLandmarkProposal extends ProposalBase {
+  readonly showcase: 'crown-tower';
+  /** A bell-garden kingdom hangs a bell in the tower's head; every other kingdom keeps a watch fire there. */
+  readonly head: CrownTowerHead;
+  /**
+   * A candidate, in world metres: `setback` metres from the pass's saddle towards the plaza, the door and its board
+   * turned to the plaza. `elevation` is the saddle's recorded height, for the piece's y = 0; `pass` is the saddle
+   * and its recorded width between its two hills. Not sampled, graded or validated.
+   */
+  readonly site: {
+    readonly axis: XZ; readonly origin: XZ; readonly elevation: number; readonly setback: number;
+    readonly pass: { readonly saddle: readonly [number, number, number]; readonly width: number; readonly between: readonly [string, string] };
+    readonly basis: 'pass-towards-plaza'; readonly status: 'unvalidated';
+  };
+}
+
+export interface CathedralSiteProposal extends ProposalBase {
+  readonly showcase: 'cathedral-site';
+  /**
+   * A candidate, in world metres, for the middle of the reserve: across the plaza from the gate, its west front
+   * (local +Z) `forecourt` metres beyond the plaza's anchor and turned back to face it. `footprint` is the turned
+   * reserve's world bounds; `withinSettlementReserve` says only whether those bounds lie inside the landscape's
+   * recorded settlement reserve. Not sampled, graded, cleared of lots or validated.
+   */
+  readonly site: {
+    readonly axis: XZ; readonly origin: XZ; readonly forecourt: number;
+    readonly footprint: { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number };
+    readonly withinSettlementReserve: boolean;
+    readonly basis: 'plaza-frontage'; readonly status: 'unvalidated';
+  };
+}
+
+export type GenesisLandmarkProposal = HarbourLandmarkProposal | RiverLandmarkProposal | MountainLandmarkProposal | CathedralSiteProposal;
 
 const METRE = VOXEL_METRES.build;
 const SETBACK = 14;
+/** How far the crown tower stands from the pass's saddle, towards the town. */
+const PASS_SETBACK = 20;
+/** The open ground between the plaza's anchor and the cathedral site's west front. */
+const FORECOURT = 10;
 
 export function proposeGenesisLandmarks(
   recipe: DeepReadonly<ChannelKingdomRecipe>,
@@ -87,9 +129,11 @@ export function proposeGenesisLandmarks(
   const own = recipe.landscapes.find(candidate => candidate.id === landscape.id);
   if (!own) throw new Error(`Landscape ${landscape.id} is not one of this recipe's candidates.`);
   if (own !== landscape && JSON.stringify(own) !== JSON.stringify(landscape)) throw new Error(`Landscape ${landscape.id} differs from the recipe's candidate.`);
-  if (landscape.character === 'coastal-harbour') return [harbourWatchtower(recipe, landscape)];
-  if (landscape.character === 'river-valley') return [riverHall(recipe, landscape)];
-  throw new Error(`No landmark is authored for the ${landscape.character} landscape yet.`);
+  const landmark = landscape.character === 'coastal-harbour' ? harbourWatchtower(recipe, landscape)
+    : landscape.character === 'river-valley' ? riverHall(recipe, landscape)
+      : landscape.character === 'mountain-pass' ? crownTower(recipe, landscape) : null;
+  if (!landmark) throw new Error(`No landmark is authored for the ${String(landscape.character)} landscape.`);
+  return recipe.size.cathedralSite ? [landmark, cathedralSite(recipe, landscape)] : [landmark];
 }
 
 function harbourWatchtower(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>): HarbourLandmarkProposal {
@@ -189,6 +233,106 @@ function riverHall(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepRe
       'Every waterway, the flag swing and the bell swing stay clear of every other placed solid.',
     ],
   };
+}
+
+function crownTower(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>): MountainLandmarkProposal {
+  const { identity } = recipe;
+  const style = identity.styleFamily;
+  if (!(style in LANDMARK_KITS)) throw new Error(`Unknown style family ${String(style)}.`);
+  const palette = snapPalette(identity.profileColourTargets, style);
+  const head: CrownTowerHead = identity.landmark === 'bell-garden' ? 'bell' : 'watch-fire';
+  const crest = { shape: identity.crest.shape, charge: identity.crest.charge };
+  const piece = createCrownTower({ style, head, crest, bannerCut: identity.banner.cut, colours: { field: palette.field.material, band: palette.band.material } });
+
+  const { saddle, width, betweenHillIds } = landscape.mountainPass;
+  const plaza = placeOf(landscape, 'plaza');
+  const toPlaza = unit([plaza.anchor[0] - saddle[0], plaza.anchor[1] - saddle[2]]);
+  const axis: XZ = [saddle[0] + toPlaza[0] * PASS_SETBACK, saddle[2] + toPlaza[1] * PASS_SETBACK];
+  const quarterTurns = facing(unit([plaza.anchor[0] - axis[0], plaza.anchor[1] - axis[1]]));
+  const local = rotate([CROWN_TOWER_AXIS.x * METRE, CROWN_TOWER_AXIS.z * METRE], quarterTurns);
+
+  return {
+    id: `${landscape.id}/landmark/crown-tower`,
+    landscapeId: landscape.id, character: landscape.character, showcase: 'crown-tower',
+    recipeLandmark: identity.landmark, head, piece, quarterTurns,
+    site: {
+      axis, origin: [axis[0] - local[0], axis[1] - local[1]], elevation: saddle[1], setback: PASS_SETBACK,
+      pass: { saddle: [saddle[0], saddle[1], saddle[2]], width, between: [betweenHillIds[0], betweenHillIds[1]] },
+      basis: 'pass-towards-plaza', status: 'unvalidated',
+    },
+    palette, crest, bannerCut: identity.banner.cut,
+    provenance: provenanceOf(recipe),
+    checks: [
+      'Sample the selected surface under the terrace: ground within one cell of y = 0 at its front edge and the steps, and no higher than y = 4 anywhere under it; the rock outcrop may sink up to six cells into rising ground at the back.',
+      'The door approach and its outer ground run are dry, air and within one cell of groundAt, with a road from the plaza reaching the steps.',
+      'The road through the pass stays open beside the terrace: the saddle\'s recorded width is not taken by the piece or by its clear volumes.',
+      'The footprint is outside the settlement reserve\'s home lots and other places.',
+      'The board, the lookouts, the flag swing and the fire\'s flame (or the bell\'s swing) stay clear of every other placed solid.',
+    ],
+  };
+}
+
+function cathedralSite(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>): CathedralSiteProposal {
+  const { identity } = recipe;
+  const style = identity.styleFamily;
+  if (!(style in LANDMARK_KITS)) throw new Error(`Unknown style family ${String(style)}.`);
+  const palette = snapPalette(identity.profileColourTargets, style);
+  const crest = { shape: identity.crest.shape, charge: identity.crest.charge };
+  const piece = createCathedralSite({ style, crest, colours: { field: palette.field.material, band: palette.band.material } });
+
+  // Across the plaza from the gate: whoever enters by the gate crosses the plaza towards the site's west front.
+  const plaza = placeOf(landscape, 'plaza'), gate = placeOf(landscape, 'gate');
+  const onward = unit([plaza.anchor[0] - gate.anchor[0], plaza.anchor[1] - gate.anchor[1]]);
+  const quarterTurns = facing([-onward[0], -onward[1]]);
+  const halfLength = (CATHEDRAL_SITE_SIZE[2] * METRE) / 2;
+  const axis: XZ = [plaza.anchor[0] + onward[0] * (FORECOURT + halfLength), plaza.anchor[1] + onward[1] * (FORECOURT + halfLength)];
+  const local = rotate([CATHEDRAL_SITE_AXIS.x * METRE, CATHEDRAL_SITE_AXIS.z * METRE], quarterTurns);
+  const origin: XZ = [axis[0] - local[0], axis[1] - local[1]];
+  const corners = ([[0, 0], [CATHEDRAL_SITE_SIZE[0], 0], [0, CATHEDRAL_SITE_SIZE[2]], [CATHEDRAL_SITE_SIZE[0], CATHEDRAL_SITE_SIZE[2]]] as const)
+    .map(([x, z]) => rotate([x * METRE, z * METRE], quarterTurns)).map(([x, z]) => [origin[0] + x, origin[1] + z] as const);
+  const footprint = {
+    minX: Math.min(...corners.map(c => c[0])), maxX: Math.max(...corners.map(c => c[0])),
+    minZ: Math.min(...corners.map(c => c[1])), maxZ: Math.max(...corners.map(c => c[1])),
+  };
+  const reserve = landscape.settlementReserve;
+  const withinSettlementReserve = footprint.minX >= reserve.minX && footprint.maxX <= reserve.maxX && footprint.minZ >= reserve.minZ && footprint.maxZ <= reserve.maxZ;
+
+  return {
+    id: `${landscape.id}/landmark/cathedral-site`,
+    landscapeId: landscape.id, character: landscape.character, showcase: 'cathedral-site',
+    recipeLandmark: identity.landmark, piece, quarterTurns,
+    site: { axis, origin, forecourt: FORECOURT, footprint, withinSettlementReserve, basis: 'plaza-frontage', status: 'unvalidated' },
+    palette, crest, bannerCut: identity.banner.cut,
+    provenance: provenanceOf(recipe),
+    checks: [
+      'Sample the selected surface over the whole reserve: dry, and within the slope the future cathedral\'s plan can be graded to.',
+      'The reserve is held out of the home-lot allocator, every other place and every road but the one to its west front.',
+      'The forecourt between the plaza and the west front stays open ground.',
+      'Nothing is built in the reserve but its setting-out until the community raises the cathedral; no light, sound or figure implies people who are not there.',
+    ],
+  };
+}
+
+function placeOf(landscape: DeepReadonly<GenesisLandscape>, purpose: GenesisLandscape['places'][number]['purpose']): DeepReadonly<GenesisLandscape['places'][number]> {
+  const place = landscape.places.find(candidate => candidate.purpose === purpose);
+  if (!place) throw new Error(`Landscape ${landscape.id} has no ${purpose}.`);
+  return place;
+}
+
+function unit([x, z]: XZ): XZ {
+  const length = Math.hypot(x, z);
+  if (length < 1e-9) throw new Error('Cannot take a direction between two coincident places.');
+  return [x / length, z / length];
+}
+
+/** The quarter turn whose local +Z points closest to `direction` (the first, on a tie). */
+function facing(direction: XZ): Turn {
+  let best: Turn = 0, dot = -Infinity;
+  for (const turn of [0, 1, 2, 3] as const) {
+    const [fx, fz] = rotate([0, 1], turn), d = fx * direction[0] + fz * direction[1];
+    if (d > dot + 1e-9) { dot = d; best = turn; }
+  }
+  return best;
 }
 
 function provenanceOf(recipe: DeepReadonly<ChannelKingdomRecipe>): ProposalBase['provenance'] {

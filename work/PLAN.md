@@ -330,48 +330,41 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Order:** picture first, one visible fix per turn, committed with an obvious before/after. No new systems/contracts;
-chosen avatar/builder remains authorised. Keep accepted exposure34ac89a, indigo0896044, street warmth96f2d08,
-beacon, warm pools, gold frame and wide dusk grade. Close/wide castle lighta1dac83/32633a8 landed. Merge good
-lane checkpoints immediately; medium-effort helpers for routine recon/captures/merges. Check merges BEFORE
-starting the turn's capture, so a newly ready producer cannot strand an unnecessary render.
+**Order:** picture only, one obvious same-view before/after per turn. Merge good art checkpoints first;
+medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
+beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current slice:** smithy camera lower and tighter. Open south-east direction[4.8,.9,12], aim1.8m higher without
-moving the eye; waiting holds the whole hearth, casting prioritises metal/faces. First far-east angle hit the well
-roof and was rejected. Viewed native1080p and `shots/magic/smithy-frame-pair.png` (before left): pour/anvil/faces
-read together, castle rises behind; a well-roof edge stays at far right, crowd still leans left. Same hash-verified
-adopted scene008f059a, SIMULATED fixed pour/gather clock, high HDR/ACES. Final source frozen for capture; no errors,
-resources closed. Typecheck, scoped lint,1 meaningful room/assembly/camera test and web build pass;15 PL03 tests
-pass. Whole hearth and actual crucible stay within frame; waiting margin tighter. No lighting/presence changes.
+**Current:** AS10 whole citizens0b11c76 merged and adopted in kingdom/stream/observed/self walkers.
+Six existing presence look IDs; exact linear vertex dyes inherit kingdom lighting/fog/AO. Shoulders±4
+are render-local; shared rig/sockets/schema untouched. Two existing thin cloth capes survive. Card painter
+uses the same canonical recipes. `shots/magic/avatar-runtime-pair.png` viewed at1920×1080 HIGH,
+hour19.5/time12: sharp hair/hats/plaid replace rounder citizens, accepted light/pools unchanged.
+`avatar-runtime-card.png` viewed at1440×900: purple portrait arch fits. Typecheck/scoped lint/17 focused
+tests/web build pass; no browser errors, capture resources released. Next: goggled deep-skin eyes need
+clearer contrast; ankle joins at maximum stride need a motion look. Live card/panel portrait asset delivery
+still needs its host binding; only painter/bench updated. Saved/equip/earned authority unchanged.
+Chosen reference/spec49/PRD81eab8f, A/B/C rejected. Render seam decision in avatar-style/contract-proposal.md.
 
-**Land next:** PL03 checkpoint1541661 merged402e3c6; street/west frames in `work/evidence/PL03/` viewed. Ridges
-now have a silhouette; foreground still looks like parallel pink trenches. Concrete irregular-bank follow-up in
-lane progress. Producer `picture-land:2` remains candidate-only: main must adopt one derived sampler through
-terrain worker, horizon, light-field occupancy and collision/contact together. Existing physics version/digest and
-collisionRevision publication can carry this without new protocol; never forge plan.revision or paint triangles
-that disagree with walking. `createHorizonSurface` already accepts sampleTerrain; other consumers call terrainHeight.
-Actual sampler adoption, then wide-road life, is next. No need to wait for another lane checkpoint.
+**Picture carried forward:**736ee93 gives static groves horizon dusk air beyond220m; `grove-air-pair.png`
+viewed, far-right grove loses definition.2f854d9 restores carried pools using existing exact-air projection,
+no strength/budget retune (`lantern-road-pools-pair.png`).73dc36e stages12 SIMULATED foreground arrivals
+16–21s:104 walking/136lit vs93/147, still small (`wide-homecoming-pair.png`); live traffic not demonstrated.
+975af2f/44de84b adopt sculpted picture-land consistently through render/light/contact/founded collision;
+9f843d7 ridge haze, aa7baeb birch/alder/fir at existing sites. Full tree families/wind remain team-owned.
+Land next: lower saddle behind beacon, break parallel pink trench banks. Accepted layout stays43cffdb6.
 
-**Avatar/art:** reference/spec49/PRD81eab8f chosen, all A/B/C rejected. AS03 head/portrait4c333ed merged8ff6f87;
-both comparison sheets viewed.8-cell skull plus hair gives~10-cell silhouette on unchanged rig; black eyes/no
-mouth. Hair follow-up: lighter uneven fringe instead of a shelf. Clothes/accessories/builder stay with team;
-swap kingdom/stream/card/passport once head, hair and clothes are ready. No rig/socket proposal exists; exact
-proposals go in contract-proposal.md for main. Recipe remains content-local until its first runtime consumer.
-Main owns real save/earned-item authority. Effects EL01 merged66d5244 and bench viewed, not adopted; ember drift/
-brightness follow-up recorded. Heraldry44c948e/river hallb5d3897 viewed/merged, not mounted as Genesis seats.
-Trees had no new checkpoint. Passport/Genesis content continue. No second forest or emitter stack.
+**Mounted/merged:** Forge64efb0f16 present spectators, still left-heavy; pour02c3494/cameraf0112c6 stay.
+Market be6ab51 cart/wares; square sparse. Harbour a6fcf9a watchtower potential `/kingdom/63920635` only:
+better scale, isolated; needs actual royal glass anchor before live adoption. River/mountain seats remain.
+Effects d535804 merged; accepted smoke NOT replaced. Flight seam next: realm-scene after presentation.update,
+actual mesh world pose+ForgeRitualFrame; retire only old stage flight trail loop. Keepers7eff5d8/sound1ed6865
+additive, unmounted/unheard; never fake crowds. Emote40aeb18 glass clips, follow-up in lane log. Kingdom-land
+6f60ae2 is parked layout v2, NOT picture-land. Passport/gate/emotes/moments/atlas-w2 merged through47c0ef7,
+some live host bindings absent. Genesis content mostly unmounted. Do not reopen these as systems now.
 
-**Accepted paint/open moments:**7c16789 corrected GPU-rejected white smokea545cfa: stable~quarter of occupied
-hearths, thin grey-violet wisps, short fade and restrained amber base; close arrival smoke active. Viewed
-`shots/magic/smoke-soft-pair.png`; wide smoke/base very subtle. Actual chimney mouths only. Rejected far lantern
-glints and global all-pane/2.5x window candidate stay reverted. Castle `shots/magic/wide-gate-pair.png` shows warm
-front walls/cool towers. Molten02c3494 stays. Still open: readable wide-road walkers/cart, fuller two-sided Forge
-crowd, real approved chat ritual (no waiting observer before Tobias announces live). Passport/gate/emotes/moments/
-atlas-w2 through47c0ef7: first4 SIM benches still lack live host bindings. No new system wiring in this pass.
-
-**Continuity/preserved:** lantern cull fadesbc9a54c accepted;7c71b38 retains valid presence through retries until
-min(receipt+90s,frame.asOf+90s), then0.7s fade; SIM outage smoke passed. Other shimmer unlocalized. Royal65534 is
-the keep window, never a deed. Layout43cffdb6/240homes/v1 pinned. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a
-(7files) stays; preserve rounded copy. Superseded night-paint stays superseded. Genesis still needs actual3 Atlas
-entries. Managed5190web/5196API/5197realm/5195Forge/5194herald; only affected code restarts, all on.env. Logs ONLY
-`../conductor/state/services.log`; never journals/other services. Helpers clean owned capture processes.
+**Do not repeat:** ineffective far lantern scale/HDR/halo and idle retunes reverted;44m approaches lost34
+warm homes for3 visible walkers. Keep existing roads/identities, never fake live traffic. Captures serial,
+actual HIGH/settled fields, hard deadlines/finally. Lantern fadesbc9a54c; presence7c71b38 holds valid lease
+through retries then0.7s fade. Royal65534 is keep pane. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a
+stays; retain rounded copy. Managed5190web/5196API/5197realm/5195Forge/5194herald, affected-code restarts,
+all on.env. Logs ONLY `../conductor/state/services.log`, never journals/other services.

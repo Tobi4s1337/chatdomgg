@@ -63,7 +63,7 @@ it('continues forge walks across a scene rebuild only under the current presence
   absent.dispose(); clay.dispose();
 });
 
-it('walks the existing rehearsal neighbours into an inward-facing crescent, including the installed barrel', () => {
+it('walks the existing rehearsal neighbours around both sides of the anvil, including the installed barrel', () => {
   // Same graph/config as the hash-verified adopted rehearsal; no cached file or
   // invented square residents. The closest doors begin 22–66 metres away.
   const layout = generateSettlementPlan({ seed: 'willowmere', tier: 'town', firstYear: 2022, year: 2026 });
@@ -101,7 +101,6 @@ it('walks the existing rehearsal neighbours into an inward-facing crescent, incl
       for (const sample of arrived) {
         expect(frame.windows.some(window => window.slot === sample.slot && window.present)).toBe(true);
         expect(sample.homeLit).toBe(true);
-        expect(sample.position[0]).toBeLessThanOrEqual(-2.6);
         expect(sample.heading).toBeCloseTo(Math.atan2(-sample.position[0], 8 - sample.position[2]), 9);
         expect(sample.speed).toBe(0);
       }
@@ -113,6 +112,9 @@ it('walks the existing rehearsal neighbours into an inward-facing crescent, incl
       if (ms === 132_000) {
         expect(arrived.length).toBeGreaterThanOrEqual(10);
         expect(arrived.length).toBeLessThanOrEqual(16);
+        const side = (sample: typeof arrived[number]) => sample.position[0] * 12 - (sample.position[2] - 8) * 4.8;
+        expect(arrived.some(sample => side(sample) > 26)).toBe(true);
+        expect(arrived.some(sample => side(sample) < -26)).toBe(true);
         const raised = arrived.find(sample => sample.goalNodeId === 'forge:watch:14')!;
         expect(raised.position).toEqual([-8, 9 + barrel.height, 1.125]);
         expect(citizens.subject(raised.slot)?.position).toEqual(raised.position);

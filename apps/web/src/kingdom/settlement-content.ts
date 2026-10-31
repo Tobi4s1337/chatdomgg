@@ -1,4 +1,4 @@
-import { createStreetProp, createMarketWell, createMarketStall, type StreetPropForm } from '@chatdom/content';
+import { createCivicProp, createStreetProp, createMarketWell, createMarketStall, type StreetPropForm } from '@chatdom/content';
 import { createNativeForgeHost } from '@chatdom/forge';
 import type { WindowHouse } from '@chatdom/render';
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
@@ -13,6 +13,9 @@ export function placeMarketContent(market:SettlementPlan['market']):Dressing[] {
     {blueprint:createMarketWell(),position:[8,market.elevation,16],yaw:0},
     {blueprint:createMarketStall(0),position:[-14,market.elevation,0],yaw:0},
     {blueprint:createMarketStall(1),position:[-14,market.elevation,17],yaw:0},
+    // Leave half a metre around the stalls and keep the central crossing open.
+    {blueprint:createCivicProp('gift-cart','hearth'),position:[-13.5,market.elevation,3.5],yaw:0},
+    {blueprint:createCivicProp('market-stores','hearth'),position:[-13,market.elevation,14.5],yaw:0},
   ];
 }
 

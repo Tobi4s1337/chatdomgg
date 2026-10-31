@@ -61,13 +61,54 @@ diffuseColor.rgb *= vOcclusion;`)
   return material;
 }
 
-/** The character as one mesh in avatar cells, root at the origin, facing +Z. */
-export function citizenObject(look: CitizenLook, options: HeadOptions = {}, material: THREE.Material = citizenMaterial()): THREE.Mesh {
-  const mesh = new THREE.Mesh(citizenGeometry(meshCitizen(buildCitizen(look, options), slotColours(look))), material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.name = 'citizen';
-  return mesh;
+/** Lens glass: tinted, glossy and see-through, so the eye blocks read behind it. */
+export function citizenGlassMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .12, metalness: 0, transparent: true, depthWrite: false });
+}
+
+/**
+ * Lens geometry with per-vertex alpha from the tint: clear and pale glass is barely there so the eyes read
+ * fully through it, smoked glass is dark enough to read as sunglasses.
+ */
+function glassGeometry(mesh: CitizenMesh): THREE.BufferGeometry {
+  const g = citizenGeometry(mesh);
+  const rgba = new Float32Array(mesh.faces * 16);
+  for (let v = 0; v < mesh.faces * 4; v++) {
+    const [r, gr, b] = [mesh.colours[v * 3]!, mesh.colours[v * 3 + 1]!, mesh.colours[v * 3 + 2]!];
+    const luma = r * .2126 + gr * .7152 + b * .0722;
+    rgba.set([linear(r), linear(gr), linear(b), luma > .7 ? .2 : luma > .4 ? .34 : .62], v * 4);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
+  return g;
+}
+
+/**
+ * The character in avatar cells, root at the origin, facing +Z: the opaque body as `citizen-solid`, and any
+ * lenses as `citizen-glass` drawn after it. Dispose with `disposeCitizen`; materials are the caller's.
+ */
+export function citizenObject(
+  look: CitizenLook, options: HeadOptions = {},
+  material: THREE.Material = citizenMaterial(), glass: THREE.Material = citizenGlassMaterial(),
+): THREE.Group {
+  const grid = buildCitizen(look, options), colours = slotColours(look);
+  const group = new THREE.Group();
+  group.name = 'citizen';
+  const solid = new THREE.Mesh(citizenGeometry(meshCitizen(grid, colours, 'solid')), material);
+  solid.name = 'citizen-solid';
+  solid.castShadow = solid.receiveShadow = true;
+  group.add(solid);
+  const lenses = meshCitizen(grid, colours, 'glass');
+  if (lenses.faces) {
+    const mesh = new THREE.Mesh(glassGeometry(lenses), glass);
+    mesh.name = 'citizen-glass';
+    mesh.renderOrder = 1;
+    group.add(mesh);
+  }
+  return group;
+}
+
+export function disposeCitizen(citizen: THREE.Object3D): void {
+  citizen.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
 }
 
 const colour = (hex: `#${string}`) => new THREE.Color().setRGB(...rgb(hex), THREE.SRGBColorSpace);
@@ -85,6 +126,48 @@ function gradientTexture(): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
+}
+
+/** The highest a silhouette may reach in the frame (normalised device y). */
+const HEADROOM = .84;
+/** How far the frame may rise for a tall hat before it widens instead, in cells. */
+const MAX_LIFT = 2.4;
+
+/**
+ * Every portrait uses the same framing, except that a tall silhouette (a pompom, a pointed hat, a top knot under
+ * a beanie) never touches the top edge: the frame first rises with it, losing a little chest, and only past
+ * `MAX_LIFT` widens. Short silhouettes keep the bust framing exactly.
+ */
+function frameSubject(camera: THREE.PerspectiveCamera, subject: THREE.Object3D): void {
+  const { target, fovDegrees, halfHeight } = PORTRAIT.camera;
+  const eye = new THREE.Vector3(...portraitEye()), aim = new THREE.Vector3(...target);
+  const points: THREE.Vector3[] = [];
+  subject.traverse(o => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const position = (o.geometry as THREE.BufferGeometry).getAttribute('position');
+    for (let i = 0; i < position.count; i++) if (position.getY(i) > target[1]) points.push(new THREE.Vector3().fromBufferAttribute(position, i));
+  });
+  const top = () => {
+    camera.updateMatrixWorld(true);
+    let max = -Infinity;
+    for (const p of points) max = Math.max(max, p.clone().project(camera).y);
+    return max;
+  };
+  const place = (lift: number, fov: number) => {
+    camera.fov = fov;
+    camera.position.copy(eye).add(new THREE.Vector3(0, lift, 0));
+    camera.lookAt(aim.clone().add(new THREE.Vector3(0, lift, 0)));
+    camera.updateProjectionMatrix();
+  };
+  let lift = 0, fov = fovDegrees;
+  place(lift, fov);
+  for (let i = 0; i < 4; i++) {
+    const over = top() - HEADROOM;
+    if (over <= 0) break;
+    if (lift < MAX_LIFT) lift = Math.min(MAX_LIFT, lift + over * halfHeight * 1.05);
+    else fov *= 1 + over * .55;
+    place(lift, fov);
+  }
 }
 
 export interface PortraitRenderer {
@@ -124,17 +207,18 @@ export function createPortraitRenderer(): PortraitRenderer {
   rim.position.copy(new THREE.Vector3(...light.rim.direction).normalize().multiplyScalar(40).add(new THREE.Vector3(...frame.target)));
   rim.target.position.set(...frame.target);
   scene.add(sky, key, key.target, rim, rim.target);
-  const material = citizenMaterial();
+  const material = citizenMaterial(), glass = citizenGlassMaterial();
 
   return {
     render(look, size) {
       const inner = size * PORTRAIT.supersample;
       renderer.setSize(inner, inner, false);
-      const subject = citizenObject(look, {}, material);
+      const subject = citizenObject(look, {}, material, glass);
+      frameSubject(camera, subject);
       scene.add(subject);
       renderer.render(scene, camera);
       scene.remove(subject);
-      subject.geometry.dispose();
+      disposeCitizen(subject);
       const out = document.createElement('canvas');
       out.width = out.height = size;
       const ctx = out.getContext('2d')!;
@@ -145,6 +229,7 @@ export function createPortraitRenderer(): PortraitRenderer {
     },
     dispose() {
       material.dispose();
+      glass.dispose();
       background.dispose();
       renderer.dispose();
     },

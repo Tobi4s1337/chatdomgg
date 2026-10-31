@@ -27,11 +27,11 @@ function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): 
     return inside && !plan.reservations.some(({ lot }) => x >= lot.minX - .6 && x <= lot.maxX + .6 && z >= lot.minZ - .6 && z <= lot.maxZ + .6);
   };
   const nodes = [...plan.nodes], streets = [...plan.streets], activeStreetIds = [...plan.activeStreetIds];
-  // Two staggered arcs on the open west/north side leave the smithy's floor
-  // and the south-west camera approach clear. Nobody waits behind the workshop.
-  const standingPoints = [[-3.1, 7.2], [-3.4, 5.8], [-3.8, 4.3], [-3.6, 2.8], [-3.1, 1.4], [-2.6, -.2],
-    [-4.5, 8], [-5, 6.6], [-5.5, 5.2], [-5.6, 3.8], [-5.3, 2.3], [-4.8, .9], [-4.2, -.4], [-3.7, -1.4], [-6.9, 2.8], [-6.6, 5.8]];
-  if (barrel && insideMarket(barrel.position[0], barrel.position[2])) standingPoints[14] = [barrel.position[0], barrel.position[2]];
+  // Staggered arcs face the anvil from the north and west, clear of the workshop.
+  const standingPoints = [[-3.4, 8], [-3.6, 6.1], [-3.7, 4.1], [-3.2, 2.1], [-1.8, .6], [.2, .5],
+    [-5.2, 9.3], [-5.5, 7.1], [-5.8, 5], [-5.5, 2.9], [-4.3, .7], [-2.7, -.8], [-.5, -.8], [-.5, 2], [-.8, 3.8], [1, -1]];
+  const installedBarrel = barrel && insideMarket(barrel.position[0], barrel.position[2]);
+  if (installedBarrel) standingPoints[14] = [barrel.position[0], barrel.position[2]];
   const addPath = (from: string, to: string) => {
     const start = nodes.find(node => node.id === from)?.position, end = nodes.find(node => node.id === to)?.position;
     if (!start || !end || !Array.from({ length: 21 }, (_, i) => insideMarket(start[0] + (end[0] - start[0]) * i / 20, start[2] + (end[2] - start[2]) * i / 20)).every(Boolean)) return;
@@ -40,7 +40,7 @@ function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): 
     streets.push({ id, from, to, kind: 'lane', name: 'Market', points: [start, end], width: 1.4, verge: 0 });
     activeStreetIds.push(id);
   };
-  const entryId = 'forge:walk:entry', entry: Vec3 = [-3, market.position[1], 10];
+  const entryId = 'forge:walk:entry', entry: Vec3 = [-3, market.position[1], 12];
   if (!insideMarket(entry[0], entry[2])) return plan;
   nodes.push({ id: entryId, kind: 'junction', position: entry });
   addPath(market.id, entryId);
@@ -48,11 +48,17 @@ function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): 
     const id = `forge:watch:${index}`, position: Vec3 = [x!, market.position[1], z!];
     if (!insideMarket(position[0], position[2]) || nodes.some(node => node.id === id)) continue;
     nodes.push({ id, kind: 'junction', position });
-    // Shared graph junctions matter: a polyline attached only at the market made
-    // a passer-by reach the market and double back along the very same paving.
-    addPath(index === 0 || index === 6 ? entryId : `forge:watch:${index === 14 ? 9 : index === 15 ? 7 : index - 1}`, id);
-    if (index >= 6 && index < 12) addPath(`forge:watch:${index - 6}`, id);
   }
+  const watch = (index: number) => `forge:watch:${index}`;
+  for (const start of [0, 6]) addPath(entryId, watch(start));
+  for (const [start, end] of [[0, 5], [6, 12]] as const) {
+    for (let index = start; index < end; index++) addPath(watch(index), watch(index + 1));
+  }
+  for (let index = 0; index < 5; index++) addPath(watch(index), watch(index + 6));
+  addPath(watch(5), watch(12));
+  addPath(watch(3), watch(13));
+  addPath(watch(5), watch(15));
+  addPath(watch(installedBarrel ? 10 : 2), watch(14));
   return { ...plan, nodes, streets, activeStreetIds };
 }
 

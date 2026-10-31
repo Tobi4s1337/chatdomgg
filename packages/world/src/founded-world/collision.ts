@@ -4,9 +4,10 @@ import { COLLISION_COMPILER_VERSION, compileCollisionWorld, type SampledTerrain 
 import { terrainHeight } from '../layout';
 import type { RealmFoundedScene } from './types';
 import type { SettlementPlan } from '../settlement/types';
+import { TERRAIN_ART_PRODUCER } from '../terrain-art/types';
 
 /** Changes to sampling/known volume must change this identity before a revision is reused. */
-export const FOUNDED_TERRAIN_VERSION = 'founded-terrain:1' as const;
+export const FOUNDED_TERRAIN_VERSION = `founded-terrain:2/${TERRAIN_ART_PRODUCER}` as const;
 export const FOUNDED_PHYSICS_VERSION = `${COLLISION_COMPILER_VERSION}/${FOUNDED_TERRAIN_VERSION}` as const;
 
 /**

@@ -1,0 +1,622 @@
+[
+  {
+    "name": "Simulated cap · short-crop",
+    "look": {
+      "version": 1,
+      "skin": "#fbe4d8",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "short-crop",
+        "colour": "#1c191c"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "cap",
+        "colour": "#ef4b2c",
+        "trim": "#d3202a"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#ef4b2c"
+      }
+    }
+  },
+  {
+    "name": "Simulated cap · curls",
+    "look": {
+      "version": 1,
+      "skin": "#dba875",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "curls",
+        "colour": "#5a3622"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "cap",
+        "colour": "#e6b73a",
+        "trim": "#e6b73a"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#3fae4a"
+      }
+    }
+  },
+  {
+    "name": "Simulated cap · long-waves",
+    "look": {
+      "version": 1,
+      "skin": "#8b5434",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "long-waves",
+        "colour": "#e0561f"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "cap",
+        "colour": "#1f7a3c",
+        "trim": "#3fae4a"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#223a7a"
+      }
+    }
+  },
+  {
+    "name": "Simulated cap · ponytail",
+    "look": {
+      "version": 1,
+      "skin": "#f8dcc8",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "ponytail",
+        "colour": "#22b2a4"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "cap",
+        "colour": "#2d5fd8",
+        "trim": "#1ea59a"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#1e1d22"
+      }
+    }
+  },
+  {
+    "name": "Simulated cap-backwards · short-crop",
+    "look": {
+      "version": 1,
+      "skin": "#c9a477",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "short-crop",
+        "colour": "#8e8c8a"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "cap-backwards",
+        "colour": "#f6d23c",
+        "trim": "#43b6ec"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#f58a1f"
+      }
+    }
+  },
+  {
+    "name": "Simulated cap-backwards · curls",
+    "look": {
+      "version": 1,
+      "skin": "#7c4a2e",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "curls",
+        "colour": "#2a2224"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "cap-backwards",
+        "colour": "#1ea59a",
+        "trim": "#223a7a"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#1ea59a"
+      }
+    }
+  },
+  {
+    "name": "Simulated cap-backwards · long-waves",
+    "look": {
+      "version": 1,
+      "skin": "#f4cfae",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "long-waves",
+        "colour": "#7b4322"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "cap-backwards",
+        "colour": "#223a7a",
+        "trim": "#ef6fae"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#ef6fae"
+      }
+    }
+  },
+  {
+    "name": "Simulated cap-backwards · ponytail",
+    "look": {
+      "version": 1,
+      "skin": "#cc9862",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "ponytail",
+        "colour": "#c6a2f4"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "cap-backwards",
+        "colour": "#f3f1ee",
+        "trim": "#3a3a40"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#d9c49b"
+      }
+    }
+  },
+  {
+    "name": "Simulated beanie · short-crop",
+    "look": {
+      "version": 1,
+      "skin": "#6e402a",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "short-crop",
+        "colour": "#f0e6c8"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "beanie",
+        "colour": "#43b6ec",
+        "trim": "#1e1d22"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#f6d23c"
+      }
+    }
+  },
+  {
+    "name": "Simulated beanie · curls",
+    "look": {
+      "version": 1,
+      "skin": "#f0c2ac",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "curls",
+        "colour": "#f2f0ec"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "beanie",
+        "colour": "#8a3fe6",
+        "trim": "#d9c49b"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#2d5fd8"
+      }
+    }
+  },
+  {
+    "name": "Simulated beanie · long-waves",
+    "look": {
+      "version": 1,
+      "skin": "#c08a6a",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "long-waves",
+        "colour": "#3a2519"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "beanie",
+        "colour": "#3a3a40",
+        "trim": "#d3202a"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#3a3a40"
+      }
+    }
+  },
+  {
+    "name": "Simulated beanie · ponytail",
+    "look": {
+      "version": 1,
+      "skin": "#623925",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "ponytail",
+        "colour": "#f27db4"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "beanie",
+        "colour": "#d9c49b",
+        "trim": "#e6b73a"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#d3202a"
+      }
+    }
+  },
+  {
+    "name": "Simulated straw-hat · short-crop",
+    "look": {
+      "version": 1,
+      "skin": "#efd2a4",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "short-crop",
+        "colour": "#c99a4c"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "straw-hat",
+        "colour": "#ecd9a6",
+        "trim": "#f6d23c"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#1f7a3c"
+      }
+    }
+  },
+  {
+    "name": "Simulated straw-hat · curls",
+    "look": {
+      "version": 1,
+      "skin": "#b57d4c",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "curls",
+        "colour": "#9b8f82"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "straw-hat",
+        "colour": "#ecd9a6",
+        "trim": "#1f7a3c"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#8a3fe6"
+      }
+    }
+  },
+  {
+    "name": "Simulated straw-hat · long-waves",
+    "look": {
+      "version": 1,
+      "skin": "#563221",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "long-waves",
+        "colour": "#1c191c"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "straw-hat",
+        "colour": "#ecd9a6",
+        "trim": "#43b6ec"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#8d8e94"
+      }
+    }
+  },
+  {
+    "name": "Simulated straw-hat · ponytail",
+    "look": {
+      "version": 1,
+      "skin": "#e8c08f",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "ponytail",
+        "colour": "#3559e6"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "straw-hat",
+        "colour": "#ecd9a6",
+        "trim": "#223a7a"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#e6b73a"
+      }
+    }
+  },
+  {
+    "name": "Simulated pointed-hat · short-crop",
+    "look": {
+      "version": 1,
+      "skin": "#a76d42",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "short-crop",
+        "colour": "#e0561f"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "pointed-hat",
+        "colour": "#8d8e94",
+        "trim": "#8a3fe6"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#43b6ec"
+      }
+    }
+  },
+  {
+    "name": "Simulated pointed-hat · curls",
+    "look": {
+      "version": 1,
+      "skin": "#4a2b1e",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "curls",
+        "colour": "#ebc964"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "pointed-hat",
+        "colour": "#d3202a",
+        "trim": "#f3f1ee"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#f3f1ee"
+      }
+    }
+  },
+  {
+    "name": "Simulated pointed-hat · long-waves",
+    "look": {
+      "version": 1,
+      "skin": "#e5b48e",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "long-waves",
+        "colour": "#8e8c8a"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "pointed-hat",
+        "colour": "#f6d23c",
+        "trim": "#1e1d22"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#ef4b2c"
+      }
+    }
+  },
+  {
+    "name": "Simulated pointed-hat · ponytail",
+    "look": {
+      "version": 1,
+      "skin": "#9a6648",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "ponytail",
+        "colour": "#a8d4e8"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "pointed-hat",
+        "colour": "#1ea59a",
+        "trim": "#d9c49b"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#3fae4a"
+      }
+    }
+  }
+]
