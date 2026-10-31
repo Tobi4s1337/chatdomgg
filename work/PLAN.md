@@ -330,55 +330,48 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Order:** picture only, one visible fix/commit per turn, same-view before/after. No new systems/contracts/system
-lanes. Exposure34ac89a is ACCEPTED on Tobias's RTX5080: readable dusk, coloured roofs/fronts/castle, glowing sky.
-Keep that exposure, low lantern street camera, warm pools, house models, beacon and gold frame. Founder says
-window/depth passes were too subtle. New order: close-view fill, windows 2–3x brighter, lower/tighter smithy.
-Each before/after must read at a glance. Avatar proportions remain Tobias's choice.
+**Order:** picture first, one visible fix per turn, before/after obvious at a glance. No new system lanes;
+exception explicitly authorised: reference avatar plus real builder. Routine helpers/captures/merges use medium
+effort. Keep accepted exposure34ac89a, indigo lift0896044, low street camera, beacon, warm pools and gold frame.
+The wide dusk view now sings: leave it alone. Restore close warm/cool contrast, then close windows, then smithy.
 
-**Current slice:** stronger close-view indigo sky bounce plus soft moon fill, full inside35m and easing out
-by150m. Existing exposure, beacon and warm pool calculations unchanged. Low sky gets an amber-gold band;
-distance haze leans lilac. Viewed native1080p and `shots/magic/street-light-before-after@3840x1080.png`:
-fresh903873f baseline versus current, fixed eye[-103.95,13.25,64], target[-110.45,8.8,51], FOV48,
-SIMULATED/hour19.5/time12. Facade/columns/eaves/roof clearly lift; warm pools stay. Roof blue is saturated;
-deep doorway interiors remain dark. Smithy uses the same material but needs its own judged composition shot.
-High HDR/ACES, settled/curtain open; typecheck/scoped lint,13 render tests and web build pass. Capture resources
-closed. GPU close-view look still needed. Prior depth/window comparisons remain in `shots/magic/`.
+**Current slice:** street lantern warmth restored against the indigo fill. Existing field/source positions stay;
+nearby surfaces get stronger warm response, avatars a gentler falloff reaching faces. Full within25m, easing
+back to the original treatment by60m. Rejected the unshipped global all-pane/2.5x candidate after the instruction
+to preserve the wide; scene/presence-window files restored. Do not reapply that candidate from capture scripts.
+Viewed native1080p and `shots/magic/street-warm-comparison@3840x1080.png` (0896044 left, current right): warm
+pools/face light return, blue roofs/stone stay cool. Fixed eye[-103.95,13.25,64], target[-110.45,8.8,51], FOV48,
+SIMULATED/hour19.5/time12; high HDR/ACES, settled/open. Orange hair is saturated; bodies remain the old look.
+Typecheck, scoped lint,13 render tests and final web build pass;81 scoped merge tests pass. Capture resources closed.
 
-**Prior flicker fixes retained:** bc9a54c removed carried-light nearest24 cutoff and added cull fades; Tobias
-says lanterns hold. 7c71b38 keeps the last accepted public picture through a feed retry only until
-`min(receipt+90s, frame.asOf+90s)`, then fades windows over0.7s and clears citizens/names. Real SSE adapter,
-SIMULATED smoke: old240→0 immediately; fixed240 remain, same-epoch reconnect0walking, +91s outage0/0.
-Evidence `shots/magic/presence-drop-before-after@3840x1080.png`, `presence-drop-smoke.json`. Separate GPU
-shimmer remains unlocalized; don't repeat slow software takes without an exact repro.
+**Avatar reference chosen:** all A/B/C studies rejected. Spec49/PRD/reference reviewed and committed on the lane
+as81eab8f, merged to main063a71b. `work/references/avatar-style/reference.png` is now the target: crisp square
+10–12-voxel head, two solid black eyes/no mouth, compact body, signature low-res hair, layered clothes/accessories.
+AS03 head/face/portrait is unblocked. Builder on web/panel, same recipe in kingdom/stream/card/passport, earned
+items never bought. No rig/socket/recipe proposal exists yet; exact proposals go in the lane's contract-proposal.md
+for main's small tested freeze. No silent runtime rig change. Main owns save/entitlement authority and host mounts.
 
-**Earlier merges:** passport, raid-gate, emotes, twitch-moments, atlas-w2 through47c0ef7 are on main and viewed:
+**Art merged and viewed:** PL01 candidate terrain c657fff (fixture only, not adopted land), accessible heraldry
+44c948e, river civic hall b5d3897. Land ridges need exposed faces/ledges readable at dusk; follow-up in its progress.
+River hall's bell/flag framing already has a follow-up. These do not yet replace Genesis seats or mount heraldry.
+Source refs: picture-land, picture-trees, effects-library; worktrees/specs46–48 unchanged. Trees/effects had no new
+commits. Land adoption must share height across render/contact and preserve pinned foundations. Passport45 and
+Genesis40–44 continue. Other system lanes finish their current task and stop. No second forest or emitter stack.
+
+**Earlier integration:** passport/gate/emotes/moments/atlas-w2 through47c0ef7; viewed contact sheet
 `shots/integration/look-reset/contact@1920x800.png`. First4 are SIMULATED benches; Atlas uses real survey data.
-Live bindings still missing: passport API/card/panel, gate world/item hosts, emote catalogue/scene, moments
-crowd/hush/cheer/hype. No system wiring under this picture pass. Land/trees/effects had no new commits.
+Live hosts still missing: passport API/card/panel, gate item/world hosts, emote catalogue/scene, moments
+crowd/hush/cheer/hype. No system wiring under this picture pass. Royal65534 is the keep window, never a deed.
 
-**Team picture lanes ready (spec/PRD/branch/worktree):**
-- 46 picture-land — `lane/picture-land`, `../worktrees/picture-land`: ridges/rock/ledges/ragged paths/terraces.
-- 47 picture-trees — `lane/picture-trees`, `../worktrees/picture-trees`: oak/pine/birch/willow/elders, clumps/wind.
-- 48 effects-library — `lane/effects-library`, `../worktrees/effects-library`: visual effects from actual anchors.
-- 49 avatar-style — `lane/avatar-style`, `../worktrees/avatar-style`: same5 citizens/outfits/poses in3proportions
-  on1080p bench; Tobias chooses, then apply. No default choice. Passport45/Genesis40–44 keep going; other system
-  lanes finish current task and stop. Main retains scene/shader/shadow integration; no second forest/emitters.
-  Land adoption must use the same new height in render/contact, without silently moving pinned foundations.
+**Continuity:** bc9a54c lantern cutoff/cull fades retained; Tobias says they hold. 7c71b38 keeps a valid presence
+picture through a retry only until min(receipt+90s,frame.asOf+90s), then0.7s fade. SIMULATED SSE smoke proved
+240 held, reconnect0walking, expiry0/0; evidence `shots/magic/presence-drop-smoke.json`. Other shimmer unlocalized.
 
-**Art merges:** avatar-style AS01 (504e1ac), Genesis harbour watchtower (d92e0ff), heraldry
-(df5c42c/aee97df) merged after a short look. Content/studies only, no runtime adoption yet.
-Avatar choice remains Tobias's; landmarks need export/placement/light adoption, heraldry colours are proposals.
-Viewed the avatar contact sheet and all three native1080p options, harbour and snapped river arms lane renders.
-56 scoped tests, typecheck, scoped lint and web build pass. Storybook shoulder gap, bright quay grass and dark
-violet/sable arms remain lane followups; merge not held. Avatar evidence: `work/evidence/avatar-style/AS01/`.
-**Next picture:** windows become the town's light: 2–3x brighter camera-facing panes, warm ground spill,
-lanterns lighting their carriers' faces. Then smithy lower/tighter: crowd wraps BOTH sides with faces behind
-pour, castle lit behind. Current13-person west crescent isn't final.
-Molten02c3494 stays. Real approved chat ritual remains unproved; no waiting observer before Tobias goes live.
+**Next picture:** close panes and their warm facade light, preserving the wide; then smithy lower/tighter,
+anvil/pour/crowd filling middle two-thirds, faces on BOTH sides lit by metal. Current west crescent isn't final.
+Molten02c3494 stays. Real approved chat ritual still unproved; no waiting observer before Tobias goes live.
 
-**Preserved/live:** unfinished city stash `7c6f1f9d324042998fff71e4d5ea7863ea46cf0a` (7files), retain rounded
-copy on overlap; don't drop. `work/night-paint` superseded, never reapply. Genesis needs actual3 Atlas entries.
-Layout43cffdb6/240homes/v1 pinned; provider owns fixture revision. Monarch65534 is keep window, never a deed.
-Managed5190web/5196API/5197realm/5195Forge/5194Herald; restart only relevant code, all on.env. Read ONLY
-`../conductor/state/services.log`, never host journals. Capture helpers own/clean their temporary servers/locks.
+**Preserved/live:** city stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a (7files), preserve rounded copy; never drop.
+Superseded night-paint stays superseded. Genesis needs actual3 Atlas entries. Layout43cffdb6/240homes/v1 pinned.
+Managed5190web/5196API/5197realm/5195Forge/5194herald. Restart only affected code, all on.env. Read ONLY
+`../conductor/state/services.log`, never journals/other services. Capture helpers own/clean temporary processes.

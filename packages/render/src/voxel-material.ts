@@ -252,8 +252,12 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       // The soft cap below keeps overlapping sources from clipping. The colour falls from a warm core through
       // amber. It reads fully from dusk (night .2, about
       // 18.5 h) and is absent by day.
-      float pool=pow(warm,uTerrain>.5?1.8:3.4);
-      float poolAmount=pool*smoothstep(0.,.2,uNight)*(uTerrain>.5?2.15:.44);
+      // The lantern is below a person's face: its softer falloff must reach
+      // cheeks and clothes. Restore warm/cool contrast in the close street only;
+      // the field, its positions and the accepted wide view keep their old treatment.
+      float closeLantern=1.-smoothstep(25.,60.,distanceToCamera);
+      float pool=pow(warm,${lattice==='avatar'?'mix(3.4,1.35,closeLantern)':'uTerrain>.5?1.8:3.4'});
+      float poolAmount=pool*smoothstep(0.,.2,uNight)*${lattice==='avatar'?'mix(.44,1.8,closeLantern)':'(uTerrain>.5?2.15:.44)*mix(1.,1.9,closeLantern)'};
       vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
       float beaconAmount=beacon*beacon*beacon*(.3+.7*uNight)*2.1;
