@@ -7,9 +7,10 @@ import type { AtlasChannel } from '@chatdom/shared';
 import {
   GATE_LIMITS,
   type AtlasRaid, type GateActionState, type GateActionView, type GateAuthority, type GateCommand, type GateDenial, type GatePreview, type GateReply,
-  type GateStatusView, type GateTarget, type KingdomId, type OpenGateView, type TravelReason, type TravelState, type TravelView,
+  type GateStatusView, type GateTarget, type KingdomId, type OpenGateView, type PersonId, type TravelReason, type TravelState, type TravelView,
 } from '../../../api/src/raid-gate/contracts';
 import type { AtlasTravelStage, GateKingdom, GateLand, RaidGatePorts } from './ports';
+import { createGuestWelcomeController, type GuestWelcomeController, type WelcomeSnapshot } from './welcome';
 
 export type GatePhase =
   /** No authenticated authority is bound to this view. */
@@ -112,6 +113,8 @@ export type GateSnapshot = Readonly<{
   journey: JourneySnapshot | null;
   /** This viewer marched with a party that set out for a founded kingdom and may follow it through the gate. */
   canTravel: boolean;
+  /** The destination's welcome around this viewer's arrival there as a visitor: the party, the monarch and gifts. */
+  welcome: WelcomeSnapshot | null;
 }>;
 
 export interface RaidGateController {
@@ -142,6 +145,13 @@ export interface RaidGateController {
   reconcileTravel(): Promise<void>;
   /** Puts away a journey that has ended (home again, or turned back). */
   dismissJourney(): void;
+  /** Takes a gift offered at the destination home. Asked once; a lost answer is asked again, never guessed. */
+  acceptGift(offerId: string): Promise<void>;
+  refuseGift(offerId: string): Promise<void>;
+  /** Leaves one of this viewer's own things with a host of the kingdom they are visiting. */
+  leaveGift(itemId: string, recipient: PersonId): Promise<void>;
+  /** Reads the welcome again now (it is also read on its own every few seconds). */
+  refreshWelcome(): Promise<void>;
   reconnect(): void;
   refresh(): Promise<void>;
   dispose(): void;
@@ -183,6 +193,8 @@ const SETTLED: ReadonlySet<GateActionState> = new Set(['landed', 'cancelled', 'r
 
 export function createRaidGateController(ports: RaidGatePorts): RaidGateController {
   const { api, atlas, source, clock } = ports;
+  /** The welcome around this viewer's current arrival abroad, while they stand there. */
+  let welcome: Readonly<{ arrivalId: string; controller: GuestWelcomeController }> | null = null;
   const ids = ports.ids ?? (() => crypto.randomUUID());
   const wait = ports.wait ?? ((ms: number, signal: AbortSignal) => new Promise<void>(resolve => {
     const timer = setTimeout(resolve, ms);
@@ -262,7 +274,21 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
       busy, farewell: status ? farewellAt(now, live, viewer) : null, asking: busy === 'preview' ? asking : null, notice: unreachable && status ? { kind: 'unreachable' } : notice, canReconnect: ports.account !== undefined,
       journey: journeyAt(now),
       canTravel: journey === null && live?.state === 'landed' && live.joined && live.raid !== null && live.target.founded,
+      welcome: welcome?.controller.snapshot() ?? null,
     };
+  }
+
+  /** Opens the welcome when the destination acknowledges a visitor's arrival, and closes it when they leave. */
+  function syncWelcome(): void {
+    const view = journey?.view;
+    const arrivalId = journey?.kind === 'raid' && view?.state === 'committed' && view.role === 'visitor' ? view.arrivalId : null;
+    if (welcome && welcome.arrivalId === arrivalId) return;
+    welcome?.controller.dispose();
+    welcome = null;
+    if (!api || !arrivalId || life.signal.aborted) return;
+    const controller = createGuestWelcomeController({ api, clock, ids, ...(ports.wait ? { wait: ports.wait, pollMs: 0 } : {}) }, arrivalId);
+    controller.subscribe(() => emit());
+    welcome = { arrivalId, controller };
   }
 
   function journeyAt(now: number): JourneySnapshot | null {
@@ -280,6 +306,7 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
 
   function emit(): void {
     if (life.signal.aborted) return;
+    syncWelcome();
     const next = snapshot();
     for (const listener of listeners) listener(next);
   }
@@ -640,8 +667,15 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
       if (state === 'committed' && journey.kind === 'raid') return;
       ++journeyGeneration; journey = null; emit();
     },
+    refreshWelcome: async () => welcome?.controller.refresh(),
+    acceptGift: async offerId => welcome?.controller.accept(offerId),
+    refuseGift: async offerId => welcome?.controller.refuse(offerId),
+    async leaveGift(itemId, recipient) {
+      if (!welcome) return;
+      await welcome.controller.offer(itemId, recipient, welcome.arrivalId);
+    },
     reconnect() { ports.account?.reconnect(); },
     refresh,
-    dispose() { life.abort(); listeners.clear(); if (choosing) atlas?.close(); },
+    dispose() { life.abort(); listeners.clear(); welcome?.controller.dispose(); welcome = null; if (choosing) atlas?.close(); },
   };
 }

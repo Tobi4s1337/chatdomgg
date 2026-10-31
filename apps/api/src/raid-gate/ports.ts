@@ -5,6 +5,7 @@
 import type { AtlasRaid } from '../../../../packages/shared/src/atlas-raids';
 import type { KingdomId, PersonId } from '../../../../packages/shared/src/identity';
 import type { GateContext, GateDenial, GatePrincipal, GateReply, GateTarget, TravelReason } from './contracts';
+import type { VisitorGiftApplication } from './gifts';
 import type { RaidGateRepository, RecordOrigin } from './repository';
 
 /**
@@ -146,4 +147,9 @@ export type RaidGateDeps = Readonly<{
   dispatchTimeoutMs?: number;
   /** Null until main binds the realm's room transport: travel commands then answer `unavailable`. */
   travel?: RaidTravel | null;
+  /**
+   * The welcome and visitor gifts (`createVisitorGifts`), over main's item authority, the realm's arrival records and
+   * the host directory. Null until main binds item storage: welcome and gift commands then answer `unavailable`.
+   */
+  gifts?: VisitorGiftApplication | null;
 }>;

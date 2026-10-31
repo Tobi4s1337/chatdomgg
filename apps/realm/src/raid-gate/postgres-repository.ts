@@ -5,10 +5,10 @@
  * serializable transaction per call, every `put` a compare-and-set on `revision`, every row decoded by its strict
  * reader in both directions, and a serialization failure retried as a whole.
  */
-import type { PersonId } from '../../../../packages/shared/src/identity';
+import type { KingdomId, PersonId } from '../../../../packages/shared/src/identity';
 import { listWhere, put, select, serializable, type SqlClient, type SqlPool, type TableSpec } from '../../../api/src/raid-gate/postgres-repository';
 import {
-  readArrivalRecord, readTravelRecord, readWhereaboutsRecord,
+  TRAVEL_LIST_LIMIT, readArrivalRecord, readTravelRecord, readWhereaboutsRecord,
   type ArrivalRecord, type TravelRecord, type TravelRepository, type TravelTransaction, type WhereaboutsRecord,
 } from './records';
 
@@ -25,7 +25,7 @@ const ARRIVALS: TableSpec<ArrivalRecord> = {
 const WHEREABOUTS: TableSpec<WhereaboutsRecord> = {
   name: 'realm_raid_whereabouts', read: readWhereaboutsRecord,
   key: ['person_id'], keyOf: record => [record.personId],
-  columns: ['kingdom_id', 'generation'], columnsOf: record => [record.kingdomId, record.generation],
+  columns: ['kingdom_id', 'generation', 'arrival_id', 'updated_at'], columnsOf: record => [record.kingdomId, record.generation, record.arrivalId, record.updatedAt],
 };
 
 const OPEN = `state in ('reserved', 'preparing', 'ready', 'committing', 'unknown')`;
@@ -44,6 +44,17 @@ function transactionOn(client: SqlClient): TravelTransaction {
     getWhereabouts: personId => select(client, WHEREABOUTS, [personId]),
     putWhereabouts: (record, expected) => put(client, WHEREABOUTS, record, expected),
     listTravel: (listing, after, limit) => listWhere(client, TRAVEL, listing === 'open' ? OPEN : `release <> 'none'`, [], after, limit),
+    async listArrivedIn(kingdomId: KingdomId, limit: number) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > TRAVEL_LIST_LIMIT) throw new Error('A travel listing takes 1–100 records.');
+      const found = await client.query(
+        `select person_id from ${WHEREABOUTS.name} where kingdom_id = $1 and arrival_id is not null order by updated_at desc, person_id collate "C" limit $2`, [kingdomId, limit]);
+      const records: WhereaboutsRecord[] = [];
+      for (const row of found.rows as { person_id?: unknown }[]) {
+        const record = typeof row.person_id === 'string' ? await select(client, WHEREABOUTS, [row.person_id]) : null;
+        if (record) records.push(record);
+      }
+      return records;
+    },
   };
 }
 

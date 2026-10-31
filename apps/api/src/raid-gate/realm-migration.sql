@@ -113,10 +113,71 @@ CREATE TABLE realm_raid_whereabouts (
   person_id  text PRIMARY KEY CHECK (person_id ~ '^[1-9][0-9]{0,31}$'),
   kingdom_id text NOT NULL CHECK (kingdom_id ~ '^[1-9][0-9]{0,31}$'),
   generation bigint NOT NULL CHECK (generation >= 0 AND generation <= 9007199254740991),
+  -- The arrival that put the person here (null where they always were) and when this record last changed: the welcome
+  -- lists the guests standing in a kingdom from these (RG10).
+  arrival_id text CHECK (arrival_id IS NULL OR length(arrival_id) BETWEEN 1 AND 140),
+  updated_at bigint NOT NULL CHECK (updated_at >= 0 AND updated_at <= 9007199254740991),
   revision   bigint NOT NULL CHECK (revision > 0 AND revision <= 9007199254740991),
   record     text NOT NULL CHECK (octet_length(record) <= 4096),
   CHECK (record::jsonb ->> 'personId' = person_id),
   CHECK (record::jsonb ->> 'kingdomId' = kingdom_id),
   CHECK ((record::jsonb ->> 'generation')::bigint = generation),
+  CHECK (record::jsonb ->> 'arrivalId' IS NOT DISTINCT FROM arrival_id),
+  CHECK ((record::jsonb ->> 'updatedAt')::bigint = updated_at),
   CHECK ((record::jsonb ->> 'revision')::bigint = revision)
 );
+CREATE INDEX realm_raid_whereabouts_arrived ON realm_raid_whereabouts (kingdom_id, updated_at DESC, person_id COLLATE "C") WHERE arrival_id IS NOT NULL;
+
+-- One visitor gift offer around one acknowledged arrival (RG10, `apps/api/src/raid-gate/gifts.ts`): offered by its
+-- owner, then accepted, refused, expired or rejected once. Unique per (giver, request) so a retried offer finds its
+-- record, and at most one open offer per thing. The thing itself stays in main's item authority; nothing here owns it.
+-- Both unique indexes stay non-deferrable: they are the arbiters of the adapter's `on conflict do nothing`.
+CREATE TABLE realm_raid_gifts (
+  offer_id     text PRIMARY KEY CHECK (length(offer_id) BETWEEN 1 AND 128 AND offer_id ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'),
+  giver_id     text NOT NULL CHECK (giver_id ~ '^[1-9][0-9]{0,31}$'),
+  request_id   text NOT NULL CHECK (length(request_id) BETWEEN 1 AND 128),
+  recipient_id text NOT NULL CHECK (recipient_id ~ '^[1-9][0-9]{0,31}$'),
+  arrival_id   text NOT NULL CHECK (length(arrival_id) BETWEEN 1 AND 128),
+  kingdom_id   text NOT NULL CHECK (kingdom_id ~ '^[1-9][0-9]{0,31}$'),
+  item_id      text NOT NULL CHECK (length(item_id) BETWEEN 1 AND 128),
+  state        text NOT NULL CHECK (state IN ('offered', 'accepted', 'refused', 'expired', 'rejected')),
+  offered_at   bigint NOT NULL CHECK (offered_at >= 0 AND offered_at <= 9007199254740991),
+  origin       text NOT NULL CHECK (origin IN ('live', 'simulated')),
+  revision     bigint NOT NULL CHECK (revision > 0 AND revision <= 9007199254740991),
+  record       text NOT NULL CHECK (octet_length(record) <= 8192),
+  UNIQUE (giver_id, request_id),
+  CHECK (giver_id <> recipient_id),
+  CHECK (record::jsonb ->> 'offerId' = offer_id),
+  CHECK (record::jsonb ->> 'giverId' = giver_id),
+  CHECK (record::jsonb ->> 'requestId' = request_id),
+  CHECK (record::jsonb ->> 'recipientId' = recipient_id),
+  CHECK (record::jsonb ->> 'arrivalId' = arrival_id),
+  CHECK (record::jsonb ->> 'kingdomId' = kingdom_id),
+  CHECK (record::jsonb ->> 'itemId' = item_id),
+  CHECK (record::jsonb ->> 'state' = state),
+  CHECK ((record::jsonb ->> 'offeredAt')::bigint = offered_at),
+  CHECK (record::jsonb ->> 'origin' = origin),
+  CHECK ((record::jsonb ->> 'revision')::bigint = revision)
+);
+CREATE UNIQUE INDEX realm_raid_gifts_open ON realm_raid_gifts (item_id) WHERE state = 'offered';
+CREATE INDEX realm_raid_gifts_arrival ON realm_raid_gifts (arrival_id, offered_at DESC, offer_id COLLATE "C");
+CREATE INDEX realm_raid_gifts_giver ON realm_raid_gifts (kingdom_id, giver_id, offered_at DESC, offer_id COLLATE "C");
+CREATE INDEX realm_raid_gifts_recipient ON realm_raid_gifts (kingdom_id, recipient_id, offered_at DESC, offer_id COLLATE "C");
+
+-- The append-only lineage of one ownership transfer, written in the transaction that moved the thing and accepted its
+-- offer. Its ID is the offer's, so one offer moves a thing once. Never rewritten or deleted (`realm_refuse_rewrite`,
+-- migration 0003).
+CREATE TABLE realm_raid_item_transfers (
+  transfer_id text PRIMARY KEY REFERENCES realm_raid_gifts (offer_id) DEFERRABLE INITIALLY DEFERRED,
+  item_id     text NOT NULL CHECK (length(item_id) BETWEEN 1 AND 128),
+  origin      text NOT NULL CHECK (origin IN ('live', 'simulated')),
+  revision    bigint NOT NULL CHECK (revision = 1),
+  record      text NOT NULL CHECK (octet_length(record) <= 4096),
+  CHECK (record::jsonb ->> 'transferId' = transfer_id),
+  CHECK (record::jsonb ->> 'offerId' = transfer_id),
+  CHECK (record::jsonb ->> 'itemId' = item_id),
+  CHECK (record::jsonb ->> 'origin' = origin),
+  CHECK ((record::jsonb ->> 'revision')::bigint = revision)
+);
+CREATE INDEX realm_raid_item_transfers_item ON realm_raid_item_transfers (item_id);
+CREATE TRIGGER realm_raid_item_transfers_immutable BEFORE UPDATE OR DELETE ON realm_raid_item_transfers FOR EACH ROW EXECUTE FUNCTION realm_refuse_rewrite();

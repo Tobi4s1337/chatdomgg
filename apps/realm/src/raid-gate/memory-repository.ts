@@ -3,7 +3,7 @@
  * all-or-nothing and strict-reader rules a durable adapter must keep, so a write the coordinator should never make
  * fails here first. Never bound as production storage.
  */
-import type { PersonId } from '../../../../packages/shared/src/identity';
+import type { KingdomId, PersonId } from '../../../../packages/shared/src/identity';
 import {
   inListing, readArrivalRecord, readTravelRecord, readWhereaboutsRecord, TRAVEL_LIST_LIMIT,
   type ArrivalRecord, type Stored, type TravelRecord, type TravelRepository, type TravelTransaction, type WhereaboutsRecord,
@@ -56,6 +56,12 @@ export function createMemoryTravelRepository(): MemoryTravelRepository {
         const all = merged();
         return [...all.keys()].filter(key => after === null || key > after).sort()
           .map(key => all.get(key)!).filter(record => inListing(record, listing)).slice(0, limit).map(record => structuredClone(record));
+      },
+      listArrivedIn: async (kingdomId: KingdomId, limit: number) => {
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > TRAVEL_LIST_LIMIT) throw new Error('A travel listing takes 1–100 records.');
+        return [...new Map([...tables.whereabouts, ...staged.whereabouts]).values()]
+          .filter(record => record.kingdomId === kingdomId && record.arrivalId !== null)
+          .sort((a, b) => b.updatedAt - a.updatedAt || (a.personId < b.personId ? -1 : 1)).slice(0, limit).map(record => structuredClone(record));
       },
     };
     const result = await work(tx);

@@ -7,16 +7,21 @@
  * reconcile without a second Twitch write, the verified raid delivered twice, and its one road handoff. RG09 carries
  * the marcher through the realm's travel coordinator: reserve, prepare, commit, a lost destination acknowledgment, a
  * restart, recovery, one walking location, the source released only after the destination acknowledged, and home.
- * The room transport is SIMULATED too.
+ * The room transport is SIMULATED too. RG10 welcomes the marcher at the destination: a host there offers a thing to take
+ * home, the item store commits the acceptance and loses its answer, the server restarts, and the retried acceptance
+ * finds the one transfer it already made. The item store and the host directory are SIMULATED.
  */
 import { describe, expect, it } from 'vitest';
 import { AtlasRaidSchema, type AtlasRaid } from '../../../../packages/shared/src/atlas-raids';
 import { KingdomIdSchema, PersonIdSchema, type PersonId } from '../../../../packages/shared/src/identity';
+import { createArrivalWitness } from '../../../realm/src/raid-gate/arrivals';
 import { createRaidTravelCoordinator } from '../../../realm/src/raid-gate/coordinator';
 import { createMemoryTravelRepository } from '../../../realm/src/raid-gate/memory-repository';
 import { createSimulatedRooms } from '../../../realm/src/raid-gate/simulated-rooms';
 import { createRaidGateApplication, createRaidMarchCheck, type RaidGateApplication } from './application';
 import { readGateReply, type GateContext, type GateReply } from './contracts';
+import { createMemoryItemTransfers } from './gift-memory';
+import { createVisitorGifts, type GiftHosts, type GiftItem } from './gifts';
 import { createMemoryRaidGateRepository, type MemoryRaidGateRepository } from './memory-repository';
 import type { AtlasRoadIngress, AuthorizedRaidTransport, GatePolicy, RaidWrite, RaidWriteOutcome, TrustedRaidObservation } from './ports';
 import { outboxId } from './repository';
@@ -27,7 +32,22 @@ const FERN = KingdomIdSchema.parse('41000003');
 const MONARCH = PersonIdSchema.parse('41000001');
 const WREN = PersonIdSchema.parse('52000001');
 const OAK = PersonIdSchema.parse('52000002');
+/** A citizen of Mira, there to welcome guests. */
+const ASH = PersonIdSchema.parse('53000001');
 const T0 = 1_800_000_000_000;
+
+/** SIMULATED host directory: Mira's broadcaster and one deed holder, with approved names. */
+const NAMES: Readonly<Record<string, string>> = { [ASH]: 'Ash of the Mill', [WREN]: 'Wren', [MIRA]: 'Queen Mira' };
+const hosts: GiftHosts = {
+  origin: 'simulated',
+  async standing(personId, kingdomId) { return String(personId) === String(kingdomId) ? 'monarch' : personId === ASH && kingdomId === MIRA ? 'citizen' : 'none'; },
+  async names(personIds) { return new Map(personIds.filter(id => NAMES[id]).map(id => [id, NAMES[id]!])); },
+};
+/** A SIMULATED lantern Ash forged in Mira, held by the SIMULATED item store. */
+const LANTERN: GiftItem = {
+  itemId: 'item-lantern', revision: 3, ownerId: ASH, kind: 'forged', title: 'Lantern of the sleeping fox', makerId: ASH, makerName: 'Ash of the Mill',
+  originKingdomId: MIRA, originName: 'Mira', transferable: true, paid: false, origin: 'simulated',
+};
 
 /**
  * SIMULATED Twitch raid authority. It keeps its own record of each write by key, as main's transport must, so
@@ -104,17 +124,20 @@ function world() {
   const atlas = simulatedRoads();
   const journeys = createMemoryTravelRepository();
   const rooms = createSimulatedRooms({ clock, rooms: [SOURCE, MIRA] });
-  let issued = 0, ticketed = 0;
+  const items = createMemoryItemTransfers('simulated');
+  items.seed([LANTERN]);
+  let issued = 0, ticketed = 0, offered = 0;
   let travel = createRaidTravelCoordinator({ repository: journeys, rooms: rooms.transport, marches: createRaidMarchCheck(repository), origin: 'simulated', clock, tickets: () => `ticket${++ticketed}` });
   const boot = (options: { raids?: boolean } = {}): RaidGateApplication => createRaidGateApplication({
     repository, policy, origin: 'simulated', clock,
     raids: options.raids === false ? null : twitch.transport, roads: atlas.ingress, travel,
+    gifts: createVisitorGifts({ items, arrivals: createArrivalWitness({ repository: journeys, origin: 'simulated' }), hosts, origin: 'simulated', ids: () => `offer${++offered}` }),
     tokens: { issue: () => `preview${++issued}`, hash: async value => value.replace(/\D/g, '').padStart(64, 'b') },
   });
   let app = boot();
-  const as = (personId: PersonId) => async (command: unknown): Promise<GateReply> => {
+  const as = (personId: PersonId, kingdomId = SOURCE) => async (command: unknown): Promise<GateReply> => {
     const context: GateContext = {
-      principal: { personId, sessionId: `session-${personId}`, sourceKingdomId: SOURCE, sourceRole: personId === MONARCH ? 'monarch' : 'citizen' },
+      principal: { personId, sessionId: `session-${personId}`, sourceKingdomId: kingdomId, sourceRole: String(personId) === String(kingdomId) ? 'monarch' : 'citizen' },
       now, signal: new AbortController().signal,
     };
     const reply = await app.handle(context, command);
@@ -122,7 +145,7 @@ function world() {
     return reply;
   };
   return {
-    repository, twitch, atlas, clock, journeys, rooms,
+    repository, twitch, atlas, clock, journeys, rooms, items,
     get app() { return app; },
     get travel() { return travel; },
     restart(options?: { raids?: boolean }) {
@@ -130,7 +153,7 @@ function world() {
       app = boot(options);
     },
     advance(ms: number) { now += ms; },
-    monarch: as(MONARCH), wren: as(WREN), oak: as(OAK),
+    monarch: as(MONARCH), wren: as(WREN), oak: as(OAK), ash: as(ASH, MIRA),
   };
 }
 
@@ -265,6 +288,43 @@ describe('Raid Gate journey (SIMULATED transports)', () => {
     // The road the Atlas holds is the one witnessed raid, still there after the party cleared.
     expect([...w.atlas.roads.keys()]).toEqual([raid.raid.id]);
 
+    // Mira welcomes its guest. Ash, a citizen there, sees Wren at the gate and offers a lantern to take home.
+    expect(await w.ash({ op: 'welcome', arrivalId: null })).toMatchObject({ kind: 'welcome', value: {
+      kingdomId: MIRA, viewer: 'host', guests: [{ arrivalId: 'arrival.ticket1', personId: WREN, name: 'Wren', from: SOURCE, kind: 'raid' }],
+      shelf: [{ itemId: LANTERN.itemId, revision: 3, story: { title: LANTERN.title, kind: 'forged', makerName: 'Ash of the Mill', originName: 'Mira' } }],
+    } });
+    const offer = { op: 'offer-gift', requestId: 'g1', itemId: LANTERN.itemId, recipient: WREN, arrivalId: 'arrival.ticket1' };
+    const offered = await w.ash(offer);
+    expect(offered).toMatchObject({ kind: 'gift', value: { offerId: 'offer1', from: ASH, to: WREN, state: 'offered', direction: 'brought-back', fromName: 'Ash of the Mill', receipt: null } });
+    // The same press twice is the same offer; nothing has moved yet.
+    expect(await w.ash(offer)).toEqual(offered);
+    expect(w.items.snapshot().items).toEqual([expect.objectContaining({ itemId: LANTERN.itemId, ownerId: ASH, revision: 3 })]);
+    expect(await w.wren({ op: 'welcome', arrivalId: 'arrival.ticket1' })).toMatchObject({ value: {
+      viewer: 'visitor', kingdomId: MIRA, arrival: { from: SOURCE, present: true, raidId: raid.raid.id }, monarch: { personId: MIRA, name: 'Queen Mira' },
+      offers: [{ offerId: 'offer1', state: 'offered' }], guests: [],
+    } });
+    // Nobody but Wren may take it.
+    expect(await w.oak({ op: 'accept-gift', requestId: 'a0', offerId: 'offer1' })).toEqual({ kind: 'denied', code: 'unauthorized' });
+
+    // Wren accepts. The item store commits the transfer and then its answer is lost; the server restarts.
+    w.items.loseNextAnswer();
+    await expect(w.wren({ op: 'accept-gift', requestId: 'a1', offerId: 'offer1' })).rejects.toThrow(/SIMULATED/);
+    w.restart();
+    // The retried acceptance finds what already happened: the same receipt, never a second transfer.
+    const accepted = await w.wren({ op: 'accept-gift', requestId: 'a1', offerId: 'offer1' });
+    expect(accepted).toMatchObject({ kind: 'gift', value: { state: 'accepted', receipt: { transferId: 'offer1', at: w.clock() } } });
+    expect(await w.wren({ op: 'accept-gift', requestId: 'a2', offerId: 'offer1' })).toEqual(accepted);
+    expect(await w.ash(offer)).toEqual(accepted);
+    // One thing, now Wren's, moved exactly once with its maker, its home and its giver in the lineage.
+    const ledger = w.items.snapshot();
+    expect(ledger.items).toEqual([{ ...LANTERN, ownerId: WREN, revision: 4 }]);
+    expect(ledger.transfers).toEqual([expect.objectContaining({
+      transferId: 'offer1', itemId: LANTERN.itemId, fromRevision: 3, toRevision: 4, from: ASH, to: WREN, arrivalId: 'arrival.ticket1',
+      kingdomId: MIRA, homeKingdomId: SOURCE, makerId: ASH, originKingdomId: MIRA,
+    })]);
+    // Ash cannot give it again: it is not Ash's any more.
+    expect(await w.ash({ ...offer, requestId: 'g2' })).toEqual({ kind: 'denied', code: 'stale' });
+
     // Coming home is another journey through the same coordinator, voluntary and checked again.
     if (arrived.kind !== 'travel') throw new Error('expected a journey');
     const home = { kind: 'return', arrivalId: arrived.value.arrivalId! } as const;
@@ -277,6 +337,9 @@ describe('Raid Gate journey (SIMULATED transports)', () => {
     expect(await w.wren({ op: 'reserve', requestId: 'j4', target: SOURCE, reason: home })).toEqual({ kind: 'denied', code: 'stale' });
     expect(w.rooms.openHolds()).toBe(0);
     expect(w.rooms.retainedSources()).toBe(0);
+    // Home again: the lantern came home with Wren, and the welcome abroad no longer lists a guest who left.
+    expect(await w.ash({ op: 'welcome', arrivalId: null })).toMatchObject({ value: { guests: [], shelf: [] } });
+    expect(w.items.snapshot().items).toEqual([expect.objectContaining({ ownerId: WREN, revision: 4 })]);
   });
 
   it('turns the party back on a confirmed cancel, and keeps a raid that already left', async () => {

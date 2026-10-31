@@ -103,6 +103,11 @@ export interface TravelTransaction {
   putWhereabouts(record: WhereaboutsRecord, expectedRevision: number): Promise<Stored<WhereaboutsRecord>>;
   /** Tickets in this listing, ordered by ticket, strictly after `after`. At most `limit` (1–100). */
   listTravel(listing: TravelListing, after: string | null, limit: number): Promise<TravelRecord[]>;
+  /**
+   * People whose whereabouts are in `kingdomId` because of an arrival (not where they always were), most recently moved
+   * first. At most `limit` (1–100). The welcome reads its guests from here (RG10).
+   */
+  listArrivedIn(kingdomId: KingdomId, limit: number): Promise<WhereaboutsRecord[]>;
 }
 
 export interface TravelRepository {

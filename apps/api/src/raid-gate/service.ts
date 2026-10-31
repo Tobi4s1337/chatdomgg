@@ -4,7 +4,7 @@
  * four policy ports; everything else is built here.
  *
  *   const gate = createRaidGateService({ pool, origin, issuer: provider.issuer, sessionCookie, publicOrigin,
- *     origins: [publicOrigin], clock: Date.now, policyPorts: { live, grants, consent, directory }, raids, roads, rooms });
+ *     origins: [publicOrigin], clock: Date.now, policyPorts: { live, grants, consent, directory }, raids, roads, rooms, items });
  *   if (gate.matches(request.url)) return gate.serve(request, response);
  *   // main's verified EventSub ingress, for each channel.raid it correlated (or not) to a gate request:
  *   await gate.application.ingestRaid({ raid, upstreamEventId, actionRequestId, receivedAt });
@@ -15,8 +15,12 @@ import { Readable } from 'node:stream';
 import type { KingdomId } from '../../../../packages/shared/src/identity';
 import { createRaidTravelCoordinator, type RaidTravelCoordinator } from '../../../realm/src/raid-gate/coordinator';
 import type { RealmTravelTransport, TravelRecovery } from '../../../realm/src/raid-gate/ports';
+import { createArrivalWitness } from '../../../realm/src/raid-gate/arrivals';
 import { createPostgresTravelRepository } from '../../../realm/src/raid-gate/postgres-repository';
 import { createRaidGateApplication, createRaidMarchCheck, type RaidGateApplication } from './application';
+import { createRealmGiftHosts } from './gift-hosts';
+import { createPostgresItemTransfers, type ItemRows } from './gift-postgres';
+import { createVisitorGifts } from './gifts';
 import { createGateFanout, createRaidGateHttp, type RaidGateHttp } from './http';
 import { createRealmGatePolicy, type LiveChannels, type RaidGrants, type TargetDirectory, type WriteConsent } from './policy';
 import type { AtlasRoadIngress, AuthorizedRaidTransport, PreviewTokens, RaidGateRecovery } from './ports';
@@ -46,6 +50,11 @@ export type RaidGateServiceDeps = Readonly<{
   roads?: AtlasRoadIngress | null;
   /** The realm's room membership transport. Absent: travel commands answer `unavailable`. */
   rooms?: RealmTravelTransport | null;
+  /**
+   * Main's item rows on the gift transaction's client (`gift-postgres.ts` states the contract). Absent: the welcome and
+   * gifts answer `unavailable`; travel is unaffected.
+   */
+  items?: ItemRows | null;
   /** How often recovery runs (reconcile, resend the provably unsent, retry roads, mark overdue). 0 turns it off. */
   recoverEveryMs?: number;
   /** Told about a recovery pass that did something, or failed. */
@@ -150,6 +159,12 @@ export function createRaidGateService(deps: RaidGateServiceDeps): RaidGateServic
   const application = createRaidGateApplication({
     repository, policy, tokens: deps.tokens ?? createPreviewTokens(), notifier: fanout, origin: deps.origin, clock: deps.clock,
     raids: deps.raids ?? null, roads: deps.roads ?? null, travel,
+    gifts: deps.items ? createVisitorGifts({
+      items: createPostgresItemTransfers({ pool: deps.pool, origin: deps.origin, items: deps.items }),
+      arrivals: createArrivalWitness({ repository: createPostgresTravelRepository({ pool: deps.pool }), origin: deps.origin }),
+      hosts: createRealmGiftHosts({ pool: deps.pool, origin: deps.origin }),
+      origin: deps.origin,
+    }) : null,
   });
   const http = createRaidGateHttp({
     application, changes: fanout, clock: deps.clock, origins: deps.origins,

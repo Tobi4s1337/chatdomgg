@@ -521,3 +521,30 @@ part of acceptance, not permission to replace them or defer the gate's full trav
   or nothing outstanding and still where they always were). The browser restores a journey from it after a reload.
   `AtlasGateHost.travel?(stage)` (optional until the Atlas implements it) receives `rise | road | drawing | arrived |
   back` once per ticket at the pace of the authority's answers. The travel tables join `realm-migration.sql`.
+- **2026-10-31 — RG10: the welcome and visitor gifts.** Added `{op:'welcome', arrivalId}` → `WelcomeView`. With an
+  arrival ID, a visitor sees their arrival (present or not), how many of their raid party stand there with them, the
+  monarch, the offers around the arrival and (while present) their own giftable shelf. With `null`, a host (monarch or
+  deed citizen of the destination) sees the visitors present in their kingdom (at most 24) and their own offers.
+  `VisitorGiftView` gains `kingdomId`, `direction` (`left | brought-back`, told from the visitor's side), the item's
+  `story`, both names, `expiresAt` and a `receipt` that exists exactly when the offer is accepted, with
+  `transferId = offerId`.
+- **2026-10-31 — RG10: gift policy.** Giftable kinds are forged, crafted, found and welcome-offering; light, home, lot,
+  money, rank, tenure, sub-pieces, bits products, keepsakes and companions are bound. A thing must also be transferable,
+  not paid, and of the gate's origin. Gifts pass only between a present visitor and a host of the destination, one open
+  offer per thing, six open offers per arrival, ten minutes each; expiry is settled lazily. Offers are idempotent by
+  (giver, request); the same key with a different gift is `invalid`.
+- **2026-10-31 — RG10: one transaction, one receipt.** Accepting rechecks owner and revision, moves the thing with a
+  conditional update, appends the lineage row under the offer's ID and marks the offer accepted, all in one item
+  transaction. A failure before commit moves nothing; an answer lost after commit is found on retry, which returns the
+  same receipt. A thing that changed hands meanwhile is `rejected` (`moved`), and one that became bound is `rejected`
+  (`bound`). The browser re-sends a lost press under the same request ID and shows the offer as being checked, never
+  as taken, until the authority says so.
+- **2026-10-31 — RG10: storage seams.** No item authority exists yet, so the things stay behind `ItemRows` (main's),
+  on the gift transaction's client. Our own tables are `realm_raid_gifts` (unique (giver, request) and a partial unique
+  index for one open offer per thing) and `realm_raid_item_transfers` (append-only lineage). To list a kingdom's guests,
+  `realm_raid_whereabouts` gains `arrival_id` and `updated_at` columns (checked against the record) and an index;
+  `TravelTransaction.listArrivedIn(kingdomId, limit)` reads it.
+- **2026-10-31 — RG10: the staged welcome.** Until the kingdom host has a gate anchor in the world, the welcome is an
+  overlay tableau over the destination's own valley. It shows only real people: the viewer, their counted party, the
+  monarch and hosts with real offers. The guests carry torches and the home kingdom's banner, the gate wears the
+  destination's tinctures and arms, and the torches and braziers bloom. On a phone the board alone carries it.

@@ -2,6 +2,7 @@ import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'soli
 import { GATE_LIMITS, type GateDenial } from '../../../api/src/raid-gate/contracts';
 import type { GateDestination, GateFarewell, GateNotice, GateSnapshot, JourneySnapshot, RaidGateController } from './controller';
 import { Seal } from './Seal';
+import { VisitorGiftPane } from './VisitorGifts';
 
 /**
  * The gate board: a walnut and brass plaque with a parchment inlay, docked beside the kingdom on desktop and as a
@@ -36,7 +37,7 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
       </header>
       <div class="rg-parchment">
         <Show when={s().notice}>{notice => <p class="rg-notice" role="alert">{noticeText(notice(), s())}</p>}</Show>
-        <Show when={!s().journey} fallback={<TravelBoard snap={s()} journey={s().journey!} controller={props.controller} />}>
+        <Show when={!s().journey} fallback={<TravelBoard snap={s()} journey={s().journey!} controller={props.controller} now={now()} />}>
         <Switch>
           <Match when={s().phase === 'unbound'}>
             <p class="rg-lede">This view isn't signed in to {name()}'s gate, so nothing here can call a raid or move anyone.</p>
@@ -362,7 +363,7 @@ function roadPoint(fraction: number): Readonly<{ x: number; y: number }> {
   return { x: at(0), y: at(1) };
 }
 
-function TravelBoard(props: { snap: GateSnapshot; journey: JourneySnapshot; controller: RaidGateController }) {
+function TravelBoard(props: { snap: GateSnapshot; journey: JourneySnapshot; controller: RaidGateController; now: number }) {
   const s = () => props.snap;
   const j = () => props.journey;
   const names = () => journeyNames(s(), j());
@@ -409,7 +410,7 @@ function TravelBoard(props: { snap: GateSnapshot; journey: JourneySnapshot; cont
         </div>
       </Match>
       <Match when={arrived() && j().kind === 'raid'}>
-        <Arrived snap={s()} journey={j()} controller={props.controller} />
+        <Arrived snap={s()} journey={j()} controller={props.controller} now={props.now} />
       </Match>
       <Match when={arrived()}>
         <p class="rg-arrival-line">You're home in {names().going}. Your door is right where you left it.</p>
@@ -460,7 +461,7 @@ function JourneySteps(props: { snap: GateSnapshot; journey: JourneySnapshot }) {
   </ol>;
 }
 
-function Arrived(props: { snap: GateSnapshot; journey: JourneySnapshot; controller: RaidGateController }) {
+function Arrived(props: { snap: GateSnapshot; journey: JourneySnapshot; controller: RaidGateController; now: number }) {
   const s = () => props.snap;
   const j = () => props.journey;
   const going = () => journeyNames(s(), j()).going;
@@ -469,6 +470,10 @@ function Arrived(props: { snap: GateSnapshot; journey: JourneySnapshot; controll
     : `You stand at ${going()}'s gate as a visitor. You carry no rank here, only your company.`;
   return <>
     <p class="rg-arrival-line">{role()}</p>
+    <Show when={s().welcome?.view}>
+      <VisitorGiftPane welcome={s().welcome!} hostName={going()} now={props.now}
+        actions={{ accept: id => void props.controller.acceptGift(id), refuse: id => void props.controller.refuseGift(id), leave: (id, to) => void props.controller.leaveGift(id, to) }} />
+    </Show>
     <p class="rg-quiet">Your home in {s().source.name} waits behind you, exactly as you left it. Coming home is your choice, whenever you like.</p>
     <div class="rg-actions">
       <button class="rg-button rg-primary" disabled={j().busy !== null} onClick={() => void props.controller.returnHome()}><Glyph kind="boot" />Return to {s().source.name}</button>

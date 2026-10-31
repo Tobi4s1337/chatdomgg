@@ -5,6 +5,7 @@
  * `createRaidMarchCheck(repository)` who marched.
  */
 export { createRaidTravelCoordinator, TRAVEL_LIMITS, type RaidTravelCoordinator } from './coordinator';
+export { createArrivalWitness } from './arrivals';
 export { createMemoryTravelRepository, type MemoryTravelRepository } from './memory-repository';
 export type {
   AdmissionOutcome, CommitOutcome, HoldOutcome, PrepareOutcome, RaidTravelDeps, RealmTravelTransport, ReleaseOutcome, TicketStatus, TravelRecovery,

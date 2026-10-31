@@ -3,7 +3,7 @@
 Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server application lives in
 `apps/api/src/raid-gate/`. The browser imports only `apps/api/src/raid-gate/contracts.ts` (plus the in-page bench).
 
-## What exists (RG01, RG07, RG08, RG09)
+## What exists (RG01, RG07, RG08, RG09, RG10)
 
 | Piece | File | State |
 |---|---|---|
@@ -27,6 +27,12 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | March check for raid journeys | `createRaidMarchCheck` in `apps/api/src/raid-gate/application.ts` | Joined, landed, this raid, within five minutes |
 | SIMULATED room transport (tests and bench only) | `apps/realm/src/raid-gate/simulated-rooms.ts` | Fencing generation, idempotent holds, refuses a commit after reconcile |
 | Journey board | `RaidGatePane.tsx` (`TravelBoard`) | Stages from the authority, overrun, confirming, arrived, home, turned back, refused |
+| Gift policy and the welcome: offer, accept, refuse, `{op:'welcome'}` | `apps/api/src/raid-gate/gifts.ts` | Real. One item transaction moves the thing, writes its lineage and settles the offer; retries return the same receipt |
+| Durable gift storage and host directory | `apps/api/src/raid-gate/gift-postgres.ts`, `gift-hosts.ts`; tables in `realm-migration.sql` | Offers and lineage are ours; the things stay in main's item authority behind `ItemRows` |
+| Arrival evidence for gifts | `apps/realm/src/raid-gate/arrivals.ts` | Present = the whereabouts still name this arrival in its kingdom, unfenced |
+| SIMULATED item store (tests and bench only) | `apps/api/src/raid-gate/gift-memory.ts` | Can fail before commit or lose its answer after commit |
+| Welcome controller | `welcome.ts` | Created by the gate controller once a raid journey commits as a visitor; lost presses re-sent under the same request |
+| The welcome tableau and gift tags | `GuestArrival.tsx`, `VisitorGifts.tsx`, `welcome.css` | Torchlit column at the destination's gate; gifts, ledger and shelf on the board |
 | Captures | `capture.mjs` | `node apps/web/src/raid-gate/capture.mjs [--only a,b]` after `pnpm build` |
 
 ## What main binds
@@ -68,7 +74,14 @@ Short version, with the pieces above:
    coordinator on the realm pool (`createPostgresTravelRepository`) with the gate's own `createRaidMarchCheck`, and its
    recovery timer runs the journeys' recovery after the gate's. Without `rooms`, travel commands answer `unavailable`. The Atlas may implement `AtlasGateHost.travel(stage)` to
    rise, draw the road and reveal the destination at the pace of those stages.
-4. In the kingdom host, give the controller `createHttpRaidGateApi({ url: `/api/raid-gate/${kingdomId}`, origin })`,
+4. Gifts (RG10). Pass `items: ItemRows` to `createRaidGateService({ ..., items })`: `get`, a conditional `move` (owner
+   and revision, stored at `expectedRevision + 1`) and `listOwned`, all on the gift transaction's own `SqlClient`, so the
+   move, the offer and the lineage row commit together. Each item carries kind, `transferable`, `paid`, maker and
+   origin names (`readGiftItem`). The service composes `createVisitorGifts` with `createPostgresItemTransfers`,
+   `createArrivalWitness` and `createRealmGiftHosts`. Without `items`, `welcome` and the gift ops answer `unavailable`.
+   The welcome is drawn as an overlay tableau (`GuestArrivalPane`) until the kingdom host has a gate anchor in the
+   world; a host's gift shelf (`{op:'welcome', arrivalId: null}`) has no host-side surface yet.
+5. In the kingdom host, give the controller `createHttpRaidGateApi({ url: `/api/raid-gate/${kingdomId}`, origin })`,
    the Atlas `AtlasGateHost`, the source face and the throne's `{ reconnect }`, and mount `RaidGatePane` at the gate
    anchor.
 

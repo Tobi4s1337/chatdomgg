@@ -18,7 +18,10 @@
  *   journey is open only to someone who chose to march on that witnessed raid, which `createRaidMarchCheck` answers
  *   from this application's own records (R4, R5).
  *
- * Commands that later tasks own (passport, gifts) answer `unavailable`: honest, never success.
+ * - The destination's welcome and visitor gifts go to `deps.gifts` (`gifts.ts`): offers, answers and the one recorded
+ *   ownership transfer, all inside the item authority's own transaction (R9).
+ *
+ * Commands that later tasks own (passport) answer `unavailable`: honest, never success.
  */
 import { AtlasRaidSchema } from '../../../../packages/shared/src/atlas-raids';
 import { kingdomForBroadcaster } from '../../../../packages/shared/src/identity';
@@ -27,6 +30,7 @@ import {
   type GateActionState, type GateActionView, type GateAuthority, type GateCommand, type GateContext, type GateDenial, type GatePreview,
   type GatePrincipal, type GateReply, type GateStatusView, type OpenGateView, type PartyView,
 } from './contracts';
+import type { GiftCommand, VisitorGiftApplication } from './gifts';
 import { epoch, fields, kingdom, oneOf, person, token } from './guard';
 import type {
   GateNotifier, RaidGateDeps, RaidGateRecovery, RaidMarchCheck, RaidMarchVerdict, RaidObservationReceipt, RaidTravel, RaidWrite, RaidWriteOutcome,
@@ -199,11 +203,12 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
   const { repository, policy, tokens, clock } = deps;
   const raids = deps.raids ?? null, roads = deps.roads ?? null;
   const journeys: RaidTravel | null = deps.travel ?? null;
+  const gifts: VisitorGiftApplication | null = deps.gifts ?? null;
   const notifier: GateNotifier | undefined = deps.notifier;
   const dispatchTimeoutMs = deps.dispatchTimeoutMs ?? DISPATCH_TIMEOUT_MS;
   if (typeof clock !== 'function') throw new Error('The Raid Gate needs main\'s server clock.');
   // A live gate never talks to a controlled transport, and a simulated one never reaches Twitch or the real Atlas.
-  for (const [name, port] of [['raid transport', raids], ['road ingestion', roads], ['travel coordinator', journeys]] as const) {
+  for (const [name, port] of [['raid transport', raids], ['road ingestion', roads], ['travel coordinator', journeys], ['visitor gifts', gifts]] as const) {
     if (port && port.origin !== deps.origin) throw new Error(`The Raid Gate is ${deps.origin}, but its ${name} is ${port.origin}.`);
   }
 
@@ -647,6 +652,13 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
     }
   }
 
+  /** A welcome or gift command, for a viewer whose session is current. The gift application checks the rest. */
+  async function gift(context: GateContext, command: GiftCommand): Promise<GateReply> {
+    if (!gifts) return denied('unavailable');
+    await standingOf(context);
+    return gifts.handle(context, command);
+  }
+
   // ---- Server-only ingress and recovery ----------------------------------------------------------------------------
 
   const ignored = (reason: Extract<RaidObservationReceipt, { kind: 'ignored' }>['reason']): RaidObservationReceipt => ({ kind: 'ignored', reason });
@@ -737,6 +749,8 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
           case 'cancel': return await close(scoped, command.requestId);
           case 'reserve': case 'prepare': case 'commit': case 'cancel-travel': case 'reconcile-travel': case 'whereabouts':
             return await journey(scoped, command);
+          case 'welcome': case 'offer-gift': case 'accept-gift': case 'refuse-gift':
+            return await gift(scoped, command);
           default: return denied('unavailable');
         }
       } catch (error) {

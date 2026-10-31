@@ -5,10 +5,13 @@
  */
 import { AtlasChannelSchema, AtlasRaidSchema, type AtlasChannel, type AtlasRaid } from '@chatdom/shared';
 import { createRaidGateApplication, createRaidMarchCheck } from '../../../api/src/raid-gate/application';
+import { createMemoryItemTransfers, type MemoryItemTransfers } from '../../../api/src/raid-gate/gift-memory';
+import { createVisitorGifts, type GiftHosts, type GiftItem } from '../../../api/src/raid-gate/gifts';
+import { createArrivalWitness } from '../../../realm/src/raid-gate/arrivals';
 import { createRaidTravelCoordinator } from '../../../realm/src/raid-gate/coordinator';
 import { createMemoryTravelRepository } from '../../../realm/src/raid-gate/memory-repository';
 import { createSimulatedRooms, type SimulatedRooms } from '../../../realm/src/raid-gate/simulated-rooms';
-import type { GateAuthority, GateContext, GatePrincipal, GateReply, KingdomId } from '../../../api/src/raid-gate/contracts';
+import type { GateAuthority, GateContext, GatePrincipal, GateReply, KingdomId, PersonId } from '../../../api/src/raid-gate/contracts';
 import { createMemoryRaidGateRepository } from '../../../api/src/raid-gate/memory-repository';
 import type { AtlasRoadIngress, AuthorizedRaidTransport, RaidObservationReceipt, RaidWriteOutcome, SourceStanding, TargetVerdict } from '../../../api/src/raid-gate/ports';
 import type { AtlasGateEvent, AtlasGateHost, GateKingdom, GateLand, RaidGateApi } from './ports';
@@ -29,6 +32,30 @@ const STANDINGS: Readonly<Record<GateAuthority, Partial<SourceStanding>>> = {
 
 /** SIMULATED walkers of Willowmere, so the bench can show a real count growing through real join commands. */
 const WALKERS = ['52000001', '52000002', '52000003', '52000004', '52000005', '52000006', '52000007'];
+
+/** SIMULATED Fernhollow: its monarch (the channel's own ID) and one citizen with a deed, there to welcome guests. */
+const FERN = '41000002' as KingdomId;
+const FERN_HOSTS = { monarch: FERN as unknown as PersonId, ash: '53000001' as PersonId } as const;
+const NAMES: Readonly<Record<string, string>> = {
+  [FERN]: 'Queen Hazel', [FERN_HOSTS.ash]: 'Ash of the Mill', [SOURCE.kingdomId]: 'King Alder', '52000001': 'Wren', '52000002': 'Tamsin',
+};
+
+/** SIMULATED things in the SIMULATED item store: what Wren carries from home, and what Fernhollow's hosts may give. */
+function benchItems(): GiftItem[] {
+  const thing = (itemId: string, ownerId: string, kind: GiftItem['kind'], title: string, makerId: string, originKingdomId: KingdomId): GiftItem => ({
+    itemId, revision: 1, ownerId: ownerId as PersonId, kind, title, makerId: makerId as PersonId, makerName: NAMES[makerId] ?? null,
+    originKingdomId, originName: originKingdomId === FERN ? 'Fernhollow' : 'Willowmere', transferable: kind !== 'light' && kind !== 'keepsake', paid: false, origin: 'simulated',
+  });
+  return [
+    thing('willow-acorn', '52000001', 'crafted', 'A copper acorn', '52000001', SOURCE.kingdomId),
+    thing('willow-lantern', '52000001', 'forged', 'Willow-bark lantern', '52000002', SOURCE.kingdomId),
+    // Bound things never show on a shelf: a light and a keepsake stay with their holder.
+    thing('willow-hearth', '52000001', 'light', 'Hearth light', '52000001', SOURCE.kingdomId),
+    thing('willow-medal', '52000001', 'keepsake', 'First-snow keepsake', '52000001', SOURCE.kingdomId),
+    thing('fern-fox-lantern', FERN_HOSTS.ash, 'forged', 'Lantern of the sleeping fox', FERN_HOSTS.ash, FERN),
+    thing('fern-bread', FERN_HOSTS.monarch, 'welcome-offering', 'Fern-sprig welcome loaf', FERN_HOSTS.monarch, FERN),
+  ];
+}
 
 /**
  * How the SIMULATED Twitch answers a start: accept it, accept it but lose the reply on the way back (the gate must
@@ -64,6 +91,12 @@ export type GateBench = Readonly<{
   readonly log: Readonly<{ writes: readonly string[]; roads: readonly AtlasRaid[]; followed: readonly string[]; travel: readonly string[] }>;
   /** The SIMULATED room transport behind journeys. */
   readonly rooms: SimulatedRooms;
+  /** The SIMULATED item store behind gifts. */
+  readonly items: MemoryItemTransfers;
+  /** SIMULATED: these marchers (after the viewer) follow the witnessed raid through the gate themselves. */
+  partyTravel(requestId: string, raidId: string, count: number): Promise<number>;
+  /** SIMULATED: a Fernhollow host greets the viewer's arrival and offers the first thing on their shelf. */
+  hostOffer(host: keyof typeof FERN_HOSTS): Promise<GateReply>;
 }>;
 
 async function sha256Hex(text: string): Promise<string> {
@@ -112,11 +145,23 @@ export function createGateBench(options: GateBenchOptions): GateBench {
   });
   if (roomMode === 'lose') rooms.loseNextCommitAnswer();
   if (roomMode === 'deny') rooms.denyNextCommit();
+  const journeys = createMemoryTravelRepository();
   const travel = createRaidTravelCoordinator({
-    repository: createMemoryTravelRepository(), rooms: rooms.transport, marches: createRaidMarchCheck(repository), origin: 'simulated', clock: options.clock,
+    repository: journeys, rooms: rooms.transport, marches: createRaidMarchCheck(repository), origin: 'simulated', clock: options.clock,
   });
+  const items = createMemoryItemTransfers('simulated');
+  items.seed(benchItems());
+  const hosts: GiftHosts = {
+    origin: 'simulated',
+    async standing(personId, kingdomId) {
+      if (String(personId) === String(kingdomId)) return 'monarch';
+      return personId === FERN_HOSTS.ash && kingdomId === FERN ? 'citizen' : 'none';
+    },
+    async names(personIds) { return new Map(personIds.filter(id => NAMES[id]).map(id => [id, NAMES[id]!])); },
+  };
+  const gifts = createVisitorGifts({ items, arrivals: createArrivalWitness({ repository: journeys, origin: 'simulated' }), hosts, origin: 'simulated' });
   const app = createRaidGateApplication({
-    repository, origin: 'simulated', clock: options.clock, raids, roads, travel,
+    repository, origin: 'simulated', clock: options.clock, raids, roads, travel, gifts,
     policy: {
       async readStanding(principal) {
         return { session: 'current', broadcaster: String(principal.personId) === String(SOURCE.kingdomId), live: true, raids: 'granted', actions: 'enabled', ...STANDINGS[authority] };
@@ -133,12 +178,12 @@ export function createGateBench(options: GateBenchOptions): GateBench {
     // Each subscriber re-reads with its own principal; the change itself carries nothing.
     notifier: { changed: () => queueMicrotask(() => { for (const subscriber of subscribers) subscriber(); }) },
   });
-  const principal = (personId: string): GatePrincipal => ({
-    personId: personId as GatePrincipal['personId'], sessionId: `bench-${personId}`, sourceKingdomId: SOURCE.kingdomId,
-    sourceRole: personId === SOURCE.kingdomId ? 'monarch' : 'citizen',
+  const principal = (personId: string, kingdomId: KingdomId = SOURCE.kingdomId): GatePrincipal => ({
+    personId: personId as GatePrincipal['personId'], sessionId: `bench-${personId}`, sourceKingdomId: kingdomId,
+    sourceRole: personId === kingdomId ? 'monarch' : 'citizen',
   });
-  const as = (personId: string, command: unknown) => {
-    const context: GateContext = { principal: principal(personId), now: options.clock(), signal: new AbortController().signal };
+  const as = (personId: string, command: unknown, kingdomId?: KingdomId) => {
+    const context: GateContext = { principal: principal(personId, kingdomId), now: options.clock(), signal: new AbortController().signal };
     return app.handle(context, command);
   };
   const viewerId = options.viewer === 'monarch' ? SOURCE.kingdomId : WALKERS[0]!;
@@ -209,7 +254,30 @@ export function createGateBench(options: GateBenchOptions): GateBench {
       // As main's verified ingress would: correlated to the request its transport sent, with an upstream event ID.
       return app.ingestRaid({ raid, upstreamEventId: `simulated-event-${requestId}`, actionRequestId: accepted.has(requestId) ? requestId : null, receivedAt: at });
     },
-    log, rooms,
+    log, rooms, items,
+    async partyTravel(requestId, raidId, count) {
+      let arrived = 0;
+      const others = WALKERS.slice(options.viewer === 'walker' ? 1 : 0).slice(0, count);
+      for (const personId of others) {
+        let reply = await as(personId, { op: 'reserve', requestId: `bench-${personId}-${requestId}`, target: FERN, reason: { kind: 'raid', requestId, raidId } });
+        for (let step = 0; step < 16 && reply.kind === 'travel' && reply.value.state !== 'committed'; step++) {
+          const { ticket, state } = reply.value;
+          if (state !== 'reserved' && state !== 'preparing' && state !== 'ready') break;
+          reply = await as(personId, { op: state === 'ready' ? 'commit' : 'prepare', ticket });
+        }
+        if (reply.kind === 'travel' && reply.value.state === 'committed') arrived++;
+      }
+      return arrived;
+    },
+    async hostOffer(host) {
+      const hostId = FERN_HOSTS[host];
+      const welcome = await as(hostId, { op: 'welcome', arrivalId: null }, FERN);
+      if (welcome.kind !== 'welcome') return welcome;
+      const guest = welcome.value.guests.find(each => each.personId === viewerId);
+      const thing = welcome.value.shelf[0];
+      if (!guest || !thing) return { kind: 'denied', code: 'stale' };
+      return as(hostId, { op: 'offer-gift', requestId: crypto.randomUUID(), itemId: thing.itemId, recipient: guest.personId, arrivalId: guest.arrivalId }, FERN);
+    },
     monarchClose: requestId => as(SOURCE.kingdomId, { op: 'cancel', requestId }),
     async walkersJoin(count, requestId) {
       for (const personId of WALKERS.slice(options.viewer === 'walker' ? 1 : 0, (options.viewer === 'walker' ? 1 : 0) + count)) await as(personId, { op: 'join', requestId });
