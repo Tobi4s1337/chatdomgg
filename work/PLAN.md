@@ -367,9 +367,12 @@ labels kept inside frame. One-pass picture/Genesis recon found no new finished l
   lanes finish current task and stop. Main retains scene/shader/shadow integration; no second forest/emitters.
   Land adoption must use the same new height in render/contact, without silently moving pinned foundations.
 
-**Next integration first:** avatar-style AS01 (504e1ac), Genesis harbour watchtower (d92e0ff), heraldry
-(df5c42c/aee97df) are now available; short read found no blockers. Content/studies only, no runtime adoption yet.
+**Art merges:** avatar-style AS01 (504e1ac), Genesis harbour watchtower (d92e0ff), heraldry
+(df5c42c/aee97df) merged after a short look. Content/studies only, no runtime adoption yet.
 Avatar choice remains Tobias's; landmarks need export/placement/light adoption, heraldry colours are proposals.
+Viewed the avatar contact sheet and all three native1080p options, harbour and snapped river arms lane renders.
+56 scoped tests, typecheck, scoped lint and web build pass. Storybook shoulder gap, bright quay grass and dark
+violet/sable arms remain lane followups; merge not held. Avatar evidence: `work/evidence/avatar-style/AS01/`.
 **Next picture:** Smithy crowd wraps BOTH
 sides with faces behind pour; lower/closer camera, castle lit behind. Current13-person west crescent isn't final.
 Molten02c3494 stays. Real approved chat ritual remains unproved; no waiting observer before Tobias goes live.
