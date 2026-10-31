@@ -1,0 +1,24 @@
+html, body { margin: 0; height: 100%; overflow: hidden; background: #1d2026; }
+#stage { display: block; width: 100vw; height: 100vh; }
+/* The seal sits in the lower corner, small enough to leave the composition alone and always legible. */
+.place-seal {
+  position: fixed; left: 12px; bottom: 10px; max-width: min(560px, calc(100vw - 24px)); display: grid; gap: 1px;
+  padding: 6px 10px 7px; font: 11px/1.35 Georgia, 'Times New Roman', serif; color: #eadfc8;
+  background: rgba(30, 26, 32, .78); border: 1px solid rgba(214, 186, 130, .45); border-radius: 3px;
+}
+.place-seal strong { font-size: 10px; letter-spacing: .12em; color: #e9c27a; }
+.place-seal span { font-size: 12px; }
+.place-seal small { color: #cbbd9f; }
+/* Controls stay folded in the top corner, outside the shot. */
+.place-controls { position: fixed; right: 10px; top: 8px; font: 12px Georgia, serif; color: #eadfc8; }
+.place-controls summary { cursor: pointer; padding: 4px 8px; background: rgba(30, 26, 32, .7); border-radius: 3px; list-style: none; }
+.place-controls nav { display: grid; gap: 2px; margin-top: 4px; padding: 6px 8px; background: rgba(30, 26, 32, .86); border-radius: 3px; }
+.place-controls a { color: #eadfc8; }
+.place-controls a[aria-current] { color: #e9c27a; }
+.place-status {
+  position: fixed; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px;
+  font: 15px Georgia, serif; color: #eadfc8; background: #1d2026;
+}
+.place-status[hidden] { display: none; }
+.place-status[role='alert'] { color: #f3c6b6; }
+.place-status p { margin: 0; max-width: 34em; }
