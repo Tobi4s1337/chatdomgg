@@ -25,7 +25,7 @@ serially; no independent Chromium alongside another capture. Keep every fixture 
   short highlight, cooling to the real kit and flight to the exact host socket. Reuse bounded emitter seams where
   appropriate. Verify clone/material ownership, repeated/seek/null frames and resource cleanup in one focused
   temporal regression; no approval, attachment or permanent emission is authored here. Inspect stream and phone.
-- [ ] **FR03 — Hear a complete physical forge through the host graph** · evidence: audible ceremony + browser behavior.
+- [x] **FR03 — Hear a complete physical forge through the host graph** · evidence: audible ceremony + browser behavior.
   Build Forge-only procedural/permissive sound behind the approved context/destination API. Finish every stage
   cue and the generic cough/sulk cue; bound voices/tails/sources, skip duplicate or expired attacks, support mute,
   zero volume, suspension and disposal without replay. Listen in isolation and two-anvil overlap, tune under

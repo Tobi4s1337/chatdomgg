@@ -4,6 +4,7 @@ import type { ForgePhase } from '@chatdom/shared';
 import { createForgeStage, type ForgePresentation, type StageEnvironment } from '../forge/presentation/stage';
 import { benchFrame } from './clock';
 import { parseRitualBench, RITUAL_SECONDS, type RitualBenchState } from './params';
+import { createBenchSound, type BenchRenderPlan, type BenchSoundReport } from './sound';
 import { createRitualWorld, type RitualWorld } from './world';
 import './style.css';
 
@@ -19,6 +20,14 @@ interface RitualBenchControl {
   clear(): RitualBenchReport;
   motion(reduced: boolean): RitualBenchReport;
   report(): RitualBenchReport;
+  sound: {
+    report(): BenchSoundReport;
+    mix(muted: boolean, volume: number): BenchSoundReport;
+    second(offset: number | null): BenchSoundReport;
+    refusal(variant: 0 | 1 | 2): BenchSoundReport;
+    render(plan: BenchRenderPlan): ReturnType<ReturnType<typeof createBenchSound>['render']>;
+    host(): { context: AudioContext; bus: GainNode } | null;
+  };
 }
 declare global {
   interface Window {
@@ -55,6 +64,11 @@ export default function ForgeRitualBench() {
   const [reduced, setReduced] = createSignal(false);
   const [phase, setPhase] = createSignal<ForgePhase | null>(null);
   const [held, setHeld] = createSignal(0);
+  const [soundOn, setSoundOn] = createSignal(false);
+  const [muted, setMuted] = createSignal(false);
+  const [volume, setVolume] = createSignal(.65);
+  const [second, setSecond] = createSignal(false);
+  const sound = createBenchSound();
   const motionListeners = new Set<() => void>(), cleanups: (() => void)[] = [];
 
   const report = (): RitualBenchReport => {
@@ -71,6 +85,7 @@ export default function ForgeRitualBench() {
     if (!world || !presentation) return;
     const { frame, held: wait } = benchFrame(RITUAL_ID, time(), gate());
     presentation.update(cleared() ? null : frame);
+    sound.update(cleared() ? null : frame, time());
     setPhase(cleared() ? null : frame.phase); setHeld(wait);
     world.direct(cleared() ? null : frame.phase, frame.phaseProgress, reduced());
     world.renderer.render(world.scene, world.camera);
@@ -81,6 +96,12 @@ export default function ForgeRitualBench() {
     if (playing()) setTime(t => t + Math.min(.1, (now - then) / 1000));
     draw();
     raf = window.requestAnimationFrame(next => loop(next, now));
+  };
+  /** The first press is the gesture that makes and starts the context; later presses mute and unmute. */
+  const toggleSound = async () => {
+    if (!sound.on) { setSoundOn(await sound.enable()); setMuted(false); sound.setMix({ muted: false }); return; }
+    if (!soundOn()) { setSoundOn(await sound.enable()); return; }
+    setMuted(m => !m); sound.setMix({ muted: muted() });
   };
   const setMotion = (value: boolean) => { setReduced(value); motionListeners.forEach(listener => listener()); draw(); };
   const play = () => { if (cleared() || time() >= RITUAL_SECONDS + 4) setTime(0); setCleared(false); setPlaying(p => !p); };
@@ -128,6 +149,14 @@ export default function ForgeRitualBench() {
         clear: () => { setPlaying(false); setCleared(true); draw(); return report(); },
         motion: value => { setMotion(value); return report(); },
         report,
+        sound: {
+          report: () => sound.report(),
+          mix: (m, v) => { setMuted(m); setVolume(v); sound.setMix({ muted: m, volume: v }); return sound.report(); },
+          second: offset => { sound.setSecond(offset); setSecond(offset !== null); return sound.report(); },
+          refusal: variant => { sound.refusal(variant); return sound.report(); },
+          render: plan => sound.render(plan),
+          host: () => sound.host,
+        },
       };
       setStatus('');
       if (s.t === null) setPlaying(true);
@@ -143,7 +172,7 @@ export default function ForgeRitualBench() {
   });
   onCleanup(() => {
     disposed = true; window.cancelAnimationFrame(raf); cleanups.forEach(c => c());
-    presentation?.dispose(); world?.dispose();
+    presentation?.dispose(); world?.dispose(); sound.dispose();
     delete window.__chatdomForgeRitual; window.__chatdomReady = false;
   });
 
@@ -177,11 +206,16 @@ export default function ForgeRitualBench() {
           <button onClick={() => { setPlaying(false); setCleared(true); draw(); }}>Clear</button>
           <button aria-pressed={reduced()} onClick={() => setMotion(!reduced())}>Reduced motion</button>
         </div>
+        <div class="ritual-row ritual-sound">
+          <button aria-pressed={soundOn() && !muted()} onClick={() => void toggleSound()} aria-label={soundOn() && !muted() ? 'Mute the forge' : 'Hear the forge'}>{!soundOn() ? 'Sound on' : muted() ? 'Unmute' : 'Mute'}</button>
+          <input type="range" min="0" max="1" step="0.01" value={volume()} aria-label="Forge volume" disabled={!soundOn()} onInput={e => { setVolume(Number(e.currentTarget.value)); sound.setMix({ volume: volume() }); }} />
+          <button disabled={!soundOn()} onClick={() => sound.refusal(0)} title="A SIMULATED refusal beat: the forge coughs">Cough</button>
+        </div>
         <div class="ritual-row ritual-pick">
           <select aria-label="Part" value={input()!.part} onChange={e => navigate('part', e.currentTarget.value)}><For each={PARTS}>{([value, label]) => <option value={value}>{label}</option>}</For></select>
           <select aria-label="Kingdom kit" value={input()!.family} onChange={e => navigate('family', e.currentTarget.value)}><For each={KITS}>{([value, label]) => <option value={value}>{label}</option>}</For></select>
         </div>
-        <p class="ritual-note">SIMULATED local run around a real forged part. Nothing is judged, attached or saved here.</p>
+        <p class="ritual-note">SIMULATED local run around a real forged part. Nothing is judged, attached or saved here.<Show when={second()}> A SIMULATED second anvil is heard alongside.</Show></p>
       </div>
     </Show>
     <Show when={status()}><div class="ritual-status" role={failed() ? 'alert' : 'status'}><strong>{failed() ? 'The anvil could not be lit' : 'At the anvil'}</strong><p>{status()}</p></div></Show>
