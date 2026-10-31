@@ -10,7 +10,7 @@ import { sampleTerrainTriangles } from '../terrain-worker';
 import { simulatedLand, simulatedWaterKeepOut } from './fixture';
 import { DRESSING_VERTEX_ANCHOR, dressingVertexShader } from './material';
 import { createGroundDressing, pieceMatrix } from './mount';
-import { footprintCorners, patchArea, pieceRole, planGroundDressing, polygonDistance, type GroundDressingInput, type GroundDressingPlan, type GroundPiece } from './plan';
+import { arrivalHome, footprintCorners, patchArea, pieceRole, planGroundDressing, polygonDistance, type GroundDressingInput, type GroundDressingPlan, type GroundPiece } from './plan';
 
 const all = (plan: GroundDressingPlan) => [...plan.pieces.values()].flat();
 const CELL = 0.125;
@@ -46,6 +46,27 @@ const centreOf = (piece: GroundPiece): [number, number] => {
   return [piece.position[0] + c * a + s * b, piece.position[2] - s * a + c * b];
 };
 
+/** A coarse bucket index, so each check visits only what stands near one piece. */
+function bucketed<T>(items: readonly T[], box: (item: T) => { minX: number; maxX: number; minZ: number; maxZ: number }) {
+  const buckets = new Map<string, T[]>(), size = 8;
+  for (const item of items) {
+    const b = box(item);
+    for (let x = Math.floor(b.minX / size); x <= Math.floor(b.maxX / size); x++) for (let z = Math.floor(b.minZ / size); z <= Math.floor(b.maxZ / size); z++) {
+      const list = buckets.get(`${x},${z}`); if (list) list.push(item); else buckets.set(`${x},${z}`, [item]);
+    }
+  }
+  return (x: number, z: number, reach: number): T[] => {
+    const found = new Set<T>();
+    for (let bx = Math.floor((x - reach) / size); bx <= Math.floor((x + reach) / size); bx++) for (let bz = Math.floor((z - reach) / size); bz <= Math.floor((z + reach) / size); bz++)
+      for (const item of buckets.get(`${bx},${bz}`) ?? []) found.add(item);
+    return [...found];
+  };
+}
+const boxOf = (corners: readonly (readonly [number, number])[], margin = 0) => ({
+  minX: Math.min(...corners.map(c => c[0])) - margin, maxX: Math.max(...corners.map(c => c[0])) + margin,
+  minZ: Math.min(...corners.map(c => c[1])) - margin, maxZ: Math.max(...corners.map(c => c[1])) + margin,
+});
+
 let land: KingdomLand, input: GroundDressingInput, plan: GroundDressingPlan;
 // A keep-out and keep-clear placed over open ground the meadow would otherwise dress.
 const keepOutSquare = [[-120, 120], [-100, 120], [-100, 140], [-120, 140]] as const;
@@ -53,7 +74,7 @@ beforeAll(() => {
   land = simulatedLand({ seed: 'willowmere', tier: 'town' });
   input = inputFor(land, { keepOut: [keepOutSquare.map(p => [...p] as [number, number])] });
   plan = planGroundDressing(input);
-}, 240_000);
+}, 120_000);
 
 describe('planGroundDressing', () => {
   it('is deterministic, with unique semantic IDs', () => {
@@ -61,46 +82,51 @@ describe('planGroundDressing', () => {
     expect(JSON.stringify([...again.pieces])).toBe(JSON.stringify([...plan.pieces]));
     const ids = all(plan).map(p => p.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.every(id => /^(meadow|lot:[^:]+|forecourt:\d+:-?1|drift:-?\d+:-?\d+)(:[^:]+)*$/.test(id))).toBe(true);
+    expect(ids.every(id => /^(meadow|lot:[^:]+|forecourt:\d+:-?1|doorstep:\d+:-?1|drift:-?\d+:-?\d+)(:[^:]+)*$/.test(id))).toBe(true);
     expect(all(plan).length).toBeGreaterThan(4000);
     expect(all(plan).length).toBeLessThanOrEqual(40_000);
-  }, 240_000);
+  }, 120_000);
 
   it('keeps every clearance of R3', () => {
     const p = land.plan;
-    const homes = p.homes.map(home => ({ home, rect: currentFootprint(home), frame: homeFrame(home) }));
+    const homes = bucketed(p.homes.map(home => ({ home, rect: currentFootprint(home), frame: homeFrame(home) })), h => h.rect);
+    const occupied = bucketed(input.occupied.map(o => ({ id: o.blueprint.id, box: boxOf(footprintCorners(o.blueprint, o.position, o.yaw)) })), o => o.box);
+    const polygons = [p.market.boundary, ...p.courts.map(c => c.boundary), p.castle.court.boundary, keepOutSquare];
+    const castle = p.castle.bounds, violations: string[] = [];
     for (const piece of all(plan)) {
-      const role = pieceRole(piece.blueprint), height = piece.blueprint.size[1] * CELL;
+      const role = pieceRole(piece.blueprint), height = piece.blueprint.size[1] * CELL, [cx, cz] = centreOf(piece);
+      const near = homes(cx, cz, 14), radius = Math.hypot(piece.blueprint.size[0], piece.blueprint.size[2]) * CELL / 2;
+      // Paving and verge distances are true distances: one sample at the centre vouches for the whole box when it
+      // clears the radius; otherwise every 0.25 m point is sampled.
+      const centre = samplePublicGround(p, cx, cz);
+      const vouched = (centre?.pavingDistance ?? Infinity) - 0.25 > radius && (!role.solid || (centre?.reservedDistance ?? Infinity) - 0.6 > radius);
       for (const [x, z] of footprintPoints(piece)) {
-        const sample = samplePublicGround(p, x, z);
-        expect(sample ? sample.pavingDistance : Infinity, `${piece.id} on paving`).toBeGreaterThan(0.25);
-        if (role.solid) expect(sample ? sample.reservedDistance : Infinity, `${piece.id} in a verge`).toBeGreaterThanOrEqual(0.6);
-        for (const { rect, frame } of homes) {
-          expect(x > rect.minX && x < rect.maxX && z > rect.minZ && z < rect.maxZ, `${piece.id} on a home`).toBe(false);
+        if (!vouched) {
+          const sample = samplePublicGround(p, x, z);
+          if ((sample?.pavingDistance ?? Infinity) <= 0.25) violations.push(`${piece.id} on paving`);
+          if (role.solid && (sample?.reservedDistance ?? Infinity) < 0.6) violations.push(`${piece.id} in a verge`);
+        }
+        for (const { rect, frame } of near) {
+          if (x > rect.minX && x < rect.maxX && z > rect.minZ && z < rect.maxZ) violations.push(`${piece.id} on a home`);
           const dx = x - frame.front[0], dz = z - frame.front[2];
           const out = dx * frame.outward[0] + dz * frame.outward[2], side = dx * frame.right[0] + dz * frame.right[2];
           if (out > 0 && out < 3.5 && Math.abs(side) < 4) {
-            expect(Math.abs(side + 0.25) >= 1.75, `${piece.id} in an entrance band`).toBe(true);
-            expect(height, `${piece.id} tall in a forecourt`).toBeLessThanOrEqual(0.6);
+            if (Math.abs(side + 0.25) < 1.75) violations.push(`${piece.id} in an entrance band`);
+            if (height > 0.6) violations.push(`${piece.id} tall in a forecourt`);
           }
         }
-        const castle = p.castle.bounds;
-        expect(x > castle.minX && x < castle.maxX && z > castle.minZ && z < castle.maxZ, `${piece.id} in the castle`).toBe(false);
-        for (const polygon of [p.market.boundary, ...p.courts.map(c => c.boundary), p.castle.court.boundary, keepOutSquare])
-          expect(polygonDistance(polygon, x, z), `${piece.id} in a square or keep-out`).toBeGreaterThan(0);
-        expect(Math.hypot(x, z - 8), `${piece.id} in the Forge plaza`).toBeGreaterThan(7);
-        expect(input.waterKeepOut(x, z, 0.5), `${piece.id} in water`).toBe(false);
+        if (x > castle.minX && x < castle.maxX && z > castle.minZ && z < castle.maxZ) violations.push(`${piece.id} in the castle`);
+        if (polygons.some(polygon => polygonDistance(polygon, x, z) <= 0)) violations.push(`${piece.id} in a square or keep-out`);
+        if (Math.hypot(x, z - 8) <= 7) violations.push(`${piece.id} in the Forge plaza`);
+        if (input.waterKeepOut(x, z, 0.5)) violations.push(`${piece.id} in water`);
       }
       // Occupied placements: never overlapped; solids keep 1.5 m.
-      const corners = footprintCorners(piece.blueprint, piece.position, piece.yaw, CELL);
-      const box = { minX: Math.min(...corners.map(c => c[0])), maxX: Math.max(...corners.map(c => c[0])), minZ: Math.min(...corners.map(c => c[1])), maxZ: Math.max(...corners.map(c => c[1])) };
-      for (const other of input.occupied) {
-        const o = footprintCorners(other.blueprint, other.position, other.yaw), margin = role.solid ? 1.5 : 0.2;
-        const ob = { minX: Math.min(...o.map(c => c[0])) - margin, maxX: Math.max(...o.map(c => c[0])) + margin, minZ: Math.min(...o.map(c => c[1])) - margin, maxZ: Math.max(...o.map(c => c[1])) + margin };
-        expect(box.minX < ob.maxX && box.maxX > ob.minX && box.minZ < ob.maxZ && box.maxZ > ob.minZ, `${piece.id} on ${other.blueprint.id}`).toBe(false);
-      }
+      const box = boxOf(footprintCorners(piece.blueprint, piece.position, piece.yaw, CELL)), margin = role.solid ? 1.5 : 0.2;
+      for (const { id, box: ob } of occupied(cx, cz, 4))
+        if (box.minX < ob.maxX + margin && box.maxX > ob.minX - margin && box.minZ < ob.maxZ + margin && box.maxZ > ob.minZ - margin) violations.push(`${piece.id} on ${id}`);
     }
-  }, 240_000);
+    expect([...new Set(violations)]).toEqual([]);
+  }, 120_000);
 
   it('lists only solids as blockers, each with an exact cardinal turn', () => {
     expect(plan.blockers.length).toBeGreaterThan(0);
@@ -114,17 +140,19 @@ describe('planGroundDressing', () => {
     expect(plan.blockers.map(b => b.id).sort()).toEqual(solids);
   });
 
-  it('grounds cover on its slope and sets solids level', () => {
+  it('lays passive pieces on their slope and sets solids level', () => {
     for (const piece of all(plan)) {
       const role = pieceRole(piece.blueprint), [gx, gz] = piece.slope ?? [0, 0];
       const heights = footprintPoints(piece, 0.5).map(([x, z]) => {
         const plane = piece.position[1] + gx * (x - piece.position[0]) + gz * (z - piece.position[2]);
         return { plane, ground: input.ground(x, z) };
       });
-      if (role.cover) {
+      if (!role.solid) {
         expect(Math.hypot(gx, gz)).toBeLessThanOrEqual(Math.tan(35 * Math.PI / 180) + 1e-9);
-        // Never floating, never more than a few cells buried.
-        for (const { plane, ground } of heights) { expect(plane - ground, piece.id).toBeLessThan(0.06); expect(ground - plane, piece.id).toBeLessThan(0.3); }
+        // Never floating, never more than a few cells buried; flush stones keep a worn lip above the turf.
+        for (const { plane, ground } of heights) { expect(plane - ground, piece.id).toBeLessThan(0.06); if (role.form !== 'stepping-stones') expect(ground - plane, piece.id).toBeLessThan(0.3); }
+        // Flush stones are bedded deep, so they may lie lower than cover, but their worn lip always shows.
+        if (role.form === 'stepping-stones') for (const { plane, ground } of heights) expect(plane + piece.blueprint.size[1] * CELL - ground, piece.id).toBeGreaterThan(0);
       } else {
         expect(piece.slope).toBeUndefined();
         const low = Math.min(...heights.map(h => h.ground)), high = Math.max(...heights.map(h => h.ground));
@@ -136,7 +164,8 @@ describe('planGroundDressing', () => {
 
   it('thins with distance and gathers into drifts with calm meadow between', () => {
     const p = land.plan, cover = all(plan).filter(piece => pieceRole(piece.blueprint).cover);
-    const lotDistance = (x: number, z: number) => Math.min(...p.reservations.map(({ lot }) => {
+    const lots = bucketed(p.reservations.map(r => r.lot), lot => lot);
+    const lotDistance = (x: number, z: number) => Math.min(Infinity, ...lots(x, z, 40).map(lot => {
       const dx = Math.max(lot.minX - x, 0, x - lot.maxX), dz = Math.max(lot.minZ - z, 0, z - lot.maxZ); return Math.hypot(dx, dz);
     }));
     const edge = (x: number, z: number) => Math.min(Math.max(0, samplePublicGround(p, x, z)?.pavingDistance ?? Infinity), lotDistance(x, z));
@@ -160,10 +189,11 @@ describe('planGroundDressing', () => {
     expect(count.near / area.near).toBeGreaterThanOrEqual(3 * (count.far / area.far));
     expect(patchArea(3)).toBe(4); expect(patchArea(30)).toBe(16); expect(patchArea(45)).toBe(40);
     // At least 40% of open meadow keeps no cover within 2 m.
-    const centres = cover.map(centreOf);
-    const open = eligible.filter(([x, z]) => !centres.some(([cx, cz]) => Math.hypot(cx - x, cz - z) < 2)).length;
+    const centres = bucketed(cover.map(centreOf), ([x, z]) => ({ minX: x, maxX: x, minZ: z, maxZ: z }));
+    const open = eligible.filter(([x, z]) => !centres(x, z, 2).some(([cx, cz]) => Math.hypot(cx - x, cz - z) < 2)).length;
     expect(open / eligible.length).toBeGreaterThanOrEqual(0.4);
-    // Drifts: 5–15 patches of one flower colour, 3–6 m across (plus the patch itself).
+    // Drifts: 5–15 patches of one flower colour, 3–6 m across (plus the patch itself). A doorstep's planted
+    // border is a close row of at least two.
     const drifts = new Map<string, GroundPiece[]>();
     for (const piece of cover.filter(piece => pieceRole(piece.blueprint).form.startsWith('wildflowers-'))) {
       const key = piece.id.split(':').slice(0, -1).join(':'), list = drifts.get(key);
@@ -171,13 +201,58 @@ describe('planGroundDressing', () => {
     }
     expect(drifts.size).toBeGreaterThan(40);
     for (const [key, patches] of drifts) {
-      expect(patches.length, key).toBeGreaterThanOrEqual(5); expect(patches.length, key).toBeLessThanOrEqual(15);
+      const border = key.endsWith(':border');
+      expect(patches.length, key).toBeGreaterThanOrEqual(border ? 2 : 5); expect(patches.length, key).toBeLessThanOrEqual(15);
       expect(new Set(patches.map(p => p.blueprint.id)).size, key).toBe(1);
       const cs = patches.map(centreOf), span = Math.max(...cs.flatMap(a => cs.map(b => Math.hypot(a[0] - b[0], a[1] - b[1]))));
       expect(span, key).toBeLessThanOrEqual(6.5);
     }
     // Forecourt drifts lead to doors in the older quarters too, not only out in the meadow.
     expect([...drifts.keys()].filter(key => key.startsWith('forecourt:')).length).toBeGreaterThan(20);
+  });
+
+  it('tends doorsteps: stones up the gap, a bed beside them, flowers along them, and the arrival home always', () => {
+    const doorsteps = new Map<string, GroundPiece[]>();
+    for (const piece of all(plan).filter(p => p.id.startsWith('doorstep:'))) {
+      const key = piece.id.split(':').slice(0, 3).join(':'), list = doorsteps.get(key);
+      if (list) list.push(piece); else doorsteps.set(key, [piece]);
+    }
+    expect(doorsteps.size).toBeGreaterThanOrEqual(8);
+    const arrival = arrivalHome(land.plan), arrivalFrame = homeFrame(arrival);
+    const touchesArrival = [...doorsteps.keys()].filter(key => {
+      const [, slot, side] = key.split(':').map(Number);
+      if (slot === arrival.slot) return true;
+      const home = land.plan.homes.find(h => h.slot === slot)!, f = homeFrame(home);
+      // The strip toward the arrival home from its neighbour.
+      return Math.abs((arrivalFrame.front[0] - f.front[0]) * f.right[0] * side! + (arrivalFrame.front[2] - f.front[2]) * f.right[2] * side! - 9.5) < 2.5;
+    });
+    expect(touchesArrival.length).toBeGreaterThanOrEqual(1);
+    const cover = all(plan).filter(p => pieceRole(p.blueprint).cover && pieceRole(p.blueprint).form !== 'seedling-bed');
+    const covers = bucketed(cover, p => boxOf(footprintCorners(p.blueprint, p.position, p.yaw)));
+    for (const [key, pieces] of doorsteps) {
+      const forms = pieces.map(p => pieceRole(p.blueprint).form);
+      expect(forms.filter(f => f === 'stepping-stones'), key).toHaveLength(1);
+      expect(forms.filter(f => f === 'seedling-bed'), key).toHaveLength(1);
+      const stones = pieces.find(p => pieceRole(p.blueprint).form === 'stepping-stones')!, bed = pieces.find(p => pieceRole(p.blueprint).form === 'seedling-bed')!;
+      // Neither is a blocker: both lie flush and are walked past.
+      expect(plan.blockers.some(b => b.id === stones.id || b.id === bed.id)).toBe(false);
+      const stoneBox = boxOf(footprintCorners(stones.blueprint, stones.position, stones.yaw, CELL)), bedBox = boxOf(footprintCorners(bed.blueprint, bed.position, bed.yaw, CELL));
+      expect(stoneBox.minX < bedBox.maxX && stoneBox.maxX > bedBox.minX && stoneBox.minZ < bedBox.maxZ && stoneBox.maxZ > bedBox.minZ, key).toBe(false);
+      // No tuft or bloom grows through the bed or the stones, and the turf beside the stones is short clover.
+      for (const target of [stoneBox, bedBox]) {
+        const [x, z] = [(target.minX + target.maxX) / 2, (target.minZ + target.maxZ) / 2];
+        for (const patch of covers(x, z, 4)) {
+          const inner = boxOf(footprintCorners(patch.blueprint, patch.position, patch.yaw, 0.25));
+          expect(inner.minX < target.maxX && inner.maxX > target.minX && inner.minZ < target.maxZ && inner.maxZ > target.minZ, `${patch.id} through ${key}`).toBe(false);
+        }
+      }
+      for (const patch of covers((stoneBox.minX + stoneBox.maxX) / 2, (stoneBox.minZ + stoneBox.maxZ) / 2, 4)) {
+        const [x, z] = centreOf(patch), dx = Math.max(stoneBox.minX - x, 0, x - stoneBox.maxX), dz = Math.max(stoneBox.minZ - z, 0, z - stoneBox.maxZ);
+        if (!patch.id.startsWith('doorstep:') && Math.hypot(dx, dz) < 0.9) expect(pieceRole(patch.blueprint).form, patch.id).not.toBe('meadow-tufts');
+      }
+    }
+    // At least one tended doorstep at the arrival home carries its neighbour's flowers along the stones.
+    expect(touchesArrival.some(key => doorsteps.get(key)!.some(p => pieceRole(p.blueprint).form.startsWith('wildflowers-')))).toBe(true);
   });
 
   it('changes only the grown lot when a home grows deeper', () => {
@@ -191,7 +266,7 @@ describe('planGroundDressing', () => {
     const rect = currentFootprint({ ...home, allowedDepth: home.allowedDepth + 4 });
     for (const piece of all(after).filter(piece => piece.lotSlot === home.slot))
       for (const [x, z] of footprintPoints(piece)) expect(x > rect.minX && x < rect.maxX && z > rect.minZ && z < rect.maxZ).toBe(false);
-  }, 240_000);
+  }, 120_000);
 });
 
 describe('vertex anchor', () => {
@@ -225,7 +300,8 @@ describe('createGroundDressing', () => {
   it('installs only the plan’s own transforms and stays within the draw budget', async () => {
     const { handle, meshes, clay } = await mount();
     const transforms = new Set<string>();
-    const key = (array: ArrayLike<number>, at: number) => Array.from({ length: 16 }, (_, i) => array[at + i]!.toFixed(4)).join(',');
+    // Compared as the float32 the instance buffers hold, so rounding never splits one transform in two.
+    const key = (array: ArrayLike<number>, at: number) => Array.from({ length: 16 }, (_, i) => Math.fround(array[at + i]!).toFixed(4)).join(',');
     for (const piece of all(plan)) for (const level of [1, 2, 4] as const) { const m = pieceMatrix(piece, level).elements; transforms.add(key(m, 0)); }
     let installed = 0;
     for (const mesh of meshes) for (let i = 0; i < mesh.count; i++) { expect(transforms.has(key(mesh.instanceMatrix.array, i * 16))).toBe(true); installed++; }
@@ -266,6 +342,7 @@ describe('createGroundDressing', () => {
   it('casts solids only, releases every shadow and frees only what it owns', async () => {
     const { handle, scene, registerShadow, releases, clay } = await mount();
     const solids = new Map<string, number>();
+    // Flush stones and the bed lie in the turf and cast no sun shadow, like the cover.
     for (const blocker of plan.blockers) solids.set(blocker.blueprint.id, (solids.get(blocker.blueprint.id) ?? 0) + 1);
     expect(registerShadow).toHaveBeenCalledTimes(solids.size);
     for (const [mesh] of registerShadow.mock.calls) expect((mesh as THREE.InstancedMesh).count).toBe(solids.get(mesh.name.replace(':shadow-source', '')));

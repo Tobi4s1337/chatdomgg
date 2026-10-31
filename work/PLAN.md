@@ -353,15 +353,19 @@ gets no street deed or unearned coal. PH08's concrete follow-up remains a crafte
 Fresh validated chat may frame an existing resident too. No invented speech, heartbeat replay or queue. Walking,
 manual selection and Forge take priority. Ordinary window shots fit actual house bounds, doorstep and person.
 
-**Look/checks:** looked at shots/kingdom/live-evening/homecoming-deep-dusk-SIMULATED@1920x1080.png and
-shots/kingdom/live-evening/royal-court-deep-dusk-SIMULATED@1440x900.png: clear lantern, soft plume, bubble/path/window;
-castle silhouette, named high pane, gate fires and standard. These are explicitly SIMULATED fixed-clock stills over
-the actual adopted town with derived pre-commit fixtures, not motion or real-chat acceptance. Review UTF-8 header
-fixes the temporary label's encoding slip. Both captures had no browser errors; all browsers/servers/locks released.
-Typecheck, scoped lint,18 focused tests (12 changed tests rerun serially), web/realm/API builds pass. No full-suite claim.
+**Latest integration:** LD04 merged9c1e086: connected destination walks/reveals, with its two route regressions
+passing after a bounded20s founding-test deadline (shared host exceeded5s). Looked at the lane lake-reveal still:
+route opens onto water, but red trail earth is raw and banks bare. This remains future v2 data, not changed live land.
+GD01's new tended forecourts now compose on actual v1 ground:17 seedling beds and17 flush stepping-stone strips.
+The adopted-cover adapter includes these declared non-solid flush stones; solid garden/woodland models still wait
+for authoritative placement. Typecheck, scoped lint,31 content/adapter tests and web build pass. Looked at
+shots/kingdom/live-evening/forecourt-dusk-SIMULATED@1440x900.png: worn stones, blue flowers and planting between
+homes11/13 beside warm window/lantern; bed seedlings remain too dark (one concrete lane follow-up). No browser
+errors; capture ended, browser/server/lock released. SIMULATED presence and fixed clock, not real-chat acceptance.
+Earlier looked homecoming1920×1080 and royal-court1440×900 stills remain in shots/kingdom/live-evening/.
 
 **One world:** adopted settlement:2:43cffdb6, 240 homes, kingdom129634568. Reviewed market cart/stores stand by
-market:stall:0. LD03 woodland zones are merged; v2 land/planting data is available, but the actual compiler still
+market:stall:0. LD03 woodland zones and LD04 walks are merged; v2 land/planting/routes are available, but the actual compiler still
 consumes adopted v1. A zone map does not plant live trees. Genuine names, starter looks and bounded5Hz walkers
 follow ownership. Seated bodies/names follow actual leases; native targets remain anvil/own door/exit. Glassy pass
 stands; multiple genuinely signed-in walkers and GPU feel await acceptance. Market counter needs its warm practical;
@@ -369,7 +373,10 @@ the castle's broad masonry needs the places lane's detail. Sleeping dragon silho
 
 **Live:** managed preview5190, API5196, realm5197(root env), Forge5195, Herald5194; auto-restart on main/env changes,
 one live writer. Leave services alone. Browser origin http://localhost:5190. Old simulated5191 gone; spare5198 stopped;
-explicit SIMULATED rehearsal5187 separate. Walk /?walk=1&kingdom=129634568&hour=19.5 requires genuine Twitch sign-in;
+explicit SIMULATED rehearsal5187 separate. Reload confirmed: actual5190 serves scene008f059a… at collision revision3,
+with240 door lamps,2 gate braziers and royal standard. Herald connected/healthy, offline, chatSubmitted0; no actual
+line observed. Forge5195 reports Codex CLI configured (configuration only, not a successful judge/run claim).
+Walk /?walk=1&kingdom=129634568&hour=19.5 requires genuine Twitch sign-in;
 read-only /stream?source=realm&kingdom=129634568&hour=19.5 observes the same kingdom. Postgres/KingdomRoom owns
 allocation, presence, geometry, coal reservations and Forge commits; migration0007 applied. Herald→room→Codex CLI
 judges→owned host→public ritual is connected, still unproved on actual chat. No actual chat was supplied in this slice.

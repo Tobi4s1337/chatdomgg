@@ -6,7 +6,7 @@ import { sampleTerrainTriangles } from '../terrain-worker';
 import { planAdoptedCover } from './adopted-cover';
 import { footprintCorners, pieceRole } from './plan';
 
-it('adds only passive flowers and tufts over the adopted hamlet without changing its land or homes', () => {
+it('adds only passive planting and flush stones over the adopted hamlet without changing its land or homes', () => {
   const adopted = generateSettlementPlan({ seed: 'willowmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
   expect(adopted.landform.version).toBe(1);
   const before = JSON.stringify(adopted);
@@ -40,7 +40,7 @@ it('adds only passive flowers and tufts over the adopted hamlet without changing
   expect(forms.some(form => form.startsWith('wildflowers-'))).toBe(true);
   expect(placements.every(piece => {
     const role = pieceRole(piece.blueprint);
-    return role.cover && !role.solid;
+    return (role.cover || role.form === 'stepping-stones') && !role.solid;
   })).toBe(true);
   expect(cover.blockers).toEqual([]);
   expect(cover.collisionPieces).toEqual([]);

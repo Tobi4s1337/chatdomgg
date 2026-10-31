@@ -48,7 +48,8 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => {
       if (message.type() !== 'error') return;
-      const text = message.text() || `console error at ${message.location().url}:${message.location().lineNumber}`;
+      const { url, lineNumber } = message.location();
+      const text = `${message.text() || 'console error'}${url ? ` (${url}:${lineNumber})` : ''}`;
       errors.push(text);
       console.error(text);
     });

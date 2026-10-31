@@ -375,3 +375,18 @@ with channel points; benches, gates, stiles and anything sat on or opened.
 - **2026-10-30 — One authoritative placement plan.** `createGroundDressing` consumes the exact precomputed plan
   already used for blockers; no second RNG pass. Stable IDs and lot tags keep growth/build toggles local and
   host visibility updates synchronize geometry, collision and light rather than merely hiding the mesh.
+- **2026-10-31 — The doorstep's gardening story is flush, so `seedling-bed` joins the cover forms.** The front
+  apron is all forecourt/approach verge, where R3 forbids solids, and the lot gaps are 1–2 m against the 1.5 m
+  solid clearance. A raised bed or crates cannot stand there. A passive bed of turned earth with seedlings, one
+  row unfinished, tells the gardening story within the rules. It is added after `clover-pebbles` in the R1 order
+  (24×3×8, cover band, cover budget). `stepping-stones` is authored now for the same vignette. GD05 places it on
+  routes; it is cut two courses deep and bedded so its lip shows across up to 0.14 m of grade relief (lot gaps
+  carry a foundation step). Both are passive and flush: shown at full detail only, no shadow, never a blocker.
+- **2026-10-31 — Tended doorsteps.** Two fronts on one street with the same facing, one lot and a 0–3.5 m gap
+  apart, share a forecourt strip. The arrival home's strips are always tended, others by age (0.12 + 0.28 × age).
+  A tended strip has stepping stones from the street up the lot gap, the older neighbour's bed beside them and
+  the other neighbour's flower in a close row (two or more patches, square turns) along the other side. The turf
+  beside the stones is clover. A strip that cannot hold both the stones and the bed is planted as a plain
+  forecourt drift, with the reason in `report.omissions`.
+- **2026-10-31 — Public drifts take their colour from the nearest lot, not the current footprint,** so a home's
+  growth never recolours dressing outside its lot.

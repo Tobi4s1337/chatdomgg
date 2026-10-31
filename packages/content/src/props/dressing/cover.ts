@@ -3,7 +3,7 @@ import { MAT } from '../../materials';
 
 type Box = VoxelBlueprint['boxes'][number];
 type Vec = [number, number, number];
-type Cover = { size: Vec; boxes: Box[] };
+export type Cover = { size: Vec; boxes: Box[] };
 export type WildflowerColour = 'petal' | 'blue' | 'gold' | 'cream';
 
 /** The one flower material of each drift. */
@@ -20,11 +20,13 @@ const HEAD = [2, 4] as const;
  *   `f` and `h` are the same with the head's top cell left open: one chipped corner turns a cube into a bloom.
  *   Every head is a 2×2 of these on even X and Z, with a stem and at most one chipped corner, so it holds its
  *   whole LOD-2 cell and nothing else shares it.
- * - `o`, `O`: pebble stone one or two cells tall.
+ * - `o`, `O`: stone one or two cells tall (pebbles, or the kit stone of a path form).
+ * - `e`, `E`: turned earth one or two cells tall. `s`: a seedling leaf on one earth cell. `t`: a seedling heart,
+ *   a leaf and a moss tip on one earth cell. `m`: one cell of moss. `M`: moss on one earth cell.
  *
  * Columns never overhang except a head's `H` cells, so every patch stands on its own ground.
  */
-function plan(rows: readonly string[], size: Vec, flower?: number): Map<string, number> {
+export function plan(rows: readonly string[], size: Vec, flower?: number, stone: number = MAT.stone): Map<string, number> {
   if (rows.length !== size[2] || rows.some(row => row.length !== size[0])) throw new Error(`A plan must be ${size[2]} rows of ${size[0]} marks.`);
   const cells = new Map<string, number>();
   const column = (x: number, z: number, from: number, to: number, material: number) => {
@@ -38,7 +40,14 @@ function plan(rows: readonly string[], size: Vec, flower?: number): Map<string, 
     const leaf = '1234'.indexOf(mark) + 1, lit = 'abcd'.indexOf(mark) + 1;
     if (leaf) return column(x, z, 0, leaf, MAT.leaf);
     if (lit) { column(x, z, 0, lit - 1, MAT.leaf); return column(x, z, lit - 1, lit, MAT.moss); }
-    if (mark === 'o' || mark === 'O') return column(x, z, 0, mark === 'o' ? 1 : 2, MAT.stone);
+    if (mark === 'o' || mark === 'O') return column(x, z, 0, mark === 'o' ? 1 : 2, stone);
+    if (mark === 'e' || mark === 'E') return column(x, z, 0, mark === 'e' ? 1 : 2, MAT.earth);
+    if (mark === 'm') return column(x, z, 0, 1, MAT.moss);
+    if (mark === 'M') { column(x, z, 0, 1, MAT.earth); return column(x, z, 1, 2, MAT.moss); }
+    if (mark === 's' || mark === 't') {
+      column(x, z, 0, 1, MAT.earth); column(x, z, 1, 2, MAT.leaf);
+      return mark === 't' ? column(x, z, 2, 3, MAT.moss) : undefined;
+    }
     if (!'FHfh'.includes(mark)) throw new Error(`Unknown plan mark "${mark}" at ${x},${z}.`);
     if (flower === undefined) throw new Error('This patch has no flower.');
     // A head is named by its even corner; the other three columns must complete it.
@@ -53,7 +62,7 @@ function plan(rows: readonly string[], size: Vec, flower?: number): Map<string, 
 }
 
 /** Cells to boxes: runs along X per course, merged along Z while a run repeats. Each cell is written once. */
-function toBoxes(cells: ReadonlyMap<string, number>, size: Vec): Box[] {
+export function toBoxes(cells: ReadonlyMap<string, number>, size: Vec): Box[] {
   const boxes: Box[] = [];
   for (let y = 0; y < size[1]; y++) {
     let open: Box[] = [];
@@ -163,4 +172,26 @@ const CLOVER = [
 export function cloverPebbles(): Cover {
   const size: Vec = [16, 2, 16];
   return { size, boxes: toBoxes(plan(CLOVER, size), size) };
+}
+
+/**
+ * A front-garden bed being planted: a strip of turned earth with two staggered rows of seedlings, each a small
+ * cross of leaves around a lit heart. The back row is full. The front row stops after three, with one seedling
+ * only just set and the soil from the planting holes still heaped at its end. It lies flush, so it can stand in a
+ * forecourt and is never a seat or a step.
+ */
+const SEEDLINGS = [
+  '........................',
+  '..eseeeseeeseeeseeesee..',
+  '.estsestsestsestsestsee.',
+  '.eeseeeseeeseeeseeeseee.',
+  '.eeeseeeseeeseeeeeeeEee.',
+  '.eestsestsestseeseeEEEe.',
+  '..eeseeeseeeseeeeeeeEe..',
+  '........................',
+];
+
+export function seedlingBed(): Cover {
+  const size: Vec = [24, 3, 8];
+  return { size, boxes: toBoxes(plan(SEEDLINGS, size), size) };
 }
