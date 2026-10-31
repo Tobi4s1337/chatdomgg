@@ -12,6 +12,7 @@ import { createServer } from 'vite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
+import { CAPTURE_PORTS } from '../../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock.mjs';
 
 const PRIMARY = ['anvil-close', 'anvil-square', 'dragon-close', 'dragon-square'];
@@ -100,7 +101,7 @@ async function compareMark(browser, shotPath, shotSize, rect, name) {
 }
 
 async function startServer() {
-  for (let port = 5170; port <= 5199; port++) {
+  for (const port of CAPTURE_PORTS) {
     const server = await createServer({
       root: `${root}apps/web`, configFile: `${root}apps/web/vite.config.ts`, logLevel: 'error', clearScreen: false,
       server: { host: '127.0.0.1', port, strictPort: true, hmr: false },
@@ -116,7 +117,7 @@ async function startServer() {
       if (error?.code !== 'EADDRINUSE' && !/already in use/i.test(String(error?.message))) throw error;
     }
   }
-  throw new Error('No free port in 5170–5199 for the anvil bench.');
+  throw new Error('No safe capture port available.');
 }
 
 let server, browser, release;

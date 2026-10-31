@@ -31,6 +31,28 @@ const commit = (attachment: CommittedForgeAttachment): Extract<ForgeActivity, { 
 afterEach(() => { vi.useRealTimers(); });
 
 describe('entry-owned live Forge handoff', () => {
+  it('ends only the waiting attempt, blocks stale runes and still accepts a later durable commit', () => {
+    const room = observed(), feed = createRealmForgeFeed(), events: string[] = [];
+    const unbind = feed.bind(room.observer);
+    const handlers = { stage: (id: string) => events.push(`stage:${id}`), ended: (id: string) => events.push(`ended:${id}`),
+      committed: (item: CommittedForgeAttachment) => events.push(`commit:${item.id}`) };
+    const off = feed.subscribe(handlers);
+    room.emit({ type: 'stage', activityId: 'first', stage: 'drafting' });
+    room.emit({ type: 'stage', activityId: 'second', stage: 'judging-words' });
+    room.emit({ type: 'ended', activityId: 'first' });
+    room.emit({ type: 'ended', activityId: 'first' });
+    room.emit({ type: 'stage', activityId: 'first', stage: 'judging-piece' });
+    expect(events).toEqual(['stage:first', 'stage:second', 'ended:first']);
+    off();
+    const waiting: string[] = [];
+    const nextOff = feed.subscribe({ ...handlers, stage: id => waiting.push(id) });
+    expect(waiting).toEqual(['second']);
+    // A lost commit reply can cool the waiting animation before its real durable outbox row arrives.
+    const attachment = part('actual-part');
+    room.emit({ type: 'committed', activityId: 'first', attachment });
+    expect(events.at(-1)).toBe('commit:actual-part');
+    feed.settled(attachment.id); nextOff(); unbind(); feed.unavailable();
+  });
   it('keeps observed model waiting and a committed part through an exact-scene remount, then settles once', () => {
     const old = part('old'), fresh = part('fresh'), first = observed([old]), feed = createRealmForgeFeed();
     let unbind = feed.bind(first.observer);

@@ -7,6 +7,7 @@ import { chromium } from '@playwright/test';
 import { build, preview } from 'vite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { assertCapturePort } from '../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
 
 const args = process.argv.slice(2);
@@ -25,7 +26,7 @@ try {
   const path = option('--path') ?? '/src/emotes/index.html';
   if (!base) {
     // Port zero lets the OS pick a free port atomically; parallel lane captures never collide.
-    const port = Number(option('--port') ?? 0);
+    const port = assertCapturePort(Number(option('--port') ?? 0), { allowZero: true, name: '--port' });
     await build({ root: web, configFile: `${web}/vite.config.ts`, logLevel: 'warn', build: { outDir, emptyOutDir: true, rollupOptions: { input: { emotes: `${web}/src/emotes/index.html` } } } });
     server = await preview({ root: web, configFile: `${web}/vite.config.ts`, build: { outDir }, preview: { host: '127.0.0.1', port, strictPort: true } });
     const address = server.httpServer.address();

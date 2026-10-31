@@ -14,10 +14,10 @@ import { createRealmCitizens } from './evening/citizens';
 import { createRealmCastle } from './evening/castle';
 import { attachEveningInteractions } from './evening/interactions';
 import { createServer as createPortReservation } from 'node:net';
+import { realmListenPort } from './listen-port';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
-const port = Number(process.env.REALM_PORT ?? 5191);
 
 try {
   await serve();
@@ -29,7 +29,7 @@ try {
 }
 
 async function serve() {
-  if (!Number.isInteger(port) || port < 5170 || port > 5199) throw new Error('Use a development port in 5170–5199');
+  const port = realmListenPort(process.env);
   // uWS permits SO_REUSEPORT. Two local builds on one port would split entry and sockets between worlds.
   const reservation = createPortReservation();
   await new Promise<void>((resolve, reject) => {
@@ -38,13 +38,13 @@ async function serve() {
   });
   let held = true;
   const release = async () => { if (held) { held = false; await new Promise<void>(resolve => reservation.close(() => resolve())); } };
-  try { await serveOwnedPort(release); } finally { await release(); }
+  try { await serveOwnedPort(release, port); } finally { await release(); }
 }
 
-async function serveOwnedPort(releasePort: () => Promise<void>) {
+async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   if (storage === 'memory') {
     if (!simulated) throw new Error('Memory reference mode requires explicit REALM_SIMULATED=1.');
-    return serveMemoryReference(releasePort);
+    return serveMemoryReference(releasePort, port);
   }
   if (storage !== 'postgres') throw new Error('REALM_STORAGE must be "postgres" or, for the SIMULATED reference only, "memory".');
 
@@ -98,7 +98,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>) {
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);
 }
 
-async function serveMemoryReference(releasePort: () => Promise<void>) {
+async function serveMemoryReference(releasePort: () => Promise<void>, port: number) {
   const services = referenceServices();
   const { server, transport } = createRealmServer(services);
   transport.app.post('/reference/session', response => {

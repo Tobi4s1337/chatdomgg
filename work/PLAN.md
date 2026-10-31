@@ -331,57 +331,58 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 ## 10. Current handoff — 2026-10-31
 
 **Order:** real-chat evening; glassy walk; town with love; hero anvil/dragon; interactions; Twitch spectacle.
-Main carries evening/realm/walk and takes finished lane work promptly. One worker per active world lane, no new
-lanes. Terra handles volume/look/captures, Luna recon, Sol core main would otherwise write. Changed checks and
-chosen stills; full evening at milestones. Tobias supplies the first actual chat line: do not wait for it or fake it.
+Main carries evening/realm/walk and merges finished reviewed work promptly. One worker per active world lane,
+no new lanes. Terra volume/look/captures, Luna recon, Sol core. Changed checks and one chosen look; full evening
+at milestones. Tobias supplies the first real line and the GPU browser when available; never fake that acceptance.
 
-**Dusk pass:** shaded masonry/plaster now receive blue key/fill, with carved edges responding to actual light.
-Window-pool falloff2.6 and castle-field falloff3 keep distant walls cool while retaining warm cores, doorways and
-nearby cobbles. Tiny distant panes retain amber rather than averaging into cream. Actual arrived presence warms
-the door lantern and starts smoke at its real chimney mouths; stale presence clears both. No invented chimney on
-a plain custom roof. Actual public fixtures remain240 door lamps,2 gate braziers and the reviewed royal standard;
-geometry participates in scene hashes/collision revisions, while owned home/keep bytes and Forge fingerprints stay pinned.
+**Homecoming stands:** 2882b2e replaces white columns with five short, soft irregular grey puffs per actual flue,
+wind/curl, early fade and 1.8 m rise. Very faint in the looked still; motion awaits GPU. Real arrived presence also
+warms the actual door lamp. House name stays; the bubble header disappears only while that same tag is visible.
+Cool blue dusk walls and local amber window/lantern pools are accepted. Evidence remains
+shots/kingdom/live-evening/soft-smoke-homecoming-SIMULATED@1920x1080.png. Royal western lancet is visibly amber
+but small: PH08 owns the additive crafted surround/deep sill, preserving owned keep bytes and Forge fingerprint.
+Royal camera keep-local eye[-5,14,65], target[16,14,16], fov64; pane cells[117.5,155,139.04],5×8,south.
+Monarch slot65534 gets no street deed or unearned coal; personal presence works offline, beacon follows stream state.
 
-**Royal picture:** court camera now keep-local metres[-5,14,65], target[16,14,16], fov64. The western upper lancet
-is keep-local build cells[117.5,155,139.04],5×8 cells,south-facing. Whole-compound sightline regression passes;
-the eastern lancet and a further-right camera were roof/gate-occluded and rejected. Name offset is0.45m in the
-royal directed picture, ordinary names remain1.1m. The pane is visibly amber but small; PH08's existing concrete
-follow-up is its crafted worn surround/deep sill as an additive public fixture. Do not change owned keep bytes.
-Gate fires follow fresh observed live state; banners sway independently. Monarch65534 receives no street deed or
-unearned coal. Personal presence can work offline; beacon follows observed stream state independently.
+**One adopted world:** kingdom129634568, settlement:2:43cffdb6,240 homes,collision3,
+scene008f059a38530d09717d045c463440c93c244ea4b614663eac983adb6756bd73. Door lamps, gate braziers/standard and
+market furnishings are in authoritative geometry. GD01 beds/doorstep strips are mounted. LD03 woods/LD04 walks
+are future v2 data; actual v1 remains adopted. Zone data does not plant live trees. No unused finished fauna
+factory exists; wind/water sound already follows the listener. Native interactions: anvil/own door/exit; seats need
+installed place geometry. Glassy controller stands; genuine signed-in multiplayer/GPU feel remains unaccepted.
 
-**Looked evidence:** shots/kingdom/live-evening/cool-homecoming-SIMULATED@1920x1080.png and
-cool-royal-court-SIMULATED@1440x900.png. Exact persisted published scene008f059a…6756bd73 was SHA-verified;
-73 simulated present people, including72 scattered neighbours. No fabricated live presence: actual lights still
-follow actual chat. Home window/lantern/bubble and cooler upper wall read clearly. Royal pane/name visible,
-castle masonry still austere; royal speech bubble not visible. Serial SwiftShader stills, zero browser errors;
-all owned capture sessions ended and locks released. No GPU/motion or real-chat acceptance claimed.
-Typecheck, scoped lint,49 distinct focused render/royal/garden tests and web build pass; final whole-court
-visibility test rerun after camera change. No full-suite/matrix rerun.
+**Latest integration:** PW02 merged98c03c4: mill, wheel, trough/weir, bridge, fingerpost, shore pieces; 82 focused
+content tests, typecheck/lint/web build pass. Looked at the lane bridge dusk still: sculpted arch, bare banks/flat water.
+26adc1a mounts the finished passive reeds/lilies in irregular pockets on the adopted lake's sampled triangular
+shore, clear of plots/roads/installed geometry, using its material registry. No invented mill/bridge sites or physical
+blockers. One meaningful placement test, typecheck/lint/build pass. Looked at
+shots/kingdom/live-evening/adopted-shore-dusk-SIMULATED@1440x900.png: 14 reeds/15 lily rafts, grounded and readable,
+but sparse, dark, stepped banks. PW03/PW05 next: one dense overlapping cove reed bed with an open walk-up edge;
+its complete water-place mount replaces this small adapter, never duplicates it. Screenshot/browser/server/lock
+all finished. TM02 carts/support remain merged; real scene feed/anchor/camera ports and TM03 spectacle remain open.
 
-**Latest integration:** ground-dressing93564a2 now merged/pushed: cutting beds and worn stones by actual market
-stall0, preserving paving/wares/approaches. Looked lane market-dusk still; bank remains dark and planting blocky.
-Earlier17 doorstep seedling beds/17 stepping-stone strips compose on actual v1. Concrete seedling follow-up remains
-visible sage-green leaves over warm turned soil. LD04 destination walks/reveals merged9c1e086, future v2 data only;
-actual v1 land stays adopted. V2 winding-town composition/adoption and finished water/high place producers remain open.
+**Forge waiting ends promptly:** the room now forwards a strict opaque `{type:'ended',activityId}` transient
+when an observed staged attempt finishes without a confirmed commit. No wish/person/verdict/reason enters it.
+The feed clears just that attempt, rejects stale later stages, and still permits a real durable commit after an
+uncertain reply. Confirmed commits and pre-stage denials emit no ending. Spec36 R8 records this small contract.
+35 focused server/client/contract tests pass across scoped runs, plus typecheck, scoped lint and web/realm builds.
+Looked at shots/kingdom/live-evening/forge-rest-SIMULATED@1440x900.png: cold engraved anvil after drafting→ended,
+no phantom attachment/runes, no browser errors; actual published bytes SHA-verified from disk during restart.
+Market backdrop is sparse/dark; this is a waiting-lifecycle fix, not final hero-art or real-chat acceptance.
 
-**One world:** settlement:2:43cffdb6,240 homes,kingdom129634568,collision revision3. Market cart/stores stand by
-market:stall:0. LD03 woodland zones and LD04 walks are data, not planted live woods/routes. Actual native interaction
-targets remain anvil/own door/exit; place seats await installed producer geometry. Glassy controller pass stands;
-genuine multiple walkers/GPU acceptance and sleeping-dragon silhouette remain open. Stream arrival director follows
-one witnessed arrival and its actually warm window; fresh speech can frame a resident. Walking/manual/Forge win.
+**Runtime:** preview5190, API5196, realm5197, Forge5195, Herald5194; browser origin http://localhost:5190.
+Founder clarified the drops were host restarts after merge batches. New host policy: restart a service only for
+its own code/used-package changes; every service restarts on .env changes. This Forge slice changes realm/shared,
+so its restart is expected. Report a drop outside that policy. No env/host configuration edits here. Latest owned
+handle/status is ignored .realm.local/main-session.json; poll that handle and actual /readyz before starting
+anything, never trust an old status label or bind over a listener/held live writer lease. The room was healthy at
+turn start (correct live manifest, Herald pending0/faultnull); the last owned process11461 then exited cleanly.
+Capture selectors share packages/testing/capture-ports.mjs: reserve5187 and5190–5197 even when down, including
+ad-hoc benches; explicit reserved binds fail, OS-selected preview port0 remains. ae82f2e covers this collision.
 
-**Services:** managed preview5190, API5196,realm5197(root env),Forge5195,Herald5194; auto-restart on main/env changes,
-one live writer. Leave services alone. Browser origin http://localhost:5190. During this pass realm5197 stopped
-listening (ECONNREFUSED) and5190 founded endpoint returned502; preview/API/Herald/Forge still returned200.
-Stills therefore used the exact previously published persisted artifact, not a test court or a live endpoint claim.
-No managed process/config changed. Recheck after host service recovery. Last healthy Herald observation was offline,
-no actual line observed. Forge status reports Codex CLI judges configured, not successful real-chat run evidence.
-Walk /?walk=1&kingdom=129634568&hour=19.5 requires genuine Twitch sign-in; read-only
-/stream?source=realm&kingdom=129634568&hour=19.5 observes the same kingdom. Postgres/KingdomRoom owns allocation,
-presence, geometry, coal reservations and Forge commits; migration0007 applied. Herald→room→Codex CLI independent
-judges→owned host→public ritual is connected, still unproved on actual chat. No actual line supplied this slice.
-
-**Next:** healthy live room, actual chat→shared arrival/window/name/bubble, actual wish→judged piece→right home.
-Keep the next core piece moving before that line arrives. GPU browser/full-quality recording comes when Tobias is
-at his machine; until then stills suffice. Complete live evening remains unaccepted; goal active.
+**Next:** check the restored service before any start, then actual chat→shared arrival/window/name/bubble and
+actual wish→independent Codex judges→owned home. Walk /?walk=1&kingdom=129634568&hour=19.5 needs genuine Twitch
+sign-in; public /stream?source=realm&kingdom=129634568&hour=19.5 observes the same authority. Last genuinely
+healthy public stream was looked at in restored-live-stream@1920x1080.png (offline,0present,240homes); actual Codex
+approval exists in private development records, not real-chat room acceptance. No real line/wish or genuine
+multi-browser walk witnessed here. Goal active; GPU recording and full live-evening acceptance remain open.

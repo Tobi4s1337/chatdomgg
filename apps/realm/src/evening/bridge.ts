@@ -31,7 +31,7 @@ interface Pending { readonly command: KingdomForgeCommand; readonly abort: Abort
 
 /**
  * Herald's evening consumer. The registry remains the only owner of a writer; this module takes counted
- * holds, runs the existing coordinator and authority, and sends only transient stage/owner messages.
+ * holds, runs the existing coordinator and authority, and sends only transient activity/owner messages.
  * An approved attachment is published exclusively by the authority's durable transaction/outbox.
  */
 export class RealmEveningBridge {
@@ -75,7 +75,7 @@ export class RealmEveningBridge {
       publish: event => {
         // The committed event has already been persisted and queued by the authority. Re-emitting it
         // here would race the delivery cursor and repeat the reveal after reconnect.
-        if (event.type === 'stage') kingdom.transient({ type: 'forge', event });
+        if (event.type !== 'committed') kingdom.transient({ type: 'forge', event });
       },
     });
     const off = kingdom.onClosed(() => stop());
