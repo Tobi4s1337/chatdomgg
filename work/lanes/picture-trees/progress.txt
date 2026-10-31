@@ -1,0 +1,2 @@
+next: PT10 Seeded sculpting volume and blueprint decomposition landed; tree family, planting adapter, wind, focused tests and stream evidence remain.
+follow-up: PT10 Add focused tests for sculpting and capture the required before/after stream view as the grove is completed.

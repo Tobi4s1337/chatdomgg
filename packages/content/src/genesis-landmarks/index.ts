@@ -9,4 +9,6 @@ export * from './heraldry';
 export * from './parts';
 export * from './harbour-watchtower/tower';
 export * from './river-hall/hall';
+export * from './crown-tower/crown';
+export * from './cathedral-site/site';
 export * from './adapter';

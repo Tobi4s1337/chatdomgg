@@ -1,18 +1,18 @@
 # Lane picture-trees
+Spec (background, its Decisions hold): `work/specs/47-picture-trees.md` · Branch: `lane/picture-trees` · Worktree: `../worktrees/picture-trees` · Scope: `packages/content/src/trees/**`, `apps/web/src/kingdom/trees/**` + this lane's PRD, progress and evidence (`work/lanes/<lane>/**`, `work/evidence/<lane>/**`) · Worker: Opus high
 
-Spec: `work/specs/47-picture-trees.md` · Branch: `lane/picture-trees` · Worktree: `../worktrees/picture-trees` · Scope: `packages/content/src/trees/**`, `apps/web/src/kingdom/trees/**` · Worker: one `gpt-6.1-terra`, high effort.
-
-Read the spec, `packages/content/README.md`, `$voxel-content`, and the art and quality direction first. Work only in scope; coordinate the integration seam with main. You are not alone in the codebase: preserve others' edits. For each task run relevant focused tests, record evidence and a progress line; capture and inspect images as specified. Main owns integration outside scope. Commit each finished task on the lane branch; sub-agents do not run git.
-
-Every visual fix uses a before/after capture of the same view, shown side by side. Preserve the accepted lantern procession, street camera and warm pools.
+## The part
+A handmade kingdom set among living trees. Oak, pine, birch and willow each read at a glance, with a few gnarled old elders;
+they frame the town and the water without taking the picture from the homes and their lights, and a quiet breeze moves the
+crowns while every tree stays rooted. You own it end to end and make the design calls.
+Context: spec 47 (intent and rules, not a checklist); `work/references/living-ground.md` (ez-tree's seeded branch identity
+and anchored motion, adapted to voxel clumps), `work/references/voxel-meshing-light.md`; `packages/content/README.md` and
+`$voxel-content`; `chatdom/Artstyle-Soul-Feel.md`.
+Boundaries: the scope above. The existing tree call, render harness and stream integration are main's; plant on the
+existing sites, never a second forest. Keep the lantern procession, street camera and warm pools as they are.
+Work in checkpoints: if a session ends before the part is done, leave everything building and working, write `next: <id> <what is done, what remains>` and carry on next session. For visual changes, show a before/after of the same view. Hand main exact `needs:` for any seam outside scope and keep going.
 
 ## Tasks
-
-- [ ] **PT01 — Make the first recognisable trees and see them** · Produce an oak and pine with distinct branch and crown silhouettes and a dusk three-angle contact sheet through the production voxel renderer. Inspect it with `view_image` and improve weak forms; report capture path and any harness `needs:` to main.
-- [ ] **PT02 — Complete the tree family** · Add slender birch, waterside willow and a few gnarled elder variants, palette-aware seeded variation and stable IDs. Validate schema, palette, grounding and determinism; render and inspect the complete contact sheet and improve weak forms until they meet the spec.
-- [ ] **PT03 — Prepare existing planting sites and quiet wind** · Implement the private site adapter and canopy metadata described in the spec. Keep identities and transforms stable, roots and trunks fixed, and all crown attachments coherent. Focused tests cover the producer and adapter. Hand the exact exports and any shader/depth requirements to main; do not create a new forest.
-- [ ] **PT04 — Judge the grove in the accepted stream** · Work with main's integration of existing planting, wind, shadows and LOD. Capture and inspect one 1920×1080 stream still, correct lane-owned weak details and inspect again as needed. Run scoped tests, `pnpm typecheck` and `pnpm --filter @chatdom/web build`; report contact sheet, stream still, limitations and integration needs.
+- [ ] **PT10 — The grove, planted and judged in the stream.** The whole tree family with seeded variation and stable ids, the adapter for the existing planting sites with canopy data and quiet wind, the exact exports main needs to swap it in, and a 1920×1080 stream still where the grove makes the town look like a place you'd want to live.
 
 ## Backlog
-
-Ideas found while working go here; do not pick from this list during the lane.
