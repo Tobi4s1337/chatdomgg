@@ -17,7 +17,7 @@ Work in checkpoints: if a session ends before the part is done, leave everything
 ## Tasks
 - [x] **AS01 — Three avatar looks to choose between.** (Done; Tobias chose none. Superseded.)
 - [x] **AS03 — The head, the face and the portrait.**
-- [ ] **AS10 — The whole look and its parts library.** Every hair style, beard and moustache in any colour; caps, beanie, straw hat, pointed hat, glasses, goggles, earrings, flowers, scarves; the short compact body with patterned, layered clothes and dyes; bust portraits on the Twitch-purple gradient. Hard to tell from the reference, beautiful at stream distance at dusk.
+- [x] **AS10 — The whole look and its parts library.** Every hair style, beard and moustache in any colour; caps, beanie, straw hat, pointed hat, glasses, goggles, earrings, flowers, scarves; the short compact body with patterned, layered clothes and dyes; bust portraits on the Twitch-purple gradient. Hard to tell from the reference, beautiful at stream distance at dusk.
 - [ ] **AS11 — The builder, earned items, and the same character everywhere.** The builder at page and panel size with a live turntable and portrait, randomise then tweak, undo, save; Twitch defaults (name colour → favourite dye, sub tenure → tenure garb, a seeded default look); earned items only (tenure ribbons and hood, passport keepsake pins, Forge-made accessories, the cheer cape and raid scarf), locked ones showing how they're earned; a town free of near-duplicates; and the recipe-to-mesh and recipe-to-portrait entry points main needs for kingdom, stream, card and passport.
 
 ## Backlog

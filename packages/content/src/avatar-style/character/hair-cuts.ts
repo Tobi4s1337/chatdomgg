@@ -1,7 +1,7 @@
 import type { Slot, VoxelGrid } from './grid';
 import { FACE_Z } from './head';
 import {
-  FRONT, X0, X1, Y0, Z0, Z1, cellHash, clearUnderChin, deepen, fringe, guardFace, scalp, slab, slabs, type HairStyle,
+  FRONT, X0, X1, Y0, Z0, Z1, cellHash, clearUnderChin, deepen, fringe, guardFace, hairline, scalp, slab, slabs, type HairStyle,
 } from './hair-kit';
 
 /*
@@ -58,6 +58,8 @@ export const HAIR_CUTS: Record<CutId, HairStyle> = {
     fringe(g, [[23, [[part + 1, 4]]], [22, [[0, 4]]], [21, [[2, 4]]]]);
     cells(g, [[4, 22, FRONT], [4, 21, FRONT]]);
     streak(g, [part + 1, 25, -3], [part + 2, 26, 3], 'hairLight');
+    // The short side shows the forehead up to the parting; the swept side steps down to the left temple.
+    hairline(g, [[21], [21], [22], [22, 23], [22, 22], [21, 22], [21, 21], [20, 21]]);
     guardFace(g, 21);
     deepen(g, 'hair', 'hairDeep', .03, 21);
   } },
@@ -191,7 +193,8 @@ export const HAIR_CUTS: Record<CutId, HairStyle> = {
       g.carve([x + (x < 0 ? 0 : 1), end, z], [x + (x < 0 ? 1 : 2), end + 1, z + 2]).carve([x, end, z], [x + 2, end + 1, z + 1]);
       if (i % 3 === 1) g.fill([x, kink + 3, z], [x + 2, kink + 4, z + 2], 'band');
     }
-    // Short locs over the brow, and one falling beside each cheek.
+    // Short locs over the brow, each its own length, the forehead showing between them; one beside each cheek.
+    hairline(g, [[20], [21], [23], [22], [22], [22], [21], [20]]);
     for (const [i, [x0, x1, y0]] of ([[-4, -2, 21], [-1, 1, 22], [2, 4, 21]] as const).entries()) g.fill([x0, y0, FRONT], [x1, 24, FRONT + 1], tone(i));
     g.fill([X0 - 1, 15, FACE_Z - 1], [X0, 23, Z1], 'hairDeep');
     g.fill([X1, 15, FACE_Z - 1], [X1 + 1, 23, Z1], 'hairLight');
@@ -206,7 +209,8 @@ export const HAIR_CUTS: Record<CutId, HairStyle> = {
       // Neat and close, parted in the middle, pulled back behind the ears into two plaits.
       slab(g, 24, [-4, 4], [-4, 4], 1);
       slabs(g, [19, 24], [-5, 5], [-5, 2], 1);
-      fringe(g, [[23, [[-4, -1], [1, 4]]], [22, [[-4, -2], [2, 4]]]]);
+      // Combed down and back from the parting, closer to the brow on the person's right.
+      hairline(g, [[20, 22], [21, 22], [22, 23], [22], [22], [22, 23], [21, 23], [20, 22]]);
       g.paint([-1, 22, FACE_Z], [1, 24, Z1], 'scalp', ['hair']);
       g.carve([-1, 24, 0], [1, 25, 4]);
       g.paint([-1, 23, 0], [1, 24, FACE_Z], 'scalp', ['hair']);
@@ -232,8 +236,8 @@ export const HAIR_CUTS: Record<CutId, HairStyle> = {
       slab(g, 25, [-3, 3], [-3, 2], 1);
       slab(g, 24, [-4, 4], [-4, 4], 2);
       slabs(g, [19, 24], [-5, 5], [-5, 3], 2);
-      // A centre parting, the fringe falling to each side.
-      fringe(g, [[23, [[-4, -1], [1, 4]]], [22, [[-4, -1], [1, 4]]], [21, [[-4, -2], [2, 4]]]]);
+      // A centre parting, the fringe falling to each side in uneven pieces.
+      hairline(g, [[20, 21], [21, 21], [21, 22], [23], [22, 23], [21, 22], [21, 22], [20, 21]]);
       guardFace(g, 21);
       deepen(g, 'hair', 'hairDeep', .07, 29);
     },

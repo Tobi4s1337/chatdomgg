@@ -10,17 +10,18 @@ import { meshCitizen, OCCLUSION_LEVELS } from './mesh';
 import { SKIN_TONES } from './palette';
 import { PORTRAIT, portraitEye } from './portrait';
 import { PORTRAIT_FIXTURES } from './fixtures';
-import { TORSO } from './bust';
+import { ARM, CHEST_Z, LEG, PROUD_Z, TORSO, armX, legX } from './body';
 import {
   BEARD_STYLE_IDS, EARRING_STYLE_IDS, EYE_SHAPES, EYE_SPACINGS, FRECKLES, GLASSES_STYLE_IDS, HAIR_STYLE_IDS, HAT_STYLE_IDS,
-  MOUSTACHE_STYLE_IDS, parseLook, seedLook, type CitizenLook,
+  BOTTOM_STYLE_IDS, DEFAULT_BOTTOM, DEFAULT_SHOES, MOUSTACHE_STYLE_IDS, NECKWEAR_STYLE_IDS, OUTER_STYLE_IDS, PATTERN_IDS, SHOE_STYLE_IDS,
+  TOP_STYLE_IDS, parseLook, seedLook, type CitizenLook,
 } from './recipe';
 
 /** A plain citizen: short black hair, a sky tee, nothing worn. */
 const base: CitizenLook = {
   version: 1, skin: '#b57d4c', eyes: { shape: 'dot', spacing: 'set' }, freckles: 'none', blush: false,
   hair: { style: 'short-crop', colour: '#1c191c' }, beard: null, moustache: null, hat: null, glasses: null, earrings: null, flower: null,
-  top: { style: 'tee', dye: '#43b6ec' },
+  top: { style: 'tee', dye: '#43b6ec', pattern: 'plain', accent: '#1e1d22' }, outer: null, bottom: DEFAULT_BOTTOM, neckwear: null, shoes: DEFAULT_SHOES,
 };
 const variant = (patch: Partial<CitizenLook>): CitizenLook => ({ ...base, ...patch });
 const rest = (id: string): number => {
@@ -84,7 +85,9 @@ describe('the head and face', () => {
     expect(SKULL.z[1]).toBe(AVATAR_SOCKETS.face.offset[2]);
     expect(SKULL.x[1] - SKULL.x[0]).toBe(8);
     const g = buildCitizen(variant({ hair: { style: 'bald', colour: '#000000' }, beard: null }));
-    for (let x = -4; x < 4; x++) for (let y = 16; y < 24; y++) for (let z = -4; z < 4; z++) expect(g.has(x, y, z)).toBe(true);
+    // Bald steps its crown in by a cell like a hair slab; below the top row the skull is a full cube.
+    for (let x = -4; x < 4; x++) for (let y = 16; y < 23; y++) for (let z = -4; z < 4; z++) expect(g.has(x, y, z)).toBe(true);
+    for (let x = -3; x < 3; x++) for (let z = -3; z < 3; z++) expect(g.has(x, 23, z)).toBe(true);
     expect(g.has(-5, 20, 0) || g.has(4, 20, 0) || g.has(0, 24, 0)).toBe(false);
   });
 
@@ -276,9 +279,112 @@ describe('glasses, earrings and the flower', () => {
   });
 });
 
-describe('the bust', () => {
+describe('the body', () => {
   it('has a torso narrower than the head, as in the reference', () => {
     expect(TORSO.x[1] - TORSO.x[0]).toBeLessThan(SKULL.x[1] - SKULL.x[0]);
+  });
+
+  it('is 24 cells tall with the head a third of it, on the frozen rig’s joints', () => {
+    const g = buildCitizen(base), { min, max } = g.bounds();
+    expect(min[1]).toBe(0);
+    expect(SKULL.y[0]).toBe(rest('head'));
+    expect((SKULL.y[1] - SKULL.y[0]) / SKULL.y[1]).toBeCloseTo(1 / 3, 5);
+    expect(max[1]).toBeLessThanOrEqual(SKULL.y[1] + 2);
+    // Legs hang under the thigh joints, feet on the ground, hips at the pelvis.
+    for (const side of [-1, 1] as const) {
+      const thigh = AVATAR_RIG.find(b => b.id === (side < 0 ? 'thighLeft' : 'thighRight'))!.offset[0];
+      expect(legX(side) + 1).toBe(thigh);
+      expect(g.has(legX(side), 0, 0)).toBe(true);
+      expect(g.has(armX(side), ARM.y[0], 0)).toBe(true);
+    }
+    expect(LEG.y[1]).toBeLessThanOrEqual(rest('pelvis'));
+    // A gap between the legs and either side of the torso, so a walking stride reads.
+    expect(g.has(0, 3, 0)).toBe(false);
+    expect(g.has(-1, 3, 0)).toBe(false);
+  });
+});
+
+describe('the wardrobe', () => {
+  const dress = (patch: Partial<CitizenLook>) => variant(patch);
+  const garment = <S extends string>(style: S, dye = '#d3202a', pattern: (typeof PATTERN_IDS)[number] = 'plain', accent = '#1e1d22') =>
+    ({ style, dye: dye as `#${string}`, pattern, accent: accent as `#${string}` });
+
+  it('reads a look saved before the wardrobe existed as a plain top, trousers and shoes', () => {
+    const older = { ...base, top: { style: 'tee', dye: '#43b6ec' } } as Record<string, unknown>;
+    for (const key of ['outer', 'bottom', 'neckwear', 'shoes']) delete older[key];
+    const look = parseLook(older);
+    expect(look.top).toEqual({ style: 'tee', dye: '#43b6ec', pattern: 'plain', accent: '#1e1d22' });
+    expect(look.outer).toBeNull();
+    expect(look.neckwear).toBeNull();
+    expect(look.bottom).toEqual(DEFAULT_BOTTOM);
+    expect(look.shoes).toEqual(DEFAULT_SHOES);
+    expect(() => parseLook({ ...base, top: { ...base.top, pattern: 'paisley' } })).toThrow(/pattern/);
+    expect(() => parseLook({ ...base, top: { ...base.top, sleeves: 'long' } })).toThrow(/Unknown top field sleeves/);
+    expect(() => parseLook({ ...base, outer: { style: 'cape', dye: '#ffffff' } })).toThrow(/outer layer/);
+    expect(() => parseLook({ ...base, shoes: { style: 'boots', dye: '#ffffff', laces: 1 } })).toThrow(/Unknown shoes field/);
+  });
+
+  it('dresses every combination within the look limits, and nothing it wears reaches the head', () => {
+    for (const top of TOP_STYLE_IDS) for (const outer of [null, ...OUTER_STYLE_IDS]) for (const bottom of BOTTOM_STYLE_IDS) {
+      for (const neckwear of [null, ...NECKWEAR_STYLE_IDS]) {
+        const look = dress({
+          top: garment(top, '#f3f1ee', 'plaid'), outer: outer && garment(outer, '#2d5fd8', 'dots', '#f6d23c'), bottom: garment(bottom, '#3a3a40', 'stripes'),
+          neckwear: neckwear && { style: neckwear, dye: '#d3202a', accent: '#f6d23c' }, shoes: { style: 'boots', dye: '#5e3a22' },
+        });
+        const g = buildCitizen(look), label = `${top}/${outer}/${bottom}/${neckwear}`;
+        expect(meshCitizen(g, slotColours(look)).faces * 2, label).toBeLessThan(AVATAR_LOOK_LIMITS.maxTriangles);
+        for (const [[, y], slot] of g.entries()) if (/^(top|outer|bottom|neck|shoe|sole|button)/.test(slot)) expect(y, `${label} ${slot}`).toBeLessThan(SKULL.y[0]);
+      }
+    }
+  }, 30000);
+
+  it('wears an outer layer open: proud front panels, and the top showing down the middle', () => {
+    for (const outer of OUTER_STYLE_IDS) {
+      const g = buildCitizen(dress({ top: garment('tee', '#f3f1ee'), outer: garment(outer, '#d3202a') }));
+      for (const x of [-1, 0]) expect(g.get(x, 11, CHEST_Z), outer).toBe('top');
+      for (const x of [TORSO.x[0], TORSO.x[1] - 1]) expect(g.get(x, 11, PROUD_Z), outer).toBe('outer');
+      expect(g.get(TORSO.x[0], 11, TORSO.z[0]), outer).toBe('outer');
+      // A vest leaves the tee's sleeves; the others cover them.
+      expect(g.get(armX(-1), 13, 0), outer).toBe(outer === 'vest' ? 'top' : 'outer');
+    }
+  });
+
+  it('paints patterns on the garment’s own cells only', () => {
+    const count = (look: CitizenLook, slot: string) => [...buildCitizen(look).entries()].filter(([, s]) => s === slot).length;
+    expect(count(dress({ top: garment('tee', '#f3f1ee', 'plain') }), 'topAccent')).toBe(0);
+    expect(count(dress({ top: garment('tee', '#f3f1ee', 'stripes') }), 'topAccent')).toBeGreaterThan(20);
+    const plaid = dress({ top: garment('shirt', '#d3202a', 'plaid') });
+    expect(count(plaid, 'topAccent')).toBeGreaterThan(8);
+    expect(count(plaid, 'topMix')).toBeGreaterThan(count(plaid, 'topAccent'));
+    expect(count(dress({ top: garment('tee', '#f3f1ee', 'print') }), 'topAccent')).toBe(4);
+    // A patterned top under a plain jacket: the jacket stays plain.
+    expect(count(dress({ top: garment('tee', '#f3f1ee', 'stripes'), outer: garment('jacket', '#2d5fd8') }), 'outerAccent')).toBe(0);
+  });
+
+  it('gives every bottom and shoe its own shape', () => {
+    const shapes = new Set<string>();
+    for (const bottom of BOTTOM_STYLE_IDS) for (const shoes of SHOE_STYLE_IDS) {
+      const g = buildCitizen(dress({ bottom: garment(bottom, '#2f4f86'), shoes: { style: shoes, dye: '#5e3a22' } }));
+      shapes.add([...g.entries()].filter(([[, y]]) => y < SKULL.y[0]).map(([c, s]) => `${c.join(',')}:${s}`).join('|'));
+    }
+    expect(shapes.size).toBe(BOTTOM_STYLE_IDS.length * SHOE_STYLE_IDS.length);
+    // Shorts and skirts show the legs; trousers cover them to the shoe.
+    expect(buildCitizen(dress({ bottom: garment('shorts', '#2f4f86') })).get(legX(-1), 3, 0)).toBe('skin');
+    expect(buildCitizen(dress({ bottom: garment('trousers', '#2f4f86') })).get(legX(-1), 3, 0)).toBe('bottom');
+  });
+
+  it('seeds outfits with layers, patterns and every piece somewhere in a town, layers apart from what they cover', () => {
+    const looks = Array.from({ length: 400 }, (_, i) => seedLook(`viewer-${i}`));
+    for (const style of TOP_STYLE_IDS) expect(looks.some(l => l.top.style === style), style).toBe(true);
+    for (const style of OUTER_STYLE_IDS) expect(looks.some(l => l.outer?.style === style), style).toBe(true);
+    for (const style of BOTTOM_STYLE_IDS) expect(looks.some(l => l.bottom.style === style), style).toBe(true);
+    for (const style of NECKWEAR_STYLE_IDS) expect(looks.some(l => l.neckwear?.style === style), style).toBe(true);
+    for (const style of SHOE_STYLE_IDS) expect(looks.some(l => l.shoes.style === style), style).toBe(true);
+    for (const pattern of PATTERN_IDS) expect(looks.some(l => l.top.pattern === pattern || l.outer?.pattern === pattern), pattern).toBe(true);
+    const layered = looks.filter(l => l.outer).length / looks.length;
+    expect(layered).toBeGreaterThan(.2);
+    expect(layered).toBeLessThan(.45);
+    for (const l of looks) if (l.outer) expect(l.outer.dye).not.toBe(l.top.dye);
   });
 });
 

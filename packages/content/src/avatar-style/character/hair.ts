@@ -1,7 +1,7 @@
 import { VoxelGrid } from './grid';
 import { FACE_Z } from './head';
 import {
-  FRONT, HAIR_SLOTS, X0, X1, Y0, Z1, cellHash, clearUnderChin, deepen, fringe, guardFace, locks, scalp, slab, slabs, type HairStyle,
+  FRONT, HAIR_SLOTS, TOP, X0, X1, Y0, Z0, Z1, cellHash, clearUnderChin, deepen, fringe, guardFace, hairline, locks, scalp, slab, slabs, type HairStyle,
 } from './hair-kit';
 import { HAIR_CUTS } from './hair-cuts';
 import type { BeardStyleId, HairStyleId, MoustacheStyleId } from './recipe';
@@ -49,9 +49,10 @@ const CLASSIC: Record<ClassicId, HairStyle> = {
     slabs(g, [18, 21], [-6, 6], [-6, 4], 1);
     slabs(g, [15, 18], [-7, 7], [-6, 3], 2);
     slab(g, 14, [-7, 7], [-5, 2], 3);
-    // A parting at the crown, a fringe that falls in clumps.
+    // A parting at the crown; the fringe falls in clumps, low over the person's right brow, curling up off
+    // the forehead on the left and back down at the temple.
     g.carve([0, 25, 1], [1, 27, 4]);
-    fringe(g, [[21, [[-4, -2], [1, 2]]]]);
+    hairline(g, [[20, 21], [21, 21], [21, 21], [21, 22], [22, 22], [23, 23], [22, 22], [20, 21]]);
     guardFace(g, 21);
     clearUnderChin(g);
     locks(g, 23, 3);
@@ -81,8 +82,8 @@ const CLASSIC: Record<ClassicId, HairStyle> = {
     slab(g, 24, [-4, 4], [-4, 4], 2);
     slabs(g, [21, 24], [-5, 5], [-5, 4], 2);
     slabs(g, [19, 21], [-5, 5], [-5, 3], 2);
-    // A centre parting, the fringe swept to each side.
-    fringe(g, [[23, [[-4, -1], [0, 4]]], [22, [[-4, -1], [1, 4]]], [21, [[-4, -2], [2, 4]]]]);
+    // Parted on the person's right, the fringe swept over to the left and falling lower there.
+    hairline(g, [[20, 21], [22, 22], [TOP], [23, 23], [22, 22], [21, 22], [21, 21], [20, 21]]);
     guardFace(g, 21);
     deepen(g, 'hair', 'hairDeep', .08, 6);
     },
@@ -103,8 +104,8 @@ const CLASSIC: Record<ClassicId, HairStyle> = {
     slab(g, 25, [-3, 3], [-3, 2], 1);
     slab(g, 24, [-4, 4], [-5, 4], 2);
     slabs(g, [20, 24], [-5, 5], [-5, 3], 2);
-    // Swept fringe, longer on the person's right.
-    fringe(g, [[23, [[-4, 4]]], [22, [[-4, 2]]], [21, [[-4, -1]]]]);
+    // Swept fringe, longer on the person's right, pulled back off the forehead on the left.
+    hairline(g, [[20, 21], [21, 21], [21, 21], [21, 22], [22, 22], [22, 23], [23], [21]]);
     guardFace(g, 21);
     deepen(g, 'hair', 'hairDeep', .06, 7);
     },
@@ -134,12 +135,13 @@ const CLASSIC: Record<ClassicId, HairStyle> = {
   bob: { draw(g) {
     scalp(g, { front: 21, side: Y0, back: Y0 });
     slab(g, 25, [-3, 3], [-4, 3], 1);
-    slab(g, 24, [-5, 5], [-5, 5], 2);
+    // The crown steps back from the fringe, so the front is a fringe and not a wall.
+    slab(g, 24, [-5, 5], [-5, 4], 2);
     slabs(g, [21, 24], [-5, 5], [-5, 5], 1);
     slabs(g, [16, 21], [-5, 5], [-5, 5], 1);
+    // A blunt fringe, but cut by hand: a step up over the person's left brow, one longer piece.
+    hairline(g, [[20, 21], [21, 21], [21, 21], [21, 22], [22, 22], [22, 22], [22, 23], [20, 21]]);
     guardFace(g, 21);
-    // A blunt fringe with one cell out of line.
-    g.delete(1, 21, FRONT);
     deepen(g, 'hair', 'hairDeep', .05, 8);
   } },
 
@@ -152,8 +154,9 @@ const CLASSIC: Record<ClassicId, HairStyle> = {
     slabs(g, [10, 21], [-5, 5], [-5, 4], 1);
     // Waves: the outside swings one cell out every other pair of rows.
     for (const y of [10, 11, 14, 15, 18, 19]) slab(g, y, [-6, 6], [-6, 3], 2);
-    // A centre parting with curtains to each side.
-    g.carve([-1, 22, FRONT], [1, 26, FRONT + 1]).carve([0, 25, -1], [1, 26, 4]);
+    // A parting just off centre, the curtains falling away from it: longer on the person's right.
+    g.carve([0, 25, -1], [1, 26, 4]);
+    hairline(g, [[20, 21], [21, 21], [21, 22], [22, 23], [TOP], [23, 23], [22, 22], [20, 21]]);
     guardFace(g, 21);
     fringe(g, [[21, [[-4, -3], [3, 4]]], [20, [[-4, -3], [3, 4]]]], FACE_Z);
     clearUnderChin(g);
@@ -167,7 +170,19 @@ export const HAIR_STYLES: Record<Exclude<HairStyleId, 'bald'>, HairStyle> = { ..
 
 /** The head of hair. Tied parts are drawn separately (`drawTiedHair`), after any hat. */
 export function drawHair(g: VoxelGrid, style: HairStyleId): void {
-  if (style !== 'bald') HAIR_STYLES[style].draw(g);
+  if (style === 'bald') drawBald(g);
+  else HAIR_STYLES[style].draw(g);
+}
+
+/**
+ * Bald keeps the skull but steps its top edge in by a cell all round, the way every style's slabs step, so the
+ * crown reads as a dome and not a box lid. The face keeps its square (only its two top corners go), the head
+ * keeps its 8-cell footprint, and a hat still sits over the whole of it.
+ */
+function drawBald(g: VoxelGrid): void {
+  for (let x = X0; x < X1; x++) for (let z = Z0; z < Z1; z++) {
+    if (x === X0 || x === X1 - 1 || z === Z0) g.delete(x, TOP - 1, z);
+  }
 }
 
 /**
