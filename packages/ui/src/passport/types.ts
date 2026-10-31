@@ -40,6 +40,9 @@ export interface KeepsakeView { readonly id: string; readonly name: string; read
 export interface PageView<T> { readonly items: readonly T[]; readonly nextCursor: string | null }
 
 export type PassportCollection = 'stamps' | 'kingdoms' | 'bonds' | 'keepsakes';
+/** The record type each collection pages through. */
+export type PassportItemView<K extends PassportCollection> =
+  K extends 'stamps' ? StampView : K extends 'kingdoms' ? VisitView : K extends 'bonds' ? BondView : KeepsakeView;
 
 export interface VisiblePassportView {
   readonly version: 1;

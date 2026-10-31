@@ -23,6 +23,11 @@ export interface PassportBookProps {
   readonly initialView?: number;
   /** Ask the owner for the next page of one collection. Without it, the leaf says the history continues elsewhere. */
   readonly onMore?: (collection: PassportCollection) => void;
+  /**
+   * Kingdom names the surface already shows publicly beside the book, such as the card's disclosed homes. They let a
+   * raid's road name where it began; the book's own records still name every kingdom they carry.
+   */
+  readonly places?: ReadonlyMap<string, string>;
   readonly class?: string;
 }
 
@@ -86,7 +91,7 @@ export function PassportBook(props: PassportBookProps): JSX.Element {
   };
 
   const names = createMemo(() => {
-    const known = new Map<string, string>();
+    const known = new Map<string, string>(props.places ?? []);
     const s = shelf();
     for (const stamp of s.stamps.items) known.set(stamp.kingdom.kingdomId, stamp.kingdom.name);
     for (const visit of s.kingdoms.items) known.set(visit.kingdom.kingdomId, visit.kingdom.name);
@@ -145,19 +150,24 @@ function TurnGlyph(props: { dir: 'next' | 'prev' }): JSX.Element {
   </svg>;
 }
 
+/** The blind-tooled compass rose with a dashed road across it, pressed into every cover. */
+export function CoverEmblem(): JSX.Element {
+  return <svg class="pp-cover-emblem" viewBox="0 0 120 120" aria-hidden="true">
+    <circle cx="60" cy="60" r="50" fill="none" stroke-width="2.2" />
+    <circle cx="60" cy="60" r="43" fill="none" stroke-width="1" stroke-dasharray="2 3.4" />
+    <path d="M60 14v92M14 60h92" stroke-width="1" />
+    <path d="M60 22l7 31 31 7-31 7-7 31-7-31-31-7 31-7Z" stroke-width="1.6" />
+    <path d="M60 37l3 20 20 3-20 3-3 20-3-20-20-3 20-3Z" stroke-width="1" />
+    <path d="M30 96c10-12 22-6 30-18s20-8 30-22" fill="none" stroke-width="1.6" stroke-dasharray="5 3.4" />
+  </svg>;
+}
+
 /** The closed book: blind-tooled leather, the word PASSPORT in worn gilt, the holder's name tooled beneath. */
 function Cover(props: { book: VisiblePassportView; simulated: boolean; onOpen: () => void }): JSX.Element {
   return <div class="pp-cover-wrap">
     <button type="button" class="pp-cover" onClick={() => props.onOpen()} aria-label={`Open the passport of ${props.book.holder.name}`}>
       <span class="pp-cover-tooling" aria-hidden="true" />
-      <svg class="pp-cover-emblem" viewBox="0 0 120 120" aria-hidden="true">
-        <circle cx="60" cy="60" r="50" fill="none" stroke-width="2.2" />
-        <circle cx="60" cy="60" r="43" fill="none" stroke-width="1" stroke-dasharray="2 3.4" />
-        <path d="M60 14v92M14 60h92" stroke-width="1" />
-        <path d="M60 22l7 31 31 7-31 7-7 31-7-31-31-7 31-7Z" stroke-width="1.6" />
-        <path d="M60 37l3 20 20 3-20 3-3 20-3-20-20-3 20-3Z" stroke-width="1" />
-        <path d="M30 96c10-12 22-6 30-18s20-8 30-22" fill="none" stroke-width="1.6" stroke-dasharray="5 3.4" />
-      </svg>
+      <CoverEmblem />
       <span class="pp-cover-title">Passport</span>
       <span class="pp-cover-rule" aria-hidden="true" />
       <span class="pp-cover-name" dir="auto">{props.book.holder.name}</span>
@@ -251,7 +261,7 @@ function StampEntry(props: { stamp: StampView; names: ReadonlyMap<string, string
       </p>
       <p class="pp-entry-date"><time datetime={isoDay(props.stamp.at)}>{longDate(props.stamp.at)}</time></p>
       {/* The road is named only when this book already knows where it began. */}
-      <Show when={from()}>{name => <p class="pp-entry-road">By the road from <span dir="auto">{name()}</span></p>}</Show>
+      <Show when={from()}>{name => <p class="pp-entry-road"><RoadGlyph />By the road from <span dir="auto">{name()}</span></p>}</Show>
       <Show when={props.stamp.gifts.length > 0}>
         <ul class="pp-gifts">
           <For each={props.stamp.gifts}>{gift => <li class="pp-gift" data-direction={gift.direction}>
@@ -261,6 +271,15 @@ function StampEntry(props: { stamp: StampView; names: ReadonlyMap<string, string
       </Show>
     </div>
   </li>;
+}
+
+/** A few inked dashes from a dot to the stamp: the road, drawn the way it is on the Atlas. */
+function RoadGlyph(): JSX.Element {
+  return <svg class="pp-road-glyph" viewBox="0 0 30 12" aria-hidden="true">
+    <circle cx="3" cy="8" r="2" />
+    <path d="M6.5 7.6c4-3.4 8-3.8 11.5-2.2 2.4 1.1 4.4 1.2 6.4-.4" stroke-dasharray="2.4 2" />
+    <path d="M22.6 2.6l3.4 2.1-3.1 2.4" />
+  </svg>;
 }
 
 function SectionHead(props: { title: string; note: string }): JSX.Element {

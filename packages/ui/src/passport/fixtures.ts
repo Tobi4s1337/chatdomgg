@@ -169,16 +169,17 @@ export function simulatedPassport(name: PassportFixtureName): VisiblePassportVie
 }
 
 /**
- * The next page of one collection after `cursor`, as the same revision of the same SIMULATED book. Unknown cursors
- * return null: a fixture never invents a page it does not have.
+ * The next page of one collection after `cursor`, as the same revision of the same SIMULATED book. Cursors it never
+ * issued (malformed, out of range, or in range but off a page boundary) return null: a fixture never invents a page.
  */
 export function simulatedPassportPage<K extends PassportCollection>(name: PassportFixtureName, collection: K, cursor: string): PageView<CollectionItem<K>> | null {
   const book = fixture(name);
-  const match = /^sim:([a-z]+):(\d+)$/.exec(cursor);
+  const match = /^sim:([a-z]+):([1-9]\d*)$/.exec(cursor);
   if (!match || match[1] !== collection) return null;
   const start = Number(match[2]);
   const all = book.all[collection] as readonly CollectionItem<K>[];
-  if (!Number.isSafeInteger(start) || start <= 0 || start >= all.length) return null;
+  // Only cursors the fixture issued: a page boundary inside the collection, never an arbitrary in-range offset.
+  if (!Number.isSafeInteger(start) || start <= 0 || start >= all.length || start % book.pageSize[collection] !== 0) return null;
   const items = all.slice(start, start + book.pageSize[collection]);
   const end = start + items.length;
   return { items, nextCursor: end < all.length ? `sim:${collection}:${end}` : null };

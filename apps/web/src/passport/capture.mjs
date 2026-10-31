@@ -28,6 +28,11 @@ const SHOTS = [
   ['many-journeys', { fixture: 'many', view: '5', layout: 'spread' }, [1440, 900]],
   ['many-cover', { fixture: 'many', view: '0', layout: 'spread' }, [1440, 900]],
   ['many-page', { fixture: 'many', view: '3', layout: 'page' }, [390, 844]],
+  // The closed states: travels kept private, the read still out, and a reply the boundary refused.
+  ['private', { fixture: 'few', state: 'hidden', layout: 'spread' }, [1440, 900]],
+  ['opening', { fixture: 'few', state: 'pending', layout: 'spread' }, [1440, 900]],
+  ['unreadable', { fixture: 'few', state: 'malformed', layout: 'spread' }, [1440, 900]],
+  ['private-page', { fixture: 'many', state: 'unsigned', layout: 'page' }, [390, 844]],
 ];
 
 let server, browser, release;
@@ -58,7 +63,7 @@ try {
   /** Smallest rendered font size among visible text inside the book, and any horizontal overflow. */
   const audit = page => page.evaluate(() => {
     let smallest = Infinity, where = '';
-    const walker = document.createTreeWalker(document.querySelector('.pp-book'), NodeFilter.SHOW_TEXT);
+    const walker = document.createTreeWalker(document.querySelector('.pp-book') ?? document.body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const element = node.parentElement;
       if (!node.textContent.trim() || !element || element.closest('svg')) continue;
@@ -139,6 +144,48 @@ try {
     if (!moreVisible || kingdomsAt === kingdomsLater) throw new Error(`Older pages did not extend the book: ${JSON.stringify(report.checks.olderPages)}`);
     await page.close();
   }
+
+  // Privacy: a hidden or never-signed-in book shows nothing of its holder or travels, in text or accessibility names.
+  for (const state of ['hidden', 'unsigned']) {
+    const page = await open({ fixture: 'few', state, layout: 'spread' }, [1440, 900]);
+    const exposed = await page.evaluate(() => {
+      const book = document.querySelector('.pp-book');
+      const words = [book?.textContent ?? '', ...[...(book?.querySelectorAll('[aria-label]') ?? [])].map(node => node.getAttribute('aria-label')), book?.getAttribute('aria-label') ?? ''].join(' ');
+      return ['Pellam', 'Rook', 'Hollowmere', 'Copperleaf', 'Brindlewick', 'Maple Wren', 'raid', 'Journeys'].filter(word => words.includes(word));
+    });
+    report.checks[`private-${state}`] = { exposed };
+    if (exposed.length) throw new Error(`A ${state} passport exposed: ${exposed.join(', ')}`);
+    await page.close();
+  }
+  // A corrupt reply is unavailable with a way to try again, never an empty book.
+  {
+    const page = await open({ fixture: 'few', state: 'malformed', layout: 'spread' }, [1440, 900]);
+    const seen = await page.evaluate(() => ({ state: document.querySelector('.ppb-reading')?.dataset.state, retry: !!document.querySelector('.pp-retry'), flyleaf: !!document.querySelector('.pp-flyleaf') }));
+    report.checks.unreadable = seen;
+    if (seen.state !== 'unavailable' || !seen.retry || seen.flyleaf) throw new Error(`Corrupt reply was not unavailable: ${JSON.stringify(seen)}`);
+    await page.close();
+  }
+  // A journey lands while reading: turning to older journeys reopens the book on the new snapshot, then turns.
+  {
+    const page = await open({ fixture: 'many', state: 'revised', view: '1', layout: 'spread' }, [1440, 900]);
+    const before = await page.evaluate(() => document.querySelectorAll('.pp-entry').length);
+    await page.click('.pp-tab:has-text("Kingdoms")');
+    if (!(await page.locator('.pp-more-action').count())) await page.click('.pp-turn[data-dir="prev"]');
+    await page.click('.pp-more-action:has-text("older journeys")');
+    await page.waitForFunction(() => !document.querySelector('.pp-more-note[role="status"]'), {}, { timeout: 10_000 });
+    const failed = await page.locator('.pp-more-note:has-text("could not be read")').count();
+    await page.click('.pp-tab:has-text("Journeys")');
+    const fresh = await page.evaluate(() => [...document.querySelectorAll('.pp-entry-name')].slice(0, 2).map(node => node.textContent));
+    report.checks.revised = { before, failed, fresh };
+    if (failed || fresh[0] !== 'Copperleaf') throw new Error(`Revised reading did not reopen on the new journey: ${JSON.stringify(report.checks.revised)}`);
+    await page.close();
+  }
+
+  // The closed states and the few-journeys spread with its roads, at half size.
+  const states = `${output}/states@1440x900.png`;
+  await run('ffmpeg', ['-y', '-loglevel', 'error', ...['private', 'opening', 'unreadable', 'few'].flatMap(name => ['-i', `${output}/${name}@1440x900.png`]),
+    '-filter_complex', '[0]scale=720:450[a];[1]scale=720:450[b];[2]scale=720:450[c];[3]scale=720:450[d];[a][b]hstack[top];[c][d]hstack[bottom];[top][bottom]vstack', states]);
+  report.shots.push({ path: states.slice(root.length) });
 
   // Contact sheet: none, few and many open, with the many cover, each scaled to half size.
   const sheet = `${output}/contact@1440x900.png`;

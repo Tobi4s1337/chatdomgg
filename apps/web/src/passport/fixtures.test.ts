@@ -55,6 +55,11 @@ describe('the three SIMULATED books', () => {
     expect(simulatedPassportPage('many', 'stamps', 'sim:stamps:9999')).toBeNull();
     expect(simulatedPassportPage('many', 'stamps', 'live:stamps:50')).toBeNull();
     expect(simulatedPassportPage('none', 'stamps', 'sim:stamps:0')).toBeNull();
+    // In range, but never issued: issued cursors sit on page boundaries only.
+    expect(simulatedPassportPage('many', 'stamps', 'sim:stamps:7')).toBeNull();
+    expect(simulatedPassportPage('many', 'bonds', 'sim:bonds:9')).toBeNull();
+    expect(simulatedPassportPage('many', 'stamps', 'sim:stamps:050')).toBeNull();
+    expect(simulatedPassportPage('many', 'stamps', 'sim:stamps:50')).not.toBeNull();
   });
 
   it('draw roads that end at the stamped kingdom and leave leaders unknown when the fixture has none', () => {

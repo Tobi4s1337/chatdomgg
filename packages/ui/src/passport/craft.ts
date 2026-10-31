@@ -11,6 +11,10 @@ export {
   type BookLayout, type BookView, type Leaf, type Loaded, type PageDensity, type PassportPage, type PassportShelf, type SectionId, type SectionTab,
 } from './pages';
 export {
+  continuesBook, createPassportSession,
+  type PassportPageReplyView, type PassportReadState, type PassportReplyView, type PassportRequestView, type PassportSession, type PassportTransport,
+} from './session';
+export {
   FIXTURE_AS_OF, FIXTURE_KINGDOMS, PASSPORT_FIXTURE_NAMES, PASSPORT_FIXTURE_TITLES, simulatedPassport, simulatedPassportPage, simulatedRevision,
   type PassportFixtureName,
 } from './fixtures';
