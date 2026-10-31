@@ -13,7 +13,7 @@ import {
   FRIEND, cartLoad, destinationOf, extendGiftBeat, giftSeal, planGiftBeat, recipientLine, type GiftBeat, type GiftDestination, type GiftSeal, type GiftTier,
 } from './gift-beat';
 import {
-  dragonCaption, dragonCues, dragonFocusWindow, dragonFrame, nextBattle, nextTrain, stirCues, stirFrame, trainCaption, trainCues, trainFrame,
+  dragonCaption, dragonCues, dragonFocusWindow, dragonFrame, nextBattle, nextTrain, stirCues, stirFrame, stirWindow, trainCaption, trainCues, trainFrame,
   type BattleState, type TrainState,
 } from './hype-beat';
 import { describeAction } from './previews';
@@ -527,6 +527,16 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
           cut: presentation.mood === 'show', wide: true, follow: null, toward: [] };
       }
     }
+    // A short train's ending: the closing fireworks over the castle and, in the hills behind it, the sleeping dragon
+    // stirring. One shot from the town side holds both.
+    const stir = train ? stirWindow(train) : null;
+    if (!focus && train && stir && !presentation.busy) {
+      const from = train.endedAt! + TRAIN_BEAT.closing.fireworks[0], until = Math.max(from + skyLength('festival', 'castle-volley'), stir[1]);
+      if (atMs >= from && atMs < until) {
+        focus = { id: `closing.${train.trainKey}`, subject: { kind: 'place', place: 'castle' }, startAt: from, endAt: until,
+          cut: presentation.mood === 'show', wide: true, follow: null, toward: [] };
+      }
+    }
     for (const beat of live) {
       if (atMs < beat.startAt) continue;
       const t = atMs - beat.startAt;
@@ -536,8 +546,10 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
         // A bubble's dressing is small: it never takes the camera. A balloon is framed as it rises, then drifts on its own.
         const until = beat.sky === 'balloon' ? beat.startAt + 6000 : beat.endAt;
         if (!focus && beat.sky !== 'bubble' && atMs < until && !presentation.busy) {
+          // A spark and a street's fireworks rise from the cheerer's own home: the shot is that home and its sky.
           const intimate = beat.sky === 'cheer' && beat.rung === 'spark' && beat.origin.kind === 'home';
-          const subject: MomentSubject = intimate && beat.origin.kind === 'home' ? { kind: 'home', slot: beat.origin.slot }
+          const fromHome = beat.sky === 'cheer' && (beat.rung === 'spark' || beat.rung === 'street-fireworks') && beat.origin.kind === 'home';
+          const subject: MomentSubject = fromHome && beat.origin.kind === 'home' ? { kind: 'home', slot: beat.origin.slot }
             : { kind: 'place', place: beat.sky === 'balloon' ? 'plaza' : beat.sky === 'confetti' ? 'castle' : 'sky' };
           focus = { id: beat.id, subject, startAt: beat.startAt, endAt: until, cut: presentation.mood === 'show', wide: !intimate, follow: null,
             toward: beat.origin.kind === 'home' ? [{ kind: 'home', slot: beat.origin.slot }] : [] };

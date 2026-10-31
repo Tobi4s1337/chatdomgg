@@ -37,6 +37,8 @@ export interface MomentStage {
   setGlow(glow: SkyGlow): void;
   setPresence(frame: KingdomPresenceFrame): void;
   setPose(pose: CameraPose): void;
+  /** The director's occlusion check: null when the eye stands in or against a solid, or a solid hides the subject. */
+  validatePose(pose: CameraPose): CameraPose | null;
   readonly pose: CameraPose;
   render(atMs: number): void;
   stats(): { drawCalls: number; triangles: number; lightingReady: boolean };
@@ -82,6 +84,34 @@ function bannerMount(house: WindowHouse): HomeAnchor | null {
 const yawed = (house: WindowHouse, x: number, z: number) => new THREE.Vector3(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw);
 const toWorld = (house: WindowHouse, cell: Vec3) => new THREE.Vector3(...cell).multiplyScalar(VOXEL_METRES.build).applyAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw)
   .add(new THREE.Vector3(...house.position));
+
+/** A placed blueprint's footprint as the director sees it: the box it occupies, in metres, about its yawed origin. */
+interface Solid { readonly origin: THREE.Vector3; readonly yaw: number; readonly size: THREE.Vector3; readonly reach: number }
+const solidOf = (position: Vec3, yaw: number, cells: readonly number[]): Solid => {
+  const size = new THREE.Vector3(cells[0]!, cells[1]!, cells[2]!).multiplyScalar(VOXEL_METRES.build);
+  return { origin: new THREE.Vector3(...position), yaw, size, reach: size.length() };
+};
+const local = new THREE.Vector3();
+function within(solid: Solid, point: THREE.Vector3, pad: number): boolean {
+  if (point.distanceTo(solid.origin) > solid.reach + pad) return false;
+  local.copy(point).sub(solid.origin).applyAxisAngle(new THREE.Vector3(0, 1, 0), -solid.yaw);
+  return local.x > -pad && local.x < solid.size.x + pad && local.y > -pad && local.y < solid.size.y + pad && local.z > -pad && local.z < solid.size.z + pad;
+}
+
+/**
+ * Whether a shot can stand where it is and see what it aims at: the eye clear of the ground and of every house,
+ * castle module and tree by a body's width, and the line to the subject unbroken by any of them.
+ */
+function sightline(layout: SettlementPlan, solids: readonly Solid[], pose: CameraPose): CameraPose | null {
+  const eye = new THREE.Vector3(...pose.eye), target = new THREE.Vector3(...pose.target);
+  if (eye.y < terrainHeight(layout, eye.x, eye.z) + 1.5 || solids.some(s => within(s, eye, 2.5))) return null;
+  const length = eye.distanceTo(target), step = new THREE.Vector3().subVectors(target, eye).normalize(), at = new THREE.Vector3();
+  for (let d = 0.75; d < length - 3; d += 0.75) {
+    at.copy(eye).addScaledVector(step, d);
+    if (at.y < terrainHeight(layout, at.x, at.z) || solids.some(s => within(s, at, 0))) return null;
+  }
+  return pose;
+}
 
 /** The doorstep in front of the authored entrance (or the façade's middle), on the lot's floor. */
 function doorOf(house: WindowHouse): DoorAnchor {
@@ -220,7 +250,8 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
     ground.setShoreLevel(layout.lake.level, [layout.lake.x - layout.lake.radiusX * 1.3, layout.lake.x + layout.lake.radiusX * 1.3, layout.lake.z - layout.lake.radiusZ * 1.3, layout.lake.z + layout.lake.radiusZ * 1.3]);
     const pool = own(new VoxelWorkerPool({ size: Math.min(4, Math.max(2, (navigator.hardwareConcurrency || 4) - 1)), maxQueue: 192 }));
     const { houses, props } = placeSettlementContent(layout.homes, (x, z) => terrainHeight(layout, x, z));
-    props.push(...placeMarketContent(layout.market));
+    const stalls = placeMarketContent(layout.market);
+    props.push(...stalls);
     const { buildings: castle, beaconPosition } = createCastleContent(layout.castle);
     const content = [...houses, ...castle, ...props];
     const windows = own(createWindowLights(scene, houses));
@@ -287,6 +318,8 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
     if (options.signal.aborted) throw new DOMException('The bench closed while loading', 'AbortError');
 
     const anchors = new Map<number, HomeAnchor | null>();
+    const solids = [...houses, ...castle, ...stalls].map(b => solidOf(b.position, b.yaw, b.blueprint.size))
+      .concat(trees.flatMap((tree, i) => treePlaces[i]!.map(p => solidOf(p.position, p.yaw, tree.size))));
     const route = giftRouteOf(layout);
     const places = placesOf(layout, houses, castle, beaconPosition, track);
     let glow: SkyGlow = { colour: [0, 0, 0], strength: 0 };
@@ -326,6 +359,7 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
       setGlow(next) { glow = next; },
       setPresence(frame) { windows.setFrame(frame); windows.update(1, options.hour); lastField = -Infinity; },
       setPose(next) { pose = next; },
+      validatePose: next => sightline(layout, solids, next),
       get pose() { return pose; },
       render(atMs) {
         const base = getEnvironment(options.hour);

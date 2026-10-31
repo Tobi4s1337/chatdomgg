@@ -37,7 +37,7 @@ continue independent presentation work. Never choose from Backlog without main i
   Do not allocate a home, grant an entitlement or create a giver counter. Frame the actual supplied home and
   demonstrate cloth/parcel anticipation/action/settle at desktop/phone and stream distance. R2–R4, R11–R12.
 
-- [ ] **TM03 — Cheers fill the sky and the earned train brings its dragon** · evidence: ladder/train/battle shots.
+- [x] **TM03 — Cheers fill the sky and the earned train brings its dragon** · evidence: ladder/train/battle shots.
   Implement the real Bits/Hype normalizers and read recovery plus every cheer threshold and mapped Power-up using approved-effect lookup with exact revision/origin;
   author train/carriages/bunting and all supplied dragon forms, telegraphs, retreat/victory presentation. Add
   world strike/haul/fireworks-chant command adapters on the authoritative port; the Wyrm Bell shares the same

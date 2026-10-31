@@ -309,7 +309,7 @@ export function createProceduralMomentSound(options: ProceduralSoundOptions): Mo
     lfo(context, nodes, 'sine', 19, 0.22, mix.gain, t, end);
     throat.connect(mix);
     chain(noiseAt(context, nodes, t, end, 3.3), filterNode(context, 'bandpass', 900, 0.6), gainNode(context, 0.7), mix);
-    const grit = shaper(context, 1.6), voice = gainNode(context);
+    const grit = shaper(context, 1.6), voice = gainNode(context, 1);
     mix.connect(grit);
     for (const [points, q, level] of [
       [[[0, 620], [0.5, 760], [1.8, 420]], 5, 1.4], [[[0, 1050], [0.5, 1220], [1.8, 760]], 7, 0.8], [[[0, 2450], [1.8, 2300]], 9, 0.3],

@@ -92,7 +92,7 @@ if (sheetOnly) {
       reached = offset;
       await page.waitForTimeout(400);
       const path = framePath(scenario, beat, [width, height]);
-      await page.screenshot({ path });
+      await page.screenshot({ path, timeout: 180_000 });
       row.push(path);
     }
     const stats = await page.evaluate(() => window.__chatdomMoments.view());

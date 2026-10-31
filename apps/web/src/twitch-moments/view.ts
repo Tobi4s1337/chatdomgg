@@ -84,6 +84,11 @@ export interface ScreenCaption {
 }
 
 const DIRECTOR_PRIORITY = 20;
+const UP = new THREE.Vector3(0, 1, 0);
+/** Most parts the view asks the host to mesh at once while preparing. */
+const PREPARE_IN_FLIGHT = 24;
+/** Farthest apart (m) two eyes may be for the director to glide between them rather than cut. */
+const GLIDE_LIMIT = 30;
 const EASE_IN_MS = 1500, EASE_OUT_MS = 1700, CANCEL_MS = 700, FOLLOW_MS = 1400;
 const MOUNT = BANNER_CELLS.mount;
 const local = (x: number, y: number, z: number) => new THREE.Vector3((x - MOUNT[0]) * CELL, (y - MOUNT[1]) * CELL, (z - MOUNT[2]) * CELL);
@@ -167,7 +172,12 @@ export function createTwitchMomentView(host: MomentViewHost) {
       parts.push(p.head, p.roll, p.rollLapsed, ...p.rows, ...p.shimmer.flat());
       if (p.swag) parts.push(p.swag, p.swagLapsed!);
     }
-    await Promise.all(parts.map(geometry));
+    // The host's voxel pipeline is a bounded queue shared with the town: feed it a few parts at a time, never all
+    // several hundred at once.
+    const unique = [...new Map(parts.map(part => [part.id, part])).values()];
+    let next = 0;
+    const lane = async () => { while (next < unique.length && !disposed) await geometry(unique[next++]!); };
+    await Promise.all(Array.from({ length: Math.min(PREPARE_IN_FLIGHT, unique.length) }, lane));
   }
 
   function build(slot: number, tier: BannerTier, anchor: HomeAnchor): HomeBanner {
@@ -363,6 +373,16 @@ export function createTwitchMomentView(host: MomentViewHost) {
     return checked(eye, target, portrait ? 60 : 48);
   }
 
+  /** The first candidate the host accepts: a shot never stands inside a wall or looks through one. */
+  const first = (candidates: Iterable<readonly [THREE.Vector3, THREE.Vector3, number]>) => {
+    for (const [eye, target, fov] of candidates) { const pose = checked(eye, target, fov); if (pose) return pose; }
+    return null;
+  };
+
+  /** Candidate turns (radians) about a subject, nearest the viewer's own side first. */
+  const TURNS = [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 2, -2, Math.PI];
+  const turned = (direction: THREE.Vector3, turn: number) => direction.clone().applyAxisAngle(UP, turn);
+
   /** Horizontal unit direction from a point toward where the viewer already stands, so cuts read as steps, not jumps. */
   const sideOf = (point: THREE.Vector3, prior: CameraPose) => {
     const d = new THREE.Vector3(...prior.eye).sub(point).setY(0);
@@ -381,50 +401,118 @@ export function createTwitchMomentView(host: MomentViewHost) {
       case 'sky': {
         if (!sky) return null;
         const centre = new THREE.Vector3(...sky.centre), side = sideOf(centre, prior);
-        const eye = centre.clone().addScaledVector(side, sky.radius * (portrait ? 0.95 : 0.8)).add(new THREE.Vector3(0, portrait ? 6 : 5, 0));
         const target = centre.clone().add(new THREE.Vector3(0, sky.ceiling * 0.52, 0));
-        return checked(eye, target, portrait ? 68 : 56);
+        return first(function* () {
+          for (const reach of [portrait ? 0.95 : 0.8, 0.62, 1.1]) for (const turn of TURNS) {
+            const eye = centre.clone().addScaledVector(turned(side, turn), sky.radius * reach).add(new THREE.Vector3(0, portrait ? 6 : 5, 0));
+            yield [eye, target, portrait ? 68 : 56] as const;
+          }
+        }());
       }
       case 'castle': {
         const castle = places.castle();
         if (!castle) return sky ? spectacleShot('sky', prior) : null;
         const crown = new THREE.Vector3(...castle.crown), side = sideOf(crown, prior);
         const target = crown.clone().add(new THREE.Vector3(0, 7, 0));
-        const eye = crown.clone().addScaledVector(side, portrait ? 40 : 34).add(new THREE.Vector3(0, -2, 0));
-        return checked(eye, target, portrait ? 66 : 54);
+        return first(function* () {
+          for (const reach of [portrait ? 40 : 34, 46]) for (const turn of TURNS) {
+            yield [crown.clone().addScaledVector(turned(side, turn), reach).add(new THREE.Vector3(0, -2, 0)), target, portrait ? 66 : 54] as const;
+          }
+        }());
       }
       case 'plaza': {
         const plaza = places.plaza();
         if (!plaza) return null;
-        const point = new THREE.Vector3(...plaza), side = sideOf(point, prior);
-        const eye = point.clone().addScaledVector(side, portrait ? 22 : 18).add(new THREE.Vector3(0, 3.5, 0));
-        return checked(eye, point.clone().add(new THREE.Vector3(0, 9, 0)), portrait ? 64 : 52);
+        // The plaza's float rides 15 m and more over the stalls: stand back across the square and look up at it.
+        const point = new THREE.Vector3(...plaza), side = sideOf(point, prior), target = point.clone().add(new THREE.Vector3(0, portrait ? 22 : 20, 0));
+        return first(function* () {
+          for (const reach of [portrait ? 36 : 32, 40, 26]) for (const turn of TURNS) {
+            yield [point.clone().addScaledVector(turned(side, turn), reach).add(new THREE.Vector3(0, 4, 0)), target, portrait ? 68 : 58] as const;
+          }
+        }());
       }
       case 'train': {
         const at = trainLayer.focus();
         if (!sky || !at) return null;
-        // From a raised spot inside the loop, on the viewer's side, turning to follow the train round the town.
-        const centre = new THREE.Vector3(...sky.centre), side = sideOf(centre, prior);
-        const eye = centre.clone().addScaledVector(side, sky.radius * 0.35).add(new THREE.Vector3(0, portrait ? 12 : 10, 0));
-        return checked(eye, at.clone().add(new THREE.Vector3(0, 1.2, 0)), portrait ? 62 : 48);
+        // From trackside, outside the loop, the town behind the train: the shot rides along with it.
+        const out = at.clone().sub(new THREE.Vector3(...sky.centre)).setY(0).normalize(), target = at.clone().add(new THREE.Vector3(0, 1.4, 0));
+        return first(function* () {
+          for (const reach of [portrait ? 20 : 16, 24, 12]) for (const turn of [0, 0.35, -0.35, 0.7, -0.7]) {
+            yield [at.clone().addScaledVector(turned(out, turn), reach).add(new THREE.Vector3(0, portrait ? 8 : 6.5, 0)), target, portrait ? 62 : 50] as const;
+          }
+        }());
       }
       case 'dragon':
       case 'lair': {
         const lair = places.lair(), at = place === 'dragon' ? dragon.focus() : null;
         if (!lair || !sky) return null;
-        // Low on the town's far side from the hills, so the dragon is seen over the roofs as it comes.
-        const centre = new THREE.Vector3(...sky.centre), out = new THREE.Vector3(...lair.position).sub(centre).setY(0).normalize();
-        const eye = centre.clone().addScaledVector(out, -sky.radius * 0.55).add(new THREE.Vector3(0, portrait ? 7 : 6, 0));
-        const target = at ?? new THREE.Vector3(...lair.position).add(new THREE.Vector3(0, 6, 0));
-        return checked(eye, target, portrait ? 66 : 54);
+        const centre = new THREE.Vector3(...sky.centre), den = new THREE.Vector3(...lair.position);
+        const out = den.clone().sub(centre).setY(0).normalize(), target = at ?? den.clone().add(new THREE.Vector3(0, 5, 0));
+        const fov = portrait ? 66 : 54;
+        // At its lair the dragon is watched from the slope between the castle and the hills; aloft, from the far
+        // side of the town, seen over the roofs as it comes.
+        const near = function* () {
+          for (const reach of [42, 54, 32]) for (const rise of [10, 16]) for (const turn of [0, 0.4, -0.4, 0.8, -0.8]) {
+            yield [den.clone().addScaledVector(turned(out, turn), -reach).add(new THREE.Vector3(0, rise, 0)), target, fov] as const;
+          }
+        };
+        const far = function* () {
+          for (const reach of [0.55, 0.4, 0.75]) for (const rise of [portrait ? 7 : 6, 14]) for (const turn of TURNS.slice(0, 5)) {
+            yield [centre.clone().addScaledVector(turned(out, turn), -sky.radius * reach).add(new THREE.Vector3(0, rise, 0)), target, fov] as const;
+          }
+        };
+        const aloft = at !== null && at.y - den.y > 18;
+        return first(function* () { yield* aloft ? far() : near(); yield* aloft ? near() : far(); }());
       }
       default: return null;
     }
   }
 
+  /**
+   * A cheer rising from a home: the roof and the sky over it, seen from the town's side of the home, so the
+   * shells climb out of the cheerer's own street and burst in frame.
+   */
+  function homeSkyShot(slot: number, prior: CameraPose): CameraPose | null {
+    const { width, height } = host.viewport(), portrait = height > width;
+    const roof = places.roof(slot), anchor = host.homeAnchor(slot), at = roof ?? anchor?.mount, sky = places.sky();
+    if (!at) return null;
+    const point = new THREE.Vector3(...at), target = point.clone().add(new THREE.Vector3(0, portrait ? 6 : 4, 0));
+    // From the town's side of the home, so its own street is in the picture; otherwise from where the viewer stands.
+    const inward = sky ? new THREE.Vector3(...sky.centre).sub(point).setY(0) : null;
+    const side = inward && inward.lengthSq() > 1 ? inward.normalize() : sideOf(point, prior);
+    for (const reach of [portrait ? 38 : 36, 44, 28]) for (const turn of TURNS) {
+      const eye = point.clone().addScaledVector(turned(side, turn), reach).add(new THREE.Vector3(0, 3, 0));
+      // The home itself must be in sight, not only the sky over it.
+      if (!checked(eye, point, portrait ? 70 : 66)) continue;
+      const pose = checked(eye, target, portrait ? 70 : 66);
+      if (pose) return pose;
+    }
+    return null;
+  }
+
+
+  /**
+   * A moving subject's shot this frame. The train's shot rides along beside it; the dragon's keeps its eye and
+   * turns to follow. Something passing in front for a moment is how the street sees it too, so only the eye is
+   * held to the host's check here; the aim follows regardless.
+   */
+  function trackedShot(place: MomentPlace, held: CameraPose, prior: CameraPose): CameraPose | null {
+    if (place === 'train') return spectacleShot('train', prior);
+    const at = dragon.focus();
+    if (!at) return null;
+    // While it can be seen from where the shot stands, only the aim turns; once a wall or a hill hides it, the
+    // shot finds a new place to watch from (a cut), and only with none left does the aim follow it blind.
+    const seen = checked(new THREE.Vector3(...held.eye), at, held.fov);
+    if (seen) return seen;
+    const moved = spectacleShot('dragon', prior);
+    if (moved) return moved;
+    const pose = CameraPoseSchema.safeParse({ eye: held.eye, target: at.toArray(), fov: held.fov });
+    return pose.success ? pose.data : null;
+  }
+
   const MOVING = new Set<string>(['train', 'dragon']);
-  const shotFor = (subject: MomentSubject, prior: CameraPose, toward: readonly MomentSubject[] = []) =>
-    subject.kind === 'home' ? homeShot(subject.slot)
+  const shotFor = (subject: MomentSubject, prior: CameraPose, toward: readonly MomentSubject[] = [], skyward = false) =>
+    subject.kind === 'home' ? (skyward ? homeSkyShot(subject.slot, prior) : homeShot(subject.slot))
       : subject.place === 'market' || subject.place === 'gate' ? placeShot(subject.place, prior, toward) : spectacleShot(subject.place, prior);
 
   /** World point a caption hangs above. */
@@ -474,7 +562,9 @@ export function createTwitchMomentView(host: MomentViewHost) {
     }
     if (!director && focus && host.camera && atMs < focus.endAt) {
       const abort = new AbortController(), lease = host.camera.acquire('twitch-moments', DIRECTOR_PRIORITY, abort.signal);
-      const prior = lease?.read(), shot = lease && prior ? shotFor(focus.subject, prior, focus.follow ? [focus.follow.subject] : focus.toward) : null;
+      const subject = focus.subject, skyward = subject.kind === 'home'
+        && frame.sky.some(beat => beat.kind === 'cheer' && beat.origin.kind === 'home' && beat.origin.slot === subject.slot);
+      const prior = lease?.read(), shot = lease && prior ? shotFor(subject, prior, focus.follow ? [focus.follow.subject] : focus.toward, skyward) : null;
       // No legal shot of a supplied subject: hand the camera straight back rather than guess one.
       if (lease && prior && shot) director = { focus, lease, prior, shot, abort, leaving: null, from: null };
       else if (lease) { lease.release(); abort.abort(); }
@@ -483,24 +573,26 @@ export function createTwitchMomentView(host: MomentViewHost) {
     const { focus: f, lease, prior } = director;
     // A moving subject keeps its eye and turns to follow; a subject that leaves every legal pose keeps the last one.
     if (f.subject.kind === 'place' && MOVING.has(f.subject.place) && director.leaving === null) {
-      const tracked = spectacleShot(f.subject.place, prior);
-      if (tracked) director.shot = { ...tracked, eye: director.shot.eye };
+      const tracked = trackedShot(f.subject.place, director.shot, prior);
+      if (tracked) director.shot = tracked;
     }
     // Following a parcel home: the shot glides from the gathering to the doorstep it is bound for.
     if (f.follow && atMs >= f.follow.at && director.second === undefined) director.second = shotFor(f.follow.subject, director.shot);
     const followed = f.follow && director.second ? director.second : null;
     const shot = followed ? mix(director.shot, followed, (atMs - f.follow!.at) / FOLLOW_MS) : director.shot;
+    // A shot across the town is a cut, in and back: a glide between far-apart eyes would fly through roofs and hills.
+    const far = (a: CameraPose, b: CameraPose) => Math.hypot(a.eye[0] - b.eye[0], a.eye[1] - b.eye[1], a.eye[2] - b.eye[2]) > GLIDE_LIMIT;
     let next: CameraPose;
     if (director.leaving !== null) {
       const t = (atMs - director.leaving) / CANCEL_MS;
-      if (t >= 1) { release(); return; }
+      if (t >= 1 || far(director.from!, prior)) { release(); return; }
       next = mix(director.from!, prior, t);
     } else if (atMs >= f.endAt) {
       const t = (atMs - f.endAt) / EASE_OUT_MS;
-      if (t >= 1) { release(); return; }
+      if (t >= 1 || far(shot, prior)) { release(); return; }
       next = mix(shot, prior, t);
     } else {
-      next = mix(prior, shot, (atMs - f.startAt) / EASE_IN_MS);
+      next = far(prior, shot) ? shot : mix(prior, shot, (atMs - f.startAt) / EASE_IN_MS);
     }
     if (!lease.write(next)) { director.abort.abort(); director = null; }
   }
