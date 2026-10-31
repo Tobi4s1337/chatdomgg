@@ -446,3 +446,105 @@ part of acceptance, not permission to replace them or defer the gate's full trav
 - **2026-10-31 — Current handoff: one witnessed raid journey.** Deliver streamer-led gate, consent, witnessed departure, Atlas road and entry/return as one comprehensible stream journey. Existing RG01 is a simulated standalone foundation, not a connected real gate. Preserve the accepted feature-local work; main owns authentication, durable infrastructure, Twitch/room transports and host bindings and must approve any missing shared or local seam. Do not claim a Twitch write, arrival or passport from a fixture, timer or HTTP success. The destination welcomes the party and includes the existing visitor-gift policy, transactional idempotence and honest receipt; use existing approved ports and report missing authority seams without inventing a contract.
 
 - **2026-10-31 — Current handoff verification and ownership.** For each visual change inspect one stream-first 1920×1080 capture; use typecheck and affected tests for the step. This supersedes the older per-task capture matrix for this handoff. The lane implements feature-local durable adapters and runtime behavior against existing ports; main owns shared contracts and cross-surface authority and integration bindings. Report only actual missing authority or contract seams.
+
+- **2026-10-31 — RG07: the monarch can close an unstarted gate.** `{op:'cancel'}` on a `prepared` request is the
+  monarch's close: refused for anyone but the verified broadcaster before any policy call, allowed even when the
+  raid grant is missing or withdrawn (closing sends nothing to Twitch), recorded as `cancelled` with the new
+  `endReason: 'closed'` (or `expired` if the window had already run out), and it clears the gate pointer in the same
+  transaction. Every walker's choice ends with it; repeating the close answers with the settled action. A request
+  Twitch already holds (`dispatching | pending | unknown`) answers `unavailable` until RG08's Twitch cancel and
+  reconcile exist; it is never forgotten locally.
+- **2026-10-31 — RG07: endings are told, not stored.** A walker who chose to march learns why: the monarch closed
+  the gate, the call ran out, or the monarch picked another destination (their choice ended; join again). The
+  browser derives this farewell from consecutive authority views (no new server fact or contract field) and shows
+  it for five minutes. The monarch sees only their own close; their lapse keeps its own phase.
+- **2026-10-31 — RG07: durable adapters against the realm schema.** The gate URL is `/api/raid-gate/<kingdomId>`:
+  the kingdom rides in the path because the stream refuses extra query keys, and the role is derived on the
+  server (monarch by Twitch identity, citizen by a non-void deed, otherwise guest). The session principal reads
+  realm-auth's own session row by handle hash; records live in three realm tables (migration text in
+  `apps/api/src/raid-gate/realm-migration.sql` for main to register as `0009`). The live policy takes every
+  main-owned fact (live channels, raid grant, write consent, Atlas classification/permission) as a required port;
+  there is no fallback that pretends a grant exists.
+- **2026-10-31 — RG08: Twitch writes go through a durable outbox.** Start and cancel each have one outbox record
+  (`<requestId>/start`, `<requestId>/cancel`), written in the same transaction as the decision; its ID is the idempotency
+  key handed to `AuthorizedRaidTransport`. `queued` is provably unsent, so recovery may send it (a start only while its
+  preview window is open, otherwise it ends `cancelled/expired` with nothing sent). `claimed` may have reached Twitch:
+  it is handed over at most once (the reader refuses `attempts > 1`) and afterwards only `reconcile`d, which never
+  writes. The write and its answer use a server-owned signal and `deps.clock`, so a dropped HTTP request cannot abort
+  them. A claimed write nobody can explain after six hours stops being asked about; only a witnessed raid can settle it.
+- **2026-10-31 — RG08: what each state means to the party.** `pending` is Twitch's countdown (shown from Twitch's own
+  `createdAt`), never a departure. Past countdown plus 60 s grace without a witnessed raid, viewers are told `unknown`
+  ("checking whether the raid began") at once and recovery writes it down. Unresolved, the party may wait 15 minutes,
+  then the gate goes quiet without claiming anything; the action stays `unknown` on record. A confirmed Twitch cancel
+  is `cancelled` with the new `endReason: 'withdrawn'`; a cancel Twitch had nothing for turns the request `unknown`,
+  because the raid may already have left. One cancel per request. People may join while Twitch holds the raid and may
+  always leave, also after departure (RG09's travel reserves only those still marching). Landed, called-off and refused
+  stay the gate's news for five minutes; the monarch may preview anew over them.
+- **2026-10-31 — RG08: landing rule.** `ingestRaid` lands a request only when every one holds: a live gate's raid is
+  `source: 'herald'` with observed evidence (a simulated gate takes only `simulation`); main's ingress correlated it to
+  the request (`actionRequestId`) and it carries an upstream event ID; the pair matches; the request is one Twitch holds
+  or may hold, and its start was actually handed over; the raid's event time is no earlier than the press (−10 s skew)
+  and no later than Twitch's countdown allows (+10 s, or +60 s for a receipt-time-only source). Replays, legacy feeds,
+  stale same-pair raids and raids after a confirmed cancel are ignored with a reason. A repeat of the same event (or
+  raid ID) is `duplicate`; a different event for a landed request is `conflict`.
+- **2026-10-31 — RG08: the road reaches the Atlas from the server, the caravan from the browser.** Landing queues a
+  `<requestId>/road` outbox record handing the exact `AtlasRaid` to `AtlasRoadIngress.observe` (idempotent by raid ID
+  at the Atlas ledger, so it is retried every 30 s until it resolves). The browser's `AtlasGateHost.follow(raid)` only
+  attaches the viewer's map to that raid's public caravan, once per raid. `OpenGateView` gains `countdownEndsAt`
+  (pending only) and `raid` (landed only); both are checked by the strict reader. Records written before RG08 read
+  their new start fields as null.
+- **2026-10-31 — RG09: one walking location, fenced.** The realm coordinator keeps three records: `TravelRecord` per
+  ticket, an immutable `ArrivalRecord` per committed ticket (`arrival.<ticket>`, so a reconciled commit can never mint a
+  second), and one `WhereaboutsRecord` per person holding the authoritative kingdom, the membership `generation`, the
+  one outstanding journey (`active`) and a `fence` set in the same transaction that marks the ticket `committing`. While
+  fenced nothing else moves that person and the commit is never handed over again; only `reconcile` settles it. The
+  whereabouts move to the destination at `generation + 1` and the retained source is released only after the
+  destination's acknowledgment. A person with no record stands where the request's kingdom says, at generation 0.
+- **2026-10-31 — RG09: who may travel.** A raid journey asks the gate application's `createRaidMarchCheck` (landed,
+  this raid ID, this person joined, within five minutes of the departure) before reserving and again before committing,
+  so someone who chose to stay home since reserving is turned back, not moved. A raid to waiting land reserves nothing
+  (`unavailable`): no room is ever manufactured. A return must name the arrival that put the person where they stand
+  and goes back to that arrival's source, even after the source's retention lapsed; it cannot be used twice. A full
+  destination answers `full` from a read-only admission check before any ticket exists, so waiting is simply asking
+  again. Prepare and commit need the reserving session; another session finding a pre-commit ticket cancels it (a
+  disconnect before commit releases the hold).
+- **2026-10-31 — RG09: answers that may be lost.** Every room operation is idempotent by ticket. A reserve whose answer
+  was lost is retried; a commit whose answer was lost is `unknown` and only reconciled. A commit handed over less than
+  20 s ago is not reconciled (its own answer may still come); after that `committing` is told as `unknown`. The room
+  transport must refuse a later commit once `reconcile` answered `held` or `released`, so that answer stays true. A late
+  answer for a ticket that already ended is ignored and its hold released. Recovery lapses expired holds, reconciles
+  uncertain commits and retries owed releases, continuing where the previous pass stopped so a stuck ticket cannot
+  starve the rest. A destination that names a foreign walker `monarch` is recorded as `visitor`.
+- **2026-10-31 — RG09: contract details.** Coordinator operations return the reply (`{kind:'travel'}` or
+  `{kind:'denied'}`) rather than a bare `TravelView`, so refusals travel the same strict reader. Added `{op:'whereabouts'}`
+  → the outstanding journey, else the one that brought the person where they are, else `denied: stale` (never travelled,
+  or nothing outstanding and still where they always were). The browser restores a journey from it after a reload.
+  `AtlasGateHost.travel?(stage)` (optional until the Atlas implements it) receives `rise | road | drawing | arrived |
+  back` once per ticket at the pace of the authority's answers. The travel tables join `realm-migration.sql`.
+- **2026-10-31 — RG10: the welcome and visitor gifts.** Added `{op:'welcome', arrivalId}` → `WelcomeView`. With an
+  arrival ID, a visitor sees their arrival (present or not), how many of their raid party stand there with them, the
+  monarch, the offers around the arrival and (while present) their own giftable shelf. With `null`, a host (monarch or
+  deed citizen of the destination) sees the visitors present in their kingdom (at most 24) and their own offers.
+  `VisitorGiftView` gains `kingdomId`, `direction` (`left | brought-back`, told from the visitor's side), the item's
+  `story`, both names, `expiresAt` and a `receipt` that exists exactly when the offer is accepted, with
+  `transferId = offerId`.
+- **2026-10-31 — RG10: gift policy.** Giftable kinds are forged, crafted, found and welcome-offering; light, home, lot,
+  money, rank, tenure, sub-pieces, bits products, keepsakes and companions are bound. A thing must also be transferable,
+  not paid, and of the gate's origin. Gifts pass only between a present visitor and a host of the destination, one open
+  offer per thing, six open offers per arrival, ten minutes each; expiry is settled lazily. Offers are idempotent by
+  (giver, request); the same key with a different gift is `invalid`.
+- **2026-10-31 — RG10: one transaction, one receipt.** Accepting rechecks owner and revision, moves the thing with a
+  conditional update, appends the lineage row under the offer's ID and marks the offer accepted, all in one item
+  transaction. A failure before commit moves nothing; an answer lost after commit is found on retry, which returns the
+  same receipt. A thing that changed hands meanwhile is `rejected` (`moved`), and one that became bound is `rejected`
+  (`bound`). The browser re-sends a lost press under the same request ID and shows the offer as being checked, never
+  as taken, until the authority says so.
+- **2026-10-31 — RG10: storage seams.** No item authority exists yet, so the things stay behind `ItemRows` (main's),
+  on the gift transaction's client. Our own tables are `realm_raid_gifts` (unique (giver, request) and a partial unique
+  index for one open offer per thing) and `realm_raid_item_transfers` (append-only lineage). To list a kingdom's guests,
+  `realm_raid_whereabouts` gains `arrival_id` and `updated_at` columns (checked against the record) and an index;
+  `TravelTransaction.listArrivedIn(kingdomId, limit)` reads it.
+- **2026-10-31 — RG10: the staged welcome.** Until the kingdom host has a gate anchor in the world, the welcome is an
+  overlay tableau over the destination's own valley. It shows only real people: the viewer, their counted party, the
+  monarch and hosts with real offers. The guests carry torches and the home kingdom's banner, the gate wears the
+  destination's tinctures and arms, and the torches and braziers bloom. On a phone the board alone carries it.

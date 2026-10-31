@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { KingdomPresenceFrame, Vec3 } from '@chatdom/shared';
 
-export interface HomeLifeSite { readonly slot: number; readonly mouths: readonly Vec3[]; readonly lantern: Vec3; readonly normal: Vec3 }
+export interface HomeLifeSite { readonly slot: number; readonly mouths: readonly Vec3[]; readonly lantern: Vec3 | null; readonly normal: Vec3 }
 export interface HomeLifeSource { readonly id: string; readonly slot: number; readonly position: Vec3; readonly normal: Vec3; level: number; readonly name: null; strength: number }
 
 const MAX_STACKS = 96, PUFFS = 5, LIFE = 3.6;
@@ -9,9 +9,10 @@ const clamp = THREE.MathUtils.clamp;
 const fract = (n: number) => n - Math.floor(n);
 const hash = (n: number) => fract(Math.sin(n * 127.1 + 13.7) * 43758.5453);
 
-/** Presence and all positions are supplied by the installed scene; this creates no homes or people. */
+/** Presence and all positions come from the placed homes; this creates no homes or people. */
 export function createHomeLife(scene: THREE.Scene, sites: readonly HomeLifeSite[]) {
-  const sources: HomeLifeSource[] = sites.map(site => ({ id: `home-lantern:${site.slot}`, slot: site.slot, position: site.lantern, normal: site.normal, level: 0, name: null, strength: 0 }));
+  const sources = sites.map(site => site.lantern ? { id: `home-lantern:${site.slot}`, slot: site.slot, position: site.lantern, normal: site.normal, level: 0, name: null, strength: 0 } satisfies HomeLifeSource : undefined);
+  const lightSources = sources.filter((source): source is NonNullable<typeof source> => source !== undefined);
   const bySlot = new Map(sites.map((site, index) => [site.slot, index]));
   const ages = new Float64Array(sites.length);
   const strengths = new Float32Array(sites.length);
@@ -29,6 +30,7 @@ export function createHomeLife(scene: THREE.Scene, sites: readonly HomeLifeSite[
   const mat = new THREE.Matrix4(), pos = new THREE.Vector3(), q = new THREE.Quaternion(), scale = new THREE.Vector3(.62, .74, 1);
   const forward = new THREE.Vector3(0, 0, 1), normal = new THREE.Vector3();
   sites.forEach((site, i) => {
+    if (!site.lantern) { mat.makeScale(0, 0, 0); lanterns.setMatrixAt(i, mat); return; }
     normal.set(...site.normal).normalize(); q.setFromUnitVectors(forward, normal);
     pos.set(...site.lantern).addScaledVector(normal, .008);
     mat.compose(pos, q, scale); lanterns.setMatrixAt(i, mat);
@@ -47,8 +49,8 @@ export function createHomeLife(scene: THREE.Scene, sites: readonly HomeLifeSite[
   puffGeometry.setAttribute('aCentre', centre); puffGeometry.setAttribute('aSize', size); puffGeometry.setAttribute('aOpacity', opacity); puffGeometry.setAttribute('aShape', shape);
   puffGeometry.instanceCount = 0;
   const puffMaterial = new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
-    vertexShader: `attribute vec3 aCentre;attribute float aSize;attribute float aOpacity;attribute float aShape;varying vec2 vP;varying float vOpacity;varying float vShape;void main(){vP=position.xy;vOpacity=aOpacity;vShape=aShape;vec4 mv=viewMatrix*vec4(aCentre,1.);mv.xy+=position.xy*aSize;gl_Position=projectionMatrix*mv;}`,
-    fragmentShader: `varying vec2 vP;varying float vOpacity;varying float vShape;void main(){vec2 p=vP;float angle=atan(p.y,p.x);float edge=1.+.12*sin(angle*3.+vShape*6.28)+.08*sin(angle*5.-vShape*9.);float d=length(p*vec2(1.,1.12))/edge;float a=(1.-smoothstep(.12,1.,d))*vOpacity;gl_FragColor=vec4(.16,.17,.19,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}` });
+    vertexShader: `attribute vec3 aCentre;attribute float aSize;attribute float aOpacity;attribute float aShape;varying vec2 vP;varying float vOpacity;varying float vShape;varying float vDistance;void main(){vP=position.xy;vOpacity=aOpacity;vShape=aShape;vec4 mv=viewMatrix*vec4(aCentre,1.);vDistance=length(mv.xyz);mv.xy+=position.xy*aSize;gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: `varying vec2 vP;varying float vOpacity;varying float vShape;varying float vDistance;void main(){vec2 p=vP;float angle=atan(p.y,p.x);float edge=1.+.12*sin(angle*3.+vShape*6.28)+.08*sin(angle*5.-vShape*9.);float d=length(p*vec2(1.,1.12))/edge;float a=(1.-smoothstep(.12,1.,d))*vOpacity;vec3 colour=mix(vec3(.16,.17,.19),vec3(.34,.35,.40),smoothstep(50.,120.,vDistance));gl_FragColor=vec4(colour,a);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}` });
   const smoke = new THREE.Mesh(puffGeometry, puffMaterial); smoke.frustumCulled = false; smoke.renderOrder = 3; scene.add(smoke);
   const frustum = new THREE.Frustum(), projection = new THREE.Matrix4(), sample = new THREE.Vector3(), sphere = new THREE.Sphere(sample, 4);
   const windows = new Map<number, { present: boolean; since: number }>();
@@ -66,8 +68,9 @@ export function createHomeLife(scene: THREE.Scene, sites: readonly HomeLifeSite[
         const age = w ? Math.max(0, (atMs - w.since) / 1000) : 0;
         const strength = w ? clamp(age / .7, 0, 1) : 0;
         ages[i] = age; strengths[i] = strength;
-        const source = sources[i]!; source.strength = strength * .5; source.level = Math.round(source.strength * 15);
-        lanternAlpha.setX(i, strength * (.24 + .76 * night));
+        const source = sources[i];
+        if (source) { source.strength = strength * .5; source.level = Math.round(source.strength * 15); }
+        lanternAlpha.setX(i, source ? strength * (.24 + .76 * night) : 0);
       }
       lanternAlpha.needsUpdate = true;
       camera.updateMatrixWorld(); projection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frustum.setFromProjectionMatrix(projection);
@@ -81,10 +84,13 @@ export function createHomeLife(scene: THREE.Scene, sites: readonly HomeLifeSite[
       for (const c of candidates) {
         if (stacks >= MAX_STACKS) break;
         const age = ages[c.index]! - .2;
-        if (strengths[c.index]! <= 0 || age <= 0 || c.distance > 150 * 150) continue;
+        if (strengths[c.index]! <= 0 || age <= 0 || c.distance > 320 * 320) continue;
         sample.set(c.mouth[0], c.mouth[1] + 1.5, c.mouth[2]);
         if (!frustum.intersectsSphere(sphere)) continue;
         stacks++;
+        // Broad moonlit wisps survive the wide stream shot; the accepted close
+        // puffs retain their scale and colour. Every plume still fades within a few metres.
+        const wide = THREE.MathUtils.smoothstep(Math.sqrt(c.distance), 50, 120);
         for (let j = 0; j < PUFFS; j++) {
           const stackSeed = sites[c.index]!.slot * 13 + c.mouthIndex * 97;
           const seed = stackSeed + j * 31;
@@ -94,16 +100,16 @@ export function createHomeLife(scene: THREE.Scene, sites: readonly HomeLifeSite[
           // A shared wind bends every plume; the growing eddy offsets keep individual puffs from forming a stripe.
           const eddy = timeSeconds * .38 + stackSeed * .3 + phase * 5 + hash(seed) * 2;
           const curl = .22 * phase;
-          centre.setXYZ(count, c.mouth[0] + phase * 1.65 + Math.sin(eddy) * curl, c.mouth[1] + .08 + phase * 1.8, c.mouth[2] + phase * .55 + Math.cos(eddy) * curl);
-          size.setX(count, .20 + phase * .28 + hash(seed) * .07);
+          centre.setXYZ(count, c.mouth[0] + phase * 1.65 + Math.sin(eddy) * curl, c.mouth[1] + .08 + phase * (1.8 + wide), c.mouth[2] + phase * .55 + Math.cos(eddy) * curl);
+          size.setX(count, (.20 + phase * .28 + hash(seed) * .07) * (1 + wide * 1.5));
           shape.setX(count, hash(seed + 17));
-          opacity.setX(count, started ? THREE.MathUtils.smoothstep(phase, 0, .1) * (1 - THREE.MathUtils.smoothstep(phase, .42, 1)) * .15 * Math.min(1, age / .7) : 0);
+          opacity.setX(count, started ? THREE.MathUtils.smoothstep(phase, 0, .1) * (1 - THREE.MathUtils.smoothstep(phase, .42, 1)) * (.15 + wide * .35) * Math.min(1, age / .7) * (1 - THREE.MathUtils.smoothstep(Math.sqrt(c.distance), 240, 320)) : 0);
           count++;
         }
       }
       puffGeometry.instanceCount = count; centre.needsUpdate = size.needsUpdate = opacity.needsUpdate = shape.needsUpdate = true;
     },
-    sources() { return sources; },
+    sources() { return lightSources; },
     dispose() { if (disposed) return; disposed = true; scene.remove(lanterns, smoke); lanterns.dispose(); lanternGeometry.dispose(); lanternMaterial.dispose(); puffGeometry.dispose(); puffMaterial.dispose(); },
   };
 }

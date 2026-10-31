@@ -72,6 +72,9 @@
 .rg-waiting { display: flex; align-items: center; gap: 10px; font-style: italic; }
 .rg-quill { animation: rg-write 1.6s ease-in-out infinite; transform-origin: 20% 90%; }
 @keyframes rg-write { 50% { transform: rotate(-9deg) translateX(2px); } }
+.rg-farewell { display: flex; gap: 12px; align-items: center; margin: 0 0 14px; padding: 10px 12px 10px 10px; border-left: 3px solid #8d6537;
+  background: linear-gradient(90deg, #8d653720, #8d653708); font-size: 16px; line-height: 1.42; color: var(--ink); }
+.rg-farewell > :first-child { flex: none; }
 .rg-notice { margin: 0 0 14px; padding: 9px 12px; border-left: 3px solid #9b3a2b; background: #c45a3c18; font-size: 15px; color: #5a2216; }
 
 /* Wooden buttons that press in a millimetre. */
@@ -87,6 +90,10 @@
 .rg-primary { color: #2d1c0e; border-color: #5b3d1c;
   background: linear-gradient(180deg, #f4d79f, #d3a865 55%, #b48546); box-shadow: inset 0 1px 0 #fff3d2, inset 0 -2px 0 #8d6233, 0 3px 0 #4b3018, 0 5px 10px #5a3a1a44; }
 .rg-primary:active:not(:disabled) { box-shadow: inset 0 1px 0 #fff3d2aa, inset 0 -1px 0 #8d6233, 0 1px 0 #4b3018; }
+/* A quiet secondary act on the parchment: inked outline, no timber. */
+.rg-subtle { background: none; border-color: #6b4a2c99; box-shadow: none; color: var(--ink); }
+.rg-subtle:hover { background: #6b4a2c14; filter: none; }
+.rg-subtle:active:not(:disabled) { box-shadow: none; }
 .rg-button kbd { font: 12px Alegreya, Georgia, serif; padding: 1px 6px; border: 1px solid #e3c49360; border-radius: 3px; color: #e8d0a6; }
 .rg-glyph { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
@@ -118,7 +125,9 @@
 .rg-facts .rg-glyph { color: #7b5a35; margin-top: 1px; }
 .rg-facts b { color: var(--ink); }
 
-.rg-simulated { margin: 12px 4px 0; display: flex; align-items: center; gap: 8px; font: 12px Alegreya, Georgia, serif; letter-spacing: .1em; color: #ecd2a6; }
+/* Simulated data wears one small chip in the board's corner, never a banner. */
+.rg-simulated { position: absolute; right: 26px; bottom: -11px; z-index: 2; margin: 0; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px;
+  font: 10px/1.1 Alegreya, Georgia, serif; letter-spacing: .14em; color: #f2d8b3; background: #2c1f18; border: 1px solid #c69a5c88; border-radius: 2px; box-shadow: 0 2px 4px #0b0d1a66; }
 
 /* The bench's stand-in finder: a parchment card, clearly labelled, never the Atlas itself. */
 .rg-finder { position: absolute; z-index: 3; left: 34px; top: 108px; width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; color: var(--ink); border-radius: 4px;
@@ -165,7 +174,7 @@
   .rg-button { min-height: 46px; padding: 0 14px; font-size: 15.5px; }
   .rg-party-actions .rg-button { flex: 1 1 auto; }
   .rg-facts li { font-size: 14.5px; }
-  .rg-simulated { font-size: 10.5px; margin-top: 8px; }
+  .rg-simulated { right: 16px; bottom: 2px; font-size: 9.5px; }
   .rg-finder { left: 8px; right: 8px; top: 92px; width: auto; }
 }
 
@@ -176,3 +185,106 @@
 
 /* A walker's board ends with their choice; no rule hangs under it. */
 .rg-pane[data-phase='gathering'] .rg-party { border-bottom: 0; margin-bottom: 0; padding-bottom: 2px; }
+
+/* Twitch's countdown: an ink ring that empties, the minutes set like a clock face. */
+.rg-countdown { display: flex; align-items: center; gap: 14px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid #8a6a4455; border-radius: 4px; background: #fff6e04d; }
+.rg-countdown-ring { width: 52px; height: 52px; flex: none; transform: rotate(-90deg); }
+.rg-ring-track { fill: none; stroke: #8a6a4433; stroke-width: 3; }
+.rg-ring-ink { fill: none; stroke: #7b2a1f; stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray 1s linear; }
+.rg-countdown-time { margin: 0; font: 700 30px/1 Alegreya, Georgia, serif; color: var(--ink); }
+.rg-countdown-words { margin: 4px 0 0; font-size: 14.5px; line-height: 1.35; color: #45311f; }
+.rg-checking { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 12px; padding: 10px 12px; border-left: 3px solid #8d6537; background: #8d653718; font-size: 16px; line-height: 1.42; }
+.rg-checking .rg-glyph { margin-top: 2px; color: #6b4a2c; }
+/* While Twitch holds the raid, the dotted road starts to move toward the destination. */
+.rg-journey[data-stage='countdown'] .rg-ink-road path:not(.rg-road-arrow) { animation: rg-march 1.4s linear infinite; }
+@keyframes rg-march { to { stroke-dashoffset: -7.5; } }
+
+/* The party set out: the road is inked solid over its pencil trace, once, from the gate to the destination. */
+.rg-departure { margin: 0; }
+.rg-ink-road-set .rg-road-trace { stroke: #4a342255; }
+.rg-ink-road-set .rg-road-inked { stroke: #3a2614; stroke-width: 3.2; stroke-dasharray: 100 100; stroke-dashoffset: 0; animation: rg-ink 2.4s cubic-bezier(.45, .05, .3, 1) both; }
+@keyframes rg-ink { from { stroke-dashoffset: 100; } }
+.rg-witnessed { display: grid; grid-template-columns: 22px 1fr; gap: 10px; margin: 14px 0 0; font-size: 15.5px; line-height: 1.38; color: #45311f; }
+.rg-witnessed .rg-glyph { color: #7b2a1f; margin-top: 1px; }
+.rg-witnessed b { color: var(--ink); }
+.rg-party-set { margin-top: 12px; }
+.rg-pane[data-phase='departed'] .rg-party { border-bottom: 0; margin-bottom: 4px; }
+.rg-watch { text-decoration: none; }
+.rg-watch:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+
+@media (max-width: 720px) {
+  .rg-countdown { gap: 10px; padding: 8px 10px; }
+  .rg-countdown-ring { width: 44px; height: 44px; }
+  .rg-countdown-time { font-size: 25px; }
+  .rg-countdown-words, .rg-witnessed, .rg-checking { font-size: 14.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rg-journey[data-stage='countdown'] .rg-ink-road path, .rg-ink-road-set .rg-road-inked { animation: none; }
+  .rg-ring-ink { transition: none; }
+}
+
+/* ---- One walker's journey through the gate (RG09) ----
+   The road is walked in ink as the destination answers; a lantern carries the walker's place along it. On arrival the
+   destination's seal is lit by torchlight with a few embers rising, warm enough to bloom on the stream. */
+.rg-follow { margin-top: 14px; }
+.rg-travel { margin: 0; }
+.rg-road-travel { --lantern: 0; }
+.rg-travel-way { position: relative; height: 56px; }
+.rg-ink-road-travel { position: absolute; left: 0; right: 0; top: 0; height: 40px; margin-top: 12px; }
+.rg-ink-road-travel .rg-road-trace { stroke: #4a342266; }
+.rg-ink-road-travel .rg-road-walked { stroke: #3a2614; stroke-width: 3.2; stroke-dasharray: 100 100; stroke-dashoffset: calc(100 - var(--lantern) * 100);
+  transition: stroke-dashoffset 1.2s cubic-bezier(.45, .05, .3, 1); }
+.rg-travel[data-state='cancelled'] .rg-road-walked, .rg-travel[data-state='expired'] .rg-road-walked,
+.rg-travel[data-state='denied'] .rg-road-walked, .rg-travel[data-state='refused'] .rg-road-walked { stroke-dashoffset: 100; }
+/* The lantern rides the same curve the road is drawn on; its point is computed from that curve in the board. */
+.rg-lantern { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
+  transition: left 1.2s cubic-bezier(.45, .05, .3, 1), top 1.2s cubic-bezier(.45, .05, .3, 1);
+  background: radial-gradient(circle, #fff3c4 0 18%, #f6b74e 30%, #d9772a66 55%, transparent 72%); box-shadow: 0 0 14px 4px #f0a04366; }
+.rg-lantern-flame { position: absolute; inset: 5px; border-radius: 50% 50% 45% 45%; background: #fff6d8; animation: rg-flicker 1.3s ease-in-out infinite alternate; }
+@keyframes rg-flicker { 0% { transform: scale(.85) translateY(.5px); opacity: .85; } 40% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(.92) translateY(-.5px); opacity: .9; } }
+
+.rg-steps { list-style: none; margin: 14px 0 12px; padding: 0; display: grid; gap: 7px; counter-reset: step; }
+.rg-steps li { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: center; font-size: 16px; line-height: 1.3; color: #8a7458; }
+.rg-step-mark { width: 20px; height: 20px; border-radius: 50%; border: 1.6px dashed #8a6a4499; display: grid; place-items: center; }
+.rg-step-mark .rg-glyph { width: 15px; height: 15px; stroke-width: 2.2; }
+.rg-steps li[data-step='done'] { color: var(--ink); }
+.rg-steps li[data-step='done'] .rg-step-mark { border: 1.6px solid #3a2614; background: #3a26140f; color: #3a2614; }
+.rg-steps li[data-step='now'] { color: var(--ink); font-weight: 700; }
+.rg-steps li[data-step='now'] .rg-step-mark { border: 2px solid #b5651f; background: radial-gradient(circle, #f6c46a 0 30%, transparent 34%); box-shadow: 0 0 0 4px #e5a14a26;
+  animation: rg-glow 1.6s ease-in-out infinite; }
+@keyframes rg-glow { 50% { box-shadow: 0 0 0 7px #e5a14a12; } }
+.rg-overrun { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 12px; padding: 10px 12px; border-left: 3px solid #b5651f; background: #e5a14a1c; font-size: 15.5px; line-height: 1.42; }
+.rg-overrun .rg-glyph { margin-top: 2px; color: #8d4f1c; }
+
+/* Arrival: torchlight at the destination's seal, and a few embers that rise and fade. */
+.rg-end-goal { position: relative; }
+.rg-torchlight { position: absolute; left: 50%; top: 32px; width: 0; height: 0; pointer-events: none; z-index: 0; }
+.rg-torchlight::before { content: ''; position: absolute; left: -64px; top: -64px; width: 128px; height: 128px; border-radius: 50%;
+  background: radial-gradient(circle, #ffd88a 0, #f5a94a88 26%, #e0782a33 48%, transparent 70%); mix-blend-mode: multiply; animation: rg-torch 2.2s ease-in-out infinite alternate; }
+.rg-torchlight i { position: absolute; left: 0; top: 0; width: 4px; height: 4px; border-radius: 50%; background: #ffcf6e; box-shadow: 0 0 6px 2px #ffb24a99;
+  opacity: 0; animation: rg-ember 3.2s ease-out infinite; }
+.rg-torchlight i:nth-child(1) { --dx: -22px; animation-delay: 0s; }
+.rg-torchlight i:nth-child(2) { --dx: 14px; animation-delay: .45s; }
+.rg-torchlight i:nth-child(3) { --dx: -6px; animation-delay: .9s; width: 3px; height: 3px; }
+.rg-torchlight i:nth-child(4) { --dx: 26px; animation-delay: 1.4s; }
+.rg-torchlight i:nth-child(5) { --dx: -30px; animation-delay: 1.9s; width: 3px; height: 3px; }
+.rg-torchlight i:nth-child(6) { --dx: 4px; animation-delay: 2.3s; }
+.rg-torchlight i:nth-child(7) { --dx: 18px; animation-delay: 2.8s; width: 3px; height: 3px; }
+@keyframes rg-torch { from { transform: scale(.94); opacity: .85; } to { transform: scale(1.06); opacity: 1; } }
+@keyframes rg-ember { 0% { opacity: 0; transform: translate(0, 10px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), -58px); } }
+.rg-end-goal .rg-seal, .rg-end-goal figcaption { position: relative; z-index: 1; }
+.rg-end-lit .rg-seal { filter: drop-shadow(0 0 10px #f2a8487a) drop-shadow(0 2px 2px #1a0d0866); }
+.rg-end-lit figcaption { color: #2a1a0c; }
+.rg-arrival-line { margin: 16px 0 6px; font: 400 21px/1.3 'IM Fell English', Georgia, serif; color: var(--ink); text-wrap: balance; }
+.rg-pane[data-phase='journey'] .rg-actions { margin-top: 12px; }
+
+@media (max-width: 720px) {
+  .rg-steps li { font-size: 15px; }
+  .rg-arrival-line { font-size: 19px; }
+  .rg-overrun { font-size: 14.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rg-ink-road-travel .rg-road-walked, .rg-lantern { transition: none; }
+  .rg-lantern-flame, .rg-steps li[data-step='now'] .rg-step-mark, .rg-torchlight::before { animation: none; }
+  .rg-torchlight i { display: none; }
+}

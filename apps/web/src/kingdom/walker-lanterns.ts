@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { CitizenMotionSample } from '@chatdom/world';
 import type { Vec3 } from '@chatdom/shared';
 import type { LightFieldSource } from './light-field';
+import { createLanternLightSelection, type LanternLightCandidate } from './lantern-light-selection';
 
 /** A little box-built lantern, with its origin at the hand gripping its handle. */
 function cageGeometry(): THREE.BufferGeometry {
@@ -48,7 +49,10 @@ export function createWalkerLanterns(scene: THREE.Scene, capacity: number) {
   const matrix = new THREE.Matrix4(), flameMatrix = new THREE.Matrix4(), flameLocal = new THREE.Matrix4();
   const q = new THREE.Quaternion(), rotation = new THREE.Euler(), position = new THREE.Vector3(), scale = new THREE.Vector3();
   const day = new THREE.Color('#d0a66a'), glow = new THREE.Color().setRGB(1.5, .52, .12);
-  let lights: LightFieldSource[] = [];
+  let lights: readonly LightFieldSource[] = [];
+  // These are emitters in a bounded voxel field, not individual point-light draws.
+  // Every rendered lantern can contribute without a nearest-24 lighting cutoff.
+  const selection = createLanternLightSelection(capacity);
   return {
     /** Grip matrices are the renderer's world-space gripRight poses, keyed by citizen slot. */
     update(samples: readonly CitizenMotionSample[], time: number, night: number, focus?: THREE.Vector3 | THREE.Camera,
@@ -57,7 +61,7 @@ export function createWalkerLanterns(scene: THREE.Scene, capacity: number) {
       const dark = THREE.MathUtils.clamp(night, 0, 1);
       glass.color.copy(day).lerp(glow, dark);
       let count = 0;
-      const candidates: { source: LightFieldSource; distance: number; slot: number }[] = [];
+      const candidates: LanternLightCandidate[] = [];
       const target = focus instanceof THREE.Camera ? focus.position : focus;
       for (const sample of samples) {
         if (count >= capacity) break;
@@ -86,12 +90,11 @@ export function createWalkerLanterns(scene: THREE.Scene, capacity: number) {
       }
       frames.count = panes.count = flames.count = count;
       frames.instanceMatrix.needsUpdate = panes.instanceMatrix.needsUpdate = flames.instanceMatrix.needsUpdate = true;
-      candidates.sort((a, b) => a.distance - b.distance || a.slot - b.slot);
-      lights = candidates.slice(0, 24).map(item => item.source);
+      lights = selection.update(candidates, performance.now() / 1000);
     },
     sources(): readonly LightFieldSource[] { return lights; },
     dispose() {
-      scene.remove(frames, panes, flames); frames.dispose(); panes.dispose(); flames.dispose(); cage.dispose(); pane.dispose(); flameGeometry.dispose(); iron.dispose(); glass.dispose(); fire.dispose(); lights = [];
+      scene.remove(frames, panes, flames); frames.dispose(); panes.dispose(); flames.dispose(); cage.dispose(); pane.dispose(); flameGeometry.dispose(); iron.dispose(); glass.dispose(); fire.dispose(); selection.clear(); lights = [];
     },
   };
 }

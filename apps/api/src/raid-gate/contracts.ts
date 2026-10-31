@@ -15,9 +15,29 @@ export const GATE_LIMITS = Object.freeze({
   previewMs: 120_000,
   /** Twitch's own countdown between an accepted Start a Raid and the raid itself. */
   twitchCountdownMs: 90_000,
+  /** After Twitch's countdown, how long a verified `channel.raid` may take to reach us before we say we are checking. */
+  observationGraceMs: 60_000,
+  /** How far event clocks may disagree when matching a raid to the press that asked for it. */
+  clockSkewMs: 10_000,
+  /** How long an unresolved raid keeps the party at the gate ("checking whether the raid began"). */
+  unknownHoldMs: 15 * 60_000,
+  /** How long a settled raid (departed, called off, refused) stays the gate's news. */
+  settledShowMs: 5 * 60_000,
   passportPage: 50,
   passportSessionCap: 200,
   cursor: 256,
+  /** A gift offer is a moment of the visit, not a standing promise. */
+  giftOfferMs: 10 * 60_000,
+  /** Offers a welcome lists, most recent first. */
+  giftsListed: 24,
+  /** A person's own giftable things a welcome shows (read from the item authority, never copied). */
+  giftShelf: 12,
+  /** Guests a host's welcome lists: those who arrived through a gate and still stand in the kingdom. */
+  guestsListed: 24,
+  /** Offers that may stand open at once around one arrival. */
+  giftsOpenPerArrival: 6,
+  /** Display names and item titles. */
+  name: 64,
 });
 
 export type GateRole = 'monarch' | 'citizen' | 'guest';
@@ -40,9 +60,15 @@ export type PartyView = Readonly<{ requestId: string; joined: boolean; optedIn: 
  * walkers learn that a gate is open, never the state of someone else's Twitch grant.
  */
 export type GateAuthority = 'ready' | 'offline' | 'not-connected' | 'revoked' | 'disabled' | 'unavailable';
+/**
+ * The gate as one viewer sees it. `expiresAt` is when this view stops being the gate's news: the preview's end, the
+ * end of the wait for an unresolved raid, or a few minutes after a settled one. `countdownEndsAt` is Twitch's own
+ * countdown, only while Twitch holds the request (`pending`). `raid` is the verified public observation that set the
+ * party out, only once `landed`.
+ */
 export type OpenGateView = Readonly<{
   requestId: string; revision: number; to: KingdomId; target: GateTarget; state: GateActionState;
-  optedIn: number; expiresAt: number; joined: boolean;
+  optedIn: number; expiresAt: number; joined: boolean; countdownEndsAt: number | null; raid: AtlasRaid | null;
 }>;
 export type GateStatusView = Readonly<{
   kingdomId: KingdomId; viewer: 'monarch' | 'walker'; authority: GateAuthority | null; open: OpenGateView | null;
@@ -59,13 +85,46 @@ export type TravelView = Readonly<{
 }>;
 export type PassportStamp = Readonly<{ id: string; kingdomId: KingdomId; occurredAt: number; kind: 'visit' | 'raid'; raidId: string | null }>;
 export type PassportView = Readonly<{ hidden: boolean; revision: number; stamps: readonly PassportStamp[]; nextCursor: string | null }>;
+/** Things a person may freely give. Light, homes, lots, money, rank, sub pieces, Bits products, keepsakes and companions stay bound. */
+export type GiftKind = 'forged' | 'crafted' | 'found' | 'welcome-offering';
+/** What the item authority says about a thing: its title and the story of who made it where. Names are null when anonymous. */
+export type GiftStory = Readonly<{ title: string; kind: GiftKind; makerName: string | null; originName: string | null }>;
+export type GiftState = 'offered' | 'accepted' | 'refused' | 'expired' | 'rejected' | 'unknown';
+/**
+ * One offer between a visitor and a host, told to the two of them. `direction` is the visitor's view: a gift they `left`
+ * with a host, or one they were given to take home (`brought-back`). `receipt` is the one recorded ownership transfer,
+ * only once `accepted`. `kingdomId` is where it was given. Feature-local (RG10): story, names, expiry and receipt.
+ */
 export type VisitorGiftView = Readonly<{
   offerId: string; itemId: string; from: PersonId; to: PersonId; originKingdomId: KingdomId; makerId: PersonId; revision: number;
-  state: 'offered' | 'accepted' | 'refused' | 'expired' | 'rejected' | 'unknown';
+  state: GiftState;
+  kingdomId: KingdomId; direction: 'left' | 'brought-back'; story: GiftStory; fromName: string | null; toName: string | null; expiresAt: number;
+  receipt: Readonly<{ transferId: string; at: number }> | null;
+}>;
+/** One of the viewer's own things that the item authority says may be given, at its current revision. */
+export type GiftableView = Readonly<{ itemId: string; revision: number; story: GiftStory }>;
+/** A visitor standing in the host's kingdom, having arrived through a gate. Only hosts of that kingdom see this. */
+export type GuestView = Readonly<{ arrivalId: string; personId: PersonId; name: string | null; from: KingdomId; arrivedAt: number; kind: 'raid' | 'visit' }>;
+/**
+ * The welcome at a destination, as one person sees it (RG10). A visitor sees their own arrival, how many of their party
+ * stand here with them, the monarch who receives them and the offers around them; a host sees the guests now in their
+ * kingdom. `shelf` is the viewer's own giftable things, only while a gift can be given.
+ */
+export type WelcomeView = Readonly<{
+  kingdomId: KingdomId;
+  viewer: 'visitor' | 'host';
+  arrival: Readonly<{ arrivalId: string; from: KingdomId; arrivedAt: number; present: boolean; raidId: string | null }> | null;
+  party: number;
+  monarch: Readonly<{ personId: PersonId; name: string | null }>;
+  guests: readonly GuestView[];
+  offers: readonly VisitorGiftView[];
+  shelf: readonly GiftableView[];
 }>;
 
 export type GateCommand =
   | Readonly<{ op: 'gate' }>
+  /** The viewer's own outstanding journey, else the one that brought them where they are. Feature-local (RG09). */
+  | Readonly<{ op: 'whereabouts' }>
   | Readonly<{ op: 'preview'; requestId: string; target: KingdomId }>
   | Readonly<{ op: 'start'; requestId: string; previewToken: string }>
   | Readonly<{ op: 'cancel' | 'reconcile' | 'read-action' | 'join' | 'leave'; requestId: string }>
@@ -74,7 +133,9 @@ export type GateCommand =
   | Readonly<{ op: 'passport'; cursor: string | null }>
   | Readonly<{ op: 'hide-travels'; requestId: string; hidden: boolean }>
   | Readonly<{ op: 'offer-gift'; requestId: string; itemId: string; recipient: PersonId; arrivalId: string }>
-  | Readonly<{ op: 'accept-gift' | 'refuse-gift'; requestId: string; offerId: string }>;
+  | Readonly<{ op: 'accept-gift' | 'refuse-gift'; requestId: string; offerId: string }>
+  /** The welcome around the viewer's own arrival, or (null) the guests in the kingdom this host belongs to. Feature-local (RG10). */
+  | Readonly<{ op: 'welcome'; arrivalId: string | null }>;
 
 export type GateDenial = 'unauthorized' | 'stale' | 'unavailable' | 'full' | 'invalid';
 export type GateReply =
@@ -85,11 +146,13 @@ export type GateReply =
   | Readonly<{ kind: 'travel'; value: TravelView }>
   | Readonly<{ kind: 'passport'; value: PassportView }>
   | Readonly<{ kind: 'gift'; value: VisitorGiftView }>
+  | Readonly<{ kind: 'welcome'; value: WelcomeView }>
   | Readonly<{ kind: 'denied'; code: GateDenial }>;
 
 const ACTION_STATES = ['prepared', 'dispatching', 'pending', 'landed', 'cancelled', 'rejected', 'unknown'] as const;
 const TRAVEL_STATES = ['reserved', 'preparing', 'ready', 'committing', 'committed', 'cancelled', 'expired', 'denied', 'unknown'] as const;
 const GIFT_STATES = ['offered', 'accepted', 'refused', 'expired', 'rejected', 'unknown'] as const;
+export const GIFT_KINDS = ['forged', 'crafted', 'found', 'welcome-offering'] as const;
 const AUTHORITIES = ['ready', 'offline', 'not-connected', 'revoked', 'disabled', 'unavailable'] as const;
 const CLASSIFICATIONS = ['unknown', 'general', 'mature', 'excluded'] as const;
 const DENIALS = ['unauthorized', 'stale', 'unavailable', 'full', 'invalid'] as const;
@@ -119,7 +182,7 @@ function readReason(value: unknown): TravelReason | undefined {
 /** The only way a command enters the application. Unknown ops, extra keys and actor fields are all refused. */
 export function readGateCommand(value: unknown): GateCommand | undefined {
   const op = typeof value === 'object' && value !== null ? (value as { op?: unknown }).op : undefined;
-  if (op === 'gate') return fields(value, ['op']) ? { op } : undefined;
+  if (op === 'gate' || op === 'whereabouts') return fields(value, ['op']) ? { op } : undefined;
   if (op === 'preview' || op === 'reserve') {
     const f = fields(value, op === 'preview' ? ['op', 'requestId', 'target'] : ['op', 'requestId', 'target', 'reason']);
     if (!f) return undefined;
@@ -160,6 +223,11 @@ export function readGateCommand(value: unknown): GateCommand | undefined {
     const f = fields(value, ['op', 'requestId', 'itemId', 'recipient', 'arrivalId']);
     const command = f && { op: 'offer-gift' as const, requestId: token(f.requestId), itemId: token(f.itemId), recipient: person(f.recipient), arrivalId: token(f.arrivalId) };
     return command && complete(command) ? command : undefined;
+  }
+  if (op === 'welcome') {
+    const f = fields(value, ['op', 'arrivalId']);
+    const arrivalId = f && nullable(f.arrivalId, token);
+    return f && arrivalId !== undefined ? { op, arrivalId } : undefined;
   }
   if (op === 'accept-gift' || op === 'refuse-gift') {
     const f = fields(value, ['op', 'requestId', 'offerId']);
@@ -209,13 +277,18 @@ function readParty(value: unknown): PartyView | undefined {
 }
 
 function readOpenGate(value: unknown): OpenGateView | undefined {
-  const f = fields(value, ['requestId', 'revision', 'to', 'target', 'state', 'optedIn', 'expiresAt', 'joined']);
-  const open = f && {
+  const f = fields(value, ['requestId', 'revision', 'to', 'target', 'state', 'optedIn', 'expiresAt', 'joined', 'countdownEndsAt', 'raid']);
+  if (!f) return undefined;
+  const countdownEndsAt = nullable(f.countdownEndsAt, positive), raid = nullable(f.raid, readRaid);
+  const open = {
     requestId: token(f.requestId), revision: positive(f.revision), to: kingdom(f.to), target: readTarget(f.target),
     state: oneOf(f.state, ACTION_STATES), optedIn: uint(f.optedIn), expiresAt: positive(f.expiresAt), joined: bool(f.joined),
   };
-  if (!open || !complete(open) || open.target.kingdomId !== open.to) return undefined;
-  return !open.joined || open.optedIn > 0 ? open : undefined;
+  if (!complete(open) || countdownEndsAt === undefined || raid === undefined || open.target.kingdomId !== open.to) return undefined;
+  // A countdown exists only while Twitch holds the request; a raid only once it is witnessed, and only to this gate's destination.
+  if ((open.state === 'pending') !== (countdownEndsAt !== null) || (open.state === 'landed') !== (raid !== null)) return undefined;
+  if (raid && raid.toKingdomId !== open.to) return undefined;
+  return !open.joined || open.optedIn > 0 ? { ...open, countdownEndsAt, raid } : undefined;
 }
 
 function readStatus(value: unknown): GateStatusView | undefined {
@@ -226,6 +299,7 @@ function readStatus(value: unknown): GateStatusView | undefined {
   if (!kingdomId || !viewer || authority === undefined || open === undefined) return undefined;
   // A walker never learns the monarch's grant state.
   if ((viewer === 'monarch') !== (authority !== null)) return undefined;
+  if (open?.raid && open.raid.fromKingdomId !== kingdomId) return undefined;
   return open && open.to === kingdomId ? undefined : { kingdomId, viewer, authority, open };
 }
 
@@ -260,17 +334,88 @@ function readPassport(value: unknown): PassportView | undefined {
   return { hidden, revision, stamps: stamps as PassportStamp[], nextCursor };
 }
 
+/** A display name or title: trimmed, 1–64 characters, no control characters. */
+export const displayText = (value: unknown): string | undefined =>
+  // eslint-disable-next-line no-control-regex -- Refuse control characters at the gate's boundary.
+  typeof value === 'string' && value.length > 0 && value.length <= GATE_LIMITS.name && value.trim() === value && !/[\u0000-\u001f\u007f]/.test(value) ? value : undefined;
+
+export function readGiftStory(value: unknown): GiftStory | undefined {
+  const f = fields(value, ['title', 'kind', 'makerName', 'originName']);
+  if (!f) return undefined;
+  const makerName = nullable(f.makerName, displayText), originName = nullable(f.originName, displayText);
+  const story = { title: displayText(f.title), kind: oneOf(f.kind, GIFT_KINDS) };
+  return complete(story) && makerName !== undefined && originName !== undefined ? { ...story, makerName, originName } : undefined;
+}
+
 function readGift(value: unknown): VisitorGiftView | undefined {
-  const f = fields(value, ['offerId', 'itemId', 'from', 'to', 'originKingdomId', 'makerId', 'revision', 'state']);
-  const gift = f && {
+  const f = fields(value, ['offerId', 'itemId', 'from', 'to', 'originKingdomId', 'makerId', 'revision', 'state',
+    'kingdomId', 'direction', 'story', 'fromName', 'toName', 'expiresAt', 'receipt']);
+  if (!f) return undefined;
+  const fromName = nullable(f.fromName, displayText), toName = nullable(f.toName, displayText);
+  const receipt = nullable(f.receipt, value => {
+    const r = fields(value, ['transferId', 'at']);
+    const read = r && { transferId: token(r.transferId), at: epoch(r.at) };
+    return read && complete(read) ? read : undefined;
+  });
+  const gift = {
     offerId: token(f.offerId), itemId: token(f.itemId), from: person(f.from), to: person(f.to), originKingdomId: kingdom(f.originKingdomId),
-    makerId: person(f.makerId), revision: positive(f.revision), state: oneOf(f.state, GIFT_STATES),
+    makerId: person(f.makerId), revision: positive(f.revision), state: oneOf(f.state, GIFT_STATES), kingdomId: kingdom(f.kingdomId),
+    direction: oneOf(f.direction, ['left', 'brought-back'] as const), story: readGiftStory(f.story), expiresAt: positive(f.expiresAt),
   };
-  return gift && complete(gift) && gift.from !== gift.to ? gift : undefined;
+  if (!complete(gift) || fromName === undefined || toName === undefined || receipt === undefined || gift.from === gift.to) return undefined;
+  // A receipt exists if and only if the item changed hands, and its transfer is this offer's own.
+  if ((gift.state === 'accepted') !== (receipt !== null) || (receipt && receipt.transferId !== gift.offerId)) return undefined;
+  return { ...gift, fromName, toName, receipt };
+}
+
+function readGiftable(value: unknown): GiftableView | undefined {
+  const f = fields(value, ['itemId', 'revision', 'story']);
+  const item = f && { itemId: token(f.itemId), revision: positive(f.revision), story: readGiftStory(f.story) };
+  return item && complete(item) ? item : undefined;
+}
+
+function readGuest(value: unknown): GuestView | undefined {
+  const f = fields(value, ['arrivalId', 'personId', 'name', 'from', 'arrivedAt', 'kind']);
+  if (!f) return undefined;
+  const name = nullable(f.name, displayText);
+  const guest = { arrivalId: token(f.arrivalId), personId: person(f.personId), from: kingdom(f.from), arrivedAt: epoch(f.arrivedAt), kind: oneOf(f.kind, ['raid', 'visit'] as const) };
+  return complete(guest) && name !== undefined ? { ...guest, name } : undefined;
+}
+
+function readList<T>(value: unknown, max: number, read: (value: unknown) => T | undefined): T[] | undefined {
+  if (!Array.isArray(value) || value.length > max) return undefined;
+  const items = value.map(read);
+  return items.every(item => item !== undefined) ? items as T[] : undefined;
+}
+
+function readWelcome(value: unknown): WelcomeView | undefined {
+  const f = fields(value, ['kingdomId', 'viewer', 'arrival', 'party', 'monarch', 'guests', 'offers', 'shelf']);
+  if (!f) return undefined;
+  const arrival = nullable(f.arrival, value => {
+    const a = fields(value, ['arrivalId', 'from', 'arrivedAt', 'present', 'raidId']);
+    if (!a) return undefined;
+    const raidId = nullable(a.raidId, token);
+    const read = { arrivalId: token(a.arrivalId), from: kingdom(a.from), arrivedAt: epoch(a.arrivedAt), present: bool(a.present) };
+    return complete(read) && raidId !== undefined ? { ...read, raidId } : undefined;
+  });
+  const m = fields(f.monarch, ['personId', 'name']);
+  const monarchName = m ? nullable(m.name, displayText) : undefined, monarchId = m ? person(m.personId) : undefined;
+  const welcome = {
+    kingdomId: kingdom(f.kingdomId), viewer: oneOf(f.viewer, ['visitor', 'host'] as const), party: uint(f.party),
+    guests: readList(f.guests, GATE_LIMITS.guestsListed, readGuest), offers: readList(f.offers, GATE_LIMITS.giftsListed, readGift),
+    shelf: readList(f.shelf, GATE_LIMITS.giftShelf, readGiftable),
+  };
+  if (!complete(welcome) || arrival === undefined || monarchName === undefined || !monarchId) return undefined;
+  // A visitor sees their own arrival and no guest list; a host sees guests and has no arrival of their own here.
+  if ((welcome.viewer === 'visitor') !== (arrival !== null) || (welcome.viewer === 'visitor' && welcome.guests.length > 0)) return undefined;
+  if (arrival && arrival.from === welcome.kingdomId) return undefined;
+  if (welcome.offers.some(offer => offer.kingdomId !== welcome.kingdomId) || welcome.guests.some(guest => guest.from === welcome.kingdomId)) return undefined;
+  return { ...welcome, arrival, monarch: { personId: monarchId, name: monarchName } };
 }
 
 const VALUE_READERS = {
   gate: readStatus, preview: readPreview, action: readAction, party: readParty, travel: readTravel, passport: readPassport, gift: readGift,
+  welcome: readWelcome,
 } as const;
 
 /** Re-reads a reply from any transport. Used by the server before sending and by the browser after receiving. */
