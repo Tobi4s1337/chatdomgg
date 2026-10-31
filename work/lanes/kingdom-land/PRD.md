@@ -23,7 +23,7 @@ lands, then use the actual module. All independent tasks can start without a sce
 - [ ] **LD01 — Homes gather along winding streets into a square.** Build connected varied streets/frontages and
   an irregular usable market on today's geography; preserve full lots/access and canonical IDs. Show roofs and
   street fronts at dusk in a lane-owned composition bench, plus a small plan-map. One meaningful regression test.
-- [ ] **LD02 — Shape the land and freeze its real destinations.** Implement v2 sampler/water query and grading
+- [x] **LD02 — Shape the land and freeze its real destinations.** Implement v2 sampler/water query and grading
   dispatch, lake/pond/stream/leat/tailrace, castle rise/court and actual door anchor, lookout and forest envelope.
   Populate typed sites/places early so consumers replace their fixtures. Keep v1 exactly unchanged. Show lake
   beyond roofs and court looking over town. Do not invent warmth or geometry for unbuilt places.

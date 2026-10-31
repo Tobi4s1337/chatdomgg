@@ -5,6 +5,9 @@ import type { RealmFoundedScene } from '@chatdom/world';
 import { connectRealm } from '../realm/client';
 import { compileFoundedScene } from '@chatdom/world/founded-collision';
 import type { KingdomEntrySource } from './types';
+import { observeRealm, observedRoom } from '../realm/adapters/observer';
+import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
+import { createRoomChatFeed } from '../realm/adapters/chat';
 
 const endpoint = () => `${location.origin}/realm-data`;
 async function read(path: string, signal: AbortSignal) {
@@ -37,6 +40,11 @@ export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
     },
   }, collision, sessionStorage);
   if (signal.aborted) { client.dispose(); signal.throwIfAborted(); }
+  const room = observedRoom(client.room);
+  const observer = observeRealm(room, { kingdomId: manifest.kingdomId, origin: 'simulated',
+    collisionRevision: manifest.collisionRevision, layoutRevision: manifest.layoutRevision });
+  const forgeFeed = createRealmForgeFeed(), offForge = forgeFeed.bind(observer);
+  const chatFeed = createRoomChatFeed(room, observer);
   let frame: KingdomPresenceFrame | undefined, cursor = -1, disposed = false;
   const listeners = new Set<{ receive: (frame: KingdomPresenceFrame) => void; unavailable: () => void }>();
   let ready: () => void = () => {};
@@ -65,7 +73,7 @@ export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
   const dispose = () => {
     if (disposed) return; disposed = true; signal.removeEventListener('abort', dispose);
     offBootstrap(); offWorld(); client.room.onDrop.remove(dropped); client.room.onLeave.remove(dropped); client.room.onReconnect.remove(reconnect);
-    listeners.clear(); client.dispose();
+    listeners.clear(); offForge(); forgeFeed.unavailable(); chatFeed.dispose(); observer.dispose(); client.dispose();
   };
   signal.addEventListener('abort', dispose, { once: true });
   client.room.send('bootstrap');
@@ -79,5 +87,5 @@ export const openSimulatedKingdomEntry: KingdomEntrySource = async signal => {
     if (frame) receive(frame); else unavailable();
     return () => listeners.delete(listener);
   } };
-  return { scene, manifest, collision, client, presenceFeed, kingdomName: info.kingdomName, notice: info.notice, dispose };
+  return { scene, manifest, collision, client, presenceFeed, forgeFeed, chatFeed, kingdomName: info.kingdomName, notice: info.notice, dispose };
 };

@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { ServerError } from '@colyseus/core';
 import type { Pool } from 'pg';
-import { KingdomIdSchema, PersonIdSchema } from '@chatdom/shared';
+import { KingdomIdSchema, PersonIdSchema, starterCitizenLook } from '@chatdom/shared';
 import { RealmJoinSchema, type RealmAuthenticator, type RealmJoin, type RealmPrincipal } from '@chatdom/shared/realm';
 
-/** Shown for everyone without an approved public name or look. Never derived from browser input. */
+/** Legacy fallback presentation. Verified entries receive the same free starter recipes as presence. */
 export const REALM_ANONYMOUS_PRESENTATION = { publicName: 'Citizen', look: 'neutral' } as const;
 
 export interface RealmAuthenticatorOptions {
@@ -70,7 +70,7 @@ export function createRealmAuthenticator({ pool, origin }: RealmAuthenticatorOpt
       return {
         personId: PersonIdSchema.parse(row.person_id), kingdomId: KingdomIdSchema.parse(row.kingdom_id),
         sessionId: entryId, expiresAt: Number(row.session_expires_ms), origin,
-        publicName: row.public_name ?? REALM_ANONYMOUS_PRESENTATION.publicName, look: REALM_ANONYMOUS_PRESENTATION.look,
+        publicName: row.public_name ?? REALM_ANONYMOUS_PRESENTATION.publicName, look: starterCitizenLook(PersonIdSchema.parse(row.person_id)),
       };
     },
     async current(principal: RealmPrincipal, now: number): Promise<boolean> {

@@ -1,8 +1,9 @@
+import { REALM_CASTLE_SLOT, castleHostId, forgeHostForPerson, ownedForgeHost, ownedHostProfile } from '@chatdom/shared/realm';
 import type { RealmCapability, RealmDecision, RealmDecisionContext, RealmDomainCommand, RealmFact, RealmForgeReservation, RealmPrivateState, RealmPublicMessage } from '@chatdom/shared/realm';
-import { ForgeDraftSchema, type KingdomId } from '@chatdom/shared';
+import { ForgeDraftSchema, TokenSchema, kingdomForBroadcaster, type KingdomId } from '@chatdom/shared';
 
 const capability: Record<RealmDomainCommand['type'], RealmCapability> = {
-  'stream.observe': 'presence', 'citizen.rights': 'moderation', 'home.installAllocated': 'allocation',
+  'stream.observe': 'presence', 'citizen.rights': 'moderation', 'home.installAllocated': 'allocation', 'castle.installNative': 'allocation',
   'home.replaceApproved': 'publication', 'coal.creditQualifiedNight': 'presence',
   'presence.confirmInterval': 'presence',
   'forge.reserve': 'forge', 'forge.release': 'forge', 'forge.commitApproved': 'forge',
@@ -11,7 +12,7 @@ const own = <T>(record: Readonly<Record<string, T>>, key: string): T | undefined
 const without = <T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> => Object.fromEntries(Object.entries(record).filter(([id]) => id !== key));
 
 export function createRealmState(kingdomId: KingdomId, origin: 'live' | 'simulated'): RealmPrivateState {
-  return { version: 1, kingdomId, origin, sequence: 0, stream: { sessionId: null, startedAt: 0, liveUntil: 0 }, rights: {}, homes: {}, coals: {}, reservations: {}, forgeOutcomes: {}, attachments: {}, creditedNights: {}, qualification: {} };
+  return { version: 1, kingdomId, origin, sequence: 0, stream: { sessionId: null, startedAt: 0, liveUntil: 0 }, rights: {}, homes: {}, castle: null, coals: {}, reservations: {}, forgeOutcomes: {}, attachments: {}, creditedNights: {}, qualification: {} };
 }
 
 /** Pure intent -> facts. Only a fenced room may commit these proposals; clients never submit internal commands. */
@@ -37,14 +38,22 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
       break;
     }
     case 'home.installAllocated':
-      if (!c.home.allocationReceipt || !c.home.attribution.approvalId || !/^[a-f0-9]{64}$/.test(c.home.digest)
+      if (c.home.slot === REALM_CASTLE_SLOT || Object.hasOwn(c.home, 'moduleId') || c.home.id === s.castle?.id || !c.home.allocationReceipt || !c.home.attribution.approvalId || !/^[a-f0-9]{64}$/.test(c.home.digest)
         || Object.values(s.homes).some(h => h.id === c.home.id || h.ownerId === c.home.ownerId || h.slot === c.home.slot)) return reject('conflict');
       break;
+    case 'castle.installNative': {
+      const h = c.castle;
+      if (s.castle || kingdomForBroadcaster(h.ownerId) !== s.kingdomId || h.slot !== REALM_CASTLE_SLOT
+        || !TokenSchema.safeParse(h.moduleId).success || h.id !== castleHostId(h.moduleId)
+        || own(s.homes, h.id) || !h.attribution.approvalId || !/^[a-f0-9]{64}$/.test(h.digest)
+        || Object.keys(h.attachments).length > 0 || Object.hasOwn(h, 'allocationReceipt')) return reject('conflict');
+      break;
+    }
     case 'home.replaceApproved': {
       const h = own(s.homes, c.homeId);
       const rights = h ? own(s.rights, h.ownerId) : undefined;
       if (!rights?.build || rights.blocked) return reject('forbidden');
-      if (!h || h.revision !== c.expectedRevision || c.home.revision === h.revision || !c.approvalReceipt
+      if (!h || Object.hasOwn(c.home, 'moduleId') || h.revision !== c.expectedRevision || c.home.revision === h.revision || !c.approvalReceipt
         || c.home.id !== h.id || c.home.ownerId !== h.ownerId || c.home.slot !== h.slot
         || c.home.allocationReceipt !== h.allocationReceipt || c.home.layoutRevision !== h.layoutRevision
         || !/^[a-f0-9]{64}$/.test(c.home.digest)) return reject('conflict');
@@ -62,7 +71,7 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
     }
     case 'coal.creditQualifiedNight':
       if (!c.qualificationReceipt || !c.streamSessionId) return reject('forbidden');
-      if (!Object.values(s.homes).some(home=>home.ownerId===c.personId)) return reject('forbidden');
+      if (!forgeHostForPerson(s, c.personId)) return reject('forbidden');
       if (own(s.creditedNights, `${c.personId}:${c.streamSessionId}`)) return same;
       if ((own(s.qualification, `${c.personId}:${c.streamSessionId}`)?.coveredMs ?? 0) < 600_000) return reject('held');
       break;
@@ -93,11 +102,12 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
       const r = own(s.reservations, c.attempt.key);
       if (!r || r.attempt.attemptId !== c.attempt.attemptId || r.reservation.reservationId !== c.reservationId) return reject('conflict');
       if (!validReservation(s, r, ctx.now) || r.reservation.expiresAt <= ctx.now) return reject('cold');
-      const h = own(s.homes, r.homeId)!;
+      const h = ownedForgeHost(s, r.homeId)!;
       if (!ForgeDraftSchema.safeParse(c.attachment.draft).success) return reject('conflict');
       if (h.revision !== c.expectedRevision || h.digest !== c.expectedHomeDigest
         || !c.approvalReceipt || !c.creation.words.trim() || c.creation.words.length > 240
         || c.attachment.kingdomId !== s.kingdomId || c.attachment.provenance.source !== s.origin || own(s.attachments, c.attachment.id)
+        || (c.attachment.hostProfile ?? 'street-home') !== ownedHostProfile(h)
         || c.attachment.slot !== h.slot || c.attachment.hostId !== h.blueprint.id || c.attachment.family !== h.family
         || c.attachment.provenance.makerName !== h.attribution.makerName || c.attachment.provenance.kingdomName !== h.attribution.kingdomName
         || (own(s.coals, h.ownerId) ?? 0) < 1
@@ -113,10 +123,11 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
 }
 
 function validReservation(s: RealmPrivateState, r: RealmForgeReservation, now: number): boolean {
-  const h = own(s.homes, r.homeId), rights = own(s.rights, r.reservation.personId), v = r.reservation;
+  const h = ownedForgeHost(s, r.homeId), rights = own(s.rights, r.reservation.personId), v = r.reservation;
   return !!(h && rights && rights.forge && !rights.blocked && rights.revision === r.rightsRevision
     && rights.safetyIdentifier === v.safetyIdentifier && h.ownerId === v.personId && v.kingdomId === s.kingdomId
     && h.revision === v.revision && h.digest === r.homeDigest && h.slot === v.slot && h.family === v.family
+    && (v.hostProfile ?? 'street-home') === ownedHostProfile(h)
     && h.blueprint.id === v.home.id && h.attribution.approvalId === v.attribution.approvalId
     && s.stream.sessionId !== null && s.stream.sessionId === r.streamSessionId && s.stream.liveUntil > now);
 }
@@ -124,10 +135,11 @@ function validReservation(s: RealmPrivateState, r: RealmForgeReservation, now: n
 /** Replay committed facts only; gaps/cross-kingdom facts fail loudly. No clocks or external services. */
 export function applyRealmFact(s: RealmPrivateState, f: RealmFact): RealmPrivateState {
   if (f.version !== 1 || f.kingdomId !== s.kingdomId || f.seq !== s.sequence + 1 || f.origin !== s.origin) throw new Error('Realm fact continuity mismatch');
-  const c = f.body, next = { ...s, sequence: f.seq };
+  const c = f.body, next = { ...s, castle: s.castle ?? null, sequence: f.seq };
   switch (c.type) {
     case 'stream.observe': return { ...next, stream: { sessionId: c.sessionId, startedAt: c.startedAt, liveUntil: c.liveUntil } };
     case 'citizen.rights': return { ...next, rights: { ...s.rights, [c.personId]: c.rights } };
+    case 'castle.installNative': return { ...next, castle: c.castle };
     case 'home.installAllocated': return { ...next, homes: { ...s.homes, [c.home.id]: c.home } };
     case 'home.replaceApproved': {
       const attachments = {...s.attachments};
@@ -156,11 +168,12 @@ export function applyRealmFact(s: RealmPrivateState, f: RealmFact): RealmPrivate
     case 'forge.release': return { ...next, reservations: without(s.reservations, c.attempt.key),forgeOutcomes:{...s.forgeOutcomes,[c.attempt.key]:{attemptId:c.attempt.attemptId,status:'released'}} };
     case 'forge.commitApproved': {
       const r = own(s.reservations, c.attempt.key)!;
-      const h = own(s.homes, r.homeId)!;
+      const h = ownedForgeHost(s, r.homeId)!;
       const v=c.attachment;
       // Explicit public projection: private extra fields can never leak through an object spread.
       const attachment = { version:1 as const,id:v.id,runId:v.runId,kingdomId:v.kingdomId,slot:v.slot,hostId:v.hostId,
         hostFingerprint:v.hostFingerprint,socketId:v.socketId,origin:[v.origin[0],v.origin[1],v.origin[2]] as const,
+        ...(ownedHostProfile(h) === 'castle-keep' ? { hostProfile: 'castle-keep' as const } : {}),
         kitId:v.kitId,kitRevision:v.kitRevision,family:v.family,draft:ForgeDraftSchema.parse(v.draft),committedAt:f.committedAt,
         provenance:{source:v.provenance.source,makerName:v.provenance.makerName,kingdomName:v.provenance.kingdomName,designId:v.provenance.designId,firstForgedAt:f.committedAt}};
       const previousId = own(h.attachments, attachment.socketId), previous = previousId ? own(s.attachments, previousId) : undefined;
@@ -168,7 +181,9 @@ export function applyRealmFact(s: RealmPrivateState, f: RealmFact): RealmPrivate
         coals: { ...s.coals, [h.ownerId]: own(s.coals, h.ownerId)! - 1 },
         reservations: without(s.reservations, c.attempt.key),
         forgeOutcomes:{...s.forgeOutcomes,[c.attempt.key]:{attemptId:c.attempt.attemptId,status:'committed'}},
-        homes: { ...s.homes, [h.id]: { ...h, revision: `r${f.seq}`, attachments: { ...h.attachments, [attachment.socketId]: attachment.id } } },
+        ...('moduleId' in h
+          ? { castle: { ...h, revision: `r${f.seq}`, attachments: { ...h.attachments, [attachment.socketId]: attachment.id } } }
+          : { homes: { ...s.homes, [h.id]: { ...h, revision: `r${f.seq}`, attachments: { ...h.attachments, [attachment.socketId]: attachment.id } } } }),
         attachments: { ...s.attachments, ...(previous && previousId ? { [previousId]: { ...previous, attached: false } } : {}),
           [attachment.id]: { forgeKey: c.attempt.key, ownerId: h.ownerId, homeId: h.id, attached: true, attachment, creation: c.creation, approvalReceipt: c.approvalReceipt } },
       };
@@ -179,7 +194,8 @@ export function applyRealmFact(s: RealmPrivateState, f: RealmFact): RealmPrivate
 /** Public allowlist. A raw fact includes private ownership/words; it is never a broadcast payload. */
 export function projectRealmFact(s: RealmPrivateState, f: RealmFact): readonly RealmPublicMessage[] {
   const c = f.body;
-  if (c.type === 'forge.commitApproved') return [{ type: 'forge', event: { type: 'committed', activityId: c.attachment.runId, attachment: s.attachments[c.attachment.id]!.attachment } }];
+  if (c.type === 'forge.commitApproved') return [{ type: 'forge', event: { type: 'committed', activityId: c.attempt.attemptId, attachment: s.attachments[c.attachment.id]!.attachment } }];
+  if (c.type === 'castle.installNative') return [{ type: 'castle', moduleId: c.castle.moduleId, revision: c.castle.revision, assetHash: c.castle.digest, attachments: [] }];
   if (c.type === 'home.replaceApproved') return [{ type: 'home', plotId: c.homeId, revision: c.home.revision, assetHash: c.home.digest,attachments:Object.values(c.home.attachments).map(id=>s.attachments[id]!.attachment) }];
   return [];
 }

@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { ForgeDraftSchema, TokenSchema, VoxelBlueprintSchema, type KingdomId, type PersonId, type VoxelBlueprint } from '@chatdom/shared';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
+import { forgeHostForPerson, ownedHostProfile } from '@chatdom/shared/realm';
 import type { ForgeAttachment, ForgeAttempt, ForgeReservation, KingdomForgeAuthority, KingdomForgeLease, NativeForgeHome, RealmDomainCommand,
-  RealmForgeReservation, RealmOwnedHome, RealmPrivateState, RealmStoredOutcome } from '@chatdom/shared/realm';
+  RealmForgeReservation, RealmOwnedForgeHost, RealmPrivateState, RealmStoredOutcome } from '@chatdom/shared/realm';
 import { REALM_BASE_ANVILS, RealmBusyError, RealmHeldError, RealmWriterFencedError, type DurableKingdom, type DurableKingdomHold,
   type RealmCommandMeta } from '../persistence';
 import type { RealmForgeAttemptStatus, RealmForgeAuthority, RealmForgeOptions, RealmWiringLog } from './types';
@@ -39,7 +40,7 @@ type Reserved = Awaited<ReturnType<KingdomForgeAuthority['reserve']>>;
 type Revalidated = Awaited<ReturnType<KingdomForgeAuthority['revalidate']>>;
 type Committed = Awaited<ReturnType<KingdomForgeAuthority['commit']>>;
 type Refusal = { readonly kind: 'held' | 'cold'; readonly reason: string };
-type Eligible = { readonly kind: 'eligible'; readonly home: RealmOwnedHome; readonly rights: RealmPrivateState['rights'][string]; readonly blueprint: VoxelBlueprint };
+type Eligible = { readonly kind: 'eligible'; readonly home: RealmOwnedForgeHost; readonly rights: RealmPrivateState['rights'][string]; readonly blueprint: VoxelBlueprint };
 
 /**
  * What a person must actually hold for free words, read from committed authority only: their own home
@@ -47,7 +48,7 @@ type Eligible = { readonly kind: 'eligible'; readonly home: RealmOwnedHome; read
  * geometry that matches its digest. The chat command's slot is never consulted.
  */
 function eligibility(state: RealmPrivateState, personId: PersonId, now: number, layoutRevision: string): Eligible | Refusal {
-  const home = Object.values(state.homes).find(candidate => candidate.ownerId === personId);
+  const home = forgeHostForPerson(state, personId);
   if (!home) return { kind: 'cold', reason: 'no-home' };
   const rights = own(state.rights, personId);
   if (rights?.blocked) return { kind: 'held', reason: 'hold' };
@@ -63,8 +64,8 @@ function eligibility(state: RealmPrivateState, personId: PersonId, now: number, 
   return { kind: 'eligible', home, rights, blueprint: parsed.data };
 }
 
-function native(home: RealmOwnedHome, blueprint: VoxelBlueprint): NativeForgeHome {
-  return { slot: home.slot, revision: home.revision, family: home.family, home: structuredClone(blueprint) };
+function native(home: RealmOwnedForgeHost, blueprint: VoxelBlueprint): NativeForgeHome {
+  return { slot: home.slot, revision: home.revision, family: home.family, home: structuredClone(blueprint), ...(ownedHostProfile(home) === 'castle-keep' ? { hostProfile: 'castle-keep' } : {}) };
 }
 
 /** True once any attempt of this key made a part: one message is one made thing. */
@@ -81,11 +82,12 @@ function attemptStatus(state: RealmPrivateState, attempt: ForgeAttempt): RealmFo
 }
 
 /** Candidate fields checked against the current owned home before the reducer checks them again in the transaction. */
-function fits(attachment: ForgeAttachment, home: RealmOwnedHome, kingdomId: KingdomId, origin: 'live' | 'simulated'): boolean {
+function fits(attachment: ForgeAttachment, home: RealmOwnedForgeHost, kingdomId: KingdomId, origin: 'live' | 'simulated'): boolean {
   const a = attachment;
   const draft = ForgeDraftSchema.safeParse(a.draft);
   if (!draft.success) return false;
   if (!(a.version === 1 && a.kingdomId === kingdomId && a.slot === home.slot && a.hostId === home.blueprint.id && a.family === home.family
+    && (a.hostProfile ?? 'street-home') === ownedHostProfile(home)
     && TokenSchema.safeParse(a.id).success && a.id === a.runId && TokenSchema.safeParse(a.socketId).success
     && TokenSchema.safeParse(a.kitId).success && Number.isSafeInteger(a.kitRevision) && a.kitRevision >= 0
     && typeof a.hostFingerprint === 'string' && a.hostFingerprint.length > 0 && a.hostFingerprint.length <= 128
@@ -94,11 +96,11 @@ function fits(attachment: ForgeAttachment, home: RealmOwnedHome, kingdomId: King
     && a.provenance.source === origin && TokenSchema.safeParse(a.provenance.designId).success
     && a.provenance.makerName === home.attribution.makerName && a.provenance.kingdomName === home.attribution.kingdomName)) return false;
   try {
-    const socket = findForgeSockets(home.blueprint).find(candidate => candidate.kind === draft.data.plan.kind);
+    const socket = findForgeSockets(home.blueprint, ownedHostProfile(home)).find(candidate => candidate.kind === draft.data.plan.kind);
     if (!socket || socket.id !== a.socketId || socket.origin.some((value, index) => value !== a.origin[index])
       || a.hostFingerprint !== homeFingerprint(home.blueprint)) return false;
     const assembled = assembleForge(draft.data.plan, forgeStyleKit(home.family), socket);
-    checkForge(assembled, home.blueprint);
+    checkForge(assembled, home.blueprint, ownedHostProfile(home));
     return assembled.kit.id === a.kitId && assembled.kit.revision === a.kitRevision;
   } catch { return false; }
 }
@@ -220,7 +222,7 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
         const { home, rights, blueprint } = found;
         const reservation: ForgeReservation = {
           reservationId: `forge-reservation-${attemptDigest(input).slice(0, 32)}`, kingdomId, personId: input.personId,
-          slot: home.slot, revision: home.revision, family: home.family, home: structuredClone(blueprint),
+          ...native(home, blueprint),
           safetyIdentifier: rights.safetyIdentifier, expiresAt: now + reservationMs,
           attribution: { makerName: home.attribution.makerName, kingdomName: home.attribution.kingdomName, approvalId: home.attribution.approvalId },
         };

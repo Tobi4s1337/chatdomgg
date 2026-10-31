@@ -18,7 +18,7 @@ export async function runForge(input:unknown,providers:ForgeProviders,emit:(even
   abort();emit({type:'stage',stage:'judging-words'});
   const words=await providers.judgeWords({words:request.words,safetyIdentifier,...(signal?{signal}:{})});verdicts.push(words);abort();
   if(words.outcome!=='pass'){await stop(words.outcome,words.reason);return;}
-  const sockets=findForgeSockets(request.home);if(!sockets.length){await stop('hold','Your home needs a clear place for a new part.');return;}
+  const sockets=findForgeSockets(request.home,request.hostProfile);if(!sockets.length){await stop('hold','Your home needs a clear place for a new part.');return;}
   let feedback:string|undefined;
   for(let attempt=0;attempt<2;attempt++){
    emit({type:'stage',stage:'drafting'});
@@ -27,7 +27,7 @@ export async function runForge(input:unknown,providers:ForgeProviders,emit:(even
    let sheet:string;
    try{
     const socket=sockets.find(s=>s.kind===draft.plan.kind);if(!socket)throw new Error('This house has no clear socket for that kind of part.');
-    const result=assembleForge(draft.plan,forgeStyleKit(request.family),socket);checkForge(result,request.home);
+    const result=assembleForge(draft.plan,forgeStyleKit(request.family),socket);checkForge(result,request.home,request.hostProfile);
     sheet=renderForgeContactSheet(result.blueprint);
    }catch(error){abort();feedback=error instanceof Error?error.message:'The part could not be assembled.';if(attempt===1){await stop('hold','The smith needs another night to find a good fit.');return;}continue;}
    abort();emit({type:'stage',stage:'judging-piece'});

@@ -20,12 +20,17 @@ export interface StampFrame { x: number; y: number; w: number; h: number }
 export interface Stamp { group: string; ink: StampFrame; fill: StampFrame | null; anchor: { x: number; y: number }; w: number; h: number }
 export interface StampSheet { image: CanvasImageSource; stamps: Stamp[] }
 
+/** A patch of ground (a cluster) or a whole realm, washed in its realm's tint. */
 export interface PaintCluster { x: number; y: number; r: number; region: number; tint: string }
+export interface PaintRealm { x: number; y: number; r: number; tint: string }
 
 export interface PaintScene {
   pyramid: Pyramid;
   rings: Ring[];
   regionCount: number;
+  /** The base pigment of each region's land, by region index. */
+  regionTints: string[];
+  realms: PaintRealm[];
   clusters: PaintCluster[];
   decor: DecorMark[];
   stamps: StampSheet | null;
@@ -34,6 +39,8 @@ export interface PaintScene {
 const RIPPLES = [4, 8.5, 13.5, 19.5, 26.5, 34.5];
 const RIPPLE_ALPHA = [0.5, 0.4, 0.31, 0.23, 0.16, 0.1];
 const MARGIN_PX = 76;
+const REALM_WASH = [[0, 0.34], [0.72, 0.28], [1, 0]] as const;
+const CLUSTER_BLOOM = [[0, 0.26], [0.7, 0.18], [1, 0]] as const;
 
 /** Seeded PRNG, so every worker draws the same paper. */
 function mulberry(seed: number): () => number {
@@ -303,7 +310,7 @@ export class TilePainter {
 
       // Watercolour land, one tint per language.
       for (const [region, path] of byRegion) {
-        ctx.fillStyle = mixHex(LAND, regionTint(region), 0.46);
+        ctx.fillStyle = mixHex(LAND, this.tint(region), 0.46);
         ctx.fill(path, 'evenodd');
       }
       ctx.save();
@@ -313,7 +320,7 @@ export class TilePainter {
       if (scale >= 2.5) this.pattern(ctx, kit.hatch, key, 192, 'source-over', Math.min(0.55, (scale - 2.5) * 0.18));
       // Pigment pools along the shore, darker at the very edge as wet paint does.
       for (const [region, path] of byRegion) {
-        const edge = mixHex(regionTint(region), INK, 0.3);
+        const edge = mixHex(this.tint(region), INK, 0.3);
         for (const [width, alpha] of [[18, 0.06], [9, 0.08], [3.5, 0.13]] as const) {
           ctx.strokeStyle = rgba(edge, alpha);
           ctx.lineWidth = width;
@@ -350,21 +357,27 @@ export class TilePainter {
     ctx.restore();
   }
 
-  /** Each community's ground blooms in a slightly different wash, so neighbours read as places. */
+  private tint(region: number): string {
+    return this.scene.regionTints[region] ?? regionTint(region);
+  }
+
+  /**
+   * Each realm lays one soft wash over its ground, and its patches bloom in the same tint on top, so a realm reads
+   * as one place and its neighbour as another.
+   */
   private blooms(ctx: Canvas2D, clip: { minX: number; minY: number; maxX: number; maxY: number }, toX: (x: number) => number, toY: (y: number) => number, scale: number): void {
-    for (const cluster of this.scene.clusters) {
-      const reach = cluster.r * 1.15;
-      if (cluster.x + reach < clip.minX || cluster.x - reach > clip.maxX || cluster.y + reach < clip.minY || cluster.y - reach > clip.maxY) continue;
-      const x = toX(cluster.x);
-      const y = toY(cluster.y);
+    const wash = (circle: PaintRealm, reach: number, stops: readonly (readonly [number, number])[]) => {
+      if (circle.x + reach < clip.minX || circle.x - reach > clip.maxX || circle.y + reach < clip.minY || circle.y - reach > clip.maxY) return;
+      const x = toX(circle.x);
+      const y = toY(circle.y);
       const radius = reach * scale;
       const gradient = ctx.createRadialGradient(x, y, radius * 0.15, x, y, radius);
-      gradient.addColorStop(0, rgba(cluster.tint, 0.3));
-      gradient.addColorStop(0.7, rgba(cluster.tint, 0.18));
-      gradient.addColorStop(1, rgba(cluster.tint, 0));
+      for (const [at, alpha] of stops) gradient.addColorStop(at, rgba(circle.tint, alpha));
       ctx.fillStyle = gradient;
       ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-    }
+    };
+    for (const realm of this.scene.realms) wash(realm, realm.r * 1.08, REALM_WASH);
+    for (const cluster of this.scene.clusters) wash(cluster, cluster.r * 1.15, CLUSTER_BLOOM);
   }
 
   private decor(ctx: Canvas2D, kit: PaperKit, clip: { minX: number; minY: number; maxX: number; maxY: number }, toX: (x: number) => number, toY: (y: number) => number, scale: number): void {

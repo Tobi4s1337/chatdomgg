@@ -6,7 +6,8 @@ export type {
 } from './types';
 export { AUDIO_CONTROL_SURFACES, AUDIO_CUES, AUDIO_MATERIALS } from './types';
 export { FINISHED_FAMILIES } from './families';
-export { inspectKingdomAudio, playKingdomPhrase, type KingdomAudioInspection } from './engine';
+export { inspectKingdomAudio, kingdomAudioHost, playKingdomPhrase, type KingdomAudioInspection } from './engine';
+export { createForgeAudio, type ForgeAudio } from './forge';
 export { PHRASE_LIMITS, type KingdomPhrase, type KingdomPhraseOptions, type PhraseVoice } from './phrase';
 export { noteHz, type PaletteNote } from './palette';
 

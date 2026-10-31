@@ -1,0 +1,2982 @@
+{
+  "version": 1,
+  "kind": "chatdom-atlas-family-taxonomy",
+  "id": "families-1",
+  "review": {
+    "status": "proposed",
+    "proposedAt": "2026-10-30",
+    "basis": "Main categories of the 690 categories streamed most by at least three channels averaging 25+ viewers in the survey of 2026-10-30 (obs-20261030T042315Z-d5a9af3c1cf2). Hand-assigned proposal; not reviewed by the founder.",
+    "reviewedBy": null,
+    "reviewedAt": null
+  },
+  "families": [
+    {
+      "id": "just-chatting",
+      "name": "Just Chatting & IRL",
+      "realmName": "The Lantern-Lit Commons",
+      "games": [
+        {
+          "gameId": "509658",
+          "name": "Just Chatting"
+        },
+        {
+          "gameId": "509672",
+          "name": "IRL"
+        },
+        {
+          "gameId": "509659",
+          "name": "ASMR"
+        },
+        {
+          "gameId": "499003",
+          "name": "VRChat"
+        },
+        {
+          "gameId": "499973",
+          "name": "Always On"
+        },
+        {
+          "gameId": "417752",
+          "name": "Talk Shows & Podcasts"
+        },
+        {
+          "gameId": "509663",
+          "name": "Special Events"
+        },
+        {
+          "gameId": "1599346425",
+          "name": "Co-working & Studying"
+        },
+        {
+          "gameId": "498592",
+          "name": "I'm Only Sleeping"
+        },
+        {
+          "gameId": "272263131",
+          "name": "Animals, Aquariums, and Zoos"
+        },
+        {
+          "gameId": "509667",
+          "name": "Food & Drink"
+        },
+        {
+          "gameId": "116747788",
+          "name": "Pools, Hot Tubs, and Beaches"
+        },
+        {
+          "gameId": "515214",
+          "name": "Politics"
+        },
+        {
+          "gameId": "509671",
+          "name": "Fitness & Health"
+        },
+        {
+          "gameId": "509669",
+          "name": "GRWM"
+        }
+      ]
+    },
+    {
+      "id": "creative",
+      "name": "Creative & Music",
+      "realmName": "The Minstrel's Painted Coast",
+      "games": [
+        {
+          "gameId": "1669431183",
+          "name": "DJs"
+        },
+        {
+          "gameId": "509660",
+          "name": "Art"
+        },
+        {
+          "gameId": "26936",
+          "name": "Music"
+        },
+        {
+          "gameId": "1469308723",
+          "name": "Software and Game Development"
+        },
+        {
+          "gameId": "460951",
+          "name": "Geometry Dash"
+        },
+        {
+          "gameId": "509673",
+          "name": "Makers & Crafting"
+        },
+        {
+          "gameId": "1397210469",
+          "name": "Miniatures & Models"
+        },
+        {
+          "gameId": "21465",
+          "name": "osu!"
+        },
+        {
+          "gameId": "509670",
+          "name": "Science & Technology"
+        },
+        {
+          "gameId": "43579844",
+          "name": "Lego & Brickbuilding"
+        },
+        {
+          "gameId": "125264560",
+          "name": "Clone Hero"
+        },
+        {
+          "gameId": "503116",
+          "name": "Beat Saber"
+        },
+        {
+          "gameId": "772157971",
+          "name": "Writing & Reading"
+        }
+      ]
+    },
+    {
+      "id": "shooters",
+      "name": "Shooters",
+      "realmName": "The Gunpowder Marches",
+      "games": [
+        {
+          "gameId": "32399",
+          "name": "Counter-Strike"
+        },
+        {
+          "gameId": "516575",
+          "name": "VALORANT"
+        },
+        {
+          "gameId": "33214",
+          "name": "Fortnite"
+        },
+        {
+          "gameId": "1478650472",
+          "name": "Call of Duty: Modern Warfare 4"
+        },
+        {
+          "gameId": "515025",
+          "name": "Overwatch"
+        },
+        {
+          "gameId": "491931",
+          "name": "Escape from Tarkov"
+        },
+        {
+          "gameId": "1264310518",
+          "name": "Marvel Rivals"
+        },
+        {
+          "gameId": "464339927",
+          "name": "ARC Raiders"
+        },
+        {
+          "gameId": "511224",
+          "name": "Apex Legends"
+        },
+        {
+          "gameId": "500188",
+          "name": "Hunt: Showdown 1896"
+        },
+        {
+          "gameId": "493057",
+          "name": "PUBG: BATTLEGROUNDS"
+        },
+        {
+          "gameId": "460630",
+          "name": "Rainbow Six Siege"
+        },
+        {
+          "gameId": "512710",
+          "name": "Call of Duty: Warzone"
+        },
+        {
+          "gameId": "401587136",
+          "name": "Arena Breakout: Infinite"
+        },
+        {
+          "gameId": "27546",
+          "name": "World of Tanks"
+        },
+        {
+          "gameId": "497057",
+          "name": "Destiny 2"
+        },
+        {
+          "gameId": "2106425216",
+          "name": "Gray Zone Warfare"
+        },
+        {
+          "gameId": "66170",
+          "name": "Warframe"
+        },
+        {
+          "gameId": "1282866981",
+          "name": "Delta Force"
+        },
+        {
+          "gameId": "417892",
+          "name": "Z1: Battle Royale"
+        },
+        {
+          "gameId": "505884",
+          "name": "PUBG MOBILE"
+        },
+        {
+          "gameId": "66366",
+          "name": "War Thunder"
+        },
+        {
+          "gameId": "168648543",
+          "name": "Battlefield 6"
+        },
+        {
+          "gameId": "1910103699",
+          "name": "THE FINALS"
+        },
+        {
+          "gameId": "32502",
+          "name": "World of Warships"
+        },
+        {
+          "gameId": "1393304883",
+          "name": "Mir Tankov"
+        },
+        {
+          "gameId": "504463",
+          "name": "Tom Clancy's The Division 2"
+        },
+        {
+          "gameId": "623291583",
+          "name": "Ghosts of Tabor"
+        },
+        {
+          "gameId": "1663723394",
+          "name": "Gears of War: E-Day"
+        },
+        {
+          "gameId": "513501",
+          "name": "Standoff 2"
+        },
+        {
+          "gameId": "1494",
+          "name": "Call of Duty"
+        },
+        {
+          "gameId": "766571430",
+          "name": "HELLDIVERS 2"
+        },
+        {
+          "gameId": "223869970",
+          "name": "Warhammer 40,000: Space Marine II"
+        },
+        {
+          "gameId": "407314011",
+          "name": "Marathon"
+        },
+        {
+          "gameId": "1413930024",
+          "name": "Active Matter"
+        },
+        {
+          "gameId": "2133072147",
+          "name": "Mir Korabley"
+        },
+        {
+          "gameId": "506416",
+          "name": "Halo Infinite"
+        },
+        {
+          "gameId": "1630174498",
+          "name": "SULFUR"
+        },
+        {
+          "gameId": "16676",
+          "name": "Team Fortress 2"
+        },
+        {
+          "gameId": "24193",
+          "name": "Left 4 Dead 2"
+        },
+        {
+          "gameId": "1158884259",
+          "name": "Splatoon 3"
+        },
+        {
+          "gameId": "32345",
+          "name": "Borderlands 2"
+        },
+        {
+          "gameId": "417969",
+          "name": "Halo: The Master Chief Collection"
+        },
+        {
+          "gameId": "502732",
+          "name": "Free Fire"
+        },
+        {
+          "gameId": "1388848972",
+          "name": "Metro 2033 Redux"
+        },
+        {
+          "gameId": "1515015750",
+          "name": "Strinova"
+        },
+        {
+          "gameId": "19490",
+          "name": "Quake Live"
+        },
+        {
+          "gameId": "2012789438",
+          "name": "Call of Duty: Black Ops 7"
+        },
+        {
+          "gameId": "490843",
+          "name": "War Robots"
+        },
+        {
+          "gameId": "518873",
+          "name": "Warhammer 40,000: Darktide"
+        },
+        {
+          "gameId": "1023750977",
+          "name": "FragPunk"
+        },
+        {
+          "gameId": "1848745913",
+          "name": "Battlefield REDSEC"
+        },
+        {
+          "gameId": "2104758320",
+          "name": "The First Descendant"
+        },
+        {
+          "gameId": "21563",
+          "name": "S4 League"
+        },
+        {
+          "gameId": "34134",
+          "name": "Call of Duty: Black Ops II"
+        },
+        {
+          "gameId": "489401",
+          "name": "Call of Duty: Black Ops III"
+        },
+        {
+          "gameId": "491115",
+          "name": "Paladins"
+        },
+        {
+          "gameId": "494684",
+          "name": "MechWarrior 5: Mercenaries"
+        },
+        {
+          "gameId": "1730526563",
+          "name": "Killing Floor III"
+        },
+        {
+          "gameId": "1964",
+          "name": "Call of Duty 4: Modern Warfare"
+        },
+        {
+          "gameId": "2121806469",
+          "name": "S.T.A.L.K.E.R. G.A.M.M.A."
+        },
+        {
+          "gameId": "23894",
+          "name": "Call of Duty: Black Ops"
+        },
+        {
+          "gameId": "32736074",
+          "name": "BloodStrike"
+        },
+        {
+          "gameId": "478407715",
+          "name": "Arma Reforger"
+        },
+        {
+          "gameId": "492113",
+          "name": "Crossout"
+        },
+        {
+          "gameId": "505963",
+          "name": "Atomic Heart"
+        },
+        {
+          "gameId": "511701",
+          "name": "Ready or Not"
+        },
+        {
+          "gameId": "730238586",
+          "name": "Counter-Strike: Source"
+        }
+      ]
+    },
+    {
+      "id": "arenas",
+      "name": "Arenas & MOBAs",
+      "realmName": "The Warring Lanes",
+      "games": [
+        {
+          "gameId": "21779",
+          "name": "League of Legends"
+        },
+        {
+          "gameId": "29595",
+          "name": "Dota 2"
+        },
+        {
+          "gameId": "2132205352",
+          "name": "Deadlock"
+        },
+        {
+          "gameId": "494184",
+          "name": "Mobile Legends: Bang Bang"
+        },
+        {
+          "gameId": "32959",
+          "name": "Heroes of the Storm"
+        },
+        {
+          "gameId": "497497",
+          "name": "Brawl Stars"
+        },
+        {
+          "gameId": "2094865572",
+          "name": "SMITE 2"
+        },
+        {
+          "gameId": "514858",
+          "name": "League of Legends: Wild Rift"
+        },
+        {
+          "gameId": "515474",
+          "name": "NARAKA: BLADEPOINT"
+        },
+        {
+          "gameId": "511295",
+          "name": "Predecessor"
+        },
+        {
+          "gameId": "451007760",
+          "name": "My Hero Ultra Rumble"
+        },
+        {
+          "gameId": "518379",
+          "name": "Pokémon UNITE"
+        },
+        {
+          "gameId": "113749",
+          "name": "Prime World"
+        },
+        {
+          "gameId": "498302",
+          "name": "Arena of Valor"
+        },
+        {
+          "gameId": "512864",
+          "name": "Eternal Return"
+        }
+      ]
+    },
+    {
+      "id": "mmo",
+      "name": "Online Worlds",
+      "realmName": "The Thousand-Guild Kingdoms",
+      "games": [
+        {
+          "gameId": "18122",
+          "name": "World of Warcraft"
+        },
+        {
+          "gameId": "771448419",
+          "name": "AION 2"
+        },
+        {
+          "gameId": "19619",
+          "name": "Tibia"
+        },
+        {
+          "gameId": "386821",
+          "name": "Black Desert"
+        },
+        {
+          "gameId": "459931",
+          "name": "Old School RuneScape"
+        },
+        {
+          "gameId": "24241",
+          "name": "FINAL FANTASY XIV ONLINE"
+        },
+        {
+          "gameId": "417528",
+          "name": "Albion Online"
+        },
+        {
+          "gameId": "19976",
+          "name": "MapleStory"
+        },
+        {
+          "gameId": "71375",
+          "name": "Star Citizen"
+        },
+        {
+          "gameId": "29056",
+          "name": "Knight Online"
+        },
+        {
+          "gameId": "490100",
+          "name": "Lost Ark"
+        },
+        {
+          "gameId": "502829",
+          "name": "R2 Online: Reign of Revolution"
+        },
+        {
+          "gameId": "13263",
+          "name": "EVE Online"
+        },
+        {
+          "gameId": "516588",
+          "name": "Rise Online"
+        },
+        {
+          "gameId": "20596",
+          "name": "Dofus"
+        },
+        {
+          "gameId": "20050",
+          "name": "Perfect World"
+        },
+        {
+          "gameId": "19357",
+          "name": "Guild Wars 2"
+        },
+        {
+          "gameId": "506246",
+          "name": "Fallout 76"
+        },
+        {
+          "gameId": "515349",
+          "name": "Lineage II"
+        },
+        {
+          "gameId": "31336",
+          "name": "Metin2"
+        },
+        {
+          "gameId": "65654",
+          "name": "The Elder Scrolls Online"
+        },
+        {
+          "gameId": "2083",
+          "name": "RuneScape"
+        },
+        {
+          "gameId": "80607",
+          "name": "Elite: Dangerous"
+        },
+        {
+          "gameId": "15229",
+          "name": "Ragnarok Online"
+        },
+        {
+          "gameId": "24438",
+          "name": "MU Online"
+        },
+        {
+          "gameId": "1468190144",
+          "name": "Aion"
+        },
+        {
+          "gameId": "966704637",
+          "name": "MIR 4"
+        },
+        {
+          "gameId": "3951",
+          "name": "RF Online"
+        },
+        {
+          "gameId": "479682350",
+          "name": "Monsters & Memories"
+        },
+        {
+          "gameId": "413569",
+          "name": "The Lord of the Rings Online"
+        },
+        {
+          "gameId": "10229",
+          "name": "FINAL FANTASY XI ONLINE"
+        },
+        {
+          "gameId": "20941",
+          "name": "Wizard101"
+        },
+        {
+          "gameId": "30924",
+          "name": "ArcheAge"
+        },
+        {
+          "gameId": "457975278",
+          "name": "PokeMMO"
+        },
+        {
+          "gameId": "608663369",
+          "name": "RavenQuest"
+        },
+        {
+          "gameId": "15134",
+          "name": "Dungeons & Dragons Online"
+        },
+        {
+          "gameId": "19275",
+          "name": "DC Universe Online"
+        },
+        {
+          "gameId": "19801",
+          "name": "Throne and Liberty"
+        },
+        {
+          "gameId": "19858",
+          "name": "Star Trek Online"
+        },
+        {
+          "gameId": "498523",
+          "name": "Conqueror's Blade"
+        },
+        {
+          "gameId": "517282",
+          "name": "Mortal Online 2"
+        }
+      ]
+    },
+    {
+      "id": "roleplay",
+      "name": "Roleplay & Open Worlds",
+      "realmName": "The Masquerade Free Cities",
+      "games": [
+        {
+          "gameId": "32982",
+          "name": "Grand Theft Auto V"
+        },
+        {
+          "gameId": "493959",
+          "name": "Red Dead Redemption II"
+        },
+        {
+          "gameId": "509577",
+          "name": "Dungeons & Dragons"
+        },
+        {
+          "gameId": "1131336879",
+          "name": "Black Russia"
+        },
+        {
+          "gameId": "509664",
+          "name": "Tabletop RPGs"
+        },
+        {
+          "gameId": "18707",
+          "name": "Grand Theft Auto IV"
+        },
+        {
+          "gameId": "1306936545",
+          "name": "NEXTRP"
+        }
+      ]
+    },
+    {
+      "id": "sandbox",
+      "name": "Builders & Sandboxes",
+      "realmName": "The Blockwright Highlands",
+      "games": [
+        {
+          "gameId": "27471",
+          "name": "Minecraft"
+        },
+        {
+          "gameId": "23020",
+          "name": "ROBLOX"
+        },
+        {
+          "gameId": "1763263",
+          "name": "nanos world"
+        },
+        {
+          "gameId": "1510789205",
+          "name": "Planet Zoo 2"
+        },
+        {
+          "gameId": "18846",
+          "name": "Garry's Mod"
+        },
+        {
+          "gameId": "394568",
+          "name": "RimWorld"
+        },
+        {
+          "gameId": "458781",
+          "name": "No Man's Sky"
+        },
+        {
+          "gameId": "511399",
+          "name": "Super Mario Maker 2"
+        },
+        {
+          "gameId": "1422023940",
+          "name": "QSMP"
+        },
+        {
+          "gameId": "1804231074",
+          "name": "MapleStory Worlds"
+        },
+        {
+          "gameId": "506456",
+          "name": "Satisfactory"
+        },
+        {
+          "gameId": "130942",
+          "name": "Factorio"
+        },
+        {
+          "gameId": "2059463486",
+          "name": "Waterpark Simulator"
+        },
+        {
+          "gameId": "31376",
+          "name": "Terraria"
+        },
+        {
+          "gameId": "1979693660",
+          "name": "Transport Fever 3"
+        },
+        {
+          "gameId": "1584836809",
+          "name": "Schedule I"
+        },
+        {
+          "gameId": "493815",
+          "name": "Oxygen Not Included"
+        },
+        {
+          "gameId": "514891",
+          "name": "Timberborn"
+        },
+        {
+          "gameId": "1637021799",
+          "name": "Anno 117: Pax Romana"
+        },
+        {
+          "gameId": "498417",
+          "name": "Vintage Story"
+        }
+      ]
+    },
+    {
+      "id": "survival",
+      "name": "Survival & Horror",
+      "realmName": "The Moors of Last Light",
+      "games": [
+        {
+          "gameId": "491487",
+          "name": "Dead by Daylight"
+        },
+        {
+          "gameId": "263490",
+          "name": "Rust"
+        },
+        {
+          "gameId": "518184",
+          "name": "Phasmophobia"
+        },
+        {
+          "gameId": "737987407",
+          "name": "Enshrouded"
+        },
+        {
+          "gameId": "31339",
+          "name": "Project Zomboid"
+        },
+        {
+          "gameId": "65632",
+          "name": "DayZ"
+        },
+        {
+          "gameId": "1441208453",
+          "name": "Once Human"
+        },
+        {
+          "gameId": "1294658629",
+          "name": "R.E.P.O."
+        },
+        {
+          "gameId": "902998079",
+          "name": "Halloween: The Game"
+        },
+        {
+          "gameId": "508455",
+          "name": "Valheim"
+        },
+        {
+          "gameId": "1960720223",
+          "name": "SILENT HILL: townfall"
+        },
+        {
+          "gameId": "23311496",
+          "name": "Clive Barker's Hellraiser: Revival"
+        },
+        {
+          "gameId": "458443",
+          "name": "Alien: Isolation"
+        },
+        {
+          "gameId": "735904419",
+          "name": "ARK: Survival Ascended"
+        },
+        {
+          "gameId": "1820378900",
+          "name": "Resident Evil 4"
+        },
+        {
+          "gameId": "490948",
+          "name": "The Isle"
+        },
+        {
+          "gameId": "1597660489",
+          "name": "RESIDENT EVIL: requiem"
+        },
+        {
+          "gameId": "293693714",
+          "name": "Resident Evil 2"
+        },
+        {
+          "gameId": "518144",
+          "name": "The Outlast Trials"
+        },
+        {
+          "gameId": "271304",
+          "name": "7 Days to Die"
+        },
+        {
+          "gameId": "488634",
+          "name": "Don't Starve Together"
+        },
+        {
+          "gameId": "518017",
+          "name": "Resident Evil Village"
+        },
+        {
+          "gameId": "1937599489",
+          "name": "The Quarry"
+        },
+        {
+          "gameId": "1945673289",
+          "name": "The Mortuary Assistant"
+        },
+        {
+          "gameId": "492934",
+          "name": "RESIDENT EVIL 7 biohazard"
+        },
+        {
+          "gameId": "250649084",
+          "name": "SILENT HILL 2"
+        },
+        {
+          "gameId": "418016",
+          "name": "The Long Dark"
+        },
+        {
+          "gameId": "73586",
+          "name": "Outlast"
+        },
+        {
+          "gameId": "1286840579",
+          "name": "Demonologist"
+        },
+        {
+          "gameId": "1966055328",
+          "name": "Fears to Fathom - Scratch Creek"
+        },
+        {
+          "gameId": "1987896617",
+          "name": "Dune: Awakening"
+        },
+        {
+          "gameId": "2085980140",
+          "name": "Lethal Company"
+        },
+        {
+          "gameId": "1028198402",
+          "name": "Dead Space"
+        },
+        {
+          "gameId": "510117",
+          "name": "Outlast II"
+        },
+        {
+          "gameId": "542560980",
+          "name": "Until Dawn"
+        },
+        {
+          "gameId": "82446336",
+          "name": "Remothered: Red Nun's Legacy"
+        },
+        {
+          "gameId": "1064893715",
+          "name": "Resident Evil 3"
+        },
+        {
+          "gameId": "1330093788",
+          "name": "Voices of the Void"
+        },
+        {
+          "gameId": "1535635666",
+          "name": "MADiSON"
+        },
+        {
+          "gameId": "1936054038",
+          "name": "Little Nightmares III"
+        },
+        {
+          "gameId": "2066107586",
+          "name": "Escape the Backrooms"
+        },
+        {
+          "gameId": "2115231542",
+          "name": "No, I'm Not A Human"
+        },
+        {
+          "gameId": "2124871354",
+          "name": "RuneScape: Dragonwilds"
+        },
+        {
+          "gameId": "494082",
+          "name": "Visage"
+        },
+        {
+          "gameId": "495811",
+          "name": "SCUM"
+        },
+        {
+          "gameId": "492035",
+          "name": "Resident Evil"
+        },
+        {
+          "gameId": "848400095",
+          "name": "SILENT HILL ƒ"
+        },
+        {
+          "gameId": "1196356222",
+          "name": "MiSide"
+        },
+        {
+          "gameId": "1868360962",
+          "name": "Five Nights at Freddy's"
+        },
+        {
+          "gameId": "1904996652",
+          "name": "Mouthwashing"
+        },
+        {
+          "gameId": "458224",
+          "name": "SOMA"
+        },
+        {
+          "gameId": "68000",
+          "name": "The Evil Within"
+        },
+        {
+          "gameId": "1074044196",
+          "name": "Alan Wake II"
+        },
+        {
+          "gameId": "18808",
+          "name": "Resident Evil 5"
+        },
+        {
+          "gameId": "19156",
+          "name": "Alan Wake"
+        },
+        {
+          "gameId": "227689960",
+          "name": "Still Wakes the Deep"
+        },
+        {
+          "gameId": "489721",
+          "name": "Resident Evil 0"
+        },
+        {
+          "gameId": "513949",
+          "name": "Little Nightmares II"
+        },
+        {
+          "gameId": "976324957",
+          "name": "Fears to Fathom: Carson House"
+        },
+        {
+          "gameId": "1036710512",
+          "name": "Palworld"
+        },
+        {
+          "gameId": "1112609075",
+          "name": "Cronos: The New Dawn"
+        },
+        {
+          "gameId": "1162901384",
+          "name": "Fears to Fathom: Ironbark Lookout"
+        },
+        {
+          "gameId": "1180890490",
+          "name": "At Dead of Night"
+        },
+        {
+          "gameId": "1317379021",
+          "name": "Look Outside"
+        },
+        {
+          "gameId": "1531824392",
+          "name": "Amnesia: The Bunker"
+        },
+        {
+          "gameId": "1749963163",
+          "name": "Dying Light: The Beast"
+        },
+        {
+          "gameId": "19009",
+          "name": "Dead Space (2008)"
+        },
+        {
+          "gameId": "1977278621",
+          "name": "DIRECTIVE 8020"
+        },
+        {
+          "gameId": "2045790021",
+          "name": "No More Room in Hell 2"
+        },
+        {
+          "gameId": "2058220722",
+          "name": "Poppy Playtime"
+        },
+        {
+          "gameId": "2105826178",
+          "name": "Choo-Choo Charles"
+        },
+        {
+          "gameId": "27127",
+          "name": "Amnesia: The Dark Descent"
+        },
+        {
+          "gameId": "460090",
+          "name": "Subnautica"
+        },
+        {
+          "gameId": "482579574",
+          "name": "Grounded 2"
+        },
+        {
+          "gameId": "508685",
+          "name": "SIGNALIS"
+        },
+        {
+          "gameId": "517528",
+          "name": "LABYRINTHINE"
+        },
+        {
+          "gameId": "518405",
+          "name": "Little Goody Two Shoes"
+        },
+        {
+          "gameId": "67647",
+          "name": "ROUTINE"
+        },
+        {
+          "gameId": "143662140",
+          "name": "Parasocial"
+        },
+        {
+          "gameId": "1840896223",
+          "name": "REANIMAL"
+        },
+        {
+          "gameId": "1959204573",
+          "name": "Crow Country"
+        },
+        {
+          "gameId": "2099118364",
+          "name": "Fears to Fathom: Norwood Hitchhike"
+        },
+        {
+          "gameId": "2143096682",
+          "name": "Five Nights at Freddy's: Security Breach"
+        },
+        {
+          "gameId": "463659004",
+          "name": "Paranormal Cleanup"
+        },
+        {
+          "gameId": "490105",
+          "name": "Fran Bow"
+        },
+        {
+          "gameId": "504901183",
+          "name": "Layers of Fear"
+        },
+        {
+          "gameId": "506410",
+          "name": "Dying Light 2: Stay Human"
+        },
+        {
+          "gameId": "512981",
+          "name": "Blair Witch"
+        },
+        {
+          "gameId": "513913",
+          "name": "Killer Frequency"
+        },
+        {
+          "gameId": "514207",
+          "name": "The Dark Pictures Anthology: Little Hope"
+        },
+        {
+          "gameId": "515479",
+          "name": "Sons of the Forest"
+        },
+        {
+          "gameId": "569438345",
+          "name": "Quarantine Zone: The Last Check"
+        },
+        {
+          "gameId": "654543582",
+          "name": "The Dark Pictures Anthology: The Devil in Me"
+        },
+        {
+          "gameId": "67637",
+          "name": "Until Dawn"
+        },
+        {
+          "gameId": "723826053",
+          "name": "Subnautica 2"
+        },
+        {
+          "gameId": "7690",
+          "name": "Resident Evil Code: Veronica X HD"
+        },
+        {
+          "gameId": "836519689",
+          "name": "DEVOUR"
+        },
+        {
+          "gameId": "932115604",
+          "name": "Resident Evil"
+        }
+      ]
+    },
+    {
+      "id": "adventure",
+      "name": "Adventures & RPGs",
+      "realmName": "The Wandering Heroes' Reach",
+      "games": [
+        {
+          "gameId": "306019403",
+          "name": "Phantom Blade Zero"
+        },
+        {
+          "gameId": "1267582829",
+          "name": "Aniimo"
+        },
+        {
+          "gameId": "65876",
+          "name": "Cyberpunk 2077"
+        },
+        {
+          "gameId": "512953",
+          "name": "ELDEN RING"
+        },
+        {
+          "gameId": "513181",
+          "name": "Genshin Impact"
+        },
+        {
+          "gameId": "512033",
+          "name": "GODDESS OF VICTORY: NIKKE"
+        },
+        {
+          "gameId": "515186",
+          "name": "Crimson Desert"
+        },
+        {
+          "gameId": "1736572793",
+          "name": "Castlevania: Belmont's Curse"
+        },
+        {
+          "gameId": "890558948",
+          "name": "Torchlight: Infinite"
+        },
+        {
+          "gameId": "344035090",
+          "name": "Kingdom Come: Deliverance II"
+        },
+        {
+          "gameId": "490377",
+          "name": "Sea of Thieves"
+        },
+        {
+          "gameId": "1702520304",
+          "name": "Path of Exile 2"
+        },
+        {
+          "gameId": "1780647523",
+          "name": "HITMAN World of Assassination"
+        },
+        {
+          "gameId": "510056",
+          "name": "Epic Seven"
+        },
+        {
+          "gameId": "1630982727",
+          "name": "Where Winds Meet"
+        },
+        {
+          "gameId": "805597430",
+          "name": "The Wolf Among Us Remastered"
+        },
+        {
+          "gameId": "1286077738",
+          "name": "Monster Hunter Wilds"
+        },
+        {
+          "gameId": "2009321156",
+          "name": "Dark and Darker"
+        },
+        {
+          "gameId": "456845141",
+          "name": "Zenless Zone Zero"
+        },
+        {
+          "gameId": "115977",
+          "name": "The Witcher 3: Wild Hunt"
+        },
+        {
+          "gameId": "1414860634",
+          "name": "The Binding of Isaac: Repentance"
+        },
+        {
+          "gameId": "448390627",
+          "name": "The Witcher 3: Wild Hunt Remastered"
+        },
+        {
+          "gameId": "512923",
+          "name": "Baldur's Gate 3"
+        },
+        {
+          "gameId": "558633344",
+          "name": "Monster Hunter Outlanders"
+        },
+        {
+          "gameId": "982348888",
+          "name": "ELDEN RING NIGHTREIGN"
+        },
+        {
+          "gameId": "1982936547",
+          "name": "Pokémon"
+        },
+        {
+          "gameId": "460636",
+          "name": "Bloodborne"
+        },
+        {
+          "gameId": "494099",
+          "name": "Kingdom Hearts HD 1.5 + 2.5 ReMIX"
+        },
+        {
+          "gameId": "515024",
+          "name": "Diablo IV"
+        },
+        {
+          "gameId": "1050003477",
+          "name": "The Elder Scrolls V: Skyrim - Special Edition"
+        },
+        {
+          "gameId": "209738946",
+          "name": "Wuthering Waves"
+        },
+        {
+          "gameId": "489111",
+          "name": "Summoners War: Sky Arena"
+        },
+        {
+          "gameId": "1338428218",
+          "name": "CONTROL Resonant"
+        },
+        {
+          "gameId": "506415",
+          "name": " SEKIRO: SHADOWS DIE TWICE"
+        },
+        {
+          "gameId": "653624336",
+          "name": "Lies of P"
+        },
+        {
+          "gameId": "29307",
+          "name": "Path of Exile"
+        },
+        {
+          "gameId": "36799602",
+          "name": "Clair Obscur: Expedition 33"
+        },
+        {
+          "gameId": "490292",
+          "name": "DARK SOULS III"
+        },
+        {
+          "gameId": "847310440",
+          "name": "Valor Mortis"
+        },
+        {
+          "gameId": "1122982998",
+          "name": "Dark Souls: Remastered"
+        },
+        {
+          "gameId": "1448964995",
+          "name": "ARKNIGHTS: ENDFIELD"
+        },
+        {
+          "gameId": "435870350",
+          "name": "Dragon's Dogma II"
+        },
+        {
+          "gameId": "1819887434",
+          "name": "Tomb Raider I•II•III Remastered"
+        },
+        {
+          "gameId": "489170",
+          "name": "DARK SOULS II: Scholar of the First Sin"
+        },
+        {
+          "gameId": "490147",
+          "name": "Hollow Knight"
+        },
+        {
+          "gameId": "1357871551",
+          "name": "The Blood of Dawnwalker"
+        },
+        {
+          "gameId": "177579460",
+          "name": "FELLOWSHIP"
+        },
+        {
+          "gameId": "213930085",
+          "name": "Honkai: Star Rail"
+        },
+        {
+          "gameId": "492535",
+          "name": "Celeste"
+        },
+        {
+          "gameId": "508948",
+          "name": "Raid: Shadow Legends"
+        },
+        {
+          "gameId": "516173984",
+          "name": "Cult of the Lamb"
+        },
+        {
+          "gameId": "1901865180",
+          "name": "NTE: Neverness to Everness"
+        },
+        {
+          "gameId": "30740",
+          "name": "The Walking Dead"
+        },
+        {
+          "gameId": "327598602",
+          "name": "Onimusha: Way of the Sword"
+        },
+        {
+          "gameId": "1535225577",
+          "name": "The Last of Us Part II Remastered"
+        },
+        {
+          "gameId": "1695276178",
+          "name": "CAIRN"
+        },
+        {
+          "gameId": "493997",
+          "name": "Super Mario Odyssey"
+        },
+        {
+          "gameId": "511391",
+          "name": "Hollow Knight: Silksong"
+        },
+        {
+          "gameId": "965771331",
+          "name": "Deltarune"
+        },
+        {
+          "gameId": "110758",
+          "name": "The Legend of Zelda: Breath of the Wild"
+        },
+        {
+          "gameId": "1788326126",
+          "name": "Diablo II: Resurrected"
+        },
+        {
+          "gameId": "997367275",
+          "name": "Pokémon Legends: Z-A"
+        },
+        {
+          "gameId": "1095275650",
+          "name": "Hogwarts Legacy"
+        },
+        {
+          "gameId": "1361634357",
+          "name": "Roco Kingdom"
+        },
+        {
+          "gameId": "497467",
+          "name": "Monster Hunter: World"
+        },
+        {
+          "gameId": "505705",
+          "name": "Noita"
+        },
+        {
+          "gameId": "509541",
+          "name": "Luigi's Mansion 3"
+        },
+        {
+          "gameId": "511229",
+          "name": "Pogostuck: Rage With Your Friends"
+        },
+        {
+          "gameId": "76929895",
+          "name": "The Seven Deadly Sins: Origin"
+        },
+        {
+          "gameId": "778386489",
+          "name": "The Last of Us Part I"
+        },
+        {
+          "gameId": "18763",
+          "name": "Fallout 3"
+        },
+        {
+          "gameId": "19745",
+          "name": "Pokémon Platinum Version"
+        },
+        {
+          "gameId": "22959",
+          "name": "Alice: Madness Returns"
+        },
+        {
+          "gameId": "229772247",
+          "name": "007 First Light"
+        },
+        {
+          "gameId": "23857",
+          "name": "Pokémon HeartGold/SoulSilver"
+        },
+        {
+          "gameId": "26881",
+          "name": "Grim Dawn"
+        },
+        {
+          "gameId": "30028",
+          "name": "The Elder Scrolls V: Skyrim"
+        },
+        {
+          "gameId": "313558",
+          "name": "Diablo III"
+        },
+        {
+          "gameId": "468533702",
+          "name": "Soulframe"
+        },
+        {
+          "gameId": "489405",
+          "name": "Dragon Ball Z: Dokkan Battle"
+        },
+        {
+          "gameId": "509110",
+          "name": "Risk of Rain 2"
+        },
+        {
+          "gameId": "512998",
+          "name": "The Legend of Zelda: Tears of the Kingdom"
+        },
+        {
+          "gameId": "521979070",
+          "name": "Slay the Princess"
+        },
+        {
+          "gameId": "1967084783",
+          "name": "Marvel's Spider-Man 2"
+        },
+        {
+          "gameId": "404069058",
+          "name": "ACE COMBAT 8: WINGS OF THEVE"
+        },
+        {
+          "gameId": "489776",
+          "name": "Fallout 4"
+        },
+        {
+          "gameId": "505980",
+          "name": "Stoneshard"
+        },
+        {
+          "gameId": "511864",
+          "name": "Persona 5 Royal"
+        },
+        {
+          "gameId": "518018",
+          "name": "PRAGMATA"
+        },
+        {
+          "gameId": "602959317",
+          "name": "Dispatch"
+        },
+        {
+          "gameId": "852009328",
+          "name": "Mistfall Hunter"
+        },
+        {
+          "gameId": "102007682",
+          "name": "God of War Ragnarök"
+        },
+        {
+          "gameId": "1102949822",
+          "name": "FINAL FANTASY VII REBIRTH"
+        },
+        {
+          "gameId": "1239888734",
+          "name": "Tales of Eternia: Remastered"
+        },
+        {
+          "gameId": "1275666892",
+          "name": "Monster Hunter Rise"
+        },
+        {
+          "gameId": "1568081763",
+          "name": "Mass Effect Legendary Edition"
+        },
+        {
+          "gameId": "1581126534",
+          "name": "DREDGE"
+        },
+        {
+          "gameId": "1584745140",
+          "name": "Pokémon Brilliant Diamond/Shining Pearl"
+        },
+        {
+          "gameId": "1809772714",
+          "name": "The Séance of Blake Manor"
+        },
+        {
+          "gameId": "1945019091",
+          "name": "JUMP KING QUEST"
+        },
+        {
+          "gameId": "2042681592",
+          "name": "Minecraft Dungeons II"
+        },
+        {
+          "gameId": "33734",
+          "name": "Pokémon Black/White Version 2"
+        },
+        {
+          "gameId": "431065997",
+          "name": "FINAL FANTASY VII REMAKE"
+        },
+        {
+          "gameId": "459064",
+          "name": "Cuphead"
+        },
+        {
+          "gameId": "460327",
+          "name": "Pokémon Omega Ruby/Alpha Sapphire"
+        },
+        {
+          "gameId": "489335",
+          "name": "Outer Wilds"
+        },
+        {
+          "gameId": "497480",
+          "name": "Detroit: Become Human"
+        },
+        {
+          "gameId": "503932",
+          "name": "Last Epoch"
+        },
+        {
+          "gameId": "504651",
+          "name": "MARVEL Strike Force"
+        },
+        {
+          "gameId": "510590",
+          "name": "Hades"
+        },
+        {
+          "gameId": "512070",
+          "name": "Jump King"
+        },
+        {
+          "gameId": "519291",
+          "name": "Black Myth: Wukong"
+        },
+        {
+          "gameId": "670867987",
+          "name": "Pokémon Scarlet/Violet"
+        },
+        {
+          "gameId": "767864507",
+          "name": "Dragon Quest Heroes: Torneko's Mystery Dungeon Classic HD"
+        },
+        {
+          "gameId": "85857",
+          "name": "INSIDE"
+        },
+        {
+          "gameId": "933203405",
+          "name": "Sonic Dream Team"
+        }
+      ]
+    },
+    {
+      "id": "strategy",
+      "name": "Strategy & Cards",
+      "realmName": "The Chequered Vale",
+      "games": [
+        {
+          "gameId": "138585",
+          "name": "Hearthstone"
+        },
+        {
+          "gameId": "513143",
+          "name": "Teamfight Tactics"
+        },
+        {
+          "gameId": "743",
+          "name": "Chess"
+        },
+        {
+          "gameId": "491168",
+          "name": "Clash Royale"
+        },
+        {
+          "gameId": "2748",
+          "name": "Magic: The Gathering"
+        },
+        {
+          "gameId": "9618",
+          "name": "Pokémon Trading Card Game"
+        },
+        {
+          "gameId": "12924",
+          "name": "Warcraft III"
+        },
+        {
+          "gameId": "1931693784",
+          "name": "Pokémon Champions"
+        },
+        {
+          "gameId": "12839",
+          "name": "Heroes of Might and Magic III: The Restoration of Erathia"
+        },
+        {
+          "gameId": "13389",
+          "name": "Age of Empires II"
+        },
+        {
+          "gameId": "490422",
+          "name": "StarCraft II"
+        },
+        {
+          "gameId": "498482",
+          "name": "Age of Empires IV"
+        },
+        {
+          "gameId": "114524791",
+          "name": "Shadowverse: Worlds Beyond"
+        },
+        {
+          "gameId": "1119642287",
+          "name": "Yu-Gi-Oh! Master Duel"
+        },
+        {
+          "gameId": "1435206302",
+          "name": "Slay the Spire II"
+        },
+        {
+          "gameId": "375403621",
+          "name": "Pokémon Trading Card Game Pocket"
+        },
+        {
+          "gameId": "1913410799",
+          "name": "Total War: WARHAMMER III"
+        },
+        {
+          "gameId": "745589378",
+          "name": "Balatro"
+        },
+        {
+          "gameId": "779192097",
+          "name": "Fire Emblem: Fortune's Weave"
+        },
+        {
+          "gameId": "1751366933",
+          "name": "Riftbound"
+        },
+        {
+          "gameId": "1743359147",
+          "name": "MARVEL SNAP"
+        },
+        {
+          "gameId": "494436328",
+          "name": "The Bazaar"
+        },
+        {
+          "gameId": "508798",
+          "name": "Warhammer"
+        },
+        {
+          "gameId": "73914",
+          "name": "Clash of Clans"
+        },
+        {
+          "gameId": "1426873999",
+          "name": "Heroes of Might & Magic: Olden Era"
+        },
+        {
+          "gameId": "510530",
+          "name": "Star Trek Fleet Command"
+        },
+        {
+          "gameId": "155409827",
+          "name": "Pokémon Trading Card Game Live"
+        },
+        {
+          "gameId": "493217",
+          "name": "Gwent: The Witcher Card Game"
+        },
+        {
+          "gameId": "1029242563",
+          "name": "Northgard Battlegrounds"
+        },
+        {
+          "gameId": "1865647616",
+          "name": "DDTank"
+        },
+        {
+          "gameId": "2052017714",
+          "name": "Origins Trading Card Game"
+        },
+        {
+          "gameId": "492553",
+          "name": "Sid Meier's Civilization VI"
+        },
+        {
+          "gameId": "511554",
+          "name": "Arknights"
+        },
+        {
+          "gameId": "512708",
+          "name": "Mahjong Soul"
+        },
+        {
+          "gameId": "418410192",
+          "name": "One Piece Card Game"
+        },
+        {
+          "gameId": "490413",
+          "name": "Board Games"
+        },
+        {
+          "gameId": "1042236765",
+          "name": "GIRLS' FRONTLINE 2: EXILIUM"
+        },
+        {
+          "gameId": "11989",
+          "name": "StarCraft"
+        },
+        {
+          "gameId": "1931776829",
+          "name": "Company of Heroes 3"
+        },
+        {
+          "gameId": "520083701",
+          "name": "RISK: The Game of Global Domination"
+        },
+        {
+          "gameId": "7830",
+          "name": "Age of Empires III"
+        },
+        {
+          "gameId": "1771060953",
+          "name": "XCOM: Enemy Unknown"
+        },
+        {
+          "gameId": "458353",
+          "name": "Darkest Dungeon"
+        },
+        {
+          "gameId": "493489",
+          "name": "Legion TD 2"
+        },
+        {
+          "gameId": "494508",
+          "name": "Yu-Gi-Oh! Duel Links"
+        },
+        {
+          "gameId": "497248",
+          "name": "Yu-Gi-Oh! TRADING CARD GAME"
+        },
+        {
+          "gameId": "499132",
+          "name": "They Are Billions"
+        },
+        {
+          "gameId": "511748",
+          "name": "Auto Chess"
+        },
+        {
+          "gameId": "517109",
+          "name": "Beyond All Reason"
+        },
+        {
+          "gameId": "65663",
+          "name": "Company of Heroes 2"
+        },
+        {
+          "gameId": "674491029",
+          "name": "Star Wars Zero Company"
+        },
+        {
+          "gameId": "1174942814",
+          "name": "Broken Arrow"
+        },
+        {
+          "gameId": "1260",
+          "name": "Age of Mythology"
+        },
+        {
+          "gameId": "1414406743",
+          "name": "Europa Universalis V"
+        },
+        {
+          "gameId": "1951012895",
+          "name": "Disney Lorcana Trading Card Game"
+        },
+        {
+          "gameId": "27103",
+          "name": "Sid Meier's Civilization V"
+        },
+        {
+          "gameId": "340920845",
+          "name": "Backpack Battles"
+        },
+        {
+          "gameId": "417749",
+          "name": "Tabletop Simulator"
+        },
+        {
+          "gameId": "489767",
+          "name": "XCOM 2"
+        },
+        {
+          "gameId": "490771",
+          "name": "Battle Brothers"
+        },
+        {
+          "gameId": "515881069",
+          "name": "Mechabellum"
+        },
+        {
+          "gameId": "589569308",
+          "name": "Splinterlands"
+        },
+        {
+          "gameId": "633454324",
+          "name": "Rush Royale"
+        },
+        {
+          "gameId": "68351",
+          "name": "Mount & Blade II: Bannerlord"
+        }
+      ]
+    },
+    {
+      "id": "sports",
+      "name": "Sports, Racing & Simulators",
+      "realmName": "The Tournament Downs",
+      "games": [
+        {
+          "gameId": "123184772",
+          "name": "EA Sports FC 27"
+        },
+        {
+          "gameId": "518203",
+          "name": "Sports"
+        },
+        {
+          "gameId": "30921",
+          "name": "Rocket League"
+        },
+        {
+          "gameId": "602040818",
+          "name": "NBA 2K27"
+        },
+        {
+          "gameId": "1000178598",
+          "name": "Football Manager 27"
+        },
+        {
+          "gameId": "262437666",
+          "name": "Farming Simulator 25"
+        },
+        {
+          "gameId": "19554",
+          "name": "iRacing"
+        },
+        {
+          "gameId": "670138298",
+          "name": "Madden NFL 27"
+        },
+        {
+          "gameId": "331373906",
+          "name": "eFootball"
+        },
+        {
+          "gameId": "497304",
+          "name": "Russian Fishing 4"
+        },
+        {
+          "gameId": "2060730947",
+          "name": "Le Mans Ultimate"
+        },
+        {
+          "gameId": "1991115310",
+          "name": "Forza Horizon 6"
+        },
+        {
+          "gameId": "93798731",
+          "name": "F1 25"
+        },
+        {
+          "gameId": "687129551",
+          "name": "Trackmania"
+        },
+        {
+          "gameId": "1331855755",
+          "name": "Darts"
+        },
+        {
+          "gameId": "75467",
+          "name": "Euro Truck Simulator 2"
+        },
+        {
+          "gameId": "474709880",
+          "name": "STAR WARS: Galactic Racer"
+        },
+        {
+          "gameId": "488910",
+          "name": "American Truck Simulator"
+        },
+        {
+          "gameId": "518584827",
+          "name": "NHL 27"
+        },
+        {
+          "gameId": "669337588",
+          "name": "Microsoft Flight Simulator 2024"
+        },
+        {
+          "gameId": "676313093",
+          "name": "WWE 2K26"
+        },
+        {
+          "gameId": "1678532194",
+          "name": "EA Sports College Football 27"
+        },
+        {
+          "gameId": "624536948",
+          "name": "EA Sports FC 26"
+        },
+        {
+          "gameId": "1832641890",
+          "name": "MLB The Show 26"
+        },
+        {
+          "gameId": "1826300051",
+          "name": "Mario Kart World"
+        },
+        {
+          "gameId": "1135492840",
+          "name": "Sonic Racing: CrossWorlds"
+        },
+        {
+          "gameId": "2088318578",
+          "name": "over the hill"
+        },
+        {
+          "gameId": "2099590881",
+          "name": "Out of the Park Baseball 27"
+        },
+        {
+          "gameId": "490959",
+          "name": "Zwift"
+        },
+        {
+          "gameId": "518014",
+          "name": "Gran Turismo 7"
+        },
+        {
+          "gameId": "733916086",
+          "name": "Tape to Tape"
+        },
+        {
+          "gameId": "1362102608",
+          "name": "REMATCH"
+        },
+        {
+          "gameId": "493112",
+          "name": "NBA 2K17"
+        },
+        {
+          "gameId": "515066",
+          "name": "SnowRunner"
+        },
+        {
+          "gameId": "1471416868",
+          "name": "UFL"
+        },
+        {
+          "gameId": "666511413",
+          "name": "The Crew: Motorfest"
+        },
+        {
+          "gameId": "941530474",
+          "name": "Mario Kart 8 Deluxe"
+        },
+        {
+          "gameId": "1099254808",
+          "name": "Hunting Simulator 3"
+        },
+        {
+          "gameId": "313197",
+          "name": "Assetto Corsa"
+        },
+        {
+          "gameId": "491117",
+          "name": "Fishing Planet"
+        },
+        {
+          "gameId": "491878",
+          "name": "BeamNG.drive"
+        }
+      ]
+    },
+    {
+      "id": "fighting",
+      "name": "Fighting Games",
+      "realmName": "The Duelists' Cliffs",
+      "games": [
+        {
+          "gameId": "55453844",
+          "name": "Street Fighter 6"
+        },
+        {
+          "gameId": "538054672",
+          "name": "TEKKEN 8"
+        },
+        {
+          "gameId": "461221",
+          "name": "MARVEL Contest of Champions"
+        },
+        {
+          "gameId": "504461",
+          "name": "Super Smash Bros. Ultimate"
+        },
+        {
+          "gameId": "29448",
+          "name": "Tekken Tag Tournament 2"
+        },
+        {
+          "gameId": "490382",
+          "name": "For Honor"
+        },
+        {
+          "gameId": "2030977008",
+          "name": "Avatar Legends: The Fighting Game"
+        },
+        {
+          "gameId": "185606059",
+          "name": "Fatal Fury: City of the Wolves"
+        },
+        {
+          "gameId": "16282",
+          "name": "Super Smash Bros. Melee"
+        },
+        {
+          "gameId": "774680424",
+          "name": "2XKO"
+        },
+        {
+          "gameId": "460316",
+          "name": "Brawlhalla"
+        },
+        {
+          "gameId": "510578",
+          "name": "Mortal Kombat 11"
+        },
+        {
+          "gameId": "517159",
+          "name": "GUILTY GEAR -STRIVE-"
+        },
+        {
+          "gameId": "904864974",
+          "name": "Mortal Kombat 1"
+        },
+        {
+          "gameId": "504921",
+          "name": "Dragon Ball Legends"
+        },
+        {
+          "gameId": "2400",
+          "name": "Marvel vs. Capcom 2: New Age of Heroes"
+        },
+        {
+          "gameId": "313164",
+          "name": "Ultra Street Fighter IV"
+        },
+        {
+          "gameId": "818770426",
+          "name": "Granblue Fantasy Versus: Rising"
+        }
+      ]
+    },
+    {
+      "id": "retro",
+      "name": "Retro & Speedruns",
+      "realmName": "The Old Cartridge Ruins",
+      "games": [
+        {
+          "gameId": "27284",
+          "name": "Retro"
+        },
+        {
+          "gameId": "13332",
+          "name": "Pokémon FireRed/LeafGreen"
+        },
+        {
+          "gameId": "11557",
+          "name": "The Legend of Zelda: Ocarina of Time"
+        },
+        {
+          "gameId": "1041",
+          "name": "Diablo II"
+        },
+        {
+          "gameId": "6521",
+          "name": "Grand Theft Auto: San Andreas"
+        },
+        {
+          "gameId": "2692",
+          "name": "Super Mario 64"
+        },
+        {
+          "gameId": "12482",
+          "name": "The Legend of Zelda: Majora's Mask"
+        },
+        {
+          "gameId": "1229",
+          "name": "Super Mario World"
+        },
+        {
+          "gameId": "7595",
+          "name": "Super Metroid"
+        },
+        {
+          "gameId": "10090",
+          "name": "Luigi's Mansion"
+        },
+        {
+          "gameId": "10322",
+          "name": "FINAL FANTASY X"
+        },
+        {
+          "gameId": "1663404833",
+          "name": "Croc 2: Kingdom of the Gobbos"
+        },
+        {
+          "gameId": "11988",
+          "name": "FINAL FANTASY VII"
+        },
+        {
+          "gameId": "1654",
+          "name": "Gothic II"
+        },
+        {
+          "gameId": "8645",
+          "name": "Resident Evil 2"
+        },
+        {
+          "gameId": "17828",
+          "name": "The Legend of Zelda: Twilight Princess"
+        },
+        {
+          "gameId": "9522",
+          "name": "Silent Hill 3"
+        },
+        {
+          "gameId": "10609",
+          "name": "Pokémon Emerald Version"
+        },
+        {
+          "gameId": "1468",
+          "name": "Resident Evil 4"
+        },
+        {
+          "gameId": "3947",
+          "name": "Silent Hill"
+        },
+        {
+          "gameId": "9435",
+          "name": "The Legend of Zelda: A Link to the Past"
+        },
+        {
+          "gameId": "9891",
+          "name": "Silent Hill 2"
+        },
+        {
+          "gameId": "10979",
+          "name": "The Legend of Zelda"
+        },
+        {
+          "gameId": "14890",
+          "name": "Zelda II: The Adventure of Link"
+        },
+        {
+          "gameId": "15631",
+          "name": "Grand Theft Auto: Vice City"
+        },
+        {
+          "gameId": "17447",
+          "name": "Disciples II: Rise of the Elves"
+        },
+        {
+          "gameId": "207",
+          "name": "Yu-Gi-Oh! Forbidden Memories"
+        },
+        {
+          "gameId": "3412",
+          "name": "Grand Theft Auto III"
+        },
+        {
+          "gameId": "5126",
+          "name": "Resident Evil 3: Nemesis"
+        },
+        {
+          "gameId": "1089241698",
+          "name": "Dragon Quest V: Tenkuu no Hanayome"
+        },
+        {
+          "gameId": "15943",
+          "name": "The Elder Scrolls III: Morrowind"
+        },
+        {
+          "gameId": "19023",
+          "name": "FINAL FANTASY IV"
+        },
+        {
+          "gameId": "2755",
+          "name": "HλLF-LIFE"
+        },
+        {
+          "gameId": "5804",
+          "name": "Silent Hill 4: The Room"
+        },
+        {
+          "gameId": "8855",
+          "name": "Need for Speed: Underground 2"
+        },
+        {
+          "gameId": "9455",
+          "name": "Super Mario Bros. 3"
+        }
+      ]
+    },
+    {
+      "id": "cozy",
+      "name": "Cozy & Party",
+      "realmName": "The Tea-Garden Hamlets",
+      "games": [
+        {
+          "gameId": "66082",
+          "name": "Games + Demos"
+        },
+        {
+          "gameId": "509511",
+          "name": "Marbles on Stream"
+        },
+        {
+          "gameId": "982017546",
+          "name": "Palia"
+        },
+        {
+          "gameId": "490655",
+          "name": "Pokémon GO"
+        },
+        {
+          "gameId": "369252",
+          "name": "The Sims 4"
+        },
+        {
+          "gameId": "1515862749",
+          "name": "Disney Dreamlight Valley"
+        },
+        {
+          "gameId": "1081998272",
+          "name": "PEAK"
+        },
+        {
+          "gameId": "510218",
+          "name": "Among Us"
+        },
+        {
+          "gameId": "329951934",
+          "name": "Pokémon Community Game"
+        },
+        {
+          "gameId": "490744",
+          "name": "Stardew Valley"
+        },
+        {
+          "gameId": "369418",
+          "name": "GeoGuessr"
+        },
+        {
+          "gameId": "509538",
+          "name": "Animal Crossing: New Horizons"
+        },
+        {
+          "gameId": "510389",
+          "name": "Shakes and Fidget"
+        },
+        {
+          "gameId": "512980",
+          "name": "Fall Guys"
+        },
+        {
+          "gameId": "803237359",
+          "name": "We Were Here Tomorrow"
+        },
+        {
+          "gameId": "278888515",
+          "name": "Gartic Phone"
+        },
+        {
+          "gameId": "346078625",
+          "name": "Blood on the Clocktower"
+        },
+        {
+          "gameId": "1329153872",
+          "name": "Pokémon Pokopia"
+        },
+        {
+          "gameId": "1069936801",
+          "name": "Nintendo Switch Sports Resort"
+        },
+        {
+          "gameId": "2106755390",
+          "name": "Graveyard Keeper II"
+        },
+        {
+          "gameId": "493174",
+          "name": "Jackbox Party Packs"
+        },
+        {
+          "gameId": "505084",
+          "name": "Umamusume: Pretty Derby"
+        },
+        {
+          "gameId": "1308598570",
+          "name": "Hello Kitty: Party Land"
+        },
+        {
+          "gameId": "1846293708",
+          "name": "Fields of Mistria"
+        },
+        {
+          "gameId": "2005329090",
+          "name": "Jinro Metropolis"
+        },
+        {
+          "gameId": "1099705332",
+          "name": "Tomodachi Life: Living the Dream"
+        },
+        {
+          "gameId": "1241308891",
+          "name": "Japanese Ramen Simulator"
+        },
+        {
+          "gameId": "2013539540",
+          "name": "Blue Prince"
+        },
+        {
+          "gameId": "497284",
+          "name": "Kynseed"
+        },
+        {
+          "gameId": "509549",
+          "name": "Pummel Party"
+        },
+        {
+          "gameId": "512821",
+          "name": "Words On Stream"
+        },
+        {
+          "gameId": "14333696",
+          "name": "Goose Goose Duck"
+        },
+        {
+          "gameId": "1470211036",
+          "name": "Dave the Diver"
+        },
+        {
+          "gameId": "18814",
+          "name": "The Sims 3"
+        },
+        {
+          "gameId": "2014795392",
+          "name": "Infinity Nikki"
+        },
+        {
+          "gameId": "515053710",
+          "name": "Moonlight Peaks"
+        },
+        {
+          "gameId": "532988445",
+          "name": "PowerWash Simulator 2"
+        },
+        {
+          "gameId": "676802825",
+          "name": "Big Walk"
+        },
+        {
+          "gameId": "1115711128",
+          "name": "PlateUp!"
+        },
+        {
+          "gameId": "1230742965",
+          "name": "TCG Card Shop Simulator"
+        },
+        {
+          "gameId": "1414211237",
+          "name": "House Flipper 2"
+        },
+        {
+          "gameId": "1418594934",
+          "name": "Placid Plastic Duck Simulator"
+        },
+        {
+          "gameId": "1471610418",
+          "name": "Super Mario Party Jamboree"
+        },
+        {
+          "gameId": "17085",
+          "name": "Quiz Show"
+        },
+        {
+          "gameId": "1835475218",
+          "name": "Tetris"
+        },
+        {
+          "gameId": "2128193047",
+          "name": "Super Battle Golf"
+        },
+        {
+          "gameId": "518764",
+          "name": "Kukoro: Stream Chat Games"
+        }
+      ]
+    }
+  ],
+  "unassigned": [
+    {
+      "gameId": "743893402",
+      "name": "WARDOGS",
+      "why": "unrecognised title; name alone does not say the genre"
+    },
+    {
+      "gameId": "499634",
+      "name": "Crypto",
+      "why": "trading and speculation streams; money-adjacent like the removed gambling categories, needs a founder call"
+    },
+    {
+      "gameId": "1954784138",
+      "name": "Final Fantasy Resonance",
+      "why": "unrecognised Final Fantasy title; an RPG, but unclear whether online (mmo) or single-player (adventure)"
+    },
+    {
+      "gameId": "195574289",
+      "name": "Moon Sweepers",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "366412048",
+      "name": "Probably Stolen",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1870528958",
+      "name": "Terrible Lizards",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "516866",
+      "name": "STALZONE",
+      "why": "unrecognised title; possibly a shooter but not reliable"
+    },
+    {
+      "gameId": "1207887450",
+      "name": "CRACK",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "31355766",
+      "name": "Tenebris Somnia",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "532911623",
+      "name": "Vampir",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1288749557",
+      "name": "Dressmaker (2026)",
+      "why": "unrecognised 2026 title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1987792797",
+      "name": "Invokyr",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "127694361",
+      "name": "Species: Unknown",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "722422729",
+      "name": "$cam With Your Friends",
+      "why": "unrecognised title; name hints at scams or money, needs a check"
+    },
+    {
+      "gameId": "1032872922",
+      "name": "Finals Week ",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1496435078",
+      "name": "Casino Simulator 2024",
+      "why": "casino simulation; gambling-adjacent, needs a founder call like Slots and Poker"
+    },
+    {
+      "gameId": "2142646770",
+      "name": "Silver Pines",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "228327217",
+      "name": "Giggleland",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1467190654",
+      "name": "Love: Fall in Death",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "210472759",
+      "name": "Shift at Midnight",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1408630947",
+      "name": "Witchspire",
+      "why": "unrecognised title; witch theme gives no reliable genre cue"
+    },
+    {
+      "gameId": "1820839024",
+      "name": "MECCHA CHAMELEON",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "2144016909",
+      "name": "S.O.N.A.R.: Submarine Operators Not Actually Ready",
+      "why": "unrecognised title; co-op submarine theme, genre not certain"
+    },
+    {
+      "gameId": "199665106",
+      "name": "Hassle Online",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "921298138",
+      "name": "BOMBANANA!",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1134393554",
+      "name": "REKA",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "257983487",
+      "name": "Village in the Shade",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "789588840",
+      "name": "Funnel Runners",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1168459646",
+      "name": "SPAM",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1785603396",
+      "name": "ATMOSFAR",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "189654361",
+      "name": "Tom the Postgirl",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1934479857",
+      "name": "Queen's Domain",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "253234167",
+      "name": "GONE Fishing",
+      "why": "unrecognised title; a fishing theme but unclear whether sim, cozy or horror"
+    },
+    {
+      "gameId": "857210695",
+      "name": "Deep Dish Dungeon",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1197530250",
+      "name": "One Piece: Grand Gourmet",
+      "why": "unrecognised title; name hints at cooking but not reliable"
+    },
+    {
+      "gameId": "709941216",
+      "name": "Endacopia",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "987413865",
+      "name": "Deadly Days: Roadtrip",
+      "why": "recognised only vaguely; genre not certain"
+    },
+    {
+      "gameId": "1183694848",
+      "name": "KOTÁMON: My Sis Found A Super-Rare Card In Her Cereal Box, So I Became A Garbage Man To Find The Entire Collection And Earn $1,000,000",
+      "why": "unrecognised title; name describes a story, not a genre"
+    },
+    {
+      "gameId": "1398657661",
+      "name": "Anime Squad",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "151959766",
+      "name": "Nomad Drive",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1575984427",
+      "name": "CH13: Rest Stop",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1861940133",
+      "name": "Forever Ago",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1943685030",
+      "name": "Permafrost",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "213975850",
+      "name": "Sort Them Ducks",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "258824392",
+      "name": "Flipping is Hard",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "671595268",
+      "name": "Playable Archive",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "866287127",
+      "name": "Welcome to Elderfield",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "999744789",
+      "name": "Night Plane",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1506110656",
+      "name": "Casino Simulator",
+      "why": "casino simulation; gambling-adjacent, needs a founder call like Slots and Poker"
+    },
+    {
+      "gameId": "1554543571",
+      "name": "Photomaly",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1642629214",
+      "name": "lily's world XD",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1940320402",
+      "name": "The Annual Ghost Town Pumpkin Festival",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "2118363474",
+      "name": "Rio Rise",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "2146281325",
+      "name": "Plants on Fire",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "318184140",
+      "name": "The Skin Stapler",
+      "why": "unrecognised title; name suggests horror but not reliable"
+    },
+    {
+      "gameId": "490242481",
+      "name": "GRAIN ROT",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "610706148",
+      "name": "Woman Simulator",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1049660771",
+      "name": "Creature Kitchen",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1055378174",
+      "name": "Berserk Heroes Online",
+      "why": "unrecognised title; online game of unknown genre"
+    },
+    {
+      "gameId": "1057274213",
+      "name": "Gaggl",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1216417455",
+      "name": "The Mailroom",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1245428743",
+      "name": "Airport Contraband",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1372812270",
+      "name": "Virtue and a Sledgehammer",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1457501816",
+      "name": "Cat Mail Co.",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1555577087",
+      "name": "Abnormality",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1581328319",
+      "name": "Cucina Stellata ✦ Starred Cuisine",
+      "why": "unrecognised title; name hints at cooking but not reliable"
+    },
+    {
+      "gameId": "1609630759",
+      "name": "Tidy Up the Halloween Shop",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1658881343",
+      "name": "Selkie's Salvage&Co.",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1692832617",
+      "name": "Safari-TV",
+      "why": "unrecognised category; could be a game or an IRL stream type"
+    },
+    {
+      "gameId": "1765783729",
+      "name": "MOLE",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1788851197",
+      "name": "End of Abyss",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1843029531",
+      "name": "RoboGAL: Gaga Delta Lady",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1923144012",
+      "name": "HELLMART",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "1958218323",
+      "name": "Allogloom",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "2133075861",
+      "name": "Gaming Late at Night",
+      "why": "unrecognised category; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "3151",
+      "name": "Tournament Poker",
+      "why": "poker game; gambling-adjacent, needs a founder call like Slots and Poker"
+    },
+    {
+      "gameId": "321313344",
+      "name": "Fart Together",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "335261990",
+      "name": "Stonewards",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "353006782",
+      "name": "DressMaker",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "457551837",
+      "name": "the cabin game",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "499919202",
+      "name": "Trash Day",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "503018",
+      "name": "With Your Destiny",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "524080594",
+      "name": "Otherside Tapes: Favela",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "578078875",
+      "name": "Pao Pao",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "590993568",
+      "name": "Dumb Ways to Build",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "618479630",
+      "name": "The Other Side",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "626298054",
+      "name": "Machine Party",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "723030544",
+      "name": "Stupid Never Dies",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "762903183",
+      "name": "Bleach Mirrors High",
+      "why": "unrecognised title; licensed anime game of unknown genre"
+    },
+    {
+      "gameId": "903469103",
+      "name": "Batomon Showdown",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    },
+    {
+      "gameId": "928003551",
+      "name": "Danchi Days",
+      "why": "unrecognised title; name gives no reliable genre cue"
+    }
+  ],
+  "notes": [
+    "Online ARPGs (Path of Exile 1 and 2, Diablo III/IV, Diablo II: Resurrected, Torchlight: Infinite, Last Epoch, Grim Dawn) all go to adventure; Online Worlds is kept for persistent shared worlds.",
+    "Retro is by original release before about 2006 for offline games. Remakes and remasters go by genre (Silent Hill 2 2024, Resident Evil 2/3/4 remakes, Tomb Raider I-III Remastered, Kingdom Hearts HD, Diablo II: Resurrected).",
+    "Older games with a living online or competitive scene stay in their genre, not retro: old MMOs (World of Warcraft, Tibia, Lineage II, Ragnarok, MU, FFXI), StarCraft, Warcraft III, Age of Empires II/III, Heroes III, Smash Melee, Marvel vs. Capcom 2, Counter-Strike: Source.",
+    "Twitch's 'Call of Duty' (1494) is nominally the 2003 original, but I read it as a generic franchise category and put it in shooters rather than retro.",
+    "Tabletop roleplay (Dungeons & Dragons, Tabletop RPGs) goes to roleplay with the GTA RP servers. Board Games, Warhammer and Tabletop Simulator go to strategy.",
+    "GTA III, Vice City and San Andreas are retro by release date, even though San Andreas multiplayer RP exists. GTA IV, Black Russia and NEXTRP go to roleplay.",
+    "Gacha RPGs (Genshin, Honkai: Star Rail, Zenless Zone Zero, Wuthering Waves, NIKKE, Epic Seven, Summoners War, Raid) go to adventure. Tactics or card gachas (Arknights, Girls' Frontline 2) go to strategy, fighting gachas (Contest of Champions, Dragon Ball Legends) to fighting, and Umamusume to cozy.",
+    "Looter, hero and vehicle-combat shooters are shooters: Destiny 2, Warframe, The Division 2, Helldivers 2, The First Descendant, World of Warships, Mir Korabley, War Robots, Crossout, MechWarrior 5.",
+    "Melee battle royales (NARAKA: BLADEPOINT, My Hero Ultra Rumble) go to arenas, not shooters. Fantasy extraction crawlers (Dark and Darker, Mistfall Hunter) go to adventure.",
+    "Rhythm games go to creative as music performance: osu!, Beat Saber, Clone Hero, and also Geometry Dash. Rage platformers (Jump King, Pogostuck) go to adventure.",
+    "Kart racers (Mario Kart World, Mario Kart 8 Deluxe, Sonic Racing: CrossWorlds) go to sports with racing, not cozy.",
+    "Survival-crafting online games (Once Human, Dune: Awakening, Palworld) go to survival. Fallout 76, Star Citizen, EVE Online and Elite: Dangerous go to Online Worlds. Palia goes to cozy. City builders (Anno 117, Planet Zoo 2, Transport Fever 3) go to sandbox; 4X and RTS go to strategy.",
+    "Pokémon Champions (competitive battling) goes to strategy. Pokémon GO and Pokopia go to cozy. Mainline Pokémon from Platinum (2008) onward goes to adventure; FireRed/LeafGreen and Emerald go to retro.",
+    "Gambling-adjacent categories are deliberately left unassigned for a founder call: Casino Simulator, Casino Simulator 2024 and Tournament Poker. Crypto is too, as speculation streams. If the founder agrees, they should be excluded like Slots and Poker.",
+    "Two Twitch categories are both named 'Resident Evil' (492035, 932115604), and I can't tell which release each one is, so both go to survival. Names keep Twitch's exact text, including the stray spaces in ' SEKIRO: SHADOWS DIE TWICE' and 'Finals Week '."
+  ]
+}

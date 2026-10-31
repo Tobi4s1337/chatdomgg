@@ -332,3 +332,11 @@ responsibilities consumed here. Their absence blocks the corresponding integrate
   Moderation/leave/writer loss abort requests still awaiting rights or host admission; a host closes a seat only by
   exact generation (`endSeat`). Arrival order across different awaited latencies is not a queue: the synchronous
   decision is serialized, and nothing about a person (subs, money, rank) enters it.
+- **2026-10-31 — IN03: one browser owner, one camera token, blur keeps an accepted view.** A single
+  `createInteractionController` per kingdom view owns the look, world clicks/taps (ray picks judged by the same
+  `assessTarget` as the look), one-shot E, Escape, gamepad West/East and the prompt; it takes walk-camera's
+  `release()` only after the room accepted a seat/table/Forge whose place returns a view, and only while walk is
+  `walking`. Escape/stand/first step while seated/the room no longer seating you/disconnect/the place closing/
+  dispose all hand the camera back in the same call. Tab blur abandons a pending request and held input but does
+  not close an accepted seat or Forge view: alt-tabbing to copy a line must not close the Forge, and the room still
+  says you sit. A world click on a target out of reach says "Walk a little closer" locally and sends nothing.
