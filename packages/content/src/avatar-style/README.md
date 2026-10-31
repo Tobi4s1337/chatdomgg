@@ -8,19 +8,22 @@ The three-option study further down (AS01) is superseded and kept only as a reco
 
 | File | What it is |
 |---|---|
-| `recipe.ts` | `CitizenLook`, the saved recipe: skin, eyes (shape, spacing), freckles, blush, hair (style, colour), beard, top. Every colour is a `#rrggbb`. `parseLook` validates untrusted input; `seedLook(personId)` gives a newcomer a complete, varied default |
-| `palette.ts` | Twenty skin tones, fourteen natural and nine wild hair swatches, eighteen dyes, eye ink, blush pink, freckle brown |
+| `recipe.ts` | `CitizenLook`, the saved recipe: skin, eyes (shape, spacing), freckles, blush, hair (style, colour), beard, moustache, hat (style, colour, trim), glasses (style, frame, lens), earrings, flower, top. Every colour is a `#rrggbb` (either case in, lower-case stored). `parseLook` validates untrusted input and refuses unknown keys at every level; a look saved before the accessories existed reads as wearing none. `seedLook(personId)` gives a newcomer a complete, varied default |
+| `palette.ts` | Twenty skin tones, fourteen natural and nine wild hair swatches, eighteen dyes, straw, metals, lens tints, petals, eye ink, blush pink, freckle brown |
 | `grid.ts` | `VoxelGrid`, a sparse grid of paint slots in root-local avatar cells (the frozen rig's frame) |
 | `head.ts` | The 8 × 8 × 8 skull and the face: eye cells, blush, freckles, the blink frame |
-| `hair.ts` | Eight hair styles plus bald, and two beards |
+| `hair-kit.ts` | The moves every hair style is built from (scalp, slabs, fringe, locks, the face guard) and the `HairStyle` interface: `draw` for the head of hair, `tied(g, brim?)` for gathered parts that come out from under a hat |
+| `hair.ts` | The first eight styles, the registry of all eighteen plus bald, four beards (full, chinstrap, goatee, stubble) and three moustaches (walrus, handlebar, horseshoe) |
+| `hair-cuts.ts` | Ten more styles: side part, slicked, spiky, side shave, mohawk, wild tuft, locs, braids, pigtails, top knot |
+| `accessories.ts` | Hats (cap, cap backwards, beanie, straw hat, pointed hat), glasses (round, square, goggles), earrings (stud, hoop, drop), a flower |
 | `bust.ts` | The neck, the compact torso, short upper arms and a plain tee |
-| `build.ts` | `buildCitizen(look)` draws everything into one grid. `slotColours(look)` resolves every slot to a colour |
-| `mesh.ts` | `meshCitizen(grid, colours)` gives engine-free arrays: quads with corner occlusion, convex-edge flags and in-face coordinates for the bevel |
+| `build.ts` | `buildCitizen(look)` draws everything into one grid in dressing order. `slotColours(look)` resolves every slot to a colour |
+| `mesh.ts` | `meshCitizen(grid, colours, 'solid' \| 'glass')` gives engine-free arrays: quads with corner occlusion, convex-edge flags and in-face coordinates for the bevel. Lenses are meshed apart for a see-through material |
 | `portrait.ts` | The fixed portrait composition: camera, lights, gradient, bevel width, sizes 128 and 512 |
 | `fixtures.ts` | Twenty SIMULATED citizens for the 4 × 5 sheet |
 
 The web side is in `apps/web/src/avatar-builder/portrait-renderer.ts`. `citizenObject(look)` is the three.js
-mesh in cells (scale by 1/16 for metres). `createPortraitRenderer().render(look, size)` returns a canvas with
+group in cells (scale by 1/16 for metres): `citizen-solid`, plus `citizen-glass` when the look wears lenses. `createPortraitRenderer().render(look, size)` returns a canvas with
 the bust portrait.
 
 ### Decisions
@@ -50,6 +53,21 @@ the bust portrait.
   in-plane neighbour and the cell diagonally in front are empty. The shader tilts the normal over 13 % of the
   cell at those edges only. Coplanar neighbours never show a seam, and a colour change stays flat paint, as in
   the reference.
+- **Hats flatten the hair under them; tied hair comes out.** A hat has a brim row (21 for the beanie, 22 for
+  the rest). Hair outside the skull at or above it is removed before the hat is drawn, so what shows below the
+  brim is the style's own hair, as under a real cap. Gathered parts (buns, tails, braids, a top knot) are a
+  style's `tied` layer, drawn after the hat and never over it; under a hat a high tail or top knot is routed
+  low at the back. The tests hold every style × hat to it: no hair above a hat's top, and only hat over the
+  skull above the brim.
+- **Glasses are glass.** Lenses stand one cell proud and are meshed apart for a tinted, see-through material,
+  so the eye blocks still read through them (opaque lenses hid the face). Round glasses are wire rings with the
+  corners left open, square ones a heavy brow bar with corners, goggles a double-thick lens with a strap round
+  the head over the hair. Lenses sit on the eye row and the one above, so a moustache below stays clear.
+- **Moustaches never read as a mouth.** A plain bar under the eyes reads as lips on this face, so there is no
+  brush moustache: the walrus is wide with drooping ends and an open middle, the handlebar curls up beside the
+  eyes, the horseshoe falls past the chin. They stand one cell proud in their own colour, separate from beards.
+- **Earrings go over long hair** and a flower sits on the outer surface of whatever is on the person's right
+  side (the side the portrait shows), or in the band of a straw or pointed hat.
 - **Seeded beards go only with short hair.** A long style plus a same-colour full beard closes around an
   eight-cell face and hides it. The builder will still allow any combination.
 - **Portrait light.** One warm key light, nearly frontal, high and slightly from the person's left, with a soft
@@ -60,11 +78,12 @@ the bust portrait.
 
 ### Bench and capture
 
-`apps/web/src/avatar-builder/portraits.html?set=fixtures|seeded` renders twenty SIMULATED citizens at 512 px
-(shown at 256) and at 128 px (shown at actual size).
+`apps/web/src/avatar-builder/portraits.html?set=fixtures|seeded|hair|hats|faces` renders twenty SIMULATED
+citizens at 512 px (shown at 256) and at 128 px (shown at actual size). `hair` is every style once, `hats`
+every hat over four hair lengths, `faces` glasses, beards, moustaches, earrings and flowers.
 
 ```sh
-node apps/web/src/avatar-builder/capture.mjs --out shots/avatar-style/portraits          # both sets
+node apps/web/src/avatar-builder/capture.mjs --out shots/avatar-style/portraits [--sets fixtures,hair]
 node apps/web/src/avatar-builder/capture.mjs --compare <before-dir> <after-dir>          # same-view pairs
 ```
 
