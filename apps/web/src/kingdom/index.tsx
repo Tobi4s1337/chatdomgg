@@ -33,11 +33,19 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
   const construction=new AbortController();
   let unsubscribeChat:(()=>void)|undefined;
   const [forgeStatus,setForgeStatus]=createSignal<ForgeStatus|null>(null);
+  const [anvilVisit,setAnvilVisit]=createSignal<{leave:()=>void}|null>(null);
+  const unlockWithE=(event:KeyboardEvent)=>{if(event.isTrusted&&event.code==='KeyE')void engine?.sound.unlock();};
   /** Local practice on this screen (Forge, a simulated home build, its housewarming) is its own fact beside the feed. */
   const practice=()=>!!forgeStatus()?.open||buildSession()?.controller.snapshot().mode==='SIMULATED'||!!housewarming();
   async function attachWalk(binding:KingdomWalkBinding){
     if(!engine||unmounted)return;
-    await engine.attachWalk({...binding,hud:host,onSceneNeeded:()=>{
+    await engine.attachWalk({...binding,hud:host,interactionPlaces:binding.interactionPlaces??{
+      open(accepted,closed){
+        if(accepted.action!=='forge')return null;
+        setAnvilVisit({leave:closed});
+        return {close(){setAnvilVisit(null);}};
+      },
+    },onSceneNeeded:()=>{
       setReady(false);setPhase('The street is finding its new shape');
       window.__chatdomReady=false;binding.onSceneNeeded?.();
     }});
@@ -46,6 +54,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     setWalking(engine.walkSelected());
   }
   onMount(()=>{
+    document.addEventListener('keydown',unlockWithE);
     const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
@@ -59,7 +68,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
         else if(message.type==='chat.remove')instance.clearChat(message.cueIds);
         else {instance.clearChat();setSpeech([]);}
       });
-      testWindow.__chatdomKingdom={attachWalk,detachWalk:()=>{instance.detachWalk();delete window.__chatdomWalk;setWalking(false);},walkDebug:instance.walkDebug,stats:instance.debug,build:instance.build,forge:instance.forge,inspect:()=>instance.inspect(),subject:()=>instance.subject(),pose:instance.pose,seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play(),capture:(time:number)=>instance.capture(time)};
+      testWindow.__chatdomKingdom={attachWalk,detachWalk:()=>{instance.detachWalk();delete window.__chatdomWalk;setWalking(false);},walkDebug:instance.walkDebug,interactionDebug:instance.interactionDebug,stats:instance.debug,build:instance.build,forge:instance.forge,inspect:()=>instance.inspect(),subject:()=>instance.subject(),pose:instance.pose,seek:(time:number,camera?:CameraName)=>instance.seek(time,camera),hour:(value:number)=>{instance.setHour(value);setHour(value);},play:()=>instance.play(),capture:(time:number)=>instance.capture(time)};
       const showReady=()=>{
         if(unmounted||error())return;
         if(!instance.debug.ready){openingFrame=requestAnimationFrame(showReady);return;}
@@ -71,7 +80,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       if(!props.founded&&query.get('forge')==='1')instance.forge.open();
     }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(true);});
   });
-  onCleanup(()=>{unmounted=true;cancelAnimationFrame(openingFrame);construction.abort();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
+  onCleanup(()=>{unmounted=true;document.removeEventListener('keydown',unlockWithE);cancelAnimationFrame(openingFrame);construction.abort();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
   function tap(action:()=>void){if(!engine)return;if(!sound()){void engine.sound.unlock().then(setSound);}action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setWalking(false);setView(value);tap(()=>engine!.setCamera(value));}
@@ -85,7 +94,8 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     for(const parameter of ['camera','build','forge'])destination.delete(parameter);
     location.assign(`${location.pathname}?${destination}`);
   }
-  return <div ref={element=>{host=element;}} class={`kingdom ${walking()?'kingdom-walking':''} ${stream?'kingdom-stream':''}`} data-chatdom-kingdom data-forge-phase={forgeStatus()?.phase} data-chatdom-build={buildSession()?true:undefined}>
+  return <div ref={element=>{host=element;}} onPointerDown={event=>{if(event.isTrusted)void engine?.sound.unlock();}}
+    class={`kingdom ${walking()?'kingdom-walking':''} ${stream?'kingdom-stream':''}`} data-chatdom-kingdom data-forge-phase={forgeStatus()?.phase} data-chatdom-build={buildSession()?true:undefined}>
     <canvas ref={element=>{canvas=element;}} class="kingdom-canvas" aria-label={`${realmName}, a voxel kingdom lit by its people`} />
     <div class="kingdom-vignette" aria-hidden="true" />
     <header class="kingdom-heading">
@@ -103,6 +113,13 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       <Show when={!error()} fallback={<button onClick={()=>location.reload()}>Try the gate again</button>}><div class="gate-progress"><i style={{width:`${Math.round(progress()*100)}%`}} /></div></Show>
     </div></Show>
     <Show when={!stream&&forgeStatus()?.open}><ForgePanel status={forgeStatus()!} submit={words=>engine!.forge.submit(words)} close={()=>engine?.forge.close()} refit={()=>{void engine?.forge.refit();}} family={value=>{location.href=`/?tier=${tier}&hour=${hour()}&forge=1&realm=${value}`;}} /></Show>
+    <Show when={!stream&&anvilVisit()}>{visit=><section class="forge-panel" role="dialog" aria-label="At the anvil">
+      <div class="forge-panel-top"><span class="forge-eyebrow">THE FORGE</span><button onClick={()=>visit().leave()} aria-label="Leave the anvil">×</button></div>
+      <h2>Give the smith a wish.</h2>
+      <p class="forge-message">Write <code>!forge a chimney shaped like a sleeping dragon</code> in Twitch chat. When the fire is awake and you have a coal, your words can become part of your home.</p>
+      <p class="forge-footnote">The anvil listens to chat. Escape returns you to the street.</p>
+      <button class="forge-submit" onClick={()=>visit().leave()}>Back to the street</button>
+    </section>}</Show>
     <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} ownerName="Juniper" imports={session().imports}/>}</Show>
     <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>Welcome to the street</small></div>}</Show>
     <Show when={ready()&&walking()&&!error()&&!stream}><button class="walk-overlook" onClick={()=>chooseView('hero')}>Above the streets</button></Show>

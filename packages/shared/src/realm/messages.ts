@@ -69,6 +69,8 @@ export type RealmTransientMessage =
   | { readonly type: 'chat.clear' }
   | { readonly type: 'seats'; readonly writerEpoch: string; readonly revision: number; readonly seats: readonly RealmSeat[] };
 export type RealmPrivateMessage =
+  /** The authenticated viewer's own street plot, never the other homes' ownership table. */
+  | { readonly type: 'home.owned'; readonly plotId: string | null }
   | { readonly type: 'receipt'; readonly receipt: RealmReceipt }
   | { readonly type: 'interaction'; readonly requestId: string | null; readonly writerEpoch: string; readonly state: RealmInteractionState };
 

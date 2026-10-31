@@ -7,6 +7,9 @@ import { MATERIALS } from '@chatdom/content';
 import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import type { RealmClient, RealmCollision, RealmWalkerPose } from '../realm/client';
 import { createWalkController } from '../walk';
+import { createFoundedInteractionRegistry, homeZone, STREET_ZONE } from '@chatdom/world/interactions';
+import { interactionSound, mountInteractionController, type InteractionPlaces, type InteractionSoundBus } from '../interactions';
+import { bindWalkInteractions } from './walk-interactions';
 
 export interface KingdomWalkBinding {
   readonly client: RealmClient;
@@ -18,6 +21,8 @@ export interface KingdomWalkBinding {
   readonly heading?: number;
   /** Request a new checked scene when authority changes geometry. Called once; entry owns reinstallation. */
   readonly onSceneNeeded?: () => void;
+  /** A real place's own view, opened only after room acceptance. */
+  readonly interactionPlaces?: InteractionPlaces;
 }
 export interface WalkerLabel { readonly id: string; readonly name: string; readonly self: boolean; readonly x: number; readonly y: number }
 
@@ -35,7 +40,7 @@ export function checkWalkBinding(founded: RealmFoundedScene | undefined, binding
 
 /** One renderer/camera owner in the existing kingdom. Entry, public state and world production stay with wiring. */
 export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement,
-  pool: VoxelWorkerPool, material: VoxelRenderState, binding: KingdomWalkBinding) {
+  pool: VoxelWorkerPool, material: VoxelRenderState, binding: KingdomWalkBinding, founded: RealmFoundedScene, sound: InteractionSoundBus) {
   const looks = createDefaultCitizenLooks();
   const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
   const client = binding.client;
@@ -45,9 +50,19 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   const controller = createWalkController({ camera, surface: canvas, realm: client, collision: currentWorld,
     ...(binding.hud ? { hud: binding.hud } : {}), ...(binding.heading !== undefined ? { heading: binding.heading } : {}) });
   controller.resize(canvas.clientWidth, canvas.clientHeight);
+  const registry = createFoundedInteractionRegistry(founded, currentWorld()!);
+  const connection = bindWalkInteractions(client.room, interactionSound(sound));
+  const host = binding.hud ?? canvas.parentElement;
+  if (!host) { connection.dispose(); controller.dispose(); people.dispose(); throw new Error('The kingdom interaction surface is unavailable'); }
+  const interactions = mountInteractionController({ host, surface: canvas, session: connection.session, camera: controller,
+    ...(binding.interactionPlaces ? { places: binding.interactionPlaces } : {}) });
+  const projected = new THREE.Vector3(), direction = new THREE.Vector3(), raycaster = new THREE.Raycaster();
   let poses: readonly RealmWalkerPose[] = [], connected = true, waiting = false;
   const left = () => { connected = false; controller.release(); people.update([]); };
+  const reconnected = () => { connected = true; };
   client.room.onLeave(left);
+  client.room.onDrop(left);
+  client.room.onReconnect(reconnected);
   const point = new THREE.Vector3();
   return {
     controller,
@@ -56,16 +71,44 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     frame(now: number, selected: boolean) {
       const state = client.room.state;
       if (state.layoutRevision !== binding.manifest.layoutRevision || state.collisionRevision !== binding.manifest.collisionRevision) {
+        connection.session.disconnect();
         controller.release(); client.clearInput(); poses = []; people.update([]);
         if (!waiting) { waiting = true; binding.onSceneNeeded?.(); }
         return false;
       }
       const active = selected && connected && !waiting;
-      if (active && controller.owner === 'released') { camera.clearViewOffset(); controller.resume(); }
-      else if (!active) controller.release();
+      // A place's accepted view holds the same walk token until the interaction controller returns it.
+      if (active && controller.owner === 'released' && !interactions.debug.held) { camera.clearViewOffset(); controller.resume(); }
+      else if (!active) { if (interactions.debug.held) interactions.leave(); controller.release(); }
       poses = controller.frame(now);
       return active;
     },
+    /** After the scene's final camera transform, before drawing: all input paths use these native targets. */
+    interact(now: number) {
+      const self = controller.debug.self;
+      if (!self) return;
+      const state = connection.session.snapshot().self;
+      camera.getWorldDirection(direction);
+      interactions.frame({ now, look: { feet: [self.x, self.y, self.z], forward: [direction.x, direction.y, direction.z] },
+        records: registry.records, world: waiting || !connected ? null : currentWorld(),
+        actor: { walkerId: client.selfId, zone: state.mode === 'interior' && state.plotId ? homeZone(state.plotId) : STREET_ZONE,
+          ownedPlotId: connection.ownedPlotId },
+        project(position) {
+          projected.set(...position).project(camera);
+          if (projected.z < -1 || projected.z > 1) return null;
+          const surface = canvas.getBoundingClientRect(), root = host.getBoundingClientRect();
+          return { x: surface.left - root.left + (projected.x + 1) * surface.width / 2,
+            y: surface.top - root.top + (1 - projected.y) * surface.height / 2 };
+        },
+        ray(x, y) {
+          if (!canvas.clientWidth || !canvas.clientHeight) return null;
+          raycaster.setFromCamera(new THREE.Vector2(x / canvas.clientWidth * 2 - 1, 1 - y / canvas.clientHeight * 2), camera);
+          const { origin, direction } = raycaster.ray;
+          return { origin: [origin.x, origin.y, origin.z], direction: [direction.x, direction.y, direction.z] };
+        },
+      });
+    },
+    interactionDebug: interactions.debug,
     /** Call after the final camera transform, so frustum culling uses the camera that actually draws. */
     draw(now: number) {
       people.update(connected ? poses.map(pose => ({ id: pose.id,
@@ -85,6 +128,6 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       }
       return labels;
     },
-    dispose() { client.room.onLeave.remove(left); controller.dispose(); people.dispose(); },
+    dispose() { client.room.onLeave.remove(left); client.room.onDrop.remove(left); client.room.onReconnect.remove(reconnected); interactions.dispose(); connection.dispose(); controller.dispose(); people.dispose(); },
   };
 }

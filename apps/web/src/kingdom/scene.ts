@@ -293,7 +293,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(!installed){build.update(now,dt,hour,target);forge.update(now,target,!!build.session);}
     const forgeDirected=forgeCameraDirected=realmForge?.update(now,!walking&&!build.session&&!capturePose)??false;
     if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
-    if(!walking&&!forgeDirected)camera.lookAt(target);camera.updateMatrixWorld();walk?.draw(now);updateInstances(fixedTime&&autoCamera?time*1000:now);
+    if(!walking&&!forgeDirected)camera.lookAt(target);camera.updateMatrixWorld();walk?.interact(now);walk?.draw(now);updateInstances(fixedTime&&autoCamera?time*1000:now);
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=.0016;
     water.update(grade,time,camera);
@@ -355,13 +355,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       if(disposed)throw new Error('The kingdom has closed');
       checkWalkBinding(options.founded,binding);
       detachWalk();const generation=walkGeneration;
-      const next=await createKingdomWalk(scene,camera,canvas,pool,crowd.material,binding);
+      const next=await createKingdomWalk(scene,camera,canvas,pool,crowd.material,binding,options.founded!,sound);
       if(disposed||generation!==walkGeneration){next.dispose();return;}
       try{checkWalkBinding(options.founded,binding);}catch(error){next.dispose();throw error;}
       walk=next;walkSelected=true;capturePose=null;autoCamera=false;poseRevision++;instancesDirty=true;
     },
     detachWalk,
     walkDebug:()=>walk?.controller.debug??null,
+    interactionDebug:()=>walk?.interactionDebug??null,
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
     inspect:()=>({build:'progressive-light-v1',loaded,renderPhase,renderStartedAt,renderCompletedAt,presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(cue:unknown)=>crowd.receiveChat(cue),clearChat:(cueIds?:readonly string[])=>crowd.clearChat(cueIds),

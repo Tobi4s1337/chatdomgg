@@ -330,46 +330,50 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Rule:** Merge reviewed code promptly, short look and changed checks. Missing visible detail becomes the
-owner's next task, never a merge hold. No matrices per change, new lanes, audit commits or reopened accepted
-work. Main carries the evening/realm core with Sol-high/Terra agents. World lanes: kingdom-land,
-ground-dressing, places-water, places-high, kingdom-light, first-look-polish, anvil-hero, interactions; one worker
-each. The founder also unparked twitch-moments. Dressing's tended verge and first-look's arrival framing stand.
+**Order:** One real-chat evening first; glassy walk; town with love; hero anvil/dragon; deep interactions; one
+Twitch spectacle. Merge reviewed work promptly, short look and changed checks. Missing visible detail becomes
+the owner's next task, never a hold. Main owns evening/realm/walk; world lanes keep one worker each. No new
+lanes, matrices per change, audit commits or reopened accepted work. This goal remains active.
 
-**Merged:** Earlier light/glass, PS06, CB03, FR02, AH02, PW02 and FL01 stand. This turn merged twitch-moments
-TM01 subscriptions/home banners; looked at the warm doorway/banner. Nothing held or sent back.
+**Merged:** Previous light/glass, PS06, CB03, FR02, AH02, PW02, FL01 and TM01 stand. New: RS07 shared district
+views, IN03 contextual controls, FR03 Forge audio, WB02 body/hair/eye contrast, BT04 truthful publication, Atlas
+A03–A05, emotes E01, Raid Gate RG01 and founded-world closed-touch collision queries. Lockfile includes emotes.
+Looked at the producers' Atlas, wardrobe, build-tools, emote and Raid Gate images. No reviewed delivery held;
+campfire/table branches still carry failed or unfinished review notes. Their benches are not live composition.
 
-**Core:** Real Postgres/KingdomRoom owns presence, allocation, geometry and Forge commits. Herald's bounded
-durable outbox sends person-bound presence; speech/wishes/cleanup stay transient. Chat names never create
-OIDC identities, follow history or coal. Browser scene hashes/checkpoints are checked; witnessed Forge work
-survives geometry replacement, with one attempt ID and canonical host fingerprints from runes to reveal.
-`4478622` adds the actual pinned keep as the monarch's separate host (slot 65534, no street deed/home count),
-transaction-checked native bytes/head/provider name, intrinsic broadcaster Forge rights preserving moderation,
-and the same ten-minute evidenced coal rule. Explicit castle bounds/sockets propagate through fitting,
-projection, collision and landing. Migration 0007 applied. Genuine follower/knighthood evidence is still needed
-for other free-word rights; Herald's app-token grant path cannot backfill follower dates.
+**Core:** Durable Postgres/KingdomRoom owns presence, allocation, geometry and Forge commits. Herald's bounded
+outbox sends person-bound presence; speech/wishes/cleanup stay transient. Chat never invents OIDC identities,
+follow history, rights or coal. Actual pinned keep is the monarch's separate Forge host (slot 65534), preserving
+moderation and the ten-minute evidenced coal rule. Migration 0007 applied. Witnessed Forge work survives scene
+replacement; exact host fingerprints remain checked through fitting, projection, commit and landing.
 
-**Stream:** `/stream?source=realm&kingdom=129634568&hour=19.5` now reads the same retained authority through
-bounded public SSE, quiet checkpoints and live deliveries. No walker/principal/alternate writer. Exact scene,
-approved name, presence, speech and Forge camera handoff are wired; hidden sources release watcher/renderer.
+**Interactions:** The retained writer now binds the interaction authority, lifecycle, moderation, geometry and
+private deed/self bootstrap. Browser E/click/tap/gamepad uses those same native targets and collision. Colon-bearing
+adopted plot IDs are valid. Door thresholds derive from installed façade openings; no phantom seats or missing
+places. Accepted anvil view hands back the walking camera on Escape/close; it truthfully tells you to use
+`!forge` in Twitch chat, not a fake browser submission. FR03 ritual sound uses the existing kingdom audio bus,
+mute/visibility lifecycle and trusted input unlock. SIMULATED rehearsal uses the same interaction authority.
 
-**Running:** Preview5190 → main-owned realm5197/API5196. Unknown5191/5192 listeners left alone. SIMULATED
-full-town rehearsal5187: `/?walk=1&source=simulated&hour=19.5`. Real walking:
-`/?walk=1&kingdom=129634568&hour=19.5`. The exact accepted 240-home Willowmere layout was explicitly imported;
-no simulated people/deeds/standing/coals/Genesis migrated. Runtime bytes/keys stay ignored. Managed Forge5195
-reports CLI judges configured; a duplicate launch refused the occupied port and exited. Herald5194 is healthy/
-offline but has no room sink. Ignored `.env` has its destination/key ready: host-managed Herald needs restart
-from main loading it, preserving existing data. Its data is read-only here; no competing EventSub source was
-started. Public sign-in origin/callback is pending the async question; API still uses localhost.
+**Stream:** `/stream?source=realm&kingdom=129634568&hour=19.5` watches the same retained authority through bounded
+public SSE. Exact scene, approved name, presence, speech, committed Forge and director handoff; no walker or
+alternate writer. Hidden sources release watcher/renderer. No real evening capture accepted yet.
 
-**Seen/checked:** Typecheck, touched lint, changed tests and web/realm/Codex builds pass, including isolated
-Postgres keep installation/recovery and actual keep fit/qualification/commit/replay. Real independent CLI word
-judges passed the dragon wish with a SIMULATED check identity. Looked at
-`shots/twitch-moments/merged-banner@1440x900.png` and `shots/stream/realm-evening@1920x1080.png`.
-Actual stream opens/sets ready, draws 240 homes without console errors, and honestly reports connection lost
-because no room presence arrived. It is an empty dusk town, not acceptance. No full-suite or GPU-rate claim.
+**Running:** Preview5190 → own durable realm5197/API5196; unknown5191/5192 untouched. Exact accepted 240-home
+Willowmere imported without fake people/deeds/standing/coals/Genesis. Real walking:
+`/?walk=1&kingdom=129634568&hour=19.5`. Explicit full-town rehearsal5187:
+`/?walk=1&source=simulated&hour=19.5`. Realm5197 restarted with current interactions/district transport.
+Managed Forge5195 reports CLI judges configured. Herald5194 is healthy/offline, with no room sink: ignored `.env`
+has destination/key ready; host-managed service needs restart from main loading it and preserving its existing
+read-only grants/data. Service manager is unreachable here; no duplicate EventSub source started. Public sign-in
+origin/callback is pending the async question; API still uses localhost. Runtime secrets/bytes remain ignored.
 
-**Next:** Real Herald chat→arrival/window; real wish→judges→correct host; shared browsers and stream direction;
-then record/watch the 60–90 s evening. All remain unclaimed. Continue core/hookup while public sign-in and
-host service setup arrive, without inventing people/stream state/coals. Then glassy walk, world love, hero
-anvil/dragon, deep interactions and one Twitch spectacle, in that order.
+**Seen/checked:** Typecheck, touched lint, web/realm builds and 58 changed producer tests pass. Two focused native
+room/browser interaction tests pass (actual opening/pose/deed, lifecycle and mounted bootstrap). One serial
+SIMULATED kingdom walk reached the anvil via WASD, showed its E prompt and got the room's acceptance; Escape
+returned control. Looked at `shots/kingdom/interactions/room-anvil@1440x900.png` and `@390x844.png` (no browser errors):
+useful warm dusk and a readable phone panel, but a bare market and cold house backs from this direction. Ground owner gets the concrete dressing task. Previous actual
+stream shot opens/sets ready with no console errors; no room presence arrived. No full-suite/GPU-rate claim.
+
+**Next:** Real Herald chat→arrival/window; real wish→judges→right host; shared browsers/stream direction; record
+and watch the 60–90 s evening. These remain unclaimed. While host/sign-in hookup arrives, continue the next core
+piece in the order above; never manufacture stream state, people, Forge rights or coals to claim acceptance.
