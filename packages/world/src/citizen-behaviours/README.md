@@ -1,7 +1,8 @@
 # Citizen behaviours
 
 Local, ambient presentation for the citizens main already supplies (spec 16). The policy walks present people
-through gentle street routines by asking main's motion for approved destinations, notices neighbours, and returns
+through gentle street routines by asking main's motion for approved destinations, notices neighbours, lets a
+witnessed chat line turn a few heads, and returns
 small overlays in the citizen renderer's existing vocabulary: `gesture: 'none' | 'nod' | 'wave'`, `lookYaw` and
 `time`. It owns no route, body, identity, chat text, relationship or record. Routines and greetings are
 presentation only: no friendship, purchase, reward, attendance or act on anyone's behalf is created or stored.
@@ -14,11 +15,13 @@ import { createCitizenBehaviours, dueBehaviourSteps, BEHAVIOUR_TUNING } from './
 const policy = createCitizenBehaviours();
 const step = policy.step({ kingdomId, epoch, origin, atMs, samples, ambientSlots,
   destinationsFor: slot => motion.destinationsForSlot(slot),   // main's approved places, per slot
-  answers });                                                  // main's results for the previous step's goals
-// → { atMs, overlays, encounters, started, goals, transitions, routines }
+  answers,                                                     // main's results for the previous step's goals
+  cues });                                                     // main's validated CitizenChatCues, resent every step
+// → { atMs, overlays, encounters, started, goals, transitions, routines, reactions, reacted, cues }
 policy.present(samples, atMs);   // overlays at any render time on or after the latest step
 policy.reset();                  // drop every actor, contact, cooldown, claim, routine and pose
-policy.stats;                    // { actors, contacts, cooldowns, encounters, releases, claims, pending }
+policy.stats;                    // { actors, contacts, cooldowns, encounters, releases, claims, pending,
+                                 //   reactions, cuesSeen, cuesWaiting }
 ```
 
 - `samples` are main's actual `CitizenMotionSample`s at `atMs`. They are the only people the policy may animate.
@@ -34,12 +37,18 @@ policy.stats;                    // { actors, contacts, cooldowns, encounters, r
   node, pattern, since/until) are slot-only views for tests and the bench. They are not persisted and carry no
   names. `encounters` / `started` are the greeting records (`startMs`, `poseAtMs`, `poseEndMs`, `endMs`,
   `glanceAtMs`).
+- `cues` are main's `CitizenChatCueSchema`-validated cues. The input type is `CitizenChatCueSignal`, the cue
+  without `parts`: the policy reads ID, kingdom, epoch, origin, slot, `asOf` and `expiresAt`, copies those fields
+  and keeps no cue object, so the words never reach its state, output or stats. Passing the same cues on every step
+  is the intended use. `reactions` / `reacted` are the active and new chat reactions (cue ID, origin, speaker,
+  `speakerNods`, nod window, listeners with their look windows). `cues` notes what became of each decided cue:
+  `reacted`, `coalesced`, `crowded`, `duplicate`, `expired`, `stale`, `foreign` or `absent`.
 - A new kingdom, epoch or origin, or a backward clock, resets the policy. A forward gap larger than
   `maxGapMs` drops transient looks and contacts and restarts routine timers from what motion shows: nothing is
   replayed, and nobody leaves their door in step with everyone else when the clock lands.
 
-`fixture.ts` holds the SIMULATED nine-neighbour street and the SIMULATED 240-slot town shared by the scenario test
-and the bench. They are labelled input fixtures, not producers, and are not exported from the barrel.
+`fixture.ts` holds the SIMULATED nine-neighbour street, the SIMULATED 240-slot town and the SIMULATED chat script
+(`createSimulatedChat`) shared by the scenario test and the bench. They are labelled input fixtures, not producers, and are not exported from the barrel.
 
 ## Caller loop
 
@@ -53,6 +62,7 @@ for (const atMs of dueBehaviourSteps(lastStepMs, nowMs)) {     // fixed 100 ms g
     destinationsFor: slot => motion.destinationsForSlot(slot), answers });
   answers = step.goals.map(request => ({ request, result: motion.requestGoal(request) }));
 }
+// On a source reconnect, before the next step: policy.reset(); answers = []; lastStepMs = null (motion carries on).
 const samples = motion.sample(nowMs), overlays = policy.present(samples, nowMs);
 renderer.update(samples.map(s => toCitizenSample(s, overlays.get(s.slot), lookFor(s))), camera);
 ```
@@ -79,6 +89,33 @@ Five authored routines, all on main's motion: the policy only chooses approved n
 - **Returning home** ends every excursion at the person's own frontage. A refusal never strands anyone: they
   rest exactly where motion left them and ask again.
 - **Neighbours notice one another** (below), at doors, at stops and in passing.
+
+## A witnessed chat line
+
+A sanitized `CitizenChatCue` is the only cause: no words are read, no sentiment, friendship or command is
+inferred, no reply is invented and nobody walks toward anyone.
+
+- **The reaction.** The speaker's head lifts for 160–320 ms, then one renderer nod cycle (1.047 s, phased to
+  begin and end at its shallowest pitch). The closest neighbours within 10 m who can turn toward the speaker (up to
+  0.65 rad past their neck limit: a line is heard, not seen) look, at most two: the first 80–350 ms after the nod
+  begins, the second 160–380 ms later; each eases in over 380–520 ms, holds 1.1–2.2 s and settles over
+  0.48–0.68 s. The speaker's head answers the first listener at 45 % of a full turn, while that listener looks.
+  Everyone else keeps their life; walkers keep walking and only `lookYaw` changes.
+- **Validity.** A cue for another kingdom, epoch or origin is `foreign`; past `expiresAt`, `expired`; said before
+  this body was present in the current story (a reconnect or reset) or first heard more than 1.5 s after it was
+  said, `stale` (main's bubble still shows it); for a slot with no present body, `absent`. A cue said up to a moment
+  ahead waits for its `asOf`. Every decided ID is kept until 10 s past its expiry (at most 256), so every resend is a
+  `duplicate`.
+- **Coalescing.** One current reaction per person: a line from someone already speaking or listening, or within
+  6–10 s of their own last reaction, is `coalesced`. At most one reaction per eight present people (rounded up,
+  never more than four), one per 20 m neighbourhood, and starts 400 ms apart; other lines are `crowded` and only
+  show their bubble. A burst therefore turns a few heads and never replays a backlog: in the SIMULATED street, six
+  lines in a second (one person three times) turn two of them into reactions and move three people.
+- **Interruptions.** A speaker under walker, royal or reserved control is released at once and never posed, but
+  their listeners may keep looking. A listener taken over just stops (they are no longer the policy's). A speaker
+  who leaves ends the reaction in the same step and their listeners ease back over 420 ms. A listener who leaves is
+  dropped, and the speaker's answering look eases back. A clock jump drops every reaction and waiting cue; a reset
+  forgets everything, and the same line offered again after it is `stale`.
 
 **Known ground.** Destinations carry no walk length, and straight-line distance lies: main's hearthwick hamlet
 has an inactive lane piece between `join:12` and `join:20`, so two doors 8 m apart are a 200 m walk. Each person
@@ -119,6 +156,11 @@ All values live in `tuning.ts` and were set by watching the bench.
 | Pair cooldown | 90–120 s | Spec minimum 90 s |
 | Personal rest | 8–16 s after a greeting | Stops one person greeting a stream of passers |
 | Gesture clock | nod one full cycle (1.047 s) from phase −π/12; wave 1.5 sways (1.178 s) | Follows the renderer's fixed curves (below) |
+| Listening range | 10 m, closest two who can turn, 0.65 rad past the neck | Main's hamlet doors stand 9.0–9.1 m apart and doorstep rests face the house, so the neighbour either side sits ~90° aside |
+| Chat timing | lift 160–320 ms, nod 1.047 s, looks 80–350 ms then +160–380 ms after it, hold 1.1–2.2 s | The head moves before the next head; two listeners never turn on the same frame |
+| Speaker answer | 45 % of a turn toward the first listener | Reads as a shared moment without a second gesture |
+| Chat storm cap | 1 per 8 people (max 4), 1 per 20 m, 400 ms apart, speaker rest 6–10 s, listener rest 3–5 s | A doorstep frame shows at most one reaction; a fast chatter does not nod every line |
+| Fresh window | 1.5 s from `asOf` | A late line only shows its bubble; heads never turn for an old line |
 
 ## Renderer limit
 
@@ -130,7 +172,13 @@ and should get an eased arm weight in main's rig polish.
 
 ## Main integration at merge
 
-- Export the barrel (`createCitizenBehaviours`, `dueBehaviourSteps`, types) from `@chatdom/world`.
+- Export the barrel (`createCitizenBehaviours`, `dueBehaviourSteps`, types) from `@chatdom/world`. (Already done on
+  `integration/kingdom-queue`; the new chat types come through the same barrel.)
+- **Chat in `citizen-scene.ts`:** pass `cues: [...speech.values()]` into every `behaviours.step(...)`; the policy
+  decides each ID once. Then drop the consumer's own speaker gesture (`speech.has(slot) … ? 'nod'`, which nods for
+  the whole bubble lifetime) so the speaker's finite nod and the listeners' looks come only from the overlays. Keep
+  `receiveChat`'s validation, bubbles and `speechLabels` as they are; the policy never displays or stores words.
+  `resetBehaviours()` on a source change already gives the reconnect behaviour above.
 - In `apps/web/src/kingdom/citizen-scene.ts`, run the caller loop above: forward `step.goals` to
   `motion.requestGoal`, pass the results back as `answers`, and pass the overlays into the renderer samples
   (with `speed` for capes); supply `ambientSlots` from actual walker/royal/reserved control ownership.

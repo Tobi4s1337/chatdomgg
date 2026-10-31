@@ -6,3 +6,6 @@ export * from './domain';
 export * from './interactions';
 export * from './auth';
 export * from './founded-world';
+export * from './herald';
+export * from './entry';
+export * from './hosts';

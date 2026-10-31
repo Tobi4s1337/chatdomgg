@@ -6,7 +6,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bridgeHelper, type HelperAuthorized, type HelperExt } from '../helper';
 import type { PanelSnapshot } from '../model';
-import { createFixtureAdapter, FIXTURE_ACT_MS, FIXTURE_BITS_MS, FIXTURE_CONFIRM_MS, FIXTURE_SHARE_MS } from './fixture';
+import { createFixtureAdapter, FIXTURE_ACT_MS, FIXTURE_BITS_MS, FIXTURE_CONFIRM_MS, FIXTURE_SHARE_MS, type FixtureAdapter } from './fixture';
+import { openSimulationWire } from './simulation';
 import { createProductionAdapter } from './production';
 import { selectAdapter } from './select';
 
@@ -86,7 +87,7 @@ describe('lighting a window from the panel', () => {
     adapter.dispose();
   });
 
-  it('demonstrates the named and unnamed light and tonight\'s acts only under SIMULATED, without sending anything', () => {
+  it('demonstrates the named and unnamed light, tonight\'s acts and the streamer\'s Hide only under SIMULATED, without sending anything', async () => {
     for (const choice of ['named', 'unnamed'] as const) {
       const adapter = createFixtureAdapter('unshared');
       const seen: PanelSnapshot[] = [adapter.get()];
@@ -141,7 +142,44 @@ describe('lighting a window from the panel', () => {
       expect(snapshot.source).toMatchObject({ kind: 'simulated', label: 'SIMULATED' });
       if (snapshot.shelf.kind === 'offered') expect(['idle', 'confirming', 'cancelled']).toContain(snapshot.shelf.request.kind);
     }
+    // The streamer's choices act on the fixture alone: no crowd-acts section means no act, no chosen product no shelf.
+    night.configure({ sections: { night: true, home: true, acts: false, shelf: true } });
+    expect(night.get().act).toBeNull();
+    night.configure({ sections: { night: true, home: true, acts: true, shelf: true }, products: [] });
+    expect(night.get().act).not.toBeNull();
+    expect(night.get().shelf).toEqual({ kind: 'hidden' });
     night.dispose();
+
+    // Simulated Hide from the live dashboard reaches every simulated panel beside it, and one opened later asks and
+    // is told. The real panel never listens: nothing simulated can hide, or show, anything in it.
+    let hidden = false;
+    const host = openSimulationWire(message => { if (message.kind === 'ask') host?.post({ kind: 'hide', hidden }); });
+    if (!host) throw new Error('BroadcastChannel is missing');
+    const changed = (adapter: FixtureAdapter, done: (snapshot: PanelSnapshot) => boolean) => new Promise<void>(resolve => {
+      const off = adapter.subscribe(snapshot => { if (done(snapshot)) { off(); resolve(); } });
+    });
+    const open = [createFixtureAdapter('vote'), createFixtureAdapter('errand')];
+    const production = createProductionAdapter(bridgeHelper(fakeHelper().ext));
+    const productionSeen = vi.fn();
+    production.subscribe(productionSeen);
+    for (const adapter of open) expect(adapter.get().act).not.toBeNull();
+    hidden = true;
+    host.post({ kind: 'hide', hidden: true });
+    await Promise.all(open.map(adapter => changed(adapter, snapshot => snapshot.act === null)));
+    for (const adapter of open) {
+      expect(adapter.get().shelf).toEqual({ kind: 'hidden' });
+      adapter.requestAct('haul');
+      expect(adapter.get().act).toBeNull();
+    }
+    const later = createFixtureAdapter('dragon');
+    await changed(later, snapshot => snapshot.act === null);
+    host.post({ kind: 'hide', hidden: false });
+    await changed(open[1]!, snapshot => snapshot.act !== null);
+    expect(open[1]!.get().act?.status).toEqual({ kind: 'open' });
+    expect(productionSeen).not.toHaveBeenCalled();
+    expect(production.get().act).toBeNull();
+    for (const adapter of [...open, later, production]) adapter.dispose();
+    host.close();
     nothingSent();
   });
 });

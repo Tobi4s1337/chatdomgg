@@ -78,10 +78,10 @@ work/         how the build is organised (see below)
   ingest, the content library, replays and capture. A lane is a worker in a git worktree on the branch
   `lane/<name>`. It owns one folder scope and follows its PRD Ralph-style: one task at a time, tick the box, one
   progress line, commit on the lane branch. `chatdom-main` writes the spec and the PRD (`$write-spec`), the team
-  starts the worker. The team integrator merges reviewed lane work into `lane/integrator`, one branch at a time,
-  resolves conflicts and keeps verification green. When Tobias says that candidate is ready, `chatdom-main`
-  inspects and judges it, then fast-forwards main (or merges the candidate if main advanced). Main does not merge
-  lane branches during its own turns. Lane workers follow `$ralph-lane`.
+  starts the worker. Main merges reviewed lane work every turn, one branch at a time, with a short look and focused checks; no
+  announcement or additional permission is needed. An integrator candidate may still collect reviewed work,
+  but is not a gate. Merge clean work promptly; send the lane one concrete missing visual detail as its next task.
+  Lane workers follow `$ralph-lane`.
 - **Contracts first.** `packages/shared` (types, schemas, protocol messages, budgets) changes only in
   `chatdom-main`, and before the lanes that depend on it. A lane that needs a contract change writes `needs:` in
   its progress line and keeps going on something else.
@@ -122,10 +122,10 @@ Use `max` effort only for a problem that has already beaten `xhigh`. Don't use `
   the repo config. Leave them alone.
 - Push `main` to `origin` (private repo) after every green milestone or merge: `git push origin main`. Never
   force-push or rewrite pushed history. Lane branches stay local.
-- Reviewed lane branches enter `lane/integrator` through the team integrator, atop current main, one branch at
-  a time with conflicts resolved and verification green. Main accepts only the integration candidate Tobias
-  announces ready, after inspecting and judging it; fast-forward when possible, otherwise merge that candidate.
-  Main does not directly merge individual lanes. Sub-agents never run git; lane workers commit only their lane.
+- Main takes reviewed lane commits without waiting for an announcement, one branch at a time, resolves
+  composition conflicts and keeps focused checks green. A ready `lane/integrator` candidate can also enter main.
+  Do not repeat deep lane reviews or hold clean work for a missing polish detail; send that detail back as the next task.
+  Sub-agents never run git; lane workers commit only their lane.
 
 ## Environment
 

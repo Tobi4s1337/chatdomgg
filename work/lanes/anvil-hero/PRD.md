@@ -19,11 +19,11 @@ seams rather than expanding scope. The five tasks are an execution order for the
   horn/body/waist/feet on a worn stone block, with an open hardy hole. Add the standalone honest bench and scoped
   capture command; expose only implemented views until their geometry exists and fail unsupported requests
   visibly. Demonstrate cold anvil close and street views at both sizes. · evidence: looked shots + green commands
-- [ ] **AH02 — Engraved iron that rewards looking.** Finish worn edges, recessed authored runes and seekable
+- [x] **AH02 — Engraved iron that rewards looking.** Finish worn edges, recessed authored runes and seekable
   heat; supply the exact mark mount and aligned rune origin. In the bench mount the unchanged engraving through
   the same contract main uses. Judge cold/heated close shots, square shots and official-mark comparison detail;
   fix shape, shadows and contrast. · evidence: looked comparison + mount/disposal tests
-- [ ] **AH03 — A dragon asleep around its chimney.** Deliver `createAnvilHeroDragon` for Hearth, Tide and Grove,
+- [x] **AH03 — A dragon asleep around its chimney.** Deliver `createAnvilHeroDragon` for Hearth, Tide and Grove,
   preserving existing bounds/mount/nose anchors and registered materials. Show chin on paws, a continuous coil,
   folded wings and useful negative space; validate real final occupancy/support and open flue. Add actual roof
   context and existing nose smoke to the bench. · evidence: focused geometry tests + looked three-angle sheets

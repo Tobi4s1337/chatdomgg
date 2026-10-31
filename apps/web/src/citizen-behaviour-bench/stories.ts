@@ -1,7 +1,7 @@
 import { createCitizenMotion } from '@chatdom/world';
-import type { NeighbourStreet } from '../../../../packages/world/src/citizen-behaviours/fixture';
+import { createSimulatedChat, type NeighbourStreet, type SimulatedChat } from '../../../../packages/world/src/citizen-behaviours/fixture';
 import type {
-  CitizenEncounter, CitizenGoalAnswer, CitizenRoutineKind, CitizenRoutineTransition,
+  CitizenChatReaction, CitizenCueNote, CitizenEncounter, CitizenGoalAnswer, CitizenRoutineKind, CitizenRoutineTransition,
 } from '../../../../packages/world/src/citizen-behaviours';
 import { createBehaviourLoop, type BehaviourLoopSource } from './loop';
 
@@ -88,4 +88,35 @@ export function scoutStreet(street: NeighbourStreet, source: Omit<BehaviourLoopS
     market: excursion(plain.transitions, 'market', item => item.kind === 'request' && item.nodeId === market),
     closed: refused ? excursion(closed.transitions, 'closed', item => item === refused) : null,
   };
+}
+
+export interface ScoutedChat {
+  readonly reactions: readonly CitizenChatReaction[];
+  /** Every cue decision except the per-step duplicates of an ID already decided. */
+  readonly notes: readonly CitizenCueNote[];
+  readonly moments: SimulatedChat['moments'];
+  readonly departures: ReadonlyMap<number, number>;
+}
+
+/** A loop source that plays the SIMULATED chat script through the real motion and policy, restarting with the loop. */
+export function chatSource(street: NeighbourStreet, source: Omit<BehaviourLoopSource, 'frameAt' | 'ambientAt'>) {
+  let script = createSimulatedChat(street);
+  const everyone = new Set(street.slots);
+  const loopSource: BehaviourLoopSource = { ...source,
+    frameAt: atMs => street.frameAt(atMs, script.departures),
+    ambientAt: atMs => { const held = script.controlledAt(atMs); return held.size ? new Set(street.slots.filter(slot => !held.has(slot))) : everyone; },
+    cuesAt: (atMs, samples) => script.cuesAt(atMs, samples),
+    resetsAt: atMs => script.resetsAt(atMs),
+    restart: () => { script = createSimulatedChat(street); } };
+  return { source: loopSource, get script(): SimulatedChat { return script; } };
+}
+
+/** Plays the SIMULATED chat story once and reads back each line's reaction and every cue's outcome. */
+export function scoutChat(street: NeighbourStreet, source: Omit<BehaviourLoopSource, 'frameAt' | 'ambientAt' | 'gate'>, startMs: number, untilMs: number): ScoutedChat {
+  const chat = chatSource(street, source), loop = createBehaviourLoop(createCitizenMotion(street.plan), chat.source);
+  const reactions: CitizenChatReaction[] = [], notes: CitizenCueNote[] = [];
+  for (let now = startMs; now <= untilMs; now += STEP_MS) for (const step of loop.advance(now)) {
+    reactions.push(...step.reacted); notes.push(...step.cues.filter(note => note.outcome !== 'duplicate'));
+  }
+  return { reactions, notes, moments: chat.script.moments, departures: chat.script.departures };
 }

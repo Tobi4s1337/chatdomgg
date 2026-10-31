@@ -364,3 +364,8 @@ changes. These boundaries reserve parallel ownership; they do not permit omittin
   an owned home. Wiring consumes those exact contracts and never introduces a replacement context or reducer.
 - 2026-10-30: Auth route constants and strict DTOs are frozen in shared realm/auth. Fact persistence uses the
   actual event envelope; state retains `sequence`. Simulated Forge provenance remains simulated end to end.
+
+- **2026-10-31 — Walk is entry, not a preset.** The kingdom’s Walk the street action enters the room through the
+  main-owned KingdomEntrySource, or resumes its existing controller after an overview. Preserve stream/capture
+  camera presets separately. Only the explicitly simulated spectator selects the simulated source; Herald/live
+  entry never falls back to it.

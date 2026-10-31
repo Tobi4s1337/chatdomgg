@@ -1,1 +1,14 @@
-{"name":"@chatdom/voxel","private":true,"version":"0.0.0","type":"module","exports":{".":"./src/index.ts","./worker":"./src/worker.ts"},"dependencies":{"@chatdom/shared":"workspace:*"}}
+{
+  "name": "@chatdom/voxel",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/worker.ts",
+    "./collision": "./src/collision/index.ts"
+  },
+  "dependencies": {
+    "@chatdom/shared": "workspace:*"
+  }
+}

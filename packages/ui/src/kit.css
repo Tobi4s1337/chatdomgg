@@ -1,1 +1,96 @@
-/* lane/first-look-polish owns the carved UI kit. No unfinished styling is imported by the app. */
+/* The carved kit: the same wood, brass, parchment and wax as the kingdom. Fonts are SIL OFL (see fonts/OFL-*.txt). */
+@font-face { font-family: 'IM Fell English'; font-style: normal; font-weight: 400; font-display: swap; src: url('./fonts/im-fell-english-regular.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English'; font-style: italic; font-weight: 400; font-display: swap; src: url('./fonts/im-fell-english-italic.woff2') format('woff2'); }
+@font-face { font-family: 'IM Fell English SC'; font-style: normal; font-weight: 400; font-display: swap; src: url('./fonts/im-fell-english-sc.woff2') format('woff2'); }
+@font-face { font-family: 'Alegreya'; font-style: normal; font-weight: 400 900; font-display: swap; src: url('./fonts/alegreya-roman-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Alegreya'; font-style: italic; font-weight: 400 900; font-display: swap; src: url('./fonts/alegreya-italic-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+:root {
+  /* Wood: the rack's walnut, lit from above. */
+  --cd-wood-hi: #7d5538; --cd-wood: #5b3b27; --cd-wood-lo: #3d2718; --cd-wood-edge: #24160d; --cd-wood-well: #2b1b10;
+  /* Brass fittings and the focus wire. */
+  --cd-brass-hi: #f4dc9d; --cd-brass: #c99f5b; --cd-brass-lo: #7c5a2a;
+  /* Parchment and its inks. Ink on parchment is above 10:1; soft ink stays above 4.5:1 on the darkest parchment. */
+  --cd-parch-hi: #fbf1d8; --cd-parch: #f3e6c6; --cd-parch-lo: #e3cfa3; --cd-ink: #38261a; --cd-ink-soft: #654a31; --cd-ink-alarm: #7c2617;
+  /* Cream text on wood. Soft cream stays above 4.5:1 on the darkest wood. */
+  --cd-cream: #f4e3bf; --cd-cream-soft: #d6bf98;
+  /* Pressed wax, one colour per fact; the word always says the fact too. */
+  --cd-wax-simulated: #a1402a; --cd-wax-connecting: #a07a3c; --cd-wax-live: #c4862c; --cd-wax-resting: #404c78; --cd-wax-lost: #5c6370;
+  /* Type: storybook headings, readable bodies, small caps for labels. Product text never drops below 12 px. */
+  --cd-face-story: 'IM Fell English', Georgia, 'Times New Roman', serif;
+  --cd-face-label: 'IM Fell English SC', Georgia, 'Times New Roman', serif;
+  --cd-face-body: Alegreya, Georgia, 'Times New Roman', serif;
+  --cd-type-min: 12px; --cd-type-small: 13px; --cd-type-body: 14px; --cd-type-lead: 16px; --cd-type-title: 22px; --cd-type-display: 38px;
+  --cd-label-tracking: .08em;
+  /* Focus: a drawn brass wire just outside the fitting. */
+  --cd-focus-width: 2px; --cd-focus-offset: 3px; --cd-focus: var(--cd-brass-hi);
+}
+
+/* Any kit fitting: keyboard focus is a brass wire. A real outline survives forced colours, where shadows vanish. */
+.cd-focus:focus { outline: none; }
+.cd-focus:focus-visible, .cd-kit :focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
+@media (forced-colors: active) { .cd-focus:focus-visible, .cd-kit :focus-visible { outline-color: Highlight; } }
+
+/* Carved plate: walnut with grain, four brass pins, an inner bevel. */
+.cd-plate {
+  color: var(--cd-cream); font: var(--cd-type-body)/1.35 var(--cd-face-body); font-synthesis: none;
+  background:
+    radial-gradient(circle at 9px 9px, var(--cd-brass-hi) 0 1px, var(--cd-brass) 1.5px 2.6px, var(--cd-brass-lo) 3.2px, transparent 3.8px),
+    radial-gradient(circle at calc(100% - 9px) 9px, var(--cd-brass-hi) 0 1px, var(--cd-brass) 1.5px 2.6px, var(--cd-brass-lo) 3.2px, transparent 3.8px),
+    radial-gradient(circle at 9px calc(100% - 9px), var(--cd-brass-hi) 0 1px, var(--cd-brass) 1.5px 2.6px, var(--cd-brass-lo) 3.2px, transparent 3.8px),
+    radial-gradient(circle at calc(100% - 9px) calc(100% - 9px), var(--cd-brass-hi) 0 1px, var(--cd-brass) 1.5px 2.6px, var(--cd-brass-lo) 3.2px, transparent 3.8px),
+    repeating-linear-gradient(93deg, #ffdcae08 0 2px, transparent 2px 9px, #1a0c0410 9px 10px, transparent 10px 17px, #ffdcae06 17px 18px, transparent 18px 26px),
+    linear-gradient(176deg, var(--cd-wood-hi), var(--cd-wood) 38%, var(--cd-wood-lo));
+  border: 1px solid var(--cd-wood-edge); border-radius: 12px;
+  box-shadow: inset 0 1px 0 #ffe1b440, inset 0 -2px 0 #0000004d, inset 0 0 0 4px #00000014, 0 0 0 1px #c99f5b33, 0 18px 40px #0c0a1c80, 0 4px 10px #0c0a1c55;
+}
+
+/* Parchment slip: cut paper, a little warmer where the light lands, pinned with a short drop to the wood. */
+.cd-slip {
+  color: var(--cd-ink); font: var(--cd-type-small)/1.3 var(--cd-face-body); font-synthesis: none; border-radius: 3px;
+  background: radial-gradient(ellipse at 28% 18%, var(--cd-parch-hi), transparent 72%), linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff4d, inset 0 -5px 12px #a0784022, 0 1px 0 #ffe7b826, 0 2px 0 #0000004d, 0 3px 8px #0000003d;
+}
+.cd-label { font: var(--cd-type-min)/1.1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); }
+
+/* Wax seal: an uneven pressed disc, a rim from the matrix, an embossed glyph. Colour by fact. */
+.cd-seal { --cd-wax: var(--cd-wax-simulated); display: block; flex: none; width: 24px; height: 24px; overflow: visible;
+  filter: drop-shadow(0 1px 0 #00000059) drop-shadow(0 1.5px 1.5px #2a140a40); }
+.cd-seal-wax { fill: var(--cd-wax); stroke: color-mix(in srgb, var(--cd-wax) 62%, #120800); stroke-width: .7; }
+.cd-seal-rim { fill: none; stroke: color-mix(in srgb, var(--cd-wax) 70%, #160a02); stroke-width: 1; }
+.cd-seal-glyph { fill: none; stroke: color-mix(in srgb, var(--cd-wax) 38%, #fff3dc); stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; }
+.cd-seal[data-seal='live'] .cd-seal-glyph, .cd-seal[data-seal='resting'] .cd-seal-glyph { fill: color-mix(in srgb, var(--cd-wax) 30%, #fff1d2); stroke-width: .6; }
+.cd-seal[data-seal='connecting'] { --cd-wax: var(--cd-wax-connecting); }
+.cd-seal[data-seal='live'] { --cd-wax: var(--cd-wax-live); }
+.cd-seal[data-seal='resting'] { --cd-wax: var(--cd-wax-resting); }
+.cd-seal[data-seal='lost'] { --cd-wax: var(--cd-wax-lost); }
+.cd-seal-small { width: 18px; height: 18px; }
+
+/* The provenance seal: one quiet slip per surface, the wax pressed over its left edge. Every fact is a line. */
+.cd-provenance { position: relative; display: flex; flex-direction: column; gap: 4px; width: max-content; max-width: min(260px, 100%); margin: 0;
+  padding: 5px 11px 5px 6px; color: var(--cd-ink); font: var(--cd-type-min)/1.15 var(--cd-face-body); font-synthesis: none; pointer-events: none;
+  border-radius: 2px 3px 3px 2px;
+  background:
+    linear-gradient(90deg, #8a5a3014 0 18px, transparent 26px),
+    radial-gradient(ellipse at 30% 15%, var(--cd-parch-hi), transparent 75%),
+    linear-gradient(172deg, var(--cd-parch), var(--cd-parch-lo));
+  box-shadow: inset 0 0 0 1px #ffffff52, inset 0 0 0 3px #f9eed5, inset 0 0 0 3.6px #9c7a4c2e, inset 0 -4px 9px #a0784020, 0 1px 0 #00000052, 0 3px 9px #1008184d; }
+.cd-provenance-line { display: flex; align-items: center; gap: 7px; margin: 0; }
+.cd-provenance-line .cd-seal { margin: -2px 0 -2px -14px; }
+.cd-provenance-line .cd-seal-small { margin: 0 2px 0 -11px; }
+.cd-provenance-words { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cd-provenance-word { font: var(--cd-type-small)/1.1 var(--cd-face-label); font-weight: 400; letter-spacing: var(--cd-label-tracking); color: var(--cd-ink); white-space: nowrap; }
+.cd-provenance-note { display: block; font: italic var(--cd-type-min)/1.15 var(--cd-face-body); color: var(--cd-ink-soft); }
+.cd-provenance-line + .cd-provenance-line { padding-top: 4px; border-top: 1px solid #9c7a4c40; }
+.cd-provenance-line[data-seal='lost'] .cd-provenance-word { color: var(--cd-ink-alarm); }
+.cd-provenance[data-provenance='lost'] { background:
+    linear-gradient(90deg, #5c637018 0 18px, transparent 26px),
+    radial-gradient(ellipse at 30% 15%, #f6eedc, transparent 75%),
+    linear-gradient(172deg, #ece1c8, #d9c8a4); }
+@media (forced-colors: active) {
+  .cd-provenance { border: 1px solid CanvasText; }
+  .cd-seal-wax { fill: Canvas; stroke: CanvasText; }
+  .cd-seal-rim, .cd-seal-glyph { stroke: CanvasText; }
+}

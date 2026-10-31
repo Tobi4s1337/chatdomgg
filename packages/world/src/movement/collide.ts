@@ -204,7 +204,13 @@ function stepRise(s: PlayerState, dx: number, dz: number, world: CollisionWorld)
  */
 function treadAt(x: number, y: number, z: number, world: CollisionWorld): boolean {
   let tread = false;
-  for (const b of world.query({ min: [x, y - STEP_HEIGHT, z], max: [x, y + CONTACT_EPSILON, z] })) {
+  for (const b of world.query({
+    // Collision broad phases may use strict intersections or reject empty bounds. A point-shaped query can
+    // disappear at a cell boundary even when a broad slab really supports this tread. Probe a finite volume;
+    // the exact point/height checks below still decide whether the landing is valid.
+    min: [x - SUPPORT_PROBE, y - STEP_HEIGHT - SUPPORT_PROBE, z - SUPPORT_PROBE],
+    max: [x + SUPPORT_PROBE, y + SUPPORT_PROBE, z + SUPPORT_PROBE],
+  })) {
     if (x < b.min[0]! || x > b.max[0]! || z < b.min[2]! || z > b.max[2]!) continue;
     if (b.max[1]! > y + CONTACT_EPSILON) return false;
     if (b.max[1]! >= y - STEP_HEIGHT - CONTACT_EPSILON) tread = true;

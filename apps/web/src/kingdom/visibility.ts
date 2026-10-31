@@ -1,5 +1,10 @@
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
 import type { WindowHouse } from '@chatdom/render';
+import { MATERIALS } from '@chatdom/content/materials';
+
+/** Sight follows the registry: air and `surface: glass` are seen through; anything unregistered blocks. */
+const blocksSight=new Uint8Array(65536).fill(1);
+for(const material of MATERIALS.materials)blocksSight[material.id]=Number(material.surface!=='air'&&material.surface!=='glass');
 
 /** Intersect a finite segment with a half-open box, returning parameter distance [0,1]. */
 function interval(a:Vec3,b:Vec3,lo:Vec3,hi:Vec3):[number,number]|null {
@@ -14,7 +19,7 @@ function interval(a:Vec3,b:Vec3,lo:Vec3,hi:Vec3):[number,number]|null {
   return [start,end];
 }
 
-/** Exact ordered-box occupancy along a ray: later air carves really open a passage. */
+/** Exact ordered-box occupancy along a ray: later air carves and glass really open a sight line. */
 export function blueprintOccludes(blueprint:VoxelBlueprint,a:Vec3,b:Vec3):boolean {
   if(!interval(a,b,[0,0,0],blueprint.size))return false;
   let solid:[number,number][]=[];
@@ -23,7 +28,7 @@ export function blueprintOccludes(blueprint:VoxelBlueprint,a:Vec3,b:Vec3):boolea
     // Repaint this interval, preserving disjoint occupied sections outside it.
     const next:[number,number][]=[];
     for(const [lo,hi] of solid){if(hi<=hit[0]||lo>=hit[1])next.push([lo,hi]);else{if(lo<hit[0])next.push([lo,hit[0]]);if(hi>hit[1])next.push([hit[1],hi]);}}
-    if(box.material!==0)next.push(hit);
+    if(blocksSight[box.material])next.push(hit);
     solid=next;
   }
   return solid.some(([lo,hi])=>hi-lo>1e-6);

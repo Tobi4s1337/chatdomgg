@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { createAnvilHero, MARK_SCALE } from './index';
-import { ANVIL_FACE_HEIGHT, BLOCK, CHEEK_Z, FACE_ROW, GRID_MIN, GRID_SIZE, H, HARDY, MARK_WINDOW, PLATE, sculptAnvilStage, Y_OFFSET } from './sculpt';
+import { ANVIL_FACE_HEIGHT, BLOCK, CHEEK_Z, FACE_ROW, FEET, FOOT_ARCH_HALF_Z, FOOT_ARCH_X, GRID_MIN, GRID_SIZE, H, HARDY, MARK_WINDOW, PLATE, sculptAnvilStage, Y_OFFSET } from './sculpt';
 
 const sculpt = sculptAnvilStage();
 const [nx, ny, nz] = GRID_SIZE;
@@ -35,6 +35,14 @@ describe('the anvil stage', () => {
     }
   });
 
+  it('stands on four feet, with the arches open right through from the side and the end', () => {
+    for (let row = FEET.rows[0]; row < FEET.rows[0] + 2; row++) {
+      for (let x = FOOT_ARCH_X[0]; x < FOOT_ARCH_X[1]; x++) for (let z = FEET.z[0] - 1; z <= FEET.z[1]; z++) expect(material(x, row, z)).toBe(0);
+      for (let z = -FOOT_ARCH_HALF_Z; z < FOOT_ARCH_HALF_Z; z++) for (let x = FEET.x[0] - 1; x <= FEET.x[1]; x++) expect(material(x, row, z)).toBe(0);
+      for (const x of [FEET.x[0], FEET.x[1] - 1]) for (const z of [FEET.z[0], FEET.z[1] - 1]) expect(material(x, row, z)).not.toBe(0);
+    }
+  });
+
   it('carries every cell of iron down to the block: no floating chips or loose horn', () => {
     const key = (x: number, row: number, z: number) => `${x},${row},${z}`;
     const todo = solids.filter(([, row]) => row === BLOCK.rows[0]);
@@ -58,11 +66,11 @@ describe('createAnvilHero', () => {
     expect(scale).toBe(MARK_SCALE);
     expect(rotation.order).toBe('YXZ');
     expect([rotation.x, rotation.y, rotation.z]).toEqual([0, 0, 0]);
-    // Plate front (its 0.13-unit bevel) stands a hair proud of the cheek; never behind it, never floating.
+    // Plate front (its 0.13-unit bevel) sits a hair inside its window, so the cheek's edge hides its rim; never floating.
     const unit = .32 / 24 * scale;
     const front = position.z + .13 * unit;
-    expect(front - CHEEK_Z * H).toBeGreaterThan(0);
-    expect(front - CHEEK_Z * H).toBeLessThan(.001);
+    expect(CHEEK_Z * H - front).toBeGreaterThan(0);
+    expect(CHEEK_Z * H - front).toBeLessThan(.001);
     // Every point of the source paths, placed by the mount, lies in the open window behind the cut.
     const svg = readFileSync(new URL('../engraving/codex.svg', import.meta.url), 'utf8');
     const numbers = [...svg.matchAll(/ d="([^"]+)"/g)].flatMap(m => m[1]!.match(/-?\d+(?:\.\d+)?/g)!.map(Number));
@@ -82,7 +90,7 @@ describe('createAnvilHero', () => {
     // The rune origin is just outside the centre of the cut.
     expect(hero.runeOrigin.x).toBeCloseTo(position.x, 6);
     expect(hero.runeOrigin.y).toBeCloseTo(position.y, 6);
-    expect(hero.runeOrigin.z - front).toBeGreaterThan(.005);
+    expect(hero.runeOrigin.z - CHEEK_Z * H).toBeGreaterThan(.005);
     expect(hero.runeOrigin.z - front).toBeLessThan(.04);
     hero.dispose();
   });
@@ -109,9 +117,10 @@ describe('createAnvilHero', () => {
     callerMaterial.addEventListener('dispose', () => disposed.push('caller material'));
     stage.geometry.addEventListener('dispose', () => disposed.push('stage geometry'));
     stage.material.addEventListener('dispose', () => disposed.push('stage material'));
+    (uniforms.uAnvilCells!.value as THREE.Texture).addEventListener('dispose', () => disposed.push('occupancy texture'));
     hero.dispose();
     hero.dispose();
-    expect(disposed.sort()).toEqual(['stage geometry', 'stage material']);
+    expect(disposed.sort()).toEqual(['occupancy texture', 'stage geometry', 'stage material']);
     expect(parent.children).not.toContain(hero.root);
     expect(caller.parent).toBe(hero.root);
   });

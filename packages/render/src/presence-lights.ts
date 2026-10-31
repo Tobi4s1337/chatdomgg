@@ -165,10 +165,13 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       // Mullions and frame stay dark; their inner edges catch the room's light.
       float catchLight = frame * (1.0 - smoothstep(0.455, 0.49, max(p.x, p.y))) * lit;
       vec3 timber = mix(vec3(0.2, 0.13, 0.09), vec3(0.07, 0.04, 0.035), night) + vec3(0.36, 0.13, 0.03) * catchLight;
-      gl_FragColor = vec4(mix(glass, timber, wood), 1.0);
+      // The real voxel glass remains visible through this presentation layer.
+      float street = gl_FrontFacing ? 1.0 : 0.18;
+      float glassAlpha = mix(0.1, mix(0.2, 0.68, night), presence) * street;
+      gl_FragColor = vec4(mix(glass, timber, wood), mix(glassAlpha, 1.0, wood));
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
-    }`, side: THREE.DoubleSide });
+    }`, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const haloMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `${shared}
     void main() {
       discardDetail();
@@ -199,6 +202,8 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   }
   const panes = makeMesh(paneMaterial, transforms);
   const halos = makeMesh(haloMaterial, haloTransforms);
+  // Both layers are translucent: the pane first, then the halo around it.
+  panes.renderOrder = 1; halos.renderOrder = 2;
   function setDetail(slot: number, from: LodFactor, to: LodFactor, progress: number): void {
     const indices = slotIndices.get(slot);
     if (!indices) return;

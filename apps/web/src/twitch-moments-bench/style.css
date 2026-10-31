@@ -1,0 +1,76 @@
+body.moments-bench-page{margin:0;background:#1d1b24;overflow:hidden}
+.moments-bench{position:fixed;inset:0;overflow:hidden;background:#1d1b24;color:#efe3c8;font-family:Georgia,'Times New Roman',serif;isolation:isolate}
+.moments-canvas{position:absolute;inset:0;display:block;width:100%;height:100%}
+.moments-vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 46%,#0000 58%,#120f1a8c 100%)}
+
+.moments-heading{position:absolute;left:28px;top:22px;max-width:420px;pointer-events:none;text-shadow:0 1px 10px #120f1acc}
+.moments-eyebrow{margin:0 0 4px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#d9c28c}
+.moments-heading h1{margin:0;font-weight:normal;font-size:30px;line-height:1.1;letter-spacing:.01em;color:#fbf1da}
+.moments-sub{margin:6px 0 0;font-size:13px;font-style:italic;color:#d8cdb6}
+
+.moments-source{position:absolute;right:24px;top:22px;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 10px;border:1px solid #c9a96a;border-radius:3px;background:#2a2431e6;color:#f4e6c4;font-size:11px;letter-spacing:.14em;box-shadow:0 2px 0 #0000004d}
+.moments-source .source-pip{width:7px;height:7px;border-radius:50%;background:#e9b65a;box-shadow:0 0 8px #e9b65a}
+.moments-source.down .source-pip{background:#8a7f86;box-shadow:none}
+.moments-clean-mark{position:absolute;left:18px;bottom:16px;padding:4px 9px;border:1px solid #c9a96a99;border-radius:3px;background:#221d29b3;color:#f1e3c2;font-size:10px;letter-spacing:.16em}
+.moments-bench.clean .moments-source{display:none}
+
+/* The caption is a carved wooden placard on a brass pin, not a toast. */
+.moment-captions{position:absolute;inset:0;pointer-events:none}
+.moment-caption{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:2px;min-width:150px;max-width:260px;padding:9px 18px 10px;border:1px solid #8e6b3a;border-radius:4px;background:linear-gradient(#5b3f27,#45301f);box-shadow:inset 0 1px 0 #a98454,inset 0 -2px 0 #2e1f14,0 6px 18px #0d0a1299;text-align:center;transition:opacity .12s linear}
+.moment-caption::after{content:'';position:absolute;left:50%;bottom:-9px;width:2px;height:9px;margin-left:-1px;background:#c9a96a}
+.moment-caption .caption-mark{position:absolute;top:-6px;left:50%;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe7a6,#b58a3c 70%);box-shadow:0 1px 2px #0008}
+.moment-caption strong{font-weight:normal;font-size:17px;line-height:1.2;color:#fff2d2;overflow-wrap:anywhere}
+.moment-caption small{font-size:11px;letter-spacing:.08em;color:#e1c992}
+
+.sheet-toggle{position:absolute;right:24px;bottom:20px;z-index:3}
+.moments-panel{position:absolute;right:24px;top:64px;bottom:66px;width:330px;overflow:auto;padding:4px 18px 16px;border:1px solid #806a4a;border-radius:6px;background:#26212dee;box-shadow:0 18px 40px #0b09108c;scrollbar-width:thin;scrollbar-color:#6c5a42 #0000}
+.moments-panel section{padding:14px 0 12px;border-bottom:1px solid #4c4150}
+.moments-panel section:last-child{border-bottom:0}
+.moments-panel h2{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-weight:normal;font-size:15px;color:#f6e8c8}
+.moments-panel h2 em{font-style:normal;padding:1px 6px;border:1px solid #c9a96a;border-radius:2px;font-size:9px;letter-spacing:.16em;color:#ecd59f}
+.panel-note{margin:0 0 10px;font-size:12px;line-height:1.5;color:#cbbfab}
+.moments-bench button{font:13px Georgia,serif;color:#f7ead0;padding:7px 12px;border:1px solid #9c7d4c;border-radius:3px;background:linear-gradient(#5a4330,#47331f);box-shadow:inset 0 1px 0 #8f6e45,0 2px 0 #1a1218;cursor:pointer}
+.moments-bench button:hover:not(:disabled){background:linear-gradient(#6a4f37,#533b25)}
+.moments-bench button:active:not(:disabled){transform:translateY(1px);box-shadow:inset 0 1px 0 #8f6e45}
+.moments-bench button:disabled{color:#a99c8c;border-color:#5f5246;background:#38303a;box-shadow:none;cursor:not-allowed}
+.moments-bench button:focus-visible,.moments-bench input:focus-visible{outline:2px solid #f0c66d;outline-offset:2px}
+.citizens{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:6px}
+.citizens li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 8px;border-radius:3px;background:#302935}
+.citizen-name{display:flex;flex-direction:column;font-size:14px;color:#f9edd2}
+.citizen-name.quiet{font-style:italic;color:#d6c9b5}
+.citizen-name small{font-size:10px;letter-spacing:.06em;color:#b8a990;font-style:normal}
+.source-actions{display:flex;flex-wrap:wrap;gap:6px}
+.source-actions button{font-size:12px;padding:5px 9px}
+.timeline{display:flex;align-items:center;gap:10px}
+.timeline input{flex:1;accent-color:#d9ae5c}
+.timeline output{width:44px;text-align:right;font-size:12px;color:#dccfb6;font-variant-numeric:tabular-nums}
+.timeline .play{width:64px}
+.beat-marks{position:relative;height:6px;margin:3px 54px 10px 74px}
+.beat-marks i{position:absolute;top:0;width:1px;height:6px;background:#c9a96a99}
+.sound[aria-pressed='true']{border-color:#e2bd6e}
+.decree-title{margin:0 0 6px;font-size:15px;color:#fff1d3}
+.decree-lines{margin:0 0 8px;padding-left:20px;font-size:13px;line-height:1.6;color:#e2d6bf}
+.decree-state{margin:0 0 8px;font-size:11px;letter-spacing:.06em;color:#c5a978}
+.log{list-style:none;margin:0;padding:0;display:grid;gap:5px;font-size:12px;line-height:1.45}
+.log li{padding-left:10px;border-left:2px solid #7e6c55;color:#d9cdb7}
+.log li.public{border-color:#d9ae5c;color:#f3e6ca}
+.log li.refused{border-color:#b96d5f;color:#e6c7bd}
+.log li.source{border-color:#6d7c9a;color:#c9d0de}
+
+.moments-gate{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:radial-gradient(#2f2836,#1b1821);text-align:center;padding:24px}
+.moments-gate h2{margin:0;font-weight:normal;font-size:22px;color:#f7e9c9}
+.moments-gate p{margin:0;max-width:340px;font-size:14px;line-height:1.5;color:#cfc2ab;overflow-wrap:anywhere}
+.gate-progress{width:200px;height:3px;border-radius:2px;background:#463c48;overflow:hidden}
+.gate-progress i{display:block;height:100%;background:#d9ae5c;transition:width .2s}
+
+@media (max-width:640px){
+  .moments-heading{left:18px;top:16px;max-width:60%}
+  .moments-heading h1{font-size:23px}
+  .moments-sub{font-size:12px}
+  .moments-source{right:14px;top:16px;font-size:9px;padding:5px 9px 5px 8px}
+  .moments-panel{left:10px;right:10px;top:auto;bottom:62px;width:auto;max-height:46vh;padding:2px 14px 12px}
+  .sheet-toggle{left:50%;right:auto;transform:translateX(-50%);bottom:14px}
+  .moment-caption{min-width:120px;padding:7px 14px 8px}
+  .moment-caption strong{font-size:15px}
+}
+@media (prefers-reduced-motion:reduce){.moment-caption,.gate-progress i{transition:none}}

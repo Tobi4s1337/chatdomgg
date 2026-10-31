@@ -72,7 +72,9 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         },
         allowWalking: (id, allowed) => { this.walking.set(id,allowed); if(!allowed)this.inputs.get(id).clear(); },
         adoptWorld: (world, layoutRevision, positions) => {
-          if(world.revision <= this.world.revision) throw new Error('Collision revisions must advance');
+          // Revisions identify immutable geometry. Returning to previously approved exact bytes may reuse an
+          // older identity; it still needs the same complete safe-pose validation as any other adoption.
+          if(world.revision === this.world.revision) throw new Error('Collision adoption must change geometry identity');
           for(const [id,p] of this.state.walkers) {
             const position=positions.get(id); if(!position || !safePose(world,position)) throw new Error('Every walker needs a safe revision pose');
             // Validation is completed for every pose before publishing a new world below.

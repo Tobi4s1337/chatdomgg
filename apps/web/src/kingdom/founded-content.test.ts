@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest';
-import { MATERIALS } from '@chatdom/content';
+import { createCastleModule, MATERIALS } from '@chatdom/content';
 import { VOXEL_FIXTURE } from '@chatdom/shared/world-fixtures';
 import { generateSettlementPlan, type RealmFoundedScene } from '@chatdom/world';
-import { KingdomRoomState, kingdomRoomId, type RealmFoundedManifest } from '@chatdom/shared/realm';
+import { KingdomRoomState, REALM_CASTLE_SLOT, castleHostId, kingdomRoomId, type RealmFoundedManifest } from '@chatdom/shared/realm';
 import type { RealmClient } from '../realm/client';
 import { foundedContent } from './founded-content';
 import { checkWalkBinding } from './walk-scene';
@@ -18,6 +18,13 @@ it('installs hash-distinct approved homes at their exact plots and refuses a wal
   };
   const installed = foundedContent(scene);
   expect(installed.houses).toHaveLength(plan.homes.length);
+  const module = plan.castle.modules.find(module => module.id === plan.castle.beaconModuleId)!;
+  const castle = createCastleModule('keep', module.size, 'tide');
+  const withKeep = foundedContent({ ...scene, assets: [...scene.assets, { assetHash: 'd'.repeat(64), blueprint: castle }], placements: [...scene.placements,
+    { id: castleHostId(module.id), assetHash: 'd'.repeat(64), position: module.position, rotation: module.rotation }] });
+  expect(withKeep.houses).toHaveLength(plan.homes.length);
+  expect(withKeep.forgeHosts).toHaveLength(plan.homes.length + 1);
+  expect(withKeep.forgeHosts.at(-1)).toMatchObject({ blueprint: castle, position: module.position, yaw: module.rotation * Math.PI / 2, slot: REALM_CASTLE_SLOT });
   expect(installed.houses[0]!.blueprint).toBe(a);
   expect(installed.houses[1]!.blueprint).toBe(b); // Same semantic ID, genuinely different asset bytes.
   expect(installed.content[1]!.position).toBe(plan.homes[1]!.position);
