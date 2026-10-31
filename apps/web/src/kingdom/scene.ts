@@ -52,6 +52,18 @@ import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
 import { createWaterSurface } from '../places/water/surface';
 import { deriveWaterReaches } from '../../../../packages/world/src/places/water/reaches';
 
+const distantAirAnchor='colour=mix(colour,fogColour,min(.86,fogAmount));';
+const distantAir=`colour=mix(colour,fogColour,min(.86,fogAmount));
+    // Distant land and groves share this evening air. Keep the town's accepted light
+    // untouched; sightline depth and low valleys separate successive rock ridges.
+    float duskAir=smoothstep(.15,.65,uNight);
+    float ridgeDistance=max(distanceToCamera-220.,0.);
+    float valleyAir=.45+.55*exp(-max(vWorld.y-12.,0.)*.012);
+    float ridgeHaze=(1.-exp(-ridgeDistance*.0009*valleyAir))*duskAir;
+    vec3 lilacAir=vec3(${new THREE.Color('#9685ad').multiplyScalar(.65).toArray().join(',')});
+    colour=mix(colour,lilacAir,min(.34,ridgeHaze));`;
+function withDistantAir(shader:string){if(!shader.includes(distantAirAnchor))throw new Error('Distant air shader anchor missing');return shader.replace(distantAirAnchor,distantAir);}
+
 // One short-lived presentation handoff keeps a scene revision from sending neighbours back home.
 let citizenHandoff: { at: number; checkpoint: CitizenSceneCheckpoint } | undefined;
 
@@ -181,6 +193,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   const sunShadows=own(createSunShadows(renderer,{bounds:new THREE.Box3(new THREE.Vector3(layout.bounds.minX-40,-8,layout.bounds.minZ-70),new THREE.Vector3(layout.bounds.maxX+40,60,layout.bounds.maxZ+20)),resolution:portrait()?1024:2048}));
   sunShadows.bindReceiver(clay.material);sunShadows.bindReceiver(ground.material);sunShadows.bindReceiver(crowd.material.material);
+  const floraMaterial=own(new THREE.ShaderMaterial({glslVersion:clay.material.glslVersion,uniforms:clay.material.uniforms,defines:clay.material.defines,alphaToCoverage:clay.material.alphaToCoverage,vertexShader:clay.material.vertexShader,fragmentShader:withDistantAir(clay.material.fragmentShader)}));
+  sunShadows.bindReceiver(floraMaterial);
   const royalLife=own(createRoyalLife(scene,clay,installed?.forgeHosts.find(home=>home.slot===65534),lifeSites.braziers,lifeSites.standard));
   if(royalLife.keepMaterial)sunShadows.bindReceiver(royalLife.keepMaterial);
   if(royalLife.standardMaterial)sunShadows.bindReceiver(royalLife.standardMaterial);
@@ -237,7 +251,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const geometry=geometryFromChunks(chunks,'build');geometry.setAttribute('aLodFade',new THREE.InstancedBufferAttribute(new Float32Array(placements.length).fill(1),1));geometries.push(geometry);
     const keepMesh=installed?.forgeHosts.some(home=>home.slot===65534&&blueprintKey(home.blueprint)===blueprintKey(blueprint));
     const standardMesh=lifeSites.standard&&blueprintKey(lifeSites.standard.blueprint)===blueprintKey(blueprint);
-    const mesh=new THREE.InstancedMesh(geometry,standardMesh&&royalLife.standardMaterial?royalLife.standardMaterial:keepMesh&&royalLife.keepMaterial?royalLife.keepMaterial:clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
+    const mesh=new THREE.InstancedMesh(geometry,blueprint.kind==='flora'?floraMaterial:standardMesh&&royalLife.standardMaterial?royalLife.standardMaterial:keepMesh&&royalLife.keepMaterial?royalLife.keepMaterial:clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
     placements.forEach((p,i)=>{m.compose(v.set(...p.position),q.setFromAxisAngle(new THREE.Vector3(0,1,0),p.yaw),new THREE.Vector3(factor,factor,factor));mesh.setMatrixAt(i,m);});
     mesh.instanceMatrix.needsUpdate=true;mesh.frustumCulled=false;mesh.name=blueprint.id;scene.add(mesh);meshes.push(mesh);geometryBuilds++;
     if(factor===(blueprint.kind==='flora'?2:1))sunShadows.register(mesh);
@@ -336,7 +350,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     plant(cx+Math.cos(angle)*radius,cz+Math.sin(angle)*radius,group%3);
   }
   // A continuous distant land silhouette lies beyond the detailed editable terrain.
-  const horizonMaterial=own(new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:ground.material.uniforms,fragmentShader:ground.material.fragmentShader.replace('vec3 n=normalize(vNormal);',`vec3 n=normalize(vNormal);
+  const horizonMaterial=own(new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms:ground.material.uniforms,fragmentShader:withDistantAir(ground.material.fragmentShader.replace('vec3 n=normalize(vNormal);',`vec3 n=normalize(vNormal);
     // Exposed faces belong to the sculpted terrain, never to houses or the town's light grade.
     vec3 faceNormal=normalize(cross(dFdx(vWorld),dFdy(vWorld)));
     float exposed=(1.-smoothstep(.64,.9,abs(faceNormal.y)));
@@ -344,15 +358,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     float course=vWorld.y*.72+.45*sin(vWorld.x*.13+vWorld.z*.09)+1.1*sin((vWorld.x-vWorld.z)*.027);
     rock*=.88+.16*fract(sin(floor(course)*12.9898)*43758.5453);
     base=mix(base,rock,exposed);
-    n=normalize(mix(n,faceNormal*sign(dot(faceNormal,n)),exposed*.6));`).replace('colour=mix(colour,fogColour,min(.86,fogAmount));', `colour=mix(colour,fogColour,min(.86,fogAmount));
-    // Only the distant land takes this evening air. Keep the town's accepted light
-    // untouched; sightline depth and low valleys separate successive rock ridges.
-    float duskAir=smoothstep(.15,.65,uNight);
-    float ridgeDistance=max(distanceToCamera-220.,0.);
-    float valleyAir=.45+.55*exp(-max(vWorld.y-12.,0.)*.012);
-    float ridgeHaze=(1.-exp(-ridgeDistance*.0009*valleyAir))*duskAir;
-    vec3 lilacAir=vec3(${new THREE.Color('#9685ad').multiplyScalar(.65).toArray().join(',')});
-    colour=mix(colour,lilacAir,min(.34,ridgeHaze));`),vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
+    n=normalize(mix(n,faceNormal*sign(dot(faceNormal,n)),exposed*.6));`)),vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
   // The v1 lake has no body record. Its terrain carves the shoreline within this
   // envelope; the supplied height grid clips the surface to the actual bed.
   const landform=layout.landform;
@@ -535,7 +541,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();

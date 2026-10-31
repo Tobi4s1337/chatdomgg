@@ -334,12 +334,18 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 remains authorised. Keep exposure34ac89a, indigo0896044, street warmth96f2d08, beacon/pools/gold frame,
 soft smoke7c16789 and castle lighta1dac83/32633a8. Merge good checkpoints; medium helpers for routine work.
 
-**Current slice:** carried lanterns now use existing exact-air upward projection in the light field.
-The coarse terrain grid had rounded up around low flames and rejected sources without an outward normal;
-no strength/budget/exposure change. One regression test uses the actual carried source: rounded street cell
-lights, genuinely buried flame stays blocked. Viewed `shots/magic/lantern-road-pools-pair.png`,1920×1080 HIGH,
-hour19.5/time25: distinct warm pools now follow foreground walkers. Beacon/castle/window light preserved;
-faces too small to judge. Typecheck, scoped lint, focused test and web build pass. No pending captures/locks.
+**Current slice:** static flora now shares the horizon's exact dusk air beyond220m, via a clay-derived
+material with the same light/shadow uniforms. Nearby trees, homes, castle, people and pools unchanged.
+Viewed `shots/magic/grove-air-pair.png`,1920×1080 HIGH,hour19.5/time25: distant white trunks/black cutouts
+recede clearly into lilac land; far-right grove loses some definition. No haze-value/LOD/planting changes.
+Typecheck, scoped lint and web build pass; capture ready/fields settled/no errors, resources cleaned up.
+No new art code checkpoints (avatar branch only PRD/sync). Full tree variation/wind and body/clothes stay team-owned.
+
+**Previous light slice:**2f854d9 gives carried flames existing exact-air upward projection: coarse terrain
+cells had enclosed/rejected them. No strength/budget change. Actual-source regression checks rounded street
+lights but truly buried flame does not. `lantern-road-pools-pair.png` viewed: warm pools follow walkers.
+Faces too small to judge. Next existing flight-effects seam: realm-scene/index.ts after presentation.update,
+read actual mesh world pose + ForgeRitualFrame; retire only stage.ts flight trail loop when mounting the library.
 
 **Previous rehearsal slice:**73dc36e lets12 SIMULATED foreground neighbours join16–21s after the main wave.
 First Juniper/existing routes/window-on-arrival/live times unchanged. `wide-homecoming-pair.png` viewed:
