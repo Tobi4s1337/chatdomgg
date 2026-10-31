@@ -70,7 +70,8 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
     const attempt: ForgeAttempt = {
       key: `forge-chat-${digest([command.kingdomId, command.messageId])}`, attemptId: `attempt-${randomUUID()}`,
     };
-    const activityId = `forge-activity-${randomUUID()}`;
+    // The durable commit already carries this opaque run attempt. Keep one identity from first rune to landing.
+    const activityId = attempt.attemptId;
     const abort = new AbortController();
     const signal = AbortSignal.any([incoming.signal, abort.signal]);
     let reservation: ForgeReservation | undefined;

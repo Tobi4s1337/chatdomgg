@@ -15,7 +15,7 @@ function channel() {
   const callbacks = new Set<() => void>();
   return Object.assign((callback: () => void) => { callbacks.add(callback); }, { remove: (callback: () => void) => callbacks.delete(callback), emit: () => { for (const callback of callbacks) callback(); } });
 }
-function roomFixture(manifest: RealmFoundedManifest) {
+function roomFixture(manifest: RealmFoundedManifest, includePresence = true) {
   const callbacks = new Map<string, Set<(value: unknown) => void>>();
   const frame: KingdomPresenceFrame = { version: 1, kingdomId: manifest.kingdomId, origin: manifest.origin, epoch: 'presence-1', sequence: 2,
     asOf: Date.now(), streamLive: true, connection: 'fresh', windows: [{ slot: 1, since: Date.now() - 1000, present: true, publicName: 'SIMULATED visitor' }] };
@@ -27,7 +27,7 @@ function roomFixture(manifest: RealmFoundedManifest) {
     },
     send(type: string) {
       if (type === 'bootstrap') queueMicrotask(() => emit('bootstrap', { ...manifest, version: 1, writerEpoch: 'writer-1', throughSequence: 42,
-        throughCursor: 109, current: [{ type: 'presence', frame }] }));
+        throughCursor: 109, current: includePresence ? [{ type: 'presence', frame }] : [] }));
     },
   };
   const dispose = vi.fn();
@@ -97,4 +97,29 @@ describe('checked authenticated founded entry', () => {
     await expect(anonymous(new AbortController().signal)).rejects.toMatchObject({ status: 'unauthenticated' });
     expect(connectRealm).not.toHaveBeenCalled();
   });
+
+  it('retains a live Forge wait only for a deliberate exact-scene replacement in the same entry UI', async () => {
+    const { manifest, fetcher } = await fixture();
+    const source = createLiveKingdomEntrySource({ kingdomId: manifest.kingdomId, kingdomName: 'SIMULATED Willowmere', origin: 'simulated', notice: 'SIMULATED rehearsal',
+      endpoint: 'https://chatdom.test/realm-data', storage, fetcher });
+    const firstRoom = roomFixture(manifest), controller = new AbortController();
+    const first = await source(controller.signal);
+    firstRoom.emit('transient', { type: 'forge', event: { type: 'stage', activityId: 'actual-observed-wish', stage: 'drafting' } });
+    first.dispose('scene-revision'); controller.abort();
+    const replacementRoom = roomFixture(manifest, false), next = await source(new AbortController().signal);
+    let frames = 0, unavailable = 0;
+    const offPresence = next.presenceFeed.subscribe(() => frames++, () => unavailable++);
+    expect({ frames, unavailable }).toEqual({ frames: 0, unavailable: 1 });
+    expect(next.forgeFeed).toBe(first.forgeFeed);
+    const stages: string[] = [];
+    const off = next.forgeFeed!.subscribe({ stage: (id, stage) => stages.push(`${id}:${stage}`) });
+    expect(stages).toEqual(['actual-observed-wish:drafting']);
+    replacementRoom.room.onDrop.emit();
+    off();
+    next.forgeFeed!.subscribe({ stage: () => stages.push('stale') })();
+    expect(stages).toHaveLength(1);
+    offPresence(); next.dispose();
+    expect(firstRoom.dispose).toHaveBeenCalledOnce();
+    expect(replacementRoom.dispose).toHaveBeenCalledOnce();
+  }, 30_000);
 });

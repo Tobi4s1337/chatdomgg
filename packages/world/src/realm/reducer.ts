@@ -179,7 +179,7 @@ export function applyRealmFact(s: RealmPrivateState, f: RealmFact): RealmPrivate
 /** Public allowlist. A raw fact includes private ownership/words; it is never a broadcast payload. */
 export function projectRealmFact(s: RealmPrivateState, f: RealmFact): readonly RealmPublicMessage[] {
   const c = f.body;
-  if (c.type === 'forge.commitApproved') return [{ type: 'forge', event: { type: 'committed', activityId: c.attachment.runId, attachment: s.attachments[c.attachment.id]!.attachment } }];
+  if (c.type === 'forge.commitApproved') return [{ type: 'forge', event: { type: 'committed', activityId: c.attempt.attemptId, attachment: s.attachments[c.attachment.id]!.attachment } }];
   if (c.type === 'home.replaceApproved') return [{ type: 'home', plotId: c.homeId, revision: c.home.revision, assetHash: c.home.digest,attachments:Object.values(c.home.attachments).map(id=>s.attachments[id]!.attachment) }];
   return [];
 }

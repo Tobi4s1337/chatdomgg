@@ -98,6 +98,9 @@ it('uses one held writer and real coordinator; stages are transient, audited att
   expect(f.transient.every(message => message.type === 'forge' && message.event.type === 'stage')).toBe(true);
   expect(f.rows).toHaveLength(1);
   expect(f.rows[0]?.message).toMatchObject({ type: 'forge', event: { type: 'committed' } });
+  const firstStage = f.transient.find(message => message.type === 'forge');
+  expect(firstStage?.type).toBe('forge');
+  if (firstStage?.type === 'forge') expect(f.rows[0]?.message).toMatchObject({ type: 'forge', event: { activityId: firstStage.event.activityId } });
   expect(f.delivered).toHaveLength(1);
   expect(f.kingdom.publicCheckpoint().current).toContainEqual(expect.objectContaining({ type: 'home', attachments: [expect.objectContaining({ slot: 7 })] }));
   const publicBytes = JSON.stringify([f.rows, f.transient, f.delivered]);

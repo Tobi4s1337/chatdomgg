@@ -24,11 +24,11 @@ export function createRoomPresenceFeed(observer: RealmObserver, origin: KingdomP
       };
       const unsubscribe = observer.subscribe({
         presence: accept,
-        status: status => { if (status !== 'ready') fail(); },
+        status: status => { if (status !== 'ready' || !observer.current().presence) fail(); },
       });
       const now = observer.current();
       if (now.status === 'ready' && now.presence) accept(now.presence);
-      else if (now.status === 'mismatch' || now.status === 'unavailable' || now.status === 'disposed') fail();
+      else if (now.status === 'ready' || now.status === 'mismatch' || now.status === 'unavailable' || now.status === 'disposed') fail();
       return () => { closed = true; clearTimeout(stale); unsubscribe(); };
     },
   };

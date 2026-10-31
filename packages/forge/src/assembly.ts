@@ -4,8 +4,9 @@ import { MAT, STYLES } from '@chatdom/content/materials';
 import { createForgeMotif } from '@chatdom/content/forge-motifs';
 import { createForgeOrnament } from '@chatdom/content/forge-ornaments';
 import { rasterizeBlueprint } from '@chatdom/voxel';
+import { canonicalSceneJson } from '@chatdom/world/founded-codec';
 
-export function homeFingerprint(home:VoxelBlueprint):string {let hash=2166136261;for(const c of JSON.stringify(home))hash=Math.imul(hash^c.charCodeAt(0),16777619);return `home-${(hash>>>0).toString(16)}`;}
+export function homeFingerprint(home:VoxelBlueprint):string {let hash=2166136261;for(const c of canonicalSceneJson(home))hash=Math.imul(hash^c.charCodeAt(0),16777619);return `home-${(hash>>>0).toString(16)}`;}
 function cellReader(home:VoxelBlueprint){const asset=rasterizeBlueprint(home),[sx,sy,sz]=asset.size;return (x:number,y:number,z:number)=>x<0||y<0||z<0||x>=sx||y>=sy||z>=sz?0:asset.voxels[x+sx*(y+sy*z)]!;}
 /** Slots are discovered from retained occupancy, not from empty bounding-box corners or a prompt's coordinates. */
 export function findForgeSockets(home:VoxelBlueprint):ForgeHouseSocket[]{

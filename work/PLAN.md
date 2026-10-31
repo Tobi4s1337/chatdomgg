@@ -347,7 +347,9 @@ private table, never a fake OIDC sign-in, tenure, right or coal. Changed geometr
 matches, then updates collision/receipt and safely relocates affected walkers together. `b1a672a` adds Herald's
 bounded durable presence outbox and transient speech/wish/cleanup delivery. First-message speech briefly waits
 for actual room presence. Browser entry now verifies the public receipt/bytes/checkpoint, offers Twitch sign-in,
-and consumes room speech/deletions. Forge stages reach the observer; the actual room-fed ritual view is next.
+and consumes room speech/deletions. The room-fed ritual now mounts runes/mark, actual committed casting, close landing and standing smoke.
+Its expiring in-memory handoff survives scene revision; snapshots never replay a ceremony. Home fingerprints
+are canonical across public serialization, and one opaque attempt ID connects first rune to durable reveal.
 
 **Running:** Web preview 5190; SIMULATED full-town memory rehearsal 5187 behind `/realm-data`:
 `/?walk=1&source=simulated&hour=19.5`. The exact already accepted 240-home Willowmere geometry was explicitly
@@ -362,11 +364,16 @@ Herald needs its main build restarted with `HERALD_REALM_URL=http://127.0.0.1:51
 **Seen/checked:** Global typecheck, touched lint, relevant tests and web/realm/API/Herald builds pass; the actual
 scratch-Postgres cold boot/restart test passes. The full evening is not claimed. Serial browser walking smoke
 opened/moved in the complete SIMULATED town without page errors. Looked at `shots/kingdom/founded-walk@1440x900.png`
-and `@390x844.png`, `evening-street@1440x900.png`, and actual anonymous `live-signin@390x844.png`.
+and `@390x844.png`, `evening-street@1440x900.png`, actual anonymous `live-signin@390x844.png`, and `realm-forge-drafting@1440x900.png` (SIMULATED pending stage).
 Warm plaster/windows read better; the arrival still faces a bare bank/cropped castle and front strips remain
 empty. Dressing gets one tended verge vignette; first-look keeps the arrival-framing task. Merges stand.
 
-**Next, main:** Mount room Forge activity into the existing ritual/mark/landing view; finish actual rights/history,
-owned-host and build consumers without inventing evidence. Then demonstrate real chat→arrival/window and real
-wish→judges→correct home. Mount E interactions at actual places while the world lanes deliver them. Three-browser
-smoothness, plaza→pier, 300 walkers at 5 Hz and the real-GPU glassy check remain open. No waiting on lane delivery.
+**Priority now:** The founder's new goal is the real live evening and a watched 60–90 s capture, then glassy
+walking, world love, hero anvil/dragon, deep interactions and one Twitch spectacle. No immediate load-test detour.
+Real chat→arrival/window, real wish→judges→correct home, shared browsers and stream direction remain unclaimed.
+Main next finishes actual eligibility/owned hosts: the monarch needs a real castle host (no street deed), native
+keep fitting profile and public castle view; genuine identity grants monarch rights, actual ten-minute stream
+presence earns coal. Other free-word rights need real follow/knighthood evidence. Herald's current grant-only
+app-token path cannot backfill follower history; do not invent it. Reserve castle slot 65534. Public sign-in
+origin/registered callback was requested asynchronously; keep working on core while that and managed Herald
+hookup are supplied. The next look must judge the actual real run, not another rehearsal.

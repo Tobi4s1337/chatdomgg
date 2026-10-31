@@ -19,17 +19,17 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
   let connection: KingdomEntryConnection | undefined;
   let unmount: (() => void) | undefined;
 
-  function release() {
+  function release(sceneRevision = false) {
     generation++;
     // The walk/controller and scene must stop reading the client before its source closes it.
     unmount?.(); unmount = undefined;
-    connection?.dispose(); connection = undefined;
+    connection?.dispose(sceneRevision ? 'scene-revision' : undefined); connection = undefined;
     request?.abort(); request = undefined;
     setNotice(undefined);
   }
 
-  async function open() {
-    release();
+  async function open(sceneRevision = false) {
+    release(sceneRevision);
     if (closed) return;
     const current = generation, controller = new AbortController();
     request = controller;
@@ -40,10 +40,11 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
       if (closed || current !== generation || controller.signal.aborted) { next.dispose(); return; }
       connection = next;
       unmount = render(() => <Kingdom founded={next.scene} presenceFeed={next.presenceFeed} {...(next.chatFeed ? { chatFeed: next.chatFeed } : {})}
+        {...(next.forgeFeed ? { forgeFeed: next.forgeFeed } : {})}
         kingdomName={next.kingdomName} walk={{ client: next.client, collision: next.collision,
           manifest: next.manifest, onSceneNeeded: () => {
             // Finish the current scene frame before disposing its renderer and controller.
-            queueMicrotask(() => { if (!closed && current === generation) void open(); });
+            queueMicrotask(() => { if (!closed && current === generation) void open(true); });
           } }} />, host);
       setNotice(next.notice);
       setState('connected');
