@@ -25,3 +25,23 @@ h1.ppb-h1 { margin: 0; font: 400 var(--cd-type-title)/1.1 var(--cd-face-story); 
 @media (max-width: 760px) {
   main.ppb { --pp-max: 100%; padding: 12px 10px 48px; }
 }
+
+/* The card page's room for `?surface=card`: its dusk sky over the kingdom's rooftops, as `CitizenCard` draws it. */
+html:has(.ppb[data-surface='card']) {
+  background:
+    radial-gradient(70% 55% at 50% 100%, rgba(255, 168, 92, .38), rgba(255, 168, 92, 0) 70%),
+    linear-gradient(180deg, #221b33 0%, #3d2a45 34%, #7a4549 64%, #c06f4c 88%, #d98a55 100%);
+}
+html:has(.ppb[data-surface='card']) body { background: transparent; }
+main.ppb[data-surface='card'] { padding: 14px 40px 120px; overflow-x: clip; }
+.ppb-card { position: relative; display: grid; justify-items: center; gap: 6px; width: min(100%, 1360px); }
+.ppb-card-head { display: flex; gap: 14px; align-items: baseline; justify-content: center; flex-wrap: wrap; }
+.ppb-card-mark { font: 400 22px/1 var(--cd-face-label); letter-spacing: .16em; color: #f6d995; text-shadow: 0 1px 0 #0006; }
+.ppb-card-kingdom { font: italic 400 17px/1.2 var(--cd-face-story); color: #f2e2c0; opacity: .9; }
+.ppb-card-roofs {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 96px; z-index: -1; pointer-events: none; opacity: .9;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='466' height='120' viewBox='0 0 466 120'%3E%3Cpath fill='%23170f16' d='M0 120V78l18-14 18 14v-8h10V58l26-22 26 22v20h8V66l14-10 14 10v12h10V48l6-6 6 6v10l22-18 22 18v20h12V70l16-12 16 12v8h10V62l24-20 24 20v16h8V54l12-14 12 14v24h10V68l18-14 18 14v10h12V60l20-16 20 16v18h14V72l10-8 10 8v48z'/%3E%3Cg fill='%23ffbf66'%3E%3Crect x='62' y='66' width='5' height='6'/%3E%3Crect x='76' y='66' width='5' height='6' opacity='.7'/%3E%3Crect x='164' y='64' width='5' height='7'/%3E%3Crect x='252' y='60' width='5' height='7' opacity='.8'/%3E%3Crect x='300' y='62' width='4' height='6'/%3E%3Crect x='420' y='70' width='5' height='6' opacity='.85'/%3E%3C/g%3E%3C/svg%3E") bottom left / 372.8px 96px repeat-x;
+}
+@media (max-width: 760px) {
+  main.ppb[data-surface='card'] { padding: 12px 12px 110px; }
+}

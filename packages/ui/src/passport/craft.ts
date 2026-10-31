@@ -1,6 +1,7 @@
 /**
- * The passport's pure craft: types, deterministic ink, crest geometry, dates, the page model and the SIMULATED
- * fixtures. No DOM, CSS or JSX, so a server (the share image) can draw the same book from the same rules.
+ * The passport's pure craft: types, deterministic ink, crest geometry, dates, the page model, the drawn marks, the
+ * share composition and the SIMULATED fixtures. No DOM, CSS or JSX, so a server (the share image) can draw the same
+ * book from the same rules.
  */
 export type * from './types';
 export { ARMS_BOX, CHARGE, CHARGE_SEAT, SHIELD, blazonOf, chargeTransform, type ChargeArt } from './crest';
@@ -18,3 +19,8 @@ export {
   FIXTURE_AS_OF, FIXTURE_KINGDOMS, PASSPORT_FIXTURE_NAMES, PASSPORT_FIXTURE_TITLES, simulatedPassport, simulatedPassportPage, simulatedRevision,
   type PassportFixtureName,
 } from './fixtures';
+export { armsMarkup, armsSvg, chargeMarkup, escapeMarkup, stampMarkup, stampSvg } from './markup';
+export {
+  SHARE_GIFTS, SHARE_KINGDOMS, SHARE_SIZE, SHARE_STAMPS, composePassportShare, curateShareSpread, shareAlt,
+  type PassportShare, type ShareOptions, type ShareSpread,
+} from './share';
