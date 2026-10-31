@@ -99,58 +99,7 @@ function finish(id: string, grid: Grid, anchor: Vec3, { occlude, flush = true }:
 
 /* ---------- Seats ---------- */
 
-/**
- * A felled log along X with an adzed seat. The section is four cells with chamfered corners; the middle of the
- * top course is adzed away so the next course, bark lips either side of bare timber, is the flat seat. The ends
- * keep their round crown, the root end runs a little fuller, and a knot, a branch stub and moss on the back
- * shoulder break the line. Long logs carry one gentle crook. The anchor sits so the seat is exactly `seatTop`.
- */
-export function createSeatLog(options: { length: number; seatTop: number; seed: number }): CampfireProp & { readonly seatTop: number } {
-  const { seed } = options, seatTop = clamp(options.seatTop, 0.1, 0.3), d = draws(seed, 1);
-  const n = clamp(Math.round(clamp(options.length, 0.6, 2.6) / M), 5, 21), grid = new Grid(n, 6, 10);
-  const butt = d() < .5 ? 0 : n - 1, fullEnd = (x: number) => Math.abs(x - butt) <= 1;
-  const crown = [1 + (n >= 9 && d() < .45 ? 1 : 0), 1 + (n >= 11 && d() < .35 ? 1 : 0)] as const;
-  const inStrip = (x: number) => x >= crown[0] && x < n - crown[1];
-  const crook = n >= 14 && d() < .7 ? { at: Math.round(n * d(.3, .7)), dz: d() < .5 ? -1 : 1 } : undefined;
-  const zcOf = (x: number) => 5 + (crook && x >= crook.at ? crook.dz : 0);
-  const pith = [d() < .5 ? 1 : 2, d() < .5 ? -1 : 0] as const;
-  for (let x = 0; x < n; x++) {
-    const zc = zcOf(x), r = fullEnd(x) ? 2.3 : 2.0;
-    for (let y = 0; y < 4; y++) for (let z = zc - 2; z < zc + 2; z++) {
-      const oy = y + .5 - 2, oz = z + .5 - zc;
-      if (oy * oy + oz * oz > r * r || (y === 3 && inStrip(x))) continue;
-      let m: number = MAT.bark;
-      if (x === 0 || x === n - 1) m = Math.abs(oy) < 1 && Math.abs(oz) < 1 ? (y === pith[0] && z === zc + pith[1] ? MAT.timber : MAT.cream) : MAT.bark;
-      else if (y === 2 && inStrip(x) && Math.abs(oz) < 1) m = hash(Math.floor((x + z * 3) / 2), z, 11, seed) < .2 ? MAT.cream : MAT.timber;
-      else if (hash(Math.floor((x + Math.floor(hash(y, z, 3, seed) * 4)) / (2 + Math.floor(hash(y, z, 4, seed) * 3))), y, z, seed) < .16) m = MAT.timber;
-      grid.set(x, y, z, m);
-    }
-  }
-  // The root end swells: a buttress on one flank and a burr on its crown.
-  const bz = zcOf(butt);
-  grid.set(butt, 4, bz - (d() < .5 ? 1 : 0), MAT.bark);
-  grid.set(butt, 1 + (d() < .5 ? 1 : 0), d() < .5 ? bz - 3 : bz + 2, MAT.bark);
-  // A knot on the front flank and a cut branch stub rising off the back.
-  const free = (lo: number, hi: number) => Math.round(d(Math.max(1, lo), Math.max(1, hi)));
-  const knot = free(crown[0] + 1, n - crown[1] - 2), kz = zcOf(knot);
-  grid.set(knot, 1, kz + 1, MAT.timber); grid.set(knot, 1, kz + 2, MAT.bark); if (zcOf(knot + 1) === kz) grid.set(knot + 1, 1, kz + 2, MAT.bark);
-  if (n >= 7) {
-    let stub = free(crown[0] + 1, n - crown[1] - 2);
-    if (stub === knot) stub = stub + 1 < n - 1 ? stub + 1 : stub - 1;
-    const sz = zcOf(stub);
-    grid.set(stub, 2, sz - 3, MAT.bark); grid.set(stub, 3, sz - 3, MAT.bark); grid.set(stub, 3, sz - 4, MAT.timber);
-  }
-  // Moss gathers on the back shoulder and the crowns, and drips a cell down where it is thickest.
-  grid.each((x, y, z, m) => {
-    if (m !== MAT.bark || z >= zcOf(x) || y < 2 || grid.get(x, y + 1, z) !== MAT.air) return;
-    const moss = noise(x / 1.7, y * 1.3, z * 1.3, seed + 9) * .8 + hash(x, y, z, seed + 10) * .2;
-    if (moss > .56) { grid.set(x, y, z, MAT.moss); if (moss > .68 && grid.get(x, y - 1, z) === MAT.bark) grid.set(x, y - 1, z, MAT.moss); }
-  });
-  let zSum = 0;
-  for (let x = 0; x < n; x++) zSum += zcOf(x);
-  const prop = finish(`campfire.log.${n}.s${seed}`, grid, [n / 2, 3 - seatTop / M, zSum / n], { occlude: bounds });
-  return { ...prop, seatTop };
-}
+export { createSeatLog } from '@chatdom/content';
 
 /**
  * The magistrate's seat: a broad stump chair. Its top shows the rings; the back third rises into a low carved

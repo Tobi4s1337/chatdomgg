@@ -81,7 +81,7 @@ export type RealmPrivateMessage =
 
 export interface RealmInteractionTarget {
   readonly id: string;
-  readonly kind: 'campfire-seat' | 'anvil' | 'tavern-seat' | 'home-door' | 'home-exit';
+  readonly kind: 'bench-seat' | 'campfire-seat' | 'anvil' | 'tavern-seat' | 'home-door' | 'home-exit';
   readonly position: Vec3; readonly approach: Vec3; readonly reach: number;
   readonly plotId?: string;
 }

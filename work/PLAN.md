@@ -339,8 +339,9 @@ browser when available. Never fake that acceptance. Goal remains active.
 **One adopted world:** kingdom129634568, settlement:2:43cffdb6,240 homes,collision3,
 scene008f059a38530d09717d045c463440c93c244ea4b614663eac983adb6756bd73. Authoritative door lamps, gate
 braziers/standard and market furnishings stand. GD01 beds/doorstep strips are mounted. LD03 woods/LD04 walks
-are future v2 data; actual v1 stays adopted. Zone data does not plant live trees. Native interactions remain
-anvil/own door/exit; seats need installed geometry. Glassy controller stands; signed-in multiplayer/GPU feel unaccepted.
+are future v2 data; actual v1 stays adopted. Zone data does not plant live trees. Live manifest remains collision3
+with anvil/own door/exit; new market seating awaits host adoption.
+Glassy controller stands; signed-in multiplayer/GPU feel unaccepted.
 
 **Homecoming stands:** 2882b2e soft grey puffs, wind/curl, 1.8 m rise; faint in the still, motion awaits GPU.
 Real arrivals warm actual door lamps. House name stays; bubble header hides only while that same tag is visible.
@@ -355,20 +356,23 @@ shots/kingdom/live-evening/adopted-shore-dusk-SIMULATED@1440x900.png:14 reeds/15
 stepped banks. PW03/PW05 next: one dense overlapping cove reed bed, open walk-up edge; complete water-place mount
 replaces this adapter. No unused finished fauna factory exists; wind/water sound already follows the listener.
 
-**Support moments:** public fact/feed promoted unchanged to `@chatdom/shared/twitch-moments` (spec20).
-Herald's optional chat-notification subscription uses the existing verified chat grant; only stripped support
-observations enter its durable retry queue. Realm commits claims/domain/current/facts/outbox under its held
-writer queue/lease; moment sequence is separate from world fact sequence. Both walkers and public stream use
-one observer feed: quiet checkpoints, then cursor-ordered new beats. Quiet citizens stay anonymous; no rights,
-coals or new payment authority. Additive migration0008 applied to the live realm schema. Typecheck/scoped lint,
-web/realm/Herald/API builds and58 focused tests pass, including real Postgres + two in-process observers and
-writer reopen. This does not prove a real Twitch support delivery or genuine multiplayer session.
+**Support moments:** e2b6fa7 promotes accepted public facts/feed to shared (spec20), binds stripped verified
+Herald chat notices to durable retries and held realm writer records/outbox, then walker/stream observers.
+Migration0008 applied;58 focused tests incl Postgres/two in-process observers/reopen, scoped checks/builds pass.
+Herald still reports the old seven-subscription plan at last check: new eighth optional notification plan is
+compiled, host adoption unconfirmed. No real support event witnessed. TM03 cheer/hype remains unfinished lane
+work; other EventSub/action bindings remain open. Existing warm parcel seal/ribbon fix stays with the lane.
 
-**Latest look:** shots/kingdom/live-evening/live-room-moment-feed@1920x1080.png, actually viewed: live published
-SHA checked, ready/settled/two draws, no browser errors. Resting stream,0 active people/events. Wide town feels
-cold/empty; kingdom-light's next visible improvement is warm civic pools at the actual market/gate, independent
-of citizen presence. Prior SIMULATED gift still has a readable pony/cart but dark parcels; existing warm
-seal/ribbon follow-up remains with the lane. No parcel-arrival or TM03 cheer/hype acceptance yet.
+**New market rest:** merged completed CF01 clearing at d10c005 (CF02 game remains unmerged/unreviewed).
+Its authored log now has one shared content generator. Main adds a grounded two-person log at the actual
+market edge through the existing additive native/fenced-adoption path, retaining every original home/fixture.
+Small frozen civic `seats` metadata and `bench-seat` namespace drive collision/reach/occupancy/sit/stand and
+seated peer drawing. No phantom fire/game/host. Actual adopted-scene checks passed; portable scoped tests,
+typecheck/lint and web/realm builds pass. Prospective bench pivot[-6,9,-1.25], facing+Z; predicted collision4,
+not a published receipt. Looked at shots/kingdom/live-evening/market-rest-SIMULATED@1440x900.png: actual
+candidate geometry, one simulated seated walker, no browser errors. Character charming; adzed wood/contact
+is too dark. Campfire next art fix: readable warm cut timber under the seated hip at accepted dusk lighting.
+Real sign-in/E click and host adoption remain unverified. One capture; all temporary resources released.
 
 **Forge:** d5a91b6 sends opaque ended(activityId) when a staged attempt ends without confirmed commit; no identity,
 wish/verdict/reason. Feed clears only that wait, ignores stale stages, allows later durable commit. Spec36 R8;
@@ -382,12 +386,10 @@ Root owns no running realm. Ignored .realm.local/main-session.json records the l
 manifest200, Herald pending0/faultnull. No host/env edits. Capture ports reserve5187 and5190–5197 even when down,
 including ad hoc helpers (packages/testing/capture-ports.mjs); screenshot browser/server/lock all released.
 
-**Next:** actual chat→shared arrival/window/name/bubble, actual wish→Codex judges→owned home when Tobias supplies
-his line. Walk /?walk=1&kingdom=129634568&hour=19.5 needs genuine Twitch sign-in; public
-/stream?source=realm&kingdom=129634568&hour=19.5 observes the same authority. Do not wait on that line: continue
-the next live-evening core seam. Support binding now carries existing sub/gift notices; badge metadata,
-structured sources, other EventSub families and action executors still need bindings. TM03's cheer/hype
-spectacle is unfinished lane work, not a reviewed visual merge. No newly reviewed lane code in this intake.
-No real line/wish, genuine multiplayer walk or GPU recording witnessed. Actual Codex approval in private dev
-records is not real-chat acceptance. One capture only; browser/lock released. No host/env edits or unexplained
-drop observed. Shared/Herald/realm code changed this turn, so corresponding host service restarts are expected.
+**Next:** check service/manifest adoption of committed code once; do not wait on it. Actual chat→shared
+arrival/window/name/bubble, actual wish→Codex judges→owned home when Tobias supplies his line. Walk
+/?walk=1&kingdom=129634568&hour=19.5 needs genuine Twitch sign-in; public
+/stream?source=realm&kingdom=129634568&hour=19.5 observes the same authority. Continue the next live-evening
+core seam while that waits. No real line/wish, genuine multiplayer or GPU recording witnessed; private dev
+Codex approval is not real-chat acceptance. No host/env edits or unexplained drop observed. Code/used packages
+changed this turn, so affected host service restarts are expected. Keep the full evening goal active.
