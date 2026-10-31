@@ -1,0 +1,25 @@
+/* The bench's desk: a night-lit table the book lies on. Only the bench uses this; surfaces bring their own room. */
+html:has(.ppb), html:has(.ppb) body {
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 38%, #4a3324 0, transparent 70%),
+    repeating-linear-gradient(92deg, #ffdcae06 0 3px, transparent 3px 11px, #0a040212 11px 12px, transparent 12px 21px),
+    linear-gradient(180deg, #2a1c14, #1a110c 70%, #120b08);
+}
+main.ppb { --pp-max: min(1080px, calc((100svh - 300px) * 1.58)); display: grid; justify-items: center; align-content: start; width: 100%; max-width: none; min-height: 100svh; margin: 0;
+  padding: 12px 120px 40px 24px; gap: 14px; text-align: left; }
+main.ppb[data-chrome='off'] { padding-top: 28px; }
+.ppb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; width: min(100%, 1180px); padding: 10px 18px; }
+.ppb-title { flex: 1 1 320px; display: grid; gap: 3px; }
+.ppb-eyebrow { color: var(--cd-cream-soft); }
+h1.ppb-h1 { margin: 0; font: 400 var(--cd-type-title)/1.1 var(--cd-face-story); letter-spacing: 0; color: var(--cd-cream); }
+.ppb-sim { margin: 0; font: var(--cd-type-small)/1.35 var(--cd-face-body); color: var(--cd-cream-soft); }
+.ppb-sim b { font: var(--cd-type-small)/1 var(--cd-face-label); letter-spacing: var(--cd-label-tracking); color: #f0b48a; }
+.ppb-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.ppb-chip { min-height: 36px; padding: 7px 12px; border: 0; border-radius: 18px; cursor: pointer; color: var(--cd-cream);
+  font: var(--cd-type-small)/1.1 var(--cd-face-body); background: #00000038; box-shadow: inset 0 0 0 1px #c99f5b40; }
+.ppb-chip[aria-pressed='true'] { color: #2a1a0e; background: radial-gradient(circle at 34% 28%, #fff1c4, #e1b867 40%, #b58945); box-shadow: inset 0 -1px 2px #5a3c1499; }
+.ppb-chip:focus-visible { outline: 2px solid var(--cd-focus); outline-offset: 3px; }
+.ppb-refusal { color: var(--cd-cream); font: var(--cd-type-body)/1.4 var(--cd-face-body); }
+@media (max-width: 760px) {
+  main.ppb { --pp-max: 100%; padding: 12px 10px 48px; }
+}
