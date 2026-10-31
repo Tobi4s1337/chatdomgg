@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { VoxelBlueprintSchema, type VoxelAsset, type VoxelBlueprint } from '@chatdom/shared';
 // The frozen recipe compiler and observed fixtures, and the production rasterizer and mesher.
 import { compileChannelGenesis } from '../../../world/src/genesis/index';
-import { OBSERVED_GENESIS_FIXTURES } from '../../../world/src/genesis/observed-fixtures';
+import { OBSERVED_GENESIS_FIXTURES, OBSERVED_GENESIS_SHOWCASE_CHOICES } from '../../../world/src/genesis/observed-fixtures';
 import { meshVoxelChunk, prepareAssetChunks, rasterizeBlueprint } from '../../../voxel/src/index';
 import { MAT, MATERIALS } from '../materials';
 import { AVATAR_MATERIALS } from '../avatars/palette';
-import { PROFILE_TARGETS } from './fixtures';
+import { DISPLAY_NAMES, PROFILE_TARGETS, selectLandscape } from './fixtures';
 import {
   GENESIS_CREST, GENESIS_STANDARD, HERALDIC_KITS, MIN_CONTRAST, NEUTRAL_COLOURS, TINCTURES,
-  clothArms, composeGenesisHeraldry, contrast, shieldArms, snapTargets,
+  FITTINGS, METALS, VISIONS, clothArms, composeGenesisHeraldry, contrast, heraldicPalette, readableContrast, shieldArms, snapTargets, visionContrasts, visionLuminance,
   type ClothCut, type CrestCharge, type CrestShape, type GenesisHeraldry, type HeraldicStyle, type HeraldryRecipe,
 } from './index';
 
@@ -130,12 +130,13 @@ describe('palette snapping', () => {
   it('snaps the three channels’ profile targets to tinctures, honouring the first target as the field', () => {
     const snaps = TARGETED.map(recipe => composeGenesisHeraldry(recipe, recipe.landscapes[0]));
     expect(snaps.map(({ colours }) => [name(colours.field), name(colours.charge), name(colours.border)])).toEqual([
-      ['fabricRed', 'fabricGold', 'brass'], // The_AGGman: red with the amber target as a gold charge.
+      // The_AGGman: red with the peach target as a linen charge; the amber target's gold dye is 2.9:1 to a deuteranope.
+      ['fabricRed', 'cream', 'brass'],
       ['fabricViolet', 'hairBlack', 'brass'], // PinkKittyRose: violet with the deep purple target as sable.
       ['fabricMutedViolet', 'cream', 'brass'], // MashaD4: indigo; no later target reads on it, so a linen charge.
     ]);
     expect(snaps.map(({ treatment }) => treatment.kind === 'snapped' && [treatment.field.target, treatment.charge.target]))
-      .toEqual([['#c91709', '#f8ae04'], ['#8753da', '#4e125e'], ['#514a98', null]]);
+      .toEqual([['#c91709', '#fe9e79'], ['#8753da', '#4e125e'], ['#514a98', null]]);
   });
 
   it('always picks registered tinctures with a legible field and charge and a distinct border', () => {
@@ -150,6 +151,7 @@ describe('palette snapping', () => {
       expect(TINCTURES).toContain(field);
       expect(TINCTURES).toContain(charge);
       expect(contrast(field, charge), targets.join()).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      for (const [vision, ratio] of Object.entries(visionContrasts(field, charge))) expect(ratio, `${targets.join()} ${vision}`).toBeGreaterThanOrEqual(MIN_CONTRAST);
       expect(new Set([field, charge, border]).size).toBe(3);
       for (const swatch of [field, charge, border]) expect(AVATAR_MATERIALS.has(swatch)).toBe(true);
       expect(snapped.field.target).toBe(first);
@@ -295,3 +297,107 @@ describe('standard and crest models', { timeout: 60_000 }, () => {
     }
   });
 });
+
+/** FNV-1a over a model's boxes: a short fingerprint that moves when any box, cell or material of it moves. */
+const digest = (blueprint: VoxelBlueprint) => {
+  let hash = 0x811c9dc5;
+  for (const char of JSON.stringify(blueprint.boxes)) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193) >>> 0;
+  return hash.toString(16).padStart(8, '0');
+};
+
+describe('the three showcase proposals', () => {
+  // Each composition target on the landscape the showcase selects, neutral as observed: no profile colours.
+  const showcase = OBSERVED_GENESIS_SHOWCASE_CHOICES.map(choice => {
+    const recipe = RECIPES[OBSERVED_GENESIS_FIXTURES.findIndex(facts => facts.broadcasterId === choice.broadcasterId)]!;
+    const land = selectLandscape(recipe.landscapes, choice.character);
+    return { choice, recipe, land, heraldry: composeGenesisHeraldry(recipe, land) };
+  });
+  const name = (id: number) => Object.entries(MAT).find(([, value]) => value === id)![0];
+
+  it('select each target’s own landscape explicitly, which is mostly not the recommendation', () => {
+    expect(showcase.map(({ choice }) => DISPLAY_NAMES[choice.broadcasterId])).toEqual(['The_AGGman', 'PinkKittyRose', 'MashaD4']);
+    expect(showcase.map(({ heraldry }) => [heraldry.style, heraldry.character])).toEqual([
+      ['tide', 'coastal-harbour'], ['hearth', 'river-valley'], ['hearth', 'mountain-pass'],
+    ]);
+    expect(showcase.map(({ recipe, land }) => land.id === recipe.recommendedLandscapeId)).toEqual([false, false, true]);
+    expect(showcase.map(({ heraldry }) => heraldry.device)).toEqual([
+      { shape: 'heater', charge: 'wave', cut: 'forked' },
+      { shape: 'swallowtail', charge: 'star', cut: 'forked' },
+      { shape: 'heater', charge: 'mountain', cut: 'square' },
+    ]);
+    for (const { heraldry } of showcase) expect(heraldry.treatment).toEqual({ kind: 'neutral', reason: 'no-profile-colours' });
+    expect(() => selectLandscape(RECIPES[0]!.landscapes, 'desert')).toThrow(/exactly one desert/);
+  });
+
+  it('read for every kind of colour vision: field and charge at least 3:1, and the charge drawn in bold strokes', () => {
+    for (const { heraldry } of showcase) {
+      const { field, charge } = heraldry.colours;
+      expect(heraldry.legibility).toEqual(visionContrasts(field, charge));
+      expect(Object.keys(heraldry.legibility)).toEqual([...VISIONS]);
+      for (const vision of VISIONS) expect(heraldry.legibility[vision], `${heraldry.style} ${vision}`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    }
+    // Locked so a recolour of linen or a roof that costs legibility is seen: the weakest reader of each showcase.
+    expect(showcase.map(({ heraldry }) => {
+      const weakest = VISIONS.reduce((a, b) => heraldry.legibility[a] <= heraldry.legibility[b] ? a : b);
+      return [name(heraldry.colours.charge), weakest, Number(heraldry.legibility[weakest].toFixed(2))];
+    })).toEqual([['slate', 'protanopia', 3.96], ['terracotta', 'deuteranopia', 3.24], ['terracotta', 'deuteranopia', 3.24]]);
+    // Every neutral style, and every tincture as a field, has a charge that passes, so composition never strands a kingdom.
+    for (const style of STYLES) expect(readableContrast(NEUTRAL_COLOURS[style].field, NEUTRAL_COLOURS[style].charge)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    for (const field of TINCTURES) expect(TINCTURES.some(other => other !== field && readableContrast(field, other) >= MIN_CONTRAST), name(field)).toBe(true);
+    // The charge has no lone cells that would shimmer at stream distance: each touches another, at least at a corner
+    // (the oak's root tips step out diagonally).
+    for (const arms of [...SHAPES.flatMap(shape => CHARGES.map(charge => shieldArms(shape, charge))), ...CUTS.flatMap(cut => CHARGES.map(charge => clothArms(cut, charge)))]) {
+      arms.forEach((row, r) => [...row].forEach((mark, c) => {
+        if (mark !== 'C') return;
+        const touches = [-1, 0, 1].some(dr => [-1, 0, 1].some(dc => (dr || dc) && arms[r + dr]?.[c + dc] === 'C'));
+        expect(touches, `${arms.join('\n')}\n${c},${r}`).toBe(true);
+      }));
+    }
+  });
+
+  it('simulate colour vision faithfully: greys stay put, and red against gold dims for a deuteranope', () => {
+    for (const hex of ['#000000', '#7f7f7f', '#ffffff']) for (const vision of VISIONS) {
+      expect(visionLuminance(hex, vision)).toBeCloseTo(visionLuminance(hex, 'typical'), 3);
+    }
+    // The gold dye on the red dye passes 3:1 for typical vision but not for a deuteranope, so snapping refuses it.
+    expect(contrast(MAT.fabricRed, MAT.fabricGold)).toBeGreaterThan(3);
+    expect(visionContrasts(MAT.fabricRed, MAT.fabricGold).deuteranopia).toBeLessThan(3);
+  });
+
+  it('lock the palette: a closed set of at most sixteen materials, the registry revision, and fingerprints of every model', () => {
+    const palette = JSON.stringify(MATERIALS);
+    for (const { heraldry } of showcase) {
+      const allowed = heraldicPalette(HERALDIC_KITS[heraldry.style], heraldry.colours);
+      expect(allowed.size).toBeLessThanOrEqual(16);
+      const carved = new Set([...heraldry.standard.blueprint.boxes, ...heraldry.crest.blueprint.boxes].map(box => box.material).filter(m => m !== MAT.air));
+      expect(heraldry.palette.materials).toEqual([...carved].sort((a, b) => a - b));
+      for (const material of heraldry.palette.materials) expect(allowed.has(material), name(material)).toBe(true);
+      expect(heraldry.palette.revision).toBe(MATERIALS.revision);
+    }
+    // Changing any of these on purpose means looking at the showcase again; nothing here moves by accident.
+    expect(showcase.map(({ heraldry }) => ({
+      materials: heraldry.palette.materials.map(name).join(' '),
+      standard: [heraldry.standard.blueprint.boxes.length, digest(heraldry.standard.blueprint)],
+      crest: [heraldry.crest.blueprint.boxes.length, digest(heraldry.crest.blueprint)],
+    }))).toEqual(SHOWCASE_LOCK);
+    // The tinctures snapping chooses from and the fittings, in the registry colours the contrast rules were verified against.
+    expect(Object.fromEntries([...TINCTURES, ...FITTINGS].map(id => [name(id), MATERIALS.materials.find(m => m.id === id)!.colour]))).toEqual(COLOUR_LOCK);
+    expect(METALS.every(metal => TINCTURES.includes(metal))).toBe(true);
+    expect(JSON.stringify(MATERIALS)).toBe(palette);
+  });
+});
+
+/** The three neutral showcase proposals as accepted: palette, box count and fingerprint of each model. */
+const SHOWCASE_LOCK = [
+  { materials: 'stone timber slate thatch brass glass darkStone cream', standard: [784, '5d7fdc41'], crest: [664, '76a91bd8'] },
+  { materials: 'stone limestone timber terracotta brass glass darkStone moss cream petal blueFlower', standard: [767, '82a9716c'], crest: [745, '3f08b9b9'] },
+  { materials: 'stone limestone timber terracotta brass glass darkStone cream', standard: [859, '80f64ae0'], crest: [629, '5cc52677'] },
+];
+/** Registry colours of the tinctures and fittings, as the contrast rules were verified against them (revision 4). */
+const COLOUR_LOCK = {
+  cream: '#e5d8b7', fabricGold: '#d8bd68', fabricRed: '#a94744', fabricOrange: '#c78746', fabricGreen: '#58816c',
+  fabricBlue: '#557f9e', fabricViolet: '#8b6f9e', fabricMutedRed: '#765b58', fabricMutedOrange: '#7d6b57',
+  fabricMutedGold: '#897e62', fabricMutedGreen: '#5c6e62', fabricMutedBlue: '#596d7c', fabricMutedViolet: '#6e6378',
+  hairBlack: '#30241f', brass: '#b69155', glass: '#d0a66a', darkStone: '#65727d', thatch: '#b89a5f', moss: '#74835b',
+  blueFlower: '#8e9eb8', petal: '#d2968d',
+};
