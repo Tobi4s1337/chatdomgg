@@ -188,3 +188,14 @@ transient ritual effects, audio, refusal logic, generated images, package regist
   existing motif, effects and engraving folders remain untouched. Exact publisher SVG shape is non-negotiable.
 - **2026-10-30 — Local mount seam.** Main remounts the existing engraving using the returned transform and uses
   the new rune origin. No shared protocol is required; an actual missing contract is reported as `needs:`.
+- **2026-10-31 — Runes are cut by the shader, through the real face (AH02).** A 2 cm stroke is a third of the
+  character lattice's 6.25 cm cell, so the runes cannot be voxels. The hero's voxel shader marches the eye ray into
+  each stroke from a fixed rune table: the walls show their true 1.5 cm depth at every angle and the bed sits in
+  shadow; only the bed (and the wall beside it) carries heat. Each rune lies wholly on one flat face of the sculpt,
+  proved by walking the occupancy. The glyphs are the ritual's own alphabet, copied because
+  `presentation/runes.ts` keeps it private; a test reads the ritual's stroke buffer and requires the same set.
+- **2026-10-31 — Heat is a pure function of {time, heat, shaping}.** Each rune lights at its own heat threshold,
+  ranked by distance from the mark, so rising heat flows outward and falling heat drains horn-first back to the
+  mark; shaping runs a fuse through them 0.12 s apart on the caller's clock. The worn sheen on convex arrises comes
+  from a small occupancy texture, not a decal. The bench adds `shaping=0|1` and the `anvil-mark` face-on view, whose
+  capture writes a crop beside, and overlaid with, the untouched SVG.
