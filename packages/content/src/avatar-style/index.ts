@@ -4,3 +4,4 @@ export { paintStyleFace, styleBodyPieces, styleHead, type StyleGarb } from './bo
 export { blockify, partCells, retargetHair, sealScalp, styleHair } from './hair';
 export { convertLook, type StyledLook, type StyleLookSource } from './convert';
 export { STYLE_STUDY_FIXTURES, type StyleStudyFixture } from './fixtures';
+export * from './character';
