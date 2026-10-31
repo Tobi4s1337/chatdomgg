@@ -1,0 +1,185 @@
+/* The passport in the panel: the book lies on the panel's walnut under a lamp. Everything here only gives the shared
+   book (packages/ui/src/passport) the panel's room: a slim head, the book filling the slot, one leaf at a time,
+   thumb tabs cut into the fore-edge, and the lamp's light and dust. Every class is prefixed `cpp-` or scoped under
+   `.cpp`, so the view can sit inside the panel's frame or any 318 x 496 preview without touching either. */
+
+.cpp {
+  position: absolute; inset: 0; box-sizing: border-box; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: column; gap: 6px; padding: 9px 9px 10px 10px;
+  color: #f2e3c5; font: 400 13px/1.35 Alegreya, Georgia, serif; text-align: left; font-synthesis: none;
+  background:
+    radial-gradient(ellipse 85% 55% at 84% 6%, #ffc77a2e, #ffb2580f 45%, transparent 72%),
+    radial-gradient(ellipse 120% 60% at 50% 108%, #0a0503b3, transparent 70%),
+    url('../assets/wood.svg') 0 0 / 420px 280px, #3a281c;
+  box-shadow: inset 0 0 0 1px #0b0604, inset 0 0 0 2px #6b4b31, inset 0 0 0 3px #22160e, inset 0 0 28px 6px #0d0805cc;
+  -webkit-font-smoothing: antialiased;
+}
+.cpp *, .cpp *::before, .cpp *::after { box-sizing: border-box; }
+.cpp button { -webkit-tap-highlight-color: transparent; }
+
+/* ---------- Lamp: a warm pool, a soft shaft and dust turning in it ---------- */
+
+.cpp-lamp { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+.cpp-shaft {
+  position: absolute; top: -60px; right: -40px; width: 170px; height: 640px; transform: rotate(27deg); transform-origin: top right;
+  background: linear-gradient(90deg, transparent, #ffd9a00d 22%, #ffe4b41f 48%, #ffd9a00d 74%, transparent);
+  filter: blur(5px); mix-blend-mode: screen;
+}
+.cpp-motes { position: absolute; inset: 0; }
+.cpp-motes i {
+  position: absolute; width: 3px; height: 3px; border-radius: 50%; opacity: 0;
+  background: radial-gradient(circle, #fff3d0 0 35%, #ffd38a99 60%, transparent 72%);
+  box-shadow: 0 0 4px #ffcf7a99;
+  animation: cpp-mote 11s linear infinite; animation-delay: calc(var(--i) * -1.45s);
+}
+/* Each mote has its own place in the shaft and its own slow drift. */
+.cpp-motes i:nth-child(1) { left: 79%; top: 18%; }
+.cpp-motes i:nth-child(2) { left: 68%; top: 34%; width: 2px; height: 2px; animation-duration: 14s; }
+.cpp-motes i:nth-child(3) { left: 88%; top: 9%; animation-duration: 9s; }
+.cpp-motes i:nth-child(4) { left: 61%; top: 52%; width: 2px; height: 2px; animation-duration: 13s; }
+.cpp-motes i:nth-child(5) { left: 74%; top: 44%; animation-duration: 12s; }
+.cpp-motes i:nth-child(6) { left: 92%; top: 27%; width: 2px; height: 2px; animation-duration: 10s; }
+.cpp-motes i:nth-child(7) { left: 55%; top: 66%; width: 2px; height: 2px; animation-duration: 15s; }
+.cpp-motes i:nth-child(8) { left: 84%; top: 58%; animation-duration: 12.5s; }
+@keyframes cpp-mote {
+  0% { opacity: 0; transform: translate(0, 0); }
+  18% { opacity: .85; }
+  50% { transform: translate(-9px, -16px); }
+  82% { opacity: .55; }
+  100% { opacity: 0; transform: translate(-4px, -34px); }
+}
+
+/* ---------- Head ---------- */
+
+.cpp-head { position: relative; z-index: 2; flex: none; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 32px; }
+.cpp-back {
+  display: inline-flex; align-items: center; gap: 1px; min-height: 32px; padding: 0 9px 0 3px; border: 0; border-radius: 16px; cursor: pointer;
+  font: 400 13px/1 'IM Fell English', Georgia, serif; color: #f1ddb8;
+  background: linear-gradient(#2a1c12, #1d130c); box-shadow: inset 0 1px 3px #000c, 0 1px 0 #7a5a3a66;
+}
+.cpp-back:hover { color: #fff0cf; }
+.cpp-back:active { transform: translateY(1px); }
+.cpp-back-glyph { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.cpp .cpp-title {
+  grid-column: 2; margin: 0; min-width: 0; font: 400 17px/1.05 'IM Fell English', Georgia, serif; letter-spacing: 0; color: #f7e7c6; white-space: nowrap;
+  text-shadow: 0 1px 0 #0009, 0 0 12px #f5b45a33; overflow-wrap: anywhere;
+}
+.cpp-back + .cpp-title { text-align: center; }
+/* SIMULATED: one small parchment chip in the corner, never a banner. */
+.cpp-chip {
+  grid-column: 3; position: relative; padding: 5px 6px 5px 12px; white-space: nowrap;
+  font: 400 12px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .04em; color: #7a1d12;
+  background: url('../assets/parchment.svg') 0 0 / 300px, #ead8b1;
+  clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%); filter: drop-shadow(0 1px 0 #000);
+}
+.cpp-chip::before { content: ''; position: absolute; left: 7px; top: 50%; width: 3px; height: 3px; margin-top: -1.5px; border-radius: 50%; background: #7a1d12; }
+.cpp :focus-visible { outline: 2px solid #f6b558; outline-offset: 2px; }
+
+/* ---------- The book in the panel's slot ---------- */
+
+.cpp-desk { position: relative; z-index: 1; flex: 1 1 auto; min-height: 0; display: flex; }
+/* The lamp warms the paper where it falls. */
+.cpp-desk::after {
+  content: ''; position: absolute; inset: 0; z-index: 6; pointer-events: none; mix-blend-mode: soft-light;
+  background: radial-gradient(ellipse 70% 45% at 86% 4%, #ffd08a40, transparent 70%);
+}
+.cpp .pp-book { --pp-mark: 144px; flex: 1 1 auto; min-height: 0; height: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 7px; }
+.cpp .pp-book[data-layout='page'] { gap: 7px; }
+.cpp .pp-stage { position: relative; z-index: 1; flex: 1 1 auto; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); justify-items: stretch; }
+.cpp .pp-book[data-view='leaves']:has(.pp-tab:nth-child(2)) .pp-stage { padding-right: 25px; }
+.cpp .pp-case { width: 100%; height: 100%; padding: 7px 7px 9px 10px; }
+.cpp .pp-spread { height: 100%; }
+.cpp .pp-book[data-layout='page'] .pp-page { height: 100%; min-height: 0; padding: 14px 15px 24px 17px; }
+.cpp .pp-book[data-layout='page'] .pp-folio { right: 15px; bottom: 7px; }
+.cpp .pp-page-body {
+  /* A long leaf scrolls inside the page and fades at its foot, so it reads as one that continues, not one cut off. */
+  mask-image: linear-gradient(#000 calc(100% - 12px), transparent); -webkit-mask-image: linear-gradient(#000 calc(100% - 12px), transparent);
+  overscroll-behavior: contain;
+}
+/* The ribbon marker peeks below the boards and stirs in the lamp's warmth. */
+.cpp .pp-ribbon { left: 52px; bottom: -11px; height: 26px; transform-origin: top center; animation: cpp-ribbon 5.5s ease-in-out infinite; }
+@keyframes cpp-ribbon { 0%, 100% { transform: rotate(-2.5deg); } 50% { transform: rotate(3deg); } }
+
+/* Thumb tabs cut into the fore-edge, reading down the page like a ledger's. The flyleaf needs none: it is one turn
+   from the cover. An empty book has no sections to jump to and shows no tabs at all. */
+.cpp .pp-tabs-row {
+  position: absolute; z-index: 2; top: 14px; right: 0; width: 28px; display: flex; flex-direction: column; gap: 4px; padding: 0; overflow: visible;
+}
+.cpp .pp-book:not(:has(.pp-tab:nth-child(2))) .pp-tabs-row { display: none; }
+.cpp .pp-tabs-row .pp-tab:first-child { display: none; }
+.cpp .pp-tabs-row .pp-tab {
+  writing-mode: vertical-rl; min-height: 0; width: 28px; padding: 9px 4px 9px 7px; border-radius: 0 7px 7px 0;
+  font-size: 12px; line-height: 1; letter-spacing: .06em; text-align: center;
+  box-shadow: inset 1px 0 0 #00000059, inset -1px 0 0 #ffd9a82e, 2px 1px 3px #0000006b;
+}
+.cpp .pp-tabs-row .pp-tab[aria-current='true'] { transform: translateX(3px); }
+.cpp .pp-tabs-row .pp-tab[aria-current='true']::after { left: 7px; bottom: auto; top: calc(50% - 2.5px); }
+
+/* One stamp to a leaf: pressed large, a little off-centre by its own ink, the words whole beneath it. */
+.cpp .pp-stamps { gap: 6px; }
+.cpp .pp-running-head { padding-bottom: 6px; }
+.cpp .pp-stamp-list { justify-content: center; }
+.cpp .pp-entry, .cpp .pp-entry[data-flip='true'] { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 4px; text-align: center; }
+.cpp .pp-entry .pp-entry-mark { order: 0; justify-self: start; margin: 0 0 -4px 10px; }
+.cpp .pp-entry[data-flip='true'] .pp-entry-mark { justify-self: end; margin: 0 10px -4px 0; }
+.cpp .pp-entry .pp-entry-words, .cpp .pp-entry[data-flip='true'] .pp-entry-words { width: 100%; text-align: center; justify-items: center; }
+.cpp .pp-entry-name { font-size: 19px; text-wrap: balance; }
+.cpp .pp-entry-road { text-wrap: balance; }
+.cpp .pp-gifts { justify-items: center; }
+
+.cpp .pp-book[data-layout='page'] .pp-holder { font-size: 26px; }
+.cpp .pp-flyleaf { gap: 9px; }
+.cpp .pp-flyleaf-note { font-size: 13px; }
+.cpp .pp-list-page { gap: 8px; }
+.cpp .pp-section-head { padding-bottom: 6px; }
+.cpp .pp-section-head p { line-height: 1.2; }
+.cpp .pp-rows { gap: 8px; }
+.cpp .pp-row { grid-template-columns: 40px minmax(0, 1fr); gap: 10px; }
+.cpp .pp-row + .pp-row { padding-top: 8px; }
+.cpp .pp-row-name { font-size: 16px; line-height: 1.15; }
+.cpp .pp-row-note { line-height: 1.3; }
+.cpp .pp-invitation-room { width: 62%; }
+.cpp .pp-invitation-title { font-size: 20px; }
+
+/* Turning: a slimmer bar of the panel's walnut with brass buttons a thumb can find. */
+.cpp .pp-controls { flex: none; width: 100%; grid-template-columns: 38px minmax(0, 1fr) 38px; gap: 8px; padding: 3px 4px; border-radius: 22px; }
+.cpp .pp-turn { width: 38px; height: 38px; }
+.cpp .pp-where { font-size: 13px; line-height: 1.2; }
+
+/* The book's own SIMULATED slip would cost the leaf its room: the head's corner chip says it for the whole view. */
+.cpp .pp-provenance { display: none; }
+
+/* ---------- Closed: the cover, opening, private, unreadable ---------- */
+
+.cpp .pp-stage > .pp-cover-wrap, .cpp .pp-book[data-view='closed'] > .pp-cover-wrap {
+  min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: center; perspective: 1400px;
+}
+.cpp .pp-book[data-view='closed'] > .pp-cover-wrap { flex: 1 1 auto; }
+.cpp .pp-book[data-layout='page'] .pp-cover {
+  /* Short enough that the private strap, which wraps round the fore-edge, still sits inside the slot. */
+  height: min(calc(100% - 10px), 384px); width: auto; aspect-ratio: .72; padding: 26px 18px 26px 34px; gap: 10px;
+}
+.cpp .pp-book[data-layout='page'] .pp-cover-title { font-size: 27px; }
+.cpp .pp-book[data-layout='page'] .pp-cover-name { font-size: 19px; }
+.cpp .pp-book[data-layout='page'] .pp-cover-emblem { width: 44%; }
+.cpp .pp-book[data-layout='page'] .pp-cover-open { bottom: 22px; }
+.cpp .pp-book[data-layout='page'] .pp-cover-note { font-size: 17px; }
+/* The closed cover catches the lamp: a slow sheen across the gilt title. */
+.cpp .pp-cover:not(.pp-cover-still) .pp-cover-title {
+  background-image: linear-gradient(100deg, var(--pp-gilt-lo) 0 34%, var(--pp-gilt) 44%, #fff2c8 50%, var(--pp-gilt) 56%, var(--pp-gilt-lo) 66% 100%);
+  background-size: 320% 100%; background-position: 50% 0; animation: cpp-sheen 7s ease-in-out 1.2s infinite;
+}
+@keyframes cpp-sheen { 0%, 62% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+.cpp .pp-retry { margin: 8px 0 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cpp-motes i { animation: none; opacity: .45; }
+  .cpp-motes i:nth-child(n+5) { display: none; }
+  .cpp .pp-ribbon, .cpp .pp-cover .pp-cover-title { animation: none; }
+  /* The book's short settle survives a host that stops every animation, so the turning leaf always clears. */
+  .cpp .pp-leaf, .cpp .pp-leaf[data-dir], .cpp .pp-spread[data-count='1'] .pp-leaf { animation: pp-settle 140ms linear both !important; }
+}
+@media (forced-colors: active) {
+  .cpp-lamp, .cpp-desk::after { display: none; }
+  .cpp-chip { border: 1px solid CanvasText; clip-path: none; }
+}

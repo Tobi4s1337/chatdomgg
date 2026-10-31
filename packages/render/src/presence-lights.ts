@@ -167,7 +167,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       // A lit lamp is a source of light, not just a pale pigment. Keep the core above
       // display white in linear space so it survives pane transparency and feeds HDR bloom.
       // The distant average already carries extra energy; temper the core there.
-      room *= (1.0 + 4.8 * night * core * (1.0 - 0.6 * distant)) * (1.0 + .18 * windowPulse());
+      room *= (1.0 + 8.0 * night * core * (1.0 - 0.6 * distant)) * (1.0 + .18 * windowPulse());
       vec3 glass = mix(reflection, room * mix(0.9, 1.25, night), lit);
       // Mullions and frame stay dark; their inner edges catch the room's light.
       float catchLight = frame * (1.0 - smoothstep(0.455, 0.49, max(p.x, p.y))) * lit;
@@ -190,7 +190,9 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       // A thin warm spill on the reveal, heavier on the sill below, leaving the glass itself untouched.
       float sill = step(q.y, -0.5) * (1.0 - smoothstep(0.18, 0.5, abs(q.x)));
       float glow = exp(-distance * 26.0) * smoothstep(0.0, 0.012, distance) * (1.0 + 1.3 * sill) * edge;
-      gl_FragColor = vec4(1.0, 0.46, 0.13, glow * windowPresence() * night * 0.42 * (1.0 + 2.2 * windowPulse()));
+      // The reveal is lit by the same HDR room as the pane. Its tight amber edge
+      // feeds bloom locally without raising the wall or the kingdom's exposure.
+      gl_FragColor = vec4(4.0, 1.8, 0.38, glow * windowPresence() * night * 0.52 * (1.0 + 2.2 * windowPulse()));
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`, transparent: true, depthWrite: false, side: THREE.DoubleSide });

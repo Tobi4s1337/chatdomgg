@@ -15,7 +15,7 @@ import { draftEdition, foundingGates, type DraftEdition, type FoundingGateInput 
 import { applyEvent, emptyState, encodeLine, extendLedger, headHolds, replayLedger, type LedgerEvent, type LedgerState } from './ledger';
 import { EDITIONS, EditionWorldSchema, LedgerLineSchema, type AuthorizationPayload, type EditionNumber, type EditionWorld, type LedgerHead } from './schema';
 import {
-  GONE_RETURN_MS, apparentTier, editionContext, holdingRadius, holdingState, holdingTierFor, occupancyOf, settleNight,
+  GONE_RETURN_MS, apparentTier, editionContext, hideWithheld, holdingRadius, holdingState, holdingTierFor, occupancyOf, settleNight,
   type EditionContext, type HoldingTier, type NightResult,
 } from './settle';
 import { FOUNDINGS_LOG, appendSettlement, editionDir, readEditionFiles, verifyEditionDir, writeNewEdition } from './store';
@@ -657,6 +657,64 @@ describe('hidden and gone channels', () => {
     ]);
     expect(n4.chain.state.settlers).toEqual(d0.settlers);
     expect(verifyEdition(filesOf(n4.chain), null).problems).toEqual([]);
+  });
+
+  it('lets withheld land wait even when its channel is gone: hidden outranks gone, never the reverse', () => {
+    const [both, laterHidden] = [d0.settlers[3]!, d0.settlers[5]!];
+    const goneAt = at(20);
+    const goneSpecs = BASE.map((spec) => (spec.n === nOf(both.kingdomId) || spec.n === nOf(laterHidden.kingdomId) ? { ...spec, goneAt } : spec));
+
+    // Night 2: one channel is gone and withheld at once, the other only gone.
+    const r2 = revision({ asOf: at(24), specs: goneSpecs, tag: 'gone' });
+    const n2 = night(start(d0, '0'), r2, new Set([both.kingdomId]));
+    expect(n2.chain.state.tombstones.get(both.kingdomId)).toEqual({ cause: 'hidden', at: r2.manifest.asOf });
+    expect(n2.chain.state.tombstones.get(laterHidden.kingdomId)).toEqual({ cause: 'gone', at: goneAt });
+    expect(holdingState(n2.chain.state.tombstones.get(both.kingdomId), at(25))).toBe('waiting');
+    expect(holdingState(n2.chain.state.tombstones.get(laterHidden.kingdomId), at(25))).toBe('abandoned');
+
+    // Night 3: the gone channel is withheld too. A hidden tombstone replaces its gone one, and its land waits now
+    // instead of lying abandoned for the rest of its 30 days. The holding and its owner do not change.
+    const r3 = revision({ asOf: at(48), specs: goneSpecs, tag: 'withheld-later' });
+    const withheld = new Set([both.kingdomId, laterHidden.kingdomId]);
+    const n3 = night(n2.chain, r3, withheld);
+    expect(n3.result.events.filter((event) => event.kind !== 'night')).toEqual([
+      { kind: 'tombstone', kingdomId: laterHidden.kingdomId, holdingId: laterHidden.holdingId, cause: 'hidden', at: r3.manifest.asOf, revision: r3.manifest.revision },
+    ]);
+    expect(n3.result.summary).toMatchObject({ tombstones: 1, restores: 0, settled: 0 });
+    expect(n3.chain.state.tombstones.get(laterHidden.kingdomId)).toEqual({ cause: 'hidden', at: r3.manifest.asOf });
+    expect(holdingState(n3.chain.state.tombstones.get(laterHidden.kingdomId), at(49))).toBe('waiting');
+    expect(n3.chain.state.settlers).toEqual(d0.settlers);
+    expect(occupancyOf(n3.chain.ctx, n3.chain.state.settlers).fits(laterHidden.point.x, laterHidden.point.y, d0.world.lattice.hamletRadius)).toBe(false);
+
+    // Night 4: nothing changed, so nothing is written: a hidden tombstone is never replaced, not even by itself.
+    const r4 = revision({ asOf: at(72), specs: goneSpecs, tag: 'steady' });
+    const n4 = night(n3.chain, r4, withheld);
+    expect(n4.result.events.filter((event) => event.kind !== 'night')).toEqual([]);
+    expect(verifyEdition(filesOf(n4.chain), null).problems).toEqual([]);
+    expect(replayLedger(n4.chain.text, d0.edition).tombstones).toEqual(n4.chain.state.tombstones);
+
+    // The ledger accepts only that one replacement: gone → hidden. Gone over hidden, or a cause laid twice, is refused.
+    const s = replayLedger(n4.chain.text, d0.edition);
+    const tomb = (kingdomId: string, holdingId: string, cause: 'hidden' | 'gone') =>
+      LedgerLineSchema.parse({ seq: s.lines, prev: s.head, kind: 'tombstone', kingdomId, holdingId, cause, at: at(80), revision: r4.manifest.revision });
+    expect(() => applyEvent(s, tomb(laterHidden.kingdomId, laterHidden.holdingId, 'gone'))).toThrow(/already tombstoned as hidden/);
+    expect(() => applyEvent(s, tomb(both.kingdomId, both.holdingId, 'hidden'))).toThrow(/already tombstoned as hidden/);
+    const gone = replayLedger(n2.chain.text, d0.edition);
+    const goneTomb = LedgerLineSchema.parse({ seq: gone.lines, prev: gone.head, kind: 'tombstone', kingdomId: laterHidden.kingdomId, holdingId: laterHidden.holdingId, cause: 'gone', at: at(30), revision: r2.manifest.revision });
+    expect(() => applyEvent(gone, goneTomb)).toThrow(/already tombstoned as gone/);
+  });
+
+  it('hides a gone holding between surveys too, when moderation withholds it with no newer revision', () => {
+    const target = d0.settlers[5]!;
+    const r2 = revision({ asOf: at(24), specs: BASE.map((spec) => (spec.n === nOf(target.kingdomId) ? { ...spec, goneAt: at(20) } : spec)), tag: 'gone' });
+    const { chain } = night(start(d0, '0'), r2);
+    expect(chain.state.tombstones.get(target.kingdomId)?.cause).toBe('gone');
+    const events = hideWithheld(chain.state, new Set([target.kingdomId]), r2.manifest.revision, at(30));
+    expect(events).toEqual([{ kind: 'tombstone', kingdomId: target.kingdomId, holdingId: target.holdingId, cause: 'hidden', at: at(30), revision: r2.manifest.revision }]);
+    const { next } = extendLedger(chain.state, events);
+    expect(next.tombstones.get(target.kingdomId)).toEqual({ cause: 'hidden', at: at(30) });
+    // Once hidden, the pass has nothing more to add.
+    expect(hideWithheld(next, new Set([target.kingdomId]), r2.manifest.revision, at(31))).toEqual([]);
   });
 });
 
