@@ -33,6 +33,8 @@ export interface DurableKingdomOptions {
   readonly hold?: () => string | null;
 }
 export interface RealmCommandMeta {
+  /** Optional trusted caller lease, rechecked alongside the writer through the final pre-COMMIT boundary. */
+  readonly current?: () => boolean;
   readonly anvilCapacity?: number;
   readonly occurredAt?: number; readonly receivedAt?: number;
   readonly actor?: PersonId | null; readonly cause?: EventCause;
@@ -148,16 +150,19 @@ export class DurableKingdom implements RealmRoomHandle {
    * committed with its outbox, and only then published. A lost COMMIT reply is resolved by lookup, never guessed.
    */
   execute(commandId: string, command: RealmDomainCommand, capability: RealmCapability, meta: RealmCommandMeta = {}): Promise<RealmStoredOutcome> {
+    const current = () => {
+      try { return this.current && (meta.current?.() ?? true); } catch { return false; }
+    };
     return this.serial(async () => {
       const decide = (state: RealmPrivateState, now: number) => decideRealm(state, command, {
-        now, writerEpoch: this.lease.epoch, commandId, capability, current: this.current,
+        now, writerEpoch: this.lease.epoch, commandId, capability, current: current(),
         anvilCapacity: meta.anvilCapacity ?? REALM_BASE_ANVILS,
         ...(meta.occurredAt === undefined ? {} : { occurredAt: meta.occurredAt }),
         ...(meta.receivedAt === undefined ? {} : { receivedAt: meta.receivedAt }),
         ...(meta.actor === undefined ? {} : { actor: meta.actor }),
         ...(meta.cause === undefined ? {} : { cause: meta.cause }),
       });
-      return this.settle(commandId, () => this.repository.execute(this.lease, commandId, command, decide, () => this.current));
+      return this.settle(commandId, () => this.repository.execute(this.lease, commandId, command, decide, current));
     });
   }
 
