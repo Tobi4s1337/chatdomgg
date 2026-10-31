@@ -331,7 +331,7 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 ## 10. Current handoff — 2026-10-31
 
 **Order:** Twitch first: real chat/shared arrival → stream director → real !forge → event physics → three
-channel kingdoms/Atlas/raids → earned growth/Chronicle → chat-led fire → panel/emotes. Walking accepted.
+channel kingdoms/Atlas/raids → earned growth/Chronicle → passport/panel → emotes. Fire game parked after current task, no new game work. Walking accepted.
 Short turns, tight reads, one viewed capture per visual change. No parked-world/walking polish detours.
 
 **Real evening:** bot re-granted incl. user:write:chat; posting works. Greeting13:11 and wish13:13:02 reached
@@ -359,8 +359,17 @@ six focused tests, typecheck/lint and isolated web build pass. No adopted gradin
 Retry target5170 is an isolated artifact copy, root server92547 (previous60105 terminal130). Terra
 `genesis_capture` owns NEW existing process68147, queued at last poll; previous71941 terminal1/released lock.
 Continue68147 rather than duplicate. Three1920×1080 worlds at18.8 plus one static showcase full-page1440 capture.
+Retry68147 terminal1/released lock: coast/newcitypatch still exceed2m; river receipt read got transient502.
+Core helper `genesis_settlement` owns surface.ts/settlement terrain.ts/regression test for full-field diagnosis.
 No three-kingdom completion claim. Showcase links/provenance current
 at f5b4548; old viewed still `shots/showcase/showcase@1440x900.png`; pending intro compacted.
+
+**Passport:** user replaced fire game with a lovingly crafted raid passport in panel/card/share image. Spec45,
+`@chatdom/shared/passport` read projection and one meaningful privacy/identity contract test prepared. Same
+Gate arrival/raid/road/gift IDs, no second ledger or inferred riders. Hidden variant carries no history/counts.
+One lane `passport` owns new UI/panel/web/API passport folders; seeded0/3/84-raids books visibly SIMULATED.
+Campfire main PRD and existing worktree now explicitly stop after current task; preserve dirty progress, no
+half-done merge. Lazy host registration and UI workspace dependencies supplied for passport first consumer.
 
 **Atlas/lanes:** Atlas/Gate/Emotes/Campfire ready at5016549; Twitch-moments has uncommitted work, sync at checkpoint.
 No new reviewed lane delta found this turn; do not re-audit old duplicate branch history. Served Atlas revision
