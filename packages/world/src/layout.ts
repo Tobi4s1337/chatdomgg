@@ -1,5 +1,6 @@
 import type { SettlementPlan } from './settlement/types';
-import { settlementTerrainHeight } from './settlement/terrain';
+import { adoptedTerrainHeight } from './terrain-art/adopted';
+import { seedHash } from './seed';
 import { HOME_DEPTH_METRES, type HomeTier, type Vec3 } from '@chatdom/shared';
 
 export type KingdomTier = 'hamlet' | 'town';
@@ -17,9 +18,7 @@ export interface KingdomLayout {
   castle: Vec3; beacon: Vec3; bounds: {minX:number;maxX:number;minZ:number;maxZ:number};
   lake: {x:number;z:number;radiusX:number;radiusZ:number;level:number};
 }
-export function seedHash(text: string): number {
-  let h=2166136261; for(let i=0;i<text.length;i++) { h^=text.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0;
-}
+export { seedHash } from './seed';
 export function randomUnit(seed:number): number { let t=seed+0x6d2b79f5; t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return ((t^(t>>>14))>>>0)/4294967296; }
 
 /** Each year owns an east/west growth corridor. New lots append outward; old coordinates never move. */
@@ -91,7 +90,7 @@ function settlementGrade(layout:KingdomLayout,quarters:readonly TenureQuarter[],
   return last.elevation;
 }
 export function terrainHeight(layout: KingdomLayout | SettlementPlan,x:number,z:number):number {
-  if ('version' in layout && layout.version === 2) return settlementTerrainHeight(layout,x,z);
+  if ('version' in layout && layout.version === 2) return adoptedTerrainHeight(layout,x,z);
   return legacyTerrainHeight(layout as KingdomLayout,x,z);
 }
 function legacyTerrainHeight(layout: KingdomLayout,x:number,z:number):number {

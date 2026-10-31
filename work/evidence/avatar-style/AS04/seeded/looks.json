@@ -1,0 +1,585 @@
+[
+  {
+    "name": "Simulated viewer 1",
+    "look": {
+      "version": 1,
+      "skin": "#b57d4c",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": true,
+      "hair": {
+        "style": "side-part",
+        "colour": "#c99a4c"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#ef6fae"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 2",
+    "look": {
+      "version": 1,
+      "skin": "#563221",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "light",
+      "blush": false,
+      "hair": {
+        "style": "buns",
+        "colour": "#9b8f82"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#3a3a40"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 3",
+    "look": {
+      "version": 1,
+      "skin": "#563221",
+      "eyes": {
+        "shape": "tall",
+        "spacing": "wide"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "quiff",
+        "colour": "#3a2519"
+      },
+      "beard": {
+        "style": "chinstrap",
+        "colour": "#3a2519"
+      },
+      "moustache": null,
+      "hat": null,
+      "glasses": {
+        "style": "square",
+        "colour": "#1f1d22",
+        "lens": "#ffcf73"
+      },
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#8a3fe6"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 4",
+    "look": {
+      "version": 1,
+      "skin": "#fbe4d8",
+      "eyes": {
+        "shape": "tall",
+        "spacing": "wide"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "long-waves",
+        "colour": "#ffd23a"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#d3202a"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 5",
+    "look": {
+      "version": 1,
+      "skin": "#fbe4d8",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": true,
+      "hair": {
+        "style": "spiky",
+        "colour": "#ebc964"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": {
+        "style": "drop",
+        "colour": "#c9cdd4"
+      },
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#1ea59a"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 6",
+    "look": {
+      "version": 1,
+      "skin": "#f4cfae",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "pigtails",
+        "colour": "#ebc964"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#f58a1f"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 7",
+    "look": {
+      "version": 1,
+      "skin": "#a76d42",
+      "eyes": {
+        "shape": "tall",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "quiff",
+        "colour": "#d0252f"
+      },
+      "beard": {
+        "style": "full",
+        "colour": "#e0561f"
+      },
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#d3202a"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 8",
+    "look": {
+      "version": 1,
+      "skin": "#8b5434",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "light",
+      "blush": false,
+      "hair": {
+        "style": "spiky",
+        "colour": "#5a3622"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": {
+        "style": "stud",
+        "colour": "#e8b54a"
+      },
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#f58a1f"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 9",
+    "look": {
+      "version": 1,
+      "skin": "#9a6648",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "spiky",
+        "colour": "#e0561f"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": {
+        "style": "round",
+        "colour": "#e1a088",
+        "lens": "#ffcf73"
+      },
+      "earrings": {
+        "style": "stud",
+        "colour": "#e8b54a"
+      },
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#8a3fe6"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 10",
+    "look": {
+      "version": 1,
+      "skin": "#7c4a2e",
+      "eyes": {
+        "shape": "tall",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "side-shave",
+        "colour": "#ebc964"
+      },
+      "beard": {
+        "style": "full",
+        "colour": "#f2f0ec"
+      },
+      "moustache": {
+        "style": "walrus",
+        "colour": "#f2f0ec"
+      },
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#d3202a"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 11",
+    "look": {
+      "version": 1,
+      "skin": "#4a2b1e",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "afro",
+        "colour": "#3559e6"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#1e1d22"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 12",
+    "look": {
+      "version": 1,
+      "skin": "#f8dcc8",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": true,
+      "hair": {
+        "style": "short-crop",
+        "colour": "#3a2519"
+      },
+      "beard": null,
+      "moustache": {
+        "style": "handlebar",
+        "colour": "#3a2519"
+      },
+      "hat": null,
+      "glasses": null,
+      "earrings": {
+        "style": "hoop",
+        "colour": "#e1a088"
+      },
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#2d5fd8"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 13",
+    "look": {
+      "version": 1,
+      "skin": "#8b5434",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "pigtails",
+        "colour": "#22b2a4"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#d9c49b"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 14",
+    "look": {
+      "version": 1,
+      "skin": "#e5b48e",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "wide"
+      },
+      "freckles": "full",
+      "blush": false,
+      "hair": {
+        "style": "bob",
+        "colour": "#ebc964"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#f58a1f"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 15",
+    "look": {
+      "version": 1,
+      "skin": "#efd2a4",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "light",
+      "blush": false,
+      "hair": {
+        "style": "quiff",
+        "colour": "#22b2a4"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": {
+        "style": "goggles",
+        "colour": "#c9cdd4",
+        "lens": "#ffcf73"
+      },
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#e6b73a"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 16",
+    "look": {
+      "version": 1,
+      "skin": "#fbe4d8",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": true,
+      "hair": {
+        "style": "curls",
+        "colour": "#e0561f"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#ef6fae"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 17",
+    "look": {
+      "version": 1,
+      "skin": "#7c4a2e",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "light",
+      "blush": true,
+      "hair": {
+        "style": "short-crop",
+        "colour": "#3a2519"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": {
+        "style": "cap-backwards",
+        "colour": "#8a3fe6",
+        "trim": "#d3202a"
+      },
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#2d5fd8"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 18",
+    "look": {
+      "version": 1,
+      "skin": "#e5b48e",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "set"
+      },
+      "freckles": "none",
+      "blush": true,
+      "hair": {
+        "style": "locs",
+        "colour": "#c99a4c"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#8d8e94"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 19",
+    "look": {
+      "version": 1,
+      "skin": "#f8dcc8",
+      "eyes": {
+        "shape": "closed",
+        "spacing": "set"
+      },
+      "freckles": "light",
+      "blush": true,
+      "hair": {
+        "style": "quiff",
+        "colour": "#7ccf3e"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#2d5fd8"
+      }
+    }
+  },
+  {
+    "name": "Simulated viewer 20",
+    "look": {
+      "version": 1,
+      "skin": "#4a2b1e",
+      "eyes": {
+        "shape": "dot",
+        "spacing": "wide"
+      },
+      "freckles": "none",
+      "blush": false,
+      "hair": {
+        "style": "curls",
+        "colour": "#f27db4"
+      },
+      "beard": null,
+      "moustache": null,
+      "hat": null,
+      "glasses": null,
+      "earrings": null,
+      "flower": null,
+      "top": {
+        "style": "tee",
+        "dye": "#8a3fe6"
+      }
+    }
+  }
+]

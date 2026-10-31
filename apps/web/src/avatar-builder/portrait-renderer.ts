@@ -61,13 +61,54 @@ diffuseColor.rgb *= vOcclusion;`)
   return material;
 }
 
-/** The character as one mesh in avatar cells, root at the origin, facing +Z. */
-export function citizenObject(look: CitizenLook, options: HeadOptions = {}, material: THREE.Material = citizenMaterial()): THREE.Mesh {
-  const mesh = new THREE.Mesh(citizenGeometry(meshCitizen(buildCitizen(look, options), slotColours(look))), material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  mesh.name = 'citizen';
-  return mesh;
+/** Lens glass: tinted, glossy and see-through, so the eye blocks read behind it. */
+export function citizenGlassMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .12, metalness: 0, transparent: true, depthWrite: false });
+}
+
+/**
+ * Lens geometry with per-vertex alpha from the tint: clear and pale glass is barely there so the eyes read
+ * fully through it, smoked glass is dark enough to read as sunglasses.
+ */
+function glassGeometry(mesh: CitizenMesh): THREE.BufferGeometry {
+  const g = citizenGeometry(mesh);
+  const rgba = new Float32Array(mesh.faces * 16);
+  for (let v = 0; v < mesh.faces * 4; v++) {
+    const [r, gr, b] = [mesh.colours[v * 3]!, mesh.colours[v * 3 + 1]!, mesh.colours[v * 3 + 2]!];
+    const luma = r * .2126 + gr * .7152 + b * .0722;
+    rgba.set([linear(r), linear(gr), linear(b), luma > .7 ? .2 : luma > .4 ? .34 : .62], v * 4);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
+  return g;
+}
+
+/**
+ * The character in avatar cells, root at the origin, facing +Z: the opaque body as `citizen-solid`, and any
+ * lenses as `citizen-glass` drawn after it. Dispose with `disposeCitizen`; materials are the caller's.
+ */
+export function citizenObject(
+  look: CitizenLook, options: HeadOptions = {},
+  material: THREE.Material = citizenMaterial(), glass: THREE.Material = citizenGlassMaterial(),
+): THREE.Group {
+  const grid = buildCitizen(look, options), colours = slotColours(look);
+  const group = new THREE.Group();
+  group.name = 'citizen';
+  const solid = new THREE.Mesh(citizenGeometry(meshCitizen(grid, colours, 'solid')), material);
+  solid.name = 'citizen-solid';
+  solid.castShadow = solid.receiveShadow = true;
+  group.add(solid);
+  const lenses = meshCitizen(grid, colours, 'glass');
+  if (lenses.faces) {
+    const mesh = new THREE.Mesh(glassGeometry(lenses), glass);
+    mesh.name = 'citizen-glass';
+    mesh.renderOrder = 1;
+    group.add(mesh);
+  }
+  return group;
+}
+
+export function disposeCitizen(citizen: THREE.Object3D): void {
+  citizen.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
 }
 
 const colour = (hex: `#${string}`) => new THREE.Color().setRGB(...rgb(hex), THREE.SRGBColorSpace);
@@ -124,17 +165,17 @@ export function createPortraitRenderer(): PortraitRenderer {
   rim.position.copy(new THREE.Vector3(...light.rim.direction).normalize().multiplyScalar(40).add(new THREE.Vector3(...frame.target)));
   rim.target.position.set(...frame.target);
   scene.add(sky, key, key.target, rim, rim.target);
-  const material = citizenMaterial();
+  const material = citizenMaterial(), glass = citizenGlassMaterial();
 
   return {
     render(look, size) {
       const inner = size * PORTRAIT.supersample;
       renderer.setSize(inner, inner, false);
-      const subject = citizenObject(look, {}, material);
+      const subject = citizenObject(look, {}, material, glass);
       scene.add(subject);
       renderer.render(scene, camera);
       scene.remove(subject);
-      subject.geometry.dispose();
+      disposeCitizen(subject);
       const out = document.createElement('canvas');
       out.width = out.height = size;
       const ctx = out.getContext('2d')!;
@@ -145,6 +186,7 @@ export function createPortraitRenderer(): PortraitRenderer {
     },
     dispose() {
       material.dispose();
+      glass.dispose();
       background.dispose();
       renderer.dispose();
     },

@@ -1,5 +1,5 @@
 import type { Rgb } from './colour';
-import type { Slot, VoxelGrid } from './grid';
+import { GLASS_SLOTS, type Slot, type VoxelGrid } from './grid';
 
 /*
  * Grid → renderable surface, independent of any engine. One quad per exposed cell face (a bust is a few
@@ -30,11 +30,20 @@ const FACES: readonly { n: V3; u: V3; v: V3 }[] = [
 /** Occlusion per corner by how many of its three neighbours in front of the face are solid. */
 export const OCCLUSION_LEVELS = [.5, .68, .84, 1] as const;
 
-export function meshCitizen(grid: VoxelGrid, colours: Record<Slot, Rgb>): CitizenMesh {
+/**
+ * `solid` is everything opaque; glass cells (lenses) are not solid to it, so the eyes behind a lens keep their
+ * faces. `glass` is the lenses alone, meshed against everything, for a see-through material.
+ */
+export function meshCitizen(grid: VoxelGrid, colours: Record<Slot, Rgb>, part: 'solid' | 'glass' = 'solid'): CitizenMesh {
   const pos: number[] = [], nor: number[] = [], col: number[] = [], occ: number[] = [], uv: number[] = [], edg: number[] = [], tu: number[] = [], tv: number[] = [], idx: number[] = [];
-  const solid = (x: number, y: number, z: number) => grid.has(x, y, z);
+  const glassy = (slot: Slot | undefined) => slot !== undefined && GLASS_SLOTS.includes(slot);
+  const solid = part === 'glass' ? (x: number, y: number, z: number) => grid.has(x, y, z) : (x: number, y: number, z: number) => {
+    const slot = grid.get(x, y, z);
+    return slot !== undefined && !glassy(slot);
+  };
   let faces = 0;
   for (const [[x, y, z], slot] of grid.entries()) {
+    if (glassy(slot) !== (part === 'glass')) continue;
     const c = colours[slot];
     for (const { n, u, v } of FACES) {
       const fx = x + n[0], fy = y + n[1], fz = z + n[2];

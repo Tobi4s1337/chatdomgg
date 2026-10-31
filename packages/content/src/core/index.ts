@@ -1,5 +1,6 @@
 import { HOME_DEPTH_METRES, type HomeTier, type VoxelBlueprint } from '@chatdom/shared';
 import { MAT, STYLES, type StyleKey } from '../materials';
+import { createDressing } from '../props/dressing/registry';
 
 export const CASTLE_BEACON_HEIGHT_METRES = 30.5;
 /** Centre of the authored lantern cap, relative to the castle asset origin. */
@@ -179,25 +180,17 @@ export function createCastle(style: StyleKey): VoxelBlueprint {
 }
 
 /** Rounded clusters preserve a readable trunk and an uneven, broadleaf silhouette. */
+/** Reviewed narrow grove forms fit the existing eight-metre planting envelope. */
 export function createTree(variant: number): VoxelBlueprint {
-  const v=((Math.floor(variant)%3)+3)%3, boxes:Box[]=[];
-  const h=34+v*5;
-  box(boxes,27,0,27,37,h,37,MAT.bark);
-  box(boxes,23,0,29,29,4,35,MAT.bark); box(boxes,35,0,29,41,4,35,MAT.bark);
-  box(boxes,29,0,23,35,4,29,MAT.bark); box(boxes,29,0,35,35,4,41,MAT.bark);
-  box(boxes,17,h-8,27,32,h-2,34,MAT.bark); box(boxes,32,h-6,30,47,h,37,MAT.bark);
-  const leaf=v===1?MAT.goldLeaf:MAT.leaf;
-  // Overlapping rounded masses use continuous, stepped ellipsoid courses.
-  // Their offsets make an irregular canopy without random speckle.
-  for(const [cx,cy,cz,rx,ry,rz] of [[22,h+1,29,13,11,12],[42,h+3,34,13,12,12],[32,h+9,23,12,12,11],[30,h+11,40,12,12,11],[32,h+17,31,11,11,11]] as const) {
-    for (let dy=-ry; dy<=ry; dy+=2) {
-      const fy = Math.sqrt(Math.max(0, 1 - ((dy+1)/ry)**2));
-      for (let dz=-rz; dz<rz; dz+=2) {
-        const fz = (dz+1)/rz;
-        const half = Math.floor(rx * Math.sqrt(Math.max(0, fy*fy-fz*fz)));
-        if (half>0) box(boxes,cx-half,cy+dy,cz+dz,cx+half,cy+dy+2,cz+dz+2,leaf);
-      }
-    }
-  }
-  return {version:1,id:`tree-${v}`,styleId:STYLES.grove.id,kind:'flora',lattice:'build',size:[64,80,64],boxes,windows:[]};
+  const v = ((Math.floor(variant) % 3) + 3) % 3;
+  const form = createDressing((['birch', 'alder', 'fir'] as const)[v]!);
+  // Both the live native compiler and the stream bench already place this origin
+  // four metres southwest of the trunk. Pad the authored forms, never move a site
+  // or scale their voxel lattice to make them fit.
+  const dx = (64 - form.size[0]) / 2, dz = (64 - form.size[2]) / 2;
+  return { ...form, id: `tree-${v}`, size: [64, form.size[1], 64],
+    boxes: form.boxes.map(({ from, to, material }) => ({
+      from: [from[0] + dx, from[1], from[2] + dz],
+      to: [to[0] + dx, to[1], to[2] + dz], material,
+    })) };
 }

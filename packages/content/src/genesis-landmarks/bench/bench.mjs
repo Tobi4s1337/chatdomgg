@@ -2,9 +2,11 @@
 // The Genesis landmark bench: a landmark the adapter proposes for a showcase recipe, on SIMULATED ground, drawn
 // through the production voxel mesher, clay and terrain materials, light fields, window lights, sun shadows,
 // atmosphere, water surface and post stack. `?scene=harbour` (the default) is the coastal watchtower on a headland;
-// `?scene=river` is the river hall across a river. The lanterns burn as they would with people about, the harbour
-// beacon as it would under a full kingdom, the hall's windows as if its rooms were full, and the flag moves on its
-// hoist: all SIMULATED host behaviour shown to judge the piece, not a claim about any kingdom. Served by the Vite dev
+// `?scene=river` is the river hall across a river; `?scene=mountain` is the crown tower at the head of a pass with
+// the city's reserved cathedral site on the meadow below it. The lanterns burn as they would with people about, the
+// harbour beacon and the tower's watch fire as they would under a full kingdom, the windows as if their rooms were
+// full, and the flag moves on its hoist: all SIMULATED host behaviour shown to judge the piece, not a claim about any
+// kingdom. Served by the Vite dev
 // server only (capture.mjs); the app never loads it.
 import * as THREE from 'three';
 import { createAtmosphere, createPostStack, createSunShadows, createVoxelMaterial, createWindowLights, geometryFromChunks, getEnvironment } from '@chatdom/render';
@@ -12,7 +14,7 @@ import { VoxelWorkerPool, buildLightVolume, rasterizeLightOccluders } from '@cha
 import { MAT, MATERIALS } from '../../materials';
 import { groundMaterial, meshGround } from '../../../../../apps/web/src/places/water/surface-bench/ground';
 import { createWaterSurface } from '../../../../../apps/web/src/places/water/surface/index';
-import { CELL, harbourBench, riverBench } from './scene';
+import { CELL, harbourBench, mountainBench, riverBench } from './scene';
 const query = new URLSearchParams(location.search);
 const canvas = document.querySelector('canvas');
 const fail = (error) => {
@@ -43,8 +45,8 @@ function dotTexture(soft) {
 const rand = (i, salt) => { const s = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453; return s - Math.floor(s); };
 try {
     let hour = number('hour', 20.4), time = number('time', 42);
-    const river = query.get('scene') === 'river';
-    const bench = river ? riverBench() : harbourBench(), { proposal } = bench, piece = proposal.piece;
+    const river = query.get('scene') === 'river', mountain = query.get('scene') === 'mountain';
+    const bench = river ? riverBench() : mountain ? mountainBench() : harbourBench(), { proposal } = bench, piece = proposal.piece;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, preserveDrawingBuffer: true });
     renderer.debug.onShaderError = (gl, program, vertex, fragment) => {
         console.error('Bench shader failed', { vertex: gl.getShaderInfoLog(vertex), fragment: gl.getShaderInfoLog(fragment), link: gl.getProgramInfoLog(program) });
@@ -77,8 +79,9 @@ try {
             throw new Error(`Could not mesh ${blueprint.id}`);
         return geometryFromChunks(result.chunks, 'build');
     };
-    const { ground } = bench, sea = river ? null : bench.sea, tower = river ? bench.hall : bench.tower, level = river ? bench.level : sea.level;
-    const made = groundMaterial(ground, level);
+    const { ground } = bench, sea = river ? null : mountain ? bench.tarn : bench.sea, tower = river ? bench.hall : bench.tower, level = river ? bench.level : sea.level;
+    // The tarn's water sits a hand below the meadow; its bank tint would stain the whole pass, so it starts lower.
+    const made = groundMaterial(ground, mountain ? level - 0.8 : level);
     states.push(made.state);
     const sun = createSunShadows(renderer, { bounds: new THREE.Box3(new THREE.Vector3(...bench.shadowBounds.min), new THREE.Vector3(...bench.shadowBounds.max)), resolution: 2048 });
     for (const s of states)
@@ -87,13 +90,19 @@ try {
     scene.add(water.root);
     // World positions of the piece's own anchors.
     const world = (cells) => [tower[0] + cells[0] * CELL, tower[1] + cells[1] * CELL, tower[2] + cells[2] * CELL];
-    // The harbour's fire burns in its loft; the hall has no beacon, so its point sits on the hall at strength zero.
-    const beacon = river ? world([56, 120, 116]) : world(piece.emitters.find(e => e.id === 'beacon').position);
+    // The harbour's fire burns in its loft and the crown tower's in its head; the hall has no beacon, so its point
+    // sits on the hall at strength zero.
+    const beacon = river ? world([56, 120, 116]) : world(piece.emitters.find(e => e.kind === 'beacon').position);
     const lanterns = piece.emitters.filter(e => e.kind === 'lantern').map(e => world(e.position));
+    // The reserved cathedral site's one lantern, by its foundation stone (the site stands unturned on the meadow).
+    if (mountain) {
+        const at = bench.placements.find(p => p.id === 'cathedral-site').origin;
+        for (const e of bench.site.piece.emitters) lanterns.push([at[0] + e.position[0] * CELL, at[1] + e.position[1] * CELL, at[2] + e.position[2] * CELL]);
+    }
     // SIMULATED presence for the hall's glazing: every room full, through the production window lights. Content
     // windows hold at most 64 panes, so the panes are split across bench-only copies of the hall at its origin.
     let windows = null;
-    if (river) {
+    if (piece.glazing) {
         const houses = [];
         for (let i = 0; i < piece.glazing.length; i += 64) {
             const panes = piece.glazing.slice(i, i + 64).map(g => ({ id: g.id.replace(/[^A-Za-z0-9_-]/g, '_'), centre: [...g.centre], width: g.width, height: g.height, facing: g.facing }));
@@ -108,7 +117,9 @@ try {
     // coarse field over the headland. Occluders are the tower's own solid boxes.
     const occluders = piece.blueprint.boxes.filter(b => b.material !== MAT.air).map(b => ({ min: world(b.from), max: world(b.to) }));
     const field = (spec, emitters) => buildLightVolume({ ...spec, occupancy: rasterizeLightOccluders(spec, occluders), emitters });
-    const near = river
+    const near = mountain
+        ? field({ revision: 1, origin: [-34, 0, -12], size: [96, 52, 104], cellSize: 0.5 }, [...lanterns.map(position => ({ position, level: 12 })), ...windows.getSources().map(s => ({ position: s.position, level: 9 }))])
+        : river
         ? field({ revision: 1, origin: [-20, -3, -26], size: [80, 48, 104], cellSize: 0.5 }, [...lanterns.map(position => ({ position, level: 12 })), ...(windows ? windows.getSources().map(s => ({ position: s.position, level: 9 })) : [])])
         : field({ revision: 1, origin: [-16, -1, -12], size: [64, 32, 64], cellSize: 0.5 }, lanterns.map(position => ({ position, level: 13 })));
     const far = river
@@ -165,7 +176,7 @@ try {
             floats.push({ ...f, mesh, pivot: body.pivot.map(v => v * AVATAR), light: f.critter.light.map(v => v * AVATAR) });
         }));
     }
-    tasks.push(meshGround(pool, ground, made, (x, z, h) => h < level + 0.05 || water.waterAt(x, z) !== null).then(land => { scene.add(land); land.updateMatrixWorld(true); sun.register(land); }));
+    tasks.push(meshGround(pool, ground, made, (x, z, h) => (!mountain && h < level + 0.05) || water.waterAt(x, z) !== null).then(land => { scene.add(land); land.updateMatrixWorld(true); sun.register(land); }));
     // Glows: each lantern's glass and the beacon's fire, bright enough for the bloom to take them.
     const glowTexture = dotTexture(0.22), glows = [];
     const glow = (at, scale, colour, flicker) => {
@@ -186,9 +197,9 @@ try {
         glow([beacon[0], beacon[1] + 0.6, beacon[2]], 6.5, new THREE.Color(0.9, 0.42, 0.1), 0.08);
     }
     // Embers lifting off the beacon and smoke that curls away downwind.
-    const EMBERS = river ? 0 : 70, SMOKE = river ? 48 : 34, wind = new THREE.Vector3(-0.9, 0, -0.25).normalize();
+    const EMBERS = river ? 0 : mountain ? 56 : 70, SMOKE = river ? 48 : mountain ? 64 : 34, wind = new THREE.Vector3(-0.9, 0, -0.25).normalize();
     // Where the smoke rises: the beacon's fire, or the hall's two chimneys.
-    const vents = river ? bench.chimneys.map(c => ({ at: c, lift: 0.2, puff: 0.7 })) : [{ at: beacon, lift: 2.4, puff: 1 }];
+    const vents = river ? bench.chimneys.map(c => ({ at: c, lift: 0.2, puff: 0.7 })) : [{ at: beacon, lift: mountain ? 1.2 : 2.4, puff: 1 }];
     const emberGeometry = new THREE.BufferGeometry(), emberPositions = new Float32Array(EMBERS * 3);
     emberGeometry.setAttribute('position', new THREE.BufferAttribute(emberPositions, 3));
     const embers = new THREE.Points(emberGeometry, new THREE.PointsMaterial({ map: dotTexture(0.3), size: 0.16, color: new THREE.Color(6, 2.4, 0.5), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false }));
@@ -239,7 +250,7 @@ try {
     }
     new ResizeObserver(resize).observe(canvas);
     resize();
-    const stats = { ready: false, scene: river ? 'river' : 'harbour', proposal: proposal.id, blueprint: piece.blueprint.id, variant: river ? (proposal.wheel ? 'wheel' : 'still') : proposal.crown, recipeLandmark: proposal.recipeLandmark, label: 'SIMULATED' };
+    const stats = { ready: false, scene: river ? 'river' : mountain ? 'mountain' : 'harbour', proposal: proposal.id, blueprint: piece.blueprint.id, variant: river ? (proposal.wheel ? 'wheel' : 'still') : mountain ? proposal.head : proposal.crown, recipeLandmark: proposal.recipeLandmark, label: 'SIMULATED' };
     let loaded = false, drawn = 0, frame = 0, shadowsSet = false;
     void Promise.all(tasks).then(() => { loaded = true; }, fail);
     const beaconVector = new THREE.Vector3(...beacon), target = new THREE.Vector3();
@@ -297,7 +308,9 @@ try {
             flag.matrixWorld.copy(flag.matrix);
             cloth.material.uniforms.uWind.value = time;
         }
-        water.update({ time, environment: grade, camera, sources: river
+        water.update({ time, environment: grade, camera, sources: mountain
+                ? [...lanterns.map(position => ({ position, strength: 0.7, kind: 'window' })), ...windows.getSources().map(s => ({ position: s.position, strength: s.strength * 0.6, kind: 'window', normal: s.normal })), { position: beacon, strength: flame, kind: 'beacon' }]
+                : river
                 ? [...lanterns.map(position => ({ position, strength: 0.7, kind: 'window' })), ...windows.getSources().map(s => ({ position: s.position, strength: s.strength * 0.6, kind: 'window', normal: s.normal }))]
                 : [...lanterns.map(position => ({ position, strength: 0.85, kind: 'window' })), { position: beacon, strength: flame, kind: 'beacon' }] });
         water.reflect({ renderer, scene, camera, frame: ++frame, exclusions: [...atmosphere.reflectionExclusions] });

@@ -6,3 +6,5 @@ PL03: finished the picture over 7 looked-at iterations at 1920×1080 (street, we
 follow-up: PL03 Refine the castle bank and distant ridge separation when main adopts the terrain.
 follow-up: PL03 break the uniform escarpment beneath the castle into irregular exposed ledges with ragged green and scree interruptions; retain protected foundations and roads.
 follow-up: PL03 checkpoint merged and viewed; west foreground banks still look like long parallel pink trenches. Break their continuity and expose irregular grass and stone for natural banks; no grade changes.
+
+2026-10-31 main integrated PL03: actual stream before/after viewed in shots/magic/land-adopted-pair.png; adopted height feeds render/light/contact/collision without changing plan identity or accepted light. Next picture fix: cut a lower saddle behind the keep/beacon so the tall central mountain does not swallow their silhouette; keep layered crags to either side. Existing irregular-bank follow-up remains.

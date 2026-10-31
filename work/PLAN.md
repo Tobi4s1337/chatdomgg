@@ -330,48 +330,65 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Order:** picture first, one visible fix per turn, committed with an obvious before/after. No new systems/contracts;
-chosen avatar/builder remains authorised. Keep accepted exposure34ac89a, indigo0896044, street warmth96f2d08,
-beacon, warm pools, gold frame and wide dusk grade. Close/wide castle lighta1dac83/32633a8 landed. Merge good
-lane checkpoints immediately; medium-effort helpers for routine recon/captures/merges. Check merges BEFORE
-starting the turn's capture, so a newly ready producer cannot strand an unnecessary render.
+**Order:** picture first, one visible fix per turn with an obvious before/after. No new systems/contracts;
+chosen avatar/builder remains authorised. Keep wide exposure34ac89a, indigo0896044, street warmth96f2d08,
+beacon, warm pools, gold frame, softer smoke7c16789 and castle lighta1dac83/32633a8. Merge useful art checkpoints
+first; medium-effort helpers for routine recon/captures/fixes. Latest runtime/content checkpoint merges and their consumer are below.
 
-**Current slice:** smithy camera lower and tighter. Open south-east direction[4.8,.9,12], aim1.8m higher without
-moving the eye; waiting holds the whole hearth, casting prioritises metal/faces. First far-east angle hit the well
-roof and was rejected. Viewed native1080p and `shots/magic/smithy-frame-pair.png` (before left): pour/anvil/faces
-read together, castle rises behind; a well-roof edge stays at far right, crowd still leans left. Same hash-verified
-adopted scene008f059a, SIMULATED fixed pour/gather clock, high HDR/ACES. Final source frozen for capture; no errors,
-resources closed. Typecheck, scoped lint,1 meaningful room/assembly/camera test and web build pass;15 PL03 tests
-pass. Whole hearth and actual crucible stay within frame; waiting margin tighter. No lighting/presence changes.
+**Current slice:** narrow reviewed GD02 birch/alder/fir replace generic tree crowns through `createTree`,
+shared by the stream scene and native compiler. Same sites, eight-metre origin/footprint, actual build lattice;
+only padding, no scale/new planting. Viewed `shots/magic/grove-pair.png` and `grove-after.png`,1920×1080 HIGH,
+hour19.5/time30, against the identical prior wide frame. Clear conifer/white-bark variation; distant tree contact
+still hard to read through haze. Preserve accepted light. Grove remains a checkpoint, not the full seeded
+family/wind pass. Roads still empty; readable lantern walkers next. Avatar body/clothes still with their lane.
 
-**Land next:** PL03 checkpoint1541661 merged402e3c6; street/west frames in `work/evidence/PL03/` viewed. Ridges
-now have a silhouette; foreground still looks like parallel pink trenches. Concrete irregular-bank follow-up in
-lane progress. Producer `picture-land:2` remains candidate-only: main must adopt one derived sampler through
-terrain worker, horizon, light-field occupancy and collision/contact together. Existing physics version/digest and
-collisionRevision publication can carry this without new protocol; never forge plan.revision or paint triangles
-that disagree with walking. `createHorizonSurface` already accepts sampleTerrain; other consumers call terrainHeight.
-Actual sampler adoption, then wide-road life, is next. No need to wait for another lane checkpoint.
+**Merged:** effects d535804 (21 tests), emote art40aeb18 (31), ground-dressing92421d5 (160). Root viewed their
+existing evidence; emote eye/mouth still clip locally, follow-up in lane progress. Effects vocabulary is available
+but accepted home smoke is NOT replaced. Integration checks: typecheck, scoped lint,51 core assets validated,
+web build. Picture-trees foundation remains20c87a9; its oak/willow/seeded adapter/wind work stays with team.
 
-**Avatar/art:** reference/spec49/PRD81eab8f chosen, all A/B/C rejected. AS03 head/portrait4c333ed merged8ff6f87;
-both comparison sheets viewed.8-cell skull plus hair gives~10-cell silhouette on unchanged rig; black eyes/no
-mouth. Hair follow-up: lighter uneven fringe instead of a shelf. Clothes/accessories/builder stay with team;
-swap kingdom/stream/card/passport once head, hair and clothes are ready. No rig/socket proposal exists; exact
-proposals go in contract-proposal.md for main. Recipe remains content-local until its first runtime consumer.
-Main owns real save/earned-item authority. Effects EL01 merged66d5244 and bench viewed, not adopted; ember drift/
-brightness follow-up recorded. Heraldry44c948e/river hallb5d3897 viewed/merged, not mounted as Genesis seats.
-Trees had no new checkpoint. Passport/Genesis content continue. No second forest or emitter stack.
+**Previous coast slice:**a6fcf9a mounts the reviewed harbour watchtower in `/kingdom/63920635`, on the valid
+castle parcel with flag/lamps/beacon. Proposed shoreline site remains ungraded/disconnected. Potential Genesis
+only; founded/royal presence untouched. `shots/magic/harbour-seat-pair.png` viewed: better hamlet scale, still
+isolated and road ends beside it. Live adoption needs real high chamber glass/window anchor; tower has none.
 
-**Accepted paint/open moments:**7c16789 corrected GPU-rejected white smokea545cfa: stable~quarter of occupied
-hearths, thin grey-violet wisps, short fade and restrained amber base; close arrival smoke active. Viewed
-`shots/magic/smoke-soft-pair.png`; wide smoke/base very subtle. Actual chimney mouths only. Rejected far lantern
-glints and global all-pane/2.5x window candidate stay reverted. Castle `shots/magic/wide-gate-pair.png` shows warm
-front walls/cool towers. Molten02c3494 stays. Still open: readable wide-road walkers/cart, fuller two-sided Forge
-crowd, real approved chat ritual (no waiting observer before Tobias announces live). Passport/gate/emotes/moments/
-atlas-w2 through47c0ef7: first4 SIM benches still lack live host bindings. No new system wiring in this pass.
+**Previous Forge slice:**64efb0f gathers16 existing present citizens across the pour in staggered west/north
+arcs, preserving walks, inward headings, barrel perch and tiptoe. Viewed `shots/magic/forge-ring-pair.png`:
+two warm faces right of pour, still a little left-heavy. Pour/camera/light unchanged;3 focused tests pass.
 
-**Continuity/preserved:** lantern cull fadesbc9a54c accepted;7c71b38 retains valid presence through retries until
-min(receipt+90s,frame.asOf+90s), then0.7s fade; SIM outage smoke passed. Other shimmer unlocalized. Royal65534 is
-the keep window, never a deed. Layout43cffdb6/240homes/v1 pinned. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a
-(7files) stays; preserve rounded copy. Superseded night-paint stays superseded. Genesis still needs actual3 Atlas
-entries. Managed5190web/5196API/5197realm/5195Forge/5194herald; only affected code restarts, all on.env. Logs ONLY
-`../conductor/state/services.log`; never journals/other services. Helpers clean owned capture processes.
+**Previous market slice:**be6ab51 puts reviewed civic cart/wares beside generated stalls, matching furnishings
+already used by founded markets. Road/reservation audit clear in both sizes. `shots/magic/market-life-pair.png`
+viewed from street: tangible detail, still empty square, not proof of wide impact. Wide-road activity/well remain
+open. Keep accepted wide camera and light; grove/avatar integration follows usable lane checkpoints.
+
+**Land:**975af2f adopts picture-land:2 consistently through workers/height texture/horizon/light occupancy/citizen
+contact/founded collision. Plan identity unchanged; existing physics revision includes producer.44de84b applies
+rock colour/strata/faceted normals to steep horizon faces. Near-ground classified fixture adapter still separate.9f843d7 adds horizon-only lilac dusk air beyond220m;
+`shots/magic/ridge-haze-pair.png` viewed, facets retained, town unchanged.
+Viewed `shots/magic/land-adopted-pair.png` and `land-rock-pair.png`; silhouette obvious, faces coarse. Land lane
+has concrete next fix: lower saddle behind beacon/keep, ridges to either side; irregular-bank follow-up remains.
+Narrow GD02 forms now mounted; full tree family/planting adapter remains with picture-trees. Keep existing sites.
+
+**Avatar/art:** chosen reference/spec49/PRD81eab8f; A/B/C rejected. AS03 head4c333ed and AS04 hair/accessories
+5e6352f merged/viewed;38 focused tests pass.8-cell skull+hair≈10-cell silhouette, unchanged rig, black eyes/no
+mouth. Tall hats need portrait headroom; lighter uneven fringe follow-up. Body/clothes/builder stay with team;
+swap kingdom/stream/card/passport once ready. No rig/socket proposal yet; exact proposals go in
+contract-proposal.md for main. Look recipe content-local until consumer, real save/earned authority stays main.
+Effects EL01 merged66d5244/viewed, not adopted; ember drift/brightness follow-up. Mountain landmarks95c21e6,
+carved emote art5778aa5 merged/viewed,134 focused tests pass; not yet mounted on Genesis pages. Glass bloom
+obscures emote face: lane follow-up. Harbour tower mounted in coastal preview; river hall/heraldry runtime mounting remains open.
+
+**Rejected/open:** road-routine tuning and far-lantern enlargement/HDR boost fully reverted. Viewed
+`shots/magic/road-lantern-lived-pair.png`: continuous SIM30→95 has57 walking/240 lit, still no obvious improvement.
+Do not repeat brightness nudges/idle-policy retuning. Capture-only instance.render bypass can warm actual scene
+history cheaply, restoring actual high-quality render/settled fields for final still; prototype patch cannot.
+Smithy cameraf0112c6 and molten02c3494 stay; current audience correction is the viewed checkpoint above.
+Real approved chat ritual unproved; no observer waiting before Tobias announces live. Passport/gate/emotes/
+moments/atlas-w2 through47c0ef7: first4 SIM benches still lack live host bindings. No new system wiring now.
+
+**Continuity:** lantern cull fadesbc9a54c accepted;7c71b38 holds valid presence through retries until
+min(receipt+90s,frame.asOf+90s), then0.7s fade. Other shimmer unlocalized. Royal65534 is keep pane, never a deed.
+Layout43cffdb6/240homes/v1 pinned. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a (7files) stays; retain
+rounded copy. Superseded night-paint stays superseded. Genesis still needs actual3 Atlas entries. Managed5190web/
+5196API/5197realm/5195Forge/5194herald; only affected code restarts, all on.env. Logs ONLY
+`../conductor/state/services.log`; never journals/other services. Helpers clean owned captures/locks.
