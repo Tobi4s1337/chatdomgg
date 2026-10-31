@@ -8,6 +8,7 @@ import type { PotentialKingdomView } from '../kingdom/scene';
 import { readRealmJson } from '../realm/adapters/entry';
 import { GENESIS_CHANNELS, PROFILE_CAPTURED_AT } from './channels';
 import { createGenesisWindowPreview } from './window-preview';
+import { createGenesisSeatContent } from './seat-content';
 import './preview.css';
 
 type View = { potential: PotentialKingdomView; name: string; feed: PresenceFeed; category: string; average: number; landscape: string; lore: string };
@@ -66,7 +67,9 @@ export default function GenesisPreview() {
     const empty: KingdomPresenceFrame = { version: 1, kingdomId: id, epoch: `potential:${id}`, sequence: 0,
       asOf: recipe.evidence.asOf, origin: 'simulated', connection: 'offline', streamLive: false, windows: [] };
     const feed: PresenceFeed = { label: 'SIMULATED', subscribe(receive) { receive(empty); return () => {}; } };
+    const seat = choice.character === 'coastal-harbour' ? createGenesisSeatContent(recipe, landscape, plan) : undefined;
     if (!abort.signal.aborted) setView({ potential: { plan, size: recipe.size.tier, style: recipe.identity.styleFamily,
+      ...(seat ? { seat } : {}),
       camera: { eye, target, fov: 50 }, windowPreview: createGenesisWindowPreview(id, plan.homes, recipe.evidence.asOf) }, name: channel.name, feed, category: observed.categories[0]!.name,
       average: observed.audience.averageViewers!, landscape: choice.character.replaceAll('-', ' '), lore: channel.lore });
   }

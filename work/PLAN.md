@@ -335,13 +335,19 @@ chosen avatar/builder remains authorised. Keep wide exposure34ac89a, indigo08960
 beacon, warm pools, gold frame, softer smoke7c16789 and castle lighta1dac83/32633a8. Merge useful art checkpoints
 first; medium-effort helpers for routine recon/captures/fixes. No new runtime/content checkpoints this turn.
 
-**Current slice:** Forge spectators now gather across the pour in staggered west/north arcs.16 existing present
-slots only, actual walks, inward headings, barrel perch and back-row tiptoe preserved. First southeast branch
-put a large back in the foreground; rejected. Corrected far-side sites show two warm faces right of the pour.
-Viewed `shots/magic/forge-ring-after.png` and `forge-ring-pair.png` at1920×1080 high HDR/ACES, same hash-verified
-adopted scene and60s SIMULATED gather. Pour/camera/light unchanged; still a little left-heavy, rightmost partly
-hidden by smithy post.3 focused tests (including actual arrivals across camera halves and barrel), typecheck,
-scoped lint and web build pass. No harness errors; owned resources/locks closed. No fresh art code checkpoints.
+**Current slice:** the coastal Genesis preview (`/kingdom/63920635`) mounts the reviewed harbour watchtower
+instead of the oversized generic castle. Actual footing checked on the existing level castle parcel, with its
+flag, lamps and beacon anchor; the proposed shoreline site is dry but ungraded and disconnected, so unused.
+Only read-only potential Genesis changes: adopted/founded kingdoms and royal presence stay untouched. Viewed
+`shots/magic/harbour-seat-pair.png` and `harbour-seat-after.png`,1920×1080 HIGH, hour19.5/time30, same view.
+Clear silhouette/scale improvement; tower still isolated, road ends beside it, caption overlaps the base. No
+light/camera/terrain edits. Focused actual-channel test, typecheck, scoped lint and web build pass. No new
+committed art checkpoints to merge. Grove and body/clothes remain with their lanes. Before any live seat
+adoption, landmark content needs a real high chamber glass pane/window anchor; this tower has none.
+
+**Previous Forge slice:**64efb0f gathers16 existing present citizens across the pour in staggered west/north
+arcs, preserving walks, inward headings, barrel perch and tiptoe. Viewed `shots/magic/forge-ring-pair.png`:
+two warm faces right of pour, still a little left-heavy. Pour/camera/light unchanged;3 focused tests pass.
 
 **Previous market slice:**be6ab51 puts reviewed civic cart/wares beside generated stalls, matching furnishings
 already used by founded markets. Road/reservation audit clear in both sizes. `shots/magic/market-life-pair.png`
@@ -362,7 +368,7 @@ swap kingdom/stream/card/passport once ready. No rig/socket proposal yet; exact 
 contract-proposal.md for main. Look recipe content-local until consumer, real save/earned authority stays main.
 Effects EL01 merged66d5244/viewed, not adopted; ember drift/brightness follow-up. Mountain landmarks95c21e6,
 carved emote art5778aa5 merged/viewed,134 focused tests pass; not yet mounted on Genesis pages. Glass bloom
-obscures emote face: lane follow-up. Harbour tower/river hall/heraldry merged/viewed, actual Genesis mounting open.
+obscures emote face: lane follow-up. Harbour tower mounted in coastal preview; river hall/heraldry runtime mounting remains open.
 
 **Rejected/open:** road-routine tuning and far-lantern enlargement/HDR boost fully reverted. Viewed
 `shots/magic/road-lantern-lived-pair.png`: continuous SIM30→95 has57 walking/240 lit, still no obvious improvement.

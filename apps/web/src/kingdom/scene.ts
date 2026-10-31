@@ -22,6 +22,7 @@ import { placeSettlementContent, placeMarketContent } from './settlement-content
 import { createForgeSquareContent } from './forge-square-content';
 import { createCastleContent, createCastleCourtContent } from './castle-content';
 import { createGenesisWaterContent } from '../genesis/water-content';
+import type { GenesisSeatContent } from '../genesis/seat-content';
 import { sampleGenesisSurface } from '@chatdom/world/genesis';
 import { inhabitedLightBounds } from './light-bounds';
 import { terrainBatches } from './terrain-batches';
@@ -56,7 +57,7 @@ let citizenHandoff: { at: number; checkpoint: CitizenSceneCheckpoint } | undefin
 
 export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number;arrivalAgeSeconds?:number}
-export interface PotentialKingdomView {plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
+export interface PotentialKingdomView {seat?:GenesisSeatContent;plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
 export interface SceneOptions {potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
@@ -117,8 +118,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }else props.push(...marketProps);
   }
   if(options.potential)props.push(...createGenesisWaterContent(layout));
-  const {buildings:castleBuildings,beaconPosition}=createCastleContent(layout.castle,options.potential?.style);
-  const simulatedCourt=installed?undefined:createCastleCourtContent(layout.castle,options.potential?.style);
+  const potentialSeat=installed?undefined:options.potential?.seat;
+  const {buildings:castleBuildings,beaconPosition}=potentialSeat??createCastleContent(layout.castle,options.potential?.style);
+  const simulatedCourt=installed?undefined:potentialSeat??createCastleCourtContent(layout.castle,options.potential?.style);
   if(simulatedCourt)props.push(...simulatedCourt.props);
   const buildings=installed?houses:[...houses,...castleBuildings],content=installed?.content??[...buildings,...props];
   for(const {blueprint} of content)blueprints.set(blueprintKey(blueprint),blueprint);
