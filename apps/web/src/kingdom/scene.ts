@@ -33,7 +33,7 @@ import { composeWindowCamera } from './window-camera';
 import { composeRoyalCamera } from './royal-camera';
 import { createHomeLife } from './home-life';
 import { createRoyalLife } from './royal-life';
-import { foundedLifeSites, foundedForgeSites } from './home-life-sites';
+import { foundedLifeSites, foundedForgeSites, generatedHomeLifeSites } from './home-life-sites';
 import { createForgeEmitters } from '../forge/emitters';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
 import { createObservedWalkers, walkerSlots } from './observed-walkers';
@@ -122,7 +122,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   for(const {blueprint} of content)blueprints.set(blueprintKey(blueprint),blueprint);
   const royal=installed?royalWindow(installed.forgeHosts):undefined;
   const presenceHouses=royal?[...houses,royal]:[...houses];
-  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:[],braziers:[],standard:undefined};
+  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:generatedHomeLifeSites(houses),braziers:[],standard:undefined};
   const homeLife=own(createHomeLife(scene,lifeSites.homes));
   const forgeSites=options.founded?foundedForgeSites(options.founded):simulatedSmithy??{fires:[],noses:[]};
   const forgeHearth=own(createRoyalLife(scene,clay,undefined,forgeSites.fires.filter(site=>site.normal[1]===0),undefined,true));
