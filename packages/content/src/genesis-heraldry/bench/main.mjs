@@ -11,6 +11,7 @@ import { OBSERVED_GENESIS_FIXTURES } from '../../../../world/src/genesis/observe
 import { MAT, MATERIALS, STYLES } from '../../materials.ts';
 import { createHome, createTree } from '../../core/index.ts';
 import { composeGenesisHeraldry } from '../index.ts';
+import { PROFILE_TARGETS } from '../fixtures.ts';
 import { composition, forecourt, meadow } from './stage.mjs';
 
 const CELL = VOXEL_METRES.build;
@@ -18,19 +19,24 @@ const params = new URLSearchParams(window.location.search);
 const recipeIndex = Number(params.get('recipe') ?? 0);
 const landIndex = Number(params.get('land') ?? 2);
 const hour = Number(params.get('hour') ?? 19.1);
+// `targets=profile` adds the channel's profile palette proposal as colour targets, so the snapped proposal shows.
+const withTargets = params.get('targets') === 'profile';
 const host = document.getElementById('stage');
 window.__chatdomReady = false;
 
 async function main() {
   const facts = OBSERVED_GENESIS_FIXTURES[recipeIndex];
   if (!facts) throw new Error(`No observed recipe ${recipeIndex}.`);
-  const recipe = compileChannelGenesis(facts);
+  const recipe = compileChannelGenesis(withTargets ? { ...facts, profileColours: [...PROFILE_TARGETS[facts.broadcasterId]] } : facts);
   const land = recipe.landscapes[landIndex];
   if (!land) throw new Error(`No landscape ${landIndex}.`);
   const heraldry = composeGenesisHeraldry(recipe, land);
   const style = heraldry.style;
   const plan = composition(heraldry);
-  document.getElementById('plate').innerHTML = `Genesis heraldry · neutral proposal<small>${STYLES[style].name} · ${land.character.replace('-', ' ')} · base arms, the land's own colours</small>`;
+  const { shape, charge, cut } = heraldry.device;
+  const colours = heraldry.treatment.kind === 'snapped' ? 'profile colours snapped to the dyes, not approved' : "the land's own colours";
+  const title = heraldry.treatment.kind === 'snapped' ? 'colour proposal' : 'neutral proposal';
+  document.getElementById('plate').innerHTML = `Genesis heraldry · ${title}<small>${STYLES[style].name} · ${land.character.replace('-', ' ')} · ${charge} on a ${shape} · ${cut} cloth · ${colours}</small>`;
 
   const homeStyle = style === 'grove' ? 'grove' : style;
   const placed = [
@@ -137,7 +143,7 @@ async function main() {
   await new Promise(resolve => window.requestAnimationFrame(resolve));
   post.render(0);
   renderer.getContext().finish();
-  window.__chatdomBench = { recipe: recipeIndex, land: land.character, style, treatment: heraldry.treatment.reason, standard: heraldry.standard.blueprint.id, crest: heraldry.crest.blueprint.id };
+  window.__chatdomBench = { recipe: recipeIndex, land: land.character, style, treatment: heraldry.treatment.kind, device: heraldry.device, standard: heraldry.standard.blueprint.id, crest: heraldry.crest.blueprint.id };
   window.__chatdomReady = true;
 }
 

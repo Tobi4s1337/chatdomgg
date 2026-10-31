@@ -1,16 +1,17 @@
 import { MAT } from '../materials';
-import { blazon, heater } from '../civic/kit';
+import { SHIELD_HEIGHT, SHIELD_WIDTH, shieldArms, type CrestCharge, type CrestShape } from './arms';
 import { lantern, runs, Sculpt, type HeraldicColours, type HeraldicKit, type LandscapeCharacter, type LanternAnchor } from './kit';
 
 /**
- * The crest monument, in build cells. A coursed pedestal (y 0..27) carries a 24 × 30 heater carved with the arms on
- * both faces, standing point down on a seat, between two pillars that each lift a lantern to the shield's
- * shoulder. Three cells of air part the shield's rim from each pillar, so it reads as a carved tablet in a frame. A brass lozenge crowns the shield. The slab is z 10..14; field faces are z 10 and 13, and the border,
- * charge and rim stand one cell proud at z 9 and z 14.
+ * The crest monument, in build cells. A coursed pedestal (y 0..27) carries a shield 24 wide (a 30-tall heater or
+ * swallowtail, or a 24 roundel) carved with the arms on both faces, standing on a seat between two pillars that
+ * each lift a lantern to the shield's shoulder. Three cells of air part the shield's rim from each pillar, so it
+ * reads as a carved tablet in a frame. A brass lozenge finial crowns the shield. The slab is z 10..14; field faces
+ * are z 10 and 13, and the border, charge and rim stand one cell proud at z 9 and z 14.
  */
 export const GENESIS_CREST = {
   size: [46, 72, 24],
-  shield: { x: 11, y: 30, width: 24, height: 30 },
+  shield: { x: 11, y: 30, width: SHIELD_WIDTH, height: SHIELD_HEIGHT },
   slab: [10, 14],
   faces: [[10, 9], [13, 14]],
   pillars: [[1, 7], [39, 45]],
@@ -21,10 +22,8 @@ const { shield: SHIELD } = GENESIS_CREST;
 /** The monument's axis of symmetry. */
 const MID = SHIELD.x + SHIELD.width / 2;
 
-/** The kingdom's base arms on the crest: a deep chevron and a broad lozenge on a long-sided heater. */
-export const CREST_ARMS = blazon(SHIELD.width, SHIELD.height, heater(SHIELD.width, SHIELD.height, 14), { apex: 3, thickness: 4, lozenge: [21.5, 4.5, 4.5] });
-
-export function genesisCrest(kit: HeraldicKit, colours: HeraldicColours, character: LandscapeCharacter): { boxes: Sculpt; lanterns: LanternAnchor[] } {
+export function genesisCrest(kit: HeraldicKit, colours: HeraldicColours, character: LandscapeCharacter, shape: CrestShape, charge: CrestCharge): { boxes: Sculpt; lanterns: LanternAnchor[]; arms: string[] } {
+  const arms = shieldArms(shape, charge), height = SHIELD.height[shape];
   const b = new Sculpt();
   // The pedestal: an octagonal footing and step, a die with two joints and a sunk brass panel, and a cornice.
   b.chamfer(0, 0, 0, 46, 3, 24, 3, kit.base);
@@ -51,16 +50,23 @@ export function genesisCrest(kit: HeraldicKit, colours: HeraldicColours, charact
     lanterns.push(lantern(b, side ? 'crest-lantern-east' : 'crest-lantern-west', x + 1, 46, 10));
   });
 
-  // The seat the shield's point stands on.
-  b.add(MID - 6, 27, 8, MID + 6, 28, 16, kit.base);
-  b.add(MID - 4, 28, 9, MID + 4, 30, 15, kit.stone);
-
   // The shield: a stone slab one cell larger than the arms all round, its rim standing proud as a frame.
   const [slabFrom, slabTo] = GENESIS_CREST.slab;
-  const inside = (col: number, row: number) => CREST_ARMS[row]?.[col] !== undefined && CREST_ARMS[row]![col] !== '.';
+  const inside = (col: number, row: number) => arms[row]?.[col] !== undefined && arms[row]![col] !== '.';
   const near = (col: number, row: number) => [-1, 0, 1].some(dc => [-1, 0, 1].some(dr => inside(col + dc, row + dr)));
-  for (let row = -1; row <= SHIELD.height; row++) {
-    const y = SHIELD.y + SHIELD.height - 1 - row;
+
+  // The seat: a stone block under each point the shield stands on (one for the heater and roundel, two for the
+  // swallowtail, whose notch stays open), on a footing course two cells broader than the points.
+  let lo = Infinity, hi = -Infinity;
+  runs(SHIELD.width + 2, i => near(i - 1, height) ? 1 : null, (from, to) => {
+    b.add(SHIELD.x - 1 + from, 28, 9, SHIELD.x - 1 + to, 30, 15, kit.stone);
+    lo = Math.min(lo, SHIELD.x - 1 + from);
+    hi = Math.max(hi, SHIELD.x - 1 + to);
+  });
+  b.add(lo - 2, 27, 8, hi + 2, 28, 16, kit.base);
+
+  for (let row = -1; row <= height; row++) {
+    const y = SHIELD.y + height - 1 - row;
     runs(SHIELD.width + 2, i => near(i - 1, row) ? 1 : null, (from, to) => b.add(SHIELD.x - 1 + from, y, slabFrom, SHIELD.x - 1 + to, y + 1, slabTo, kit.stone));
     runs(SHIELD.width + 2, i => near(i - 1, row) && !inside(i - 1, row) ? 1 : null, (from, to) => {
       for (const [, proud] of GENESIS_CREST.faces) b.add(SHIELD.x - 1 + from, y, proud, SHIELD.x - 1 + to, y + 1, proud + 1, kit.stone);
@@ -68,8 +74,8 @@ export function genesisCrest(kit: HeraldicKit, colours: HeraldicColours, charact
   }
   // The arms on both faces: the field is flush with the slab, border and charge stand one cell proud.
   const material = { B: colours.border, F: colours.field, C: colours.charge } as Record<string, number>;
-  CREST_ARMS.forEach((row, i) => {
-    const y = SHIELD.y + SHIELD.height - 1 - i;
+  arms.forEach((row, i) => {
+    const y = SHIELD.y + height - 1 - i;
     runs(row.length, col => row[col] === '.' ? null : row[col]!, (from, to, mark) => {
       for (const [face, proud] of GENESIS_CREST.faces) {
         b.add(SHIELD.x + from, y, face, SHIELD.x + to, y + 1, face + 1, colours.field);
@@ -78,13 +84,13 @@ export function genesisCrest(kit: HeraldicKit, colours: HeraldicColours, charact
     });
   });
 
-  // A short stone stem lifts the arms' lozenge in brass above the shield.
-  const top = SHIELD.y + SHIELD.height;
+  // A short stone stem lifts a brass lozenge, the kingdom's finial, above the shield.
+  const top = SHIELD.y + height;
   b.add(MID - 2, top + 1, 11, MID + 2, top + 2, 13, kit.stone);
   for (const [dy, half] of [[2, 1], [3, 2], [4, 3], [5, 4], [6, 3], [7, 2], [8, 1], [9, 1]] as const) b.add(MID - half, top + dy, 11, MID + half, top + dy + 1, 13, MAT.brass);
 
   dressFooting(b, kit, character);
-  return { boxes: b, lanterns };
+  return { boxes: b, lanterns, arms };
 }
 
 /** The same land marks as the standard's foot: damp by the sea, moss and flowers by a river, boulders on a pass. */

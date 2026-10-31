@@ -1,30 +1,28 @@
 import { MAT } from '../materials';
-import { blazon } from '../civic/kit';
+import { CLOTH_ROWS, CLOTH_WIDTH, clothArms, type ClothCut, type CrestCharge } from './arms';
 import { lantern, runs, Sculpt, type HeraldicColours, type HeraldicKit, type LandscapeCharacter, type LanternAnchor } from './kit';
 
 /**
  * The founding standard, in build cells. A 4 × 4 faceted pole rises 14 m from a three-stage plinth to a brass
  * lozenge. Its crossbar at y 100..102 carries a cloth 24 cells wide and 56 deep, hung in front of the pole by
- * loops of field cloth; its forked tails end at y 44, above a person's reach, so it reads over a crowd.
+ * loops of field cloth; its hem (level, forked or pointed) ends at y 44, above a person's reach, so it reads over a
+ * crowd.
  */
 export const GENESIS_STANDARD = {
   size: [32, 120, 28],
   pole: { from: [14, 14, 12], to: [18, 112, 16] },
   bar: { from: [1, 100, 13], to: [31, 102, 15] },
-  cloth: { x: 4, width: 24, top: 99, rows: 56, z: 16, thickness: 2, notch: 18 },
+  cloth: { x: 4, width: CLOTH_WIDTH, top: 99, rows: CLOTH_ROWS, z: 16, thickness: 2 },
   plinthTop: 16,
 } as const;
 
 const { cloth: CLOTH } = GENESIS_STANDARD;
 
-/** The forked cut: a deep V up from the hem that leaves two tails four cells wide at their tips. */
-const forked = (col: number, row: number) => {
-  const depth = row - (CLOTH.rows - CLOTH.notch) + 1;
-  return depth <= 0 || Math.abs(col + 0.5 - CLOTH.width / 2) > depth * (CLOTH.width / 2 - 4) / CLOTH.notch;
-};
-
-/** The kingdom's base arms on the standard: a broad chevron over a tall lozenge, read from the far side of a square. */
-export const STANDARD_ARMS = blazon(CLOTH.width, CLOTH.rows, forked, { apex: 6, thickness: 4, lozenge: [26.5, 5, 8] });
+/**
+ * Where tassels hang from the hem, as cloth columns: one at each tip of the forked and pennant cuts (found from the
+ * hem), five spaced along the square cut's level hem.
+ */
+const SQUARE_TASSELS = [2, 7, 12, 17, 22] as const;
 
 /**
  * How far each column bellies forward when the cloth is full of air: a broad fold either side of the pole, two
@@ -38,7 +36,8 @@ const fold = (col: number, row: number) => Math.min(FOLD[col]!, Math.max(0, Math
 /** Bands of the binding round the pole, below the cloth and above the bar. */
 const BANDS = [24, 34, 104] as const;
 
-export function genesisStandard(kit: HeraldicKit, colours: HeraldicColours, character: LandscapeCharacter): { boxes: Sculpt; lanterns: LanternAnchor[] } {
+export function genesisStandard(kit: HeraldicKit, colours: HeraldicColours, character: LandscapeCharacter, cut: ClothCut, charge: CrestCharge): { boxes: Sculpt; lanterns: LanternAnchor[]; arms: string[] } {
+  const arms = clothArms(cut, charge);
   const b = new Sculpt();
   // The plinth: an octagonal footing, a step, a die cut by two joints with quoins, and an oversailing cornice.
   b.chamfer(1, 0, 1, 31, 3, 27, 3, kit.base);
@@ -54,7 +53,7 @@ export function genesisStandard(kit: HeraldicKit, colours: HeraldicColours, char
     const [lx, lz] = course % 2 ? [2, 3] : [3, 2];
     for (const [x, X] of [[6, 6 + lx], [26 - lx, 26]]) for (const [z, Z] of [[6, 6 + lz], [22 - lz, 22]]) b.add(x!, y!, z!, X!, Y!, Z!, kit.band);
   });
-  // A sunk panel on both broad faces holds the arms' lozenge in brass.
+  // A sunk panel on both broad faces holds the kingdom's lozenge in brass.
   for (const [face, back] of [[21, 22], [6, 7]] as const) {
     b.add(12, 7, face, 20, 12, back, MAT.air);
     for (const [y, half] of [[7, 1], [8, 2], [9, 3], [10, 2], [11, 1]] as const) b.add(16 - half, y, face, 16 + half, y + 1, back, MAT.brass);
@@ -63,7 +62,7 @@ export function genesisStandard(kit: HeraldicKit, colours: HeraldicColours, char
   b.chamfer(5, 15, 5, 27, 16, 23, 2, kit.stone);
   dressFooting(b, kit, character);
 
-  // The pole is wedged into a dark iron collar and rises to a brass lozenge, the arms' charge, as its finial.
+  // The pole is wedged into a dark iron collar and rises to a brass lozenge, the kingdom's finial.
   b.add(12, 16, 10, 20, 19, 18, MAT.darkStone);
   b.add(13, 19, 11, 19, 20, 17, MAT.darkStone);
   const { pole, bar } = GENESIS_STANDARD;
@@ -90,7 +89,7 @@ export function genesisStandard(kit: HeraldicKit, colours: HeraldicColours, char
 
   // The cloth: the arms through both faces, two cells thick, pleated forward of the pole.
   const material = { B: colours.border, F: colours.field, C: colours.charge } as Record<string, number>;
-  STANDARD_ARMS.forEach((row, i) => {
+  arms.forEach((row, i) => {
     const y = CLOTH.top - i;
     runs(row.length, col => row[col] === '.' ? null : `${row[col]}${fold(col, i)}`, (from, to, key) => {
       const z = CLOTH.z + Number(key.slice(1));
@@ -103,17 +102,19 @@ export function genesisStandard(kit: HeraldicKit, colours: HeraldicColours, char
     b.add(x, 100, 12, x + 2, 102, 13, colours.field);
     b.add(x, 100, CLOTH.z, x + 2, 102, CLOTH.z + CLOTH.thickness, colours.field);
   }
-  // Brass tassels at both tips of the fork.
-  const last = STANDARD_ARMS[CLOTH.rows - 1]!, hem = CLOTH.top - CLOTH.rows + 1;
-  runs(last.length, col => last[col] === '.' ? null : 1, (from, to) => {
-    const col = Math.floor((from + to) / 2), centre = CLOTH.x + col, z = CLOTH.z + fold(col, CLOTH.rows - 1);
+  // Brass-headed tassels in the border colour hang from the hem.
+  const last = arms[CLOTH.rows - 1]!, hem = CLOTH.top - CLOTH.rows + 1, tassels: number[] = [];
+  if (cut === 'square') tassels.push(...SQUARE_TASSELS);
+  else runs(last.length, col => last[col] === '.' ? null : 1, (from, to) => tassels.push(Math.floor((from + to) / 2)));
+  for (const col of tassels) {
+    const centre = CLOTH.x + col, z = CLOTH.z + fold(col, CLOTH.rows - 1);
     b.add(centre - 1, hem - 1, z, centre + 1, hem, z + 2, MAT.brass);
     b.add(centre - 1, hem - 5, z, centre + 1, hem - 1, z + 2, colours.border);
-  });
+  }
 
   // Two more on the cornice light the hem and the plinth from below.
   lanterns.push(lantern(b, 'standard-lantern-west', 6, 16, 17), lantern(b, 'standard-lantern-east', 22, 16, 17));
-  return { boxes: b, lanterns };
+  return { boxes: b, lanterns, arms };
 }
 
 /**
