@@ -330,8 +330,18 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Latest direction:** finish the focused landing take, commit, end the turn. Tobias has a new goal coming;
-the previous live-evening goal is paused. No new lanes, broad test matrices or accepted-work re-review.
+**Current order:** Twitch is home: stream view is the stage, chat the controller, events the physics.
+Real tobi4s_ presence → shared room + stream arrival first; then stream director, real !forge, event physics,
+raid journey, earned growth/Chronicle, chat-led fire, panel/emotes. Walking stays accepted; no further polish.
+Refresh Atlas (raid road/entry only), raid-gate, twitch-moments, emotes and campfire lanes next; progression
+lanes follow a frozen growth contract. Parked world lanes finish current work. Short turns, delegate reading.
+
+**Grant fix:** Herald reader consent now includes user:write:chat for the crier and unions ALL scopes already
+held by this client/user, including scopes outside Herald. Existing read-only chat grants still allow ingest.
+Realm remains openid-only; any future API scopes must first preserve existing grants. Focused auth tests cover
+actual consent URL/callback with an unrelated polls grant preserved. No consent or chat message sent by main.
+Use `/stream?source=realm&kingdom=129634568` for the real room-backed OBS surface. Need Tobias's re-grant and
+first real line to demonstrate the shared arrival; Herald room delivery currently configured, no fault.
 
 **Live entry repaired:** ad344fc holds Colyseus patch publication until async room authority initialization
 finishes. The real failure was POST `/live-realm-data/matchmake/joinOrCreate/kingdom`502, then loss of the
@@ -371,4 +381,4 @@ scene134778eb60ac5414858df3c7cee5ed2abc4d65ba4331e45a259c5cc75294d4b3. Keep plot
 Hearth/braziers/door lamps/royal standard/gate fires/market log installed. Monarch65534 owns the keep pane.
 **Remaining seams:** GD03 solid gardens need durable collision mounting; real cheer/hype source binding pending;
 PW05 dense cove and AH04 sculpt refinements remain lane tasks. Accepted walking smoothing unchanged; GPU/phone
-feel needs real-device judgement. No newly reviewed lane delta was found this turn. Wait for Tobias's next goal.
+feel needs real-device judgement. No newly reviewed lane delta was found this turn. Continue with real chat and the stream director.
