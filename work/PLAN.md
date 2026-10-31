@@ -337,7 +337,8 @@ Realm lanes are parked; main owns the remaining evening core with Sol-high/Terra
 kingdom-land, ground-dressing, places-water, places-high, kingdom-light, first-look-polish, anvil-hero, interactions.
 
 **Merged this turn:** kingdom-light KL02 atmosphere/glass follow-up, panel-stream PS06, crowd-behaviour CB03,
-forge-ritual FR02. Earlier WC07, KL01/03/04/05, AH01/03 and IN01/02 remain accepted. Nothing sent back or held.
+forge-ritual FR02; then AH02 heated runes, KL04 sun through glass, FL01 source seal and PW02 shore helpers.
+Earlier WC07, KL01/03/05, AH01/03 and IN01/02 stand. Nothing sent back or held.
 The observed shortcomings below are next tasks, not acceptance gates.
 
 **Core landed:** `dbc8118` freezes person-bound Herald delivery and shares exact scene decoding with the browser.
@@ -365,8 +366,9 @@ Herald needs its main build restarted with `HERALD_REALM_URL=http://127.0.0.1:51
 scratch-Postgres cold boot/restart test passes. The full evening is not claimed. Serial browser walking smoke
 opened/moved in the complete SIMULATED town without page errors. Looked at `shots/kingdom/founded-walk@1440x900.png`
 and `@390x844.png`, `evening-street@1440x900.png`, actual anonymous `live-signin@390x844.png`, and `realm-forge-drafting@1440x900.png` (SIMULATED pending stage).
-Warm plaster/windows read better; the arrival still faces a bare bank/cropped castle and front strips remain
-empty. Dressing gets one tended verge vignette; first-look keeps the arrival-framing task. Merges stand.
+Warm plaster/windows read better; bare banks and empty front strips persist. Dressing gets a tended verge;
+first-look keeps arrival framing. Looked at lane glass/seal shots and the heated-anvil close shot; fixed the brown
+engraving badge by keeping heat in the cuts, then captured/looked again. Merges stand.
 
 **Priority now:** The founder's new goal is the real live evening and a watched 60–90 s capture, then glassy
 walking, world love, hero anvil/dragon, deep interactions and one Twitch spectacle. No immediate load-test detour.
