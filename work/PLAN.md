@@ -339,6 +339,9 @@ tools merged and pushed; parked/incomplete campfire/table work remains outside m
 **Integrated:** RS07 district views, IN03 controls, FR03 audio, WB02 body/hair/eyes, BT04 publication, AtlasA03–A05,
 E01 emotes, RG01 gate, founded collision; AH05 anvil exports, KL05 ground warmth, LD02 geography, GD01 meadow kit,
 FL03 readable build labels/resting controls. Phone disabled-reason words remain the polish lane's next task.
+Reviewed civic carts/stores now compose beside the installed first market stall through the founded provider:
+two fixtures at[-13.5,9,3.5] and[-8.5,9,.5] in the actual adopted town. The pinned baseline/homes stay exact; public
+scene digest/collision/adoption include the wares. Second-stall candidates are omitted for road/home clearance.
 Passive flowers/tufts now mount over the actual adopted v1 plots/court and occupied geometry, using rendered ground
 and shared lighting. Solid gardens wait for authoritative collision composition; homes/streets never move to a new
 generator. Native founded compilation still consumes adopted v1 land. Market cart/worn planting is the ground
@@ -386,5 +389,7 @@ looked comparison is `work/evidence/first-look-polish/fl03/zoom-sheet.png`. Prev
 `shots/kingdom/live-evening/adopted-cover@1440x900.png`, `shots/forge/room-hot-pour-framed@1440x900.png` and
 `shots/forge/room-cool@1440x900.png`. Flowers soften fronts but town too tidy/empty; dragon still weak. Changed
 contract/watch/pose/citizen/footstep checks, typecheck, scoped lint and web/realm builds cover this slice, not a full verify.
+Market composition/provider checks(3), typecheck, scoped lint and realm build pass; selected live market capture:
+`shots/kingdom/live-evening/market-wares@1440x900.png`. Ground lane keeps planting/wear, not a duplicate civic cart.
 Next acceptance remains real chat→shared arrival/window/bubble, real wish→judged piece→right home, two/three real
 walkers/director, then record and watch60–90seconds. No full evening capture or real-GPU smoothness acceptance yet.
