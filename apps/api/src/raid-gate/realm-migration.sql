@@ -72,3 +72,51 @@ CREATE TABLE realm_raid_gate_outbox (
   CHECK ((record::jsonb ->> 'revision')::bigint = revision)
 );
 CREATE INDEX realm_raid_gate_outbox_state ON realm_raid_gate_outbox (state, outbox_id COLLATE "C");
+
+-- One person's one journey between kingdoms (RG09, `apps/realm/src/raid-gate/records.ts`): reserved, readied, committed
+-- once, or rolled back. Unique per (person, request) so a retried reservation returns its ticket.
+CREATE TABLE realm_raid_travel (
+  ticket     text PRIMARY KEY CHECK (length(ticket) BETWEEN 1 AND 128 AND ticket ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'),
+  person_id  text NOT NULL CHECK (person_id ~ '^[1-9][0-9]{0,31}$'),
+  request_id text NOT NULL CHECK (length(request_id) BETWEEN 1 AND 128),
+  state      text NOT NULL CHECK (state IN ('reserved', 'preparing', 'ready', 'committing', 'committed', 'cancelled', 'expired', 'denied', 'unknown')),
+  release    text NOT NULL CHECK (release IN ('none', 'destination', 'source')),
+  revision   bigint NOT NULL CHECK (revision > 0 AND revision <= 9007199254740991),
+  record     text NOT NULL CHECK (octet_length(record) <= 4096),
+  UNIQUE (person_id, request_id),
+  CHECK (record::jsonb ->> 'ticket' = ticket),
+  CHECK (record::jsonb ->> 'personId' = person_id),
+  CHECK (record::jsonb ->> 'requestId' = request_id),
+  CHECK (record::jsonb ->> 'state' = state),
+  CHECK (record::jsonb ->> 'release' = release),
+  CHECK ((record::jsonb ->> 'revision')::bigint = revision)
+);
+CREATE INDEX realm_raid_travel_open ON realm_raid_travel (ticket COLLATE "C") WHERE state IN ('reserved', 'preparing', 'ready', 'committing', 'unknown');
+CREATE INDEX realm_raid_travel_release ON realm_raid_travel (ticket COLLATE "C") WHERE release <> 'none';
+
+-- Immutable evidence that a destination acknowledged one person's arrival, one per committed ticket. Never public.
+CREATE TABLE realm_raid_arrivals (
+  arrival_id text PRIMARY KEY CHECK (length(arrival_id) BETWEEN 1 AND 140),
+  ticket     text NOT NULL UNIQUE REFERENCES realm_raid_travel (ticket) DEFERRABLE INITIALLY DEFERRED,
+  person_id  text NOT NULL CHECK (person_id ~ '^[1-9][0-9]{0,31}$'),
+  revision   bigint NOT NULL CHECK (revision = 1),
+  record     text NOT NULL CHECK (octet_length(record) <= 4096),
+  CHECK (arrival_id = 'arrival.' || ticket),
+  CHECK (record::jsonb ->> 'arrivalId' = arrival_id),
+  CHECK (record::jsonb ->> 'ticket' = ticket),
+  CHECK (record::jsonb ->> 'personId' = person_id),
+  CHECK ((record::jsonb ->> 'revision')::bigint = revision)
+);
+
+-- The one authoritative walking location per person, its membership fencing generation and outstanding journey.
+CREATE TABLE realm_raid_whereabouts (
+  person_id  text PRIMARY KEY CHECK (person_id ~ '^[1-9][0-9]{0,31}$'),
+  kingdom_id text NOT NULL CHECK (kingdom_id ~ '^[1-9][0-9]{0,31}$'),
+  generation bigint NOT NULL CHECK (generation >= 0 AND generation <= 9007199254740991),
+  revision   bigint NOT NULL CHECK (revision > 0 AND revision <= 9007199254740991),
+  record     text NOT NULL CHECK (octet_length(record) <= 4096),
+  CHECK (record::jsonb ->> 'personId' = person_id),
+  CHECK (record::jsonb ->> 'kingdomId' = kingdom_id),
+  CHECK ((record::jsonb ->> 'generation')::bigint = generation),
+  CHECK ((record::jsonb ->> 'revision')::bigint = revision)
+);

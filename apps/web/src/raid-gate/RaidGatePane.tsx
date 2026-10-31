@@ -1,6 +1,6 @@
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { GATE_LIMITS, type GateDenial } from '../../../api/src/raid-gate/contracts';
-import type { GateDestination, GateFarewell, GateNotice, GateSnapshot, RaidGateController } from './controller';
+import type { GateDestination, GateFarewell, GateNotice, GateSnapshot, JourneySnapshot, RaidGateController } from './controller';
 import { Seal } from './Seal';
 
 /**
@@ -24,18 +24,19 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
   const simulated = () => s().origin === 'simulated';
   const name = () => s().source.name;
 
-  return <aside class="rg-pane" data-phase={s().phase} data-viewer={s().viewer ?? 'none'} aria-labelledby="rg-title">
+  return <aside class="rg-pane" data-phase={s().journey ? 'journey' : s().phase} data-viewer={s().viewer ?? 'none'} aria-labelledby="rg-title">
     <div class="rg-board">
       <Corner at="tl" /><Corner at="tr" /><Corner at="bl" /><Corner at="br" />
       <header class="rg-head">
         <Seal kingdomId={s().source.kingdomId} size={58} label={`Arms of ${name()}`} />
         <div class="rg-head-words">
           <p class="rg-eyebrow">The gate of {name()}</p>
-          <h2 id="rg-title" class="rg-title">{title(s())}</h2>
+          <h2 id="rg-title" class="rg-title">{s().journey ? journeyTitle(s(), s().journey!) : title(s())}</h2>
         </div>
       </header>
       <div class="rg-parchment">
         <Show when={s().notice}>{notice => <p class="rg-notice" role="alert">{noticeText(notice(), s())}</p>}</Show>
+        <Show when={!s().journey} fallback={<TravelBoard snap={s()} journey={s().journey!} controller={props.controller} />}>
         <Switch>
           <Match when={s().phase === 'unbound'}>
             <p class="rg-lede">This view isn't signed in to {name()}'s gate, so nothing here can call a raid or move anyone.</p>
@@ -111,6 +112,12 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
           </Match>
           <Match when={s().phase === 'departed' && s().destination && s().raid}>
             <Departure snap={s()} destination={s().destination!} />
+            <Show when={s().canTravel}>
+              <div class="rg-actions rg-follow">
+                <button class="rg-button rg-primary" onClick={() => void props.controller.travel()}><Glyph kind="gate" />Follow the party through the gate</button>
+              </div>
+              <p class="rg-quiet">You'll stay in {name()} until {destinationName(s().destination!)} is ready for you. Your door here is kept.</p>
+            </Show>
           </Match>
           <Match when={(s().phase === 'called-off' || s().phase === 'refused') && s().destination}>
             <p class="rg-farewell" role="status">
@@ -136,6 +143,7 @@ export function RaidGatePane(props: { controller: RaidGateController; clock: () 
             <p class="rg-quiet">Nobody travels unless they choose to. Staying is always fine.</p>
           </Match>
         </Switch>
+        </Show>
       </div>
       <Show when={simulated()}><p class="rg-simulated" title="Bench authority, walkers and Twitch answers; nothing reaches Twitch"><span class="rg-pip" />SIMULATED</p></Show>
     </div>
@@ -304,6 +312,192 @@ function Departure(props: { snap: GateSnapshot; destination: GateDestination }) 
       <a class="rg-button rg-watch" href={`https://www.twitch.tv/${channel().login}`} target="_blank" rel="noopener noreferrer"><Glyph kind="eye" />Watch {channel().displayName} on Twitch</a>
     }</Show>
   </section>;
+}
+
+// ---- One walker's journey through the gate ------------------------------------------------------------------------
+
+function journeyNames(s: GateSnapshot, j: JourneySnapshot): Readonly<{ leaving: string; going: string }> {
+  const away = j.destination ? destinationName(j.destination) : 'that kingdom';
+  return j.kind === 'return' ? { leaving: away, going: s.source.name } : { leaving: s.source.name, going: away };
+}
+
+function journeyTitle(s: GateSnapshot, j: JourneySnapshot): string {
+  const { going } = journeyNames(s, j);
+  if (j.refusal) return j.refusal === 'full' ? `${going} is full right now` : "You're still home";
+  switch (j.state) {
+    case 'asking': case 'reserved': return j.kind === 'return' ? 'Setting out for home' : `Setting out for ${going}`;
+    case 'preparing': return j.overrun ? `${going} is still drawing its world` : `${going} draws its world`;
+    case 'ready': case 'committing': return 'Stepping through the gate';
+    case 'unknown': return 'Confirming where you stand';
+    case 'committed': return j.kind === 'return' ? `Home in ${going}` : `At the gate of ${going}`;
+    case 'cancelled': return 'You turned back';
+    case 'expired': return 'The held place lapsed';
+    case 'denied': return `${going} couldn't take you`;
+  }
+}
+
+const JOURNEY_ORDER = ['asking', 'reserved', 'preparing', 'ready', 'committing', 'unknown', 'committed'] as const;
+
+/** Where the lantern stands on the road, as a fraction of the way. Rolled-back journeys never left. */
+function lanternAt(j: JourneySnapshot): number {
+  switch (j.state) {
+    case 'asking': case 'reserved': return .14;
+    case 'preparing': return .42;
+    case 'ready': case 'committing': case 'unknown': return .76;
+    case 'committed': return 1;
+    default: return 0;
+  }
+}
+
+/**
+ * A point on the road's curve (`M2 26C22 6 38 34 60 20s36-10 58 2`, in its 120×40 drawing), a fraction of the way
+ * along: two cubic segments, the second the smooth continuation of the first.
+ */
+function roadPoint(fraction: number): Readonly<{ x: number; y: number }> {
+  const segments = [[[2, 26], [22, 6], [38, 34], [60, 20]], [[60, 20], [82, 6], [96, 10], [118, 22]]] as const;
+  const f = Math.min(1, Math.max(0, fraction));
+  const [p0, p1, p2, p3] = segments[f <= .5 ? 0 : 1];
+  const t = f <= .5 ? f * 2 : f * 2 - 1, u = 1 - t;
+  const at = (axis: 0 | 1) => u * u * u * p0[axis] + 3 * u * u * t * p1[axis] + 3 * u * t * t * p2[axis] + t * t * t * p3[axis];
+  return { x: at(0), y: at(1) };
+}
+
+function TravelBoard(props: { snap: GateSnapshot; journey: JourneySnapshot; controller: RaidGateController }) {
+  const s = () => props.snap;
+  const j = () => props.journey;
+  const names = () => journeyNames(s(), j());
+  const away = () => j().destination;
+  const waxAway = () => away()?.land && away()!.land !== 'founded' ? 'umber' as const : 'crimson' as const;
+  const leftSeal = () => j().kind === 'return' ? away()?.target.kingdomId ?? j().from : s().source.kingdomId;
+  const rightSeal = () => j().kind === 'return' ? s().source.kingdomId : j().to;
+  const rolledBack = () => j().state === 'cancelled' || j().state === 'expired' || j().state === 'denied' || j().refusal !== null;
+  const arrived = () => j().state === 'committed';
+  return <section class="rg-travel" data-state={j().refusal ? 'refused' : j().state} data-kind={j().kind} aria-label="Your journey">
+    <div class="rg-road rg-road-travel" style={{ '--lantern': String(lanternAt(j())) }}>
+      <figure class="rg-end">
+        <Seal kingdomId={leftSeal()} size={64} wax={j().kind === 'return' ? waxAway() : 'crimson'} />
+        <figcaption>{names().leaving}</figcaption>
+      </figure>
+      <div class="rg-travel-way" aria-hidden="true">
+        <svg class="rg-ink-road rg-ink-road-travel" viewBox="0 0 120 40" preserveAspectRatio="none">
+          <path class="rg-road-trace" d="M2 26C22 6 38 34 60 20s36-10 58 2" />
+          <path class="rg-road-walked" pathLength="100" d="M2 26C22 6 38 34 60 20s36-10 58 2" />
+        </svg>
+        <Show when={!rolledBack()}>{(() => {
+          const point = () => roadPoint(lanternAt(j()));
+          return <span class="rg-lantern" style={{ left: `${(point().x / 120) * 100}%`, top: `${12 + point().y}px` }}><span class="rg-lantern-flame" /></span>;
+        })()}</Show>
+      </div>
+      <figure class="rg-end rg-end-goal" classList={{ 'rg-end-lit': arrived() }}>
+        <Show when={arrived()}><span class="rg-torchlight" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span></Show>
+        <Seal kingdomId={rightSeal()} size={64} wax={j().kind === 'return' ? 'crimson' : waxAway()} />
+        <figcaption>{names().going}</figcaption>
+      </figure>
+    </div>
+    <Switch>
+      <Match when={j().refusal}>{code => <RefusedJourney snap={s()} journey={j()} code={code()} controller={props.controller} />}</Match>
+      <Match when={rolledBack()}>
+        <p class="rg-farewell" role="status">
+          <Seal kingdomId={rightSeal()} size={34} wax={j().kind === 'return' ? 'crimson' : waxAway()} />
+          <span>{j().state === 'cancelled' ? `You turned back before stepping through. You never left ${names().leaving}, and nothing moved.`
+            : j().state === 'expired' ? `The place ${names().going} held for you lapsed before you stepped through. You never left ${names().leaving}.`
+            : `${names().going} couldn't take you just now. You never left ${names().leaving}, and your door is where you left it.`}</span>
+        </p>
+        <div class="rg-actions">
+          <Show when={j().kind === 'raid'}><button class="rg-button rg-primary" onClick={() => { props.controller.dismissJourney(); void props.controller.travel(); }}><Glyph kind="gate" />Try the gate again</button></Show>
+          <button class="rg-button" onClick={() => props.controller.dismissJourney()}>{j().kind === 'raid' ? 'Stay home' : 'Stay here'}</button>
+        </div>
+      </Match>
+      <Match when={arrived() && j().kind === 'raid'}>
+        <Arrived snap={s()} journey={j()} controller={props.controller} />
+      </Match>
+      <Match when={arrived()}>
+        <p class="rg-arrival-line">You're home in {names().going}. Your door is right where you left it.</p>
+        <div class="rg-actions"><button class="rg-button rg-primary" onClick={() => props.controller.dismissJourney()}><Glyph kind="check" />Put the journey away</button></div>
+      </Match>
+      <Match when={j().state === 'unknown'}>
+        <JourneySteps snap={s()} journey={j()} />
+        <p class="rg-checking" role="status"><Quill /><span>Your step through the gate is being confirmed with {names().going}. You stand in exactly one place, and nothing will move you twice.</span></p>
+        <div class="rg-actions">
+          <button class="rg-button" disabled={j().busy !== null} aria-busy={j().busy === 'reconcile'} onClick={() => void props.controller.reconcileTravel()}>{j().busy === 'reconcile' ? 'Checking…' : 'Check again'}</button>
+        </div>
+      </Match>
+      <Match when={true}>
+        <JourneySteps snap={s()} journey={j()} />
+        <Show when={j().overrun} fallback={<p class="rg-quiet">You're still in {names().leaving} until you step through. {j().kind === 'raid' ? 'Your door there is kept.' : ''}</p>}>
+          <p class="rg-overrun" role="status"><Quill /><span>{names().going} is taking longer than usual to ready its world. The road holds, and you're still in {names().leaving} until it's ready.</span></p>
+        </Show>
+        <Show when={j().state !== 'committing'}>
+          <div class="rg-actions">
+            <button class="rg-button rg-subtle" disabled={j().busy !== null || j().ticket === null} aria-busy={j().busy === 'cancel'} onClick={() => void props.controller.cancelTravel()}>
+              <Glyph kind="bar" />{j().busy === 'cancel' ? 'Turning back…' : j().kind === 'raid' ? 'Turn back and stay home' : 'Stay a while longer'}
+            </button>
+          </div>
+        </Show>
+      </Match>
+    </Switch>
+  </section>;
+}
+
+/** The authority's real stages, inked as each one is answered. */
+function JourneySteps(props: { snap: GateSnapshot; journey: JourneySnapshot }) {
+  const j = () => props.journey;
+  const going = () => journeyNames(props.snap, j()).going;
+  const at = () => JOURNEY_ORDER.indexOf(j().state as typeof JOURNEY_ORDER[number]);
+  const steps = () => [
+    { label: `${going()} holds a place for you`, from: 0, until: 2 },
+    { label: `${going()} draws its world`, from: 2, until: 3 },
+    { label: 'Stepping through the gate', from: 3, until: 6 },
+  ];
+  return <ol class="rg-steps">
+    <For each={steps()}>{step => {
+      const state = () => at() >= step.until ? 'done' : at() >= step.from ? 'now' : 'later';
+      return <li data-step={state()} aria-current={state() === 'now' ? 'step' : undefined}>
+        <span class="rg-step-mark" aria-hidden="true"><Show when={state() === 'done'}><Glyph kind="check" /></Show></span>
+        <span>{step.label}</span>
+      </li>;
+    }}</For>
+  </ol>;
+}
+
+function Arrived(props: { snap: GateSnapshot; journey: JourneySnapshot; controller: RaidGateController }) {
+  const s = () => props.snap;
+  const j = () => props.journey;
+  const going = () => journeyNames(s(), j()).going;
+  const role = () => j().role === 'monarch' ? `You're on your own throne in ${going()}.`
+    : j().role === 'citizen' ? `You're at your own door in ${going()}.`
+    : `You stand at ${going()}'s gate as a visitor. You carry no rank here, only your company.`;
+  return <>
+    <p class="rg-arrival-line">{role()}</p>
+    <p class="rg-quiet">Your home in {s().source.name} waits behind you, exactly as you left it. Coming home is your choice, whenever you like.</p>
+    <div class="rg-actions">
+      <button class="rg-button rg-primary" disabled={j().busy !== null} onClick={() => void props.controller.returnHome()}><Glyph kind="boot" />Return to {s().source.name}</button>
+      <Show when={j().destination?.channel}>{channel =>
+        <a class="rg-button rg-watch" href={`https://www.twitch.tv/${channel().login}`} target="_blank" rel="noopener noreferrer"><Glyph kind="eye" />Watch on Twitch</a>
+      }</Show>
+    </div>
+  </>;
+}
+
+function RefusedJourney(props: { snap: GateSnapshot; journey: JourneySnapshot; code: GateDenial; controller: RaidGateController }) {
+  const names = () => journeyNames(props.snap, props.journey);
+  const text = () => {
+    switch (props.code) {
+      case 'full': return `${names().going} has no room right now. Nobody was moved and nothing was held. Wait a moment and ask again, or stay home.`;
+      case 'unauthorized': return `${names().going} isn't admitting you right now. You never left ${names().leaving}.`;
+      case 'unavailable': return `${names().going} can't be reached right now. Nothing moved.`;
+      case 'stale': return `That journey has moved on. You're still in ${names().leaving}.`;
+      case 'invalid': return "That journey didn't look right, so nothing moved.";
+    }
+  };
+  const retry = () => props.journey.kind === 'raid' ? props.controller.travel() : props.controller.returnHome();
+  return <>
+    <p class="rg-farewell" role="status"><Seal kingdomId={props.journey.to} size={34} wax="umber" /><span>{text()}</span></p>
+    <div class="rg-actions">
+      <Show when={props.code === 'full' && props.journey.kind === 'raid'}><button class="rg-button rg-primary" onClick={() => { props.controller.dismissJourney(); void retry(); }}><Glyph kind="hourglass" />Ask again</button></Show>
+      <button class="rg-button" onClick={() => props.controller.dismissJourney()}>{props.journey.kind === 'raid' ? 'Stay home' : 'Stay here'}</button>
+    </div>
+  </>;
 }
 
 function remaining(expiresAt: number | null, now: number): string {

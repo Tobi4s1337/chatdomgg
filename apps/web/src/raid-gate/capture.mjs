@@ -25,6 +25,9 @@ const FRAMES = [
   { name: 'countdown-stream', size: STREAM, query: `bench=simulated&pick=${FERN}&walkers=4&join=1&start=1`, expect: { phase: 'countdown', state: 'pending', optedIn: 5, joined: true } },
   { name: 'departure-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&start=1&witness=1`, expect: { phase: 'departed', state: 'landed', optedIn: 5, joined: true } },
   { name: 'checking-phone', size: PHONE, query: `bench=simulated&pick=${FERN}&walkers=2&start=1&twitch=lose`, expect: { phase: 'checking', state: 'unknown' } },
+  { name: 'arrival-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&start=1&witness=1&go=1`, expect: { phase: 'departed' }, journey: { kind: 'raid', state: 'committed', role: 'visitor' } },
+  { name: 'journey-overrun-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&start=1&witness=1&go=1&rooms=hold`, expect: { phase: 'departed' }, journey: { state: 'preparing', overrun: true } },
+  { name: 'journey-confirming-phone', size: PHONE, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=2&join=1&start=1&witness=1&go=1&rooms=lose`, expect: { phase: 'departed' }, journey: { state: 'committed' } },
 ];
 
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1].split(',') : null;
@@ -47,6 +50,7 @@ try {
     await page.evaluate(() => document.fonts.ready);
     const snapshot = await page.evaluate(() => window.__chatdomRaidGate?.snapshot() ?? null);
     for (const [key, value] of Object.entries(frame.expect)) assert.equal(snapshot?.[key], value, `${frame.name}: ${key}`);
+    for (const [key, value] of Object.entries(frame.journey ?? {})) assert.equal(snapshot?.journey?.[key], value, `${frame.name}: journey.${key}`);
     const simulated = await page.getByText('SIMULATED', { exact: false }).count();
     assert.ok(simulated > 0, `${frame.name}: SIMULATED must be visible`);
     const clipped = await page.evaluate(() => {

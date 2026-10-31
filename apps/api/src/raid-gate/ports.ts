@@ -3,8 +3,8 @@
  * about who may open the gate, which preview is current and who is marching stays in the application.
  */
 import type { AtlasRaid } from '../../../../packages/shared/src/atlas-raids';
-import type { KingdomId } from '../../../../packages/shared/src/identity';
-import type { GatePrincipal, GateTarget } from './contracts';
+import type { KingdomId, PersonId } from '../../../../packages/shared/src/identity';
+import type { GateContext, GateDenial, GatePrincipal, GateReply, GateTarget, TravelReason } from './contracts';
 import type { RaidGateRepository, RecordOrigin } from './repository';
 
 /**
@@ -99,6 +99,36 @@ export type RaidObservationReceipt =
 /** What one recovery pass did, for main's log. */
 export type RaidGateRecovery = Readonly<{ reconciled: number; sent: number; lapsed: number; delivered: number; overdue: number }>;
 
+/**
+ * Whether this person marched on this witnessed raid and may travel with it now. Implemented by the gate application
+ * over its own records (`createRaidMarchCheck`); the realm's travel coordinator asks it before reserving and again
+ * before committing, so a walker who chose to stay home is never moved.
+ */
+export type RaidMarchVerdict =
+  | Readonly<{ kind: 'marching'; from: KingdomId; to: KingdomId; founded: boolean; origin: RecordOrigin }>
+  | Readonly<{ kind: 'refused'; code: GateDenial }>;
+export interface RaidMarchCheck {
+  check(personId: PersonId, requestId: string, raidId: string, now: number, signal: AbortSignal): Promise<RaidMarchVerdict>;
+}
+
+/** A travel command's answer: the ticket as this person may see it, or a refusal. */
+export type TravelReply = Extract<GateReply, { kind: 'travel' } | { kind: 'denied' }>;
+
+/**
+ * The realm's travel coordinator as the gate application delegates to it (`apps/realm/src/raid-gate`). The context
+ * is the authenticated viewer's; the coordinator checks that every ticket is theirs.
+ */
+export interface RaidTravel {
+  readonly origin: RecordOrigin;
+  reserve(context: GateContext, requestId: string, target: KingdomId, reason: TravelReason): Promise<TravelReply>;
+  prepare(context: GateContext, ticket: string): Promise<TravelReply>;
+  commit(context: GateContext, ticket: string): Promise<TravelReply>;
+  cancel(context: GateContext, ticket: string): Promise<TravelReply>;
+  reconcile(context: GateContext, ticket: string): Promise<TravelReply>;
+  /** The person's outstanding journey, else the journey that brought them where they are now. */
+  whereabouts(context: GateContext): Promise<TravelReply>;
+}
+
 export type RaidGateDeps = Readonly<{
   repository: RaidGateRepository;
   policy: GatePolicy;
@@ -114,4 +144,6 @@ export type RaidGateDeps = Readonly<{
   roads?: AtlasRoadIngress | null;
   /** How long one Twitch call may take before its answer counts as unknown. */
   dispatchTimeoutMs?: number;
+  /** Null until main binds the realm's room transport: travel commands then answer `unavailable`. */
+  travel?: RaidTravel | null;
 }>;

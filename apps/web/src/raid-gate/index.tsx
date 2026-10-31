@@ -15,8 +15,8 @@ import { Seal } from './Seal';
 import './raid-gate.css';
 
 export { createRaidGateController, RaidGatePane };
-export type { GateFarewell, GatePhase, GateSnapshot, RaidGateController } from './controller';
-export type { AtlasGateEvent, AtlasGateHost, GateAccount, GateKingdom, GateLand, RaidGateApi, RaidGatePorts } from './ports';
+export type { GateFarewell, GatePhase, GateSnapshot, JourneySnapshot, RaidGateController } from './controller';
+export type { AtlasGateEvent, AtlasGateHost, AtlasTravelStage, GateAccount, GateKingdom, GateLand, RaidGateApi, RaidGatePorts } from './ports';
 
 type GateWindow = Window & { __chatdomReady?: boolean; __chatdomRaidGate?: unknown };
 const AUTHORITIES = ['ready', 'offline', 'not-connected', 'revoked', 'disabled', 'unavailable'] as const;
@@ -64,7 +64,8 @@ export default function RaidGateRoute() {
       if (benchMode) {
         const { createGateBench } = await import('./bench');
         const twitch = (['accept', 'lose', 'refuse'] as const).find(each => each === query.get('twitch')) ?? 'accept';
-        made = createGateBench({ viewer, authority, clock, twitch });
+        const rooms = (['ready', 'slow', 'hold', 'lose', 'deny'] as const).find(each => each === query.get('rooms')) ?? 'ready';
+        made = createGateBench({ viewer, authority, clock, twitch, rooms });
         made.finder.onChange(() => setFinderOpen(made!.finder.open()));
         ports = { api: made.api, atlas: made.atlas, source: made.source, clock, account: { reconnect: () => made!.reconnect() } };
       }
@@ -89,6 +90,18 @@ export default function RaidGateRoute() {
           else { await made.monarchStart(requestId); await gate.refresh(); }
         }
         if (requestId && query.get('witness') === '1') { await made.witness(requestId); await gate.refresh(); }
+        if (requestId && query.get('go') === '1') {
+          // The marcher follows the party; the board shows each stage as the SIMULATED rooms answer it.
+          void gate.travel();
+          await waitFor(gate, snapshot => {
+            const journey = snapshot.journey;
+            return journey !== null && (journey.overrun || journey.refusal !== null || !['asking', 'reserved', 'preparing', 'ready', 'committing'].includes(journey.state));
+          });
+          if (query.get('home') === '1' && gate.snapshot().journey?.state === 'committed') {
+            void gate.returnHome();
+            await waitFor(gate, snapshot => snapshot.journey?.kind === 'return' && ['committed', 'denied', 'expired', 'cancelled'].includes(snapshot.journey.state));
+          }
+        }
         if (requestId && query.get('close') === '1') {
           if (viewer === 'monarch') await gate.cancel();
           else { await made.monarchClose(requestId); await gate.refresh(); }

@@ -14,7 +14,11 @@
  *   ingress correlated to this request, for this pair, inside this request's window. That raid goes on to the Atlas's
  *   road ingestion through the same outbox (R3, R11).
  *
- * Commands that later tasks own (travel, passport, gifts) answer `unavailable`: honest, never success.
+ * - Travel commands go to the realm's travel coordinator (`deps.travel`) once the viewer's session is current. A raid
+ *   journey is open only to someone who chose to march on that witnessed raid, which `createRaidMarchCheck` answers
+ *   from this application's own records (R4, R5).
+ *
+ * Commands that later tasks own (passport, gifts) answer `unavailable`: honest, never success.
  */
 import { AtlasRaidSchema } from '../../../../packages/shared/src/atlas-raids';
 import { kingdomForBroadcaster } from '../../../../packages/shared/src/identity';
@@ -25,10 +29,12 @@ import {
 } from './contracts';
 import { epoch, fields, kingdom, oneOf, person, token } from './guard';
 import type {
-  GateNotifier, RaidGateDeps, RaidGateRecovery, RaidObservationReceipt, RaidWrite, RaidWriteOutcome, SourceStanding, TrustedRaidObservation,
+  GateNotifier, RaidGateDeps, RaidGateRecovery, RaidMarchCheck, RaidMarchVerdict, RaidObservationReceipt, RaidTravel, RaidWrite, RaidWriteOutcome,
+  SourceStanding, TrustedRaidObservation,
 } from './ports';
 import {
   outboxId,
+  type RaidGateRepository,
   type GatePointerRecord, type OutboxKind, type PartyMemberRecord, type RaidActionRecord, type RaidGateTransaction, type RaidOutboxRecord, type Stored,
 } from './repository';
 
@@ -164,14 +170,40 @@ function readObservation(value: unknown): TrustedRaidObservation | undefined {
   return { raid: raid.data, upstreamEventId, actionRequestId, receivedAt };
 }
 
+/** How long after the party set out a marcher may still follow it through the gate. */
+export const MARCH_WINDOW_MS = GATE_LIMITS.settledShowMs;
+
+/**
+ * The gate's answer to the realm's travel coordinator: did this person choose to march on this witnessed raid, and
+ * may they still follow it? Read from the gate's own durable records, never from the viewer.
+ */
+export function createRaidMarchCheck(repository: RaidGateRepository): RaidMarchCheck {
+  return {
+    async check(personId, requestId, raidId, now, signal): Promise<RaidMarchVerdict> {
+      const found = await repository.transaction(async tx => {
+        const action = await tx.getAction(requestId);
+        return action ? { action, member: await tx.getMember(requestId, personId) } : null;
+      }, signal);
+      if (!found) return { kind: 'refused', code: 'stale' };
+      const { action, member } = found;
+      // Only a raid Twitch actually carried out moves anyone, and only the one this person chose.
+      if (action.state !== 'landed' || action.raid?.id !== raidId) return { kind: 'refused', code: 'stale' };
+      if (member?.joined !== true || member.kingdomId !== action.from) return { kind: 'refused', code: 'unauthorized' };
+      if (now >= action.observedAt + MARCH_WINDOW_MS) return { kind: 'refused', code: 'stale' };
+      return { kind: 'marching', from: action.from, to: action.to, founded: action.target.founded, origin: action.origin };
+    },
+  };
+}
+
 export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplication {
   const { repository, policy, tokens, clock } = deps;
   const raids = deps.raids ?? null, roads = deps.roads ?? null;
+  const journeys: RaidTravel | null = deps.travel ?? null;
   const notifier: GateNotifier | undefined = deps.notifier;
   const dispatchTimeoutMs = deps.dispatchTimeoutMs ?? DISPATCH_TIMEOUT_MS;
   if (typeof clock !== 'function') throw new Error('The Raid Gate needs main\'s server clock.');
   // A live gate never talks to a controlled transport, and a simulated one never reaches Twitch or the real Atlas.
-  for (const [name, port] of [['raid transport', raids], ['road ingestion', roads]] as const) {
+  for (const [name, port] of [['raid transport', raids], ['road ingestion', roads], ['travel coordinator', journeys]] as const) {
     if (port && port.origin !== deps.origin) throw new Error(`The Raid Gate is ${deps.origin}, but its ${name} is ${port.origin}.`);
   }
 
@@ -601,6 +633,20 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
     return { kind: 'action', value: actionView(action, context.now) };
   }
 
+  /** A travel command, for a viewer whose session is current. The coordinator checks every ticket is theirs. */
+  async function journey(context: GateContext, command: Extract<GateCommand, { op: 'reserve' | 'prepare' | 'commit' | 'cancel-travel' | 'reconcile-travel' | 'whereabouts' }>): Promise<GateReply> {
+    if (!journeys) return denied('unavailable');
+    await standingOf(context);
+    switch (command.op) {
+      case 'reserve': return journeys.reserve(context, command.requestId, command.target, command.reason);
+      case 'prepare': return journeys.prepare(context, command.ticket);
+      case 'commit': return journeys.commit(context, command.ticket);
+      case 'cancel-travel': return journeys.cancel(context, command.ticket);
+      case 'reconcile-travel': return journeys.reconcile(context, command.ticket);
+      case 'whereabouts': return journeys.whereabouts(context);
+    }
+  }
+
   // ---- Server-only ingress and recovery ----------------------------------------------------------------------------
 
   const ignored = (reason: Extract<RaidObservationReceipt, { kind: 'ignored' }>['reason']): RaidObservationReceipt => ({ kind: 'ignored', reason });
@@ -689,6 +735,8 @@ export function createRaidGateApplication(deps: RaidGateDeps): RaidGateApplicati
           case 'read-action': return await readAction(scoped, command.requestId);
           case 'reconcile': return await reconcile(scoped, command.requestId);
           case 'cancel': return await close(scoped, command.requestId);
+          case 'reserve': case 'prepare': case 'commit': case 'cancel-travel': case 'reconcile-travel': case 'whereabouts':
+            return await journey(scoped, command);
           default: return denied('unavailable');
         }
       } catch (error) {

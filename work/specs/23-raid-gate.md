@@ -493,3 +493,31 @@ part of acceptance, not permission to replace them or defer the gate's full trav
   attaches the viewer's map to that raid's public caravan, once per raid. `OpenGateView` gains `countdownEndsAt`
   (pending only) and `raid` (landed only); both are checked by the strict reader. Records written before RG08 read
   their new start fields as null.
+- **2026-10-31 — RG09: one walking location, fenced.** The realm coordinator keeps three records: `TravelRecord` per
+  ticket, an immutable `ArrivalRecord` per committed ticket (`arrival.<ticket>`, so a reconciled commit can never mint a
+  second), and one `WhereaboutsRecord` per person holding the authoritative kingdom, the membership `generation`, the
+  one outstanding journey (`active`) and a `fence` set in the same transaction that marks the ticket `committing`. While
+  fenced nothing else moves that person and the commit is never handed over again; only `reconcile` settles it. The
+  whereabouts move to the destination at `generation + 1` and the retained source is released only after the
+  destination's acknowledgment. A person with no record stands where the request's kingdom says, at generation 0.
+- **2026-10-31 — RG09: who may travel.** A raid journey asks the gate application's `createRaidMarchCheck` (landed,
+  this raid ID, this person joined, within five minutes of the departure) before reserving and again before committing,
+  so someone who chose to stay home since reserving is turned back, not moved. A raid to waiting land reserves nothing
+  (`unavailable`): no room is ever manufactured. A return must name the arrival that put the person where they stand
+  and goes back to that arrival's source, even after the source's retention lapsed; it cannot be used twice. A full
+  destination answers `full` from a read-only admission check before any ticket exists, so waiting is simply asking
+  again. Prepare and commit need the reserving session; another session finding a pre-commit ticket cancels it (a
+  disconnect before commit releases the hold).
+- **2026-10-31 — RG09: answers that may be lost.** Every room operation is idempotent by ticket. A reserve whose answer
+  was lost is retried; a commit whose answer was lost is `unknown` and only reconciled. A commit handed over less than
+  20 s ago is not reconciled (its own answer may still come); after that `committing` is told as `unknown`. The room
+  transport must refuse a later commit once `reconcile` answered `held` or `released`, so that answer stays true. A late
+  answer for a ticket that already ended is ignored and its hold released. Recovery lapses expired holds, reconciles
+  uncertain commits and retries owed releases, continuing where the previous pass stopped so a stuck ticket cannot
+  starve the rest. A destination that names a foreign walker `monarch` is recorded as `visitor`.
+- **2026-10-31 — RG09: contract details.** Coordinator operations return the reply (`{kind:'travel'}` or
+  `{kind:'denied'}`) rather than a bare `TravelView`, so refusals travel the same strict reader. Added `{op:'whereabouts'}`
+  → the outstanding journey, else the one that brought the person where they are, else `denied: stale` (never travelled,
+  or nothing outstanding and still where they always were). The browser restores a journey from it after a reload.
+  `AtlasGateHost.travel?(stage)` (optional until the Atlas implements it) receives `rise | road | drawing | arrived |
+  back` once per ticket at the pace of the authority's answers. The travel tables join `realm-migration.sql`.

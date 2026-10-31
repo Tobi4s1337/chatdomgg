@@ -43,8 +43,8 @@ export class RaidGateStorageError extends Error {
 
 const retryable = (error: unknown) => typeof error === 'object' && error !== null && RETRYABLE.has(String((error as { code?: unknown }).code));
 
-/** One table's statements and the reader that every row passes through. */
-type TableSpec<T> = Readonly<{
+/** One table's statements and the reader that every row passes through. Shared with the realm's travel records. */
+export type TableSpec<T> = Readonly<{
   name: string;
   read: (value: unknown) => T | undefined;
   /** Primary key columns and the matching values of a record. */
@@ -81,7 +81,7 @@ function where(key: readonly string[]): string {
   return key.map((column, index) => `${column} = $${index + 1}`).join(' and ');
 }
 
-async function select<T extends { revision: number }>(client: SqlClient, spec: TableSpec<T>, key: readonly string[]): Promise<T | null> {
+export async function select<T extends { revision: number }>(client: SqlClient, spec: TableSpec<T>, key: readonly string[]): Promise<T | null> {
   const result = await client.query(`select revision::text as revision, record from ${spec.name} where ${where(spec.key)}`, [...key]);
   const row = result.rows[0] as { revision?: unknown; record?: unknown } | undefined;
   if (!row) return null;
@@ -99,7 +99,7 @@ async function select<T extends { revision: number }>(client: SqlClient, spec: T
   return record;
 }
 
-async function put<T extends { revision: number }>(client: SqlClient, spec: TableSpec<T>, record: T, expected: number): Promise<Stored<T>> {
+export async function put<T extends { revision: number }>(client: SqlClient, spec: TableSpec<T>, record: T, expected: number): Promise<Stored<T>> {
   if (!Number.isSafeInteger(expected) || expected < 0) throw new RaidGateStorageError('An expected revision is a non-negative integer.');
   // What the database will hold, decoded exactly as a later read will decode it.
   const text = JSON.stringify(record);
@@ -124,13 +124,22 @@ async function put<T extends { revision: number }>(client: SqlClient, spec: Tabl
   return { kind: 'conflict', current: await select(client, spec, key) };
 }
 
-/** Rows of one state in key order after a cursor; every row passes its reader, as `select` does. */
-async function listBy<T extends { revision: number }>(client: SqlClient, spec: TableSpec<T>, state: string, after: string | null, limit: number): Promise<T[]> {
+/** Rows of one state in key order after a cursor. */
+function listBy<T extends { revision: number }>(client: SqlClient, spec: TableSpec<T>, state: string, after: string | null, limit: number): Promise<T[]> {
+  return listWhere(client, spec, 'state = $1', [state], after, limit);
+}
+
+/**
+ * Rows matching `condition` (SQL over the table's columns, its parameters numbered from `$1`) in key order after a
+ * cursor. Every row passes its reader, as `select` does.
+ */
+export async function listWhere<T extends { revision: number }>(client: SqlClient, spec: TableSpec<T>, condition: string, params: readonly unknown[], after: string | null, limit: number): Promise<T[]> {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > RAID_GATE_LIST_LIMIT) throw new RaidGateStorageError('A Raid Gate listing takes 1–100 records.');
   const [key] = spec.key;
+  const at = params.length;
   const result = await client.query(
-    `select ${key} as key, revision::text as revision, record from ${spec.name} where state = $1 and ($2::text is null or ${key} collate "C" > $2) order by ${key} collate "C" limit $3`,
-    [state, after, limit]);
+    `select ${key} as key, revision::text as revision, record from ${spec.name} where (${condition}) and ($${at + 1}::text is null or ${key} collate "C" > $${at + 1}) order by ${key} collate "C" limit $${at + 2}`,
+    [...params, after, limit]);
   return result.rows.map(raw => {
     const row = raw as { key?: unknown; revision?: unknown; record?: unknown };
     let parsed: unknown;
@@ -141,6 +150,34 @@ async function listBy<T extends { revision: number }>(client: SqlClient, spec: T
     }
     return record;
   });
+}
+
+/**
+ * Runs `work` in one serializable transaction on its own connection, retrying a serialization failure or deadlock up
+ * to `RAID_GATE_TRANSACTION_ATTEMPTS` in all. An abort before commit rolls back and rejects with the signal's reason.
+ */
+export async function serializable<Tx, T>(pool: SqlPool, open: (client: SqlClient) => Tx, work: (tx: Tx) => Promise<T>, signal: AbortSignal): Promise<T> {
+  for (let tries = 1; ; tries++) {
+    signal.throwIfAborted();
+    const client = await pool.connect();
+    // A connection whose rollback failed is in an unknown state: destroy it rather than hand it to the next caller.
+    let broken = false;
+    try {
+      await client.query('begin isolation level serializable');
+      const result = await work(open(client));
+      signal.throwIfAborted();
+      await client.query('commit');
+      return result;
+    } catch (error) {
+      await client.query('rollback').catch(() => { broken = true; });
+      if (signal.aborted || !retryable(error)) throw error;
+      if (tries >= RAID_GATE_TRANSACTION_ATTEMPTS) {
+        throw new RaidGateStorageError(`The Raid Gate transaction kept conflicting with concurrent writers (${RAID_GATE_TRANSACTION_ATTEMPTS} attempts).`, { cause: error });
+      }
+    } finally {
+      client.release(broken || undefined);
+    }
+  }
 }
 
 function transactionOn(client: SqlClient): RaidGateTransaction {
@@ -159,39 +196,5 @@ function transactionOn(client: SqlClient): RaidGateTransaction {
 }
 
 export function createPostgresRaidGateRepository(options: PostgresRaidGateRepositoryOptions): RaidGateRepository {
-  const { pool } = options;
-
-  async function attempt<T>(work: (tx: RaidGateTransaction) => Promise<T>, signal: AbortSignal): Promise<T> {
-    const client = await pool.connect();
-    // A connection whose rollback failed is in an unknown state: destroy it rather than hand it to the next caller.
-    let broken = false;
-    try {
-      await client.query('begin isolation level serializable');
-      const result = await work(transactionOn(client));
-      signal.throwIfAborted();
-      await client.query('commit');
-      return result;
-    } catch (error) {
-      await client.query('rollback').catch(() => { broken = true; });
-      throw error;
-    } finally {
-      client.release(broken || undefined);
-    }
-  }
-
-  return {
-    async transaction<T>(work: (tx: RaidGateTransaction) => Promise<T>, signal: AbortSignal): Promise<T> {
-      for (let tries = 1; ; tries++) {
-        signal.throwIfAborted();
-        try {
-          return await attempt(work, signal);
-        } catch (error) {
-          if (signal.aborted || !retryable(error)) throw error;
-          if (tries >= RAID_GATE_TRANSACTION_ATTEMPTS) {
-            throw new RaidGateStorageError(`The Raid Gate transaction kept conflicting with concurrent writers (${RAID_GATE_TRANSACTION_ATTEMPTS} attempts).`, { cause: error });
-          }
-        }
-      }
-    },
-  };
+  return { transaction: (work, signal) => serializable(options.pool, transactionOn, work, signal) };
 }

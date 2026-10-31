@@ -3,7 +3,7 @@
 Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server application lives in
 `apps/api/src/raid-gate/`. The browser imports only `apps/api/src/raid-gate/contracts.ts` (plus the in-page bench).
 
-## What exists (RG01, RG07, RG08)
+## What exists (RG01, RG07, RG08, RG09)
 
 | Piece | File | State |
 |---|---|---|
@@ -22,6 +22,11 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | Gate board | `RaidGatePane.tsx`, `Seal.tsx`, `raid-gate.css` | Desktop dock, phone sheet |
 | Route `/-/raid-gate` | `index.tsx` | Unbound by default: "The gate is shut here" |
 | Bench `/-/raid-gate?bench=simulated` | `bench.ts` | The real application in the page; SIMULATED everywhere |
+| Travel coordinator: reserve, prepare, commit once, reconcile, cancel, return, recover | `apps/realm/src/raid-gate/coordinator.ts` | Real; fenced whereabouts, arrival evidence, source released only after the destination's acknowledgment |
+| Travel records and their durable repository | `apps/realm/src/raid-gate/records.ts`, `postgres-repository.ts` | Travel, arrival, whereabouts; tables in `realm-migration.sql` |
+| March check for raid journeys | `createRaidMarchCheck` in `apps/api/src/raid-gate/application.ts` | Joined, landed, this raid, within five minutes |
+| SIMULATED room transport (tests and bench only) | `apps/realm/src/raid-gate/simulated-rooms.ts` | Fencing generation, idempotent holds, refuses a commit after reconcile |
+| Journey board | `RaidGatePane.tsx` (`TravelBoard`) | Stages from the authority, overrun, confirming, arrived, home, turned back, refused |
 | Captures | `capture.mjs` | `node apps/web/src/raid-gate/capture.mjs [--only a,b]` after `pnpm build` |
 
 ## What main binds
@@ -55,7 +60,15 @@ Short version, with the pieces above:
    for that source and target; pass `null` when it cannot tell, and the gate will not land anything on it. `grants` (the source's `channel:manage:raids` state, telling revoked apart from never connected),
    `consent` (the monarch's Twitch-write switch) and `directory` (Atlas classification and whether this source may
    raid the target) have no store yet; they are main's.
-3. In the kingdom host, give the controller `createHttpRaidGateApi({ url: `/api/raid-gate/${kingdomId}`, origin })`,
+3. Travel (RG09). Bind a `RealmTravelTransport` over the realm's rooms (`apps/realm/src/raid-gate/ports.ts` states the
+   contract: every operation idempotent by ticket; `commit` moves the walking membership atomically only while the
+   person is still at `generation - 1` in `from`, and answers the destination's role; `reconcile` never moves anyone and
+   makes a later commit for that ticket fail once it answered `held` or `released`; `release('source')` lets go of the
+   retained source place). Then pass it as `rooms` to `createRaidGateService({ ..., rooms })`: the service builds the
+   coordinator on the realm pool (`createPostgresTravelRepository`) with the gate's own `createRaidMarchCheck`, and its
+   recovery timer runs the journeys' recovery after the gate's. Without `rooms`, travel commands answer `unavailable`. The Atlas may implement `AtlasGateHost.travel(stage)` to
+   rise, draw the road and reveal the destination at the pace of those stages.
+4. In the kingdom host, give the controller `createHttpRaidGateApi({ url: `/api/raid-gate/${kingdomId}`, origin })`,
    the Atlas `AtlasGateHost`, the source face and the throne's `{ reconnect }`, and mount `RaidGatePane` at the gate
    anchor.
 

@@ -7,9 +7,9 @@ import type { AtlasChannel } from '@chatdom/shared';
 import {
   GATE_LIMITS,
   type AtlasRaid, type GateActionState, type GateActionView, type GateAuthority, type GateCommand, type GateDenial, type GatePreview, type GateReply,
-  type GateStatusView, type GateTarget, type KingdomId, type OpenGateView,
+  type GateStatusView, type GateTarget, type KingdomId, type OpenGateView, type TravelReason, type TravelState, type TravelView,
 } from '../../../api/src/raid-gate/contracts';
-import type { GateKingdom, GateLand, RaidGatePorts } from './ports';
+import type { AtlasTravelStage, GateKingdom, GateLand, RaidGatePorts } from './ports';
 
 export type GatePhase =
   /** No authenticated authority is bound to this view. */
@@ -58,6 +58,27 @@ export type GateNotice =
   /** The monarch's press never reached the gate (the authority still holds the unstarted preview). Nothing was sent. */
   | Readonly<{ kind: 'not-sent' }>;
 
+/**
+ * This viewer's own journey through the gate, as the authority last told it. `state` is `asking` until the first
+ * answer. `overrun` is true when the destination is taking longer than usual to ready its world: the drawing holds,
+ * and the walker is still home until they step through. `refusal` is why a reservation was refused (`full`: no room
+ * right now; others: not admitted or no longer eligible), and nothing was held.
+ */
+export type JourneySnapshot = Readonly<{
+  kind: 'raid' | 'return';
+  ticket: string | null;
+  state: TravelState | 'asking';
+  from: KingdomId;
+  to: KingdomId;
+  /** The kingdom that is not home: where a raid journey goes, or where a journey home leaves from. */
+  destination: GateDestination | null;
+  role: TravelView['role'];
+  arrivalId: string | null;
+  overrun: boolean;
+  refusal: GateDenial | null;
+  busy: 'cancel' | 'reconcile' | null;
+}>;
+
 export type GateSnapshot = Readonly<{
   phase: GatePhase;
   origin: 'live' | 'simulated' | null;
@@ -87,6 +108,10 @@ export type GateSnapshot = Readonly<{
   asking: AtlasChannel | null;
   notice: GateNotice | null;
   canReconnect: boolean;
+  /** This viewer's journey, if one is under way or just ended. Null for everyone who stayed. */
+  journey: JourneySnapshot | null;
+  /** This viewer marched with a party that set out for a founded kingdom and may follow it through the gate. */
+  canTravel: boolean;
 }>;
 
 export interface RaidGateController {
@@ -107,6 +132,16 @@ export interface RaidGateController {
   reconcile(): Promise<void>;
   join(): Promise<void>;
   leave(): Promise<void>;
+  /** A marcher follows the witnessed raid through the gate: reserve, ready, step through. Each step is the authority's. */
+  travel(): Promise<void>;
+  /** After arriving, go home the same careful way. */
+  returnHome(): Promise<void>;
+  /** Turns back before stepping through. A step that may have happened is checked instead, never undone by guess. */
+  cancelTravel(): Promise<void>;
+  /** Asks the authority what became of this viewer's journey, and carries on from there. */
+  reconcileTravel(): Promise<void>;
+  /** Puts away a journey that has ended (home again, or turned back). */
+  dismissJourney(): void;
   reconnect(): void;
   refresh(): Promise<void>;
   dispose(): void;
@@ -117,6 +152,27 @@ type Ended = Readonly<{ reason: 'closed' | 'changed'; target: GateTarget; joined
 
 /** A farewell is news, not a state: after this long the gate is simply quiet again. */
 export const FAREWELL_MS = 5 * 60_000;
+/** Readying a world longer than this is told as an overrun: the drawing holds with the real stage. */
+export const JOURNEY_OVERRUN_MS = 6_000;
+const PREPARE_POLL_MS = 900;
+const CONFIRM_POLL_MS = 3_000;
+const JOURNEY_STEPS = 120;
+const OPEN_TRAVEL: ReadonlySet<TravelState> = new Set(['reserved', 'preparing', 'ready', 'committing', 'unknown']);
+
+type Journey = {
+  kind: 'raid' | 'return'; requestId: string; target: KingdomId; reason: TravelReason; destination: GateTarget | null;
+  view: TravelView | null; startedAt: number; refusal: GateDenial | null; busy: JourneySnapshot['busy'];
+};
+
+function stageOf(state: TravelState): AtlasTravelStage['kind'] {
+  switch (state) {
+    case 'reserved': return 'rise';
+    case 'preparing': return 'road';
+    case 'ready': case 'committing': case 'unknown': return 'drawing';
+    case 'committed': return 'arrived';
+    default: return 'back';
+  }
+}
 
 const STARTED_PHASES: Readonly<Record<Exclude<GateActionState, 'prepared'>, GatePhase>> = {
   dispatching: 'starting', pending: 'countdown', unknown: 'checking', landed: 'departed', cancelled: 'called-off', rejected: 'refused',
@@ -128,6 +184,10 @@ const SETTLED: ReadonlySet<GateActionState> = new Set(['landed', 'cancelled', 'r
 export function createRaidGateController(ports: RaidGatePorts): RaidGateController {
   const { api, atlas, source, clock } = ports;
   const ids = ports.ids ?? (() => crypto.randomUUID());
+  const wait = ports.wait ?? ((ms: number, signal: AbortSignal) => new Promise<void>(resolve => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+  }));
   const life = new AbortController();
   const listeners = new Set<(snapshot: GateSnapshot) => void>();
   const known = new Map<KingdomId, Pick>();
@@ -149,6 +209,11 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
   const followed = new Set<string>();
   /** Requests this viewer saw Twitch counting down. */
   const counted = new Set<string>();
+  let journey: Journey | null = null;
+  /** Only the newest journey's steps land; turning back or starting over retires the older loop. */
+  let journeyGeneration = 0;
+  /** Stages already shown on the map, so a refresh never replays one. */
+  const staged = new Set<string>();
 
   function destinationFor(target: GateTarget): GateDestination {
     const pick = known.get(target.kingdomId);
@@ -195,6 +260,21 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
       checking: phase === 'checking' && live ? (counted.has(live.requestId) ? 'countdown' : 'answer') : null,
       canStart: viewer === 'monarch' && live?.state === 'prepared' && preview?.requestId === live.requestId && now < preview.expiresAt,
       busy, farewell: status ? farewellAt(now, live, viewer) : null, asking: busy === 'preview' ? asking : null, notice: unreachable && status ? { kind: 'unreachable' } : notice, canReconnect: ports.account !== undefined,
+      journey: journeyAt(now),
+      canTravel: journey === null && live?.state === 'landed' && live.joined && live.raid !== null && live.target.founded,
+    };
+  }
+
+  function journeyAt(now: number): JourneySnapshot | null {
+    if (!journey) return null;
+    const view = journey.view;
+    const state = view?.state ?? 'asking';
+    const readying = state === 'asking' || state === 'reserved' || state === 'preparing';
+    const destination = journey.destination ? destinationFor(journey.destination) : null;
+    return {
+      kind: journey.kind, ticket: view?.ticket ?? null, state, from: view?.from ?? (journey.kind === 'return' ? journey.target : source.kingdomId), to: journey.target,
+      destination, role: view?.role ?? null, arrivalId: view?.arrivalId ?? null, overrun: readying && journey.refusal === null && now - journey.startedAt >= JOURNEY_OVERRUN_MS,
+      refusal: journey.refusal, busy: journey.busy,
     };
   }
 
@@ -387,9 +467,142 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
     void refresh();
   }
 
+  // ---- This viewer's journey ------------------------------------------------------------------------------------
+
+  /** Takes a travel reply for the current journey. False when the transport failed and nothing is known. */
+  function applyTravel(reply: GateReply | null): boolean {
+    if (!journey || reply === null) return false;
+    if (reply.kind === 'denied') { if (!journey.view) journey.refusal = reply.code; return true; }
+    if (reply.kind !== 'travel') return true;
+    const held = journey.view;
+    if (held && (held.ticket !== reply.value.ticket || reply.value.revision < held.revision)) return true;
+    journey.view = reply.value;
+    present(reply.value);
+    return true;
+  }
+
+  /** The map shows each stage once, at the pace of the authority's answers. */
+  function present(view: TravelView): void {
+    const kind = stageOf(view.state);
+    const key = `${view.ticket}/${kind}`;
+    if (!atlas?.travel || staged.has(key)) return;
+    staged.add(key);
+    atlas.travel({ kind, ticket: view.ticket, from: view.from, to: view.to, state: view.state }, life.signal);
+  }
+
+  /** Carries the journey forward one authority answer at a time, until it arrives, ends, or needs the viewer. */
+  async function walk(mine: number): Promise<void> {
+    let confirms = 0;
+    for (let step = 0; step < JOURNEY_STEPS; step++) {
+      if (mine !== journeyGeneration || life.signal.aborted || !journey?.view) return;
+      const { ticket, state } = journey.view;
+      let command: GateCommand;
+      if (state === 'reserved' || state === 'preparing') command = { op: 'prepare', ticket };
+      else if (state === 'ready') command = { op: 'commit', ticket };
+      else if (state === 'committing' || (state === 'unknown' && confirms < 4)) {
+        // A step through the gate that may have happened is only ever asked about.
+        confirms++;
+        await wait(CONFIRM_POLL_MS, life.signal);
+        if (mine !== journeyGeneration || life.signal.aborted) return;
+        command = { op: 'reconcile-travel', ticket };
+      } else return;
+      let reply = await request(command);
+      if (mine !== journeyGeneration || life.signal.aborted) return;
+      // The answer was lost: ask what became of the step rather than repeating it.
+      if (reply === null) reply = await request({ op: 'reconcile-travel', ticket });
+      if (mine !== journeyGeneration || life.signal.aborted) return;
+      if (!applyTravel(reply)) { emit(); return; }
+      emit();
+      const next = journey.view?.state;
+      if (next === 'reserved' || next === 'preparing') await wait(PREPARE_POLL_MS, life.signal);
+    }
+  }
+
+  async function begin(next: Omit<Journey, 'requestId' | 'view' | 'startedAt' | 'refusal' | 'busy'>): Promise<void> {
+    const mine = ++journeyGeneration;
+    const previous = journey;
+    journey = { ...next, requestId: ids(), view: null, startedAt: clock(), refusal: null, busy: null };
+    notice = null; emit();
+    const command: GateCommand = { op: 'reserve', requestId: journey.requestId, target: next.target, reason: next.reason };
+    let reply = await request(command);
+    // A reservation is keyed by its request ID: asking again returns the same ticket, never a second one.
+    if (reply === null && mine === journeyGeneration && !life.signal.aborted) reply = await request(command);
+    if (mine !== journeyGeneration || life.signal.aborted) return;
+    if (!applyTravel(reply)) { journey = previous; notice = { kind: 'unreachable' }; emit(); return; }
+    // A refused journey home leaves the walker where they stand, with the arrival they came on.
+    if (journey.refusal && previous) { notice = { kind: 'denied', code: journey.refusal }; journey = previous; emit(); return; }
+    emit();
+    await walk(mine);
+  }
+
+  async function travel(): Promise<void> {
+    const open = status?.open;
+    if (journey || !open || open.state !== 'landed' || !open.joined || !open.raid || !open.target.founded) return;
+    await begin({ kind: 'raid', target: open.to, reason: { kind: 'raid', requestId: open.requestId, raidId: open.raid.id }, destination: open.target });
+  }
+
+  async function returnHome(): Promise<void> {
+    const view = journey?.view;
+    if (!journey || !view || view.state !== 'committed' || !view.arrivalId || journey.kind === 'return') return;
+    // The kingdom being left keeps its name on the board on the way home.
+    await begin({ kind: 'return', target: view.from, reason: { kind: 'return', arrivalId: view.arrivalId }, destination: journey.destination });
+  }
+
+  async function cancelTravel(): Promise<void> {
+    const view = journey?.view;
+    if (!journey || !view || !OPEN_TRAVEL.has(view.state) || journey.busy) return;
+    const mine = ++journeyGeneration;
+    journey.busy = 'cancel'; emit();
+    const reply = await request({ op: 'cancel-travel', ticket: view.ticket });
+    if (mine !== journeyGeneration || life.signal.aborted || !journey) return;
+    journey.busy = null;
+    if (!applyTravel(reply)) notice = { kind: 'unreachable' };
+    emit();
+    // A step that may have happened is still being found out; keep asking.
+    if (journey.view?.state === 'committing' || journey.view?.state === 'unknown') await walk(mine);
+  }
+
+  async function reconcileTravel(): Promise<void> {
+    const view = journey?.view;
+    if (!journey || !view || journey.busy) return;
+    const mine = ++journeyGeneration;
+    journey.busy = 'reconcile'; emit();
+    const reply = await request({ op: 'reconcile-travel', ticket: view.ticket });
+    if (mine !== journeyGeneration || life.signal.aborted || !journey) return;
+    journey.busy = null;
+    if (!applyTravel(reply)) notice = { kind: 'unreachable' };
+    emit();
+    await walk(mine);
+  }
+
+  /** After a reload or reconnect: the authority's record of where this person stands, and any journey still open. */
+  async function restoreJourney(): Promise<void> {
+    const reply = await request({ op: 'whereabouts' });
+    if (life.signal.aborted || journey || reply?.kind !== 'travel') return;
+    const view = reply.value;
+    // Home, and nothing outstanding: ordinary life.
+    if (view.state === 'committed' && view.to === source.kingdomId) return;
+    if (!OPEN_TRAVEL.has(view.state) && view.state !== 'committed') return;
+    const kind = view.to === source.kingdomId ? 'return' : 'raid';
+    const mine = ++journeyGeneration;
+    journey = {
+      kind, requestId: ids(), target: view.to, reason: { kind: 'visit' }, view, startedAt: clock(), refusal: null, busy: null,
+      destination: kind === 'raid' ? { kingdomId: view.to, founded: true, live: false, classification: 'unknown' } : null,
+    };
+    if (kind === 'raid') resolve(view.to);
+    present(view);
+    emit();
+    if (OPEN_TRAVEL.has(view.state)) {
+      applyTravel(await request({ op: 'reconcile-travel', ticket: view.ticket }));
+      emit();
+      await walk(mine);
+    }
+  }
+
   if (api) {
     api.subscribe(null, reply => { if (!life.signal.aborted) { absorb(reply); emit(); } }, life.signal);
     void refresh();
+    void restoreJourney();
   }
   atlas?.subscribe(event => {
     if (event.kind === 'closed') { choosing = false; emit(); return; }
@@ -416,6 +629,17 @@ export function createRaidGateController(ports: RaidGatePorts): RaidGateControll
     reconcile,
     join: () => choose(true),
     leave: () => choose(false),
+    travel,
+    returnHome,
+    cancelTravel,
+    reconcileTravel,
+    dismissJourney() {
+      const state = journey?.view?.state;
+      if (!journey || (state && OPEN_TRAVEL.has(state))) return;
+      // An arrival abroad stays until the walker goes home; a journey home or one that turned back may be put away.
+      if (state === 'committed' && journey.kind === 'raid') return;
+      ++journeyGeneration; journey = null; emit();
+    },
     reconnect() { ports.account?.reconnect(); },
     refresh,
     dispose() { life.abort(); listeners.clear(); if (choosing) atlas?.close(); },

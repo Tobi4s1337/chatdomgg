@@ -4,7 +4,7 @@
  * four policy ports; everything else is built here.
  *
  *   const gate = createRaidGateService({ pool, origin, issuer: provider.issuer, sessionCookie, publicOrigin,
- *     origins: [publicOrigin], clock: Date.now, policyPorts: { live, grants, consent, directory }, raids, roads });
+ *     origins: [publicOrigin], clock: Date.now, policyPorts: { live, grants, consent, directory }, raids, roads, rooms });
  *   if (gate.matches(request.url)) return gate.serve(request, response);
  *   // main's verified EventSub ingress, for each channel.raid it correlated (or not) to a gate request:
  *   await gate.application.ingestRaid({ raid, upstreamEventId, actionRequestId, receivedAt });
@@ -13,7 +13,10 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import type { KingdomId } from '../../../../packages/shared/src/identity';
-import { createRaidGateApplication, type RaidGateApplication } from './application';
+import { createRaidTravelCoordinator, type RaidTravelCoordinator } from '../../../realm/src/raid-gate/coordinator';
+import type { RealmTravelTransport, TravelRecovery } from '../../../realm/src/raid-gate/ports';
+import { createPostgresTravelRepository } from '../../../realm/src/raid-gate/postgres-repository';
+import { createRaidGateApplication, createRaidMarchCheck, type RaidGateApplication } from './application';
 import { createGateFanout, createRaidGateHttp, type RaidGateHttp } from './http';
 import { createRealmGatePolicy, type LiveChannels, type RaidGrants, type TargetDirectory, type WriteConsent } from './policy';
 import type { AtlasRoadIngress, AuthorizedRaidTransport, PreviewTokens, RaidGateRecovery } from './ports';
@@ -41,10 +44,12 @@ export type RaidGateServiceDeps = Readonly<{
   raids?: AuthorizedRaidTransport | null;
   /** The Atlas's road ingestion. Absent: witnessed raids wait in the outbox until it is bound. */
   roads?: AtlasRoadIngress | null;
+  /** The realm's room membership transport. Absent: travel commands answer `unavailable`. */
+  rooms?: RealmTravelTransport | null;
   /** How often recovery runs (reconcile, resend the provably unsent, retry roads, mark overdue). 0 turns it off. */
   recoverEveryMs?: number;
   /** Told about a recovery pass that did something, or failed. */
-  onRecovery?: (outcome: Readonly<{ kind: 'report'; report: RaidGateRecovery }> | Readonly<{ kind: 'error'; error: unknown }>) => void;
+  onRecovery?: (outcome: Readonly<{ kind: 'report'; report: RaidGateRecovery & Partial<TravelRecovery> }> | Readonly<{ kind: 'error'; error: unknown }>) => void;
   pathPrefix?: string;
   tokens?: PreviewTokens;
   heartbeatMs?: number;
@@ -56,12 +61,14 @@ const RECOVERY_PAGE = 50;
 export interface RaidGateService {
   readonly http: RaidGateHttp;
   readonly application: RaidGateApplication;
+  /** The travel coordinator, when the realm's rooms are bound. */
+  readonly travel: RaidTravelCoordinator | null;
   /** True for `${pathPrefix}/<kingdomId>` with or without a query, from a node request's `url`. */
   matches(url: string | undefined): boolean;
   /** Answers one node request end to end, streaming the live gate and ending it when the client leaves. */
   serve(request: IncomingMessage, response: ServerResponse): Promise<void>;
-  /** One recovery pass now; the timer runs the same thing. */
-  recover(): Promise<RaidGateRecovery>;
+  /** One recovery pass now (the gate, then journeys); the timer runs the same thing. */
+  recover(): Promise<RaidGateRecovery & Partial<TravelRecovery>>;
   /** Ends every open stream and the recovery timer. The pool is main's. */
   close(): void;
 }
@@ -136,9 +143,13 @@ export function createRaidGateService(deps: RaidGateServiceDeps): RaidGateServic
   const repository = createPostgresRaidGateRepository({ pool: deps.pool });
   const policy = createRealmGatePolicy({ pool: deps.pool, origin: deps.origin, issuer: deps.issuer, ...deps.policyPorts });
   const fanout = createGateFanout();
+  const travel = deps.rooms ? createRaidTravelCoordinator({
+    repository: createPostgresTravelRepository({ pool: deps.pool }), rooms: deps.rooms, marches: createRaidMarchCheck(repository),
+    origin: deps.origin, clock: deps.clock,
+  }) : null;
   const application = createRaidGateApplication({
     repository, policy, tokens: deps.tokens ?? createPreviewTokens(), notifier: fanout, origin: deps.origin, clock: deps.clock,
-    raids: deps.raids ?? null, roads: deps.roads ?? null,
+    raids: deps.raids ?? null, roads: deps.roads ?? null, travel,
   });
   const http = createRaidGateHttp({
     application, changes: fanout, clock: deps.clock, origins: deps.origins,
@@ -146,8 +157,12 @@ export function createRaidGateService(deps: RaidGateServiceDeps): RaidGateServic
     ...(deps.heartbeatMs === undefined ? {} : { heartbeatMs: deps.heartbeatMs }),
   });
 
-  let recovering: Promise<RaidGateRecovery> | null = null;
-  const recover = () => recovering ??= application.recover(deps.clock(), RECOVERY_PAGE).finally(() => { recovering = null; });
+  let recovering: Promise<RaidGateRecovery & Partial<TravelRecovery>> | null = null;
+  const pass = async () => {
+    const gate = await application.recover(deps.clock(), RECOVERY_PAGE);
+    return travel ? { ...gate, ...await travel.recover(deps.clock(), RECOVERY_PAGE) } : gate;
+  };
+  const recover = () => recovering ??= pass().finally(() => { recovering = null; });
   const every = deps.recoverEveryMs ?? RAID_GATE_RECOVER_EVERY_MS;
   const tick = () => {
     recover().then(report => {
@@ -160,7 +175,7 @@ export function createRaidGateService(deps: RaidGateServiceDeps): RaidGateServic
   if (timer) queueMicrotask(tick);
 
   return {
-    http, application, recover,
+    http, application, travel, recover,
     matches(url) {
       const path = pathOf(url);
       return path !== null && kingdomFromGatePath(prefix, path) !== null;

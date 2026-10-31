@@ -4,12 +4,18 @@
  * raid observation here is SIMULATED; nothing reaches Twitch or the Atlas.
  *
  * This file grows with the lane. RG08 covers the first portion: preview, join, start, a lost start reply, a restart,
- * reconcile without a second Twitch write, the verified raid delivered twice, and its one road handoff.
+ * reconcile without a second Twitch write, the verified raid delivered twice, and its one road handoff. RG09 carries
+ * the marcher through the realm's travel coordinator: reserve, prepare, commit, a lost destination acknowledgment, a
+ * restart, recovery, one walking location, the source released only after the destination acknowledged, and home.
+ * The room transport is SIMULATED too.
  */
 import { describe, expect, it } from 'vitest';
 import { AtlasRaidSchema, type AtlasRaid } from '../../../../packages/shared/src/atlas-raids';
 import { KingdomIdSchema, PersonIdSchema, type PersonId } from '../../../../packages/shared/src/identity';
-import { createRaidGateApplication, type RaidGateApplication } from './application';
+import { createRaidTravelCoordinator } from '../../../realm/src/raid-gate/coordinator';
+import { createMemoryTravelRepository } from '../../../realm/src/raid-gate/memory-repository';
+import { createSimulatedRooms } from '../../../realm/src/raid-gate/simulated-rooms';
+import { createRaidGateApplication, createRaidMarchCheck, type RaidGateApplication } from './application';
 import { readGateReply, type GateContext, type GateReply } from './contracts';
 import { createMemoryRaidGateRepository, type MemoryRaidGateRepository } from './memory-repository';
 import type { AtlasRoadIngress, AuthorizedRaidTransport, GatePolicy, RaidWrite, RaidWriteOutcome, TrustedRaidObservation } from './ports';
@@ -96,10 +102,13 @@ function world() {
   const repository = createMemoryRaidGateRepository();
   const twitch = simulatedTwitch(clock);
   const atlas = simulatedRoads();
-  let issued = 0;
+  const journeys = createMemoryTravelRepository();
+  const rooms = createSimulatedRooms({ clock, rooms: [SOURCE, MIRA] });
+  let issued = 0, ticketed = 0;
+  let travel = createRaidTravelCoordinator({ repository: journeys, rooms: rooms.transport, marches: createRaidMarchCheck(repository), origin: 'simulated', clock, tickets: () => `ticket${++ticketed}` });
   const boot = (options: { raids?: boolean } = {}): RaidGateApplication => createRaidGateApplication({
     repository, policy, origin: 'simulated', clock,
-    raids: options.raids === false ? null : twitch.transport, roads: atlas.ingress,
+    raids: options.raids === false ? null : twitch.transport, roads: atlas.ingress, travel,
     tokens: { issue: () => `preview${++issued}`, hash: async value => value.replace(/\D/g, '').padStart(64, 'b') },
   });
   let app = boot();
@@ -113,9 +122,13 @@ function world() {
     return reply;
   };
   return {
-    repository, twitch, atlas, clock,
+    repository, twitch, atlas, clock, journeys, rooms,
     get app() { return app; },
-    restart(options?: { raids?: boolean }) { app = boot(options); },
+    get travel() { return travel; },
+    restart(options?: { raids?: boolean }) {
+      travel = createRaidTravelCoordinator({ repository: journeys, rooms: rooms.transport, marches: createRaidMarchCheck(repository), origin: 'simulated', clock, tickets: () => `ticket${++ticketed}` });
+      app = boot(options);
+    },
     advance(ms: number) { now += ms; },
     monarch: as(MONARCH), wren: as(WREN), oak: as(OAK),
   };
@@ -196,6 +209,74 @@ describe('Raid Gate journey (SIMULATED transports)', () => {
     expect(await w.app.recover(w.clock(), 50)).toEqual({ reconciled: 0, sent: 0, lapsed: 0, delivered: 0, overdue: 0 });
     expect(await w.oak({ op: 'join', requestId: 'r1' })).toEqual({ kind: 'denied', code: 'stale' });
     expect(w.twitch.writes).toHaveLength(1);
+  });
+
+  it('carries a marcher through the gate once, across a lost arrival answer and a restart, and home again', async () => {
+    const w = world();
+    const token = await previewToken(await w.monarch({ op: 'preview', requestId: 'r1', target: MIRA }));
+    await w.wren({ op: 'join', requestId: 'r1' });
+    await w.monarch({ op: 'start', requestId: 'r1', previewToken: token });
+    // Before the raid is witnessed, nobody may travel on it.
+    expect(await w.wren({ op: 'reserve', requestId: 'j0', target: MIRA, reason: { kind: 'raid', requestId: 'r1', raidId: 'simulated-raid-evt-1' } })).toEqual({ kind: 'denied', code: 'stale' });
+    w.advance(40_000);
+    const raid = observed({ requestId: 'r1', at: w.clock() });
+    expect(await w.app.ingestRaid(raid)).toMatchObject({ kind: 'landed' });
+    expect(await w.app.ingestRaid(raid)).toMatchObject({ kind: 'duplicate' });
+    const reason = { kind: 'raid', requestId: 'r1', raidId: raid.raid.id } as const;
+
+    // Oak chose to stay home: the gate's own records say so, and Oak is not moved.
+    expect(await w.oak({ op: 'reserve', requestId: 'j1', target: MIRA, reason })).toEqual({ kind: 'denied', code: 'unauthorized' });
+
+    // Wren marched: reserve (a retry returns the same ticket), prepare until Mira's world is ready.
+    const reserved = await w.wren({ op: 'reserve', requestId: 'j1', target: MIRA, reason });
+    expect(reserved).toMatchObject({ kind: 'travel', value: { ticket: 'ticket1', from: SOURCE, to: MIRA, state: 'reserved', role: null } });
+    expect(await w.wren({ op: 'reserve', requestId: 'j1', target: MIRA, reason })).toEqual(reserved);
+    expect(await w.wren({ op: 'prepare', ticket: 'ticket1' })).toMatchObject({ value: { state: 'ready' } });
+    // Another person cannot touch Wren's ticket.
+    expect(await w.oak({ op: 'commit', ticket: 'ticket1' })).toEqual({ kind: 'denied', code: 'unauthorized' });
+
+    // The destination takes Wren, but its answer is lost: Wren is told it is unknown, and stays fenced.
+    w.rooms.loseNextCommitAnswer();
+    expect(await w.wren({ op: 'commit', ticket: 'ticket1' })).toMatchObject({ value: { state: 'unknown', role: null, arrivalId: null } });
+    expect(w.rooms.membership(WREN)).toEqual({ kingdomId: MIRA, generation: 1 });
+    // No source release before the destination's acknowledgment reached the coordinator.
+    expect(w.rooms.calls.filter(call => call.startsWith('release-source'))).toEqual([]);
+    expect(w.rooms.retainedSources()).toBe(1);
+    // Fenced: no second journey and no second commit while the first is uncertain.
+    expect(await w.wren({ op: 'reserve', requestId: 'j2', target: MIRA, reason: { kind: 'visit' } })).toEqual({ kind: 'denied', code: 'stale' });
+    expect(await w.wren({ op: 'commit', ticket: 'ticket1' })).toMatchObject({ value: { state: 'unknown' } });
+    expect(w.rooms.calls.filter(call => call.startsWith('commit'))).toEqual(['commit ticket1']);
+
+    // A restart, then recovery asks the room transport what happened and settles it once.
+    w.restart();
+    expect(await w.travel.recover(w.clock(), 50)).toEqual({ expired: 0, reconciled: 1, released: 0 });
+    expect(await w.travel.recover(w.clock(), 50)).toEqual({ expired: 0, reconciled: 0, released: 0 });
+    const arrived = await w.wren({ op: 'whereabouts' });
+    expect(arrived).toMatchObject({ kind: 'travel', value: { ticket: 'ticket1', state: 'committed', to: MIRA, role: 'visitor', arrivalId: 'arrival.ticket1' } });
+    expect(await w.wren({ op: 'reconcile-travel', ticket: 'ticket1' })).toEqual(arrived);
+    // Exactly one Twitch write, one commit, one arrival, one walking location; the source let go only now.
+    expect(w.twitch.writes).toHaveLength(1);
+    expect(w.rooms.calls.filter(call => call.startsWith('commit'))).toEqual(['commit ticket1']);
+    expect(w.journeys.snapshot().arrivals).toHaveLength(1);
+    expect(w.journeys.snapshot().whereabouts).toEqual([expect.objectContaining({ personId: WREN, kingdomId: MIRA, generation: 1, fence: null, active: null })]);
+    expect(w.rooms.leases(WREN)).toBe(1);
+    expect(w.rooms.retainedSources()).toBe(0);
+    expect(w.rooms.calls.indexOf('release-source ticket1')).toBeGreaterThan(w.rooms.calls.indexOf('reconcile ticket1'));
+    // The road the Atlas holds is the one witnessed raid, still there after the party cleared.
+    expect([...w.atlas.roads.keys()]).toEqual([raid.raid.id]);
+
+    // Coming home is another journey through the same coordinator, voluntary and checked again.
+    if (arrived.kind !== 'travel') throw new Error('expected a journey');
+    const home = { kind: 'return', arrivalId: arrived.value.arrivalId! } as const;
+    expect(await w.wren({ op: 'reserve', requestId: 'j3', target: FERN, reason: home })).toEqual({ kind: 'denied', code: 'invalid' });
+    expect(await w.wren({ op: 'reserve', requestId: 'j3', target: SOURCE, reason: home })).toMatchObject({ value: { state: 'reserved', from: MIRA, to: SOURCE } });
+    expect(await w.wren({ op: 'prepare', ticket: 'ticket2' })).toMatchObject({ value: { state: 'ready' } });
+    expect(await w.wren({ op: 'commit', ticket: 'ticket2' })).toMatchObject({ value: { state: 'committed', role: 'visitor', to: SOURCE } });
+    expect(w.rooms.membership(WREN)).toEqual({ kingdomId: SOURCE, generation: 2 });
+    // The arrival that came home cannot be used to come home twice.
+    expect(await w.wren({ op: 'reserve', requestId: 'j4', target: SOURCE, reason: home })).toEqual({ kind: 'denied', code: 'stale' });
+    expect(w.rooms.openHolds()).toBe(0);
+    expect(w.rooms.retainedSources()).toBe(0);
   });
 
   it('turns the party back on a confirmed cancel, and keeps a raid that already left', async () => {

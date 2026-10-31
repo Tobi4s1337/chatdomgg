@@ -4,7 +4,10 @@
  * pane says so. It exists to exercise the gate before main binds authenticated transports; it is never the default.
  */
 import { AtlasChannelSchema, AtlasRaidSchema, type AtlasChannel, type AtlasRaid } from '@chatdom/shared';
-import { createRaidGateApplication } from '../../../api/src/raid-gate/application';
+import { createRaidGateApplication, createRaidMarchCheck } from '../../../api/src/raid-gate/application';
+import { createRaidTravelCoordinator } from '../../../realm/src/raid-gate/coordinator';
+import { createMemoryTravelRepository } from '../../../realm/src/raid-gate/memory-repository';
+import { createSimulatedRooms, type SimulatedRooms } from '../../../realm/src/raid-gate/simulated-rooms';
 import type { GateAuthority, GateContext, GatePrincipal, GateReply, KingdomId } from '../../../api/src/raid-gate/contracts';
 import { createMemoryRaidGateRepository } from '../../../api/src/raid-gate/memory-repository';
 import type { AtlasRoadIngress, AuthorizedRaidTransport, RaidObservationReceipt, RaidWriteOutcome, SourceStanding, TargetVerdict } from '../../../api/src/raid-gate/ports';
@@ -32,7 +35,12 @@ const WALKERS = ['52000001', '52000002', '52000003', '52000004', '52000005', '52
  * check rather than press again), or refuse it.
  */
 export type BenchTwitch = 'accept' | 'lose' | 'refuse';
-export type GateBenchOptions = Readonly<{ viewer: 'monarch' | 'walker'; authority: GateAuthority; clock: () => number; twitch?: BenchTwitch }>;
+/**
+ * How the SIMULATED rooms answer a journey: ready after a short drawing, slow (an overrun), never ready (`hold`), the
+ * arrival's answer lost on the way back (`lose`), or refused at the door (`deny`).
+ */
+export type BenchRooms = 'ready' | 'slow' | 'hold' | 'lose' | 'deny';
+export type GateBenchOptions = Readonly<{ viewer: 'monarch' | 'walker'; authority: GateAuthority; clock: () => number; twitch?: BenchTwitch; rooms?: BenchRooms }>;
 
 export type GateBench = Readonly<{
   source: GateKingdom;
@@ -53,7 +61,9 @@ export type GateBench = Readonly<{
   /** SIMULATED: Twitch's `channel.raid` for this request arrives through the verified-ingress path. */
   witness(requestId: string, viewers?: number): Promise<RaidObservationReceipt>;
   /** SIMULATED Twitch writes, in order, and the roads handed to the stand-in Atlas ledger. */
-  readonly log: Readonly<{ writes: readonly string[]; roads: readonly AtlasRaid[]; followed: readonly string[] }>;
+  readonly log: Readonly<{ writes: readonly string[]; roads: readonly AtlasRaid[]; followed: readonly string[]; travel: readonly string[] }>;
+  /** The SIMULATED room transport behind journeys. */
+  readonly rooms: SimulatedRooms;
 }>;
 
 async function sha256Hex(text: string): Promise<string> {
@@ -65,7 +75,7 @@ export function createGateBench(options: GateBenchOptions): GateBench {
   const repository = createMemoryRaidGateRepository();
   let authority = options.authority;
   const subscribers = new Set<() => void>();
-  const log = { writes: [] as string[], roads: [] as AtlasRaid[], followed: [] as string[] };
+  const log = { writes: [] as string[], roads: [] as AtlasRaid[], followed: [] as string[], travel: [] as string[] };
   /** SIMULATED Twitch: keeps its own record of each write by key so reconcile can answer for a lost reply. */
   const ledger = new Map<string, RaidWriteOutcome>();
   const accepted: Map<string, number> = new Map();
@@ -94,8 +104,19 @@ export function createGateBench(options: GateBenchOptions): GateBench {
     async observe(raid) { if (!log.roads.some(each => each.id === raid.id)) log.roads.push(raid); },
   };
   const tokens = new Map<string, string>();
+  // SIMULATED rooms: Fernhollow and Saltmarsh Reach are founded kingdoms with worlds to enter; waiting land has none.
+  const roomMode = options.rooms ?? 'ready';
+  const rooms = createSimulatedRooms({
+    clock: options.clock, rooms: [SOURCE.kingdomId, '41000002' as KingdomId, '41000005' as KingdomId],
+    prepareSteps: roomMode === 'hold' ? Number.MAX_SAFE_INTEGER : roomMode === 'slow' ? 9 : 2,
+  });
+  if (roomMode === 'lose') rooms.loseNextCommitAnswer();
+  if (roomMode === 'deny') rooms.denyNextCommit();
+  const travel = createRaidTravelCoordinator({
+    repository: createMemoryTravelRepository(), rooms: rooms.transport, marches: createRaidMarchCheck(repository), origin: 'simulated', clock: options.clock,
+  });
   const app = createRaidGateApplication({
-    repository, origin: 'simulated', clock: options.clock, raids, roads,
+    repository, origin: 'simulated', clock: options.clock, raids, roads, travel,
     policy: {
       async readStanding(principal) {
         return { session: 'current', broadcaster: String(principal.personId) === String(SOURCE.kingdomId), live: true, raids: 'granted', actions: 'enabled', ...STANDINGS[authority] };
@@ -142,6 +163,7 @@ export function createGateBench(options: GateBenchOptions): GateBench {
     open() { open = true; changed(); },
     close() { if (open) { open = false; changed(); emit({ kind: 'closed' }); } },
     follow(raid) { log.followed.push(raid.id); },
+    travel(stage) { log.travel.push(`${stage.kind} ${stage.state}`); },
     async resolve(kingdomId) {
       const entry = DESTINATIONS.find(each => each.channel.kingdomId === kingdomId);
       return entry ? { channel: entry.channel, land: entry.land } : null;
@@ -187,7 +209,7 @@ export function createGateBench(options: GateBenchOptions): GateBench {
       // As main's verified ingress would: correlated to the request its transport sent, with an upstream event ID.
       return app.ingestRaid({ raid, upstreamEventId: `simulated-event-${requestId}`, actionRequestId: accepted.has(requestId) ? requestId : null, receivedAt: at });
     },
-    log,
+    log, rooms,
     monarchClose: requestId => as(SOURCE.kingdomId, { op: 'cancel', requestId }),
     async walkersJoin(count, requestId) {
       for (const personId of WALKERS.slice(options.viewer === 'walker' ? 1 : 0, (options.viewer === 'walker' ? 1 : 0) + count)) await as(personId, { op: 'join', requestId });

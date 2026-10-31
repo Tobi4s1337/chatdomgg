@@ -112,6 +112,8 @@ describe('Raid Gate controller', () => {
       origin: 'simulated',
       request: command => command.op === 'gate'
         ? Promise.resolve({ kind: 'gate', value: { kingdomId: SOURCE.kingdomId, viewer: 'monarch', authority: 'ready', open } })
+        // This viewer has never travelled.
+        : command.op === 'whereabouts' ? Promise.resolve({ kind: 'denied', code: 'stale' })
         : new Promise(resolve => pending.push({ command, resolve })),
       subscribe: () => undefined,
     };
@@ -195,5 +197,49 @@ describe('Raid Gate controller', () => {
     await controller.start();
     expect(await until(controller, s => s.phase === 'countdown')).toMatchObject({ notice: null });
     expect(bench.log.writes).toHaveLength(1);
+  });
+
+  it('follows the witnessed raid through the gate one authority answer at a time, confirms a lost arrival, and comes home', async () => {
+    let now = 1_800_000_000_000;
+    const clock = () => now;
+    const bench = createGateBench({ viewer: 'walker', authority: 'ready', clock, rooms: 'lose' });
+    const stages: string[] = [];
+    const atlas = { ...bench.atlas, travel: (stage: { kind: string; state: string }) => { stages.push(`${stage.kind} ${stage.state}`); } };
+    const walker = createRaidGateController({ api: bench.api, atlas, source: bench.source, clock, wait: async () => { now += 1_000; } });
+    await until(walker, s => s.phase === 'quiet');
+    const preview = await bench.monarchPreview(FERN);
+    if (preview.kind !== 'preview') throw new Error('expected a preview');
+    await walker.refresh();
+    expect(walker.snapshot().canTravel).toBe(false);
+    await walker.join();
+    await bench.monarchStart(preview.value.requestId);
+    await bench.witness(preview.value.requestId);
+    await walker.refresh();
+    expect(walker.snapshot()).toMatchObject({ phase: 'departed', joined: true, canTravel: true, journey: null });
+
+    // The arrival's answer is lost: the board confirms rather than stepping again, then shows the arrival.
+    await walker.travel();
+    const arrived = await until(walker, s => s.journey?.state === 'committed');
+    expect(arrived.journey).toMatchObject({ kind: 'raid', state: 'committed', from: SOURCE.kingdomId, to: FERN, role: 'visitor', destination: { channel: { kingdomName: 'Fernhollow' } } });
+    expect(arrived.canTravel).toBe(false);
+    expect(bench.rooms.calls.filter(call => call.startsWith('commit'))).toHaveLength(1);
+    // Each stage reaches the map once; confirming the step is still the drawing.
+    expect(stages).toEqual(['rise reserved', 'road preparing', 'drawing ready', 'arrived committed']);
+    // An arrival abroad stays on the board until the walker chooses to go home.
+    walker.dismissJourney();
+    expect(walker.snapshot().journey?.state).toBe('committed');
+
+    // A reload finds the arrival again through the authority.
+    const reloaded = createRaidGateController({ api: bench.api, atlas: bench.atlas, source: bench.source, clock, wait: async () => { now += 1_000; } });
+    expect((await until(reloaded, s => s.journey !== null)).journey).toMatchObject({ state: 'committed', to: FERN, arrivalId: arrived.journey!.arrivalId });
+    reloaded.dispose();
+
+    await walker.returnHome();
+    const home = await until(walker, s => s.journey?.kind === 'return' && s.journey.state === 'committed');
+    expect(home.journey).toMatchObject({ from: FERN, to: SOURCE.kingdomId, destination: { channel: { kingdomName: 'Fernhollow' } } });
+    expect(bench.rooms.membership('52000001' as Parameters<typeof bench.rooms.membership>[0])).toEqual({ kingdomId: SOURCE.kingdomId, generation: 2 });
+    walker.dismissJourney();
+    expect(walker.snapshot().journey).toBeNull();
+    walker.dispose();
   });
 });

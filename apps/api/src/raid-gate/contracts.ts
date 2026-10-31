@@ -80,6 +80,8 @@ export type VisitorGiftView = Readonly<{
 
 export type GateCommand =
   | Readonly<{ op: 'gate' }>
+  /** The viewer's own outstanding journey, else the one that brought them where they are. Feature-local (RG09). */
+  | Readonly<{ op: 'whereabouts' }>
   | Readonly<{ op: 'preview'; requestId: string; target: KingdomId }>
   | Readonly<{ op: 'start'; requestId: string; previewToken: string }>
   | Readonly<{ op: 'cancel' | 'reconcile' | 'read-action' | 'join' | 'leave'; requestId: string }>
@@ -133,7 +135,7 @@ function readReason(value: unknown): TravelReason | undefined {
 /** The only way a command enters the application. Unknown ops, extra keys and actor fields are all refused. */
 export function readGateCommand(value: unknown): GateCommand | undefined {
   const op = typeof value === 'object' && value !== null ? (value as { op?: unknown }).op : undefined;
-  if (op === 'gate') return fields(value, ['op']) ? { op } : undefined;
+  if (op === 'gate' || op === 'whereabouts') return fields(value, ['op']) ? { op } : undefined;
   if (op === 'preview' || op === 'reserve') {
     const f = fields(value, op === 'preview' ? ['op', 'requestId', 'target'] : ['op', 'requestId', 'target', 'reason']);
     if (!f) return undefined;
