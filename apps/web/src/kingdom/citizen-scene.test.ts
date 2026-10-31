@@ -63,23 +63,65 @@ it('continues forge walks across a scene rebuild only under the current presence
   absent.dispose(); clay.dispose();
 });
 
-it('gathers only present, arrived citizens at distinct forge standing points', () => {
+it('walks the existing rehearsal neighbours into an inward-facing crescent, including the installed barrel', () => {
+  // Same graph/config as the hash-verified adopted rehearsal; no cached file or
+  // invented square residents. The closest doors begin 22–66 metres away.
+  const layout = generateSettlementPlan({ seed: 'willowmere', tier: 'town', firstYear: 2022, year: 2026 });
   const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
-  const layout = generateSettlementPlan({ seed: 'forge-crowd', tier: 'town', firstYear: 2022, year: 2026 });
-  const citizens = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
-  const kingdomId = KingdomIdSchema.parse('129634568'), now = 200_000;
-  const homes = layout.homes.slice(0, 18);
+  const barrel = { position: [-8, 9, 1.125] as const, height: 11 / 8 };
+  let citizens = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, undefined, barrel);
+  const now = 1_000_000, kingdomId = KingdomIdSchema.parse('129634568');
+  const nodes = new Map(layout.nodes.map(node => [node.id, node.position]));
+  const distance = (plot: typeof layout.homes[number]) => { const door = nodes.get(`${plot.id}:front`) ?? plot.position; return Math.hypot(door[0], door[2] - 10); };
+  const homes = layout.homes.filter(home => home.slot !== 2).sort((a, b) => distance(a) - distance(b)).slice(0, 70);
+  let frame = { version: 1 as const, kingdomId, epoch: 'SIMULATED-rehearsal', sequence: 1, asOf: now,
+    origin: 'simulated' as const, streamLive: false, connection: 'offline' as const,
+    windows: homes.map(home => ({ slot: home.slot, present: true, publicName: 'SIMULATED neighbour', since: now - 600_000 })) };
+  citizens.applyFrame(frame);
+  const arrivedCounts: number[] = [];
   try {
-    expect(homes.length).toBeGreaterThanOrEqual(16);
-    citizens.applyFrame({ version: 1, kingdomId, epoch: 'SIMULATED-forge-crowd', sequence: 1, asOf: now,
-      origin: 'simulated', streamLive: true, connection: 'fresh',
-      windows: homes.map((home, index) => ({ slot: home.slot, present: index < 16,
-        publicName: index < 16 ? `SIMULATED ${index}` : null, since: 0 })) });
-    citizens.watchForge(true, now, [0, layout.market.elevation, 8]);
-    citizens.update(now, 0);
-    const watchers = citizens.checkpoint()!.watchers;
-    expect(watchers.size).toBe(16);
-    expect(new Set(watchers.values()).size).toBe(16);
-    expect([...watchers.keys()].every(slot => homes.slice(0, 16).some(home => home.slot === slot))).toBe(true);
+    for (const ms of [0, 2_000, 13_000, 31_000, 38_000, 62_000, 64_000, 72_000, 124_000, 125_000, 132_000]) {
+      if (ms === 2_000) {
+        frame = { ...frame, sequence: 2, asOf: now + ms, windows: [...frame.windows,
+          { slot: 2, present: true, publicName: 'SIMULATED maker', since: now + ms }] };
+        citizens.applyFrame(frame);
+      }
+      if (ms === 124_000) {
+        const checkpoint = citizens.checkpoint()!;
+        citizens.dispose();
+        citizens = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, checkpoint, barrel);
+        citizens.applyFrame(frame);
+        citizens.watchForge(false, now + ms, [0, 9, 8]);
+        citizens.update(now + ms, ms / 1000);
+      }
+      citizens.watchForge(ms >= 38_000, now + ms, [0, 9, 8]);
+      const samples = citizens.update(now + ms, ms / 1000), watchers = citizens.checkpoint()!.watchers;
+      const arrived = samples.filter(sample => watchers.get(sample.slot) === sample.goalNodeId && sample.goalReached);
+      if ([38_000, 62_000, 64_000, 72_000, 132_000].includes(ms)) arrivedCounts.push(arrived.length);
+      for (const sample of arrived) {
+        expect(frame.windows.some(window => window.slot === sample.slot && window.present)).toBe(true);
+        expect(sample.homeLit).toBe(true);
+        expect(sample.position[0]).toBeLessThanOrEqual(-2.6);
+        expect(sample.heading).toBeCloseTo(Math.atan2(-sample.position[0], 8 - sample.position[2]), 9);
+        expect(sample.speed).toBe(0);
+      }
+      if (ms === 38_000) {
+        expect(watchers.size).toBe(16);
+        expect(new Set(watchers.values()).size).toBe(16);
+        expect(samples.filter(sample => watchers.has(sample.slot)).every(sample => !sample.goalReached && sample.position[1] < 10)).toBe(true);
+      }
+      if (ms === 132_000) {
+        expect(arrived.length).toBeGreaterThanOrEqual(10);
+        expect(arrived.length).toBeLessThanOrEqual(16);
+        const raised = arrived.find(sample => sample.goalNodeId === 'forge:watch:14')!;
+        expect(raised.position).toEqual([-8, 9 + barrel.height, 1.125]);
+        expect(citizens.subject(raised.slot)?.position).toEqual(raised.position);
+        const ground = citizens.motion.sample(now + ms).find(sample => sample.slot === raised.slot)!;
+        expect(ground.position[1]).toBe(9);
+        expect(raised.distance).toBe(ground.distance);
+      }
+    }
+    // The old 72s still was necessarily early: accepted goals were not arrivals.
+    expect(arrivedCounts).toEqual([0, 0, 0, 2, 13]);
   } finally { citizens.dispose(); clay.dispose(); }
 });
