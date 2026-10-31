@@ -6,7 +6,7 @@ import { sampleTerrainTriangles } from '../terrain-worker';
 import { planAdoptedCover } from './adopted-cover';
 import { footprintCorners, pieceRole, polygonDistance } from './plan';
 
-it('adds only passive planting over the adopted hamlet without changing its land or homes', () => {
+it('adds only passive planting and flush stones over the adopted hamlet without changing its land or homes', () => {
   const adopted = generateSettlementPlan({ seed: 'willowmere', tier: 'hamlet', firstYear: 2025, year: 2026 });
   expect(adopted.landform.version).toBe(1);
   const before = JSON.stringify(adopted);
@@ -38,8 +38,10 @@ it('adds only passive planting over the adopted hamlet without changing its land
   const forms = placements.map(piece => pieceRole(piece.blueprint).form);
   expect(forms).toContain('meadow-tufts');
   expect(forms.some(form => form.startsWith('wildflowers-'))).toBe(true);
-  expect(placements.every(piece => !pieceRole(piece.blueprint).solid)).toBe(true);
-  // The market stall's grower keeps cutting beds behind it, reached over flush stones from beside the stall.
+  expect(placements.every(piece => {
+    const role = pieceRole(piece.blueprint);
+    return (role.cover || role.form === 'stepping-stones') && !role.solid;
+  })).toBe(true);
   expect(forms).toContain('cutting-bed');
   expect(forms).toContain('stepping-stones');
   expect(cover.blockers).toEqual([]);
