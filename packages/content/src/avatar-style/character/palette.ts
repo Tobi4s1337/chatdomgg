@@ -50,3 +50,28 @@ export const EYE_INK_DEEP: Hex = '#0e0b10';
 export const BLUSH_PINK: Hex = '#ff5d7a';
 /** Freckles: the skin taken toward a warm dark brown. */
 export const FRECKLE_BROWN: Hex = '#5a2a18';
+
+/** Straw and felt for the straw hat, light to dark. Any `#rrggbb` is allowed. */
+export const STRAW = [
+  { id: 'wheat', hex: '#f1dfb0' }, { id: 'raffia', hex: '#e6cc8e' }, { id: 'toast', hex: '#cfa766' },
+] as const satisfies readonly { id: string; hex: Hex }[];
+
+/** Metals and frames: earrings, glasses frames, goggle rims. */
+export const METALS = [
+  { id: 'gold', hex: '#e8b54a' }, { id: 'silver', hex: '#c9cdd4' }, { id: 'rose-gold', hex: '#e1a088' },
+  { id: 'gunmetal', hex: '#55565e' }, { id: 'black', hex: '#1f1d22' }, { id: 'tortoise', hex: '#7a4a26' },
+] as const satisfies readonly { id: string; hex: Hex }[];
+
+/** Lens tints. Lenses are glass: the eyes show through them. */
+export const LENS_TINTS = [
+  { id: 'clear', hex: '#e9f2ff' }, { id: 'rose', hex: '#ffb7c4' }, { id: 'amber', hex: '#ffcf73' },
+  { id: 'sea', hex: '#8fe0d6' }, { id: 'smoke', hex: '#3b3546' }, { id: 'violet', hex: '#b48cff' },
+] as const satisfies readonly { id: string; hex: Hex }[];
+
+/** Flower petals. The heart is always a warm yellow, the leaf a fresh green. */
+export const PETALS = [
+  { id: 'poppy', hex: '#ff4d4d' }, { id: 'daisy', hex: '#fbfaf5' }, { id: 'rose', hex: '#ff6fa8' },
+  { id: 'marigold', hex: '#ffa526' }, { id: 'violet', hex: '#9f6bff' }, { id: 'cornflower', hex: '#5f8dff' },
+] as const satisfies readonly { id: string; hex: Hex }[];
+export const FLOWER_HEART: Hex = '#ffd23a';
+export const LEAF_GREEN: Hex = '#3fae4a';
