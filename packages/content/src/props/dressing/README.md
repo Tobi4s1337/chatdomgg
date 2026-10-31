@@ -2,12 +2,21 @@
 
 The living and garden forms that dress open ground (spec 28, R1). `index.ts` exports `createDressing(form, style?)`,
 `BLUEPRINTS` (finished forms only, in R1 table order; kit forms Hearth, Tide, Grove), `DRESSING_FORMS`,
-`DRESSING_ROLES` and `DRESSING_SIZES`. Non-kit forms are built in Grove and have `kind: 'flora'`. All units below
-are 0.125 m build cells, half-open, with y=0 the ground.
+`DRESSING_ROLES` and `DRESSING_SIZES`. Non-kit forms are built in Grove. Cover and canopy forms have
+`kind: 'flora'`; garden, field and path pieces have `kind: 'prop'`. All units below are 0.125 m build cells,
+half-open, with y=0 the ground.
 
-So far the collection holds the six cover forms in `cover.ts`. The heather, fern, garden, field, path, tree and
-woodland forms will join the same index as they are authored and reviewed. Until then `createDressing` throws
-for them.
+So far the collection holds the six meadow cover forms, the `seedling-bed` and the `cutting-bed` in `cover.ts`;
+the garden pieces (`garden-bed`, `woodpile`, `barrels`, `crates`, `handcart`) in `garden.ts`; the field runs
+(`field-wall`, `rail-fence`, `back-fence`) in `field.ts`; and the `stepping-stones` kit form in `path.ts`. The
+seedling bed and stones make the tended doorstep; with the cutting bed they make the market stall's garden. The
+heather, fern, edge-stone, tree and woodland forms will join the same index as they are authored and reviewed.
+Until then `createDressing` throws for them.
+
+**Palette.** The validator's ground-dressing palette applies to every form: the kit's trim and stone, plus
+`earth`, `bark`, `leaf`, `moss`, `petal`, `blueFlower`, `grass`, `goldLeaf`, `cream`, `thatch` and `terracotta`.
+Kit forms use only their own kit's stone. Non-kit pieces are built in Grove (trim is `bark`) and may use any
+kit's stone, but never `timber`, `plaster`, `slate` or `glass`.
 
 ## Cover
 
@@ -18,7 +27,9 @@ stay four cells (0.5 m) tall or less, so they can stand in front of a facade und
 Each patch is drawn as a **height map**: one row per Z and one mark per column. A digit is a leaf column that
 many cells tall, and `a`–`d` are the same heights with a moss top cell. `F`/`H` are flower-head columns with or
 without a two-cell leaf stem, and `f`/`h` are the same with the head's top cell left open. `o`/`O` are pebble
-stone one or two cells tall. The whole composition of a patch is visible in its plan. Columns never overhang,
+stone one or two cells tall (the kit's stone in a path form). `e`/`E` are turned earth one or two cells tall.
+`s` is a seedling leaf on one earth cell, `t` is a seedling heart (leaf and moss tip) on one earth cell, and `m`
+is one cell of moss. The whole composition of a patch is visible in its plan. Columns never overhang,
 except for a head's stemless cells, which its own head holds up. So every patch is grounded by construction.
 `plan` throws on a mark in the margin, a column that is too tall, or a head that is not a proper 2×2.
 `toBoxes` merges runs along X, then along Z, and writes each cell once.
@@ -35,6 +46,104 @@ except for a head's stemless cells, which its own head holds up. So every patch 
 - **clover-pebbles** 16×2×16: two rounded clover mats in `leaf` with `moss` along their sunny rims, plus five
   raised leaves. Four pebbles in `stone` (#aaa49b) are bedded into the lawn: a domed 4×4 at the back right, a
   2×2 tucked against the larger mat, a soft 3×3 at the left and a low one at the front.
+
+- **seedling-bed** 24×3×8: a front-garden bed being planted. A strip of turned `earth` one course deep, with
+  ragged ends, holds two staggered rows of seedlings. Each is a cross of `leaf` around a `moss` heart. The back
+  row is full (five). The front row stops after three, then one seedling only just set, then the soil from the
+  planting holes heaped two cells high. There is no tool and nothing to harvest. It is passive and lies flush,
+  so it may stand in a forecourt.
+
+- **cutting-bed** 24×4×10: a grower's cutting bed, the stock of a market stall. A continuous edge of turned
+  `earth` holds three staggered rows of 2×2 heads in three blocks of one colour each: five `petal`, four `cream`,
+  five `goldLeaf`, never mixed, so it reads as planted rather than wild. `plan` takes a colour per head, named by
+  its even corner. Leaves bank against every head. Between the cream and the gold one head has been cut for the
+  stall: its bare stems stand with `moss` cut ends, and a single heaped clod lies on the edge beside them. It
+  is half a metre tall, passive and flush, with nothing to pick, sit on or step up.
+
+## Garden
+
+Garden pieces are solid props that make the medium-band vignettes against a home's open lot side or the back of
+its lot (woodpile and barrels, bed and crates, the handcart). They are seven cells deep, tighter than the R1
+maxima, so they fit the narrow margins outside the lots. Each is carved cell by cell with `sculpt` (`garden.ts`): a later
+write replaces an earlier one, writing outside the size throws, and `toBoxes` from `cover.ts` writes each cell
+once. Solid pieces may touch their box edges; the one-cell margin is for cover only. Back pieces stand with low Z
+against a wall or lot line and +Z facing away from the home.
+
+- **garden-bed** (kit) 24×5×12: a raised bed. Soil (`earth`) lies two courses deep inside an edge whose top is
+  one course above it. On the soil stands mixed leafy planting, drawn as a height map: a tall leafy mass at the
+  left end, a lower clump at the right, low clumps between them with `moss` tips, one bare patch with a turned
+  clod, and two 2×2 flower heads on leaf stems. There is no crop, fruit or anything to harvest.
+  - Hearth: a `timber` board edge on a `limestone` footing course, with corner stakes and one mid-front stake a
+    cell proud. Flowers in `petal`.
+  - Tide: a kerb of rounded `stone` cobbles, each crowned a course above its joints. Flowers in `blueFlower`.
+  - Grove: rounded `bark` logs two cells thick, the front and back logs running past the ends with `thatch` end
+    grain, moss along their tops and a `darkStone` boulder at the back right corner. Flowers in `cream`.
+- **woodpile** 20×12×7: round split logs, each a `bark` body three cells across whose end shows a plus of end
+  grain inside its bark rind. The rinds of neighbouring logs meet, so no daylight shows through. They are stacked three courses
+  on the left and stepping down to two on the right. Their end grain shows on the +Z face in `thatch`, three
+  freshly split in `cream`; some ends stand proud, one is set back, and one split half lies flat side down on
+  top. Above them is a short `bark` lean-to: two back posts at z=0 carry its high edge, two front posts its eave,
+  the slabs overlap down the slope with a ragged eave, and `moss` has taken the upper left.
+- **barrels** 14×10×7: two closed barrels with a cell between them. The tall one has `thatch` staves; the shorter,
+  darker one in `bark` is set a cell forward with its bung on the other side. Each is a round voxel profile that
+  bellies out between `darkStone` hoops and carries a flush lid of its own wood with a stopped bung.
+- **crates** 12×12×7: a 7×6×7 crate with `bark` corner battens, a mid rail across its front and `thatch` plank
+  panels recessed a cell, and a flush closed lid. A smaller 5×5×6 crate sits on it, turned the other way, set back
+  and to the right, with a diagonal brace. A tied `cream` sack with a `thatch` cord slumps against the bottom
+  crate's side.
+- **handcart** 24×14×12: a parked two-wheeled garden cart. Its wheels are eleven cells across, with a `darkStone`
+  tyre, a `bark` felloe, four spokes and a hub cap, and they stand on the ground at z=1 and z=10. The box has a
+  `thatch` floor, `terracotta`-painted boards (the one painted accent) in a `bark` frame, and corner stakes. Its
+  front rests on two short legs, and the shafts run down to the ground toward +X, joined by a low crossbar. It is
+  empty except for one tied sack.
+
+## Field
+
+Field runs are solid kit pieces laid along +X.
+
+- **field-wall** (kit) 32×7×5: a 4 m dry-stone run in the kit's stone. It is battered from five cells at the foot
+  to a ridge one cell wide. Its faces are laid in two-cell courses, drawn as marks per X (`course`): the lowest
+  course is all proud, and above it stones are proud or set back a cell, with an open cell at joints. That gives an
+  uneven top and faces that read stone by stone. Front and back are laid differently. Moss sits on top stones
+  only.
+  - Hearth: upright cope stones on the ridge and a few patches of `goldLeaf` lichen.
+  - Tide: flat slabs, two of them through-stones lipping both faces, and a tuft of `petal` sea thrift on a ledge.
+  - Grove: a turf cap of `moss` and `leaf` over the ridge and ferns at its feet.
+
+  **Join:** runs are laid at a pitch of 30 cells with the same base height. The ends are rounded and authored
+  column by column (`LEFT_END`, `RIGHT_END`). The left end is lower and narrower and lies strictly inside the right
+  end: every occupied cell (x, y, z) with x < 2 has (x+30, y, z) occupied. Every open face of the left end, other
+  than its ground face, is covered by a cell of the right end, so two joined runs share no coincident face.
+- **rail-fence** (kit) 32×10×4: a 4 m split-rail run. Two posts are set in from the ends, at x=2 and x=27, and
+  each leans a cell toward +X above its fifth course. Rails overrun both ends by two cells, and some spans thin to
+  one cell deep where the wood was split.
+  - Hearth: three `timber` rails, with `limestone` packed round the post feet.
+  - Tide: two salt-bleached `thatch` rails on `timber` posts, with `stone` at the feet.
+  - Grove: three `bark` rails, moss on the post tops, a `darkStone` boulder and a fern at the feet.
+
+  **Join:** same 30-cell pitch. Each rail drops a cell where it passes through the left post, so its left end rides
+  one cell above the right end of the run before it. No left-end cell coincides with a cell 30 on, and each one
+  rests on that run's rail end, against its end post (x=29). Double posts and stacked rail ends at every joint
+  read as an alpine paired-post fence.
+- **back-fence** (kit) 64×9×3: the lot's 8 m back fence. Posts two cells wide span the full depth at x = 0, 16, 32,
+  48 and 62 (a post every 2 m and at both ends). Two rails run the whole length on the house side (z=2, at y=2 and
+  y=5), and low pales stand in front of them at z=1, a cell above the ground.
+  - Hearth: `timber` pales in a gentle arch across each bay, on `limestone` post pads.
+  - Tide: `cream`-painted pales cut level, every fourth one taller, on `timber` posts capped with `stone`.
+  - Grove: rustic `bark` staves of uneven height and spacing, a few fresh `thatch` ones, posts with `moss` tops,
+    `darkStone` at two feet and ferns.
+
+  Neighbouring lots' fences stand 1 m or more apart, so the ends need no overlap.
+  On the garden side the planner runs one flower drift (4.4–6 m, the home's kit colours) 1.9 m behind it, tagged
+  with the lot, so it moves with the fence and hides with the lot; Old Row and the arrival home almost always have one.
+
+## Path
+
+- **stepping-stones** (kit) 24×2×8: three flat stones a stride apart, two courses of the kit's stone (Hearth
+  limestone, Tide stone, Grove dark stone). One is broad and square-shouldered, one is a narrower oval and one is
+  long and turned off the line. Turf worn to `earth` lies where feet land between them, and `moss` holds a few
+  joints. It is passive: walked over, never a blocker. The planter beds it so only a worn lip shows,
+  even where up to 0.14 m of grade relief runs under it.
 
 ## LOD design
 
@@ -61,8 +170,21 @@ Full detail, from the mesher (confirmed by `render-stats.json`); each renders in
 | meadow-tufts | 100 | 538 | 45 |
 | wildflowers-* (each) | 219 | 956 | 93 |
 | clover-pebbles | 96 | 502 | 37 |
+| seedling-bed | 182 | 590 | 39 |
+| cutting-bed | 351 | 1,098 | 106 |
+| garden-bed Hearth / Tide / Grove | 800 / 758 / 802 | 1,030 / 1,192 / 1,034 | 105 / 109 / 118 |
+| woodpile | 614 | 1,928 | 164 |
+| barrels | 522 | 722 | 71 |
+| crates | 398 | 698 | 71 |
+| handcart | 427 | 1,496 | 157 |
+| field-wall Hearth / Tide / Grove | 718 / 786 / 726 | 1,014 / 1,034 / 956 | 89 / 76 / 99 |
+| rail-fence Hearth / Tide / Grove | 241 / 183 / 244 | 568 / 444 / 594 | 30 / 34 / 32 |
+| back-fence Hearth / Tide / Grove | 584 / 544 / 586 | 1,716 / 1,558 / 1,818 | 245 / 213 / 254 |
+| stepping-stones (each kit) | 182 | 324 | 37 |
 
-Budget: ≤ 1,500 triangles per cover form.
+The back fence spans two mesher chunks; it is still one model draw. Budget: ≤ 1,500 triangles and ≤ 400 boxes
+per cover form, ≤ 6,000 triangles and ≤ 2,000 boxes per garden, field or path form. The flush forms are mounted at full detail
+only: a coarse level would stand a one-course stone up as a slab.
 
 ## Commands
 

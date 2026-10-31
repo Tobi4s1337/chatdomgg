@@ -19,7 +19,7 @@ const draft: ForgeDraft = {
 const pass = { outcome: 'pass' as const, reason: 'passed', records: [{ judge: 'controlled-test-judge', status: 'complete' }] };
 
 /** Controlled authority only for this test. No test authorization implementation is exported to applications. */
-function fixture(origin: KingdomForgeAuthority['origin'] = 'live') {
+function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (event: ForgeActivity) => void) {
   const home = createHome('house', 'hearth', 0), controller = new AbortController();
   const reservation: ForgeReservation = {
     kingdomId: command.kingdomId, personId: command.personId, slot: 7, home, family: 'hearth',
@@ -52,7 +52,7 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live') {
   };
   const run = createKingdomForgeApplication({
     authority, providers, now: () => now, record: async audit => { audits.push(audit); },
-    publish: event => { if (event.type === 'committed') expect(durable).not.toBeNull(); publicEvents.push(event); },
+    publish: event => { onPublish?.(event); if (event.type === 'committed') expect(durable).not.toBeNull(); publicEvents.push(event); },
   });
   return { run, authority, providers, publicEvents, audits, reservation, controller,
     lease: { signal: controller.signal, current: () => current },
@@ -60,6 +60,56 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live') {
 }
 
 describe('the kingdom Forge application', () => {
+  it.each(['refused', 'held', 'canceled'] as const)('ends a staged %s run privately before reservation cleanup finishes', async kind => {
+    const f = fixture();
+    vi.mocked(f.providers.judgeWords).mockImplementation(async () => {
+      if (kind === 'canceled') f.controller.abort();
+      return { ...pass, outcome: kind === 'refused' ? 'refuse' : 'hold', reason: 'PRIVATE controlled verdict' };
+    });
+    let release!: () => void, releasing!: () => void;
+    const cleanupStarted = new Promise<void>(resolve => { releasing = resolve; });
+    vi.mocked(f.authority.release).mockImplementation(() => {
+      releasing(); return new Promise<void>(resolve => { release = resolve; });
+    });
+    const running = f.run(command, f.lease);
+    await cleanupStarted;
+    try {
+      const stage = f.publicEvents[0];
+      expect(stage).toMatchObject({ type: 'stage', stage: 'judging-words' });
+      expect(f.publicEvents).toEqual([stage, { type: 'ended', activityId: stage?.activityId }]);
+      expect(f.authority.commit).not.toHaveBeenCalled();
+      expect(f.coals).toBe(1);
+    } finally { release(); }
+    expect(await running).toMatchObject({ kind });
+  });
+
+  it('emits no ending when reserve fails, validation fails before a stage, or every stage publication throws', async () => {
+    const denied = fixture();
+    vi.mocked(denied.authority.reserve).mockResolvedValue({ kind: 'held' });
+    expect(await denied.run(command, denied.lease)).toEqual({ kind: 'held' });
+    expect(denied.publicEvents).toEqual([]);
+
+    const invalid = fixture();
+    Object.assign(invalid.reservation, { safetyIdentifier: 'invalid' });
+    expect(await invalid.run(command, invalid.lease)).toEqual({ kind: 'held' });
+    expect(invalid.publicEvents).toEqual([]);
+
+    const publish = vi.fn(() => { throw new Error('SIMULATED unavailable broadcast'); });
+    const unobserved = fixture('live', publish);
+    vi.mocked(unobserved.providers.judgeWords).mockResolvedValue({ ...pass, outcome: 'hold' });
+    expect(await unobserved.run(command, unobserved.lease)).toEqual({ kind: 'held' });
+    expect(publish).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ type: 'stage' }));
+    expect(unobserved.publicEvents).toEqual([]);
+  });
+
+  it('does not end a confirmed durable commit even when its publication cancels the caller', async () => {
+    const f = fixture('live', event => { if (event.type === 'committed') f.controller.abort(); });
+    expect(await f.run(command, f.lease)).toMatchObject({ kind: 'committed' });
+    expect(f.publicEvents.some(event => event.type === 'ended')).toBe(false);
+    expect(f.authority.release).not.toHaveBeenCalled();
+    expect(f.coals).toBe(0);
+  });
+
   it('derives the castle profile from the reservation and rejects a changed authoritative profile', async () => {
     const accepted = fixture();
     Object.assign(accepted.reservation, { home: createCastleModule('keep', [32, 31, 32], 'hearth'), hostProfile: 'castle-keep', slot: 65_534 });
@@ -111,6 +161,7 @@ describe('the kingdom Forge application', () => {
     expect(accepted.providers.judgeWords).toHaveBeenCalledTimes(1);
     expect(accepted.authority.commit).toHaveBeenCalledTimes(1);
     expect(accepted.publicEvents.filter(event => event.type === 'committed')).toHaveLength(1);
+    expect(accepted.publicEvents.some(event => event.type === 'ended')).toBe(false);
 
     // The exact same coordinator can rehearse against a simulated room without claiming a live creation.
     const rehearsal = fixture('simulated');
@@ -156,6 +207,7 @@ describe('the kingdom Forge application', () => {
       expect(failed.coals).toBe(1);
       expect(failed.durable).toBeNull();
       expect(failed.publicEvents.some(event => event.type === 'committed')).toBe(false);
+      expect(failed.publicEvents.at(-1)).toEqual({ type: 'ended', activityId: failed.publicEvents[0]?.activityId });
     }
 
     // The authority owns the final CAS: a race AFTER revalidation still cannot spend or attach.
@@ -169,6 +221,7 @@ describe('the kingdom Forge application', () => {
     expect(commitRace.authority.release).toHaveBeenCalledTimes(1);
     expect(commitRace.coals).toBe(1);
     expect(commitRace.publicEvents.some(event => event.type === 'committed')).toBe(false);
+    expect(commitRace.publicEvents.at(-1)).toEqual({ type: 'ended', activityId: commitRace.publicEvents[0]?.activityId });
 
     // An unreachable adapter cannot hold the caller forever or keep a late reservation's lease valid.
     vi.useFakeTimers();

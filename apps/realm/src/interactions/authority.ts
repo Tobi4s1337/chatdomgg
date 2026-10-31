@@ -180,7 +180,7 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     if (!context.unobstructed) return refuse('unreachable');
 
     switch (target.kind) {
-      case 'campfire-seat': case 'tavern-seat': return seat(context, entry, record, requestId);
+      case 'bench-seat': case 'campfire-seat': case 'tavern-seat': return seat(context, entry, record, requestId);
       case 'anvil':
         // The Forge opens where you stand; the room only confirms that this anvil is in reach. No lease, no fact.
         return accept(entry.state, null);

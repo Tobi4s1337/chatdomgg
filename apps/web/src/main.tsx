@@ -23,7 +23,10 @@ const lanePaths: Record<string, string> = {
   '/-/avatars': './avatar-bench/index.tsx', '/-/forge': './forge-bench/index.tsx', '/-/audio': './audio-bench/index.tsx',
 };
 const loadLane = laneViews[lanePaths[window.location.pathname] ?? ''];
-if (window.location.pathname === '/-/realm') {
+if (window.location.pathname === '/showcase') {
+  const { default: Showcase } = await import('./showcase');
+  render(() => <Showcase />, root);
+} else if (window.location.pathname === '/-/realm') {
   const { default: RealmReference } = await import('./realm-reference');
   render(() => <RealmReference />, root);
 } else if (loadLane) {
@@ -36,7 +39,7 @@ if (window.location.pathname === '/-/realm') {
   const module = await loadAtlas();
   render(() => <module.default />, root);
 } else if (new URLSearchParams(location.search).get('walk') === '1') {
-  const [{ default: KingdomEntry }, { openSimulatedKingdomEntry }, { createLiveKingdomEntrySource }, { RealmEntryError }] = await Promise.all([
+  const [{ default: KingdomEntry }, { openSimulatedKingdomEntry }, { createLiveKingdomEntrySource }, { RealmEntryError, readRealmJson }] = await Promise.all([
     import('./kingdom-entry'), import('./kingdom-entry/simulated'), import('./kingdom-entry/live'), import('./realm/adapters/entry'),
   ]);
   const query = new URLSearchParams(location.search);
@@ -48,7 +51,7 @@ if (window.location.pathname === '/-/realm') {
     const response = await fetch(REALM_ENTRY_ROUTE.replace(':kingdomId', encodeURIComponent(kingdom.data)), {
       signal, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
     });
-    const body: unknown = await response.json().catch(() => null);
+    const body = await readRealmJson(response, `Finding the kingdom (/api/realm/entry/${kingdom.data})`);
     if (!response.ok) {
       const error = RealmApiErrorSchema.safeParse(body);
       throw new RealmEntryError(error.success ? error.data.status : response.status === 401 ? 'unauthenticated' : 'unavailable',

@@ -13,7 +13,7 @@ import { placeMarketContent, placeSettlementContent } from '../kingdom/settlemen
 import { loadTerrain } from '../kingdom/terrain-client';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from '../kingdom/terrain-worker';
 import { terrainBatches } from '../kingdom/terrain-batches';
-import type { CameraPose, HomeAnchor } from '../twitch-moments';
+import type { CameraPose, DoorAnchor, GiftRoute, HomeAnchor, PlaceAnchor, SkyGlow, SpectaclePlaces, WindowAnchor } from '../twitch-moments';
 
 /**
  * The bench's kingdom: a real generated hamlet, composed from the same settlement, content, voxel worker,
@@ -28,6 +28,13 @@ export interface MomentStage {
   readonly camera: THREE.PerspectiveCamera;
   mesh(blueprint: VoxelBlueprint): Promise<THREE.BufferGeometry>;
   homeAnchor(slot: number): HomeAnchor | null;
+  doorAnchor(slot: number): DoorAnchor | null;
+  windowAnchor(slot: number): WindowAnchor | null;
+  placeAnchor(place: 'market' | 'gate'): PlaceAnchor | null;
+  giftRoute(): GiftRoute | null;
+  readonly places: SpectaclePlaces;
+  /** The sky's light on the town (fireworks, aurora, dragon fire), mixed into the hour's ambient until the next call. */
+  setGlow(glow: SkyGlow): void;
   setPresence(frame: KingdomPresenceFrame): void;
   setPose(pose: CameraPose): void;
   readonly pose: CameraPose;
@@ -72,6 +79,128 @@ function bannerMount(house: WindowHouse): HomeAnchor | null {
   return null;
 }
 
+const yawed = (house: WindowHouse, x: number, z: number) => new THREE.Vector3(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw);
+const toWorld = (house: WindowHouse, cell: Vec3) => new THREE.Vector3(...cell).multiplyScalar(VOXEL_METRES.build).applyAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw)
+  .add(new THREE.Vector3(...house.position));
+
+/** The doorstep in front of the authored entrance (or the façade's middle), on the lot's floor. */
+function doorOf(house: WindowHouse): DoorAnchor {
+  const [sx, , sz] = house.blueprint.size, entrance = ENTRANCES[house.blueprint.id]?.entrance;
+  const doorX = entrance && entrance[2] > sz / 2 ? entrance[0] : sx / 2, floor = entrance ? entrance[1] - 11 : 4;
+  return { doorstep: toWorld(house, [doorX, floor, sz + 3]).toArray(), normal: yawed(house, 0, 1).toArray(), right: yawed(house, 1, 0).toArray() };
+}
+
+/** The presence window (the first authored one, as the window lights use), on its exterior glass face. */
+function windowOf(house: WindowHouse): WindowAnchor | null {
+  const window = house.blueprint.windows[0];
+  if (!window) return null;
+  const angle = { north: Math.PI, east: Math.PI / 2, south: 0, west: -Math.PI / 2 }[window.facing] + house.yaw;
+  const normal = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle)), right = new THREE.Vector3(Math.cos(angle), 0, -Math.sin(angle));
+  return { centre: toWorld(house, window.centre).addScaledVector(normal, 0.006).toArray(), normal: normal.toArray(), right: right.toArray(),
+    width: window.width * VOXEL_METRES.build, height: window.height * VOXEL_METRES.build };
+}
+
+/**
+ * The gift cart's real route along active streets: in along the lane whose far junction lies nearest 55 m of road
+ * from the market, and on up the castle road. Street points are the plan's own ground points.
+ */
+function giftRouteOf(layout: SettlementPlan): GiftRoute | null {
+  const active = new Set(layout.activeStreetIds), market = layout.market.nodeId;
+  const node = new Map(layout.nodes.map(n => [n.id, n]));
+  const edges = layout.streets.filter(s => active.has(s.id) && s.kind !== 'approach' && s.kind !== 'trail');
+  const length = (points: readonly Vec3[]) => points.reduce((sum, p, i) => i ? sum + Math.hypot(p[0] - points[i - 1]![0], p[2] - points[i - 1]![2]) : 0, 0);
+  // Shortest road from the market to every junction.
+  const best = new Map<string, { distance: number; points: Vec3[] }>([[market, { distance: 0, points: [node.get(market)!.position] }]]);
+  const open = [market];
+  while (open.length) {
+    open.sort((a, b) => best.get(a)!.distance - best.get(b)!.distance);
+    const here = open.shift()!, from = best.get(here)!;
+    for (const edge of edges) {
+      if (edge.from !== here && edge.to !== here) continue;
+      const there = edge.from === here ? edge.to : edge.from, points = edge.from === here ? [...edge.points] : [...edge.points].reverse();
+      const distance = from.distance + length(points);
+      if ((best.get(there)?.distance ?? Infinity) <= distance) continue;
+      best.set(there, { distance, points: [...from.points, ...points.slice(1)] });
+      if (!open.includes(there)) open.push(there);
+    }
+  }
+  const gate = layout.castle.gateNodeId;
+  const entries = [...best.entries()].filter(([id]) => id !== market && id !== gate && !id.startsWith('road:') && best.get(id)!.distance > 30);
+  const [, entry] = entries.sort((a, b) => Math.abs(a[1].distance - 55) - Math.abs(b[1].distance - 55))[0] ?? [];
+  const castle = best.get(gate);
+  if (!entry || !castle) return null;
+  // On out up the castle road, as far as the first 60 m of it.
+  let run = 0, end = castle.points.length;
+  for (let i = 1; i < castle.points.length; i++) { run += Math.hypot(castle.points[i]![0] - castle.points[i - 1]![0], castle.points[i]![2] - castle.points[i - 1]![2]); if (run > 60) { end = i + 1; break; } }
+  return { inbound: [...entry.points].reverse(), outbound: castle.points.slice(0, Math.max(2, end)) };
+}
+
+/** The festival train's loop: a rounded ring just outside the homes, kept off the lake and the castle, on the ground. */
+function trackOf(layout: SettlementPlan): Vec3[] {
+  const lots = layout.reservations.map(r => r.lot);
+  const minX = Math.min(...lots.map(l => l.minX)) - 10, maxX = Math.max(...lots.map(l => l.maxX)) + 10;
+  const minZ = Math.min(...lots.map(l => l.minZ)) - 10, maxZ = Math.max(...lots.map(l => l.maxZ)) + 10;
+  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2, rx = (maxX - minX) / 2, rz = (maxZ - minZ) / 2;
+  const c = layout.castle.bounds, lake = layout.lake;
+  const blocked = (x: number, z: number) => (x > c.minX - 6 && x < c.maxX + 6 && z > c.minZ - 6 && z < c.maxZ + 6)
+    || Math.hypot((x - lake.x) / lake.radiusX, (z - lake.z) / lake.radiusZ) < 1.25;
+  const out: Vec3[] = [];
+  const count = Math.max(48, Math.round(Math.PI * (rx + rz) / 2.2));
+  for (let i = 0; i < count; i++) {
+    const a = i / count * Math.PI * 2;
+    // A squircle reads as a laid railway rather than a drawn circle: long straights with rounded ends.
+    const sx = Math.sign(Math.cos(a)) * Math.abs(Math.cos(a)) ** 0.6, sz = Math.sign(Math.sin(a)) * Math.abs(Math.sin(a)) ** 0.6;
+    let k = 1, x = cx + sx * rx, z = cz + sz * rz;
+    while (blocked(x, z) && k > 0.45) { k -= 0.03; x = cx + sx * rx * k; z = cz + sz * rz * k; }
+    out.push([x, terrainHeight(layout, x, z), z]);
+  }
+  // Ease the ring so pulled-in stretches curve rather than step.
+  for (let pass = 0; pass < 3; pass++) {
+    const copy = out.map(p => [...p] as Vec3);
+    for (let i = 0; i < out.length; i++) {
+      const a = copy[(i - 1 + out.length) % out.length]!, b = copy[i]!, d = copy[(i + 1) % out.length]!;
+      const x = (a[0] + 2 * b[0] + d[0]) / 4, z = (a[2] + 2 * b[2] + d[2]) / 4;
+      out[i] = [x, terrainHeight(layout, x, z), z];
+    }
+  }
+  return out;
+}
+
+/** The town's public places for the spectacle layers, all from the plan and the placed homes. */
+function placesOf(layout: SettlementPlan, houses: readonly WindowHouse[], castle: readonly (WindowHouse & { id: string })[], beacon: Vec3, track: readonly Vec3[]): SpectaclePlaces {
+  const ground = (x: number, z: number): Vec3 => [x, terrainHeight(layout, x, z), z];
+  const homes = layout.homes.map(h => h.position);
+  const cx = homes.reduce((s, p) => s + p[0], 0) / Math.max(1, homes.length), cz = homes.reduce((s, p) => s + p[2], 0) / Math.max(1, homes.length);
+  const radius = Math.max(30, ...homes.map(p => Math.hypot(p[0] - cx, p[2] - cz) + 12));
+  const market = layout.market.boundary, mx = market.reduce((s, p) => s + p[0], 0) / market.length, mz = market.reduce((s, p) => s + p[1], 0) / market.length;
+  const kinds = new Map(layout.castle.modules.map(m => [m.id, m.kind]));
+  const walls = castle.filter(b => kinds.get(b.id) !== 'keep').map(b => {
+    const [sx, sy, sz] = b.blueprint.size;
+    return toWorld(b, [sx / 2, sy, sz / 2]).toArray() as Vec3;
+  });
+  // The lair lies in the hills beyond the castle, away from the homes.
+  const away = new THREE.Vector3(layout.castle.centre[0] - cx, 0, layout.castle.centre[2] - cz).normalize();
+  const lx = layout.castle.centre[0] + away.x * 70, lz = layout.castle.centre[2] + away.z * 70;
+  const roofs = new Map(houses.map(h => {
+    const [sx, sy, sz] = h.blueprint.size;
+    return [h.slot, toWorld(h, [sx / 2, sy, sz / 2]).toArray() as Vec3] as const;
+  }));
+  const active = new Set(layout.activeStreetIds);
+  const bunting = layout.streets.filter(st => active.has(st.id) && (st.kind === 'main' || st.kind === 'lane') && st.points.length > 1)
+    .sort((a, b) => Math.hypot(a.points[0]![0] - mx, a.points[0]![2] - mz) - Math.hypot(b.points[0]![0] - mx, b.points[0]![2] - mz)).slice(0, 6)
+    .map(st => st.points.map(p => [p[0], p[1] + 4.4, p[2]] as Vec3));
+  return {
+    sky: () => ({ centre: ground(cx, cz), radius, ceiling: 58 }),
+    castle: () => ({ crown: beacon, walls }),
+    plaza: () => ground(mx, mz),
+    lair: () => ({ position: ground(lx, lz), facing: away.clone().negate().toArray() }),
+    track: () => track,
+    bunting: () => bunting,
+    roof: slot => roofs.get(slot) ?? null,
+    homes: () => [...roofs.keys()].sort((a, b) => a - b),
+  };
+}
+
 export async function createMomentStage(canvas: HTMLCanvasElement, options: { seed: string; hour: number; signal: AbortSignal; onProgress(fraction: number): void }): Promise<MomentStage> {
   const cleanups: (() => void)[] = [];
   const own = <T extends { dispose(): void }>(resource: T): T => { cleanups.push(() => resource.dispose()); return resource; };
@@ -97,6 +226,7 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
     const windows = own(createWindowLights(scene, houses));
     const shadows = own(createSunShadows(renderer, { bounds: new THREE.Box3(new THREE.Vector3(layout.bounds.minX - 40, -8, layout.bounds.minZ - 70), new THREE.Vector3(layout.bounds.maxX + 40, 60, layout.bounds.maxZ + 20)), resolution: 2048 }));
     shadows.bindReceiver(clay.material); shadows.bindReceiver(ground.material);
+    const track = trackOf(layout);
     const blockers = [...houses, ...castle], near = [...blockers, ...props.map(p => ({ ...p, slot: 65534 }))];
     let nearBytes = 0, farBytes = 0, beaconBytes = 0;
     const field = own(createLightField(layout, near, v => { clay.setLight(v); nearBytes = v.estimatedPeakBytes; }));
@@ -116,6 +246,8 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
       if (x > c.minX - 4.25 && x < c.maxX + 4.25 && z > c.minZ - 4.25 && z < c.maxZ + 4.25) continue;
       if (Math.hypot((x - layout.lake.x) / layout.lake.radiusX, (z - layout.lake.z) / layout.lake.radiusZ) < 1.19) continue;
       if (planted.some(([px, pz]) => (px - x) ** 2 + (pz - z) ** 2 < 8)) continue;
+      // The festival railway runs clear through the groves.
+      if (track.some(p => (p[0] - x) ** 2 + (p[2] - z) ** 2 < 20)) continue;
       planted.push([x, z]);
       let low = Infinity;
       for (const dx of [-1.25, 0, 1.25]) for (const dz of [-1.25, 0, 1.25]) low = Math.min(low, terrainHeight(layout, x + dx, z + dz));
@@ -155,6 +287,10 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
     if (options.signal.aborted) throw new DOMException('The bench closed while loading', 'AbortError');
 
     const anchors = new Map<number, HomeAnchor | null>();
+    const route = giftRouteOf(layout);
+    const places = placesOf(layout, houses, castle, beaconPosition, track);
+    let glow: SkyGlow = { colour: [0, 0, 0], strength: 0 };
+    const lit = new THREE.Color(), flash = new THREE.Color();
     let pose: CameraPose = { eye: [0, 40, 80], target: [0, 0, 0], fov: 46 }, lastField = -Infinity;
     const resize = () => { renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); camera.aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
@@ -176,11 +312,27 @@ export async function createMomentStage(canvas: HTMLCanvasElement, options: { se
         if (!anchors.has(slot)) { const house = houses.find(h => h.slot === slot); anchors.set(slot, house ? bannerMount(house) : null); }
         return anchors.get(slot)!;
       },
+      doorAnchor(slot) { const house = houses.find(h => h.slot === slot); return house ? doorOf(house) : null; },
+      windowAnchor(slot) { const house = houses.find(h => h.slot === slot); return house ? windowOf(house) : null; },
+      placeAnchor(place) {
+        if (!route) return null;
+        // The gate is where the cart's lane enters the hamlet; the market is where it stops.
+        const [a, b] = place === 'gate' ? [route.inbound[0]!, route.inbound[1]!] : [route.inbound.at(-1)!, route.inbound.at(-2)!];
+        const facing = new THREE.Vector3(b[0] - a[0], 0, b[2] - a[2]).normalize();
+        return { position: a, facing: (place === 'gate' ? facing : facing.negate()).toArray() };
+      },
+      giftRoute: () => route,
+      places,
+      setGlow(next) { glow = next; },
       setPresence(frame) { windows.setFrame(frame); windows.update(1, options.hour); lastField = -Infinity; },
       setPose(next) { pose = next; },
       get pose() { return pose; },
       render(atMs) {
-        const grade = getEnvironment(options.hour);
+        const base = getEnvironment(options.hour);
+        // The sky's light washes the town: the ambient leans toward the burst's colour and lifts with its strength.
+        const k = Math.min(1, Math.max(0, glow.strength));
+        const grade = k > 0.001 ? { ...base, ambient: `#${lit.set(base.ambient).lerp(flash.setRGB(...glow.colour), Math.min(0.5, k * 0.85)).getHexString()}`,
+          ambientIntensity: base.ambientIntensity * (1 + 1.25 * k) } : base;
         clay.setEnvironment(grade); ground.setEnvironment(grade);
         camera.position.set(...pose.eye); camera.lookAt(new THREE.Vector3(...pose.target));
         if (Math.abs(camera.fov - pose.fov) > 1e-3) { camera.fov = pose.fov; camera.updateProjectionMatrix(); }

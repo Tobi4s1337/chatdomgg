@@ -3,7 +3,7 @@
  * previously granted this client the right scopes, so every capability is derived from recorded grants,
  * never from holding the app secret.
  */
-export const READER_SCOPES = ['user:bot', 'user:read:chat'] as const;
+export const READER_SCOPES = ['user:bot', 'user:read:chat', 'user:write:chat'] as const;
 export const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters'] as const;
 export const HERALD_SCOPES: readonly string[] = [...READER_SCOPES, ...BROADCASTER_SCOPES];
 
@@ -16,7 +16,7 @@ export const ROLE_SCOPES: Readonly<Record<Role, readonly string[]>> = { reader: 
 /** Which role must have granted which scopes for each capability. */
 const REQUIREMENTS: Readonly<Record<Capability, ReadonlyArray<{ readonly role: Role; readonly scopes: readonly string[] }>>> = {
   // channel.chat.message and its cleanup types (message_delete, clear, clear_user_messages) over a conduit.
-  chat: [{ role: 'reader', scopes: READER_SCOPES }, { role: 'broadcaster', scopes: ['channel:bot'] }],
+  chat: [{ role: 'reader', scopes: ['user:bot', 'user:read:chat'] }, { role: 'broadcaster', scopes: ['channel:bot'] }],
   // Get Chatters with an app token, the broadcaster as moderator_id.
   chatters: [{ role: 'broadcaster', scopes: ['moderator:read:chatters'] }],
   // Get Streams and stream.online/offline need only the app token.
@@ -83,10 +83,9 @@ export function missingScopes(granted: readonly string[], required: readonly str
 }
 
 /**
- * The scopes a consent request for `role` asks for. When the same account plays both roles, the Herald
- * scopes it already granted are requested again so a fresh consent never narrows the other role's grant.
+ * Consent expands this client's existing grant for the resolved account; it never narrows it.
+ * Preserve even scopes owned by other Chatdom features, not just known Herald scopes.
  */
 export function scopesToRequest(role: Role, alreadyGranted: readonly string[]): string[] {
-  const keep = alreadyGranted.filter(scope => HERALD_SCOPES.includes(scope));
-  return [...new Set([...ROLE_SCOPES[role], ...keep])].sort();
+  return [...new Set([...ROLE_SCOPES[role], ...alreadyGranted])].sort();
 }

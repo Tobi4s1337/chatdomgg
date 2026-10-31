@@ -47,7 +47,7 @@ const REED_LAYOUTS: readonly ReedLayout[] = [
   {
     size: [16, 13, 16],
     fans: [
-      { x: 5, z: 6, axis: 'x', out: -1, height: 10, blades: 5 }, { x: 7, z: 4, axis: 'z', out: -1, height: 9, blades: 4 },
+      { x: 5, z: 6, axis: 'x', out: -1, height: 10, blades: 5 }, { x: 7, z: 5, axis: 'z', out: -1, height: 9, blades: 4 },
       { x: 9, z: 6, axis: 'x', out: 1, height: 10, blades: 5 }, { x: 6, z: 9, axis: 'z', out: 1, height: 8, blades: 4 },
       { x: 9, z: 9, axis: 'x', out: 1, height: 9, blades: 4 },
     ],
@@ -95,10 +95,13 @@ export function createReeds(style: StyleKey, variant: number): WaterPiece {
   checkVariant('reeds', variant);
   const layout = REED_LAYOUTS[variant]!, size = layout.size, b = new Boxes();
   const collar = style === 'grove' ? MAT.moss : MAT.earth;
-  layout.fans.forEach((fan, f) => {
-    // A low muddy collar with cut corners, then the sheathed crown the blades rise from.
+  // Low muddy collars with cut corners go down first, so a neighbour's collar never buries another fan's crown.
+  for (const fan of layout.fans) {
     b.add(fan.x - 1, 0, fan.z, fan.x + 3, 1, fan.z + 2, collar);
     b.add(fan.x, 0, fan.z - 1, fan.x + 2, 1, fan.z + 3, collar);
+  }
+  layout.fans.forEach((fan, f) => {
+    // The sheathed crown the blades rise from.
     b.add(fan.x, 0, fan.z, fan.x + 2, 2, fan.z + 2, MAT.leaf);
     FAN_BLADES[fan.blades].forEach(([lean, drop], i) => {
       const seed = [variant, f, i] as const;
@@ -106,10 +109,10 @@ export function createReeds(style: StyleKey, variant: number): WaterPiece {
       const height = fan.height - drop - (hash(...seed, 1) < 0.3 && drop ? 1 : 0);
       const along = outward < 0 ? 0 : 1, across = i % 2;
       const [x, z] = fan.axis === 'x' ? [fan.x + along, fan.z + across] : [fan.x + across, fan.z + along];
-      // The second fan's inward blade is last year's stem, straw from root to tip.
+      // The second fan's inward blade is last year's stem, straw from its green sheath to the tip.
       const dead = f === 1 && i === 0;
       const tip = hash(...seed, 2) < DRYNESS[style] ? height - 2 - (hash(...seed, 3) < 0.5 ? 1 : 0) : height;
-      const end = blade(b, x, z, fan.axis, outward, height, y => dead || y >= tip ? MAT.thatch : MAT.leaf);
+      const end = blade(b, x, z, fan.axis, outward, height, y => (dead && y >= 2) || y >= tip ? MAT.thatch : MAT.leaf);
       if (i === fan.blades - 1) {
         // The outermost blade folds over: two cells further out along the top course, then two cells down.
         const s = fan.out, top = height - 1;
@@ -169,9 +172,9 @@ interface LilyLayout { readonly size: Vec3; readonly pads: number; readonly radi
 
 /** 0 is a round raft with two blooms and a bud; 1 a few big pads; 2 a long drift of small ones. */
 const LILY_LAYOUTS: readonly LilyLayout[] = [
-  { size: [20, 3, 18], pads: 7, radius: [2.2, 3.6], blooms: 2, buds: 1 },
-  { size: [16, 3, 16], pads: 5, radius: [2.6, 3.8], blooms: 1, buds: 1 },
-  { size: [24, 3, 14], pads: 8, radius: [1.9, 3.2], blooms: 2, buds: 0 },
+  { size: [22, 3, 20], pads: 7, radius: [2.2, 3.6], blooms: 2, buds: 1 },
+  { size: [18, 3, 18], pads: 5, radius: [2.6, 3.8], blooms: 1, buds: 1 },
+  { size: [24, 3, 14], pads: 8, radius: [1.9, 3.4], blooms: 2, buds: 0 },
 ];
 
 /** Hearth's lilies are pink, Tide's and Grove's white; a second bloom in a raft takes the other colour. */

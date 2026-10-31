@@ -7,13 +7,13 @@ import { createObservedWalkerTrack, walkerSlots, walkerSubject } from './observe
 import { KingdomIdSchema } from '@chatdom/shared';
 import type { CitizenMotionSample } from '@chatdom/world';
 
-it('draws a witnessed sitter at the installed rotated rest, retains safe walking authority and returns on unseat', () => {
+it.each(['campfire-seat', 'bench-seat'] as const)('draws a witnessed %s sitter at the installed rest and returns on unseat', kind => {
   const floor: SolidBox = { min: [-50, -1, -50], max: [50, 0, 50] };
   const world: CollisionWorld = { revision: 3, query: bounds => bounds.min[1] < 0 && bounds.max[1] > -1 ? [floor] : [] };
-  const targetId = interactionTargetId.campfireSeat('turned', 'north');
+  const targetId = kind === 'bench-seat' ? interactionTargetId.benchSeat('market:rest:v1:0', 'left') : interactionTargetId.campfireSeat('turned', 'north');
   const registry = createInteractionRegistry({ layoutRevision: 'installed-3', world, placements: [
     { source: 'campfire:turned', origin: [10, 0, 10], turn: 1, cell: 1, anchors: [
-      { id: targetId, kind: 'campfire-seat', zone: 'street', position: [0, .4, 1.4], approach: [0, 0, 2],
+      { id: targetId, kind, zone: 'street', position: [0, .4, 1.4], approach: [0, 0, 2],
         rest: [0, 0, 1.4], facing: Math.PI, reach: 1.6 },
       { id: interactionTargetId.anvil('turned'), kind: 'anvil', zone: 'street', position: [2, .6, 0], approach: [2, 0, 1], reach: 2 },
     ] },

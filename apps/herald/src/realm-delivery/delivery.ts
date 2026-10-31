@@ -1,13 +1,15 @@
 import { PresenceInputSchema, type PresenceInput } from '@chatdom/shared';
-import { REALM_HERALD_ROUTE, RealmHeraldEnvelopeSchema, type RealmHeraldEnvelope } from '@chatdom/shared/realm';
+import { REALM_HERALD_ROUTE, RealmHeraldEnvelopeSchema, RealmSupportObservationSchema, type RealmSupportObservation, type RealmHeraldEnvelope } from '@chatdom/shared/realm';
 import { randomUUID } from 'node:crypto';
 import { mkdir, open, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { z } from 'zod';
 import type { RealmDeliverySink } from './sink';
 
 const INGRESS_ROUTE = '/internal/realm/ingress';
 const MAX_PENDING = 4096, CLEANUP_RESERVE = 128, MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSIENT = 64;
+const SupportEnvelope = z.strictObject({ version: z.literal(1), support: RealmSupportObservationSchema });
 interface Entry { readonly file: string; readonly body: string; readonly bytes: number; readonly urgent: boolean }
 export interface RealmDeliveryOptions {
   readonly url: string;
@@ -66,9 +68,11 @@ export class RealmDelivery implements RealmDeliverySink {
       const path = join(sender.#directory, file), metadata = await stat(path);
       if ((metadata.mode & 0o077) !== 0 || metadata.size > MAX_BYTES || sender.#bytes + metadata.size > MAX_BYTES) throw new Error('Herald realm outbox is insecure or too large');
       const raw: unknown = JSON.parse(await readFile(path, 'utf8'));
-      const input = PresenceInputSchema.parse(raw);
-      if (input.origin !== options.origin && input.origin !== 'recovered') throw new Error('Herald realm outbox origin differs');
-      sender.#entries.push({ file, body: JSON.stringify({ version: 1, observation: input }), bytes: metadata.size, urgent: urgent(input) });
+      const support = SupportEnvelope.safeParse(raw);
+      const input = support.success ? null : PresenceInputSchema.parse(raw);
+      const origin = support.success ? support.data.support.origin : input!.origin;
+      if (origin !== options.origin && origin !== 'recovered') throw new Error('Herald realm outbox origin differs');
+      sender.#entries.push({ file, body: JSON.stringify(support.success ? support.data : { version: 1, observation: input }), bytes: metadata.size, urgent: input !== null && urgent(input) });
       sender.#bytes += metadata.size;
     }
     void sender.flush();
@@ -82,8 +86,21 @@ export class RealmDelivery implements RealmDeliverySink {
   observation(raw: PresenceInput): Promise<void> {
     if (this.#closed) return Promise.resolve();
     const input = PresenceInputSchema.parse(raw);
-    const data = JSON.stringify(input), bytes = Buffer.byteLength(data);
+    if (input.origin !== this.options.origin && input.origin !== 'recovered') throw new Error('Herald realm outbox origin differs');
     const cleanup = input.kind === 'source-lost' || input.kind === 'remove' || input.kind === 'stream';
+    return this.#enqueue(input, { version: 1, observation: input }, cleanup, urgent(input));
+  }
+
+  support(raw: RealmSupportObservation): Promise<void> {
+    if (this.#closed) return Promise.resolve();
+    const input = RealmSupportObservationSchema.parse(raw);
+    if (input.origin !== this.options.origin) throw new Error('Herald realm outbox origin differs');
+    const envelope = { version: 1 as const, support: input };
+    return this.#enqueue(envelope, envelope, false, false);
+  }
+
+  #enqueue(stored: unknown, envelope: unknown, cleanup: boolean, isUrgent: boolean): Promise<void> {
+    const data = JSON.stringify(stored), bytes = Buffer.byteLength(data);
     return this.#serialize(async () => {
       if (this.#entries.length >= MAX_PENDING + (cleanup ? CLEANUP_RESERVE : 0) || this.#bytes + bytes > MAX_BYTES - (cleanup ? 0 : 1024 * 1024)) {
         this.#fault = 'capacity'; this.#counters.refused++; return;
@@ -96,9 +113,9 @@ export class RealmDelivery implements RealmDeliverySink {
         try { await handle.writeFile(data); await handle.sync(); } finally { await handle.close(); }
         await rename(temporary, path);
         await this.#syncDirectory();
-        this.#entries.push({ file, body: JSON.stringify({ version: 1, observation: input }), bytes, urgent: urgent(input) });
+        this.#entries.push({ file, body: JSON.stringify(envelope), bytes, urgent: isUrgent });
         this.#bytes += bytes; this.#counters.accepted++;
-        if (urgent(input) && this.#retry) { clearTimeout(this.#retry); this.#retry = null; }
+        if (isUrgent && this.#retry) { clearTimeout(this.#retry); this.#retry = null; }
       } catch {
         this.#fault = 'storage'; this.#counters.refused++;
         await rm(temporary, { force: true }).catch(() => undefined);

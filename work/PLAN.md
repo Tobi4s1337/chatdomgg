@@ -330,66 +330,49 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Order:** Real-chat evening; glassy walk; town with love; hero anvil/dragon; deep interactions; one Twitch moment.
-Goal active. Main carries evening/realm/walk and integrates reviewed work promptly; changed checks plus one looked
-frame, no matrices/full-suite per change. One worker per active world lane, no new lanes. Founder sends the first
-real chat line when available: do not wait, fake people/live state/coals, or ask again. FL03 readable carved build
-tools merged and pushed; parked/incomplete campfire/table work remains outside main.
+**Order:** Twitch first: real chat/shared arrival → stream director → real !forge → event physics → three
+channel kingdoms/Atlas/raids → earned growth/Chronicle → chat-led fire → panel/emotes. Walking accepted.
+Short turns, tight reads, one viewed capture per visual change. No parked-world/walking polish detours.
 
-**Integrated:** RS07 district views, IN03 controls, FR03 audio, WB02 body/hair/eyes, BT04 publication, AtlasA03–A05,
-E01 emotes, RG01 gate, founded collision; AH05 anvil exports, KL05 ground warmth, LD02 geography, GD01 meadow kit,
-FL03 readable build labels/resting controls. Phone disabled-reason words remain the polish lane's next task.
-Reviewed civic carts/stores now compose beside the installed first market stall through the founded provider:
-two fixtures at[-13.5,9,3.5] and[-8.5,9,.5] in the actual adopted town. The pinned baseline/homes stay exact; public
-scene digest/collision/adoption include the wares. Second-stall candidates are omitted for road/home clearance.
-Passive flowers/tufts now mount over the actual adopted v1 plots/court and occupied geometry, using rendered ground
-and shared lighting. Solid gardens wait for authoritative collision composition; homes/streets never move to a new
-generator. Native founded compilation still consumes adopted v1 land. Market cart/worn planting is the ground
-lane’s next visible task; AH04 gets a sleeping muzzle-on-paws silhouette separated from the current plate-ring.
+**Real evening:** bot re-granted incl. user:write:chat; posting works. Greeting13:11 and wish13:13:02 reached
+realm, but wish stopped offline: stream:offline committed4.8s earlier, zero reservations/approval audit.
+Server Forge runs without a browser; never bypass live-only eligibility. Tobias will say when live and send
+another line/wish. Do not hold an observer/capture waiting for him. Prior observer42199 stopped, exit130.
+Resting stream still viewed: `shots/stream/live-realm@1920x1080.png`. No real approved ritual recording yet.
 
-**Authority/Forge:** Postgres/KingdomRoom owns allocation, presence, geometry and commits. Presence is durable;
-speech/wishes/deletions transient. Chat grants no identity/history/rights/coals. Monarch keep is separate host65534,
-with the same actual ten-minute coal rule; migration0007 applied. Host fingerprints stay pinned through judgment,
-commit and landing. Current path is Herald→room→real Codex CLI/judges→owned host→public ritual/director, still
-unproved on real chat. Room-fed casting now heats the physical engraved anvil through pour/cooling without duplicate
-effects; camera includes the crucible/bail. Dragon finishes/inlays preserve horns, stack and authored detail.
+**Genesis:** one architect pass DONE; Sol carries it. Core3a774f8/spec39 at `@chatdom/world/genesis`.
+Consumer f60dc3d composes16/160/512 unowned proposed homes, dry full lots, connected frontages and castle ramp;
+coast/island sampler shared by settlement terrain/workers. Five focused tests, typecheck/lint/web build pass.
+Three observed30Oct16:32UTC inputs: The_AGGman63920635/Counter-Strike/avg16 coastal hamlet;
+PinkKittyRose4363967/Retro/avg139.98 river town; MashaD4 154972160/Chess/avg852.12 mountain city.
+Public Twitch cache: `shots/genesis/source-cache/capture.json` plus per-ID users/channel info/emotes/badges,
+profile images and representative emotes. All requested reads200, no writes. Profile-image palettes (not chat
+colours) now feed recipe targets; public source metadata in `apps/web/src/genesis/channels.ts`. Emote counts
+33/50/107, badge sets2/2/4; raw descriptions/images remain ignored, checked derivatives still missing. Five Genesis content lanes specs40–44 committed5016549, branches/worktrees ready; team owns assets.
 
-**Citizens/walking:** Appended WalkerSchema.homeSlot (65535=no street home) follows committed ownership through
-join/allocation/reconnect; replacement removes the previous body. Six free starter looks derive from verified
-identity and use reviewed wardrobe parts across chat/walking without private IDs in public frames. Actual feet
-replace only their linked representative body/shadow; speech/camera follows the walker, presence still owns its
-window. Bounded public5Hz `walkers` SSE adds no spectator player/socket/crowd transforms; scope/revisions/freshness
-clear stale bodies. Read-only250ms interpolation clamps/cuts on placements; physical Predict is unchanged. Existing
-glassy pass and material footsteps stand. One shared seated-pose resolver now uses witnessed room leases and the
-installed registry's rest/facing for walkers, stream, names and speech. Renderer bends knees, plants soles and
-blends posture over280ms; room collision stays at the safe approach. Optional bounded public frame `seats` is copied
-from the actual lease book, never the movement publisher; older writers imply standing. Native targets remain
-anvil/own door/exit only: installed producer anchors still needed. `rest` means sole datum; legacy log examples
-using seat-top height must be corrected before mounting. Main took this runtime seam; interactions owns the places.
+**Pending client in tree:** `/kingdom/<id>` reads adopted receipt first; existing land redirects to its real
+stream, explicit unfounded404 composes read-only potential. No room join, assigned homes, people or fake history.
+Atlas card entry link and `/showcase` three side-by-side doors prepared, not visually accepted/committed yet.
+First actual three-browser capture FAILED before drawing: abrupt shore and foundation/road grading exceeded
+the unchanged2m mesh bound. Shared Genesis-only continuous grading/bank fade fixes the three reproduced regions;
+six focused tests, typecheck/lint and isolated web build pass. No adopted grading or mesh-bound widening.
+Retry target5170 is an isolated artifact copy, root server92547 (previous60105 terminal130). Terra
+`genesis_capture` owns NEW existing process68147, queued at last poll; previous71941 terminal1/released lock.
+Continue68147 rather than duplicate. Three1920×1080 worlds at18.8 plus one static showcase full-page1440 capture.
+No three-kingdom completion claim. Showcase links/provenance current
+at f5b4548; old viewed still `shots/showcase/showcase@1440x900.png`; pending intro compacted.
 
-**Landscape sound:** Actual feet (stream: camera) now feed shore-distance/direction and outdoor exposure into
-bounded wind/water phrases through the existing audio mixer: two sources/phrase,3.2s lifetime,1.6s cadence,
-equal-power overlap, no catch-up/queue/new context. Page hide drains the shared mix; restore preserves explicit mute.
-Original synthesis, MDN technique study/CC0 credit in THIRD_PARTY and references/kingdom-ambience.md. The22s
-`shots/audio/landscape-tour.wav` uses the live adopted plan with SIMULATED sampled locations and the real offline
-mixer:13/13 admissions, browser errors0, mute16–18s silent after fade; town RMS0.000369, lake0.004077. Not listened
-to on this host; wind intentionally very quiet. No listening-quality claim; audition at normal/quiet PC levels.
+**Atlas/lanes:** Atlas/Gate/Emotes/Campfire ready at5016549; Twitch-moments has uncommitted work, sync at checkpoint.
+No new reviewed lane delta found this turn; do not re-audit old duplicate branch history. Served Atlas revision
+obs-20261030T054103Z has NONE of the three holding IDs. A19 progress records exact need: newer captured import,
+below25-viewer hamlet dabs, real holding entry/return. Direct preview links do not prove Atlas entry. Raid road
+work independent. Kingdom moment feed/stream mount already wired; next main seam is verified Herald bits/hype
+→ durable realm moment ingress (currently chat-notification support only), not a new renderer.
 
-**Runtime/open:** Managed main-checkout preview5190, API5196, realm5197(root env mode/schema), Forge5195,
-Herald5194; restart after main/env changes, one live writer. Origin exactly http://localhost:5190. Old simulated5191
-gone, spare5198 stopped; explicit SIMULATED rehearsal5187 remains. Leave managed processes alone. Entry/session and
-public checkpoint/`walkers` work; Herald healthy, no pending/faults, no observed chat yet, stream offline. Ordinary
-observed chat may warm a window offline; beacon/coals/Forge need observed live. Bench5195 CLI status alone is not
-room Forge proof. Walk: `/?walk=1&kingdom=129634568&hour=19.5` (genuine Twitch sign-in); watch:
-`/stream?source=realm&kingdom=129634568&hour=19.5`.
-
-**Evidence/next:** Root looked at `shots/citizens/seated@1440x900.png`: six reviewed looks, explicitly SIMULATED
-bench/people review; planted feet/readable bent knees, hands still stiff, rear cape clearance unproved. FL03's
-looked comparison is `work/evidence/first-look-polish/fl03/zoom-sheet.png`. Previous actual town and Forge frames:
-`shots/kingdom/live-evening/adopted-cover@1440x900.png`, `shots/forge/room-hot-pour-framed@1440x900.png` and
-`shots/forge/room-cool@1440x900.png`. Flowers soften fronts but town too tidy/empty; dragon still weak. Changed
-contract/watch/pose/citizen/footstep checks, typecheck, scoped lint and web/realm builds cover this slice, not a full verify.
-Market composition/provider checks(3), typecheck, scoped lint and realm build pass; selected live market capture:
-`shots/kingdom/live-evening/market-wares@1440x900.png`. Ground lane keeps planting/wear, not a duplicate civic cart.
-Next acceptance remains real chat→shared arrival/window/bubble, real wish→judged piece→right home, two/three real
-walkers/director, then record and watch60–90seconds. No full evening capture or real-GPU smoothness acceptance yet.
+**Live setup:** host-managed5190 preview/5196 API/5197 realm/5195 Forge/5194 Herald. Relevant-code or .env changes
+restart affected services after settling. Use ONLY `conductor/state/services.log`, NEVER journals/other-service
+logs. Entry/movement accepted Firefox+Chromium at fd5c319; temporary sessions revoked. Adopted129634568 stays
+settlement:2:43cffdb6,240homes,v1,collision6,scene134778eb60ac5414858df3c7cee5ed2abc4d65ba4331e45a259c5cc75294d4b3.
+Do not reseat plots; monarch65534 owns keep pane, no invented street deed/coal. Latest landing14s SIMULATED take
+viewed all56frames: still roof-occluded silhouette/two horn shapes; no image-judge waiver. Real Forge remains
+unproved; cheer/hype binding, solid gardens, raid journey and the wider goal remain open.

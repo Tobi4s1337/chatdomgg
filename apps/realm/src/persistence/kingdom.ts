@@ -202,6 +202,19 @@ export class DurableKingdom implements RealmRoomHandle {
   }
 
   loadIngress(): Promise<RealmIngressCheckpoint | null> { return this.repository.loadIngress(this.lease); }
+  /** Trusted normalized moments share this writer's queue and lease; no external writer or domain command. */
+  writeMoments<T>(work: (lease: RealmWriterLease, current: () => boolean) => Promise<T>): Promise<T> {
+    return this.serial(async () => {
+      try {
+        const result = await work(this.lease, () => this.current);
+        void this.dispatcher.kick();
+        return result;
+      } catch (error) {
+        if (error instanceof RealmWriterFencedError) this.close('fenced');
+        throw error;
+      }
+    });
+  }
   lookup(commandId: string): Promise<RealmStoredOutcome | null> { return this.repository.lookup(this.kingdomId, commandId); }
 
   // RealmRoomHandle -------------------------------------------------------------------------------------------------
