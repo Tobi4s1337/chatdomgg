@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { parseKingdomPresentationParams, parseStreamParams } from './params';
 
 describe('public kingdom presentation', () => {
+  it('selects the read-only realm source and waits for its approved name', () => {
+    expect(parseStreamParams('?source=realm&kingdom=129634568&seed=pretend-name&hour=19.5')).toMatchObject({
+      source: 'realm', kingdomId: '129634568', kingdomName: 'Kingdom', hour: 19.5,
+    });
+  });
   it('preserves the existing demonstration layouts when no coordinates are supplied', () => {
     expect(parseKingdomPresentationParams(new URLSearchParams(), 'hamlet')).toEqual({ firstYear: 2025, year: 2026 });
     expect(parseKingdomPresentationParams(new URLSearchParams(), 'town')).toEqual({ firstYear: 2022, year: 2026 });

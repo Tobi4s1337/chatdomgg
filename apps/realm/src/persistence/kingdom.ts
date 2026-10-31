@@ -97,6 +97,7 @@ export class DurableKingdom implements RealmRoomHandle {
   private readonly effects = new Set<RealmRoomEffects>();
   private readonly lifecycles = new Set<RealmLifecycleListener>();
   private readonly closed = new Set<(reason: string) => void>();
+  private readonly worldAdopted = new Set<() => void>();
   private geometry: Pick<DurableKingdomOptions, 'world' | 'layoutRevision' | 'spawn'>;
   private preparingWorld: Promise<void> | null = null;
   private worldNeeded = false;
@@ -310,6 +311,13 @@ export class DurableKingdom implements RealmRoomHandle {
     return () => { this.closed.delete(listener); };
   }
 
+  /** Public geometry changed only after the exact candidate is atomically installed and discoverable. */
+  onWorldAdopted(listener: () => void): () => void {
+    if (!this.current) return () => {};
+    this.worldAdopted.add(listener);
+    return () => { this.worldAdopted.delete(listener); };
+  }
+
   /** Bounded shutdown: stop new work, let queued commits finish, snapshot committed state, release only our own lease. */
   async dispose(): Promise<void> {
     clearInterval(this.renewal);
@@ -429,6 +437,9 @@ export class DurableKingdom implements RealmRoomHandle {
           this.geometry = candidate;
           this.arrivals = 0;
           candidate.adopted();
+          for (const listener of this.worldAdopted) {
+            try { listener(); } catch (error) { this.log(`world adoption listener failed: ${(error as Error).name}`); }
+          }
         } catch (error) {
           // A failed scene never changes the committed outcome or withdraws the previous adopted world.
           this.log(`founded world preparation held: ${(error as Error).name}`);
@@ -476,6 +487,7 @@ export class DurableKingdom implements RealmRoomHandle {
     clearInterval(this.renewal); clearTimeout(this.watchdog);
     this.dispatcher.stop();
     this.relay.clear();
+    this.worldAdopted.clear();
     for (const walker of this.walkers) for (const effects of this.effects) effects.allowWalking(walker, false);
     for (const effects of this.effects) {
       try { effects.close(reason === 'disposed' ? 'shutdown' : 'authority-lost'); }

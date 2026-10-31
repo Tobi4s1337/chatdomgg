@@ -5,7 +5,7 @@ import { assertRealmSchema, createRealmPool, describeStorageFailure,
 import { INGRESS_ROUTE, ingressCredentials } from './ingress';
 import { HEALTH_ROUTE, READY_ROUTE } from './diagnostics';
 import { TenureEvidenceVerifier, tenureEvidenceKey } from './allocation';
-import { createDurableRealmBoot, mountEntryRoutes } from './bootstrap';
+import { createDurableRealmBoot, mountEntryRoutes, mountRealmWatchRoutes } from './bootstrap';
 import { RealmEntryInfoSchema } from '@chatdom/shared/realm';
 import { join } from 'node:path';
 import { ForgeWriteGate, FileForgeApprovals } from './wiring';
@@ -80,6 +80,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>) {
   evening.use(boot.services);
   const { server, transport } = boot.createServer({ mountIngress: app => mountEveningRoutes(app, evening) });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
+  mountRealmWatchRoutes(transport.app, boot);
   server.onShutdown(async () => { await evening.stop(); await boot.stop(); await pool.end(); });
   try {
     await boot.readiness.start();
