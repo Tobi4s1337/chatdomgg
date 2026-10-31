@@ -17,7 +17,8 @@ import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock
 
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
-const HOURS = { noon: 12.5, dusk: 19.5, night: 22.5 };
+// Dusk is the gold-to-lilac half hour of the shared grade (18:00 gold, 19:15 blue).
+const HOURS = { noon: 12.5, dusk: 18.6, night: 22.5 };
 const VIEWS = ['lake-postcard', 'pier-deck'];
 const list = (name, fallback, allowed) => {
   const values = (option(name) ?? fallback).split(',');

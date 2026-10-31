@@ -48,35 +48,44 @@ export function placeFixture(): PlaceFixture {
   const ground: WaterGround = { data: lake.ground.data, width: lake.ground.width, height: lake.ground.depth, origin: lake.ground.origin, step: lake.ground.step };
   const level = lake.body.level, at = (x: number, z: number) => groundAt(ground, x, z);
 
-  // The pier runs north from the south bank (turn 2: local +Z faces −Z), its root where the bank stands a quarter
-  // metre under the deck, so one short ramp meets the landing.
-  const pierX = 4.5;
-  let rootZ = 30;
-  while (rootZ > 15 && at(pierX - 1.25, rootZ) > level + PIER_DECK - 0.25) rootZ -= 0.125;
-  const pierFrame: CardinalFrame = { origin: [pierX, level, rootZ], turn: 2 };
+  // The pier runs east from the west bank (turn 1: local +Z faces +X, local +X faces −Z), so its head stands near the
+  // middle of the lake with the town and the keep across open water to the north. Its root sits where the bank stands
+  // a quarter metre under the deck, so one short ramp meets the landing.
+  const pierZ = 8;
+  const at1 = (origin: Vec3, x: number, z: number) => { const p = toWorld({ origin, turn: 1 }, [x, 0, z]); return at(p[0], p[2]); };
+  let rootX = -46;
+  while (rootX < -20 && at1([rootX, level, pierZ], 1.25, 0) > level + PIER_DECK - 0.25) rootX += 0.125;
+  const pierFrame: CardinalFrame = { origin: [rootX, level, pierZ], turn: 1 };
   const footprint = ([[0, 0], [2.5, 0], [2.5, 24], [5.25, 24], [5.25, 28], [-2.75, 28], [-2.75, 24], [0, 24]] as const)
     .map(([x, z]) => { const p = toWorld(pierFrame, [x, 0, z]); return [p[0], p[2]] as XZ; });
   const headCentre = toWorld(pierFrame, [1.25, 0, 26]), rootAt = toWorld(pierFrame, [1.25, 0, 0]);
   const pier: PierPlan = {
-    site: { id: 'lake:pier', turn: 2, footprint }, frame: pierFrame, deck: level + PIER_DECK, deckAboveWater: PIER_DECK,
+    site: { id: 'lake:pier', turn: 1, footprint }, frame: pierFrame, deck: level + PIER_DECK, deckAboveWater: PIER_DECK,
     walk: { x: [0, 2.5], length: 24 }, head: { x: [-2.75, 5.25], z: [24, 28] },
     shore: shoreAlong(ground, pierFrame, 1.25, 0, 28, level), headDepth: level - at(headCentre[0], headCentre[2]),
     rootGround: at(rootAt[0], rootAt[2]), foundation: grid(ground, pierFrame, [-2.75, 0], [5.25, 28]),
   };
 
-  // The boathouse stands west of the pier's root, its back on the bank and its bay open to the lake.
-  const boatFrame: CardinalFrame = { origin: [-13.5, level, 20.75], turn: 2 };
+  // The boathouse stands on the lake's straight west tip just north of the pier's root, its back wall wholly ashore and
+  // its bay open east to the lake. Its local x runs north from z 4 to z −4, a metre and a half clear of the pier's walk.
+  const boatZ = 4;
+  const backAshore = (x0: number) => [0.25, 2.25, 4.25, 6.25, 7.75].every(x => [0.1, 0.9].every(z => at1([x0, level, boatZ], x, z) >= level - 0.2));
+  let boatX = -16;
+  while (boatX > -46 && !backAshore(boatX)) boatX -= 0.125;
+  const boatFrame: CardinalFrame = { origin: [boatX, level, boatZ], turn: 1 };
   const boatMid = toWorld(boatFrame, [4, 0, 10.5]);
   const boathouse: BoathousePlan = {
-    site: { id: 'lake:boathouse', turn: 2, footprint: rectangleToWorld(boatFrame, [0, 0], [8, 11]) }, frame: boatFrame,
+    site: { id: 'lake:boathouse', turn: 1, footprint: rectangleToWorld(boatFrame, [0, 0], [8, 11]) }, frame: boatFrame,
     shore: shoreAlong(ground, boatFrame, 4, 0, 11, level), bayDepth: level - at(boatMid[0], boatMid[2]),
     foundation: grid(ground, boatFrame, [0, 0], [8, 11]),
   };
 
-  // The upturned boat rests on its trestles on the grass between the boathouse and the pier.
-  const upturnedAt: Vec3 = [-8.5, 0, 24.5];
-  const upturned: CardinalFrame = { origin: [upturnedAt[0], at(upturnedAt[0] + 0.7, upturnedAt[2] + 1.75) - CELL, upturnedAt[2]], turn: 1 };
-
+  // The upturned boat rests on its trestles on the grass south of the pier's root, bow to the water.
+  const upZ = 11.25;
+  let upX = -46;
+  while (upX < -14 && at(upX + 0.8, upZ + 1.75) > level + 0.45) upX += 0.125;
+  upX -= 1.25;
+  const upturned: CardinalFrame = { origin: [upX, at(upX + 0.8, upZ + 1.75) - CELL, upZ], turn: 0 };
   // Shore pieces of the lake fixture that would stand in a site are left out.
   const sites = [footprint, boathouse.site.footprint];
   const inside = (x: number, z: number, margin: number) => sites.some(poly => {
@@ -95,15 +104,17 @@ export function placeFixture(): PlaceFixture {
   return {
     label: SIMULATED_PLACE, lake, ground, pier, boathouse, keep, upturned,
     views: {
-      // From the back of the pier head: the seat edge and bell post in front, water, the roofs, the keep and beacon.
+      // From the south side of the pier head looking north: the bell post and the seat edge at the right, open water,
+      // the lakeside roofs across the middle and the keep with its beacon high.
       'lake-postcard': {
-        wide: { eye: deckEye(0.4, 24.6), target: [-1, 6.5, -42], fov: 52 },
-        tall: { eye: deckEye(0.8, 24.4), target: [-2, 9, -42], fov: 66 },
+        wide: { eye: deckEye(-2.2, 24.4), target: [-4, 7, -42], fov: 52 },
+        // Narrow: from the head's south edge just west of the post, so the post and lantern stand inside the right third.
+        tall: { eye: deckEye(-2.6, 26.0), target: [-6.2, 10, -42], fov: 66 },
       },
-      // On the walk near the root, looking out along the deck to the head with the boathouse on the left shore.
+      // On the walk near the root, looking out along the deck to the head, the boathouse on the left bank.
       'pier-deck': {
-        wide: { eye: deckEye(1.0, 3.5), target: toWorld(pierFrame, [0.6, 1.4, 22]), fov: 55 },
-        tall: { eye: deckEye(1.1, 2.5), target: toWorld(pierFrame, [0.8, 2.2, 22]), fov: 68 },
+        wide: { eye: deckEye(1.6, 2.0), target: toWorld(pierFrame, [-1.8, 1.4, 22]), fov: 58 },
+        tall: { eye: deckEye(1.7, 1.6), target: toWorld(pierFrame, [-1.2, 2.2, 22]), fov: 70 },
       },
     },
   };

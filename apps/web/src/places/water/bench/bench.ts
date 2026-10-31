@@ -55,7 +55,7 @@ const validHour = (h: number) => h >= 0 && h < 24, validTime = (t: number) => t 
 
 try {
   const view = choice('view', 'lake-postcard', VIEWS);
-  let hour = number('hour', 19.5, validHour, 'an hour in [0, 24)'), time = number('time', 30, validTime, 'non-negative seconds');
+  let hour = number('hour', 18.6, validHour, 'an hour in [0, 24)'), time = number('time', 30, validTime, 'non-negative seconds');
   const seed = number('seed', 29, Number.isSafeInteger, 'a whole number');
   const quality: WaterQuality = choice('quality', 'full', ['full', 'reduced'] as const);
   const style = choice('style', 'tide', Object.keys(STYLES) as StyleKey[]);
@@ -171,7 +171,9 @@ try {
   const seat = headAnchors.seats[0]!;
   const crowd: Vec3[] = Array.from({ length: people }, (_, i) => {
     const t = (i + 0.5) / Math.max(1, people);
-    return [THREE.MathUtils.lerp(seat.min[0], seat.max[0], t), seat.min[1], THREE.MathUtils.lerp(seat.min[2], seat.max[2], t) + (place.pier.frame.turn === 2 ? 0.6 : -0.6)];
+    // Just inboard of the seat edge, back from the water along the pier's own axis.
+    const inboard = toWorld({ origin: [0, 0, 0], turn: place.pier.frame.turn }, [0, 0, -0.6]);
+    return [THREE.MathUtils.lerp(seat.min[0], seat.max[0], t) + inboard[0], seat.min[1], THREE.MathUtils.lerp(seat.min[2], seat.max[2], t) + inboard[2]];
   });
   const lampLights = new Map<string, PeopleLight>(lamps.map(l => [l.id, createPeopleLight(placeLampLight(l))]));
   const strengths = new Map<string, number>();

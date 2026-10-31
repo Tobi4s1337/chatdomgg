@@ -1,4 +1,6 @@
 import type { VoxelBlueprint } from '@chatdom/shared';
+import { BOATHOUSE_BLUEPRINTS } from './boathouse/index';
+import { BOAT_BLUEPRINTS } from './boats/index';
 import { BRIDGE_BLUEPRINTS } from './bridge/index';
 import { FINGERPOST_BLUEPRINTS } from './fingerpost/index';
 import { MILL_BLUEPRINTS } from './mill/index';
@@ -16,6 +18,8 @@ import { SHORE_BLUEPRINTS } from './shore/index';
  */
 export * from './place-piece';
 export * from './pier/index';
+export * from './boathouse/index';
+export * from './boats/index';
 export * from './mill/index';
 export * from './millrace/index';
 export * from './bridge/index';
@@ -25,6 +29,8 @@ export * from './critters/index';
 
 export const BLUEPRINTS: readonly VoxelBlueprint[] = [
   ...PIER_BLUEPRINTS,
+  ...BOATHOUSE_BLUEPRINTS,
+  ...BOAT_BLUEPRINTS,
   ...MILL_BLUEPRINTS,
   ...MILLRACE_BLUEPRINTS,
   ...BRIDGE_BLUEPRINTS,

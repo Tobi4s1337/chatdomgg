@@ -28,7 +28,7 @@ assembles the mount/index, and only that lead edits PRD/progress/README. PW06 fo
 
 ## Tasks
 
-- [ ] **PW01 — See the pier and lake in the real material.** Build modular supported pier/boathouse/boats and a
+- [x] **PW01 — See the pier and lake in the real material.** Build modular supported pier/boathouse/boats and a
   labelled production-renderer bench/capture script. First visible result in this task: lake postcard and pier-deck
   at dusk at 1440×900/390×844. Use isolated fixture water/lighting inputs; no fake shared modules. Implement readiness,
   error checks, serial capture lock and owned-server cleanup. Record module counts and actual material/mesher costs.
