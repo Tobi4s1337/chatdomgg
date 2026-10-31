@@ -40,7 +40,7 @@ assembles the mount/index, and only that lead edits PRD/progress/README. PW06 fo
   bed foundations, reach tangents/flow and walk/seat/emitter anchors from supplied point records/sites only. Fixtures
   use those same types; no generator stub. Validate site/bed/head/join/path constraints and report bad geography as
   `needs:`. Static turns remain cardinal. Document exact `createWaterPlaces` input/output and integrator recipe.
-- [ ] **PW04 — Carry real windows across water.** Implement depth/shore/foam/flow plus the explicit one-pass planar
+- [x] **PW04 — Carry real windows across water.** Implement depth/shore/foam/flow plus the explicit one-pass planar
   reflection hook and coherent analytic fallback. Prove renderer state restoration and no recursion; compare same
   full/reduced postcard and bridge-pond at night. Record source cap, texture bytes and actual pass/draw costs. W-M1/3/4
   consumers wait on actual land/light/frame inputs; independent shader experiments stay inside the labelled bench.
