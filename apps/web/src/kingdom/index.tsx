@@ -14,6 +14,7 @@ import type { ForgeStatus } from '../forge/scene';
 import { parseKingdomPresentationParams } from '../stream/params';
 import { ProvenanceSeal, provenanceFromSource } from '@chatdom/ui';
 import '@chatdom/ui/kit.css';
+import { isEditableTarget, isKeyboardControl } from '../walk';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
 export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
@@ -34,7 +35,17 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
   let unsubscribeChat:(()=>void)|undefined;
   const [forgeStatus,setForgeStatus]=createSignal<ForgeStatus|null>(null);
   const [anvilVisit,setAnvilVisit]=createSignal<{leave:()=>void}|null>(null);
-  const unlockWithE=(event:KeyboardEvent)=>{if(event.isTrusted&&event.code==='KeyE')void engine?.sound.unlock();};
+  const unlockSound=()=>{
+    const instance=engine;
+    if(instance)void instance.sound.unlock().then(()=>{if(!unmounted&&engine===instance)setSound(instance.sound.enabled);});
+  };
+  const unlockWithWalk=(event:KeyboardEvent)=>{
+    if(!event.isTrusted||event.defaultPrevented||event.isComposing||event.ctrlKey||event.metaKey||event.altKey||isEditableTarget(event.target))return;
+    const letters=['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight'];
+    const movement=letters.includes(event.code)||['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(event.code);
+    if((event.code==='KeyE'||movement)&&engine?.walkDebug()?.owner==='walking'
+      &&(letters.includes(event.code)||!isKeyboardControl(event.target)))unlockSound();
+  };
   /** Local practice on this screen (Forge, a simulated home build, its housewarming) is its own fact beside the feed. */
   const practice=()=>!!forgeStatus()?.open||buildSession()?.controller.snapshot().mode==='SIMULATED'||!!housewarming();
   async function attachWalk(binding:KingdomWalkBinding){
@@ -54,7 +65,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     setWalking(engine.walkSelected());
   }
   onMount(()=>{
-    document.addEventListener('keydown',unlockWithE);
+    document.addEventListener('keydown',unlockWithWalk);
     const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
@@ -62,6 +73,8 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:()=>{setError(true);setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
+      // OBS may allow autoplay; a browser that requires a gesture stays honestly locked until the retry.
+      if(stream)unlockSound();
       unsubscribeChat=props.chatFeed?.subscribe(message=>{
         if(unmounted)return;
         if(message.type==='chat')instance.receiveChat(message.cue);
@@ -80,8 +93,8 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       if(!props.founded&&query.get('forge')==='1')instance.forge.open();
     }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(true);});
   });
-  onCleanup(()=>{unmounted=true;document.removeEventListener('keydown',unlockWithE);cancelAnimationFrame(openingFrame);construction.abort();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
-  function tap(action:()=>void){if(!engine)return;if(!sound()){void engine.sound.unlock().then(setSound);}action();}
+  onCleanup(()=>{unmounted=true;document.removeEventListener('keydown',unlockWithWalk);cancelAnimationFrame(openingFrame);construction.abort();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
+  function tap(action:()=>void){if(!engine)return;if(!sound())unlockSound();action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setWalking(false);setView(value);tap(()=>engine!.setCamera(value));}
   function chooseWalking(){
@@ -94,7 +107,10 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
     for(const parameter of ['camera','build','forge'])destination.delete(parameter);
     location.assign(`${location.pathname}?${destination}`);
   }
-  return <div ref={element=>{host=element;}} onPointerDown={event=>{if(event.isTrusted)void engine?.sound.unlock();}}
+  return <div ref={element=>{host=element;}} onPointerDown={event=>{
+    // The sound button owns its toggle; an earlier root unlock would turn its first click into a mute.
+    if(event.isTrusted&&!(event.target instanceof Element&&event.target.closest('.sound-button')))unlockSound();
+  }}
     class={`kingdom ${walking()?'kingdom-walking':''} ${stream?'kingdom-stream':''}`} data-chatdom-kingdom data-forge-phase={forgeStatus()?.phase} data-chatdom-build={buildSession()?true:undefined}>
     <canvas ref={element=>{canvas=element;}} class="kingdom-canvas" aria-label={`${realmName}, a voxel kingdom lit by its people`} />
     <div class="kingdom-vignette" aria-hidden="true" />
@@ -132,7 +148,7 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       <Show when={source()==='SIMULATED'&&!props.founded}><button onClick={()=>tap(()=>{void engine!.build.enter();})}>Build my home</button><button onClick={()=>tap(()=>engine!.forge.open())}>At the Forge</button></Show>
       <span class="control-divider" />
       <a class="tier-button" onClick={()=>tap(()=>engine!.sound.cue('wood'))} href={`?tier=${tier==='hamlet'?'town':'hamlet'}&hour=${hour()}&time=30`}>{tier==='hamlet'?'Visit the town':'Visit the hamlet'}</a>
-      <button class="sound-button" aria-label={sound()?'Mute sound':'Turn sound on'} aria-pressed={sound()} onClick={()=>{if(engine)setSound(engine.sound.toggle());}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4Z"/><Show when={sound()} fallback={<path d="m17 9 5 6m0-6-5 6"/>}><path d="M17 8q5 4 0 8m3-11q8 7 0 14"/></Show></svg></button>
+      <button class="sound-button" aria-label={sound()?'Mute sound':'Turn sound on'} aria-pressed={sound()} onClick={()=>{if(engine){const requested=engine.sound.toggle();setSound(engine.sound.enabled);if(requested)unlockSound();}}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4Z"/><Show when={sound()} fallback={<path d="m17 9 5 6m0-6-5 6"/>}><path d="M17 8q5 4 0 8m3-11q8 7 0 14"/></Show></svg></button>
     </nav><p class="kingdom-caption">{source()==='SIMULATED'?'Every warm window is someone home':'Windows follow the people in chat'}</p></Show>
     <Show when={ready()&&stream}><div class="stream-signature">{realmName} <span>·</span> a kingdom lit by its people</div></Show>
   </div>;
