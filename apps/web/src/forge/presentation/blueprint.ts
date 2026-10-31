@@ -18,13 +18,13 @@ export function createBlueprint(silhouette: Silhouette, shared: CellUniforms) {
   hull.computeVertexNormals();
   const fillMaterial = new THREE.ShaderMaterial({
     name: 'forge-blueprint-body', transparent: true, depthWrite: true,
-    uniforms: { ...shared, uBody: { value: new THREE.Color('#5fa9d6') }, uSky: { value: new THREE.Color('#c4e6ff') }, uRule: { value: new THREE.Color('#e3f4ff') }, uWarm: { value: new THREE.Color('#ffc978') }, uLock: { value: 0 } },
+    uniforms: { ...shared, uBody: { value: new THREE.Color('#5fa9d6') }, uSky: { value: new THREE.Color('#c4e6ff') }, uRule: { value: new THREE.Color('#e3f4ff') }, uWarm: { value: new THREE.Color('#ffc978') }, uLock: { value: 0 }, uBodyAlpha: { value: 1 } },
     vertexShader: /* glsl */`
       varying vec3 vLocal,vNormal,vViewNormal,vView;
       void main(){vLocal=position;vNormal=normal;vec4 view=modelViewMatrix*vec4(position,1.);vView=view.xyz;vViewNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*view;}`,
     fragmentShader: /* glsl */`
       ${CELLS}
-      uniform vec3 uBody,uSky,uRule,uWarm;uniform float uGlow,uLock;
+      uniform vec3 uBody,uSky,uRule,uWarm;uniform float uGlow,uLock,uBodyAlpha;
       varying vec3 vLocal,vNormal,vViewNormal,vView;
       void main(){
         vec3 index=cellIndex(vLocal,vNormal);float hash=cellHash(index);float age=arrival(index,hash);
@@ -42,7 +42,7 @@ export function createBlueprint(silhouette: Silhouette, shared: CellUniforms) {
         vec3 colour=mix(body,uRule,rule*.3);
         colour=mix(colour,uWarm*1.1,fresh*.85);
         float alpha=((.54+.2*up+.14*rim)+rule*(.06+.12*uLock))*uGlow+fresh*.3;
-        gl_FragColor=vec4(colour*(1.+.22*uLock),min(alpha,.9));
+        gl_FragColor=vec4(colour*(1.+.22*uLock),min(alpha,.9)*uBodyAlpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
@@ -75,12 +75,12 @@ export function createBlueprint(silhouette: Silhouette, shared: CellUniforms) {
     /** The traced surface as one owned geometry, also drawn by the molten shell. */
     body,
     /** Every value is set on every call, so the drawn state depends only on the latest arguments. */
-    set(state: { visible: boolean; reveal: number; ink: number; inkAlpha: number; dissolve: number; glow: number; lock: number }) {
+    set(state: { visible: boolean; reveal: number; ink: number; inkAlpha: number; bodyAlpha: number; dissolve: number; glow: number; lock: number }) {
       object.visible = state.visible;
       // Once every cell is molten the body has nothing left to draw.
-      fill.visible = shared.uFill.value < 1;
+      fill.visible = shared.uFill.value < 1 && state.bodyAlpha > .001;
       shared.uReveal.value = state.reveal; shared.uDissolve.value = state.dissolve; shared.uGlow.value = state.glow;
-      u.fill.uLock!.value = state.lock; u.ink.uInk!.value = state.ink; u.ink.uInkAlpha!.value = state.inkAlpha;
+      u.fill.uLock!.value = state.lock; u.fill.uBodyAlpha!.value = state.bodyAlpha; u.ink.uInk!.value = state.ink; u.ink.uInkAlpha!.value = state.inkAlpha;
     },
     dispose() { body.dispose(); hull.dispose(); fillMaterial.dispose(); inkMaterial.dispose(); },
   };

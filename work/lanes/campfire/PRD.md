@@ -29,6 +29,14 @@ states decisions, evidence and unresolved `needs:`; and the coherent change is c
 Use `$ralph-lane` for commits; sub-agents never run git. Do not push. Main runs `pnpm verify` and integration.
 Use the shared capture queue and existing/assigned server; never cancel another lane's capture or server.
 
+## Park instruction — 2026-10-31 (supersedes the task queue below)
+
+Tobias has set the fire game through chat aside. Finish only the task already in progress, preserving useful
+finished work, then STOP. Do not start CF07/CF08 or any new fire/game task. If no task is in progress, stop now.
+Do not mark half-built work accepted or merge it to main; leave it clearly recorded on the lane for selective
+review. The next product handoff is the raid passport, panel card and share image (spec45). Existing accepted
+clearing and seating remain. This parking changes no accepted world interaction.
+
 ## Current handoff — 2026-10-31
 
 This handoff supersedes earlier task order, parking and per-task verification instructions in this PRD; scope and safety boundaries still apply.

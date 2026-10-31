@@ -6,11 +6,15 @@ import { CitizenChatCueSchema, type CitizenChatCue, type KingdomPresenceFrame, t
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import { walkerSubject, type WalkerSlots } from './observed-walkers';
+import { createWalkerLanterns } from './walker-lanterns';
+
+export interface ForgeAudienceBarrel { position: Vec3; height: number }
+const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
 export interface SpeechLabel { slot: number; name: string | null; x: number; y: number; parts: CitizenChatCue['parts'] }
 
 /** Add public standing points only inside the installed market, without changing the adopted plan. */
-function forgeStandingPlan(plan: SettlementPlan): SettlementPlan {
+function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): SettlementPlan {
   const market = plan.nodes.find(node => node.id === plan.market.nodeId);
   if (!market) return plan;
   const insideMarket = (x: number, z: number) => {
@@ -23,15 +27,31 @@ function forgeStandingPlan(plan: SettlementPlan): SettlementPlan {
     return inside && !plan.reservations.some(({ lot }) => x >= lot.minX - .6 && x <= lot.maxX + .6 && z >= lot.minZ - .6 && z <= lot.maxZ + .6);
   };
   const nodes = [...plan.nodes], streets = [...plan.streets], activeStreetIds = [...plan.activeStreetIds];
-  for (const [index, [dx, dz]] of [[-4, 0], [4, 0], [-3, 3], [3, 3], [0, 5], [-5, 2], [-4, 5], [2, 6]].entries()) {
-    const position: Vec3 = [market.position[0] + dx!, market.position[1], market.position[2] + dz!];
-    // Check the whole connector, not just its endpoint, against market and lots.
-    if (!Array.from({ length: 21 }, (_, i) => insideMarket(market.position[0] + dx! * i / 20, market.position[2] + dz! * i / 20)).every(Boolean)) continue;
-    const id = `forge:watch:${index}`, edgeId = `${id}:path`;
-    if (nodes.some(node => node.id === id) || streets.some(edge => edge.id === edgeId)) continue;
+  // Two staggered arcs on the open west/north side leave the smithy's floor
+  // and the south-west camera approach clear. Nobody waits behind the workshop.
+  const standingPoints = [[-3.1, 7.2], [-3.4, 5.8], [-3.8, 4.3], [-3.6, 2.8], [-3.1, 1.4], [-2.6, -.2],
+    [-4.5, 8], [-5, 6.6], [-5.5, 5.2], [-5.6, 3.8], [-5.3, 2.3], [-4.8, .9], [-4.2, -.4], [-3.7, -1.4], [-6.9, 2.8], [-6.6, 5.8]];
+  if (barrel && insideMarket(barrel.position[0], barrel.position[2])) standingPoints[14] = [barrel.position[0], barrel.position[2]];
+  const addPath = (from: string, to: string) => {
+    const start = nodes.find(node => node.id === from)?.position, end = nodes.find(node => node.id === to)?.position;
+    if (!start || !end || !Array.from({ length: 21 }, (_, i) => insideMarket(start[0] + (end[0] - start[0]) * i / 20, start[2] + (end[2] - start[2]) * i / 20)).every(Boolean)) return;
+    const id = `${from}:${to}:path`;
+    if (streets.some(edge => edge.id === id)) return;
+    streets.push({ id, from, to, kind: 'lane', name: 'Market', points: [start, end], width: 1.4, verge: 0 });
+    activeStreetIds.push(id);
+  };
+  const entryId = 'forge:walk:entry', entry: Vec3 = [-3, market.position[1], 10];
+  if (!insideMarket(entry[0], entry[2])) return plan;
+  nodes.push({ id: entryId, kind: 'junction', position: entry });
+  addPath(market.id, entryId);
+  for (const [index, [x, z]] of standingPoints.entries()) {
+    const id = `forge:watch:${index}`, position: Vec3 = [x!, market.position[1], z!];
+    if (!insideMarket(position[0], position[2]) || nodes.some(node => node.id === id)) continue;
     nodes.push({ id, kind: 'junction', position });
-    streets.push({ id: edgeId, from: market.id, to: id, kind: 'lane', name: 'Market', points: [market.position, position], width: 2, verge: 0 });
-    activeStreetIds.push(edgeId);
+    // Shared graph junctions matter: a polyline attached only at the market made
+    // a passer-by reach the market and double back along the very same paving.
+    addPath(index === 0 || index === 6 ? entryId : `forge:watch:${index === 14 ? 9 : index === 15 ? 7 : index - 1}`, id);
+    if (index >= 6 && index < 12) addPath(`forge:watch:${index - 6}`, id);
   }
   return { ...plan, nodes, streets, activeStreetIds };
 }
@@ -42,6 +62,8 @@ export interface CitizenSceneCheckpoint {
   readonly revision: string;
   readonly seed: string;
   readonly castleHome: boolean;
+  readonly barrelKey: string;
+  readonly watcherArrivals: ReadonlyMap<number, number>;
   readonly frame: KingdomPresenceFrame;
   readonly motion: CitizenMotion;
   readonly watchers: ReadonlyMap<number, string>;
@@ -49,8 +71,10 @@ export interface CitizenSceneCheckpoint {
 }
 
 /** Render-side presentation only: the public presence projection remains unchanged. */
-export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan, pool: VoxelWorkerPool, clay: VoxelRenderState, castleHome = false, checkpoint?: CitizenSceneCheckpoint) {
-  let motion = createCitizenMotion(forgeStandingPlan(layout), { castleHome });
+export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan, pool: VoxelWorkerPool, clay: VoxelRenderState, castleHome = false, checkpoint?: CitizenSceneCheckpoint, forgeBarrel?: ForgeAudienceBarrel) {
+  if (forgeBarrel && (![...forgeBarrel.position, forgeBarrel.height].every(Number.isFinite) || forgeBarrel.height <= 0)) throw new Error('Invalid Forge audience barrel.');
+  const barrelKey = JSON.stringify(forgeBarrel ?? null);
+  let motion = createCitizenMotion(forgeStandingPlan(layout, forgeBarrel), { castleHome });
   let pendingCheckpoint = checkpoint;
   const behaviours = createCitizenBehaviours();
   const capacity = layout.homes.length + Number(castleHome);
@@ -61,13 +85,19 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
   // darker skin into a silhouette before a nearby window lights.
   material.material.fragmentShader = material.material.fragmentShader.replace('float sky=mix(.24,1.,vSky);', 'float sky=mix(.72,1.,vSky);').replace('vec3 colour=base*edge*light*ao;', 'vec3 colour=base*edge*(light+vec3(.4,.32,.25))*ao;');
   for (const key of ['uLight','uLightOrigin','uLightExtent','uFarLight','uFarOrigin','uFarExtent','uFarCell','uBeaconLight','uBeaconOrigin','uBeaconExtent','uBeaconCell']) material.material.uniforms[key] = clay.material.uniforms[key]!;
+  const lanterns = createWalkerLanterns(scene, capacity);
   const looks = createDefaultCitizenLooks();
   const knownLooks = new Set(looks.map(look => look.id)), suppliedLooks = new Map<number, string>();
   let renderer: Awaited<ReturnType<typeof createCitizenRenderer>> | undefined;
   let samples: readonly CitizenMotionSample[] = [], frame: KingdomPresenceFrame | undefined;
+  let carrying: readonly CitizenMotionSample[] = [];
   let walkers: WalkerSlots = new Map();
   let forge: { anchor: Vec3; atMs: number } | undefined;
-  const watchers = new Map<number, string>();
+  const watchers = new Map<number, string>(), watcherArrivals = new Map<number, number>();
+  let nextForgeGatherMs = 0;
+  // A rebuilt scene can subscribe before the Forge feed replays its activity.
+  let restoredForgeGraceStart: number | undefined;
+  let restoredForgePending = false;
   const speech = new Map<number, CitizenChatCue>();
   let disposed = false;
   const shadowGeometry = new THREE.CircleGeometry(.29, 12); shadowGeometry.rotateX(-Math.PI / 2);
@@ -85,22 +115,24 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       // Only restore after a fresh projection has established the same authority and
       // cannot predate the checkpoint. No checkpoint data is visible before this.
       const saved = pendingCheckpoint; pendingCheckpoint = undefined;
-      if (saved && !saved.used && saved.revision === layout.revision && saved.seed === layout.config.seed && saved.castleHome === castleHome
+      if (saved && !saved.used && saved.revision === layout.revision && saved.seed === layout.config.seed && saved.castleHome === castleHome && saved.barrelKey === barrelKey
         && saved.frame.kingdomId === next.kingdomId && saved.frame.epoch === next.epoch && saved.frame.origin === next.origin
         && next.sequence >= saved.frame.sequence && next.asOf >= saved.frame.asOf
         && (next.sequence > saved.frame.sequence || JSON.stringify(next) === JSON.stringify(saved.frame))) {
         saved.used = true;
         motion = saved.motion;
         for (const [slot, destination] of saved.watchers) if (next.windows.some(window => window.slot === slot && window.present && saved.frame.windows.some(previous => previous.slot === slot && previous.present && previous.since === window.since))) watchers.set(slot, destination);
+        for (const [slot, arrivedAt] of saved.watcherArrivals) if (watchers.has(slot)) watcherArrivals.set(slot, arrivedAt);
+        restoredForgePending = watchers.size > 0;
         for (const [slot, look] of saved.looks) suppliedLooks.set(slot, look);
       }
-      if(frame&&(frame.kingdomId!==next.kingdomId||frame.epoch!==next.epoch||frame.origin!==next.origin||next.asOf<frame.asOf)){resetBehaviours();watchers.clear();suppliedLooks.clear();}
+      if(frame&&(frame.kingdomId!==next.kingdomId||frame.epoch!==next.epoch||frame.origin!==next.origin||next.asOf<frame.asOf)){resetBehaviours();watchers.clear();watcherArrivals.clear();suppliedLooks.clear();}
       for (const window of next.windows) if (window.look !== undefined) suppliedLooks.set(window.slot, window.look);
       frame = next; motion.applyFrame(next);
     },
     checkpoint(): CitizenSceneCheckpoint | undefined {
       if (!frame) return undefined;
-      return { used: false, revision: layout.revision, seed: layout.config.seed, castleHome, frame, motion,
+      return { used: false, revision: layout.revision, seed: layout.config.seed, castleHome, barrelKey, watcherArrivals: new Map(watcherArrivals), frame, motion,
         watchers: new Map(watchers), looks: new Map(suppliedLooks) };
     },
     receiveChat(input: unknown) {
@@ -118,25 +150,34 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       for (const [slot, cue] of speech) if (removed.has(cue.id)) speech.delete(slot);
     },
     watchForge(active: boolean, atMs: number, anchor: Vec3) {
-      if (!active) { forge = undefined; watchers.clear(); return; }
       if (!Number.isFinite(atMs) || !anchor.every(Number.isFinite)) return;
+      if (!active) {
+        if (restoredForgePending) {
+          restoredForgeGraceStart ??= atMs;
+          if (atMs - restoredForgeGraceStart < 3_000) return;
+        }
+        forge = undefined; watchers.clear();watcherArrivals.clear(); nextForgeGatherMs = 0;
+        restoredForgePending = false; restoredForgeGraceStart = undefined;
+        return;
+      }
+      restoredForgePending = false; restoredForgeGraceStart = undefined;
       forge = { anchor, atMs };
     },
     update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set(), walkerFeet: WalkerSlots = new Map()) {
       walkers = walkerFeet;
-      if (forge && frame && atMs >= forge.atMs) {
+      if (forge && frame && atMs >= forge.atMs && atMs >= nextForgeGatherMs) {
+        nextForgeGatherMs = atMs + 1_000;
         const present = new Set(frame.windows.filter(window => window.present).map(window => window.slot));
         const current = motion.sample(atMs);
-        for (const slot of watchers.keys()) if (!present.has(slot) || reservedSlots.has(slot) || walkers.has(slot) || !current.some(sample => sample.slot === slot && sample.homeLit)) watchers.delete(slot);
+        for (const slot of watchers.keys()) if (!present.has(slot) || reservedSlots.has(slot) || walkers.has(slot) || !current.some(sample => sample.slot === slot && sample.homeLit)) { watchers.delete(slot); watcherArrivals.delete(slot); }
         const occupied = new Set(watchers.values());
-        const candidates = current.filter(sample => sample.homeLit && present.has(sample.slot) && !watchers.has(sample.slot) && !reservedSlots.has(sample.slot) && !walkers.has(sample.slot)
-          && Math.hypot(sample.position[0] - forge!.anchor[0], sample.position[2] - forge!.anchor[2]) < 70)
+        const candidates = current.filter(sample => sample.homeLit && present.has(sample.slot) && !watchers.has(sample.slot) && !reservedSlots.has(sample.slot) && !walkers.has(sample.slot))
           .sort((a, b) => Math.hypot(a.position[0] - forge!.anchor[0], a.position[2] - forge!.anchor[2]) - Math.hypot(b.position[0] - forge!.anchor[0], b.position[2] - forge!.anchor[2]));
         for (const sample of candidates) {
-          if (watchers.size >= 8) break;
+          if (watchers.size >= 16) break;
           const destination = motion.destinationsForSlot(sample.slot).find(item => item.nodeId.startsWith('forge:watch:') && !occupied.has(item.nodeId)
             && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) >= 3
-            && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) <= 9);
+            && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) <= 13);
           if (destination && motion.requestGoal({ slot: sample.slot, nodeId: destination.nodeId, startAtMs: Math.max(atMs, frame.asOf) }).accepted) {
             watchers.set(sample.slot, destination.nodeId); occupied.add(destination.nodeId);
           }
@@ -145,17 +186,29 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       if(frame)for(const stepMs of dueBehaviourSteps(lastStepMs,atMs)){
         lastStepMs=stepMs;
         const stepSamples=motion.sample(stepMs),ambientSlots=new Set(stepSamples.filter(sample=>!reservedSlots.has(sample.slot) && !walkers.has(sample.slot) && !watchers.has(sample.slot)).map(sample=>sample.slot));
-        const step=behaviours.step({kingdomId:frame.kingdomId,epoch:frame.epoch,origin:frame.origin,atMs:stepMs,samples:stepSamples,ambientSlots,destinationsFor:slot=>motion.destinationsForSlot(slot).filter(destination => !destination.nodeId.startsWith('forge:watch:')),answers});
+        const step=behaviours.step({kingdomId:frame.kingdomId,epoch:frame.epoch,origin:frame.origin,atMs:stepMs,samples:stepSamples,ambientSlots,destinationsFor:slot=>motion.destinationsForSlot(slot).filter(destination => !destination.nodeId.startsWith('forge:')),answers});
         answers=step.goals.map(request=>({request,result:motion.requestGoal(request)}));
       }
-      samples = motion.sample(atMs);
+      samples = motion.sample(atMs).map(sample => {
+        if (!forge || watchers.get(sample.slot) !== sample.goalNodeId) return sample;
+        if (sample.goalReached && !watcherArrivals.has(sample.slot)) watcherArrivals.set(sample.slot, atMs);
+        const lift = forgeBarrel && sample.goalNodeId === 'forge:watch:14'
+          ? forgeBarrel.height * smooth(1 - Math.hypot(sample.position[0] - forgeBarrel.position[0], sample.position[2] - forgeBarrel.position[2]) / 1.25) : 0;
+        const position: Vec3 = [sample.position[0], sample.position[1] + lift, sample.position[2]];
+        return { ...sample, position, heading: sample.goalReached ? Math.atan2(forge.anchor[0] - position[0], forge.anchor[2] - position[2]) : sample.heading };
+      });
       const overlays=behaviours.present(samples,atMs);
       const bodies = samples.filter(sample => !walkers.has(sample.slot) && (!suppliedLooks.has(sample.slot) || knownLooks.has(suppliedLooks.get(sample.slot)!)));
       renderer?.update(bodies.map(sample => ({ id: String(sample.slot), look: suppliedLooks.get(sample.slot) ?? looks[sample.slot % looks.length]!.id,
-        position: sample.position, heading: forge && watchers.get(sample.slot) === sample.goalNodeId && sample.goalReached
-          ? Math.atan2(forge.anchor[0] - sample.position[0], forge.anchor[2] - sample.position[2]) : sample.heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time:overlays.get(sample.slot)?.time??time,
+        position: sample.position, heading: sample.heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time:overlays.get(sample.slot)?.time??time,
+        tiptoe: sample.goalReached && ['forge:watch:8', 'forge:watch:12', 'forge:watch:15'].includes(watchers.get(sample.slot) ?? '')
+          ? smooth((atMs - (watcherArrivals.get(sample.slot) ?? atMs) - 500) / 900) * (.82 + .18 * Math.sin(time * 1.3 + sample.slot)) : 0,
         lookYaw:watchers.has(sample.slot) ? 0 : overlays.get(sample.slot)?.lookYaw??0,
         gesture: reservedSlots.has(sample.slot) || watchers.has(sample.slot)?'none' as const:speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : overlays.get(sample.slot)?.gesture??'none' as const })), camera);
+      carrying = [...bodies, ...samples.filter(sample => {
+        const walker = walkers.get(sample.slot);
+        return walker && knownLooks.has(walker.look) && !walker.posture;
+      }).map(sample => walkerSubject(sample, walkers))];
       shadows.count = 0;
       for (const sample of bodies) {
         shadowMatrix.makeScale(1, 1, .8); shadowMatrix.setPosition(sample.position[0], sample.position[1] + .018, sample.position[2]);
@@ -165,6 +218,16 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       for (const [slot, cue] of speech) if (cue.expiresAt <= atMs || cue.asOf > atMs || !samples.some(s => s.slot === slot)) speech.delete(slot);
       return samples;
     },
+    drawLanterns(time: number, night: number, camera?: THREE.Camera, walkerGrips?: ReadonlyMap<string, THREE.Matrix4>) {
+      const grips = new Map<number, THREE.Matrix4>();
+      for (const sample of carrying) {
+        const walker = walkers.get(sample.slot);
+        const grip = walker ? walkerGrips?.get(walker.id) : renderer?.grips.get(String(sample.slot));
+        if (grip) grips.set(sample.slot, grip);
+      }
+      lanterns.update(carrying, time, night, camera, grips);
+    },
+    sources: () => lanterns.sources(),
     lightFrame(atMs: number): KingdomPresenceFrame | undefined {
       if (!frame) return;
       const arrived = new Map(samples.filter(s => s.homeLit).map(s => [s.slot, s.homeLitAtMs!]));
@@ -188,7 +251,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       }
       return labels;
     },
-    clear() { pendingCheckpoint = undefined; resetBehaviours(); forge = undefined; watchers.clear(); motion.clear(); frame = undefined; samples = []; walkers = new Map(); suppliedLooks.clear(); speech.clear(); renderer?.update([]); shadows.count = 0; },
-    dispose() { resetBehaviours(); disposed = true; renderer?.dispose(); material.dispose(); scene.remove(shadows); shadows.dispose(); shadowGeometry.dispose(); shadowMaterial.dispose(); },
+    clear() { pendingCheckpoint = undefined; resetBehaviours(); forge = undefined; watchers.clear();watcherArrivals.clear(); restoredForgePending = false; restoredForgeGraceStart = undefined; motion.clear(); frame = undefined; samples = []; carrying = []; walkers = new Map(); suppliedLooks.clear(); speech.clear(); renderer?.update([]); lanterns.update([], 0, 0); shadows.count = 0; },
+    dispose() { resetBehaviours(); disposed = true; renderer?.dispose(); lanterns.dispose(); material.dispose(); scene.remove(shadows); shadows.dispose(); shadowGeometry.dispose(); shadowMaterial.dispose(); },
   };
 }

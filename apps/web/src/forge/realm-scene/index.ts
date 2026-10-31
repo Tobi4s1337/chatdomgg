@@ -58,7 +58,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
   const stages = new Map<string, { stage: string; started: number }>();
   const focusPoint = options.anvil.clone();
   const anvilFace = options.anvil.clone().add(new THREE.Vector3(0, 1.43, 0));
-  let now = 0, revision = 0, epoch = 0, disposed = false, receivedClock = false;
+  let now = 0, revision = 0, epoch = 0, disposed = false, receivedClock = false, castingHeat = 0;
   let preparing: CommittedForgeAttachment | null = null, current: Casting | null = null;
   let landing: { at: number; position: THREE.Vector3; sources: { position: Vec3; normal: Vec3; strength: number }[] } | null = null;
 
@@ -197,10 +197,12 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       }
       return { target: centre.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).add(position), offset: backward.multiplyScalar(distance + .6) };
     }
-    if (waiting) {
-      // The hearth and its sleeping dragon stand beside the anvil, rather than disappearing outside a close crop.
-      const workshop = fit(new THREE.Box3(new THREE.Vector3(-1.7, -.125, -5), new THREE.Vector3(8.65, 4.8, 1.45)),
-        options.anvil, 0, new THREE.Vector3(-7, 3.6, 11));
+    if (waiting || frame?.phase === 'words' || frame?.phase === 'blueprint' || frame?.phase === 'pour') {
+      // Hold the working smithy and the west/north audience crescent together.
+      // See the west-side audience from the forge side, with a clear
+      // foreground wedge so heads never hide the pour.
+      const workshop = fit(new THREE.Box3(new THREE.Vector3(-9, -.125, -10), new THREE.Vector3(8.65, Math.max(4.8, waiting ? 0 : stageHeight), 2.5)),
+        options.anvil, 0, new THREE.Vector3(1.5, 2.4, 11));
       target.copy(workshop.target); offset.copy(workshop.offset);
     }
     if (casting && frame && (frame.phase === 'flight' || frame.phase === 'landed')) {
@@ -284,6 +286,8 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
         ritualId: pending?.[0] ?? preparing!.runId, phase: 'words', elapsed: Math.max(0, (now - (pending?.[1].started ?? now)) / 1000),
         phaseProgress: 0, duration: 21, source: 'live',
       } : null;
+      castingHeat = frame?.phase === 'pour' || frame?.phase === 'strike' ? 1 :
+        frame?.phase === 'seal' ? .85 : frame?.phase === 'cool' ? 1 - frame.phaseProgress : 0;
       view.update(waiting, !!waiting && pending?.[1].stage === 'drafting');
       // The external presentation owns the clone, hammer and runes after commit. Heat the physical anvil too,
       // without starting a second set of effects or exposing a candidate while the judges are still working.
@@ -305,11 +309,18 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     active: () => !!(stages.size || preparing || current),
     get focusPoint() { return focusPoint; },
     sources(): readonly { position: Vec3; normal: Vec3; strength: number }[] {
-      if (!landing) return [];
+      // The approved casting is luminous while it pours and cools, not only when
+      // it lands. Feed the same occluded field used by paving and moving faces.
+      const sources: { position: Vec3; normal: Vec3; strength: number }[] = castingHeat > 0 ? [
+        { position: [anvilFace.x, anvilFace.y + .45, anvilFace.z], normal: [0, 1, 0], strength: castingHeat },
+        // Light leaving the audience-facing side of the molten casting.
+        { position: [anvilFace.x - .5, anvilFace.y + .3, anvilFace.z - .4], normal: [-1, 0, 0], strength: castingHeat },
+      ] : [];
+      if (!landing) return sources;
       const age = (now - landing.at) / 1000;
-      if (age < 0 || age >= 3) return [];
+      if (age < 0 || age >= 3) return sources;
       const strength = THREE.MathUtils.smoothstep(age, 0, .15) * (1 - THREE.MathUtils.smoothstep(age, .15, 3));
-      return landing.sources.map(source => ({ ...source, strength: source.strength * strength }));
+      return [...sources, ...landing.sources.map(source => ({ ...source, strength: source.strength * strength }))];
     },
     get activeAttachmentId() { return current?.attachment.id ?? preparing?.id ?? null; },
     dispose() {

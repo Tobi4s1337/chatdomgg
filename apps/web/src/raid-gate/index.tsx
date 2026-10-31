@@ -8,21 +8,29 @@ import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import type { KingdomId } from '../../../api/src/raid-gate/contracts';
 import { createKingdomScene } from '../kingdom/scene';
 import type { GateBench } from './bench';
-import { createRaidGateController, type RaidGateController } from './controller';
+import { createRaidGateController, type GateSnapshot, type RaidGateController } from './controller';
+import { GuestArrivalPane } from './GuestArrival';
 import type { GateKingdom, RaidGatePorts } from './ports';
 import { GateDefs, RaidGatePane } from './RaidGatePane';
 import { Seal } from './Seal';
+import { VisitorGiftPane } from './VisitorGifts';
+import { createGuestWelcomeController } from './welcome';
 import './raid-gate.css';
+import './welcome.css';
 
-export { createRaidGateController, RaidGatePane };
-export type { GatePhase, GateSnapshot, RaidGateController } from './controller';
-export type { AtlasGateEvent, AtlasGateHost, GateAccount, GateKingdom, GateLand, RaidGateApi, RaidGatePorts } from './ports';
+export { createGuestWelcomeController, createRaidGateController, GuestArrivalPane, RaidGatePane, VisitorGiftPane };
+export type { GiftActions } from './VisitorGifts';
+export type { GuestWelcomeController, WelcomePorts, WelcomeSnapshot } from './welcome';
+export type { GateFarewell, GatePhase, GateSnapshot, JourneySnapshot, RaidGateController } from './controller';
+export type { AtlasGateEvent, AtlasGateHost, AtlasTravelStage, GateAccount, GateKingdom, GateLand, RaidGateApi, RaidGatePorts } from './ports';
 
 type GateWindow = Window & { __chatdomReady?: boolean; __chatdomRaidGate?: unknown };
 const AUTHORITIES = ['ready', 'offline', 'not-connected', 'revoked', 'disabled', 'unavailable'] as const;
 
 /** Willowmere is the kingdom route's own simulated realm; the board stands at its gate. */
 const UNBOUND_SOURCE: GateKingdom = { kingdomId: '41000001' as KingdomId, name: 'Willowmere', login: 'willowmere' };
+/** The bench's founded destination, whose valley the welcome is staged in. */
+const WELCOME_HOST = { kingdomId: '41000002' as KingdomId, name: 'Fernhollow', seed: 'fernhollow' } as const;
 
 export default function RaidGateRoute() {
   const query = new URLSearchParams(location.search);
@@ -30,8 +38,12 @@ export default function RaidGateRoute() {
   const viewer = query.get('viewer') === 'walker' ? 'walker' : 'monarch';
   const authority = AUTHORITIES.find(each => each === query.get('authority')) ?? 'ready';
   const backdrop = query.get('backdrop') !== '0';
+  // The welcome is staged where it happens: in the destination's valley, under its own name.
+  const welcoming = benchMode && query.get('welcome') === '1';
+  const valley = welcoming ? { seed: WELCOME_HOST.seed, name: WELCOME_HOST.name, kingdomId: WELCOME_HOST.kingdomId } : { seed: 'willowmere', name: 'Willowmere', kingdomId: UNBOUND_SOURCE.kingdomId };
   const clock = () => Date.now();
   const [controller, setController] = createSignal<RaidGateController | null>(null);
+  const [snap, setSnap] = createSignal<GateSnapshot | null>(null);
   const [bench, setBench] = createSignal<GateBench | null>(null);
   const [kingdomReady, setKingdomReady] = createSignal(!backdrop);
   const [kingdomFailed, setKingdomFailed] = createSignal(false);
@@ -47,7 +59,7 @@ export default function RaidGateRoute() {
     document.body.classList.add('rg-page');
     if (backdrop) {
       void createKingdomScene(canvas, {
-        signal: life.signal, tier: query.get('tier') === 'town' ? 'town' : 'hamlet', seed: 'willowmere', realmName: 'Willowmere', hour: 19.5, time: 40, camera: 'hero', source: 'simulated',
+        signal: life.signal, tier: query.get('tier') === 'town' ? 'town' : 'hamlet', seed: valley.seed, realmName: valley.name, hour: 19.5, time: 40, camera: 'hero', source: 'simulated',
         onProgress: () => undefined, onNames: () => undefined, onSource: () => undefined,
         onError: () => setKingdomFailed(true),
       }).then(scene => {
@@ -63,13 +75,17 @@ export default function RaidGateRoute() {
       let made: GateBench | null = null;
       if (benchMode) {
         const { createGateBench } = await import('./bench');
-        made = createGateBench({ viewer, authority, clock });
+        const twitch = (['accept', 'lose', 'refuse'] as const).find(each => each === query.get('twitch')) ?? 'accept';
+        const rooms = (['ready', 'slow', 'hold', 'lose', 'deny'] as const).find(each => each === query.get('rooms')) ?? 'ready';
+        made = createGateBench({ viewer, authority, clock, twitch, rooms });
         made.finder.onChange(() => setFinderOpen(made!.finder.open()));
         ports = { api: made.api, atlas: made.atlas, source: made.source, clock, account: { reconnect: () => made!.reconnect() } };
       }
       if (life.signal.aborted) return;
       const gate = createRaidGateController(ports);
       setBench(made); setController(gate);
+      setSnap(gate.snapshot());
+      gate.subscribe(setSnap);
       await waitFor(gate, snapshot => snapshot.phase !== 'loading');
       const pick = query.get('pick') as KingdomId | null, walkers = Math.max(0, Math.min(7, Number(query.get('walkers')) || 0));
       if (made && pick && authority === 'ready') {
@@ -83,6 +99,46 @@ export default function RaidGateRoute() {
         const requestId = gate.snapshot().requestId;
         if (requestId && walkers > 0) { await made.walkersJoin(walkers, requestId); await gate.refresh(); }
         if (query.get('join') === '1') await gate.join();
+        if (requestId && query.get('start') === '1') {
+          if (viewer === 'monarch') await gate.start();
+          else { await made.monarchStart(requestId); await gate.refresh(); }
+        }
+        if (requestId && query.get('witness') === '1') { await made.witness(requestId); await gate.refresh(); }
+        if (requestId && query.get('go') === '1') {
+          // The marcher follows the party; the board shows each stage as the SIMULATED rooms answer it.
+          void gate.travel();
+          await waitFor(gate, snapshot => {
+            const journey = snapshot.journey;
+            return journey !== null && (journey.overrun || journey.refusal !== null || !['asking', 'reserved', 'preparing', 'ready', 'committing'].includes(journey.state));
+          });
+          const arrived = gate.snapshot().journey;
+          if (welcoming && arrived?.state === 'committed' && gate.snapshot().raid) {
+            // SIMULATED: the rest of the party follows through the gate, and Fernhollow's hosts come to greet them.
+            const raid = gate.snapshot().raid!;
+            await made.partyTravel(requestId, raid.id, walkers);
+            const gift = query.get('gift');
+            if (gift === 'both') {
+              const bread = await made.hostOffer('monarch');
+              await gate.refreshWelcome();
+              if (bread.kind === 'gift') await gate.acceptGift(bread.value.offerId);
+            }
+            if (gift === 'offer' || gift === 'both') await made.hostOffer('ash');
+            if (query.get('leave') === '1') {
+              await gate.refreshWelcome();
+              const view = gate.snapshot().welcome?.view;
+              if (view?.shelf[0]) await gate.leaveGift(view.shelf[0].itemId, view.monarch.personId);
+            }
+            await gate.refreshWelcome();
+          }
+          if (query.get('home') === '1' && gate.snapshot().journey?.state === 'committed') {
+            void gate.returnHome();
+            await waitFor(gate, snapshot => snapshot.journey?.kind === 'return' && ['committed', 'denied', 'expired', 'cancelled'].includes(snapshot.journey.state));
+          }
+        }
+        if (requestId && query.get('close') === '1') {
+          if (viewer === 'monarch') await gate.cancel();
+          else { await made.monarchClose(requestId); await gate.refresh(); }
+        }
       }
       gateWindow.__chatdomRaidGate = { snapshot: () => gate.snapshot(), controller: gate, bench: made, ready: false };
       setStaged(true);
@@ -106,15 +162,24 @@ export default function RaidGateRoute() {
     (window as GateWindow).__chatdomReady = false; document.body.classList.remove('rg-page');
   });
 
-  return <div class="rg-route" classList={{ 'rg-no-backdrop': !backdrop }}>
+  /** The welcome is drawn once the destination acknowledged this viewer as a visitor and the authority answered. */
+  const welcome = () => {
+    const s = snap();
+    return s?.journey?.kind === 'raid' && s.journey.state === 'committed' && s.welcome?.view ? { snap: s, welcome: s.welcome } : null;
+  };
+  const here = () => welcome() ? { name: WELCOME_HOST.name, kingdomId: WELCOME_HOST.kingdomId } : { name: valley.name, kingdomId: valley.kingdomId };
+
+  return <div class="rg-route" classList={{ 'rg-no-backdrop': !backdrop, 'rg-welcoming': welcome() !== null }}>
     <GateDefs />
-    <Show when={backdrop}><canvas ref={element => { canvas = element; }} class="rg-kingdom" aria-label="Willowmere at dusk, seen from above its gate" /></Show>
+    <Show when={backdrop}><canvas ref={element => { canvas = element; }} class="rg-kingdom" aria-label={`${valley.name} at dusk, seen from above its gate`} /></Show>
     <div class="rg-shade" aria-hidden="true" />
     <header class="rg-realm">
-      <Seal kingdomId={UNBOUND_SOURCE.kingdomId} size={44} />
-      <div><p>A kingdom at dusk</p><h1>Willowmere</h1></div>
+      <Seal kingdomId={here().kingdomId} size={44} />
+      <div><p>{welcome() ? 'Guests at the gate' : 'A kingdom at dusk'}</p><h1>{here().name}</h1></div>
       <span class="rg-ribbon"><span class="rg-pip" />SIMULATED citizens</span>
     </header>
+    <Show when={welcome()}>{state => <GuestArrivalPane welcome={state().welcome} homeName={state().snap.source.name} homeKingdomId={state().snap.source.kingdomId}
+      hostName={state().snap.journey?.destination?.channel?.kingdomName ?? WELCOME_HOST.name} hostKingdomId={state().snap.journey!.to} />}</Show>
     <Show when={!ready()}><div class="rg-veil" role="status"><p>Unfolding the valley…</p></div></Show>
     <Show when={bench() && finderOpen()}>
       <BenchFinder bench={bench()!} />

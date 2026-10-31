@@ -1,4 +1,4 @@
-import { createForgeHearth, createGateBrazier, FORGE_HEARTH_PIVOT, GATE_BRAZIER_MOUNT } from '@chatdom/content';
+import { createForgeHearth, createGateBrazier, createForgeWorkshop, FORGE_WORKSHOP_HEARTH_PIVOT, FORGE_HEARTH_PIVOT, GATE_BRAZIER_MOUNT } from '@chatdom/content';
 import { VOXEL_METRES, type Vec3 } from '@chatdom/shared';
 import { terrainHeight, transformCardinalPoint, type CardinalTurn, type SettlementPlan } from '@chatdom/world';
 import { foundedGroundAt } from './collision';
@@ -74,4 +74,27 @@ export function enrichNativeForgeHearth(plan: SettlementPlan, native: NativeTown
     occupied.push(box);
   }
   return { ...native, fixtures: [...native.fixtures, ...pieces] };
+}
+
+/** The open workshop surrounds the installed fire, never moves the anvil or a citizen's plot. */
+export function enrichNativeForgeWorkshop(plan: SettlementPlan, native: NativeTown): NativeTown {
+  if (native.revision !== plan.revision || native.fixtures.some(piece => piece.id === 'forge:workshop:v1')) return native;
+  const hearth = native.fixtures.find(piece => piece.id === ID);
+  if (!hearth || hearth.blueprint.id !== 'civic-forge-hearth-hearth') return native;
+  const at = (point: readonly number[]) => transformCardinalPoint([0, 0, 0], hearth.rotation, [point[0]! * M, 0, point[2]! * M]);
+  const old = at(FORGE_HEARTH_PIVOT), offset = at(FORGE_WORKSHOP_HEARTH_PIVOT);
+  const piece: NativePiece = { id: 'forge:workshop:v1', blueprint: createForgeWorkshop('hearth'),
+    position: [hearth.position[0] + old[0] - offset[0], hearth.position[1], hearth.position[2] + old[2] - offset[2]], rotation: hearth.rotation };
+  const box = footprint(piece), active = new Set(plan.activeStreetIds);
+  if ([...native.homes.values(), ...native.fixtures.filter(other => other !== hearth)].some(other => overlaps(box, footprint(other)))
+    || plan.reservations.some(r => overlaps(box, r.lot)) || overlaps(box, plan.castle.bounds)) return native;
+  // A tall canopy may shelter the paved verge; posts leave a 2.2 m walking corridor on every road.
+  for (const solid of piece.blueprint.boxes.filter(solid => solid.material && solid.from[1] < 20)) {
+    const local: NativePiece = { ...piece, blueprint: { ...piece.blueprint, boxes: [solid] } }, base = footprint(local);
+    if (plan.streets.some(street => active.has(street.id) && street.points.some((p, i) => i > 0
+      && nearSegment(street.points[i - 1]!, p, base, 1.1)))) return native;
+    const x = (base.minX + base.maxX) / 2, z = (base.minZ + base.maxZ) / 2;
+    if (Math.abs(foundedGroundAt(plan, x, z)[1] - piece.position[1]) > .125) return native;
+  }
+  return { ...native, fixtures: [...native.fixtures, piece] };
 }

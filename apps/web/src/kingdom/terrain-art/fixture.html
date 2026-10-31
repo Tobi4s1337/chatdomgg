@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Chatdom · Picture land fixture</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0c1426; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .label { position: fixed; left: 18px; bottom: 16px; font: 600 12px/1.35 Georgia, 'Times New Roman', serif; letter-spacing: .08em;
+    color: #f1dfb8; background: rgba(18, 22, 34, .62); border: 1px solid rgba(214, 178, 108, .55); border-radius: 3px; padding: 6px 10px; text-transform: uppercase; }
+  .label small { display: block; font-weight: 400; letter-spacing: .04em; text-transform: none; color: #c9bfae; }
+</style>
+</head>
+<body>
+<canvas id="land"></canvas>
+<div class="label" id="label">Fixture · candidate land<small>SIMULATED presence · not the adopted kingdom</small></div>
+<script type="module" src="./fixture-main.ts"></script>
+</body>
+</html>

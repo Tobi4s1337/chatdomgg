@@ -1,0 +1,79 @@
+/* The welcome at the destination's gate (RG10): a torchlit column of guests walking into the gate's light, and gift tags
+   on the board. Warm light is drawn as additive bloom so it reads as light at stream distance, not as flat orange. */
+
+.rg-welcoming .rg-shade { background: linear-gradient(90deg, transparent 45%, #12142466 78%, #10121fa6), linear-gradient(180deg, #11142450, transparent 22%), linear-gradient(0deg, #0d0f1ccc, #0d0f1c66 24%, transparent 46%); }
+
+.rg-welcome-stage { position: absolute; z-index: 2; left: 0; bottom: 0; width: min(1360px, calc(100vw - 500px)); height: min(46vh, 470px); pointer-events: none; }
+/* Dusk gathers at the frame's foot, so the valley's own edge falls away into it and the column walks out of the dark. */
+.rg-welcome-stage::before { content: ''; position: absolute; inset: -12% 0 0 0; z-index: -1;
+  background: radial-gradient(ellipse 70% 62% at 0% 100%, #0b0c18f2 0, #0b0c18c4 45%, transparent 100%), linear-gradient(0deg, #0b0c18e6 0, #0b0c1880 18%, transparent 46%); }
+.rg-welcome-words { position: absolute; left: 44px; top: 0; max-width: 760px; text-shadow: 0 2px 12px #0b0c18, 0 1px 0 #0b0c18; }
+.rg-welcome-eyebrow { margin: 0 0 6px; font: 13px 'IM Fell English SC', Georgia, serif; letter-spacing: .2em; text-transform: lowercase; color: #f0c98b; }
+.rg-welcome-title { margin: 0; font: 400 44px/1.02 'IM Fell English', Georgia, serif; color: #fff1d6; letter-spacing: -.01em; text-wrap: balance; }
+.rg-welcome-line { margin: 10px 0 0; max-width: 640px; font: italic 19px/1.38 Alegreya, Georgia, serif; color: #f0dcbc; }
+.rg-welcome-scene { position: absolute; left: 0; right: 0; bottom: 0; height: 74%; }
+.rg-welcome-scene svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.rg-welcome-seal { overflow: visible; filter: drop-shadow(0 0 10px #ffc4704d) drop-shadow(0 3px 2px #0b0c18aa); }
+.rg-welcome-seal > * { display: block; margin: 3px auto 0; }
+.rg-welcome-chip { position: absolute; right: 18px; bottom: 14px; margin: 0; display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border: 1px solid #d0b58160; background: #20243acc; color: #f2d8b3; font: 10px/1 Alegreya, Georgia, serif; letter-spacing: .16em; }
+
+.rg-w-ground { fill: #1c1a26; }
+.rg-w-bloom, .rg-w-haze { mix-blend-mode: screen; }
+.rg-w-bloom { animation: rg-w-breathe 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes rg-w-breathe { 50% { opacity: .82; transform: scale(.94); } }
+.rg-w-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: rg-w-flicker .42s steps(3) infinite alternate; filter: drop-shadow(0 0 6px #ffb050); }
+@keyframes rg-w-flicker { 0% { transform: scale(1, 1) skewX(0); } 50% { transform: scale(.92, 1.08) skewX(4deg); } 100% { transform: scale(1.05, .94) skewX(-3deg); } }
+.rg-w-ember { fill: #ffcb7a; mix-blend-mode: screen; opacity: 0; animation: rg-w-rise 2.6s ease-out infinite; animation-delay: var(--d); transform-box: fill-box; }
+@keyframes rg-w-rise { 0% { opacity: 0; transform: translate(0, 0); } 12% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), -70px); } }
+.rg-w-banner { transform-box: fill-box; transform-origin: 50% 0; animation: rg-w-sway 3.4s ease-in-out infinite; }
+.rg-w-banner-late { animation-delay: -1.3s; }
+@keyframes rg-w-sway { 50% { transform: skewX(5deg) scaleX(.96); } }
+.rg-w-walking .rg-w-body, .rg-w-walking .rg-w-torch, .rg-w-walking .rg-w-standard { animation: rg-w-bob .92s ease-in-out infinite; animation-delay: var(--step); }
+@keyframes rg-w-bob { 50% { transform: translateY(-3px); } }
+.rg-w-walking .rg-w-leg-a { animation: rg-w-stride .92s steps(2) infinite; animation-delay: var(--step); }
+.rg-w-walking .rg-w-leg-b { animation: rg-w-stride .92s steps(2) infinite reverse; animation-delay: var(--step); }
+@keyframes rg-w-stride { 0% { transform: translateX(-2px); } 100% { transform: translateX(3px); } }
+.rg-w-you { font: 13px 'IM Fell English SC', Georgia, serif; letter-spacing: .12em; fill: #f7dca4; paint-order: stroke; stroke: #120d14; stroke-width: 3px; }
+.rg-w-more { font: italic 18px Alegreya, Georgia, serif; fill: #e8d1ac; paint-order: stroke; stroke: #120d14; stroke-width: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rg-w-bloom, .rg-w-flame, .rg-w-banner, .rg-w-walking .rg-w-body, .rg-w-walking .rg-w-torch, .rg-w-walking .rg-w-standard,
+  .rg-w-walking .rg-w-leg-a, .rg-w-walking .rg-w-leg-b { animation: none; }
+  .rg-w-ember { animation: none; opacity: 0; }
+}
+/* On a phone the board is the welcome; the stage would sit under the sheet. */
+@media (max-width: 760px) { .rg-welcome-stage { display: none; } }
+
+/* ---- Gifts on the board ------------------------------------------------------------------------------------------ */
+.rg-gifts { margin: 4px 0 6px; }
+.rg-gift { position: relative; display: grid; grid-template-columns: 56px 1fr; gap: 14px; margin: 12px 0 12px; padding: 16px 16px 14px 14px; color: var(--ink);
+  background: radial-gradient(ellipse at 15% 0%, #fff6dc 0, transparent 60%), linear-gradient(#f8ecd0, #ecd9b0);
+  border: 1px solid #b38b55; border-radius: 3px 14px 3px 3px;
+  box-shadow: 0 1px 0 #fff8e6 inset, 0 3px 0 #b3895066, 0 6px 14px #6b4a2a40, 0 0 0 4px #ffd27a1f, 0 0 28px #ffbf6233; }
+.rg-gift::after { content: ''; position: absolute; top: 12px; right: 12px; width: 9px; height: 9px; border-radius: 50%; background: #d9c39a; box-shadow: inset 0 1px 2px #6b4a2a99, 0 0 0 2px #b38b55; }
+.rg-gift-string { position: absolute; top: -10px; right: 15px; width: 2px; height: 26px; background: linear-gradient(#a2342a, #7d241d); transform: rotate(14deg); border-radius: 1px; }
+.rg-gift-medal { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%; color: #3b2612;
+  background: radial-gradient(circle at 35% 30%, #fbe3a9, #d1a25c 55%, #8d6233); box-shadow: inset 0 0 0 2px #fff0c866, inset 0 -3px 5px #6b45208c, 0 2px 3px #4a2e1466, 0 0 18px #ffc56a66; }
+.rg-gift-medal .rg-glyph { width: 30px; height: 30px; stroke-width: 1.7; }
+.rg-gift-words { min-width: 0; }
+.rg-gift-eyebrow { margin: 0 0 3px; font: 12.5px 'IM Fell English SC', Georgia, serif; letter-spacing: .12em; text-transform: lowercase; color: #7a5228; }
+.rg-gift-title { margin: 0; font: 400 24px/1.08 'IM Fell English', Georgia, serif; color: #2e1d10; text-wrap: balance; }
+.rg-gift-story { margin: 5px 0 10px; font: italic 15.5px/1.35 Alegreya, Georgia, serif; color: #5b4128; }
+.rg-gift-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.rg-gift-actions .rg-button { min-height: 42px; padding: 0 14px; }
+.rg-gift-time { margin: 8px 0 0; font-size: 13px; color: #7d6247; }
+.rg-gift-ledger { list-style: none; margin: 8px 0 10px; padding: 0; display: grid; gap: 7px; }
+.rg-gift-ledger li { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.38; color: var(--ink); }
+.rg-gift-stamp { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: #f6dfc0;
+  background: radial-gradient(circle at 38% 32%, #b5473a, #7c231c 60%, #5c1711); box-shadow: inset 0 1px 2px #3a0906aa, 0 1px 1px #3a090666; transform: rotate(-8deg); }
+.rg-gift-ledger li[data-state='refused'] .rg-gift-stamp, .rg-gift-ledger li[data-state='expired'] .rg-gift-stamp, .rg-gift-ledger li[data-state='rejected'] .rg-gift-stamp,
+.rg-gift-ledger li[data-state='offered'] .rg-gift-stamp { background: radial-gradient(circle at 38% 32%, #9a7a52, #66492c 60%, #4a331d); }
+.rg-gift-stamp .rg-glyph { width: 17px; height: 17px; }
+.rg-gift-shelf { margin: 10px 0 2px; padding-top: 10px; border-top: 1px dashed #8d653766; }
+.rg-gift-shelf ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.rg-gift-chip { appearance: none; min-height: 40px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; cursor: pointer; color: var(--ink);
+  font: 15px Alegreya, Georgia, serif; background: linear-gradient(#f7e8c8, #e6cf9f); border: 1px solid #a07a46; border-radius: 20px; box-shadow: 0 2px 0 #a0794699; }
+.rg-gift-chip:hover { filter: brightness(1.05); }
+.rg-gift-chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.rg-gift-chip:disabled { cursor: default; filter: saturate(.6); }
+.rg-gift-chip .rg-glyph { width: 18px; height: 18px; }

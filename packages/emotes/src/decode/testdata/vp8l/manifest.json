@@ -1,0 +1,158 @@
+[
+ {
+  "file": "gradient-64x48-m4.webp",
+  "width": 64,
+  "height": 48,
+  "rgbaSha256": "cdb2ef58951ee1359605cda7780c9c496f1a352249e4f789035604790d5051b1"
+ },
+ {
+  "file": "gradient-64x48-m0.webp",
+  "width": 64,
+  "height": 48,
+  "rgbaSha256": "cdb2ef58951ee1359605cda7780c9c496f1a352249e4f789035604790d5051b1"
+ },
+ {
+  "file": "noise-37x19-m0.webp",
+  "width": 37,
+  "height": 19,
+  "rgbaSha256": "4c83f79b24624e2aa1bf7a07208a4c67459754bef730436fdf3252e1343271fc"
+ },
+ {
+  "file": "noise-37x19-m6.webp",
+  "width": 37,
+  "height": 19,
+  "rgbaSha256": "4c83f79b24624e2aa1bf7a07208a4c67459754bef730436fdf3252e1343271fc"
+ },
+ {
+  "file": "shapes-alpha-96x64-m6.webp",
+  "width": 96,
+  "height": 64,
+  "rgbaSha256": "4f365fd4490cebd4e7e8bddbf1cdff019a1666e3e72e5302c9726f4ad0f5debd"
+ },
+ {
+  "file": "shapes-alpha-96x64-m2.webp",
+  "width": 96,
+  "height": 64,
+  "rgbaSha256": "4f365fd4490cebd4e7e8bddbf1cdff019a1666e3e72e5302c9726f4ad0f5debd"
+ },
+ {
+  "file": "palette2-50x30.webp",
+  "width": 50,
+  "height": 30,
+  "rgbaSha256": "38abc78f4aaf906cc1e5848cde8cbf24fe44dbb0ac1f19b876615ecf92e281cb"
+ },
+ {
+  "file": "palette3-41x23.webp",
+  "width": 41,
+  "height": 23,
+  "rgbaSha256": "3b768a5ad1bd11af98ac98f8a1112ad5dae5e3b1f589e3cecc66c88a16dd4969"
+ },
+ {
+  "file": "palette4-41x23.webp",
+  "width": 41,
+  "height": 23,
+  "rgbaSha256": "774dbef627a6f1d5e43787014b697a393268aed58c1682f40d6aeb3f335c72f4"
+ },
+ {
+  "file": "palette11-33x17.webp",
+  "width": 33,
+  "height": 17,
+  "rgbaSha256": "a5329f69be04a9c1125427a565045ce87e1a7a8b4aeeea2818b3e85aeab09888"
+ },
+ {
+  "file": "palette16-67x45.webp",
+  "width": 67,
+  "height": 45,
+  "rgbaSha256": "50a905d24b6aaa483277d2f9e719e0434243419c8a8ad55441c808435bc29a90"
+ },
+ {
+  "file": "palette200-64x64.webp",
+  "width": 64,
+  "height": 64,
+  "rgbaSha256": "5b202d536472dcdf026f1279bef15f0492dba9c7be96497f71a2111013bc7403"
+ },
+ {
+  "file": "pixel-1x1.webp",
+  "width": 1,
+  "height": 1,
+  "rgbaSha256": "6b623af500800897f26385b4edc8d1a7dd8a76085b7a02db2ed9fa1f0b707f85"
+ },
+ {
+  "file": "column-1x23.webp",
+  "width": 1,
+  "height": 23,
+  "rgbaSha256": "e22c10c9eaad47c5f93b4c8228405d30e3028769513379ed2965fe34da696050"
+ },
+ {
+  "file": "row-29x1.webp",
+  "width": 29,
+  "height": 1,
+  "rgbaSha256": "94e75752320c0d1113e1ef34924ca0f79c80a0f0936c84a7633dfed2e351e1cc"
+ },
+ {
+  "file": "tiled-128x96-m6.webp",
+  "width": 128,
+  "height": 96,
+  "rgbaSha256": "b00f9e55a81c54a3c1b4cac0aa548a0943761e7ec2c214dd8d9a0da79ece5bad"
+ },
+ {
+  "file": "tiled-128x96-m1.webp",
+  "width": 128,
+  "height": 96,
+  "rgbaSha256": "b00f9e55a81c54a3c1b4cac0aa548a0943761e7ec2c214dd8d9a0da79ece5bad"
+ },
+ {
+  "file": "scene-300x200-m6.webp",
+  "width": 300,
+  "height": 200,
+  "rgbaSha256": "360509070c43ba7e1042677a13234d26923628ba1bf3a7b3615f2851e0a51b25"
+ },
+ {
+  "file": "scene-300x200-m3.webp",
+  "width": 300,
+  "height": 200,
+  "rgbaSha256": "360509070c43ba7e1042677a13234d26923628ba1bf3a7b3615f2851e0a51b25"
+ },
+ {
+  "file": "transparent-40x30.webp",
+  "width": 40,
+  "height": 30,
+  "rgbaSha256": "fd9091483b3cc20d072d09e3ea807b156c368fd3b4d177274d74421035249216"
+ },
+ {
+  "file": "checker-512x512.webp",
+  "width": 512,
+  "height": 512,
+  "rgbaSha256": "dd8c311f433a5caeeb20f8270dbb6a705237bc7a3920d4b93b13a9e6e85df95d"
+ },
+ {
+  "file": "field-radial-64x48.webp",
+  "width": 64,
+  "height": 48,
+  "rgbaSha256": "f0a7bd91da1b870470e015d36f5be33f2cc72d26448e2640b7dfb0bf8cfbc996"
+ },
+ {
+  "file": "field-waves-64x48.webp",
+  "width": 64,
+  "height": 48,
+  "rgbaSha256": "ed27d48950a7ec008405c074aca3adaf8602336889133bdba9e7b304b724ad15"
+ },
+ {
+  "file": "dark-blocks-64x48.webp",
+  "width": 64,
+  "height": 48,
+  "rgbaSha256": "77e1911a8465d038101ee9a4dbff3f8c94126136f4fd3340c88f99c6c5946f82"
+ },
+ {
+  "file": "bands6-80x60.webp",
+  "width": 80,
+  "height": 60,
+  "rgbaSha256": "a216b1f96f25acd6f3d7367975710b9a904b9b7d1c42d2e90432d3ad00d2d28a"
+ },
+ {
+  "file": "bands40-80x60.webp",
+  "width": 80,
+  "height": 60,
+  "rgbaSha256": "d4b9e6f8fbaa9dea880f38f5e509856787b62ec20660b935bf412973ff9df3cd"
+ }
+]

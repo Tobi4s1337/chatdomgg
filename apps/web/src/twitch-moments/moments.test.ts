@@ -8,7 +8,8 @@ import { BANNER_BEAT } from './choreography';
 import type { DragonSummonRequest } from '../../../herald/src/twitch-moments/ports';
 import { ApprovedEffectSchema, type ActionPort, type KingdomMomentIntent } from './contracts';
 import { createTwitchMoments, type MomentFrame } from './controller';
-import { rungFor, type SpectaclePlaces } from './spectacle';
+import { SKY_BEAT, SKY_LIMITS, rungFor, type SpectaclePlaces } from './spectacle';
+import { chooseWatchers, crowdPose, type CrowdCall } from './stage-beat';
 import { createTwitchMomentView, type CameraLease, type GiftRoute, type HomeAnchor, type MomentViewHost, type PlaceAnchor } from './view';
 import type { CameraPose } from './contracts';
 
@@ -297,7 +298,9 @@ describe('Twitch moments: one sub travels from Twitch to a named home and nowher
     expect(settled.parcels.map(p => [p.key, p.elapsed]).sort()).toEqual([['m-juniper', null], ['m-moss', null]]);
     expect(settled.focus).toBeNull();
     // The cart's cues follow its clock: wheels, bell, one knock per landing, wheels away.
-    expect(arriving.audio.map(a => a.cue)).toEqual(['cart-roll', 'gift-bell', 'cart-roll', 'parcel-land', 'parcel-land']);
+    // The street gathers for it, so the present neighbours' murmur and cheer ride on the same clock.
+    expect(arriving.audio.map(a => a.cue)).toEqual(['cart-roll', 'gift-bell', 'cart-roll', 'parcel-land', 'parcel-land', 'crowd-murmur', 'crowd-cheer']);
+    expect(arriving.stage).toMatchObject({ subject: { kind: 'place', place: 'market' }, profile: { reach: 'street' } });
 
     // Pip pays forward Origin's gift to Fern: one parcel sinks from the sky to Fern's door under Pip's forward seal.
     now = cartGone + 3000;
@@ -370,7 +373,8 @@ describe('Twitch moments: one sub travels from Twitch to a named home and nowher
         expect(t.camera()).toEqual(t.prior);
       }
       expect(cues[0]).toEqual(cues[1]);
-      expect(cues[0]).toEqual(['cart-roll@0', 'gift-bell@3300', 'parcel-land@8300']);
+      // The street's murmur rises into the first wave (4.2 s) and its cheer answers it, on the cart's own clock.
+      expect(cues[0]).toEqual(['cart-roll@0', 'crowd-murmur@2700', 'gift-bell@3300', 'crowd-cheer@4380', 'parcel-land@8300']);
       // Hiding mid-cart ends the procession at once: the lease returns, and the parcel rests where it was sent.
       const { t, view } = await mount();
       for (let at = start; at < start + 6000; at += 33) view.apply(moments.sample(at));
@@ -651,6 +655,19 @@ describe('Twitch moments: a cheer and the sky answers; the earned train brings i
     expect(rig.camera()).toEqual(rig.prior);
     moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] });
 
+    // Skyfire over the same town: the curtains unroll behind the castle while the name is written and the shells
+    // walk the walls, and all three fit the sky's budget together, so no curtain ever cuts a letter or a shell.
+    now += 30_000; kingdomNow = now;
+    local.deliver(bitsUse(JUNIPER, 5000)); await settle(ingest);
+    let busiest = 0, strips = 0;
+    for (let at = now; at <= now + 12_000; at += 200) {
+      view.apply(moments.sample(at));
+      const sky = view.stats();
+      busiest = Math.max(busiest, Number(sky['sky.motes'])); strips = Math.max(strips, Number(sky['sky.auroraColumns']));
+    }
+    expect(strips).toBeGreaterThanOrEqual(90);
+    expect(busiest).toBeLessThan(SKY_LIMITS.motes);
+
     // The train sets out on the supplied track and carries its riders' names; level 3 wakes the realm's dragon.
     now += 60_000; kingdomNow = now;
     local.deliver(hype('begin', 1, now, [JUNIPER, ROWAN])); await settle(ingest);
@@ -669,6 +686,119 @@ describe('Twitch moments: a cheer and the sky answers; the earned train brings i
     view.dispose();
     expect(rig.parent.children).toHaveLength(0);
     expect(view.stats()).toMatchObject({ sounds: 0, leased: false, attached: false });
+    moments.dispose(); ingest.stop();
+  });
+
+  it('stages one observed cheer together: the town turns, the lamps hush, the crowd answers the climax and the camera comes back', async () => {
+    let now = START;
+    const clock = { now: () => (kingdomNow = now) };
+    const local = createLocalProviderTransport();
+    const ingest = createTwitchMomentIngest({ kingdomId: KINGDOM, origin: 'simulated', epochPrefix: 'together', moderatorId: null, readerId: null,
+      authorized: new Set(['moments.bits'] as const), transport: local.transport, records: createMemoryMomentRecords(clock).port, directory, clock });
+    ingest.start();
+    const moments = createTwitchMoments({ kingdomId: KINGDOM, expectedOrigin: 'simulated', clock });
+    moments.connect(ingest.feed);
+    // SIMULATED presence: six people home, one of them quiet. Only present windows can ever turn to look.
+    const presenceAt = (sequence: number, present: readonly number[]): KingdomPresenceFrame => ({ version: 1, kingdomId: KINGDOM, epoch: 'together', sequence, asOf: now,
+      origin: 'simulated', streamLive: true, connection: 'fresh',
+      windows: [3, 4, 5, 6, 7, 8, 9].map(slot => ({ slot, present: present.includes(slot), publicName: slot === 4 || !present.includes(slot) ? null : `Name${slot}`, since: START - 60_000 })) });
+    expect(moments.receivePresence(presenceAt(1, [3, 4, 5, 7, 8, 9]))).toBe(true);
+    const rig = testHost(new Map([[3, anchorAt(0)], [5, anchorAt(8)]]));
+    const calls: (CrowdCall | null)[] = [], light: number[] = [];
+    const places: SpectaclePlaces = {
+      sky: () => ({ centre: [0, 0, 0], radius: 40, ceiling: 58 }), castle: () => ({ crown: [0, 18, -46], walls: [[-12, 9, -40], [12, 9, -40]] }),
+      plaza: () => [20, 0, 20], lair: () => null, track: () => [], bunting: () => [], roof: () => null, homes: () => [3, 5],
+    };
+    const view = createTwitchMomentView({ ...rig.host, ...giftPlaces, places, crowd: call => calls.push(call), light: glow => light.push(glow.hush ?? 0),
+      watchers: () => [[0, 0, 24], [6, 0, 26], [-5, 0, 22]] });
+    await view.prepare();
+    await settle(ingest);
+
+    const cheer = bitsUse(JUNIPER, 5000);
+    expect(local.deliver(cheer)).toBe(true); await settle(ingest);
+    const cheered = now, climax = cheered + SKY_BEAT.skyfire.name[1];
+    // The same delivery again is the same event: it cannot stage the town a second time.
+    local.deliver(cheer); await settle(ingest);
+    const stages = new Set<string>(), seen = new Map<string, number>();
+    for (let at = cheered; at <= cheered + 22_000; at += 100) {
+      now = at; const frame = moments.sample(at); view.apply(frame);
+      if (frame.stage) stages.add(frame.stage.id);
+      for (const c of frame.audio) if (c.cue.startsWith('crowd-')) seen.set(c.id, c.atMs);
+    }
+    expect(stages.size).toBe(1);
+    const live = calls.filter((c): c is CrowdCall => c !== null);
+    expect(live[0]).toMatchObject({ subject: { kind: 'place', place: 'sky' }, watchers: 6, climaxAt: climax, profile: { reach: 'town', cheer: true } });
+    expect(live[0]!.point[1]).toBeGreaterThan(20);
+    // Gather: the town turns before the climax and holds its breath; climax: the breath is let go and the crowd answers.
+    // One call per 100 ms frame from the cheer on, so a frame's call is found by its time.
+    const callAt = (t: number) => live[Math.round((t - cheered) / 100)]!;
+    expect(callAt(climax - 1000)).toMatchObject({ phase: 'gather', cheer: 0 });
+    expect(callAt(climax - 1000).attention).toBe(1);
+    expect(callAt(climax - 300).hush).toBeGreaterThan(0.3);
+    expect(callAt(climax + 700).hush).toBe(0);
+    expect(callAt(climax + 1500)).toMatchObject({ phase: 'climax', cheer: 1 });
+    expect(Math.max(...light)).toBeGreaterThan(0.3);
+    // The crowd's voice: one murmur rising into the climax, one cheer just after it, whatever the frame rate.
+    expect([...seen].sort()).toEqual([[`${live[0]!.beat}:crowd-cheer`, climax + 180], [`${live[0]!.beat}:crowd-murmur`, climax - 1500]].sort());
+    expect(rig.played.filter(p => p.cue === 'crowd-murmur' || p.cue === 'crowd-cheer').map(p => [p.cue, p.atMs])).toEqual([['crowd-murmur', climax - 1500], ['crowd-cheer', climax + 180]]);
+    const stageAt = (dt: number) => { const out: string[] = []; for (let t = cheered; t < cheered + 19_000; t += dt) { const s = moments.sample(t).stage; if (s) out.push(`${s.id}@${s.climaxAt}`); } return [...new Set(out)]; };
+    expect(stageAt(16)).toEqual(stageAt(50));
+    // Each watcher turns a little after their neighbours and most raise an arm after the climax; never in lockstep.
+    const people = [3, 4, 5, 7, 8, 9].map(slot => ({ slot, position: [slot * 4 - 20, 0, 30] as [number, number, number], heading: 0 }));
+    const call = callAt(climax + 1500), early = live[8]!;
+    expect(chooseWatchers(call, people)).toHaveLength(6);
+    expect(new Set(people.map(p => crowdPose(early, p, early.startAt + 800).turned.toFixed(2))).size).toBeGreaterThan(2);
+    const poses = people.map(p => crowdPose(call, p, climax + 1500));
+    expect(poses.filter(p => p.gesture === 'wave').length).toBeGreaterThanOrEqual(2);
+    expect(new Set(poses.map(p => p.offset)).size).toBe(poses.length);
+    for (const [i, p] of poses.entries()) expect(Math.cos(p.heading - Math.atan2(call.point[0] - people[i]!.position[0], call.point[2] - people[i]!.position[2]))).toBeGreaterThan(0.999);
+    // Payoff and settle: the crowd lets go, the light returns and the camera is handed back to the actual prior view.
+    expect(calls.at(-1)).toBeNull();
+    expect(light.at(-1)).toBe(0);
+    expect(rig.leases()).toEqual({ leased: 1, released: 1 });
+    expect(rig.camera()).toEqual(rig.prior);
+    expect(view.stats()).toMatchObject({ crowd: false, 'stage.watchers': 0, leased: false });
+
+    // Interrupted mid-gather: hidden, every crowd voice and shot is released, the town stops turning and the lamps return.
+    now += 30_000; kingdomNow = now;
+    local.deliver(bitsUse(ROWAN, 1200)); await settle(ingest);
+    const beast = now;
+    for (let t = beast; t <= beast + 3600; t += 100) { now = t; view.apply(moments.sample(t)); }
+    expect(view.stats()).toMatchObject({ crowd: true, leased: true });
+    expect(rig.played.at(-1)).toMatchObject({ cue: 'crowd-murmur' });
+    const cancelledBefore = rig.cancelled.length;
+    moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: false, safeRects: [], autoOpenKinds: [] });
+    view.apply(moments.sample(now));
+    expect(calls.at(-1)).toBeNull();
+    expect(light.at(-1)).toBe(0);
+    expect(rig.cancelled.slice(cancelledBefore).some(id => id.startsWith('crowd-murmur'))).toBe(true);
+    expect(view.stats()).toMatchObject({ sounds: 0, leased: false, crowd: false });
+    expect(rig.camera()).toEqual(rig.prior);
+
+    // Busy holds the camera, but Twitch's clock does not wait: the town still turns and cheers on the beat.
+    moments.setPresentation({ layout: 'stage', mood: 'show', busy: true, visible: true, safeRects: [], autoOpenKinds: [] });
+    now += 30_000; kingdomNow = now;
+    local.deliver(bitsUse(WREN, 700)); await settle(ingest);
+    const volley = now, leasesBefore = rig.leases().leased;
+    for (let t = volley; t <= volley + 4000; t += 100) { now = t; view.apply(moments.sample(t)); }
+    expect(rig.leases().leased).toBe(leasesBefore);
+    expect(calls.at(-1)).toMatchObject({ profile: { reach: 'town' }, cheer: 1 });
+
+    // Nobody home, nobody turns: without present people there is no crowd and no crowd voice, only the town's light.
+    expect(moments.receivePresence(presenceAt(2, []))).toBe(true);
+    const empty = moments.sample(now + 200);
+    expect(empty.stage).toMatchObject({ watchers: 0 });
+    expect(empty.audio.some(c => c.cue.startsWith('crowd-'))).toBe(false);
+    view.apply(empty);
+    expect(calls.at(-1)).toBeNull();
+
+    // A source reset ends the stage at once and never restages the restored cheer.
+    moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] });
+    expect(moments.receivePresence(presenceAt(3, [3, 5]))).toBe(true);
+    ingest.stop(); ingest.start(); await settle(ingest);
+    expect(moments.sample(now + 300).stage).toBeNull();
+    view.dispose();
+    expect(rig.parent.children).toHaveLength(0);
     moments.dispose(); ingest.stop();
   });
 
