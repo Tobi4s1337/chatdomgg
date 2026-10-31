@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SIMULATED · Citizen portraits</title><style>
+*{box-sizing:border-box}
+body{margin:0;background:#1b1430;color:#efe7ff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;justify-content:space-between;align-items:flex-end;padding:22px 28px 16px;gap:24px}
+h1{margin:0;font-size:24px;font-weight:600;letter-spacing:.01em}
+.sub{margin:6px 0 0;font-size:14px;color:#bba9e6}
+.tag{font-size:11px;letter-spacing:.22em;padding:4px 10px;border:1px solid #8c6fd6;border-radius:3px;color:#d8c8ff;white-space:nowrap}
+.sheet{display:grid;grid-template-columns:repeat(5,256px);margin:0 28px}
+.sheet figure{margin:0;position:relative}
+.sheet img{display:block;width:256px;height:256px}
+.sheet figcaption{position:absolute;left:8px;bottom:6px;font-size:11px;color:#fff;text-shadow:0 1px 2px #2a1460;opacity:.9}
+h2{margin:22px 28px 10px;font-size:13px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:#bba9e6}
+.strip{display:grid;grid-template-columns:repeat(10,128px);margin:0 28px 28px}
+.strip img{display:block;width:128px;height:128px;image-rendering:auto}
+</style></head><body>
+<header><div><h1>Citizen portraits</h1><p class="sub" id="sub"></p></div><span class="tag">SIMULATED CITIZENS</span></header>
+<section class="sheet" id="sheet"></section>
+<h2>128 px, actual size</h2>
+<section class="strip" id="strip"></section>
+<script type="module" src="./portraits.ts"></script></body></html>

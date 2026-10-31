@@ -260,10 +260,10 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       float poolAmount=pool*smoothstep(0.,.2,uNight)*${lattice==='avatar'?'mix(.44,1.8,closeLantern)':'(uTerrain>.5?2.15:.44)*mix(1.,1.9,closeLantern)'};
       vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
-      // At the court, let the gate fires wash the stone instead of dying
-      // inside the old cubic falloff. The wide town keeps its accepted response.
+      // The compact field localises the gate fires. Their wash must survive
+      // the stream's wide camera as well as the approach through the court.
       float castleApproach=1.-smoothstep(100.,170.,length(cameraPosition-uBeaconPosition));
-      float beaconAmount=pow(beacon,mix(3.,1.35,castleApproach))*(.3+.7*uNight)*mix(2.1,3.8,castleApproach);
+      float beaconAmount=pow(beacon,1.35)*(.3+.7*uNight)*3.8;
       // The tall beam lights the air above the keep. Its broad reflected amber
       // catches upward ledges, grazing walls and the hill, beyond the small flood
       // volume's reach. Sky occlusion preserves deep recesses; the town stays blue.

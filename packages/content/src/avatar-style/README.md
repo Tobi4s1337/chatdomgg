@@ -1,4 +1,90 @@
-# Avatar style study (spec 49)
+# Citizens (spec 49)
+
+`character/` is the citizen look Tobias chose: the reference in `work/references/avatar-style/reference.png`,
+with crisp chunky voxel heads, a minimal face, hair as the signature and a bust portrait on Twitch purple.
+The three-option study further down (AS01) is superseded and kept only as a record.
+
+## The character (`character/`)
+
+| File | What it is |
+|---|---|
+| `recipe.ts` | `CitizenLook`, the saved recipe: skin, eyes (shape, spacing), freckles, blush, hair (style, colour), beard, top. Every colour is a `#rrggbb`. `parseLook` validates untrusted input; `seedLook(personId)` gives a newcomer a complete, varied default |
+| `palette.ts` | Twenty skin tones, fourteen natural and nine wild hair swatches, eighteen dyes, eye ink, blush pink, freckle brown |
+| `grid.ts` | `VoxelGrid`, a sparse grid of paint slots in root-local avatar cells (the frozen rig's frame) |
+| `head.ts` | The 8 × 8 × 8 skull and the face: eye cells, blush, freckles, the blink frame |
+| `hair.ts` | Eight hair styles plus bald, and two beards |
+| `bust.ts` | The neck, the compact torso, short upper arms and a plain tee |
+| `build.ts` | `buildCitizen(look)` draws everything into one grid. `slotColours(look)` resolves every slot to a colour |
+| `mesh.ts` | `meshCitizen(grid, colours)` gives engine-free arrays: quads with corner occlusion, convex-edge flags and in-face coordinates for the bevel |
+| `portrait.ts` | The fixed portrait composition: camera, lights, gradient, bevel width, sizes 128 and 512 |
+| `fixtures.ts` | Twenty SIMULATED citizens for the 4 × 5 sheet |
+
+The web side is in `apps/web/src/avatar-builder/portrait-renderer.ts`. `citizenObject(look)` is the three.js
+mesh in cells (scale by 1/16 for metres). `createPortraitRenderer().render(look, size)` returns a canvas with
+the bust portrait.
+
+### Decisions
+
+- **The skull is 8 cells, not 10–12.** Measured on the reference, an eye is one cell and a seventh to an
+  eighth of the face's width. On an 8-cell face, one-cell eyes sit two cells apart with a two-cell margin,
+  which is the reference face exactly. With a cell of hair each side the silhouette is the "about 10 cells"
+  the spec saw. A 10-cell face would need eyes that are either too small (1 cell) or too big (2 × 2). It is
+  also the frozen rig's head: head bone at y 16, hat socket 8 up, face socket on the front plane at z 4. No
+  contract change is needed for the head.
+- **Eyes on row 2 of 8, no mouth.** Two face rows under the eyes give room for blush and freckles without
+  pushing the eyes up. The shapes are `dot`, `tall` and `closed` (also the blink frame); the spacings are `set`
+  and `wide`. An eyelash variant was tried and dropped: at this resolution a second dark cell beside the eye
+  reads as four eyes. Freckles never sit directly under an eye, where they read as a taller eye, and never on
+  the centre columns, where any dark pair reads as a mouth. On deep skin the eye ink goes darker, and the
+  deepest swatch stops where one-cell eyes still read at 128 px.
+- **Slots, not registered materials.** Geometry carries paint slots (`skin`, `eye`, `hair`, `hairDeep`, …), and
+  colours come from the recipe at meshing time. This is how "any hair colour" works without a material per
+  colour. Deep, blush and freckle tones are derived from the look, so any input stays coherent. Main needs to
+  decide how the kingdom renderer takes per-citizen colours (see Contract notes).
+- **Hair is stacked rounded slabs.** Each row of a style is a rectangle with stepped-off corners, so the volume
+  is the stepped dome of a pixel circle, like the reference. Curls get locks: some outer cells are removed and
+  a few pushed out. The afro is a lumpy ellipsoid. `guardFace` runs last for every style, and the tests hold
+  every style × beard × eye variant to it: nothing proud in front of the face below the hairline, the eyes
+  never covered, the face between the eyes always skin.
+- **Bevel only where an edge is truly convex.** The mesher flags each quad edge as convex when both the
+  in-plane neighbour and the cell diagonally in front are empty. The shader tilts the normal over 13 % of the
+  cell at those edges only. Coplanar neighbours never show a seam, and a colour change stays flat paint, as in
+  the reference.
+- **Seeded beards go only with short hair.** A long style plus a same-colour full beard closes around an
+  eight-cell face and hides it. The builder will still allow any combination.
+- **Portrait light.** One warm key light, nearly frontal, high and slightly from the person's left, with a soft
+  shadow, so the fringe shades the forehead. A lavender sky with a purple ground for the bounce (the
+  reference's shaded sides lean purple), and a cool rim. The camera is turned 24° to the person's right, 10°
+  above, with a 24° field of view, framing y 9.4–29.8. The image is rendered at 2× and filtered down. The
+  gradient runs #cfaaff → #b089f7 → #6a39e0, top left to bottom right, sampled from the reference.
+
+### Bench and capture
+
+`apps/web/src/avatar-builder/portraits.html?set=fixtures|seeded` renders twenty SIMULATED citizens at 512 px
+(shown at 256) and at 128 px (shown at actual size).
+
+```sh
+node apps/web/src/avatar-builder/capture.mjs --out shots/avatar-style/portraits          # both sets
+node apps/web/src/avatar-builder/capture.mjs --compare <before-dir> <after-dir>          # same-view pairs
+```
+
+For each set it writes `<set>-sheet.png` (4 × 5 at 500 px cells, the reference's layout),
+`<set>-vs-reference.png`, every portrait at both sizes with `looks.json`, and the bench page. It uses capture
+port 5189 under the shared capture lock.
+
+### Contract notes for main
+
+- The bust's torso is 6 cells wide with 1-cell arms just outside it, narrower than the head as in the
+  reference. Today's `AVATAR_RIG` puts the shoulders at x ±5, which fits an 8-wide torso. The full body is
+  AS05; any rig proposal goes to `work/lanes/avatar-style/contract-proposal.md` then.
+- The kingdom renderer registers voxel materials by id. Citizens need per-instance colours: either per-vertex
+  colour (as `citizenObject` does) or a per-citizen palette texture. Main decides when it wires the character.
+- `@chatdom/content` does not export `./avatar-style` yet. The web imports it by relative path, as the AS01
+  study did.
+
+---
+
+# Avatar style study (AS01, superseded)
 
 Three candidate citizen shapes, shown on the same five wardrobe looks so Tobias can choose one. This
 module converts a wardrobe look into a style; it does not change the wardrobe, the frozen rig or any

@@ -198,11 +198,16 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
       return { target: centre.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).add(position), offset: backward.multiplyScalar(distance + .6) };
     }
     if (waiting || frame?.phase === 'words' || frame?.phase === 'blueprint' || frame?.phase === 'pour') {
-      // Hold the working smithy and the west/north audience crescent together.
-      // See the west-side audience from the forge side, with a clear
-      // foreground wedge so heads never hide the pour.
-      const workshop = fit(new THREE.Box3(new THREE.Vector3(-9, -.125, -10), new THREE.Vector3(8.65, Math.max(4.8, waiting ? 0 : stageHeight), 2.5)),
-        options.anvil, 0, new THREE.Vector3(1.5, 2.4, 11));
+      // Look across the pour from the open south-east apron. The audience
+      // spreads behind it on both sides of frame, with faces turned into the
+      // metal's light; the low angle leaves the castle above the workshop.
+      // Waiting includes the whole hearth; once metal forms, the piece and
+      // watching faces take priority over the workshop's far rear corner.
+      const workshop = fit(new THREE.Box3(new THREE.Vector3(-6.5, -.125, waiting ? -5 : -4), new THREE.Vector3(waiting ? 8.65 : 7, Math.max(4.8, waiting ? 0 : stageHeight), 2.5)),
+        options.anvil, 0, new THREE.Vector3(4.8, .9, 12));
+      // Aim above the piece without moving the eye into the nearby market well.
+      // The pour stays central and the castle can rise behind the watching faces.
+      workshop.target.y+=1.8;workshop.offset.y-=1.8;
       target.copy(workshop.target); offset.copy(workshop.offset);
     }
     if (casting && frame && (frame.phase === 'flight' || frame.phase === 'landed')) {
