@@ -5,7 +5,10 @@ import { createTwitchMomentIngest, type CitizenDirectory, type CitizenDisclosure
 import { createLocalProviderTransport, eventSubFrame } from '../../../herald/src/twitch-moments/local-transport';
 import { createMemoryMomentRecords } from '../../../herald/src/twitch-moments/memory';
 import { BANNER_BEAT } from './choreography';
+import type { DragonSummonRequest } from '../../../herald/src/twitch-moments/ports';
+import { ApprovedEffectSchema, type ActionPort, type KingdomMomentIntent } from './contracts';
 import { createTwitchMoments, type MomentFrame } from './controller';
+import { rungFor, type SpectaclePlaces } from './spectacle';
 import { createTwitchMomentView, type CameraLease, type GiftRoute, type HomeAnchor, type MomentViewHost, type PlaceAnchor } from './view';
 import type { CameraPose } from './contracts';
 
@@ -460,5 +463,248 @@ describe('Twitch moments: one sub travels from Twitch to a named home and nowher
     moments.dispose();
     expect(moments.sample(now).visible).toBe(false);
     again.stop(); notices.stop(); later.stop();
+  });
+});
+
+describe('Twitch moments: a cheer and the sky answers; the earned train brings its dragon', () => {
+  let kingdomNow = START;
+  const bitsUse = (user: PersonId | 'anon', bits: number, extra: object = {}, type = 'cheer') => eventSubFrame({ messageId: `bits-${++messages}`, at: kingdomNow,
+    type: 'channel.bits.use', version: '1', condition: { broadcaster_user_id: KINGDOM },
+    event: { broadcaster_user_id: KINGDOM, broadcaster_user_login: 'kingdom', broadcaster_user_name: 'Kingdom',
+      user_id: user === 'anon' ? '407665396' : user, user_login: user === 'anon' ? 'ananonymouscheerer' : `login${user}`, user_name: user === 'anon' ? 'AnAnonymousCheerer' : `Provider${user}`,
+      bits, type, message: { text: 'SECRET CHEER TEXT', fragments: [] }, power_up: null, custom_power_up: null, ...extra } });
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const hype = (phase: 'begin' | 'progress' | 'end', level: number, at: number, contributors: readonly PersonId[]) => {
+    const common = { broadcaster_user_id: KINGDOM, broadcaster_user_login: 'kingdom', broadcaster_user_name: 'Kingdom', id: 'train-one', total: 900 * level, level,
+      started_at: iso(START), type: 'regular', is_shared_train: false, shared_train_participants: null,
+      top_contributions: contributors.map(id => ({ user_id: id, user_login: `login${id}`, user_name: `Provider${id}`, type: 'bits', total: 777 })) };
+    const running = { ...common, progress: 100, goal: 1000, expires_at: iso(at + 300_000) };
+    return eventSubFrame({ messageId: `hype-${++messages}`, at, type: `channel.hype_train.${phase}`, version: '2', condition: { broadcaster_user_id: KINGDOM },
+      event: phase === 'begin' ? { ...running, all_time_high_level: 9, all_time_high_total: 99_999 } : phase === 'progress' ? running
+        : { ...common, ended_at: iso(at), cooldown_ends_at: iso(at + 3_600_000) } });
+  };
+
+  it('runs every rung, Power-up, train and authoritative battle through the real ingest, honestly and on one clock', async () => {
+    let now = START;
+    const clock = { now: () => (kingdomNow = now) };
+    const memory = createMemoryMomentRecords(clock), local = createLocalProviderTransport();
+    const summons: DragonSummonRequest[] = [];
+    const ingest = createTwitchMomentIngest({ kingdomId: KINGDOM, origin: 'simulated', epochPrefix: 'sky', moderatorId: null, readerId: null,
+      authorized: new Set(['moments.bits', 'moments.hype'] as const), transport: local.transport, records: memory.port, directory, clock,
+      battle: { summon: async request => { summons.push(request); return { status: 'accepted' }; } } });
+    expect(ingest.start().plan.map(p => p.type)).toEqual(['channel.bits.use', 'channel.hype_train.begin', 'channel.hype_train.progress', 'channel.hype_train.end']);
+    const effect = ApprovedEffectSchema.parse({ id: 'emotefox', revision: 2, origin: 'simulated', periodMs: 2000,
+      frames: [{ blueprint: { version: 1, id: 'emote-fox', styleId: 'tide', kind: 'prop', lattice: 'build', size: [2, 2, 1], boxes: [{ from: [0, 0, 0], to: [2, 2, 1], material: 3 }], windows: [] }, durationMs: 2000 }] });
+    const strikes: string[] = [];
+    const gameplay: ActionPort<KingdomMomentIntent> = {
+      capabilities: () => new Map([['strike', { available: true, reason: 'ready', retryAt: null }]]),
+      submit: async intent => { strikes.push(intent.id); return { status: 'accepted', intentId: intent.id, receiptKey: `r${intent.id}`, acceptedAt: now, providerId: null }; },
+      reconcile: async () => { throw new Error('nothing pending'); },
+    };
+    const moments = createTwitchMoments({ kingdomId: KINGDOM, expectedOrigin: 'simulated', clock, gameplay,
+      effect: id => (id === 'emotefox' ? effect : null), channelEffects: () => [effect] });
+    moments.connect(ingest.feed);
+    await settle(ingest);
+    const step = async (make: string | (() => string), advance = 0) => { kingdomNow = now; const frame = typeof make === 'string' ? make : make(); expect(local.deliver(frame)).toBe(true); await settle(ingest); const at = now; now += advance; return at; };
+
+    // Every default threshold, exactly at and just below it.
+    for (const [bits, rung] of [[1, 'spark'], [99, 'spark'], [100, 'street-fireworks'], [499, 'street-fireworks'], [500, 'castle-volley'], [999, 'castle-volley'],
+      [1000, 'hearthbeast'], [4999, 'hearthbeast'], [5000, 'skyfire'], [9999, 'skyfire'], [10_000, 'kites']] as const) expect(rungFor(bits)).toBe(rung);
+
+    // Juniper's single Bit: a spark climbs from her own roof, credited by name, never by amount.
+    const spark = await step(() => bitsUse(JUNIPER, 1), 30_000);
+    const climbing = moments.sample(spark + 1000);
+    expect(climbing.sky).toEqual([expect.objectContaining({ kind: 'cheer', rung: 'spark', origin: { kind: 'home', slot: 3 }, name: 'Juniper' })]);
+    const lit = moments.sample(spark + 2500);
+    expect(lit.captions).toEqual([expect.objectContaining({ title: 'Juniper', line: 'sends a spark up from home', detail: null })]);
+    expect(lit.focus).toMatchObject({ subject: { kind: 'home', slot: 3 }, wide: false });
+    expect(lit.captions.map(c => [c.title, c.line, c.detail].join(' ')).join(' ')).not.toMatch(/\d|Bit/u);
+
+    // An anonymous cheer is a friend of the realm from the market, even at castle-volley strength; the burst is an approved emote.
+    const volley = await step(() => bitsUse('anon', 750), 30_000);
+    const fired = moments.sample(volley + 3000);
+    expect(fired.sky).toEqual([expect.objectContaining({ rung: 'castle-volley', origin: { kind: 'place', place: 'market' }, name: 'A friend of the realm',
+      effect: expect.objectContaining({ id: 'emotefox', revision: 2, origin: 'simulated' }) })]);
+    expect(fired.focus).toMatchObject({ subject: { kind: 'place', place: 'sky' }, wide: true });
+
+    // No cheer ever wakes the dragon, however large.
+    const kites = await step(() => bitsUse(ROWAN, 250_000), 30_000);
+    expect(moments.sample(kites + 4000).sky[0]).toMatchObject({ rung: 'kites', origin: { kind: 'home', slot: 5 } });
+    expect(summons).toEqual([]);
+    expect(moments.sample(kites + 4000)).toMatchObject({ dragon: null, train: null, battle: null });
+
+    // A gigantified emote floats only with its exact approved effect; an unknown one shows nothing at all.
+    const balloon = await step(() => bitsUse(WREN, 30, { power_up: { type: 'gigantify_an_emote', emote: { id: 'emotefox', name: 'fox' }, message_effect_id: null } }, 'power_up'), 30_000);
+    expect(moments.sample(balloon + 4000).sky).toEqual([expect.objectContaining({ kind: 'balloon', effect: expect.objectContaining({ id: 'emotefox' }) })]);
+    const refused = await step(() => bitsUse(WREN, 30, { power_up: { type: 'gigantify_an_emote', emote: { id: 'emoteunknown', name: 'x' }, message_effect_id: null } }, 'power_up'), 30_000);
+    expect(moments.sample(refused + 2000).sky).toEqual([]);
+    expect(moments.metrics().suppressed.unapproved).toBe(1);
+
+    // Cue times belong to the beat, not the frame rate: sampled at 16 ms or 50 ms, the same cues at the same instants.
+    const skyfire = await step(() => bitsUse(JUNIPER, 5000));
+    const cues = (dt: number) => { const seen = new Map<string, number>(); for (let at = skyfire; at < skyfire + 19_000; at += dt) for (const c of moments.sample(at).audio) seen.set(c.id, c.atMs); return [...seen].sort(); };
+    expect(cues(16)).toEqual(cues(50));
+    expect(cues(50).length).toBeGreaterThan(6);
+    now += 30_000;
+
+    // The Hype Train: out with its bunting, carriages per level, contributors by name only; level 3 asks the realm once.
+    const rode = [JUNIPER, QUIET, ROWAN];
+    const begun = await step(hype('begin', 1, now, rode), 9000);
+    const arriving = moments.sample(begun + 1500);
+    expect(arriving.train).toMatchObject({ state: 'arriving', level: 1, names: ['Juniper', 'Rowan'] });
+    expect(arriving.focus).toMatchObject({ subject: { kind: 'place', place: 'train' }, wide: true });
+    await step(hype('progress', 2, now, rode), 9000);
+    expect(summons).toEqual([]);
+    const woke = await step(hype('progress', 3, now, rode));
+    await step(hype('progress', 3, now + 50, rode));
+    expect(summons).toEqual([expect.objectContaining({ source: 'hype', level: 3, form: 'young', origin: 'simulated' })]);
+    // Accepting a request is not a battle: until the realm reports one, the status says so and nothing fights.
+    expect(moments.sample(woke + 500)).toMatchObject({ battle: 'requested', dragon: null });
+    expect(moments.sample(woke + 500).train?.carriages).toBeGreaterThanOrEqual(3);
+
+    // The realm's battle: summoning, then the encounter; strikes are what the realm accepted, never local damage.
+    const fight = (revision: number, phase: string, extra: object = {}) => ({ kingdomId: KINGDOM, battleKey: 'dragon1', source: 'hype', trainKey: summons[0]!.trainKey,
+      phase, form: 'young', startsAt: woke + 8400, endsAt: woke + 68_400, healthPermille: 1000, fighters: 0, acceptedStrikes: 0, sharedSessionKey: null,
+      revision, observedAt: now, origin: 'simulated', ...extra });
+    expect(ingest.observeBattle(fight(1, 'summoning'))).toBe('accepted');
+    await settle(ingest);
+    const summoned = now;
+    expect(moments.sample(summoned + 1000)).toMatchObject({ battle: 'battle', dragon: { phase: 'summoning', form: 'young', source: 'hype' } });
+    expect(moments.sample(summoned + 1000).focus).toMatchObject({ subject: { kind: 'place', place: 'dragon' } });
+    expect(moments.sample(summoned + 3200).audio.some(c => c.cue === 'dragon-roar')).toBe(true);
+    now = woke + 8400;
+    ingest.observeBattle(fight(2, 'active'));
+    await settle(ingest);
+    const health = moments.sample(now + 100).dragon!.health;
+    expect(await moments.submitMoment({ id: 'strike1', type: 'kingdom.moment', args: { kind: 'strike', battleKey: 'dragon1' } })).toMatchObject({ status: 'accepted' });
+    expect(strikes).toEqual(['strike1']);
+    // A strike the realm accepted changes nothing here until its fact returns.
+    expect(moments.sample(now + 200).dragon).toMatchObject({ health, strikes: 0, flinch: null });
+    now += 2000;
+    ingest.observeBattle(fight(3, 'active', { acceptedStrikes: 4, fighters: 2, healthPermille: 880 }));
+    await settle(ingest);
+    expect(moments.sample(now + 100).dragon).toMatchObject({ health: 0.88, strikes: 4, fighters: 2, flinch: 100 });
+    expect(moments.sample(now + 100).audio.some(c => c.cue === 'dragon-hit')).toBe(true);
+
+    // The realm says it retreats: the dragon flies home and the train's battle is over.
+    now += 20_000;
+    ingest.observeBattle(fight(4, 'retreat', { acceptedStrikes: 30, fighters: 9, healthPermille: 610 }));
+    ingest.observeBattle(fight(3, 'active'));
+    await settle(ingest);
+    const retreat = moments.sample(now + 1500);
+    expect(retreat).toMatchObject({ battle: 'ended', dragon: { phase: 'retreat' } });
+    expect(moments.sample(now + 6000).captions.map(c => c.line)).toContain('It will wake again. Nothing is lost');
+
+    // The Wyrm Bell rings the very same battle, free, with no train behind it.
+    now += 60_000;
+    ingest.observeBattle({ ...fight(1, 'summoning'), battleKey: 'bell1', source: 'wyrm-bell', trainKey: null, startsAt: now + 8400, endsAt: now + 60_000, observedAt: now });
+    await settle(ingest);
+    const bell = moments.sample(now + 500);
+    expect(bell.dragon).toMatchObject({ source: 'wyrm-bell', phase: 'summoning', form: 'young' });
+    expect(bell.audio.filter(c => c.cue === 'wyrm-bell')).toHaveLength(3);
+
+    // Hidden, every beat, shot and sound stops at once.
+    moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: false, safeRects: [], autoOpenKinds: [] });
+    expect(moments.sample(now + 600)).toMatchObject({ visible: false, sky: [], train: null, dragon: null, audio: [] });
+
+    // Nothing public carries a person ID, login, amount, message or provider name.
+    moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] });
+    const publicOutput = JSON.stringify([moments.currentFacts(), moments.sample(now + 1000), moments.metrics()]);
+    for (const secret of [JUNIPER, QUIET, ROWAN, WREN, '407665396', 'login9001', 'Provider9001', 'SECRET', 'AnAnonymous', '250000', '777']) expect(publicOutput).not.toContain(secret);
+    moments.dispose();
+    ingest.stop();
+  });
+
+  it('stages the sky, the train and the dragon on the host, and an interruption releases every sound, shot and part', async () => {
+    let now = START;
+    const clock = { now: () => (kingdomNow = now) };
+    const local = createLocalProviderTransport();
+    const ingest = createTwitchMomentIngest({ kingdomId: KINGDOM, origin: 'simulated', epochPrefix: 'stage', moderatorId: null, readerId: null,
+      authorized: new Set(['moments.bits', 'moments.hype'] as const), transport: local.transport, records: createMemoryMomentRecords(clock).port, directory, clock,
+      battle: { summon: async () => ({ status: 'accepted' }) } });
+    ingest.start();
+    const moments = createTwitchMoments({ kingdomId: KINGDOM, expectedOrigin: 'simulated', clock });
+    moments.connect(ingest.feed);
+    const rig = testHost(new Map([[3, anchorAt(0)], [5, anchorAt(8)]]));
+    const ring = Array.from({ length: 48 }, (_, i) => [Math.cos(i / 48 * Math.PI * 2) * 40, 0, Math.sin(i / 48 * Math.PI * 2) * 30] as [number, number, number]);
+    const places: SpectaclePlaces = {
+      sky: () => ({ centre: [0, 0, 0], radius: 40, ceiling: 58 }), castle: () => ({ crown: [0, 18, -46], walls: [[-12, 9, -40], [12, 9, -40]] }),
+      plaza: () => [20, 0, 20], lair: () => ({ position: [0, 6, -120], facing: [0, 0, 1] }), track: () => ring,
+      bunting: () => [[[-10, 4.4, 0], [10, 4.4, 0]]], roof: slot => (slot === 3 ? [0, 7, 0] : slot === 5 ? [8, 7, 0] : null), homes: () => [3, 5],
+    };
+    const view = createTwitchMomentView({ ...rig.host, ...giftPlaces, places });
+    await view.prepare();
+    await settle(ingest);
+    local.deliver(bitsUse(ROWAN, 600)); await settle(ingest);
+    const cheered = now;
+    for (let at = cheered; at <= cheered + 4000; at += 100) { now = at; view.apply(moments.sample(at)); }
+    expect(view.stats()).toMatchObject({ 'sky.beats': 1, leased: true });
+    expect(view.stats()['sky.motes']).toBeGreaterThan(0);
+    expect(rig.played.some(p => p.cue === 'firework-bloom')).toBe(true);
+    expect(view.glow().strength).toBeGreaterThan(0);
+
+    // Hidden mid-volley: every playing cue is cancelled with its tail, the shot is handed back and the sky empties.
+    moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: false, safeRects: [], autoOpenKinds: [] });
+    view.apply(moments.sample(now));
+    expect(view.stats()).toMatchObject({ sounds: 0, leased: false, 'sky.beats': 0 });
+    expect(rig.cancelled.length).toBeGreaterThan(0);
+    expect(rig.camera()).toEqual(rig.prior);
+    moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] });
+
+    // The train sets out on the supplied track and carries its riders' names; level 3 wakes the realm's dragon.
+    now += 60_000; kingdomNow = now;
+    local.deliver(hype('begin', 1, now, [JUNIPER, ROWAN])); await settle(ingest);
+    now += 6000; kingdomNow = now;
+    local.deliver(hype('progress', 3, now, [JUNIPER, ROWAN])); await settle(ingest);
+    ingest.observeBattle({ kingdomId: KINGDOM, battleKey: 'stage1', source: 'hype', trainKey: 'ht.train-one', phase: 'summoning', form: 'young', startsAt: now + 8400,
+      endsAt: now + 60_000, healthPermille: 1000, fighters: 0, acceptedStrikes: 0, sharedSessionKey: null, revision: 1, observedAt: now, origin: 'simulated' });
+    await settle(ingest);
+    for (let at = now; at <= now + 3200; at += 100) view.apply(moments.sample(at));
+    const stats = view.stats();
+    expect(stats['train.cars']).toBeGreaterThanOrEqual(4);
+    expect(stats['dragon.parts'] ?? Object.entries(stats).filter(([k, v]) => k.startsWith('dragon.') && Number(v) > 0).length).toBeGreaterThan(0);
+    expect(view.nameplates(new THREE.PerspectiveCamera()).map(p => p.name).every(n => n === 'Juniper' || n === 'Rowan')).toBe(true);
+    expect(rig.played.some(p => p.cue === 'dragon-roar')).toBe(true);
+
+    view.dispose();
+    expect(rig.parent.children).toHaveLength(0);
+    expect(view.stats()).toMatchObject({ sounds: 0, leased: false, attached: false });
+    moments.dispose(); ingest.stop();
+  });
+
+  it('without a realm battle port the earned dragon is honestly unavailable, and a short train closes with fireworks', async () => {
+    let now = START;
+    const clock = { now: () => now };
+    const local = createLocalProviderTransport();
+    const ingest = createTwitchMomentIngest({ kingdomId: KINGDOM, origin: 'simulated', epochPrefix: 'unbound', moderatorId: null, readerId: null,
+      authorized: new Set(['moments.hype'] as const), transport: local.transport, records: createMemoryMomentRecords(clock).port, directory, clock });
+    ingest.start();
+    const moments = createTwitchMoments({ kingdomId: KINGDOM, expectedOrigin: 'simulated', clock });
+    moments.connect(ingest.feed);
+    await settle(ingest);
+    const send = async (frame: string) => { local.deliver(frame); await settle(ingest); };
+    await send(hype('begin', 1, now, [ROWAN]));
+    now += 10_000; await send(hype('progress', 3, now, [ROWAN]));
+    expect(moments.sample(now + 500)).toMatchObject({ battle: 'unavailable', dragon: null });
+    expect(moments.sample(now + 2000).captions.map(c => c.line)).toContain('The dragon stirs, but no battle can be fought here');
+    expect(await moments.submitMoment({ id: 'strike2', type: 'kingdom.moment', args: { kind: 'strike', battleKey: 'nothing' } })).toEqual({ status: 'unavailable', intentId: 'strike2' });
+    moments.dispose(); ingest.stop();
+
+    // A second kingdom's short train: home at level 2 with closing fireworks over the castle and a sleeping stir in the hills.
+    now = START + 600_000;
+    const local2 = createLocalProviderTransport();
+    const short = createTwitchMomentIngest({ kingdomId: KINGDOM, origin: 'simulated', epochPrefix: 'short', moderatorId: null, readerId: null,
+      authorized: new Set(['moments.hype'] as const), transport: local2.transport, records: createMemoryMomentRecords(clock).port, directory, clock });
+    short.start();
+    const quiet = createTwitchMoments({ kingdomId: KINGDOM, expectedOrigin: 'simulated', clock });
+    quiet.connect(short.feed);
+    await settle(short);
+    for (const [phase, level] of [['begin', 1], ['progress', 2], ['end', 2]] as const) { now += 10_000; local2.deliver(hype(phase, level, now, [ROWAN])); await settle(short); }
+    const closing = quiet.sample(now + 2000);
+    expect(closing.train).toMatchObject({ state: 'closing', closingFireworks: true });
+    expect(closing.sky).toEqual([expect.objectContaining({ kind: 'festival', rung: 'castle-volley', name: '' })]);
+    expect(quiet.sample(now + 4000).dragon).toMatchObject({ phase: 'stir' });
+    expect(quiet.sample(now + 4000).battle).toBeNull();
+    quiet.dispose(); short.stop();
   });
 });

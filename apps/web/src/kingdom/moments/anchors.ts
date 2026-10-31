@@ -4,7 +4,7 @@ import type { WindowHouse } from '@chatdom/render';
 import { VOXEL_METRES, type Vec3 } from '@chatdom/shared';
 import { rasterizeBlueprint, voxelIndex } from '@chatdom/voxel';
 import { homeLifeAnchors, type SettlementPlan } from '@chatdom/world';
-import type { DoorAnchor, GiftRoute, HomeAnchor, WindowAnchor } from '../../twitch-moments';
+import type { DoorAnchor, GiftRoute, HomeAnchor, SpectaclePlaces, WindowAnchor } from '../../twitch-moments';
 
 const toWorld = (house: WindowHouse, cell: Vec3) => new THREE.Vector3(...cell).multiplyScalar(VOXEL_METRES.build).applyAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw).add(new THREE.Vector3(...house.position));
 const yawed = (house: WindowHouse, x: number, z: number) => new THREE.Vector3(x, 0, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw);
@@ -80,3 +80,56 @@ export function giftRouteOf(layout: SettlementPlan): GiftRoute | null {
   return { inbound: [...entry.points].reverse(), outbound: castle.points.slice(0, Math.max(2, end)) };
 }
 
+
+/** Resolve the highest surviving solid cell, including ordered air cuts, rather than the reserved blueprint extent. */
+function highestSolid(house: WindowHouse): Vec3 | null {
+  const { boxes } = house.blueprint;
+  // Occupancy can change only at a box boundary. A carve can expose the layer
+  // immediately below its lower boundary, so include both kinds of boundary.
+  const planes = [...new Set(boxes.flatMap(box => [box.from[1] - 1, box.to[1] - 1]).filter(y => y >= 0))].sort((a, b) => b - a);
+  const solidAt = (x: number, y: number, z: number) => {
+    for (let i = boxes.length - 1; i >= 0; i--) {
+      const box = boxes[i]!;
+      if (x >= box.from[0] && x < box.to[0] && y >= box.from[1] && y < box.to[1] && z >= box.from[2] && z < box.to[2]) return box.material !== MAT.air;
+    }
+    return false;
+  };
+  for (const y of planes) for (const box of boxes) {
+    if (box.material === MAT.air || y < box.from[1] || y >= box.to[1]) continue;
+    const cx = Math.floor((box.from[0] + box.to[0] - 1) / 2), cz = Math.floor((box.from[2] + box.to[2] - 1) / 2);
+    if (solidAt(cx, y, cz)) return toWorld(house, [cx + .5, y + 1, cz + .5]).toArray();
+    for (let z = box.from[2]; z < box.to[2]; z++) for (let x = box.from[0]; x < box.to[0]; x++) {
+      if (solidAt(x, y, z)) return toWorld(house, [x + .5, y + 1, z + .5]).toArray();
+    }
+  }
+  return null;
+}
+
+/** Only mounted geometry and the adopted public plan provide spectacle locations. */
+export function spectaclePlacesOf(plan: SettlementPlan, houses: readonly WindowHouse[], keep?: WindowHouse): SpectaclePlaces {
+  const roofs = new Map<number, { house: WindowHouse; point: Vec3 | null }>();
+  const roof = (slot: number): Vec3 | null => {
+    const house = houses.find(item => item.slot === slot);
+    if (!house) { roofs.delete(slot); return null; }
+    const cached = roofs.get(slot);
+    if (cached?.house === house) return cached.point;
+    const point = highestSolid(house); roofs.set(slot, { house, point }); return point;
+  };
+  let crown: Vec3 | null | undefined;
+  const castle = () => {
+    if (!keep) return null;
+    if (crown === undefined) crown = highestSolid(keep);
+    return crown ? { crown, walls: [] } : null;
+  };
+  const market = plan.nodes.find(node => node.id === plan.market.nodeId)?.position;
+  const { minX, maxX, minZ, maxZ } = plan.bounds;
+  const centre: Vec3 = [(minX + maxX) / 2, plan.market.elevation, (minZ + maxZ) / 2];
+  const radius = Math.hypot(maxX - minX, maxZ - minZ) / 2;
+  return {
+    sky: () => ({ centre, radius, ceiling: Math.max(45, radius * .65, (castle()?.crown[1] ?? centre[1]) - centre[1] + 25) }),
+    castle,
+    plaza: () => market ?? null,
+    lair: () => null, track: () => null, bunting: () => [],
+    roof, homes: () => houses.map(house => house.slot).filter(slot => roof(slot) !== null),
+  };
+}

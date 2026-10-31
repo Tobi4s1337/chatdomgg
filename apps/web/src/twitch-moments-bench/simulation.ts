@@ -1,8 +1,9 @@
 import { KingdomIdSchema, PersonIdSchema, type PersonId } from '@chatdom/shared';
-import { createTwitchMomentIngest, type CitizenDisclosure, type IngestStatus } from '../../../herald/src/twitch-moments';
+import { createTwitchMomentIngest, type CitizenDisclosure, type IngestStatus, type TwitchMomentIngest } from '../../../herald/src/twitch-moments';
 import { createLocalProviderTransport, eventSubFrame } from '../../../herald/src/twitch-moments/local-transport';
 import { createMemoryMomentRecords } from '../../../herald/src/twitch-moments/memory';
 import type { TwitchMomentFeed } from '../twitch-moments';
+import { createSimulatedBattleAuthority, type BattleOutcome } from './battle-authority';
 
 /** A simulated channel ID: not a real Twitch account, labelled SIMULATED wherever it is shown. */
 export const BENCH_KINGDOM = KingdomIdSchema.parse('424242');
@@ -25,15 +26,19 @@ export type BenchDelivery = 'subscribe' | 'repeat' | 'late' | 'wrong-channel' | 
  * public feed adapter a production binding uses. Chat notices are the canonical support source, as they are
  * whenever a reader is authorized; `channel.subscription.end` reports lapses. Nothing forges a browser success.
  */
-export function createBenchSimulation(citizens: readonly BenchCitizen[], clock: { now(): number }) {
+export function createBenchSimulation(citizens: readonly BenchCitizen[], clock: { now(): number },
+  options: { battle: 'simulated' | 'unbound'; outcome: () => BattleOutcome } = { battle: 'simulated', outcome: () => 'victory' }) {
   const records = createMemoryMomentRecords(clock), local = createLocalProviderTransport();
+  // The realm's battle authority is SIMULATED here; with 'unbound' no battle can be requested at all.
+  const authority = options.battle === 'simulated'
+    ? createSimulatedBattleAuthority({ kingdomId: BENCH_KINGDOM, clock, observe: (state): unknown => ingest.observeBattle(state), outcome: options.outcome }) : null;
   const people = new Map<PersonId, CitizenDisclosure>(citizens.map(c => [c.id, c.disclosure === 'named'
     ? { disclosure: 'named', displayName: c.name, homeSlot: c.slot } : { disclosure: 'anonymous' }]));
   let generation = 0, messages = 0, lastFrame: string | null = null;
-  const make = () => createTwitchMomentIngest({ kingdomId: BENCH_KINGDOM, origin: 'simulated', epochPrefix: `bench${generation}`, moderatorId: null, readerId: BENCH_READER,
-    authorized: new Set(['moments.chat-notices', 'moments.subscriptions']), transport: local.transport, records: records.port,
-    directory: { resolve: async (kingdom, id) => (kingdom === BENCH_KINGDOM ? people.get(id) ?? null : null) }, clock });
-  let ingest = make();
+  const make = (): TwitchMomentIngest => createTwitchMomentIngest({ kingdomId: BENCH_KINGDOM, origin: 'simulated', epochPrefix: `bench${generation}`, moderatorId: null, readerId: BENCH_READER,
+    authorized: new Set(['moments.chat-notices', 'moments.subscriptions', 'moments.bits', 'moments.hype']), transport: local.transport, records: records.port,
+    directory: { resolve: async (kingdom, id) => (kingdom === BENCH_KINGDOM ? people.get(id) ?? null : null) }, clock, battle: authority?.port ?? null });
+  let ingest: TwitchMomentIngest = make();
   const listeners = new Set<{ reset: Parameters<TwitchMomentFeed['subscribe']>[0]; receive: Parameters<TwitchMomentFeed['subscribe']>[1]; unavailable: () => void; stop: () => void }>();
   // A stable feed for the bench, re-subscribed to whichever ingest is current.
   const feed: TwitchMomentFeed = {
@@ -67,6 +72,27 @@ export function createBenchSimulation(citizens: readonly BenchCitizen[], clock: 
 
   const send = (text: string) => { lastFrame = text; return local.deliver(text); };
 
+  const broadcaster = { broadcaster_user_id: BENCH_KINGDOM, broadcaster_user_login: 'willowmere', broadcaster_user_name: 'Willowmere' };
+  /** Twitch's stand-in account for an anonymous cheer. */
+  const payer = (who: BenchCitizen | 'anonymous') => who === 'anonymous'
+    ? { user_id: '407665396', user_login: 'ananonymouscheerer', user_name: 'AnAnonymousCheerer' }
+    : { user_id: who.id, user_login: `citizen${who.id}`, user_name: who.name };
+  const bitsUse = (who: BenchCitizen | 'anonymous', bits: number, type: 'cheer' | 'power_up' | 'custom_power_up', extra: object) =>
+    eventSubFrame({ messageId: `bench-${generation}-${++messages}`, at: clock.now(), type: 'channel.bits.use', version: '1', condition: { broadcaster_user_id: BENCH_KINGDOM },
+      event: { ...broadcaster, ...payer(who), bits, type, message: { text: '', fragments: [] }, power_up: null, custom_power_up: null, ...extra } });
+  const iso = (ms: number) => new Date(ms).toISOString();
+  let train: { id: string; startedAt: number; level: number; total: number } | null = null;
+  const hypeFrame = (phase: 'begin' | 'progress' | 'end', contributors: readonly BenchCitizen[], golden: boolean) => {
+    const t = train!, now = clock.now();
+    const common = { ...broadcaster, id: t.id, total: t.total, level: t.level, started_at: iso(t.startedAt), type: golden ? 'golden_kappa' : 'regular', is_shared_train: false,
+      shared_train_participants: null, top_contributions: contributors.map(c => ({ user_id: c.id, user_login: `citizen${c.id}`, user_name: c.name, type: 'bits', total: 500 })) };
+    const running = { ...common, progress: 120 + t.level * 40, goal: 600 + t.level * 200, expires_at: iso(now + 300_000) };
+    const event = phase === 'begin' ? { ...running, all_time_high_level: 6, all_time_high_total: 9000 } : phase === 'progress' ? running
+      : { ...common, ended_at: iso(now), cooldown_ends_at: iso(now + 3_600_000) };
+    return eventSubFrame({ messageId: `bench-${generation}-${++messages}`, at: now, type: `channel.hype_train.${phase}`, version: '2',
+      condition: { broadcaster_user_id: BENCH_KINGDOM }, event });
+  };
+
   return {
     feed,
     start(): IngestStatus { const status = ingest.start(); rewire(); return status; },
@@ -99,6 +125,20 @@ export function createBenchSimulation(citizens: readonly BenchCitizen[], clock: 
       recipients.forEach((r, i) => send(notice(now + 40 * (i + 1), giver, 'sub_gift', gift(r, id, tier))));
       return ok;
     },
+    /** A cheer of `bits` through `channel.bits.use`: the sky answers by the kingdom's ladder. */
+    cheer(who: BenchCitizen | 'anonymous', bits: number): boolean { return send(bitsUse(who, bits, 'cheer', {})); },
+    /** A Twitch Power-up: a celebration, a message effect or a gigantified emote (whose approval is the bench's emote lookup). */
+    powerUp(who: BenchCitizen | 'anonymous', kind: 'celebration' | 'message_effect' | 'gigantify_an_emote', emote: { id: string; name: string } | null = null): boolean {
+      return send(bitsUse(who, kind === 'celebration' ? 50 : 30, 'power_up', { power_up: { type: kind, emote, message_effect_id: kind === 'message_effect' ? 'cosmic' : null } }));
+    },
+    /** One Hype Train report. `begin` starts a fresh train; `progress` moves it to `level`; `end` closes it. */
+    hype(phase: 'begin' | 'progress' | 'end', level: number, contributors: readonly BenchCitizen[], golden = false): boolean {
+      if (phase === 'begin' || !train) train = { id: `simtrain-${generation}-${++messages}`, startedAt: clock.now(), level: 1, total: 0 };
+      train = { ...train, level: Math.max(train.level, level), total: train.total + 400 * level };
+      return send(hypeFrame(phase, contributors, golden));
+    },
+    /** The SIMULATED realm battle authority, or null when no battle port is bound. */
+    authority,
     /** The source drops, as a lost conduit shard would; listeners become unavailable and keep known homes. */
     disconnect() { local.lose('disconnected'); },
     /** A new source session: a fresh epoch and a non-animating reset from the records. */

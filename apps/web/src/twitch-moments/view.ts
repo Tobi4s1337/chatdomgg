@@ -5,8 +5,13 @@ import {
 } from './banner';
 import { breeze } from './choreography';
 import { CameraPoseSchema, type CameraPose } from './contracts';
-import type { FocusFrame, HomeDressFrame, MomentCue, MomentFrame, MomentSubject, Tint } from './controller';
+import type { FocusFrame, HomeDressFrame, MomentCue, MomentFrame, MomentPlace, MomentSubject, Tint } from './controller';
+import { createDragonLayer } from './dragon-view';
 import { createGiftLayer, type DoorAnchor, type GiftRoute, type PlaceAnchor } from './gift-view';
+import { createSkyFlightLayer } from './sky-flight-view';
+import { createSkyLightLayer } from './sky-light-view';
+import type { SpectacleLayerHost, SpectaclePlaces } from './spectacle';
+import { createTrainLayer } from './train-view';
 
 export type { DoorAnchor, GiftRoute, PlaceAnchor } from './gift-view';
 
@@ -59,7 +64,18 @@ export interface MomentViewHost {
   giftRoute?(): GiftRoute | null;
   /** The home's presence window, for its tier edge: centre on the glass, outward normal, right, pane size in metres. */
   windowAnchor?(slot: number): WindowAnchor | null;
+  /** The town's sky, castle, plaza, lair, track, bunting runs and roofs, for cheers, the train and the dragon. */
+  readonly places?: SpectaclePlaces;
+  /** The sky's light on the town this frame: the host tints its night by it (fireworks flash, aurora, dragon fire). */
+  light?(glow: SkyGlow): void;
 }
+
+export interface SkyGlow { readonly colour: readonly [number, number, number]; readonly strength: number }
+export interface ScreenNameplate { readonly id: string; readonly name: string; readonly x: number; readonly y: number }
+
+const NO_PLACES: SpectaclePlaces = {
+  sky: () => null, castle: () => null, plaza: () => null, lair: () => null, track: () => null, bunting: () => [], roof: () => null, homes: () => [],
+};
 
 export interface WindowAnchor { readonly centre: Vec3; readonly normal: Vec3; readonly right: Vec3; readonly width: number; readonly height: number }
 
@@ -135,9 +151,17 @@ export function createTwitchMomentView(host: MomentViewHost) {
   const gifts = createGiftLayer(root, { kit: host.kit, door, place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null,
     mesh: (blueprint, offset) => meshOf(blueprint, offset) });
 
+  // The spectacle layers: the sky's light, what flies through it, the festival train and the dragon.
+  const places = host.places ?? NO_PLACES;
+  const spectacleHost: SpectacleLayerHost = { kit: host.kit, places, material: host.material, mesh: (blueprint, offset) => meshOf(blueprint, offset),
+    meshAsync: blueprint => geometry(blueprint) };
+  const skyLight = createSkyLightLayer(root, spectacleHost), flight = createSkyFlightLayer(root, spectacleHost);
+  const trainLayer = createTrainLayer(root, spectacleHost), dragon = createDragonLayer(root, spectacleHost);
+  const spectacles = [skyLight, flight, trainLayer, dragon];
+
   /** Mesh every banner and gift part before the first meaningful frame, so no beat waits on a worker. */
   async function prepare(): Promise<void> {
-    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints()];
+    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...spectacles.flatMap(layer => layer.blueprints())];
     for (const tier of BANNER_TIERS) {
       const p = bannerParts(tier, host.kit);
       parts.push(p.head, p.roll, p.rollLapsed, ...p.rows, ...p.shimmer.flat());
@@ -339,8 +363,69 @@ export function createTwitchMomentView(host: MomentViewHost) {
     return checked(eye, target, portrait ? 60 : 48);
   }
 
+  /** Horizontal unit direction from a point toward where the viewer already stands, so cuts read as steps, not jumps. */
+  const sideOf = (point: THREE.Vector3, prior: CameraPose) => {
+    const d = new THREE.Vector3(...prior.eye).sub(point).setY(0);
+    return d.lengthSq() > 1e-4 ? d.normalize() : new THREE.Vector3(0, 0, 1);
+  };
+
+  /**
+   * The spectacle shots. The sky is watched from low in the town, roofs silhouetted against it; the castle from
+   * across its walls; the plaza from the street. The train and the dragon move, so their shots keep the eye still
+   * and turn to follow, like someone in the street watching them pass.
+   */
+  function spectacleShot(place: MomentPlace, prior: CameraPose): CameraPose | null {
+    const { width, height } = host.viewport(), portrait = height > width;
+    const sky = places.sky();
+    switch (place) {
+      case 'sky': {
+        if (!sky) return null;
+        const centre = new THREE.Vector3(...sky.centre), side = sideOf(centre, prior);
+        const eye = centre.clone().addScaledVector(side, sky.radius * (portrait ? 0.95 : 0.8)).add(new THREE.Vector3(0, portrait ? 6 : 5, 0));
+        const target = centre.clone().add(new THREE.Vector3(0, sky.ceiling * 0.52, 0));
+        return checked(eye, target, portrait ? 68 : 56);
+      }
+      case 'castle': {
+        const castle = places.castle();
+        if (!castle) return sky ? spectacleShot('sky', prior) : null;
+        const crown = new THREE.Vector3(...castle.crown), side = sideOf(crown, prior);
+        const target = crown.clone().add(new THREE.Vector3(0, 7, 0));
+        const eye = crown.clone().addScaledVector(side, portrait ? 40 : 34).add(new THREE.Vector3(0, -2, 0));
+        return checked(eye, target, portrait ? 66 : 54);
+      }
+      case 'plaza': {
+        const plaza = places.plaza();
+        if (!plaza) return null;
+        const point = new THREE.Vector3(...plaza), side = sideOf(point, prior);
+        const eye = point.clone().addScaledVector(side, portrait ? 22 : 18).add(new THREE.Vector3(0, 3.5, 0));
+        return checked(eye, point.clone().add(new THREE.Vector3(0, 9, 0)), portrait ? 64 : 52);
+      }
+      case 'train': {
+        const at = trainLayer.focus();
+        if (!sky || !at) return null;
+        // From a raised spot inside the loop, on the viewer's side, turning to follow the train round the town.
+        const centre = new THREE.Vector3(...sky.centre), side = sideOf(centre, prior);
+        const eye = centre.clone().addScaledVector(side, sky.radius * 0.35).add(new THREE.Vector3(0, portrait ? 12 : 10, 0));
+        return checked(eye, at.clone().add(new THREE.Vector3(0, 1.2, 0)), portrait ? 62 : 48);
+      }
+      case 'dragon':
+      case 'lair': {
+        const lair = places.lair(), at = place === 'dragon' ? dragon.focus() : null;
+        if (!lair || !sky) return null;
+        // Low on the town's far side from the hills, so the dragon is seen over the roofs as it comes.
+        const centre = new THREE.Vector3(...sky.centre), out = new THREE.Vector3(...lair.position).sub(centre).setY(0).normalize();
+        const eye = centre.clone().addScaledVector(out, -sky.radius * 0.55).add(new THREE.Vector3(0, portrait ? 7 : 6, 0));
+        const target = at ?? new THREE.Vector3(...lair.position).add(new THREE.Vector3(0, 6, 0));
+        return checked(eye, target, portrait ? 66 : 54);
+      }
+      default: return null;
+    }
+  }
+
+  const MOVING = new Set<string>(['train', 'dragon']);
   const shotFor = (subject: MomentSubject, prior: CameraPose, toward: readonly MomentSubject[] = []) =>
-    subject.kind === 'home' ? homeShot(subject.slot) : placeShot(subject.place, prior, toward);
+    subject.kind === 'home' ? homeShot(subject.slot)
+      : subject.place === 'market' || subject.place === 'gate' ? placeShot(subject.place, prior, toward) : spectacleShot(subject.place, prior);
 
   /** World point a caption hangs above. */
   function captionPoint(subject: MomentSubject): THREE.Vector3 | null {
@@ -350,9 +435,22 @@ export function createTwitchMomentView(host: MomentViewHost) {
       const d = door(subject.slot);
       return d ? new THREE.Vector3(...d.doorstep).add(new THREE.Vector3(0, 2.4, 0)) : null;
     }
-    const point = subject.place === 'market' ? gifts.stop()?.position : (() => { const g = host.placeAnchor?.('gate'); return g ? new THREE.Vector3(...g.position) : null; })();
-    // Just over the cart's pennant (2.1 m), so the card reads as the cart's, not the stall's behind it.
-    return point ? point.clone().add(new THREE.Vector3(0, 2.6, 0)) : null;
+    const sky = places.sky();
+    switch (subject.place) {
+      case 'market': case 'gate': {
+        const point = subject.place === 'market' ? gifts.stop()?.position : (() => { const g = host.placeAnchor?.('gate'); return g ? new THREE.Vector3(...g.position) : null; })();
+        // Just over the cart's pennant (2.1 m), so the card reads as the cart's, not the stall's behind it.
+        return point ? point.clone().add(new THREE.Vector3(0, 2.6, 0)) : null;
+      }
+      // Sky captions hang low in the sky, under the bursts, so the words never cover the light they describe.
+      case 'sky': return sky ? new THREE.Vector3(...sky.centre).add(new THREE.Vector3(0, sky.ceiling * 0.3, 0)) : null;
+      case 'castle': { const c = places.castle(); return c ? new THREE.Vector3(...c.crown).add(new THREE.Vector3(0, 3, 0)) : null; }
+      case 'plaza': { const p = places.plaza(); return p ? new THREE.Vector3(...p).add(new THREE.Vector3(0, 4.5, 0)) : null; }
+      case 'train': return trainLayer.focus()?.clone().add(new THREE.Vector3(0, 3.4, 0)) ?? null;
+      case 'dragon': return (dragon.head() ?? dragon.focus())?.clone().add(new THREE.Vector3(0, 4, 0))
+        ?? (() => { const l = places.lair(); return l ? new THREE.Vector3(...l.position).add(new THREE.Vector3(0, 8, 0)) : null; })();
+      case 'lair': { const l = places.lair(); return l ? new THREE.Vector3(...l.position).add(new THREE.Vector3(0, 8, 0)) : null; }
+    }
   }
 
   const mix = (a: CameraPose, b: CameraPose, t: number): CameraPose => {
@@ -383,6 +481,11 @@ export function createTwitchMomentView(host: MomentViewHost) {
     }
     if (!director) return;
     const { focus: f, lease, prior } = director;
+    // A moving subject keeps its eye and turns to follow; a subject that leaves every legal pose keeps the last one.
+    if (f.subject.kind === 'place' && MOVING.has(f.subject.place) && director.leaving === null) {
+      const tracked = spectacleShot(f.subject.place, prior);
+      if (tracked) director.shot = { ...tracked, eye: director.shot.eye };
+    }
     // Following a parcel home: the shot glides from the gathering to the doorstep it is bound for.
     if (f.follow && atMs >= f.follow.at && director.second === undefined) director.second = shotFor(f.follow.subject, director.shot);
     const followed = f.follow && director.second ? director.second : null;
@@ -423,6 +526,11 @@ export function createTwitchMomentView(host: MomentViewHost) {
       for (const slot of [...banners.keys()]) if (!present.has(slot)) remove(slot);
       syncEdges(frame);
       gifts.apply(frame);
+      skyLight.apply(frame.visible ? frame.sky : [], frame.atMs);
+      flight.apply(frame.visible ? frame.sky : [], frame.atMs);
+      trainLayer.apply(frame.visible ? frame.train : null, frame.atMs);
+      dragon.apply(frame.visible ? frame.dragon : null, frame.atMs);
+      host.light?.(frame.visible ? skyLight.glow() : { colour: [0, 0, 0], strength: 0 });
       syncAudio(frame);
       if (frame.visible) direct(frame); else release();
     },
@@ -438,8 +546,21 @@ export function createTwitchMomentView(host: MomentViewHost) {
       }
       return out;
     },
-    stats: () => ({ banners: banners.size, meshes: [...banners.values()].reduce((n, b) => n + b.root.children.length, 0), edges: edges.size,
-      ...gifts.stats(), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent }),
+    /** The train's carriage nameplates: the observed contributors riding it, never an amount. */
+    nameplates(camera: THREE.Camera): ScreenNameplate[] {
+      if (!lastFrame?.visible || !lastFrame.train) return [];
+      const { width, height } = host.viewport();
+      return trainLayer.nameplates().flatMap(({ name, position }, i) => {
+        const p = position.clone().project(camera);
+        if (p.z < 0 || p.z > 1 || Math.abs(p.x) > 0.95 || Math.abs(p.y) > 0.95) return [];
+        return [{ id: `plate:${i}`, name, x: (p.x + 1) * width / 2, y: (1 - p.y) * height / 2 }];
+      });
+    },
+    /** The sky's light this frame, for hosts that tint their own lighting rather than take `light()` calls. */
+    glow: (): SkyGlow => skyLight.glow(),
+    stats: (): Record<string, number | boolean> => ({ banners: banners.size, meshes: [...banners.values()].reduce((n, b) => n + b.root.children.length, 0), edges: edges.size,
+      ...gifts.stats(), ...prefixed('sky', skyLight.stats()), ...prefixed('flight', flight.stats()), ...prefixed('train', trainLayer.stats()),
+      ...prefixed('dragon', dragon.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent }),
     dispose(): void {
       if (disposed) return;
       disposed = true;
@@ -449,6 +570,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       for (const slot of [...banners.keys()]) remove(slot);
       for (const edge of edges.values()) root.remove(edge.group);
       edges.clear(); gifts.dispose();
+      for (const layer of spectacles) layer.dispose();
       host.parent.remove(root);
       for (const material of edgeMaterials.values()) material.dispose();
       edgeMaterials.clear(); edgeGeometry.dispose();
@@ -457,4 +579,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
     },
   };
 }
+const prefixed = (prefix: string, stats: Readonly<Record<string, number>>) =>
+  Object.fromEntries(Object.entries(stats).map(([key, value]) => [`${prefix}.${key}`, value]));
+
 export type TwitchMomentView = ReturnType<typeof createTwitchMomentView>;

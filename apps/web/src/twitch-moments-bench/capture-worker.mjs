@@ -2,9 +2,9 @@
 // Captures the Twitch moments bench (SIMULATED source) under the shared host capture lock: one owned Vite server
 // and one Chromium, both closed before the lock is released. Each scenario opens frozen at kingdom time START and
 // is seeked through its anticipation, action and settle, then tiled into one contact sheet.
-//   node apps/web/src/twitch-moments-bench/capture.mjs [--port 5198] [--only gift,cart] [--sheet-only]
+//   node apps/web/src/twitch-moments-bench/capture.mjs [--port 5198] [--set support|spectacle] [--only gift,cart] [--sheet-only]
 // --sheet-only tiles the frames already on disk for every run, after partial re-captures with --only.
-// Frames land in shots/twitch-moments/<scenario>-<beat>@<w>x<h>.png; the sheet in shots/twitch-moments/sheet-support.png.
+// Frames land in shots/twitch-moments/<scenario>-<beat>@<w>x<h>.png; the sheet in shots/twitch-moments/sheet-<set>.png.
 import { chromium } from '@playwright/test';
 import { createServer } from 'vite';
 import { execFileSync } from 'node:child_process';
@@ -17,13 +17,14 @@ const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
 const port = Number(option('--port') ?? 5198);
 assertCapturePort(port, { name: '--port' });
-const only = option('--only')?.split(','), sheetOnly = args.includes('--sheet-only');
+const only = option('--only')?.split(','), sheetOnly = args.includes('--sheet-only'), set = option('--set') ?? 'support';
+if (set !== 'support' && set !== 'spectacle') throw new Error('--set must be support or spectacle.');
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${root}shots/twitch-moments`;
 
 const DESKTOP = [1440, 900], PHONE = [390, 844], STREAM = [1920, 1080];
 /** scenario, viewport and the offsets (ms after START) of anticipation, action and settle. */
-const RUNS = [
+const SUPPORT = [
   ['gift', DESKTOP, [['anticipation', 2500], ['action', 3900], ['settle', 6900]]],
   ['cart', DESKTOP, [['anticipation', 3800], ['action', 7000], ['settle', 11800]]],
   ['resub', DESKTOP, [['anticipation', 500], ['action', 1500], ['settle', 5200]]],
@@ -37,7 +38,28 @@ const RUNS = [
   ['rejoin', STREAM, [['anticipation', 600], ['action', 2200], ['settle', 6000]]],
   ['friend', DESKTOP, [['anticipation', 3800], ['action', 7000], ['settle', 11800]]],
   ['ward', STREAM, [['anticipation', 3800], ['action', 6800], ['settle', 14000]]],
-].filter(([scenario]) => !only || only.includes(scenario));
+];
+/** The sky, the train and the dragon. Battle scenarios run the SIMULATED realm in setup, so their beats sit later. */
+const SPECTACLE = [
+  ['skyfire', DESKTOP, [['aurora', 3400], ['name', 7600], ['procession', 11200]]],
+  ['volley', STREAM, [['launch', 1700], ['burst', 4300], ['fade', 8200]]],
+  ['spark', PHONE, [['rise', 1200], ['peak', 2300], ['fade', 3600]]],
+  ['street', DESKTOP, [['launch', 1500], ['burst', 3500], ['willow', 5600]]],
+  ['beast', DESKTOP, [['enter', 2600], ['overhead', 4800], ['exit', 8400]]],
+  ['kites', PHONE, [['rise', 3000], ['sway', 9000], ['drift', 15500]]],
+  ['volleys', STREAM, [['first', 3500], ['second', 13800], ['ribbon', 16500]]],
+  ['balloon', DESKTOP, [['rise', 1200], ['float', 6000], ['drift', 14000]]],
+  ['confetti', PHONE, [['burst', 1200], ['fall', 3600], ['settle', 6800]]],
+  ['train', STREAM, [['arrive', 1500], ['bunting', 3400], ['running', 7000]]],
+  ['closing', DESKTOP, [['fireworks', 2600], ['stir', 5200], ['home', 9000]]],
+  ['dragon', STREAM, [['eyes', 800], ['roar', 3200], ['climb', 6400]]],
+  ['battle', DESKTOP, [['orbit', 22700], ['swoop', 26800], ['breath', 31500]]],
+  ['victory', STREAM, [['reel', 31200], ['spiral', 34600], ['bow', 38000]]],
+  ['retreat', PHONE, [['turn', 31000], ['away', 34200], ['settle', 39000]]],
+  ['bell', DESKTOP, [['strokes', 1400], ['wake', 5800], ['rise', 9400]]],
+  ['unbound', STREAM, [['earned', 800], ['stir', 2400], ['honest', 5200]]],
+];
+const RUNS = (set === 'spectacle' ? SPECTACLE : SUPPORT).filter(([scenario]) => !only || only.includes(scenario));
 
 let server, browser, release;
 const problems = [], rows = [];
@@ -100,7 +122,7 @@ for (const { scenario, width, height, row } of rows) {
   tiles.push(rowPath);
 }
 if (tiles.length) {
-  const sheet = `${output}/sheet-support.png`;
+  const sheet = `${output}/sheet-${set}.png`;
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...tiles.flatMap(p => ['-i', p]), ...(tiles.length > 1 ? ['-filter_complex', `vstack=inputs=${tiles.length}`] : []), sheet]);
   console.log(`Sheet ${sheet.slice(root.length)}`);
 }
