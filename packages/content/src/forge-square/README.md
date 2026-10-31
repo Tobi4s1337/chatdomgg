@@ -7,7 +7,7 @@ stone curb, copper keystone and binding, diagonal brace, and tools on the right 
 directly supports the unmodified `createAnvilHeroDragon(style)` sculpture, translated up 21 cells.
 
 The caller supplies fire, smoke, illumination and placement. `FORGE_HEARTH_FLAME` is `[12, 6, 15]` in the
-open firebox; `FORGE_HEARTH_CHIMNEY_NOSE` is `[0, 23, 9]`, at the dragon's open nose. These coordinates are
+open firebox; `FORGE_HEARTH_CHIMNEY_NOSE` is `[DRAGON_EMITTER[0], 21 + DRAGON_EMITTER[1], DRAGON_EMITTER[2]]`, at the dragon's open nose. These coordinates are
 local build cells, before the caller's transform. For nearby braziers, reuse `createGateBrazier` from
 `arrival-lights`; this asset deliberately contains neither an anvil nor a duplicate brazier.
 

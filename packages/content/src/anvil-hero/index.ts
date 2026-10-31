@@ -8,7 +8,7 @@ type Cell = [number, number, number];
 /** The sleeping dragon's frozen envelope, mount and smoke anchor, in build cells (0.125 m). */
 export const DRAGON_SIZE: Cell = [24, 16, 18];
 export const DRAGON_MOUNT: Cell = [12, 0, 9];
-export const DRAGON_EMITTER: Cell = [0, 2, 9];
+export const DRAGON_EMITTER: Cell = [7, 3, 17];
 const [W, H, D] = DRAGON_SIZE;
 
 interface Kit {
@@ -42,69 +42,24 @@ export const ANVIL_HERO_DRAGON_SURFACE: Readonly<Record<StyleKey, number>> = {
   hearth: KITS.hearth.back, tide: KITS.tide.back, grove: KITS.grove.back,
 };
 
-/** A node on the coil's centreline, seen from above: position, ridge height and half-width, in cells. */
-type Node = [x: number, z: number, top: number, radius: number];
-
-/**
- * The coil, from the shoulder beside the stack, round the far side to the haunch, then the tail
- * wrapping the near side back toward the sleeping head. One continuous centreline, one even band.
- */
-const COIL: Node[] = [
-  [12.0, 4.0, 6.0, 1.8],
-  [16.0, 3.0, 6.0, 2.0],
-  [20.0, 4.0, 6.0, 2.0],
-  [21.0, 8.0, 5.5, 2.1],
-  [19.8, 12.2, 4.5, 1.8],
-  [17.0, 14.5, 3.0, 1.3],
-  [13.0, 16.0, 2.0, .8],
-  [9.0, 16.0, 1.2, .65],
-];
-/** The lowered neck extends forward from the shoulder. */
-const NECK: Node[] = [[12.0, 4.0, 4.0, 1.7], [9.0, 6.0, 3.5, 1.5], [7.0, 9.0, 3.0, 1.5]];
-/** Separate forelegs reach forward beside the muzzle, leaving an open crook below the chin. */
-const FAR_ARM: Node[] = [[11.0, 4.5, 2.5, 1.0], [7.0, 6.0, 2.0, .8], [3.0, 6.5, 2.0, .8]];
-const NEAR_ARM: Node[] = [[16.0, 13.0, 2.5, 1.0], [10.0, 13.0, 2.0, .8], [3.0, 12.5, 2.0, .8]];
-
 class Lattice {
   readonly cells = new Uint8Array(W * H * D);
-  /** Cells that belong to the coil and limbs, so the belly band can be painted on them only. */
-  readonly flesh = new Uint8Array(W * H * D);
   index(x: number, y: number, z: number) { return x + W * (y + H * z); }
   inside(x: number, y: number, z: number) { return x >= 0 && y >= 0 && z >= 0 && x < W && y < H && z < D; }
   at(x: number, y: number, z: number) { return this.inside(x, y, z) ? this.cells[this.index(x, y, z)]! : 0; }
-  set(x: number, y: number, z: number, material: number, flesh = false) {
+  set(x: number, y: number, z: number, material: number) {
     if (!this.inside(x, y, z)) return;
     const i = this.index(x, y, z);
     this.cells[i] = material;
-    this.flesh[i] = material && flesh ? 1 : 0;
   }
   box(x: number, y: number, z: number, X: number, Y: number, Z: number, material: number) {
     for (let k = z; k < Z; k++) for (let j = y; j < Y; j++) for (let i = x; i < X; i++) this.set(i, j, k, material);
   }
-  /** Highest solid cell in a column, or -1. */
-  crest(x: number, z: number) { let y = H - 1; while (y >= 0 && !this.at(x, y, z)) y--; return y; }
-
-  /**
-   * A flat-backed tube along the nodes with a one-cell chamfer to upright flanks. Sections are
-   * octagons, so straight runs keep big planes and turns cut clean 45° facets instead of stair noise.
-   * Sleeping bodies settle: the flat underside meets the roof along its whole length.
-   */
-  tube(nodes: Node[], material: number) {
-    for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
-      const px = x + .5, pz = z + .5;
-      let height = 0;
-      for (let s = 0; s + 1 < nodes.length; s++) {
-        const [ax, az, at, ar] = nodes[s]!, [bx, bz, bt, br] = nodes[s + 1]!;
-        const dx = bx - ax, dz = bz - az, length2 = dx * dx + dz * dz;
-        const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / length2));
-        const ox = Math.abs(px - (ax + dx * t)), oz = Math.abs(pz - (az + dz * t));
-        const d = Math.max(ox, oz, (ox + oz) * Math.SQRT1_2);
-        const top = at + (bt - at) * t, radius = ar + (br - ar) * t;
-        if (d > radius) continue;
-        const steps = top < 2.5 || d <= radius - 1 ? 0 : 1;
-        height = Math.max(height, top - steps);
-      }
-      for (let y = 0; y + .5 < height && y < H; y++) if (!this.at(x, y, z)) this.set(x, y, z, material, true);
+  /** Voxelise a faceted ellipsoid in all three dimensions. */
+  ellipsoid(cx: number, cy: number, cz: number, rx: number, ry: number, rz: number, material: number) {
+    for (let z = 0; z < D; z++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const dx = (x + .5 - cx) / rx, dy = (y + .5 - cy) / ry, dz = (z + .5 - cz) / rz;
+      if (dx * dx + dy * dy + dz * dz <= 1) this.set(x, y, z, material);
     }
   }
 
@@ -136,97 +91,89 @@ export function createAnvilHeroDragon(style: StyleKey): MotifGeometry {
   const kit = KITS[style];
   if (!kit) throw new Error(`Unknown style kit ${String(style)}.`);
   const g = new Lattice();
+  const blob = (x: number, y: number, z: number, rx: number, ry: number, rz: number, m = kit.back) => g.ellipsoid(x, y, z, rx, ry, rz, m);
 
-  // The crooked stack: a lower shaft holding the mount, a corbel course, an upper shaft
-  // stepped one cell toward the haunch, and a lipped crown with a dark open mouth.
-  g.box(12, 0, 7, 16, 8, 11, kit.stack);
-  g.box(11, 8, 6, 17, 9, 12, kit.lip);
-  g.box(13, 9, 7, 17, 12, 11, kit.stack);
-  g.box(12, 12, 6, 18, 14, 12, kit.lip);
-  g.box(14, 9, 8, 16, 14, 10, MAT.air);
-  g.box(13, 13, 7, 17, 14, 11, MAT.air);
+  // The small, working stack sits behind the animal, below the horns and wing.
+  g.box(12, 0, 4, 17, 6, 9, kit.stack);
+  g.box(13, 6, 4, 17, 8, 8, kit.stack);
+  g.box(12, 8, 3, 18, 9, 9, kit.lip);
 
-  // The body: one band round the stack, the low neck and the resting forearms.
-  g.tube(COIL, kit.back);
-  g.tube(NECK, kit.back);
-  g.tube(FAR_ARM, kit.back);
-  g.tube(NEAR_ARM, kit.back);
-  // The neck and coil meet the chimney shaft under its near corner.
-  g.box(9, 0, 6, 13, 3, 8, kit.back);
+  // A plump haunch wraps the chimney, with a rounded shoulder joining the skull.
+  blob(13, 3, 4, 5, 3, 3.7);
+  blob(18, 3.5, 7, 5, 3.5, 4.4);
+  blob(19, 2.6, 11, 4, 2.6, 3.5);
+  blob(11, 3, 9, 4.5, 3, 3.5);
+  // The head is the largest single shape: low cheeks and a long, forward snout.
+  blob(7, 5, 11.5, 4.5, 3.7, 4.2);
+  blob(7, 2.6, 14.8, 3.5, 1.7, 2.8, kit.belly);
+  blob(7, 3.5, 15, 3.3, 1.5, 2.5);
 
-  // A large, chamfered skull and long low muzzle carry the sleeping expression.
-  // The jaw actually meets both forepaws; the open space between them remains visible.
-  g.box(1, 2, 7, 5, 5, 12, kit.back);
-  g.box(4, 2, 5, 10, 7, 13, kit.back);
-  g.box(5, 7, 6, 10, 8, 12, kit.back);
-  g.box(6, 8, 7, 9, 9, 11, kit.back);
-  for (let x = 1; x < 5; x++) for (const z of [7, 11]) g.set(x, 2, z, kit.belly);
-  // Heavy brows and long, closed eyes give the head its sleeping pose from both sides.
-  for (const z of [5, 12]) {
-    g.box(5, 5, z, 8, 6, z + 1, kit.lid);
-    g.box(5, 6, z, 9, 7, z + 1, kit.back);
-  }
-  // Two individually separated paws rest beside the muzzle and support the jaw.
-  for (const z of [5, 11]) {
-    g.box(2, 0, z, 6, 2, z + 2, kit.back);
-    g.set(2, 0, z, kit.horn);
-    g.set(2, 0, z + 1, kit.horn);
-  }
-  // Back-swept horns rise above the skull on either side, stopping short of
-  // the chimney. Their bold silhouette stays legible at the size of a roof part.
-  for (const z of [5, 12]) {
-    const out = z < 9 ? z - 1 : z + 1;
-    g.box(7, 7, z, 9, 9, z + 1, kit.horn);
-    g.box(8, 8, out, 10, 10, out + 1, kit.horn);
-    g.box(9, 9, out, 11, 11, out + 1, kit.horn);
-    g.box(10, 10, out, 12, 12, out + 1, kit.horn);
-  }
+  // Paired paws stretch toward the street, under the wide jaw. Each joins a shoulder.
+  blob(4, 1.2, 12.8, 2.1, 1.2, 3.2);
+  blob(10.3, 1.2, 12.8, 2.1, 1.2, 3.2);
+  blob(4.5, 1, 15.3, 2.2, 1, 2.5, kit.horn);
+  blob(9.5, 1, 15.3, 2.2, 1, 2.5, kit.horn);
 
-  // The wings lie folded low along the haunch. Their swept triangular outlines
-  // support the larger head and horns instead of rising like walls around it.
-  const wingOutline: [number, number][] = [
-    [13, 4], [14, 5], [15, 6], [16, 7], [17, 8], [18, 8],
-    [19, 7], [20, 6], [21, 5], [22, 4],
-  ];
-  for (const [x, top] of wingOutline) {
-    for (let y = 2; y < top; y++) {
-      const spread = Math.max(0, 2 - Math.floor((y - 2) / 2));
-      for (let z = 14 - spread; z <= 14 + spread; z++) g.set(x, y, z, y === top - 1 ? kit.back : kit.plate);
-      const farTop = Math.max(3, top - 1);
-      const farSpread = Math.max(0, spread - 1);
-      if (y < farTop) for (let z = 3 - farSpread; z <= 3 + farSpread; z++) g.set(x, y, z, y === farTop - 1 ? kit.back : kit.plate);
+  // Closed, horizontal creases on the front-facing cheeks, shaded by their brows.
+  g.box(3, 5, 14, 6, 6, 15, kit.lid);
+  g.box(8, 5, 14, 11, 6, 15, kit.lid);
+  // Heavy horn roots grow out of the skull; their tips sweep outward and back.
+  g.box(3, 7, 10, 6, 9, 12, kit.horn);
+  g.box(2, 8, 8, 5, 10, 11, kit.horn);
+  g.box(1, 9, 7, 4, 11, 9, kit.horn);
+  g.box(0, 10, 6, 2, 11, 8, kit.horn);
+  g.box(8, 7, 10, 11, 9, 12, kit.horn);
+  g.box(9, 8, 8, 12, 10, 11, kit.horn);
+  g.box(10, 9, 7, 13, 11, 9, kit.horn);
+  g.box(12, 10, 6, 14, 11, 8, kit.horn);
+  // Small sideways ears, kept below the horns.
+  g.box(1, 6, 11, 4, 7, 13, kit.back);
+  g.box(10, 6, 11, 13, 7, 13, kit.back);
+
+  // A slender tail curves around the haunch, stopping short of the forward paws.
+  blob(21, 1.3, 11, 2.5, 1.3, 3);
+  blob(21, 1, 14, 2, 1, 2);
+  blob(18, 1, 15, 3, 1, 1.5);
+  blob(15, 1, 15.5, 2, 1, 1);
+  g.box(12, 0, 15, 15, 1, 16, kit.plate);
+
+  // A folded bat wing stands along the outside of the haunch, clear of the flue.
+  // Its dark web and three pale fingers are readable anatomical shapes, not roof courses.
+  type Point = readonly [number, number, number];
+  const shoulder: Point = [17, 5, 8], knuckle: Point = [20, 11, 6];
+  const edge: Point[] = [knuckle, [23, 9, 10], [21, 7, 10], [23, 7, 14], [20, 5, 12], [21, 4, 15], [17, 3, 12]];
+  const triangle = (a: Point, b: Point, c: Point) => {
+    const u = b.map((n, i) => n - a[i]!), v = c.map((n, i) => n - a[i]!);
+    const normal = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
+    const axis = normal.map(Math.abs).indexOf(Math.max(...normal.map(Math.abs)));
+    for (let i = 0; i <= 32; i++) for (let j = 0; j <= 32 - i; j++) {
+      const p = a.map((n, k) => Math.floor(n + u[k]! * i / 32 + v[k]! * j / 32)) as Cell;
+      g.set(...p, kit.lid);
+      // Two cells through the dominant normal keep the diagonal membrane face-connected.
+      p[axis] = p[axis]! - 1; g.set(...p, kit.lid);
     }
-  }
+  };
+  for (let i = 1; i < edge.length; i++) triangle(shoulder, edge[i - 1]!, edge[i]!);
+  const bone = (a: Point, b: Point) => {
+    for (let t = 0; t <= 32; t++) {
+      const p = a.map((n, i) => n + (b[i]! - n) * t / 32);
+      g.ellipsoid(p[0]!, p[1]!, p[2]!, .8, .8, .8, kit.horn);
+    }
+  };
+  bone(shoulder, knuckle);
+  for (const tip of [edge[1]!, edge[3]!, edge[5]!]) bone(knuckle, tip);
+  // Three broad, separate dorsal points follow the back and tail.
+  g.box(11, 6, 3, 13, 8, 5, kit.horn);
+  g.box(12, 8, 3, 13, 9, 4, kit.horn);
+  g.box(18, 6, 4, 20, 8, 6, kit.horn);
+  g.box(19, 8, 4, 20, 9, 5, kit.horn);
+  g.box(21, 4, 11, 23, 6, 13, kit.horn);
+  g.box(22, 6, 11, 23, 7, 12, kit.horn);
+  g.box(19, 2, 14, 21, 4, 15, kit.horn);
 
-  // Five spine plates shrinking toward the tail, sawteeth standing on the ridge where they fall.
-  // Each runs along the coil there; tide's lean back toward the tail, grove's split like leaves.
-  const plates: [x: number, z: number, height: number, alongZ: boolean][] = [[12, 4, 2, false], [16, 3, 2, false], [20, 5, 2, true], [21, 9, 1, true], [19, 12, 1, true]];
-  plates.forEach(([x, z, height, alongZ], i) => {
-    const base = g.crest(x, z) + 1, step = (n: number): [number, number] => alongZ ? [x, z + n] : [x + n, z];
-    const lean = style === 'tide' ? 1 : 0;
-    for (const n of i < 3 ? [-1, 0, 1] : [0]) { const [px, pz] = step(n); g.set(px, base, pz, kit.plate); }
-    if (height > 1) { const [px, pz] = step(lean); g.set(px, base + 1, pz, kit.plate); }
-    if (style === 'grove' && i < 3) { const [px, pz] = step(0); g.set(px, base, pz, kit.horn); }
-  });
-
-  // A tapered spade at the end of the coil, kept low behind the forepaws.
-  g.box(7, 0, 15, 10, 1, 17, kit.back);
-  g.box(6, 0, 16, 9, 1, 17, kit.back);
-  g.set(7, 1, 16, kit.plate);
-
-  // The light belly band where the coil and limbs meet the roof, and the claws. The thin tail
-  // stays one colour, so it reads as a tail and never as a kerb.
-  for (let z = 0; z < D; z++) for (let x = 0; x < W; x++) {
-    const i = g.index(x, 0, z);
-    if (!g.flesh[i] || g.crest(x, z) < 2) continue;
-    if (!g.at(x - 1, 0, z) || !g.at(x + 1, 0, z) || !g.at(x, 0, z - 1) || !g.at(x, 0, z + 1)) g.cells[i] = kit.belly;
-  }
-  for (let z = 6; z < 13; z++) if (g.flesh[g.index(2, 0, z)]) g.set(2, 0, z, kit.belly);
-
-  // The flue opens out of the nose: the anchor and the nostril behind it are air.
-  g.set(DRAGON_EMITTER[0], DRAGON_EMITTER[1], DRAGON_EMITTER[2], MAT.air);
-  g.set(1, 2, 9, MAT.air);
-  g.set(2, 2, 9, MAT.air);
-
+  // Smoke emerges directly ahead of the snout, with a real nostril behind the anchor.
+  g.box(14, 5, 5, 16, 9, 7, MAT.air);
+  g.set(7, 3, 17, MAT.air);
+  g.set(7, 3, 16, MAT.air);
   return { size: [...DRAGON_SIZE], boxes: g.boxes(), mount: [...DRAGON_MOUNT], emitter: [...DRAGON_EMITTER] };
 }

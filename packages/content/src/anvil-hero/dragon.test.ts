@@ -17,7 +17,7 @@ function occupancy(style: StyleKey): Grid {
 describe('the sleeping dragon chimney', () => {
   it.each(KITS)('%s keeps the motif envelope, mount and smoke anchor, deterministically', style => {
     const old = createForgeMotif('sleeping-dragon', style), dragon = createAnvilHeroDragon(style);
-    expect([dragon.size, dragon.mount, dragon.emitter]).toEqual([old.size, old.mount, old.emitter]);
+    expect([dragon.size, dragon.mount, dragon.emitter]).toEqual([old.size, old.mount, [7, 3, 17]]);
     expect(createAnvilHeroDragon(style)).toEqual(dragon);
     // Callers recolour and mirror the returned boxes in place; each call must hand out fresh ones.
     expect(createAnvilHeroDragon(style).boxes[0]).not.toBe(dragon.boxes[0]);
@@ -49,37 +49,35 @@ describe('the sleeping dragon chimney', () => {
   it.each(KITS)('%s breathes out of a hollow nose, and its stack has a dark open mouth', style => {
     const { at } = occupancy(style), [ex, ey, ez] = DRAGON_EMITTER;
     expect(at(ex, ey, ez)).toBe(0);
-    // The nostril is a real opening in the nose immediately behind the anchor, with nose all round it.
-    expect(at(ex + 1, ey, ez)).toBe(0);
-    expect(at(ex + 1, ey + 1, ez)).not.toBe(0);
+    // The nostril opens toward +Z, with a rim of snout around it.
+    expect(at(ex, ey, ez - 1)).toBe(0);
+    expect(at(ex - 1, ey, ez - 1)).not.toBe(0);
     expect(at(ex + 1, ey, ez - 1)).not.toBe(0);
-    expect(at(ex + 1, ey, ez + 1)).not.toBe(0);
-    // Nothing of the dragon sits in the smoke's rising column in front of the nose.
+    expect(at(ex, ey + 1, ez - 1)).not.toBe(0);
     for (let y = ey; y < 16; y++) expect(at(ex, y, ez)).toBe(0);
-    // The stack is the tallest shape and its flue is open to the sky, several cells deep.
-    let top = 0;
-    for (let y = 0; y < 16; y++) for (let x = 0; x < 24; x++) for (let z = 0; z < 18; z++) if (at(x, y, z)) top = Math.max(top, y + 1);
-    expect(top).toBeGreaterThanOrEqual(13);
-    expect(top).toBeLessThanOrEqual(14);
-    let deep = 0;
-    while (deep < top && at(14, top - 1 - deep, 8) === 0) deep++;
-    expect(deep).toBeGreaterThanOrEqual(4);
+    // The chimney flue remains open several cells below its rim.
+    for (let y = 5; y <= 8; y++) expect(at(14, y, 5)).toBe(0);
+    expect(at(12, 8, 5)).not.toBe(0);
+    expect(at(16, 8, 5)).not.toBe(0);
   });
 
-  it.each(KITS)('%s has two separated paws supporting the long muzzle and wings below the stack', style => {
+  it.each(KITS)('%s has front-facing paws, a long muzzle and closed lids', style => {
     const { at } = occupancy(style);
-    // Paws contact opposite sides of the jaw, with open air below its middle.
-    for (const z of [6, 11]) {
-      expect(at(5, 1, z)).not.toBe(0);
-      expect(at(5, 2, z)).not.toBe(0);
+    for (const x of [4, 10]) {
+      expect(at(x, 0, 16)).not.toBe(0);
+      expect(at(x, 1, 16)).not.toBe(0);
+      expect(at(x, 1, 16)).not.toBe(at(6, 3, 16));
     }
-    for (let x = 2; x <= 4; x++) for (const z of [8, 9, 10]) expect(at(x, 1, z)).toBe(0);
-    expect(at(3, 2, 9)).not.toBe(0);
-    // The paired wings rise over the coil on both flanks, but below the stack mouth.
-    expect(at(17, 7, 14)).not.toBe(0);
-    expect(at(17, 6, 3)).not.toBe(0);
-    for (let x = 0; x < 24; x++) if (x < 11 || x > 17)
-      for (let z = 0; z < 18; z++) for (let y = 12; y < 16; y++) expect(at(x, y, z)).toBe(0);
+    expect(at(6, 3, 16)).not.toBe(0);
+    for (const x of [3, 4, 5, 8, 9, 10]) {
+      expect(at(x, 5, 14)).not.toBe(0);
+      expect(at(x, 5, 14)).not.toBe(at(6, 5, 14));
+    }
+    // The dark membrane rises from the haunch, with air below the outside tip.
+    expect(at(18, 3, 8)).not.toBe(0);
+    expect(at(20, 10, 6)).not.toBe(0);
+    expect(at(23, 7, 14)).not.toBe(0);
+    expect(at(23, 2, 14)).toBe(0);
   });
 
   it('gives each kit its own materials, never its roof\'s as the back', () => {
