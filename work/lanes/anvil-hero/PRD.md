@@ -31,7 +31,7 @@ seams rather than expanding scope. The five tasks are an execution order for the
   fixed street cameras and close views. Capture the eight primary spec views at 1440×900 and 390×844 at dusk, one heated
   close view and three-kit contact sheets, under the shared capture lock. Open every shot and fix what looks weak, including smoke origin and framing.
   Record actual costs and remaining visual doubts; do not invent numeric beauty gates. · evidence: final looked set
-- [ ] **AH05 — Deliver clean exports for main's mount.** Finish the owned README with exact imports, mount/rune
+- [x] **AH05 — Deliver clean exports for main's mount.** Finish the owned README with exact imports, mount/rune
   coordinates, resource ownership, bench/capture commands, output paths and any main-owned export/selection seam.
   Recheck the full scoped acceptance commands, deterministic seek/dispose behavior and unchanged SVG usage.
   Supply an integration checklist for replacing old stage geometry and selecting only the sleeping-dragon
