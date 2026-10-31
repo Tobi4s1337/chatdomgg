@@ -12,6 +12,14 @@ describe('window LOD placement', () => {
       windows: [{ slot: 0, present: true, publicName: 'Tobi4s_', since: 0 }] };
     windows.setFrame(frame);
     expect(windows.getSources()[0]).toMatchObject({ strength: 1, name: 'Tobi4s_' });
+    // A local lease expiry begins a fade now, rather than replaying an old, completed departure.
+    windows.setFrame({ ...frame, connection: 'stale', asOf: 91000,
+      windows: [{ ...frame.windows[0]!, present: false, publicName: null, since: 91000 }] });
+    expect(windows.getSources()[0]).toMatchObject({ strength: 1, name: null });
+    windows.update(.35, 23, 91350);
+    expect(windows.getSources()[0]!.strength).toBeCloseTo(.5);
+    windows.update(.35, 23, 91700);
+    expect(windows.getSources()[0]!.strength).toBe(0);
     windows.setFrame({ ...frame, sequence: 2, connection: 'stale' });
     windows.update(1, 23);
     expect(windows.getSources()[0]).toMatchObject({ strength: 0, name: null });

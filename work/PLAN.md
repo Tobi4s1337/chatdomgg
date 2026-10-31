@@ -335,16 +335,19 @@ lanes. Exposure34ac89a is ACCEPTED on Tobias's RTX5080: readable dusk, coloured 
 Keep that grade, low lantern street camera, warm pools, house models, beacon and gold frame. After flicker:
 restore windows' emissive/halo pull, then soft height fog/aerial depth. Avatar proportions remain Tobias's choice.
 
-**Current slice:** remove the arbitrary nearest24 carried-light cutoff. These are emitters baked into a bounded
-voxel field, not individual point-light draws; every rendered lantern now contributes. Culling retains the last
-source and fades it over0.6s. Render time drives fades, so a paused story/capture cannot freeze a handoff.
-Three focused tests cover distance changes, culling fade and >24 lanterns; typecheck/scoped lint/web build pass.
-A first hysteresis-only attempt weakened the distant pool and was rejected by eye, never committed.
-Comparison: `shots/magic/flicker-before-after.mp4`, matched fixed street, simulated10.25–12.75s,4fps;
-`shots/magic/flicker-before-after@3840x1080.png` and `flicker-paired-contact.png` in the same folder.
-Matched frames retain both pools and look nearly identical: no clear baseline pop was reproduced. This
-settled4fps take does NOT prove a smooth fade or resolve all reported flicker. Native continuous motion remains
-the check; flicker is still open, not declared fixed. No SwiftShader fps claims. Approved exposure/pool shaders unchanged.
+**Current slice:** confirmed live feed-retry blackout fixed. An unavailable callback used to clear all windows,
+citizens and arrival history immediately. The renderer now keeps its last accepted public picture only until
+`min(receipt+90s, frame.asOf+90s)`, shows Connection lost/Reconnecting, and preserves arrived citizens across a
+same-epoch retry. True lease expiry begins the existing0.7s window fade and clears citizen/name/camera state.
+No source contract, room authority or presence duration changed. Approved exposure/pool shaders untouched.
+
+**Evidence:** real SSE adapter, SIMULATED fixture: before240→0 windows/citizens on disconnect; after240 remain,
+reconnect240 with0walking; +91s local clock during outage yields0/0. No page errors. Viewed actual1080p frames
+and `shots/magic/presence-drop-before-after@3840x1080.png`; telemetry `presence-drop-smoke.json` alongside.
+Typecheck/scoped lint,25 focused tests and web build pass. Temporary capture resources closed. SIM fixture
+badge overlaps the connection note in evidence only. Prior continuous SwiftShader take completed4renders/18s
+and did not reproduce a separate GPU flicker; don't repeat slow captures without an exact repro. Other shimmer
+is unlocalized, not declared fixed. bc9a54c also removed the carried-light nearest24 cutoff and added cull fades.
 
 **Merges:** passport, raid-gate, emotes, twitch-moments, atlas-w2 through47c0ef7 are on main. All5 captures now
 complete/viewed: `shots/integration/look-reset/contact@1920x800.png`. First4 are SIMULATED benches; Atlas is

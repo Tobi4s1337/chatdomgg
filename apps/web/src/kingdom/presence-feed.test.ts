@@ -19,7 +19,7 @@ describe('SIMULATED presence scenario', () => {
     expect(frames).toHaveLength(1);
     simulation.advance(1);
     expect(frames.at(-1)!.windows.filter(window => window.present)).toEqual([
-      { slot: simulation.firstSlot, present: true, publicName: 'Juniper', since: WORLD_FIXTURE_TIME + 1000 },
+      expect.objectContaining({ slot: simulation.firstSlot, present: true, publicName: 'Juniper', since: WORLD_FIXTURE_TIME + 1000 }),
     ]);
     simulation.advance(4);
     expect(frames.at(-1)!.windows.filter(window => window.present)).toHaveLength(1);
