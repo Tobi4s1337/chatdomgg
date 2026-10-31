@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { uWebSocketsTransport } from '@colyseus/uwebsockets-transport';
 import { expect, it, vi } from 'vitest';
-import { KingdomIdSchema } from '@chatdom/shared';
+import { KingdomIdSchema, PersonIdSchema } from '@chatdom/shared';
 import { PRESENCE_FIXTURES } from '@chatdom/shared/world-fixtures';
-import { REALM_WATCH_ROUTE, type RealmPublicMessage, type RealmWriterLease } from '@chatdom/shared/realm';
+import { REALM_WATCH_ROUTE, REALM_NO_HOME_SLOT, type RealmWalkerFrame, type RealmPublicMessage, type RealmWriterLease } from '@chatdom/shared/realm';
 import { generateSettlementPlan } from '@chatdom/world';
 import { createRealmState } from '@chatdom/world/realm';
 import { createFoundedWorldLoader, FileFoundedStore } from '../founded';
@@ -90,7 +90,7 @@ it('hands the exact checkpoint before new deltas, stays quiet on restored histor
     existing.kingdom.transient({ type: 'chat.clear' }); // Preparation is not a live speech replay.
     expect(first.chunks).toHaveLength(0);
     gate.resolve(); blockedPolicy = false;
-    await vi.waitFor(() => expect(first.events()).toHaveLength(1));
+    await vi.waitFor(() => expect(first.events()).toHaveLength(2));
     const firstEvent = first.events()[0]!;
     expect(firstEvent.event).toBe('checkpoint');
     expect(firstEvent.data.checkpoint).toMatchObject({ throughCursor: 11, throughSequence: 3, current: [presence(2)] });
@@ -100,18 +100,41 @@ it('hands the exact checkpoint before new deltas, stays quiet on restored histor
     write(12); await existing.kingdom.preparePublicCheckpoint();
     existing.kingdom.transient({ type: 'chat.clear' });
     existing.kingdom.toOwner('SIMULATED-private-owner', { type: 'receipt', receipt: { version: 1, id: 'PRIVATE-SIMULATED-receipt', status: 'held', message: 'PRIVATE-SIMULATED-reply' } });
-    expect(first.events().map(event => event.event)).toEqual(['checkpoint', 'world', 'transient']);
-    expect(first.events()[1]!.data.cursor).toBe(12);
+    expect(first.events().map(event => event.event)).toEqual(['checkpoint', 'walkers', 'world', 'transient']);
+    expect(first.events()[2]!.data.cursor).toBe(12);
     expect(first.chunks.join('')).not.toContain('PRIVATE-SIMULATED');
     expect(first.headers.get('Cache-Control')).toBe('no-store');
     expect(authenticate).not.toHaveBeenCalled(); expect(acquire).toHaveBeenCalledTimes(1);
 
     first.aborted();
     const quiet = open();
-    await vi.waitFor(() => expect(quiet.events()).toHaveLength(1));
+    await vi.waitFor(() => expect(quiet.events()).toHaveLength(2));
     expect(quiet.events()[0]!.data.checkpoint.throughCursor).toBe(12);
-    expect(quiet.events().map(event => event.event)).toEqual(['checkpoint']);
-    quiet.aborted();
+    expect(quiet.events().map(event => event.event)).toEqual(['checkpoint', 'walkers']);
+    expect(quiet.events()[1]!.data.walkers).toEqual([]);
+    // Real retained writer/watch seam, with only its room-effects boundary simulated here.
+    const room = existing.kingdom.bindRoom({ close: () => {}, allowWalking: () => {}, adoptWorld: () => {}, placeWalker: () => false,
+      readWalker: () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, distance: 0, grounded: true, collisionRevision: existing.kingdom.world.revision }) });
+    const personId = PersonIdSchema.parse('900007211');
+    existing.kingdom.lifecycle('join', { personId, kingdomId, origin: 'simulated', sessionId: 'SIMULATED-private-entry', expiresAt: Date.now() + 60_000, publicName: 'SIMULATED Citizen', look: 'tide' }, 'SIMULATED-walker', Date.now());
+    const poses: RealmWalkerFrame = { version: 1, kingdomId, origin: 'simulated', writerEpoch: existing.kingdom.writerEpoch,
+      layoutRevision: existing.kingdom.layoutRevision, collisionRevision: existing.kingdom.world.revision, sampledAt: Date.now(),
+      walkers: [{ id: 'SIMULATED-walker', name: 'SIMULATED Citizen', look: 'tide', homeSlot: REALM_NO_HOME_SLOT, x: 1, y: 0, z: 2, yaw: 0, distance: 0, speed: 0, placement: 0 }] };
+    existing.kingdom.publishWalkers({ ...poses, writerEpoch: 'SIMULATED-stale-writer' });
+    expect(quiet.events()).toHaveLength(2);
+    // Movement publication cannot seat someone: the room's existing lease book is the only owner.
+    existing.kingdom.publishWalkers({ ...poses, seats: [{ targetId: 'fire:invented:seat:a', walkerId: 'SIMULATED-walker', generation: 1, status: 'occupied' }] });
+    expect(quiet.events().at(-1)).toEqual({ event: 'walkers', data: { ...poses, seats: [] } });
+    const observing = open();
+    await vi.waitFor(() => expect(observing.events()).toHaveLength(2));
+    expect(observing.events()[1]).toEqual({ event: 'walkers', data: { ...poses, seats: [] } });
+    expect(observing.chunks.join('')).not.toContain(personId);
+    expect(observing.chunks.join('')).not.toContain('SIMULATED-private-entry');
+    room();
+    expect(quiet.events().at(-1)!.data.walkers).toEqual([]);
+    expect(observing.events().at(-1)!.data.walkers).toEqual([]);
+    expect(existing.kingdom.currentWalkers().walkers).toEqual([]);
+    quiet.aborted(); observing.aborted();
     allowed = false;
     const denied = open();
     await vi.waitFor(() => expect(denied.status).toBe('403 Forbidden'));
@@ -128,9 +151,9 @@ it('hands the exact checkpoint before new deltas, stays quiet on restored histor
     expect(services.kingdoms.size).toBe(0); expect(release).toHaveBeenCalledTimes(1);
 
     const closed = open();
-    await vi.waitFor(() => expect(closed.events()).toHaveLength(1));
+    await vi.waitFor(() => expect(closed.events()).toHaveLength(2));
     await services.kingdoms.get(kingdomId)!.dispose();
-    expect(closed.events().map(event => event.event)).toEqual(['checkpoint', 'closed']);
+    expect(closed.events().map(event => event.event)).toEqual(['checkpoint', 'walkers', 'walkers', 'closed']);
     expect(closed.ended).toBe(true);
     await vi.waitFor(() => expect(services.kingdoms.size).toBe(0));
     expect(release).toHaveBeenCalledTimes(2);

@@ -6,6 +6,8 @@ import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import { connectRealm, type RealmClient } from '../../web/src/realm/client';
 import { createRealmServer } from './server';
 import { REFERENCE_KINGDOM, referenceServices } from './reference';
+import { REALM_ROOM_LIMITS } from './limits';
+import type { RealmRoomServices } from './ports';
 
 const rooms:Room<KingdomRoomState>[]=[];
 const adapters:RealmClient[]=[];
@@ -15,6 +17,36 @@ const waitFor=async(predicate:()=>boolean)=>{
   const end=Date.now()+8000;
   while(!predicate()){if(Date.now()>end)throw new Error('Room state did not arrive');await new Promise(r=>setTimeout(r,25));}
 };
+it('holds patch publication while authority opens slowly, then joins through the real transport',async()=>{
+  const probe=createNetServer();await new Promise<void>(resolve=>probe.listen(0,'127.0.0.1',resolve));
+  const address=probe.address();if(!address||typeof address==='string')throw new Error('No test port');
+  await new Promise<void>(resolve=>probe.close(()=>resolve()));
+  const base=referenceServices();
+  let release!:()=>void,opening=false,published=0;
+  const openingGate=new Promise<void>(resolve=>{release=resolve;});
+  const services:RealmRoomServices={auth:base.auth,open:async id=>{
+    opening=true;await openingGate;
+    const handle=await base.open(id);
+    return {...handle,publishWalkers:()=>{published++;}};
+  }};
+  const {server}=createRealmServer(services);
+  let room:Room<KingdomRoomState>|undefined;
+  await server.listen(address.port,'127.0.0.1');
+  const joining=new Client(`http://127.0.0.1:${address.port}`).joinOrCreate<KingdomRoomState>('kingdom',base.issue(),KingdomRoomState);
+  try{
+    await waitFor(()=>opening);
+    // Several actual patch timers fire while onCreate is still waiting for its authority.
+    await new Promise(resolve=>setTimeout(resolve,REALM_ROOM_LIMITS.patchMs*4));
+    expect(published).toBe(0);
+    release();room=await joining;
+    await waitFor(()=>!!room!.state.walkers.get(room!.sessionId)&&published>0);
+    expect(room.roomId).toBe('k:999000001');
+  }finally{
+    release();
+    const joined=room??await joining.catch(()=>undefined);
+    await joined?.leave();await server.gracefullyShutdown(false);
+  }
+});
 it('three real SDK clients share movement and reload without reusing a single-use entry ticket',async()=>{
   const probe=createNetServer();await new Promise<void>(resolve=>probe.listen(0,'127.0.0.1',resolve));
   const address=probe.address();if(!address||typeof address==='string')throw new Error('No test port');

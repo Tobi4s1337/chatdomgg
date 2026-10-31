@@ -38,7 +38,8 @@ export function promptView(selection: InteractionSelection, snapshot: Interactio
   if (selection.focus) {
     const { record, action } = selection.focus;
     const caption = action === 'stand' ? SEATED[record.target.kind] ?? null : null;
-    return { tone: 'ready', words: VERB[action], caption, actionable: true, targetId: record.target.id, anchor: lift(record) };
+    const words = action === 'sit' && record.target.kind === 'bench-seat' ? 'Sit for a moment' : VERB[action];
+    return { tone: 'ready', words, caption, actionable: true, targetId: record.target.id, anchor: lift(record) };
   }
   if (selection.quiet) {
     const { record, reason } = selection.quiet;

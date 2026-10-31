@@ -121,15 +121,21 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     const anvil=root.localToWorld(new THREE.Vector3(0,1.43,0));
     presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:(landing??anvil).toArray(),piece});
   }
+  /** The room's external casting owns its effects; it still heats this same physical stage. */
+  function updateAnvil(frame: ForgeRitualFrame | null, shaping = false) {
+    const orbitTime=frame?.elapsed??0;
+    const t=frame?.phase==='words'?Math.min(2.99,orbitTime):orbitTime;
+    const heat=!frame?0:shaping||t>=3&&t<12.7?1:t<3?.2:Math.max(0,1-(t-12.7)/2.8);
+    engraving.update({time:orbitTime,heat,shaping});
+    hero.update({time:orbitTime,heat,shaping});
+  }
   function update(frame: ForgeRitualFrame | null, shaping = false) {
     const early=frame?.phase==='words'||frame?.phase==='blueprint';
     if(!early&&presenting){presentation?.update(null);presenting=false;}
     const orbitTime=frame?.elapsed??0;
     const t = frame?.phase==='words'?Math.min(2.99,orbitTime):orbitTime;
     const active = frame !== null;
-    const heat = !active ? 0 : shaping || t >= 3 && t < 12.7 ? 1 : t < 3 ? .2 : Math.max(0, 1 - (t - 12.7) / 2.8);
-    engraving.update({time:orbitTime, heat, shaping});
-    hero.update({time:orbitTime, heat, shaping});
+    updateAnvil(frame,shaping);
     rings.visible = active; hammer.visible = active && t >= 11 && t < 13.3;
     const strikeTime=THREE.MathUtils.clamp((t-12.2)/.5,0,1);
     hammer.rotation.z=t<12.2?.8:strikeTime<.28?THREE.MathUtils.lerp(.8,-.35,strikeTime/.28):THREE.MathUtils.lerp(-.35,.15,(strikeTime-.28)/.72);
@@ -150,5 +156,5 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
   }
   function dispose() { presentation?.dispose();scene.remove(effects);engraving.dispose(); hero.dispose(); scene.remove(root); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); }
   update(null);
-  return { root, piece, setPiece, beginWords, update, dispose, setEnvironment: hero.setEnvironment };
+  return { root, piece, setPiece, beginWords, update, updateAnvil, dispose, setEnvironment: hero.setEnvironment };
 }

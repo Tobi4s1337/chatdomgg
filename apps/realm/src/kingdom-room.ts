@@ -27,6 +27,8 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     inputs = this.defineInput(WalkInputSchema, { bufferMaxSize: LIMITS.inputBuffer, sanitize: sanitizeRealmWalkInput });
     private handle!: RealmRoomHandle;
     private accepting = true;
+    /** Colyseus starts patching before async onCreate has acquired and bound the authority. */
+    private initialized = false;
     private recoveryRequests = new Map<string, number>();
     /** Shared district views: one per occupied district, each holding that district and its neighbour ring. */
     private districts = new RealmDistricts<WalkerSchema>();
@@ -75,6 +77,10 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
           [p.x,p.y,p.z] = position; p.vx=0;p.vy=0;p.vz=0;p.grounded=true;
           p.placement = (p.placement + 1) % 0x1_0000_0000;
           this.inputs.get(id).clear(); return true;
+        },
+        presentWalker: (id, presentation) => {
+          const walker = this.state.walkers.get(id);
+          if (this.accepting && walker) { walker.homeSlot = presentation.homeSlot; walker.look = presentation.look; }
         },
         allowWalking: (id, allowed) => { this.walking.set(id,allowed); if(!allowed)this.inputs.get(id).clear(); },
         adoptWorld: (world, layoutRevision, positions) => {
@@ -158,6 +164,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       }, LIMITS.walkHz);
       // Connected and dropped seats alike: a revoked session cannot wait out its grace.
       this.clock.setInterval(()=>this.seats.check(),REALM_SESSION_CHECK_MS);
+      this.initialized = true;
     }
     async onJoin(client: Client<{ auth: RealmPrincipal }>) {
       const auth = client.auth;
@@ -171,7 +178,9 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         && !embeddedSolids(carried, this.world).length && supported(carried, this.world) ? carried : undefined;
       const position = resume ? [resume.x, resume.y, resume.z] as const : this.handle.spawn(auth), body = {x:position[0],y:position[1],z:position[2]};
       if (!position.every(Number.isFinite) || embeddedSolids(body,this.world).length || !supported(body,this.world)) throw new ServerError(503,'The kingdom gate has no safe arrival yet');
-      this.seats.seat(auth, client.sessionId);
+      const replacedPrincipal = previous ? this.viewers.get(previous)?.auth : undefined;
+      const replaced = this.seats.seat(auth, client.sessionId);
+      if (replaced) this.removeWalker(replaced, replacedPrincipal);
       const walker = new WalkerSchema({ name: auth.publicName, look: auth.look, district: '', x: position[0], y: position[1], z: position[2],
         vx: 0, vy: 0, vz: 0, grounded: resume?.grounded ?? true, yaw: resume?.yaw ?? 0, distance: resume?.distance ?? 0, collisionRevision: this.state.collisionRevision });
       this.state.walkers.set(client.sessionId, walker);
@@ -183,7 +192,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     }
     async onDrop(client: Client<{ auth: RealmPrincipal }>, code?: number) {
       observer.closed('drop', code);
-      if(!client.auth||!this.accepting)return;
+      if(!client.auth||!this.accepting||!this.state.walkers.has(client.sessionId))return;
       this.handle.lifecycle('drop',client.auth,client.sessionId,Date.now());
       this.inputs.get(client.sessionId).clear();
       const p = this.state.walkers.get(client.sessionId); if (p) { p.vx = 0; p.vz = 0; }
@@ -215,13 +224,16 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     }
     onLeave(client: Client<{ auth: RealmPrincipal }>, code?: number) {
       observer.closed('leave', code);
-      if(client.auth)this.handle.lifecycle('leave',client.auth,client.sessionId,Date.now());
-      this.walking.delete(client.sessionId);this.recoveryRequests.delete(client.sessionId);
-      const p = this.state.walkers.get(client.sessionId);
-      if (p) { this.districts.leave(client.sessionId); this.state.walkers.delete(client.sessionId); }
-      if (this.viewers.get(client.sessionId) === client) this.viewers.delete(client.sessionId);
-      if (client.auth && this.control.get(client.auth.personId) === client.sessionId) this.control.delete(client.auth.personId);
-      this.seats.left(client.sessionId);
+      this.removeWalker(client.sessionId, client.auth);
+    }
+    private removeWalker(id: string, principal?: RealmPrincipal) {
+      if (principal && this.state.walkers.has(id)) this.handle.lifecycle('leave',principal,id,Date.now());
+      this.inputs.get(id).clear();
+      this.walking.delete(id); this.recoveryRequests.delete(id);
+      if (this.state.walkers.has(id)) { this.districts.leave(id); this.state.walkers.delete(id); }
+      this.viewers.delete(id);
+      if (principal && this.control.get(principal.personId) === id) this.control.delete(principal.personId);
+      this.seats.left(id);
     }
     /**
      * District membership moves only here, right before Colyseus encodes the patch, so every queued view change is
@@ -230,7 +242,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
      * adds the new district's existing ones, and leaves every other client's shared view and decoder untouched.
      */
     onBeforePatch() {
-      if (!this.accepting) return;
+      if (!this.initialized || !this.accepting) return;
       for (const crossing of this.districts.sweep()) {
         const client = this.viewers.get(crossing.id);
         if (!client) continue;
@@ -238,7 +250,13 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
         // A joining or reconnecting socket gets this view's full state when it acknowledges the join.
         if (client.state === ClientState.JOINED) (this as unknown as FullStateSender).sendFullState(client);
       }
+      this.handle.publishWalkers?.({
+        version: 1, kingdomId: this.handle.kingdomId, origin: this.handle.origin, writerEpoch: this.handle.writerEpoch,
+        layoutRevision: this.state.layoutRevision, collisionRevision: this.state.collisionRevision, sampledAt: Date.now(),
+        walkers: [...this.state.walkers].map(([id, p]) => ({ id, name: p.name, look: p.look, homeSlot: p.homeSlot,
+          x: p.x, y: p.y, z: p.z, yaw: p.yaw, distance: p.distance, speed: Math.hypot(p.vx, p.vz), placement: p.placement })),
+      });
     }
-    async onDispose() { this.districts.dispose(); this.seats?.dispose(); for (const unbind of this.unbind) unbind(); await this.handle?.dispose(); }
+    async onDispose() { this.initialized = false; this.accepting = false; this.districts.dispose(); this.seats?.dispose(); for (const unbind of this.unbind) unbind(); await this.handle?.dispose(); }
   };
 }

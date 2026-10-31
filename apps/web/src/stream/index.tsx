@@ -6,6 +6,8 @@ import { createDirector, planNight, type DirectorState, type Shot } from './dire
 import { Corner, Crest, Flame, StreamDefs } from './fittings';
 import { createRealmSpectatorSource } from '../kingdom-entry/spectator';
 import type { SpeechLabel } from '../kingdom/citizen-scene';
+import type { WalkerLabel } from '../kingdom/walk-scene';
+import type { ArrivalAttention } from '../kingdom/arrival-director';
 import './stream.css';
 import './speech.css';
 
@@ -58,10 +60,13 @@ export default function StreamView() {
   const [scale, setScale] = createSignal(1);
   const [names, setNames] = createSignal<NameLabel[]>([]);
   const [speech, setSpeech] = createSignal<SpeechLabel[]>([]);
+  const [walkers, setWalkers] = createSignal<readonly WalkerLabel[]>([]);
   const [kingdomName, setKingdomName] = createSignal(params.kingdomName);
   const mark = () => sourceMark(label());
   // Only a fresh projection may carry a person's name or give a close shot its subject.
-  const fresh = () => mark().kind === 'simulated' || mark().kind === 'live';
+  // Resting is an observed offline channel, not a broken presence connection.
+  const fresh = () => ['simulated', 'live', 'resting'].includes(mark().kind);
+  const [arrival, setArrival] = createSignal<Pick<ArrivalAttention, 'slot' | 'phase'> | null>(null);
   const stageSafe = () => layout() === 'stage' ? safe() : null;
   const named = () => kingdomName() !== 'Kingdom';
   let hour = params.hour, picture!: HTMLDivElement, lens!: HTMLDivElement, holder: HTMLDivElement | undefined, retryTimer = 0, attempts = 0, obsVisible = true;
@@ -88,17 +93,19 @@ export default function StreamView() {
 
   const mount = createSceneMount({
     host: () => lens,
-    settings: () => ({ tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time, camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin }),
+    settings: () => ({ directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time, camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin, onWalkers: setWalkers }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
       setKingdomName(connection.kingdomName);
       return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId,
-        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, forgeFeed: connection.forgeFeed,
+        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
         realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed, dispose: connection.dispose };
     } } : {}),
     onPhase: next => {
       setPhase(next);
+      if (next !== 'ready') setArrival(null);
+      if (next !== 'ready') setWalkers([]);
       if (next === 'ready') { attempts = 0; director.start(); } else director.stop();
       if (next === 'failed') scheduleRetry();
     },
@@ -115,9 +122,11 @@ export default function StreamView() {
   });
 
   function publishDebug(scene: KingdomScene | undefined): void {
-    if (!scene) { delete window.__chatdomKingdom; return; }
+    if (!scene) { setArrival(null); delete window.__chatdomKingdom; return; }
     window.__chatdomKingdom = {
       stats: scene.debug,
+      inspect: scene.inspect,
+      pose: scene.pose,
       seek: (time: number, view?: Shot) => scene.seek(time, view),
       hour: (value: number) => { hour = value; scene.setHour(value); },
       capture: (time: number) => scene.capture(time),
@@ -128,6 +137,8 @@ export default function StreamView() {
   // Chosen once per climax, so the plate never jumps between neighbours.
   let lockedSlot: number | null = null;
   const climaxSlot = createMemo(() => {
+    const homecoming = arrival();
+    if (homecoming?.phase === 'window' && fresh()) return (lockedSlot = homecoming.slot);
     if (!shot().climax || !fresh()) return (lockedSlot = null);
     if (lockedSlot !== null) return lockedSlot;
     const width = picture.clientWidth, height = lens.querySelector('.stream-canvas')?.clientHeight ?? picture.clientHeight;
@@ -222,6 +233,8 @@ export default function StreamView() {
           </div>
         }</For></div>
         <div class="stream-names" aria-live="polite">
+          <For each={walkers()}>{walker => <span class="stream-walker-name" data-walker={walker.id}
+            style={{ left: `${walker.x}px`, top: `${walker.y}px` }}>{walker.name}</span>}</For>
           <Show when={shownName()}>{name =>
             <div class="stream-name" classList={{ shown: !!climaxName() }}
               style={{ left: `${Math.min(Math.max(name().x, 70), picture.clientWidth - 70)}px`, top: `${Math.max(name().y, 46)}px` }}>

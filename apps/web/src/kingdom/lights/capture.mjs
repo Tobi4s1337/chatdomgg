@@ -8,6 +8,7 @@ import { mkdir } from 'node:fs/promises';
 import { createServer as createNetServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createServer, preview } from 'vite';
+import { CAPTURE_PORTS } from '../../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock.mjs';
 
 const root = fileURLToPath(new URL('../../../../../', import.meta.url));
@@ -31,14 +32,14 @@ const seed = 'willowmere', time = 30;
 
 /** First free port in the band this host reserves for our servers. */
 async function freePort() {
-  for (let port = 5170; port <= 5199; port++) {
+  for (const port of CAPTURE_PORTS) {
     const free = await new Promise(resolve => {
       const probe = createNetServer().once('error', () => resolve(false)).once('listening', () => probe.close(() => resolve(true)));
       probe.listen(port, '127.0.0.1');
     });
     if (free) return port;
   }
-  throw new Error('No free port in 5170–5199 for the capture preview');
+  throw new Error('No safe capture port available.');
 }
 
 /** Street and castle poses come from the lane's own deterministic layout views, not a second camera. */

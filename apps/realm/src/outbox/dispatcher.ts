@@ -1,6 +1,7 @@
 import type { KingdomId } from '@chatdom/shared';
 import { KingdomPresenceFrameSchema } from '@chatdom/shared';
 import type { RealmPublicDelivery } from '@chatdom/shared/realm';
+import { TwitchMomentFactSchema } from '@chatdom/shared/twitch-moments';
 import { RealmWriterFencedError, describeStorageFailure } from '../persistence/database';
 import type { RealmOutboxRow } from '../persistence/postgres-repository';
 import { OUTBOX_DISPATCH_BATCH } from './store';
@@ -118,7 +119,9 @@ export class OutboxDispatcher {
   private delivery(row: RealmOutboxRow): RealmPublicDelivery | null {
     const message = row.message;
     if (message.type === 'presence' && !KingdomPresenceFrameSchema.safeParse(message.frame).success) return null;
-    if (message.type !== 'presence' && message.type !== 'forge' && message.type !== 'home' && message.type !== 'castle') return null;
+    if (message.type === 'moment' && (!TwitchMomentFactSchema.safeParse(message.fact).success
+      || message.fact.kingdomId !== this.options.kingdomId || typeof message.current !== 'boolean')) return null;
+    if (message.type !== 'presence' && message.type !== 'forge' && message.type !== 'home' && message.type !== 'castle' && message.type !== 'moment') return null;
     return { version: 1, kingdomId: this.options.kingdomId, writerEpoch: this.options.writerEpoch, sequence: row.sequence, cursor: row.id, eventId: row.eventId, message };
   }
 

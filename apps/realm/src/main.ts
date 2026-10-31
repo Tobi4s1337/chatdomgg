@@ -12,11 +12,13 @@ import { ForgeWriteGate, FileForgeApprovals } from './wiring';
 import { RealmEveningBridge, mountEveningRoutes } from './evening';
 import { createRealmCitizens } from './evening/citizens';
 import { createRealmCastle } from './evening/castle';
+import { attachEveningInteractions } from './evening/interactions';
 import { createServer as createPortReservation } from 'node:net';
+import { realmListenPort } from './listen-port';
+import { ownRealmShutdown } from './lifecycle';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
-const port = Number(process.env.REALM_PORT ?? 5191);
 
 try {
   await serve();
@@ -28,7 +30,7 @@ try {
 }
 
 async function serve() {
-  if (!Number.isInteger(port) || port < 5170 || port > 5199) throw new Error('Use a development port in 5170–5199');
+  const port = realmListenPort(process.env);
   // uWS permits SO_REUSEPORT. Two local builds on one port would split entry and sockets between worlds.
   const reservation = createPortReservation();
   await new Promise<void>((resolve, reject) => {
@@ -37,13 +39,13 @@ async function serve() {
   });
   let held = true;
   const release = async () => { if (held) { held = false; await new Promise<void>(resolve => reservation.close(() => resolve())); } };
-  try { await serveOwnedPort(release); } finally { await release(); }
+  try { await serveOwnedPort(release, port); } finally { await release(); }
 }
 
-async function serveOwnedPort(releasePort: () => Promise<void>) {
+async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   if (storage === 'memory') {
     if (!simulated) throw new Error('Memory reference mode requires explicit REALM_SIMULATED=1.');
-    return serveMemoryReference(releasePort);
+    return serveMemoryReference(releasePort, port);
   }
   if (storage !== 'postgres') throw new Error('REALM_STORAGE must be "postgres" or, for the SIMULATED reference only, "memory".');
 
@@ -71,7 +73,12 @@ async function serveOwnedPort(releasePort: () => Promise<void>) {
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
-    attach: kingdom => evening.attach(kingdom),
+    attach: kingdom => {
+      const detachEvening = evening.attach(kingdom);
+      const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
+        scene: () => boot.loader.current(kingdom.kingdomId)?.scene });
+      return () => { detachInteractions(); detachEvening(); };
+    },
   });
   citizens.use(boot.allocation, boot.services);
   castle.use(boot.allocation, boot.store);
@@ -81,7 +88,10 @@ async function serveOwnedPort(releasePort: () => Promise<void>) {
   const { server, transport } = boot.createServer({ mountIngress: app => mountEveningRoutes(app, evening) });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
-  server.onShutdown(async () => { await evening.stop(); await boot.stop(); await pool.end(); });
+  ownRealmShutdown(server, transport, async () => {
+    try { await evening.stop(); }
+    finally { try { await boot.stop(); } finally { await pool.end(); } }
+  });
   try {
     await boot.readiness.start();
     await releasePort();
@@ -92,9 +102,10 @@ async function serveOwnedPort(releasePort: () => Promise<void>) {
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);
 }
 
-async function serveMemoryReference(releasePort: () => Promise<void>) {
+async function serveMemoryReference(releasePort: () => Promise<void>, port: number) {
   const services = referenceServices();
   const { server, transport } = createRealmServer(services);
+  ownRealmShutdown(server, transport, async () => {});
   transport.app.post('/reference/session', response => {
     response.writeHeader('Access-Control-Allow-Origin', '*').writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(services.issue()));
   });

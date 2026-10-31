@@ -28,6 +28,14 @@ export interface KingdomAudioInspection {
 
 const inspections = new WeakMap<KingdomAudio, () => KingdomAudioInspection>();
 const phrasePlayers = new WeakMap<KingdomAudio, (phrase: KingdomPhrase, options: KingdomPhraseOptions) => boolean>();
+const hosts = new WeakMap<KingdomAudio, () => Readonly<{ context: AudioContext; destination: AudioNode }> | null>();
+
+/** The existing graph only; never creates or resumes an AudioContext. */
+export function kingdomAudioHost(audio: KingdomAudio): Readonly<{ context: AudioContext; destination: AudioNode }> | null {
+  const host = hosts.get(audio);
+  if (!host) throw new TypeError('kingdom audio: not an instance created by createKingdomAudio');
+  return host();
+}
 
 /** Diagnostics for the bench and checks. Not part of what consumers need to play sound. */
 export function inspectKingdomAudio(audio: KingdomAudio): KingdomAudioInspection {
@@ -213,6 +221,8 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
   }
 
   const audio: KingdomAudio = { unlock, cue, setSettings, getState, dispose };
+  hosts.set(audio, () => status !== 'disposed' && context && context.state !== 'closed' && mixer
+    ? { context, destination: mixer.hostDestination } : null);
   phrasePlayers.set(audio, phrase);
   inspections.set(audio, () => ({
     contextState: context?.state ?? null,

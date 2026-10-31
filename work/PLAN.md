@@ -330,46 +330,44 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-10-31
 
-**Rule:** Merge reviewed code promptly, short look and changed checks. Missing visible detail becomes the
-owner's next task, never a merge hold. No matrices per change, new lanes, audit commits or reopened accepted
-work. Main carries the evening/realm core with Sol-high/Terra agents. World lanes: kingdom-land,
-ground-dressing, places-water, places-high, kingdom-light, first-look-polish, anvil-hero, interactions; one worker
-each. The founder also unparked twitch-moments. Dressing's tended verge and first-look's arrival framing stand.
+**Order:** Twitch first: real chat/shared arrival → stream director → real !forge → event physics → three
+channel kingdoms/Atlas/raids → earned growth/Chronicle → chat-led fire → panel/emotes. Walking stays accepted.
+Short turns; delegate reads. No world/walking polish detours. Parked world lanes finish current work and stop.
 
-**Merged:** Earlier light/glass, PS06, CB03, FR02, AH02, PW02 and FL01 stand. This turn merged twitch-moments
-TM01 subscriptions/home banners; looked at the warm doorway/banner. Nothing held or sent back.
+**Actual evening:** Tobias re-granted the bot incl. user:write:chat; posting works. “evening, Willowmere”13:11
+and weathervane wish13:13:02 reached realm. The wish stopped cold/offline: stream:offline was committed4.8s
+before it; zero Forge reservation rows or approval audit. Server Forge retains the room and runs without a
+browser. Do not bypass live-only eligibility. Tobias will go live and say when; do not wait with an observer open.
+Public watch through5190 returns200 SSE/live, collision6, checkpoint cursor728 with presence/castle facts.
+No observed real approved Forge attachment, recorded ritual or shared arrival yet.
 
-**Core:** Real Postgres/KingdomRoom owns presence, allocation, geometry and Forge commits. Herald's bounded
-durable outbox sends person-bound presence; speech/wishes/cleanup stay transient. Chat names never create
-OIDC identities, follow history or coal. Browser scene hashes/checkpoints are checked; witnessed Forge work
-survives geometry replacement, with one attempt ID and canonical host fingerprints from runes to reveal.
-`4478622` adds the actual pinned keep as the monarch's separate host (slot 65534, no street deed/home count),
-transaction-checked native bytes/head/provider name, intrinsic broadcaster Forge rights preserving moderation,
-and the same ten-minute evidenced coal rule. Explicit castle bounds/sockets propagate through fitting,
-projection, collision and landing. Migration 0007 applied. Genuine follower/knighthood evidence is still needed
-for other free-word rights; Herald's app-token grant path cannot backfill follower dates.
+**Observer:** stopped at pause; owned process42199 exited130 and released the capture lock. No observer or
+capture stays open awaiting Twitch. Tobias will explicitly say when live and send the next real wish; only then
+attach a bounded viewer. Existing stream still is an honestly resting/offline town, not a completed real ritual.
 
-**Stream:** `/stream?source=realm&kingdom=129634568&hour=19.5` now reads the same retained authority through
-bounded public SSE, quiet checkpoints and live deliveries. No walker/principal/alternate writer. Exact scene,
-approved name, presence, speech and Forge camera handoff are wired; hidden sources release watcher/renderer.
+**Showcase:** `/showcase`, linked from the kingdom heading. Real walk URL keeps ONLY walk=1 and kingdom.
+Real room stream, SIMULATED Forge/panel, RECORDED Atlas (30October snapshot), unavailable Chronicle and three
+kingdoms. Root viewed `shots/showcase/showcase@1440x900.png`; readable, intro too tall for a directory.
+Build/typecheck/scoped lint passed. Keep links and provenance current as destinations become real.
 
-**Running:** Preview5190 → main-owned realm5197/API5196. Unknown5191/5192 listeners left alone. SIMULATED
-full-town rehearsal5187: `/?walk=1&source=simulated&hour=19.5`. Real walking:
-`/?walk=1&kingdom=129634568&hour=19.5`. The exact accepted 240-home Willowmere layout was explicitly imported;
-no simulated people/deeds/standing/coals/Genesis migrated. Runtime bytes/keys stay ignored. Managed Forge5195
-reports CLI judges configured; a duplicate launch refused the occupied port and exited. Herald5194 is healthy/
-offline but has no room sink. Ignored `.env` has its destination/key ready: host-managed Herald needs restart
-from main loading it, preserving existing data. Its data is read-only here; no competing EventSub source was
-started. Public sign-in origin/callback is pending the async question; API still uses localhost.
+**Genesis:** architect’s one pass complete; main carries on Sol. 3a774f8 exposes `@chatdom/world/genesis`,
+local composition contract/spec39 and reference note. Four focused tests, lint/typecheck pass. Pure seeded
+coast/river/mountain candidates, surface sampler, Atlas size bands, channel-bound approved derivatives,
+adopted-world precedence; no scene adoption/render wiring yet. Three real Atlas fixtures (cutoff30Oct16:32UTC):
+The_AGGman63920635/Counter-Strike/avg16 → coastal hamlet; PinkKittyRose4363967/Retro/avg139.98 → river town;
+MashaD4 154972160/Chess/avg852.12 → mountain city. These showcase selections are art direction, not source facts.
+Profile colours/descriptions/approved emotes missing; fetch real sources, never invent channel-specific content.
+Next: compose three finished previews and wire their Atlas holdings. Specs40–44 hand the five content families to the team; main owns composition, exports, facts/approval binding and Atlas route integration.
 
-**Seen/checked:** Typecheck, touched lint, changed tests and web/realm/Codex builds pass, including isolated
-Postgres keep installation/recovery and actual keep fit/qualification/commit/replay. Real independent CLI word
-judges passed the dragon wish with a SIMULATED check identity. Looked at
-`shots/twitch-moments/merged-banner@1440x900.png` and `shots/stream/realm-evening@1920x1080.png`.
-Actual stream opens/sets ready, draws 240 homes without console errors, and honestly reports connection lost
-because no room presence arrived. It is an empty dusk town, not acceptance. No full-suite or GPU-rate claim.
+**Lanes:** specs40–44 and their PRDs are ready for independent landmarks, heraldry, emote art, keepers and sound. One worker each; no dependency between their asset work. Missing main-owned mounts are explicit integration needs, not reasons to stop independent tasks. 5efc270 refreshed Atlas/Gate/Moments/Emotes/Campfire handoffs. Atlas/Gate/Emotes/Campfire branches
+include main at that commit. Twitch-moments has active uncommitted work: do not overwrite it; sync at checkpoint.
+Raid road tasks independent of Genesis entry dependency; welcome+gift included. No new reviewed delta identified.
 
-**Next:** Real Herald chat→arrival/window; real wish→judges→correct host; shared browsers and stream direction;
-then record/watch the 60–90 s evening. All remain unclaimed. Continue core/hookup while public sign-in and
-host service setup arrive, without inventing people/stream state/coals. Then glassy walk, world love, hero
-anvil/dragon, deep interactions and one Twitch spectacle, in that order.
+**Live setup:** host-managed preview5190/API5196/realm5197/Forge5195/Herald5194; source edits trigger relevant
+service restarts after settling. Ensure stable before asking for a wish. Only use `conductor/state/services.log`;
+NEVER host journals or other services’ logs. Temporary sign-in test sessions revoked; entry/movement accepted
+in Firefox+Chromium at fd5c319. Adopted129634568: settlement:2:43cffdb6,240 homes,v1,collision6,
+scene134778eb60ac5414858df3c7cee5ed2abc4d65ba4331e45a259c5cc75294d4b3. Do not reseat plots.
+Monarch65534 owns keep pane, no invented street deed. Landing03/04 rehearsals are SIMULATED; latest14s take
+reviewed all56frames, still roof-occluded/two competing horn shapes. No image-judge waiver. Remaining bindings:
+real cheer/hype, durable solid gardens, raid journey; no guessed land/places or manufactured population.

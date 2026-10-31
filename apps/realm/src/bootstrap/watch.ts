@@ -102,6 +102,7 @@ export function mountRealmWatchRoutes(app: uWebSocketsTransport['app'], input: {
         if (prefix.length >= PREFIX_LIMIT || prefixBytes + bytes > BYTE_LIMIT) { close('resync-required', true); return; }
         prefix.push(message); prefixBytes += bytes;
       }));
+      detach.push(kingdom.subscribeWalkers(frame => { if (ready) send('walkers', frame); }));
       detach.push(kingdom.bindTransient(message => { if (ready) send('transient', message); }, () => {}));
       detach.push(kingdom.onWorldAdopted(() => {
         if (!ready || ended) return;
@@ -125,6 +126,7 @@ export function mountRealmWatchRoutes(app: uWebSocketsTransport['app'], input: {
       throughCursor = checkpoint.throughCursor;
       if (!send('checkpoint', initial)) return;
       ready = true;
+      if (!send('walkers', kingdom.currentWalkers())) return;
       keepalive = setInterval(() => { write(': keepalive\n\n'); }, 10_000);
       keepalive.unref?.();
       for (const message of prefix) {

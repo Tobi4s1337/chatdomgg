@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KingdomIdSchema } from '@chatdom/shared';
 import { REALM_AUTH_ROUTES } from '@chatdom/shared/realm';
-import { clearRealmScope, openRealmApiSession, realmSignInUrl, RealmEntryError } from './entry';
+import { clearRealmScope, openRealmApiSession, realmSignInUrl, realmEntryFailureMessage, RealmEntryError } from './entry';
 
 const K = KingdomIdSchema.parse('129634568');
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -13,6 +13,17 @@ const memory = (): Storage => {
 };
 
 describe('realm API entry', () => {
+  it('keeps the actual SDK failure and code readable without exposing entry credentials', () => {
+    expect(realmEntryFailureMessage(Object.assign(new Error('Bad Gateway'), { code: 502 }))).toBe('Bad Gateway (code 502)');
+    expect(realmEntryFailureMessage(new TypeError('The room has no walker'))).toBe('The room has no walker');
+    expect(realmEntryFailureMessage({ message: 'Entry expired', code: 403 })).toBe('Entry expired (code 403)');
+    expect(realmEntryFailureMessage(new Error('Failed https://localhost:5190/live-realm-data?ticket=private#token'))).not.toContain('private');
+    expect(realmEntryFailureMessage('ticket=private')).toBe('ticket=[redacted]');
+  });
+  it('retries sign-in from a callback outcome using the canonical walk destination', () => {
+    const link = new URL(realmSignInUrl('/?walk=1&kingdom=129634568&signin=declined'), 'http://localhost:5190');
+    expect(link.searchParams.get('returnTo')).toBe('/?walk=1&kingdom=129634568');
+  });
   it('reads the frozen session DTO and requests a fresh ticket only when asked, with CSRF and no-store', async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     let issued = 0;

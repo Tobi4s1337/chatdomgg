@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   KingdomIdSchema, KingdomPresenceFrameSchema, PersonIdSchema, PRESENCE_LEASE_MS, STREAM_LEASE_MS,
+  starterCitizenLook,
   type PresenceInput, type PresencePerson, type PresenceSource,
 } from '@chatdom/shared';
 import {
@@ -50,14 +51,17 @@ describe('presence evidence and its public boundary', () => {
     const frame = projectPresence(live, bindings, 1, 7);
     expect(KingdomPresenceFrameSchema.parse(frame)).toEqual(frame);
     expect(frame.windows).toEqual([
-      { slot: 0, present: false, publicName: null, since: 0 },
-      { slot: 1, present: true, publicName: null, since: 1 },
-      { slot: 2, present: true, publicName: null, since: 1 },
+      { slot: 0, present: false, publicName: null, since: 0, look: starterCitizenLook(carol) },
+      { slot: 1, present: true, publicName: null, since: 1, look: starterCitizenLook(bob) },
+      { slot: 2, present: true, publicName: null, since: 1, look: starterCitizenLook(alice) },
     ]);
     const wire = JSON.stringify(frame);
     for (const secret of [alice, bob, 'SIMULATED-session', 'personId', 'sourceTimes', 'chatters', 'restriction', 'observe.']) expect(wire).not.toContain(secret);
     // These IDs collapse as JS numbers, but remain separate lights/people.
     expect(Number(alice)).toBe(Number(bob));
+    // The same real identity keeps its body/look when it lives in another slot/kingdom; choice beats default.
+    expect(projectPresence(live, [{ personId: alice, slot: 40 }], 1, 8).windows[0]!.look).toBe(frame.windows[2]!.look);
+    expect(projectPresence(live, [{ personId: alice, slot: 40, look: 'dusk' }], 1, 9).windows[0]!.look).toBe('dusk');
   });
 
   it('unions all four sources into one person and one minute eligibility entry', () => {
@@ -87,7 +91,7 @@ describe('presence evidence and its public boundary', () => {
     state = applyPresence(state, observe(50_000, [named()], 'panel'), 50_000);
     expect(windowFor(state, PRESENCE_LEASE_MS).present).toBe(true);
     const expired = advancePresence(state, 50_000 + PRESENCE_LEASE_MS);
-    expect(windowFor(expired, 140_000)).toEqual({ slot: 0, present: false, publicName: null, since: 140_000 });
+    expect(windowFor(expired, 140_000)).toEqual({ slot: 0, present: false, publicName: null, since: 140_000, look: starterCitizenLook(alice) });
     expect(presenceTick(expired, 180_000).credit).toBeNull();
     expect(bindings).toHaveLength(3);
   });
@@ -366,7 +370,7 @@ it('keeps a witnessed offline message warm through stream polls without relighti
  const frame=projectPresence(state,bindings,60_000,2);
  expect(KingdomPresenceFrameSchema.parse(frame)).toEqual(frame);
  expect(frame).toMatchObject({streamLive:false,connection:'offline'});
- expect(frame.windows.filter(w=>w.present)).toEqual([{slot:2,present:true,publicName:'Alice is still here',since:2_000}]);
+ expect(frame.windows.filter(w=>w.present)).toEqual([{slot:2,present:true,publicName:'Alice is still here',since:2_000,look:starterCitizenLook(alice)}]);
  expect(presenceTick(state,60_000).credit).toBeNull();
  expect(windowFor(state,92_000).present).toBe(false);
  const stale=projectPresence(state,bindings,60_000+STREAM_LEASE_MS,3);

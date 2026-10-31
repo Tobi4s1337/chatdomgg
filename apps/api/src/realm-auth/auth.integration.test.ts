@@ -8,7 +8,7 @@ import {
   REALM_AUTH_ROUTES, RealmApiErrorSchema, RealmSessionReplySchema, RealmSignoutReplySchema, RealmTicketReplySchema,
   KingdomRoomState, kingdomRoomId, type RealmJoin, type RealmPrincipal, type WalkInput,
 } from '@chatdom/shared/realm';
-import { KingdomIdSchema } from '@chatdom/shared';
+import { starterCitizenLook, PersonIdSchema, KingdomIdSchema } from '@chatdom/shared';
 import { migrateRealmSchema } from '../../../realm/src/persistence/migrate';
 import { createRealmAuthenticator } from '../../../realm/src/auth/authenticator';
 import { createRealmServer } from '../../../realm/src/server';
@@ -231,7 +231,7 @@ describe.skipIf(!enabled)('realm sign-in and entry tickets (Postgres)', () => {
     expect((await pool.query('select 1 from realm_tickets where ticket_hash = $1', [sha256(reply.join.ticket)])).rowCount).toBe(1);
 
     const principal = await auth.authenticate(reply.join);
-    expect(principal).toMatchObject({ personId: '990100001', kingdomId: REFERENCE_KINGDOM, origin: 'simulated', publicName: 'Wren', look: 'neutral' });
+    expect(principal).toMatchObject({ personId: '990100001', kingdomId: REFERENCE_KINGDOM, origin: 'simulated', publicName: 'Wren', look: starterCitizenLook(PersonIdSchema.parse('990100001')) });
     expect(await auth.current(principal, Date.now())).toBe(true);
     await rejects(reply.join); // replay
 

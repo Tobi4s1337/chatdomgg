@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { PersonIdSchema, type PresenceInput } from '@chatdom/shared';
 import { VOXEL_FIXTURE, WORLD_FIXTURE_KINGDOM as kingdomId, WORLD_FIXTURE_PERSON as alice } from '@chatdom/shared/world-fixtures';
-import type { RealmIngressCheckpoint } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, type RealmIngressCheckpoint } from '@chatdom/shared/realm';
 import { createRealmState, decideRealm } from '@chatdom/world/realm';
 import { decodeIngressCheckpoint, presencePerson } from './codec';
 import { IngressGate } from './gate';
@@ -57,10 +57,10 @@ it('a source-loss barrier survives checkpoint recovery without erasing independe
   expect(gate.observe('walker', revoke).ok).toBe(false);
 });
 
-it('qualifies a castle owner from ten actual minutes while keeping the castle out of street windows', () => {
+it('lights the actual keep for its owner, qualifies only evidenced live minutes, and keeps offline chat distinct from the beacon', () => {
   const monarch = PersonIdSchema.parse(kingdomId);
   let state = createRealmState(kingdomId, 'simulated');
-  const castle = { id: 'castle:adopted-keep', moduleId: 'adopted-keep', ownerId: monarch, slot: 65534 as const,
+  const castle = { id: 'castle:adopted-keep', moduleId: 'adopted-keep', ownerId: monarch, slot: REALM_CASTLE_SLOT,
     layoutRevision: 'founded:castle', revision: 'keep:1', digest: 'b'.repeat(64), family: 'hearth' as const, blueprint: VOXEL_FIXTURE,
     attribution: { makerName: 'SIMULATED monarch', kingdomName: 'SIMULATED kingdom', approvalId: 'names:castle' }, attachments: {} };
   const install = decideRealm(state, { type: 'castle.installNative', castle }, { now: 0, writerEpoch: 'castle-writer',
@@ -85,7 +85,7 @@ it('qualifies a castle owner from ten actual minutes while keeping the castle ou
     send({ ...common(t, `stream:${minute}`), kind: 'stream', live: true, sessionId: 'castle-night' });
     const frame = send({ ...common(t, `chatters:${minute}`), kind: 'observe', source: 'chatters', coverage: 'complete',
       people: [{ personId: monarch, disclosure: 'anonymous' }, { personId: alice, disclosure: 'anonymous' }] });
-    expect(frame.windows).toEqual([]);
+    expect(frame.windows).toEqual([expect.objectContaining({ slot: REALM_CASTLE_SLOT, present: true, publicName: null })]);
     if (minute < 10) expect(state.coals[monarch]).toBeUndefined();
   }
   expect(state.qualification[`${monarch}:castle-night`]?.coveredMs).toBe(600_000);
@@ -94,4 +94,14 @@ it('qualifies a castle owner from ten actual minutes while keeping the castle ou
   send({ ...common(660_000, 'chatters:next'), kind: 'observe', source: 'chatters', coverage: 'complete',
     people: [{ personId: monarch, disclosure: 'anonymous' }] });
   expect(state.coals[monarch]).toBe(1); expect(state.homes).toEqual({});
+  const offline = send({ ...common(661_000, 'stream:offline'), kind: 'stream', live: false, sessionId: null });
+  expect(offline).toMatchObject({ streamLive: false, connection: 'offline', windows: [{ slot: REALM_CASTLE_SLOT, present: false }] });
+  const chatting = send({ ...common(662_000, 'chat:monarch'), kind: 'observe', source: 'chat', coverage: 'activity',
+    people: [{ personId: monarch, disclosure: 'named', displayName: 'SIMULATED Monarch' }] });
+  expect(chatting).toMatchObject({ streamLive: false, connection: 'offline', windows: [
+    { slot: REALM_CASTLE_SLOT, present: true, publicName: 'SIMULATED Monarch' },
+  ] });
+  expect(state.coals[monarch]).toBe(1); expect(state.homes).toEqual({});
+  expect(Object.keys(state.creditedNights)).toHaveLength(1);
+  expect(state.qualification[`${monarch}:castle-night`]?.coveredMs).toBe(600_000);
 });

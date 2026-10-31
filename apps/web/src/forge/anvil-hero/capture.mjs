@@ -3,7 +3,7 @@
 // node apps/web/src/forge/anvil-hero/capture.mjs [--view anvil-close,anvil-mark] [--style hearth|tide|grove]
 //   [--size desktop|phone] [--hour 19] [--heat 0..1 [--shaping] [--time s]] [--sheet | --no-sheet] [--sheet-width 1440]
 //   [--anvil] [--base-url http://127.0.0.1:5170]
-// Shots go to shots/anvil-hero/. The server takes the first free capture port (never a service port) and is the only one stopped.
+// Shots go to shots/anvil-hero/. The server takes the first free port in 5170–5199 and is the only one stopped.
 // A full run takes the four primary views cold at both sizes, the close anvil at pour heat at both sizes, the
 // cheek face on (cold and at pour) with its comparison against the official SVG, and the dragon contact sheet
 // (three kits, four angles, colour and greyscale). Every anvil-mark shot also writes its SVG comparison.
@@ -12,10 +12,8 @@ import { createServer } from 'vite';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
+import { CAPTURE_PORTS } from '../../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../../packages/testing/capture-lock.mjs';
-
-/** Ports a capture may own: 5170–5186, 5188, 5189, 5198, 5199. Service ports stay reserved even while empty. */
-const CAPTURE_PORTS = [...Array.from({ length: 17 }, (_, i) => 5170 + i), 5188, 5189, 5198, 5199];
 
 const PRIMARY = ['anvil-close', 'anvil-square', 'dragon-close', 'dragon-square'];
 const BUILT = [...PRIMARY, 'anvil-mark'];
@@ -119,7 +117,7 @@ async function startServer() {
       if (error?.code !== 'EADDRINUSE' && !/already in use/i.test(String(error?.message))) throw error;
     }
   }
-  throw new Error('No safe capture port available for the anvil bench.');
+  throw new Error('No safe capture port available.');
 }
 
 let server, browser, release;

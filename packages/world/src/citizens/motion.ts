@@ -31,7 +31,7 @@ function validPositive(value: number | undefined, name: string): void {
 /** Presence projection -> reproducible street walks. Owns no identity, tenancy or rewards. */
 export function createCitizenMotion(plan: SettlementPlan, options: CitizenMotionOptions = {}): CitizenMotion {
   validPositive(options.entryDistance, 'entry distance'); validPositive(options.speed, 'speed'); validPositive(options.strideLength, 'stride');
-  const router = createCitizenRoutes(plan, options.entryDistance), { routeForSlot, destinationsForSlot } = router;
+  const router = createCitizenRoutes(plan, options.entryDistance, options.castleHome), { routeForSlot, destinationsForSlot } = router;
   const stride = options.strideLength ?? .75;
   const histories = new Map<number, Stay[]>(), speeds = new Map<number, number>();
   let slots: number[] = [], latest: KingdomPresenceFrame | null = null;

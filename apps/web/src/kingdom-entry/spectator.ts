@@ -5,6 +5,7 @@ import type { RealmFoundedScene } from '@chatdom/world';
 import { RealmEntryError, type RealmFetch } from '../realm/adapters/entry';
 import { createRealmWatch, type WatchEventSource } from '../realm/adapters/watch';
 import { observeRealm, type RealmObserver } from '../realm/adapters/observer';
+import { createRoomMomentFeed } from '../realm/adapters/moments';
 import { createRoomPresenceFeed } from '../realm/adapters/presence';
 import { createRoomChatFeed } from '../realm/adapters/chat';
 import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
@@ -44,7 +45,7 @@ export function createRealmSpectatorSource(options: { kingdomId: KingdomId; fetc
       offForge = forgeFeed.bind(observer);
       await ready(observer, signal);
       signal.throwIfAborted();
-      return { scene, manifest, kingdomName: info.name, presenceFeed: createRoomPresenceFeed(observer, manifest.origin), chatFeed, forgeFeed, dispose };
+      return { scene, manifest, kingdomName: info.name, presenceFeed: createRoomPresenceFeed(observer, manifest.origin), walkerFeed: watch.walkerFeed, chatFeed, forgeFeed, momentFeed: createRoomMomentFeed(observer, manifest.origin), dispose };
     } catch (error) { dispose(); throw error; }
   };
 }
