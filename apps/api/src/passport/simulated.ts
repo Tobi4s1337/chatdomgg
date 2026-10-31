@@ -119,20 +119,24 @@ export function simulatedPassportAuthorities(name: PassportFixtureName, scenario
   const directory = new Map<string, PassportKingdom>();
   const roads = new Map<string, WitnessedRoad>();
   const gifts: AcceptedGiftRecord[] = [];
-  const gift = (stamp: StampView, offerId: string, direction: 'left' | 'brought-back', state: VisitorGiftView['state']): VisitorGiftView => ({
+  const gift = (stamp: StampView, offerId: string, direction: 'left' | 'brought-back', state: VisitorGiftView['state'], title: string): VisitorGiftView => ({
     offerId, itemId: `item:${offerId}`, from: (direction === 'left' ? holder : HOST) as PersonId, to: (direction === 'left' ? HOST : holder) as PersonId,
     originKingdomId: stamp.kingdom.kingdomId as KingdomId, makerId: HOST as PersonId, revision: 2, state,
+    kingdomId: stamp.kingdom.kingdomId as KingdomId, direction,
+    story: { title, kind: 'welcome-offering', makerName: null, originName: stamp.kingdom.name },
+    fromName: null, toName: null, expiresAt: stamp.at + 600_000,
+    receipt: state === 'accepted' ? { transferId: offerId, at: stamp.at } : null,
   });
   for (const kingdom of Object.values(FIXTURE_KINGDOMS)) directory.set(kingdom.kingdomId, kingdom as PassportKingdom);
   for (const stamp of stampsAll) {
     if (stamp.kind === 'raid') {
       roads.set(stamp.raidId, { raidId: stamp.raidId, road: { id: stamp.road.id, from: stamp.road.from as KingdomId, to: stamp.road.to as KingdomId }, leader: stamp.leader && { personId: stamp.leader.personId as PersonId, name: stamp.leader.name } });
     }
-    for (const g of stamp.gifts) gifts.push({ stampId: stamp.id, gift: gift(stamp, g.id, g.direction, 'accepted'), name: g.name, keepsakeId: g.keepsakeId });
+    for (const g of stamp.gifts) gifts.push({ stampId: stamp.id, gift: gift(stamp, g.id, g.direction, 'accepted', g.name), name: g.name, keepsakeId: g.keepsakeId });
   }
   // Offers that were never accepted stay in the gift ledger and never reach a page.
   const declined = stampsAll.find(stamp => stamp.gifts.length === 0);
-  if (declined) gifts.push({ stampId: declined.id, gift: gift(declined, `offer:${declined.id.replace(/^arrival:/, '')}`, 'left', 'refused'), name: 'A tin whistle', keepsakeId: null });
+  if (declined) gifts.push({ stampId: declined.id, gift: gift(declined, `offer:${declined.id.replace(/^arrival:/, '')}`, 'left', 'refused', 'A tin whistle'), name: 'A tin whistle', keepsakeId: null });
 
   let travelsHidden = scenario.travelsHidden;
   let personRevision = 3;
