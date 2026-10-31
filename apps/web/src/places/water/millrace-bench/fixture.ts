@@ -4,6 +4,7 @@
 // themselves are the lane's real content factories, sized from this fixture exactly as a host would size them
 // from the land's sampler.
 import type { Vec3 } from '@chatdom/shared';
+import type { LandStream, WaterBody } from '@chatdom/world';
 import { createHumpbackBridge, BRIDGE } from '../../../../../../packages/content/src/places/water/bridge/index';
 import { WEIR, createMillWheel, createWeir, createWheelPit, weirFrame, wheelPitFrame, wheelPitTrestles, WHEEL_PIT } from '../../../../../../packages/content/src/places/water/millrace/index';
 import { createFishingRock, createLilies, createPebbles, createReeds, createSteppingStones } from '../../../../../../packages/content/src/places/water/shore/index';
@@ -46,6 +47,15 @@ export interface MillraceFixture {
   readonly waters: readonly FixtureWater[];
   readonly views: Readonly<Record<'mill-wheel' | 'bridge-pond', { readonly wide: FixtureView; readonly tall: FixtureView }>>;
   readonly shadowBounds: { readonly min: Vec3; readonly max: Vec3 };
+  /**
+   * The same SIMULATED geography in the land's own record types: the millpond's outline and the stream, tailrace and
+   * leat as downstream point records over the carved beds above. Contacts are where pieces really meet the water.
+   */
+  readonly land: {
+    readonly bodies: readonly WaterBody[];
+    readonly streams: readonly LandStream[];
+    readonly contacts: readonly { readonly a: readonly [number, number]; readonly b?: readonly [number, number]; readonly radius: number; readonly strength: number }[];
+  };
 }
 
 /** Optional pieces the review composes when their factories exist; each arrives with its own footprint. */
@@ -239,8 +249,53 @@ export function millraceFixture(extras: FixtureExtras = {}): MillraceFixture {
     },
   } as const satisfies MillraceFixture['views'];
 
+  // The courses as point records, sampled from the carve above: the stream falls gently from the weir's tail to the
+  // bridge pool, lies level through the pool and falls again past it; the tailrace meets it at its own level.
+  const poolStart = bridgeZ - 4.5, poolEnd = bridgeZ + 9;
+  const streamLevel = (z: number) => z < poolStart ? lerp(0.16, 0, (z - (weirOrigin[2] + wf.size[2] * CELL)) / (poolStart - weirOrigin[2] - wf.size[2] * CELL))
+    : z <= poolEnd ? 0 : -0.08 * (z - poolEnd) / (30 - poolEnd);
+  const streamPoints: LandStream['points'][number][] = [];
+  for (let z = weirOrigin[2] + wf.size[2] * CELL; z <= 30.001; z += 1.5) {
+    const pool = smooth(bridgeZ - 4.5, bridgeZ - 1.5, z) * (1 - smooth(bridgeZ + 5.5, bridgeZ + 9, z));
+    const x = STREAM_X + 0.4 * Math.sin(z * 0.18);
+    streamPoints.push({ position: [x, z], bed: lerp(BED, bridgeBed, pool), level: STREAM_LEVEL + streamLevel(z), width: 2 * lerp(2, 3.1, pool) + 0.8 });
+  }
+  const pitX = pitOrigin[0] + 2, joinZ = pitEnd + 2.2, joinLevel = STREAM_LEVEL + streamLevel(joinZ);
+  const courses: MillraceFixture['land'] = {
+    bodies: [{ id: 'millpond', x: POND.x, z: POND.z, radiusX: POND.rx, radiusZ: POND.rz, level: pondLevel, depth: 0.95 }],
+    streams: [
+      { id: 'mill-stream', kind: 'stream', bank: 1.4, points: streamPoints },
+      { id: 'mill-tailrace', kind: 'tailrace', bank: 0.6, points: [
+        { position: [pitX, pitStart + 1], bed: BED, level: joinLevel + 0.02, width: 2.4 },
+        { position: [pitX, pitEnd + 1.2], bed: BED, level: joinLevel + 0.015, width: 2.4 },
+        { position: [pitX - 1.2, joinZ], bed: BED, level: joinLevel + 0.005, width: 2.2 },
+        { position: [STREAM_X + 1.2, joinZ], bed: BED, level: joinLevel, width: 2.2 },
+      ] },
+      { id: 'mill-leat', kind: 'leat', bank: 0.5, points: Array.from({ length: 9 }, (_, i) => {
+        const z = origin[1] + 1 + i * ((pitOrigin[2] + 0.2 - origin[1] - 1) / 8);
+        return { position: [leatX, z] as [number, number], bed: troughFloor, level: troughFloor + 0.33 - 0.05 * (i / 8), width: 1.1 };
+      }) },
+    ],
+    contacts: [
+      // The weir crest's white lip, bank to bank on its downstream face.
+      { a: [weirOrigin[0] + wf.channel[0] * CELL, weirOrigin[2] + wf.size[2] * CELL], b: [weirOrigin[0] + wf.channel[1] * CELL, weirOrigin[2] + wf.size[2] * CELL], radius: 0.15, strength: 0.95 },
+      // The arch springs from the pool on both sides.
+      ...([BRIDGE.span[0], BRIDGE.span[1]] as const).map(x => ({ a: [bridgeOrigin[0] + x * CELL, bridgeZ] as const, b: [bridgeOrigin[0] + x * CELL, bridgeZ + BRIDGE.size[2] * CELL] as const, radius: 0.1, strength: 0.28 })),
+      ...placements.filter(p => /^(pebbles|stepping-stones|fishing-rock)/.test(p.id)).map(p => {
+        const [sx, , sz] = p.turn % 2 ? [p.piece.blueprint.size[2], 0, p.piece.blueprint.size[0]] : p.piece.blueprint.size;
+        const corner = p.turn === 0 ? [p.origin[0], p.origin[2]] : p.turn === 1 ? [p.origin[0], p.origin[2] - sz * CELL] : p.turn === 2 ? [p.origin[0] - sx * CELL, p.origin[2] - sz * CELL] : [p.origin[0] - sx * CELL, p.origin[2]];
+        const centre = [corner[0]! + (sx * CELL) / 2, corner[1]! + (sz * CELL) / 2] as const;
+        const long = sx >= sz;
+        const half = (Math.max(sx, sz) * CELL) / 2 - (Math.min(sx, sz) * CELL) / 2;
+        return { a: long ? [centre[0] - half, centre[1]] as const : [centre[0], centre[1] - half] as const,
+          b: long ? [centre[0] + half, centre[1]] as const : [centre[0], centre[1] + half] as const, radius: (Math.min(sx, sz) * CELL) / 2 * 0.8, strength: p.id.startsWith('pebbles') ? 0.4 : 0.32 };
+      }),
+    ],
+  };
+
   return {
     label: SIMULATED_MILLRACE,
+    land: courses,
     ground: { origin, step, width, depth, data },
     placements, waters, views,
     shadowBounds: { min: [origin[0], BED - 1, origin[1]], max: [origin[0] + (width - 1) * step, 12, origin[1] + (depth - 1) * step] },
