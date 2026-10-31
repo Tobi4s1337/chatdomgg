@@ -11,6 +11,6 @@ are main's.
 Work in checkpoints: if a session ends before the part is done, leave everything building and working, write `next: <id> <what is done, what remains>` and carry on next session. For visual changes, show a before/after of the same view. Hand main exact `needs:` for any seam outside scope and keep going.
 
 ## Tasks
-- [ ] **GENESIS-EMOTE-ART-10 — Emote monuments and glass, whole.** Carved plaza statues and luminous stained glass from approved emotes, keeping the silhouette recognisable, each use enforced separately, an honest empty state for real channels with no approved art, the vane or animation path where one exists; shown from a simulated (labelled) fixture at dusk.**
+- [x] **GENESIS-EMOTE-ART-10 — Emote monuments and glass, whole.** Carved plaza statues and luminous stained glass from approved emotes, keeping the silhouette recognisable, each use enforced separately, an honest empty state for real channels with no approved art, the vane or animation path where one exists; shown from a simulated (labelled) fixture at dusk.**
 
 ## Backlog
