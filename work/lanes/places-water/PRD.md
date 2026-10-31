@@ -36,7 +36,7 @@ assembles the mount/index, and only that lead edits PRD/progress/README. PW06 fo
   open-arch bridge, weir and supplied-destination fingerpost; add reeds/lilies/pebbles/rock/stepping stones. Reuse civic
   crest read-only. Validate real support/open bay/arch/walk strip; fixture view mill-wheel and bridge-pond at both web
   sizes. Public text comes from caller. No generated course, trees, keeper, anvil or dragon edits.
-- [ ] **PW03 — Make supplied land into honest place metadata.** After actual main world types land, derive mounts,
+- [x] **PW03 — Make supplied land into honest place metadata.** After actual main world types land, derive mounts,
   bed foundations, reach tangents/flow and walk/seat/emitter anchors from supplied point records/sites only. Fixtures
   use those same types; no generator stub. Validate site/bed/head/join/path constraints and report bad geography as
   `needs:`. Static turns remain cardinal. Document exact `createWaterPlaces` input/output and integrator recipe.
