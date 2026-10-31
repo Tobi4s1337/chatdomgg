@@ -1,5 +1,6 @@
 import { MAT, MATERIALS } from '../materials';
-import { contrast, type HeraldicColours } from './kit';
+import type { HeraldicColours, HeraldicKit } from './kit';
+import { readableContrast } from './vision';
 
 /**
  * The tinctures a proposal may snap profile colour targets to. Every one is a registered material and an avatar
@@ -17,7 +18,11 @@ export const TINCTURES: readonly number[] = [
 /** Borders: brass first, as on the neutral arms, then linen, then sable. */
 const BORDERS = [MAT.brass, MAT.cream, MAT.hairBlack] as const;
 
-/** Field and charge must part by at least the WCAG non-text contrast, 3:1, so the charge reads at stream distance. */
+/**
+ * Field and charge must part by at least the WCAG non-text contrast, 3:1, so the charge reads at stream distance,
+ * and they must keep it for every kind of colour vision (`vision.ts`): a red field with a gold charge is 3.1:1 to
+ * most viewers but 2.9:1 to a deuteranope, so it does not pass.
+ */
 export const MIN_CONTRAST = 3;
 /**
  * A target further than this (OKLab distance) from every passing tincture is not honoured by a colour that only
@@ -76,14 +81,14 @@ export interface SnappedColours {
 /**
  * Snaps a recipe's profile colour targets (in source preference order) to the tinctures. The first target picks
  * the field. The charge is the passing tincture nearest any later target, where passing means at least 3:1 against
- * the field; when no later target is near one, the charge is the metal (or, if the field is a metal, the tincture)
+ * the field for every kind of colour vision; when no later target is near one, the charge is the metal (or, if the field is a metal, the tincture)
  * with the most contrast. The border is brass unless brass would melt into field or charge. Pure and deterministic.
  */
 export function snapTargets(targets: readonly string[]): SnappedColours {
   if (!targets.length) throw new Error('No profile colour targets to snap.');
   const labs = targets.map(oklab);
   const fieldMaterial = nearest(labs[0]!, TINCTURES).material;
-  const passing = TINCTURES.filter(material => material !== fieldMaterial && contrast(fieldMaterial, material) >= MIN_CONTRAST);
+  const passing = TINCTURES.filter(material => material !== fieldMaterial && readableContrast(fieldMaterial, material) >= MIN_CONTRAST);
   if (!passing.length) throw new Error(`No tincture reads on field ${fieldMaterial}.`);
 
   let charge: Snap | null = null;
@@ -100,7 +105,7 @@ export function snapTargets(targets: readonly string[]): SnappedColours {
     const metals = passing.filter(material => (METALS as readonly number[]).includes(material));
     const pool = metals.length ? metals : passing;
     let material = pool[0]!;
-    for (const candidate of pool) if (contrast(fieldMaterial, candidate) > contrast(fieldMaterial, material) + 1e-12) material = candidate;
+    for (const candidate of pool) if (readableContrast(fieldMaterial, candidate) > readableContrast(fieldMaterial, material) + 1e-12) material = candidate;
     charge = { target: null, material };
   }
 
@@ -111,4 +116,19 @@ export function snapTargets(targets: readonly string[]): SnappedColours {
     field: { target: targets[0]!, material: fieldMaterial },
     charge,
   };
+}
+
+/**
+ * What heraldry carves besides its kit and its three colours: brass fittings, lantern glass, and the land's own
+ * dressing (the damp course and rope lashing by a harbour, moss and flowers by a river).
+ */
+export const FITTINGS: readonly number[] = [MAT.brass, MAT.glass, MAT.darkStone, MAT.thatch, MAT.moss, MAT.blueFlower, MAT.petal];
+
+/**
+ * The closed palette one proposal may carve: its kit, its field, charge and border, and the fittings. At most
+ * sixteen registered materials; composition refuses a model that strays outside it, so a proposal can never
+ * quietly pick up a colour nobody chose.
+ */
+export function heraldicPalette(kit: HeraldicKit, colours: HeraldicColours): ReadonlySet<number> {
+  return new Set([kit.stone, kit.base, kit.band, kit.trim, kit.binding, kit.cord, colours.field, colours.charge, colours.border, ...FITTINGS]);
 }
