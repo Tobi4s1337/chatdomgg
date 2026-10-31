@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
 import { startCapturePreview, closeCapturePreview } from '../../../../packages/testing/preview.mjs';
 
-const DESKTOP = { width: 1440, height: 900 }, PHONE = { width: 390, height: 844 };
+const DESKTOP = { width: 1440, height: 900 }, PHONE = { width: 390, height: 844 }, STREAM = { width: 1920, height: 1080 };
 const FERN = '41000002', OAKEN = '41000003';
 const FRAMES = [
   { name: 'gate-desktop', size: DESKTOP, query: `bench=simulated&pick=${FERN}&walkers=3`, expect: { phase: 'preview', optedIn: 3 } },
@@ -20,6 +20,15 @@ const FRAMES = [
   { name: 'authority-desktop', size: DESKTOP, query: 'bench=simulated&authority=not-connected', expect: { phase: 'authority', authority: 'not-connected' } },
   { name: 'authority-revoked-phone', size: PHONE, query: 'bench=simulated&authority=revoked', expect: { phase: 'authority', authority: 'revoked' } },
   { name: 'unbound-phone', size: PHONE, query: '', expect: { phase: 'unbound' } },
+  { name: 'gate-preview-stream', size: STREAM, query: `bench=simulated&pick=${FERN}&walkers=5`, expect: { phase: 'preview', optedIn: 5 } },
+  { name: 'gate-closed-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&close=1`, expect: { phase: 'quiet', optedIn: 0, joined: false } },
+  { name: 'countdown-stream', size: STREAM, query: `bench=simulated&pick=${FERN}&walkers=4&join=1&start=1`, expect: { phase: 'countdown', state: 'pending', optedIn: 5, joined: true } },
+  { name: 'departure-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&start=1&witness=1`, expect: { phase: 'departed', state: 'landed', optedIn: 5, joined: true } },
+  { name: 'checking-phone', size: PHONE, query: `bench=simulated&pick=${FERN}&walkers=2&start=1&twitch=lose`, expect: { phase: 'checking', state: 'unknown' } },
+  { name: 'arrival-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&start=1&witness=1&go=1`, expect: { phase: 'departed' }, journey: { kind: 'raid', state: 'committed', role: 'visitor' } },
+  { name: 'journey-overrun-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&start=1&witness=1&go=1&rooms=hold`, expect: { phase: 'departed' }, journey: { state: 'preparing', overrun: true } },
+  { name: 'journey-confirming-phone', size: PHONE, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=2&join=1&start=1&witness=1&go=1&rooms=lose`, expect: { phase: 'departed' }, journey: { state: 'committed' } },
+  { name: 'welcome-stream', size: STREAM, query: `bench=simulated&viewer=walker&pick=${FERN}&walkers=4&join=1&start=1&witness=1&go=1&welcome=1&gift=both`, expect: { phase: 'departed' }, journey: { kind: 'raid', state: 'committed', role: 'visitor' }, welcome: { status: 'ready', offers: 2, taken: 1 } },
 ];
 
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1].split(',') : null;
@@ -42,6 +51,14 @@ try {
     await page.evaluate(() => document.fonts.ready);
     const snapshot = await page.evaluate(() => window.__chatdomRaidGate?.snapshot() ?? null);
     for (const [key, value] of Object.entries(frame.expect)) assert.equal(snapshot?.[key], value, `${frame.name}: ${key}`);
+    for (const [key, value] of Object.entries(frame.journey ?? {})) assert.equal(snapshot?.journey?.[key], value, `${frame.name}: journey.${key}`);
+    if (frame.welcome) {
+      const welcome = snapshot?.welcome;
+      assert.equal(welcome?.status, frame.welcome.status, `${frame.name}: welcome.status`);
+      assert.equal(welcome?.view?.offers.length, frame.welcome.offers, `${frame.name}: welcome offers`);
+      assert.equal(welcome?.view?.offers.filter(offer => offer.receipt !== null).length, frame.welcome.taken, `${frame.name}: gifts taken with a receipt`);
+      assert.ok(await page.locator('.rg-welcome-stage').isVisible(), `${frame.name}: the welcome is staged`);
+    }
     const simulated = await page.getByText('SIMULATED', { exact: false }).count();
     assert.ok(simulated > 0, `${frame.name}: SIMULATED must be visible`);
     const clipped = await page.evaluate(() => {

@@ -1,0 +1,15 @@
+/* The bench only: a dark page holding one 318 x 496 panel slot. At the slot's own size the slot is the whole page. */
+html, body { margin: 0; min-height: 100%; background: #120b08; color: #f2e3c5; font: 400 13px/1.4 Alegreya, Georgia, serif; }
+.cppb { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px; padding: 24px; }
+.cppb-frame { position: relative; flex: none; width: 318px; height: 496px; overflow: hidden; background: #1c130d; }
+.cppb-reopen { position: absolute; inset: 40% 30px auto; min-height: 44px; border: 0; border-radius: 22px; cursor: pointer; font: inherit; color: #2a1a0e; background: #e1b867; }
+.cppb-picks { display: grid; gap: 10px; max-width: 360px; }
+.cppb-picks p { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; }
+.cppb-picks b { color: #f0b48a; letter-spacing: .08em; }
+.cppb-picks a { color: #e9c98f; }
+.cppb-picks a[aria-current='true'] { color: #fff3d0; font-weight: 700; }
+@media (max-width: 340px) {
+  .cppb { padding: 0; gap: 0; }
+  .cppb-frame { width: 100vw; height: 100vh; }
+  .cppb-picks { display: none; }
+}

@@ -114,7 +114,7 @@ export default function StreamView() {
     onSource: setLabel,
     onNames: next => {
       const current = names();
-      if (next.length !== current.length || next.some((name, i) => name.slot !== current[i]!.slot || Math.abs(name.x - current[i]!.x) > .5 || Math.abs(name.y - current[i]!.y) > .5)) setNames(next);
+      if (next.length !== current.length || next.some((name, i) => name.slot !== current[i]!.slot || name.name !== current[i]!.name || name.arrivalAgeSeconds !== current[i]!.arrivalAgeSeconds || Math.abs(name.x - current[i]!.x) > .5 || Math.abs(name.y - current[i]!.y) > .5)) setNames(next);
     },
     onScene: publishDebug,
     onSpeech: setSpeech,
@@ -139,6 +139,11 @@ export default function StreamView() {
   const climaxSlot = createMemo(() => {
     const homecoming = arrival();
     if (homecoming?.phase === 'window' && fresh()) return (lockedSlot = homecoming.slot);
+    // A witnessed doorway arrival deserves its name even in a selected street lens.
+    // Hold one name for its beat instead of hopping between neighbours each frame.
+    const recent = names().filter(name => (name.arrivalAgeSeconds ?? Infinity) < 7);
+    const arriving = recent.find(name => name.slot === lockedSlot) ?? recent[0];
+    if (arriving && fresh()) return (lockedSlot = arriving.slot);
     if (!shot().climax || !fresh()) return (lockedSlot = null);
     if (lockedSlot !== null) return lockedSlot;
     const width = picture.clientWidth, height = lens.querySelector('.stream-canvas')?.clientHeight ?? picture.clientHeight;

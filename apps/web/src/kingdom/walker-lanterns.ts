@@ -26,21 +26,33 @@ export function createWalkerLanterns(scene: THREE.Scene, capacity: number) {
   if (!Number.isSafeInteger(capacity) || capacity < 1) throw new RangeError('Lantern capacity must be a positive integer.');
   const cage = cageGeometry();
   const pane = new THREE.BoxGeometry(.105, .125, .105); pane.translate(0, -.15, 0);
+  cage.scale(1.5, 1.25, 1.5); pane.scale(1.5, 1.25, 1.5);
+  // A faceted drop with a narrow tip, small enough to remain inside the glass.
+  const flameGeometry = new THREE.SphereGeometry(1, 8, 8);
+  const vertices = flameGeometry.getAttribute('position');
+  for (let i = 0; i < vertices.count; i++) {
+    const y = vertices.getY(i), taper = 1 - .38 * Math.max(0, y);
+    vertices.setXYZ(i, vertices.getX(i) * .034 * taper, y * .066 - .17, vertices.getZ(i) * .034 * taper);
+  }
+  vertices.needsUpdate = true; flameGeometry.computeVertexNormals();
   // Shared palette brass and glass; the pane goes into the HDR scene before bloom.
-  const iron = new THREE.MeshBasicMaterial({ color: '#765b3a' });
-  const glass = new THREE.MeshBasicMaterial({ color: '#d0a66a', toneMapped: true });
+  const iron = new THREE.MeshBasicMaterial({ color: '#8a693b' });
+  const glass = new THREE.MeshBasicMaterial({ color: '#d0a66a', transparent: true, opacity: .48, depthWrite: false, toneMapped: true });
+  const fire = new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB(4, 1.35, .22), toneMapped: true });
   const frames = new THREE.InstancedMesh(cage, iron, capacity);
   const panes = new THREE.InstancedMesh(pane, glass, capacity);
-  frames.count = panes.count = 0;
-  frames.frustumCulled = panes.frustumCulled = false;
-  scene.add(frames, panes);
-  const root = new THREE.Matrix4(), local = new THREE.Matrix4(), matrix = new THREE.Matrix4();
+  const flames = new THREE.InstancedMesh(flameGeometry, fire, capacity);
+  frames.count = panes.count = flames.count = 0;
+  frames.frustumCulled = panes.frustumCulled = flames.frustumCulled = false;
+  scene.add(frames, panes, flames);
+  const matrix = new THREE.Matrix4(), flameMatrix = new THREE.Matrix4(), flameLocal = new THREE.Matrix4();
   const q = new THREE.Quaternion(), rotation = new THREE.Euler(), position = new THREE.Vector3(), scale = new THREE.Vector3();
-  const day = new THREE.Color('#d0a66a'), glow = new THREE.Color().setRGB(3.2, 1.12, .24);
+  const day = new THREE.Color('#d0a66a'), glow = new THREE.Color().setRGB(1.5, .52, .12);
   let lights: LightFieldSource[] = [];
   return {
-    /** time is seconds; night is the same 0–1 dusk factor used by the world. */
-    update(samples: readonly CitizenMotionSample[], time: number, night: number, focus?: THREE.Vector3 | THREE.Camera) {
+    /** Grip matrices are the renderer's world-space gripRight poses, keyed by citizen slot. */
+    update(samples: readonly CitizenMotionSample[], time: number, night: number, focus?: THREE.Vector3 | THREE.Camera,
+      grips?: ReadonlyMap<number, THREE.Matrix4>) {
       if (!Number.isFinite(time) || !Number.isFinite(night)) throw new RangeError('Lantern time and night must be finite.');
       const dark = THREE.MathUtils.clamp(night, 0, 1);
       glass.color.copy(day).lerp(glow, dark);
@@ -50,20 +62,21 @@ export function createWalkerLanterns(scene: THREE.Scene, capacity: number) {
       for (const sample of samples) {
         if (count >= capacity) break;
         if (![...sample.position, sample.heading, sample.distance, sample.speed, sample.opacity].every(Number.isFinite) || sample.opacity <= 0) continue;
+        const grip = grips?.get(sample.slot);
+        if (!grip || !grip.elements.every(Number.isFinite)) continue;
         const gait = THREE.MathUtils.clamp(sample.speed / 1.2, 0, 1);
         const phase = sample.distance * Math.PI * 2 / 1.8;
-        const stride = Math.sin(phase) * gait;
-        // Hand follows the right arm's gait; the lantern trails it on a short handle.
-        const armAngle = stride * .30;
-        const handY = .9375 - .4375 * Math.cos(armAngle);
-        const handZ = -.4375 * Math.sin(armAngle);
         const fade = THREE.MathUtils.clamp(sample.opacity, 0, 1);
-        root.makeRotationY(sample.heading); root.setPosition(...sample.position);
-        position.set(.34, handY, handZ);
-        rotation.set(-armAngle * .38 + Math.sin(phase - .5) * .09 * gait, 0, Math.sin(time * 1.2 + sample.slot) * .025 * gait);
+        // The handle meets the true socket, while the suspended cage remains upright and swings gently.
+        position.setFromMatrixPosition(grip);
+        rotation.set(Math.sin(phase - .5) * .09 * gait, sample.heading, Math.sin(time * 1.2 + sample.slot) * .025 * gait);
         q.setFromEuler(rotation); scale.setScalar(fade);
-        local.compose(position, q, scale); matrix.multiplyMatrices(root, local);
-        frames.setMatrixAt(count, matrix); panes.setMatrixAt(count, matrix); count++;
+        matrix.compose(position, q, scale);
+        frames.setMatrixAt(count, matrix); panes.setMatrixAt(count, matrix);
+        // Independent, restrained flicker; only the little flame changes, never the light field.
+        const flicker = .92 + .08 * Math.sin(time * 8.7 + sample.slot * 2.31) * Math.sin(time * 4.1 + sample.slot);
+        flameLocal.makeScale(dark, dark * flicker, dark);
+        flameMatrix.multiplyMatrices(matrix, flameLocal); flames.setMatrixAt(count, flameMatrix); count++;
         if (dark > 0) {
           const p = new THREE.Vector3(0, -.15, 0).applyMatrix4(matrix);
           const source: LightFieldSource = { position: [p.x, p.y, p.z] as Vec3, strength: dark * fade * .7 };
@@ -71,14 +84,14 @@ export function createWalkerLanterns(scene: THREE.Scene, capacity: number) {
           candidates.push({ source, distance, slot: sample.slot });
         }
       }
-      frames.count = panes.count = count;
-      frames.instanceMatrix.needsUpdate = panes.instanceMatrix.needsUpdate = true;
+      frames.count = panes.count = flames.count = count;
+      frames.instanceMatrix.needsUpdate = panes.instanceMatrix.needsUpdate = flames.instanceMatrix.needsUpdate = true;
       candidates.sort((a, b) => a.distance - b.distance || a.slot - b.slot);
       lights = candidates.slice(0, 24).map(item => item.source);
     },
     sources(): readonly LightFieldSource[] { return lights; },
     dispose() {
-      scene.remove(frames, panes); frames.dispose(); panes.dispose(); cage.dispose(); pane.dispose(); iron.dispose(); glass.dispose(); lights = [];
+      scene.remove(frames, panes, flames); frames.dispose(); panes.dispose(); flames.dispose(); cage.dispose(); pane.dispose(); flameGeometry.dispose(); iron.dispose(); glass.dispose(); fire.dispose(); lights = [];
     },
   };
 }

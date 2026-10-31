@@ -3,8 +3,8 @@ import { VOXEL_METRES, type KingdomPresenceFrame, type Vec3, type VoxelBlueprint
 import { getEnvironment } from './atmosphere';
 
 export type WindowHouse = { slot: number; blueprint: VoxelBlueprint; position: Vec3; yaw: number };
-type WindowSource = { slot: number; position: Vec3; normal: Vec3; strength: number; name: string | null };
-type SlotState = { value: number; target: number; name: string | null; initialized: boolean };
+type WindowSource = { slot: number; position: Vec3; normal: Vec3; strength: number; name: string | null; arrivalAgeSeconds: number };
+type SlotState = { value: number; target: number; name: string | null; initialized: boolean; arrivedAt: number | null; arrivalAge: number };
 type LodFactor = 1 | 2 | 4;
 type WindowPlacement = { house: WindowHouse; window: VoxelBlueprint['windows'][number]; normal: THREE.Vector3; rotation: THREE.Quaternion; width: number; height: number };
 
@@ -33,7 +33,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   setHidden(slot:number,hidden:boolean):void;
   setLod(slot: number, factor: LodFactor): void;
   setDetail(slot: number, from: LodFactor, to: LodFactor, progress: number): void;
-  update(elapsedSeconds: number, hour: number): void;
+  update(elapsedSeconds: number, hour: number, atMs?: number): void;
   getSources(): readonly WindowSource[];
   clear(): void;
   dispose(): void;
@@ -59,7 +59,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
   const direction = { north: Math.PI, east: Math.PI / 2, south: 0, west: -Math.PI / 2 } as const;
   for (const house of houses) {
     if (!Number.isInteger(house.slot) || house.slot < 0 || house.slot > 65534) throw new Error('Invalid window slot');
-    if (!states.has(house.slot)) states.set(house.slot, { value: 0, target: 0, name: null, initialized: false });
+    if (!states.has(house.slot)) states.set(house.slot, { value: 0, target: 0, name: null, initialized: false, arrivedAt: null, arrivalAge: 0 });
     // The first authored window is the citizen's presence light; other anchors
     // remain available to content inspection without implying extra people.
     for (const window of options.allWindows ? house.blueprint.windows : house.blueprint.windows.slice(0, 1)) {
@@ -84,7 +84,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       haloTransforms.push(haloMatrix, haloMatrix.clone());
       slots.push(house.slot, house.slot);
       const point = centre.clone().addScaledVector(normal, 0.4);
-      sources.push({ slot: house.slot, position: [point.x, point.y, point.z], normal: [normal.x, normal.y, normal.z], strength: 0, name: null });
+      sources.push({ slot: house.slot, position: [point.x, point.y, point.z], normal: [normal.x, normal.y, normal.z], strength: 0, name: null, arrivalAgeSeconds: 0 });
     }
   }
   const uniforms = { presence: { value: texture }, textureSize: { value: new THREE.Vector2(width, height) }, night: { value: 1 },
@@ -127,13 +127,15 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       if (vDetailFade >= 0.0 && threshold >= vDetailFade) discard;
       if (vDetailFade < 0.0 && threshold < -vDetailFade - 1.0) discard;
     }
-    float windowPresence() {
+    vec2 windowSample() {
       // Interpolation can land just below an integer slot at a row boundary.
       // Snap the discrete instance ID before computing its texture coordinates.
       float slot = floor(vSlot + 0.5);
       vec2 cell = vec2(mod(slot, textureSize.x), floor(slot / textureSize.x));
-      return texture2D(presence, (cell + 0.5) / textureSize).r;
-    }`;
+      return texture2D(presence, (cell + 0.5) / textureSize).rg;
+    }
+    float windowPresence(){return windowSample().r;}
+    float windowPulse(){return windowSample().g;}`;
   const paneMaterial = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader: `${shared}
     void main() {
       discardDetail();
@@ -165,7 +167,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       // A lit lamp is a source of light, not just a pale pigment. Keep the core above
       // display white in linear space so it survives pane transparency and feeds HDR bloom.
       // The distant average already carries extra energy; temper the core there.
-      room *= 1.0 + 4.8 * night * core * (1.0 - 0.6 * distant);
+      room *= (1.0 + 4.8 * night * core * (1.0 - 0.6 * distant)) * (1.0 + .18 * windowPulse());
       vec3 glass = mix(reflection, room * mix(0.9, 1.25, night), lit);
       // Mullions and frame stay dark; their inner edges catch the room's light.
       float catchLight = frame * (1.0 - smoothstep(0.455, 0.49, max(p.x, p.y))) * lit;
@@ -188,7 +190,7 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
       // A thin warm spill on the reveal, heavier on the sill below, leaving the glass itself untouched.
       float sill = step(q.y, -0.5) * (1.0 - smoothstep(0.18, 0.5, abs(q.x)));
       float glow = exp(-distance * 26.0) * smoothstep(0.0, 0.012, distance) * (1.0 + 1.3 * sill) * edge;
-      gl_FragColor = vec4(1.0, 0.46, 0.13, glow * windowPresence() * night * 0.42);
+      gl_FragColor = vec4(1.0, 0.46, 0.13, glow * windowPresence() * night * 0.42 * (1.0 + 2.2 * windowPulse()));
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`, transparent: true, depthWrite: false, side: THREE.DoubleSide });
@@ -240,12 +242,17 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
     paneFade.needsUpdate = true; haloFade.needsUpdate = true;
   }
   function sync(): void {
-    for (const [slot, state] of states) pixels[slot * 4] = Math.round(state.value * 255);
+    for (const [slot, state] of states) {
+      pixels[slot * 4] = Math.round(state.value * 255);
+      const pop = state.target > 0 ? Math.sin(Math.min(1, state.arrivalAge / .35) * Math.PI / 2) * Math.exp(-state.arrivalAge * 2.2) : 0;
+      pixels[slot * 4 + 1] = Math.round(pop * 255);
+    }
     texture.needsUpdate = true;
     namedSlots.clear();
     for (const source of sources) {
       const state = states.get(source.slot)!;
       source.strength = hiddenSlots.has(source.slot)?0:state.value;
+      source.arrivalAgeSeconds = state.arrivalAge;
       source.name = !namedSlots.has(source.slot) && state.value > 0 ? state.name : null;
       namedSlots.add(source.slot);
     }
@@ -277,19 +284,25 @@ export function createWindowLights(scene: THREE.Scene, houses: readonly WindowHo
           state.value = present ? Math.max(state.value, age) : Math.min(state.value, 1 - age);
         }
         state.target = target;
+        state.arrivedAt = present ? window!.since : null;
+        state.arrivalAge = present ? Math.max(0, (frame.asOf - window!.since) / 1000) : 0;
         state.name = present ? window?.publicName ?? null : null;
       }
       sync();
     },
-    update(elapsedSeconds, hour) {
+    update(elapsedSeconds, hour, atMs) {
       const step = Math.max(0, elapsedSeconds) / 0.7;
-      for (const state of states.values()) state.value += Math.max(-step, Math.min(step, state.target - state.value));
+      for (const state of states.values()) {
+        state.value += Math.max(-step, Math.min(step, state.target - state.value));
+        state.arrivalAge = state.arrivedAt === null ? 0 : atMs === undefined
+          ? state.arrivalAge + Math.max(0, elapsedSeconds) : Math.max(0, (atMs - state.arrivedAt) / 1000);
+      }
       grade(hour);
       sync();
     },
     getSources() { return sources; },
     clear() {
-      for (const state of states.values()) { state.value = 0; state.target = 0; state.name = null; state.initialized = false; }
+      for (const state of states.values()) { state.value = 0; state.target = 0; state.name = null; state.initialized = false; state.arrivedAt = null; state.arrivalAge = 0; }
       sync();
     },
     dispose() {

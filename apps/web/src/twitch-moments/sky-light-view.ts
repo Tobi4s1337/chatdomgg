@@ -73,13 +73,20 @@ const WARM: RGB = tuple(new THREE.Color('#fff1cf'));
 const KIT_HUES: Record<BannerKit, readonly number[]> = { hearth: [MAT.fabricRed, MAT.fabricGold], tide: [MAT.fabricBlue, MAT.cream] };
 const SHELL_HUES = [MAT.fabricGold, MAT.fabricRed, MAT.fabricBlue, MAT.petal, MAT.cream, MAT.fabricGreen, MAT.fabricViolet, MAT.fabricOrange] as const;
 const CONFETTI = [MAT.fabricRed, MAT.fabricGold, MAT.fabricBlue, MAT.fabricGreen, MAT.petal, MAT.cream, MAT.fabricViolet, MAT.fabricOrange] as const;
-/** Aurora curtains, bottom edge to top: green and teal low, violet and rose where the light thins. */
+/** Aurora curtains, hem to crown: green and teal low, violet and rose where the light thins. Sampled as a ramp. */
 const AURORA = [
   [MAT.skinFeyMoss, MAT.fabricGreen, MAT.fabricGreen, MAT.fabricViolet],
   [MAT.fabricGreen, MAT.fabricGreen, MAT.waterbed, MAT.petal],
   [MAT.waterbed, MAT.fabricGreen, MAT.fabricViolet, MAT.petal],
 ] as const;
-const AURORA_ALPHA = [0.3, 0.22, 0.15, 0.09] as const;
+/**
+ * A curtain's vertical profile, hem to crown: each layer's share of the strip's height and its light. The hem is
+ * thin and bright, the body thins upward into a long faint crown. Every point of a curtain is covered by two
+ * neighbouring strips, so these are half the light a single strip would carry.
+ */
+const AURORA_LAYERS = [[0.06, 0.2], [0.14, 0.12], [0.2, 0.08], [0.26, 0.045], [0.34, 0.02]] as const;
+/** Strips per curtain at most: three curtains of five layers stay near 800 motes, leaving the name and shells room. */
+const AURORA_STRIPS = 52;
 
 // ---------------------------------------------------------------- small maths
 
@@ -89,6 +96,14 @@ const easeOut = (k: number) => 1 - (1 - k) ** 3;
 const easeBack = (k: number) => 1 + 2.4 * (k - 1) ** 3 + 1.4 * (k - 1) ** 2;
 const rnd = (seed: number, salt: number) => hash01(seed, salt);
 const mix = (a: RGB, b: RGB, k: number): P3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+/** Smooth seeded value noise, 0..1, varying over about one unit of x. */
+const vnoise = (seed: number, x: number) => { const i = Math.floor(x), k = smooth(0, 1, x - i); return rnd(seed, i) * (1 - k) + rnd(seed, i + 1) * k; };
+/** Three octaves of it, 0..1, so a silhouette is irregular at every scale but never jittery. */
+const fbm = (seed: number, x: number) => 0.57 * vnoise(seed, x) + 0.29 * vnoise(seed + 1, x * 2.13 + 7.1) + 0.14 * vnoise(seed + 2, x * 4.37 + 3.3);
+const ramp = (stops: readonly RGB[], u: number): P3 => {
+  const x = clamp01(u) * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x));
+  return mix(stops[i]!, stops[i + 1]!, x - i);
+};
 /** Cooling from white-gold through orange to a dull red ember, 0..1. */
 const ember = (k: number): P3 => (k < 0.5 ? mix(mix(WARM, L(MAT.goldLeaf), 0.5), L(MAT.fabricOrange), k * 2) : mix(L(MAT.fabricOrange), L(MAT.fabricRed), (k - 0.5) * 2));
 
@@ -117,6 +132,19 @@ class Motes {
     const i = this.lit++, m = this.light.instanceMatrix.array as Float32Array, o = i * 16, col = this.light.instanceColor!.array as Float32Array;
     m.fill(0, o, o + 16);
     m[o] = sx; m[o + 5] = sy; m[o + 10] = sz; m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
+    col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b;
+    return true;
+  }
+  /** A box of light turned about the vertical by `yaw` (its local x runs along (cos yaw, 0, sin yaw)). */
+  plate(x: number, y: number, z: number, sx: number, sy: number, sz: number, yaw: number, c: RGB, k: number): boolean {
+    const r = c[0] * k, g = c[1] * k, b = c[2] * k;
+    if (r + g + b < 0.008 || sx <= 0.005) return true;
+    if (this.lit >= LIGHT_CAP || this.room() <= 0) return false;
+    const i = this.lit++, m = this.light.instanceMatrix.array as Float32Array, o = i * 16, col = this.light.instanceColor!.array as Float32Array;
+    const cos = Math.cos(yaw), sin = Math.sin(yaw);
+    m.fill(0, o, o + 16);
+    m[o] = cos * sx; m[o + 2] = sin * sx; m[o + 5] = sy; m[o + 8] = -sin * sz; m[o + 10] = cos * sz;
+    m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
     col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b;
     return true;
   }
@@ -609,29 +637,54 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
     return true;
   }
 
-  /** Three curtains of thin columns over the walls, unrolling from one end, folding and rippling, rolling away. */
+  /**
+   * Three curtains of light behind the castle. Each is a band of overlapping strips along a folded path: slow
+   * S-folds bend it toward and away from the town (where the path turns into the line of sight the strips stack
+   * into a bright fold), its hem ripples, its height rises and falls irregularly along its length and fine rays
+   * drift through it. It unrolls from one end and rolls away from the same end; while the name is written the
+   * curtains behind it dip and hush so the sparks stay legible.
+   */
   function aurora(f: SkyBeatFrame, sky: NonNullable<Stage['sky']>, st: Stage): boolean {
-    const [a0, a1, a2, a3] = SKY_BEAT.skyfire.aurora, t = f.t;
+    const [a0, a1, a2, a3] = SKY_BEAT.skyfire.aurora, [n0, n1, n2, n3] = SKY_BEAT.skyfire.name, t = f.t;
     if (t < a0 || t > a3) return false;
     const unroll = smooth(a0, a1, t), away = smooth(a2, a3, t), back = Math.atan2(-st.fz, -st.fx);
+    // The name's reach across the curtains, as an angle about the sky's centre (its half-width, widened for
+    // perspective: the name is written nearer the town than the curtains hang).
+    const text = f.name.trim() ? layout(f.name) : null, radius = sky.radius;
+    const pitch = text ? Math.min(0.95, Math.max(0.32, Math.min(radius * 1.6, 70) / Math.max(1, text.width))) : 0;
+    const hush = text ? smooth(n0, n1, t) * (1 - smooth(n2, n3, t)) : 0, reach = text ? (text.width * pitch * 0.75) / (radius * 0.9) : 0;
     let drawn = false;
     for (let c = 0; c < 3; c++) {
-      // Wide, behind the castle: the curtains frame the town from the back and the name is written in front of them.
-      const alpha = back + [-0.5, 0.05, 0.55][c]! + (rnd(f.seed, 40 + c) - 0.5) * 0.3, half = 0.95 + 0.12 * c;
-      const rad = sky.radius * (0.8 + 0.14 * c), base = sky.centre[1] + sky.ceiling * (0.6 + 0.05 * c), tall = sky.ceiling * (0.48 + 0.12 * rnd(f.seed, 45 + c));
-      const n = Math.min(64, Math.max(28, Math.round((rad * 2 * half) / 1.05))), width = ((rad * 2 * half) / n) * 0.55, forward = rnd(f.seed, 50 + c) < 0.5;
+      const sd = f.seed * 7 + 401 + c * 97, drift = t * 0.00011;
+      // Wide, behind the castle, the three overlapping: they frame the town from the back.
+      const alpha = back + [-0.55, 0.05, 0.6][c]! + (rnd(f.seed, 40 + c) - 0.5) * 0.3, half = 0.88 + 0.14 * c;
+      const rad = radius * (0.78 + 0.15 * c), base = sky.centre[1] + sky.ceiling * (0.58 + 0.06 * c), tall = sky.ceiling * (0.85 + 0.3 * rnd(f.seed, 45 + c));
+      const arc = rad * 2 * half, n = Math.min(AURORA_STRIPS, Math.max(30, Math.round(arc))), width = (arc / n) * 2, forward = rnd(f.seed, 50 + c) < 0.5;
       const grad = AURORA[c]!.map(L);
       for (let j = 0; j < n; j++) {
         const s = j / (n - 1), along = forward ? s : 1 - s;
         // In: the curtain unrolls from one end. Out: it rolls away from the same end it started at.
         const show = clamp01((unroll * 1.25 - along) / 0.25) * (1 - clamp01((away * 1.25 - along) / 0.25));
         if (show <= 0.01) continue;
-        const a = alpha + (s - 0.5) * 2 * half, fold = Math.sin(s * 7.1 + t * 0.00031 + c * 2.1) * 2.4 + Math.sin(s * 17.3 - t * 0.00067 + c) * 0.7;
-        const x = sky.centre[0] + Math.cos(a) * (rad + fold), z = sky.centre[2] + Math.sin(a) * (rad + fold);
-        const wave = 0.5 + 0.5 * Math.sin(s * 19 - t * 0.0019 + c * 1.9), edge = Math.sqrt(Math.sin(Math.PI * s));
-        const height = tall * (0.72 + 0.28 * Math.sin(s * 8.3 + t * 0.0011 + c)), visible = height * (0.35 + 0.65 * show);
-        const top = base + height + Math.sin(s * 5.2 + t * 0.0007) * 0.8, segment = visible / 4, bright = (0.45 + 0.55 * wave) * show * edge;
-        for (let k = 0; k < 4; k++) drawn = motes.box(x, top - visible + segment * (k + 0.5), z, width, segment * 0.96, width, grad[k]!, AURORA_ALPHA[k]! * bright) || drawn;
+        const a = alpha + (s - 0.5) * 2 * half;
+        const at = (q: number): number => rad + (fbm(sd, q * 3.1 + drift) - 0.5) * 16 + Math.sin(q * 12.7 - t * 0.0009 + c * 2.1) * 1.1;
+        const ring = at(s), x = sky.centre[0] + Math.cos(a) * ring, z = sky.centre[2] + Math.sin(a) * ring;
+        // The strip lies along the curtain: a thin sheet, so where a fold turns into the line of sight it shows
+        // edge-on as a bright ray instead of a lit block.
+        const q = s + 0.5 / n, aq = alpha + (q - 0.5) * 2 * half, rq = at(q);
+        const yaw = Math.atan2(sky.centre[2] + Math.sin(aq) * rq - z, sky.centre[0] + Math.cos(aq) * rq - x);
+        // Behind the name: how centred this strip is in the name's reach, 1 at its heart.
+        const off = Math.abs(Math.atan2(Math.sin(a - back), Math.cos(a - back))), behind = hush * (1 - smooth(reach * 0.7, reach * 1.25, off));
+        const taper = Math.sin(Math.PI * s), rise = 0.22 + 0.78 * fbm(sd + 11, s * 4.3 - drift * 1.4);
+        const height = tall * rise * (0.5 + 0.5 * Math.sqrt(taper)) * (1 - 0.5 * behind), visible = height * (0.35 + 0.65 * show);
+        const hem = base + (vnoise(sd + 23, s * 5.9 + drift * 2) - 0.5) * 4 + Math.sin(s * 15.1 - t * 0.0016 + c) * 0.45;
+        const rays = 0.5 + 0.5 * fbm(sd + 31, s * 26 - t * 0.0006), warm = (0.35 + 0.65 * rays) * show * Math.sqrt(taper) * (1 - 0.6 * behind);
+        let y = hem, u = 0;
+        for (const [share, light] of AURORA_LAYERS) {
+          const h = visible * share;
+          drawn = motes.plate(x, y + h / 2, z, width, h * 1.04, 0.35, yaw, ramp(grad, u + share * 0.5 + (rays - 0.5) * 0.12), light * warm) || drawn;
+          y += h; u += share;
+        }
         columns++;
       }
       addGlow(grad[1]!, 0.2 * unroll * (1 - away));

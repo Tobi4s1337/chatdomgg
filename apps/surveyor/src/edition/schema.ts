@@ -99,7 +99,10 @@ export const LedgerLineSchema = z.discriminatedUnion('kind', [
     kind: z.literal('tombstone'),
     kingdomId: KingdomIdSchema,
     holdingId: z.string().max(128),
-    /** Hidden by the channel or moderation (land waits at the next run), or gone from Twitch (returns after 30 days). */
+    /**
+     * Hidden by the channel or moderation (land waits at the next run), or gone from Twitch (returns after 30 days).
+     * Hidden outranks gone: a hidden tombstone may replace a gone one, never the reverse.
+     */
     cause: z.enum(['hidden', 'gone']),
     at: EpochMsSchema,
     revision: RevisionIdSchema,
