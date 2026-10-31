@@ -11,6 +11,6 @@ are main's.
 Work in checkpoints: if a session ends before the part is done, leave everything building and working, write `next: <id> <what is done, what remains>` and carry on next session. For visual changes, show a before/after of the same view. Hand main exact `needs:` for any seam outside scope and keep going.
 
 ## Tasks
-- [ ] **GENESIS-KEEPERS-10 — Keepers of places, whole.** Place-bound keepers chosen by the recipe, with role variants, grounded routines at doors and tools on the existing rig, retreat when the town fills, greetings bound to real facts, and identity and presence tests; shown in a simulated (labelled) selected-landscape fixture at dusk.**
+- [x] **GENESIS-KEEPERS-10 — Keepers of places, whole.** Place-bound keepers chosen by the recipe, with role variants, grounded routines at doors and tools on the existing rig, retreat when the town fills, greetings bound to real facts, and identity and presence tests; shown in a simulated (labelled) selected-landscape fixture at dusk.**
 
 ## Backlog
