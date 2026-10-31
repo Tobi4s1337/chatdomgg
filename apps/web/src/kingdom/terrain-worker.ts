@@ -212,7 +212,7 @@ function surfaceCornerShade(field: TerrainField, shading: ColumnShading, x: numb
  * Uniform 1 m patches share identical XZ endpoints, diagonal, AO and sky. We omit voxel
  * stair risers because a single-valued smooth heightfield has no exposed vertical faces.
  */
-function meshTerrainSurface(field: TerrainField, coordinate: Vec3, stamp: VoxelChunkMesh['stamp'], shading: ColumnShading): VoxelChunkMesh {
+export function meshTerrainSurface(field: TerrainField, coordinate: Vec3, stamp: VoxelChunkMesh['stamp'], shading: ColumnShading): VoxelChunkMesh {
   const vertices: number[] = [], indices: number[] = [];
   const renderColumns = field.chunkCounts[0] * 16 + 1;
   let minY = 32, maxY = 0;
@@ -233,9 +233,13 @@ function meshTerrainSurface(field: TerrainField, coordinate: Vec3, stamp: VoxelC
     const base = vertices.length / 2;
     for (const [dx, dz] of [[0, 0], [0, 2], [2, 2], [2, 0]] as const) {
       const height = field.renderHeights[(fieldX + dx) / 2 + renderColumns * ((fieldZ + dz) / 2)]!;
-      if (!Number.isFinite(height) || Math.abs(height - (field.origin[1] + top * CELL_METRES)) > TERRAIN_SURFACE_BOUNDS_PADDING) {
-        throw new Error(`Terrain smoothing exceeds its render bounds at ${field.origin[0] + (fieldX + dx) * CELL_METRES},${field.origin[2] + (fieldZ + dz) * CELL_METRES}: surface ${height}, voxel top ${field.origin[1] + top * CELL_METRES}.`);
+      if (!Number.isFinite(height) || height <= field.origin[1] || height >= field.origin[1] + 512) {
+        throw new Error('Rendered terrain exceeds the reserved vertical volume.');
       }
+      // The shader replaces packed owner Y with this height. Culling must enclose
+      // the rendered surface, including steep natural slopes across a metre patch.
+      const renderedY = (height - field.origin[1]) / CELL_METRES - coordinate[1] * 32;
+      minY = Math.min(minY, renderedY); maxY = Math.max(maxY, renderedY);
       const shade = surfaceCornerShade(field, shading, fieldX + dx, fieldZ + dz);
       vertices.push(...packVoxelVertex({ x: x + dx, y, z: z + dz, face: 2, material, ...shade }));
     }
