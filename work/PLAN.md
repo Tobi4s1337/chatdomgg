@@ -332,18 +332,23 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 **Order:** picture first, one visible fix per turn, before/after obvious at a glance. Keep exposure34ac89a,
 indigo0896044, street warmth96f2d08, beacon, warm pools and gold frame. The wide dusk grade sings: leave it alone.
-Castle lighta1dac83 landed; hills as the land lane lands, then wide-road life. Routine helpers/captures/merges use
+Close castle lighta1dac83 and the wide gate-fire wash landed. Next hills as the land lane lands,
+then wide-road life; keep the accepted dusk grade. Routine helpers/captures/merges use
 medium effort. Lanes now own whole outcomes and commit checkpoints; merge good checkpoints immediately.
 
-**Current slice:** chimney life in the wide town. Generated homes now supply their actual authored chimney mouths
-to the existing presence-driven smoke; no invented door lights. Founded placement extraction stays intact. Far
-wisps broaden and catch moonlight beyond50m, returning to the accepted close treatment below50m; range fades
-240–320m. They curl/drift and fade within a few metres. No exposure, light source, window or crowd-state changes.
-Viewed native1080p and `shots/magic/chimney-town-pair.png` (before left): smoke plainly rises across the roofs.
-Same SIMULATED stream/time30/hour19.5/hero,214 lit windows/26 walkers, high HDR/ACES, settled/open. Minor hero
-framing drift. Smoke rhythm remains too uniform; walkers still barely read at wide scale. Rejected/reverted the
-far lantern-glint candidate as too subtle. Typecheck, scoped lint,3 home-life tests,17 avatar tests and web build
-pass. Capture resources closed. Baseline `shots/magic/road-lantern-before.png`; final `chimney-town-after.png`.
+**Current slice:** castle gate warmth visible from the wide stream camera. The generated court now mounts the
+same two authored braziers/mount anchors as founded kingdoms; no duplicate fixtures in an installed scene.
+The compact beacon/brazier field keeps its softer light response at wide distance; sky/ambient/exposure, broad
+beacon rim and town windows unchanged. Viewed native1080p and `shots/magic/wide-gate-pair.png` (7c16789 left):
+gatehouse and front walls warm at a glance, towers stay cool, town/sky retain the accepted balance. Same SIM
+hero/hour19.5/time30,214 windows/26 walkers, high HDR/ACES, settled/open, no shader/page errors. Torches are tiny
+at this distance; the wash carries the warmth. Typecheck, scoped lint,7 castle/royal tests and11 EL01 tests pass;
+web build to a temporary output passes. Capture resources closed.
+
+**Smoke:**7c16789 corrected GPU-rejected white tuftsa545cfa: stable~quarter of occupied hearths, thin grey-violet
+wisps, short fade, restrained amber base. Close arrival smoke stays active. Viewed `shots/magic/smoke-soft-pair.png`;
+wisps/base warmth very subtle wide, windows lead. Actual authored mouths only, no phantom door lights. Rejected
+far-lantern glints remain reverted. Smithy camera paused before source edits; no smithy capture started.
 
 **Avatar:** chosen reference/spec49/PRD committed81eab8f; all old A/B/C studies rejected. Head/portrait checkpoint
 4c333ed merged8ff6f87 and both comparison sheets viewed in `work/evidence/avatar-style/AS03/`. Square face,
@@ -357,10 +362,12 @@ in the lane's contract-proposal.md for main's tested freeze. Main owns real save
 `work/evidence/PL02/street-producer@1920x1080.png`; PL03 must break the uniform castle escarpment into irregular
 ledges with ragged green/scree interruptions. Adoption must share height across render/contact/collision and keep
 pinned foundations. Heraldry44c948e and river hallb5d3897 viewed/merged, not yet mounted as Genesis seats.
-Trees/effects had no new checkpoints at turn start. Passport/Genesis content continue; parked systems stop after
+Effects EL01 merged66d5244 and `work/evidence/EL01/street-t12-balanced-glints@1920x1080.png` viewed; library
+not adopted yet. Follow-up in progress: vary brazier ember lateral drift/brightness instead of a vertical string
+of squares. Trees had no new checkpoint. Passport/Genesis content continue; parked systems stop after
 current task. No second forest or emitter stack. Never reapply the rejected global all-pane/2.5x window candidate.
 
-**Still open:** land adoption, readable lantern walkers/cart on wide roads, then smithy lower/tighter with faces
+**Still open:** land adoption, readable lantern walkers/cart, and smithy lower/tighter with faces
 on BOTH sides of the pour. Molten02c3494 stays. Court light pair `shots/magic/castle-pair.png`: gatehouse/tower
 bases warmer; upper keep rim weak and court sparse. Real approved chat Forge remains unproved; no waiting
 observer before Tobias announces live. Prior passport/gate/emotes/moments/atlas-w2 merged through47c0ef7;

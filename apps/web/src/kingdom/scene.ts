@@ -20,7 +20,7 @@ import { createSunShadows } from '@chatdom/render';
 import { beaconStrength } from './beacon';
 import { placeSettlementContent, placeMarketContent } from './settlement-content';
 import { createForgeSquareContent } from './forge-square-content';
-import { createCastleContent } from './castle-content';
+import { createCastleContent, createCastleCourtContent } from './castle-content';
 import { createGenesisWaterContent } from '../genesis/water-content';
 import { sampleGenesisSurface } from '@chatdom/world/genesis';
 import { inhabitedLightBounds } from './light-bounds';
@@ -118,11 +118,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   if(options.potential)props.push(...createGenesisWaterContent(layout));
   const {buildings:castleBuildings,beaconPosition}=createCastleContent(layout.castle,options.potential?.style);
+  const simulatedCourt=installed?undefined:createCastleCourtContent(layout.castle,options.potential?.style);
+  if(simulatedCourt)props.push(...simulatedCourt.props);
   const buildings=installed?houses:[...houses,...castleBuildings],content=installed?.content??[...buildings,...props];
   for(const {blueprint} of content)blueprints.set(blueprintKey(blueprint),blueprint);
   const royal=installed?royalWindow(installed.forgeHosts):undefined;
   const presenceHouses=royal?[...houses,royal]:[...houses];
-  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:generatedHomeLifeSites(houses),braziers:[],standard:undefined};
+  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:generatedHomeLifeSites(houses),braziers:simulatedCourt?.braziers??[],standard:undefined};
   const homeLife=own(createHomeLife(scene,lifeSites.homes));
   const forgeSites=options.founded?foundedForgeSites(options.founded):simulatedSmithy??{fires:[],noses:[]};
   const forgeHearth=own(createRoyalLife(scene,clay,undefined,forgeSites.fires.filter(site=>site.normal[1]===0),undefined,true));
