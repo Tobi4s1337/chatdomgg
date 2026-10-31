@@ -1,6 +1,6 @@
 // Ground-dressing evidence from the SIMULATED-land bench, through the production renderer pieces.
 // Run from the repository root:
-//   node apps/web/src/kingdom/ground-dressing/capture.mjs [--views street,hero] [--hours dusk] [--sizes 1440x900,390x844]
+//   node apps/web/src/kingdom/ground-dressing/capture.mjs [--views street,hero,market] [--hours dusk] [--sizes 1440x900,390x844]
 //     [--dressing on|off] [--base-url http://127.0.0.1:<port>]
 // It takes the machine-wide capture lock before any server or browser, starts its own Vite dev server on a free port in
 // 5170–5199 unless --base-url is given (the bench page is dev-served, never shipped), waits for the bench's readiness
@@ -48,7 +48,8 @@ try {
     page.on('pageerror', error => errors.push(error.message));
     page.on('console', message => {
       if (message.type() !== 'error') return;
-      const text = message.text() || `console error at ${message.location().url}:${message.location().lineNumber}`;
+      const { url, lineNumber } = message.location();
+      const text = `${message.text() || 'console error'}${url ? ` (${url}:${lineNumber})` : ''}`;
       errors.push(text);
       console.error(text);
     });

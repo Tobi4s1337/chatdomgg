@@ -29,7 +29,7 @@ lands, then use the actual module. All independent tasks can start without a sce
   beyond roofs and court looking over town. Do not invent warmth or geometry for unbuilt places.
 - [x] **LD03 — Woods frame the land.** Emit ridge/grove/shore/forest zones and landmark trees, clear of complete
   reservations and campfire envelope plus crowns. Draw gaps and crown clearance on the map. Ground-dressing plants.
-- [ ] **LD04 — Walks reveal the kingdom.** Connect place routes and trails, shared water crossing, site furniture
+- [x] **LD04 — Walks reveal the kingdom.** Connect place routes and trails, shared water crossing, site furniture
   and pacing beats; preserve open destination footprints. Lake reveal and summit views read. No independent tree,
   watercourse, lamp or place-building creation.
 - [ ] **LD05 — Judge the whole loop and hand over composition.** Finish poses, growth continuity and exact recipe
@@ -41,4 +41,5 @@ lands, then use the actual module. All independent tasks can start without a sce
 
 Add findings here; do not pick from this list without the brief changing.
 
-- LD02's `places.forest.path` passes 0.6–0.9 m from the elder oak's trunk (`places.forest.oak`); LD04's forest trail should route around the oak's root/seat envelope (≥4 m) instead of through it.
+- LD02's `places.forest.path` passes 0.6–0.9 m from the elder oak's trunk (`places.forest.oak`); LD04's forest trail should route around the oak's root/seat envelope (≥4 m) instead of through it. Resolved for the walked trail by LD04's Oak Path (≥4 m + half-width); `places.forest.path` itself is unchanged and LD05 should set it from the Oak Path.
+- The hearth lookout trail (LD02) runs ~100 m along the land frame on a 4 m cross-slope: no bench fits there, so that walk keeps a 104 m beat gap.

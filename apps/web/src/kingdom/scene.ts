@@ -7,6 +7,7 @@ import { VoxelWorkerPool, type AssetChunkMesh } from '@chatdom/voxel';
 import { createAtmosphere, getEnvironment, createVoxelMaterial, geometryFromChunks, createWindowLights, type WindowHouse, createWater } from '@chatdom/render';
 import { generateSettlementPlan, terrainHeight, samplePublicGround, randomUnit, seedHash, type KingdomTier, type RealmFoundedScene } from '@chatdom/world';
 import type { KingdomId, KingdomPresenceFrame, Vec3, VoxelBlueprint, PresenceFeed } from '@chatdom/shared';
+import { CitizenChatCueSchema } from '@chatdom/shared';
 import { createSimulatedPresence, createHeraldPresence } from './presence-feed';
 import { loadTerrain } from './terrain-client';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from './terrain-worker';
@@ -25,6 +26,11 @@ import { createKingdomBuild, type KingdomBuildSession } from './build-scene';
 import { createKingdomCitizens, type SpeechLabel } from './citizen-scene';
 import { foundedContent } from './founded-content';
 import { royalWindow } from './royal-window';
+import { composeWindowCamera } from './window-camera';
+import { composeRoyalCamera } from './royal-camera';
+import { createHomeLife } from './home-life';
+import { createRoyalLife } from './royal-life';
+import { foundedLifeSites } from './home-life-sites';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
 import { createObservedWalkers, walkerSlots } from './observed-walkers';
 import type { RealmWalkerFeed } from '@chatdom/shared/realm';
@@ -34,10 +40,11 @@ import { compileFoundedScene } from '@chatdom/world/founded-collision';
 import { createFoundedInteractionRegistry } from '@chatdom/world/interactions';
 import { sampleKingdomAmbience } from './ambience';
 import type { AmbienceTarget } from './ambience/types';
+import { createArrivalDirector, type ArrivalAttention } from './arrival-director';
 
 export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number}
-export interface SceneOptions {founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneOptions {directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -86,6 +93,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   for(const {blueprint} of content)blueprints.set(blueprintKey(blueprint),blueprint);
   const royal=installed?royalWindow(installed.forgeHosts):undefined;
   const presenceHouses=royal?[...houses,royal]:[...houses];
+  const lifeSites=options.founded?foundedLifeSites(options.founded):{homes:[],braziers:[],standard:undefined};
+  const homeLife=own(createHomeLife(scene,lifeSites.homes));
   const windows=own(createWindowLights(scene,presenceHouses));
   // Begin the arrival among neighbours, not alone at the newest edge of town.
   const arrivalHomes=layout.homes.filter(h=>h.tier==='house');
@@ -96,17 +105,23 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const simulation=createSimulatedPresence(layout,arrivalHome?{firstSlot:arrivalHome.slot,waveSeconds:6}:undefined);
   const source=options.presenceFeed??(options.source==='simulated'?simulation.feed:createHeraldPresence('/presence-data/stream',options.kingdomId,options.presenceOrigin??'live'));
   const ownSimulation=options.source==='simulated'&&!options.presenceFeed;
+  const arrivalDirector=options.directArrivals?createArrivalDirector():undefined;
+  let arrivalCameraDirected=false,arrivalShot:ArrivalAttention|undefined,arrivalBlend=0,arrivalKey='';
+  const arrivalEye=new THREE.Vector3(),arrivalTarget=new THREE.Vector3(),arrivalWantedEye=new THREE.Vector3(),arrivalWantedTarget=new THREE.Vector3();
+  let arrivalFov=48,homeFov=64;
   const first=houses.find(h=>h.slot===simulation.firstSlot)!;
   const requestedFocus=presenceHouses.some(h=>h.slot===options.focusSlot)?options.focusSlot:undefined;
   let focusSlot=requestedFocus??(options.source==='simulated'?simulation.firstSlot:houses[0]!.slot);
   const focal=new THREE.Vector3(),homeEye=new THREE.Vector3(),homeTarget=new THREE.Vector3(),citizenEye=new THREE.Vector3();
   function focusHome(slot:number){
     const home=presenceHouses.find(h=>h.slot===slot),route=crowd.motion.routeForSlot(slot);if(!home||!route)return;
-    focusSlot=slot;const pane=home.blueprint.windows[0]??{centre:[home.blueprint.size[0]/2,Math.min(14,home.blueprint.size[1]/2),home.blueprint.size[2]],facing:'south' as const};
+    focusSlot=slot;homeFov=64;const pane=home.blueprint.windows[0]??{centre:[home.blueprint.size[0]/2,Math.min(14,home.blueprint.size[1]/2),home.blueprint.size[2]],facing:'south' as const};
     focal.set(...pane.centre).multiplyScalar(.125).applyAxisAngle(new THREE.Vector3(0,1,0),home.yaw).add(new THREE.Vector3(...home.position));
     const angle=({north:Math.PI,east:Math.PI/2,south:0,west:-Math.PI/2}[pane.facing])+home.yaw;
     homeEye.copy(focal).add(new THREE.Vector3(Math.sin(angle)*7+1.8,2.1,Math.cos(angle)*7));
     homeTarget.copy(focal).add(new THREE.Vector3(Math.cos(angle)*1.3,1.1,-Math.sin(angle)*1.3));
+    if(home!==royal){const pose=composeWindowCamera(home,route.points.at(-1)!,camera.aspect,angle);homeEye.copy(pose.eye);homeTarget.copy(pose.target);}
+    else {const pose=composeRoyalCamera(home);homeEye.copy(pose.eye);homeTarget.copy(pose.target);homeFov=pose.fov;}
     citizenEye.set(...route.points.at(-1)!).add(new THREE.Vector3(Math.sin(angle)*6.5-Math.cos(angle)*13,5.5,Math.cos(angle)*6.5+Math.sin(angle)*13));
   }
   focusHome(focusSlot);
@@ -125,7 +140,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   const sunShadows=own(createSunShadows(renderer,{bounds:new THREE.Box3(new THREE.Vector3(layout.bounds.minX-40,-8,layout.bounds.minZ-70),new THREE.Vector3(layout.bounds.maxX+40,60,layout.bounds.maxZ+20)),resolution:portrait()?1024:2048}));
   sunShadows.bindReceiver(clay.material);sunShadows.bindReceiver(ground.material);sunShadows.bindReceiver(crowd.material.material);
-  function resize(){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;setHero();walk?.controller.resize(canvas.clientWidth,canvas.clientHeight);sunShadows.setResolution(portrait()?1024:2048);}
+  const royalLife=own(createRoyalLife(scene,clay,installed?.forgeHosts.find(home=>home.slot===65534),lifeSites.braziers,lifeSites.standard));
+  if(royalLife.keepMaterial)sunShadows.bindReceiver(royalLife.keepMaterial);
+  if(royalLife.standardMaterial)sunShadows.bindReceiver(royalLife.standardMaterial);
+  function resize(){renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);camera.aspect=canvas.clientWidth/canvas.clientHeight;setHero();focusHome(focusSlot);walk?.controller.resize(canvas.clientWidth,canvas.clientHeight);sunShadows.setResolution(portrait()?1024:2048);}
   const observer=new ResizeObserver(resize);earlyCleanups.push(()=>observer.disconnect());observer.observe(canvas);resize();
   const blockers=installed?[...houses,...props.map(p=>({...p,slot:65534}))]:buildings;
   const lightBounds=inhabitedLightBounds(layout.homes);
@@ -141,7 +159,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const farField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setFarLight(volume);fieldUploads++;farBytes=volume.estimatedPeakBytes;farVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The light could not reach the kingdom'),{mode:'kingdom',bounds:lightBounds}));
   const beaconField=own(createLightField(layout,blockers,volume=>{if(disposed)return;clay.setBeaconLight(volume);fieldUploads++;beaconBytes=volume.estimatedPeakBytes;beaconVisited=volume.visited;fieldBytes=nearBytes+farBytes+beaconBytes;},()=>failLight('The castle light could not reach its towers'),{mode:'beacon',position:beaconPosition}));
   let lastField=-Infinity,lastNames=-Infinity,lastActive=0,beaconCue=false;
-  const unsubscribe=source.subscribe(next=>{frame=next;crowd.applyFrame(next);if((options.source==='herald'||next.origin==='live')&&requestedFocus===undefined){const present=next.windows.find(w=>w.present&&presenceHouses.some(h=>h.slot===w.slot));if(present)focusHome(present.slot);}lastField=-Infinity;options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{windows.clear();crowd.clear();frame=undefined;lastField=-Infinity;options.onSource('CONNECTION LOST');});
+  const unsubscribe=source.subscribe(next=>{frame=next;crowd.applyFrame(next);arrivalDirector?.observe(next,Date.now());if((options.source==='herald'||next.origin==='live')&&requestedFocus===undefined){const present=next.windows.find(w=>w.present&&presenceHouses.some(h=>h.slot===w.slot));if(present)focusHome(present.slot);}lastField=-Infinity;options.onSource(next.origin==='simulated'?'SIMULATED':next.connection==='fresh'?'LIVE CHAT':next.connection==='offline'?'STREAM RESTING':'CONNECTION LOST');},()=>{windows.clear();crowd.clear();arrivalDirector?.clear();frame=undefined;lastField=-Infinity;options.onSource('CONNECTION LOST');});
   earlyCleanups.push(unsubscribe);
   const debug:KingdomDebug={citizens:0,walking:0,ready:false,lightingReady:false,workers:pool.stats.size+4,homes:houses.length,activeWindows:0,geometryBuilds:0,fieldUploads:0,drawCalls:0,triangles:0,time:0,hour,camera:camName,fieldBytes:0,source:source.label,fieldSettled:false,shadowUpdates:0,shadowDrawCalls:0,shadowTriangles:0,shadowBytes:0,shadowEnabled:false,windowFieldVisited:0,beaconFieldVisited:0};
   type Placement={position:Vec3;yaw:number;placementId?:string};
@@ -175,7 +193,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   function instance(blueprint:VoxelBlueprint,chunks:readonly AssetChunkMesh[],placements:readonly Placement[],factor:1|2|4=1){
     const geometry=geometryFromChunks(chunks,'build');geometry.setAttribute('aLodFade',new THREE.InstancedBufferAttribute(new Float32Array(placements.length).fill(1),1));geometries.push(geometry);
-    const mesh=new THREE.InstancedMesh(geometry,clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
+    const keepMesh=installed?.forgeHosts.some(home=>home.slot===65534&&blueprintKey(home.blueprint)===blueprintKey(blueprint));
+    const standardMesh=lifeSites.standard&&blueprintKey(lifeSites.standard.blueprint)===blueprintKey(blueprint);
+    const mesh=new THREE.InstancedMesh(geometry,standardMesh&&royalLife.standardMaterial?royalLife.standardMaterial:keepMesh&&royalLife.keepMaterial?royalLife.keepMaterial:clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
     placements.forEach((p,i)=>{m.compose(v.set(...p.position),q.setFromAxisAngle(new THREE.Vector3(0,1,0),p.yaw),new THREE.Vector3(factor,factor,factor));mesh.setMatrixAt(i,m);});
     mesh.instanceMatrix.needsUpdate=true;mesh.frustumCulled=false;mesh.name=blueprint.id;scene.add(mesh);meshes.push(mesh);geometryBuilds++;
     if(factor===(blueprint.kind==='flora'?2:1))sunShadows.register(mesh);
@@ -274,9 +294,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const water=own(createWater(scene,{lake:layout.lake,terrain:{data:heightData,width:heightWidth,height:heightDepth,origin:heightOrigin,step:1}}));
   function labels(){const names:NameLabel[]=[];for(const s of [...windows.getSources(),...build.getSources()]){
     if(!s.name||s.strength<.1)continue;const p=new THREE.Vector3(...s.position),to=camera.position.clone().sub(p);
-    if(to.length()>32||to.dot(new THREE.Vector3(...s.normal))<2)continue;
+    const royalPicture=s.slot===65534&&(camName==='window'||arrivalShot?.slot===65534&&arrivalShot.phase==='window');
+    if(to.length()>(royalPicture?90:32)||to.dot(new THREE.Vector3(...s.normal))<2)continue;
     if(windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],s.position))continue;
-    p.y+=1.1;p.project(camera);if(p.z>1||p.z<0||Math.abs(p.x)>.91||Math.abs(p.y)>.88)continue;
+    p.y+=royalPicture ? .45 : 1.1;p.project(camera);if(p.z>1||p.z<0||Math.abs(p.x)>.91||Math.abs(p.y)>.88)continue;
     names.push({name:s.name,slot:s.slot,x:(p.x+1)*canvas.clientWidth/2,y:(1-p.y)*canvas.clientHeight/2});
   }options.onNames(names.slice(0,3));}
   const fog=new THREE.FogExp2(0x000000);scene.fog=fog;
@@ -317,12 +338,40 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }
     else if(camName==='citizen'){const person=crowd.subject(focusSlot);const p=person?new THREE.Vector3(...person.position):focal.clone();camera.position.copy(citizenEye);target.copy(p).add(new THREE.Vector3(0,1.05,0));}
     else if(camName==='window'){camera.position.copy(homeEye);target.copy(homeTarget);}else{camera.position.copy(heroEye);target.copy(heroTarget);}
-    const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,THREE.MathUtils.smootherstep(time,18,36)):camName==='citizen'?48:camName==='window'?64:heroFov;
+    const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,THREE.MathUtils.smootherstep(time,18,36)):camName==='citizen'?48:camName==='window'?homeFov:heroFov;
     if(!walking&&Math.abs(camera.fov-wantedFov)>.001){camera.fov=wantedFov;camera.updateProjectionMatrix();}
     if(!installed){build.update(now,dt,hour,target);forge.update(now,target,!!build.session);}
     const forgeDirected=forgeCameraDirected=realmForge?.update(now,!walking&&!build.session&&!capturePose)??false;
+    // A witnessed arrival owns only the stream lens. Walking, a chosen capture and the Forge always win.
+    if(walking||build.session||capturePose||forgeDirected)arrivalDirector?.cancel();
+    arrivalShot=loaded?arrivalDirector?.sample(presentationMs,slot=>crowd.subject(slot)):undefined;
+    if(arrivalShot){
+      focusHome(arrivalShot.slot);
+      if(arrivalShot.phase==='window'){
+        arrivalWantedEye.copy(homeEye);arrivalWantedTarget.copy(homeTarget);
+      }else{
+        const door=crowd.motion.routeForSlot(arrivalShot.slot)!.points.at(-1)!;
+        arrivalWantedTarget.set(...arrivalShot.subject.position).add(new THREE.Vector3(0,1.05,0));
+        arrivalWantedEye.copy(citizenEye).sub(new THREE.Vector3(...door)).multiplyScalar(.65).add(new THREE.Vector3(...arrivalShot.subject.position));
+      }
+      if(arrivalBlend===0){arrivalEye.copy(camera.position);arrivalTarget.copy(target);arrivalFov=camera.fov;}
+      const follow=1-Math.exp(-dt*2.8);
+      arrivalEye.lerp(arrivalWantedEye,follow);arrivalTarget.lerp(arrivalWantedTarget,follow);
+      arrivalFov+=( (arrivalShot.phase==='window'?homeFov:48)-arrivalFov)*follow;
+    }
+    const permitted=!walking&&!build.session&&!capturePose&&!forgeDirected;
+    arrivalBlend=permitted?THREE.MathUtils.clamp(arrivalBlend+(arrivalShot?1:-1)*dt/1.2,0,1):0;
+    arrivalCameraDirected=arrivalBlend>0;
+    if(arrivalCameraDirected){
+      const blend=THREE.MathUtils.smoothstep(arrivalBlend,0,1);
+      camera.position.lerp(arrivalEye,blend);target.lerp(arrivalTarget,blend);
+      camera.fov=THREE.MathUtils.lerp(camera.fov,arrivalFov,blend);camera.updateProjectionMatrix();
+    }
+    const nextArrival=arrivalShot?`${arrivalShot.slot}:${arrivalShot.phase}`:'';
+    if(nextArrival!==arrivalKey){arrivalKey=nextArrival;options.onArrival?.(arrivalShot?{slot:arrivalShot.slot,phase:arrivalShot.phase}:null);}
     if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
     if(!walking&&!forgeDirected)camera.lookAt(target);camera.updateMatrixWorld();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);updateInstances(fixedTime&&autoCamera?time*1000:now);
+    homeLife.update(presentationMs,time,lightFrame,hour,camera);royalLife.update(time,frame,hour);
     if(loaded&&now-lastAmbience>=160){
       lastAmbience=now;listenerRight.setFromMatrixColumn(camera.matrixWorld,0);
       const self=walking?walk?.poses.find(p=>p.self):undefined;
@@ -331,11 +380,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }
     if(loaded)sound.ambienceUpdate(now,ambienceTarget);
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
-    fog.color.set(grade.fog);fog.density=.0016;
+    fog.color.set(grade.fog);fog.density=grade.fogDensity;renderer.toneMappingExposure=grade.exposure;
     water.update(grade,time,camera);
     dressing.hideLot(buildHidden?simulation.firstSlot:null);
     dressing.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
-    if(now-lastField>240){lastField=now;const centre:Vec3=[target.x,terrainHeight(layout,target.x,target.z),target.z];field.update(centre,[...windows.getSources(),...build.getSources()]);farField.update(centre,[...windows.getSources(),...build.getSources()]);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]}]);}
+    if(now-lastField>240){lastField=now;const centre:Vec3=[target.x,terrainHeight(layout,target.x,target.z),target.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...royalLife.sources()];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
     const people=walk??observed;
     if(people)options.onWalkers?.(people.labels().filter(label=>{
       const person=people.poses.find(p=>p.id===label.id);
@@ -378,7 +427,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
@@ -390,7 +439,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');await crowd.prepare();if(!installed){await build.prepare();await forge.prepare();}if(options.walkerFeed&&options.founded){const next=await createObservedWalkers(scene,camera,canvas,pool,crowd.material,options.founded,options.walkerFeed,createFoundedInteractionRegistry(options.founded,compileFoundedScene(options.founded)));if(disposed){next.dispose();throw new Error('Scene closed while preparing walkers');}observed=next;}if(disposed)throw new Error('Scene closed while preparing citizens');}catch(error){dispose();throw error;}
   loaded=true;lastFrame=performance.now();options.onProgress('The gate is opening',1);
   function detachWalk(){walkGeneration++;walkSelected=false;walk?.dispose();walk=undefined;options.onWalkers?.([]);camera.clearViewOffset();camera.filmOffset=0;camera.updateProjectionMatrix();instancesDirty=true;}
-  return {layout,debug,sound,build,forge,forgeDirecting:()=>forgeCameraDirected,
+  return {layout,debug,sound,build,forge,forgeDirecting:()=>forgeCameraDirected,momentDirecting:()=>forgeCameraDirected||arrivalCameraDirected,
     async attachWalk(binding:KingdomWalkBinding){
       if(disposed)throw new Error('The kingdom has closed');
       checkWalkBinding(options.founded,binding);
@@ -405,9 +454,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     interactionDebug:()=>walk?.interactionDebug??null,
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
-    inspect:()=>({build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(cue:unknown)=>crowd.receiveChat(cue),clearChat:(cueIds?:readonly string[])=>crowd.clearChat(cueIds),
+    inspect:()=>({build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
+      if(!crowd.receiveChat(input))return false;
+      const cue=CitizenChatCueSchema.parse(input),at=Date.now();
+      if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);
+      return true;
+    },clearChat:(cueIds?:readonly string[])=>crowd.clearChat(cueIds),
     setHour(value:number){targetHour=value;sound.cue('wood');},
-    setCamera(value:CameraName){walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
+    setCamera(value:CameraName){arrivalDirector?.cancel();walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
     /** Evidence framing only. Null returns control to the current production camera. */
     pose(eye:Vec3|null,lookAt?:Vec3,fov=43){
       if(eye===null){capturePose=null;poseRevision++;lastField=-Infinity;instancesDirty=true;return;}

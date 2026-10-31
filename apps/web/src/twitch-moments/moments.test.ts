@@ -6,7 +6,7 @@ import { createLocalProviderTransport, eventSubFrame } from '../../../herald/src
 import { createMemoryMomentRecords } from '../../../herald/src/twitch-moments/memory';
 import { BANNER_BEAT } from './choreography';
 import { createTwitchMoments, type MomentFrame } from './controller';
-import { createTwitchMomentView, type CameraLease, type HomeAnchor, type MomentViewHost } from './view';
+import { createTwitchMomentView, type CameraLease, type GiftRoute, type HomeAnchor, type MomentViewHost, type PlaceAnchor } from './view';
 import type { CameraPose } from './contracts';
 
 const KINGDOM = KingdomIdSchema.parse('424242');
@@ -24,11 +24,32 @@ const people = new Map<PersonId, CitizenDisclosure>([
 const directory: CitizenDirectory = { resolve: async (kingdom, id) => (kingdom === KINGDOM ? people.get(id) ?? null : null) };
 
 let messages = 0;
+const structuredEnd = (user: PersonId, at: number) => eventSubFrame({ messageId: `end-${++messages}`, at, type: 'channel.subscription.end', version: '1',
+  condition: { broadcaster_user_id: KINGDOM }, event: { user_id: user, user_login: `login${user}`, user_name: `Provider${user}`, broadcaster_user_id: KINGDOM,
+    broadcaster_user_login: 'kingdom', broadcaster_user_name: 'Kingdom', tier: '1000', is_gift: false } });
 function subscribe(user: PersonId, at: number, options: { gift?: boolean; broadcaster?: string; condition?: string; id?: string; type?: string; tier?: string } = {}) {
   return eventSubFrame({ messageId: options.id ?? `msg-${++messages}`, at, type: options.type ?? 'channel.subscribe', version: '1',
     condition: { broadcaster_user_id: options.condition ?? KINGDOM },
     event: { user_id: user, user_login: `login${user}`, user_name: `Provider${user}`, broadcaster_user_id: options.broadcaster ?? KINGDOM,
       broadcaster_user_login: 'kingdom', broadcaster_user_name: 'Kingdom', tier: options.tier ?? '1000', is_gift: options.gift ?? false } });
+}
+
+const READER = person('9100');
+const NULLS = Object.fromEntries(['sub', 'resub', 'sub_gift', 'community_sub_gift', 'gift_paid_upgrade', 'prime_paid_upgrade', 'pay_it_forward'].map(k => [k, null]));
+/** A chat notification in Twitch's wire shape, carrying private fields that must never pass the boundary. */
+function notice(at: number, chatter: PersonId | 'anon', type: string, detail: object, messageId = `notice-${++messages}`) {
+  return eventSubFrame({ messageId: `d-${++messages}`, at, type: 'channel.chat.notification', version: '1', condition: { broadcaster_user_id: KINGDOM, user_id: READER },
+    event: { broadcaster_user_id: KINGDOM, broadcaster_user_login: 'kingdom', broadcaster_user_name: 'Kingdom', chatter_user_id: chatter === 'anon' ? '274598607' : chatter,
+      chatter_user_login: `login${chatter}`, chatter_user_name: chatter === 'anon' ? 'AnAnonymousGifter' : `Provider${chatter}`, chatter_is_anonymous: chatter === 'anon',
+      color: '#ff0000', badges: [], system_message: 'SECRET SYSTEM TEXT', message_id: messageId, message: { text: 'SECRET CHAT TEXT', fragments: [] },
+      notice_type: type, ...NULLS, [type]: detail, source_broadcaster_user_id: null, source_message_id: null, source_badges: null } });
+}
+const giftTo = (to: PersonId, community: string | null, tier = '1000') =>
+  ({ duration_months: 1, cumulative_total: 42, recipient_user_id: to, recipient_user_name: `Provider${to}`, recipient_user_login: `login${to}`, sub_tier: tier, community_gift_id: community });
+/** First kingdom time at or after `from` when `test` holds, sampling every 50 ms. */
+function firstAt(from: number, until: number, test: (at: number) => boolean): number {
+  for (let at = from; at <= until; at += 50) if (test(at)) return at;
+  throw new Error('The awaited moment never came');
 }
 
 const settle = async (ingest: { settled(): Promise<void> }) => { await ingest.settled(); for (let i = 0; i < 4; i++) await new Promise(r => setTimeout(r, 0)); };
@@ -51,6 +72,11 @@ function testHost(anchors: Map<number, HomeAnchor>) {
 }
 
 const anchorAt = (x: number): HomeAnchor => ({ mount: [x, 2.6, 4], normal: [0, 0, 1], right: [1, 0, 0], doorstep: [x - 0.8, 0.1, 4.6] });
+/** Gift places for the view: the market stop at the end of a real two-leg route, and the gate where it began. */
+const giftPlaces = {
+  placeAnchor: (place: 'market' | 'gate'): PlaceAnchor => (place === 'market' ? { position: [20, 0, 20], facing: [0, 0, -1] } : { position: [-30, 0, 20], facing: [1, 0, 0] }),
+  giftRoute: (): GiftRoute => ({ inbound: [[-30, 0, 20], [0, 0, 20], [20, 0, 20]], outbound: [[20, 0, 20], [20, 0, 50]] }),
+};
 
 describe('Twitch moments: one sub travels from Twitch to a named home and nowhere else', () => {
   it('normalizes, records, projects and presents real support input with honest refusals and cleanup', async () => {
@@ -81,14 +107,14 @@ describe('Twitch moments: one sub travels from Twitch to a named home and nowher
     const first = moments.sample(beatStart + 200);
     expect(first.homes).toEqual([expect.objectContaining({ slot: 3, phase: 'anticipation', unfurl: 0, ribbons: 1, tier: '1' })]);
     expect(first.audio.map(a => [a.cue, a.atMs - beatStart])).toEqual([['horn', BANNER_BEAT.horn], ['cloth-unfurl', BANNER_BEAT.cloth]]);
-    expect(first.focus).toMatchObject({ slot: 3, cut: true });
+    expect(first.focus).toMatchObject({ subject: { kind: 'home', slot: 3 }, cut: true, wide: false });
     const mid = moments.sample(beatStart + 2000).homes[0]!;
     expect(mid.phase).toBe('action');
     expect(mid.unfurl).toBeGreaterThan(0.3);
     expect(mid.unfurl).toBeLessThan(1);
     const held = moments.sample(beatStart + 6000);
     expect(held.homes[0]).toMatchObject({ phase: 'hold', unfurl: 1 });
-    expect(held.captions).toEqual([expect.objectContaining({ slot: 3, title: 'Juniper' })]);
+    expect(held.captions).toEqual([expect.objectContaining({ at: { kind: 'home', slot: 3 }, title: 'Juniper', line: 'raises a banner at home' })]);
     expect(moments.sample(beatStart + BANNER_BEAT.end + 10).homes[0]).toMatchObject({ phase: 'idle', unfurl: 1 });
 
     // A quiet neighbour's sub is recorded privately and never named, located, tinted or celebrated.
@@ -120,7 +146,7 @@ describe('Twitch moments: one sub travels from Twitch to a named home and nowher
     expect(moments.sample(now + 1).homes.map(h => h.slot)).toEqual([3]);
     const rowan = moments.sample(beatStart + 3600 + 200);
     expect(rowan.homes.map(h => [h.slot, h.phase])).toEqual([[3, 'settle'], [5, 'anticipation']]);
-    expect(rowan.focus).toMatchObject({ slot: 3 });
+    expect(rowan.focus).toMatchObject({ subject: { kind: 'home', slot: 3 } });
 
     // A gifted recipient's entitlement changes silently: the parcel is the gift family's beat, not a second one.
     now += 30_000;
@@ -175,7 +201,7 @@ describe('Twitch moments: one sub travels from Twitch to a named home and nowher
       for (let at = beatAt; at <= beatAt + BANNER_BEAT.end + 2500; at += step) view.apply(moments.sample(at));
       runs.push(t.played);
       expect(t.parent.children).toHaveLength(1);
-      expect(t.parent.children[0]!.children).toHaveLength(5);
+      expect(t.parent.children[0]!.children.filter(c => c.name.startsWith('banner-'))).toHaveLength(5);
       expect(t.leases()).toEqual({ leased: 1, released: 1 });
       expect(t.camera()).toEqual(t.prior);
       view.dispose();
@@ -228,6 +254,191 @@ describe('Twitch moments: one sub travels from Twitch to a named home and nowher
     expect(again.status().counts.duplicate).toBe(1);
     expect(moments.receiveFact('restart.1', sample)).toEqual({ accepted: false, reason: 'epoch' });
 
+    // ---- Support arrives at the right door with truthful names: chat notices become the one canonical source.
+    const MOSS = person('9011'), PIP = person('9012'), ORIGIN = person('9013'), FERN = person('9015');
+    people.set(MOSS, { disclosure: 'named', displayName: 'Moss', homeSlot: null });
+    people.set(PIP, { disclosure: 'named', displayName: 'Pip', homeSlot: 15 });
+    people.set(FERN, { disclosure: 'named', displayName: 'Fern', homeSlot: 17 });
+    const notices = createTwitchMomentIngest({ ...ingestOptions, authorized: new Set(['moments.chat-notices', 'moments.subscriptions'] as const), readerId: READER, epochPrefix: 'notices' });
+    expect(notices.start().support).toBe('notices');
+    moments.connect(notices.feed);
+    await settle(notices);
+    now += 60_000;
+    const admittedBefore = moments.metrics().admitted;
+
+    // Rowan's community gift of five: the aggregate and its recipient notices coalesce under one group, in any order.
+    local.deliver(notice(now, ROWAN, 'sub_gift', giftTo(JUNIPER, 'cg-1'), 'm-juniper'));
+    local.deliver(notice(now, ROWAN, 'community_sub_gift', { id: 'cg-1', total: 5, sub_tier: '1000', cumulative_total: 99 }));
+    local.deliver(notice(now, ROWAN, 'sub_gift', giftTo(MOSS, 'cg-1'), 'm-moss'));
+    local.deliver(notice(now, ROWAN, 'sub_gift', giftTo(QUIET, 'cg-1'), 'm-quiet'));
+    local.deliver(notice(now, ROWAN, 'sub_gift', giftTo(JUNIPER, 'cg-1'), 'm-juniper'));
+    local.deliver(notice(now, ROWAN, 'community_sub_gift', { id: 'cg-1', total: 5, sub_tier: '1000' }));
+    await settle(notices);
+    expect(moments.metrics().admitted).toBe(admittedBefore + 1);
+    const cartAt = firstAt(now, now + 20_000, at => moments.sample(at).carts.length > 0);
+    const arriving = moments.sample(cartAt + 1000);
+    expect(arriving.carts).toEqual([expect.objectContaining({ tier: '1', seal: 'named', load: 5 })]);
+    expect(arriving.focus).toMatchObject({ subject: { kind: 'place', place: 'market' }, wide: true, follow: { subject: { kind: 'home', slot: 3 } } });
+    // No second celebration: the gifted recipient's home only changed state.
+    expect(arriving.homes.find(h => h.slot === 3)).toMatchObject({ phase: 'idle', unfurl: 1 });
+    const named = moments.sample(cartAt + 4000).captions.find(c => c.at.kind === 'place');
+    expect(named).toMatchObject({ title: 'Rowan', line: 'sends 5 gifts', detail: 'for Moss, Juniper and 3 others' });
+    // Two located parcels lift off in the first wave; the quiet citizen and the two undisclosed ride on.
+    const wave = moments.sample(cartAt + 5600);
+    expect(wave.parcels.map(p => [p.key, p.to, p.elapsed !== null])).toEqual([['m-moss', { kind: 'gate' }, true], ['m-juniper', { kind: 'home', slot: 3 }, true]]);
+    expect(wave.carts[0]!.load).toBe(3);
+    const landed = firstAt(cartAt + 5600, cartAt + 20_000, at => moments.sample(at).captions.some(c => c.at.kind === 'home'));
+    expect(moments.sample(landed + 400).captions.find(c => c.at.kind === 'home')).toMatchObject({ title: 'Juniper', line: 'a gift from Rowan' });
+    const cartGone = firstAt(cartAt, cartAt + 45_000, at => moments.sample(at).carts.length === 0);
+    const settled = moments.sample(cartGone + 2000);
+    expect(settled.parcels.map(p => [p.key, p.elapsed]).sort()).toEqual([['m-juniper', null], ['m-moss', null]]);
+    expect(settled.focus).toBeNull();
+    // The cart's cues follow its clock: wheels, bell, one knock per landing, wheels away.
+    expect(arriving.audio.map(a => a.cue)).toEqual(['cart-roll', 'gift-bell', 'cart-roll', 'parcel-land', 'parcel-land']);
+
+    // Pip pays forward Origin's gift to Fern: one parcel sinks from the sky to Fern's door under Pip's forward seal.
+    now = cartGone + 3000;
+    local.deliver(notice(now, PIP, 'pay_it_forward', { gifter_is_anonymous: false, gifter_user_id: ORIGIN, gifter_user_name: 'Origin', gifter_user_login: 'origin' }));
+    local.deliver(notice(now + 200, PIP, 'sub_gift', giftTo(FERN, null), 'm-fern'));
+    await settle(notices);
+    const sky = firstAt(now, now + 10_000, at => moments.sample(at).parcels.some(p => p.key === 'm-fern'));
+    const sinking = moments.sample(sky + 1500);
+    expect(sinking.carts).toEqual([]);
+    expect(sinking.parcels.find(p => p.key === 'm-fern')).toMatchObject({ seal: 'forward', fromSky: true, to: { kind: 'home', slot: 17 } });
+    expect(sinking.focus).toMatchObject({ subject: { kind: 'home', slot: 17 }, wide: false, follow: null });
+    expect(moments.sample(sky + 4200).captions).toEqual([expect.objectContaining({ at: { kind: 'home', slot: 17 }, title: 'Pip', line: 'pays forward Origin’s gift', detail: 'for Fern' })]);
+    expect(sinking.audio.filter(a => a.id.startsWith('gifts.')).map(a => [a.cue, a.atMs - sky])).toEqual([['gift-bell', 240], ['parcel-land', 3900]]);
+
+    // An anonymous gift of two stays anonymous, and its undisclosed recipients are never located or named.
+    now = sky + 12_000;
+    local.deliver(notice(now, 'anon', 'community_sub_gift', { id: 'cg-2', total: 2, sub_tier: '3000' }));
+    await settle(notices);
+    const friend = firstAt(now, now + 10_000, at => moments.sample(at).carts.length > 0);
+    expect(moments.sample(friend + 4000)).toMatchObject({ carts: [expect.objectContaining({ tier: '3', seal: 'friend', load: 2 })],
+      captions: [expect.objectContaining({ title: 'A friend of the realm', line: 'sends 2 gifts', detail: 'for 2 friends of the realm' })] });
+    expect(moments.sample(friend + 4000).parcels.filter(p => p.elapsed !== null)).toEqual([]);
+
+    // Juniper shares a resub: the flying banner lifts in a gust and gains its new ribbons; nothing re-furls.
+    now = firstAt(friend, friend + 45_000, at => moments.sample(at).carts.length === 0) + 1000;
+    local.deliver(notice(now, JUNIPER, 'resub', { cumulative_months: 7, duration_months: 1, streak_months: null, sub_tier: '1000', is_prime: false, is_gift: false }));
+    await settle(notices);
+    const gust = firstAt(now, now + 5000, at => moments.sample(at).homes.find(h => h.slot === 3)?.phase !== 'idle');
+    const tying = moments.sample(gust + 1200).homes.find(h => h.slot === 3)!;
+    expect(tying).toMatchObject({ unfurl: 1, ribbons: 3, phase: 'action' });
+    expect(tying.ribbonDrop).toBeGreaterThan(0);
+    expect(tying.ribbonDrop).toBeLessThan(1);
+    expect(moments.sample(gust + 3000).captions[0]).toMatchObject({ title: 'Juniper', line: '7 months under the banner' });
+    // Her sub ends: the cloth quietly furls with no shot, caption or sound, and keeps every ribbon.
+    now = gust + 9000;
+    local.deliver(structuredEnd(JUNIPER, now));
+    await settle(notices);
+    const furling = moments.sample(now + 1300);
+    expect(furling.homes.find(h => h.slot === 3)).toMatchObject({ active: false, phase: 'idle', ribbons: 3, tint: null });
+    expect(furling.homes.find(h => h.slot === 3)!.unfurl).toBeGreaterThan(0.1);
+    expect(furling.homes.find(h => h.slot === 3)!.unfurl).toBeLessThan(0.9);
+    expect([furling.focus, furling.captions, furling.audio]).toEqual([null, [], []]);
+    expect(moments.sample(now + 3000).homes.find(h => h.slot === 3)).toMatchObject({ unfurl: 0, active: false });
+    // A rejoin raises the banner again from its furled roll, with her earned months intact.
+    now += 5000;
+    local.deliver(notice(now, JUNIPER, 'sub', { sub_tier: '1000', is_prime: false, duration_months: 1 }));
+    await settle(notices);
+    const rejoin = firstAt(now, now + 5000, at => moments.sample(at).homes.find(h => h.slot === 3)?.phase === 'anticipation');
+    expect(moments.sample(rejoin + 6000).captions[0]).toMatchObject({ title: 'Juniper', line: 'raises the banner again' });
+    expect(moments.sample(rejoin + 6000).homes.find(h => h.slot === 3)).toMatchObject({ ribbons: 3, active: true });
+
+    // The view lays every parcel at a real doorstep or the gate, builds the cart on its route and cleans up.
+    {
+      const giftAnchors = new Map([[3, anchorAt(0)], [5, anchorAt(9)], [15, anchorAt(40)], [17, anchorAt(48)]]);
+      const mount = async () => { const t = testHost(giftAnchors), view = createTwitchMomentView({ ...t.host, ...giftPlaces }); await view.prepare(); return { t, view }; };
+      now = rejoin + 12_000;
+      local.deliver(notice(now, ROWAN, 'community_sub_gift', { id: 'cg-3', total: 3, sub_tier: '2000' }));
+      local.deliver(notice(now, ROWAN, 'sub_gift', giftTo(PIP, 'cg-3', '2000'), 'm-pip'));
+      await settle(notices);
+      const start = firstAt(now, now + 10_000, at => moments.sample(at).carts.length > 0);
+      const cues: string[][] = [];
+      for (const step of [16, 50]) {
+        const { t, view } = await mount();
+        for (let at = start; at < start + 9000; at += step) view.apply(moments.sample(at));
+        expect(view.stats()).toMatchObject({ carts: 1, leased: true });
+        expect(view.stats().parcels).toBeGreaterThan(0);
+        cues.push(t.played.map(p => `${p.cue}@${p.atMs - start}`));
+        view.dispose();
+        expect(t.parent.children).toHaveLength(0);
+        expect(t.camera()).toEqual(t.prior);
+      }
+      expect(cues[0]).toEqual(cues[1]);
+      expect(cues[0]).toEqual(['cart-roll@0', 'gift-bell@3300', 'parcel-land@8300']);
+      // Hiding mid-cart ends the procession at once: the lease returns, and the parcel rests where it was sent.
+      const { t, view } = await mount();
+      for (let at = start; at < start + 6000; at += 33) view.apply(moments.sample(at));
+      moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: false, safeRects: [], autoOpenKinds: [] });
+      view.apply(moments.sample(start + 6033));
+      expect(view.stats()).toMatchObject({ leased: false, sounds: 0, carts: 0 });
+      expect(t.cancelled.length).toBeGreaterThan(0);
+      expect(t.camera()).toEqual(t.prior);
+      moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] });
+      const after = moments.sample(start + 7000);
+      expect(after.carts).toEqual([]);
+      expect(after.parcels.find(p => p.key === 'm-pip')).toMatchObject({ elapsed: null, to: { kind: 'home', slot: 15 } });
+      view.apply(after);
+      expect(view.stats().parcels).toBe(after.parcels.length);
+      view.dispose();
+      expect(t.parent.children).toHaveLength(0);
+      now = start + 8000;
+    }
+
+    // A new source session restores homes and resting parcels without any beat, cart or replayed gift.
+    const later = createTwitchMomentIngest({ ...ingestOptions, authorized: new Set(['moments.chat-notices', 'moments.subscriptions'] as const), readerId: READER, epochPrefix: 'later' });
+    later.start();
+    moments.connect(later.feed);
+    await settle(later);
+    const restored = moments.sample(now + 100);
+    expect([restored.carts, restored.captions, restored.focus]).toEqual([[], [], null]);
+    expect(restored.parcels.map(p => p.key).sort()).toEqual(['m-fern', 'm-juniper', 'm-moss', 'm-pip']);
+    expect(restored.homes.find(h => h.slot === 3)).toMatchObject({ ribbons: 3, active: true, phase: 'idle' });
+    // A late sibling notice for a celebrated group is state only: no second cart.
+    local.deliver(notice(now, ROWAN, 'sub_gift', giftTo(FERN, 'cg-3', '2000'), 'm-fern-late'));
+    await settle(later);
+    expect(moments.sample(now + 6000).carts).toEqual([]);
+    expect(moments.sample(now + 6000).parcels.some(p => p.key === 'm-fern-late' && p.elapsed === null)).toBe(true);
+
+    // A capital-shaped gift of 200 with 60 disclosed recipients: one cart, waves of six street by street, at most 48 flights
+    // and six knocks, no per-recipient caption or cut, and every disclosed parcel resting exactly once afterwards.
+    {
+      now += 10_000;
+      const ward = Array.from({ length: 60 }, (_, i) => person(String(70_000 + i)));
+      ward.slice(0, 12).forEach((id, i) => people.set(id, { disclosure: 'named', displayName: `Warden ${i + 1}`, homeSlot: 100 + i }));
+      local.deliver(notice(now, ROWAN, 'community_sub_gift', { id: 'cg-ward', total: 200, sub_tier: '1000' }));
+      ward.forEach((id, i) => local.deliver(notice(now + i * 10, ROWAN, 'sub_gift',
+        { duration_months: 1, cumulative_total: null, recipient_user_id: id, recipient_user_name: `Wayfarer${i}`, recipient_user_login: `wayfarer${i}`, sub_tier: '1000', community_gift_id: 'cg-ward' },
+        `m-ward-${i}`)));
+      await settle(later);
+      const begins = firstAt(now, now + 10_000, at => moments.sample(at).carts.length > 0);
+      let flying = 0, homeCaptions = 0;
+      const launched = new Set<string>();
+      for (let at = begins; at < begins + 40_000; at += 100) {
+        const frame = moments.sample(at);
+        expect(frame.carts.length).toBeLessThanOrEqual(1);
+        const air = frame.parcels.filter(p => p.elapsed !== null);
+        for (const p of air) launched.add(p.key);
+        flying = Math.max(flying, air.length);
+        homeCaptions += frame.captions.filter(c => c.at.kind === 'home').length;
+      }
+      expect(launched.size).toBe(48);
+      expect(flying).toBeLessThanOrEqual(48);
+      expect(homeCaptions).toBe(0);
+      const gathering = moments.sample(begins + 4000);
+      expect(gathering.captions[0]).toMatchObject({ title: 'Rowan', line: 'sends 200 gifts' });
+      expect(gathering.captions[0]!.detail).toMatch(/^for [^,]+, [^,]+, [^,]+ and 197 others$/u);
+      expect(gathering.audio.filter(a => a.cue === 'parcel-land').length).toBeLessThanOrEqual(6);
+      const after = moments.sample(firstAt(begins, begins + 45_000, at => moments.sample(at).carts.length === 0) + 1000);
+      const resting = after.parcels.filter(p => p.key.startsWith('m-ward-'));
+      expect(resting.every(p => p.elapsed === null)).toBe(true);
+      expect(new Set(resting.map(p => p.key)).size).toBe(60);
+      expect(resting.filter(p => p.to.kind === 'home')).toHaveLength(12);
+      now = begins + 46_000;
+    }
+
     // Writes stay honestly unavailable without a bound service; nothing is dispatched.
     const decree = { kind: 'poll-create', title: 'Where shall the new well go?', choices: ['By the bridge', 'In the market'], durationSeconds: 120 };
     const preview = moments.previewAction(decree);
@@ -237,12 +448,17 @@ describe('Twitch moments: one sub travels from Twitch to a named home and nowher
 
     // Nothing public carries a person ID, login, provider name or delivery payload.
     const frames: MomentFrame[] = [0, 1500, 5000].map(dt => moments.sample(now + dt));
-    const publicOutput = JSON.stringify([moments.currentFacts(), frames, moments.metrics(), again.status()]);
-    for (const secret of [JUNIPER, QUIET, ROWAN, WREN, 'login9001', 'Provider9001', 'user_id', 'is_gift']) expect(publicOutput).not.toContain(secret);
-    for (const [key, value] of memory.dump(KINGDOM)) expect(JSON.stringify([key, value])).not.toMatch(/login|Provider|user_name|is_gift/);
+    const publicOutput = JSON.stringify([moments.currentFacts(), frames, moments.metrics(), again.status(), notices.status(), later.status()]);
+    for (const secret of [JUNIPER, QUIET, ROWAN, WREN, MOSS, PIP, ORIGIN, FERN, READER, '274598607', 'login9001', 'Provider9001', 'user_id', 'is_gift', 'SECRET',
+      'AnAnonymousGifter', 'cumulative', '#ff0000']) expect(publicOutput).not.toContain(secret);
+    for (const [key, value] of memory.dump(KINGDOM)) expect(JSON.stringify([key, value])).not.toMatch(/login|Provider|user_name|is_gift|SECRET|AnAnonymous|cumulative/);
+    // A wrapping keeps the giver's seal at each located recipient's home; nothing counts or ranks the giver.
+    expect(memory.dump(KINGDOM).filter(([key]) => key.startsWith('twitch-moments:wrapping:')).map(([, v]) => (v as { giver: unknown }).giver))
+      .toContainEqual({ displayName: 'Rowan', slot: 5 });
+    expect(memory.dump(KINGDOM).some(([key]) => /giver-count|rank/u.test(key))).toBe(false);
 
     moments.dispose();
     expect(moments.sample(now).visible).toBe(false);
-    again.stop();
+    again.stop(); notices.stop(); later.stop();
   });
 });

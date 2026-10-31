@@ -57,7 +57,7 @@ function rig(authorized: MomentCapability[], readerId: PersonId | null) {
   return { ingest, local, memory, status, drain, advance: (ms: number) => { now += ms; }, now: () => now, all: facts };
 }
 
-describe('support sources (scratch)', () => {
+describe('support sources: chat notices and the structured subscription family', () => {
   it('chat notices: gift groups, forwards, resubs, lapses, upgrades and badges', async () => {
     const r = rig(['moments.chat-notices', 'moments.subscriptions'], READER);
     expect(r.status.support).toBe('notices');

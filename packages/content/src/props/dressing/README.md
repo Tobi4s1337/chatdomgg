@@ -5,9 +5,11 @@ The living and garden forms that dress open ground (spec 28, R1). `index.ts` exp
 `DRESSING_ROLES` and `DRESSING_SIZES`. Non-kit forms are built in Grove and have `kind: 'flora'`. All units below
 are 0.125 m build cells, half-open, with y=0 the ground.
 
-So far the collection holds the six cover forms in `cover.ts`. The heather, fern, garden, field, path, tree and
-woodland forms will join the same index as they are authored and reviewed. Until then `createDressing` throws
-for them.
+So far the collection holds the six meadow cover forms, the `seedling-bed` and the `cutting-bed` in `cover.ts`,
+and the `stepping-stones` kit form in `path.ts`. The seedling bed and stones make the tended doorstep; with the
+cutting bed they make the market stall's garden. The heather, fern, garden,
+field, edge-stone, tree and woodland forms will join the same index as they are authored and reviewed. Until
+then `createDressing` throws for them.
 
 ## Cover
 
@@ -18,7 +20,9 @@ stay four cells (0.5 m) tall or less, so they can stand in front of a facade und
 Each patch is drawn as a **height map**: one row per Z and one mark per column. A digit is a leaf column that
 many cells tall, and `a`–`d` are the same heights with a moss top cell. `F`/`H` are flower-head columns with or
 without a two-cell leaf stem, and `f`/`h` are the same with the head's top cell left open. `o`/`O` are pebble
-stone one or two cells tall. The whole composition of a patch is visible in its plan. Columns never overhang,
+stone one or two cells tall (the kit's stone in a path form). `e`/`E` are turned earth one or two cells tall.
+`s` is a seedling leaf on one earth cell, `t` is a seedling heart (leaf and moss tip) on one earth cell, and `m`
+is one cell of moss. The whole composition of a patch is visible in its plan. Columns never overhang,
 except for a head's stemless cells, which its own head holds up. So every patch is grounded by construction.
 `plan` throws on a mark in the margin, a column that is too tall, or a head that is not a proper 2×2.
 `toBoxes` merges runs along X, then along Z, and writes each cell once.
@@ -35,6 +39,27 @@ except for a head's stemless cells, which its own head holds up. So every patch 
 - **clover-pebbles** 16×2×16: two rounded clover mats in `leaf` with `moss` along their sunny rims, plus five
   raised leaves. Four pebbles in `stone` (#aaa49b) are bedded into the lawn: a domed 4×4 at the back right, a
   2×2 tucked against the larger mat, a soft 3×3 at the left and a low one at the front.
+
+- **seedling-bed** 24×3×8: a front-garden bed being planted. A strip of turned `earth` one course deep, with
+  ragged ends, holds two staggered rows of seedlings. Each is a cross of `leaf` around a `moss` heart. The back
+  row is full (five). The front row stops after three, then one seedling only just set, then the soil from the
+  planting holes heaped two cells high. There is no tool and nothing to harvest. It is passive and lies flush,
+  so it may stand in a forecourt.
+
+- **cutting-bed** 24×4×10: a grower's cutting bed, the stock of a market stall. A continuous edge of turned
+  `earth` holds three staggered rows of 2×2 heads in three blocks of one colour each: five `petal`, four `cream`,
+  five `goldLeaf`, never mixed, so it reads as planted rather than wild. `plan` takes a colour per head, named by
+  its even corner. Leaves bank against every head. Between the cream and the gold one head has been cut for the
+  stall: its bare stems stand with `moss` cut ends, and a single heaped clod lies on the edge beside them. It
+  is half a metre tall, passive and flush, with nothing to pick, sit on or step up.
+
+## Path
+
+- **stepping-stones** (kit) 24×2×8: three flat stones a stride apart, two courses of the kit's stone (Hearth
+  limestone, Tide stone, Grove dark stone). One is broad and square-shouldered, one is a narrower oval and one is
+  long and turned off the line. Turf worn to `earth` lies where feet land between them, and `moss` holds a few
+  joints. It is passive: walked over, never a blocker. The planter beds it so only a worn lip shows,
+  even where up to 0.14 m of grade relief runs under it.
 
 ## LOD design
 
@@ -61,8 +86,12 @@ Full detail, from the mesher (confirmed by `render-stats.json`); each renders in
 | meadow-tufts | 100 | 538 | 45 |
 | wildflowers-* (each) | 219 | 956 | 93 |
 | clover-pebbles | 96 | 502 | 37 |
+| seedling-bed | 182 | 590 | 39 |
+| cutting-bed | 351 | 1,098 | 106 |
+| stepping-stones (each kit) | 182 | 324 | 37 |
 
-Budget: ≤ 1,500 triangles per cover form.
+Budget: ≤ 1,500 triangles per cover form, ≤ 6,000 per path form. The flush forms are mounted at full detail
+only: a coarse level would stand a one-course stone up as a slab.
 
 ## Commands
 

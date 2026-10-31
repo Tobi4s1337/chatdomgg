@@ -375,3 +375,33 @@ with channel points; benches, gates, stiles and anything sat on or opened.
 - **2026-10-30 — One authoritative placement plan.** `createGroundDressing` consumes the exact precomputed plan
   already used for blockers; no second RNG pass. Stable IDs and lot tags keep growth/build toggles local and
   host visibility updates synchronize geometry, collision and light rather than merely hiding the mesh.
+- **2026-10-31 — The doorstep's gardening story is flush, so `seedling-bed` joins the cover forms.** The front
+  apron is all forecourt/approach verge, where R3 forbids solids, and the lot gaps are 1–2 m against the 1.5 m
+  solid clearance. A raised bed or crates cannot stand there. A passive bed of turned earth with seedlings, one
+  row unfinished, tells the gardening story within the rules. It is added after `clover-pebbles` in the R1 order
+  (24×3×8, cover band, cover budget). `stepping-stones` is authored now for the same vignette. GD05 places it on
+  routes; it is cut two courses deep and bedded so its lip shows across up to 0.14 m of grade relief (lot gaps
+  carry a foundation step). Both are passive and flush: shown at full detail only, no shadow, never a blocker.
+- **2026-10-31 — Tended doorsteps.** Two fronts on one street with the same facing, one lot and a 0–3.5 m gap
+  apart, share a forecourt strip. The arrival home's strips are always tended, others by age (0.12 + 0.28 × age).
+  A tended strip has stepping stones from the street up the lot gap, the older neighbour's bed beside them and
+  the other neighbour's flower in a close row (two or more patches, square turns) along the other side. The turf
+  beside the stones is clover. A strip that cannot hold both the stones and the bed is planted as a plain
+  forecourt drift, with the reason in `report.omissions`.
+- **2026-10-31 — Public drifts take their colour from the nearest lot, not the current footprint,** so a home's
+  growth never recolours dressing outside its lot.
+- **2026-10-31 — The market stall keeps a garden, so `cutting-bed` joins the cover forms.** Main asked for a
+  flower-filled, worn planting strip beside the existing stalls, without a second cart. The square is paved to its
+  edge, and the wild drift's 2 m patch cannot hug that edge under the square's radius rule. A stall whose back
+  meets the square's edge within 4 m gets a strip on the open ground behind it. The stall is found in the host's
+  real `occupied` placements (`market-stall-*`); none is assumed. From behind the stall's inner end, a run of up to
+  a dozen metres heads toward the middle of the square, where the market sees it: a cutting bed, worn stepping
+  stones up the bank, a second cutting bed turned half round, then a seedling bed. A loose petal drift has seeded
+  itself up the bank above them, and the turf by the stones is clover. Only these flush, passive pieces may border
+  that one square. Each whole box stays outside it, 0.3 m off its paving, with no corner of the square inside the
+  box. Every other clearance is unchanged, and whatever does not fit is reported in `omissions` (in the founded
+  town the castle road's paving ends the run before the seedling bed). `cutting-bed` (24×4×10, cover band and
+  budget) follows `seedling-bed` in the R1 order. It has three blocks of one colour (petal, cream, gold) on turned
+  earth, with one head cut for the stall. It is passive, mounted at full detail only and casts no shadow. The
+  adopted cover now keeps every non-solid piece, so the flush stones of doorsteps and the stall garden reach the
+  real scene. Solids still wait for collision composition.

@@ -189,6 +189,75 @@ function edgeDistance(ctx: Context, x: number, z: number, sample = samplePublicG
   return d;
 }
 
+/** The front garden beside one door, toward its neighbour on the same street when there is one. */
+interface ForecourtStrip {
+  a: HomeArea; b?: HomeArea;
+  /** Unit direction along the street, from a's door toward b's. */
+  u: XZ;
+  /** The free span along `u` from a's front centre: from the edge of a's entrance band to the edge of b's. */
+  from: number; to: number;
+  /** Where along `u` the open gap between the two lots runs, midway between their lot lines. */
+  gap: number;
+  /** Depth from the facades to the street's paving, the shallower of the two. */
+  apron: number;
+  /** World point `along` metres along the strip and `out` metres out from a's facade. */
+  at(along: number, out: number): XZ;
+}
+function forecourtStrip(ctx: Context, a: HomeArea, side: 1 | -1): ForecourtStrip {
+  const u: XZ = [a.right[0] * side, a.right[2] * side];
+  let b: HomeArea | undefined, along = Infinity;
+  // A neighbour faces the same way with its front on the same line, one lot and its gap along.
+  ctx.homes.near({ minX: a.front[0], maxX: a.front[0], minZ: a.front[2], maxZ: a.front[2] }, 12, other => {
+    if (other === a || other.outward[0] !== a.outward[0] || other.outward[2] !== a.outward[2]) return;
+    const dx = other.front[0] - a.front[0], dz = other.front[2] - a.front[2], t = dx * u[0] + dz * u[1];
+    if (Math.abs(dx * a.outward[0] + dz * a.outward[2]) < 0.5 && t >= 8 && t <= 11.5 && t < along) { b = other; along = t; }
+  });
+  // Entrance bands are centred 0.25 m toward -right of each front centre and reach 2 m either way.
+  const from = -0.25 * side + 2.1, to = b ? along - 0.25 * side - 2.1 : 4;
+  return {
+    a, ...(b ? { b } : {}), u, from, to, gap: b ? along / 2 : 4, apron: b ? Math.min(a.apron, b.apron) : a.apron,
+    at: (t, out) => [a.front[0] + u[0] * t + a.outward[0] * out, a.front[2] + u[1] * t + a.outward[2] * out],
+  };
+}
+
+/** A market stall whose back meets the edge of the square, framed for the garden behind it. */
+interface MarketStall {
+  id: string; style: SettlementHome['style'];
+  /** Unit direction along the edge, from the stall's outer end toward the middle of the square. */
+  u: XZ;
+  /** Unit outward normal of the edge, away from the square. */
+  n: XZ;
+  /** The point on the edge behind the stall's back centre; `start`/`end` bound the strip along `u` from it. */
+  edge: XZ; start: number; end: number;
+}
+
+/**
+ * Stalls are the host's real occupied placements (`market-stall-*` inside the square), never assumed positions. A
+ * stall qualifies when the square's edge lies within 4 m behind its back.
+ */
+function marketStalls(ctx: Context): MarketStall[] {
+  const square = ctx.plan.market.boundary, stalls: MarketStall[] = [];
+  const middle: XZ = [square.reduce((n, p) => n + p[0], 0) / square.length, square.reduce((n, p) => n + p[1], 0) / square.length];
+  for (const piece of ctx.input.occupied) {
+    const match = /^market-stall-(\d+)$/.exec(piece.blueprint.id);
+    if (!match) continue;
+    const c = Math.cos(piece.yaw), s = Math.sin(piece.yaw), w = piece.blueprint.size[0] * CELL;
+    const back: XZ = [piece.position[0] + c * w / 2, piece.position[2] - s * w / 2], n: XZ = [-s, -c];
+    if (polygonDistance(square, ...back) >= 0) continue;
+    let depth = 0;
+    while (depth <= 4 && polygonDistance(square, back[0] + n[0] * depth, back[1] + n[1] * depth) < 0) depth += 0.05;
+    if (depth > 4) continue;
+    const edge: XZ = [back[0] + n[0] * depth, back[1] + n[1] * depth];
+    // Toward the middle of the square along the edge: the stall's outer end lies the other way.
+    const across: XZ = [c, -s], sign = (middle[0] - back[0]) * across[0] + (middle[1] - back[1]) * across[1] >= 0 ? 1 : -1;
+    const u: XZ = [across[0] * sign, across[1] * sign];
+    const nearest = [...ctx.areas].sort((a, b) => rectDistance(a.lot, ...back) - rectDistance(b.lot, ...back))[0];
+    // The run starts behind the stall's inner end and reaches at most a dozen metres on toward the middle.
+    stalls.push({ id: `market:stall:${match[1]}:garden`, style: nearest?.home.style ?? 'hearth', u, n, edge, start: w / 2 - 1.3, end: w / 2 + 12 });
+  }
+  return stalls.sort((a, b) => (a.id < b.id ? -1 : 1));
+}
+
 interface Candidate { blueprint: VoxelBlueprint; centre: XZ; yaw: number }
 interface Fit { position: Vec3; slope?: readonly [number, number] }
 
@@ -196,7 +265,7 @@ interface Fit { position: Vec3; slope?: readonly [number, number] }
  * Every clearance rule of R3 for one footprint. Returns the grounded placement, or a reason it cannot stand.
  * Cover is sheared onto the fitted ground plane (≤35°); structural pieces need level ground (≤0.125 m relief).
  */
-function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | undefined): Fit | string {
+function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | undefined, beside?: readonly XZ[]): Fit | string {
   const role = pieceRole(blueprint), height = blueprint.size[1] * CELL;
   const [cx, cz] = centre, c = Math.cos(yaw), s = Math.sin(yaw), w = blueprint.size[0] * CELL, d = blueprint.size[2] * CELL;
   const origin: XZ = [cx - (c * w / 2 + s * d / 2), cz - (-s * w / 2 + c * d / 2)];
@@ -244,29 +313,40 @@ function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | 
   // Castle: nothing inside its bounds; within 12 m only what stays under a metre.
   if (overlaps(ctx.castle, rect)) return 'inside the castle';
   if (height > 1 && overlaps(grow(ctx.castle, 12), rect)) return 'tall beside the castle';
-  for (const polygon of ctx.polygons) if (polygonDistance(polygon, cx, cz) < radius + 0.25) return 'inside a square, court, site or keep-out';
+  for (const polygon of ctx.polygons) {
+    if (polygon !== beside) { if (polygonDistance(polygon, cx, cz) < radius + 0.25) return 'inside a square, court, site or keep-out'; continue; }
+    // Flush planting may border the one square it dresses: its whole box outside, no corner of the square inside it.
+    if (corners.some(([x, z]) => polygonDistance(polygon, x, z) < 0.3) || polygon.some(([x, z]) => x > rect.minX && x < rect.maxX && z > rect.minZ && z < rect.maxZ
+      && polygonDistance(corners, x, z) < 0)) return 'inside a square, court, site or keep-out';
+  }
   for (const circle of input.keepClear) if (rectDistance(rect, circle.x, circle.z) < circle.radius) return 'inside a keep-clear circle';
   if (input.waterKeepOut(cx, cz, radius + 0.75)) return 'in or beside water';
-  // Ground: a 3×3 sample grid across the box.
-  const samples: { dx: number; dz: number; h: number }[] = [];
-  for (const u of [0.1, 0.5, 0.9]) for (const v of [0.1, 0.5, 0.9]) {
+  // Ground: a 3×3 sample grid across the box, 5×5 under a level solid, whose lowest corner it must reach.
+  const samples: { dx: number; dz: number; h: number }[] = [], grid = role.solid ? [0.02, 0.26, 0.5, 0.74, 0.98] : [0.1, 0.5, 0.9];
+  for (const u of grid) for (const v of grid) {
     const a = w * u, b = d * v, x = origin[0] + c * a + s * b, z = origin[1] - s * a + c * b;
     samples.push({ dx: x - cx, dz: z - cz, h: input.ground(x, z) });
   }
   const mean = samples.reduce((n, p) => n + p.h, 0) / samples.length;
-  if (!role.cover) {
+  if (role.solid) {
     const low = Math.min(...samples.map(p => p.h)), high = Math.max(...samples.map(p => p.h));
     if (high - low > 0.125) return 'ground too uneven for a level piece';
-    position[1] = low;
+    // A centimetre under the lowest sample, so no corner between samples shows daylight.
+    position[1] = low - 0.01;
     return { position };
   }
   const xx = samples.reduce((n, p) => n + p.dx * p.dx, 0), zz = samples.reduce((n, p) => n + p.dz * p.dz, 0);
   const gx = samples.reduce((n, p) => n + p.dx * (p.h - mean), 0) / xx, gz = samples.reduce((n, p) => n + p.dz * (p.h - mean), 0) / zz;
   if (Math.hypot(gx, gz) > Math.tan(35 * Math.PI / 180)) return 'slope over 35°';
   const residuals = samples.map(p => p.h - (mean + gx * p.dx + gz * p.dz));
-  if (Math.max(...residuals) - Math.min(...residuals) > 0.2) return 'ground too broken for one patch';
-  // Lower the plane to the lowest residual so no sampled tuft floats; a hair more hides the contact seam.
-  const y = mean + Math.min(...residuals) - 0.03;
+  const spread = Math.max(...residuals) - Math.min(...residuals);
+  if (spread > 0.2) return 'ground too broken for one patch';
+  // Lower the plane to the lowest residual so no sampled tuft floats; a hair more hides the contact seam. Flush
+  // stones (two courses) are bedded as deep as the relief allows while their worn lip still shows at the highest
+  // point; at the lowest they stand at most a hand proud.
+  const flush = role.form === 'stepping-stones';
+  if (flush && spread > 0.14) return 'ground too broken for flush stones';
+  const y = mean + Math.min(...residuals) - (flush ? Math.min(0.19, blueprint.size[1] * CELL - 0.02 - spread) : 0.03);
   position[1] = y + gx * (origin[0] - cx) + gz * (origin[1] - cz);
   return { position, slope: [gx, gz] };
 }
@@ -276,7 +356,7 @@ function fit(ctx: Context, { blueprint, centre, yaw }: Candidate, lot: string | 
 
 const COVER_FORMS = {
   tufts: 'meadow-tufts', clover: 'clover-pebbles', petal: 'wildflowers-petal', blue: 'wildflowers-blue',
-  gold: 'wildflowers-gold', cream: 'wildflowers-cream',
+  gold: 'wildflowers-gold', cream: 'wildflowers-cream', bed: 'seedling-bed', cutting: 'cutting-bed',
 } as const satisfies Record<string, DressingForm>;
 type Bloom = 'petal' | 'blue' | 'gold' | 'cream';
 /** Each kit's meadow leans to its own flower: heather pink and gold by the hearth, sea blue and cream by the tide. */
@@ -298,7 +378,11 @@ function meadowNoise(ctx: Context, x: number, z: number, scale: number, salt: st
   return (at(ix, iz) * (1 - sx) + at(ix + 1, iz) * sx) * (1 - sz) + (at(ix, iz + 1) * (1 - sx) + at(ix + 1, iz + 1) * sx) * sz;
 }
 
-interface Drift { id: string; centre: XZ; along: XZ; length: number; width: number; bloom: Bloom; lot?: string; slot?: number }
+interface Drift {
+  id: string; centre: XZ; along: XZ; length: number; width: number; bloom: Bloom; lot?: string; slot?: number;
+  /** A planted border: one close row along `along` in near-square turns, rather than a loose drift. Two patches make one. */
+  row?: boolean;
+}
 
 const TIER_CAP: Record<KingdomTier, number> = { hamlet: 12_000, town: 40_000 };
 
@@ -313,7 +397,7 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
     const blueprint = createDressing(form);
     return [key, () => blueprint];
   })) as Record<keyof typeof COVER_FORMS, () => VoxelBlueprint>;
-  const placed: (GroundPiece & { key: string })[] = [], omissions: string[] = [];
+  const placed: GroundPiece[] = [], omissions: string[] = [];
   const blueprints = new Map<string, VoxelBlueprint>();
   const shared = (b: VoxelBlueprint) => { const known = blueprints.get(b.id); if (known) return known; blueprints.set(b.id, b); return b; };
   const lotOf = (x: number, z: number) => {
@@ -324,43 +408,127 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
     });
     return found;
   };
-  const tryPlace = (id: string, blueprint: VoxelBlueprint, centre: XZ, yaw: number, lot: { id: string; slot?: number } | undefined): boolean => {
-    const result = fit(ctx, { blueprint, centre, yaw }, lot?.id);
+  const tryPlace = (id: string, blueprint: VoxelBlueprint, centre: XZ, yaw: number, lot: { id: string; slot?: number } | undefined, beside?: readonly XZ[]): boolean => {
+    const result = fit(ctx, { blueprint, centre, yaw }, lot?.id, beside);
     if (typeof result === 'string') return false;
-    placed.push({ id, key: id, blueprint: shared(blueprint), position: result.position, yaw,
+    placed.push({ id, blueprint: shared(blueprint), position: result.position, yaw,
       ...(lot?.slot !== undefined ? { lotSlot: lot.slot } : {}), ...(result.slope ? { slope: result.slope } : {}) });
     return true;
   };
+  // Measured to the lot, which never moves, so a home growing deeper never recolours a public drift.
   const nearestHome = (x: number, z: number, reach = 40): HomeArea | undefined => {
     let best: HomeArea | undefined, distance = reach;
     ctx.homes.near({ minX: x, maxX: x, minZ: z, maxZ: z }, reach, area => {
-      const d = rectDistance(area.rect, x, z); if (d < distance) { distance = d; best = area; }
+      const d = rectDistance(area.lot, x, z); if (d < distance) { distance = d; best = area; }
     });
     return best;
   };
 
-  // 1. Forecourt drifts: one flower colour gathered in the garden strip between two neighbouring doors, under
-  //    their windows and clear of both entrance bands, so a run of colour leads along the street to each door.
-  //    Old Row forecourts flower more often than the newest street's.
-  const drifts: Drift[] = [];
+  // 1. Forecourts. Two neighbouring fronts on one street share the garden strip between their doors; each strip
+  //    is decided once, by the lower slot. Most strips carry one flower colour gathered under the windows, clear of
+  //    both entrance bands, so a run of colour leads along the street to each door. Some are tended doorsteps
+  //    (`placeDoorstep`): each neighbour's border in its own colour, a bed being planted and stones worn between
+  //    the two doors. Old Row flowers and tends more than the newest street, and the arrival home is always tended.
+  const drifts: Drift[] = [], reserved: { rect: Rect; trodden: boolean }[] = [];
   const oldest = Math.min(...plan.homes.map(h => h.quarterYear)), newest = Math.max(...plan.homes.map(h => h.quarterYear));
+  const ageOf = (home: SettlementHome) => newest === oldest ? 1 : (newest - home.quarterYear) / (newest - oldest);
+  const arrival = arrivalHome(plan);
   for (const area of [...ctx.areas].sort((a, b) => a.home.slot - b.home.slot)) {
-    const { home } = area, age = newest === oldest ? 1 : (newest - home.quarterYear) / (newest - oldest);
+    const { home } = area;
     for (const side of [-1, 1] as const) {
-      // Each shared strip is decided once, by the home on its left (looking out to the street).
-      const x0 = area.front[0] + area.right[0] * side * 4, z0 = area.front[2] + area.right[2] * side * 4;
-      const neighbour = ctx.areas.find(other => other !== area && Math.hypot(other.front[0] + other.right[0] * -side * 4 - x0, other.front[2] + other.right[2] * -side * 4 - z0) < 0.6
-        && other.outward[0] === area.outward[0] && other.outward[2] === area.outward[2]);
-      if (neighbour && neighbour.home.slot < home.slot) continue;
-      const key = `${home.slot}:${side}`;
+      const strip = forecourtStrip(ctx, area, side);
+      if (strip.b && strip.b.home.slot < home.slot) continue;
+      const key = `${home.slot}:${side}`, age = Math.max(ageOf(home), strip.b ? ageOf(strip.b.home) : 0);
+      const tended = strip.b && (home === arrival || strip.b.home === arrival || ctx.rand('doorstep', key) < 0.12 + 0.28 * age);
+      if (tended && placeDoorstep(strip, key)) continue;
       if (ctx.rand('forecourt', key) > 0.3 + 0.25 * age) continue;
       const blooms = BLOOMS[home.style], bloom = blooms[Math.floor(ctx.rand('forecourt-bloom', key) * blooms.length)]!;
-      const apron = Math.min(area.apron, neighbour?.apron ?? area.apron), out = 1.35 + (apron - 1.65) / 2;
-      const reach = neighbour ? 0 : -0.9;
-      drifts.push({ id: `forecourt:${key}`, centre: [x0 + area.outward[0] * out - area.right[0] * side * reach, z0 + area.outward[2] * out - area.right[2] * side * reach],
-        along: [area.right[0], area.right[2]], length: neighbour ? 3.8 : 2.6, width: Math.max(1.2, apron - 1.65), bloom });
+      const out = 1.35 + (strip.apron - 1.65) / 2;
+      // A lone front gathers its drift at the row end, just past its lot line.
+      const u = strip.b ? (strip.from + strip.to) / 2 : 4.9;
+      drifts.push({ id: `forecourt:${key}`, centre: strip.at(u, out), along: [area.right[0], area.right[2]],
+        length: strip.b ? Math.min(3.8, strip.to - strip.from) : 2.6, width: Math.min(2.2, Math.max(1.2, strip.apron - 1.65)), bloom });
     }
   }
+
+  /**
+   * A tended doorstep strip: stepping stones worn from the street up the gap between the two houses, the way round
+   * to the back gardens; on the older neighbour's side of them a bed being planted, and on the other side that
+   * neighbour's own flowers lining the stones. Every part passes the same clearances as the rest of the plan;
+   * returns false, planting nothing, when the strip cannot hold both the stones and the bed.
+   */
+  function placeDoorstep(strip: ForecourtStrip, key: string): boolean {
+    const a = strip.a, b = strip.b!, id = `doorstep:${key}`, before = placed.length, reservedBefore = reserved.length;
+    // Local +X of a form runs out toward the street; the gap between the two lots is the path's line.
+    const inward = Math.atan2(-a.outward[2], a.outward[0]);
+    const stones = shared(createDressing('stepping-stones', a.home.style)), bed = COVER.bed();
+    const fail = (reason: string) => { omissions.push(`${id}: ${reason}; planted as a plain forecourt`); placed.length = before; reserved.length = reservedBefore; return false; };
+    // The stones end a stride short of the street's paving and lean a touch off the straight, on the gap's line or
+    // a hand or two either side of it, where a pot or shrub stands in the way or the two lots' grades meet in a step.
+    const tilt = (ctx.rand(id, 'tilt') - 0.5) * 0.12;
+    const gap = [0, -0.2, 0.2, -0.4, 0.4, -0.6, 0.6].map(offset => strip.gap + offset).find(u => tryPlace(`${id}:stones`, stones, strip.at(u, strip.apron - 1.8), inward + tilt, undefined));
+    if (gap === undefined) return fail(`stones ${fit(ctx, { blueprint: stones, centre: strip.at(strip.gap, strip.apron - 1.8), yaw: inward + tilt }, undefined)}`);
+    const laid = placed.at(-1)!;
+    reserved.push({ rect: grow(boundsOf(footprintCorners(stones, laid.position, laid.yaw, CELL)), 0.12), trodden: true });
+    // The bed lies along the stones on the older home's side, as far in as the facade's pots allow.
+    const older = ageOf(b.home) > ageOf(a.home) ? 1 : -1, bedU = gap + older * 1.12;
+    let bedPlaced = false;
+    for (const v of [strip.apron - 1.85, strip.apron - 2.05, strip.apron - 1.65]) {
+      if (tryPlace(`${id}:bed`, bed, strip.at(bedU, v), inward + (ctx.rand(id, 'bed') - 0.5) * 0.05, undefined)) { bedPlaced = true; break; }
+    }
+    if (!bedPlaced) return fail('no bed fits beside the stones');
+    reserved.push({ rect: boundsOf(footprintCorners(bed, placed.at(-1)!.position, placed.at(-1)!.yaw, CELL)), trodden: false });
+    // The other neighbour lines its side of the stones with its own flower, facade to street.
+    const owner = older === 1 ? a.home : b.home, blooms = BLOOMS[owner.style];
+    const bloom = blooms[Math.floor(ctx.rand(id, 'bloom') * blooms.length)]!, inner = 2.35, outer = strip.apron - 1.3;
+    if (outer - inner > 0.4) drifts.push({ id: `${id}:border`, centre: strip.at(gap - older * 1.65, (inner + outer) / 2),
+      along: [a.outward[0], a.outward[2]], length: outer - inner, width: 0.8, bloom, row: true });
+    return true;
+  }
+  for (const stall of marketStalls(ctx)) placeStallGarden(stall);
+
+  /**
+   * The stall's own garden: where a market stall backs onto the edge of the square, its grower keeps cutting beds
+   * on the open ground behind it. From behind the stall's inner end the beds run along the edge toward the middle
+   * of the square, where the market sees them: pink, cream and gold in blocks, worn stones between the beds where
+   * the grower climbs the bank, a second cutting bed, then a bed being planted for the next market. Above them the
+   * stock has seeded itself up the bank in a loose drift. Every piece is flush and passive, keeps the paving and the
+   * stall's occupied geometry clear and passes every other clearance; whatever does not fit is left out with its
+   * reason. The stall and its wares are never moved or doubled.
+   */
+  function placeStallGarden(stall: MarketStall): void {
+    const { id, u, n, edge, start, end, style } = stall, square = plan.market.boundary;
+    const at = (along: number, out: number): XZ => [edge[0] + u[0] * along + n[0] * out, edge[1] + u[1] * along + n[1] * out];
+    // Local +X of a form runs along `u` (beds) or out along `n` (stones).
+    const alongYaw = Math.atan2(-u[1], u[0]), outYaw = Math.atan2(-n[1], n[0]);
+    const jitter = (key: string) => (ctx.rand(id, key) - 0.5) * 0.07;
+    const stones = shared(createDressing('stepping-stones', style));
+    // [key, form, length along the edge, distances out from the edge, yaw]. Beds lie a hand off the paving, each
+    // set a little in or out so the run never reads as ruled; the stones climb a stride up the bank.
+    const out = (key: string) => 1 + ctx.rand(id, 'out', key) * 0.25;
+    const sequence: readonly [string, VoxelBlueprint, number, readonly number[], number][] = [
+      ['cutting:0', COVER.cutting(), 3, [out('cutting:0'), 1.05], alongYaw + jitter('cutting:0')],
+      ['stones', stones, 1, [1.95, 2.1], outYaw + jitter('stones')],
+      ['cutting:1', COVER.cutting(), 3, [out('cutting:1'), 1.05], alongYaw + Math.PI + jitter('cutting:1')],
+      ['seedlings', COVER.bed(), 3, [out('seedlings') - 0.1, 0.95], alongYaw + jitter('seedlings')],
+    ];
+    let cursor = start, first: number | undefined;
+    for (const [key, blueprint, length, outs, yaw] of sequence) {
+      const from = cursor + 0.3 + ctx.rand(id, 'gap', key) * 0.35;
+      let laid = false;
+      for (let shift = 0; !laid && shift <= 3 && from + shift + length <= end; shift += 0.25)
+        for (const o of outs) if (tryPlace(`${id}:${key}`, blueprint, at(from + shift + length / 2, o), yaw, undefined, square)) {
+          const piece = placed.at(-1)!;
+          reserved.push({ rect: grow(boundsOf(footprintCorners(blueprint, piece.position, piece.yaw, CELL)), key === 'stones' ? 0.12 : 0), trodden: key === 'stones' });
+          first ??= from + shift; cursor = from + shift + length; laid = true; break;
+        }
+      if (!laid) omissions.push(`${id}:${key}: ${fit(ctx, { blueprint, centre: at(from + length / 2, outs[0]!), yaw }, undefined, square)}`);
+    }
+    if (first === undefined) return;
+    // The stock gone wild up the bank above the last beds, toward the middle of the square.
+    drifts.push({ id: `${id}:wild`, centre: at(Math.max(first + 2, cursor - 1.2), 4.2), along: u, length: 5, width: 2.4, bloom: 'petal' });
+  }
+
   // Open-meadow drifts on a coarse jittered lattice: likelier near the town, never an even scatter.
   for (let gz = Math.floor(plan.bounds.minZ / 11); gz <= Math.floor(plan.bounds.maxZ / 11); gz++)
     for (let gx = Math.floor(plan.bounds.minX / 11); gx <= Math.floor(plan.bounds.maxX / 11); gx++) {
@@ -378,22 +546,45 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
         length: 3 + ctx.rand('drift-length', gx, gz) * 3, width: 1.5 + ctx.rand('drift-width', gx, gz) * 1.2, bloom,
         ...(lot ? { lot: lot.id, ...(lot.slot !== undefined ? { slot: lot.slot } : {}) } : {}) });
     }
+  /** Whether a cover patch centred here would tuft through a doorstep bed or stones. */
+  const onReserved = (blueprint: VoxelBlueprint, centre: XZ, yaw: number) => {
+    if (!reserved.length) return false;
+    const w = blueprint.size[0] * CELL, d = blueprint.size[2] * CELL, c = Math.cos(yaw), s = Math.sin(yaw);
+    const corner: Vec3 = [centre[0] - (c * w / 2 + s * d / 2), 0, centre[1] - (-s * w / 2 + c * d / 2)];
+    const rect = boundsOf(footprintCorners(blueprint, corner, yaw, 0.25));
+    return reserved.some(r => overlaps(r.rect, rect));
+  };
   const driftHearts = new Map<number, { centre: XZ; reach: number; lot?: string }[]>();
   const heartKey = (x: number, z: number) => (Math.floor(x / 8) + 4096) * 8192 + Math.floor(z / 8) + 4096;
   for (const drift of drifts) {
-    const blueprint = COVER[drift.bloom](), patches: (GroundPiece & { key: string })[] = [];
+    const blueprint = COVER[drift.bloom](), patches: GroundPiece[] = [];
     const [ux, uz] = drift.along, vx = -uz, vz = ux, before = placed.length;
     // A loose staggered row of patches inside the drift's ellipse, rotated freely; heads overlap at the seams.
     for (let i = 0; i < 18 && patches.length < 15; i++) {
-      const t = ((i % 6) + 0.5) / 6 - 0.5, row = Math.floor(i / 6) - 1;
-      const a = t * drift.length + (ctx.rand(drift.id, 'a', i) - 0.5) * 0.6, b = row * drift.width * 0.42 + (ctx.rand(drift.id, 'b', i) - 0.5) * 0.5;
-      if ((a / (drift.length / 2)) ** 2 + (b / (drift.width / 2 + 0.3)) ** 2 > 1.05) continue;
+      let a: number, b: number;
+      if (drift.row) {
+        // `length` is the span of patch centres along the row.
+        if (i * 0.3 > drift.length + 0.05) break;
+        a = -drift.length / 2 + i * 0.3 + (ctx.rand(drift.id, 'a', i) - 0.5) * 0.08;
+        b = (ctx.rand(drift.id, 'b', i) - 0.5) * 0.08;
+      } else {
+        const t = ((i % 6) + 0.5) / 6 - 0.5, row = Math.floor(i / 6) - 1;
+        a = t * drift.length + (ctx.rand(drift.id, 'a', i) - 0.5) * 0.6; b = row * drift.width * 0.42 + (ctx.rand(drift.id, 'b', i) - 0.5) * 0.5;
+        if ((a / (drift.length / 2)) ** 2 + (b / (drift.width / 2 + 0.3)) ** 2 > 1.05) continue;
+      }
       const x = drift.centre[0] + ux * a + vx * b, z = drift.centre[1] + uz * a + vz * b;
       // A drift belongs wholly to one lot or to the open ground, so a home's growth never reshapes a public drift.
       const lot = drift.lot ? { id: drift.lot, ...(drift.slot !== undefined ? { slot: drift.slot } : {}) } : undefined;
-      if (tryPlace(`${drift.id}:${i}`, blueprint, [x, z], ctx.rand(drift.id, 'yaw', i) * Math.PI * 2, lot)) patches.push(placed.at(-1)!);
+      // A border keeps to its band: near-square turns, so its boxes clear the facade's pots and the bed.
+      const yaw = drift.row ? Math.floor(ctx.rand(drift.id, 'yaw', i) * 4) * Math.PI / 2 + (ctx.rand(drift.id, 'jitter', i) - 0.5) * 0.1
+        : ctx.rand(drift.id, 'yaw', i) * Math.PI * 2;
+      if (onReserved(blueprint, [x, z], yaw)) continue;
+      if (tryPlace(`${drift.id}:${i}`, blueprint, [x, z], yaw, lot)) patches.push(placed.at(-1)!);
     }
-    if (patches.length < 5) { placed.length = before; continue; }
+    if (patches.length < (drift.row ? 2 : 5)) {
+      if (drift.row) omissions.push(`${drift.id}: only ${patches.length} border patches fit`);
+      placed.length = before; continue;
+    }
     const heart = { centre: drift.centre, reach: drift.length / 2 + 1, ...(drift.lot ? { lot: drift.lot } : {}) };
     for (let gx = Math.floor((heart.centre[0] - heart.reach) / 8); gx <= Math.floor((heart.centre[0] + heart.reach) / 8); gx++)
       for (let gz = Math.floor((heart.centre[1] - heart.reach) / 8); gz <= Math.floor((heart.centre[1] + heart.reach) / 8); gz++) {
@@ -420,9 +611,12 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
       if (blocked(x, z, lot?.id)) continue;
       const pavingClose = (sample?.pavingDistance ?? Infinity) < 2.6;
       const rear = lot?.slot !== undefined;
-      const clover = ctx.rand('clover', ix, iz) < (pavingClose ? 0.42 : rear ? 0.38 : near ? 0.2 : 0.08);
-      const blueprint = clover ? COVER.clover() : COVER.tufts();
-      tryPlace(`${lot ? `lot:${lot.id}` : 'meadow'}:${ix}:${iz}`, blueprint, [x, z], ctx.rand('yaw', ix, iz) * Math.PI * 2, lot);
+      // Feet keep the turf short beside worn stones: clover there, never tufts.
+      const trodden = reserved.some(r => r.trodden && rectDistance(r.rect, x, z) < 1.1);
+      const clover = trodden || ctx.rand('clover', ix, iz) < (pavingClose ? 0.42 : rear ? 0.38 : near ? 0.2 : 0.08);
+      const blueprint = clover ? COVER.clover() : COVER.tufts(), yaw = ctx.rand('yaw', ix, iz) * Math.PI * 2;
+      if (onReserved(blueprint, [x, z], yaw)) continue;
+      tryPlace(`${lot ? `lot:${lot.id}` : 'meadow'}:${ix}:${iz}`, blueprint, [x, z], yaw, lot);
     }
 
   // 3. A weathered stone at the head of some far drifts, never in a lot or a forecourt (spec 06 rock cluster).
@@ -445,7 +639,7 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
       const p = placed[i]!, centreX = p.position[0], centreZ = p.position[2];
       if (overlaps(rect, boundsOf(footprintCorners(p.blueprint, [centreX, 0, centreZ], p.yaw, 0.25)))) placed.splice(i, 1);
     }
-    placed.push({ ...stone, key: id }); blockers.push(stone);
+    placed.push(stone); blockers.push(stone);
   }
 
   // 4. Bound the population by tier; drop the most marginal open-meadow tufts first, by stable hash rank.
@@ -457,11 +651,9 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
     for (let i = placed.length - 1; i >= 0; i--) if (drop.has(placed[i]!.id)) placed.splice(i, 1);
   }
 
-  placed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  placed.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const pieces = new Map<string, GroundPiece[]>(), counts: Record<string, number> = {};
-  for (const placement of placed) {
-    const { key, ...piece } = placement;
-    void key;
+  for (const piece of placed) {
     const list = pieces.get(piece.blueprint.id);
     if (list) list.push(piece); else pieces.set(piece.blueprint.id, [piece]);
     counts[piece.blueprint.id] = (counts[piece.blueprint.id] ?? 0) + 1;
@@ -469,7 +661,7 @@ export function planGroundDressing(input: GroundDressingInput): GroundDressingPl
   blockers.sort((a, b) => (a.id < b.id ? -1 : 1));
   return {
     pieces, blockers, collisionPieces: blockers, seatAnchors: [],
-    // Garden vignettes arrive with the garden kit; until then no home has one.
+    // Garden-kit vignettes (woodpile and barrels, bed and crates, the handcart) arrive with the garden kit.
     report: { counts, homesWithVignette: 0, omissions },
   };
 }

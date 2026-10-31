@@ -64,6 +64,13 @@ describe('founded scene (spec 38 R1-R3)', () => {
     for (const module of plan.castle.modules) expect(byId.get(`castle:${module.id}`)).toMatchObject({ position: [...module.position], rotation: module.rotation });
     expect(scene.placements.filter(p => p.id.startsWith('tree:')).length).toBeGreaterThan(40);
     expect(['market:well', 'market:stall:0', 'market:stall:1'].every(id => byId.has(id))).toBe(true);
+    expect(scene.placements.filter(p => p.id.startsWith('arrival:door:')).length).toBeGreaterThan(0);
+    expect(scene.placements.filter(p => p.id.startsWith('arrival:gate:'))).toHaveLength(2);
+    expect(byId.get('arrival:standard:royal')).toBeDefined();
+    for (const lamp of scene.placements.filter(p => p.id.startsWith('arrival:door:'))) {
+      expect(lamp.plotId).toBeDefined();
+      expect(scene.assets.find(asset => asset.assetHash === lamp.assetHash)?.blueprint.id).toMatch(/^arrival-door-lantern-/);
+    }
     // One asset per distinct byte content; repeated plots share it.
     expect(new Set(scene.assets.map(a => a.assetHash)).size).toBe(scene.assets.length);
     expect(scene.assets.length).toBeLessThan(scene.placements.length / 3);
@@ -77,7 +84,7 @@ describe('founded scene (spec 38 R1-R3)', () => {
     const build = await assemble(state), { scene } = build, text = new TextDecoder().decode(build.bytes);
     const homes = scene.placements.filter(p => p.plotId === plot.id);
     const origin = homeOrigin(plot, rebuilt.size[2] * VOXEL_METRES.build);
-    expect(homes.map(p => p.id)).toEqual([`home:${plot.id}`, 'forge:run-b']);
+    expect(homes.map(p => p.id)).toEqual([`home:${plot.id}`, 'forge:run-b', `arrival:door:${plot.id}`]);
     expect(homes[0]).toMatchObject({ assetHash: await assetHashOf(rebuilt), position: [...origin], rotation: plot.rotation });
     expect(homes[0]!.assetHash).not.toBe(await assetHashOf(createNativeForgeHost(plot).blueprint));
     expect(homes[1]!.position).toEqual(transformCardinalPoint(origin, plot.rotation, socket.origin.map(n => n * VOXEL_METRES.build) as [number, number, number]));

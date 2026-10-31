@@ -15,7 +15,7 @@ export interface ProceduralSoundOptions {
 }
 
 /** Length of each cue including its tail, in ms. */
-export const CUE_LENGTH_MS: Record<MomentCue, number> = { horn: 1700, 'cloth-unfurl': 2300 };
+export const CUE_LENGTH_MS: Record<MomentCue, number> = { horn: 1700, 'cloth-unfurl': 2300, 'gift-bell': 2200, 'cart-roll': 3600, 'parcel-land': 900 };
 
 export function createProceduralMomentSound(options: ProceduralSoundOptions): MomentSoundPort & { readonly active: number } {
   const live = new Set<() => void>();
@@ -76,6 +76,54 @@ export function createProceduralMomentSound(options: ProceduralSoundOptions): Mo
     knock.connect(knockAmp); knockAmp.connect(out); knock.start(t + 1.86); knock.stop(t + 2.2); nodes.push(knock);
   }
 
+  function bell(context: AudioContext, out: GainNode, t: number, nodes: AudioScheduledSourceNode[]): void {
+    // A small brass hand bell rung twice: inharmonic partials (a struck bell's 1 : 2.76 : 5.4 ratios) with long,
+    // partial-by-partial decays, the second stroke softer.
+    for (const [at, level] of [[0, 0.32], [0.24, 0.2]] as const) {
+      for (const [ratio, part, decay] of [[1, 1, 1.3], [2.76, 0.42, 0.7], [5.4, 0.2, 0.35], [8.9, 0.08, 0.18]] as const) {
+        const osc = context.createOscillator(), amp = context.createGain();
+        osc.type = 'sine'; osc.frequency.value = 1046.5 * ratio;
+        amp.gain.setValueAtTime(0, t + at); amp.gain.linearRampToValueAtTime(level * part, t + at + 0.004);
+        amp.gain.exponentialRampToValueAtTime(0.0008, t + at + decay * 1.4);
+        osc.connect(amp); amp.connect(out); osc.start(t + at); osc.stop(t + at + decay * 1.4 + 0.05); nodes.push(osc);
+      }
+    }
+  }
+
+  function roll(context: AudioContext, out: GainNode, t: number, nodes: AudioScheduledSourceNode[]): void {
+    // Wooden wheels on packed earth: low rumble that swells and fades, with the pony's soft hoof clops on top.
+    const source = context.createBufferSource(); source.buffer = noiseBuffer(context);
+    const low = context.createBiquadFilter(); low.type = 'lowpass'; low.frequency.value = 260; low.Q.value = 0.7;
+    const amp = context.createGain(); amp.gain.setValueAtTime(0, t); amp.gain.linearRampToValueAtTime(0.34, t + 0.6);
+    amp.gain.setTargetAtTime(0.22, t + 1.4, 0.5); amp.gain.setTargetAtTime(0, t + 2.7, 0.25);
+    source.connect(low); low.connect(amp); amp.connect(out); source.start(t); source.stop(t + 3.4); nodes.push(source);
+    for (let i = 0; i < 10; i++) {
+      // Two pairs per stride, each pair a hair apart, slowing as the pony reins in.
+      const at = t + 0.15 + i * (0.27 + i * 0.012) + (i % 2) * 0.05;
+      const clop = context.createOscillator(), click = context.createGain();
+      clop.type = 'triangle'; clop.frequency.setValueAtTime(i % 2 ? 360 : 300, at); clop.frequency.exponentialRampToValueAtTime(150, at + 0.06);
+      click.gain.setValueAtTime(0, at); click.gain.linearRampToValueAtTime(0.16 * (1 - i / 14), at + 0.004); click.gain.exponentialRampToValueAtTime(0.001, at + 0.09);
+      clop.connect(click); click.connect(out); clop.start(at); clop.stop(at + 0.12); nodes.push(clop);
+    }
+  }
+
+  function land(context: AudioContext, out: GainNode, t: number, nodes: AudioScheduledSourceNode[]): void {
+    // A parcel's weight on the doorstep: a hollow cardboard knock, then a short paper rustle as the canopy sags.
+    const knock = context.createOscillator(), body = context.createGain();
+    knock.type = 'sine'; knock.frequency.setValueAtTime(190, t); knock.frequency.exponentialRampToValueAtTime(92, t + 0.09);
+    body.gain.setValueAtTime(0, t); body.gain.linearRampToValueAtTime(0.42, t + 0.003); body.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    knock.connect(body); body.connect(out); knock.start(t); knock.stop(t + 0.25); nodes.push(knock);
+    const paper = context.createBufferSource(); paper.buffer = noiseBuffer(context);
+    const high = context.createBiquadFilter(); high.type = 'bandpass'; high.frequency.value = 3600; high.Q.value = 0.6;
+    const rustle = context.createGain(); rustle.gain.setValueAtTime(0, t + 0.12); rustle.gain.linearRampToValueAtTime(0.14, t + 0.2);
+    rustle.gain.setTargetAtTime(0.05, t + 0.3, 0.1); rustle.gain.setTargetAtTime(0, t + 0.55, 0.08);
+    paper.connect(high); high.connect(rustle); rustle.connect(out); paper.start(t + 0.12, 0.7); paper.stop(t + 0.8); nodes.push(paper);
+  }
+
+  const VOICES: Record<MomentCue, (context: AudioContext, out: GainNode, t: number, nodes: AudioScheduledSourceNode[]) => void> = {
+    horn, 'cloth-unfurl': cloth, 'gift-bell': bell, 'cart-roll': roll, 'parcel-land': land,
+  };
+
   return {
     play(cue, atMs, gain) {
       const audio = options.context(), level = Math.max(0, Math.min(1, gain * options.gain()));
@@ -84,7 +132,7 @@ export function createProceduralMomentSound(options: ProceduralSoundOptions): Mo
       const t = context.currentTime + Math.max(0, (atMs - options.now()) / 1000);
       const out = context.createGain(); out.gain.value = level; out.connect(destination);
       const nodes: AudioScheduledSourceNode[] = [];
-      if (cue === 'horn') horn(context, out, t, nodes); else cloth(context, out, t, nodes);
+      VOICES[cue](context, out, t, nodes);
       let done = false;
       const finish = () => { if (done) return; done = true; live.delete(cancel); out.disconnect(); };
       const timer = setTimeout(finish, Math.max(0, (t - context.currentTime) * 1000) + CUE_LENGTH_MS[cue] + 200);
