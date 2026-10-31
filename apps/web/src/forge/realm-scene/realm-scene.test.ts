@@ -62,10 +62,10 @@ describe('room-fed Forge scene', () => {
       expect(submit).not.toHaveBeenCalled(); expect(adapter.activeAttachmentId).toBeNull();
       expect(adapter.update(1100, true)).toBe(true);
       camera.updateMatrixWorld(true);
-      // The waiting view must hold the anvil and neighbouring 4.625 m hearth/dragon together.
+      // The tighter waiting view still holds the anvil and neighbouring hearth/dragon without clipping.
       for (const x of [-1.7, 8.65]) for (const y of [-.125, 4.8]) for (const z of [-5, 1.45]) {
         const p = new THREE.Vector3(x + 5, y, z + 8).project(camera);
-        expect(Math.abs(p.x)).toBeLessThan(.9); expect(Math.abs(p.y)).toBeLessThan(.9);
+        expect(Math.abs(p.x)).toBeLessThan(.96); expect(Math.abs(p.y)).toBeLessThan(.96);
       }
       handlers.ended?.('opaque-activity');
       expect(adapter.update(1150, true)).toBe(false);
