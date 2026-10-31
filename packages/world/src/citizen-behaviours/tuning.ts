@@ -13,8 +13,12 @@ export const BEHAVIOUR_TUNING = {
   maxCatchUpSteps: 10,
 
   neighbours: {
-    /** Grid cell edge in metres. Equal to the keep range, so a 3×3 query is exhaustive. */
-    cellMetres: 7.5,
+    /**
+     * One index per step serves greetings and chat listeners: it reaches the larger of the greeting keep
+     * range and the chat listening range, and its cell edge equals that reach, so a 3×3 query is exhaustive.
+     */
+    rangeMetres: 10,
+    cellMetres: 10,
     /** Closest people considered per citizen per step, after stable distance/slot ordering. */
     maxPerCitizen: 6,
   },
@@ -132,6 +136,56 @@ export const BEHAVIOUR_TUNING = {
     answerSteps: 3,
     /** Requests per policy step, across everyone; later slots wait a step. Bounds caller work. */
     maxGoalsPerStep: 8,
+  },
+
+  /**
+   * A witnessed chat line: main's sanitized cue turns a few heads. The policy reads only the cue's
+   * identity, source, slot and timing, never its words. One reaction per person, a few at a time.
+   */
+  chat: {
+    /**
+     * A neighbour within this many metres of the speaker may turn to look; within the step's one index.
+     * Main's hamlet doors stand 9.0–9.1 m apart, so the people either side of a doorstep can hear it.
+     */
+    listenMetres: 10,
+    /**
+     * A line is heard, not seen: a listener turns for a speaker up to this far beyond their neck limit,
+     * and the head stops at the limit. Doorstep rests face the house, so a neighbour's door sits ~90° aside.
+     */
+    beyondNeck: .65,
+    /** At most this many listeners per line, closest first (distance, then slot). */
+    maxListeners: 2,
+    /** A line first seen later than this after it was said only shows main's bubble: heads do not turn late. */
+    freshMs: 1_500,
+    /** The speaker's head lifts toward the moment before the nod. */
+    leadMs: [160, 320] as const,
+    /** The first listener turns this long after the speaker's nod begins; the second, later still. */
+    listenDelayMs: [80, 350] as const,
+    secondListenerMs: [160, 380] as const,
+    listenInMs: [380, 520] as const,
+    listenHoldMs: [1_100, 2_100] as const,
+    listenOutMs: [480, 680] as const,
+    /** The speaker's head answers the first listener's look, at this share of the full turn. */
+    speakerShare: .45,
+    speakerAfterMs: 150,
+    speakerInMs: 420,
+    /** A speaker reacts once in this band, however many lines they send; a listener rests a little too. */
+    speakerRestMs: [6_000, 10_000] as const,
+    listenerRestMs: [3_000, 5_000] as const,
+    /**
+     * No storm: one reaction at a time per `peoplePerReaction` present people (rounded up, at most
+     * `maxActive`), one per `localMetres` neighbourhood (about a doorstep frame), starts `staggerMs` apart.
+     */
+    peoplePerReaction: 8,
+    maxActive: 4,
+    localMetres: 20,
+    staggerMs: 400,
+    /** Bounds on per-step work and retained cue identities; cues beyond them are noted and dropped. */
+    maxCuesPerStep: 24,
+    maxWaiting: 16,
+    maxSeen: 256,
+    /** How long past its expiry a decided ID is remembered. */
+    rememberMs: 10_000,
   },
 
   /**
