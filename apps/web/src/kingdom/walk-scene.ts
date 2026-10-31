@@ -66,7 +66,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
   document.addEventListener('visibilitychange', resetFootsteps);
   window.addEventListener('blur', resetFootsteps);
   let poses: readonly RealmWalkerPose[] = [], connected = true, waiting = false;
-  const left = () => { connected = false; footsteps.reset(); controller.release(); people.update([]); };
+  const left = () => { connected = false; poses = []; footsteps.reset(); controller.release(); people.update([]); };
   const reconnected = () => { connected = true; };
   client.room.onLeave(left);
   client.room.onDrop(left);
@@ -88,7 +88,7 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
       // A place's accepted view holds the same walk token until the interaction controller returns it.
       if (active && controller.owner === 'released' && !interactions.debug.held) { footsteps.reset(); camera.clearViewOffset(); controller.resume(); }
       else if (!active) { if (interactions.debug.held) interactions.leave(); controller.release(); }
-      poses = controller.frame(now);
+      poses = connected && !waiting ? controller.frame(now) : [];
       return active;
     },
     /** After the scene's final camera transform, before drawing: all input paths use these native targets. */
@@ -119,8 +119,8 @@ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.Perspe
     interactionDebug: interactions.debug,
     /** Call after the final camera transform, so frustum culling uses the camera that actually draws. */
     draw(now: number) {
-      people.update(connected ? poses.map(pose => ({ id: pose.id,
-        look: looks.find(look => look.id === pose.look)?.id ?? looks[0]!.id,
+      people.update(connected ? poses.filter(pose => looks.some(look => look.id === pose.look)).map(pose => ({ id: pose.id,
+        look: pose.look,
         position: [pose.x, pose.y, pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
         distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed,
         opacity: pose.self && controller.owner === 'walking' ? controller.selfOpacity : 1, time: now / 1000 })) : [], camera);

@@ -4,6 +4,8 @@ import type { RealmPrivateState, RealmOwnedForgeHost } from './domain';
 
 /** Reserved for the monarch's adopted keep; never allocate it to a citizen street plot. */
 export const REALM_CASTLE_SLOT = 65534 as const;
+/** A walker without an owned street home, including the monarch. Never a presence/window slot. */
+export const REALM_NO_HOME_SLOT = 65535 as const;
 export const castleHostId = (moduleId: string): string => `castle:${moduleId}`;
 
 export function ownedForgeHost(state: RealmPrivateState, id: string): RealmOwnedForgeHost | undefined {

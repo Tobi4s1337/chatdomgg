@@ -25,10 +25,12 @@ import { createKingdomBuild, type KingdomBuildSession } from './build-scene';
 import { createKingdomCitizens, type SpeechLabel } from './citizen-scene';
 import { foundedContent } from './founded-content';
 import { checkWalkBinding, createKingdomWalk, type KingdomWalkBinding, type WalkerLabel } from './walk-scene';
+import { createObservedWalkers, walkerSlots } from './observed-walkers';
+import type { RealmWalkerFeed } from '@chatdom/shared/realm';
 
 export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number}
-export interface SceneOptions {founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneOptions {founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -38,6 +40,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // A public feed uses the wall clock even when a capture URL carries a fixture time.
   let fixedTime=options.source==='simulated'&&!options.presenceFeed&&options.time!==null,autoCamera=options.source==='simulated'&&!options.presenceFeed&&!fixedTime&&camName==='hero',frame:KingdomPresenceFrame|undefined,fieldUploads=0,geometryBuilds=0,fieldBytes=0,nearBytes=0,farBytes=0,beaconBytes=0,nearVisited=0,farVisited=0,beaconVisited=0;
   let walk:Awaited<ReturnType<typeof createKingdomWalk>>|undefined,walkSelected=false,walkGeneration=0;
+  let observed:Awaited<ReturnType<typeof createObservedWalkers>>|undefined;
   const earlyCleanups:(()=>void)[]=[];
   let fullDispose:(()=>void)|undefined;
   const own=<T extends {dispose():void}>(resource:T):T=>{earlyCleanups.push(()=>resource.dispose());return resource;};
@@ -264,7 +267,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(ownSimulation)simulation.advance(time);
     hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);clay.setEnvironment(grade);ground.setEnvironment(grade);forge.setEnvironment(grade);realmForge?.setEnvironment(grade);crowd.material.setEnvironment({...grade,ambientIntensity:Math.max(.65,grade.ambientIntensity)});
     const presentationMs=ownSimulation?simulation.epochMs+time*1000:Date.now();
-    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined):[];
+    const walking=walk?.frame(now,walkSelected&&!capturePose&&!build.session&&!build.housewarming&&!forge.status().open)??false;
+    observed?.frame(now);
+    const feet=walkerSlots(walk ? walk.poses : observed?.poses??[]);
+    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet):[];
     const lightFrame=loaded?crowd.lightFrame(presentationMs):frame;
     if(lightFrame)build.setFrame(lightFrame);
     const lightKey=`${lightFrame?.epoch}:${lightFrame?.sequence}:${lightFrame?.windows.filter(w=>w.present).map(w=>w.slot).join(',')}`;
@@ -277,7 +283,6 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const beacon=beaconStrength(lightFrame,houses.length);
     if(loaded&&active>lastActive){if(lastActive===0)sound.cue('light');else if(lastActive===1)sound.cue('wave');}lastActive=active;
     if(loaded&&beacon>.9&&!beaconCue){sound.cue('beacon');beaconCue=true;}
-    const walking=walk?.frame(now,walkSelected&&!capturePose&&!build.session&&!build.housewarming&&!forge.status().open)??false;
     if(walking){const self=walk!.poses.find(p=>p.self);if(self)target.set(self.x,self.y+1,self.z);}
     else if(autoCamera){
       // Rise inside the street before withdrawing over the opposite roofs.
@@ -293,13 +298,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(!installed){build.update(now,dt,hour,target);forge.update(now,target,!!build.session);}
     const forgeDirected=forgeCameraDirected=realmForge?.update(now,!walking&&!build.session&&!capturePose)??false;
     if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
-    if(!walking&&!forgeDirected)camera.lookAt(target);camera.updateMatrixWorld();walk?.interact(now);walk?.draw(now);updateInstances(fixedTime&&autoCamera?time*1000:now);
+    if(!walking&&!forgeDirected)camera.lookAt(target);camera.updateMatrixWorld();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);updateInstances(fixedTime&&autoCamera?time*1000:now);
     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
     fog.color.set(grade.fog);fog.density=.0016;
     water.update(grade,time,camera);
     if(now-lastField>240){lastField=now;const centre:Vec3=[target.x,terrainHeight(layout,target.x,target.z),target.z];field.update(centre,[...windows.getSources(),...build.getSources()]);farField.update(centre,[...windows.getSources(),...build.getSources()]);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]}]);}
-    if(walk)options.onWalkers?.(walk.labels().filter(label=>{
-      const person=walk?.poses.find(p=>p.id===label.id);
+    const people=walk??observed;
+    if(people)options.onWalkers?.(people.labels().filter(label=>{
+      const person=people.poses.find(p=>p.id===label.id);
       return person&&!windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],[person.x,person.y+1.95,person.z]);
     }));
     if(now-lastNames>80){labels();options.onSpeech?.(crowd.speechLabels(camera,canvas.clientWidth,canvas.clientHeight,presentationMs));lastNames=now;}
@@ -338,7 +344,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();build.dispose();crowd.dispose();pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
@@ -347,7 +353,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // KHR_parallel_shader_compile is an optional driver completion hint, and can
   // remain pending even while the scene draws. The first fully loaded render
   // opens the gate; background light readiness is reported independently.
-  try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');await crowd.prepare();if(!installed){await build.prepare();await forge.prepare();}if(disposed)throw new Error('Scene closed while preparing citizens');}catch(error){dispose();throw error;}
+  try {await Promise.all(tasks);if(disposed)throw new Error('Scene closed while loading');await crowd.prepare();if(!installed){await build.prepare();await forge.prepare();}if(options.walkerFeed&&options.founded){const next=await createObservedWalkers(scene,camera,canvas,pool,crowd.material,options.founded,options.walkerFeed);if(disposed){next.dispose();throw new Error('Scene closed while preparing walkers');}observed=next;}if(disposed)throw new Error('Scene closed while preparing citizens');}catch(error){dispose();throw error;}
   loaded=true;lastFrame=performance.now();options.onProgress('The gate is opening',1);
   function detachWalk(){walkGeneration++;walkSelected=false;walk?.dispose();walk=undefined;options.onWalkers?.([]);camera.clearViewOffset();camera.filmOffset=0;camera.updateProjectionMatrix();instancesDirty=true;}
   return {layout,debug,sound,build,forge,forgeDirecting:()=>forgeCameraDirected,

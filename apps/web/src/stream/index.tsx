@@ -6,6 +6,7 @@ import { createDirector, planNight, type DirectorState, type Shot } from './dire
 import { Corner, Crest, Flame, StreamDefs } from './fittings';
 import { createRealmSpectatorSource } from '../kingdom-entry/spectator';
 import type { SpeechLabel } from '../kingdom/citizen-scene';
+import type { WalkerLabel } from '../kingdom/walk-scene';
 import './stream.css';
 import './speech.css';
 
@@ -58,6 +59,7 @@ export default function StreamView() {
   const [scale, setScale] = createSignal(1);
   const [names, setNames] = createSignal<NameLabel[]>([]);
   const [speech, setSpeech] = createSignal<SpeechLabel[]>([]);
+  const [walkers, setWalkers] = createSignal<readonly WalkerLabel[]>([]);
   const [kingdomName, setKingdomName] = createSignal(params.kingdomName);
   const mark = () => sourceMark(label());
   // Only a fresh projection may carry a person's name or give a close shot its subject.
@@ -88,17 +90,18 @@ export default function StreamView() {
 
   const mount = createSceneMount({
     host: () => lens,
-    settings: () => ({ tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time, camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin }),
+    settings: () => ({ tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time, camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin, onWalkers: setWalkers }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
       setKingdomName(connection.kingdomName);
       return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId,
-        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, forgeFeed: connection.forgeFeed,
+        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, forgeFeed: connection.forgeFeed, walkerFeed: connection.walkerFeed,
         realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed, dispose: connection.dispose };
     } } : {}),
     onPhase: next => {
       setPhase(next);
+      if (next !== 'ready') setWalkers([]);
       if (next === 'ready') { attempts = 0; director.start(); } else director.stop();
       if (next === 'failed') scheduleRetry();
     },
@@ -222,6 +225,8 @@ export default function StreamView() {
           </div>
         }</For></div>
         <div class="stream-names" aria-live="polite">
+          <For each={walkers()}>{walker => <span class="stream-walker-name" data-walker={walker.id}
+            style={{ left: `${walker.x}px`, top: `${walker.y}px` }}>{walker.name}</span>}</For>
           <Show when={shownName()}>{name =>
             <div class="stream-name" classList={{ shown: !!climaxName() }}
               style={{ left: `${Math.min(Math.max(name().x, 70), picture.clientWidth - 70)}px`, top: `${Math.max(name().y, 46)}px` }}>

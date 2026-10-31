@@ -1,10 +1,10 @@
 import { performance } from 'node:perf_hooks';
 import { ServerError } from '@colyseus/core';
-import type { KingdomId, PersonId, EventCause, Vec3 } from '@chatdom/shared';
+import { starterCitizenLook, type KingdomId, type PersonId, type EventCause, type Vec3 } from '@chatdom/shared';
 import type { CollisionWorld, RealmAuthenticator, RealmBootstrap, RealmCapability, RealmDomainCommand, RealmIngressCheckpoint, RealmIngressTransition,
   RealmIntent, RealmPrincipal, RealmPrivateMessage, RealmPrivateState, RealmPublicDelivery, RealmReceipt, RealmRepository,
   RealmStoredOutcome, RealmTransientMessage, RealmWriterLease } from '@chatdom/shared/realm';
-import { WALK_BODY } from '@chatdom/shared/realm';
+import { WALK_BODY, REALM_NO_HOME_SLOT, REALM_WALKER_FRAME_MAX_BYTES, RealmWalkerFrameSchema, type RealmWalkerFrame } from '@chatdom/shared/realm';
 import { decideRealm } from '@chatdom/world/realm';
 import { embeddedSolids, supported } from '@chatdom/world/movement';
 import type { RealmIntentContext, RealmRoomEffects, RealmRoomHandle, RealmRoomServices } from '../ports';
@@ -99,6 +99,8 @@ export class DurableKingdom implements RealmRoomHandle {
   private readonly lifecycles = new Set<RealmLifecycleListener>();
   private readonly closed = new Set<(reason: string) => void>();
   private readonly worldAdopted = new Set<() => void>();
+  private walkerFrame: RealmWalkerFrame | null = null;
+  private readonly walkerSubscribers = new Set<(frame: RealmWalkerFrame) => void>();
   private interactions: InteractionAuthority | null = null;
   private detachInteractions: (() => void) | null = null;
   private geometry: Pick<DurableKingdomOptions, 'world' | 'layoutRevision' | 'spawn'>;
@@ -283,8 +285,9 @@ export class DurableKingdom implements RealmRoomHandle {
 
   bindRoom(effects: RealmRoomEffects): () => void {
     if (!this.current) { effects.close('authority-lost'); return () => {}; }
+    if (this.effects.size) throw new Error('This kingdom already has a walker room');
     this.effects.add(effects);
-    return () => { this.effects.delete(effects); };
+    return () => { if (this.effects.delete(effects)) this.clearWalkers(); };
   }
 
   /** Compose transient interactions into this retained writer and its actual room, without replacing either. */
@@ -327,10 +330,53 @@ export class DurableKingdom implements RealmRoomHandle {
     else {
       this.walkers.add(walkerId); this.principals.set(walkerId, principal);
       if (!this.current) for (const effects of this.effects) effects.allowWalking(walkerId, false);
+      else if (event === 'join' || event === 'reconnect') this.presentWalker(walkerId, principal);
     }
     // Walker presence is observed by ingress from these authenticated events; a listener failure never blocks the room.
     for (const listener of this.lifecycles) { try { listener(event, principal, walkerId, now); } catch (error) { this.log(`lifecycle listener failed: ${(error as Error).name}`); } }
   }
+
+  /** Latest actual room sample only: poses never enter durable history or transient speech quotas. */
+  currentWalkers(): RealmWalkerFrame {
+    return this.current && this.walkerFrame ? this.walkerFrame : this.emptyWalkers();
+  }
+
+  subscribeWalkers(receive: (frame: RealmWalkerFrame) => void): () => void {
+    if (!this.current) return () => {};
+    this.walkerSubscribers.add(receive);
+    return () => { this.walkerSubscribers.delete(receive); };
+  }
+
+  publishWalkers(frame: RealmWalkerFrame): void {
+    if (!this.current || this.effects.size !== 1 || frame.kingdomId !== this.kingdomId || frame.origin !== this.origin
+      || frame.writerEpoch !== this.writerEpoch || frame.layoutRevision !== this.layoutRevision || frame.collisionRevision !== this.world.revision) return;
+    const parsed = RealmWalkerFrameSchema.safeParse(frame);
+    if (!parsed.success || Buffer.byteLength(JSON.stringify(parsed.data)) > REALM_WALKER_FRAME_MAX_BYTES) return;
+    // A publisher may only describe walkers admitted to this same room, never a simulated crowd or private identity.
+    if (parsed.data.walkers.some(walker => !this.walkers.has(walker.id) || ![...this.effects].some(effects => effects.readWalker(walker.id)))) return;
+    this.walkerFrame = parsed.data;
+    this.deliverWalkers(parsed.data);
+  }
+
+  private emptyWalkers(): RealmWalkerFrame {
+    return { version: 1, kingdomId: this.kingdomId, origin: this.origin, writerEpoch: this.writerEpoch,
+      layoutRevision: this.layoutRevision, collisionRevision: this.world.revision, sampledAt: Date.now(), walkers: [] };
+  }
+
+  private clearWalkers() { this.walkerFrame = null; this.deliverWalkers(this.emptyWalkers()); }
+  private deliverWalkers(frame: RealmWalkerFrame) {
+    for (const receive of this.walkerSubscribers) {
+      try { receive(frame); } catch { this.log('walker listener failed'); }
+    }
+  }
+
+  private presentWalker(walkerId: string, principal: RealmPrincipal) {
+    const home = Object.values(this.state.homes).find(home => home.ownerId === principal.personId && home.layoutRevision === this.layoutRevision);
+    const look = principal.look && principal.look !== 'neutral' && principal.look !== 'reference' ? principal.look : starterCitizenLook(principal.personId);
+    for (const effects of this.effects) effects.presentWalker?.(walkerId, { homeSlot: home?.slot ?? REALM_NO_HOME_SLOT, look });
+  }
+
+  private refreshPresentations() { for (const [id, principal] of this.principals) this.presentWalker(id, principal); }
 
   onLifecycle(listener: RealmLifecycleListener): () => void {
     this.lifecycles.add(listener);
@@ -453,6 +499,7 @@ export class DurableKingdom implements RealmRoomHandle {
           if (before !== plotId) this.toOwner(owner, { type: 'home.owned', plotId });
         }
       }
+      if (previous.homes !== committed.homes) this.refreshPresentations();
       // A durable moderation decision ends occupancy and cancels pending admission in the same refresh turn.
       for (const principal of this.principals.values()) if (committed.rights[principal.personId]?.blocked) this.interactions?.revoke(principal.personId);
     } catch (error) {
@@ -495,6 +542,8 @@ export class DurableKingdom implements RealmRoomHandle {
           // No await between reading occupied poses and publishing the exact matching world/receipt.
           for (const effects of this.effects) effects.adoptWorld(candidate.world, candidate.layoutRevision, positions);
           this.geometry = candidate;
+          this.refreshPresentations();
+          this.clearWalkers();
           this.arrivals = 0;
           candidate.adopted();
           for (const listener of this.worldAdopted) {
@@ -549,6 +598,8 @@ export class DurableKingdom implements RealmRoomHandle {
     this.dispatcher.stop();
     this.relay.clear();
     this.worldAdopted.clear();
+    this.clearWalkers();
+    this.walkerSubscribers.clear();
     for (const walker of this.walkers) for (const effects of this.effects) effects.allowWalking(walker, false);
     for (const effects of this.effects) {
       try { effects.close(reason === 'disposed' ? 'shutdown' : 'authority-lost'); }
@@ -686,6 +737,7 @@ class HeldRoomHandle implements RealmRoomHandle {
   recoverWalker(walkerId: string, collisionRevision: number) { return this.k.recoverWalker(walkerId, collisionRevision); }
   intent(context: RealmIntentContext, intent: RealmIntent) { return this.k.intent(context, intent); }
   bootstrap(principal: RealmPrincipal) { return this.k.bootstrap(principal); }
+  publishWalkers(frame: RealmWalkerFrame) { this.k.publishWalkers(frame); }
   bindRoom(effects: RealmRoomEffects) { return this.k.bindRoom(effects); }
   lifecycle(event: RealmLifecycleEvent, principal: RealmPrincipal, walkerId: string, now: number) { this.k.lifecycle(event, principal, walkerId, now); }
   subscribe(deliver: (message: RealmPublicDelivery) => void) { return this.k.subscribe(deliver); }
