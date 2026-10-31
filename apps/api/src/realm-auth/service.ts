@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { JWTVerifyGetKey } from 'jose';
 import type { Pool, PoolClient } from 'pg';
+import { KingdomIdSchema } from '@chatdom/shared';
 import {
   RealmTicketRequestSchema,
   type RealmSessionReply, type RealmSignoutReply, type RealmTicketReply,
@@ -30,15 +31,26 @@ export class RealmAuthError extends Error {
 
 /**
  * The browser comes back to a kingdom page, never to an arbitrary URL: `/<login>` with up to three plain
- * sub-paths, `/map/<login>` or the development realm page. Anything else returns to the front page.
+ * sub-paths, `/map/<login>`, the development realm page, or the exact root walking entry.
+ * Unrecognised destinations are refused before a sign-in attempt is created.
  */
 const RETURN_PATH = /^\/(?:-\/realm|map(?:\/[a-z0-9_]{1,25})?|[a-z0-9_]{1,25}(?:\/[a-z0-9-]{1,32}){0,3})?$/;
 export function safeReturnPath(value: string | null): string | null {
   if (value === null || value === '') return '/';
+  if (value.startsWith('/?')) {
+    const url = new URL(value, 'https://chatdom.invalid');
+    const kingdom = KingdomIdSchema.safeParse(url.searchParams.get('kingdom'));
+    if (url.pathname !== '/' || url.hash || url.searchParams.size !== 2
+      || url.searchParams.get('walk') !== '1' || !kingdom.success) return null;
+    const canonical = `/?walk=1&kingdom=${kingdom.data}`;
+    // Accept either plain parameter order, but no encoded aliases, ignored empty
+    // entries, whitespace or other URL normalisation. Never decode a second time.
+    return value === canonical || value === `/?kingdom=${kingdom.data}&walk=1` ? canonical : null;
+  }
   return RETURN_PATH.test(value) ? value : null;
 }
 function withSignin(path: string, outcome: 'declined' | 'expired' | 'refused' | 'unavailable'): string {
-  return `${path}?signin=${outcome}`;
+  return `${path}${path.includes('?') ? '&' : '?'}signin=${outcome}`;
 }
 
 export interface RealmAuthServiceOptions {

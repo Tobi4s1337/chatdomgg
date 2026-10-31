@@ -23,6 +23,16 @@ body.moments-bench-page{margin:0;background:#1d1b24;overflow:hidden}
 .moment-caption small{font-size:.72em;letter-spacing:.08em;color:#e1c992}
 .moment-caption .caption-detail{margin-top:3px;padding-top:4px;border-top:1px solid #8e6b3a88;font-style:normal;font-size:.78em;line-height:1.25;color:#f3dfb2;overflow-wrap:anywhere}
 
+/* Carriage nameplates: small brass-rimmed boards riding with the train, names only. */
+.moment-plates{position:absolute;inset:0;pointer-events:none}
+.moment-plate{position:absolute;transform:translate(-50%,-100%);padding:.18em .6em .22em;font-size:clamp(11px,1.35vmin,15px);line-height:1.2;border:1px solid #b08a4a;border-radius:2px;background:#3b2a1ce6;color:#fbecc8;white-space:nowrap;box-shadow:0 2px 6px #0d0a1299}
+/* The earned battle's truthful status: a banner strip under the heading, never a health bar the bench computes. */
+.moments-battle{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:7px 14px;border:1px solid #c9a96a;border-radius:3px;background:#2a2431e6;color:#f4e6c4;font-size:12px;letter-spacing:.08em;box-shadow:0 2px 0 #0000004d}
+.moments-battle.unavailable{border-color:#8a7f86;color:#d8cdc0}
+.moments-battle .battle-health{width:120px;height:5px;border-radius:3px;background:#4a3f4c;overflow:hidden}
+.moments-battle .battle-health i{display:block;height:100%;background:linear-gradient(90deg,#e0574a,#f0c45e)}
+.moments-battle button{font-size:12px;padding:4px 10px}
+
 .sheet-toggle{position:absolute;right:24px;bottom:20px;z-index:3}
 .moments-panel{position:absolute;right:24px;top:64px;bottom:66px;width:330px;overflow:auto;padding:4px 18px 16px;border:1px solid #806a4a;border-radius:6px;background:#26212dee;box-shadow:0 18px 40px #0b09108c;scrollbar-width:thin;scrollbar-color:#6c5a42 #0000}
 .moments-panel section{padding:14px 0 12px;border-bottom:1px solid #4c4150}
@@ -73,5 +83,6 @@ body.moments-bench-page{margin:0;background:#1d1b24;overflow:hidden}
   .sheet-toggle{left:50%;right:auto;transform:translateX(-50%);bottom:14px}
   .moment-caption{min-width:120px;padding:7px 14px 8px}
   .moment-caption strong{font-size:15px}
+  .moments-battle{bottom:64px;max-width:calc(100% - 28px);flex-wrap:wrap;justify-content:center}
 }
 @media (prefers-reduced-motion:reduce){.moment-caption,.gate-progress i{transition:none}}

@@ -27,6 +27,8 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
     inputs = this.defineInput(WalkInputSchema, { bufferMaxSize: LIMITS.inputBuffer, sanitize: sanitizeRealmWalkInput });
     private handle!: RealmRoomHandle;
     private accepting = true;
+    /** Colyseus starts patching before async onCreate has acquired and bound the authority. */
+    private initialized = false;
     private recoveryRequests = new Map<string, number>();
     /** Shared district views: one per occupied district, each holding that district and its neighbour ring. */
     private districts = new RealmDistricts<WalkerSchema>();
@@ -162,6 +164,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
       }, LIMITS.walkHz);
       // Connected and dropped seats alike: a revoked session cannot wait out its grace.
       this.clock.setInterval(()=>this.seats.check(),REALM_SESSION_CHECK_MS);
+      this.initialized = true;
     }
     async onJoin(client: Client<{ auth: RealmPrincipal }>) {
       const auth = client.auth;
@@ -239,7 +242,7 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
      * adds the new district's existing ones, and leaves every other client's shared view and decoder untouched.
      */
     onBeforePatch() {
-      if (!this.accepting) return;
+      if (!this.initialized || !this.accepting) return;
       for (const crossing of this.districts.sweep()) {
         const client = this.viewers.get(crossing.id);
         if (!client) continue;
@@ -254,6 +257,6 @@ export function createKingdomRoom(services: RealmRoomServices, observer: RealmRo
           x: p.x, y: p.y, z: p.z, yaw: p.yaw, distance: p.distance, speed: Math.hypot(p.vx, p.vz), placement: p.placement })),
       });
     }
-    async onDispose() { this.districts.dispose(); this.seats?.dispose(); for (const unbind of this.unbind) unbind(); await this.handle?.dispose(); }
+    async onDispose() { this.initialized = false; this.accepting = false; this.districts.dispose(); this.seats?.dispose(); for (const unbind of this.unbind) unbind(); await this.handle?.dispose(); }
   };
 }

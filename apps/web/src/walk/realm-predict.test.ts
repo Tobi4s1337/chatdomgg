@@ -3,12 +3,14 @@
 // a published collision revision and a room placement. The court and its walkers are the SIMULATED reference.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer as createNetServer } from 'node:net';
-import { PLAYER_FIELDS, RealmJoinSchema, WALK_BODY, type CollisionWorld, type RealmWalkInput, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
+import * as THREE from 'three';
+import { PLAYER_FIELDS, RealmJoinSchema, WALK_BODY, type CollisionWorld, type PlayerState, type RealmWalkInput, type SolidBox, type WalkInput } from '@chatdom/shared/realm';
 import { REFERENCE_BLOCKS, REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import { connectRealm, type RealmClient, type RealmCollision, type RealmWalkerPose } from '../realm/client';
 import { createRealmServer } from '../../../realm/src/server';
 import { REFERENCE_KINGDOM, referenceServices } from '../../../realm/src/reference';
 import type { RealmRoomEffects, RealmRoomServices } from '../../../realm/src/ports';
+import { createShoulderRig } from './camera/shoulder';
 
 const worldOf = (revision: number, blocks: readonly SolidBox[]): CollisionWorld => ({
   revision,
@@ -116,7 +118,9 @@ describe('the realm client predicts with the room', () => {
     // Sample the real SDK on an exact high-refresh render clock, with no wall-clock sleeps or competing driver.
     // The reference spawn is on the clear z=7 street. Server transport remains real, but this short synchronous
     // recording isolates fixed-step interpolation from scheduler and patch-arrival timing.
-    for (let frame = 0; frame <= 96; frame++) {
+    // End one render sample beyond the eighth exact step boundary: floating-point accumulation may put
+    // the boundary infinitesimally before its due send without affecting any rendered increment.
+    for (let frame = 0; frame <= 97; frame++) {
       frames.push(client.tick(start + frame * 1000 / 360, { ...EAST, buttons: 0 }).find(p => p.self)!.x);
     }
     expect(sent).toHaveLength(8);
@@ -125,6 +129,43 @@ describe('the realm client predicts with the room', () => {
     for (let frame = 50; frame < frames.length; frame++) expect(frames[frame]! - frames[frame - 1]!).toBeCloseTo(4 / 360, 9);
     client.dispose();
   });
+
+  it('keeps the moving camera on SDK render feet through a real acknowledged correction above the fixed-step rate', async () => {
+    const client = await connectRealm(endpoint, entry('walk-predict-camera-correction'), source); clients.push(client);
+    const { handle } = recordSends(client);
+    const rig = createShoulderRig(Math.PI / 2);
+    const camera = new THREE.PerspectiveCamera(50, 1440 / 900, .15, 2200);
+    const east = { ...EAST, buttons: 0 };
+    await drive(client, 350, east, 3);
+    // Deliberately perturb only test-local prediction. Subsequent real reliable inputs carry no extra position,
+    // so the room's acknowledged state must correct this drift through the production SDK reconciler.
+    (client.predicted as PlayerState).x += .24;
+    let prior: { now: number; x: number; exact: number; cameraX: number } | undefined;
+    let corrected = false, framesBetweenSteps = 0, maxRenderDelta = 0;
+    await drive(client, 850, east, 3, (now, poses) => {
+      const self = poses.find(p => p.self)!;
+      const dt = prior ? (now - prior.now) / 1000 : 0;
+      rig.update(dt, Math.PI / 2, self.speed, true);
+      rig.apply(camera, [self.x, self.y, self.z], 1440 / 900, null, self.y);
+      if (prior) {
+        const dx = self.x - prior.x;
+        maxRenderDelta = Math.max(maxRenderDelta, Math.abs(dx));
+        // Following the same rendered anchor must add neither a 30 Hz hold/jump nor an extra camera spring.
+        expect(camera.position.x - prior.cameraX).toBeCloseTo(dx, 10);
+        if (client.predicted.x < prior.exact - .08) corrected = true;
+        if (client.predicted.x === prior.exact && dt < .02 && dx > 1e-6) framesBetweenSteps++;
+        // Frame time accounts for CI scheduler pauses; a .24 m correction must not appear as a one-frame pop.
+        expect(Math.abs(dx)).toBeLessThan(4 * dt + .04);
+      }
+      prior = { now, x: self.x, exact: client.predicted.x, cameraX: camera.position.x };
+    });
+    expect(corrected).toBe(true);
+    expect(framesBetweenSteps).toBeGreaterThan(20);
+    expect(maxRenderDelta).toBeLessThan(.24);
+    await settle(client, handle);
+    expectSameFields(client);
+    client.dispose();
+  }, 15_000);
 
   it('stages exactly the due fixed inputs on slow frames, one jump per press, and agrees with the room in every field', async () => {
     a = await connectRealm(endpoint, entry('walk-predict-scope-a'), source); clients.push(a);

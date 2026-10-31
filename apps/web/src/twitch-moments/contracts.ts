@@ -1,5 +1,6 @@
-import { createIntentSchema, EpochMsSchema, KingdomIdSchema, PersonIdSchema, TokenSchema, UIntSchema } from '@chatdom/shared';
+import { createIntentSchema, EpochMsSchema, KingdomIdSchema, PersonIdSchema, TokenSchema, UIntSchema, VoxelBlueprintSchema } from '@chatdom/shared';
 import { MOMENT_KINDS, UNSAFE_TEXT, publicText } from '@chatdom/shared/twitch-moments';
+import { SKY_RUNGS } from './spectacle';
 import { z } from './zod';
 export * from '@chatdom/shared/twitch-moments';
 
@@ -82,3 +83,21 @@ export const PresentationSchema = z.strictObject({
     .refine(kinds => new Set(kinds).size === kinds.length, 'Duplicate kind'),
 });
 export type Presentation = z.infer<typeof PresentationSchema>;
+
+// ---------------------------------------------------------------- spectacle inputs
+
+/**
+ * The monarch's approved fixed ladder: one to six steps from the fixed set of sky reactions, strictly rising, the
+ * first from a single Bit. A reaction to an ordinary cheer, never a shop, and no step wakes the dragon.
+ */
+export const CheerLadderSchema = z.array(z.strictObject({ minBits: UIntSchema.min(1).max(100_000_000), rung: z.enum(SKY_RUNGS) })).min(1).max(6)
+  .refine(steps => steps[0]!.minBits === 1, 'The ladder starts at one Bit')
+  .refine(steps => steps.every((step, i) => i === 0 || step.minBits > steps[i - 1]!.minBits), 'Thresholds rise strictly')
+  .refine(steps => new Set(steps.map(s => s.rung)).size === steps.length, 'Each reaction appears once');
+
+/** Spec 24's approved emote effect, structurally narrowed: exact revision and origin, immutable voxel frames. */
+export const ApprovedEffectSchema = z.strictObject({
+  id: TokenSchema, revision: UIntSchema, origin: z.enum(['live', 'simulated']),
+  frames: z.array(z.strictObject({ blueprint: VoxelBlueprintSchema, durationMs: UIntSchema.min(16).max(10_000) })).min(1).max(16),
+  periodMs: UIntSchema.min(16).max(60_000),
+});

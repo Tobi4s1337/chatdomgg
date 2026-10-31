@@ -1,5 +1,5 @@
 import type { EventCause, KingdomId, PersonId } from '@chatdom/shared';
-import type { MomentOrigin, TwitchMomentBody, TwitchMomentFact } from '../../../web/src/twitch-moments/contracts';
+import type { MomentBodyOf, MomentOrigin, TwitchMomentBody, TwitchMomentFact } from '../../../web/src/twitch-moments/contracts';
 import type { SubscriptionPlan } from './plan';
 
 /**
@@ -52,3 +52,38 @@ export interface CitizenDirectory {
 }
 
 export interface MomentClock { now(): number }
+
+/** The authored dragon forms, exactly the battle projection's own (`spectacle.ts` DragonForm). */
+export type DragonForm = MomentBodyOf<'battle'>['form'];
+
+/**
+ * One request to main's realm gameplay for the earned dragon of a Hype Train. `requestKey` is unique per train and
+ * form: the first request at level 3 and each later upgrade carry their own key, and each is sent at most once.
+ * The realm decides whether a battle actually happens; acceptance is not a battle.
+ */
+export interface DragonSummonRequest {
+  readonly kingdomId: KingdomId;
+  readonly source: 'hype';
+  readonly requestKey: string;
+  readonly trainKey: string;
+  readonly level: number;
+  readonly form: DragonForm;
+  readonly sharedSessionKey: string | null;
+  /** The verified origin of the train evidence; a simulated train never asks for a live battle. */
+  readonly origin: 'live' | 'simulated';
+}
+export type DragonSummonReply = { readonly status: 'accepted' | 'refused' | 'unavailable' };
+/** Main's realm battle application. Null in the ingest options means no battle can be requested. */
+export interface DragonBattlePort {
+  summon(request: DragonSummonRequest, signal: AbortSignal): Promise<DragonSummonReply>;
+}
+
+/**
+ * Bounded reconciliation reads through main's credential-bound Helix binding. `response` carries the provider
+ * status and parsed JSON body; `unavailable` means the read was never made (unbound, unauthorized, no budget).
+ */
+export type MomentRead = { readonly kind: 'response'; readonly status: number; readonly body: unknown } | { readonly kind: 'unavailable' };
+export interface MomentReadPort {
+  /** `GET /helix/hypetrain/status?broadcaster_id=<kingdom>` with the broadcaster's own credential. */
+  hypeTrainStatus(kingdomId: KingdomId, signal: AbortSignal): Promise<MomentRead>;
+}

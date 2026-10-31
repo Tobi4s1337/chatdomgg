@@ -4,14 +4,24 @@ import {
   ribbonsFor, type BeatPhase,
 } from './choreography';
 import {
-  ACTION_KINDS, ActionResultSchema, MOMENT_CURRENT_LIMIT, MomentResetInfoSchema, PresentationSchema, TwitchActionArgsSchema, TwitchActionIntentSchema,
-  TwitchMomentFactSchema, type ActionKind, type ActionPort, type ActionResult, type Capability, type MomentBodyOf, type MomentResetInfo,
-  type Presentation, type TwitchActionArgs, type TwitchActionIntent, type TwitchMomentFact, type TwitchMomentFeed,
+  ACTION_KINDS, ActionResultSchema, ApprovedEffectSchema, CheerLadderSchema, KingdomMomentIntentSchema, MOMENT_CURRENT_LIMIT, MomentResetInfoSchema,
+  PresentationSchema, TwitchActionArgsSchema, TwitchActionIntentSchema, TwitchMomentFactSchema, type ActionKind, type ActionPort, type ActionResult,
+  type Capability, type KingdomMomentIntent, type MomentBodyOf, type MomentResetInfo, type Presentation, type TwitchActionArgs, type TwitchActionIntent,
+  type TwitchMomentFact, type TwitchMomentFeed,
 } from './contracts';
 import {
   FRIEND, cartLoad, destinationOf, extendGiftBeat, giftSeal, planGiftBeat, recipientLine, type GiftBeat, type GiftDestination, type GiftSeal, type GiftTier,
 } from './gift-beat';
+import {
+  dragonCaption, dragonCues, dragonFocusWindow, dragonFrame, nextBattle, nextTrain, stirCues, stirFrame, trainCaption, trainCues, trainFrame,
+  type BattleState, type TrainState,
+} from './hype-beat';
 import { describeAction } from './previews';
+import { mergeSky, seedOf, skyCaption, skyCues, skyFrame, skyHold, skyLength, type SkyBeat } from './sky-beat';
+import {
+  DEFAULT_CHEER_LADDER, SKY_LIMITS, SKY_MERGE_MS, TRAIN_BEAT, rungFor, type ApprovedEffect, type BattleStatus, type DragonFrame, type KingdomScale,
+  type LadderStep, type SkyBeatFrame, type SkyRung, type TrainFrame,
+} from './spectacle';
 
 export type FeedStatus = 'waiting' | 'ready' | 'unavailable';
 export type FactRejection = 'not-ready' | 'epoch' | 'invalid' | 'kingdom' | 'origin' | 'replay';
@@ -26,11 +36,27 @@ export interface TwitchMomentsOptions {
   readonly clock: MomentClock;
   /** Default: an unbound port, so every write is honestly unavailable. */
   readonly actions?: ActionPort<TwitchActionIntent> | null;
+  /**
+   * The realm's authoritative gameplay port for strikes, hauls and the fireworks chant. Null (the default) means no
+   * battle can be fought here: an earned train says so honestly and nothing is tallied locally.
+   */
+  readonly gameplay?: ActionPort<KingdomMomentIntent> | null;
+  /** Hamlet: every cheer is its own beat. Town: cheers merge into a volley per 10 s. Capital: per 20 s, names in a ribbon. */
+  readonly scale?: KingdomScale;
+  /** The monarch's approved fixed ladder; default Twitch.md §6. Invalid ladders fall back to the default. */
+  readonly ladder?: readonly LadderStep[];
+  /** Spec 24's approved-effect lookup, structurally narrowed. Null means that emote is unavailable for the effect. */
+  readonly effect?: (emoteId: string) => ApprovedEffect | null;
+  /** The channel's approved emotes a castle volley may burst into; empty bursts as the kingdom's own star. */
+  readonly channelEffects?: () => readonly ApprovedEffect[];
+  /** The monarch's mapping of custom Power-ups to a fixed moment; unmapped keys are unavailable. */
+  readonly customPowerUps?: ReadonlyMap<string, SkyRung | 'confetti'>;
 }
 
 export type Tint = 'gold' | 'rose' | 'rainbow';
 /** What a shot or a caption is about: a supplied home, or a supplied public place. Never a guessed address. */
-export type MomentSubject = { readonly kind: 'home'; readonly slot: number } | { readonly kind: 'place'; readonly place: 'market' | 'gate' };
+export type MomentPlace = 'market' | 'gate' | 'sky' | 'castle' | 'plaza' | 'train' | 'dragon' | 'lair';
+export type MomentSubject = { readonly kind: 'home'; readonly slot: number } | { readonly kind: 'place'; readonly place: MomentPlace };
 export interface HomeDressFrame {
   readonly slot: number;
   readonly tier: 'prime' | '1' | '2' | '3';
@@ -56,7 +82,15 @@ export interface CaptionFrame {
   readonly detail: string | null;
   readonly opacity: number;
 }
-export type MomentCue = 'horn' | 'cloth-unfurl' | 'gift-bell' | 'cart-roll' | 'parcel-land';
+export type MomentCue = 'horn' | 'cloth-unfurl' | 'gift-bell' | 'cart-roll' | 'parcel-land'
+  // The sky: a spark's climb, a shell's launch and bloom with its crackling tail, the Hearthbeast's call and wings,
+  // the aurora's swell, kites on the wind, confetti and a rising balloon.
+  | 'spark-rise' | 'firework-launch' | 'firework-bloom' | 'firework-crackle' | 'beast-call' | 'beast-wings' | 'aurora-swell' | 'kite-wind'
+  | 'confetti-pop' | 'balloon-rise'
+  // The train and the dragon: whistle, steam pulse, coupling, the festival drum; roar, wingbeat, breath, a strike's
+  // hit, the fall, a sleeping rumble; the Wyrm Bell and the victory fanfare.
+  | 'train-whistle' | 'train-steam' | 'carriage-couple' | 'festival-drum' | 'dragon-roar' | 'dragon-wings' | 'dragon-breath' | 'dragon-hit'
+  | 'dragon-fall' | 'dragon-snore' | 'wyrm-bell' | 'victory-fanfare';
 export interface AudioCueFrame { readonly id: string; readonly cue: MomentCue; readonly atMs: number; readonly gain: number }
 export interface FocusFrame {
   readonly id: string;
@@ -97,9 +131,9 @@ export interface CartFrame {
 export interface MomentMetrics {
   readonly admitted: number;
   readonly restored: number;
-  readonly suppressed: Readonly<Record<'expired' | 'recovered' | 'anonymous' | 'coalesced' | 'unchanged', number>>;
+  readonly suppressed: Readonly<Record<'expired' | 'recovered' | 'anonymous' | 'coalesced' | 'unchanged' | 'unapproved', number>>;
   readonly rejected: Readonly<Record<FactRejection | `reset-${ResetRejection}` | 'presence', number>>;
-  readonly peak: Readonly<{ beats: number; captions: number; audio: number; current: number; parcels: number }>;
+  readonly peak: Readonly<{ beats: number; captions: number; audio: number; current: number; parcels: number; sky: number }>;
 }
 export interface MomentFrame {
   readonly atMs: number;
@@ -112,6 +146,13 @@ export interface MomentFrame {
   readonly captions: readonly CaptionFrame[];
   readonly audio: readonly AudioCueFrame[];
   readonly focus: FocusFrame | null;
+  /** Live sky beats past their start, at most SKY_LIMITS.beats. */
+  readonly sky: readonly SkyBeatFrame[];
+  readonly train: TrainFrame | null;
+  /** The authoritative battle's dragon, or the sleeping stir after a short train. Never a local fight. */
+  readonly dragon: DragonFrame | null;
+  /** The earned battle's truthful status beside a train at level 3 or more; null when there is nothing to say. */
+  readonly battle: BattleStatus | null;
 }
 
 interface BannerBeat {
@@ -121,7 +162,7 @@ interface BannerBeat {
   readonly id: string; readonly slot: number; readonly name: string; readonly line: string; readonly startAt: number; readonly endAt: number;
   readonly newRibbon: boolean;
 }
-type Beat = BannerBeat | GiftBeat;
+type Beat = BannerBeat | GiftBeat | SkyBeat;
 interface HomeDress {
   readonly tier: HomeDressFrame['tier']; readonly active: boolean; readonly months: number; readonly founder: boolean;
   /** Kingdom time of a live quiet change, and the cloth's rest before it; restoration has no motion. */
@@ -149,6 +190,8 @@ const TINT: Record<HomeDressFrame['tier'], Tint> = { prime: 'gold', 1: 'gold', 2
 const RANK: Record<HomeDressFrame['tier'], number> = { prime: 1, 1: 1, 2: 2, 3: 3 };
 /** A gift group's first notice waits this long for its siblings, so the aggregate and its recipients start one beat. */
 const GIFT_GATHER_MS = 1200;
+/** A town's or capital's cheer waits this long for company before its volley. */
+const SKY_GATHER_MS = 1200;
 
 /** An intimate cart hands the shot to its first parcel bound for a home, a little before halfway through its flight. */
 function followOf(beat: GiftBeat): FocusFrame['follow'] {
@@ -180,28 +223,40 @@ const smoothIn = (a: number, b: number, v: number) => { const t = Math.min(1, Ma
 export function createTwitchMoments(options: TwitchMomentsOptions) {
   const { kingdomId, expectedOrigin, clock } = options;
   const actions = options.actions ?? createUnavailableActionPort();
+  const gameplay = options.gameplay ?? null, scale: KingdomScale = options.scale ?? 'hamlet';
+  const ladderInput = CheerLadderSchema.safeParse(options.ladder ?? DEFAULT_CHEER_LADDER);
+  const ladder: readonly LadderStep[] = ladderInput.success ? ladderInput.data : DEFAULT_CHEER_LADDER;
   let status: FeedStatus = 'waiting', epoch: string | null = null, watermark = 0, disposed = false;
   const current = new Map<string, TwitchMomentFact>();
   const homes = new Map<number, HomeDress>();
   let beats: Beat[] = [], nextSlotAt = -Infinity, presence: KingdomPresenceFrame | null = null;
   const celebrated = new Set<string>();
+  /** Sky keys already played or merged this session, bounded: a replayed key never fires twice. */
+  const skySeen = new Set<string>();
+  let train: TrainState | null = null, battle: BattleState | null = null;
+  const inFlightMoments = new Map<string, Promise<ActionAttempt>>();
   let presentation: Presentation = { layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] };
   const inFlight = new Map<string, Promise<ActionAttempt>>();
   const metrics = {
     admitted: 0, restored: 0,
-    suppressed: { expired: 0, recovered: 0, anonymous: 0, coalesced: 0, unchanged: 0 },
+    suppressed: { expired: 0, recovered: 0, anonymous: 0, coalesced: 0, unchanged: 0, unapproved: 0 },
     rejected: { 'not-ready': 0, epoch: 0, invalid: 0, kingdom: 0, origin: 0, replay: 0, 'reset-invalid': 0, 'reset-kingdom': 0, 'reset-origin': 0,
       'reset-sequence': 0, 'reset-partial': 0, presence: 0 },
-    peak: { beats: 0, captions: 0, audio: 0, current: 0, parcels: 0 },
+    peak: { beats: 0, captions: 0, audio: 0, current: 0, parcels: 0, sky: 0 },
   };
 
   function cancelTransient(): void { beats = []; nextSlotAt = -Infinity; }
 
   /** Current public state. A live change of a known home eases its cloth quietly; restoration simply is. */
   function applyState(fact: TwitchMomentFact, live: boolean): void {
+    const body = fact.body;
+    // Cheers and Power-ups are moments, not state: nothing of them lasts in the current view.
+    if (body.kind === 'cheer' || body.kind === 'power-up') return;
     current.set(fact.body.key, fact);
     metrics.peak.current = Math.max(metrics.peak.current, current.size);
-    const body = fact.body;
+    const now = clock.now(), animate = live && now <= body.displayUntil;
+    if (body.kind === 'hype') train = nextTrain(train ?? undefined, body, now, animate);
+    if (body.kind === 'battle') battle = nextBattle(battle ?? undefined, body, now, animate);
     if (body.kind === 'subscription' && body.credit?.slot != null) {
       const previous = homes.get(body.credit.slot), now = clock.now();
       const moved = live && previous !== undefined && previous.active !== body.active;
@@ -272,6 +327,79 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     push(beat, beat.mode === 'cart' ? beat.departAt - startAt : Math.min(beat.endAt - startAt, 5200), now);
   }
 
+  /** An approved effect exactly as the lookup supplied it: valid, and never simulated geometry in a live kingdom. */
+  function approved(effect: ApprovedEffect | null | undefined): ApprovedEffect | null {
+    const parsed = ApprovedEffectSchema.safeParse(effect);
+    if (!parsed.success || (expectedOrigin === 'live' && parsed.data.origin !== 'live')) return null;
+    return effect!;
+  }
+
+  const remember = (key: string) => { skySeen.add(key); if (skySeen.size > CELEBRATED_LIMIT * 4) skySeen.delete(skySeen.values().next().value!); };
+
+  /**
+   * One sky beat per cheer in a hamlet. In a town or capital a cheer joins the volley still gathering (not yet
+   * started), which plays its highest rung with a bounded ribbon of names; otherwise it opens the next volley.
+   */
+  function scheduleSky(fact: TwitchMomentFact, sky: SkyBeat['sky'], rung: SkyRung | null, extra: { effect?: ApprovedEffect | null; bubbleSlot?: number | null } = {}): void {
+    const body = fact.body as MomentBodyOf<'cheer'> | MomentBodyOf<'power-up'>;
+    if (skySeen.has(body.key)) { metrics.suppressed.coalesced++; return; }
+    remember(body.key);
+    const now = clock.now(), name = body.credit ? truncate(body.credit.displayName) : FRIEND;
+    const window = SKY_MERGE_MS[scale];
+    if (sky === 'cheer' && window > 0) {
+      const index = beats.findIndex(b => b.kind === 'sky' && b.sky === 'cheer' && now < b.startAt);
+      if (index >= 0) {
+        const merged = mergeSky(beats[index] as SkyBeat, rung!, name, body.key);
+        beats = beats.map((b, i) => (i === index ? merged : b));
+        // A volley raised to a grander rung holds the stage for that rung.
+        nextSlotAt = Math.max(nextSlotAt, merged.startAt + Math.max(window, skyHold('cheer', merged.rung)));
+        metrics.suppressed.coalesced++;
+        return;
+      }
+    }
+    // In a town or capital the first cheer plays after a short gather; whoever cheers in the next window joins
+    // one shared volley that follows it, so a burst of cheers is a rhythm of volleys, never a queue of fifty.
+    const merging = sky === 'cheer' && window > 0;
+    const startAt = slot(now, now + (merging ? SKY_GATHER_MS : 0));
+    if (startAt === null) return;
+    // A spark or a street's fireworks rise from the cheerer's own home; a friend of the realm's from the market.
+    const origin: SkyBeat['origin'] = body.credit?.slot != null ? { kind: 'home', slot: body.credit.slot }
+      : { kind: 'place', place: sky === 'confetti' ? 'castle' : 'market' };
+    const beat: SkyBeat = { kind: 'sky', id: `${body.key}@${fact.seq}`, sky, rung, origin, seed: seedOf(body.key), name, ribbon: [], others: 0,
+      effect: extra.effect ?? null, bubbleSlot: extra.bubbleSlot ?? null, keys: [body.key], startAt, endAt: startAt + skyLength(sky, rung) };
+    push(beat, merging ? Math.max(window, skyHold(sky, rung)) : skyHold(sky, rung), now);
+  }
+
+  function scheduleCheer(fact: TwitchMomentFact, body: MomentBodyOf<'cheer'>): void {
+    const rung = rungFor(body.bits, ladder);
+    // A castle volley bursts into one of the channel's approved emotes when there are any; otherwise the kingdom's star.
+    const pool = rung === 'castle-volley' ? (options.channelEffects?.() ?? []).map(approved).filter((e): e is ApprovedEffect => e !== null) : [];
+    scheduleSky(fact, 'cheer', rung, { effect: pool.length ? pool[seedOf(body.key) % pool.length]! : null });
+  }
+
+  /**
+   * Power-ups: a gigantified emote floats only when its exact approved effect exists (never a stand-in); a
+   * message effect dresses the speaker's bubble; a celebration is the castle's confetti; a custom Power-up plays
+   * the moment the monarch mapped it to, or nothing.
+   */
+  function schedulePowerUp(fact: TwitchMomentFact, body: MomentBodyOf<'power-up'>): void {
+    switch (body.effect) {
+      case 'emote-balloon': {
+        const effect = approved(options.effect?.(body.emoteId!) ?? null);
+        if (!effect || effect.id !== body.emoteId) { metrics.suppressed.unapproved++; return; }
+        scheduleSky(fact, 'balloon', null, { effect });
+        return;
+      }
+      case 'message-effect': scheduleSky(fact, 'bubble', null, { bubbleSlot: body.credit?.slot ?? null }); return;
+      case 'celebration': scheduleSky(fact, 'confetti', null); return;
+      case 'custom': {
+        const mapped = options.customPowerUps?.get(body.mappingKey!);
+        if (!mapped) { metrics.suppressed.unapproved++; return; }
+        if (mapped === 'confetti') scheduleSky(fact, 'confetti', null); else scheduleSky(fact, 'cheer', mapped);
+      }
+    }
+  }
+
   function admit(fact: TwitchMomentFact): void {
     const body = fact.body;
     const previous = body.kind === 'subscription' && body.credit?.slot != null ? homes.get(body.credit.slot) : undefined;
@@ -281,6 +409,8 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     if (now > body.displayUntil || body.displayUntil === fact.occurredAt) { metrics.suppressed.expired++; return; }
     if (body.kind === 'subscription') scheduleBanner(fact, body, previous);
     else if (body.kind === 'gifts') scheduleGift(fact, body);
+    else if (body.kind === 'cheer') scheduleCheer(fact, body);
+    else if (body.kind === 'power-up') schedulePowerUp(fact, body);
   }
 
   const originOk = (origin: TwitchMomentFact['origin']) => origin === expectedOrigin || origin === 'recovered';
@@ -302,7 +432,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
       facts.push(fact.data);
     }
     // Replace bounded state; a restored snapshot has no "just happened" beat.
-    cancelTransient(); current.clear(); homes.clear();
+    cancelTransient(); current.clear(); homes.clear(); train = null; battle = null;
     for (const fact of facts.sort((a, b) => a.seq - b.seq)) {
       applyState(fact, false);
       // A restored group was someone's moment already; a late sibling notice for it is state only.
@@ -374,9 +504,46 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     const captions: CaptionFrame[] = [];
     const caption = (frame: CaptionFrame) => { if (frame.opacity > 0.01 && captions.length < MOMENT_LIMITS.captions) captions.push(frame); };
     let focus: FocusFrame | null = null;
+    // The earned dragon outranks everything while it wakes, ends or first takes the sky; then the train's arrival.
+    const trainNow = train && visible ? trainFrame(train, atMs) : null;
+    const battleStatus: BattleStatus | null = !train || train.level < 3 || (trainNow === null && !battle) ? null
+      : battle && battle.phase !== 'victory' && battle.phase !== 'retreat' ? 'battle'
+      : battle ? 'ended' : gameplay ? 'requested' : 'unavailable';
+    const dragonNow = visible ? (battle ? dragonFrame(battle, atMs) : null) ?? (train ? stirFrame(train, atMs) : null) : null;
+    if (visible && battle && dragonNow?.key === battle.battleKey) {
+      const words = dragonCaption(battle, atMs);
+      if (words) caption(words);
+      const window = dragonFocusWindow(battle);
+      if (window && atMs >= window[0] && atMs < window[1] && !presentation.busy) {
+        focus = { id: `battle.${battle.battleKey}:${battle.phase}`, subject: { kind: 'place', place: 'dragon' }, startAt: window[0], endAt: window[1],
+          cut: presentation.mood === 'show', wide: true, follow: null, toward: [] };
+      }
+    }
+    if (trainNow && train) {
+      const words = trainCaption(train, atMs, battleStatus ?? 'sleeping');
+      if (words) caption(words);
+      if (!focus && train.arrives && atMs - train.appearedAt < TRAIN_BEAT.arrive + 4200 && !presentation.busy) {
+        focus = { id: `train.${train.trainKey}`, subject: { kind: 'place', place: 'train' }, startAt: train.appearedAt, endAt: train.appearedAt + TRAIN_BEAT.arrive + 4200,
+          cut: presentation.mood === 'show', wide: true, follow: null, toward: [] };
+      }
+    }
     for (const beat of live) {
       if (atMs < beat.startAt) continue;
       const t = atMs - beat.startAt;
+      if (beat.kind === 'sky') {
+        const frame = skyCaption(beat, atMs);
+        if (frame) caption(frame);
+        // A bubble's dressing is small: it never takes the camera. A balloon is framed as it rises, then drifts on its own.
+        const until = beat.sky === 'balloon' ? beat.startAt + 6000 : beat.endAt;
+        if (!focus && beat.sky !== 'bubble' && atMs < until && !presentation.busy) {
+          const intimate = beat.sky === 'cheer' && beat.rung === 'spark' && beat.origin.kind === 'home';
+          const subject: MomentSubject = intimate && beat.origin.kind === 'home' ? { kind: 'home', slot: beat.origin.slot }
+            : { kind: 'place', place: beat.sky === 'balloon' ? 'plaza' : beat.sky === 'confetti' ? 'castle' : 'sky' };
+          focus = { id: beat.id, subject, startAt: beat.startAt, endAt: until, cut: presentation.mood === 'show', wide: !intimate, follow: null,
+            toward: beat.origin.kind === 'home' ? [{ kind: 'home', slot: beat.origin.slot }] : [] };
+        }
+        continue;
+      }
       if (beat.kind === 'home-banner') {
         const opacity = beat.style === 'unfurl' ? bannerPose(t).caption : flourishPose(t).caption;
         caption({ id: beat.id, at: { kind: 'home', slot: beat.slot }, title: beat.name, line: beat.line, detail: null, opacity });
@@ -390,16 +557,26 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
 
     // Every cue of a live beat is listed with its absolute time; the view plays each ID once and cancels on removal.
     const audio: AudioCueFrame[] = [];
-    for (const beat of live) {
-      const cues = beat.kind === 'home-banner' ? bannerCues(beat) : giftCues(beat);
-      if (audio.length + cues.length > MOMENT_LIMITS.audio) break;
-      audio.push(...cues);
+    const add = (cues: readonly AudioCueFrame[]) => { if (audio.length + cues.length <= MOMENT_LIMITS.audio) audio.push(...cues); };
+    // The dragon and the train are heard first; then beats in their order on the stage.
+    if (visible && battle && dragonNow?.key === battle.battleKey) add(dragonCues(battle, atMs));
+    if (visible && train && trainNow) add(trainCues(train));
+    if (visible && train && dragonNow?.phase === 'stir') add(stirCues(train));
+    for (const beat of live) add(beat.kind === 'home-banner' ? bannerCues(beat) : beat.kind === 'gift' ? giftCues(beat) : skyCues(beat));
+    // The train's closing fireworks fly over the castle, credited to nobody.
+    const sky = live.filter((b): b is SkyBeat => b.kind === 'sky' && atMs >= b.startAt).slice(0, SKY_LIMITS.beats).map(b => skyFrame(b, atMs));
+    if (trainNow?.closingFireworks && train?.endedAt != null && Number.isFinite(train.endedAt)) {
+      const festival: SkyBeat = { kind: 'sky', id: `festival.${train.trainKey}`, sky: 'festival', rung: 'castle-volley', origin: { kind: 'place', place: 'castle' },
+        seed: seedOf(train.trainKey), name: '', ribbon: [], others: 0, effect: null, bubbleSlot: null, keys: [], startAt: train.endedAt + TRAIN_BEAT.closing.fireworks[0],
+        endAt: train.endedAt + TRAIN_BEAT.closing.fireworks[0] + skyLength('festival', 'castle-volley') };
+      if (atMs >= festival.startAt && atMs < festival.endAt) { sky.push(skyFrame(festival, atMs)); add(skyCues(festival)); }
     }
     metrics.peak.captions = Math.max(metrics.peak.captions, captions.length);
     metrics.peak.audio = Math.max(metrics.peak.audio, audio.length);
     metrics.peak.parcels = Math.max(metrics.peak.parcels, parcels.length);
+    metrics.peak.sky = Math.max(metrics.peak.sky, sky.length);
     return { atMs, status, label: expectedOrigin === 'simulated' ? 'SIMULATED' : 'LIVE', visible, homes: homeFrames.sort((a, b) => a.slot - b.slot),
-      parcels, carts, captions, audio, focus };
+      parcels, carts, captions, audio, focus, sky, train: trainNow, dragon: dragonNow, battle: battleStatus };
   }
 
   /**
@@ -511,6 +688,27 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     return attempt;
   }
 
+  /**
+   * A strike, haul or fireworks chant goes to the realm's authoritative port and nowhere else. Nothing here tallies
+   * damage or declares victory: the battle's result returns as a fact. Without a port the answer is unavailable.
+   */
+  function submitMoment(input: unknown): Promise<ActionAttempt> {
+    const intent = KingdomMomentIntentSchema.safeParse(input);
+    if (!intent.success) return Promise.resolve({ status: 'invalid', intentId: null });
+    const { id } = intent.data, kind = intent.data.args.kind;
+    const same = inFlightMoments.get(id);
+    if (same) return same;
+    if ([...inFlightMoments.keys()].some(key => key.endsWith(`|${kind}`))) return Promise.resolve({ status: 'in-flight', intentId: id });
+    if (!gameplay || !(gameplay.capabilities().get(kind) ?? UNAVAILABLE).available) return Promise.resolve({ status: 'unavailable', intentId: id });
+    const attempt = gameplay.submit(intent.data, new AbortController().signal).then(result => {
+      const parsed = ActionResultSchema.safeParse(result);
+      return parsed.success && parsed.data.intentId === id ? parsed.data : { status: 'unknown' as const, intentId: id, reconciliationKey: id };
+    }, () => ({ status: 'unknown' as const, intentId: id, reconciliationKey: id }))
+      .finally(() => { inFlightMoments.delete(id); inFlightMoments.delete(`${id}|${kind}`); });
+    inFlightMoments.set(id, attempt); inFlightMoments.set(`${id}|${kind}`, attempt);
+    return attempt;
+  }
+
   return {
     reset,
     receiveFact,
@@ -521,6 +719,10 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     sample,
     previewAction,
     submitAction,
+    submitMoment,
+    /** The realm's answer for each kingdom act; every one is unavailable when no gameplay port is bound. */
+    momentCapabilities: (): ReadonlyMap<KingdomMomentIntent['args']['kind'], Capability> =>
+      gameplay?.capabilities() ?? new Map((['strike', 'haul', 'fireworks-chant'] as const).map(kind => [kind, UNAVAILABLE])),
     /** Wire an injected feed. Its origin must be the one this controller expects. */
     connect(feed: TwitchMomentFeed): () => void {
       if (feed.origin !== expectedOrigin) { markUnavailable(); return () => {}; }
@@ -532,7 +734,10 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     metrics: (): MomentMetrics => structuredClone(metrics),
     /** Public current state as received, for inspection; never includes private IDs. */
     currentFacts: (): readonly TwitchMomentFact[] => [...current.values()],
-    dispose() { disposed = true; cancelTransient(); current.clear(); homes.clear(); celebrated.clear(); presence = null; inFlight.clear(); },
+    dispose() {
+      disposed = true; cancelTransient(); current.clear(); homes.clear(); celebrated.clear(); skySeen.clear(); presence = null; inFlight.clear();
+      inFlightMoments.clear(); train = null; battle = null;
+    },
   };
 }
 export type TwitchMoments = ReturnType<typeof createTwitchMoments>;
