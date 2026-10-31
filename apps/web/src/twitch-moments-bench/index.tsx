@@ -8,6 +8,7 @@ import {
 } from '../twitch-moments';
 import { BENCH_EMOTE, BENCH_EMOTE_EFFECT } from './bench-emote';
 import { createMomentStage, type MomentStage } from './stage';
+import { createRelayPath, type RelayPath } from './relay-path';
 import { BENCH_KINGDOM, benchPerson, createBenchSimulation, type BenchCitizen, type BenchDelivery, type BenchSimulation } from './simulation';
 import './style.css';
 
@@ -18,12 +19,12 @@ const START = Date.UTC(2026, 9, 30, 19, 40);
 interface LogLine { readonly id: number; readonly text: string; readonly tone: 'public' | 'refused' | 'source' }
 
 /** Bench scenarios: each opens on one deterministic beat so a capture can seek straight into it. */
-const SCENARIOS = ['banner', 'neighbours', 'restored', 'idle', 'resub', 'tiers', 'lapse', 'rejoin', 'cloak', 'gift', 'forward', 'cart', 'friend', 'ward',
+const SCENARIOS = ['banner', 'neighbours', 'restored', 'idle', 'resub', 'tiers', 'lapse', 'rejoin', 'cloak', 'gift', 'forward', 'cart', 'friend', 'ward', 'relay',
   'spark', 'street', 'volley', 'beast', 'skyfire', 'kites', 'anonymous', 'volleys', 'balloon', 'confetti', 'unapproved',
   'train', 'closing', 'dragon', 'battle', 'victory', 'retreat', 'bell', 'unbound'] as const;
 type Scenario = typeof SCENARIOS[number];
 const HEADINGS: Partial<Record<Scenario, string>> = { gift: 'A gift at the door', forward: 'A gift paid forward', cart: 'The gift cart', friend: 'From a friend of the realm',
-  ward: 'Parcels for the whole street', cloak: 'A rose cloak',
+  ward: 'Parcels for the whole street', cloak: 'A rose cloak', relay: 'Carried by the realm',
   resub: 'Seven months under the banner', tiers: 'A finer cloth', lapse: 'A banner furled', rejoin: 'The banner, again',
   spark: 'A spark from home', street: 'Fireworks down the street', volley: 'A volley over the castle', beast: 'The Hearthbeast passes', skyfire: 'Skyfire',
   kites: 'A sky of kites', anonymous: 'A cheer from a friend of the realm', volleys: 'A town cheers together', balloon: 'A giant emote over the plaza',
@@ -50,6 +51,7 @@ export default function TwitchMomentsBench() {
   const [plates, setPlates] = createSignal<ScreenNameplate[]>([]), [battle, setBattle] = createSignal<{ status: BattleStatus; health: number; fighters: number; key: string | null } | null>(null);
   const [strikeNote, setStrikeNote] = createSignal<string | null>(null);
   let canvas!: HTMLCanvasElement, stage: MomentStage | undefined, moments: TwitchMoments | undefined, view: TwitchMomentView | undefined, sim: BenchSimulation | undefined;
+  let relayPath: RelayPath | undefined;
   let raf = 0, last = performance.now(), now = START, logId = 0, audio: { context: AudioContext; destination: AudioNode } | null = null, disposed = false;
   const construction = new AbortController();
   const benchWindow = window as Window & { __chatdomReady?: boolean; __chatdomMoments?: unknown };
@@ -319,6 +321,16 @@ export default function TwitchMomentsBench() {
           // A live source that is not bound stays unavailable; the bench never substitutes fixtures for it.
           moments.connect(createUnavailableMomentFeed('live'));
           await new Promise(r => setTimeout(r, 0));
+        } else if (scenario === 'relay') {
+          // The composed path: notices through the realm's commit, outbox and the browser observer, not the direct feed.
+          const path = relayPath = createRelayPath(people, clock, note);
+          moments.connect(path.feed);
+          await path.ready;
+          note('Source · SIMULATED realm relay: Herald evidence → held writer → public outbox → room observer', 'source');
+          const [juniper, quiet] = people, giver = people.find(p => p.name === 'Rowan') ?? juniper!, other = people.find(p => p.name === 'Hazel') ?? quiet!;
+          const seen = moments.metrics().admitted;
+          await path.giftGroup(giver, 6, [juniper!, other, people.find(p => p.name === 'Moss')!, quiet!]);
+          if (moments.metrics().admitted > seen) setBeatAt(START);
         } else {
           sim ??= createBenchSimulation(people, clock);
           moments.connect(sim.feed);
@@ -382,7 +394,7 @@ export default function TwitchMomentsBench() {
 
   onCleanup(() => {
     disposed = true; construction.abort(); cancelAnimationFrame(raf);
-    view?.dispose(); moments?.dispose(); sim?.stop(); stage?.dispose(); void audio?.context.close();
+    view?.dispose(); moments?.dispose(); sim?.stop(); relayPath?.dispose(); stage?.dispose(); void audio?.context.close();
     benchWindow.__chatdomReady = false; document.body.classList.remove('moments-bench-page');
   });
 

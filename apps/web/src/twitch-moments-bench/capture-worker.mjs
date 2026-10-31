@@ -38,6 +38,7 @@ const SUPPORT = [
   ['rejoin', STREAM, [['anticipation', 600], ['action', 2200], ['settle', 6000]]],
   ['friend', DESKTOP, [['anticipation', 3800], ['action', 7000], ['settle', 11800]]],
   ['ward', STREAM, [['anticipation', 3800], ['action', 6800], ['settle', 14000]]],
+  ['relay', STREAM, [['anticipation', 3800], ['action', 7000], ['settle', 11800]]],
 ];
 /** The sky, the train and the dragon. Battle scenarios run the SIMULATED realm in setup, so their beats sit later. */
 const SPECTACLE = [
