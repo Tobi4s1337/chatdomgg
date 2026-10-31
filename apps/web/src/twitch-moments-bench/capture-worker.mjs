@@ -41,7 +41,7 @@ const SUPPORT = [
 ];
 /** The sky, the train and the dragon. Battle scenarios run the SIMULATED realm in setup, so their beats sit later. */
 const SPECTACLE = [
-  ['skyfire', DESKTOP, [['aurora', 3400], ['name', 7600], ['procession', 11200]]],
+  ['skyfire', STREAM, [['aurora', 3400], ['name', 7600], ['procession', 11200]]],
   ['volley', STREAM, [['launch', 1700], ['burst', 4300], ['fade', 8200]]],
   ['spark', PHONE, [['rise', 1200], ['peak', 2300], ['fade', 3600]]],
   ['street', DESKTOP, [['launch', 1500], ['burst', 3500], ['willow', 5600]]],

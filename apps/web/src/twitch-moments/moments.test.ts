@@ -8,7 +8,7 @@ import { BANNER_BEAT } from './choreography';
 import type { DragonSummonRequest } from '../../../herald/src/twitch-moments/ports';
 import { ApprovedEffectSchema, type ActionPort, type KingdomMomentIntent } from './contracts';
 import { createTwitchMoments, type MomentFrame } from './controller';
-import { rungFor, type SpectaclePlaces } from './spectacle';
+import { SKY_LIMITS, rungFor, type SpectaclePlaces } from './spectacle';
 import { createTwitchMomentView, type CameraLease, type GiftRoute, type HomeAnchor, type MomentViewHost, type PlaceAnchor } from './view';
 import type { CameraPose } from './contracts';
 
@@ -650,6 +650,19 @@ describe('Twitch moments: a cheer and the sky answers; the earned train brings i
     expect(rig.cancelled.length).toBeGreaterThan(0);
     expect(rig.camera()).toEqual(rig.prior);
     moments.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] });
+
+    // Skyfire over the same town: the curtains unroll behind the castle while the name is written and the shells
+    // walk the walls, and all three fit the sky's budget together, so no curtain ever cuts a letter or a shell.
+    now += 30_000; kingdomNow = now;
+    local.deliver(bitsUse(JUNIPER, 5000)); await settle(ingest);
+    let busiest = 0, strips = 0;
+    for (let at = now; at <= now + 12_000; at += 200) {
+      view.apply(moments.sample(at));
+      const sky = view.stats();
+      busiest = Math.max(busiest, Number(sky['sky.motes'])); strips = Math.max(strips, Number(sky['sky.auroraColumns']));
+    }
+    expect(strips).toBeGreaterThanOrEqual(90);
+    expect(busiest).toBeLessThan(SKY_LIMITS.motes);
 
     // The train sets out on the supplied track and carries its riders' names; level 3 wakes the realm's dragon.
     now += 60_000; kingdomNow = now;
