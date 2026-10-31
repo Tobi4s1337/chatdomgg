@@ -34,7 +34,7 @@ views/captures say **SIMULATED**. Report actual motion/appearance evidence, no s
   through changes. Vary meaningful choices and timings by stable slot/epoch seed; tune by watching nine
   citizens over a complete routine and a 240-slot street composition. · evidence: street/market/home frames,
   one timed routine contact sheet and arrival/blocked branches in the existing scenario test.
-- [ ] **CB03 — Let a witnessed chat line turn a few heads.** Consume the separate sanitized cue schema through
+- [x] **CB03 — Let a witnessed chat line turn a few heads.** Consume the separate sanitized cue schema through
   the exact main adapter. Give its present speaker a finite nod and at most two nearby listeners a
   short staggered look using actual cue identity/source/timing metadata; coalesce bursts, deduplicate IDs and discard expired/foreign-origin/removed-slot cues.
   Never store/display text in the policy or add it to presence. Demonstrate ordinary cue, burst, walker

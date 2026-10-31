@@ -48,7 +48,7 @@ helper allocates a free port and queues through its machine-wide lock. Record an
   Keep debug/count/preview controls out of output. Preserve quiet output; preview says broadcast mix unavailable
   rather than claiming audio health. · evidence: clean stage calm/show at both broadcast sizes, seam contact
   sheet, each small format at actual size and safe-rectangle capture; stale source suppresses personal labels.
-- [ ] **PS06 — Setup, safety and mobile feel as finished as the first picture.** Finish config/live-config local
+- [x] **PS06 — Setup, safety and mobile feel as finished as the first picture.** Finish config/live-config local
   section/shelf preview and simulated Hide, with unavailable real save/Hide/review reasons and no royal powers.
   Tune wood/brass/parchment, typography, window-light feedback, tiny varied gesture sounds, designed focus and
   reduced motion. Run the complete lane browser review on nested static Extension paths, 318×496, 390×844 and
@@ -62,3 +62,5 @@ Ideas found while working go here as one line each. Do not pick them without a n
 - A supported close "street" camera in the renderer would let the bottom strip look down a lit street into depth instead of cropping the window shot (main-owned scene.ts). PS05 now uses the existing `citizen` camera for the strip's street beat; a walking street camera would still be richer.
 - A silent running-clock option in the renderer (start the simulated night at t=0 without `play()`'s sound unlock) would let the starting seam replay the fixture's arrivals instead of joining at t=30 (main-owned scene.ts).
 - Supplied "night so far" moments (an Earlier tonight replay, pool scaffold progress) would give the break tour more than the town, a window and a street once their runtimes exist.
+- Twitch's Configuration Service (broadcaster segment, written by the Helper from config) could carry the streamer's section and shelf choices without an EBS, once main freezes the segment's format; the config page would then save for real.
+- A small Opus-encoded subset of `packages/audio`'s wood/brass/parchment control cues (well under 100 KB) would let the panel share the kingdom's recorded foley instead of drawing its own procedural sounds; its WAV set is ~890 KB today.

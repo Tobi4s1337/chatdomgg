@@ -1,10 +1,7 @@
-import { createForgeMotif } from '@chatdom/content/forge-motifs';
 import type { StyleKey } from '@chatdom/content/materials';
 import { assembleForge, findForgeSockets, forgeStyleKit, type AssembledForge } from '@chatdom/forge';
 import type { ForgeHouseSocket, VoxelBlueprint } from '@chatdom/shared';
 import { rasterizeBlueprint } from '@chatdom/voxel';
-// Until main selects it, the bench reaches the replacement by its source path (spec 25).
-import { createAnvilHeroDragon } from '../../../../../../packages/content/src/anvil-hero';
 
 type Cell = [number, number, number];
 const add = (a: readonly number[], b: readonly number[]) => a.map((n, i) => n + b[i]!) as Cell;
@@ -16,28 +13,12 @@ export interface MountedDragon {
   socket: ForgeHouseSocket;
 }
 
-/**
- * The real chimney assembly on a real home, with the sleeping dragon motif swapped for this lane's
- * replacement: the seam main will select. Both motifs share size, mount and emitter, so the
- * assembler's offset, plinth and supports are untouched. Any drift in the assembler fails loudly.
- */
+/** The actual registered sleeping-dragon assembly, exactly as it lands in the kingdom. */
 export function mountSleepingDragon(home: VoxelBlueprint, style: StyleKey): MountedDragon {
   const socket = findForgeSockets(home).find(s => s.kind === 'chimney');
   if (!socket) throw new Error(`${home.id} offers no chimney socket for the dragon.`);
   const assembled: AssembledForge = assembleForge({ version: 1, kind: 'chimney', motif: 'sleeping-dragon' }, forgeStyleKit(style), socket);
-  const old = createForgeMotif('sleeping-dragon', style), dragon = createAnvilHeroDragon(style);
-  if (JSON.stringify([old.size, old.mount, old.emitter]) !== JSON.stringify([dragon.size, dragon.mount, dragon.emitter])) throw new Error('The replacement dragon no longer shares the motif envelope.');
-  const offset = add(assembled.emitter, old.emitter.map(n => -n));
-  const keep = assembled.blueprint.boxes.length - old.boxes.length;
-  const tail = assembled.blueprint.boxes.slice(keep);
-  const matches = tail.length === old.boxes.length && tail.every((b, i) => {
-    const o = old.boxes[i]!;
-    return b.material === o.material && JSON.stringify(b.from) === JSON.stringify(add(o.from, offset)) && JSON.stringify(b.to) === JSON.stringify(add(o.to, offset));
-  });
-  if (!matches) throw new Error('The chimney assembler changed its motif layout; the dragon seam needs main.');
-  const boxes = [...assembled.blueprint.boxes.slice(0, keep), ...dragon.boxes.map(b => ({ material: b.material, from: add(b.from, offset), to: add(b.to, offset) }))];
-  const size: Cell = [0, 1, 2].map(i => Math.max(32, ...boxes.map(b => b.to[i]!))) as Cell;
-  return { blueprint: { ...assembled.blueprint, size, boxes }, emitter: add(add(dragon.emitter, offset), socket.origin), socket };
+  return { blueprint: assembled.blueprint, emitter: add(assembled.emitter, socket.origin), socket };
 }
 
 /**

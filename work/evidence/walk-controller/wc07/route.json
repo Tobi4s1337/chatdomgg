@@ -1,0 +1,184 @@
+{
+ "provenance": "SIMULATED reference court (/-/realm, REALM_SIMULATED=1 memory realm on 5196, vite dev 5197), camera collision REFERENCE_WORLD patched in flight by gitignored shots/walk/wc07/diag.mjs; not the kingdom",
+ "wall-behind@1440x900": {
+  "path": "shots/walk/wc07/wall-behind@1440x900.png",
+  "self": {
+   "x": 4,
+   "y": 0,
+   "z": 16.999999999999975,
+   "yaw": 128,
+   "speed": 0
+  },
+  "authority": {
+   "x": 4,
+   "y": 0,
+   "z": 16.999999999999975
+  },
+  "camera": {
+   "yaw": 3.1415926106770797,
+   "pitch": 0.18,
+   "distance": 0.9656005389512772,
+   "zoomDistance": 6.5,
+   "desiredDistance": 6.5,
+   "clearance": 0.9656005389512772,
+   "collisionRevision": 1,
+   "fov": 50,
+   "near": 0.1,
+   "filmOffset": 5.698432991941232,
+   "shift": 0.2182201604871064
+  },
+  "selfOpacity": 0,
+  "screen": {
+   "x": 562.8814844492833,
+   "y": 1112.1751121428663
+  }
+ },
+ "corner@1440x900": {
+  "path": "shots/walk/wc07/corner@1440x900.png",
+  "self": {
+   "x": 17.72,
+   "y": 0,
+   "z": 16.999999999999975,
+   "yaw": 160,
+   "speed": 0
+  },
+  "authority": {
+   "x": 17.72,
+   "y": 0,
+   "z": 16.999999999999975
+  },
+  "camera": {
+   "yaw": 3.926990832458383,
+   "pitch": 0.18,
+   "distance": 0.33061056008983003,
+   "zoomDistance": 6.5,
+   "desiredDistance": 6.5,
+   "clearance": 0.33061056008983003,
+   "collisionRevision": 1,
+   "fov": 50,
+   "near": 0.1,
+   "filmOffset": 0.01982670768741538,
+   "shift": 0.0007592591401175419
+  },
+  "selfOpacity": 0,
+  "screen": {
+   "x": 719.4533334191111,
+   "y": 1943.3058054476646
+  }
+ },
+ "recovered@1440x900": {
+  "camera": {
+   "yaw": 3.9269908262775957,
+   "pitch": 0.18,
+   "distance": 6.5,
+   "zoomDistance": 6.5,
+   "desiredDistance": 6.5,
+   "clearance": null,
+   "collisionRevision": 1,
+   "fov": 50,
+   "near": 0.1,
+   "filmOffset": 8.695705209274415,
+   "shift": 0.333
+  },
+  "self": {
+   "x": 12.023862040441717,
+   "y": 0,
+   "z": 11.303862040441707,
+   "yaw": 0,
+   "speed": 0
+  }
+ },
+ "wall-behind@390x844": {
+  "path": "shots/walk/wc07/wall-behind@390x844.png",
+  "self": {
+   "x": -4,
+   "y": 0,
+   "z": 16.533333333333307,
+   "yaw": 128,
+   "speed": 0
+  },
+  "authority": {
+   "x": -4,
+   "y": 0,
+   "z": 16.533333333333307
+  },
+  "camera": {
+   "yaw": 3.1415926639502807,
+   "pitch": 0.18,
+   "distance": 1.4399306282606663,
+   "zoomDistance": 6.5,
+   "desiredDistance": 6.5,
+   "clearance": 1.4399306282606663,
+   "collisionRevision": 1,
+   "fov": 64,
+   "near": 0.1,
+   "filmOffset": 1.4943473843306776,
+   "shift": 0.32
+  },
+  "selfOpacity": 0,
+  "screen": {
+   "x": 132.60000000000002,
+   "y": 772.7843747984552
+  }
+ },
+ "corner@390x844": {
+  "path": "shots/walk/wc07/corner@390x844.png",
+  "self": {
+   "x": 16.73333333333331,
+   "y": 0,
+   "z": 16.533333333333307,
+   "yaw": 160,
+   "speed": 0
+  },
+  "authority": {
+   "x": 16.73333333333331,
+   "y": 0,
+   "z": 16.533333333333307
+  },
+  "camera": {
+   "yaw": 3.926990804496107,
+   "pitch": 0.18,
+   "distance": 1.7488819972040255,
+   "zoomDistance": 6.5,
+   "desiredDistance": 6.5,
+   "clearance": 1.7488819972040255,
+   "collisionRevision": 1,
+   "fov": 64,
+   "near": 0.1,
+   "filmOffset": 1.4943473843306776,
+   "shift": 0.32
+  },
+  "selfOpacity": 0.24025401997626478,
+  "screen": {
+   "x": 132.59999999999968,
+   "y": 725.3401456975805
+  }
+ },
+ "jump@390x844": {
+  "cx": 336,
+  "cy": 557,
+  "w": 64
+ },
+ "recovered@390x844": {
+  "camera": {
+   "yaw": 3.9269908150343724,
+   "pitch": 0.18,
+   "distance": 6.5,
+   "zoomDistance": 6.5,
+   "desiredDistance": 6.5,
+   "clearance": null,
+   "collisionRevision": 1,
+   "fov": 64,
+   "near": 0.1,
+   "filmOffset": 1.4943473843306776,
+   "shift": 0.32
+  },
+  "self": {
+   "x": 9.340139098927347,
+   "y": 0,
+   "z": 9.140139098927348,
+   "yaw": 0,
+   "speed": 0
+  }
+ }
+}

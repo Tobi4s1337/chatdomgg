@@ -109,6 +109,23 @@ describe('the realm client predicts with the room', () => {
     client.dispose();
   });
 
+  it('interpolates all twelve rendered samples per 30 Hz fixed step at 360 Hz', async () => {
+    const client = await connectRealm(endpoint, entry('walk-predict-high-refresh'), source); clients.push(client);
+    const { sent } = recordSends(client);
+    const start = performance.now(), frames: number[] = [];
+    // Sample the real SDK on an exact high-refresh render clock, with no wall-clock sleeps or competing driver.
+    // The reference spawn is on the clear z=7 street. Server transport remains real, but this short synchronous
+    // recording isolates fixed-step interpolation from scheduler and patch-arrival timing.
+    for (let frame = 0; frame <= 96; frame++) {
+      frames.push(client.tick(start + frame * 1000 / 360, { ...EAST, buttons: 0 }).find(p => p.self)!.x);
+    }
+    expect(sent).toHaveLength(8);
+    // After the three acceleration ticks and one interpolation tick, every rendered frame advances by 4/360m,
+    // including frames straddling a fixed send. Raw exact prediction would hold eleven frames then jump .133m.
+    for (let frame = 50; frame < frames.length; frame++) expect(frames[frame]! - frames[frame - 1]!).toBeCloseTo(4 / 360, 9);
+    client.dispose();
+  });
+
   it('stages exactly the due fixed inputs on slow frames, one jump per press, and agrees with the room in every field', async () => {
     a = await connectRealm(endpoint, entry('walk-predict-scope-a'), source); clients.push(a);
     b = await connectRealm(endpoint, entry('walk-predict-scope-b'), REFERENCE_WORLD); clients.push(b);
@@ -192,7 +209,7 @@ describe('the realm client predicts with the room', () => {
   it('snaps a short room placement for self and neighbours and fences late pre-placement inputs', async () => {
     const { handle } = recordSends(a);
     const before = WALL_X - .4, after = WALL_X + .6;
-    // One metre crosses this thin wall: below both the self (2 m) and neighbour (4 m) correction thresholds.
+    // One metre crosses this thin wall: explicit placement resets cut even below the neighbour threshold.
     expect(effects!.placeWalker(a.selfId, [before, 0, 7], 2)).toBe(true);
     await settle(a, handle);
     await drive(a, 600, IDLE, 16, now => { b.tick(now, IDLE); });

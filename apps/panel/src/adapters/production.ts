@@ -5,7 +5,7 @@
 // never offers the Bits shelf (whatever Twitch's Bits flag says, nothing could deliver
 // a product) and never treats a Twitch ID as a Chatdom person.
 import type { HelperBridge, HelperStatus } from '../helper';
-import type { Connection, Light, PanelAdapter, PanelSnapshot } from '../model';
+import { ALL_SECTIONS, type Connection, type Light, type PanelAdapter, type PanelSnapshot } from '../model';
 
 /** After this long without the Helper's answer, the panel says so instead of waiting silently. */
 export const HELPER_PATIENCE_MS = 12_000;
@@ -47,6 +47,8 @@ function snapshotFor(status: HelperStatus, patient: boolean): PanelSnapshot {
     act: null,
     shelf: { kind: 'hidden' },
     entry: { kind: 'none' },
+    // No saved choice can reach the panel yet, so every section keeps its designed place (and stays honest when empty).
+    sections: ALL_SECTIONS,
   };
 }
 

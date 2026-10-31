@@ -753,11 +753,174 @@ try {
       }
       await view.page.close();
     }],
+    // The longest names a kingdom and a viewer can bring: set smaller, turned onto a second line, never clipped mid-word.
+    ['panel-long-names', async () => {
+      for (const [width, height] of [[318, 496], [390, 844]]) {
+        const view = await open({ url: `${base}/panel?source=simulated&state=long-names`, width, height });
+        const name = await view.page.locator('.cp-name').evaluate(el => ({ lines: Math.round(el.getBoundingClientRect().height / parseFloat(window.getComputedStyle(el).lineHeight)), clamped: el.scrollHeight > el.clientHeight + 1 }));
+        if (name.clamped) failures.push(`panel-long-names@${width}: the kingdom's name is cut off (${JSON.stringify(name)})`);
+        await check('panel-long-names', view);
+        await view.page.locator('.cp-tab', { hasText: 'Home' }).click();
+        await check('panel-long-names-home', view);
+        await view.page.close();
+      }
+    }],
+    // A picture that never arrives closes its shutters with a way to knock again, and opens when it comes.
+    ['panel-picture-failed', async () => {
+      const page = await browser.newPage({ viewport: { width: 318, height: 496 }, deviceScaleFactor: 1 });
+      const errors = [], missing = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.route(HELPER, route => route.fulfill({ status: 200, contentType: 'text/javascript', body: NO_HELPER }));
+      await page.route(/willowmere-kingdom[^/]*\.webp/, route => route.abort());
+      await page.goto(`${base}/panel?source=simulated&state=named`);
+      await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
+      await page.waitForSelector('.cp-picture[data-picture=failed]', { timeout: 10_000 }).catch(() => failures.push('panel-picture-failed: a missing picture did not close its shutters'));
+      await check('panel-picture-failed', { page, errors, missing });
+      await page.unroute(/willowmere-kingdom[^/]*\.webp/);
+      await page.locator('.cp-picture .cp-inline-action', { hasText: 'Try again' }).click();
+      await page.waitForSelector('.cp-picture[data-picture=shown] img', { timeout: 10_000 }).catch(() => failures.push('panel-picture-failed: Try again did not bring the picture'));
+      await page.close();
+    }],
+    // Sound wakes only with a gesture inside the panel, never while muted, and the mute choice is remembered.
+    ['panel-sound', async () => {
+      const context = await browser.newContext({ viewport: { width: 318, height: 496 }, deviceScaleFactor: 1 });
+      await context.addInitScript(QUIET);
+      await context.route(HELPER, route => route.fulfill({ status: 200, contentType: 'text/javascript', body: NO_HELPER }));
+      const page = await context.newPage();
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.goto(`${base}/panel?source=simulated`);
+      await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
+      if (await page.evaluate(() => window.__audioContexts) !== 0) failures.push('panel-sound: an audio context opened before any gesture');
+      await page.locator('.cp-light-button').click();
+      if (await page.evaluate(() => window.__audioContexts) !== 1) failures.push('panel-sound: the first gesture did not wake one audio context');
+      await page.locator('.cp-back').click();
+      await page.locator('.cp-sound').click();
+      await expect(page, 'panel-sound', '[data-chatdom-panel]', 'data-muted', 'true');
+      await page.locator('.cp-sound').focus();
+      await page.screenshot({ path: join(out, 'panel-sound-muted@318x496.png') });
+      await page.reload();
+      await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
+      await expect(page, 'panel-sound-remembered', '[data-chatdom-panel]', 'data-muted', 'true');
+      await page.locator('.cp-tab', { hasText: 'Tavern' }).click();
+      if (await page.evaluate(() => window.__audioContexts) !== 0) failures.push('panel-sound: a muted panel opened an audio context');
+      if (errors.length) failures.push(`panel-sound: ${errors.join(' | ')}`);
+      await context.close();
+    }],
+    // Keyboard first: the focus ring is drawn for wood and for parchment; reduced motion lights the window without motion.
+    ['panel-focus', async () => {
+      const view = await open({ url: `${base}/panel?source=simulated&state=vote`, width: 318, height: 496 });
+      await view.page.keyboard.press('Tab');
+      await view.page.keyboard.press('Tab');
+      await check('panel-focus-wood', view, { settle: false });
+      const vote = view.page.locator('.cp-act-button').first();
+      await vote.focus();
+      await check('panel-focus-parchment', view, { settle: false });
+      await view.page.close();
+      const page = await browser.newPage({ viewport: { width: 318, height: 496 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
+      await page.route(HELPER, route => route.fulfill({ status: 200, contentType: 'text/javascript', body: NO_HELPER }));
+      await page.goto(`${base}/panel?source=simulated`);
+      await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
+      await page.locator('.cp-light-button').click();
+      await page.locator('.cp-choice').first().click();
+      await page.waitForSelector('[data-light="lit"]', { timeout: 6000 });
+      const moving = await page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running').length);
+      if (moving) failures.push(`panel-reduced-motion: ${moving} animation(s) still run under reduced motion`);
+      if (!await page.locator('.cp-window-glyph.lit').count()) failures.push('panel-reduced-motion: the lit state lost its meaning');
+      await page.screenshot({ path: join(out, 'panel-reduced-motion-lit@318x496.png') });
+      await page.close();
+    }],
+    // Phones: the resting kingdom and the tavern, upright and on their side.
+    ['ext-mobile-more', async () => {
+      for (const [width, height] of [[390, 844], [844, 390]]) {
+        const suffix = width > height ? '-landscape' : '';
+        const resting = await open({ url: `${panelBase}mobile.html?source=simulated&state=resting&platform=mobile&mode=viewer`, width, height });
+        await check(`ext-mobile-resting${suffix}`, resting);
+        await resting.page.locator('.cp-tab', { hasText: 'Tonight' }).click();
+        await check(`ext-mobile-resting-tonight${suffix}`, resting);
+        await resting.page.close();
+        const refused = await open({ url: `${panelBase}mobile.html?source=simulated&state=refused&platform=mobile&mode=viewer`, width, height });
+        await refused.page.locator('.cp-tab', { hasText: 'Tavern' }).click();
+        const small = await smallTargets(refused.page);
+        if (small.length) failures.push(`ext-mobile-tavern${suffix}: targets under 44 px ${JSON.stringify(small)}`);
+        await check(`ext-mobile-refused-tavern${suffix}`, refused);
+        await refused.page.close();
+      }
+    }],
+    // The streamer's config: every choice changes the simulated preview; nothing is saved and nothing claims to be.
     ['ext-config', async () => {
-      for (const view of ['config', 'live_config']) {
-        const opened = await open({ url: `${panelBase}${view}.html?mode=config&state=released`, width: 318, height: 496 });
-        await check(`ext-${view}`, opened);
-        await opened.page.close();
+      for (const [width, height] of [[318, 496], [390, 844], [1000, 760]]) {
+        const view = await open({ url: `${panelBase}config.html?mode=config&state=released`, width, height });
+        const { page } = view;
+        await page.waitForSelector('[data-preview=ready]');
+        await check('ext-config', view);
+        if (width !== 318) { await page.close(); continue; }
+        const preview = page.locator('.cfg-preview [data-chatdom-panel]');
+        if (await page.locator('.cfg-preview .cp-tag.simulated').count() !== 1) failures.push('ext-config: the preview is not marked SIMULATED');
+        if (await preview.getAttribute('data-act') !== 'open') failures.push('ext-config: the preview should open on a live vote');
+        await page.locator('.cfg-row', { hasText: 'Crowd acts' }).locator('.cfg-lever').click();
+        if (await preview.getAttribute('data-act') !== 'none') failures.push('ext-config: hiding crowd acts left the act in the preview');
+        if (!await page.locator('.cfg-preview .cp-slip').count()) failures.push('ext-config: with no act, the preview lost its Tonight slip');
+        await page.locator('.cfg-row', { hasText: 'Your home' }).locator('.cfg-lever').click();
+        if (await page.locator('.cfg-preview .cp-tab', { hasText: 'Home' }).count()) failures.push('ext-config: the Home tab stayed after the home card was hidden');
+        if (await page.locator('.cfg-preview button.cp-light-button').count()) failures.push('ext-config: the lit plate still opens a hidden home card');
+        for (const item of ['A song from the bard', 'Dress my home', 'Lead a parade', 'The royal feast']) await page.locator('.cfg-item', { hasText: item }).click();
+        if (await preview.getAttribute('data-shelf') !== 'hidden') failures.push('ext-config: with nothing chosen the preview still offers a shelf');
+        await page.locator('.cfg-item', { hasText: 'Fireworks for a friend' }).click();
+        if (await preview.getAttribute('data-shelf') !== 'offered') failures.push('ext-config: choosing a product did not offer the shelf');
+        const words = await page.locator('[data-chatdom-panel-config]').innerText();
+        if (/\bsaved\b(?! )|approved|\bbuy\b|\bprice\b|\bcost\b|\bpurchase/i.test(words.replace(/Nothing on this page is saved/g, '').replace(/nothing is approved/g, ''))) failures.push('ext-config: a claim of saving, approval or buying');
+        if (await page.locator('[data-chatdom-panel-config] button', { hasText: /^Save/ }).count()) failures.push('ext-config: a Save button that cannot save');
+        await page.screenshot({ path: join(out, 'ext-config-chosen-full@318x496.png'), fullPage: true });
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.screenshot({ path: join(out, 'ext-config-full@390x844.png'), fullPage: true });
+        await page.close();
+      }
+    }],
+    // Live config: one simulated Hide clears the vote and shelf in its preview and in a simulated panel open beside it.
+    ['ext-live-config', async () => {
+      for (const [width, height] of [[318, 496], [390, 844]]) {
+        const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+        await context.route(HELPER, route => route.fulfill({ status: 200, contentType: 'text/javascript', body: NO_HELPER }));
+        const errors = [], missing = [];
+        const watch = page => {
+          page.on('pageerror', error => errors.push(error.message));
+          page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+          page.on('response', response => { if (response.status() >= 400) missing.push(`${response.status()} ${response.url()}`); });
+          return page;
+        };
+        const live = watch(await context.newPage());
+        await live.goto(`${panelBase}live_config.html?mode=dashboard&state=released`);
+        await live.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
+        await live.evaluate(() => document.fonts.ready);
+        const panel = watch(await context.newPage());
+        await panel.goto(`${panelBase}panel.html?source=simulated&state=vote&mode=viewer`);
+        await panel.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
+        if (await panel.locator('[data-chatdom-panel]').getAttribute('data-act') !== 'open') failures.push('ext-live-config: the simulated panel should show a live vote');
+        await check(`ext-live_config`, { page: live, errors, missing });
+        await live.locator('.cfg-hide .cfg-lever').click();
+        await panel.waitForSelector('[data-chatdom-panel][data-act=none][data-shelf=hidden]', { timeout: 5000 }).catch(() => failures.push('ext-live-config: Hide did not reach the simulated panel beside it'));
+        if (await live.locator('.cfg-preview [data-chatdom-panel]').getAttribute('data-act') !== 'none') failures.push('ext-live-config: Hide left the vote in its own preview');
+        await check(`ext-live_config-hidden`, { page: live, errors, missing });
+        if (width === 318) {
+          await live.screenshot({ path: join(out, 'ext-live_config-hidden-full@318x496.png'), fullPage: true });
+          await panel.screenshot({ path: join(out, 'ext-panel-after-hide@318x496.png') });
+        }
+        // A simulated panel opened while Hide is on asks, and is told.
+        const later = watch(await context.newPage());
+        await later.goto(`${panelBase}panel.html?source=simulated&state=dragon&mode=viewer`);
+        await later.waitForSelector('[data-chatdom-panel][data-act=none]', { timeout: 10_000 }).catch(() => failures.push('ext-live-config: a panel opened after Hide still showed its act'));
+        // The real panel never hears a simulated Hide.
+        const real = watch(await context.newPage());
+        await real.goto(`${panelBase}panel.html?mode=viewer&state=released`);
+        await real.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
+        if (await real.locator('[data-chatdom-panel]').getAttribute('data-source') !== 'production') failures.push('ext-live-config: the real panel borrowed the simulation');
+        await live.locator('.cfg-hide .cfg-lever').click();
+        await panel.waitForSelector('[data-chatdom-panel][data-act=open]', { timeout: 5000 }).catch(() => failures.push('ext-live-config: showing again did not bring the vote back'));
+        const words = await live.locator('[data-chatdom-panel-config]').innerText();
+        if (!/Not available yet/.test(words)) failures.push('ext-live-config: the real Hide and review do not say they are unavailable');
+        if (/approved(?! )/i.test(words.replace(/nothing is approved/g, ''))) failures.push('ext-live-config: an approved item');
+        await context.close();
       }
     }],
   ];

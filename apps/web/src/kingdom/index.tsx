@@ -12,10 +12,10 @@ import type { ForgeStatus } from '../forge/scene';
 import { parseKingdomPresentationParams } from '../stream/params';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
-export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;walk?:KingdomWalkBinding}={}) {
+export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
   const query=new URLSearchParams(location.search),tier=props.founded?.plan.config.tier??(query.get('tier')==='hamlet'?'hamlet':'town');
   const presentation=parseKingdomPresentationParams(query,tier);
-  const realm=query.get('realm'),realmFamily=realm==='hearth'?'hearth':realm==='grove'?'grove':'tide',realmName=realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere';
+  const realm=query.get('realm'),realmFamily=realm==='hearth'?'hearth':realm==='grove'?'grove':'tide',realmName=props.kingdomName??(realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere');
   const rawHour=Number(query.get('hour')??19.5),rawTime=Number(query.get('time'));
   const initialHour=Number.isFinite(rawHour)?((rawHour%24)+24)%24:19.5,initialTime=query.has('time')&&Number.isFinite(rawTime)?Math.max(0,Math.min(3600,rawTime)):null;
   const [ready,setReady]=createSignal(false),[progress,setProgress]=createSignal(0),[phase,setPhase]=createSignal('Unfolding the valley');
@@ -62,6 +62,16 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
   function tap(action:()=>void){if(!engine)return;if(!sound()){void engine.sound.unlock().then(setSound);}action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setWalking(false);setView(value);tap(()=>engine!.setCamera(value));}
+  function chooseWalking(){
+    if(engine?.walkDebug()){tap(()=>engine!.selectWalk(true));setWalking(true);return;}
+    const destination=new URLSearchParams(location.search);
+    destination.set('walk','1');destination.set('hour',String(hour()));
+    // The existing simulated town enters its explicitly labelled room. A Herald/live view must use real entry.
+    const simulated=!props.founded&&query.get('source')!=='herald'&&query.get('source')!=='realm';
+    destination.set('source',simulated?'simulated':'realm');
+    for(const parameter of ['camera','build','forge'])destination.delete(parameter);
+    location.assign(`${location.pathname}?${destination}`);
+  }
   return <div ref={element=>{host=element;}} class={`kingdom ${walking()?'kingdom-walking':''} ${stream?'kingdom-stream':''}`} data-chatdom-kingdom data-forge-phase={forgeStatus()?.phase} data-chatdom-build={buildSession()?true:undefined}>
     <canvas ref={element=>{canvas=element;}} class="kingdom-canvas" aria-label={`${realmName}, a voxel kingdom lit by its people`} />
     <div class="kingdom-vignette" aria-hidden="true" />
@@ -88,9 +98,8 @@ export default function Kingdom(props:{founded?:RealmFoundedScene;presenceFeed?:
       <span class="control-divider" />
       <Show when={source()==='SIMULATED'&&!props.presenceFeed&&query.get('source')!=='herald'}><button class="arrival-button" onClick={()=>{setView('hero');tap(()=>engine!.play());setWalking(false);}}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 4 8 6-8 6Zm-4 0v12"/></svg>Let them in</button></Show>
       <button class="window-button" onClick={()=>chooseView(view()==='window'?'hero':'window')}>{view()==='window'?'The whole kingdom':'At the window'}</button>
-      <button class="window-button" onClick={()=>chooseView(view()==='citizen'?'hero':'citizen')}>{view()==='citizen'?'Above the streets':'Walk the street'}</button>
+      <button class="window-button" onClick={chooseWalking}>Walk the street</button>
       <Show when={source()==='SIMULATED'&&!props.founded}><button onClick={()=>tap(()=>{void engine!.build.enter();})}>Build my home</button><button onClick={()=>tap(()=>engine!.forge.open())}>At the Forge</button></Show>
-      <Show when={engine?.walkDebug()}><button onClick={()=>{engine?.selectWalk(true);setWalking(true);}}>Walk with everyone</button></Show>
       <span class="control-divider" />
       <a class="tier-button" onClick={()=>tap(()=>engine!.sound.cue('wood'))} href={`?tier=${tier==='hamlet'?'town':'hamlet'}&hour=${hour()}&time=30`}>{tier==='hamlet'?'Visit the town':'Visit the hamlet'}</a>
       <button class="sound-button" aria-label={sound()?'Mute sound':'Turn sound on'} aria-pressed={sound()} onClick={()=>{if(engine)setSound(engine.sound.toggle());}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4Z"/><Show when={sound()} fallback={<path d="m17 9 5 6m0-6-5 6"/>}><path d="M17 8q5 4 0 8m3-11q8 7 0 14"/></Show></svg></button>

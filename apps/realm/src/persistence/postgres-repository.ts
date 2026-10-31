@@ -143,7 +143,7 @@ export class PostgresRealmRepository implements RealmRepository {
       const result: RealmStoredOutcome = { status: 'committed', sequence: written.fact.seq, at: fence.now };
       await recordCommand(tx, lease, commandId, digest, result, fence.now);
       return { written: [written], result };
-    });
+    }, current);
   }
 
   async loadIngress(lease: RealmWriterLease): Promise<RealmIngressCheckpoint | null> {
@@ -250,7 +250,8 @@ export class PostgresRealmRepository implements RealmRepository {
   // ---------------------------------------------------------------------------------------------------------------
 
   private async commit(lease: RealmWriterLease, label: string,
-    work: (tx: Tx, fence: Fence, state: RealmPrivateState) => Promise<{ done: RealmStoredOutcome } | { written: readonly Written[]; result: RealmStoredOutcome }>): Promise<RealmStoredOutcome> {
+    work: (tx: Tx, fence: Fence, state: RealmPrivateState) => Promise<{ done: RealmStoredOutcome } | { written: readonly Written[]; result: RealmStoredOutcome }>,
+    current?: () => boolean): Promise<RealmStoredOutcome> {
     const tx = await this.connect();
     let phase: 'open' | 'committing' | 'committed' = 'open';
     try {
@@ -262,6 +263,9 @@ export class PostgresRealmRepository implements RealmRepository {
       if ('done' in step) { await tx.query('ROLLBACK'); return step.done; }
       const last = step.written.at(-1);
       await this.finalFence(tx, lease, fence.sequence, last ? last.fact.seq : fence.sequence);
+      // A caller may end while fact/outbox/receipt/fence SQL is awaiting its reply. Roll back all of it
+      // without fencing the healthy writer. No await separates this last check from sending COMMIT.
+      if (current && !current()) { await tx.query('ROLLBACK'); return { status: 'rejected', reason: 'cold' }; }
       phase = 'committing';
       await tx.query('COMMIT');
       phase = 'committed';
