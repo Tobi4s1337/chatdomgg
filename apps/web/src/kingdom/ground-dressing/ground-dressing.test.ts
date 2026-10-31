@@ -158,18 +158,29 @@ describe('planGroundDressing', () => {
   });
 
   it('lays passive pieces on their slope and sets solids level', () => {
+    const worst: Record<string, { value: number; context: string }> = {};
+    const record = (invariant: string, value: number, limit: number, context: string) => {
+      if (value < limit) return;
+      const previous = worst[invariant];
+      if (!previous || (Number.isFinite(previous.value) && (!Number.isFinite(value) || value > previous.value)))
+        worst[invariant] = { value, context };
+    };
     for (const piece of all(plan)) {
       const role = pieceRole(piece.blueprint), [gx, gz] = piece.slope ?? [0, 0];
       const heights = footprintPoints(piece, 0.5).map(([x, z]) => {
         const plane = piece.position[1] + gx * (x - piece.position[0]) + gz * (z - piece.position[2]);
-        return { plane, ground: input.ground(x, z) };
+        return { plane, ground: input.ground(x, z), x, z };
       });
       if (!role.solid) {
         expect(Math.hypot(gx, gz)).toBeLessThanOrEqual(Math.tan(35 * Math.PI / 180) + 1e-9);
         // Never floating, never more than a few cells buried; flush stones keep a worn lip above the turf.
-        for (const { plane, ground } of heights) { expect(plane - ground, piece.id).toBeLessThan(0.06); if (role.form !== 'stepping-stones') expect(ground - plane, piece.id).toBeLessThan(0.3); }
-        // Flush stones are bedded deep, so they may lie lower than cover, but their worn lip always shows.
-        if (role.form === 'stepping-stones') for (const { plane, ground } of heights) expect(plane + piece.blueprint.size[1] * CELL - ground, piece.id).toBeGreaterThan(0);
+        for (const { plane, ground, x, z } of heights) {
+          const context = `${piece.id} at (${x}, ${z})`;
+          record('floating (plane - ground < 0.06)', plane - ground, 0.06, context);
+          if (role.form !== 'stepping-stones') record('buried (ground - plane < 0.3)', ground - plane, 0.3, context);
+          // Flush stones are bedded deep, but their worn lip must always show.
+          if (role.form === 'stepping-stones') record('stone lip (ground - top < 0)', ground - plane - piece.blueprint.size[1] * CELL, 0, context);
+        }
       } else {
         expect(piece.slope).toBeUndefined();
         const low = Math.min(...heights.map(h => h.ground)), high = Math.max(...heights.map(h => h.ground));
@@ -177,6 +188,7 @@ describe('planGroundDressing', () => {
         expect(piece.position[1]).toBeLessThanOrEqual(low + 1e-6);
       }
     }
+    expect(worst).toEqual({});
   });
 
   it('thins with distance and gathers into drifts with calm meadow between', () => {

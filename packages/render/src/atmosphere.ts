@@ -214,6 +214,7 @@ const baseFragment = /* glsl */ `
 /** The sky follows camera translation but retains world orientation. Dispose when the scene is torn down. */
 export function createAtmosphere(scene: THREE.Scene): {
   update(hour: number, elapsedSeconds: number, camera: THREE.Camera, beaconPosition: THREE.Vector3, beaconStrength: number): void;
+  readonly reflectionExclusions: readonly THREE.Object3D[];
   dispose(): void;
 } {
   const skyGeometry = new THREE.SphereGeometry(1, 48, 24);
@@ -252,6 +253,7 @@ export function createAtmosphere(scene: THREE.Scene): {
   scene.add(base);
   const beaconLift = new THREE.Vector3();
   return {
+    reflectionExclusions: [sky, shaft, halo, base],
     update(hour, elapsedSeconds, camera, beaconPosition, beaconStrength) {
       const grade = getEnvironment(hour);
       sky.position.copy(camera.position);

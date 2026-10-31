@@ -4,11 +4,11 @@ import type { KingdomId, KingdomPresenceFrame, MaterialRegistry } from '@chatdom
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import type { SettlementPlan } from '@chatdom/world';
 import { createTwitchMomentView, createTwitchMoments, type CameraLease, type MomentSoundPort, type TwitchMomentFeed } from '../../twitch-moments';
-import { bannerMount, doorOf, giftRouteOf, windowOf } from './anchors';
+import { bannerMount, doorOf, giftRouteOf, spectaclePlacesOf, windowOf } from './anchors';
 
 export interface KingdomMomentsOptions {
   scene: THREE.Scene; camera: THREE.PerspectiveCamera; canvas: HTMLCanvasElement; target: THREE.Vector3;
-  plan: SettlementPlan; houses: readonly WindowHouse[]; pool: VoxelWorkerPool; material: VoxelRenderState; registry: MaterialRegistry;
+  plan: SettlementPlan; houses: readonly WindowHouse[]; castleKeep?: WindowHouse; pool: VoxelWorkerPool; material: VoxelRenderState; registry: MaterialRegistry;
   kingdomId: KingdomId; feed: TwitchMomentFeed; sound: MomentSoundPort | null; kit: 'hearth' | 'tide'; signal: AbortSignal;
 }
 
@@ -17,6 +17,7 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
   const { scene, camera, canvas, target, plan, houses, pool, material, registry, kingdomId, feed, signal } = options;
   const parent = new THREE.Group(); parent.name = 'kingdom-twitch-moments'; scene.add(parent);
   let now = Date.now(), allowed = false, wrote = false, disposed = false, prepared = false, lease: CameraLease | null = null;
+  let preparation: 'loading' | 'ready' | 'failed' | 'disposed' = 'loading', preparationError: string | null = null;
   let activeFocus: string | null = null, blockedFocus: string | null = null;
   let lastPresence: KingdomPresenceFrame | undefined;
   const controller = createTwitchMoments({ kingdomId, expectedOrigin: feed.origin, clock: { now: () => now } });
@@ -28,11 +29,13 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
   let nextMeshLane = 0;
   const view = createTwitchMomentView({
     parent, material: material.material, kit: options.kit, sound: options.sound,
+    places: spectaclePlacesOf(plan, houses, options.castleKeep),
     async mesh(blueprint) {
       const lane = nextMeshLane++ % meshLanes.length;
       const job = meshLanes[lane]!.then(async () => {
         if (disposed) throw new DOMException('Moments closed while preparing', 'AbortError');
         const result = await pool.submit({ kind: 'blueprint', blueprint, revision: 1, materials: registry.materials, materialRevision: registry.revision });
+        if (disposed) throw new DOMException('Moments closed while preparing', 'AbortError');
         if (result?.kind !== 'asset') throw new Error('A moment part could not be meshed');
         return geometryFromChunks(result.chunks, 'build');
       });
@@ -70,11 +73,15 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
   const dispose = () => {
     if (disposed) return;
     disposed = true; allowed = false; lease?.release(); lease = null;
+    if (preparation !== 'failed') preparation = 'disposed';
     signal.removeEventListener('abort', dispose); disconnect(); controller.dispose(); view.dispose(); scene.remove(parent);
   };
   signal.addEventListener('abort', dispose, { once: true });
   if (signal.aborted) dispose();
-  const ready = view.prepare().then(() => { if (!disposed) prepared = true; }).catch(error => { dispose(); throw error; });
+  const ready = view.prepare().then(() => { if (!disposed) { prepared = true; preparation = 'ready'; } }).catch(error => {
+    if (!disposed) { preparation = 'failed'; preparationError = error instanceof Error ? error.message : 'Moment parts could not be prepared'; }
+    dispose(); throw error;
+  });
   return {
     ready,
     update(atMs: number, presenceFrame: KingdomPresenceFrame | undefined, cameraAllowed: boolean): boolean {
@@ -94,7 +101,7 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
       return wrote;
     },
     captions: () => disposed || !prepared ? [] : view.labels(camera),
-    metrics: () => ({ controller: controller.metrics(), view: view.stats() }),
+    metrics: () => ({ preparation, preparationError, controller: controller.metrics(), view: view.stats() }),
     dispose,
   };
 }
