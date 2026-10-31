@@ -108,3 +108,12 @@ receipts, private home life/companions/keepsakes, authenticated doors and moveme
 provide complete presentation plus concrete typed ports, never fake ledgers or invented rewards. `land=next` is
 SIMULATED preview only until a realm adopts it. Existing real homes cannot move because main changed a generator.
 Newly supplied fixtures may show a thriving evening; live populations/lights remain only the people actually present.
+
+## Picture lanes — 2026-10-31
+
+The latest visual brief adds picture-land (46), picture-trees (47), effects-library (48) and avatar-style (49).
+Their new folders are disjoint: terrain-art world/web producers; content/web trees; render effects; avatar-style
+content/style-study bench. Existing land planning and planting-site ownership remain. Main owns adoption with
+one terrain height authority, existing scene/shader/shadow wiring, effect anchors and production wardrobe rollout
+after Tobias chooses. No second forest, render-only inhabited ground, duplicate emitters or default avatar choice.
+Only these picture lanes, passport and Genesis content continue; other system lanes stop after their current task.

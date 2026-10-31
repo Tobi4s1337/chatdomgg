@@ -3,6 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./kit.css": "./src/kit.css" },
-  "dependencies": { "solid-js": "1.9.18" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./kit.css": "./src/kit.css",
+    "./passport": "./src/passport/index.ts"
+  },
+  "dependencies": {
+    "solid-js": "1.9.18"
+  }
 }

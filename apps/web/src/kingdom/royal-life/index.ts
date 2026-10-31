@@ -82,7 +82,7 @@ function standardBannerMaterial(clay: VoxelRenderState, standard: RoyalStandard 
   return material;
 }
 
-export function createRoyalLife(scene: THREE.Scene, clay: VoxelRenderState, keep: WindowHouse | undefined, braziers: readonly RoyalBrazier[], standard?: RoyalStandard, hearth = false): {
+export function createRoyalLife(scene: THREE.Scene, clay: VoxelRenderState, keep: WindowHouse | undefined, braziers: readonly RoyalBrazier[], standard?: RoyalStandard, hearth = false, workingFire = false): {
   keepMaterial: THREE.ShaderMaterial | undefined;
   standardMaterial: THREE.ShaderMaterial | undefined;
   update(timeSeconds: number, frame: KingdomPresenceFrame | undefined, hour: number): void;
@@ -109,11 +109,11 @@ export function createRoyalLife(scene: THREE.Scene, clay: VoxelRenderState, keep
       float tip=1.-smoothstep(.66+.11*tongues,.97,y);
       float shape=(1.-smoothstep(width*.6,width,abs(x)))*smoothstep(0.,.11,y)*tip;
       vec3 colour=mix(vec3(1.,.19,.015),vec3(1.,.73,.22),clamp((1.-y)*.9,0.,1.));
-      gl_FragColor=vec4(colour,shape*.53);}` });
+      gl_FragColor=vec4(colour*${hearth ? '1.55' : '1.'},shape*${hearth ? '.78' : '.53'});}` });
   const glow = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending,
     vertexShader: `varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader: `varying vec2 vUv;void main(){vec2 p=(vUv-.5)*vec2(1.,1.3);float a=pow(max(0.,1.-length(p)*2.),2.);gl_FragColor=vec4(1.,.29,.045,a*.12);}` });
+    fragmentShader: `varying vec2 vUv;void main(){vec2 p=(vUv-.5)*vec2(1.,1.3);float a=pow(max(0.,1.-length(p)*2.),2.);gl_FragColor=vec4(${hearth ? '1.5,.48,.075' : '1.,.29,.045'},a*${hearth ? '.22' : '.12'});}` });
   const glowGeometry = new THREE.PlaneGeometry(1.5, 1.5);
   glowGeometry.translate(0, .45, 0);
   const flameGeometry = new THREE.PlaneGeometry(.72, 1.25, 8, 12);
@@ -125,23 +125,25 @@ export function createRoyalLife(scene: THREE.Scene, clay: VoxelRenderState, keep
   const sparks = new THREE.ShaderMaterial({ uniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: `uniform float uTime; varying float vFade;
       void main(){float age=fract(position.y+uTime*.31); vec3 p=vec3(position.x+sin(age*7.+position.y*20.)*.09,age*1.7,position.z);
-      vFade=sin(age*3.14159); vec4 mv=modelViewMatrix*vec4(p,1.);gl_PointSize=clamp(25./-mv.z,1.,4.);gl_Position=projectionMatrix*mv;}`,
-    fragmentShader: `varying float vFade;void main(){float d=length(gl_PointCoord-.5);gl_FragColor=vec4(1.,.42,.08,smoothstep(.5,.1,d)*vFade*.65);}` });
+      vFade=sin(age*3.14159); vec4 mv=modelViewMatrix*vec4(p,1.);gl_PointSize=clamp(${hearth ? '38.' : '25.'}/-mv.z,1.,${hearth ? '6.' : '4.'});gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: `varying float vFade;void main(){float d=length(gl_PointCoord-.5);gl_FragColor=vec4(${hearth ? '1.6,.7,.15' : '1.,.42,.08'},smoothstep(.5,.1,d)*vFade*.65);}` });
   const lightSources: RoyalLightSource[] = braziers.map(({ position, normal }, i) => {
     const group = new THREE.Group(); group.position.set(...position);
+    // The forge is a working hearth, with a taller, fuller flame than the keep's braziers.
+    if (hearth) group.scale.set(1.65, 1.75, 1.65);
     for (let j = 0; j < 3; j++) { const mesh = new THREE.Mesh(flameGeometry, flame); mesh.rotation.y = j * Math.PI / 3 + i * .31; group.add(mesh); }
     for (let j = 0; j < 2; j++) { const mesh = new THREE.Mesh(glowGeometry, glow); mesh.rotation.y = j * Math.PI / 2; group.add(mesh); }
     group.add(new THREE.Points(sparkGeometry, sparks)); root.add(group);
-    return { position: [position[0], position[1] + .2, position[2]], normal, strength: 0 };
+    return { position: [position[0], position[1] + (hearth ? .35 : .2), position[2]], normal, strength: 0 };
   });
   return { keepMaterial, standardMaterial,
     update(timeSeconds, frame) {
       uniforms.uTime.value = timeSeconds;
       if (keepMaterial) keepMaterial.uniforms.uRoyalTime!.value = timeSeconds;
       if (standardMaterial) standardMaterial.uniforms.uRoyalTime!.value = timeSeconds;
-      const live = hearth || (!!frame?.streamLive && frame.connection === 'fresh');
+      const live = hearth || workingFire || (!!frame?.streamLive && frame.connection === 'fresh');
       root.visible = live;
-      for (const source of lightSources) source.strength = live ? .8 : 0;
+      for (const source of lightSources) source.strength = live ? (hearth ? 1 : .8) : 0;
     },
     sources: () => lightSources,
     dispose() { scene.remove(root); flameGeometry.dispose(); glowGeometry.dispose(); sparkGeometry.dispose(); flame.dispose(); glow.dispose(); sparks.dispose(); keepMaterial?.dispose(); standardMaterial?.dispose(); },

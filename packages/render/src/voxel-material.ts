@@ -9,6 +9,7 @@ export interface VoxelRenderState {
   setLight(volume:LightVolume):void;
   setFarLight(volume:LightVolume):void;
   setBeaconLight(volume:LightVolume):void;
+  setBeaconSource(position:readonly [number,number,number],strength:number):void;
   setShoreLevel(level:number,bounds:readonly [number,number,number,number]):void;
   setTerrainHeight(data:Float32Array,width:number,height:number,origin:[number,number],step:number):void;
   dispose():void;
@@ -36,7 +37,7 @@ export function geometryFromChunks(chunks:readonly AssetChunkMesh[],lattice:Voxe
   geometry.boundingBox=bounds;geometry.boundingSphere=bounds.getBoundingSphere(new THREE.Sphere());return geometry;
 }
 
-/** Voxel fog thins with height, so it runs at this share of the scene's `FogExp2` density. */
+/** Base density for the voxel material's height haze and aerial perspective. */
 const VOXEL_FOG_SCALE=.72;
 
 export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLattice):VoxelRenderState {
@@ -48,7 +49,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
   let farLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);farLightTexture.format=THREE.RedFormat;farLightTexture.needsUpdate=true;
   let beaconLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);beaconLightTexture.format=THREE.RedFormat;beaconLightTexture.needsUpdate=true;
   let heightTexture=new THREE.DataTexture(new Float32Array(1),1,1,THREE.RedFormat,THREE.FloatType);heightTexture.needsUpdate=true;
-  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
+  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uBeaconPosition:{value:new THREE.Vector3()},uBeaconStrength:{value:0},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
   const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,alphaToCoverage:true,vertexShader:`
     in uint aPacked; in uint aMaterial;
     out float vLodFade;
@@ -78,8 +79,8 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     #define gl_FragColor voxelColour
     precision highp sampler3D;
     uniform sampler2D uPalette;uniform sampler3D uLight,uFarLight,uBeaconLight;
-    uniform vec3 uSun,uAmbient,uSunDirection,uFog,uShadow,uGlow,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent;
-    uniform float uSunIntensity,uAmbientIntensity,uFogDensity,uNight,uFarCell,uBeaconCell,uTerrain,uShoreLevel;
+    uniform vec3 uSun,uAmbient,uSunDirection,uFog,uShadow,uGlow,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent,uBeaconPosition;
+    uniform float uSunIntensity,uAmbientIntensity,uFogDensity,uNight,uFarCell,uBeaconCell,uBeaconStrength,uTerrain,uShoreLevel;
     uniform float uGlassKind,uGlassDither;
     uniform vec3 uTerrainSoil,uTerrainGrass;uniform vec4 uShoreBounds;
     in vec3 vWorld,vNormal;in float vAo,vSky,vLodFade;flat in uint vMaterial;
@@ -211,10 +212,18 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       edge=mix(kind==3.?.96:kind==4.?.94:kind==6.?.95:1.,edge,detail);
       float ao=mix(.49,1.,vAo);float sky=mix(.24,1.,vSky);
       float diffuse=max(dot(n,normalize(uSunDirection)),0.);
+      float distanceToCamera=length(cameraPosition-vWorld);
+      float closeMoon=(1.-smoothstep(35.,150.,distanceToCamera))*smoothstep(.2,.65,uNight);
       // Open faces take the hour's sky fill; occluded ones sink toward its shadow tint, so a shadowed
       // wall reads blue at noon and indigo at dusk rather than grey.
       float facing=.5+.5*max(n.y,0.);
       vec3 cool=mix(uShadow*.62,uAmbient,sky)*uAmbientIntensity*facing*(.4+.6*sky);
+      // Broad indigo sky bounce keeps sheltered doors and vertical walls readable.
+      // It is strongest in the close scene and eases away before the wide town;
+      // the exposure, warm light field and beacon retain their existing values.
+      vec3 indigo=mix(uAmbient,vec3(.24,.19,.45),.4);
+      float softMoon=max(0.,(dot(n,normalize(uSunDirection))+.25)/1.25);
+      cool+=closeMoon*(indigo*.42+uSun*.18*softMoon*(.3+.7*vSky));
       float sunSeen=1. /* sun-visibility */;
       float sunLit=sunSeen*(.15+.85*vSky);
       // Under a roof the near field's own line to the sun decides. The town map, whose texels would blur the
@@ -243,11 +252,27 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       // The soft cap below keeps overlapping sources from clipping. The colour falls from a warm core through
       // amber. It reads fully from dusk (night .2, about
       // 18.5 h) and is absent by day.
-      float pool=pow(warm,2.6);
-      float poolAmount=pool*smoothstep(0.,.2,uNight)*1.3;
+      // The lantern is below a person's face: its softer falloff must reach
+      // cheeks and clothes. Restore warm/cool contrast in the close street only;
+      // the field, its positions and the accepted wide view keep their old treatment.
+      float closeLantern=1.-smoothstep(25.,60.,distanceToCamera);
+      float pool=pow(warm,${lattice==='avatar'?'mix(3.4,1.35,closeLantern)':'uTerrain>.5?1.8:3.4'});
+      float poolAmount=pool*smoothstep(0.,.2,uNight)*${lattice==='avatar'?'mix(.44,1.8,closeLantern)':'(uTerrain>.5?2.15:.44)*mix(1.,1.9,closeLantern)'};
       vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
-      float beaconAmount=beacon*beacon*beacon*(.3+.7*uNight)*1.25;
+      // At the court, let the gate fires wash the stone instead of dying
+      // inside the old cubic falloff. The wide town keeps its accepted response.
+      float castleApproach=1.-smoothstep(100.,170.,length(cameraPosition-uBeaconPosition));
+      float beaconAmount=pow(beacon,mix(3.,1.35,castleApproach))*(.3+.7*uNight)*mix(2.1,3.8,castleApproach);
+      // The tall beam lights the air above the keep. Its broad reflected amber
+      // catches upward ledges, grazing walls and the hill, beyond the small flood
+      // volume's reach. Sky occlusion preserves deep recesses; the town stays blue.
+      vec3 fromBeacon=vWorld-uBeaconPosition;
+      float beaconReach=1.-smoothstep(12.,82.,length(fromBeacon.xz));
+      float silhouette=pow(1.-abs(dot(n,normalize(cameraPosition-vWorld))),2.);
+      float reflectedRim=(mix(.18,.48,castleApproach)+mix(.82,.52,castleApproach)*max(n.y,0.))*(.35+.65*silhouette);
+      float aboveCrown=1.-smoothstep(12.,40.,fromBeacon.y);
+      beaconAmount+=beaconReach*beaconReach*reflectedRim*aboveCrown*vSky*uBeaconStrength*uNight*2.8;
       // Overlapping warm light shares one soft cap, so lit plaster never clips to white.
       float warmTotal=poolAmount+beaconAmount;
       float warmCapped=warmTotal<.6?warmTotal:.6+.6*(1.-exp((.6-warmTotal)/.6));
@@ -287,12 +312,18 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
           cover=1.;
         }
       }
-      float distanceToCamera=length(cameraPosition-vWorld);
-      float fogAmount=1.-exp(-distanceToCamera*uFogDensity*exp(-max(vWorld.y,0.)*.019));
+      // Keep the nearby street crisp. Beyond it, integrate the low haze along the
+      // whole sightline: a distant roof is seen through air, not just fog at its height.
+      float heightRay=clamp(-.028*(max(vWorld.y,0.)-max(cameraPosition.y,0.)),-20.,20.);
+      float heightIntegral=abs(heightRay)<.001?1.+heightRay*.5:(exp(heightRay)-1.)/heightRay;
+      float lowHaze=exp(-max(cameraPosition.y,0.)*.028)*heightIntegral;
+      // A little high air remains over the ridges, so their silhouettes recede too.
+      float opticalDepth=max(distanceToCamera-65.,0.)*uFogDensity*(.65+2.2*lowHaze);
+      float fogAmount=1.-exp(-opticalDepth);
       // Distance takes the sky's colour, warmer where the view runs toward a low sun.
       vec3 view=normalize(vec3(vWorld.x-cameraPosition.x,0.,vWorld.z-cameraPosition.z)+vec3(.0001,0.,0.));
       vec3 sunFlat=normalize(vec3(uSunDirection.x,0.,uSunDirection.z)+vec3(.0001,0.,0.));
-      vec3 fogColour=uFog+uGlow*pow(max(dot(view,sunFlat),0.),3.)*.8;
+      vec3 fogColour=mix(uFog,uSkyHorizon*1.3,.45)+uGlow*pow(max(dot(view,sunFlat),0.),3.)*.8;
       colour=mix(colour,fogColour,min(.86,fogAmount));
       gl_FragColor=vec4(colour,1.);
       gl_FragColor.a=cover;
@@ -311,6 +342,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
 return {material,setEnvironment(g){uniforms.uSun.value.set(g.sun);uniforms.uAmbient.value.set(g.ambient);uniforms.uFog.value.set(g.fog);uniforms.uSkyZenith.value.set(g.zenith);uniforms.uSkyHorizon.value.set(g.horizon);uniforms.uShadow.value.set(g.shadow);uniforms.uGlow.value.set(g.glow);uniforms.uFogDensity.value=g.fogDensity*VOXEL_FOG_SCALE;uniforms.uSunDirection.value.set(...g.sunDirection);uniforms.uSunIntensity.value=g.sunIntensity;uniforms.uAmbientIntensity.value=g.ambientIntensity;uniforms.uNight.value=g.night;},
     setLight(v){lightTexture=uploadVolume(lightTexture,v);uniforms.uLight.value=lightTexture;uniforms.uLightOrigin.value.set(...v.origin);uniforms.uLightExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);},
     setFarLight(v){farLightTexture=uploadVolume(farLightTexture,v);uniforms.uFarLight.value=farLightTexture;uniforms.uFarOrigin.value.set(...v.origin);uniforms.uFarExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uFarCell.value=v.cellSize;},
+    setBeaconSource(position,strength){uniforms.uBeaconPosition.value.set(...position);uniforms.uBeaconStrength.value=THREE.MathUtils.clamp(strength,0,1);},
     setBeaconLight(v){beaconLightTexture=uploadVolume(beaconLightTexture,v);uniforms.uBeaconLight.value=beaconLightTexture;uniforms.uBeaconOrigin.value.set(...v.origin);uniforms.uBeaconExtent.value.set(v.size[0]*v.cellSize,v.size[1]*v.cellSize,v.size[2]*v.cellSize);uniforms.uBeaconCell.value=v.cellSize;},
     setShoreLevel(level,bounds){if(!Number.isFinite(level)||bounds.some(value=>!Number.isFinite(value)))throw new Error('Shore level and bounds must be finite');uniforms.uShoreLevel.value=level;uniforms.uShoreBounds.value.set(...bounds);},
     setTerrainHeight(data,width,height,origin,step){heightTexture.dispose();heightTexture=new THREE.DataTexture(data,width,height,THREE.RedFormat,THREE.FloatType);heightTexture.minFilter=heightTexture.magFilter=THREE.NearestFilter;heightTexture.needsUpdate=true;uniforms.uTerrainHeight.value=heightTexture;uniforms.uTerrainOrigin.value.set(...origin);uniforms.uTerrainSize.value.set(width,height);uniforms.uTerrainStep.value=step;uniforms.uTerrain.value=1;},

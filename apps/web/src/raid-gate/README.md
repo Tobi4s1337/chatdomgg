@@ -3,22 +3,89 @@
 Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server application lives in
 `apps/api/src/raid-gate/`. The browser imports only `apps/api/src/raid-gate/contracts.ts` (plus the in-page bench).
 
-## What exists (RG01)
+## What exists (RG01, RG07, RG08, RG09, RG10)
 
 | Piece | File | State |
 |---|---|---|
 | Feature-local contract: commands, replies, strict readers | `apps/api/src/raid-gate/contracts.ts` | All spec 23 shapes, plus `{op:'gate'}` → `GateStatusView` (see spec Decisions) |
 | Durable records and the CAS transaction port | `apps/api/src/raid-gate/repository.ts` | Gate pointer, raid action, party member |
-| Application: gate status, preview, join, leave, read-action | `apps/api/src/raid-gate/application.ts` | Real. Other ops answer `denied: unavailable` until their task lands |
+| Application: gate status, preview, join, leave, read-action, close, start, Twitch cancel, reconcile | `apps/api/src/raid-gate/application.ts` | Real. Travel, passport and gift ops answer `denied: unavailable` until their task lands |
+| Witnessed departure: `ingestRaid`, `recover` | `apps/api/src/raid-gate/application.ts` | Server-only; lands a correlated raid once and hands it to the Atlas road ingestion |
+| Outbox for Twitch writes and the road handoff | `apps/api/src/raid-gate/repository.ts` | `queued` sendable, `claimed` reconcile-only, `settled` |
+| Durable repository over the realm schema | `apps/api/src/raid-gate/postgres-repository.ts`, `realm-migration.sql` | Serializable CAS; every row passes its strict reader |
+| Session principal from realm-auth's cookie | `apps/api/src/raid-gate/session.ts` | Role derived on the server: monarch by Twitch identity, citizen by deed, otherwise guest |
+| Live policy | `apps/api/src/raid-gate/policy.ts` | Session and broadcaster from the realm; live, grant, consent and Atlas verdict are required ports |
+| Composition and node adapter | `apps/api/src/raid-gate/service.ts` | `createRaidGateService(...)` → `{ matches, serve, close }` |
 | Transactional memory repository (tests and bench only) | `apps/api/src/raid-gate/memory-repository.ts` | Never bound as production storage |
 | Browser ports | `ports.ts` | `RaidGateApi`, `AtlasGateHost`, `GateKingdom`, `GateAccount` |
 | Controller | `controller.ts` | Deterministic under an injected clock; late replies ignored |
 | Gate board | `RaidGatePane.tsx`, `Seal.tsx`, `raid-gate.css` | Desktop dock, phone sheet |
 | Route `/-/raid-gate` | `index.tsx` | Unbound by default: "The gate is shut here" |
 | Bench `/-/raid-gate?bench=simulated` | `bench.ts` | The real application in the page; SIMULATED everywhere |
+| Travel coordinator: reserve, prepare, commit once, reconcile, cancel, return, recover | `apps/realm/src/raid-gate/coordinator.ts` | Real; fenced whereabouts, arrival evidence, source released only after the destination's acknowledgment |
+| Travel records and their durable repository | `apps/realm/src/raid-gate/records.ts`, `postgres-repository.ts` | Travel, arrival, whereabouts; tables in `realm-migration.sql` |
+| March check for raid journeys | `createRaidMarchCheck` in `apps/api/src/raid-gate/application.ts` | Joined, landed, this raid, within five minutes |
+| SIMULATED room transport (tests and bench only) | `apps/realm/src/raid-gate/simulated-rooms.ts` | Fencing generation, idempotent holds, refuses a commit after reconcile |
+| Journey board | `RaidGatePane.tsx` (`TravelBoard`) | Stages from the authority, overrun, confirming, arrived, home, turned back, refused |
+| Gift policy and the welcome: offer, accept, refuse, `{op:'welcome'}` | `apps/api/src/raid-gate/gifts.ts` | Real. One item transaction moves the thing, writes its lineage and settles the offer; retries return the same receipt |
+| Durable gift storage and host directory | `apps/api/src/raid-gate/gift-postgres.ts`, `gift-hosts.ts`; tables in `realm-migration.sql` | Offers and lineage are ours; the things stay in main's item authority behind `ItemRows` |
+| Arrival evidence for gifts | `apps/realm/src/raid-gate/arrivals.ts` | Present = the whereabouts still name this arrival in its kingdom, unfenced |
+| SIMULATED item store (tests and bench only) | `apps/api/src/raid-gate/gift-memory.ts` | Can fail before commit or lose its answer after commit |
+| Welcome controller | `welcome.ts` | Created by the gate controller once a raid journey commits as a visitor; lost presses re-sent under the same request |
+| The welcome tableau and gift tags | `GuestArrival.tsx`, `VisitorGifts.tsx`, `welcome.css` | Torchlit column at the destination's gate; gifts, ledger and shelf on the board |
 | Captures | `capture.mjs` | `node apps/web/src/raid-gate/capture.mjs [--only a,b]` after `pnpm build` |
 
 ## What main binds
+
+Short version, with the pieces above:
+
+1. Register `apps/api/src/raid-gate/realm-migration.sql` unchanged as
+   `apps/realm/src/persistence/migrations/0009_realm_raid_gate.sql`, then delete the `?raw` fallback in
+   `postgres.integration.test.ts` and run it once with `REALM_DATABASE_TESTS=1`.
+2. In `apps/api/src/main.ts`:
+   ```ts
+   const raidGate = createRaidGateService({
+     pool, origin: config.mode, issuer: provider.issuer,
+     sessionCookie: config.secureCookies ? '__Host-chatdom_session' : 'chatdom_session',
+     publicOrigin: config.publicOrigin, origins: [config.publicOrigin], clock: Date.now,
+     policyPorts: { live, grants, consent, directory },
+   });
+   if (raidGate.matches(request.url)) { await raidGate.serve(request, response); return; }   // before routes()
+   // stop(): raidGate.close();
+   ```
+   `live` = `createHelixLiveChannels(new HelixReader(...))` (needs `@chatdom/twitch` in `apps/api` and an app-token
+   session). Pass `raids` (an `AuthorizedRaidTransport`: Start/Cancel a Raid with the source's `channel:manage:raids`
+   user token, recording each write by `key` before calling Twitch so `reconcile(key)` can answer for a lost reply and
+   says `unknown` when it cannot tell) and `roads` (the Atlas's `AtlasRoadIngress`, idempotent by raid ID). Without
+   `raids` the gate gathers but `start` answers `unavailable`; without `roads` witnessed raids wait in the outbox.
+   The service runs `recover()` every 15 s and once at start-up; `close()` stops it.
+   In the verified EventSub ingress, for every `channel.raid` whose `from_broadcaster_user_id` is a kingdom with a
+   gate request the transport sent, call
+   `raidGate.application.ingestRaid({ raid, upstreamEventId: messageId, actionRequestId, receivedAt })` with
+   `raid.source = 'herald'` and observed evidence. `actionRequestId` is the request whose start the transport sent
+   for that source and target; pass `null` when it cannot tell, and the gate will not land anything on it. `grants` (the source's `channel:manage:raids` state, telling revoked apart from never connected),
+   `consent` (the monarch's Twitch-write switch) and `directory` (Atlas classification and whether this source may
+   raid the target) have no store yet; they are main's.
+3. Travel (RG09). Bind a `RealmTravelTransport` over the realm's rooms (`apps/realm/src/raid-gate/ports.ts` states the
+   contract: every operation idempotent by ticket; `commit` moves the walking membership atomically only while the
+   person is still at `generation - 1` in `from`, and answers the destination's role; `reconcile` never moves anyone and
+   makes a later commit for that ticket fail once it answered `held` or `released`; `release('source')` lets go of the
+   retained source place). Then pass it as `rooms` to `createRaidGateService({ ..., rooms })`: the service builds the
+   coordinator on the realm pool (`createPostgresTravelRepository`) with the gate's own `createRaidMarchCheck`, and its
+   recovery timer runs the journeys' recovery after the gate's. Without `rooms`, travel commands answer `unavailable`. The Atlas may implement `AtlasGateHost.travel(stage)` to
+   rise, draw the road and reveal the destination at the pace of those stages.
+4. Gifts (RG10). Pass `items: ItemRows` to `createRaidGateService({ ..., items })`: `get`, a conditional `move` (owner
+   and revision, stored at `expectedRevision + 1`) and `listOwned`, all on the gift transaction's own `SqlClient`, so the
+   move, the offer and the lineage row commit together. Each item carries kind, `transferable`, `paid`, maker and
+   origin names (`readGiftItem`). The service composes `createVisitorGifts` with `createPostgresItemTransfers`,
+   `createArrivalWitness` and `createRealmGiftHosts`. Without `items`, `welcome` and the gift ops answer `unavailable`.
+   The welcome is drawn as an overlay tableau (`GuestArrivalPane`) until the kingdom host has a gate anchor in the
+   world; a host's gift shelf (`{op:'welcome', arrivalId: null}`) has no host-side surface yet.
+5. In the kingdom host, give the controller `createHttpRaidGateApi({ url: `/api/raid-gate/${kingdomId}`, origin })`,
+   the Atlas `AtlasGateHost`, the source face and the throne's `{ reconnect }`, and mount `RaidGatePane` at the gate
+   anchor.
+
+The longer contract each port honours:
 
 1. **API adapter.** Mount `createRaidGateApplication(deps).handle(context, body)` behind the authenticated router.
    Build `context.principal` from the session, never from the body:
@@ -49,7 +116,8 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
    - `api`: a `RaidGateApi` whose `request` POSTs the command and whose `subscribe(null, …)` listens to (2).
      Set `origin` to match the server.
    - `atlas`: the Atlas lane's `AtlasGateHost`, which opens gate mode at the source, reports the pick as
-     `{kind:'target', channel, land}`, reports `{kind:'closed'}`, and resolves a named destination.
+     `{kind:'target', channel, land}`, reports `{kind:'closed'}`, resolves a named destination, and `follow(raid)`
+     attaches the map to that witnessed raid's public caravan (presentation only; the road comes from the server).
    - `source`: the kingdom's `{kingdomId, name, login}`.
    - `account`: `{reconnect}` to the throne's Twitch connection, when the host has one.
 

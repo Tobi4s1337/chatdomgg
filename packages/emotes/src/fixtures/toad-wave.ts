@@ -13,24 +13,24 @@ import type { DecodedEmote, EmoteSource } from '../types';
  */
 export const TOAD_WAVE_SIZE = 112;
 
-type Sdf = (x: number, y: number) => number;
-type Rgb = readonly [number, number, number];
-interface Layer { sdf: Sdf; fill: Rgb; outline?: number }
+export type Sdf = (x: number, y: number) => number;
+export type Rgb = readonly [number, number, number];
+export interface Layer { sdf: Sdf; fill: Rgb; outline?: number }
 
-const OUTLINE: Rgb = [28, 24, 32];
+export const OUTLINE: Rgb = [28, 24, 32];
 // Math.hypot may differ by an ulp between engines; sqrt is correctly rounded everywhere.
-const length = (x: number, y: number): number => Math.sqrt(x * x + y * y);
-const circle = (cx: number, cy: number, r: number): Sdf => (x, y) => length(x - cx, y - cy) - r;
-const ellipse = (cx: number, cy: number, rx: number, ry: number): Sdf => (x, y) => (length((x - cx) / rx, (y - cy) / ry) - 1) * Math.min(rx, ry);
-const capsule = (ax: number, ay: number, bx: number, by: number, r: number): Sdf => (x, y) => {
+export const length = (x: number, y: number): number => Math.sqrt(x * x + y * y);
+export const circle = (cx: number, cy: number, r: number): Sdf => (x, y) => length(x - cx, y - cy) - r;
+export const ellipse = (cx: number, cy: number, rx: number, ry: number): Sdf => (x, y) => (length((x - cx) / rx, (y - cy) / ry) - 1) * Math.min(rx, ry);
+export const capsule = (ax: number, ay: number, bx: number, by: number, r: number): Sdf => (x, y) => {
   const px = x - ax, py = y - ay, dx = bx - ax, dy = by - ay;
   const t = Math.max(0, Math.min(1, (px * dx + py * dy) / (dx * dx + dy * dy)));
   return length(px - dx * t, py - dy * t) - r;
 };
 /** A band along a circle, kept on one side of a line (no angles needed). */
-const arc = (cx: number, cy: number, radius: number, thickness: number, keep: (x: number, y: number) => boolean): Sdf => (x, y) =>
+export const arc = (cx: number, cy: number, radius: number, thickness: number, keep: (x: number, y: number) => boolean): Sdf => (x, y) =>
   keep(x, y) ? Math.abs(length(x - cx, y - cy) - radius) - thickness / 2 : 99;
-const polygon = (points: readonly (readonly [number, number])[]): Sdf => (x, y) => {
+export const polygon = (points: readonly (readonly [number, number])[]): Sdf => (x, y) => {
   let inside = false, best = Infinity;
   for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
     const [xi, yi] = points[i]!, [xj, yj] = points[j]!;
@@ -40,29 +40,29 @@ const polygon = (points: readonly (readonly [number, number])[]): Sdf => (x, y) 
   }
   return inside ? -best : best;
 };
-const union = (...shapes: Sdf[]): Sdf => (x, y) => {
+export const union = (...shapes: Sdf[]): Sdf => (x, y) => {
   let best = Infinity;
   for (const shape of shapes) best = Math.min(best, shape(x, y));
   return best;
 };
-const intersect = (a: Sdf, b: Sdf): Sdf => (x, y) => Math.max(a(x, y), b(x, y));
+export const intersect = (a: Sdf, b: Sdf): Sdf => (x, y) => Math.max(a(x, y), b(x, y));
 
 // The crown is tilted 16° clockwise about its base centre: cos and sin written out exactly.
 const COS = .9612616959383189, SIN = .27563735581699916;
 const tilt = (points: readonly (readonly [number, number])[], cx: number, cy: number): [number, number][] =>
   points.map(([x, y]) => [cx + (x - cx) * COS - (y - cy) * SIN, cy + (x - cx) * SIN + (y - cy) * COS]);
 
-const GREEN: Rgb = [116, 178, 74], DEEP_GREEN: Rgb = [78, 132, 62], BELLY: Rgb = [236, 222, 162];
-const head = ellipse(48, 70, 37, 30);
-const leftBump = circle(30, 42, 15), rightBump = circle(64, 40, 14);
+export const GREEN: Rgb = [116, 178, 74], DEEP_GREEN: Rgb = [78, 132, 62], BELLY: Rgb = [236, 222, 162];
+export const head = ellipse(48, 70, 37, 30);
+export const leftBump = circle(30, 42, 15), rightBump = circle(64, 40, 14);
 const arm = capsule(78, 84, 98, 46, 6.5), hand = union(circle(99, 38, 8.5), circle(93, 28, 3.6), circle(100, 26, 3.8), circle(107, 31, 3.4));
-const crown = polygon(tilt([[52, 26], [52, 12], [58, 19], [64, 8], [70, 19], [76, 12], [76, 26]], 64, 26));
+export const crown = polygon(tilt([[52, 26], [52, 12], [58, 19], [64, 8], [70, 19], [76, 12], [76, 26]], 64, 26));
 
 const SILHOUETTE: readonly Layer[] = [
   { sdf: arm, fill: GREEN, outline: 2.6 }, { sdf: hand, fill: GREEN, outline: 2.6 },
   { sdf: leftBump, fill: GREEN, outline: 2.6 }, { sdf: rightBump, fill: GREEN, outline: 2.6 }, { sdf: head, fill: GREEN, outline: 2.6 },
 ];
-const DETAILS: readonly Layer[] = [
+export const DETAILS: readonly Layer[] = [
   // Darker back of the head, then the pale belly that reads the face from a distance.
   { sdf: intersect(head, ellipse(52, 48, 40, 14)), fill: DEEP_GREEN },
   { sdf: intersect(head, ellipse(46, 90, 27, 15)), fill: BELLY },

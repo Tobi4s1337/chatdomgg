@@ -52,13 +52,13 @@ export function createShell(geometry: THREE.BufferGeometry, shared: CellUniforms
           float age=molten(index,hash);
           if(age<=0.)discard;
           // The newest layer is white-gold; older layers deepen to orange and grow a dark skin along their seams.
-          float fresh=exp(-age*.75),skin=smoothstep(.6,5.,age);
-          colour=mix(uHot,uOrange,smoothstep(0.,2.6,age));
-          colour=mix(colour,uDeep,skin*.5);
-          colour=mix(colour,uWhite,fresh*(.5+.5*up));
-          colour*=(1.-seam*.42*skin)*shade*(1.+.05*sin(uTime*2.4+hash*6.283)*(1.-skin));
+          float fresh=exp(-age*1.1),skin=smoothstep(.35,3.5,age);
+          colour=mix(uHot,uOrange,smoothstep(0.,1.8,age));
+          colour=mix(colour,uDeep,skin*(.34+.15*(1.-up)));
+          colour=mix(colour,uWhite,fresh*(.12+.2*up));
+          colour*=(1.-seam*(.18+.32*skin))*shade*(1.+.05*sin(uTime*2.4+hash*6.283)*(1.-skin));
           colour=mix(colour,uWhite*1.15,uFlash*near);
-          colour*=1.22;
+          colour*=3.4; // Newly poured metal is an HDR light source, with dark iron seams.
         }else if(uMode==1){
           float d=clamp(distance(centre,uImpact)/uImpactRadius,0.,1.);
           float start=.4*d+.16*hash;
@@ -72,7 +72,7 @@ export function createShell(geometry: THREE.BufferGeometry, shared: CellUniforms
           colour*=mix(1.,1.-seam*.42,smoothstep(.45,.8,heat))*shade;
           colour=mix(colour,uOrange*1.3,lit*(1.-face));
           colour=mix(colour,uWhite*1.15,uFlash*near);
-          colour*=1.18;
+          colour*=mix(1.18,3.4,smoothstep(.2,1.,heat));
         }else{
           if(hash>=uCover||fract(hash*7.13+.31)<uVanish)discard;
           colour=mix(uPale,uGold,.35+.3*up)*(1.+.25*seam)*shade*1.1;

@@ -12,9 +12,31 @@ describe('window LOD placement', () => {
       windows: [{ slot: 0, present: true, publicName: 'Tobi4s_', since: 0 }] };
     windows.setFrame(frame);
     expect(windows.getSources()[0]).toMatchObject({ strength: 1, name: 'Tobi4s_' });
+    // A local lease expiry begins a fade now, rather than replaying an old, completed departure.
+    windows.setFrame({ ...frame, connection: 'stale', asOf: 91000,
+      windows: [{ ...frame.windows[0]!, present: false, publicName: null, since: 91000 }] });
+    expect(windows.getSources()[0]).toMatchObject({ strength: 1, name: null });
+    windows.update(.35, 23, 91350);
+    expect(windows.getSources()[0]!.strength).toBeCloseTo(.5);
+    windows.update(.35, 23, 91700);
+    expect(windows.getSources()[0]!.strength).toBe(0);
     windows.setFrame({ ...frame, sequence: 2, connection: 'stale' });
     windows.update(1, 23);
     expect(windows.getSources()[0]).toMatchObject({ strength: 0, name: null });
+    windows.dispose();
+  });
+  it('keeps the arrival beat on witnessed time through fixed captures and recovered snapshots', () => {
+    const windows = createWindowLights(new THREE.Scene(), [{ slot: 0, blueprint: VOXEL_FIXTURE, position: [0, 0, 0], yaw: 0 }]);
+    const frame = { version: 1 as const, kingdomId: KingdomIdSchema.parse('129634568'), epoch: 'arrival', sequence: 1,
+      asOf: 1400, origin: 'simulated' as const, streamLive: false, connection: 'offline' as const,
+      windows: [{ slot: 0, present: true, publicName: 'Juniper', since: 1000 }] };
+    windows.setFrame(frame);
+    windows.update(1, 19.5, 1400);
+    windows.update(1, 19.5, 1400);
+    expect(windows.getSources()[0]).toMatchObject({ strength: 1, name: 'Juniper', arrivalAgeSeconds: .4 });
+    windows.setFrame({ ...frame, sequence: 2, asOf: 61000 });
+    windows.update(0, 19.5, 61000);
+    expect(windows.getSources()[0]!.arrivalAgeSeconds).toBe(60);
     windows.dispose();
   });
   it('renders one designated presence window per home, with an inspection opt-in for all anchors', () => {

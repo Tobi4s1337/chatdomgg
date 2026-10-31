@@ -8,6 +8,7 @@ import { compileLandscape, draw } from './landscape';
 
 export * from './contracts';
 export { sampleGenesisSurface } from './surface';
+export { compileGenesisSettlement } from './settlement';
 
 const TIERS: readonly GenesisTier[] = ['hamlet', 'village', 'town', 'city', 'capital'];
 const HOMES = [16, 48, 160, 512, 1536] as const;

@@ -217,10 +217,15 @@ export function settleNight(input: NightInput): NightResult {
     const goneAt = channel?.goneAt ?? null;
     const holdingId = settler.holdingId;
     if (!current) {
-      if (goneAt !== null) events.push({ kind: 'tombstone', kingdomId: settler.kingdomId, holdingId, cause: 'gone', at: goneAt, revision });
-      else if (hidden) events.push({ kind: 'tombstone', kingdomId: settler.kingdomId, holdingId, cause: 'hidden', at: manifest.asOf, revision });
+      // Hidden outranks gone: a withheld channel's land waits from this run even when the channel is also gone.
+      if (hidden) events.push({ kind: 'tombstone', kingdomId: settler.kingdomId, holdingId, cause: 'hidden', at: manifest.asOf, revision });
+      else if (goneAt !== null) events.push({ kind: 'tombstone', kingdomId: settler.kingdomId, holdingId, cause: 'gone', at: goneAt, revision });
       else continue;
       silenced.add(id);
+      tombstones++;
+    } else if (hidden && current.cause === 'gone') {
+      // A gone holding withheld later waits from now on rather than lying abandoned for the rest of its 30 days.
+      events.push({ kind: 'tombstone', kingdomId: settler.kingdomId, holdingId, cause: 'hidden', at: manifest.asOf, revision });
       tombstones++;
     } else if (channel && goneAt === null && !hidden) {
       // Only a channel this revision actually observed, neither gone nor withheld, is restored. A hidden channel
@@ -334,13 +339,14 @@ export function settleNight(input: NightInput): NightResult {
 
 /**
  * Moderation between surveys: a cartography run with no newer revision still reads the withheld list, and every
- * holding on it that is not yet tombstoned waits from this run on. Hiding never waits for a fresh sweep; lifting a
- * tombstone does (only an observed revision restores land), so this pass only ever adds hidden tombstones.
+ * holding on it that is not yet hidden waits from this run on, including one already tombstoned as gone (hidden
+ * outranks gone). Hiding never waits for a fresh sweep; lifting a tombstone does (only an observed revision restores
+ * land), so this pass only ever adds hidden tombstones.
  */
 export function hideWithheld(state: LedgerState, withheld: ReadonlySet<string>, revision: string, at: number): LedgerEvent[] {
   const events: LedgerEvent[] = [];
   for (const settler of [...state.settlers].sort((a, b) => compareIds(a.kingdomId, b.kingdomId))) {
-    if (!withheld.has(settler.kingdomId) || state.tombstones.has(settler.kingdomId)) continue;
+    if (!withheld.has(settler.kingdomId) || state.tombstones.get(settler.kingdomId)?.cause === 'hidden') continue;
     events.push({ kind: 'tombstone', kingdomId: settler.kingdomId, holdingId: settler.holdingId, cause: 'hidden', at, revision });
   }
   return events;
