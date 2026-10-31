@@ -7,6 +7,7 @@ import { compileFoundedScene, sampleFoundedTerrain } from './collision';
 import { canonicalSceneJson } from './codec';
 import { loadAdoptedPlan, type FoundedLayoutSource } from './load';
 import type { NativeTown } from './native';
+import { enrichNativePictureGroves } from './picture-groves';
 import { enrichNativeMarket } from './market-furnishings';
 import { enrichNativeForgeHearth, enrichNativeForgeWorkshop } from './forge-hearth-furnishings';
 import { enrichNativeMarketSeats } from './market-seats';
@@ -73,7 +74,7 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
     // Add reviewed public furnishings around installed stalls without regenerating the pinned town. These
     // solids use the same immutable scene, digest and room adoption as homes; never a browser-only overlay.
     const furnished = enrichNativeForgeWorkshop(adopted.plan, enrichNativeForgeHearth(adopted.plan, enrichNativeMarketSeats(adopted.plan, enrichNativeMarket(adopted.plan, native))));
-    const candidate = await assembleFoundedScene({ kingdomId, plan: adopted.plan, state, native: furnished, collisionRevision: 0 });
+    const candidate = await assembleFoundedScene({ kingdomId, plan: adopted.plan, state, native: enrichNativePictureGroves(adopted.plan, furnished), collisionRevision: 0 });
     const collisionRevision = await store.revision(kingdomId, candidate.geometryDigest);
     const scene = { ...candidate.scene, collisionRevision }, encoded = await encodeFoundedScene(scene);
     const build: FoundedSceneBuild = { ...candidate, scene, bytes: encoded.bytes, manifest: encoded.manifest };

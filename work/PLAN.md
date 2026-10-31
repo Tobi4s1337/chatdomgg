@@ -328,26 +328,28 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Current handoff — 2026-10-31
+## 10. Current handoff — 2026-11-01
 
 **Order:** picture only, one obvious same-view before/after per turn. Merge good art checkpoints first;
 medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
 beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current:** the labelled SIMULATED homecoming stages32 late neighbours (15% cap) at16–23.75s,
-on their existing household routes; first Juniper beat/live timestamps unchanged. Same-view HIGH1920×1080
-hour19.5/time25 `shots/magic/road-homecoming-pair.png` viewed: more lantern people read on the left street
-and foreground crossings;104→115 walking of240 supplied citizens. Typecheck/scoped lint/17 presence tests/
-web build pass; no browser errors, captures cleaned. This is opening choreography, NOT sustained live traffic.
-Next: everyday activity around market/forge using only present citizens and approved destinations.
+**Current:** PT10 now reaches founded kingdoms through the existing producer enrichment/scene-adoption
+path, not browser geometry replacement. Native tree fixture IDs and exact roots stay; homes/other fixtures
+and pinned baseline stay. New tree assets get normal hashes/collision revisions. Shared pure planting moved
+to content; installed canopy motion uses supplied meshes and the accepted distant-air material. Focused
+founded test+10 web tree tests/typecheck/lint/web build pass. Same-view public LIVE evidence:
+`shots/magic/founded-grove-{before,after,pair}.png`, `/stream?source=realm&kingdom=129634568&hour=19.5&time=30&camera=hero`.
+The channel is resting (0 citizens, lights dark); this is real public founded geometry, not a simulated crowd.
+Before: manifest ddd7fcac…014fc3d5, collision8,260 trees/3 old forms. Managed services adopt main normally.
+Generated groves f424fac retain existing sites and accepted736ee93 haze (`picture-grove-pair.png`).
 
-PT10 a7d5253 merged; the generated kingdom now plants the full picture-tree family on the
-same court/grove sites, with willows by water, rare elders, quiet canopy wind and LOD-2 shadows.
-Accepted distant grove air736ee93 inherited. `shots/magic/picture-grove-pair.png` viewed at1920×1080
-HIGH, hour19.5/time25: broader irregular crowns frame the hill; light/camera/roads unchanged. Typecheck,
-scoped lint,18 tree tests and web build pass; no browser errors, capture resources released. Founded
-installed content remains authoritative (no replacement planting); its compiled trees still need the same
-art adoption. Never fake live traffic. Existing quiet market routines remain the everyday-life seam.
+95e403b keeps32 late SIMULATED neighbours at16–23.75s on existing routes; first Juniper/live timings
+unchanged. `road-homecoming-pair.png` viewed at19.5/time25:104→115 walking/240 supplied, more lanterns
+on left street/crossings. Opening choreography only. Market visitor experiment rejected/reverted: warmed
+`market-visitors-pair.png` at70s showed no clear gain; square screened by roofs. Next road-life change must
+read on open foreground routes, not behind houses. Capture warming:640×360 HIGH in≤1s seeks, then1920
+and settle; serial/hard deadlines. Separate browsers avoid accumulating software-renderer memory.
 
 AS10 whole citizens0b11c76 adopted in kingdom/stream/observed/self walkers in e2a9100. Six stable
 presence look IDs use exact painted recipes/kingdom light; render-local shoulders±4, two thin cloth capes.

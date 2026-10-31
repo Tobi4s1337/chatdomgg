@@ -3,6 +3,7 @@ import { createKingdomForge, type ForgeStatus } from '../forge/scene';
 import { createRealmForgeScene } from '../forge/realm-scene';
 import type { RealmForgeFeed } from '../realm/adapters/forge-feed';
 import { MATERIALS } from '@chatdom/content';
+import { createPictureTree, TREE_SPECIES, TREE_STYLES, TREE_VARIANTS, type TreeSpecies, type StyleFamily } from '@chatdom/content/trees';
 import { attachCanopy, createCanopyMaterial, groveBatches, plantGrove, type TreeSite } from './trees';
 import { VoxelWorkerPool, type AssetChunkMesh } from '@chatdom/voxel';
 import { createAtmosphere, getEnvironment, createVoxelMaterial, geometryFromChunks, createWindowLights, createPostStack, type WindowHouse } from '@chatdom/render';
@@ -252,10 +253,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   function instance(blueprint:VoxelBlueprint,chunks:readonly AssetChunkMesh[],placements:readonly Placement[],factor:1|2|4=1){
     const geometry=geometryFromChunks(chunks,'build');geometry.setAttribute('aLodFade',new THREE.InstancedBufferAttribute(new Float32Array(placements.length).fill(1),1));geometries.push(geometry);
     const treeBatch=treeBatches.find(batch=>batch.blueprint===blueprint);
-    if(treeBatch)attachCanopy(geometry,treeBatch.canopy,[blueprint.size[0]/2,0,blueprint.size[2]/2]);
+    const match = /^tree-(oak|pine|birch|willow|elder)-(hearth|tide|grove)-(\d+)$/.exec(blueprint.id);
+    const species = match?.[1] as TreeSpecies | undefined, style = match?.[2] as StyleFamily | undefined, variant = Number(match?.[3]);
+    const installedTree = blueprint.kind === 'flora' && species && style && TREE_SPECIES.includes(species) && TREE_STYLES.includes(style)
+      && blueprint.styleId === style && variant < TREE_VARIANTS[species] ? createPictureTree(species, style, variant) : undefined;
+    const motion=treeBatch?.canopy ?? installedTree?.canopy;
+    if(motion)attachCanopy(geometry,motion,installedTree?.root ?? [blueprint.size[0]/2,0,blueprint.size[2]/2]);
     const keepMesh=installed?.forgeHosts.some(home=>home.slot===65534&&blueprintKey(home.blueprint)===blueprintKey(blueprint));
     const standardMesh=lifeSites.standard&&blueprintKey(lifeSites.standard.blueprint)===blueprintKey(blueprint);
-    const mesh=new THREE.InstancedMesh(geometry,treeBatch?canopy.material:blueprint.kind==='flora'?floraMaterial:standardMesh&&royalLife.standardMaterial?royalLife.standardMaterial:keepMesh&&royalLife.keepMaterial?royalLife.keepMaterial:clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
+    const mesh=new THREE.InstancedMesh(geometry,motion?canopy.material:blueprint.kind==='flora'?floraMaterial:standardMesh&&royalLife.standardMaterial?royalLife.standardMaterial:keepMesh&&royalLife.keepMaterial?royalLife.keepMaterial:clay.material,placements.length);const m=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3();
     placements.forEach((p,i)=>{m.compose(v.set(...p.position),q.setFromAxisAngle(new THREE.Vector3(0,1,0),p.yaw),new THREE.Vector3(factor,factor,factor));mesh.setMatrixAt(i,m);});
     mesh.instanceMatrix.needsUpdate=true;mesh.frustumCulled=false;mesh.name=blueprint.id;scene.add(mesh);meshes.push(mesh);geometryBuilds++;
     if(factor===(blueprint.kind==='flora'?2:1))sunShadows.register(mesh);

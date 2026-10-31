@@ -116,3 +116,5 @@ export function allPictureTrees(): readonly PictureTree[] {
 
 /** The collection's blueprints, in `allPictureTrees` order. Built on first use, not at import. */
 export function treeBlueprints(): readonly VoxelBlueprint[] { return allPictureTrees().map(tree => tree.blueprint); }
+
+export * from './plant';
