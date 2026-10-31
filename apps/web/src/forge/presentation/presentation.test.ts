@@ -3,13 +3,13 @@ import * as THREE from 'three';
 import { forgeRitualFrame } from '@chatdom/forge';
 import type { ForgePhase, ForgeRitualFrame } from '@chatdom/shared';
 import { createForgePresentation } from './index';
-import { createForgeStage, MOTE_BUDGET, type StageEnvironment } from './stage';
+import { CONTACT, createForgeStage, DRAW_BUDGET, IMPACT, MOTE_BUDGET, type StageEnvironment } from './stage';
 import { traceSilhouette } from './silhouette';
 
-function environment(reduced = false) {
+function environment(reduced = false, phone = false) {
   const listeners = new Set<() => void>();
   const env: StageEnvironment & { listeners: Set<() => void>; reduced: boolean } = {
-    reduced, listeners, phone: false,
+    reduced, listeners, phone,
     reducedMotion: () => env.reduced,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
   };
@@ -36,15 +36,16 @@ const frame = (phase: ForgePhase, phaseProgress: number, elapsed: number, ritual
 /** Everything this adapter draws, read back from the scene graph and its GPU inputs. */
 function snapshot(root: THREE.Object3D, piece: THREE.Object3D) {
   const state: unknown[] = [piece.visible, piece.position.toArray(), piece.quaternion.toArray(), piece.scale.toArray()];
+  const value = (v: unknown): unknown => typeof v === 'number' || typeof v === 'boolean' ? v
+    : Array.isArray(v) ? v.map(value) : v && typeof (v as { toArray?: unknown }).toArray === 'function' ? (v as THREE.Vector3).toArray() : null;
   root.traverse(object => {
-    state.push(object.name, object.visible, object.matrix.toArray());
+    state.push(object.name, object.visible, object.matrix.toArray(), object.position.toArray(), object.rotation.toArray(), object.scale.toArray());
     const mesh = object as THREE.Mesh;
-    if (mesh.material instanceof THREE.ShaderMaterial) {
-      for (const [key, uniform] of Object.entries(mesh.material.uniforms)) {
-        const value = uniform.value as unknown;
-        if (typeof value === 'number') state.push(key, value);
-        else if (Array.isArray(value)) state.push(key, value.map(v => (v as THREE.Vector4).toArray()));
-      }
+    if (mesh.material instanceof THREE.ShaderMaterial) for (const [key, uniform] of Object.entries(mesh.material.uniforms)) state.push(key, value(uniform.value));
+    else if (mesh.material instanceof THREE.Material) state.push(mesh.material.name, mesh.material.opacity);
+    if ((object as THREE.InstancedMesh).isInstancedMesh) {
+      const instanced = object as THREE.InstancedMesh;
+      state.push(instanced.count, Array.from(instanced.instanceMatrix.array.slice(0, instanced.count * 16)), Array.from(instanced.instanceColor!.array.slice(0, instanced.count * 3)));
     }
     if ((object as THREE.Points).isPoints) {
       const { geometry } = object as THREE.Points, count = geometry.drawRange.count;
@@ -69,7 +70,7 @@ describe('Forge ritual presentation', () => {
       expect(h.piece.visible).toBe(false);
       expect(snapshot(new THREE.Group(), h.piece).slice(1)).toEqual(saved.slice(1));
       expect(h.root.children.length).toBe(owned);
-      expect((h.root.getObjectByName('forge-motes') as THREE.Points).geometry.drawRange.count).toBeLessThanOrEqual(MOTE_BUDGET.full);
+      expect((h.root.getObjectByName('forge-motes') as THREE.Points).geometry.drawRange.count).toBeLessThanOrEqual(MOTE_BUDGET.full.sparks);
       const g = uniform(h.root, 'forge-blueprint-body', 'uGlow');
       glow = [Math.min(glow[0]!, g), Math.max(glow[1]!, g)];
       expect(uniform(h.root, 'forge-blueprint-body', 'uReveal')).toBe(1);
@@ -84,8 +85,10 @@ describe('Forge ritual presentation', () => {
     const a = host(), b = host();
     const one = createForgeStage({ root: a.root, anvil: a.anvil, landing: a.landing, piece: a.piece }, environment());
     const two = createForgeStage({ root: b.root, anvil: b.anvil, landing: b.landing, piece: b.piece }, environment());
-    for (const t of [.4, 1.7, 2.9, 3.4, 4.2, 4.95]) {
-      for (let s = 0; s <= t; s += 1 / 60) one.update(forgeRitualFrame('ritual-a', s));
+    // One adapter plays through at 60 fps; the other only ever seeks, from a later moment and from cleared.
+    let played = 0;
+    for (const t of [.4, 1.7, 2.9, 3.4, 4.2, 4.95, 6.3, 9.9, 11.6, 12.3, 12.42, 13.1, 15, 16.2, 18.1, 18.9, 19.2, 20.5]) {
+      for (; played <= t; played += 1 / 60) one.update(forgeRitualFrame('ritual-a', played));
       one.update(forgeRitualFrame('ritual-a', t));
       two.update(forgeRitualFrame('ritual-a', 4.8)); two.update(null); two.update(forgeRitualFrame('ritual-a', t)); two.update(forgeRitualFrame('ritual-a', t));
       expect(snapshot(b.root, b.piece)).toEqual(snapshot(a.root, a.piece));
@@ -94,6 +97,7 @@ describe('Forge ritual presentation', () => {
     one.update(forgeRitualFrame('ritual-a', 1.2)); const early = snapshot(a.root, a.piece);
     one.update(forgeRitualFrame('ritual-a', 2.2)); expect(snapshot(a.root, a.piece)).not.toEqual(early);
     expect(shown(a.root)).toContain('forge-runes');
+    one.update(forgeRitualFrame('ritual-a', 12.42)); expect(shown(a.root)).toEqual(expect.arrayContaining(['forge-shell', 'forge-hammer', 'forge-flash', 'forge-seal', 'forge-motes']));
     one.dispose(); two.dispose();
   });
 
@@ -166,9 +170,95 @@ describe('Forge ritual presentation', () => {
     expect(traced.bounds.max.toArray()).toEqual([4.25, .375, .25]);
     expect(traced.positions.length).toBe(12 * 9);
     expect(traced.landings.length).toBe(4);
-    const root = new THREE.Group(), stage = createForgePresentation({ root, anvil: [0, 1.45, 0], landing: [4, 0, 0], piece });
+    const root = new THREE.Group(), stage = createForgePresentation({ root, anvil: [0, 1.45, 0], landing: [0, 0, 0], piece });
     stage.update(forgeRitualFrame('ritual-b', 4.6));
     expect(shown(root)).toContain('forge-blueprint');
     stage.dispose(); expect(root.children).toEqual([]);
+  });
+
+  it('never seals, strikes or lands while an observed gate holds an earlier stage', () => {
+    const h = host(), env = environment(), stage = createForgeStage({ root: h.root, anvil: h.anvil, landing: h.landing, piece: h.piece }, env);
+    const hammer = h.root.getObjectByName('forge-hammer')!, landingAt = h.piece.position.toArray();
+    for (let t = 11, step = 0; t <= 41; t += [.016, .5, .033, 2.7, .1][step++ % 5]!) {
+      // A live run whose pour finished but whose second gate has not answered.
+      stage.update(frame('pour', 1, t));
+      expect(shown(h.root)).not.toContain('forge-seal'); expect(shown(h.root)).not.toContain('forge-hammer');
+      expect(h.piece.visible).toBe(false);
+      // The same run, judged and sealed, waiting for the mint: the hammer waits raised; nothing strikes.
+      stage.update(frame('seal', 1, t));
+      expect(shown(h.root)).toContain('forge-seal'); expect(shown(h.root)).not.toContain('forge-flash');
+      expect(hammer.rotation.z).toBeGreaterThan(1.9);
+      expect(uniform(h.root, 'forge-shell', 'uFlash')).toBe(0);
+      expect(h.piece.visible).toBe(false); expect(h.piece.position.toArray()).toEqual(landingAt);
+      expect((h.root.getObjectByName('forge-motes') as THREE.Points).geometry.drawRange.count).toBe(0);
+    }
+    // Only a live seal may claim the realm; the local simulation never does.
+    stage.update(frame('seal', 1, 12)); expect(uniform(h.root, 'forge-seal', 'uLive')).toBe(1);
+    stage.update(forgeRitualFrame('ritual-a', 12)); expect(uniform(h.root, 'forge-seal', 'uLive')).toBe(0);
+    // The strike happens only when the strike is reported, and the flash only after the impact.
+    stage.update(frame('strike', IMPACT * .9, 12.4)); expect(shown(h.root)).not.toContain('forge-flash');
+    stage.update(frame('strike', IMPACT + .02, 12.4)); expect(shown(h.root)).toContain('forge-flash');
+    stage.dispose();
+  });
+
+  it('cools the real clone on the anvil, flies it home and lands it flush on its socket', () => {
+    const h = host(), stage = createForgeStage({ root: h.root, anvil: h.anvil, landing: h.landing, piece: h.piece }, environment());
+    const saved = { position: h.piece.position.clone(), quaternion: h.piece.quaternion.clone(), scale: h.piece.scale.clone() };
+    const world = () => h.piece.getWorldPosition(new THREE.Vector3());
+    stage.update(forgeRitualFrame('ritual-a', 13)); h.scene.updateMatrixWorld(true);
+    expect(h.piece.visible).toBe(true); expect(world().distanceTo(new THREE.Vector3(...h.landing))).toBeGreaterThan(5);
+    // Its world orientation on the anvil is already its socket orientation.
+    expect(h.piece.getWorldQuaternion(new THREE.Quaternion()).angleTo(h.piece.parent!.getWorldQuaternion(new THREE.Quaternion()).multiply(saved.quaternion))).toBeLessThan(1e-6);
+    let highest = -Infinity;
+    for (let t = 15.5; t < 15.5 + 3.5 * CONTACT; t += .05) { stage.update(forgeRitualFrame('ritual-a', t)); h.scene.updateMatrixWorld(true); highest = Math.max(highest, world().y); }
+    expect(highest).toBeGreaterThan(Math.max(h.landing[1], h.anvil[1]) + 2);
+    // Contact and the planted squash never sink the part's foot below the socket.
+    for (let t = 15.5 + 3.5 * CONTACT; t <= 21; t += .01) {
+      stage.update(forgeRitualFrame('ritual-a', t)); h.scene.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(h.piece), rest = new THREE.Box3();
+      h.piece.position.copy(saved.position); h.piece.quaternion.copy(saved.quaternion); h.piece.scale.copy(saved.scale); h.scene.updateMatrixWorld(true);
+      rest.setFromObject(h.piece);
+      stage.update(forgeRitualFrame('ritual-a', t));
+      expect(box.min.y).toBeGreaterThanOrEqual(rest.min.y - 1e-5);
+    }
+    stage.update(forgeRitualFrame('ritual-a', 19.5));
+    expect(h.piece.position.toArray()).toEqual(saved.position.toArray()); expect(h.piece.quaternion.toArray()).toEqual(saved.quaternion.toArray()); expect(h.piece.scale.toArray()).toEqual(saved.scale.toArray());
+    expect(h.piece.visible).toBe(true);
+    stage.dispose();
+  });
+
+  it('stays inside its particle and draw budgets on every frame, desktop and phone', () => {
+    for (const phone of [false, true]) {
+      const h = host(), stage = createForgeStage({ root: h.root, anvil: h.anvil, landing: h.landing, piece: h.piece }, environment(false, phone));
+      const budget = phone ? MOTE_BUDGET.phone : MOTE_BUDGET.full, cap = phone ? 80 : 192;
+      let draws = 0;
+      expect(budget.sparks + budget.dust).toBeLessThanOrEqual(cap);
+      for (let t = 0; t <= 21; t += 1 / 30) {
+        stage.update(forgeRitualFrame('ritual-a', t));
+        let meshes = 0;
+        h.root.traverseVisible(o => { if ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints) meshes++; });
+        draws = Math.max(draws, meshes);
+        expect((h.root.getObjectByName('forge-motes') as THREE.Points).geometry.drawRange.count).toBeLessThanOrEqual(budget.sparks);
+        expect((h.root.getObjectByName('forge-dust') as THREE.Points).geometry.drawRange.count).toBeLessThanOrEqual(budget.dust);
+      }
+      expect(draws).toBeLessThanOrEqual(phone ? DRAW_BUDGET.phone : 12);
+      let owned = 0; h.root.traverse(o => { if ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints) owned++; });
+      expect(owned).toBe(DRAW_BUDGET.owned);
+      stage.dispose();
+    }
+  });
+
+  it('dissolves home without a streak or flash when motion is reduced', () => {
+    const h = host(), stage = createForgeStage({ root: h.root, anvil: h.anvil, landing: h.landing, piece: h.piece }, environment(true));
+    const saved = h.piece.position.toArray();
+    for (let t = 12.2; t <= 21; t += 1 / 30) {
+      stage.update(forgeRitualFrame('ritual-a', t));
+      expect(shown(h.root)).not.toContain('forge-flash');
+      if (t >= 15.5) expect(shown(h.root)).not.toContain('forge-motes');
+      // Between the anvil and home the part is never in the air: it is at one or the other, or in light.
+      if (h.piece.visible && t >= 15.5 + 3.5 * .5) expect(h.piece.position.toArray()).toEqual(saved);
+    }
+    stage.update(forgeRitualFrame('ritual-a', 15.5 + 3.5 * .2)); expect(uniform(h.root, 'forge-shell', 'uMode')).toBe(2);
+    stage.dispose();
   });
 });

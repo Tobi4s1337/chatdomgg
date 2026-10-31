@@ -1,0 +1,92 @@
+/* The streamer's views: the panel's own wood, a page that can grow, parchment sheets with
+   carved switches, and the simulated panel beside them at its real size. */
+.cp.cp-config { position: relative; inset: auto; min-height: 100vh; gap: 12px; padding: 10px 10px 18px; }
+.cfg-head { grid-template-columns: auto 1fr auto; }
+.cfg-page { display: grid; gap: 14px; align-items: start; }
+.cfg-settings { display: grid; gap: 12px; min-width: 0; }
+
+.cfg-sheet { position: relative; display: grid; gap: 7px; padding: 10px 12px 12px; color: var(--ink); }
+.cfg-sheet::before { content: ''; position: absolute; inset: 0; z-index: -1; background: url('./assets/parchment.svg') 0 0 / 300px, var(--parch); filter: url(#cp-deckle) drop-shadow(0 2px 3px #000a); }
+.cfg-sheet:nth-child(2n)::before { background-position: 120px 60px, 0 0; }
+.cfg-sheet .cp-label { margin: 0; }
+.cp .cfg-title { margin: -2px 0 1px; font: 400 19px/1.1 'IM Fell English', Georgia, serif; letter-spacing: 0; color: #2e1e13; text-align: left; }
+.cfg-body { margin: 0; font-size: 13px; line-height: 1.35; color: #3b2a1e; }
+.cfg-fine { margin: 0; font: italic 400 11.5px/1.3 Alegreya, Georgia, serif; color: var(--ink-soft); }
+.cfg-simulated { color: #7a1d12; }
+.cfg-throne { padding: 0 4px; color: var(--text-soft); }
+
+.cfg-unavailable { margin: 0; display: grid; gap: 1px; padding: 6px 9px 7px; border-left: 3px solid var(--ink-red); background: #8b2a1d10; border-radius: 0 2px 2px 0; }
+.cfg-unavailable strong { font: 400 11.5px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .08em; color: var(--ink-red); }
+.cfg-unavailable span { font-size: 12.5px; line-height: 1.3; color: #4a3020; }
+.cfg-settings > .cfg-unavailable { color: var(--text); background: #1a110bcc; box-shadow: inset 0 0 0 1px #0007; border-left-color: #c4553f; }
+.cfg-settings > .cfg-unavailable strong { color: #f0a48c; }
+.cfg-settings > .cfg-unavailable span { color: var(--text-soft); }
+
+.cfg-rows { margin: 0; padding: 0; list-style: none; display: grid; border-top: 1px solid #a8885a66; }
+.cfg-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dotted #a8885a99; }
+.cfg-row-words { display: grid; gap: 1px; min-width: 0; }
+.cfg-row-words strong { font: 400 15px/1.1 'IM Fell English', Georgia, serif; color: #2e1e13; }
+.cfg-row-words small { font-size: 12px; line-height: 1.25; color: var(--ink-soft); }
+
+/* The lever: a brass knob in a wooden slot. Lit warm when on. */
+.cfg-lever { display: inline-grid; grid-template-columns: auto; justify-items: center; gap: 3px; min-width: 52px; min-height: 40px; padding: 3px 2px; border: 0; background: none; cursor: pointer; font: inherit; color: var(--ink-soft); }
+.cfg-slot { position: relative; width: 38px; height: 18px; border-radius: 9px; background: linear-gradient(#2a1b11, #4a3220); box-shadow: inset 0 1px 3px #000c, inset 0 -1px 0 #7a5a3a, 0 1px 0 #fff3d488; transition: background .2s; }
+.cfg-slot i { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 38% 32%, #fbe6b3, #c69a5c 55%, #6a4c2b); box-shadow: 0 1px 2px #000a, inset 0 -1px 0 #5a3d1f; transition: transform .18s cubic-bezier(.3, .7, .4, 1); }
+.cfg-lever[aria-checked='true'] .cfg-slot { background: linear-gradient(#5a3418, #b8742e); box-shadow: inset 0 1px 3px #000a, inset 0 0 8px #ffb35a66, 0 1px 0 #fff3d488; }
+.cfg-lever[aria-checked='true'] .cfg-slot i { transform: translateX(20px); }
+.cfg-lever-words { font: 400 11px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .07em; }
+.cfg-lever[aria-checked='true'] .cfg-lever-words { color: #2e1e13; }
+.cfg-lever:active .cfg-slot i { filter: brightness(.92); }
+.cfg-lever:disabled { cursor: default; opacity: .45; }
+
+.cfg-menu { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.cfg-item { width: 100%; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 42px; padding: 4px 6px 4px 4px; border: 0; border-radius: 3px; cursor: pointer; text-align: left; font: inherit; color: var(--ink); background: none; }
+.cfg-item:hover:not(:disabled) { background: #a8885a1f; }
+.cfg-item:disabled { cursor: default; }
+.cfg-menu.off .cfg-item { opacity: .45; }
+.cfg-tick { position: relative; width: 16px; height: 16px; border-radius: 2px; background: #f6ead0; box-shadow: inset 0 1px 2px #6a4c2b88, 0 0 0 1px #8f6a3f; }
+.cfg-item[aria-checked='true'] .cfg-tick::after { content: ''; position: absolute; left: 4px; top: 0; width: 6px; height: 11px; border: solid var(--ink-red); border-width: 0 2.4px 2.4px 0; transform: rotate(40deg); }
+.cfg-item-words { display: grid; gap: 1px; min-width: 0; }
+.cfg-item-words strong { font: 400 14.5px/1.1 'IM Fell English', Georgia, serif; color: #2e1e13; }
+.cfg-item-words small { font: italic 400 11.5px/1.2 Alegreya, Georgia, serif; color: var(--ink-soft); }
+.cfg-bits { display: grid; justify-items: end; font: 700 14px/1 Alegreya, Georgia, serif; color: #4c3218; font-variant-numeric: lining-nums; }
+.cfg-bits small { font: 400 10px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .08em; color: var(--ink-soft); }
+
+.cfg-hide-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 6px 0; border-block: 1px solid #a8885a66; }
+.cfg-hide .cfg-lever { min-width: 60px; }
+.cfg-hide .cfg-slot { width: 46px; height: 22px; border-radius: 11px; }
+.cfg-hide .cfg-slot i { width: 18px; height: 18px; }
+.cfg-hide .cfg-lever[aria-checked='true'] .cfg-slot { background: linear-gradient(#3a120c, #8b2a1d); box-shadow: inset 0 1px 3px #000c, 0 1px 0 #fff3d488; }
+.cfg-hide .cfg-lever[aria-checked='true'] .cfg-slot i { transform: translateX(24px); }
+.cfg-hide-state { margin: 0; font: italic 400 12.5px/1.3 Alegreya, Georgia, serif; color: #3b2a1e; }
+
+.cfg-preview { margin: 0; display: grid; gap: 7px; justify-items: center; }
+.cfg-preview-holder { position: relative; width: 100%; max-width: 318px; }
+.cfg-preview-scale { position: absolute; left: 0; top: 0; width: 318px; height: 496px; transform-origin: 0 0; box-shadow: 0 0 0 1px #0b0604, 0 6px 18px #000c; }
+.cfg-caption { max-width: 300px; text-align: center; font: italic 400 12px/1.3 Alegreya, Georgia, serif; color: var(--text-soft); }
+
+.cp-config :focus-visible { outline: 2px solid var(--ink-red); outline-offset: 2px; border-radius: 3px; }
+.cp-config .cfg-preview :focus-visible { outline-color: var(--glow); }
+.cp-config .cfg-preview .cp-drawer :focus-visible, .cp-config .cfg-preview .cp-slip :focus-visible { outline-color: var(--ink-red); }
+
+/* Phones: room for the thumb. */
+@media (min-width: 340px) {
+  .cp.cp-config { padding: 14px 14px 22px; }
+  .cfg-lever, .cfg-item { min-height: 46px; }
+  .cfg-body, .cfg-unavailable span { font-size: 14px; }
+  .cfg-row-words strong { font-size: 16.5px; }
+  .cfg-row-words small { font-size: 13px; }
+  .cfg-item-words strong { font-size: 15.5px; }
+  .cfg-lever-words { font-size: 12px; }
+}
+/* Twitch's wide configuration page: the settings beside the panel they shape. */
+@media (min-width: 720px) {
+  .cfg-page { grid-template-columns: minmax(0, 1fr) 318px; gap: 22px; }
+  .cfg-preview { position: sticky; top: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cfg-slot, .cfg-slot i { transition: none; }
+}
+/* The streamer's title stays one line beside the source mark, at the panel's own narrowest width. */
+.cp .cfg-head .cp-name { display: block; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 340px) { .cp .cfg-head .cp-name { font-size: 23px; } }

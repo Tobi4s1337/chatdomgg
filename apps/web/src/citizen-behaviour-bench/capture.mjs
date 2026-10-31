@@ -4,8 +4,10 @@
 //              (look → gesture → settle; walker takeover; departure);
 //   routine  — street, market and home frames at web sizes, a midday grounding frame, one timed routine
 //              sheet through a complete stroll, and the closed-market branch;
+//   chat     — a witnessed line at web sizes and midday, a timed look sheet (lift → nod → two staggered looks →
+//              settle), the no-storm burst frame and sheet, walker takeover and reconnect sheets;
 //   town     — the 240-slot town at dusk, from above and in a lane.
-//   node apps/web/src/citizen-behaviour-bench/capture.mjs --base-url http://127.0.0.1:5196 [--only greeting,routine,town]
+//   node apps/web/src/citizen-behaviour-bench/capture.mjs --base-url http://127.0.0.1:5196 [--only greeting,routine,chat,town]
 // Without --base-url it starts its own preview (port from CHATDOM_BEHAVIOUR_PORT, default any free port).
 import { chromium } from '@playwright/test';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -15,7 +17,7 @@ import { startCapturePreview, closeCapturePreview } from '../../../../packages/t
 
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i < 0 ? undefined : args[i + 1]; };
-const only = new Set((option('--only') ?? 'greeting,routine,town').split(','));
+const only = new Set((option('--only') ?? 'greeting,routine,chat,town').split(','));
 const root = fileURLToPath(new URL('../../../..', import.meta.url));
 const output = `${root}shots/citizen-behaviour`;
 const escape = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
@@ -142,6 +144,53 @@ try {
       { t: refused.from + .4, label: 'route refused' }, { t: (refused.from + refused.to) / 2, label: 'resting where they stand' },
       { t: instead.from + 1.6, label: 'a stroll instead' }, { t: beat(closed, 'rest', 1).from + .4, label: 'home again' },
     ], 'the market closed (simulated reserved action)', describe);
+  }
+
+  if (only.has('chat')) {
+    const lineOf = async scenario => {
+      const page = await open({ t: '0', frame: 'still', scenario }, 320, 240);
+      const { chat } = await report(page);
+      await page.close();
+      console.log(`[capture] ${scenario}: slot ${chat.speaker} · nod ${chat.nod.toFixed(2)}–${chat.nodEnd.toFixed(2)} s · listeners ${chat.listeners.map(l => `${l.slot}@${l.at.toFixed(2)}`).join(', ') || 'none'} · ${chat.reactions}/${chat.lines} lines turned heads · ${chat.outcomes.map(o => `${o.id.replace('simulated-', '')}:${o.outcome}`).join(' ')}`);
+      return chat;
+    };
+    const heads = current => {
+      const { chat } = current, of = slot => current.overlays.find(o => o.slot === slot);
+      const speaker = of(chat.speaker), parts = [`speaker ${speaker ? `${speaker.gesture === 'none' ? 'still' : speaker.gesture} · yaw ${speaker.lookYaw.toFixed(2)}` : 'no overlay'}`];
+      for (const listener of chat.listeners) { const o = of(listener.slot); parts.push(`${listener.slot}: ${o ? `yaw ${o.lookYaw.toFixed(2)}` : 'at rest'}`); }
+      return `${parts.join(' · ')} · ${current.bubbles} bubble${current.bubbles === 1 ? '' : 's'}`;
+    };
+    const line = await lineOf('chat'), [first, second] = line.listeners;
+    const bothLook = second ? (second.at + Math.min(first.out, second.out)) / 2 + .2 : (first.at + first.out) / 2;
+    const looking = current => { if (!current.overlays.some(o => o.slot === first.slot && Math.abs(o.lookYaw) > .15)) throw new Error('The first listener is not looking at the speaker.'); };
+    for (const [width, height] of [[1440, 900], [390, 844]]) for (const hour of width === 1440 ? ['19', '12'] : ['19']) {
+      await frame(`chat-${hour === '12' ? 'midday' : 'dusk'}`, { scenario: 'chat', t: String(bothLook), hour, view: 'doorstep' }, width, height, looking);
+    }
+    await sheet('chat', { scenario: 'chat', view: 'doorstep' }, [
+      { t: line.start - .5, label: 'at ease' }, { t: (line.start + line.nod) / 2, label: 'the speaker lifts' }, { t: line.nod + .26, label: 'nod' },
+      { t: first.at + .22, label: 'a neighbour turns' }, { t: (second ?? first).at + .3, label: second ? 'the second turns' : 'looking' },
+      { t: bothLook, label: 'both look' }, { t: Math.max(first.out, second?.out ?? 0) + .25, label: 'settling' }, { t: line.end + .3, label: 'at ease' },
+    ], 'a line in chat · lift, nod, staggered looks, settle', heads);
+
+    const burst = await lineOf('burst');
+    const crowd = current => { if (current.chat.reactions > 2) throw new Error(`A burst turned ${current.chat.reactions} lines into reactions.`); };
+    for (const [width, height] of [[1440, 900], [390, 844]]) await frame('burst-dusk', { scenario: 'burst', t: String(burst.nod + .5), view: 'doorstep' }, width, height, crowd);
+    await frame('burst-street-dusk', { scenario: 'burst', t: String(burst.nod + .5), view: 'street' }, 1440, 900, crowd);
+    await sheet('burst', { scenario: 'burst', view: 'doorstep' }, [
+      { t: burst.start - .3, label: 'before' }, { t: burst.nod + .2, label: 'six lines arrive' }, { t: burst.nod + .9, label: 'a second reaction' }, { t: burst.end + .3, label: 'settled' },
+    ], `a burst · ${burst.reactions} of ${burst.lines} lines turn heads`, heads);
+
+    const walker = await lineOf('chat-walker'), watcher = walker.listeners[0];
+    await sheet('chat-walker', { scenario: 'chat-walker', view: 'doorstep' }, [
+      { t: walker.nod + .15, label: 'nod begins' }, { t: walker.cut + .1, label: 'walker control' },
+      { t: (watcher.at + watcher.out) / 2, label: 'neighbours still look' }, { t: walker.end + .3, label: 'settled' },
+    ], 'the speaker comes under walker control (simulated)', heads);
+
+    const reconnect = await lineOf('reconnect'), heard = reconnect.listeners[0];
+    await sheet('reconnect', { scenario: 'reconnect', view: 'doorstep' }, [
+      { t: heard.at + .45, label: 'neighbours look' }, { t: reconnect.cut - .05, label: 'source drops' },
+      { t: reconnect.cut + .05, label: 'reconnected · reset' }, { t: reconnect.cut + 1.5, label: 'line not replayed' },
+    ], 'a reconnect mid-look (simulated)', heads);
   }
 
   if (only.has('town')) {

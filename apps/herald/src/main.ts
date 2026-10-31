@@ -15,6 +15,7 @@ import { repositoryRoot, startLiveSource } from './source/live';
 import { startPresenceServer } from './source/server';
 import { playScenario, SCENARIO_NOTES, SCENARIOS, SIMULATED_KINGDOM, type ScenarioName } from './source/simulation';
 import { PresenceSource } from './source/source';
+import { configuredRealmDelivery } from './realm-delivery/config';
 
 const USAGE = [
   'Usage: herald <command>',
@@ -113,8 +114,12 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (command === 'dev') {
     const config = await loadConfig();
     if (portRefused(config)) return 2;
-    const handle = await startLiveSource({ config, print });
-    return untilSignal(handle.stop);
+    const realm = await configuredRealmDelivery(config, repositoryRoot());
+    try {
+      const handle = await startLiveSource({ config, print, ...(realm ? { realm } : {}) });
+      if (realm) print('  signed Realm delivery configured; normalized evidence durable, speech and wishes transient');
+      return await untilSignal(async () => { await handle.stop(); await realm?.close(); });
+    } catch (error) { await realm?.close(); throw error; }
   }
 
   if (command === 'replay') {

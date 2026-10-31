@@ -62,20 +62,12 @@ export function fitSunShadowCamera(
 // Manual depth comparison works with WebGL2's core depth texture support. Receiver-plane
 // depth correction prevents the PCF taps from mistaking a sloping roof for its own shadow.
 const receiverGLSL = /* glsl */ `
+#define SUN_SHADOW_RECEIVER 1
 uniform sampler2D uSunShadowMap;
 uniform mat4 uSunShadowMatrix;
 uniform vec2 uSunShadowTexel;
 uniform float uSunShadowEnabled, uSunShadowBias, uSunShadowNormalBias, uSunShadowSoft;
-float sunShadowVisibility(vec3 world, vec3 normal) {
-  if (uSunShadowEnabled <= 0.0) return 1.0;
-  vec4 projected = uSunShadowMatrix * vec4(world + normal * uSunShadowNormalBias, 1.0);
-  vec3 p = projected.xyz / projected.w;
-  vec3 dx = dFdx(p), dy = dFdy(p);
-  float determinant = dx.x * dy.y - dx.y * dy.x;
-  vec2 gradient = abs(determinant) > 1e-10
-    ? vec2(dy.y * dx.z - dx.y * dy.z, dx.x * dy.z - dy.x * dx.z) / determinant
-    : vec2(0.0);
-  gradient = clamp(gradient, vec2(-10.0), vec2(10.0));
+float sunShadowTaps(vec3 p, vec2 gradient) {
   if (any(lessThanEqual(p, vec3(0.0))) || any(greaterThanEqual(p, vec3(1.0)))) return 1.0;
   vec2 texelPosition = p.xy / uSunShadowTexel - 0.5;
   vec2 base = floor(texelPosition), f = fract(texelPosition);
@@ -87,14 +79,52 @@ float sunShadowVisibility(vec3 world, vec3 normal) {
     if (uSunShadowSoft < 0.5) { wx = x == 0 ? 1.0 - f.x : f.x; wy = y == 0 ? 1.0 - f.y : f.y; }
     vec2 uv = (base + vec2(float(x), float(y)) + 0.5) * uSunShadowTexel;
     float receiver = p.z + dot(gradient, uv - p.xy) - uSunShadowBias;
-    float sampleDepth = texture(uSunShadowMap, uv).r;
+    float sampleDepth = textureLod(uSunShadowMap, uv, 0.0).r;
     float weight = wx * wy;
     visible += step(receiver, sampleDepth) * weight;
     total += weight;
   }
   return mix(1.0, visible / max(total, 0.001), uSunShadowEnabled);
 }
+float sunShadowVisibility(vec3 world, vec3 normal) {
+  if (uSunShadowEnabled <= 0.0) return 1.0;
+  vec4 projected = uSunShadowMatrix * vec4(world + normal * uSunShadowNormalBias, 1.0);
+  vec3 p = projected.xyz / projected.w;
+  vec3 dx = dFdx(p), dy = dFdy(p);
+  float determinant = dx.x * dy.y - dx.y * dy.x;
+  vec2 gradient = abs(determinant) > 1e-10
+    ? vec2(dy.y * dx.z - dx.y * dy.z, dx.x * dy.z - dy.x * dx.z) / determinant
+    : vec2(0.0);
+  return sunShadowTaps(p, clamp(gradient, vec2(-10.0), vec2(10.0)));
+}
+// A point in open air, not on a surface: no receiver plane and no derivatives, so it is safe in a branch.
+// Receivers use it to ask whether far casters shade the air just outside an opening they see the sun through.
+float sunShadowInAir(vec3 world) {
+  if (uSunShadowEnabled <= 0.0) return 1.0;
+  vec4 projected = uSunShadowMatrix * vec4(world, 1.0);
+  return sunShadowTaps(projected.xyz / projected.w, vec2(0.0));
+}
 `;
+
+/**
+ * Depth-only casters. A voxel clay material (and any material sharing its uniforms) names its glass surface kind;
+ * glass then lets the sun through to the floor behind it, while its frame and every opaque wall still cast.
+ */
+function casterFragment(material: THREE.ShaderMaterial): string {
+  // A derived material with its own vertex transform and no material varying casts as plain depth.
+  if (!('uGlassKind' in material.uniforms) || !('uPalette' in material.uniforms) || !/flat out uint vMaterial\b/.test(material.vertexShader)) {
+    return 'out vec4 unusedColour; void main(){ unusedColour = vec4(1.0); }';
+  }
+  return `precision highp float;
+uniform sampler2D uPalette;
+uniform float uGlassKind;
+flat in uint vMaterial;
+out vec4 unusedColour;
+void main(){
+  if (abs(texelFetch(uPalette, ivec2(int(vMaterial & 255u), int(vMaterial >> 8u)), 0).a - uGlassKind) < 0.5) discard;
+  unusedColour = vec4(1.0);
+}`;
+}
 
 /**
  * One cached map for this bounded kingdom. Register the chosen static detail mesh BEFORE
@@ -194,7 +224,7 @@ export function createSunShadows(renderer: THREE.WebGLRenderer, options: SunShad
         material = new THREE.ShaderMaterial({
           glslVersion: THREE.GLSL3, uniforms: mesh.material.uniforms,
           vertexShader: mesh.material.vertexShader,
-          fragmentShader: 'out vec4 unusedColour; void main(){ unusedColour = vec4(1.0); }',
+          fragmentShader: casterFragment(mesh.material),
           defines: { ...mesh.material.defines }, side: THREE.DoubleSide, colorWrite: false,
           depthWrite: true, depthTest: true, blending: THREE.NoBlending, toneMapped: false,
         });

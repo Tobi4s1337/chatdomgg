@@ -13,7 +13,7 @@ export function foundedContent(scene: RealmFoundedScene) {
     const blueprint = assets.get(placement.assetHash);
     if (!blueprint || ids.has(placement.id)) throw new Error('The founded scene has an unresolved placement');
     ids.add(placement.id);
-    const placed = { blueprint, position: placement.position, yaw: placement.rotation * Math.PI / 2, assetHash: placement.assetHash };
+    const placed = { blueprint, position: placement.position, yaw: placement.rotation * Math.PI / 2, assetHash: placement.assetHash, placementId: placement.id };
     const plot = placement.plotId ? plots.get(placement.plotId) : undefined;
     if (placement.plotId && !plot) throw new Error('The founded scene references an unknown plot');
     // Attachments may share a plot with its home; only the home supplies the presence windows.

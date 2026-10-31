@@ -1,8 +1,8 @@
 import { WALK_BODY } from '@chatdom/shared/realm';
 
 /**
- * Rendered easing of half-metre steps. Presentation only: it reads the predicted feet height after the shared
- * step has run and never feeds anything back into it, so the authoritative body stays exactly where collision
+ * Rendered easing of half-metre steps. Presentation only: it reads the SDK interpolated render feet height after prediction
+ * has ticked and never feeds anything back into it, so the authoritative body stays exactly where collision
  * put it. Jumps, falls and landings are not steps and pass through untouched.
  *
  * - The camera follows a step over `cameraSeconds` both ways, with its lag bounded to one step, so stairs and
@@ -14,7 +14,7 @@ import { WALK_BODY } from '@chatdom/shared/realm';
 export const STEP_EASE = { bodySeconds: .07, cameraSeconds: .1, cameraLag: 2 * WALK_BODY.stepHeight } as const;
 
 export interface StepEaseHeights {
-  /** Rendered feet height for the walker's own avatar. Never below the predicted feet. */
+  /** Rendered feet height for the walker's own avatar. Never below the render feet. */
   readonly body: number;
   /** Feet height the player camera should follow; its offset from the feet is within one step. */
   readonly camera: number;
@@ -22,7 +22,7 @@ export interface StepEaseHeights {
 
 export interface StepEase {
   /**
-   * Once per rendered frame with the predicted feet height, whether the shared step reported support and the
+   * Once per rendered frame with the render feet height, whether the shared step reported support and the
    * frame's render time in seconds. A grounded-to-grounded change of at most `WALK_BODY.stepHeight` is a step.
    */
   update(y: number, grounded: boolean, dtSeconds: number): StepEaseHeights;

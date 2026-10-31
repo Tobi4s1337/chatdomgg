@@ -62,11 +62,16 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
     if (!parsed.success) return { kind: 'held' };
     const command = parsed.data, authority = options.authority;
     if (!authority) return { kind: 'cold' };
+    // Capture the authority's identity for this run. A wish, a real model call or a live channel cannot
+    // turn a simulated room into a live attachment. Older bindings must supply their room's origin.
+    const origin = authority.origin;
+    if (origin !== 'live' && origin !== 'simulated') return { kind: 'cold' };
     if (incoming.signal.aborted || !incoming.current()) return { kind: 'canceled' };
     const attempt: ForgeAttempt = {
       key: `forge-chat-${digest([command.kingdomId, command.messageId])}`, attemptId: `attempt-${randomUUID()}`,
     };
-    const activityId = `forge-activity-${randomUUID()}`;
+    // The durable commit already carries this opaque run attempt. Keep one identity from first rune to landing.
+    const activityId = attempt.attemptId;
     const abort = new AbortController();
     const signal = AbortSignal.any([incoming.signal, abort.signal]);
     let reservation: ForgeReservation | undefined;
@@ -136,7 +141,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
           version: 1, id: approval.runId, runId: approval.runId, kingdomId: command.kingdomId, slot: reservation.slot,
           hostId: request.home.id, hostFingerprint: fingerprint, socketId: socket.id, origin: [...socket.origin],
           kitId: assembled.kit.id, kitRevision: assembled.kit.revision, family: request.family, draft: approval.draft,
-          provenance: { source: 'live', makerName: attribution.makerName, kingdomName: attribution.kingdomName,
+          provenance: { source: origin, makerName: attribution.makerName, kingdomName: attribution.kingdomName,
             designId: `forge-design-${digest([command.kingdomId, approval.runId])}` },
         };
         checkCurrent();

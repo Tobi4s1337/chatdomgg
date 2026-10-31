@@ -1,3 +1,4 @@
+import type { CitizenChatCue } from '@chatdom/shared';
 import type { CitizenDestination, CitizenGoalRequest, CitizenGoalResult, CitizenMotionSample } from '../citizens/types';
 
 /** One fixed policy step. Everything here is public, local presentation input. */
@@ -18,6 +19,46 @@ export interface CitizenBehaviourInput {
   readonly destinationsFor: (slot: number) => readonly CitizenDestination[];
   /** Main's actual answers to the goals this policy returned in the previous step. */
   readonly answers?: readonly CitizenGoalAnswer[];
+  /**
+   * Main's sanitized chat cues (`CitizenChatCueSchema`-validated). Passing the same cues again on
+   * later steps is safe: each ID is decided once. Only identity, source, slot and timing are read.
+   */
+  readonly cues?: readonly CitizenChatCueSignal[];
+}
+
+/**
+ * The fields of a `CitizenChatCue` this policy may read. The words (`parts`) are not part of the
+ * type, and the policy keeps none of the cue object: only these fields are copied.
+ */
+export type CitizenChatCueSignal = Pick<CitizenChatCue, 'id' | 'kingdomId' | 'epoch' | 'origin' | 'slot' | 'asOf' | 'expiresAt'>;
+
+/** What became of one cue at a step. Slots and IDs only. */
+export interface CitizenCueNote {
+  readonly id: string;
+  readonly slot: number;
+  readonly atMs: number;
+  /**
+   * `reacted` turned heads; `coalesced` the speaker is already in a reaction or resting from one;
+   * `crowded` a reaction is already under way nearby or too many are; `duplicate` this ID was decided;
+   * `expired`, `stale` (said before this body was present or first seen too late), `foreign` (another
+   * kingdom, epoch or origin) and `absent` (no present body for the slot) are discarded.
+   */
+  readonly outcome: 'reacted' | 'coalesced' | 'crowded' | 'duplicate' | 'expired' | 'stale' | 'foreign' | 'absent';
+}
+
+/** A chat line's reaction: one finite nod for its speaker and a short look from at most two neighbours. */
+export interface CitizenChatReaction {
+  readonly cueId: string;
+  readonly origin: 'live' | 'simulated';
+  readonly speaker: number;
+  /** False once the speaker is under walker, royal or reserved control: they are looked at, never posed. */
+  readonly speakerNods: boolean;
+  readonly startMs: number;
+  readonly nodAtMs: number;
+  readonly nodEndMs: number;
+  /** Staggered looks toward the speaker; each eases in at `atMs`, holds, and is back at rest at `endMs`. */
+  readonly listeners: readonly { readonly slot: number; readonly atMs: number; readonly outAtMs: number; readonly endMs: number }[];
+  readonly endMs: number;
 }
 
 /** One goal the caller forwarded to `motion.requestGoal`, and main's actual result. */
@@ -92,6 +133,11 @@ export interface CitizenBehaviourStep {
   readonly transitions: readonly CitizenRoutineTransition[];
   /** Every supplied person's routine after this step, by slot. */
   readonly routines: readonly CitizenRoutineView[];
+  /** Chat reactions active after this step, and those that began in it. */
+  readonly reactions: readonly CitizenChatReaction[];
+  readonly reacted: readonly CitizenChatReaction[];
+  /** The outcome of every cue decided in this step. */
+  readonly cues: readonly CitizenCueNote[];
 }
 
 export interface CitizenBehaviourStats {
@@ -104,6 +150,10 @@ export interface CitizenBehaviourStats {
   readonly claims: number;
   /** Goals awaiting main's answer. */
   readonly pending: number;
+  /** Active chat reactions; cue IDs retained until they expire; cues waiting for their time or a stagger. */
+  readonly reactions: number;
+  readonly cuesSeen: number;
+  readonly cuesWaiting: number;
 }
 
 export interface CitizenBehaviours {

@@ -13,7 +13,7 @@ export interface SourceHost {
   readonly current: SourceFrame | null;
   subscribe(listener: SourceListener): () => void;
   /** A running live source adds observed stream/Chatters state and delivery health (shard, coverage, redacted counters). */
-  health(): SourceHealth | UnstartedHealth | (SourceHealth & { readonly observed?: unknown; readonly delivery?: unknown });
+  health(): SourceHealth | UnstartedHealth | (SourceHealth & { readonly observed?: unknown; readonly delivery?: unknown; readonly realm?: unknown });
 }
 
 /** Health of a source that could not start (no kingdom resolved, no authority): reasons, never details. */

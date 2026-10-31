@@ -4,12 +4,12 @@ import { WALK_BUTTON, type CollisionWorld, type PlayerState, type SolidBox, type
 import type { RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkRealm } from './index';
 
-const hudInput = vi.hoisted(() => ({ jump: undefined as (() => void) | undefined }));
+const hudInput = vi.hoisted(() => ({ jump: undefined as (() => void) | undefined, look: undefined as ((event: MouseEvent) => void) | undefined }));
 vi.mock('./input/hud', async importOriginal => ({
   ...await importOriginal<typeof import('./input/hud')>(),
-  createWalkHud: (_container: HTMLElement, jump: () => void) => {
-    hudInput.jump = jump;
-    return { update() {}, dispose() { hudInput.jump = undefined; } };
+  createWalkHud: (_container: HTMLElement, jump: () => void, look: (event: MouseEvent) => void) => {
+    hudInput.jump = jump; hudInput.look = look;
+    return { update() {}, dispose() { hudInput.jump = undefined; hudInput.look = undefined; } };
   },
 }));
 
@@ -144,6 +144,53 @@ describe('the walk controller', () => {
     expect(sent.at(-1)).toMatchObject({ moveZ: -127 });
   });
 
+  it('comes back from a Forge or build camera to the normal walking view and walks on the first frame', () => {
+    const solids: SolidBox[] = [{ min: [-20, -1, -20], max: [20, 0, 20] }];
+    const { controller, keyboard, camera, sent } = setup(1440, 900, undefined, { revision: 7, query: () => solids });
+    controller.frame(0);
+    const entry = { position: camera.position.clone(), fov: camera.fov, filmOffset: camera.filmOffset };
+    key(keyboard, 'keydown', 'KeyW'); key(keyboard, 'keydown', 'Space');
+    controller.frame(16);
+    controller.release();
+    // The Forge composes its own shot with a view offset and fov; walking leaves both alone while it owns them.
+    camera.position.set(0, 3, 8); camera.fov = 43;
+    camera.setViewOffset(1440, 900, -105, 15, 1440, 900);
+    const escape = Object.assign(new Event('keydown', { cancelable: true }), { code: 'Escape', repeat: false, ctrlKey: false, metaKey: false, altKey: false });
+    keyboard.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(false);
+    controller.frame(32);
+    expect([camera.position.toArray(), camera.fov, camera.view?.enabled]).toEqual([[0, 3, 8], 43, true]);
+    expect(controller.selfOpacity).toBe(1);
+    // Its close forgot the view offset. The first walking frame is the ordinary view all the same.
+    controller.resume();
+    controller.frame(48);
+    expect(camera.view?.enabled ?? false).toBe(false);
+    expect(camera.position.distanceTo(entry.position)).toBeLessThan(.05);
+    expect([camera.fov, camera.filmOffset]).toEqual([entry.fov, entry.filmOffset]);
+    expect(controller.debug.screen!.x).toBeLessThan(1440 * .4);
+    // W and Space are still down from before the Forge opened: the key's own repeat walks on at once,
+    // and the held Space never becomes a second jump.
+    key(keyboard, 'keydown', 'KeyW', true); key(keyboard, 'keydown', 'Space', true);
+    controller.frame(64);
+    expect(sent.at(-1)).toMatchObject({ moveZ: -127, buttons: 0 });
+  });
+
+  it('hands a first-person walker back to another camera whole, and takes first person back at once', () => {
+    const { controller, surface } = setup();
+    controller.frame(0);
+    for (let n = 1; n <= 120; n++) {
+      surface.dispatchEvent(Object.assign(new Event('wheel', { cancelable: true }), { deltaY: -240, deltaMode: 0 }));
+      controller.frame(n * 16);
+    }
+    expect([controller.debug.camera.distance, controller.selfOpacity]).toEqual([0, 0]);
+    // The director or the Forge looks at the citizen: it must be drawn.
+    controller.release();
+    expect(controller.selfOpacity).toBe(1);
+    controller.resume();
+    controller.frame(2000);
+    expect([controller.debug.camera.distance, controller.selfOpacity]).toEqual([0, 0]);
+  });
+
   it('follows the given entry heading and resets to it', () => {
     const { controller, camera } = setup(390, 844, Math.PI / 2);
     controller.frame(0);
@@ -191,9 +238,9 @@ describe('the walk controller', () => {
 
   it('turns a fixed angle per locked mouse pixel, gathering a whole slow frame', () => {
     const turn = (width: number, height: number) => {
-      const { controller, keyboard, mouse, clock } = setup(width, height);
+      const { controller, mouse, clock } = setup(width, height, undefined, true);
       controller.frame(0);
-      key(keyboard, 'keydown', 'KeyV');
+      hudInput.look!({ type: 'click', isTrusted: true, detail: 1 } as MouseEvent);
       expect(controller.debug.look).toBe('locked');
       const start = controller.debug.camera.yaw;
       clock.now = 50; mouse(50, 0); // inside the settle window: ignored
@@ -212,10 +259,11 @@ describe('the walk controller', () => {
   });
 
   it('lets go of held keys, a pending jump, the stick and the lock on a dropped connection, a hidden page and a menu', () => {
-    const { controller, keyboard, page, touch, onDrop, onLeave, lockDocument, sent } = setup();
+    const { controller, keyboard, page, touch, onDrop, onLeave, lockDocument, sent } = setup(1440, 900, undefined, true);
     controller.frame(0);
     const holdAll = () => {
-      key(keyboard, 'keydown', 'KeyW'); key(keyboard, 'keydown', 'Space'); key(keyboard, 'keydown', 'KeyV');
+      key(keyboard, 'keydown', 'KeyW'); key(keyboard, 'keydown', 'Space');
+      hudInput.look!({ type: 'click', isTrusted: true, detail: 1 } as MouseEvent);
       touch('pointerdown', 1, 200, 800); touch('pointermove', 1, 200, 740);
     };
     const still = (now: number) => {
@@ -279,6 +327,25 @@ describe('the walk controller', () => {
     expect(controller.debug.camera.clearance).toBeNull();
   });
 
+  it('does not inject an exact 30 Hz height change before SDK rendered feet begin moving', () => {
+    const { controller, camera, fake, self } = setup();
+    const predicted: PlayerState = { x: self.x, y: 0, z: self.z, vx: 0, vy: 0, vz: 0, grounded: true, yaw: self.yaw, distance: 0, collisionRevision: 7 };
+    Object.defineProperty(fake, 'predicted', { value: predicted });
+    controller.frame(0); controller.frame(1000 / 360);
+    const cameraY = camera.position.y;
+    // A fixed tick climbs, while interpolation still draws the previous endpoint. Both presentation consumers
+    // must stay on that endpoint; the exact state only supplies grounded/revision decisions.
+    predicted.y = .5;
+    const drawn = controller.frame(2000 / 360).find(p => p.self)!;
+    expect(drawn.y).toBe(0);
+    expect(camera.position.y).toBeCloseTo(cameraY, 12);
+    self.y = .5 / 12;
+    controller.frame(3000 / 360);
+    expect(controller.debug.self!.y).toBe(self.y);
+    expect(camera.position.y).toBeGreaterThanOrEqual(cameraY);
+    controller.dispose();
+  });
+
   it('eases a predicted step down without moving collision feet or drawing the head into the next lintel', () => {
     const lintel: SolidBox = { min: [2.5, 1.8, 8], max: [4, 3, 10] };
     const collision: CollisionWorld = { revision: 7, query: () => [lintel] };
@@ -310,7 +377,7 @@ describe('the walk controller', () => {
     const clearInput = vi.fn(); Object.assign(fake, { clearInput });
     controller.frame(0);
     key(keyboard, 'keydown', 'KeyW');
-    key(keyboard, 'keydown', 'KeyV');
+    hudInput.look!({ type: 'click', isTrusted: true, detail: 1 } as MouseEvent);
     touch('pointerdown', 1, 90, 700); touch('pointermove', 1, 90, 600);
     hudInput.jump!();
     keyboard.dispatchEvent(new Event(event, { cancelable: true }));

@@ -1,4 +1,7 @@
 import type { Component } from 'solid-js';
+import { KingdomIdSchema } from '@chatdom/shared';
+import { REALM_ENTRY_ROUTE, RealmEntryInfoSchema, RealmApiErrorSchema } from '@chatdom/shared/realm';
+import type { KingdomEntrySource } from './kingdom-entry/types';
 import { render } from 'solid-js/web';
 import './style.css';
 
@@ -32,6 +35,34 @@ if (window.location.pathname === '/-/realm') {
 } else if (/^\/map(?:\/|$)/.test(window.location.pathname) && loadAtlas) {
   const module = await loadAtlas();
   render(() => <module.default />, root);
+} else if (new URLSearchParams(location.search).get('walk') === '1') {
+  const [{ default: KingdomEntry }, { openSimulatedKingdomEntry }, { createLiveKingdomEntrySource }, { RealmEntryError }] = await Promise.all([
+    import('./kingdom-entry'), import('./kingdom-entry/simulated'), import('./kingdom-entry/live'), import('./realm/adapters/entry'),
+  ]);
+  const query = new URLSearchParams(location.search);
+  let checkedLiveSource: KingdomEntrySource | undefined;
+  const live: KingdomEntrySource = async signal => {
+    if (checkedLiveSource) return checkedLiveSource(signal);
+    const kingdom = KingdomIdSchema.safeParse(query.get('kingdom'));
+    if (!kingdom.success) throw new RealmEntryError('refused', 'Choose a kingdom to visit from the Atlas.');
+    const response = await fetch(REALM_ENTRY_ROUTE.replace(':kingdomId', encodeURIComponent(kingdom.data)), {
+      signal, credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' },
+    });
+    const body: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = RealmApiErrorSchema.safeParse(body);
+      throw new RealmEntryError(error.success ? error.data.status : response.status === 401 ? 'unauthenticated' : 'unavailable',
+        error.success ? error.data.message : response.status === 401 ? 'Sign in with Twitch to walk into this kingdom.' : 'The kingdom’s gate cannot be reached right now.');
+    }
+    const info = RealmEntryInfoSchema.safeParse(body);
+    if (!info.success || info.data.kingdomId !== kingdom.data || info.data.origin !== 'live') {
+      throw new RealmEntryError('unavailable', 'The kingdom’s approved name is not available yet.');
+    }
+    checkedLiveSource = createLiveKingdomEntrySource({ kingdomId: kingdom.data, kingdomName: info.data.name,
+      endpoint: `${location.origin}/live-realm-data` });
+    return checkedLiveSource(signal);
+  };
+  render(() => <KingdomEntry open={query.get('source') === 'simulated' ? openSimulatedKingdomEntry : live} />, root);
 } else {
   if(window.location.pathname==='/panel') {
     render(() => <App />, root);

@@ -27,7 +27,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
 
 ## Tasks
 
-- [ ] **KL01 — One real people-lit helper for every place.**
+- [x] **KL01 — One real people-lit helper for every place.**
   Implement `createPeopleLight` in `lights/people-light.ts` using main's actual types. No three.js, civic, land,
   scene, clock or presence-source dependency. Validate input, use caller-space positions, rise/hold/fade, bounded
   pilot/full/capacity, source reuse and `clear()`. Explicit history: same-time calls are idempotent; reverse seek
@@ -36,7 +36,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   Commit this task alone so places-high, places-water and home-interiors can consume its accepted implementation.
   **Evidence:** trace test output, exact import/call recipe and no copied stand-ins.
 
-- [ ] **KL02 — A blue noon and an indigo dusk.**
+- [x] **KL02 — A blue noon and an indigo dusk.**
   Author coherent sky, sun, cloud, ambient, shadow tint, hour-dependent fog and exposure. Noon is clear blue with
   white broken clouds; dusk has lilac sky, gold rims and indigo shadows; night stays cool around warm people.
   Restrain the daylight beacon to its crown. Preserve existing Environment consumers; give the integrator the
@@ -44,7 +44,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   **Evidence:** hero noon/dusk at 1440×900 and 390×844, with dusk greyscale. If the adapter is absent, record
   integrated captures pending; a modified bench is not evidence that the real town changed.
 
-- [ ] **KL03 — An honest evening already under way.**
+- [x] **KL03 — An honest evening already under way.**
   Implement `createSimulatedEvening` through the existing reducer and motion contracts. Seed past fixture stays
   so 80–90% of the labelled simulated homes are already settled; witnessed arrivals/departures continue. Explicit
   `replayArrival()` starts the dark → one named window → town wave in a new epoch. Never alter Herald frames,
@@ -52,7 +52,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   simulated source and binds the existing replay control.
   **Evidence:** one reducer-backed seek/arrival/departure trace; actual town open and replay at 0/30 s after mounting.
 
-- [ ] **KL04 — Glass passes sight and light without losing its frame.**
+- [x] **KL04 — Glass passes sight and light without losing its frame.**
   Implement the complete approved glass path in the spec's narrow files: glass material flags distinct from
   collision solidity, visible interior-facing surfaces, appropriate voxel rendering, presence panes that allow
   sight, sun-shadow transmission and ordered light-field blockers. Reuse existing material flags and formats;

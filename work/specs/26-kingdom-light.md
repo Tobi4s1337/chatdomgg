@@ -412,3 +412,37 @@ These belong to other owners:
   coordinates the reusable painted-room treatment; missing producer evidence stays visibly pending. A small kingdom's live castle sequence completes without
   an audience-strength threshold. Capture readiness comes from real completed work. The team integrator owns
   lane integration, and main judges the announced candidate.
+- **2026-10-30 — Glass (KL04).** The registry's glass stays `solid` and becomes non-occluding for faces, AO and light
+  (registry revision 4); no palette, packing or protocol change. The shared clay pass stays opaque: glass fragments
+  write fractional alpha-to-coverage (sky reflection, Fresnel, sun glint), so the meshed reveal and room show
+  through with no sorting and no second shell; without a multisampled target the same coverage becomes a 4×4 ordered
+  pattern. Sun casters built from a voxel material discard the glass kind, so frames and walls still cast. Sight
+  rays treat `surface: glass` like air. In the half-metre field a cell reached by a *glazed* opening (its glass and
+  the air carves that meet it) is open only when no light blocker survives anywhere inside it, sampled exactly at
+  build-cell centres; unglazed partial carves keep the conservative "carve must enclose the cell" rule and the
+  two-metre fields are unchanged. Consequence: an unmullioned light wider than half a metre passes warmth both ways;
+  a mullioned 8-cell window's two 0.375 m lights stay closed in the field (honest at that grid, still projected
+  outward). The presence pane is a translucent layer over the real glass (street side warm, room side a faint sheen).
+- **2026-10-31 — Glass through mullions (KL04 follow-up).** Supersedes the mullion consequence above. A half-metre
+  cell that a glazed opening reaches is open when at least half of its face has a clear straight line of build cells
+  along the glass's wall normal (no light blocker anywhere on the line, ordered paint respected); a cell of unbroken
+  wall has no clear line and stays closed, and unglazed carves keep the conservative rule. Measured on the actual
+  Willowmere town: a window emitter now reaches 1 m into the room at level 11–12 for every Hearth and Tide home
+  (before: emberfold, gullstep and keelcroft's casements 0–6 through detours), with glass bricked in it stays 0. The
+  grove template homes mount their glass on a solid timber row, so those windows stay blind until their content
+  owner opens them. Evidence window: the deepest-room presence window facing the late sun, chosen by
+  `lights/glass-capture.mjs`. Sun casters already skip glass, but the one kingdom sun map spans the town at
+  0.375 m per texel (0.75 m on phones) under a 4×4 soft filter, so neither a window light nor a 1 m open doorway
+  leaves a visible patch on a floor; direct sun indoors is also scaled by the baked sky `(.15+.85*vSky)`. A sunlit
+  floor needs a camera-local sun cascade (a new render target, so main decides under R7) before the sky factor is
+  retuned for receivers it covers.
+- **2026-10-31 — Sun indoors through the near field (KL04 close).** No camera-local cascade and no new render target
+  (R7 holds). Under a roof (`vSky` < 0.85), a sun-facing clay fragment walks the near field's uploaded half-metre
+  light blockers toward the sun for up to 48 cells (glass and open carves are clear); the town map is asked only about
+  casters beyond where that line stopped (`sunShadowInAir`, a derivative-free in-air read added to `sun-shadows.ts`).
+  A slab of whole blocker cells always costs ≥ 1 cell of path, so < 0.8 cells of blocked path fades the line as an
+  opening's quantised edge: the real cottages' 0.5 m walls straddle two field cells and read strictly as a 1 m tunnel
+  (a sliver of floor at a 56° sun); with the allowance a 1.75 m light gives a 0.54 m patch against 0.57 m true, and a
+  solid wall or roof never leaks. The result only raises the existing `(.15+.85*vSky)` sun term, so outdoor faces are
+  unchanged. Fields without corner samples (ground, horizon, citizens) keep today's light. The 0.25 m mullion casts
+  no bar of its own at this grid.

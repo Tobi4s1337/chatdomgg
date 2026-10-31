@@ -1,5 +1,7 @@
-import { KingdomIdSchema, type KingdomPresenceFrame } from '@chatdom/shared';
+import { CitizenChatCueSchema, KingdomIdSchema, type CitizenChatCue, type KingdomPresenceFrame } from '@chatdom/shared';
+import type { CitizenMotionSample } from '../citizens/types';
 import { generateSettlementPlan } from '../settlement/generator';
+import { BEHAVIOUR_TUNING } from './tuning';
 import type { SettlementPlan } from '../settlement/types';
 
 /**
@@ -94,4 +96,93 @@ export function createNeighbourStreet(): NeighbourStreet {
   const slots = fixture.arrivals.map(arrival => arrival.slot);
   for (const slot of slots) if (!plan.homes.some(home => home.slot === slot)) throw new Error(`Fixture slot ${slot} has no home`);
   return { plan, slots, frameAt: framesFor(fixture) };
+}
+
+/** The SIMULATED lines of the chat script. Only main's bubble shows words; the policy never receives them as anything it reads. */
+export const SIMULATED_LINES = [
+  'Evening, all.', 'The lanterns are lovely tonight.', 'Who left bread on the sill?', 'Long day. Good to be home.',
+  'Look at that sky.', 'Anyone at the market?', 'Hello, street!', 'Ha, same.', 'Mine too.', 'Quiet tonight.',
+] as const;
+
+export type SimulatedChatMoment = 'line' | 'burst' | 'walker' | 'reconnect' | 'departure';
+export interface SimulatedChat {
+  /**
+   * The cues main's chat adapter holds at a policy step: every issued, unexpired cue, supplied again on
+   * every step exactly like main's `speech` map. Call once per fixed step, in order; moments are chosen
+   * from the actual motion samples, so the same story always produces the same lines.
+   */
+  cuesAt(stepMs: number, samples: readonly CitizenMotionSample[]): readonly CitizenChatCue[];
+  /** Cues whose bubble main would show at a render time: said, unexpired, speaker present. */
+  heldAt(atMs: number, samples: readonly CitizenMotionSample[]): readonly CitizenChatCue[];
+  /** Slots under SIMULATED walker control at a step. */
+  controlledAt(stepMs: number): ReadonlySet<number>;
+  /** True on the step at which the caller resets its policy, as main's consumer does when its source reconnects. */
+  resetsAt(stepMs: number): boolean;
+  /** SIMULATED departures chosen by the script (slot → kingdom ms), for the street's frames. */
+  readonly departures: ReadonlyMap<number, number>;
+  /** Where each moment landed: the step it began and the people it chose (speakers first). */
+  readonly moments: ReadonlyMap<SimulatedChatMoment, { readonly atMs: number; readonly slots: readonly number[] }>;
+}
+
+/**
+ * A SIMULATED chat script for the nine-neighbour street: an ordinary line at a doorstep, a burst of
+ * lines with a repeat, an expired, a foreign and an absent cue, a line from someone who then comes under
+ * walker control, a line cut by a reconnect, and a line whose speaker then leaves. Cues are built through
+ * the actual `CitizenChatCueSchema`. No Twitch data, attendance or history is implied.
+ */
+export function createSimulatedChat(street: NeighbourStreet, fixture: { readonly kingdomId: string; readonly epoch: string; readonly origin: 'simulated'; readonly startMs: number } = NEIGHBOUR_FIXTURE,
+  options: { readonly firstAtMs?: number; readonly gapMs?: number; readonly only?: readonly SimulatedChatMoment[] } = {}): SimulatedChat {
+  const first = options.firstAtMs ?? 70_000, gap = options.gapMs ?? 25_000;
+  const order: SimulatedChatMoment[] = (['line', 'burst', 'walker', 'reconnect', 'departure'] as const).filter(kind => !options.only || options.only.includes(kind));
+  const issued: CitizenChatCue[] = [], moments = new Map<SimulatedChatMoment, { atMs: number; slots: number[] }>(), departures = new Map<number, number>();
+  let control: { slot: number; fromMs: number; untilMs: number } | null = null, resetMs: number | null = null, next = 0, line = 0, dueMs = fixture.startMs + first;
+  const say = (slot: number, asOf: number, id: string, kingdomId = fixture.kingdomId, epoch = fixture.epoch): void => {
+    issued.push(CitizenChatCueSchema.parse({ version: 1, id, kingdomId, epoch, origin: fixture.origin, slot, asOf, expiresAt: asOf + 7_000,
+      parts: [{ kind: 'text', text: SIMULATED_LINES[line++ % SIMULATED_LINES.length]! }] }));
+  };
+  const standing = (sample: CitizenMotionSample): boolean => sample.goalReached && sample.speed === 0 && sample.opacity === 1 && (sample.state === 'home' || sample.state === 'idle');
+  /** A neighbour within earshot who could turn their head toward `speaker` (the policy still decides). */
+  const canHear = (other: CitizenMotionSample, speaker: CitizenMotionSample): boolean => {
+    const dx = speaker.position[0] - other.position[0], dz = speaker.position[2] - other.position[2], turn = Math.atan2(dx, dz) - other.heading;
+    const neck = other.speed > .05 ? BEHAVIOUR_TUNING.look.walkingLimit : BEHAVIOUR_TUNING.look.standingLimit;
+    return other !== speaker && other.state !== 'leaving' && other.opacity === 1 && Math.hypot(dx, dz) <= BEHAVIOUR_TUNING.chat.listenMetres - .4
+      && Math.abs(Math.atan2(Math.sin(turn), Math.cos(turn))) <= neck + BEHAVIOUR_TUNING.chat.beyondNeck - .1;
+  };
+  /** A person settled at their door with at least `count` neighbours within earshot. */
+  const speakerWith = (samples: readonly CitizenMotionSample[], count: number): CitizenMotionSample | undefined =>
+    samples.find(sample => sample.state === 'home' && standing(sample) && samples.filter(other => canHear(other, sample)).length >= count);
+  return {
+    cuesAt(stepMs, samples) {
+      const kind = order[next];
+      if (kind && stepMs >= dueMs) {
+        const tag = `simulated-${kind}`;
+        if (kind === 'burst') {
+          // Six neighbours speak inside a second, the first of them three times; with three cues that must be discarded.
+          const speakers = samples.filter(sample => sample.state !== 'leaving' && sample.opacity === 1).slice(0, 6);
+          speakers.forEach((sample, i) => say(sample.slot, stepMs + i * 160, `${tag}-${i}`));
+          if (speakers[0]) { say(speakers[0].slot, stepMs + 320, `${tag}-again-1`); say(speakers[0].slot, stepMs + 640, `${tag}-again-2`); }
+          say(speakers[1]?.slot ?? 0, stepMs - 9_000, `${tag}-expired`);
+          say(speakers[2]?.slot ?? 0, stepMs, `${tag}-foreign`, fixture.kingdomId, `${fixture.epoch}:elsewhere`);
+          say(60_000, stepMs, `${tag}-absent`);
+          moments.set(kind, { atMs: stepMs, slots: speakers.map(sample => sample.slot) });
+        } else {
+          const speaker = speakerWith(samples, kind === 'line' || kind === 'reconnect' ? 2 : 1);
+          if (speaker) {
+            say(speaker.slot, stepMs, tag);
+            if (kind === 'walker') control = { slot: speaker.slot, fromMs: stepMs + 700, untilMs: stepMs + 6_700 };
+            if (kind === 'reconnect') resetMs = stepMs + 1_200;
+            if (kind === 'departure') departures.set(speaker.slot, stepMs + 1_500);
+            moments.set(kind, { atMs: stepMs, slots: [speaker.slot] });
+          }
+        }
+        if (moments.has(kind)) { next++; dueMs = stepMs + gap; }
+      }
+      return issued.filter(cue => cue.asOf <= stepMs + 1_000 && cue.expiresAt > stepMs - 10_000);
+    },
+    heldAt: (atMs, samples) => issued.filter(cue => cue.asOf <= atMs && cue.expiresAt > atMs && cue.epoch === fixture.epoch
+      && samples.some(sample => sample.slot === cue.slot && sample.state !== 'leaving')),
+    controlledAt: stepMs => control && stepMs >= control.fromMs && stepMs < control.untilMs ? new Set([control.slot]) : new Set(),
+    resetsAt: stepMs => resetMs !== null && stepMs === Math.ceil(resetMs / BEHAVIOUR_TUNING.stepMs) * BEHAVIOUR_TUNING.stepMs,
+    departures, moments,
+  };
 }
