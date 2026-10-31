@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createHome } from '@chatdom/content';
+import { createCastleModule, createHome } from '@chatdom/content';
 import { KingdomIdSchema, PersonIdSchema, type ForgeDraft } from '@chatdom/shared';
 import type { ForgeProviders } from '../providers';
 import { createKingdomForgeApplication } from './application';
@@ -60,6 +60,25 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live') {
 }
 
 describe('the kingdom Forge application', () => {
+  it('derives the castle profile from the reservation and rejects a changed authoritative profile', async () => {
+    const accepted = fixture();
+    Object.assign(accepted.reservation, { home: createCastleModule('keep', [32, 31, 32], 'hearth'), hostProfile: 'castle-keep', slot: 65_534 });
+    expect(await accepted.run(command, accepted.lease)).toMatchObject({ kind: 'committed', attachment: {
+      slot: 65_534, hostId: 'castle-hearth', hostProfile: 'castle-keep',
+    } });
+    expect(accepted.providers.draft).toHaveBeenCalledWith(expect.objectContaining({ availableSockets: expect.arrayContaining([
+      expect.objectContaining({ hostProfile: 'castle-keep', profile: 'roof' }),
+    ]) }));
+    expect(accepted.providers.judgeResult).toHaveBeenCalledTimes(1);
+    expect(accepted.coals).toBe(0);
+
+    const changed = fixture();
+    Object.assign(changed.reservation, { home: createCastleModule('keep', [32, 31, 32], 'hearth'), hostProfile: 'castle-keep', slot: 65_534 });
+    vi.mocked(changed.authority.revalidate).mockResolvedValue({ kind: 'current', native: { ...changed.reservation, hostProfile: 'street-home' } });
+    expect(await changed.run(command, changed.lease)).toEqual({ kind: 'held' });
+    expect(changed.authority.commit).not.toHaveBeenCalled();
+    expect(changed.coals).toBe(1);
+  });
   it('requires real reservation and both gates, commits once, and keeps failed or stale work away from homes and coals', async () => {
     const missing = fixture();
     const disabled = createKingdomForgeApplication({ providers: missing.providers, record: async () => {}, publish: () => {} });

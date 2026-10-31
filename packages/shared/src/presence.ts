@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, PersonIdSchema, TokenSchema, UIntSchema } from './identity';
+import { CitizenLookIdSchema } from './citizen-look';
 
 export const PRESENCE_MINUTE_MS = 60_000;
 export const PRESENCE_LEASE_MS = 90_000;
@@ -45,6 +46,8 @@ export type PresenceInput = z.infer<typeof PresenceInputSchema>;
 /** A local visual slot is not a citizen ID, deed, reward or proof of tenancy. */
 export const WindowPresenceSchema = z.strictObject({
   slot: UIntSchema.max(65534), present: z.boolean(), publicName: DisplayNameSchema.nullable(), since: EpochMsSchema,
+  /** Approved free/default or chosen look. Older replay frames may omit it. */
+  look: CitizenLookIdSchema.optional(),
 });
 export const KingdomPresenceFrameSchema = z.strictObject({
   version: z.literal(1), kingdomId: KingdomIdSchema, epoch: TokenSchema, sequence: UIntSchema, asOf: EpochMsSchema,

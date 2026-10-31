@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { AtlasError } from './errors';
 
@@ -58,10 +59,41 @@ export function importConfigFrom(env: Env): ImportConfig {
   };
 }
 
+export interface LiveConfig {
+  surveyorDbPath: string | null;
+  dataDir: string;
+  /** How often the producer reads the source; it publishes only when a newer complete sweep exists. */
+  intervalMs: number;
+}
+
+export function liveConfigFrom(env: Env): LiveConfig {
+  const db = env.SURVEYOR_DB_PATH?.trim();
+  return {
+    surveyorDbPath: db ? (isAbsolute(db) ? db : resolve(db)) : null,
+    dataDir: dataDirFrom(env),
+    intervalMs: intFrom(env, 'ATLAS_LIVE_INTERVAL_MS', 30_000, 5_000, 600_000),
+  };
+}
+
 export function serveConfigFrom(env: Env): ServeConfig {
   return {
     dataDir: dataDirFrom(env),
     host: env.ATLAS_HOST?.trim() || '127.0.0.1',
     port: intFrom(env, 'ATLAS_PORT', 5193, 1, 65_535),
   };
+}
+
+/**
+ * The founder's Ed25519 public key, as PEM text or a path to a PEM file. Absent means no founding can be authorized
+ * and no edition's founding signature can be verified; it is never defaulted.
+ */
+export function founderKeyPemFrom(env: Env): string | null {
+  const raw = env.ATLAS_FOUNDER_PUBLIC_KEY?.trim();
+  if (!raw) return null;
+  if (raw.startsWith('-----BEGIN')) return raw;
+  try {
+    return readFileSync(isAbsolute(raw) ? raw : resolve(raw), 'utf8');
+  } catch {
+    throw new AtlasError('config', 'ATLAS_FOUNDER_PUBLIC_KEY names a file that cannot be read.');
+  }
 }

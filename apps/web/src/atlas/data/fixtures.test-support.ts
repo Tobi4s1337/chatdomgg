@@ -15,7 +15,7 @@ export const sha = (bytes: Uint8Array | string): string => createHash('sha256').
 export const clone = <T>(value: T): T => structuredClone(value);
 export const decorCode = (kind: number, bands: number, variant: number): number => (kind << 12) | (bands << 7) | variant;
 
-export interface Row { id: string; login: string; name: string; tier: number; x: number; y: number; average: number; game: number; region: number }
+export interface Row { id: string; login: string; name: string; tier: number; x: number; y: number; average: number; game: number; region: number; realm: number }
 
 /** Geometry columns of the rows; their logins and names travel separately, in the names projection. */
 export function columns(rows: Row[]): SettlerColumns {
@@ -27,17 +27,21 @@ export function columns(rows: Row[]): SettlerColumns {
     average: rows.map((r) => r.average),
     game: rows.map((r) => r.game),
     region: rows.map((r) => r.region),
+    realm: rows.map((r) => r.realm),
   };
 }
 
-/** A two-region world at coordScale 20: world units span x −100…120, y −60…50. */
+/**
+ * A world of one continent (English: the Crossroads, two family realms and the Wilds), one isle (Deutsch) and one
+ * of the Outer Isles, at coordScale 20: world units span x −100…120, y −60…50.
+ */
 export function makeWorld(id = ID_A, revision = REV_A, asOf = 1_793_325_387_307): PreviewWorld {
   const placeholder = { sha256: '0'.repeat(64), bytes: 0, records: 0 };
   return {
     version: 1,
     kind: 'chatdom-atlas-survey-preview',
     id,
-    algorithm: 'survey-preview-1',
+    algorithm: 'survey-preview-4',
     label: PREVIEW_LABEL,
     status: 'preview',
     revision,
@@ -45,20 +49,35 @@ export function makeWorld(id = ID_A, revision = REV_A, asOf = 1_793_325_387_307)
     window: { firstObservationAt: asOf - 36_687_817, lastObservationAt: asOf, hours: 10.19, sweeps: 205, gapCount: 0 },
     coverage: { sweepFloorViewers: 5, candidateMinAverage: 25, contentLabels: 'not-collected', missing: ['Content classification labels are not collected by the source; every channel is unknown.'] },
     founding: { status: 'not-founded', edition0EligibleAt: asOf + 136_112_183, editionIEligibleAt: asOf + 568_112_183 },
-    counts: { channelsObserved: 176_266, mapped: 7, languages: 2, capital: 1, city: 2, town: 2, village: 2 },
+    counts: { channelsObserved: 176_266, mapped: 7, languages: 2, capital: 1, city: 2, town: 2, village: 2, hamletSlots: 12_345 },
+    taxonomy: { id: 'families-1', status: 'proposed', sha256: 'dd3ecc6c6669aba4cd35157bee05d84a80ac156e5901b41a3ac769d8bc8df45b', variety: 'variety-1', realmThreshold: 'realm-threshold-1' },
+    lattice: { id: 'hex-1', hamletRadius: 0.5, shore: 0.9, gap: 0.6 },
     coordScale: 20,
     bounds: { minX: -2000, minY: -1200, maxX: 2400, maxY: 1000 },
     tiers: { minAverage: { capital: 5000, city: 500, town: 50, village: 25 }, holdingRadius: { capital: 6, city: 3.4, town: 1.8, village: 1.25 } },
     regions: [
       { index: 0, language: 'en', name: 'English', englishName: 'English', kind: 'continent', x: 0, y: 0, r: 800, members: 5, chunk: { path: 'region-0.json', ...placeholder } },
       { index: 1, language: 'de', name: 'Deutsch', englishName: 'German', kind: 'isle', x: 1600, y: 400, r: 300, members: 2, chunk: { path: 'region-1.json', ...placeholder } },
+      { index: 2, language: null, name: 'The Outer Isles', englishName: 'The Outer Isles', kind: 'outer', x: 2000, y: -800, r: 150, members: 0, chunk: { path: 'region-2.json', ...placeholder } },
     ],
     isles: { name: 'The Isles of Many Tongues', x: 1600, y: 400, r: 500 },
+    outer: { name: 'The Outer Isles', x: 2000, y: -800, r: 200 },
+    families: [{ id: 'just-chatting', name: 'Just Chatting & IRL' }, { id: 'arenas', name: 'Arenas & MOBAs' }],
+    realms: [
+      { index: 0, region: 0, kind: 'crossroads', family: -1, name: 'The Crossroads', x: -600, y: 200, r: 220, members: 2, slots: 300 },
+      { index: 1, region: 0, kind: 'family', family: 0, name: 'Just Chatting & IRL', x: 0, y: 0, r: 420, members: 3, slots: 4_000 },
+      { index: 2, region: 0, kind: 'family', family: 1, name: 'Arenas & MOBAs', x: -700, y: -400, r: 200, members: 1, slots: 900 },
+      { index: 3, region: 0, kind: 'wilds', family: -1, name: 'The Wilds', x: 600, y: 500, r: 200, members: 1, slots: 1_200 },
+      { index: 4, region: 1, kind: 'isle', family: -1, name: 'Deutsch', x: 1600, y: 400, r: 300, members: 2, slots: 2_500 },
+      { index: 5, region: 2, kind: 'outer', family: -1, name: 'The Outer Isles', x: 2000, y: -800, r: 150, members: 0, slots: 3_445 },
+    ],
     games: [{ gameId: '509658', name: 'Just Chatting' }, { gameId: '21779', name: 'League of Legends' }, { gameId: '33214', name: null }],
     clusters: [
-      { region: 0, game: 0, x: 0, y: 0, r: 400, members: 3 },
-      { region: 0, game: -1, x: -600, y: 200, r: 200, members: 2 },
-      { region: 1, game: 2, x: 1600, y: 400, r: 120, members: 2 },
+      { region: 0, realm: 1, game: 0, x: 0, y: 0, r: 400, members: 3 },
+      { region: 0, realm: 0, game: -1, x: -600, y: 200, r: 200, members: 2 },
+      { region: 0, realm: 2, game: 1, x: -700, y: -400, r: 180, members: 1 },
+      { region: 1, realm: 4, game: 2, x: 1600, y: 400, r: 120, members: 2 },
+      { region: 2, realm: 5, game: -1, x: 2000, y: -800, r: 150, members: 0 },
     ],
     coasts: [
       // A square from (−50,−30) to (50,30) in world units, delta-encoded.
@@ -73,24 +92,26 @@ export function makeWorld(id = ID_A, revision = REV_A, asOf = 1_793_325_387_307)
 }
 
 export const HEAD_ROWS: Row[] = [
-  { id: '552120296', login: 'zackrawrr', name: 'zackrawrr', tier: 0, x: 120, y: -120, average: 33_015, game: 0, region: 0 },
-  { id: '207813352', login: 'hasanabi', name: 'HasanAbi', tier: 1, x: -12, y: 294, average: 2_697, game: 0, region: 0 },
-  { id: '36926489', login: 'gronkh', name: 'GRONKH', tier: 1, x: 1610, y: 420, average: 900, game: -1, region: 1 },
+  { id: '552120296', login: 'zackrawrr', name: 'zackrawrr', tier: 0, x: 120, y: -120, average: 33_015, game: 0, region: 0, realm: 1 },
+  { id: '207813352', login: 'hasanabi', name: 'HasanAbi', tier: 1, x: -12, y: 294, average: 2_697, game: 0, region: 0, realm: 1 },
+  { id: '36926489', login: 'gronkh', name: 'GRONKH', tier: 1, x: 1610, y: 420, average: 900, game: -1, region: 1, realm: 4 },
 ];
 
 export const CHUNK_ROWS: Row[][] = [
   [
-    { id: '506611431', login: 'mira004', name: 'mira004', tier: 2, x: 304, y: 445, average: 497, game: 0, region: 0 },
-    { id: '65365812', login: 'pumpkinpotion', name: 'pumpkinpotion', tier: 3, x: -702, y: -361, average: 31, game: 1, region: 0 },
+    { id: '506611431', login: 'mira004', name: 'mira004', tier: 2, x: 304, y: 445, average: 497, game: 0, region: 0, realm: 3 },
+    { id: '65365812', login: 'pumpkinpotion', name: 'pumpkinpotion', tier: 3, x: -702, y: -361, average: 31, game: 1, region: 0, realm: 2 },
   ],
   [
-    { id: '108586685', login: 'tenzinniznet', name: 'TenzinNiznet', tier: 2, x: 1590, y: 380, average: 120, game: 2, region: 1 },
-    { id: '558501883', login: 'koalapuffslive', name: 'koalapuffslive', tier: 3, x: 1700, y: 500, average: 26, game: -1, region: 1 },
+    { id: '108586685', login: 'tenzinniznet', name: 'TenzinNiznet', tier: 2, x: 1590, y: 380, average: 120, game: 2, region: 1, realm: 4 },
+    { id: '558501883', login: 'koalapuffslive', name: 'koalapuffslive', tier: 3, x: 1700, y: 500, average: 26, game: -1, region: 1, realm: 4 },
   ],
+  // The Outer Isles are kept empty.
+  [],
 ];
 
 export function makeChunk(world: PreviewWorld, region: number): PreviewChunk {
-  return { version: 1, kind: 'chatdom-atlas-survey-preview-region', preview: world.id, region, settlers: columns(CHUNK_ROWS[region === 0 ? 0 : 1]!) };
+  return { version: 1, kind: 'chatdom-atlas-survey-preview-region', preview: world.id, region, settlers: columns(CHUNK_ROWS[region] ?? []) };
 }
 
 /**

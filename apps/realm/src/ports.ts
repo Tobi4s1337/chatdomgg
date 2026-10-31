@@ -1,4 +1,5 @@
 import type { KingdomId } from '@chatdom/shared';
+import type { RealmWalkerFrame, RealmWalkerPresentation } from '@chatdom/shared/realm';
 import type { CollisionWorld, PlayerState, RealmAuthenticator, RealmIntent, RealmPrincipal, RealmReceipt, RealmPublicDelivery, RealmTransientMessage, RealmPrivateMessage, RealmBootstrap } from '@chatdom/shared/realm';
 
 export interface RealmIntentContext {
@@ -14,6 +15,8 @@ export interface RealmRoomEffects {
   /** Caller validates support/egress at this revision. Stale revisions fail without moving anyone. */
   placeWalker(walkerId: string, position: readonly [number, number, number], collisionRevision: number): boolean;
   allowWalking(walkerId: string, allowed: boolean): void;
+  /** Retained writer's verified home/look link. No browser-supplied identity or authority. */
+  presentWalker?(walkerId: string, presentation: RealmWalkerPresentation): void;
   /** Atomic committed geometry/collision adoption. Positions cover every affected walker. */
   adoptWorld(world: CollisionWorld, layoutRevision: string, positions: ReadonlyMap<string, readonly [number, number, number]>): void;
 }
@@ -29,6 +32,8 @@ export interface RealmRoomHandle {
   intent(context: RealmIntentContext, intent: RealmIntent): Promise<RealmReceipt>;
   /** Synchronous checkpoint: client buffers deltas, installs throughCursor, then applies newer entries. */
   bootstrap(principal: RealmPrincipal): RealmBootstrap;
+  /** Called only by the actual room at public patch cadence, never by a spectator or crowd simulation. */
+  publishWalkers?(frame: RealmWalkerFrame): void;
   bindRoom(effects: RealmRoomEffects): () => void;
   lifecycle(event: 'join' | 'drop' | 'reconnect' | 'leave', principal: RealmPrincipal, walkerId: string, now: number): void;
   /** Only committed public outbox entries; public projection catches up before declaring itself ready. */

@@ -32,3 +32,7 @@
   .ritual-controls button,.ritual-controls select{padding:7px 8px;font-size:11px}
   .ritual-note{font-size:9px}
 }
+.ritual-sound input{flex:1;margin:0;accent-color:#d5ac69;min-width:0}
+.ritual-sound input:disabled{opacity:.4}
+.ritual-sound button{min-width:74px}
+.ritual-controls button:disabled{opacity:.45;cursor:default}

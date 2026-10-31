@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KingdomIdSchema, type KingdomPresenceFrame } from '@chatdom/shared';
-import type { CommittedForgeAttachment, RealmBootstrap, RealmPublicDelivery, RealmPublicMessage } from '@chatdom/shared/realm';
+import { REALM_CASTLE_SLOT, type CommittedForgeAttachment, type RealmBootstrap, type RealmPublicDelivery, type RealmPublicMessage } from '@chatdom/shared/realm';
 import { observeRealm, type RealmObservedRoom } from './observer';
 import { observeForgeActivity } from './forge';
 import { createRoomPresenceFeed } from './presence';
@@ -205,6 +205,29 @@ describe('buffered room checkpoint installation', () => {
     emit('world', deliver(12, 'fact:12:0', committed(part('new', 'door'))));
     expect(rituals).toEqual(['new']);
     expect([...observer.current().attachments.keys()].sort()).toEqual(['new', 'old']);
+  });
+
+  it('restores street and keep attachments together without turning the keep into a home or replaying its ritual', () => {
+    const { room, emit } = fakeRoom(), observer = observeRealm(room, expected), restored: string[][] = [], rituals: string[] = [], castles: string[] = [];
+    observeForgeActivity(observer, { restored: parts => restored.push(parts.map(p => p.id).sort()), committed: item => rituals.push(item.id) });
+    observer.subscribe({ castle: (castle, cause) => castles.push(`${castle.moduleId}:${cause}`) });
+    const keepPart = { ...part('keep'), slot: REALM_CASTLE_SLOT }, next = { ...keepPart, id: 'keep-new', runId: 'keep-new' };
+    const castle: RealmPublicMessage = { type: 'castle', moduleId: 'keep-actual', revision: 'r10', assetHash: HASH, attachments: [keepPart] };
+    emit('bootstrap', boot(10, [home('r10', [part('street')]), castle]));
+    expect(restored).toEqual([['keep', 'street']]);
+    expect(observer.current().homes.size).toBe(1);
+    expect(observer.current().castle?.moduleId).toBe('keep-actual');
+    expect(castles).toEqual(['keep-actual:bootstrap']);
+    emit('world', deliver(11, 'old-keep', committed(keepPart)));
+    expect(rituals).toEqual([]);
+    emit('world', deliver(12, 'new-keep', committed(next)));
+    expect(rituals).toEqual(['keep-new']);
+    expect([...observer.current().attachments.keys()].sort()).toEqual(['keep-new', 'street']);
+    observer.resync();
+    emit('bootstrap', boot(12, [home('r10', [part('street')]), { ...castle, revision: 'r12', attachments: [next] }]));
+    expect(restored).toEqual([['keep', 'street'], ['keep-new', 'street']]);
+    expect(rituals).toEqual(['keep-new']);
+    observer.dispose();
   });
 
   it('rejects a foreign kingdom or origin and labels the feed by origin', () => {

@@ -7,6 +7,9 @@ import { SNAPSHOT_FILE_NAMES, type ChannelObservation, type RaidObservation } fr
 import { runImport, type ImportOutcome } from './import';
 import { acquireLock, layout, readCurrent, readLedger, revisionDir } from './store/revisions';
 import { FixtureSource, RECENT, T0, clock, configFor, fakeSurveyor, sweepAt, tempDataDir } from './test/fixture-source';
+import { allowRealImports } from './test/timeouts';
+
+allowRealImports();
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {

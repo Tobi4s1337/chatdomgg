@@ -9,6 +9,7 @@ import {
   type ChannelObservation, type Game, type SnapshotManifest,
 } from '../export/schema';
 import { GAMBLING_POLICY, publicVisibility } from '../policy/visibility';
+import { currentTaxonomy } from '../cartography/taxonomy';
 import { buildPreview, languageNames, previewChannels, previewIdFor, type PreviewFiles } from './build';
 import { DECOR_KINDS, DECOR_SPACING, insideLand, ringArea, ringBox, type RingBox } from './land';
 import { CONTINENT_MIN_CANDIDATES, HOLDING_RADIUS, layoutPreview, type Layout, type Tier } from './layout';
@@ -17,6 +18,9 @@ import {
   PreviewWorldSchema, TIER_CODES, type PreviewChunk, type PreviewNames, type PreviewWorld, type SettlerColumns,
 } from './schema';
 import { PREVIEW_MANIFEST, previewDir, previewsRoot, prunePreviews, verifyPreviewDir, writePreview } from './store';
+import { allowRealImports } from '../test/timeouts';
+
+allowRealImports();
 
 // ── A deterministic synthetic survey ──────────────────────────────────────────────────────────────────────────
 // Clearly fake channels shaped like a Surveyor export: several thousand channels, languages either side of the
@@ -295,12 +299,15 @@ function sharedLandmasses({ world, all, rings }: Decoded): string[] {
     }
     if (rings[best]!.region !== holding.region) problems.push(`${holding.id} stands on a coast of region ${rings[best]!.region}`);
     const set = languagesOnRing.get(best) ?? new Set<string>();
-    set.add(world.regions[holding.region]!.language);
+    set.add(world.regions[holding.region]!.language ?? 'outer');
     languagesOnRing.set(best, set);
   }
   for (const [ring, languages] of languagesOnRing) if (languages.size > 1) problems.push(`coast ${ring} holds ${[...languages].join(' + ')}`);
   return problems;
 }
+
+/** Regions that belong to a language: everything but the empty Outer Isles. */
+const spoken = (world: PreviewWorld) => world.regions.filter((region) => region.language !== null);
 
 const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 
@@ -328,7 +335,7 @@ beforeAll(() => {
   input = synthesize(MAIN_PLAN, 0xc0ffee);
   preview = buildPreview(input);
   decoded = decode(preview);
-  layout = layoutPreview(previewChannels(input.channels).mapped);
+  layout = layoutPreview(previewChannels(input.channels, currentTaxonomy()).mapped);
 });
 
 describe('survey preview build', () => {
@@ -444,7 +451,7 @@ describe('survey preview build', () => {
       expect(immutable.includes(`"${holding.login}"`), holding.login).toBe(false);
       expect(immutable.includes(`"${holding.name}"`), holding.name).toBe(false);
     }
-    for (const columns of [world.head, ...chunks.map((c) => c.settlers)]) expect(Object.keys(columns).sort()).toEqual(['average', 'game', 'ids', 'region', 'tier', 'x', 'y']);
+    for (const columns of [world.head, ...chunks.map((c) => c.settlers)]) expect(Object.keys(columns).sort()).toEqual(['average', 'game', 'ids', 'realm', 'region', 'tier', 'x', 'y']);
     // names.json: exactly the drawn holdings in ID order, each with the moment the source last confirmed it.
     expect(names.ids).toEqual(all.map((h) => h.id).sort(compareIds));
     const byId = new Map(input.channels.map((c) => [c.kingdomId as string, c]));
@@ -478,9 +485,9 @@ describe('survey preview build', () => {
 
   it('R4: languages with at least 600 candidates are continents, smaller ones isles in the Isles of Many Tongues', () => {
     const { world } = decoded;
-    const kinds = Object.fromEntries(world.regions.map((r) => [r.language, r.kind]));
+    const kinds = Object.fromEntries(spoken(world).map((r) => [r.language, r.kind]));
     expect(kinds).toEqual({ en: 'continent', es: 'continent', pt: 'isle', de: 'isle', ja: 'isle', fr: 'isle', other: 'isle' });
-    const members = Object.fromEntries(world.regions.map((r) => [r.language, r.members]));
+    const members = Object.fromEntries(spoken(world).map((r) => [r.language, r.members]));
     expect(members).toEqual({ en: 600, es: 640, pt: 599, de: 120, ja: 48, fr: 20, other: 6 });
     expect(world.regions.map((r) => r.index)).toEqual(world.regions.map((_, i) => i));
 
@@ -491,7 +498,7 @@ describe('survey preview build', () => {
     expect(ISLES_NAME).toBe('The Isles of Many Tongues');
     const s = world.coordScale;
     for (const region of world.regions.filter((r) => r.kind === 'isle')) {
-      expect(Math.hypot(region.x - isles.x, region.y - isles.y) + region.r, region.language).toBeLessThanOrEqual(isles.r + 2);
+      expect(Math.hypot(region.x - isles.x, region.y - isles.y) + region.r, region.language ?? undefined).toBeLessThanOrEqual(isles.r + 2);
     }
     const discs = [...world.regions.filter((r) => r.kind === 'continent'), { ...isles, language: 'isles' }];
     for (let i = 0; i < discs.length; i++) {
@@ -521,14 +528,14 @@ describe('survey preview build', () => {
     ];
     for (const seed of [1, 2, 3]) {
       const built = decode(buildPreview(synthesize(tiny, seed)));
-      expect(built.world.regions).toHaveLength(5);
+      expect(spoken(built.world)).toHaveLength(5);
       expect(sharedLandmasses(built), `seed ${seed}`).toEqual([]);
     }
   });
 
   it('R4: names are real: language endonyms and English names from Intl, category names only from the games input', () => {
     const { world } = decoded;
-    const names = Object.fromEntries(world.regions.map((r) => [r.language, [r.name, r.englishName]]));
+    const names = Object.fromEntries(spoken(world).map((r) => [r.language, [r.name, r.englishName]]));
     expect(names).toEqual({
       en: ['English', 'English'], es: ['Español', 'Spanish'], pt: ['Português', 'Portuguese'], de: ['Deutsch', 'German'],
       ja: ['日本語', 'Japanese'], fr: ['Français', 'French'], other: ['Other tongues', 'Other languages'],
@@ -536,7 +543,7 @@ describe('survey preview build', () => {
     expect(languageNames('ko')).toEqual({ name: '한국어', englishName: 'Korean' });
 
     const inputNames = new Map(input.games.map((g) => [g.gameId, g.name]));
-    const { mapped } = previewChannels(input.channels);
+    const { mapped } = previewChannels(input.channels, currentTaxonomy());
     const mains = new Set(mapped.map((c) => c.mainGameId).filter((g): g is string => g !== null));
     expect(new Set(world.games.map((g) => g.gameId))).toEqual(mains);
     expect(world.games.map((g) => g.gameId)).toEqual([...mains].sort(compareIds));
@@ -666,7 +673,8 @@ describe('survey preview build', () => {
   it('draws a small survey with only isles', () => {
     const small = synthesize(SMALL_PLAN, 3);
     const built = decode(buildPreview(small));
-    expect(built.world.regions.every((r) => r.kind === 'isle')).toBe(true);
+    expect(spoken(built.world).every((r) => r.kind === 'isle')).toBe(true);
+    expect(built.world.regions.filter((r) => r.language === null).every((r) => r.kind === 'outer' && r.members === 0)).toBe(true);
     expect(built.world.isles).not.toBeNull();
     expect(built.all.length).toBe(57);
   });

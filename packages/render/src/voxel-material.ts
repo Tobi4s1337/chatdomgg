@@ -84,6 +84,10 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     uniform vec3 uTerrainSoil,uTerrainGrass;uniform vec4 uShoreBounds;
     in vec3 vWorld,vNormal;in float vAo,vSky,vLodFade;flat in uint vMaterial;
     const int BAYER[16]=int[16](0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5);
+    // Forty-eight half-metre cell steps reach 14-24 m toward the sun: across a room, its eaves and its lane.
+    const int SUN_LINE_CELLS=48;
+    // Blocked path, in cells, an opening's edge may cross; below the one cell every solid slab costs.
+    const float SUN_LINE_EDGE=.8;
     float hash(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}
     float packedSample(sampler3D field,ivec3 cell){return floor(texelFetch(field,cell,0).r*255.+.5);}
     bool fieldInside(vec3 p,vec3 size){return all(greaterThanEqual(p,vec3(0)))&&all(lessThan(p,size));}
@@ -127,6 +131,51 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       if(any(lessThan(cell,ivec3(0)))||any(greaterThanEqual(cell,size)))return 0.;
       return step(128.,packedSample(field,cell));
     }
+    // Direct sun indoors. The town-wide sun map is too coarse to find a window or a doorway, and the baked sky
+    // term that hides its leaks through walls also dims the sun that really comes in. The near field's half-metre
+    // light blockers (glass and open carves are clear) answer the actual line to the sun instead, walking whole
+    // cells from the receiver's own air cell and giving up as clear past the field. Crossing any slab of blocker
+    // cells costs at least one cell of path, so under one cell of blocked path is an opening's quantised edge:
+    // it fades the line rather than closing it, and a real 0.4 m reveal is not read as a one-metre tunnel.
+    // reach returns the metres the line covered, so the map need only answer for casters beyond it.
+    float sunLine(vec3 normal,vec3 direction,out float reach){
+      reach=0.;
+      ivec3 size=ivec3(round(uLightExtent/.5));
+      if(any(lessThanEqual(size,ivec3(0)))||any(notEqual(textureSize(uLight,0),size+ivec3(1))))return 0.;
+      vec3 q=(vWorld+normal*.025-uLightOrigin)/.5;
+      if(!fieldInside(q,vec3(size)))return 0.;
+      ivec3 cell=ivec3(floor(q));
+      if(packedSample(uLight,cell)>=128.){
+        vec3 end=vec3(cell)+step(vec3(0.),normal),distanceToFace=vec3(1e10);
+        if(abs(normal.x)>.0001)distanceToFace.x=(end.x-q.x)/normal.x;
+        if(abs(normal.y)>.0001)distanceToFace.y=(end.y-q.y)/normal.y;
+        if(abs(normal.z)>.0001)distanceToFace.z=(end.z-q.z)/normal.z;
+        q+=normal*(max(0.,min(distanceToFace.x,min(distanceToFace.y,distanceToFace.z)))+.005);
+        if(!fieldInside(q,vec3(size)))return 0.;
+        cell=ivec3(floor(q));
+        if(packedSample(uLight,cell)>=128.)return 0.;
+      }
+      ivec3 stepTo=ivec3(sign(direction));
+      vec3 delta=vec3(abs(direction.x)>1e-5?1./abs(direction.x):1e10,abs(direction.y)>1e-5?1./abs(direction.y):1e10,abs(direction.z)>1e-5?1./abs(direction.z):1e10);
+      vec3 next=vec3(abs(direction.x)>1e-5?(float(cell.x)+step(0.,direction.x)-q.x)/direction.x:1e10,
+        abs(direction.y)>1e-5?(float(cell.y)+step(0.,direction.y)-q.y)/direction.y:1e10,
+        abs(direction.z)>1e-5?(float(cell.z)+step(0.,direction.z)-q.z)/direction.z:1e10);
+      float blocked=0.,start=dot(q-(vWorld-uLightOrigin)/.5,direction),walked=0.;
+      for(int i=0;i<SUN_LINE_CELLS;i++){
+        float enter=min(next.x,min(next.y,next.z));walked=enter;
+        if(next.x<=enter){cell.x+=stepTo.x;next.x+=delta.x;}
+        else if(next.y<=enter){cell.y+=stepTo.y;next.y+=delta.y;}
+        else{cell.z+=stepTo.z;next.z+=delta.z;}
+        if(any(lessThan(cell,ivec3(0)))||any(greaterThanEqual(cell,size)))break;
+        if(packedSample(uLight,cell)>=128.){
+          float leave=min(next.x,min(next.y,next.z));
+          blocked+=leave-enter;
+          if(blocked>=SUN_LINE_EDGE)return 0.;
+        }
+      }
+      reach=(start+walked)*.5;
+      return 1.-smoothstep(.25,SUN_LINE_EDGE,blocked);
+    }
     // Ground contact comes from the same authored blockers, sampled just above
     // the ground. It is independent of presence and adds no decorative splats.
     float groundContact(sampler3D field,vec3 origin,vec3 extent,float cellSize,vec3 normal){
@@ -166,7 +215,20 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       // wall reads blue at noon and indigo at dusk rather than grey.
       float facing=.5+.5*max(n.y,0.);
       vec3 cool=mix(uShadow*.62,uAmbient,sky)*uAmbientIntensity*facing*(.4+.6*sky);
-      vec3 light=cool+uSun*uSunIntensity*diffuse*(.15+.85*vSky) /* sun-visibility */;
+      float sunSeen=1. /* sun-visibility */;
+      float sunLit=sunSeen*(.15+.85*vSky);
+      // Under a roof the near field's own line to the sun decides. The town map, whose texels would blur the
+      // window frame across the patch, is asked only about casters beyond the line, in the air where it ended.
+      float sheltered=1.-smoothstep(.55,.85,vSky);
+      if(sheltered>0.&&diffuse>0.&&uSunIntensity>0.){
+        vec3 toSun=normalize(uSunDirection);float reach;
+        float line=sunLine(n,toSun,reach);
+        #ifdef SUN_SHADOW_RECEIVER
+          if(line>0.)line*=sunShadowInAir(vWorld+toSun*reach);
+        #endif
+        sunLit=max(sunLit,sheltered*line);
+      }
+      vec3 light=cool+uSun*uSunIntensity*diffuse*sunLit;
       vec3 uvw=(vWorld-uLightOrigin)/uLightExtent;
       float warm=surfaceField(uFarLight,uFarOrigin,uFarExtent,uFarCell,n);
       float nearBlend=0.;
@@ -176,11 +238,13 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         warm=mix(warm,surfaceField(uLight,uLightOrigin,uLightExtent,.5,n),nearBlend);
       }
       // The field is blocked by occupied cells; this adds real warm street/wall illumination, not a decal.
-      // The flood falls off linearly with distance. A 1.6 power (not a square) carries the pool 3-5 m onto
-      // the wall and cobbles and still rolls to zero without a ring; the colour falls from a warm core
-      // through amber. It reads fully from dusk (night .2, about 18.5 h) and is absent by day.
-      float pool=pow(warm,1.6);
-      float poolAmount=pool*smoothstep(0.,.2,uNight)*1.15;
+      // The flood falls off linearly with (Manhattan) distance, so the ground under a window is a metre or two
+      // further from it than the wall. A 1.3 power (not a square) carries the pool 3-5 m onto the wall and
+      // the cobbles below and still rolls to zero without a ring; the soft cap below keeps the core from
+      // clipping. The colour falls from a warm core through amber. It reads fully from dusk (night .2, about
+      // 18.5 h) and is absent by day.
+      float pool=pow(warm,1.3);
+      float poolAmount=pool*smoothstep(0.,.2,uNight)*1.3;
       vec3 poolColour=mix(vec3(1.,.34,.09),vec3(1.,.71,.44),pool);
       float beacon=surfaceField(uBeaconLight,uBeaconOrigin,uBeaconExtent,uBeaconCell,n);
       float beaconAmount=beacon*beacon*(.3+.7*uNight)*1.25;

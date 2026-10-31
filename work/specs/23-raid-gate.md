@@ -423,3 +423,22 @@ part of acceptance, not permission to replace them or defer the gate's full trav
   is required; an exhaustive invisible matrix is not.
 - **2026-10-30 — History survives reward caps.** Fewer than three riders and the daily rewarded-raid cap prevent
   automatic raid reward farming; they do not erase witnessed journeys or honest Atlas roads.
+- **2026-10-30 — RG01: walkers need to find the open gate.** Added `{op:'gate'}` → `{kind:'gate', value:
+  GateStatusView}` to the feature-local API. Otherwise a walker could not learn the request ID they are asked to
+  join. The view is computed per principal. `viewer` is `monarch` only for the verified broadcaster. `authority`
+  (`ready | offline | not-connected | revoked | disabled | unavailable`) goes to the monarch only, so the pane
+  can explain a missing grant without leaking it to walkers. `open` holds the current request's destination
+  verdict, count, expiry and this person's own choice. Subscriptions re-read this view per subscriber; the
+  notifier carries no private data.
+- **2026-10-30 — RG01: one open gate per source.** A durable gate pointer per kingdom names the current request.
+  A new request ID supersedes an unstarted preview: that action closes as `cancelled` with
+  `endReason: superseded | expired`, and its party's choice ends with it. A started request is never superseded.
+  Re-previewing the same request and destination before expiry rotates the token and keeps the party. A
+  different destination needs a new request ID. Once a preview lapses its request is over and cannot be revived.
+  The opted-in count lives on the action and changes in the same transaction as the member record.
+- **2026-10-30 — RG01: browser composition details.** `RaidGateApi.origin` and `AtlasGateHost.origin` carry
+  `live | simulated`, so SIMULATED follows the transport rather than a page flag. `AtlasGateHost.resolve` lets a
+  walker see the destination's name under Atlas visibility rules. The wax seals draw the Atlas's own
+  `heraldry` module (a public drawing utility, not its model/view), so the gate and the map show identical arms.
+  `apps/api` has no package manifest, so lane files import shared validators by relative path and validate
+  with small strict readers instead of Zod, as the citizen-card lane does.

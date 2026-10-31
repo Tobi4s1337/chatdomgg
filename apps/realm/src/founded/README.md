@@ -2,14 +2,16 @@
 
 The production path reads the current adopted revision and its exact stored `SettlementPlan`. It never calls
 `generateSettlementPlan`. `assembleFoundedScene` replaces each committed owned plot's native home and retains
-only its currently attached approved parts. Public scene fields are explicitly allowlisted and validated,
+only its currently attached approved parts. The monarch owns the adopted beacon keep separately: its native fixture
+is replaced once at the same position and turn, without a street plot ID. Castle Forge parts use the keep profile
+and the reserved slot 65534. Public scene fields are explicitly allowlisted and validated,
 including nested plan records. Ownership, wishes, names, receipts and private state are absent from scene bytes.
 
 Real exports in `index.ts`:
 
 ```ts
 assembleFoundedScene({ kingdomId, plan, state, collisionRevision, native?, materials? })
-  // Promise<{ scene, bytes, manifest, geometryDigest, homes, counts }>
+  // Promise<{ scene, bytes, manifest, geometryDigest, homes, castle, counts }>
 decodeFoundedScene(bytes: Uint8Array, manifest: RealmFoundedManifest): Promise<RealmFoundedScene>
 createFoundedWorld(scene: RealmFoundedScene)
   // { scene, world: CollisionWorld, anchors: readonly Vec3[], options: DurableKingdomOptions }
@@ -50,7 +52,8 @@ numbers identify immutable geometry, so an approved return to earlier geometry c
 
 Bytes can be prospective;
 `manifestFor` requires matching kingdom/layout/collision revisions and every current public owned-home revision,
-content digest and attached part IDs. The composition owner must also enforce actual adoption and access policy,
+content digest and attached part IDs, plus the independent castle view when installed. Castle identity is included
+in both provider and writer preparation caches, including a metadata-only installation with unchanged geometry. The composition owner must also enforce actual adoption and access policy,
 retain/release the existing registry and prepare its public checkpoint before exposing a receipt.
 
 Read handlers call `store.get(manifest.sceneHash)` and return those exact checked bytes. The host owns route
@@ -72,7 +75,8 @@ const { world, options } = createFoundedWorld(scene);
 
 Renderer `foundedContent(scene)` already mounts all placements by asset hash, suppressing duplicate legacy homes,
 castle, market, trees and gardens. Turns rotate about the local blueprint origin, yaw `rotation * Math.PI / 2`,
-then translate in world metres. Retain the existing warm materials, visible terrain, water and horizon.
+then translate in world metres. `houses` contains street homes for presence; `forgeHosts` adds the beacon keep
+for Forge presentation only. Retain the existing warm materials, visible terrain, water and horizon.
 
 Terrain uses the renderer's 16 m chunk footprint, exact 0.5 m cell centres and rounded half-metre occupancy.
 The smoothed visible metre triangles may differ from physical contact; visual easing remains with walking.

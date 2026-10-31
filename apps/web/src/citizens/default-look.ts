@@ -15,21 +15,21 @@ function dyeGarb(part: AvatarPartBlueprint, shirt: number, trousers: number): Av
 /** Curated everyday clothing; selection remains the caller's responsibility. */
 export function createDefaultCitizenLooks(): readonly CitizenLook[] {
   const variants = [
-    { id: 'hearth', skin: AVATAR_PALETTE.skin[2], hair: AVATAR_PALETTE.hair[1], shirt: MAT.cream, trousers: MAT.fabricMutedBlue, cape: 'hearth' },
-    { id: 'tide', skin: AVATAR_PALETTE.skin[6], hair: AVATAR_PALETTE.hair[0], shirt: MAT.fabricMutedBlue, trousers: MAT.earth, cape: null },
-    { id: 'grove', skin: AVATAR_PALETTE.skin[0], hair: AVATAR_PALETTE.hair[4], shirt: MAT.fabricMutedGreen, trousers: MAT.fabricMutedGold, cape: null },
-    { id: 'clay', skin: AVATAR_PALETTE.skin[4], hair: AVATAR_PALETTE.hair[2], shirt: MAT.fabricMutedRed, trousers: MAT.fabricMutedBlue, cape: null },
-    { id: 'sun', skin: AVATAR_PALETTE.skin[7], hair: AVATAR_PALETTE.hair[3], shirt: MAT.fabricMutedGold, trousers: MAT.fabricMutedGreen, cape: 'tide' },
-    { id: 'dusk', skin: AVATAR_PALETTE.skin[1], hair: AVATAR_PALETTE.hair[5], shirt: MAT.fabricMutedViolet, trousers: MAT.earth, cape: null },
+    { id: 'hearth', body: 'balanced', hairForm: 'sidePart', skin: AVATAR_PALETTE.skin[2], hair: AVATAR_PALETTE.hair[1], shirt: MAT.cream, trousers: MAT.fabricMutedBlue, cape: 'hearth' },
+    { id: 'tide', body: 'broad', hairForm: 'coiledHighCrown', skin: AVATAR_PALETTE.skin[6], hair: AVATAR_PALETTE.hair[0], shirt: MAT.fabricMutedBlue, trousers: MAT.earth, cape: null },
+    { id: 'grove', body: 'slender', hairForm: 'bob', skin: AVATAR_PALETTE.skin[0], hair: AVATAR_PALETTE.hair[4], shirt: MAT.fabricMutedGreen, trousers: MAT.fabricMutedGold, cape: null },
+    { id: 'clay', body: 'round', hairForm: 'roundedCurls', skin: AVATAR_PALETTE.skin[4], hair: AVATAR_PALETTE.hair[2], shirt: MAT.fabricMutedRed, trousers: MAT.fabricMutedBlue, cape: null },
+    { id: 'sun', body: 'broad', hairForm: 'longBraid', skin: AVATAR_PALETTE.skin[7], hair: AVATAR_PALETTE.hair[3], shirt: MAT.fabricMutedGold, trousers: MAT.fabricMutedGreen, cape: 'tide' },
+    { id: 'dusk', body: 'slender', hairForm: 'pairedTwists', skin: AVATAR_PALETTE.skin[1], hair: AVATAR_PALETTE.hair[5], shirt: MAT.fabricMutedViolet, trousers: MAT.earth, cape: null },
   ] as const;
   return variants.map(variant => {
     const blueprints = [
-      ...createBodyParts('balanced', variant.skin).map(part => dyeGarb(part, variant.shirt, variant.trousers)),
-      ...createHairParts('sidePart', { body: 'balanced', hair: variant.hair, headwear: null }),
-      ...(variant.cape ? createWearableParts('shortCloak', { body: 'balanced', style: variant.cape }) : []),
+      ...createBodyParts(variant.body, variant.skin).map(part => dyeGarb(part, variant.shirt, variant.trousers)),
+      ...createHairParts(variant.hairForm, { body: variant.body, hair: variant.hair, headwear: null }),
+      ...(variant.cape ? createWearableParts('shortCloak', { body: variant.body, style: variant.cape }) : []),
     ];
     validateLook(blueprints);
-    const cape = variant.cape ? createCape('shortCloak', { body: 'balanced', style: variant.cape }) : undefined;
+    const cape = variant.cape ? createCape('shortCloak', { body: variant.body, style: variant.cape }) : undefined;
     return { id: variant.id, ...(cape ? { cape } : {}), parts: blueprints.map(blueprint => ({ blueprint, asset: compileAvatarPart(blueprint, 0) })) };
   });
 }

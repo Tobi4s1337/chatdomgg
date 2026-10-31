@@ -36,7 +36,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   Commit this task alone so places-high, places-water and home-interiors can consume its accepted implementation.
   **Evidence:** trace test output, exact import/call recipe and no copied stand-ins.
 
-- [ ] **KL02 — A blue noon and an indigo dusk.**
+- [x] **KL02 — A blue noon and an indigo dusk.**
   Author coherent sky, sun, cloud, ambient, shadow tint, hour-dependent fog and exposure. Noon is clear blue with
   white broken clouds; dusk has lilac sky, gold rims and indigo shadows; night stays cool around warm people.
   Restrain the daylight beacon to its crown. Preserve existing Environment consumers; give the integrator the
@@ -52,7 +52,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   simulated source and binds the existing replay control.
   **Evidence:** one reducer-backed seek/arrival/departure trace; actual town open and replay at 0/30 s after mounting.
 
-- [ ] **KL04 — Glass passes sight and light without losing its frame.**
+- [x] **KL04 — Glass passes sight and light without losing its frame.**
   Implement the complete approved glass path in the spec's narrow files: glass material flags distinct from
   collision solidity, visible interior-facing surfaces, appropriate voxel rendering, presence panes that allow
   sight, sun-shadow transmission and ordered light-field blockers. Reuse existing material flags and formats;
@@ -62,7 +62,7 @@ glass tasks touch shared render files and cannot silently run overlapping edits.
   warm field passing glass, an adjacent wall that still blocks and a lit pane that still reads from the street.
   A compact wall/glass/carve test covers actual sky/mesher/field/shadow semantics affected by the change.
 
-- [ ] **KL05 — Windows and faces carry soft warm pools.**
+- [x] **KL05 — Windows and faces carry soft warm pools.**
   Keep one citizen/one presence window, the 0.7 s fade, disclosure, dither and sources. Make the pane brightest
   low/centre and amber at edges, with dark mullions, source-sized halo and cool sky reflection while absent.
   Replace the squared warm falloff with a capped soft knee readable 3–5 m onto the wall and street. Faces and

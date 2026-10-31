@@ -22,4 +22,9 @@ order has no effect. Each call returns new box objects, because the assembler re
   nose and flue, and the sleeping read. The bench test `apps/web/src/forge/anvil-hero/bench/roof.test.ts` mounts it
   through the real `assembleForge` on all nine authored kit homes, under the Forge fit rules.
 
-Main owns the package export and the motif selection. Until then the bench imports this file by its source path.
+- **Finishes.** `ANVIL_HERO_DRAGON_SURFACE[style]` is the coil's back, the broad surface a composed copper or ceramic
+  finish should recolour. The assembler's current set (the roof, moss, brass, goldLeaf) misses it; see the integration
+  checklist in `apps/web/src/forge/anvil-hero/README.md`.
+
+Main owns the package export (`@chatdom/content/anvil-hero`, in place) and the motif selection in
+`packages/forge/src/assembly.ts` (in place for `sleeping-dragon`).

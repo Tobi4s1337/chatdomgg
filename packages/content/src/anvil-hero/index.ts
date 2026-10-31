@@ -32,6 +32,16 @@ const KITS: Record<StyleKey, Kit> = {
   grove: { back: MAT.moss, belly: MAT.cream, plate: MAT.bark, horn: MAT.goldLeaf, lid: MAT.bark, stack: MAT.stone, lip: MAT.darkStone },
 };
 
+/**
+ * The broad surface a composed Forge finish (copper, ceramic) recolours: the coil's back and folded wing.
+ * Never the roof material, so a finish keyed on `STYLES[style].roof` misses this dragon's body. The belly
+ * band, horns, lids, plates, stack and lip keep their kit colours, so a cast dragon keeps its anatomy and
+ * its chimney stays masonry.
+ */
+export const ANVIL_HERO_DRAGON_SURFACE: Readonly<Record<StyleKey, number>> = {
+  hearth: KITS.hearth.back, tide: KITS.tide.back, grove: KITS.grove.back,
+};
+
 /** A node on the coil's centreline, seen from above: position, ridge height and half-width, in cells. */
 type Node = [x: number, z: number, top: number, radius: number];
 

@@ -5,6 +5,7 @@ import { decodeFoundedScene, FOUNDED_SCENE_LIMITS } from '@chatdom/world/founded
 import { connectRealm } from '../realm/client';
 import { openRealmApiSession, RealmEntryError, type RealmFetch } from '../realm/adapters/entry';
 import { createRoomChatFeed } from '../realm/adapters/chat';
+import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
 import { observeRealm, observedRoom, type RealmObserver } from '../realm/adapters/observer';
 import { createRoomPresenceFeed } from '../realm/adapters/presence';
 import type { KingdomEntrySource } from './types';
@@ -28,7 +29,8 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
   const kingdomName = options.kingdomName.trim();
   if (!kingdomName || kingdomName.length > 80) throw new RealmEntryError('unavailable', 'The kingdom’s approved name is not available yet.');
   if (origin === 'simulated' && !options.notice?.includes('SIMULATED')) throw new RealmEntryError('refused', 'This rehearsal must be labelled SIMULATED.');
-  return async signal => {
+  const forgeFeed = createRealmForgeFeed();
+  const open: KingdomEntrySource = async signal => {
     signal.throwIfAborted();
     const fetcher = options.fetcher ?? ((input, init) => fetch(input, init));
     const session = await openRealmApiSession(kingdomId, fetcher, signal);
@@ -54,21 +56,29 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
     const room = observedRoom(client.room);
     const observer = observeRealm(room, { kingdomId, origin, collisionRevision: manifest.collisionRevision, layoutRevision: manifest.layoutRevision });
     const chatFeed = createRoomChatFeed(room, observer);
+    const offForge = forgeFeed.bind(observer);
     const dropped = () => observer.unavailable();
     const reconnected = () => observer.resync();
     client.room.onDrop(dropped); client.room.onLeave(dropped); client.room.onReconnect(reconnected);
     let disposed = false;
-    const dispose = () => {
+    const dispose = (reason?: 'scene-revision') => {
       if (disposed) return; disposed = true;
-      signal.removeEventListener('abort', dispose);
+      signal.removeEventListener('abort', aborted);
       client.room.onDrop.remove(dropped); client.room.onLeave.remove(dropped); client.room.onReconnect.remove(reconnected);
+      offForge();
+      if (reason !== 'scene-revision') forgeFeed.unavailable();
       chatFeed.dispose(); observer.dispose(); client.dispose();
     };
-    signal.addEventListener('abort', dispose, { once: true });
+    const aborted = () => dispose();
+    signal.addEventListener('abort', aborted, { once: true });
     try { await readyCheckpoint(observer, signal); signal.throwIfAborted(); }
     catch (error) { dispose(); throw error; }
-    return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), chatFeed,
+    return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), chatFeed, forgeFeed,
       kingdomName, ...(options.notice ? { notice: options.notice } : {}), dispose };
+  };
+  return async signal => {
+    try { return await open(signal); }
+    catch (error) { forgeFeed.unavailable(); throw error; }
   };
 }
 
@@ -98,11 +108,11 @@ function readyCheckpoint(observer: RealmObserver, signal: AbortSignal): Promise<
     const finish = (error?: Error) => { clearTimeout(timer); unsubscribe(); signal.removeEventListener('abort', aborted); if (error) reject(error); else resolve(); };
     const check = () => {
       const now = observer.current();
-      if (now.status === 'ready' && now.presence) finish();
-      else if (now.status === 'mismatch' || now.status === 'unavailable' || now.status === 'disposed') finish(new RealmEntryError('unavailable', 'The kingdom’s current windows could not be confirmed.'));
+      if (now.status === 'ready') finish();
+      else if (now.status === 'mismatch' || now.status === 'unavailable' || now.status === 'disposed') finish(new RealmEntryError('unavailable', 'The kingdom’s current streets could not be confirmed.'));
     };
     const aborted = () => finish(new DOMException('Entry was cancelled', 'AbortError'));
-    const timer = setTimeout(() => finish(new RealmEntryError('unavailable', 'The kingdom’s current windows did not arrive.')), 15_000);
+    const timer = setTimeout(() => finish(new RealmEntryError('unavailable', 'The kingdom’s current streets did not arrive.')), 15_000);
     unsubscribe = observer.subscribe({ status: check, presence: check });
     signal.addEventListener('abort', aborted, { once: true });
     if (signal.aborted) aborted(); else check();

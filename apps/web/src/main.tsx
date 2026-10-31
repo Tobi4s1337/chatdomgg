@@ -40,7 +40,9 @@ if (window.location.pathname === '/-/realm') {
     import('./kingdom-entry'), import('./kingdom-entry/simulated'), import('./kingdom-entry/live'), import('./realm/adapters/entry'),
   ]);
   const query = new URLSearchParams(location.search);
+  let checkedLiveSource: KingdomEntrySource | undefined;
   const live: KingdomEntrySource = async signal => {
+    if (checkedLiveSource) return checkedLiveSource(signal);
     const kingdom = KingdomIdSchema.safeParse(query.get('kingdom'));
     if (!kingdom.success) throw new RealmEntryError('refused', 'Choose a kingdom to visit from the Atlas.');
     const response = await fetch(REALM_ENTRY_ROUTE.replace(':kingdomId', encodeURIComponent(kingdom.data)), {
@@ -56,8 +58,9 @@ if (window.location.pathname === '/-/realm') {
     if (!info.success || info.data.kingdomId !== kingdom.data || info.data.origin !== 'live') {
       throw new RealmEntryError('unavailable', 'The kingdom’s approved name is not available yet.');
     }
-    return createLiveKingdomEntrySource({ kingdomId: kingdom.data, kingdomName: info.data.name,
-      endpoint: `${location.origin}/live-realm-data` })(signal);
+    checkedLiveSource = createLiveKingdomEntrySource({ kingdomId: kingdom.data, kingdomName: info.data.name,
+      endpoint: `${location.origin}/live-realm-data` });
+    return checkedLiveSource(signal);
   };
   render(() => <KingdomEntry open={query.get('source') === 'simulated' ? openSimulatedKingdomEntry : live} />, root);
 } else {

@@ -60,7 +60,8 @@ again, another account) gets a new one. A session lasts 14 days. One session may
 - Twitch access and refresh tokens are dropped inside `exchangeCode` and never stored or logged.
 - The public name is the Twitch display name (`preferred_username` claim, no extra scope), cleaned by Herald's
   window-name rule and recorded with approval `provider-display-name-v1`. A name that does not survive, or no name,
-  uses the anonymous presentation (`Citizen`, look `neutral`), set by the realm.
+  uses the anonymous name `Citizen`, set by the realm. The verified person receives a stable free starter look;
+  the same look follows them from their chat homecoming into their signed-in walker.
 - Postgres stores SHA-256 hashes of session handles, tickets, sign-in state, nonce and browser binding. Never
   the values themselves.
 - Mutating routes require the page's exact `Origin` (and reject `Sec-Fetch-Site: cross-site`) plus the CSRF token.

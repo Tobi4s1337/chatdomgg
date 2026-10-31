@@ -13,8 +13,10 @@ import { ANVIL_IRON, ANVIL_STUMP, FIRE_STONES, LOGS } from './court';
 export interface BenchStage {
   readonly camera: THREE.PerspectiveCamera;
   readonly canvas: HTMLCanvasElement;
-  /** Draw one frame looking along `yaw` from behind `feet`. */
-  frame(input: { readonly now: number; readonly feet: Vec3; readonly yaw: number; readonly people: readonly CitizenSample[] }): void;
+  /** Draw one frame looking along `yaw` from behind `feet`, or from a place's own framing when `view` is given. */
+  frame(input: { readonly now: number; readonly feet: Vec3; readonly yaw: number; readonly people: readonly CitizenSample[]; readonly view?: BenchView | null }): void;
+  /** World ray through CSS px of the canvas. */
+  ray(x: number, y: number): { readonly origin: Vec3; readonly direction: Vec3 };
   /** CSS px of a world point, or null when it is behind the camera. */
   project(point: Vec3): { readonly x: number; readonly y: number } | null;
   /** Camera view direction in world space. */
@@ -22,6 +24,9 @@ export interface BenchStage {
   resize(): void;
   dispose(): void;
 }
+
+/** A place's framing: where the camera stands and what it looks at. */
+export interface BenchView { readonly eye: Vec3; readonly at: Vec3 }
 
 const mat = (color: string, extra: THREE.MeshStandardMaterialParameters = {}) => new THREE.MeshStandardMaterial({ color, roughness: .92, ...extra });
 
@@ -160,9 +165,10 @@ export async function createBenchStage(host: HTMLElement, options: { readonly re
   resize();
 
   const view = new THREE.Vector3();
+  const caster = new THREE.Raycaster(), pointer = new THREE.Vector2();
   return {
     camera, canvas: renderer.domElement,
-    frame({ now, feet, yaw, people }) {
+    frame({ now, feet, yaw, people, view: placed }) {
       const t = now / 1000;
       for (const flame of flames) {
         const k = options.reducedMotion ? 0 : Math.sin(t * 7.3 + flame.phase) * .5 + Math.sin(t * 11.1 + flame.phase * 2) * .5;
@@ -173,8 +179,13 @@ export async function createBenchStage(host: HTMLElement, options: { readonly re
       const distance = portrait ? 3.7 : 3, height = portrait ? 3 : 2.5, shoulder = portrait ? 1.05 : 1.35;
       const fx = Math.sin(yaw), fz = Math.cos(yaw);
       // Wide over the right shoulder, so a log at arm's length stands clear of your own body. The kingdom uses walk-camera.
-      camera.position.set(feet[0] - fx * distance - fz * shoulder, feet[1] + height, feet[2] - fz * distance + fx * shoulder);
-      camera.lookAt(feet[0] + fx * 2, feet[1] + .35, feet[2] + fz * 2);
+      if (placed) {
+        camera.position.set(placed.eye[0], placed.eye[1], placed.eye[2]);
+        camera.lookAt(placed.at[0], placed.at[1], placed.at[2]);
+      } else {
+        camera.position.set(feet[0] - fx * distance - fz * shoulder, feet[1] + height, feet[2] - fz * distance + fx * shoulder);
+        camera.lookAt(feet[0] + fx * 2, feet[1] + .35, feet[2] + fz * 2);
+      }
       citizens.update(people, camera);
       shadows.count = 0;
       for (const p of people) { m.makeTranslation(p.position[0], .012, p.position[2]); shadows.setMatrixAt(shadows.count++, m); }
@@ -187,6 +198,12 @@ export async function createBenchStage(host: HTMLElement, options: { readonly re
       return { x: (view.x + 1) / 2 * host.clientWidth, y: (1 - view.y) / 2 * host.clientHeight };
     },
     forward() { camera.getWorldDirection(view); return [view.x, view.y, view.z]; },
+    ray(x, y) {
+      pointer.set(x / host.clientWidth * 2 - 1, 1 - y / host.clientHeight * 2);
+      caster.setFromCamera(pointer, camera);
+      const { origin, direction } = caster.ray;
+      return { origin: [origin.x, origin.y, origin.z], direction: [direction.x, direction.y, direction.z] };
+    },
     resize,
     dispose() {
       citizens.dispose(); avatar.dispose(); tiles.dispose(); shadows.dispose();

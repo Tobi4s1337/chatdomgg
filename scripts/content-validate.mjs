@@ -20,8 +20,13 @@ try {
   const families = collection === 'homes-hearth' ? ['emberfold', 'bramblecross', 'heatherstead'] : ['gullstep', 'saltbend', 'keelcroft'];
   const forms = ['fence-straight', 'fence-corner', 'fence-end', 'wall-straight', 'wall-corner', 'wall-end', 'flower-pot', 'flower-trough', 'rock-cluster', 'leafy-shrub'];
   const propSizes = [[16,12,4],[16,12,16],[4,12,4],[16,9,4],[16,9,16],[4,10,4],[8,12,8],[16,10,6],[12,7,10],[12,12,12]];
+  // Ground dressing: the full R1 manifest, kit forms Hearth, Tide, Grove (spec 28). Only this branch reads it.
+  const dressing = collection === 'ground-dressing' ? await server.ssrLoadModule('/packages/content/src/props/dressing/index.ts') : null;
+  const dressingIds = dressing ? dressing.DRESSING_FORMS.flatMap(form => dressing.DRESSING_ROLES[form].kit
+    ? dressing.DRESSING_STYLES.map(style => ({ id: `dressing-${style}-${form}`, form, style })) : [{ id: `dressing-${form}`, form }]) : [];
   const expected = collection.startsWith('homes-') ? families.flatMap(family => HomeTierSchema.options.map(tier => `home-${collection.slice(6)}-${family}-${tier}`))
-    : collection === 'street-props' ? ['hearth','tide'].flatMap(style => forms.map(form => `street-${style}-${form}`)) : null;
+    : collection === 'street-props' ? ['hearth','tide'].flatMap(style => forms.map(form => `street-${style}-${form}`))
+    : dressing ? dressingIds.map(entry => entry.id) : null;
   if (expected) {
     const actual = blueprints.map(b => b.id);
     const wanted = partial ? expected.filter(id => actual.includes(id)) : expected;
@@ -37,6 +42,11 @@ try {
         : () => module[collection === 'homes-hearth'?'createHearthHome':'createTideHome'](HomeTierSchema.options[i%5],Math.floor(i/5));
       if (JSON.stringify(create()) !== JSON.stringify(b) || JSON.stringify(create()) !== JSON.stringify(b)) fail(`${b.id}: factory is not reproducible or differs from BLUEPRINTS.`);
     }
+  }
+  if (dressing) for (const b of blueprints) {
+    const { form, style } = dressingIds.find(entry => entry.id === b.id);
+    const create = () => dressing.createDressing(form, style);
+    if (JSON.stringify(create()) !== JSON.stringify(b) || JSON.stringify(create()) !== JSON.stringify(b)) fail(`${b.id}: factory is not reproducible or differs from BLUEPRINTS.`);
   }
   const civic = collection === 'civic-props', attached = collection === 'forge-pieces';
   if (!partial && civic && blueprints.length !== 20) fail('Civic collection requires twenty finished assets.');
@@ -61,7 +71,12 @@ try {
     if (collection === 'places-water' || collection === 'places-high') {
       for (const key of ['brass','cloth','cream','darkStone','thatch','goldLeaf','terracotta','forgeCopper']) allowed.add(MAT[key]);
     }
-    if (prop) { allowed.delete(kit.wall); allowed.delete(kit.roof); allowed.delete(MAT.glass); }
+    if (prop || dressing) { allowed.delete(kit.wall); allowed.delete(kit.roof); allowed.delete(MAT.glass); }
+    // Flora and garden roles from spec 28 R1. Natural (non-kit) stones may be any kit's stone; kit forms keep their own.
+    if (dressing) {
+      for (const key of ['grass','goldLeaf','cream','thatch','terracotta']) allowed.add(MAT[key]);
+      if (!dressingIds.find(entry => entry.id === b.id)?.style) for (const other of Object.values(STYLES)) allowed.add(other.stone);
+    }
     for (const box of b.boxes) {
       if (!registered.has(box.material)) fail(`${b.id}: unregistered material ${box.material}`);
       if (lane && !allowed.has(box.material)) fail(`${b.id}: material ${box.material} is outside its style palette.`);
@@ -78,6 +93,11 @@ try {
       if (!b.windows.length) fail(`${b.id}: a home needs executable presence window anchors.`);
       const rear = 128 - HOME_DEPTH_METRES[tier] * 8;
       if (b.boxes.some(box => box.material !== MAT.air && box.from[2] < rear)) fail(`${b.id}: geometry occupies the locked rear land.`);
+    }
+    if (dressing) {
+      const { form } = dressingIds.find(entry => entry.id === b.id), max = dressing.DRESSING_SIZES[form];
+      const kind = dressing.DRESSING_ROLES[form].band === 'small' || dressing.DRESSING_ROLES[form].sway === 'canopy' ? 'flora' : 'prop';
+      if (b.kind !== kind || b.windows.length || b.size.some((v, axis) => v > max[axis])) fail(`${b.id}: wrong dressing kind, dimensions or windows.`);
     }
     if (prop) {
       const index = forms.findIndex(form => b.id === `street-${b.styleId}-${form}`);
@@ -147,6 +167,18 @@ try {
     if(civic && (b.kind!=='civic'||b.windows.length||b.boxes.length>1024||occupied>120000||triangles>120000)) fail(`${b.id}: invalid civic asset or cost.`);
     if(attached && (b.boxes.length>512||occupied>100000||triangles>40000)) fail(`${b.id}: Forge piece exceeds authored cost.`);
     if(lane&&triangles>(prop?40_000:250_000)) fail(`${b.id}: triangle budget exceeded.`);
+    if(dressing) {
+      // R1 per-form budgets at full detail; the far woodland clump is judged at its LOD 4 presentation.
+      const { form } = dressingIds.find(entry => entry.id === b.id), role = dressing.DRESSING_ROLES[form];
+      const budget = form === 'woodland-clump' ? 8_000 : form === 'elder-oak' ? 40_000 : role.band === 'small' ? 1_500 : role.sway === 'canopy' ? 24_000 : 6_000;
+      let measured = triangles;
+      if (form === 'woodland-clump') {
+        const { createRenderLodAsset } = await server.ssrLoadModule('/packages/voxel/src/lod.ts');
+        measured = 0;
+        for (const prepared of prepareAssetChunks(createRenderLodAsset(asset, 4, MATERIALS.materials), MATERIALS.materials, MATERIALS.revision)) measured += meshVoxelChunk(prepared).indices.length / 3;
+      }
+      if (measured > budget) fail(`${b.id}: ${measured} meshed triangles exceed the ${budget} R1 budget.`);
+    }
     rows.push({id:b.id,boxes:b.boxes.length,occupied,windows:b.windows.length,chunks,vertices,triangles,modelDrawBudget:1,bounds:`${min.join(',')}..${max.join(',')}`});
     console.log(`${b.id}: ${occupied} cells · ${triangles} triangles · ${b.boxes.length} boxes`);
   }

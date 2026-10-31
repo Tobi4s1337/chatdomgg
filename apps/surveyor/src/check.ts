@@ -7,8 +7,8 @@ import {
   SNAPSHOT_FILES, SNAPSHOT_RECORD_SCHEMAS, SnapshotManifestSchema,
   type ChannelObservation, type Game, type RaidObservation, type RaidPair, type SnapshotFile, type SnapshotManifest, type Sweep,
 } from './export/schema';
-import { previewIdFor } from './preview/build';
-import { previewDir, readPreviewNames, verifyPreviewDir } from './preview/store';
+import { buildPreview, previewIdFor } from './preview/build';
+import { previewDir, readPreviewManifest, readPreviewNames, verifyPreviewDir } from './preview/store';
 import { publicVisibility, withheldReader } from './policy/visibility';
 import { MANIFEST_FILE, readCurrent, readLedger, revisionDir } from './store/revisions';
 
@@ -19,6 +19,15 @@ export interface CheckReport {
   problems: string[];
   /** Candidates the visibility gate keeps off the public map (gone, gambling); the preview must not draw them. */
   offMap?: ReadonlySet<string>;
+  /** The verified records, for callers that go on to draw or settle from them. */
+  records?: RevisionRecords;
+}
+
+export interface RevisionRecords {
+  channels: ChannelObservation[];
+  games: Game[];
+  raidPairs: RaidPair[];
+  raidObservations: RaidObservation[];
 }
 
 const MAX_PROBLEMS = 20;
@@ -185,7 +194,8 @@ export function checkRevisionDir(dir: string): CheckReport {
   if (games && manifest.counts.games !== games.length) problems.add('Game count in the manifest does not match the records.');
 
   const list = problems.done();
-  return { ok: list.length === 0, revision: manifest.revision, manifest, problems: list, ...(channels ? { offMap } : {}) };
+  const records = channels && games && pairs && observations ? { channels, games, raidPairs: pairs, raidObservations: observations } : null;
+  return { ok: list.length === 0, revision: manifest.revision, manifest, problems: list, ...(channels ? { offMap } : {}), ...(records ? { records } : {}) };
 }
 
 /** Checks what readers would actually get: the current pointer, its manifest hash, that revision and the ledger. */
@@ -215,7 +225,7 @@ export function checkDataDir(dataDir: string, revision?: string): CheckReport {
   } catch {
     extra.push('The import ledger has an invalid entry.');
   }
-  if (report.manifest) extra.push(...checkPreview(dataDir, report.manifest, report.offMap));
+  if (report.manifest) extra.push(...checkPreview(dataDir, report.manifest, report.offMap, report.ok ? report.records : undefined));
   const withheld = withheldReader(dataDir).current();
   if (withheld.error) extra.push(`${withheld.error} (names are refused until it is fixed).`);
   const problems = [...report.problems, ...extra];
@@ -226,7 +236,7 @@ export function checkDataDir(dataDir: string, revision?: string): CheckReport {
  * A revision is never current without its land (Spec 01 R2): its survey preview must exist, belong to it, and pass
  * the full preview verification (hashes, shapes, label, every mapped channel once on dry land, no overlaps).
  */
-export function checkPreview(dataDir: string, manifest: SnapshotManifest, offMap?: ReadonlySet<string>): string[] {
+export function checkPreview(dataDir: string, manifest: SnapshotManifest, offMap?: ReadonlySet<string>, records?: RevisionRecords): string[] {
   const id = previewIdFor(manifest.revision, manifest.asOf);
   const dir = previewDir(dataDir, id);
   if (!existsSync(dir)) return [`Survey preview ${id} for revision ${manifest.revision} is missing. Run atlas:import to draw it.`];
@@ -235,10 +245,26 @@ export function checkPreview(dataDir: string, manifest: SnapshotManifest, offMap
     const drawn = readPreviewNames(dataDir, id).ids.filter((channel) => offMap.has(channel));
     if (drawn.length) problems.push(`${drawn.length} channels the visibility gate excludes (gone or gambling) are drawn, e.g. ${drawn[0]}.`);
   }
+  // Same input, same land: redraw the preview from its revision and require identical bytes.
+  if (records && problems.length === 0) problems.push(...previewReproduces(dataDir, id, manifest, records));
   return problems.map((problem) => bound(`Survey preview ${id}: ${problem}`, 240));
 }
 
 export function assertRevisionDir(dir: string): void {
   const report = checkRevisionDir(dir);
   if (!report.ok) throw new AtlasError('check', 'The written revision failed verification; the previous revision stays current.', report.problems);
+}
+
+/** The stored preview's world and names must be exactly what its revision draws today. */
+export function previewReproduces(dataDir: string, id: string, manifest: SnapshotManifest, records: Pick<RevisionRecords, 'channels' | 'games'>): string[] {
+  const stored = readPreviewManifest(dataDir, id);
+  const rebuilt = buildPreview({ manifest, channels: records.channels, games: records.games });
+  const problems: string[] = [];
+  if (rebuilt.manifest.world.sha256 !== stored.world.sha256) problems.push('world.json is not reproducible from its revision (same input gave different land).');
+  if (rebuilt.manifest.names.sha256 !== stored.names.sha256) problems.push('names.json is not reproducible from its revision.');
+  for (const region of rebuilt.world.regions) {
+    const file = join(previewDir(dataDir, id), region.chunk.path);
+    if (!existsSync(file) || sha256(readFileSync(file)) !== region.chunk.sha256) problems.push(`${region.chunk.path} is not reproducible from its revision.`);
+  }
+  return problems.slice(0, 5);
 }

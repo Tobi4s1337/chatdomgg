@@ -68,3 +68,11 @@ export function scaleBar(pxPerUnit: number, minPx = 56, maxPx = 140): { units: n
   const units = 10 * power;
   return { units, px: units * pxPerUnit };
 }
+
+/** "10:07 UTC" today, or the full moment on another day. */
+export function formatTime(at: number, now = Date.now()): string {
+  const date = new Date(at);
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const mm = String(date.getUTCMinutes()).padStart(2, '0');
+  return new Date(now).toISOString().slice(0, 10) === date.toISOString().slice(0, 10) ? `${hh}:${mm} UTC` : formatMoment(at);
+}
