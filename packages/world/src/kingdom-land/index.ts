@@ -1,2 +1,4 @@
-// Builders and samplers arrive from lane/kingdom-land; no placeholder geography is exported.
 export type * from './types';
+export { naturalLandHeight, sampleLandWater, waterSurfaceAt, waterKeepOut } from './surface';
+export { foundKingdomGeography, createKingdomCastle, reservedByGeography, geographyBounds, LAND_FRAME,
+  KEEP_DOOR_LOCAL_METRES, COURT_ELEVATION, BRIDGE_SPAN, WHEEL_HEAD_METRES, type KingdomGeography } from './geography';
