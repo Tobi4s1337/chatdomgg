@@ -4,7 +4,8 @@ import { createCastlePlan, generateKingdom, generateSettlementPlan, terrainHeigh
 import { createWindowLights, type WindowHouse } from '@chatdom/render';
 import { createHome, createHearthHome, createCastle, CASTLE_BEACON_ANCHOR_METRES, MATERIALS } from '@chatdom/content';
 import { PRESENCE_FIXTURES } from '@chatdom/shared/world-fixtures';
-import { Scene } from 'three';
+import { Matrix4, Scene } from 'three';
+import { createWalkerLanterns } from './walker-lanterns';
 import { createVoxelMaterial } from '@chatdom/render';
 import { sampleLightVolume } from '@chatdom/voxel';
 import { createLightField, type LightFieldOptions } from './light-field';
@@ -297,6 +298,25 @@ describe('authoritative worker light geometry', () => {
 });
 
 describe('bounded kingdom light field', () => {
+  it('keeps a real carried lantern lit when the coarse street cell rounds up around its flame', () => {
+    const street = { ...layout, homes: [], quarters: layout.quarters.map(quarter => ({ ...quarter, elevation: 8.125 })) };
+    const options = { mode: 'kingdom', bounds: { minX: -16, maxX: 16, minZ: -16, maxZ: 16 } } as const;
+    const lanterns = createWalkerLanterns(new Scene(), 1);
+    try {
+      lanterns.update([{ slot: 0, publicName: null, state: 'walking', position: [1, 8.125, 1], heading: 0,
+        speed: 1.2, distance: 0, walkPhase: 0, homeLit: false, homeLitAtMs: null, opacity: 1,
+        goalNodeId: 'home', goalReached: false }], 0, 1, undefined, new Map([[0, new Matrix4().makeTranslation(1, 9.7, 1)]]));
+      const flame = lanterns.sources()[0]!;
+      const solver = createLightFieldSolver(street, [], options);
+      const job = { kind: 'solve' as const, revision: 1, origin: resolveLightFieldConfig(street, options).origin!,
+        emitters: [{ position: flame.position, level: Math.round(flame.strength * 15) }] };
+      expect(solver.solve(job).volume.visited).toBe(0);
+      const lit = solver.solve({ ...job, revision: 2, emitters: [{ ...job.emitters[0]!, normal: flame.normal! }] }).volume;
+      expect(sampleLightVolume(lit, [1, 10.001, 1])).toBeGreaterThan(0);
+      expect(solver.solve({ ...job, revision: 3, emitters: [{ ...job.emitters[0]!, position: [1, 8, 1], normal: flame.normal! }] }).volume.visited).toBe(0);
+    } finally { lanterns.dispose(); }
+  });
+
   it('escapes only terrain quantization above low windows, with exact roof and wall checks', () => {
     const lowGround = { ...layout, homes: [], quarters: layout.quarters.map(quarter => ({ ...quarter, elevation: 8.125 })) };
     const options = { mode: 'kingdom', bounds: { minX: -16, maxX: 16, minZ: -16, maxZ: 16 } } as const;

@@ -334,17 +334,23 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 remains authorised. Keep exposure34ac89a, indigo0896044, street warmth96f2d08, beacon/pools/gold frame,
 soft smoke7c16789 and castle lighta1dac83/32633a8. Merge good checkpoints; medium helpers for routine work.
 
-**Current slice:** the labelled SIMULATED rehearsal lets12 actual foreground neighbours join16–21s after
-its main wave. First Juniper unchanged; existing routes, window-on-arrival, live presence timing and all light/
-camera settings unchanged. Viewed `shots/magic/wide-homecoming-pair.png`,1920×1080 HIGH,hour19.5/time25:
-visible foreground group,104 walking/136 lit versus93/147. Still small at wide scale, not a busy evening yet;
-this is rehearsal staging, NOT a claim of improved live traffic.17 presence tests, typecheck, scoped lint and
-web build pass. Real road life and avatar body/clothes remain open. No waiting live observer.
+**Current slice:** carried lanterns now use existing exact-air upward projection in the light field.
+The coarse terrain grid had rounded up around low flames and rejected sources without an outward normal;
+no strength/budget/exposure change. One regression test uses the actual carried source: rounded street cell
+lights, genuinely buried flame stays blocked. Viewed `shots/magic/lantern-road-pools-pair.png`,1920×1080 HIGH,
+hour19.5/time25: distinct warm pools now follow foreground walkers. Beacon/castle/window light preserved;
+faces too small to judge. Typecheck, scoped lint, focused test and web build pass. No pending captures/locks.
 
-**Merged this turn:** keeper content7eff5d8 (193 focused tests; root viewed court evidence), additive only,
-not mounted into authority/world. Hero lantern has a triangular mesh shard; concrete follow-up in lane log.
-Prior merges: effects d535804, emote art40aeb18, ground-dressing92421d5. Accepted home smoke NOT replaced.
-Emote glass central eye/mouth still clip; lane follow-up recorded. Their focused suites/evidence were checked.
+**Previous rehearsal slice:**73dc36e lets12 SIMULATED foreground neighbours join16–21s after the main wave.
+First Juniper/existing routes/window-on-arrival/live times unchanged. `wide-homecoming-pair.png` viewed:
+104 walking/136 lit versus93/147. Still small, not a busy evening; actual live traffic not demonstrated by SIM.
+Avatar body/clothes remain with team. Keepers retreat under real crowd counts; never use them as fake audience.
+
+**Merges:** Genesis sound1ed6865 additive only (17 focused tests), not mounted or listening-approved; accepted
+ambience unchanged. Keepers7eff5d8 merged (193 tests), unmounted; hero lantern shard follow-up in lane log.
+Effects d535804, emote art40aeb18, ground-dressing92421d5 merged/viewed; accepted smoke NOT replaced. Central
+emote glass clips; follow-up recorded. Separate kingdom-land6f60ae2 is a parked v2 layout candidate, NOT a
+picture-land checkpoint or permission to replace the accepted streets. No new tree/body/clothes checkpoint.
 
 **Land/grove:**975af2f adopts picture-land:2 through worker/height texture/horizon/light occupancy/citizen
 contact/founded collision. Plan identity unchanged; producer is in existing physics revision.44de84b adds rock

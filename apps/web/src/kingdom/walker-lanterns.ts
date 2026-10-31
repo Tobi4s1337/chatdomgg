@@ -83,7 +83,9 @@ export function createWalkerLanterns(scene: THREE.Scene, capacity: number) {
         flameMatrix.multiplyMatrices(matrix, flameLocal); flames.setMatrixAt(count, flameMatrix); count++;
         if (dark > 0) {
           const p = new THREE.Vector3(0, -.15, 0).applyMatrix4(matrix);
-          const source: LightFieldSource = { position: [p.x, p.y, p.z] as Vec3, strength: dark * fade * .7 };
+          // The flame is real air even when the coarse kingdom grid rounds the
+          // street up around it. Reuse exact-air upward projection, as gate fires do.
+          const source: LightFieldSource = { position: [p.x, p.y, p.z] as Vec3, strength: dark * fade * .7, normal: [0, 1, 0] };
           const distance = target ? p.distanceToSquared(target) : 0;
           candidates.push({ source, distance, slot: sample.slot });
         }
