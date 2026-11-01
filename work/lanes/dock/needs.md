@@ -233,3 +233,10 @@ implemented in `apps/api/src/dock/contracts.ts` into shared and the realm snapsh
 while the original act is witnessed and `head.undo.until > now`. An empty list explicitly
 denies undo. Existing same-session reload already recovers the accepted receipt locally;
 the realm remains responsible for atomic authorization and expiry.
+
+**needs: town attendance in the existing label.** `town.presenceLabel` currently says only
+whether the stream is awake. DK10 asks who is in town at a glance. Populate this existing
+field from the current public presence projection (a safe attendance count and, where
+disclosure permits, a short approved name sample). Keep unknown coverage explicit; do not
+substitute viewer count or number of homes for observed people. No schema change is needed;
+the dock already displays the authoritative label beside Here.

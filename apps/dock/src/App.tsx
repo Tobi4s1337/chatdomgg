@@ -1,4 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import '@chatdom/ui/kit.css';
 import { createKingdomAudio } from '@chatdom/audio';
 import { REALM_AUTH_ROUTES, RealmSessionReplySchema, RealmSignoutReplySchema, type RealmSessionReply } from '@chatdom/shared/realm';
 import { bindRecovery, chooseKingdom, clearRecovery, migrateLegacy, readRecovery, sameScope, writeRecovery } from './recovery';
@@ -35,6 +36,7 @@ export function App() {
   const [uncertain, setUncertain] = createSignal('');
   let alive = true;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let cadenceTimer: ReturnType<typeof setTimeout> | undefined;
   let reading = false;
   let generation = 0;
   const params = new URLSearchParams(location.search);
@@ -84,7 +86,7 @@ export function App() {
     } finally { reading = false; if (alive) setLoading(false); }
   }
   onMount(() => { void (async () => { await refresh(); await document.fonts.ready; window.__chatdomReady = true; })(); timer = setInterval(() => void refresh(), 10000); });
-  onCleanup(() => { sound.dispose(); alive = false; if (timer) clearInterval(timer); });
+  onCleanup(() => { sound.dispose(); alive = false; if (timer) clearInterval(timer); if (cadenceTimer) clearTimeout(cadenceTimer); });
   const ready = () => { const current = status(); return current?.status === 'ready' ? current : undefined; };
   const capability = (kind: Kind) => ready()?.capabilities.find(item => item.kind === kind);
   const can = (kind: Kind) => connected() && session()?.status === 'authenticated' && storageReady() && !signingOut() && !pending() && !uncertain() && ready()?.principal.role === 'broadcaster' && capability(kind)?.allowed === true;
@@ -94,6 +96,8 @@ export function App() {
     if (!state || identity?.status !== 'authenticated' || !can(kind) || (['raid-welcome', 'citizen-crown', 'citizen-knight', 'moment-play'].includes(kind) && !targetId)) return;
     void sound.unlock().then(() => sound.cue('wood', { ui: 'brass' }));
     generation++;
+    const actionGeneration = generation;
+    if (cadenceTimer) clearTimeout(cadenceTimer);
     const actionId = crypto.randomUUID();
     if (!writeRecovery(storage, identity.resumeScope, state.kingdom.id, { uncertain: actionId, receipt: receipt() })) { setStorageReady(false); setNotice({ text: 'This browser cannot save action recovery. Allow session storage before sending an act.', error: true }); return; }
     setPending({ kind, ...(targetId ? { target: targetId } : {}) }); setNotice(undefined);
@@ -119,7 +123,15 @@ export function App() {
       if (result.status === 'unavailable') setConnected(false);
     } catch {
       if (alive && sameScope(session(), identity.resumeScope)) { sound.cue('wood', { ui: 'wood' }); setUncertain(actionId); setConnected(false); setNotice({ text: 'The reply was lost. This action may have reached the kingdom; check its state before trying again.', error: true }); }
-    } finally { if (alive) { setPending(undefined); void refresh(); } }
+    } finally {
+      if (alive) {
+        setPending(undefined);
+        await refresh();
+        if (alive && generation === actionGeneration) {
+          cadenceTimer = setTimeout(() => { cadenceTimer = undefined; void refresh(); }, 2200);
+        }
+      }
+    }
   }
   async function signOut() {
     const identity = session();
@@ -156,7 +168,7 @@ export function App() {
     </nav></Show>;
   };
   return <main class="dock"><div class="frame">
-    <header class="masthead"><span class="crest" aria-hidden="true"><Insignia kind="throne" /></span><div><div class="eyebrow">Chatdom · The throne</div><h1>{ready()?.kingdom.name ?? 'Your kingdom'}</h1><div class="statusline"><span classList={{ dot: true, live: connected() && !!ready() }} />{loading() ? 'Finding your kingdom…' : !connected() ? 'Connection unavailable' : ready() ? `${ready()!.principal.displayName} · ${ready()!.principal.role === 'broadcaster' ? 'Monarch' : 'Moderator'}` : 'The throne'}</div></div></header>
+    <header class="masthead"><span class="crest" aria-hidden="true"><Insignia kind="throne" /></span><div><div class="eyebrow">Chatdom · The throne</div><h1>{ready()?.kingdom.name ?? 'Your kingdom'}</h1><div class="statusline"><span classList={{ dot: true, live: connected() && !!ready() }} />{loading() ? 'Finding your kingdom…' : session()?.status === 'anonymous' ? 'Sign in with Twitch' : !connected() ? 'Connection unavailable' : ready() ? `${ready()!.principal.displayName} · ${ready()!.principal.role === 'broadcaster' ? 'Monarch' : 'Moderator'}` : 'The throne'}</div></div></header>
     <Show when={status()?.mode === 'SIMULATED' || params.get('rehearsal') === '1'}><div class="notice"><strong>SIMULATED</strong> · Rehearsal data, not a live kingdom.</div></Show>
     <Show when={loading()}><div class="paper summary" role="status"><h2>Opening the throne</h2><p>Finding your kingdom and checking your place in it.</p></div></Show>
     <Show when={!loading() && session()?.status !== 'anonymous' && !connected()}><div class="paper summary" role="status"><h2>The kingdom is out of reach</h2><p>{status()?.status === 'unavailable' ? status()?.message : 'We couldn’t connect to the dock. Your controls will return when the connection does.'}</p><button class="retry" type="button" onClick={() => void refresh()}>Try again</button></div></Show>
