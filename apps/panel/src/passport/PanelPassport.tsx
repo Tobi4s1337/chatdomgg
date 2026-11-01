@@ -5,7 +5,7 @@
 import { createEffect, createMemo, For, Show, type JSX } from 'solid-js';
 import {
   PassportReading, createPassportReading,
-  type PassportDisclosureView, type PassportReadState, type PassportTransport,
+  type PassportBookProps, type PassportDisclosureView, type PassportReadState, type PassportSession, type PassportTransport,
 } from '@chatdom/ui/passport';
 import { PANEL_DENSITY, simulatedOrigin } from './model';
 import './panel-passport.css';
@@ -33,6 +33,13 @@ export interface PanelPassportProps {
   /** Every state the reading passes through, for a host that waits on the first settled one. */
   readonly onState?: (state: PassportReadState) => void;
   readonly title?: string;
+  /**
+   * A reading the host already holds for this same transport (the card reads the passport's keepsakes before the page
+   * is turned). The view then shows that reading instead of opening a second one.
+   */
+  readonly reading?: { readonly state: () => PassportReadState; readonly session: PassportSession };
+  /** Told after every page the reader turns, so the host can give it a sound. */
+  readonly onTurn?: PassportBookProps['onTurn'];
 }
 
 export function PanelPassport(props: PanelPassportProps): JSX.Element {
@@ -41,7 +48,7 @@ export function PanelPassport(props: PanelPassportProps): JSX.Element {
 }
 
 function PanelReading(props: PanelPassportProps): JSX.Element {
-  const { state, session } = createPassportReading(props.transport, { disclosure: () => props.disclosure });
+  const { state, session } = props.reading ?? createPassportReading(props.transport, { disclosure: () => props.disclosure });
   createEffect(() => props.onState?.(state()));
   const simulated = createMemo(() => simulatedOrigin(state(), props.simulated === true));
   const onKey = (event: KeyboardEvent) => {
@@ -66,7 +73,8 @@ function PanelReading(props: PanelPassportProps): JSX.Element {
     </header>
     <div class="cpp-desk">
       <PassportReading state={state()} layout="page" density={PANEL_DENSITY} initialView={props.initialView ?? 0} class="cpp-book"
-        {...(props.places ? { places: props.places } : {})} onMore={collection => session.more(collection)} onRetry={() => session.open()} />
+        {...(props.places ? { places: props.places } : {})} onMore={collection => session.more(collection)} onRetry={() => session.open()}
+        {...(props.onTurn ? { onTurn: props.onTurn } : {})} />
     </div>
   </section>;
 }
