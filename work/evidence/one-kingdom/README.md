@@ -15,4 +15,15 @@ The authenticated checks used a temporary session for the existing broadcaster, 
 
 Checks: native growth/public gateway focused tests, 110 tests for the latest Soul/Chronicle/grand-artisan checkpoints, four opening-lease tests, scoped lint, full typecheck, realm/web builds and `pnpm public:build` including the checked panel zip passed. A new full `pnpm verify` or real-GPU run was not performed.
 
-Still running: GK10's grand pipeline and its dependent GK11 settlement checkpoint, plus the remaining live host bindings described in `work/PLAN.md` §10. The landscape has not replaced the live kingdom. The public Chronicle is unavailable; the earned shelf, civic placement, approved wardrobe/gesture authority and remaining dock acts still need their real consumer joins. No active Twitch event was witnessed in this pass.
+At takeover: GK10 and the GK11 settlement checkpoint are merged as standalone producers; their live host adoption and the other bindings in `work/PLAN.md` §10 remain unfinished. No main-thread job remains running. The landscape has not replaced the live kingdom. The public Chronicle is unavailable; the earned shelf, civic placement, approved wardrobe/gesture authority and remaining dock acts still need their real consumer joins. No active Twitch event was witnessed in this pass.
+
+
+## Wind-down — 2026-11-01
+
+- `e066d39`: Atlas Pixi CSP shim, original mount-error logging, one fresh-renderer retry and selected-still fallback. Strict CSP is unchanged. The emitted atlas chunk was checked for the unsafe-eval shim's shader/uniform overrides; public real-GPU confirmation remains Tobias's check.
+- `9ace174`: Atlas names always served with at least another day of freshness; withholding unchanged. Surveyor: 16 files, 193 tests passed, including old facts and withheld channels.
+- Final whole-workspace typecheck and lint passed. Focused Atlas recovery, walking observed-head fixture, realm persistence, grand generation/settlement/meshing and LOD: seven files, 38 tests passed. Workspace build and final `pnpm public:build` passed; the latter restored the complete front door and produced the checked panel zip (22 files, 612 KB). No new full `pnpm verify`, screenshot matrix or real-GPU run was performed.
+- The walking fixture now uses actual rendered head anchors; public capture globals lint is fixed. No new visual result is claimed for these corrections.
+- Grand hosted adoption is preserved off main at `wip/grand-land-adoption` / `5dcc56d`. The actual stream stayed behind its loading curtain for 300 seconds. Its branch contains the viewed baseline and failed frame, clearly marked as a failed adoption. A different-identity CPU diagnostic is not evidence that the real stream opens.
+- No active Twitch moment, successful new cottage still, dock composite or public Chronicle was demonstrated in this pass. Those limitations remain open.
+- All main-owned captures, diagnostics and temporary servers have ended. Managed services remain untouched; temporary test-session cleanup is complete. The build is paused for Tobias's takeover. Lane checkpoints and dirty worktrees are recorded in `work/HANDOFF-LANES.md`.

@@ -25,7 +25,7 @@ if (!Number.isFinite(timeout) || timeout < 1 || timeout > 240_000) throw new Err
 
 let release, browser, deadline;
 try {
-  release = await acquireCaptureLock({ signal: AbortSignal.timeout(20 * 60_000) });
+  release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(20 * 60_000) });
   // A stuck browser cannot retain the pipe-owned capture guard indefinitely.
   deadline = setTimeout(() => {
     console.error('Public still exceeded its eight-minute active deadline.');
@@ -53,5 +53,5 @@ try {
   for (const line of problems) console.log(line);
 } finally {
   try { await browser?.close(); }
-  finally { clearTimeout(deadline); await release?.(); }
+  finally { globalThis.clearTimeout(deadline); await release?.(); }
 }
