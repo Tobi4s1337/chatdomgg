@@ -1,12 +1,12 @@
 // One invocation holds the shared capture lock for one still or one short UI clip.
 // This HTTP fixture models acknowledgements only. It does not connect to a kingdom.
 import { createServer, request as httpRequest } from 'node:http';
-import { mkdir, mkdtemp, rename, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
-import { createServer as createViteServer } from 'vite';
+import { build as viteBuild } from 'vite';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const out = fileURLToPath(new URL('./', import.meta.url));
@@ -25,9 +25,21 @@ let town = { gate: scenario === 'close' ? 'open' : 'closed', fire: 'unlit', pres
 function state() { return { kingdom: { id: '129634568', name: 'Willowmere' }, principal: { role: scenario === 'moderator' ? 'moderator' : 'broadcaster', displayName: 'Tobias' }, town, raids: scenario === 'empty' ? [] : [{ id: 'raid1', name: 'Hollowbrook' }], citizens: scenario === 'empty' ? [] : [{ id: 'citizen1', name: 'Robin' }], moments: scenario === 'empty' ? [] : [{ id: 'sky', name: 'Skyfire', available: true, reason: '' }], capabilities: kinds.map(kind => ({ kind, allowed: scenario !== 'moderator', reason: scenario === 'moderator' ? 'Only the monarch can do this.' : '' })), revision: String(revision), undoable }; }
 const base = { version: 1, mode: 'SIMULATED', signInUrl: '/api/realm/auth/start?returnTo=%2Fdock' };
 let handleDock, apiRunner;
-let vite;
+let buildDir;
 const server = createServer(async (req, res) => {
-  if (!req.url?.startsWith('/api/')) { vite.middlewares(req, res, () => { res.writeHead(404).end(); }); return; }
+  // Serve a fresh production build: no injected Vite dev client or hidden console filtering.
+  if (!req.url?.startsWith('/api/')) {
+    try {
+      const path = new URL(req.url ?? '/', 'http://dock.capture').pathname;
+      const relative = path === '/dock' || path === '/dock/' ? 'index.html' : path.startsWith('/dock/') ? decodeURIComponent(path.slice(6)) : '';
+      const file = resolve(buildDir, relative);
+      if (!relative || !file.startsWith(`${buildDir}${sep}`)) { res.writeHead(404).end(); return; }
+      const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml', '.png': 'image/png' };
+      const data = await readFile(file);
+      res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' }).end(data);
+    } catch { if (!res.headersSent) res.writeHead(404).end(); else res.destroy(); }
+    return;
+  }
   if (handleDock && req.url?.startsWith('/api/dock/')) {
     // Real API handler, simulated session lookup, and no realm bridge configured.
     await handleDock(req, res, { config: { mode: 'simulated', secureCookies: false, publicOrigin: 'http://dock.capture' }, pool: { query: async () => ({ rows: [{ person_id: '129634568', session_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' }] }) } });
@@ -78,8 +90,10 @@ try {
     const imported = await runnerImport(`${root}/apps/api/src/dock/index.ts`, { root: `${root}/apps/api`, configFile: false, logLevel: 'warn', server: { middlewareMode: true, hmr: false, ws: false } });
     handleDock = imported.module.handleDock; apiRunner = imported.runner;
     delete process.env.DOCK_REALM_URL;
+    delete process.env.CHATDOM_REALM_TARGET;
   }
-  vite = await createViteServer({ root: `${root}/apps/dock`, configFile: `${root}/apps/dock/vite.config.ts`, server: { middlewareMode: true, hmr: false, ws: false, allowedHosts: ['dock.capture'] }, appType: 'spa', logLevel: 'error' });
+  buildDir = await mkdtemp(join(tmpdir(), 'chatdom-dock-ui-build-'));
+  await viteBuild({ root: `${root}/apps/dock`, configFile: `${root}/apps/dock/vite.config.ts`, build: { outDir: buildDir, emptyOutDir: true }, logLevel: 'error' });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socketPath, resolve); });
   const origin = 'http://dock.capture';
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', '--unsafely-treat-insecure-origin-as-secure=http://dock.capture'] });
@@ -162,7 +176,7 @@ try {
 } finally {
   await browser?.close();
   if (server.listening) await new Promise(resolve => server.close(resolve));
-  await vite?.close();
   await apiRunner?.close?.();
+  if (buildDir) await rm(buildDir, { recursive: true, force: true });
   await rm(socketDirectory, { recursive: true, force: true });
 }
