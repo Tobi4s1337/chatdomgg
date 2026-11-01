@@ -9,7 +9,7 @@ import './bench.css';
 declare global {
   interface Window {
     __chatdomReady?: boolean;
-    __chatdomCardBench?: { readonly fixture: string; readonly mode: CardMode; readonly state: BenchState; readonly portraits: number; readonly passport: string | null };
+    __chatdomCardBench?: { readonly fixture: string; readonly mode: CardMode; readonly state: BenchState; readonly travels: Travels; readonly portraits: number; readonly passport: string | null; readonly picture: string | null };
     __chatdomCardError?: string;
   }
 }
@@ -19,6 +19,9 @@ type BenchState = 'ready' | 'loading' | 'missing' | 'withdrawn' | 'unavailable';
 const STATES: readonly BenchState[] = ['ready', 'loading', 'missing', 'withdrawn', 'unavailable'];
 const MODES: readonly CardMode[] = ['page', 'dialog'];
 const LIGHTS: readonly CardLight[] = ['day', 'dusk', 'night'];
+/** Whether the SIMULATED citizen keeps their travels private: the card stays, the book and its picture go. */
+type Travels = 'shown' | 'hidden';
+const TRAVELS: readonly Travels[] = ['shown', 'hidden'];
 
 const pick = <T extends string>(value: string | null, options: readonly T[], fallback: T): T =>
   options.includes(value as T) ? value as T : fallback;
@@ -29,7 +32,11 @@ const pick = <T extends string>(value: string | null, options: readonly T[], fal
  * SIMULATED passport (Wren Tarnwalker) has it read beneath their card, through the real passport reader. It is the
  * lane's runnable proof and the default export main mounts; it stores nothing and talks to no server.
  *
- *   /src/citizen-card/bench.html?fixture=wren&mode=page&light=dusk&state=ready&chrome=0
+ * On the page the card is also shared: its picture is `/-/citizens/share.png`, which only the card capture serves
+ * (the real composition of the bench's card and the passport reader's answer, drawn by Chrome). Opened without the
+ * capture, the print shows its designed could-not-be-drawn state rather than a stand-in.
+ *
+ *   /src/citizen-card/bench.html?fixture=wren&mode=page&light=dusk&state=ready&travels=shown&chrome=0
  */
 export default function CitizenCardBench() {
   const params = new URLSearchParams(window.location.search);
@@ -37,6 +44,7 @@ export default function CitizenCardBench() {
   const mode = pick(params.get('mode'), MODES, 'page');
   const state = pick(params.get('state'), STATES, 'ready');
   const light = pick(params.get('light'), LIGHTS, 'dusk');
+  const travels = pick(params.get('travels'), TRAVELS, 'shown');
   const chrome = params.get('chrome') !== '0';
   const [subject, setSubject] = createSignal<CitizenKey | null>(null);
   const [status, setStatus] = createSignal<string | null>('Painting the portraits…');
@@ -53,7 +61,7 @@ export default function CitizenCardBench() {
   const announce = () => {
     void settle().then(() => {
       if (disposed) return;
-      window.__chatdomCardBench = { fixture: fixture.id, mode, state, portraits: portraits.size, passport };
+      window.__chatdomCardBench = { fixture: fixture.id, mode, state, travels, portraits: portraits.size, passport, picture: document.querySelector('.cc-share')?.getAttribute('data-picture') ?? null };
       window.__chatdomReady = true;
     });
   };
@@ -69,11 +77,20 @@ export default function CitizenCardBench() {
       }
       if (state !== 'ready') return Promise.resolve(answer({ status: state }));
       const match = CARD_FIXTURES.find(item => item.document.key.personId === key.personId && item.document.key.kingdomId === key.kingdomId);
-      return Promise.resolve(answer(match ? { status: 'ready', document: match.document } : { status: 'missing' }));
+      // Travels kept private: the authority's projected card carries a hidden passport; homes and the rest remain.
+      const shown = match && travels === 'hidden' ? { ...match.document, passport: { hidden: true } as const } : match?.document;
+      return Promise.resolve(answer(shown ? { status: 'ready', document: shown } : { status: 'missing' }));
     },
     assetUrl: (ref: CardAssetRef) => portraits.get(`${ref.id}@${ref.revision}`) ?? null,
     close() { setSubject(null); },
     navigate(path) { window.location.assign(path); },
+    // The bench's own page for this card is its public page; the picture's route is the capture's.
+    share(card) {
+      if (card.key.personId !== fixture.document.key.personId) return null;
+      const page = new URL(window.location.pathname, window.location.href);
+      page.search = new URLSearchParams({ fixture: fixture.id, mode: 'page', ...(travels === 'hidden' ? { travels } : {}) }).toString();
+      return { pageUrl: page.href, imageUrl: `/-/citizens/share.png?${new URLSearchParams({ fixture: fixture.id, travels })}` };
+    },
   };
 
   onMount(() => {
@@ -87,7 +104,7 @@ export default function CitizenCardBench() {
         passport = 'pending';
         const { simulatedCardPassport } = await import('./passport');
         if (disposed) return;
-        setBeneath(() => (card: CitizenCardDocument) => simulatedCardPassport(card, book, reading => { passport = reading.kind; }));
+        setBeneath(() => (card: CitizenCardDocument) => simulatedCardPassport(card, book, reading => { passport = reading.kind; }, travels === 'hidden'));
       }
       const painted = await paintPortraits(sitters.map(item => ({ id: item.id, look: item.portraitLook })), { signal: sitting.signal });
       if (disposed) return;
@@ -129,6 +146,7 @@ export default function CitizenCardBench() {
         <Choice label="Mode" items={MODES.map(value => ({ value, text: value }))} current={mode} href={value => href({ mode: value })} />
         <Choice label="Ledger" items={STATES.map(value => ({ value, text: value }))} current={state} href={value => href({ state: value })} />
         <Choice label="Light" items={LIGHTS.map(value => ({ value, text: value }))} current={light} href={value => href({ light: value })} />
+        <Choice label="Travels" items={TRAVELS.map(value => ({ value, text: value }))} current={travels} href={value => href({ travels: value })} />
       </nav>
     </Show>
     <Show when={mode === 'dialog'}>
@@ -157,7 +175,9 @@ async function settle(): Promise<void> {
   // A passport on the page settles first: its reading answers, then its book draws.
   for (let wait = 0; document.querySelector('.cpc[data-state="pending"]') && wait < 600; wait++) await new Promise(resolve => setTimeout(resolve, 50));
   await document.fonts.ready;
-  const images = [...document.querySelectorAll<HTMLImageElement>('.cc-plaque img, .cpc img')];
+  // The share print settles too: drawn, or its designed could-not-be-drawn state.
+  for (let wait = 0; document.querySelector('.cc-share[data-picture="loading"]') && wait < 1200; wait++) await new Promise(resolve => setTimeout(resolve, 50));
+  const images = [...document.querySelectorAll<HTMLImageElement>('.cc-plaque img, .cpc img, .cc-share img')];
   await Promise.all(images.map(image => image.decode().catch(() => undefined)));
   // Let the card's entrance and the seal's press finish; a looping quill never does, so it is not awaited.
   const finite = document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().iterations ?? Infinity));

@@ -6,6 +6,7 @@ import { createSignal, For, Match, Show, Switch, type JSX } from 'solid-js';
 import { CrestArms, type KeepsakeView, type PassportReadState } from '@chatdom/ui/passport';
 import type { CitizenCard, WornPiece } from '../model';
 import { homeLine, nameInk } from './words';
+import { remembersTravel } from './worn';
 
 export { homeLine, nameInk };
 import './card.css';
@@ -28,6 +29,8 @@ export interface CardSheetProps {
 export function CardSheet(props: CardSheetProps): JSX.Element {
   const ink = () => nameInk(props.card.colour);
   const long = () => [...props.card.name].length > 16;
+  // Travel pieces wait for the passport's own reading: private, unread or unreadable travels name no road here.
+  const worn = () => props.passport?.kind === 'visible' ? props.card.worn : props.card.worn.filter(piece => !remembersTravel(piece));
   return <div class="cp-sheet cpc">
     <section class="cpc-face" aria-label="Your citizen card">
       <Portrait card={props.card} simulated={props.simulated} />
@@ -64,11 +67,11 @@ export function CardSheet(props: CardSheetProps): JSX.Element {
       </For></p>
     </Show>
 
-    <Show when={props.card.worn.length > 0}>
+    <Show when={worn().length > 0}>
       <section class="cpc-worn" aria-labelledby="cpc-worn-title">
         <p id="cpc-worn-title" class="cp-label">Earned, and worn</p>
         <ul>
-          <For each={props.card.worn}>{piece => <li>
+          <For each={worn()}>{piece => <li>
             <WornMark piece={piece} />
             <span class="cpc-worn-words"><strong>{piece.name}</strong><Show when={piece.story}>{story => <small>{story()}</small>}</Show></span>
           </li>}</For>

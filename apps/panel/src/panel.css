@@ -51,7 +51,7 @@ html.cp-config-document, html.cp-config-document body { height: auto; min-height
 .cp-title.longer .cp-name { font-size: 13.5px; line-height: 1; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-wrap: balance; }
 .cp-title.longer .cp-motto { display: none; }
 .cp-motto { margin: 3px 0 0; font: 400 12px/1.1 'IM Fell English SC', Georgia, serif; letter-spacing: .05em; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cp-tag { align-self: start; margin-top: 3px; font: 700 9.5px/1 Alegreya, Georgia, serif; letter-spacing: .16em; text-transform: uppercase; white-space: nowrap; }
+.cp-tag { align-self: start; margin-top: 3px; font: 700 11.5px/1 Alegreya, Georgia, serif; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
 .cp-tag.simulated { position: relative; padding: 6px 8px 6px 13px; color: #7a1d12; background: url('./assets/parchment.svg') 0 0 / 300px, var(--parch);
   clip-path: polygon(7px 0, 100% 0, 100% 100%, 7px 100%, 0 50%); filter: drop-shadow(0 1px 0 #000); }
 .cp-tag.simulated::before { content: ''; position: absolute; left: 7px; top: 50%; width: 3px; height: 3px; margin-top: -1.5px; border-radius: 50%; background: #7a1d12; }
@@ -66,7 +66,7 @@ html.cp-config-document, html.cp-config-document body { height: auto; min-height
 .cp-picture::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1; background: linear-gradient(transparent 70%, #0e0a1488); }
 .cp-picture picture { display: contents; }
 .cp-picture img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 62%; }
-.cp-picture-caption { position: absolute; z-index: 2; left: 9px; bottom: 6px; margin: 0; font: italic 400 11px/1 Alegreya, Georgia, serif; letter-spacing: .02em; color: #f4e4c8d9; text-shadow: 0 1px 3px #000e; }
+.cp-picture-caption { position: absolute; z-index: 2; left: 9px; bottom: 6px; margin: 0; font: italic 400 12px/1 Alegreya, Georgia, serif; letter-spacing: .02em; color: #f4e4c8d9; text-shadow: 0 1px 3px #000e; }
 
 .cp-closed { position: absolute; inset: 0; display: grid; place-items: center; }
 .cp-shutters { position: absolute; inset: 0; width: 100%; height: 100%; }
