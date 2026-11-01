@@ -9,6 +9,7 @@ import { readRealmJson } from '../realm/adapters/entry';
 import { GENESIS_CHANNELS, PROFILE_CAPTURED_AT } from './channels';
 import { createGenesisWindowPreview } from './window-preview';
 import { createGenesisSeatContent } from './seat-content';
+import { genesisKingdomComposer } from './kingdom-composer';
 import './preview.css';
 
 type View = { potential: PotentialKingdomView; name: string; feed: PresenceFeed; category: string; average: number; landscape: string; lore: string };
@@ -43,7 +44,9 @@ export default function GenesisPreview() {
       kind: 'observed', sourceId: 'atlas-20261030-helix-20261031', asOf: Date.parse(PROFILE_CAPTURED_AT),
     } });
     const landscape = recipe.landscapes.find(item => item.character === choice.character)!;
-    const plan = compileGenesisSettlement(recipe, landscape.id);
+    const proposed = compileGenesisSettlement(recipe, landscape.id);
+    const composed = genesisKingdomComposer(id)?.compose({ recipe, landscape, plan: proposed });
+    const plan = composed?.plan ?? proposed;
     const centreX = (plan.bounds.minX + plan.bounds.maxX) / 2;
     const centreZ = (plan.bounds.minZ + plan.bounds.maxZ) / 2;
     const span = Math.max(plan.bounds.maxX - plan.bounds.minX, plan.bounds.maxZ - plan.bounds.minZ);
@@ -67,10 +70,10 @@ export default function GenesisPreview() {
     const empty: KingdomPresenceFrame = { version: 1, kingdomId: id, epoch: `potential:${id}`, sequence: 0,
       asOf: recipe.evidence.asOf, origin: 'simulated', connection: 'offline', streamLive: false, windows: [] };
     const feed: PresenceFeed = { label: 'SIMULATED', subscribe(receive) { receive(empty); return () => {}; } };
-    const seat = choice.character === 'coastal-harbour' ? createGenesisSeatContent(recipe, landscape, plan) : undefined;
+    const seat = composed?.seat ?? (choice.character === 'coastal-harbour' ? createGenesisSeatContent(recipe, landscape, plan) : undefined);
     if (!abort.signal.aborted) setView({ potential: { plan, size: recipe.size.tier, style: recipe.identity.styleFamily,
       ...(seat ? { seat } : {}),
-      camera: { eye, target, fov: 50 }, windowPreview: createGenesisWindowPreview(id, plan.homes, recipe.evidence.asOf) }, name: channel.name, feed, category: observed.categories[0]!.name,
+      camera: composed?.camera ?? { eye, target, fov: 50 }, windowPreview: createGenesisWindowPreview(id, plan.homes, recipe.evidence.asOf) }, name: channel.name, feed, category: observed.categories[0]!.name,
       average: observed.audience.averageViewers!, landscape: choice.character.replaceAll('-', ' '), lore: channel.lore });
   }
   return <Show when={view()} fallback={<div class="genesis-wait"><p>CHATDOM · THE LAND BEYOND THE MAP</p><h1>{error() ? 'The road needs a moment.' : 'Unfolding the land…'}</h1><p>{error() ?? 'Reading this channel’s own seed.'}</p><a href="/map">Return to the Atlas</a></div>}>{current => <>
