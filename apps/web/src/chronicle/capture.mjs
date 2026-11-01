@@ -57,7 +57,7 @@ try {
   if (await page.evaluate(() => document.documentElement.scrollWidth > document.defaultView.innerWidth)) throw new Error('Horizontal overflow');
   if (errors.length) throw new Error(errors.join('\n'));
   const path = resolve(evidence, `chronicle-${view}@${width}x${height}.png`);
-  await page.screenshot({ path });
+  await page.screenshot({ path, timeout: 120_000 });
   console.log(`Captured ${path}; forward and backward seeking changed and restored the accessible night and world image`);
 } catch (error) {
   failure = error;
