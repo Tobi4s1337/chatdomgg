@@ -330,54 +330,52 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Order:** picture only, one obvious same-view before/after per turn; medium helpers for routine work.
-Merge good checkpoints. Team owns three Genesis kingdoms, panel portraits/passport, raid journey and
-cheer/hype spectacles. Main stays on the Forge. No new system lanes or contracts.
+**Order:**picture only, one visible change and looked-at matched pair per turn; medium routine helpers.
+Main stays on the Forge. Team owns three Genesis kingdoms, panel portraits/passport, raid journey and
+sky moments. Merge good checkpoints; no new system lanes/contracts.
 
-**Forge fire, current:** the hot casting now throws directional amber bounce through the existing
-occluded light field, with cooler edges around the apron. The local treatment reduces broad sky/static
-wash and the citizens' constant studio fill near the anvil; it follows casting heat and fades before
-the receiving-home beat. Outside the ritual the accepted dusk stays. SIM now supplies the same casting
-field sources as the room. `shots/magic/forge-fire-pair.png` and `forge-fire-close-pair.png` viewed:
-clear amber across cobbles and woodwork; roof bounce is strong and needs a GPU look. Both1920×1080
-HIGH frames are active pour9/world157, busy with zero placements, labelled SIMULATED; no browser errors
-or Forge POST.15 focused tests/typecheck/scoped lint/web build pass. Close evidence is same-pixel crops,
-not a second camera. The lower camera experiment was rejected/reverted: smaller pour, excess paving,
-foreground occlusion. Accepted framing remains. Next: a deeper watching ring and the landing's light beat;
-the hillside still competes with the anvil. This is not full ritual visual signoff.
+**Current ring:**32 staggered places recruit existing present citizens through normal walks. Facing,
+tiptoe and barrel remain; paths avoid workshop/anvil. `shots/magic/forge-ring-depth-pair.png` and close
+crops viewed at1920×1080: roughly22 visible versus11 before, pour unobstructed; foreground feet crop.
+Three citizen tests cover arrivals, spacing, facing, presence/rebuild and barrel; typecheck/lint/build pass.
 
-**Crowd/capture:**d7e0edd wraps16 existing spectators around the apron; paths avoid workshop/anvil.
-Normal walking/facing/barrel stay. Distant neighbours need about94s to arrive: the rehearsal holds
-words2 during a120s SIM planning lead-in, then advances to pour9. Fast real planning can outpace them.
-Freeze ritual2 in the same browser evaluation that awaits fixture submit: otherwise slow browser calls
-can let wall time auto-commit before the seek. Assert active pour/zero placements before accepting pairs.
-No invented live bodies.9ddf895 shares the receiving-home camera between room/SIM, keeping the facade
-beneath the gift; `forge-landing-pair.png` viewed. Previous sequence sheet was phase samples, not motion.
+**Flight next, founder's taste:**the airborne piece reads cold and bulky. Make it freshly forged treasure:
+warm, smaller than a house in frame, ember/spark wake, neighbours looking up, contact burst and roof settle.
+Main owns piece warmth, apparent scale/framing and reactions; effects-library EL11/spec48 owns wake/impact
+using recorded `FlightCue` history and `SparkBurst`. Existing b2251ee histories stay independent for real/SIM;
+never invent trajectory samples. Dashed/point-only wake experiments were rejected. AH06/spec25 owns the
+sleeping dragon silhouette: head on two paws, continuous coil, clear at whole-house distance; keep socket,
+open flue and nose. AH04 bd938eb and carved panel FL02 9fd035f merged. Judge matching flight frame next.
 
-**Team Forge parts:**AH04 bd938eb and panel FL02 9fd035f merged. AH06/spec25 gives the anvil lane the
-sleeping head/two paws/continuous coil silhouette at whole-house distance, preserving socket/flue/nose.
-EL11/spec48 gives effects-library a flowing recorded-path wake and warm landing burst; main owns adoption.
-Both worktrees were brought to main and are ready. Existing b2251ee flight histories are independent for
-real/SIM and follow actual positions. Point/dashed wake experiments were rejected. Keep home smoke7c16789.
+**Accepted Forge fire9be5870:**local amber bounce through the light field, cooler apron edges and reduced
+citizen studio fill near hot metal. Follows casting heat; ordinary dusk and receiving-home beat retain
+their light. SIM supplies the same casting sources as room. `forge-fire-pair.png`/close crops viewed;
+roof bounce is strong and needs a GPU look. Lower-camera experiment rejected/reverted: smaller pour,
+empty paving and occlusion. Accepted camera stays; hillside still competes.9ddf895 frames receiving home
+before a closer portrait; `forge-landing-pair.png` viewed. This is not full ritual visual signoff.
 
-**Accepted picture:**preserve exposure34ac89a, indigo0896044, street pools96f2d08, castle light
-32633a8/a1dac83, beacon/gold frame, soft sparse chimney smoke7c16789, stable lanternsbc9a54c and
-presence leases7c71b38. Land975af2f/44de84b and haze9f843d7 stay; layout43cffdb6. Native grove743effc
-uses producer enrichment,260 retained roots/IDs,15 forms, manifest784da96e…f7c2d327, collision9.
-`founded-grove-pair.png` viewed; actual offline realm's zero citizens/windows is honest. Park land6f60ae2.
+**Capture rehearsal:**1920×1080 HIGH, hour19.5, world157/pour9. Hold words2 for120s SIM planning lead-in;
+distant neighbours need about94s to arrive, so fast real planning can outpace them. Freeze ritual2 in the
+same browser evaluation that awaits fixture submit, preventing auto-commit during slow browser calls.
+Assert busy/zero placements/active pour; keep SIMULATED chip. Latest ring capture had no browser errors
+or Forge POST; resources released. Close comparisons are same-pixel crops; earlier sequence sheet was
+phase samples, not continuous motion. Never invent live citizens or replace observations with a rehearsal.
 
-**Citizens:**AS10 e2a9100 is the sharp painted full-body look in kingdom/stream/walkers/card painter;
-A/B/C rejected. Thin cloth capes and shoulders±4 stay. AS11 builder09f0267 merged, `/showcase` links
-`/-/avatar-builder`; browser-local SIM saves, no real equip/entitlement authority yet. Team owns panel
-portrait/passport binding. Keep older tenure ribbons wearable and show continuation below folded options.
-95e403b supplies32 late SIM homecomings; live/Juniper timing unchanged. Market cartsbe6ab51 stay.
+**Genesis checkpoints merged:**GA10 harbour88a5d56, GM10 mountain7d4893d, GP10 river71432a2 entered
+97ee964/57c3fc3/9606d74; integration7341e35 pushed. Keep all three preview dispatches; guard modules without
+`kingdom`; pass the river hall crossing flag.22 composition tests/typecheck/build pass. Potential previews
+only: founded bytes still win. Team retains whole-kingdom visual completion; no new hero images existed
+at merge time. Progress logs ask for legible working harbour, Copper Kettle life, finished river crossing.
 
-**Other seams:**keepers7eff5d8/sound1ed6865 remain additive/unmounted; emote40aeb18 glass clips.
-Some passport/gate/moments/Atlas host bindings remain. Harboura6fcf9a needs a real royal-glass anchor
-before live adoption. Keep city stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a. Latest lane recon found
-no new substantive checkpoints to merge, only scope notes and the parked land revision.
+**Picture stays:**exposure34ac89a, indigo0896044, pools96f2d08, castle32633a8/a1dac83, beacon/gold frame,
+soft sparse home smoke7c16789, lantern fadesbc9a54c, presence leases7c71b38. Land975af2f/44de84b,
+haze9f843d7, layout43cffdb6; native grove743effc retains260 sites,15 forms, manifest784da96e…f7c2d327,
+collision9. AS10 e2a9100 citizens everywhere, thin cloth capes/shoulders±4; A/B/C rejected. AS11 builder
+09f0267 is browser-local SIM only. Team owns panel portraits/passport and real equip binding. Keep earned
+ribbons;95e403b homecomings/live timing and be6ab51 carts stay. Park land6f60ae2; preserve city stash
+7c6f1f9d324042998fff71e4d5ea7863ea46cf0a. Keepers/sound and some passport/gate/Atlas host bindings remain.
 
-**Operations:**managed5190web/5196API/5197realm/5195Forge/5194herald; affected-code restarts only,
-all on.env. Logs ONLY `../conductor/state/services.log`, never journals/other services. Serial capture
-lease, deadlines/finally cleanup; no open observer waiting for chat. Warm HIGH at640×360, finish1920
-and settle; use separate browsers. Captures here are software-rendered, never GPU performance evidence.
+**Operations:**managed5190web/5196API/5197realm/5195Forge/5194herald; affected-code restarts, all on.env.
+Logs ONLY `../conductor/state/services.log`, never journals/other services. Serial capture lease with
+hard deadlines/finally; no observer waiting for chat. Warm HIGH at640×360, finish1920 and settle, separate
+browsers. Software captures prove pictures, never GPU performance.
