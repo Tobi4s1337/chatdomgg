@@ -1,3 +1,4 @@
+/* global AbortController, AbortSignal, TextDecoder, clearTimeout, performance */
 // Shared pieces of the live-Twitch commands: where the bench is, how a delivery is signed like Twitch signs it,
 // how the Twitch CLI writes a payload, and how to watch the kingdom's public stream for what arrived.
 import { execFileSync } from 'node:child_process';
@@ -5,11 +6,8 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { performance } from 'node:perf_hooks';
 import process from 'node:process';
-import { clearTimeout } from 'node:timers';
 import { fileURLToPath } from 'node:url';
-import { TextDecoder } from 'node:util';
 
 export const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 export const BENCH = Object.freeze({
@@ -22,8 +20,8 @@ export const BENCH = Object.freeze({
   // Only when no adopted layout exists to copy.
   fallbackConfig: { seed: 'tobi4s_', tier: 'town', firstYear: 2019, year: 2026 },
 });
-/** The running LIVE realm (main's). The commands only ever read its public watch. */
-export const LIVE = Object.freeze({ realm: 'http://127.0.0.1:5197' });
+/** The managed LIVE realm (main's). The commands only ever read its public watch. */
+export const LIVE = Object.freeze({ realm: process.env.CHATDOM_LIVE_REALM || 'http://127.0.0.1:5197' });
 
 export function stateDir() {
   return join(process.env.XDG_STATE_HOME || join(homedir(), '.local/state'), 'chatdom/live-twitch-bench');
@@ -41,7 +39,7 @@ function doorSecret() {
 export async function health() {
   const probe = async (url) => {
     try {
-      const response = await fetch(url, { signal: globalThis.AbortSignal.timeout(15_000) });
+      const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       const text = await response.text();
       let body = null; try { body = JSON.parse(text); } catch { body = null; }
       return { ok: response.ok, status: response.status, ...(body ? { body } : {}) };
@@ -56,15 +54,77 @@ export async function health() {
 }
 
 /** A payload exactly as `twitch event trigger` writes it (`-D`: no config, printed instead of sent). */
+/**
+ * Twitch CLI's payload for `type` (`-D`). When the CLI cannot run on this host, the documented shape is signed
+ * instead and every command says so: the payload is then ours, never passed off as the CLI's.
+ */
 export function cliEvent(type, flags = []) {
-  const out = execFileSync('twitch', ['event', 'trigger', type, '-D', ...flags], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  return JSON.parse(out.slice(out.indexOf('{')));
+  try {
+    const out = execFileSync('twitch', ['event', 'trigger', type, '-D', ...flags], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: CLI_ENV, timeout: 20_000 });
+    const at = out.indexOf('{');
+    if (at < 0) throw Object.assign(new Error('it wrote no payload'), { status: 0 });
+    payloadSource.value = 'Twitch CLI';
+    return JSON.parse(out.slice(at));
+  } catch (error) {
+    return documented(type, flags, error);
+  }
+}
+/** Who wrote the last payload: `Twitch CLI`, or `documented payload (Twitch CLI unavailable)`. */
+export const payloadSource = { value: 'Twitch CLI' };
+/** No update checks or prompts from the CLI; it only generates and signs payloads here. */
+const CLI_ENV = { ...process.env, TWITCH_DISABLE_UPDATE_CHECKS: 'true' };
+function cliFailure(type, error) {
+  const detail = String(error?.stderr ?? '').trim().split('\n').at(-1) || error?.message || 'unknown failure';
+  return `Twitch CLI could not trigger ${type} (exit ${error?.status ?? '?'}: ${detail.slice(0, 200)})`;
 }
 
-/** Twitch CLI forwards the event to the door itself, signed with the bench's secret. */
-export function cliForward(type, flags = []) {
-  execFileSync('twitch', ['event', 'trigger', type, '-F', `http://127.0.0.1:${BENCH.doorPort}/eventsub`, '-s', doorSecret(), ...flags],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+/**
+ * Twitch CLI forwards the event to the door itself, signed with the bench's secret. If the CLI cannot run, the
+ * documented payload goes through the same signed door instead, with the same message ID, and says so.
+ */
+export async function cliForward(type, flags = []) {
+  let out;
+  try {
+    out = execFileSync('twitch', ['event', 'trigger', type, '-F', `http://127.0.0.1:${BENCH.doorPort}/eventsub`, '-s', doorSecret(), ...flags],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: CLI_ENV, timeout: 20_000 });
+  } catch (error) {
+    const payload = documented(type, flags, error);
+    return deliver(payload, { messageId: flagValue(flags, '-I') ?? randomUUID() });
+  }
+  payloadSource.value = 'Twitch CLI';
+  // The CLI prints the door's status line; anything but a 2xx means the door refused it.
+  const status = /\[(\d{3})\]/.exec(out)?.[1];
+  if (status && !status.startsWith('2')) throw new Error(`the door answered ${status} to Twitch CLI's ${type}`);
+}
+
+const flagValue = (flags, name) => { const i = flags.indexOf(name); return i >= 0 ? flags[i + 1] : undefined; };
+/** The v1 payloads Twitch CLI 1.1.24 writes for these types, field for field, from Twitch's EventSub reference. */
+function documented(type, flags, error) {
+  const why = cliFailure(type, error);
+  payloadSource.value = 'documented payload (Twitch CLI unavailable)';
+  console.error(`  ${why}; signing Twitch's documented ${type} payload instead`);
+  const to = flagValue(flags, '-t') ?? BENCH.kingdomId, from = flagValue(flags, '-f') ?? '41245072', now = new Date();
+  const broadcaster = { broadcaster_user_id: to, broadcaster_user_login: 'tobi4s_', broadcaster_user_name: 'tobi4s_' };
+  const later = ms => new Date(now.getTime() + ms).toISOString();
+  const contribution = { total: 500, type: 'bits', user_id: from, user_login: 'cli_user1', user_name: 'cli_user1' };
+  const train = { id: randomUUID(), ...broadcaster, level: 1, total: 500, top_contributions: [contribution], started_at: now.toISOString() };
+  const events = {
+    'stream.online': () => ({ id: String(Math.floor(Math.random() * 1e10)), ...broadcaster, type: 'live', started_at: now.toISOString() }),
+    'channel.cheer': () => {
+      const anonymous = flags.includes('-a');
+      return { is_anonymous: anonymous, user_id: anonymous ? null : from, user_login: anonymous ? null : 'testfromuser', user_name: anonymous ? null : 'testFromUser',
+        ...broadcaster, message: 'This is a test event.', bits: Number(flagValue(flags, '-C') ?? 100) };
+    },
+    'channel.raid': () => ({ from_broadcaster_user_id: from, from_broadcaster_user_login: 'testfromuser', from_broadcaster_user_name: 'testFromUser',
+      to_broadcaster_user_id: to, to_broadcaster_user_login: 'tobi4s_', to_broadcaster_user_name: 'tobi4s_', viewers: 40 }),
+    'channel.hype_train.begin': () => ({ ...train, progress: 500, goal: 1600, last_contribution: contribution, expires_at: later(300_000) }),
+    'channel.hype_train.progress': () => ({ ...train, progress: 500, goal: 1600, last_contribution: contribution, expires_at: later(300_000) }),
+    'channel.hype_train.end': () => ({ ...train, ended_at: now.toISOString(), cooldown_ends_at: later(3_600_000) }),
+  };
+  if (!events[type]) throw new Error(`${why}, and there is no documented payload for it here; nothing was sent.`);
+  const condition = type === 'channel.raid' ? { to_broadcaster_user_id: to } : { broadcaster_user_id: to };
+  return { subscription: { id: randomUUID(), status: 'enabled', type, version: '1', condition, transport: { method: 'webhook', callback: 'null' },
+    created_at: now.toISOString(), cost: 0 }, event: events[type]() };
 }
 
 /** POST one notification the way Twitch's webhook transport does: message ID, timestamp, HMAC over both and the body. */
@@ -100,7 +160,7 @@ export function chatMessage({ kingdomId = BENCH.kingdomId, personId, login, name
  * time `match` returns a value for the checkpoint or a later delivery, or rejects after `timeoutMs`.
  */
 export async function watchFor(match, { realm = `http://127.0.0.1:${BENCH.realmPort}`, kingdomId = BENCH.kingdomId, timeoutMs = 30_000, onCheckpoint } = {}) {
-  const controller = new globalThis.AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     let response;
     // A kingdom that is not held opens on the first watch; its approved geometry may take a while to prepare.

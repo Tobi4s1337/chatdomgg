@@ -99,13 +99,13 @@ export class RealmIngress {
 
   /** Registry hook: drain this kingdom's inbox and observe its walkers while it is open here. */
   attach(kingdom: DurableKingdom): () => void {
-    this.support.battles.attach(kingdom);
+    const detachBattles = this.support.battles.attach(kingdom);
     const drain = new KingdomDrain(kingdom, this.inbox, this.log);
     const walkers = new WalkerPresence(kingdom, this, drain);
     this.drains.set(kingdom.kingdomId, drain);
     drain.kick();
     return () => {
-      walkers.stop(); drain.stop();
+      detachBattles(); walkers.stop(); drain.stop();
       if (this.drains.get(kingdom.kingdomId) === drain) this.drains.delete(kingdom.kingdomId);
     };
   }

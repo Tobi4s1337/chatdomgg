@@ -3,7 +3,7 @@
 //   node scripts/live/hype.mjs [--level 5] [--fighters 16] [--stop-at summoning|active|victory|end]
 // --stop-at active leaves the dragon circling over the town (for a still); `--stop-at end` (default) runs it all.
 import { randomUUID } from 'node:crypto';
-import { args, BENCH, chatMessage, cliEvent, deliver, fireAndWatch, label, momentOf, report, sleep, SIMULATED_CHATTERS, watchFor } from './lib.mjs';
+import { args, BENCH, chatMessage, cliEvent, deliver, fireAndWatch, label, momentOf, payloadSource, report, sleep, SIMULATED_CHATTERS, watchFor } from './lib.mjs';
 
 const top = Number(args('level', '5')), fighters = SIMULATED_CHATTERS.slice(0, Number(args('fighters', '16')));
 const stopAt = args('stop-at', 'end'), trainId = randomUUID(), startedAt = new Date();
@@ -20,7 +20,7 @@ const battle = test => momentOf('battle', f => f.body.battleKey && test(f.body))
 const done = phase => { if (stopAt === phase) { report([`  stopped at ${phase}; the realm keeps the fight's clock`]); process.exit(0); } };
 
 const first = await fireAndWatch(() => train('begin', 1), momentOf('hype', f => f.body.phase === 'begin'));
-report([`hype · ${label(first.found)} · the train leaves the station at level 1 (moment #${first.found.seq}, ${first.ms} ms)`]);
+report([`hype · ${label(first.found)} · the train leaves the station at level 1 (moment #${first.found.seq}, ${first.ms} ms) · written by ${payloadSource.value}`]);
 await sleep(1_500);
 await train('progress', 2);
 const summoned = await fireAndWatch(() => train('progress', 3), battle(b => b.phase === 'summoning'));

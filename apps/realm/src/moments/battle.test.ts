@@ -1,10 +1,14 @@
 import { KingdomIdSchema, PersonIdSchema, type PersonId } from '@chatdom/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createMemoryMomentRecords } from '../../../herald/src/twitch-moments/memory';
 import type { ClaimedSummon } from '../../../herald/src/twitch-moments/normalizer';
 import { momentRepository } from '../../../herald/src/twitch-moments/records';
-import { advanceDragon, DRAGON_FIGHT_MS, DRAGON_WAKE_MS, dragonHealthPermille, dragonVitality, readDragon, summonDragon } from './battle';
+import { advanceDragon, DRAGON_FIGHT_MS, DRAGON_WAKE_MS, dragonHealthPermille, dragonVitality, readDragon, RealmDragonBattles, summonDragon } from './battle';
 import { DRAGON_FIGHTER_MEMORY, DragonRecordSchema, type DragonRecord } from './dragon-record';
+import * as postgresRecords from './records';
+import type { DurableKingdom } from '../persistence/kingdom';
+import type { RealmDatabase } from '../persistence/database';
+import { commitFacts } from './commit';
 
 const K = KingdomIdSchema.parse('424242');
 const NOW = Date.UTC(2026, 9, 30, 20, 0);
@@ -17,6 +21,34 @@ const dragon = (overrides: Partial<DragonRecord> = {}): DragonRecord => DragonRe
   acceptedStrikes: 0, fighters: 0, fighterIds: [], sharedSessionKey: null, revision: 3, ...overrides,
 });
 const took = (strikes: number, fighters: readonly PersonId[]) => ({ strikes, fighters });
+
+it('keeps the first strike and a second while a reopened battle is being read', async () => {
+  const records = createMemoryMomentRecords({ now: () => NOW });
+  await records.port.transact(K, async tx => {
+    const repository = momentRepository(tx);
+    const result = await summonDragon(tx, repository, {
+      kingdomId: K, source: 'hype', requestKey: 'ht.train-1.young', trainKey: 'ht.train-1', level: 3, form: 'young', sharedSessionKey: null,
+    }, NOW, 'live');
+    if (!result || result.facts.outcome !== 'applied') throw new Error('Summoning did not apply');
+    await commitFacts(tx, repository, result.facts.facts, { occurredAt: NOW, receivedAt: NOW }, { kind: 'scheduled', id: 'summon' }, 'live');
+  });
+  const mocked = vi.spyOn(postgresRecords, 'createPostgresMomentRecords').mockReturnValue(records.port);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const kingdom = { kingdomId: K, current: true, writeMoments: async (work: (lease: never, current: () => boolean) => Promise<unknown>) => {
+    await gate; return work(null as never, () => true);
+  } } as unknown as DurableKingdom;
+  const battles = new RealmDragonBattles({} as RealmDatabase, 'live', () => {}, () => STARTS + 1_000);
+  const detach = battles.attach(kingdom);
+  try {
+    const strike = { version: 1 as const, kingdomId: K, personId: ASH, messageId: 'one', origin: 'live' as const, observedAt: STARTS + 1_000 };
+    expect(battles.strike(strike)).toBe('accepted');
+    expect(battles.strike({ ...strike, personId: BRAM, messageId: 'two' })).toBe('accepted');
+    release();
+    await vi.waitFor(() => expect(battles.counts.strikes).toBe(2));
+    expect(battles.counts.refused).toBe(0);
+  } finally { detach(); battles.stop(); mocked.mockRestore(); }
+});
 
 describe('dragon health', () => {
   it('grows the dragon with the crowd and counts down from a full thousand to zero, never past either end', () => {

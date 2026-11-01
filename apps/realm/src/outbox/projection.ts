@@ -2,6 +2,9 @@ import { castleHostId, type RealmPrivateState, type RealmPublicMessage } from '@
 import type { RealmOutboxRow } from '../persistence/postgres-repository';
 import { MOMENT_CURRENT_LIMIT, type TwitchMomentFact } from '@chatdom/shared/twitch-moments';
 
+/** Moment kinds with one current slot each (Herald's `CurrentSlot`): the Hype Train and the dragon battle. */
+const SLOTTED: ReadonlySet<string> = new Set(['hype', 'battle']);
+
 export type RealmPublicHome = Extract<RealmPublicMessage, { type: 'home' }>;
 export type RealmPublicCastle = Extract<RealmPublicMessage, { type: 'castle' }>;
 export type RealmPublicPresence = Extract<RealmPublicMessage, { type: 'presence' }>;
@@ -86,6 +89,7 @@ export class PublicProjection {
       if (row.message.type === 'moment') {
         this.momentThrough = Math.max(this.momentThrough, row.message.fact.seq);
         if (row.message.current) this.rememberMoment(row.message.fact);
+        else this.releaseMoment(row.message.fact);
       }
       this.cursor = row.id;
       this.sequence = Math.max(this.sequence, row.sequence);
@@ -106,7 +110,18 @@ export class PublicProjection {
   private rememberMoment(fact: TwitchMomentFact) {
     const key = `${fact.body.kind}:${fact.body.key}`, previous = this.moments.get(key);
     if (previous && previous.seq >= fact.seq) return;
+    // The one Hype Train and the one battle each hold a single slot: a new occupant replaces the last, as in the records.
+    if (SLOTTED.has(fact.body.kind)) {
+      for (const [other, held] of this.moments) if (held.body.kind === fact.body.kind && other !== key) this.moments.delete(other);
+    }
     if (!previous && this.moments.size >= MOMENT_CURRENT_LIMIT) throw new Error('Moment current state exceeds its budget');
     this.moments.set(key, fact);
+  }
+
+  /** A finished slot occupant (a train or battle that ended) leaves current state, as `releaseSlot` does in the records. */
+  private releaseMoment(fact: TwitchMomentFact) {
+    if (!SLOTTED.has(fact.body.kind)) return;
+    const key = `${fact.body.kind}:${fact.body.key}`, previous = this.moments.get(key);
+    if (previous && previous.seq < fact.seq) this.moments.delete(key);
   }
 }

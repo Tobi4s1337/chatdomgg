@@ -12,7 +12,7 @@ const config = { configFile:false, root:process.cwd(), publicDir:'apps/web/publi
 const output='shots/magic', evidence='work/evidence/growth-handoff';
 let release, loader, server, browser;
 try {
-  release=await acquireCaptureLock({signal:AbortSignal.timeout(20*60_000)});
+  release=await acquireCaptureLock({signal:globalThis.AbortSignal.timeout(20*60_000)});
   loader=await createServer({...config,server:{middlewareMode:true,hmr:false,ws:false}});
   const data=await (await loader.ssrLoadModule('/packages/testing/growth-home/fixture.ts')).fixture();
   await loader.close(); loader=undefined;
@@ -32,7 +32,7 @@ try {
       res.writeHead(200,{'Content-Type':'text/event-stream','Connection':'keep-alive','Cache-Control':'no-cache'});streams.add(res);req.on('close',()=>streams.delete(res));
       const frame={version:1,kingdomId:manifest.kingdomId,epoch:'simulated:handoff',sequence:1,asOf:now,origin:'simulated',streamLive:true,connection:'fresh',windows:[]};
       const checkpoint={version:1,manifest,checkpoint:{version:1,kingdomId:manifest.kingdomId,writerEpoch:'simulated:handoff',throughSequence:1,throughCursor:1,layoutRevision:manifest.layoutRevision,collisionRevision:manifest.collisionRevision,current:[{type:'presence',frame}]}};
-      res.write(`event: checkpoint\ndata: ${JSON.stringify(checkpoint)}\n\n`); let seq=1; const timer=setInterval(()=>{if(current==='before' && side==='after') return; seq++; const message={type:'presence',frame:{...frame,sequence:seq,asOf:Date.now()}}; res.write(`event: world\ndata: ${JSON.stringify({version:1,kingdomId:manifest.kingdomId,writerEpoch:'simulated:handoff',sequence:seq,cursor:seq,eventId:`simulated:${seq}`,message})}\n\n`);},5000); req.on('close',()=>clearInterval(timer)); return;
+      res.write(`event: checkpoint\ndata: ${JSON.stringify(checkpoint)}\n\n`); let seq=1; const timer=globalThis.setInterval(()=>{if(current==='before' && side==='after') return; seq++; const message={type:'presence',frame:{...frame,sequence:seq,asOf:Date.now()}}; res.write(`event: world\ndata: ${JSON.stringify({version:1,kingdomId:manifest.kingdomId,writerEpoch:'simulated:handoff',sequence:seq,cursor:seq,eventId:`simulated:${seq}`,message})}\n\n`);},5000); req.on('close',()=>globalThis.clearInterval(timer)); return;
     }
     const found=Object.values(sides).find(value=>path===`/api/realm/founded/scenes/${value.manifest.sceneHash}`);
     if(found){res.setHeader('Content-Type','application/json');if(found===sides.after) delayed.push(()=>res.end(found.bytes));else res.end(found.bytes);return;}
@@ -59,7 +59,7 @@ try {
     side='after';for(const stream of streams)stream.write('event: revision\ndata: {"collisionRevision":2}\n\n');
     await page.waitForFunction(()=>window.__chatdomStream.stats.mounts>=2,null,{timeout:30000});
     const start=Date.now();while(!delayed.length && Date.now()-start<30000)await new Promise(r=>setTimeout(r,100));assert.ok(delayed.length,'Replacement asset request never arrived');
-    const during=await shot('loading');const loading=await page.evaluate(()=>({phase:window.__chatdomStream.phase,stats:{...window.__chatdomStream.stats},source:window.__chatdomStream.source,visible:[...document.querySelectorAll('.stream-canvas')].filter(c=>getComputedStyle(c).visibility!=='hidden').length}));
+    const during=await shot('loading');const loading=await page.evaluate(()=>({phase:window.__chatdomStream.phase,stats:{...window.__chatdomStream.stats},source:window.__chatdomStream.source,visible:[...document.querySelectorAll('.stream-canvas')].filter(c=>window.getComputedStyle(c).visibility!=='hidden').length}));
     assert.equal(loading.phase,variant==='baseline'?'waking':'ready');
     assert.equal(loading.visible,1);
     if(variant==='replacement') assert.equal(loading.source,'simulated');
@@ -75,4 +75,4 @@ try {
     await context.close(); for(const stream of streams)stream.end();streams.clear();
   }
   await writeFile(`${evidence}/report.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
-} finally {for(const close of [()=>browser?.close(),()=>server?.close(),()=>loader?.close(),()=>release?.()])try{await close();}catch{}}
+} finally {for(const close of [()=>browser?.close(),()=>server?.close(),()=>loader?.close(),()=>release?.()])try{await close();}catch{/* Finish releasing the remaining capture resources. */}}

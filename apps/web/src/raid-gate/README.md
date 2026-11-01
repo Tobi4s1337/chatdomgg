@@ -134,11 +134,12 @@ One continuous journey from one gate to the other, at dusk: `/-/raid-gate?bench=
 |---|---|---|
 | Director | `road/director.ts` | A pure schedule of acts (`gather`, `setout`, `rise`, `ride`, `hold`, `wake`, `welcome`) on a presentation clock, each gated by a fact the authority gave: the party sets out only once Twitch's raid is witnessed, the map rises only once it is drawn, the column waits at the destination gate (`hold`) until the arrival commits, and the welcome waits for the welcome reply. Pure: the same facts and time give the same frame |
 | The two lands | `road/lands.ts` | MashaD4's mountain citadel rides to PinkKittyRose's river valley: real channels with real Atlas holdings, their land grown from each channel's observed seed exactly as the Genesis previews grow it. Potential land is scenery: no room, deed or audience comes with it |
-| Tableaux | `road/procession.tsx`, `road/tableaux.tsx` | Seekable SVG: the gate wakes (braziers, banners unfurling), walkers arrive one by one with their own pennants, the monarch leads the column into the arch; at the far end the guests file in under the source's banner to the host monarch and a gift-bearer |
+| The gathering | `road/procession.tsx`, `road/tableaux.tsx`, `road/gate-shot.ts` | The leaving kingdom's camera stands outside its gate looking in over the near streets (`gateShotOf`, the gate the kingdom's own raid arrivals use). Over it a seekable SVG tableau: the gate wakes (braziers, banners unfurling), walkers arrive one by one with their own pennants, the monarch leads the column into the arch. Drawn figures until the kingdom scene can stand the party at its gate (see "What main binds" 4) |
+| The arrival, in the world | `road/arrival-feed.ts` | When the column reaches the destination and its world wakes, the road hands the destination scene's `momentFeed` the witnessed raid as one SIMULATED `twitch.moment` raid fact: the kingdom's own raid arrival wakes its gate under the leaving kingdom's banner, lights the braziers, rolls the caravan in (sized by Twitch's count) and takes the gate shot. The welcome's words and the gate board sit over it; no figure is drawn on top |
 | The road on the Atlas | `../atlas/road/` | `openRoadAtlas` finds both holdings in the survey, plans one deterministic road (a sea lane when the lands differ), and draws it in ink as the column walks: pencilled ahead, trodden behind. The torch column is a mark, sized by the log of the travellers, never a roster; torches are pigment dabs (the Atlas has no night) |
 | Journey camera | `../atlas/road/shot.ts` | Rises out of the source drawing, rides close, pulls back to hold the whole road, closes in on arrival and dives into the destination |
 | The route | `road/RaidRoad.tsx`, `road/road.css` | The real gate application on the SIMULATED bench (`bench.ts` takes a `BenchCast`), both kingdoms' worlds at dusk, the map between them, the gate board while the gate acts; every surface says SIMULATED |
-| Captures | `road/capture.mjs` | `node apps/web/src/raid-gate/road/capture.mjs [--stills] [--sequence] [--fps 8] [--reduced]` after `pnpm build`; the clock is frozen (`capture=1`) and seeked, so every frame is exact |
+| Captures | `road/capture.mjs` | `node apps/web/src/raid-gate/road/capture.mjs --only gate\|road\|welcome [--reduced]` after `pnpm build`: one still per lease of the shared capture lock. The presentation clock is frozen (`capture=1`) and seeked, and the page's `Date.now` is pinned to it, so the kingdoms' own moments are seeked too |
 
 What main binds for the live road:
 
@@ -147,5 +148,12 @@ What main binds for the live road:
    revealed at `wake`. The facts come from the gate controller's snapshot exactly as `RaidRoad.observe()` reads them.
 2. `AtlasGateHost.travel(stage)` can be implemented by `openRoadAtlas(...).show(mapFrame(momentAt(...)))`; the
    ride length is `rideSeconds` (12–30 s by distance, spec 23).
-3. The welcome stays the overlay tableau over the destination valley until the kingdom scene exposes a gate
-   anchor (a world point and a facing); then the arrival tableau's walkers become the guests' avatars walking in.
+3. A live destination gets its raid arrival from its realm's own moment feed (main's ingress); the road's
+   `createRoadArrivalFeed` is SIMULATED only, and a live scene refuses its facts by origin.
+4. The party as people. The kingdom's raid arrival brings wagons and nobody rides them; the leaving gate's party is
+   still drawn. For the party to be the same citizens seen on the streets, the kingdom scene needs a read-only gate-party
+   mount on `SceneOptions.momentFeed` (the exact `needs:` is in `work/lanes/raid-road/progress.txt`): a column of
+   `caravanCount(viewers)` citizens dressed by the crowd's seeded look (from raid ID and place in the column, never a
+   viewer's identity), the first carrying the source's banner, the rest a pennant and a torch lit through the light
+   field, walking in from `placeAnchor('gate')` for an incoming raid, and out through it for a gate-party frame
+   `{ phase: 'gather' | 'setout', marchers, progress }`, plus the gate anchor's screen point for the words.
