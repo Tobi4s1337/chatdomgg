@@ -1,6 +1,6 @@
 -- The Raid Gate's durable records (spec 23). Additive only.
--- Main registers this file unchanged as apps/realm/src/persistence/migrations/0009_realm_raid_gate.sql; once applied
--- it is never edited (the migrator stops on a changed checksum), so later changes arrive as new migrations.
+-- Registered as 0011_realm_raid_gate. Migrate the target schema before starting a build containing this file.
+-- Once applied it is never edited (the migrator stops on a changed checksum); later changes use new migrations.
 --
 -- Each row keeps the canonical record exactly as `apps/api/src/raid-gate/repository.ts` defines it, as JSON text, and
 -- its strict reader decodes it on every read. The key columns are copies checked against that text. A write is a

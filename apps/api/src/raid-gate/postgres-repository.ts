@@ -1,5 +1,5 @@
 /**
- * The durable `RaidGateRepository` over the shared realm schema (migration `realm-migration.sql`). It keeps the exact
+ * The durable `RaidGateRepository` over the shared realm schema (migration `0011_realm_raid_gate.sql`). It keeps the exact
  * rules of `memory-repository.ts`, which the application suite runs against:
  *
  * - One serializable transaction per `transaction` call. If `work` throws, or the signal aborts before commit,

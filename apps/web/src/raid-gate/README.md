@@ -12,7 +12,7 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | Application: gate status, preview, join, leave, read-action, close, start, Twitch cancel, reconcile | `apps/api/src/raid-gate/application.ts` | Real. Travel, passport and gift ops answer `denied: unavailable` until their task lands |
 | Witnessed departure: `ingestRaid`, `recover` | `apps/api/src/raid-gate/application.ts` | Server-only; lands a correlated raid once and hands it to the Atlas road ingestion |
 | Outbox for Twitch writes and the road handoff | `apps/api/src/raid-gate/repository.ts` | `queued` sendable, `claimed` reconcile-only, `settled` |
-| Durable repository over the realm schema | `apps/api/src/raid-gate/postgres-repository.ts`, `realm-migration.sql` | Serializable CAS; every row passes its strict reader |
+| Durable repository over the realm schema | `apps/api/src/raid-gate/postgres-repository.ts`, `0011_realm_raid_gate.sql` | Serializable CAS; every row passes its strict reader |
 | Session principal from realm-auth's cookie | `apps/api/src/raid-gate/session.ts` | Role derived on the server: monarch by Twitch identity, citizen by deed, otherwise guest |
 | Live policy | `apps/api/src/raid-gate/policy.ts` | Session and broadcaster from the realm; live, grant, consent and Atlas verdict are required ports |
 | Composition and node adapter | `apps/api/src/raid-gate/service.ts` | `createRaidGateService(...)` → `{ matches, serve, close }` |
@@ -23,12 +23,12 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | Route `/-/raid-gate` | `index.tsx` | Unbound by default: "The gate is shut here" |
 | Bench `/-/raid-gate?bench=simulated` | `bench.ts` | The real application in the page; SIMULATED everywhere |
 | Travel coordinator: reserve, prepare, commit once, reconcile, cancel, return, recover | `apps/realm/src/raid-gate/coordinator.ts` | Real; fenced whereabouts, arrival evidence, source released only after the destination's acknowledgment |
-| Travel records and their durable repository | `apps/realm/src/raid-gate/records.ts`, `postgres-repository.ts` | Travel, arrival, whereabouts; tables in `realm-migration.sql` |
+| Travel records and their durable repository | `apps/realm/src/raid-gate/records.ts`, `postgres-repository.ts` | Travel, arrival, whereabouts; tables in `0011_realm_raid_gate.sql` |
 | March check for raid journeys | `createRaidMarchCheck` in `apps/api/src/raid-gate/application.ts` | Joined, landed, this raid, within five minutes |
 | SIMULATED room transport (tests and bench only) | `apps/realm/src/raid-gate/simulated-rooms.ts` | Fencing generation, idempotent holds, refuses a commit after reconcile |
 | Journey board | `RaidGatePane.tsx` (`TravelBoard`) | Stages from the authority, overrun, confirming, arrived, home, turned back, refused |
 | Gift policy and the welcome: offer, accept, refuse, `{op:'welcome'}` | `apps/api/src/raid-gate/gifts.ts` | Real. One item transaction moves the thing, writes its lineage and settles the offer; retries return the same receipt |
-| Durable gift storage and host directory | `apps/api/src/raid-gate/gift-postgres.ts`, `gift-hosts.ts`; tables in `realm-migration.sql` | Offers and lineage are ours; the things stay in main's item authority behind `ItemRows` |
+| Durable gift storage and host directory | `apps/api/src/raid-gate/gift-postgres.ts`, `gift-hosts.ts`; tables in `0011_realm_raid_gate.sql` | Offers and lineage are ours; the things stay in main's item authority behind `ItemRows` |
 | Arrival evidence for gifts | `apps/realm/src/raid-gate/arrivals.ts` | Present = the whereabouts still name this arrival in its kingdom, unfenced |
 | SIMULATED item store (tests and bench only) | `apps/api/src/raid-gate/gift-memory.ts` | Can fail before commit or lose its answer after commit |
 | Welcome controller | `welcome.ts` | Created by the gate controller once a raid journey commits as a visitor; lost presses re-sent under the same request |
@@ -39,9 +39,12 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 
 Short version, with the pieces above:
 
-1. Register `apps/api/src/raid-gate/realm-migration.sql` unchanged as
-   `apps/realm/src/persistence/migrations/0009_realm_raid_gate.sql`, then delete the `?raw` fallback in
-   `postgres.integration.test.ts` and run it once with `REALM_DATABASE_TESTS=1`.
+1. Apply the registered `apps/realm/src/persistence/migrations/0011_realm_raid_gate.sql` to the target schema
+   before starting the new realm or API build. The realm requires exactly its registered migration checksums;
+   startup does not apply migrations. The gate and travel Postgres suites use this registered migration directly
+   with `REALM_DATABASE_TESTS=1`, without manually creating tables outside the migration ledger. Use
+   `--no-fsModuleCache` when running these suites after adding a migration: the test runner's persistent transform
+   cache can otherwise retain an earlier expansion of the migration file list.
 2. In `apps/api/src/main.ts`:
    ```ts
    const raidGate = createRaidGateService({
