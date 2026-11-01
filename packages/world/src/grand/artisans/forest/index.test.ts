@@ -8,7 +8,7 @@ describe('forest grammar', () => {
       expect(tree).toEqual(createTree(species, 'a'));
       expect(tree.boxes.length).toBeGreaterThan(20);
       expect(tree.boxes.every(b => b.size.every(n => Number.isInteger(n) && n > 0))).toBe(true);
-      expect(tree.boxes.some(b => b.min[1] < 0 && b.min[1] + b.size[1] >= 0)).toBe(true);
+      expect(tree.boxes.some(b => b.min[1] === 0 && b.min[0] <= 0 && b.min[0] + b.size[0] > 0 && b.min[2] <= 0 && b.min[2] + b.size[2] > 0)).toBe(true);
     }
     expect(createTree('gold', 'a').boxes).not.toEqual(createTree('gold', 'b').boxes);
     expect(createTree('pine', 'a').boxes).not.toEqual(createTree('gold', 'a').boxes);
