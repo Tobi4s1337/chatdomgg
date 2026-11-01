@@ -268,3 +268,12 @@ appropriate. A warm prop without people coming to sit does not demonstrate the r
 
 These findings do not authorize this lane to change the kingdom scene or create substitute
 visuals. The actual stills/clips will decide the remaining visual polish.
+
+**needs: preserve presenter access under public viewing.** `RealmDockService.connect()`
+currently counts every public and authenticated feed against one global32-connection
+ceiling, and `kingdom/index.tsx` opens a feed for each live founded visitor. Public viewers
+can therefore fill the pool before the broadcaster's stream connects. Reserve presenter
+capacity independently of public observers (and bound public observers per kingdom/host
+as appropriate). Test that a full anonymous audience cannot prevent the independently
+authenticated broadcaster from receiving a draw capability. This is a main-owned service
+budget/authority change; the dock must not manufacture a receipt when admission fails.

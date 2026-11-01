@@ -1,6 +1,7 @@
 # Dock UI rehearsal
 
-`capture.mjs` serves the actual dock app and a local HTTP fixture over an owned Unix socket.
+`capture.mjs` builds the actual dock app into a temporary directory and serves it with a
+local HTTP fixture over an owned Unix socket. The production build contains no Vite HMR client.
 Playwright intercepts `http://dock.capture` and forwards it through that socket, so no TCP
 port is opened or existing service touched. Chrome treats that test-only origin as secure
 for browser APIs. It acquires the host capture lock before starting the server or Chrome,
@@ -38,20 +39,23 @@ checks that actions stay locked and no second POST is sent.
 
 ## Outstanding evidence
 
-The shared capture lock has not yet admitted a rehearsal capture. Three earlier bounded
-attempts timed out before starting the server or Chrome. A new unbounded lane-priority
-capture is queued as exec session 23423, owned by `/root/dock_evidence` (tool sessions
-are agent-scoped; follow up that agent to poll), which imports the latest rehearsal only after
-admission. Browser assertions have not run. No image or clip in
-this folder has been reviewed. Capture and inspect ready at 390×844 and 1440×900,
-real-unavailable at 318×900, the ambiguous reply after reload, and one action UI clip.
-Exercise anonymous, forbidden, expired, fault, moderator and remaining action states as
+Earlier bounded attempts timed out. Subsequent attempts admitted, but two exposed Vite
+HMR harness failures and produced no screenshots. Inspected simulated dock captures are
+`ready-390x844-viewport.png`, `ready-318x900-full.png`, `ready-1440x900-viewport.png`, and
+`anonymous-390x844-viewport.png`, `moderator-390x844-viewport.png`,
+`undo-390x844-viewport.png`, `unknown-390x844-viewport.png`,
+`real-unavailable-318x900-viewport.png` and `signout-390x844-viewport.png`. No browser console/page errors or horizontal overflow were
+observed; ready action focus persisted through a poll, so its visible focus ring is intentional.
+The first undo fixture incorrectly retained the gate state; it was fixed, recaptured and
+checked after reload. Unknown survives a reload and the fixture asserts no second POST.
+Capture and inspect the ambiguous reply after reload and one action UI clip.
+Exercise forbidden, expired, fault and remaining action states as
 the lock permits. Each invocation starts no server before acquiring the lock and releases
 it after closing Chrome and its socket. It has no automatic queue timeout.
 
 The earlier queued process was stopped after main supplied a cross-namespace
-[shared queue registry](../../../packages/testing/capture-lock.mjs) fix; this new process
-uses that helper. The lock has not been altered here.
+[shared queue registry](../../../packages/testing/capture-lock.mjs) fix; current processes
+use that helper. The lock has not been altered here.
 
 These UI rehearsals cannot establish that a royal act reaches a real stream. Once the
 renderer integration is ready, separately demonstrate every required act
@@ -74,36 +78,51 @@ The realm offers a dusk moment by default. A raid requires a recent normalized s
 raid fact, and honours require a public named citizen with a current real slot/presence;
 these must be seeded through actual authority paths and remain visibly SIMULATED. Neither
 fixtures nor a fabricated witness demonstrate a stream act. Main verified Postgres using
-the ignored main-checkout `.env`; its contents must not be printed or copied. At the last
-read-only listener check, only 5171 was free among the allowed capture ports. A possible
-one-port harness can serve actual API handlers and web Vite middleware on IPv4 loopback
-and bootstrap the real realm on an owned Unix socket. It must preserve streaming SSE and
+the ignored main-checkout `.env`; its contents must not be printed or copied. Recent
+read-only listener checks showed the allowed IPv4 capture ports occupied. The one-port
+harness serves actual API handlers and a fresh production web build on IPv6 loopback
+and bootstraps the real realm on an owned Unix socket. It must preserve streaming SSE and
 sign-in and replicate the production realm composition rather than fake a presenter. Do not
 stop another service to obtain a port; recheck availability at execution time.
 
-`integration-capture.mjs` and `integration.mjs` are an **untested scaffold**, not evidence.
-They compose the real durable realm, API handlers, simulated OIDC and the integrated web Vite front
-door on IPv4 loopback and the real realm on a Unix socket, with one random schema and temporary
-founded directory. They bind port 5171 exclusively only after acquiring the capture lock; a
+`integration-capture.mjs` and `integration.mjs` are a **runtime-unverified scaffold**, not evidence.
+They compose the real durable realm, API handlers, simulated OIDC and the integrated production web front
+door on IPv6 loopback and the real realm on a Unix socket, with one random schema and temporary
+founded directory. They bind `[::1]:5171` with `ipv6Only` exclusively only after acquiring the capture lock; a
 conflict must fail. A first still can show the actual stream and signed-in dock beside one another,
 but exercises no act and asserts no delivery. The script does not send a witness itself.
-It needs runtime verification and visual inspection before use as evidence; the wrapper
+The first initial still attempt, agent-owned session 21613, exited 1 while loading workspace
+services; it opened no listener or browser and produced no image. Its supervisor reported
+no cleanup error. Import-only preflight found Vite runner/CJS interop failing on zod; a
+temporary SSR build using the realm's Vite configuration and a native Node import then exposed
+all required service factories successfully without starting a server or touching the database.
+The corrected bench itself has not run yet. The wrapper
 requires `CHATDOM_DOCK_BENCH_UNTESTED=1`. After admission its supervisor has an eight-minute
 deadline, tracks its worker and Chrome process groups, waits for them to stop, then removes
 only its generated schema and temporary directory before releasing the lock. These cleanup
 paths are not yet runtime-tested. If Chrome cannot be tracked or confirmed closed, it retains
 the lock for intervention. Do not run alongside another lane-owned browser capture.
 
-For later action evidence, send normalized simulated presence/chat observations through
-the real authenticated evening ingress, then wait for allocation, disclosure and public
-watch to expose a named citizen and slot. Send a simulated normalized raid observation
-through the same ingress and wait until the dock authority lists it. Use the real dock
-controls and require the renderer's independent witness; record the receipt and actual
-visible beat. The scaffold provisions an isolated Herald credential but does not yet seed
-these events or claim their availability.
+The scaffold now seeds simulated stream and named chat observations through the real
+authenticated evening ingress, and seeds a simulated raid for the raid scenario. Its
+action driver requires a real signed-in presenter and an accepted simulated witness;
+no runtime attempt has established that these seeds or any visual beat work yet.
 
-Next: poll the existing agent-owned 23423 handle; on admission inspect its ready 390×844
-viewport still, then queue each remaining UI still separately. Validate the scaffold's
+Run one actual-service still or short clip at a time (explicit opt-in while runtime
+verification is pending):
+
+```sh
+CHATDOM_DOCK_BENCH_UNTESTED=1 node --env-file=/root/chatdomgg-harness/chatdomgg/.env work/evidence/dock/integration-capture.mjs initial still
+```
+
+After `initial` is verified, use `open`, `close`, `fire`, `raid`, `crown`, `knight`, `moment`
+or `undo` in its place, and `clip` for one short WebM. Each invocation creates a fresh own
+schema, signs in through the real simulated OIDC provider and builds current production
+assets. Witness metadata written beside an action capture contains only simulated action,
+receipt and public witness IDs; no CSRF or presenter capability is recorded.
+
+Next: poll the corrected initial isolated real-service still in agent-owned exec session 60166;
+it has not yet reported admission. Queue remaining UI stills separately. Validate the scaffold's
 owned socket, isolated schema cleanup, real sign-in and both SSE relays before relying on
 its still. Then seed actual simulated observations, use dock controls and verify stream
 draws and witnesses one act at a time. A read-only queue snapshot showed five inactive

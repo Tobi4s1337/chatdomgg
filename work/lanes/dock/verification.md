@@ -190,3 +190,29 @@ After its ready390 capture: inspect it, capture remaining UI states one at a tim
 the integration bench, then seed normalized simulated citizen/raid observations through
 real ingress and demonstrate each dock act beside the actual stream. Moderator authority,
 directed undo and attendance-label needs remain in `needs.md`. Task and goal stay active.
+
+## Production UI evidence and native service loader — 2026-11-01
+
+Nine production UI stills have been captured and individually looked at. The visual review
+lists their exact paths and limits. Captures assert no browser errors/overflow; ready
+retains keyboard focus through polling, uncertain reload sends no second POST, simulated
+undo restores the original gate and removes its receipt, and sign-out returns to sign-in.
+The original disabled opacity was too faint; corrected and recaptured the permission and
+uncertain states. Source CSS lint/build pass. After main's frozen undo schema adoption,
+29 focused tests and scoped TypeScript pass.
+
+The real-service scaffold's first attempt21613 failed during module loading, before any
+listener/browser. Import-only diagnosis reproduced Vite runner/CJS `exports is not defined`
+in bootstrap/evening's zod dependency. Building the combined factory entry with the actual
+realm SSR Vite config, then native-importing it, passes an import-only preflight without
+DB/listener/browser; its owned temp directory was removed. New service-loader and capture
+scripts pass syntax checks. Action drivers seed normalized SIMULATED observations through
+the actual authenticated evening service and require the real stream witness; those paths
+are not runtime-proven yet. No action receipt or stream pixel is claimed.
+
+The corrected one-still attempt60166 remains live and queued in `/root/dock_evidence`'s
+tool scope (fresh owner poll confirmed it). Its actual Node front binds exclusively to
+IPv6 `[::1]:5171`; the realm uses an owned Unix socket. IPv4 capture ports were occupied;
+no existing service was touched. Resume/poll the same agent-owned handle. Main has newer
+unrelated lane integrations; defer sync until this capture is terminal so its build inputs
+remain stable, then merge before the next rehearsal. The task stays open and active.
