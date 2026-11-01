@@ -1,3 +1,32 @@
+# WT10 current — 2026-11-01 18:42
+
+User's latest constraint stands: no new sub-scopes, clean local checkpoints, never push. WT10 stays unchecked until whole kingdom/stream acceptance. Previous goal turn was progress (79e89c8/15a9c37); this second resumed turn merged main's real presentation binding and improved its verification. No new agents or product features.
+
+Main 76ed4a5 synced cleanly by merge 6087a27, including 201f591's six-file walking presentation integration. PeopleLabels, actual animated heads and gait-footfall audio are now bound in kingdom/stream. Approved saved outfits/tools and authenticated current gesture transport are still main-owned missing sources; optional ports alone are not whole behavior. Owned-door spawn, visible/physical terrain agreement, continuous deterministic soft-push and guest speech association also remain required.
+
+Source checkpoints be281e9 and 8c93e6a: checker recognizes all 21 exact landed hunks (zero overlays), two patch comments aligned to main, and a new exact observed-head test fixture patch is prepared for main. Collision CPU preparation is now before capture admission; cancellation is checked immediately afterward. Browser sub-stages/signals are logged, navigation waits for commit then actual meaningful ready flag, and failure diagnostics are bounded to three seconds. No main-owned source was changed.
+
+LIVE owned handle (poll, never duplicate):
+- 75301: one actual-Kingdom 1440×900 still, `node apps/web/src/walk/capture-town.mjs --offline --out shots/walking-together/landed-town-loopback`, `/tmp/walking-loopback-town.log`. Preparing all 659 placements before capture admission. No listener/browser until lock acquisition. Replaces terminal 17663 after the demonstrated loopback permission failure; never poll/restart older handles.
+
+Terminal this turn:
+- 50409: ended after a real 240 s ready timeout. Failure metadata exposed our offline root URL mapping bug: document body was "Missing compiled review asset" with HTTP 404, no Kingdom ever opened, no clients/image. Rootfix maps / to /index.html and now asserts the document HTTP status before readiness. Catch explicitly sets exitCode 1 because the transport's uncaught handler could swallow the throw after shutdown. This is a runner defect, not a renderer readiness/performance conclusion. Logs/JSON preserved as checks/landed-town-root-route*.
+- 19224 and 22177: final runner/helper ESLint passed.
+- 17663: terminal exit 1. Rootfix reached actual Kingdom ready (240 homes/citizens, 1.29M triangles, no scene-init error), then Chrome denied the offline HTTPS origin access to the owned loopback realm before any client joined. Exact failure metadata/log preserved as checks/landed-town-loopback-denied*. 8c93e6a grants local-network-access only to the isolated offline origin; request routing still allows only the owned realm origin. No product permission or endpoint was changed.
+- 24580: exact observed-head test patch passed its real integration case through an in-memory Vitest transform (1/1). No main-owned file was written. Log saved as checks/landed-observed-overlay.log.
+- 1116: host capture guard stopped it (progress line 18:25). Exit 1, no image. It was still queued through 18:23, acquired around 18:24, compiled 659 placements, started owned realm 5170, then received SIGTERM before browser setup. Failure JSON/log retained in evidence/checks/resumed-town-retry*. The guard line calls it ten minutes holding the lock; queue time is part of command age. Main owns watchdog admission timing. No third unchanged retry: 50409 prepares CPU work outside capture slot and has finer stages. Do not poll 1116/51500 again.
+- 54708 full typecheck success; 28942 integration typecheck success (21/21 landed); 94298 build success. Logs evidence/checks/landed-*.log.
+- 30421 expanded focused suite: 27 files passed, one failed; 186 tests passed, one failed. Failure is main-owned observed-walkers.test.ts:70, still expecting synthetic 1.9 m speech with no actual renderer head map. `observed-heads-test.patch` supplies a witnessed head and checks coordinates/distance plus no-anchor/cleared-anchor suppression. Apply check passes and exact runtime overlay passed (1/1). Main still needs to apply the test fixture patch.
+- 62515 full lint exit 1: only scripts/public/look.mjs undefined AbortSignal (28) and clearTimeout (56). Exact suggested fix in needs.md: qualify globalThis. Lane runner/checker ESLint 47429 success; earlier 13101 also success.
+
+No resumed town image/clip is accepted. Do not tick WT10 or write LANE COMPLETE. Real town web/stream, persistent wardrobe/gesture propagation and real GPU pacing remain unproven. All earlier component evidence is historical, not a substitute.
+
+---
+
+Everything below is the previous checkpoint history, not current live-job status.
+
+---
+
 # WT10 working state — 2026-11-01
 
 WT10 is the only task and remains unchecked. Do not write LANE COMPLETE. Read PRD and needs.md before resuming. The previous goal turn made concrete progress (ad7a286/ca01520); this turn also changed authoritative code and evidence. Goal is being marked blocked after three consecutive turns with the same main-owned contract gaps, now with no remaining safe lane action that can complete acceptance.

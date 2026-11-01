@@ -45,7 +45,8 @@
        return labels;
 --- a/apps/web/src/kingdom/index.tsx
 +++ b/apps/web/src/kingdom/index.tsx
-@@ -1,4 +1,4 @@
+@@ -1,5 +1,5 @@
+ import { createDockConnection } from '../stream/dock-connection';
 -import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
 +import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
  import { createKingdomScene, type CameraName, type NameLabel, type PotentialKingdomView } from './scene';
@@ -155,9 +156,9 @@
    readonly hud?: HTMLElement;
    /** Arrival view only, in radians. Movement still uses the room's own yaw and quantized input. */
    readonly heading?: number;
-+  /** Main supplies approved server-owned worn recipes, including all IDs in the room. */
++  /** Approved server-owned worn recipes, including all IDs in the room. */
 +  readonly appearances?: readonly CitizenRenderLook[];
-+  /** Main binds the authenticated current gesture transport; omit until ready. */
++  /** Authenticated current gesture transport, when available. */
 +  readonly gestures?: WalkControllerOptions['gestures'];
    /** Request a new checked scene when authority changes geometry. Called once; entry owns reinstallation. */
    readonly onSceneNeeded?: () => void;
