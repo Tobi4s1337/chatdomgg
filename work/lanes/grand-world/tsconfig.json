@@ -7,6 +7,10 @@
     "../../../apps/web/src/stream/**/*.tsx",
     "../../../packages/world/src/grand-adoption/place-sites*.ts",
     "../../../packages/world/src/grand-adoption/pier-sites*.ts",
+    "../../../packages/world/src/grand-adoption/pier-authored*.ts",
+    "../../../packages/world/src/grand-adoption/pier-fishing-proposal*.ts",
+    "../../../packages/world/src/grand-adoption/pier-fishing-candidates*.ts",
+    "../../../packages/voxel/src/collision/**/*.ts",
     "../../../packages/world/src/grand/**/*.ts"
   ]
 }

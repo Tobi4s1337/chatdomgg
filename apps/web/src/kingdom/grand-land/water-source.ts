@@ -46,7 +46,8 @@ export function createSurfaceLandWater(scene: Pick<RealmFoundedScene, 'layoutRev
     const wet = query(x, z);
     if (!wet) return { state: 'dry' };
     const description = descriptions.get(wet.id);
-    if (!description?.biome || !Number.isFinite(wet.level) || wet.level <= floor) return null;
+    if (!description?.biome || !Number.isFinite(wet.level) || wet.level < floor) return null;
+    if (wet.level === floor) return { state: 'shore', level: wet.level, depth: 0, ...description };
     return { state: 'wet', level: wet.level, depth: wet.level - floor, ...description };
   };
 

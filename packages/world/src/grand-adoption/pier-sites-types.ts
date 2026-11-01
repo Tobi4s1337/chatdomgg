@@ -15,8 +15,12 @@ export interface PierAnchor {
   readonly water: 'lake' | 'river' | 'sea';
   readonly biome: string;
 }
+/** shore at a point means visible water meets the physical bed exactly: known zero depth, never a dry root. */
 export type LandWaterSample = { readonly state: 'dry' } | {
   readonly state: 'wet'; readonly level: number; readonly depth: number;
+  readonly kind: PierAnchor['water']; readonly biome: string;
+} | {
+  readonly state: 'shore'; readonly level: number; readonly depth: 0;
   readonly kind: PierAnchor['water']; readonly biome: string;
 };
 export type LandWaterAt = (x: number, z: number) => LandWaterSample | null;

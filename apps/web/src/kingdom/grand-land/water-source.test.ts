@@ -29,6 +29,16 @@ describe('renderer water land adapter', () => {
     expect(createSurfaceLandWater(scene, physical(() => null), { ground, raster, bodies: [], reaches: [] }, meta).sample(0, 0)).toBeNull();
   });
 
+  it('distinguishes known zero-depth shore from unknown or submerged water', () => {
+    const ground = grid(), raster = { levels: new Float32Array(16).fill(1), seaLevel: 0 };
+    const surface = { ground, raster, bodies: [], reaches: [] };
+    const shore = createSurfaceLandWater(scene, physical(() => 1), surface, meta);
+    expect(shore.sample(.25, .25)).toEqual({ state: 'shore', level: 1, depth: 0, ...meta.raster });
+    // A renderer surface buried below physical ground is not a valid shallow-water certificate.
+    expect(createSurfaceLandWater(scene, physical(() => 1.5), surface, meta).sample(.25, .25)).toBeNull();
+    expect(createSurfaceLandWater(scene, physical(() => null), surface, meta).sample(.25, .25)).toBeNull();
+  });
+
   it('reports a tiny dry cell as shore and refuses changed water levels', () => {
     const ground = grid(4, 4, 0.25), levels = new Float32Array(16).fill(1);
     const raster = { levels, seaLevel: 0 };

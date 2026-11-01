@@ -28,7 +28,7 @@ function validWater(v: LandWaterSample | LandWaterCoverage): boolean {
   return v.state === 'dry' || (v.state === 'wet' || v.state === 'shore') && finite(v.level)
     && typeof v.biome === 'string' && v.biome.trim().length > 0 && v.biome.length <= 128
     && ['lake', 'river', 'sea'].includes(v.kind)
-    && ('depth' in v ? finite(v.depth) && v.depth > 0 : finite(v.minDepth) && (v.state === 'shore' ? v.minDepth >= 0 : v.minDepth > 0));
+    && ('depth' in v ? finite(v.depth) && (v.state === 'shore' ? v.depth === 0 : v.depth > 0) : finite(v.minDepth) && (v.state === 'shore' ? v.minDepth >= 0 : v.minDepth > 0));
 }
 function ground(p: PreparedPierSites, x: number, z: number): Vec3 | null | 'budget-exceeded' {
   if (p.work.groundSamples >= PIER_SITE_BUDGET.groundSamples) return 'budget-exceeded';
