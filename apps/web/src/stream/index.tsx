@@ -1,4 +1,5 @@
 import { createDockFixture } from './dock-fixture';
+import { openDurableChronicle } from '../chronicle/native-overlay';
 import { createDockConnection } from './dock-connection';
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
 import type { NameLabel } from '../kingdom/scene';
@@ -101,6 +102,8 @@ export default function StreamView() {
   const dockConnection = params.source === 'realm' && params.kingdomId ? createDockConnection(params.kingdomId) : undefined;
   onCleanup(() => dockConnection?.dispose());
   const spectator = params.source === 'realm' && params.kingdomId ? createRealmSpectatorSource({ kingdomId: params.kingdomId }) : undefined;
+  let chronicle:ReturnType<typeof openDurableChronicle>|undefined,chronicleOpened=false;
+  onCleanup(()=>chronicle?.close());
 
   const mount = createSceneMount({
     host: () => lens,
@@ -135,7 +138,10 @@ export default function StreamView() {
   });
 
   function publishDebug(scene: KingdomScene | undefined): void {
-    if (!scene) { setArrival(null); delete window.__chatdomKingdom; return; }
+    if (!scene) { chronicle?.close();setArrival(null); delete window.__chatdomKingdom; return; }
+    if(!chronicleOpened&&params.source==='realm'&&params.kingdomId&&new URLSearchParams(location.search).get('chronicle')==='1'){
+      chronicleOpened=true;chronicle=openDurableChronicle({kingdomId:params.kingdomId,liveEngine:scene,onOpen:()=>director.stop(),onClose:()=>{chronicle=undefined;if(phase()==='ready')director.start();}});
+    }
     // The labelled opening starts with the first speaker, rather than an already-full town.
     // Real sources always keep their witnessed history; a fixed capture stays fixed.
     if (params.source === 'simulated' && seam() === 'starting' && params.time === null) scene.play();

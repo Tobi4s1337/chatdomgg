@@ -151,3 +151,8 @@ it('does not advance playback over a pending scene or leak an asynchronous failu
   expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
   expect(binding.clear).toHaveBeenCalledTimes(1);
 });
+it('preserves the witnessed stream date while ordering by durable committed sequence', () => {
+  const earlier = { ...snapshot(1, 'a'), nightAt: 100 };
+  expect(validateHistory({ label: 'SIMULATED', snapshots: [earlier] }).snapshots[0]?.nightAt).toBe(100);
+  expect(() => validateHistory({ label: 'SIMULATED', snapshots: [{ ...earlier, nightAt: 1001 }] })).toThrow(/witnessed stream date/);
+});

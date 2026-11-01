@@ -46,10 +46,10 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
       status.textContent = state.status === 'empty' ? 'No recorded nights' : 'History unavailable';
       play.disabled = true; seek.disabled = true; play.textContent = 'Play'; return;
     }
-    date.textContent = describeDate(state.snapshot.frame.asOf);
+    date.textContent = describeDate(state.snapshot.nightAt ?? state.snapshot.frame.asOf);
     caption.textContent = state.snapshot.caption;
     seek.disabled = false; seek.max = String(state.count - 1); seek.value = String(state.index);
-    seek.setAttribute('aria-valuetext', `${describeDate(state.snapshot.frame.asOf)}; entry ${state.index + 1} of ${state.count}`);
+    seek.setAttribute('aria-valuetext', `${describeDate(state.snapshot.nightAt ?? state.snapshot.frame.asOf)}; entry ${state.index + 1} of ${state.count}`);
     play.disabled = state.count < 2;
     play.textContent = state.playing ? 'Pause' : state.index === state.count - 1 ? 'Play again' : 'Play';
     status.textContent = `Entry ${state.index + 1} of ${state.count}`;

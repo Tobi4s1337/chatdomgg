@@ -21,6 +21,7 @@ import { isEditableTarget, isKeyboardControl } from '../walk';
 import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
 import './moment-captions.css';
 import { PeopleLabels, peopleFromLabels, measureReservedElements } from '../walk/labels/index';
+import { openDurableChronicle } from '../chronicle/native-overlay';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
 export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:RealmFoundedScene;growthFeed?:GrowthSceneFeed;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;momentFeed?:TwitchMomentFeed;walkerFeed?:RealmWalkerFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
@@ -44,6 +45,8 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
   let unsubscribeChat:(()=>void)|undefined;
   const [forgeStatus,setForgeStatus]=createSignal<ForgeStatus|null>(null);
   const [anvilVisit,setAnvilVisit]=createSignal<{leave:()=>void}|null>(null);
+  let chronicle:ReturnType<typeof openDurableChronicle>|undefined;
+  const openChronicle=()=>{if(!props.founded||!engine||chronicle)return;chronicle=openDurableChronicle({kingdomId:props.founded.kingdomId,liveEngine:engine,onClose:()=>{chronicle=undefined;}});};
   const unlockSound=()=>{
     const instance=engine;
     if(instance)void instance.sound.unlock().then(()=>{if(!unmounted&&engine===instance)setSound(instance.sound.enabled);});
@@ -97,12 +100,13 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
         setReady(true);testWindow.__chatdomReady=true;
       };
       openingFrame=requestAnimationFrame(showReady);
+      if(query.get('chronicle')==='1')openChronicle();
       if(props.walk)void attachWalk(props.walk).catch(cause=>{if(unmounted)return;setError(`Could not start walking: ${realmEntryFailureMessage(cause)}`);setReady(false);window.__chatdomReady=false;});
       if(!props.founded&&!props.potential&&query.get('build')==='1')void instance.build.enter();
       if(!props.founded&&!props.potential&&query.get('forge')==='1')instance.forge.open();
     }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(`Could not draw the kingdom: ${realmEntryFailureMessage(cause)}`);});
   });
-  onCleanup(()=>{unmounted=true;document.removeEventListener('keydown',unlockWithWalk);cancelAnimationFrame(openingFrame);construction.abort();dock?.dispose();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
+  onCleanup(()=>{unmounted=true;chronicle?.close();document.removeEventListener('keydown',unlockWithWalk);cancelAnimationFrame(openingFrame);construction.abort();dock?.dispose();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
   function tap(action:()=>void){if(!engine)return;if(!sound())unlockSound();action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setWalking(false);setView(value);tap(()=>engine!.setCamera(value));}
@@ -148,6 +152,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
     <Show when={!stream&&buildSession()}>{session=><BuildTools controller={session().controller} ownerName="Juniper" imports={session().imports}/>}</Show>
     <Show when={housewarming()}>{name=><div class="housewarming-name">{name()}’s home<small>Welcome to the street</small></div>}</Show>
     <Show when={ready()&&walking()&&!error()&&!stream}><button class="walk-overlook" onClick={()=>chooseView('hero')}>Above the streets</button></Show>
+    <Show when={ready()&&props.founded&&!error()&&!stream}><button class="kingdom-chronicle-button" onClick={openChronicle}>The Chronicle</button></Show>
     <Show when={ready()&&!props.potential&&!walking()&&!error()&&!stream&&!buildSession()&&!forgeStatus()?.open}><nav class="kingdom-controls" aria-label="Kingdom view">
       <div class="time-controls" aria-label="Time of day"><button classList={{selected:hour()<16}} onClick={()=>chooseHour(12)}>Noon</button><button classList={{selected:hour()>=16&&hour()<22}} onClick={()=>chooseHour(19.5)}>Dusk</button><button classList={{selected:hour()>=22}} onClick={()=>chooseHour(23)}>Night</button></div>
       <span class="control-divider" />

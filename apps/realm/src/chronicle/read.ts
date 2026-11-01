@@ -45,17 +45,18 @@ export function createChronicleReader(input: {
           'SELECT revision, adopted_ms FROM realm_layouts WHERE kingdom_id = $1 ORDER BY adopted_ms, revision', [kingdomId]);
         const worlds = new Map<string, { revision: string; manifest: RealmFoundedManifest; scene: RealmFoundedScene }>();
         const snapshots = [];
-        let cached: { homes: typeof states[number]['state']['homes']; castle: typeof states[number]['state']['castle']; attachments: typeof states[number]['state']['attachments']; layout: string; build: Awaited<ReturnType<typeof assembleFoundedScene>> } | undefined;
+        let cached: { homes: typeof states[number]['state']['homes']; castle: typeof states[number]['state']['castle']; attachments: typeof states[number]['state']['attachments']; civic: string; layout: string; build: Awaited<ReturnType<typeof assembleFoundedScene>> } | undefined;
         for (const item of states) {
           const layout = layouts.rows.filter(row => Number(row.adopted_ms) <= item.frame.asOf).at(-1);
           // A pre-founding stream is not a picture of a kingdom that did not exist yet.
           if (!layout) continue;
-          if (!cached || cached.layout !== layout.revision || cached.homes !== item.state.homes || cached.castle !== item.state.castle || cached.attachments !== item.state.attachments) {
+          const civic = JSON.stringify(item.frame.civic);
+          if (!cached || cached.layout !== layout.revision || cached.homes !== item.state.homes || cached.castle !== item.state.castle || cached.attachments !== item.state.attachments || cached.civic !== civic) {
             const plan = await input.allocation.layoutPlan(kingdomId, layout.revision);
             const native = await input.store.native(kingdomId, plan, input.origin);
             const furnished = enrichNativePictureGroves(plan, enrichNativeForgeWorkshop(plan, enrichNativeForgeHearth(plan, enrichNativeMarketSeats(plan, enrichNativeMarket(plan, native)))));
             const build = await assembleFoundedScene({ kingdomId, plan, native: furnished, state: item.state, collisionRevision: 0 });
-            cached = { homes: item.state.homes, castle: item.state.castle, attachments: item.state.attachments, layout: layout.revision, build };
+            cached = { homes: item.state.homes, castle: item.state.castle, attachments: item.state.attachments, civic, layout: layout.revision, build };
           }
           const build = cached.build, revision = build.manifest.sceneHash;
           worlds.set(revision, { revision, manifest: build.manifest, scene: build.scene });
@@ -64,7 +65,7 @@ export function createChronicleReader(input: {
             const placement = build.scene.placements.find(piece => piece.id === `home:${home.plotId}`);
             if (!placement) throw new Error('Chronicle home has no historical geometry.');
             return { plotId: home.plotId, assetRevision: placement.assetHash };
-          }), worldRevision: revision, caption: item.caption });
+          }), worldRevision: revision, caption: item.caption, nightAt: item.nightAt });
         }
         // The same disclosure gate rechecks withdrawal after potentially slow reconstruction.
         const latest = await input.founded.manifest(raw, request);
