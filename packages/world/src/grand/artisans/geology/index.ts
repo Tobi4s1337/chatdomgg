@@ -80,32 +80,86 @@ export const GEOLOGY_COLOURS: Readonly<Record<number, string>> = {
   30: '#938b87', 32: '#f0f3f3', 33: '#d3dfec',
 };
 
-function mountainHeight(x: number, z: number, phase: number): number {
-  // A continuous mountain backbone, with narrow transverse ridges and notches. Unlike
-  // radial cones, each broken fin shares its root and runs across the main spine.
-  const spine = -15 + 6 * Math.sin(x / 38 + phase);
-  const across = Math.abs(z - spine);
-  const longRidge = 40 + 9 * Math.sin(x / 37 + phase) + 5 * Math.sin(x / 17 - phase);
-  const finA = Math.pow(Math.max(0, 1 - Math.abs(Math.sin(x / 9 + phase))), 2.8);
-  const finB = Math.pow(Math.max(0, 1 - Math.abs(Math.sin(x / 5.5 - phase / 2))), 5);
-  const ridgeHeight = longRidge + 24 * finA + 15 * finB;
-  const cliff = Math.max(0, 1 - Math.max(0, across - 3) / (30 + 4 * Math.sin(x / 27)));
-  const base = 4 + ridgeHeight * Math.pow(cliff, 0.58);
-  const oblique = (5 * Math.sin(x / 7 + z / 18 + phase) + 2.5 * Math.sin(x / 3.7 - z / 8))
-    * Math.max(0, 1 - across / 30);
-  const shoulder = 8 * Math.exp(-(((z - 17 - 5 * Math.sin(x / 23)) / 14) ** 2));
-  return Math.max(3, Math.round(base + shoulder + oblique));
+type RidgePoint = readonly [number, number];
+const SPINES: readonly (readonly RidgePoint[])[] = [
+  [[-105, -13], [-66, -29], [-32, -22], [5, -32], [36, -14], [70, -23], [104, -9]],
+  [[-90, 16], [-60, 4], [-34, 11], [-2, -2], [24, 12], [51, 1], [91, 15]],
+];
+
+function distanceToSpine(x: number, z: number, points: readonly RidgePoint[]): number {
+  let best = Infinity;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i]!, b = points[i + 1]!, dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz)));
+    best = Math.min(best, Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz));
+  }
+  return best;
+}
+
+function smooth(t: number): number {
+  const u = Math.max(0, Math.min(1, t));
+  return u * u * (3 - 2 * u);
+}
+
+/** A coherent, locally bounded value field; neighbouring columns share the same knots. */
+function createStudyNoise(seedKey: string) {
+  let seed = 2166136261;
+  for (let i = 0; i < seedKey.length; i++) seed = Math.imul(seed ^ seedKey.charCodeAt(i), 16777619);
+  const corner = (x: number, z: number, salt: number): number => {
+    let v = Math.imul(x, 0x1f123bb5) ^ Math.imul(z, 0x5f356495) ^ seed ^ salt;
+    v = Math.imul(v ^ (v >>> 16), 0x7feb352d);
+    v = Math.imul(v ^ (v >>> 15), 0x846ca68b);
+    return ((v ^ (v >>> 16)) >>> 0) / 4294967295;
+  };
+  return (x: number, z: number, scale: number, salt: number): number => {
+    const fx = x / scale, fz = z / scale, ix = Math.floor(fx), iz = Math.floor(fz);
+    const u = smooth(fx - ix), v = smooth(fz - iz);
+    const a = corner(ix, iz, salt), b = corner(ix + 1, iz, salt);
+    const c = corner(ix, iz + 1, salt), d = corner(ix + 1, iz + 1, salt);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+  };
+}
+
+/**
+ * Independent visual study of the builder's spine-mask + coherent ridge + high jag approach.
+ * It produces heights in half-metre cells, never collision or a persisted landscape recipe.
+ */
+export function createRangeHeightField(seedKey: string): (x: number, z: number) => number {
+  const noise = createStudyNoise(seedKey + ':range-study');
+  return (x, z) => {
+    // Domain warp bends the ridges and makes adjoining valleys meet at different angles.
+    const wx = x + (noise(x, z, 52, 11) - .5) * 18;
+    const wz = z + (noise(x, z, 44, 17) - .5) * 15;
+    const primary = Math.pow(smooth(1 - distanceToSpine(wx, wz, SPINES[0]!) / 37), .66);
+    const secondary = Math.pow(smooth(1 - distanceToSpine(wx, wz, SPINES[1]!) / 30), .75);
+    const cover = Math.max(primary, secondary * .86);
+    const ridged = (scale: number, salt: number) => 1 - Math.abs(noise(wx, wz, scale, salt) * 2 - 1);
+    // Broad folds provide unequal massifs and deep saddle links. Smaller ridge fields add
+    // knife-edge breaks at the crown only, not regularly repeating side-by-side fins.
+    const broad = ridged(59, 23), fold = ridged(27, 29), crag = ridged(9, 37), fine = ridged(4.5, 41);
+    const uplift = cover * (28 + 25 * broad + 14 * fold);
+    const crown = smooth((uplift - 22) / 28);
+    const cuts = Math.pow(1 - ridged(21, 43), 3) * 11 * cover;
+    const jag = crown * (11 * Math.pow(crag, 3) + 5 * Math.pow(fine, 4));
+    const foothills = 4 + 6 * noise(x, z, 35, 47) + 3 * noise(x, z, 16, 53);
+    // Keep the complete landform: an irregular, smooth outer apron falls to the bench
+    // ground beyond the ends and flanks, well outside both warped spine envelopes.
+    const margin = Math.hypot(x / 160, (z + 5) / 104);
+    const apron = smooth((1 - margin) / .26);
+    return Math.max(0, Math.round((foothills + uplift - cuts + jag) * apron));
+  };
 }
 
 /** A non-authoritative sample range to judge bands, snowline, slopes and a talus apron. */
 export function createGeologyReview(seedKey: string): ArtisanKit {
-  const b = new KitBuilder(), phase = seedPhase(seedKey), sampler = createGeologySampler(seedKey), step = 2;
+  const b = new KitBuilder(), height = createRangeHeightField(seedKey), sampler = createGeologySampler(seedKey), step = 2;
   let summitX = 0, summitZ = 0, summitY = 0;
-  for (let z = -54; z < 48; z += step) for (let x = -78; x < 78; x += step) {
-    const top = mountainHeight(x, z, phase);
+  for (let z = -110; z <= 110; z += step) for (let x = -166; x <= 166; x += step) {
+    const top = height(x, z);
+    if (top === 0) continue;
     if (top > summitY) { summitX = x; summitY = top; summitZ = z; }
-    const slope = Math.max(Math.abs(mountainHeight(x + step, z, phase) - top),
-      Math.abs(mountainHeight(x, z + step, phase) - top)) / step;
+    const slope = Math.max(Math.abs(height(x + step, z) - top),
+      Math.abs(height(x, z + step) - top)) / step;
     const column = sampler.column(x, z), talus = top < 27 && slope > 0.7;
     const colourAt = (y: number): string => {
       // Living foothills and a thin earth lip take the rectangular quarry edge off the range.
