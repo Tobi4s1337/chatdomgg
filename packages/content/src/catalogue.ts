@@ -2,13 +2,13 @@ import { HomeTierSchema, type VoxelBlueprint } from '@chatdom/shared';
 import { createCastle, createHome, createTree } from './core';
 import { STYLES, type StyleKey } from './materials';
 
-export const COLLECTIONS = ['core', 'homes-hearth', 'homes-tide', 'street-props', 'civic-props', 'forge-pieces', 'build-templates', 'ground-dressing', 'places-water', 'places-high'] as const;
+export const COLLECTIONS = ['core', 'homes-hearth', 'homes-tide', 'street-props', 'civic-props', 'forge-pieces', 'build-templates', 'ground-dressing', 'places-water', 'places-high', 'growth-homes'] as const;
 export type ContentCollection = typeof COLLECTIONS[number];
 
 type CollectionModule = { BLUEPRINTS?: readonly VoxelBlueprint[] };
 // A glob permits lanes to arrive independently without unresolved static imports or fake fallback assets.
-const entries = import.meta.glob<CollectionModule>(['./homes/*/index.ts', './props/*/index.ts', './civic/index.ts', './forge/index.ts', './templates/index.ts', './props/dressing/index.ts', './places/*/index.ts', './places-high/index.ts']);
-const paths = { 'homes-hearth': './homes/hearth/index.ts', 'homes-tide': './homes/tide/index.ts', 'street-props': './props/street/index.ts', 'civic-props': './civic/index.ts', 'forge-pieces': './forge/index.ts', 'build-templates': './templates/index.ts', 'ground-dressing': './props/dressing/index.ts', 'places-water': './places/water/index.ts', 'places-high': './places-high/index.ts' } as const;
+const entries = import.meta.glob<CollectionModule>(['./homes/*/index.ts', './props/*/index.ts', './civic/index.ts', './forge/index.ts', './templates/index.ts', './props/dressing/index.ts', './places/*/index.ts', './places-high/index.ts', './growth-homes/index.ts']);
+const paths = { 'homes-hearth': './homes/hearth/index.ts', 'homes-tide': './homes/tide/index.ts', 'street-props': './props/street/index.ts', 'civic-props': './civic/index.ts', 'forge-pieces': './forge/index.ts', 'build-templates': './templates/index.ts', 'ground-dressing': './props/dressing/index.ts', 'places-water': './places/water/index.ts', 'places-high': './places-high/index.ts', 'growth-homes': './growth-homes/index.ts' } as const;
 
 export async function loadContentCollection(name: string): Promise<readonly VoxelBlueprint[]> {
   if (name === 'core') {
