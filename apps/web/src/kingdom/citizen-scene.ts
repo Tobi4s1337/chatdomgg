@@ -5,6 +5,7 @@ import { createCitizenMotion, createCitizenBehaviours, dueBehaviourSteps, type C
 import { CitizenChatCueSchema, type CitizenChatCue, type KingdomPresenceFrame, type Vec3 } from '@chatdom/shared';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
+import type { ForgeReactionCue } from './forge-flight';
 import { walkerSubject, type WalkerSlots } from './observed-walkers';
 import { createWalkerLanterns } from './walker-lanterns';
 
@@ -190,7 +191,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       restoredForgePending = false; restoredForgeGraceStart = undefined;
       forge = { anchor, atMs };
     },
-    update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set(), walkerFeet: WalkerSlots = new Map()) {
+    update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set(), walkerFeet: WalkerSlots = new Map(), reaction: ForgeReactionCue | null = null) {
       walkers = walkerFeet;
       if (forge && frame && atMs >= forge.atMs && atMs >= nextForgeGatherMs) {
         nextForgeGatherMs = atMs + 1_000;
@@ -226,12 +227,38 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       });
       const overlays=behaviours.present(samples,atMs);
       const bodies = samples.filter(sample => !walkers.has(sample.slot) && (!suppliedLooks.has(sample.slot) || knownLooks.has(suppliedLooks.get(sample.slot)!)));
-      renderer?.update(bodies.map(sample => ({ id: String(sample.slot), look: suppliedLooks.get(sample.slot) ?? looks[sample.slot % looks.length]!.id,
-        position: sample.position, heading: sample.heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time:overlays.get(sample.slot)?.time??time,
+      const waveSlots = new Set(reaction?.phase === 'landed' && reaction.socket
+        ? bodies.filter(sample => sample.speed < .05 && !reservedSlots.has(sample.slot)
+            && Math.hypot(sample.position[0] - reaction.socket![0], sample.position[2] - reaction.socket![2]) < 13)
+          .sort((a, b) => Math.hypot(a.position[0] - reaction.socket![0], a.position[2] - reaction.socket![2])
+            - Math.hypot(b.position[0] - reaction.socket![0], b.position[2] - reaction.socket![2]) || a.slot - b.slot)
+          .slice(0, 3).map(sample => sample.slot) : []);
+      renderer?.update(bodies.map(sample => {
+        const overlay = overlays.get(sample.slot);
+        let heading = sample.heading, lookYaw = watchers.has(sample.slot) ? 0 : overlay?.lookYaw ?? 0, lookPitch = 0, waveWeight = 0;
+        if (reaction && !reservedSlots.has(sample.slot) && reaction.position.every(Number.isFinite) && Number.isFinite(reaction.elapsed)) {
+          const dx = reaction.position[0] - sample.position[0], dz = reaction.position[2] - sample.position[2];
+          const distance = Math.hypot(dx, dz), delay = (sample.slot % 7) * .10 + distance * .018;
+          const age = reaction.elapsed - 15.5;
+          const fade = reaction.phase === 'landed' ? 1 - smooth((reaction.elapsed - 19.5) / 3.5) : 1;
+          const weight = smooth((age - delay) / .7) * smooth((26 - distance) / 5) * fade;
+          const angle = Math.atan2(Math.sin(Math.atan2(dx, dz) - sample.heading), Math.cos(Math.atan2(dx, dz) - sample.heading));
+          // Standing figures turn as a whole; moving figures retain their route and turn only their heads.
+          const turn = sample.speed < .05 ? angle * weight : 0;
+          heading += turn;
+          lookYaw = lookYaw * (1 - weight) + Math.max(-1.15, Math.min(1.15, angle - turn)) * weight;
+          lookPitch = -Math.max(0, Math.min(.65, Math.atan2(reaction.position[1] - sample.position[1] - 1.3, Math.max(.1, distance)))) * weight;
+          if (reaction.phase === 'landed' && waveSlots.has(sample.slot)) {
+            const waveAge = reaction.elapsed - 19 - (sample.slot % 3) * .25;
+            waveWeight = smooth(waveAge / .5) * (1 - smooth((waveAge - 2) / .8));
+          }
+        }
+        return ({ id: String(sample.slot), look: suppliedLooks.get(sample.slot) ?? looks[sample.slot % looks.length]!.id,
+        position: sample.position, heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time:overlays.get(sample.slot)?.time??time,
         tiptoe: sample.goalReached && ['forge:watch:8', 'forge:watch:12', 'forge:watch:15', 'forge:watch:18', 'forge:watch:24', 'forge:watch:27', 'forge:watch:30'].includes(watchers.get(sample.slot) ?? '')
           ? smooth((atMs - (watcherArrivals.get(sample.slot) ?? atMs) - 500) / 900) * (.82 + .18 * Math.sin(time * 1.3 + sample.slot)) : 0,
-        lookYaw:watchers.has(sample.slot) ? 0 : overlays.get(sample.slot)?.lookYaw??0,
-        gesture: reservedSlots.has(sample.slot) || watchers.has(sample.slot)?'none' as const:speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : overlays.get(sample.slot)?.gesture??'none' as const })), camera);
+        lookYaw, lookPitch, ...(waveWeight > 0 ? { waveWeight } : {}),
+        gesture: waveWeight > 0 ? 'wave' as const : reservedSlots.has(sample.slot) || watchers.has(sample.slot)?'none' as const:speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : overlay?.gesture??'none' as const }); }), camera);
       carrying = [...bodies, ...samples.filter(sample => {
         const walker = walkers.get(sample.slot);
         return walker && knownLooks.has(walker.look) && !walker.posture;

@@ -30,3 +30,26 @@ it('sends one timed roof-contact burst from the actual SIM or room pose, and cle
   expect(capture.update.mock.lastCall![0]).toMatchObject({ flight: null, sparks: [] });
   flight.dispose();
 });
+
+it('prioritizes the room reaction and retires a landed cue on its own clock', () => {
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(1_000);
+  try {
+    const flight = createForgeFlight(new THREE.Scene(), new THREE.PerspectiveCamera(), false);
+    const simulatedPosition = [1, 2, 3] as const;
+    const roomPosition = [4, 5, 6] as const;
+    flight.simulated(forgeRitualFrame('sim', 20), simulatedPosition);
+    flight.realm(forgeRitualFrame('room', 22), roomPosition);
+    expect(flight.reaction(50_000)).toMatchObject({ position: roomPosition, elapsed: 22, phase: 'landed' });
+
+    flight.realm(null, null);
+    expect(flight.reaction(1_500)).toMatchObject({ position: roomPosition, elapsed: 22.5 });
+    expect(flight.reaction(2_000)).toMatchObject({ position: simulatedPosition, elapsed: 20 });
+    flight.simulated(null, null);
+    expect(flight.reaction(4_000)).toBeNull();
+    flight.realm(forgeRitualFrame('room', 22), roomPosition);
+    flight.dispose();
+    expect(flight.reaction(1_000)).toBeNull();
+  } finally {
+    clock.mockRestore();
+  }
+});
