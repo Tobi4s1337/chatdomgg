@@ -86,6 +86,11 @@ export interface SkyGlow {
    * so the climax lands on a darker town and the warm windows read brighter. Absent means 0.
    */
   readonly hush?: number;
+  /**
+   * How far the sky has deepened toward night for this beat, 0..0.55 (Skyfire draws the dusk down before its aurora):
+   * the host lowers its sky fill and moonlight by this share so the town sits under the same darker sky. Absent means 0.
+   */
+  readonly night?: number;
 }
 export interface ScreenNameplate { readonly id: string; readonly name: string; readonly x: number; readonly y: number }
 
