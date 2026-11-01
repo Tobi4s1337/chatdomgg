@@ -7,25 +7,26 @@ import { fileURLToPath } from 'node:url';
 // unlinking an advisory lock would let another process lock a different inode.
 export const CAPTURE_LOCK_PATH = '/tmp/chatdom-capture.lock';
 
-// The supervisor owns both descriptors and watches the caller's pipe while queued
-// and acquired. Each short-lived flock helper inherits those same descriptions,
-// so killing a caller releases its locks even while a helper is blocked.
+// A pipe-bound guard owns the locks, including while queued. Shared locks on the
+// original files exclude old exclusive guards during migration. A separate short
+// mutex protects the FIFO registry; it is never held for the capture itself.
 const supervisorSource = `
   import { spawn } from 'node:child_process';
-  import { openSync, closeSync } from 'node:fs';
+  import { randomUUID } from 'node:crypto';
+  import { openSync, closeSync, mkdirSync, readdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
   const path = process.argv[1], priority = process.argv[2];
-  let child, descriptors = [], retry;
+  const directory = path + '.queue-v2';
+  let child, descriptors = new Set(), retry, ticket;
   let stopping = false;
-  const closeLocks = () => {
-    for (const descriptor of descriptors) closeSync(descriptor);
-    descriptors = [];
-  };
+  const open = name => { const fd = openSync(name, 'a'); descriptors.add(fd); return fd; };
+  const close = fd => { if (descriptors.delete(fd)) closeSync(fd); };
   const stop = () => {
     if (stopping) return;
     stopping = true;
     clearTimeout(retry);
     child?.kill('SIGTERM');
-    closeLocks();
+    for (const fd of descriptors) closeSync(fd);
+    descriptors.clear();
     process.stdin.destroy();
   };
   process.stdin.resume();
@@ -34,31 +35,85 @@ const supervisorSource = `
   process.stdout.on('error', stop);
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
-  const lock = (mode, descriptor, nonblocking = false) => new Promise((resolve, reject) => {
-    child = spawn('flock', [mode, ...(nonblocking ? ['--nonblock'] : []), '3'], { stdio: ['ignore', 'ignore', 'inherit', descriptor] });
+  const lock = (mode, descriptor) => new Promise((resolve, reject) => {
+    child = spawn('flock', [mode, '--nonblock', '3'], { stdio: ['ignore', 'ignore', 'inherit', descriptor] });
     child.once('error', reject);
     child.once('close', code => {
       child = undefined;
       if (stopping) resolve(false);
       else if (code === 0) resolve(true);
-      else if (nonblocking && code === 1) resolve(false);
+      else if (code === 1) resolve(false);
       else reject(new Error('flock exited with code ' + code));
     });
   });
+  // UUID ticket leases use the same host advisory-lock namespace as captures.
+  // /proc PIDs are not comparable across execution sessions on this host.
+  const remove = name => {
+    try { unlinkSync(directory + '/' + name); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  };
+  const write = entry => {
+    const temporary = directory + '/' + ticket + '.tmp';
+    writeFileSync(temporary, JSON.stringify(entry));
+    renameSync(temporary, directory + '/' + ticket);
+  };
   try {
+    mkdirSync(directory, { recursive: true });
     while (!stopping) {
-      descriptors.push(openSync(path + '.priority', 'a'));
-      descriptors.push(openSync(path, 'a'));
-      const admitted = await lock(priority === 'main' ? '--shared' : '--exclusive', descriptors[0], priority === 'lane');
-      if (admitted && !stopping && priority === 'main') process.stdout.write('priority\\n');
-      const acquired = admitted && !stopping && await lock('--exclusive', descriptors[1], priority === 'lane');
-      if (stopping) break;
-      if (acquired) {
-        process.stdout.write('acquired\\n');
-        break;
-      }
-      closeLocks();
-      await new Promise(resolve => { retry = setTimeout(resolve, 100); });
+      const mutex = open(path + '.queue-v2-mutex');
+      if (await lock('--exclusive', mutex)) {
+        try {
+          const entries = [];
+          const names = readdirSync(directory);
+          const tickets = new Set(names.map(name => name.replace(/\\.(?:live|tmp)$/, '')).filter(name => name.endsWith('.json')));
+          for (const name of tickets) {
+            const lease = open(directory + '/' + name + '.live');
+            try {
+              if (await lock('--exclusive', lease)) {
+                // No living owner holds this unique lease. Registration and
+                // cleanup share the mutex, so its inode can now be removed.
+                remove(name);
+                remove(name + '.tmp');
+                remove(name + '.live');
+              } else if (!stopping) {
+                const entry = JSON.parse(readFileSync(directory + '/' + name, 'utf8'));
+                entries.push({ ...entry, name });
+              }
+            } finally { close(lease); }
+            if (stopping) break;
+          }
+          if (stopping) break;
+          if (!ticket) {
+            const sequence = Math.max(0, ...entries.map(entry => entry.sequence)) + 1;
+            ticket = randomUUID() + '.json';
+            const lease = open(directory + '/' + ticket + '.live');
+            if (!await lock('--exclusive', lease)) throw new Error('Could not reserve capture ticket lease');
+            if (stopping) break;
+            const entry = { sequence, priority, active: false };
+            write(entry);
+            entries.push({ ...entry, name: ticket });
+            process.stdout.write('queued\\n');
+            if (priority === 'main') process.stdout.write('priority\\n');
+          }
+          const same = entries.filter(entry => entry.priority === priority);
+          const active = same.filter(entry => entry.active).length;
+          const head = same.filter(entry => !entry.active).sort((a, b) => a.sequence - b.sequence)[0];
+          if (head?.name === ticket && active < (priority === 'main' ? 1 : 2)) {
+            const legacyPriority = open(path + '.priority');
+            const legacyPrimary = open(path);
+            const admitted = await lock('--shared', legacyPriority);
+            const acquired = admitted && !stopping && await lock('--shared', legacyPrimary);
+            if (acquired && !stopping) {
+              write({ ...head, active: true });
+              process.stdout.write('acquired\\n');
+              break;
+            }
+            close(legacyPrimary);
+            close(legacyPriority);
+          }
+        } finally { close(mutex); }
+      } else close(mutex);
+      if (!stopping) await new Promise(resolve => { retry = setTimeout(resolve, 50); });
     }
   } catch (error) {
     if (!stopping) {
@@ -85,8 +140,12 @@ async function checkoutPriority() {
  * `path` exists for isolated subprocess tests; runners always use the host path.
  * `signal` cancels the queue wait. An acquired lock stays held until release so
  * cancellation cannot admit another browser before the caller closes its own.
- * Main captures take priority over polling lanes, without interrupting a holder.
- * Older guards queued directly on the primary lock retain their existing order.
+ * One slot is reserved for main and two for lanes, FIFO within each class.
+ * Main never waits for a lane; lanes never wait for main. Older exclusive guards
+ * remain safe: shared compatibility locks prevent any overlap with them.
+ * Prior PID-registry guards also hold shared locks and cannot be counted by this
+ * version. Allow those captures to finish before mixing queue versions; the
+ * three-capture capacity guarantee applies to guards using this registry.
  * Priority defaults to this checkout's branch; CHATDOM_CAPTURE_PRIORITY overrides
  * that default and the explicit option overrides the environment (for tests).
  * @param {{ path?: string, signal?: AbortSignal, priority?: 'main' | 'lane' }} [options]
@@ -122,12 +181,17 @@ export async function acquireCaptureLock({ path = CAPTURE_LOCK_PATH, signal, pri
     await new Promise((resolve, reject) => {
       let output = '';
       let prioritized = false;
+      let registered = false;
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', data => {
         output += data;
         if (!prioritized && output.includes('priority\n')) {
           prioritized = true;
           console.log('[capture] main priority registered');
+        }
+        if (output.includes('queued\n') && !registered) {
+          registered = true;
+          console.log(`[capture] queued for a ${priority} slot`);
         }
         if (output.includes('acquired\n')) resolve();
       });

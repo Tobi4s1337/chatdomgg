@@ -68,8 +68,10 @@ export function createDurableRealmBoot(options: DurableRealmBootOptions) {
     return pending;
   };
   const services: DurableRealmServices = { auth: registry.auth, kingdoms: registry.kingdoms,
-    async open(kingdomId) { await prepare(kingdomId); return registry.open(kingdomId); },
-    async retain(kingdomId) { await prepare(kingdomId); return registry.retain(kingdomId); },
+    // A held writer already owns prepared geometry. Re-reading/decoding its native baseline on each manifest,
+    // scene or room retain spends the live lease on cold-start work; adoption still checks the public prefix.
+    async open(kingdomId) { if (!registry.kingdoms.get(kingdomId)?.current) await prepare(kingdomId); return registry.open(kingdomId); },
+    async retain(kingdomId) { if (!registry.kingdoms.get(kingdomId)?.current) await prepare(kingdomId); return registry.retain(kingdomId); },
   };
   ingress.use(services);
   const founded = createFoundedReader({ origin, services, loader, store, access: options.foundedAccess });

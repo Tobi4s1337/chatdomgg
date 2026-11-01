@@ -203,8 +203,9 @@ export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): 
   root.add(layer);
   const unit = new THREE.BoxGeometry(1, 1, 1);
   const emberMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-  const smokeMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x1a1816 });
-  const dustMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x1c1914 });
+  // Unlit, and shaded for the dusk here: the kingdom lights its world in its own voxel shader, not with scene lights.
+  const smokeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const dustMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const pool = (material: THREE.Material, count: number, name: string) => {
     const mesh = new THREE.InstancedMesh(unit, material, count);
     mesh.name = name; mesh.frustumCulled = false; mesh.count = 0;
@@ -213,7 +214,9 @@ export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): 
     return mesh;
   };
   const embers = pool(emberMaterial, DRAGON_LIMITS.embers, 'dragon-embers'), smoke = pool(smokeMaterial, DRAGON_LIMITS.smoke, 'dragon-smoke'), dust = pool(dustMaterial, DRAGON_LIMITS.dust, 'dragon-dust');
-  const SMOKE = [MAT.stone, MAT.limestone, MAT.plaster].map(palette), DUST = [MAT.earth, MAT.limestone, MAT.thatch, MAT.paving].map(palette);
+  /** The dusk's air over smoke and dust: a palette colour taken most of the way into the evening's lilac shade. */
+  const DUSK = new THREE.Color('#4b4760'), dusk = (c: THREE.Color, keep: number) => c.multiplyScalar(keep).lerp(DUSK, 0.35);
+  const SMOKE = [MAT.stone, MAT.limestone, MAT.plaster].map(id => dusk(palette(id), 0.62)), DUST = [MAT.earth, MAT.limestone, MAT.thatch, MAT.paving].map(id => dusk(palette(id), 0.5));
   let rig: Rig | null = null, focus: THREE.Vector3 | null = null, headAt: THREE.Vector3 | null = null, lastGlow: DragonGlow = NO_GLOW;
 
   function build(form: DragonForm): Rig {

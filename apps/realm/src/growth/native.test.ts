@@ -1,17 +1,18 @@
 import { expect, it } from 'vitest';
+import { createGrowthHome } from '@chatdom/content/growth-homes';
 import { createNativeForgeHost, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
 import { GrowthSceneFrameSchema, KingdomIdSchema, PersonIdSchema } from '@chatdom/shared';
 import type { RealmCommitGuard } from '../persistence/postgres-repository';
 import type { RealmFact, RealmForgeReservation, RealmOwnedAttachment, RealmOwnedHome, RealmPrivateState } from '@chatdom/shared/realm';
-import { generateSettlementPlan } from '@chatdom/world';
+import { generateSettlementPlan, type SettlementHome } from '@chatdom/world';
 import { createRealmState, decideRealm } from '@chatdom/world/realm';
 import { forgeHomeDigest } from '../wiring/forge';
 import { planNativeHomeGrowth, verifyNativeGrowth } from './native';
 
-function fixture() {
+function fixture(style: SettlementHome['style'] = 'hearth', variant = 0) {
   const kingdomId = KingdomIdSchema.parse('900010001'), ownerId = PersonIdSchema.parse('900010002');
   const layout = generateSettlementPlan({ seed: 'SIMULATED-native-growth', tier: 'hamlet', firstYear: 2026, year: 2026 });
-  const plot = { ...layout.homes[0]!, tier: 'hut' as const, style: 'hearth' as const, variant: 0 };
+  const plot = { ...layout.homes[0]!, tier: 'hut' as const, style, variant };
   const blueprint = createNativeForgeHost(plot).blueprint;
   const home: RealmOwnedHome = { id: plot.id, ownerId, slot: plot.slot, allocationReceipt: `deed:${'a'.repeat(64)}`,
     layoutRevision: layout.revision, revision: 'native:original', digest: forgeHomeDigest(blueprint), family: plot.style,
@@ -27,12 +28,13 @@ function fixture() {
   return { state, home, plot, tx, context };
 }
 
-it('grows the exact native hut into the earned cottage and revalidates the deed and target inside the commit', async () => {
+it('grows the exact native hut into the earned cottage-v2 and revalidates the deed and target inside the commit', async () => {
   const { state, home, plot, tx, context } = fixture();
   const planned = planNativeHomeGrowth(state, home.id, plot);
   expect(planned.kind).toBe('ready');
   if (planned.kind !== 'ready') throw new Error(planned.reason);
-  expect(planned.command.home.blueprint).toEqual(createNativeForgeHost({ ...plot, tier: 'cottage' }).blueprint);
+  expect(planned.command.home.blueprint).toBe(createGrowthHome('emberfold', 'cottage'));
+  expect(planned.command.home.blueprint.id).toBe('home-hearth-emberfold-cottage-v2');
   const decision = decideRealm(state, planned.command, context);
   expect(decision.kind).toBe('accepted');
   if (decision.kind !== 'accepted') throw new Error(decision.reason);
@@ -48,6 +50,53 @@ it('grows the exact native hut into the earned cottage and revalidates the deed 
   expect(decideRealm(unearned, planned.command, context)).toEqual({ kind: 'rejected', reason: 'forbidden' });
   expect(await verifyNativeGrowth(tx, decision.fact, unearned)).toBe('conflict');
   expect(await verifyNativeGrowth(tx, { ...decision.fact, body: { ...planned.command, home: { ...planned.command.home, family: 'tide' } } }, state)).toBe('conflict');
+  const obsolete = createNativeForgeHost({ ...plot, tier: 'cottage' }).blueprint;
+  expect(await verifyNativeGrowth(tx, { ...decision.fact, body: { ...planned.command,
+    home: { ...planned.command.home, blueprint: obsolete, digest: forgeHomeDigest(obsolete) } } }, state)).toBe('conflict');
+});
+
+it.each(['original', 'v2'] as const)('keeps an installed %s cottage until its next earned tier, then publishes house-v2', async source => {
+  const { state, home, plot, tx, context } = fixture();
+  const blueprint = source === 'original' ? createNativeForgeHost({ ...plot, tier: 'cottage' }).blueprint
+    : createGrowthHome('emberfold', 'cottage');
+  const installed = { ...home, blueprint, digest: forgeHomeDigest(blueprint), revision: `native:${source}:cottage` };
+  const waiting = { ...state, homes: { [home.id]: installed } };
+  const originalBytes = JSON.stringify(installed);
+  expect(planNativeHomeGrowth(waiting, home.id, plot)).toEqual({ kind: 'held', reason: 'unearned' });
+  expect(JSON.stringify(waiting.homes[home.id])).toBe(originalBytes);
+  const earned: RealmPrivateState = { ...waiting, growth: { ...waiting.growth!, citizens: { [home.ownerId]: {
+    ...waiting.growth!.citizens[home.ownerId]!, qualifiedDays: 30, home: { plotId: home.id, stage: 'house' },
+  } } } };
+  const planned = planNativeHomeGrowth(earned, home.id, plot);
+  expect(planned.kind).toBe('ready');
+  if (planned.kind !== 'ready') throw new Error(planned.reason);
+  expect(planned.command.fromTier).toBe('cottage');
+  expect(planned.command.home.blueprint).toBe(createGrowthHome('emberfold', 'house'));
+  const decision = decideRealm(earned, planned.command, context);
+  expect(decision.kind).toBe('accepted');
+  if (decision.kind !== 'accepted') throw new Error(decision.reason);
+  expect(await verifyNativeGrowth(tx, decision.fact, earned)).toBe('ok');
+  expect(JSON.stringify(installed)).toBe(originalBytes);
+  const altered = { ...blueprint, windows: blueprint.windows.slice(1) };
+  const custom = { ...installed, blueprint: altered, digest: forgeHomeDigest(altered) };
+  expect(planNativeHomeGrowth({ ...earned, homes: { [home.id]: custom } }, home.id, plot)).toEqual({ kind: 'held', reason: 'custom-home' });
+  expect(planNativeHomeGrowth({ ...earned, homes: { [home.id]: { ...custom, digest: installed.digest } } }, home.id, plot))
+    .toEqual({ kind: 'held', reason: 'custom-home' });
+});
+
+it.each([
+  { style: 'hearth', variant: 1 }, { style: 'hearth', variant: 2 },
+  { style: 'tide', variant: 0 }, { style: 'grove', variant: 0 },
+] as const)('keeps $style variant $variant on its original native growth line', async ({ style, variant }) => {
+  const { state, home, plot, tx, context } = fixture(style, variant);
+  const planned = planNativeHomeGrowth(state, home.id, plot);
+  expect(planned.kind).toBe('ready');
+  if (planned.kind !== 'ready') throw new Error(planned.reason);
+  expect(planned.command.home.blueprint).toEqual(createNativeForgeHost({ ...plot, tier: 'cottage' }).blueprint);
+  const decision = decideRealm(state, planned.command, context);
+  expect(decision.kind).toBe('accepted');
+  if (decision.kind !== 'accepted') throw new Error(decision.reason);
+  expect(await verifyNativeGrowth(tx, decision.fact, state)).toBe('ok');
 });
 
 it('leaves a custom-built home intact even when its name and native-looking revision are unchanged', async () => {
@@ -108,4 +157,4 @@ it('refits an existing forged part with its identity, words, plan and provenance
   expect(moved.attachment.hostFingerprint).not.toBe(part.attachment.hostFingerprint);
   expect(decision.public[0]).toMatchObject({ type: 'home', attachments: [moved.attachment] });
   expect(decideRealm(attached, { ...planned.command, attachments: [], home: { ...planned.command.home, attachments: {} } }, context)).toMatchObject({ kind: 'rejected', reason: 'conflict' });
-});
+}, 15_000);

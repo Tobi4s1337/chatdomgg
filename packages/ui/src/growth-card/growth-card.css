@@ -1,0 +1,22 @@
+.gc-card { box-sizing: border-box; width: 100%; max-width: 430px; padding: 10px; color: #352719; border: 2px solid #3d2116; border-radius: 10px; background: linear-gradient(135deg,#95603c,#5f3423 45%,#391c15); box-shadow: inset 0 0 0 2px #bc8955, 0 9px 22px #1b101066; font: 16px/1.4 var(--cd-face-body); }
+.gc-card * { box-sizing: border-box; }
+.gc-paper { padding: 22px 24px; border: 1px solid #aa8858; background: radial-gradient(ellipse at 40% 20%,#fff8e5,#ecdcb8 78%); box-shadow: inset 0 0 20px #9e754026; }
+.gc-heading { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #b99d6c; padding-bottom: 12px; }
+.gc-heading h2,.gc-card p,.gc-card dl { margin: 0; }
+.gc-heading h2 { font-family: var(--cd-face-story); font-size: 26px; line-height: 1.1; font-weight: normal; }
+.gc-kicker,.gc-stage span,.gc-goal span { font: 12px/1.3 var(--cd-face-label); letter-spacing: .13em; color: #795637; text-transform: uppercase; }
+.gc-kicker { margin-bottom: 5px !important; }
+.gc-mark { color: #a57733; font-size: 26px; }
+.gc-simulated { display: inline-block; margin-top: 12px !important; padding: 3px 7px; border: 1px solid #825036; color: #70402c; font: 12px var(--cd-face-label); letter-spacing: .1em; }
+.gc-stage { padding: 19px 0 15px; }
+.gc-stage strong { display: block; font: 25px/1.4 var(--cd-face-story); }
+.gc-stage p,.gc-foot,.gc-goal small { color: #66523b; font-size: 13px; }
+.gc-goal { padding: 14px; background: #ddc9a2; border: 1px solid #c4a979; }
+.gc-goal span { color: var(--cd-ink-soft); }
+.gc-goal p { margin: 5px 0 9px; font-size: 17px; }
+.gc-track { height: 8px; background: #b9a27b; border-radius: 8px; overflow: hidden; }
+.gc-track i { display: block; height: 100%; background: #80512f; }
+.gc-streaks { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 17px 0; }
+.gc-streaks div + div { border-left: 1px solid #c5ab80; padding-left: 16px; }
+.gc-streaks dt { font-size: 13px; color: #66523b; }.gc-streaks dd { margin: 2px 0 0; font-size: 19px; }
+.gc-foot { border-top: 1px solid #c5ab80; padding-top: 11px; }.gc-message { padding: 24px 0 8px; }

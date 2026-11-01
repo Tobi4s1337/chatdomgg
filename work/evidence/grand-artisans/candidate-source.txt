@@ -1,0 +1,9 @@
+Disposable candidate: /tmp/grand-artisans-candidate
+Builder sources copied read-only from /root/chatdomgg-harness/worktrees/grand-kingdom
+Artisans source overlaid from /root/chatdomgg-harness/worktrees/grand-artisans
+Patches: adoption.patch, adoption-sites.needs.patch
+No git operations in candidate, no builder files changed.
+patching file packages/world/src/grand/kits.ts
+patching file packages/world/src/grand/voxelize.ts
+patching file packages/world/src/grand/generate.ts
+patching file packages/world/src/grand/flora.ts

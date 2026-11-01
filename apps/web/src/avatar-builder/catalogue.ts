@@ -202,7 +202,7 @@ export const TABS: readonly Tab[] = [
       },
       {
         kind: 'tiles', id: 'neckwear', label: 'Neckwear', view: 'bust', options: [
-          tile('none', l => ({ ...l, neckwear: null }), l => !l.neckwear),
+          tile('none', l => ({ ...l, neckwear: null, earned: { ...l.earned, scarf: null } }), l => !l.neckwear && !l.earned.scarf),
           ...NECKWEAR_STYLE_IDS.map(style => tile(style, l => {
             const dye = l.neckwear?.dye ?? apart([l.top.dye, l.outer?.dye ?? l.top.dye], ['#d3202a', '#f6d23c', '#223a7a', '#1f7a3c', '#f3f1ee']);
             return { ...l, neckwear: { style, dye, accent: l.neckwear?.accent ?? defaultAccent(dye) }, earned: { ...l.earned, scarf: null } };

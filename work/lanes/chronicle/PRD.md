@@ -6,7 +6,7 @@ Every task is done when focused tests, typecheck, lint and relevant build pass; 
 
 ## Tasks
 
-- [ ] **CH01 — Scrub a recorded kingdom in the engine** · evidence: seek tests and viewed screen
+- [x] **CH01 — Scrub a recorded kingdom in the engine** · evidence: seek tests and viewed screen
 - [ ] **CH02 — A readable, watchable history** · evidence: watched 30-second simulated run and accessibility checks
 
 ## Backlog

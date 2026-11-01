@@ -85,7 +85,7 @@ function standardBannerMaterial(clay: VoxelRenderState, standard: RoyalStandard 
 export function createRoyalLife(scene: THREE.Scene, clay: VoxelRenderState, keep: WindowHouse | undefined, braziers: readonly RoyalBrazier[], standard?: RoyalStandard, hearth = false, workingFire = false): {
   keepMaterial: THREE.ShaderMaterial | undefined;
   standardMaterial: THREE.ShaderMaterial | undefined;
-  update(timeSeconds: number, frame: KingdomPresenceFrame | undefined, hour: number): void;
+  update(timeSeconds: number, frame: KingdomPresenceFrame | undefined, hour: number, flameMultiplier?: number | null): void;
   sources(): readonly RoyalLightSource[];
   dispose(): void;
 } {
@@ -137,13 +137,17 @@ export function createRoyalLife(scene: THREE.Scene, clay: VoxelRenderState, keep
     return { position: [position[0], position[1] + (hearth ? .35 : .2), position[2]], normal, strength: 0 };
   });
   return { keepMaterial, standardMaterial,
-    update(timeSeconds, frame) {
+    update(timeSeconds, frame, _hour, flameMultiplier) {
       uniforms.uTime.value = timeSeconds;
       if (keepMaterial) keepMaterial.uniforms.uRoyalTime!.value = timeSeconds;
       if (standardMaterial) standardMaterial.uniforms.uRoyalTime!.value = timeSeconds;
       const live = hearth || workingFire || (!!frame?.streamLive && frame.connection === 'fresh');
-      root.visible = live;
-      for (const source of lightSources) source.strength = live ? (hearth ? 1 : .8) : 0;
+      const strength = flameMultiplier == null || !Number.isFinite(flameMultiplier) ? 1 : THREE.MathUtils.clamp(flameMultiplier, 0, 1);
+      root.visible = live && strength > 0;
+      // Children carry absolute installed fixture positions: scale the fire at
+      // each mount, never the root or the brazier would drift toward world zero.
+      for (const group of root.children) group.scale.set(hearth ? 1.65 * strength : strength, hearth ? 1.75 * strength : strength, hearth ? 1.65 * strength : strength);
+      for (const source of lightSources) source.strength = live ? (hearth ? 1 : .8) * strength : 0;
     },
     sources: () => lightSources,
     dispose() { scene.remove(root); flameGeometry.dispose(); glowGeometry.dispose(); sparkGeometry.dispose(); flame.dispose(); glow.dispose(); sparks.dispose(); keepMaterial?.dispose(); standardMaterial?.dispose(); },

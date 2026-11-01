@@ -148,8 +148,14 @@ export class DurableKingdom implements RealmRoomHandle {
       },
       current: () => this.current, fenced: () => this.close('fenced'), log: line => this.log(line),
     });
-    // Three renewals fit inside the local window (lease minus margin), so one slow reply never costs the lease.
-    this.renewal = setInterval(() => void this.renew(), Math.max(100, Math.floor((repository.leaseMs - LEASE_MARGIN_MS) / 3)));
+    // Opening's founded preparation already consumes this lease. Anchor the first renewal to acquisition,
+    // not construction, or a valid slow opening can expire before its first renewal is even attempted.
+    const interval = Math.max(100, Math.floor((repository.leaseMs - LEASE_MARGIN_MS) / 3));
+    this.renewal = setTimeout(() => {
+      this.renewal = setInterval(() => void this.renew(), interval);
+      this.renewal.unref?.();
+      void this.renew();
+    }, Math.max(0, started + interval - performance.now()));
     this.renewal.unref?.();
     this.armWatchdog();
     this.log(`opened ${state.origin} kingdom ${state.kingdomId} at fact ${state.sequence}${delivered < committed ? `, redelivering outbox rows after ${delivered}` : ''}`);

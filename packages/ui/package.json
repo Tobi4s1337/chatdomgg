@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./kit.css": "./src/kit.css",
-    "./passport": "./src/passport/index.ts"
+    "./passport": "./src/passport/index.ts",
+    "./growth-card": "./src/growth-card/index.ts"
   },
   "dependencies": {
     "solid-js": "1.9.18"

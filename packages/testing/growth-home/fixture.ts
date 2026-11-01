@@ -1,7 +1,7 @@
 import { KingdomIdSchema, PersonIdSchema } from '../../shared/src/index';
 import { createNativeForgeHost } from '../../forge/src/index';
-import { generateSettlementPlan } from '../../world/src/index';
-import { createGrowthState, reduceGrowth, GROWTH_POLICY_V1 } from '../../world/src/growth/index';
+import { generateSettlementPlan, homeFrame } from '../../world/src/index';
+import { createGrowthState, reduceGrowth, projectGrowthScene, GROWTH_POLICY_V1 } from '../../world/src/growth/index';
 import { createRealmState, decideRealm } from '../../world/src/realm/reducer';
 import { forgeHomeDigest } from '../../../apps/realm/src/wiring/forge';
 import { planNativeHomeGrowth } from '../../../apps/realm/src/growth/native';
@@ -11,7 +11,7 @@ import { createNativeTown } from '../../../apps/realm/src/founded/native';
 export async function fixture() {
   const kingdomId = KingdomIdSchema.parse('999000001'), owner = PersonIdSchema.parse('999000002');
   const plan = generateSettlementPlan({ seed:'willowmere', tier:'hamlet', firstYear:2025, year:2026 });
-  const plot = plan.homes.find(p => p.tier === 'hut' && p.style === 'hearth')!;
+  const plot = plan.homes.find(p => p.tier === 'hut' && p.style === 'hearth' && p.variant === 0)!;
   if (!plot) throw new Error('Missing suitable hut');
   let growth = createGrowthState(kingdomId, 'simulated'), seq = 0;
   growth = reduceGrowth(growth, { type:'home-bound', kingdomId, origin:'simulated', seq:++seq, at:1, personId:owner, plotId:plot.id, installedTier:'hut' }).state;
@@ -31,5 +31,8 @@ export async function fixture() {
   if (decision.kind !== 'accepted') throw new Error(`Realm rejected planned growth: ${decision.reason}`);
   const afterState = decision.state;
   const after = (await assembleFoundedScene({kingdomId,plan,state:afterState,native,collisionRevision:2})).scene;
-  return { before, after, plot, from:candidate.command.fromTier, to:candidate.command.tier, qualifiedDays:growth.citizens[owner]!.qualifiedDays };
+  const delivery = decision.public.find(message => message.type === 'growth');
+  if (!delivery || delivery.type !== 'growth' || !delivery.frame.beats.some(beat => beat.kind === 'home-grown')) throw new Error('Geometry commit did not emit the growth ceremony');
+  return { before, after, plot, frame:homeFrame(plot), bootstrap:projectGrowthScene(growth), delivery, publicCommit:decision.public,
+    from:candidate.command.fromTier, to:candidate.command.tier, qualifiedDays:growth.citizens[owner]!.qualifiedDays };
 }

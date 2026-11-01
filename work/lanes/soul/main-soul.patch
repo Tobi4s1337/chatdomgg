@@ -1,0 +1,193 @@
+--- a/apps/web/src/kingdom/sound.ts
++++ b/apps/web/src/kingdom/sound.ts
+@@ -15,13 +15,15 @@
+   let requested = false, disposed = false, explicitlyMuted = false;
+   let forge: ForgeAudio | undefined, forgeContext: AudioContext | undefined;
+   let forgeAudible = false, catchUp = true;
++  let soulDuck: ((seconds: number) => void) | undefined;
+   let hiddenMuted = false;
+   const momentVoices = new Set<() => void>();
+   const momentCues = createProceduralMomentSound({ context: () => !disposed && canSound() ? kingdomAudioHost(audio) : null,
+     now: Date.now, gain: () => canSound() ? 1 : 0 });
+   const moments: MomentSoundPort = { play(cue, atMs, gain) {
++    const duckTimer = setTimeout(() => soulDuck?.(Math.min(8, Math.max(2, CUE_LENGTH_MS[cue] / 1000))), Math.max(0, atMs - Date.now()));
+     const stop = momentCues.play(cue, atMs, gain);
+-    const cancel = () => { clearTimeout(timer); momentVoices.delete(cancel); stop(); };
++    const cancel = () => { clearTimeout(duckTimer); clearTimeout(timer); momentVoices.delete(cancel); stop(); };
+     momentVoices.add(cancel);
+     // Each cue has a finite tail. Retain cancellation only while that tail can still be sounding.
+     const timer = setTimeout(() => momentVoices.delete(cancel), Math.max(0, atMs - Date.now()) + CUE_LENGTH_MS[cue] + 200);
+@@ -80,6 +82,8 @@
+ 
+   return {
+     unlock,
++    setSoulDuck: (duck: (seconds: number) => void) => { soulDuck = duck; },
++    soulHost: () => !disposed && canSound() ? kingdomAudioHost(audio) : null,
+     moments,
+     ...({ forgeUpdate } as { forgeUpdate?: typeof forgeUpdate }),
+     get enabled() {
+@@ -109,7 +113,7 @@
+       ambience.update(now, target, !disposed && canSound());
+     },
+     dispose() {
+-      disposed = true;
++      disposed = true; soulDuck = undefined;
+       requested = false;
+       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+       forgeContext?.removeEventListener('statechange', onContextState);
+--- a/apps/web/src/kingdom/scene.ts
++++ b/apps/web/src/kingdom/scene.ts
+@@ -5,6 +5,7 @@
+ import { createDockVisuals } from './dock-visuals';
+ import { createDockPresenter, type DockPresentationConnection } from '../stream/dock-presenter';
+ import * as THREE from 'three';
++import { createSoulSceneHost, type SoulSceneBinding } from '../soul/host';
+ import { createKingdomForge, type ForgeStatus } from '../forge/scene';
+ import { createRealmForgeScene } from '../forge/realm-scene';
+ import type { RealmForgeFeed } from '../realm/adapters/forge-feed';
+@@ -79,7 +80,7 @@
+ export interface NameLabel {name:string;x:number;y:number;slot:number;arrivalAgeSeconds?:number}
+ export interface PotentialKingdomView {seat?:GenesisSeatContent;plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
+ export interface SceneView {eye:Vec3;target:Vec3;fov:number}
+-export interface SceneOptions {dockFeed?:DockPresentationConnection;/** Hidden warming scenes must explicitly activate before presenting or witnessing. */dockActive?:boolean;/** Explicit SIMULATED capture fixtures only. */simulatedDockSites?:boolean;initialView?:SceneView;growthFeed?:GrowthSceneFeed;growthCeremonies?:GrowthCeremonyFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
++export interface SceneOptions {soul?:SoulSceneBinding;/** Authoritative absolute kingdom clock, coordinated with the director. */soulClock?:()=>number;/** Bounded witnessed arrivals in the same kingdom-clock epoch domain. */soulArrivals?:()=>readonly number[];/** Explicit simulated fixed capture only. */soulEpochMs?:number;dockFeed?:DockPresentationConnection;/** Hidden warming scenes must explicitly activate before presenting or witnessing. */dockActive?:boolean;/** Explicit SIMULATED capture fixtures only. */simulatedDockSites?:boolean;initialView?:SceneView;growthFeed?:GrowthSceneFeed;growthCeremonies?:GrowthCeremonyFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+ export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
+ 
+ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
+@@ -125,6 +126,8 @@
+   const geometries:THREE.BufferGeometry[]=[],meshes:THREE.Object3D[]=[],abort=new AbortController();
+   earlyCleanups.push(()=>abort.abort());
+   const sound=own(createKingdomSound());
++  const soul=options.soul?own(createSoulSceneHost(scene,options.soul,sound.soulHost)):undefined;
++  if(soul)sound.setSoulDuck(seconds=>soul.duck({seconds}));
+   const blueprints=new Map<string,VoxelBlueprint>();
+   const installed=options.founded?foundedContent(options.founded):undefined;
+   // Use the installed market cask as a real raised viewing spot, never a phantom support.
+@@ -609,7 +612,20 @@
+       if(blend===1)handoffPose=undefined;
+     }
+     camera.updateMatrixWorld();forgeFlight.update();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);crowd.drawLanterns(time,night,camera,walk?.grips??observed?.grips);updateInstances(fixedTime&&autoCamera?time*1000:now);
+-    canopy.sync();canopy.setWind(time,[0.8,0.6],0.8);
++    listenerRight.setFromMatrixColumn(camera.matrixWorld,0);
++    const soulSelf=walking?walk?.poses.find(p=>p.self):undefined;
++    const soulListener:Vec3=soulSelf?[soulSelf.x,soulSelf.y+1.4,soulSelf.z]:[camera.position.x,camera.position.y,camera.position.z];
++    const soulFrame=loaded?soul?.update({
++      epochMs:options.source==='simulated'&&fixedTime&&options.soulEpochMs!==undefined?options.soulEpochMs:(options.soulClock?.()??Date.now()),
++      seconds:time,population:frame?.windows.filter(window=>window.present).length??0,
++      ...(options.soulArrivals?{shipArrivals:options.soulArrivals()}:{}),
++      listener:{position:soulListener,right:[listenerRight.x,listenerRight.y,listenerRight.z]},
++    }):undefined;
++    for(const material of [clay.material,ground.material]){
++      material.uniforms.uSoulWetness!.value=soulFrame?.weather.wetness??0;
++      material.uniforms.uSoulSnow!.value=soulFrame?.weather.snowCover??0;
++    }
++    canopy.sync();canopy.setWind(time,[0.8,0.6],soulFrame?.weather.wind??0.8);
+     homeLife.update(presentationMs,time,growthLifeHidden.size&&lightFrame?{...lightFrame,windows:lightFrame.windows.filter(w=>!growthLifeHidden.has(w.slot))}:lightFrame,hour,camera);royalLife.update(time,frame,hour,dockGateFlame);
+     forgeFire.update(time,frame,hour);forgeHearth.update(time,frame,hour);
+     forgeBreath.update({time,anvil:new THREE.Vector3(0,layout.market.elevation,8),activity:0,landed:forgeSites.noses.map(position=>({position:new THREE.Vector3(...position),kind:'smoke' as const}))});
+@@ -619,20 +635,20 @@
+       const listener:Vec3=self?[self.x,self.y+1.4,self.z]:[camera.position.x,camera.position.y,camera.position.z];
+       ambienceTarget=sampleKingdomAmbience(layout,listener,[listenerRight.x,listenerRight.y,listenerRight.z]);
+     }
+-    if(loaded)sound.ambienceUpdate(now,ambienceTarget);
++    if(loaded&&!soul)sound.ambienceUpdate(now,ambienceTarget);
+     atmosphere.update(hour,time,camera,new THREE.Vector3(...beaconPosition),beacon);
+-    fog.color.set(grade.fog);fog.density=grade.fogDensity;renderer.toneMappingExposure=grade.exposure;
++    fog.color.set(grade.fog);fog.density=grade.fogDensity+(soulFrame?.weather.fog??0)*.006;renderer.toneMappingExposure=grade.exposure;
+     post.update({environment:grade,hour,focusDistance:camName==='window'||forgeDirected||forge.status().busy?camera.position.distanceTo(forgeDirected&&realmForge?realmForge.focusPoint:target):null,beacon:{position:new THREE.Vector3(...beaconPosition),strength:beacon},forge:{position:new THREE.Vector3(0,layout.market.elevation+1.6,8),strength:realmForge?.active()||forge.status().busy?1:0}});
+     const nextWaterQuality=canvas.clientWidth<600?'reduced':'full';
+     if(nextWaterQuality!==waterQuality){waterQuality=nextWaterQuality;water.setQuality(waterQuality);}
+     water.update({time,environment:grade,camera,sources:[
+       ...[...windows.getSources(),...build.getSources()].map(source=>({...source,kind:'window' as const})),
+       {position:beaconPosition,strength:beacon,kind:'beacon'},
+-      ...[...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...(dockVisuals?.sources()??[])].map(source=>({...source,kind:'lamp' as const})),
++      ...[...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...(soul?.sources()??[]),...(dockVisuals?.sources()??[])].map(source=>({...source,kind:'lamp' as const})),
+     ]});
+     dressing.hideLot(buildHidden?simulation.firstSlot:null);
+     dressing.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
+-    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[]),...(growth?.sources()??[]),...(dockVisuals?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
++    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...(soul?.sources()??[]),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[]),...(growth?.sources()??[]),...(dockVisuals?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
+     const people=walk??observed;
+     if(people)options.onWalkers?.(people.labels().filter(label=>{
+       const person=people.poses.find(p=>p.id===label.id);
+@@ -681,7 +697,7 @@
+       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
+     }
+   }));
+-  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
++  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();soul?.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
+   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
+   if(options.signal?.aborted)dispose();
+--- a/apps/web/src/kingdom/index.tsx
++++ b/apps/web/src/kingdom/index.tsx
+@@ -2,6 +2,7 @@
+ import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
+ import { createKingdomScene, type CameraName, type NameLabel, type PotentialKingdomView } from './scene';
+ import type { RealmFoundedScene } from '@chatdom/world';
++import type { SoulSceneBinding } from '../soul/host';
+ import type { GrowthSceneFeed, PresenceFeed } from '@chatdom/shared';
+ import type { RealmWalkerFeed } from '@chatdom/shared/realm';
+ import type { RealmChatFeed } from '../realm/adapters/chat';
+@@ -22,7 +23,7 @@
+ import './moment-captions.css';
+ 
+ /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
+-export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:RealmFoundedScene;growthFeed?:GrowthSceneFeed;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;momentFeed?:TwitchMomentFeed;walkerFeed?:RealmWalkerFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
++export default function Kingdom(props:{soul?:SoulSceneBinding;soulClock?:()=>number;soulArrivals?:()=>readonly number[];potential?:PotentialKingdomView;founded?:RealmFoundedScene;growthFeed?:GrowthSceneFeed;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;momentFeed?:TwitchMomentFeed;walkerFeed?:RealmWalkerFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
+   const query=new URLSearchParams(location.search),tier=props.founded?.plan.config.tier??props.potential?.plan.config.tier??(query.get('tier')==='hamlet'?'hamlet':'town');
+   const presentation=parseKingdomPresentationParams(query,tier);
+   const realm=query.get('realm'),realmFamily=props.potential?.style??(realm==='hearth'?'hearth':realm==='grove'?'grove':'tide'),realmName=props.kingdomName??(realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere');
+@@ -76,7 +77,7 @@
+     const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
+     testWindow.__chatdomReady=false;
+     document.body.classList.add('kingdom-page');
+-    void createKingdomScene(canvas,{...(dock?{dockFeed:dock}:{}),...(props.potential?{potential:props.potential,nativeStyle:props.potential.style}:{}),...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.growthFeed?{growthFeed:props.growthFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:props.potential?.plan.config.seed??query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(!props.potential&&(realm==='hearth'||realm==='grove')?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
++    void createKingdomScene(canvas,{...(props.soulClock?{soulClock:props.soulClock}:{}),...(props.soulArrivals?{soulArrivals:props.soulArrivals}:{}),...(props.soul?{soul:props.soul}:{}),...(dock?{dockFeed:dock}:{}),...(props.potential?{potential:props.potential,nativeStyle:props.potential.style}:{}),...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.growthFeed?{growthFeed:props.growthFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:props.potential?.plan.config.seed??query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(!props.potential&&(realm==='hearth'||realm==='grove')?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
+       onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onMomentCaptions:setMomentCaptions,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:message=>{setError(message||'The kingdom renderer did not give a reason.');setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
+     }).then(instance=>{
+       if(unmounted){instance.dispose();return;}engine=instance;
+--- a/apps/web/src/stream/mount.ts
++++ b/apps/web/src/stream/mount.ts
+@@ -172,6 +172,7 @@
+       const prior = replacement ? current?.scene : undefined;
+       return createKingdomScene(canvas, {
+         ...settings,
++        ...(settings.soul ? { soul: { ...settings.soul, profile: 'stream' as const } } : {}),
+         ...(prior ? { initialView: prior.captureView(), camera: prior.debug.camera, hour: prior.debug.hour, time: settings.time === null ? null : prior.debug.time } : {}),
+         // These labels also originate in SceneOptions; a warming scene cannot
+         // move live plates or captions belonging to the visible kingdom.
+--- a/packages/render/src/voxel-material.ts
++++ b/packages/render/src/voxel-material.ts
+@@ -49,7 +49,7 @@
+   let farLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);farLightTexture.format=THREE.RedFormat;farLightTexture.needsUpdate=true;
+   let beaconLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);beaconLightTexture.format=THREE.RedFormat;beaconLightTexture.needsUpdate=true;
+   let heightTexture=new THREE.DataTexture(new Float32Array(1),1,1,THREE.RedFormat,THREE.FloatType);heightTexture.needsUpdate=true;
+-  const uniforms={uSmithyPower:{value:0},uSmithyOrigin:{value:new THREE.Vector3()},uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uBeaconPosition:{value:new THREE.Vector3()},uBeaconStrength:{value:0},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
++  const uniforms={uSoulWetness:{value:0},uSoulSnow:{value:0},uSmithyPower:{value:0},uSmithyOrigin:{value:new THREE.Vector3()},uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uBeaconPosition:{value:new THREE.Vector3()},uBeaconStrength:{value:0},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
+   const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,alphaToCoverage:true,vertexShader:`
+     in uint aPacked; in uint aMaterial;
+     out float vLodFade;
+@@ -80,6 +80,7 @@
+     precision highp sampler3D;
+     uniform sampler2D uPalette;uniform sampler3D uLight,uFarLight,uBeaconLight;
+     uniform vec3 uSmithyOrigin; uniform float uSmithyPower;
++    uniform float uSoulWetness,uSoulSnow;
+     uniform vec3 uSun,uAmbient,uSunDirection,uFog,uShadow,uGlow,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent,uBeaconPosition;
+     uniform float uSunIntensity,uAmbientIntensity,uFogDensity,uNight,uFarCell,uBeaconCell,uBeaconStrength,uTerrain,uShoreLevel;
+     uniform float uGlassKind,uGlassDither;
+@@ -202,6 +203,14 @@
+       if(uTerrain>.5&&vWorld.y<uShoreLevel+.7&&vWorld.x>uShoreBounds.x&&vWorld.x<uShoreBounds.y&&vWorld.z>uShoreBounds.z&&vWorld.z<uShoreBounds.w){
+         vec3 bank=mix(uTerrainSoil,uTerrainGrass,.8)*.82;
+         base=mix(bank,uTerrainGrass,smoothstep(uShoreLevel-.05,uShoreLevel+.4,vWorld.y));kind=2.;
++      }
++      // Soul art weights affect exposed roofs and terrain, never a presence light.
++      float soulExposed=smoothstep(.35,.9,vSky);
++      if(kind==6.||kind==3.||uTerrain>.5)base*=1.-.28*clamp(uSoulWetness,0.,1.)*soulExposed;
++      if(kind==6.||uTerrain>.5){
++        float cellSnow=hash(floor(vWorld*8.));
++        float cover=smoothstep(cellSnow-.04,cellSnow+.04,clamp(uSoulSnow,0.,1.));
++        base=mix(base,vec3(.776,.807,.738),cover*soulExposed*smoothstep(.2,.8,n.y)*step(.001,uSoulSnow));
+       }
+       float detail=1.-smoothstep(.12,.55,max(length(dFdx(uv)),length(dFdy(uv))));
+       float variation=hash(floor(vWorld*8.+n*.03));base*=1.+(.03*variation-.015)*detail;
