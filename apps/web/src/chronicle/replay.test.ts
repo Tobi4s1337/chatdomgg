@@ -18,6 +18,16 @@ describe('Chronicle replay', () => {
     expect(binding.replace.mock.calls.map(([s]) => s.homes[0].assetRevision)).toEqual(['tent', 'hut', 'tent', 'hut']);
     expect(replay.state()).toMatchObject({ status: 'ready', label: 'SIMULATED', index: 1, snapshot: { caption: 'Night 2' } });
   });
+  it('validates a large recorded settlement even when home revisions arrive in a different order', () => {
+    const recorded = snapshot(1, 'hut');
+    const home = recorded.frame.homes[0]!;
+    recorded.frame.homes = Array.from({ length: 20000 }, (_, index) => ({ ...home, plotId: `plot:${index}` }));
+    const homes = recorded.frame.homes.map(view => ({ plotId: view.plotId, assetRevision: 'hut' })).reverse();
+    const validated = validateHistory({ label: 'SIMULATED', snapshots: [{ ...recorded, homes }] });
+    expect(validated.snapshots[0]!.homes).toHaveLength(20000);
+    homes[0] = { plotId: 'not-in-frame', assetRevision: 'hut' };
+    expect(() => validateHistory({ label: 'SIMULATED', snapshots: [{ ...recorded, homes }] })).toThrow(/complete scene/);
+  });
   it('strips the recent presentation tail before applying historical snapshots', () => {
     const { replay, binding } = setup(), recorded = snapshot(1, 'hut');
     recorded.frame.beats.push({ kind: 'home-grown', sourceSeq: 1, at: 1000, plotId: 'plot', from: 'tent', to: 'hut', qualifiedDays: 3 });
@@ -48,12 +58,59 @@ describe('Chronicle replay', () => {
     replay.play(); replay.step(); expect(replay.state()).toMatchObject({ index: 1, playing: false });
     replay.dispose(); replay.dispose(); expect(binding.clear).toHaveBeenCalledTimes(1); expect(binding.dispose).toHaveBeenCalledTimes(1);
   });
+  it('stops at the final night when seeking during playback', () => {
+    const { replay, binding } = setup();
+    replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
+    replay.play(); replay.seek(1);
+    expect(replay.state()).toMatchObject({ index: 1, playing: false });
+    replay.step();
+    expect(binding.replace).toHaveBeenCalledTimes(2);
+  });
+  it('always disposes the host when clearing on close fails', () => {
+    const { replay, binding } = setup();
+    replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a')] });
+    binding.clear.mockImplementationOnce(() => { throw new Error('clear failed'); });
+    expect(() => replay.dispose()).toThrow('clear failed');
+    expect(binding.dispose).toHaveBeenCalledTimes(1);
+    replay.dispose(); expect(binding.dispose).toHaveBeenCalledTimes(1);
+  });
   it('reports unavailable and clears the scene if the engine cannot apply a revision', () => {
     const { replay, binding } = setup(); replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
     binding.replace.mockImplementationOnce(() => { throw new Error('missing revision'); });
     expect(() => replay.seek(1)).toThrow('missing revision');
     expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
     expect(binding.clear).toHaveBeenCalledTimes(1);
+  });
+  it('announces unavailable even if clearing the host presentation also fails', () => {
+    const binding = { replace: vi.fn(), clear: vi.fn(), dispose: vi.fn() };
+    const changes = vi.fn(), replay = createReplay(binding, changes);
+    replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
+    binding.replace.mockImplementationOnce(() => { throw new Error('revision missing'); });
+    binding.clear.mockImplementationOnce(() => { throw new Error('host could not clear'); });
+    try { replay.seek(1); throw new Error('Expected seek to fail'); } catch (error) {
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).errors.map((item: Error) => item.message)).toEqual(['revision missing', 'host could not clear']);
+    }
+    expect(changes).toHaveBeenLastCalledWith({ status: 'unavailable', playing: false });
+    expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
+    binding.clear.mockImplementationOnce(() => { throw new Error('host could not clear'); });
+    expect(() => replay.load({ label: 'SIMULATED', snapshots: [] })).toThrow();
+    expect(changes).toHaveBeenLastCalledWith({ status: 'unavailable', playing: false });
+  });
+  it('preserves invalid-history and cleanup errors together', () => {
+    const { replay, binding } = setup();
+    replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a')] });
+    binding.clear.mockImplementationOnce(() => { throw new Error('clear failed'); });
+    try {
+      replay.load({ label: 'LIVE', snapshots: [snapshot(1, 'a')] });
+      throw new Error('Expected invalid history to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AggregateError);
+      const errors = (error as AggregateError).errors as Error[];
+      expect(errors[0]?.message).toMatch(/provenance/);
+      expect(errors[1]?.message).toBe('clear failed');
+    }
+    expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
   });
   it('clears unavailable, empty, invalid or mismatched histories rather than retaining a stale view', () => {
     const { replay, binding } = setup(); replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a')] });
