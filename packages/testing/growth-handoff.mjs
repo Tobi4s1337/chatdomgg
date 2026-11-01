@@ -56,7 +56,7 @@ try {
     await page.evaluate(({plot})=>{window.__chatdomStream.hold(true);const [x,y,z]=plot.position;window.__chatdomKingdom.pose([x+16,y+12,z+(plot.rotation===0?1:-1)*28],[x,y+3,z],38);},data);
     await page.waitForTimeout(1500);
     const shot=async label=>{const path=`${output}/growth-handoff-${variant}-${label}@1920x1080.png`;await page.screenshot({path,timeout:120000});await copyFile(path,`${evidence}/${path.split('/').pop()}`);return path;};
-    side='after';for(const stream of streams)stream.write('event: revision\ndata: {"collisionRevision":2}\n\n');
+    side='after';for(const stream of streams)stream.write(`event: revision\ndata: ${JSON.stringify({layoutRevision:sides.after.manifest.layoutRevision,collisionRevision:2})}\n\n`);
     await page.waitForFunction(()=>window.__chatdomStream.stats.mounts>=2,null,{timeout:30000});
     const start=Date.now();while(!delayed.length && Date.now()-start<30000)await new Promise(r=>setTimeout(r,100));assert.ok(delayed.length,'Replacement asset request never arrived');
     const during=await shot('loading');const loading=await page.evaluate(()=>({phase:window.__chatdomStream.phase,stats:{...window.__chatdomStream.stats},source:window.__chatdomStream.source,visible:[...document.querySelectorAll('.stream-canvas')].filter(c=>window.getComputedStyle(c).visibility!=='hidden').length}));

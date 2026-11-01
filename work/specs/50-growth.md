@@ -91,3 +91,11 @@ The ceremony is scaffolding, a settling storey, a catching chimney and neighbour
   attached part; custom houses are preserved. Active Forge reservations hold growth until release/expiry.
   Public `home-grown` now follows the actual geometry commit, not eligibility. `GrowthHomeView.stage` remains
   an entitlement: consumers must use published home geometry for the built house, including in the Chronicle.
+
+- 2026-11-01: Across-the-street readability is the home-content bar: hut→cottage must gain a visibly
+  different roof/front or height, not only a rear wing; later tiers add a storey, new roofline, more warm panes
+  and a garden/fence/court in their own style. The growth lane may author additive native-tier variants in
+  `packages/content/src/growth-homes/**` as well as its ceremony scope. Existing home-family files remain
+  read-only. Main owns version-aware native recognition/publication so this art never replaces custom homes,
+  invalidates an installed native floor, moves a door or drops a Forge attachment. First checkpoint is one
+  Hearth hut/cottage pair viewed across the same street; the remaining families/tiers follow as content.

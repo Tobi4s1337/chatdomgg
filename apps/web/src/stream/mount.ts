@@ -14,7 +14,7 @@ export interface PreparedStreamScene {
 }
 
 /** A ready scene may keep one replacement GPU context warm until its first loaded draw. */
-export interface SceneMountStats { mounts: number; alive: number; disposed: number; cancelled: number }
+export interface SceneMountStats { mounts: number; alive: number; disposed: number; cancelled: number; lastFailure?: string }
 
 interface Entry {
   canvas: HTMLCanvasElement;
@@ -29,7 +29,8 @@ interface Entry {
   publications: Map<string, () => void>;
 }
 
-const REPLACEMENT_TIMEOUT_MS = 60_000;
+// A software-rendered first draw can take minutes; the loaded town keeps drawing meanwhile.
+const REPLACEMENT_TIMEOUT_MS = 5 * 60_000;
 
 /**
  * A visible kingdom keeps drawing while one replacement prepares behind it. Only
@@ -93,8 +94,9 @@ export function createSceneMount(hooks: {
     hooks.onPhase(phase);
   }
 
-  function fail(entry: Entry): void {
+  function fail(entry: Entry, reason = 'The kingdom revision could not be prepared'): void {
     if (!owns(entry)) return;
+    stats.lastFailure = reason;
     if (pending !== entry) { unmount('failed'); return; }
     pending = undefined;
     release(entry, 'scene-revision');
@@ -148,7 +150,7 @@ export function createSceneMount(hooks: {
     const entry: Entry = { canvas, controller: new AbortController(), frame: 0, ready: false, released: false, publications: new Map() };
     if (replacement) {
       pending = entry;
-      entry.timeout = setTimeout(() => fail(entry), REPLACEMENT_TIMEOUT_MS);
+      entry.timeout = setTimeout(() => fail(entry, 'The replacement exceeded five minutes before its first loaded draw'), REPLACEMENT_TIMEOUT_MS);
     } else {
       current = entry;
       failed = false;
@@ -184,7 +186,7 @@ export function createSceneMount(hooks: {
         onNames: names => publish(entry, 'names', () => hooks.onNames(names)),
         onSpeech: labels => publish(entry, 'speech', () => hooks.onSpeech?.(labels)),
         onSource: label => publish(entry, 'source', () => hooks.onSource(label)),
-        onError: () => fail(entry),
+        onError: message => fail(entry, message),
       });
     }).then(scene => {
       if (!owns(entry)) { scene.dispose(); return; }
@@ -214,7 +216,7 @@ export function createSceneMount(hooks: {
     }).catch((cause: unknown) => {
       if (!owns(entry)) return;
       console.error('The stream kingdom could not open', cause);
-      fail(entry);
+      fail(entry, cause instanceof Error ? cause.message : 'The kingdom revision could not be prepared');
     });
   }
 

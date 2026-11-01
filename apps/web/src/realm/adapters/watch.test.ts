@@ -64,4 +64,26 @@ describe('read-only public realm watch', () => {
     expect(unavailable).toHaveBeenCalledOnce(); expect(source.closed).toBe(true);
     watch.dispose();
   });
+  it('retires only the expected revision close while a replacement opens, preserving the witnessed prefix', async () => {
+    const source = new Source(), unavailable = vi.fn(), revision = vi.fn();
+    const watch = createRealmWatch({ kingdomId, signal: new AbortController().signal, source: () => source, unavailable, revision });
+    source.emit('checkpoint', checkpoint()); await watch.checkpoint;
+    const rows: unknown[] = [];
+    watch.room.onMessage('world', row => rows.push(row)); watch.room.send('bootstrap'); await Promise.resolve();
+    source.emit('world', { version: 1, kingdomId, writerEpoch: 'writer-1', cursor: 11, sequence: 2, eventId: 'geometry-2', message: { type: 'growth' } });
+    source.emit('revision', { layoutRevision: 'streets-1', collisionRevision: 2 });
+    source.emit('closed', { reason: 'revision' }); source.dispatchEvent(new Event('error'));
+    expect(rows).toHaveLength(1); expect(revision).toHaveBeenCalledOnce(); expect(unavailable).not.toHaveBeenCalled();
+    expect(source.closed).toBe(true); watch.dispose();
+  });
+
+  it.each([false, true])('still reports an unknown close (revision witnessed: %s)', async revised => {
+    const source = new Source(), unavailable = vi.fn();
+    const watch = createRealmWatch({ kingdomId, signal: new AbortController().signal, source: () => source, unavailable, revision: vi.fn() });
+    source.emit('checkpoint', checkpoint()); await watch.checkpoint;
+    if (revised) source.emit('revision', { layoutRevision: 'streets-1', collisionRevision: 2 });
+    source.emit('closed', { reason: revised ? 'authority-lost' : 'revision' });
+    expect(unavailable).toHaveBeenCalledOnce(); watch.dispose();
+  });
+
 });
