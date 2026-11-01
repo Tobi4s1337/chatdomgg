@@ -36,7 +36,9 @@ try {
   await page.keyboard.press('End'); await draw();
   const lastText = await slider.getAttribute('aria-valuetext'), lastPixels = await pixels();
   if (!firstText || !lastText || firstText === lastText || firstPixels === lastPixels) throw new Error('Forward seek did not change the accessible night and world image');
-  if (view === 'first') { await page.keyboard.press('Home'); await draw(); }
+  await page.keyboard.press('Home'); await draw();
+  if (await slider.getAttribute('aria-valuetext') !== firstText || await pixels() !== firstPixels) throw new Error('Backward seek did not restore the first night and world image');
+  if (view === 'latest') { await page.keyboard.press('End'); await draw(); }
   if (view === 'market') {
     const marketIndex = await page.evaluate(() => window.__chronicleHistory.snapshots.findIndex(snapshot => snapshot.focus === 'market'));
     if (marketIndex < 1) throw new Error('Market construction snapshot is missing');
@@ -56,7 +58,7 @@ try {
   if (errors.length) throw new Error(errors.join('\n'));
   const path = resolve(evidence, `chronicle-${view}@${width}x${height}.png`);
   await page.screenshot({ path });
-  console.log(`Captured ${path}; forward seek changed the accessible night and world image`);
+  console.log(`Captured ${path}; forward and backward seeking changed and restored the accessible night and world image`);
 } catch (error) {
   failure = error;
 } finally {
