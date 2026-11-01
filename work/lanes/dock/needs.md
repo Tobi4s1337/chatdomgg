@@ -28,7 +28,11 @@ successful HTTP rehearsal is not evidence of a ceremony on stream.
 **Resumed 2026-11-01:** main is implementing this seam. The lane is active again and continues
 building session states, sign-out, moderator presentation, recovery, undo and town glance while
 capture waits in the shared queue. The earlier blocked audits are historical, not the current
-work state. Main's `966e371` integration checkpoint has been synced into `lane/dock`.
+work state. Main's `966e371`, capture queue/importer changes, and shared boundary `13f1a36`
+have been synced into `lane/dock`; unrelated reviewed main work through `7a0830f` is synced too.
+The action and witness schemas now come directly from shared. The API layers only the optional,
+backward-compatible undo presentation hints described below. The original request patch below
+is retained as handoff history; main's shared request schemas now supersede that proposal.
 
 The current realm has authenticated Herald observation ingress and public watch feeds, but no
 dock command/status authority. The dock API already calls the following exact endpoints when
