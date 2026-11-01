@@ -330,66 +330,48 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Order:** picture only, one obvious same-view before/after per turn. Merge good checkpoints first;
-medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
-beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
+**Order:** Tobias accepted and CLOSED the Forge for now. Finish/commit the current crucible change,
+then stop Forge work. The next whole outcome is the evening's first moment: chat arrives, each
+speaker's own window lights in a wave across the dusk town on the stream view, then those people
+walk home down the streets carrying lanterns. Warm and alive, at the accepted Forge bar. Main owns
+the path; one visible change per turn with a matched stream-view before/after. Merge good checkpoints.
+No new systems/contracts/system lanes. Medium routine helpers; keep reads tight.
 
-**Current:** Forge audience wraps the open apron as well as the west side; paths avoid hearth/anvil.
-Existing citizens, normal walking, facing and barrel remain. The earlier empty rehearsal skipped planning:
-the supplied neighbours need time to arrive, not a routing repair or invented bodies. New pair uses the
-same120s SIMULATED planning lead-in for both sides, then pour9/world157,1920×1080:
-`shots/magic/forge-apron-pair.png`, viewed: the pour reads encircled. Fast actual planning can still
-outpace distant walkers. Next picture fix: too much hillside above the smithy; near spectators crop below.
-Three citizen integration tests, typecheck/scoped lint/build pass. EL11 in spec48/effects-library PRD hands
-the team a flowing recorded-path wake and warm landing burst; main owns adoption. Accepted home smoke stays.
+**Latest accepted change:** local Forge previews now run the EXISTING shared ritual through pour,
+seal, strike and cool as well as words/blueprint/flight/landing. Previously the middle used the older
+rising mesh, missing the crucible stream. Duplicate legacy hammer/stamp are hidden. Root viewed
+`shots/magic/forge-crucible-pair.png`, full after1920×1080 and close pair: suspended crucible,
+visible molten stream and contact sparks now read. Same SIMULATED pour9/world157/hour19.5/HIGH as
+baseline forge-ring-depth-after.12 existing presentation/heat tests, typecheck, scoped lint and
+web build passed. After capture49270 exit0, settled fields/no browser errors or Forge POST/cleanup.
+The molten grid and stage angle are not invitations to another pass: the Forge is accepted; leave it.
 
-9ddf895 shares the receiving-home camera between room and SIM, then settles with the facade beneath the
-gift. `forge-landing-pair.png` and forward-stepped sequence sheet viewed; not a continuous-motion signoff.
-Room rotated-socket/desktop/phone/settle test passes. Next: the flight and landing need their own light beat.
+**Keep Forge:**c807642 flight gift against peach/lilac sky with lit streets below;5f4dc8b heat held
+through early landing;d545d0e neighbours look up/wave;9a8dba4 rotated physical-foot contact;
+489d3a8 SIM actual-pose host/noop stage sink;9be5870 local fire;3a84d28 ring32 ordinary routes;
+9ddf895 receive/settle. Keep the warm gift, roof burst/sparks, neighbours and existing landing camera.
+No continuous whole-take approval claim: the server recording hit its deadline before the flight.
+`shots/magic/forge-partial-c807642-SIMULATED.mp4` is128 stepped8fps frames0–15.875s BEFORE this
+adapter fix, with 12/half-second sheets root viewed. No flight/landing/audio/performance evidence.
+Film24396 terminal143; lease released, browser cleanup not independently confirmed. No root captures
+remain. Do not repeat expensive720p software films; lean lower-resolution motion checks plus1080stills.
 
-Forge art checkpoint: merged Anvil Hero AH04 bd938eb and Forge panel FL02 9fd035f.
-The dragon now has a clearer head and stack; AH06 in spec25/PRD gives the team its next whole art outcome:
-one sleeping head on two distinct paws, readable on a whole house from the stream and up close.
-`shots/magic/forge-sculpt-pair.png` viewed at1920×1080. An attempted wake still read as dashes and
-was reverted. Existing b2251ee recorded-history flight effects remain; real/SIM histories stay independent.
-The sculpture still needs a sleeping silhouette. No Forge visual signoff or new systems. Team now owns
-the three Genesis kingdoms, panel portraits/passport, raid journey and cheer/hype spectacles; merge checkpoints.
+**Arrival starting points:** `presence-feed.ts` schedules first arrival1s, distance-ordered wave2–8s;
+render presence-lights fades700ms. Follow actual scene/citizen arrival handling, not the separate
+lights/simulated-evening replay helper. Existing SIM stream fixture:
+`/stream?source=simulated&seed=willowmere&tier=town&hour=19.5&time=0&layout=stage`;
+`window.__chatdomKingdom.play()` resets/plays, `seek(seconds,camera?)` fixes time. Existing evidence:
+`shots/magic/lantern-arrival-before-after@3840x1080.png`, `lantern-homecoming@1920x1080.png`,
+`road-homecoming-pair.png`. Preserve the accepted wide dusk exposure, street indigo/warm lantern
+pools, castle/beacon, sparse grey-violet chimney smoke, stable lights, land/groves and AS10 citizens.
+Judge the stream-wide wave first, then the street homecoming. No fresh runtime checkpoints at recon.
 
-AS11 09f0267 merged (ebde8de). Builder reachable from `/showcase` at `/-/avatar-builder`,
-SIMULATED with browser-local saves. Real saved/equip/entitlement authority remains pending; no shared
-v2 freeze. Additive local earned recipe accepted in avatar-style/contract-proposal.md; rig/sockets stay.
-`shots/magic/avatar-builder-main.png` viewed at1440×900; hair click changes portrait, Save says
-“Saved in this preview.”63 focused tests/typecheck/lint/build passed; after copy fix7 builder tests/lint.
-Lane next: show a clear continuation hint when colour controls sit below the options sheet's fold;
-older earned ribbon marks must remain wearable as tenure grows (already in lane log).
+**Team:** anvil-hero and effects-library clean branches/worktrees fast-forwarded to c807642 so main's
+existing AH06/EL11 tasks are present. This does not reopen the accepted Forge or hand off new work.
+Team owns Genesis, panel/passport, raid journey and sky moments. Masha GM10 merged via5ea162a;
+CP10 viaf14e348. Merge committed checkpoints, never dirty lane trees. Preserve city stash
+7c6f1f9d324042998fff71e4d5ea7863ea46cf0a; park land6f60ae2.
 
-**Live grove closed:**743effc uses existing producer enrichment/normal scene adoption, not browser
-geometry substitution.260 fixture IDs/roots stay; homes/other fixtures and native pin untouched. Public
-LIVE manifest now784da96e…f7c2d327, collision9, unchanged layout43cffdb6;15 forms replace3. Actual
-resting realm `shots/magic/founded-grove-pair.png` viewed at1920×1080 HIGH.0 citizens/windows is the
-observed offline state, not a simulated crowd. Source ready/curtain open/no browser errors; captures
-released. Generated groves f424fac also retain existing sites and accepted736ee93 distant air.
-
-**Citizens/roads:**AS10 e2a9100 uses sharp painted recipes in kingdom/stream/observed/self walkers and
-card painter. Six stable presence look IDs, render-local shoulders±4, two thin cloth capes; no shared rig
-change. Live card/panel portrait delivery still needs host binding. Goggled deep-skin eyes need contrast;
-ankle joins need a motion look. Reference/spec49/PRD81eab8f; A/B/C rejected.95e403b stages32 late
-SIMULATED neighbours at16–23.75s; first Juniper/live timings unchanged. `road-homecoming-pair.png`
-viewed at19.5/time25:104→115 walking/240 supplied. Everyday market experiment rejected/reverted:
-`market-visitors-pair.png` at70s had no clear gain; roofs screen the square. Next road-life pass must read
-on open foreground routes. Never fake live traffic or replace actual observations with rehearsal data.
-
-**Picture carried:**975af2f/44de84b sculpted land consistent across render/light/contact/collision;
-9f843d7 ridge haze. Keep layout43cffdb6; kingdom-land6f60ae2 is parked v2. Forge64efb0f16 present
-spectators still left-heavy; pour02c3494/cameraf0112c6 stay. Market be6ab51 cart/wares. Effects d535804
-flight now mounted (above); other emitters remain unmounted. Accepted home smoke stays. Harbour a6fcf9a
-potential `/kingdom/63920635` seat needs real royal glass anchor before live adoption. River/mountain
-seats remain. Keepers7eff5d8/sound1ed6865 additive/unmounted; emote40aeb18 glass clips. Some passport/
-gate/moments/Atlas host bindings absent. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a stays.
-
-**Operations:**managed5190web/5196API/5197realm/5195Forge/5194herald; affected-code restarts only,
-all on.env. Latest grove reload was delayed, then adopted normally. Logs ONLY `../conductor/state/services.log`.
-No journals/other services. Captures serial, hard deadlines/finally; no open observer waiting for chat.
-For warmed behaviour views use640×360 HIGH,≤1s seeks, then1920 and settle; separate browsers avoid
-software-renderer accumulation. Do not repeat ineffective far-lantern HDR/scale/halo or idle retunes,
-or44m approaches that lost34 warm homes for3 visible walkers. Presence leases7c71b38, lantern fadesbc9a54c.
+**Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
+`../conductor/state/services.log`; own processes only; never unlink capture locks. Real Forge only
+when Tobias announces live; no observer waiting for real chat. GPU availability question unanswered.
