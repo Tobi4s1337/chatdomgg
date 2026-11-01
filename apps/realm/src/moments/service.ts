@@ -1,4 +1,4 @@
-import { type KingdomId, type PersonId } from '@chatdom/shared';
+import { type KingdomId, type PersonId, type PresenceInput } from '@chatdom/shared';
 import { REALM_CASTLE_SLOT, type RealmMomentObservation, type RealmStrike, type RealmSupportObservation } from '@chatdom/shared/realm';
 import { approvedPublicName, DISPLAY_NAME_APPROVAL } from '../../../api/src/realm-auth/presentation';
 import { applyChatNotice } from '../../../herald/src/twitch-moments/notices';
@@ -67,42 +67,59 @@ export class RealmSupportIngress {
   }
 
   /**
-   * A citizen's words while a night is open. The first time tonight, a citizen whose home stood before tonight comes
-   * home: the relight. Cheap when they already have: an in-memory check, no transaction.
+   * Called by the inbox drain after this exact chat observation committed, before its inbox row is settled. The
+   * committed checkpoint decides disclosure; allocation still runs before ingress so the window already exists.
+   * A failed moment write throws back to the drain, leaving durable evidence waiting for this or the next writer.
    */
-  async homecoming(kingdomId: KingdomId, people: readonly { readonly personId: PersonId; readonly fresh: boolean }[], at: number): Promise<void> {
+  async homecoming(kingdom: DurableKingdom, input: PresenceInput): Promise<void> {
+    if (input.kind !== 'observe' || input.source !== 'chat' || input.origin !== this.origin) return;
+    const kingdomId = kingdom.kingdomId, at = input.observedAt;
     const cached = this.nights.get(kingdomId);
-    const due = people.filter(p => !(cached && (cached.nightKey === null || cached.welcomed.has(p.personId))));
-    if (!this.services || due.length === 0) return;
-    const hold = await this.services.retain(kingdomId);
+    const due = input.people.filter(p => !(cached && (cached.nightKey === null || cached.welcomed.has(p.personId))));
+    if (due.length === 0) return;
     try {
-      const kingdom = hold.kingdom;
-      if (kingdom.origin !== this.origin || !kingdom.current) return;
-      const directory = await this.directory(kingdom);
       const committed = await kingdom.writeMoments(async (lease, current) => {
+        // Read inside the writer queue: a later source loss or moderation must redact this beat too. Merely
+        // accepting an inbox row is insufficient; ignored/reordered chat must never consume a quiet welcome.
+        const checkpoint = await kingdom.loadIngress();
+        if (!checkpoint) return null;
+        const presence = decodeIngressCheckpoint(checkpoint, kingdomId, this.origin).presence;
+        const witnessed = due.filter(p => presencePerson(presence, p.personId)?.leases.chat?.observedAt === at);
+        if (witnessed.length === 0) return null;
+        const directory = await this.directory(kingdom, true);
+        const deeds = (await this.db.query<{ person_id: PersonId; allocated_ms: string }>(
+          `SELECT person_id, allocated_ms FROM realm_deeds WHERE kingdom_id = $1 AND origin = $2
+           AND status = 'installed' AND person_id = ANY($3::text[])`, [kingdomId, this.origin, witnessed.map(p => p.personId)])).rows;
+        const allocated = new Map(deeds.map(deed => [deed.person_id, Number(deed.allocated_ms)]));
         const records = createPostgresMomentRecords(this.db, lease, this.origin, current);
         return records.transact(kingdomId, async tx => {
           const repository = momentRepository(tx), town = townRecords(tx), night = await town.night();
           const state = { nightKey: night?.phase === 'open' ? night.nightKey : null, welcomed: new Set<PersonId>() };
           const previous = this.nights.get(kingdomId);
           if (previous && previous.nightKey === state.nightKey) for (const p of previous.welcomed) state.welcomed.add(p);
-          if (state.nightKey === null) return state;
-          for (const person of due) {
+          if (night?.phase !== 'open') return state;
+          for (const person of witnessed) {
             if (state.welcomed.has(person.personId)) continue;
-            const result = await applyHomecoming({ kingdomId, town, directory, settled: new Map() }, person.personId, person.fresh, at);
-            state.welcomed.add(person.personId);
-            if (result.outcome === 'applied' && result.facts.length) {
-              await commitFacts(tx, repository, result.facts, { occurredAt: at, receivedAt: at }, { kind: 'external', source: 'twitch.eventsub', id: `homecoming:${at}` }, this.origin);
+            const allocatedAt = allocated.get(person.personId);
+            if (allocatedAt === undefined) continue;
+            // The durable deed, rather than a process-local allocation result, remembers a home made tonight
+            // across a crash between presence commit and this transaction.
+            const result = await applyHomecoming({ kingdomId, town, directory, settled: new Map() }, person.personId, allocatedAt >= night.openedAt, at);
+            if (result.outcome === 'applied') {
+              state.welcomed.add(person.personId);
+              if (result.facts.length) await commitFacts(tx, repository, result.facts, { occurredAt: at, receivedAt: at },
+                { kind: 'external', source: 'twitch.eventsub', id: input.id }, this.origin);
             }
           }
           return state;
         });
       });
-      this.nights.set(kingdomId, committed);
+      if (committed) this.nights.set(kingdomId, committed);
     } catch (error) {
       this.nights.delete(kingdomId);
       this.log(`[town] homecoming not recorded: ${describeStorageFailure(error)}`);
-    } finally { await hold.release(); }
+      throw error;
+    }
   }
 
   /** A witnessed `!strike`: the realm's battle alone decides whether it lands. */
@@ -202,7 +219,7 @@ export class RealmSupportIngress {
     } finally { this.pending--; }
   }
 
-  private async directory(kingdom: DurableKingdom): Promise<CitizenDirectory> {
+  private async directory(kingdom: DurableKingdom, committedName = false): Promise<CitizenDirectory> {
     const checkpoint = await kingdom.loadIngress();
     const presence = checkpoint ? decodeIngressCheckpoint(checkpoint, kingdom.kingdomId, kingdom.origin).presence : null;
     const state = kingdom.privateState;
@@ -215,8 +232,10 @@ export class RealmSupportIngress {
       if (!home && slot === null && !person) return null;
       const row = (await this.db.query<{ public_name: string; name_approval: string }>(
         'SELECT public_name, name_approval FROM realm_citizen_names WHERE person_id = $1 AND origin = $2', [personId, kingdom.origin])).rows[0];
-      const name = row?.name_approval === DISPLAY_NAME_APPROVAL ? approvedPublicName(row.public_name) : null;
-      if (!name || name !== row?.public_name) return { disclosure: 'anonymous' };
+      // Homecoming follows a committed chat checkpoint. A later observation may already have persisted a new
+      // provider name while still waiting in the inbox: it cannot rename this committed beat ahead of presence.
+      const name = row?.name_approval === DISPLAY_NAME_APPROVAL ? approvedPublicName(committedName ? person?.publicName ?? '' : row.public_name) : null;
+      if (!name || name.length > 64 || (!committedName && name !== row?.public_name)) return { disclosure: 'anonymous' };
       return { disclosure: 'named', displayName: name, homeSlot: slot };
     } };
   }

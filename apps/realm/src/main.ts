@@ -70,9 +70,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     names.set(entry.kingdomId, entry.name);
   }
   const castle = createRealmCastle({ origin, kingdomNames: names, safetyKey: evidenceKey });
-  const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe, evidenceKey,
-    // Bound after boot: the town's own ingress decides whether this is anyone's homecoming tonight.
-    homecoming: (kingdomId, people, at) => boot.ingress.moments.homecoming(kingdomId, people, at) });
+  const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe, evidenceKey });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),

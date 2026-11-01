@@ -14,11 +14,6 @@ export interface RealmCitizensOptions {
   readonly castle?: (kingdom: DurableKingdom, personId: PersonId, name: string) => Promise<void>;
   /** The realm's tenure evidence key: a follow or a sub the Herald witnessed is signed with it before allocation. */
   readonly evidenceKey?: Uint8Array;
-  /**
-   * After a chat observation settled its people (writer released): each person with a home, and whether that home is
-   * new. The town hears it as people coming home tonight. Never awaited into presence: it must not fail chat.
-   */
-  readonly homecoming?: (kingdomId: KingdomId, people: readonly { readonly personId: PersonId; readonly fresh: boolean }[], at: number) => Promise<void>;
 }
 
 /**
@@ -101,7 +96,6 @@ export function createRealmCitizens(options: RealmCitizensOptions) {
       if (input.kind !== 'observe' || input.source !== 'chat' || input.origin !== options.origin) return;
       if (!allocation || !services) throw new AllocationUnavailableError('Citizen allocation is not composed.');
       const hold = await services.retain(input.kingdomId);
-      const home: { personId: PersonId; fresh: boolean }[] = [];
       try {
         const kingdom = hold.kingdom, now = kingdom.databaseNow();
         if (!kingdom.current || kingdom.origin !== options.origin) throw new AllocationUnavailableError('The citizen writer is unavailable.');
@@ -118,7 +112,6 @@ export function createRealmCitizens(options: RealmCitizensOptions) {
         await allocation.recover(kingdom);
         for (const person of input.people) {
           const result = await allocation.allocate({ kingdomId: input.kingdomId, personId: person.personId, evidence: [] });
-          if (result.status === 'deed') home.push({ personId: person.personId, fresh: result.fresh });
           if (result.status === 'castle' && person.disclosure === 'named') {
             const name = approvedPublicName(person.displayName);
             if (name && name.length <= 64) await options.castle?.(kingdom, person.personId, name);
@@ -128,8 +121,6 @@ export function createRealmCitizens(options: RealmCitizensOptions) {
           if (installed.status !== 'installed') throw new AllocationUnavailableError(`The citizen home remains ${installed.status}.`);
         }
       } finally { await hold.release(); }
-      // Outside the writer: the town takes its own hold, and a homecoming never fails the chat that caused it.
-      if (home.length && options.homecoming) void options.homecoming(input.kingdomId, home, input.observedAt).catch(() => undefined);
     },
   };
 }
