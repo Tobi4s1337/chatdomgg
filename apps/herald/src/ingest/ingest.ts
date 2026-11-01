@@ -4,7 +4,7 @@ import {
   ChatMessageEventSchema, type DeliveryFrame, matchesRequest, StreamOfflineEventSchema, StreamOnlineEventSchema,
 } from '@chatdom/twitch';
 import { RealmMomentObservationSchema, RealmSupportObservationSchema } from '@chatdom/shared/realm';
-import { isStrike, spectacleNotice } from './spectacles';
+import { isStrike, spectacleNotice, streamNotice } from './spectacles';
 import { channelChatNotification } from '../twitch-moments/notices';
 import { IGNORED } from '../twitch-moments/normalizer';
 import { toPresenceInput, type Observation } from '../source/observations';
@@ -57,7 +57,7 @@ export interface IngestCounters {
   notLive: number;
   revocations: number;
   authorizationRevokes: number;
-  /** Bits, Hype Train and raid notifications handed to the realm's durable outbox. */
+  /** Bits, Hype Train, raid, follow, reward, poll and night notifications handed to the realm's durable outbox. */
   spectacles: number;
   /** `!strike` messages relayed to the realm's battle. */
   strikes: number;
@@ -196,11 +196,12 @@ export class ChatIngest {
       case 'channel.chat.message_delete': return this.#delete(frame.event, receivedAt);
       case 'channel.chat.clear': return this.#roomClear(frame.event, at ?? receivedAt);
       case 'channel.chat.clear_user_messages': return this.#userClear(frame.event, frame.meta.messageId, at, receivedAt);
-      case 'stream.online': return this.#online(frame.event, at);
-      case 'stream.offline': return this.#offline(frame.event, at);
+      case 'stream.online': return this.#online(frame.event, at, frame.meta.messageId, receivedAt);
+      case 'stream.offline': return this.#offline(frame.event, at, frame.meta.messageId, receivedAt);
       case 'user.authorization.revoke': return this.#authorizationRevoke(frame.event);
       case 'channel.bits.use': case 'channel.hype_train.begin': case 'channel.hype_train.progress': case 'channel.hype_train.end':
-      case 'channel.raid':
+      case 'channel.raid': case 'channel.follow': case 'channel.channel_points_custom_reward_redemption.add':
+      case 'channel.poll.begin': case 'channel.poll.progress': case 'channel.poll.end':
         return this.#spectacle(plan.type, frame.event, frame.meta.messageId, at, receivedAt);
     }
   }
@@ -242,8 +243,10 @@ export class ChatIngest {
     const notice = channelChatNotification.parse(raw, this.kingdomId);
     if (notice === IGNORED) return;
     if (notice === null) { this.#counters.malformed++; return; }
+    // A subscriber's public name travels with their entitlement, so one with no home yet can be settled for the banner.
+    const named = notice.kind === 'entitlement' ? { ...notice, name: chatterName(raw) } : notice;
     const result = RealmSupportObservationSchema.safeParse({ version: 1, id, kingdomId: this.kingdomId,
-      origin: this.#options.source.origin, occurredAt: at, receivedAt, notice });
+      origin: this.#options.source.origin, occurredAt: at, receivedAt, notice: named });
     if (!result.success) { this.#counters.malformed++; return; }
     void this.#options.realm?.support?.(result.data).catch(() => undefined);
   }
@@ -388,7 +391,18 @@ export class ChatIngest {
     this.#submit({ kind: 'user_clear', eventId: deliveryId, at: clearedAt, userId: target });
   }
 
-  #online(raw: unknown, at: number | null): void {
+  /** The night's evidence for the realm: the gate opens when a broadcast starts and rests when it ends. */
+  #night(live: boolean, id: string, streamId: string | null, startedAt: number | null, at: number, receivedAt: number): void {
+    const notice = streamNotice(live, streamId, startedAt);
+    if (!notice) return;
+    const result = RealmMomentObservationSchema.safeParse({ version: 1, id, kingdomId: this.kingdomId,
+      origin: this.#options.source.origin, occurredAt: at, receivedAt, notice });
+    if (!result.success) return;
+    this.#counters.spectacles++;
+    void this.#options.realm?.moment?.(result.data).catch(() => undefined);
+  }
+
+  #online(raw: unknown, at: number | null, id: string, receivedAt: number): void {
     const parsed = StreamOnlineEventSchema.safeParse(raw);
     if (!parsed.success || parsed.data.broadcaster_user_id !== this.kingdomId) {
       this.#counters.malformed++;
@@ -404,9 +418,11 @@ export class ChatIngest {
     }
     this.#counters.streamChanges++;
     this.#stream({ kind: 'stream', at, live: true, streamId: parsed.data.id });
+    const startedAt = parsed.data.started_at ?? null;
+    this.#night(true, id, parsed.data.id, startedAt, at, receivedAt);
   }
 
-  #offline(raw: unknown, at: number | null): void {
+  #offline(raw: unknown, at: number | null, id: string, receivedAt: number): void {
     const parsed = StreamOfflineEventSchema.safeParse(raw);
     if (!parsed.success || parsed.data.broadcaster_user_id !== this.kingdomId) {
       this.#counters.malformed++;
@@ -418,6 +434,7 @@ export class ChatIngest {
     }
     this.#counters.streamChanges++;
     this.#stream({ kind: 'stream', at, live: false });
+    this.#night(false, id, null, null, at, receivedAt);
   }
 
   #authorizationRevoke(raw: unknown): void {
@@ -448,6 +465,11 @@ export class ChatIngest {
       return null;
     }
   }
+}
+
+function chatterName(raw: unknown): string | null {
+  const name = (raw as { chatter_user_name?: unknown } | null)?.chatter_user_name;
+  return typeof name === 'string' && name.length > 0 && name.length <= 128 ? name : null;
 }
 
 function spread(values: readonly number[]): { readonly median: number; readonly max: number } | null {

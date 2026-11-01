@@ -51,5 +51,7 @@ export async function applySpectacle(observation: RealmMomentObservation, contex
         from: { kingdomId: notice.from.kingdomId, displayName, crestKey: null }, viewers: notice.viewers, founded: await context.founded(notice.from.kingdomId) };
       return { outcome: 'applied', facts: [{ current: false, body }], summons: [] };
     }
+    // Follows, the night, rewards and polls shape the town (`../town/apply`), not a spectacle.
+    default: return { outcome: 'stale' };
   }
 }

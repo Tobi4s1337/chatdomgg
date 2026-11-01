@@ -58,3 +58,86 @@ The renderer's own count agrees with the watch. On the stream view, `activeWindo
 
 - **The director's dragon shot.** The dragon flies over the town in the hero shot. In software rendering a 1080p frame lands after the director's 9 s battle focus has passed, so the still never shows the closer battle framing. Check it on a real GPU.
 - **Frame timing.** Real-GPU frame timing is not measured here (SwiftShader).
+
+# LT11 evidence: every Twitch event shapes the kingdom
+
+Same bench and path as LT10, **SIMULATED** end to end, with the door on 5173 this time (5175 was held by another
+worktree's API): `CHATDOM_BENCH_DOOR_PORT=5173 node scripts/live/bench.mjs up`. The managed services on 5190–5197 were
+never touched.
+
+## What reached the kingdom
+
+| Command | Result on the kingdom's public watch |
+|---|---|
+| `online.mjs` | `stream.online · SIMULATED · Night N opens: the gate is lit`; a second notice for the same stream is the same night |
+| `follow.mjs --id 990000310 --name Hollis_Reed` | `a new home on slot 4100`, `grove: a sapling by the door of slot 4100`; `--again`: deduplicated, no second sapling |
+| `sub.mjs --name Maren_Holt --months 14` (a new subscriber) | no home yet: settled on slot 4102 with 14 months as tenure evidence (one street toward the castle), then the banner unfurls on it |
+| `redeem.mjs --reward 'Show My Home'` / `'Ring the Bell'` | the director visits the redeemer's home and its window flares / the bell rings from the castle |
+| `redeem.mjs --reward 'Call a Festival'` | the festival is the current `festival` fact: ten minutes, in the town's colours |
+| `redeem.mjs --reward 'Plant a Tree'` (a redeemer with no home) | settled first (slot 4101), then a tree on their own plot, added to the `grove`; a redeemer whose deed predates the bench's layout revision has no current home and the tree is refused as stale |
+| `redeem.mjs --reward 'Hydrate!'` | nothing: a streamer's own reward is theirs |
+| `poll.mjs` (votes 2 · 5 · 5, paid votes taken off) | the board stands while the poll runs; at the end `the town is divided`, nothing changes |
+| `poll.mjs` (votes 2 · 1 · 5) | `the town chose Meadow`; `decree.colours` is Meadow from then on (Postgres `realm_moment_values` holds the decree record) |
+| `online.mjs --rest`, then `online.mjs --who ID:name,…` (three citizens settled before tonight) | a new night; each returning citizen's first chat plays `Welcome back, ‹name›` at their own home, the one they left; their second message tonight plays nothing |
+
+## Stills (1920×1080, stream view)
+
+`CHATDOM_BENCH_DOOR_PORT=5173 node scripts/live/stills.mjs follow sub online homecoming bell festival tree poll decree`.
+These beats last seconds, and on this host a software-rendered 1080p frame lands 40–90 s after the cue. So each still
+holds the page's wall clock (Playwright `clock.setFixedTime`) at a fixed offset into the beat the page itself admitted:
+the frame drawn is the one a GPU would show at that instant. Every still carries the SIMULATED mark.
+
+| Moment | Still | Held at |
+|---|---|---|
+| A follow: a new home on the edge of town and its sapling, the director on the front garden, "Hollis_Reed · follows · a new home on the edge of town · their sapling takes root" | `follow@1920x1080.png` | 4.2 s into the beat |
+| A sub settles a new subscriber on their tenure street: "Maren_Holt · 14 months under the banner" over their door (slot 4096). This native home has no wall the banner fits (a door between two windows), so the cloth does not hang: see the doubts | `sub@1920x1080.png` | 4 s into the beat |
+| Going live: the gate's braziers lit, the standard up in the town's colours, "The gate opens · Night 5 · welcome home, everyone" | `online@1920x1080.png` | 7 s into the beat |
+| Ring the Bell: the castle's crown rings out over the town, "Hollis_Reed · rings the castle bell" | `bell@1920x1080.png` | 2.4 s into the beat (the second stroke's rings) |
+| Welcome back: Hollis_Reed's first chat of Night 6 lights their own home (slot 4100, the one their first follow gave them), the neighbours' lamps answer, "Welcome back, Hollis_Reed · the lights come on at home"; their sapling still stands by the door | `homecoming@1920x1080.png` | 2.2 s into the beat |
+| Plant a Tree: a fresh redeemer (Ilsabet_Rowe) is settled on slot 3073 and their tree grows in their own front garden, 2.3 m off the path, "Ilsabet_Rowe · plants a tree at home" | `tree@1920x1080.png` | 5.4 s into the beat |
+
+## LIVE on twitch.tv/tobi4s_
+
+- **Going live** needs no grant: Herald's conduit already carries `stream.online/offline` for 129634568. The gate
+  opens on the real channel once the managed realm runs this code.
+- **Follows, kingdom rewards and polls** wait on three broadcaster grants. `check:auth` (2026-11-01 14:48 UTC):
+  `✗ follows · missing moderator:read:followers`, `✗ kingdom rewards · missing channel:manage:redemptions`,
+  `✗ polls and decrees · missing channel:manage:polls`. To grant them, tobi4s_ runs
+  `pnpm --filter @chatdom/herald authorize -- --role broadcaster`, then `provision:source`. Herald keeps no user token
+  by design, so nothing here creates a reward or a poll on Twitch: the monarch makes the four rewards (`Ring the Bell`,
+  `Call a Festival`, `Plant a Tree`, `Show My Home`) and starts a poll (Ember / Tide / Meadow) in the Creator
+  Dashboard; `follow.mjs --live`, `redeem.mjs --live`, `poll.mjs --live` and `online.mjs --live` wait for the real act.
+- **Subs** need a real subscriber.
+
+## Found and fixed on the way (LT11)
+
+- **The director missed the town's beats in stills.** A software frame lands most of a minute after the cue, long after a sapling's or a gate's shot has ended. The stills now hold the page's clock at a fixed offset into the beat the page admitted (the controller's metrics name the latest beat and when it takes the stage).
+- **A planting's caption hung off the top of the frame.** The banner's close shot framed the doorstep; the words over the door fell outside it. Home beats of the town (sapling, tree, window answering, welcome) take a front-garden shot from the street instead.
+- **The poll board was framed from under the balloon.** The plaza's shot looks 20 m up at a float; the board stood below the frame. Board, decision and colours beats frame the board from across the square, question and every pennant in it.
+- **The poll's board left the stage before the votes moved,** and from across the town its pennant labels piled on each other. The poll's opening now holds the board for 12 s (the beat runs 14 s), and a pennant only gets its own label when the board is near enough for the labels to stand apart.
+- **The festival looked up at the castle.** A festival is the whole town dressed: it no longer takes the camera, and the director's view over the streets is its shot.
+- **A tree stepped along the wall into the neighbour's garden** when the window stood where it would grow. It now stands out in its own front garden, off the path.
+- **The gate's standard rose out of a brazier** from the director's angle: it stands on the verge, 5.4 m across.
+- **`redeem.mjs` missed an uncredited redemption** (a redeemer the town cannot name is credited to a friend of the realm): it now also accepts the uncredited fact of the same reward.
+
+## Not proven here (LT11)
+
+- **A sub's banner on every home.** `bannerMount` (main's `apps/web/src/kingdom/moments/anchors.ts`) finds no wall on some native homes (slot 4096: a door between two windows), so the sub's caption shows and the cloth does not hang. Needs main: a mount for those homes.
+- **A bell you can see.** The castle keep has no bell; the bell is drawn as its sound (rings and a strike glint at the crown). A belfry belongs in the castle kit.
+- **LIVE follows, rewards and polls** wait on tobi4s_'s three grants (above); a real stream's going-live waits on the managed realm running this code.
+- **Real-GPU look and timing** of the beats (the clock-held stills show their peak, not their motion).
+- **Bench oddity:** chatters settled before the bench's layout revision have no current home, so their tree is refused and their bell is credited to a friend of the realm. Fresh people (as the stills use) are settled and named.
+
+## Integration review, 2026-11-01
+
+All nine existing LT11 stills were inspected together in `/tmp/live-twitch-review-contact.png`. The decree still is
+only the opening/loading screen and is **rejected as evidence**. The poll still is a distant town view and does not
+demonstrate the board. The other stills show the actual scene; the subscriber's missing banner remains the explicit
+anchor limitation above. These existing captures predate the integration review; no new capture or live Twitch act
+was performed for this review.
+
+The final focused regression run passes 69 tests across seven files, and `pnpm typecheck` plus scoped ESLint pass.
+Regressions cover redemption retry/rollback, reordered and reconciled nights, older polls/decrees, the real growth
+binding in citizen installation, and a maximum-epoch 4,096-entry grove restored through both public projection and
+browser controller within the 288 KiB outbound budget. The renderer's fixed first-512 planting selection remains a
+large-town visual limitation; record/transport coverage does not demonstrate every home's planting on screen.

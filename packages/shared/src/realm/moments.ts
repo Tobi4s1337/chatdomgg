@@ -25,9 +25,13 @@ const HypeUpdate = z.strictObject({
   allTimeHighLevel: UIntSchema.nullable(), recordVerified: z.boolean(),
   contributors: z.array(z.strictObject({ personId: PersonIdSchema, name: Name.nullable() })).max(64),
 });
+const Person = z.strictObject({ personId: PersonIdSchema, name: Name });
+const PollChoice = z.strictObject({ id: TokenSchema, title: z.string().min(1).max(25), votes: UIntSchema, paidVotes: UIntSchema })
+  .refine(choice => choice.paidVotes <= choice.votes, "Paid votes are part of the votes");
 const RaidSource = z.strictObject({ kingdomId: KingdomIdSchema, login: z.string().regex(/^[a-z0-9_]{1,64}$/u), name: Name });
 export const RealmSupportNoticeSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('entitlement'), personId: PersonIdSchema, act: Entitlement }),
+  /** `name` is the public name Twitch showed with the notice, so a subscriber with no home yet can be settled. */
+  z.strictObject({ kind: z.literal('entitlement'), personId: PersonIdSchema, act: Entitlement, name: Name.nullable().optional() }),
   z.strictObject({ kind: z.literal('recipient'), groupKey: TokenSchema, single: z.boolean(), gifter: Gifter, tier: GiftTier,
     noticeKey: TokenSchema, recipientId: PersonIdSchema, recipientName: Name }),
   z.strictObject({ kind: z.literal('aggregate'), groupKey: TokenSchema, gifter: Gifter, tier: GiftTier, total: UIntSchema.min(1).max(100_000) }),
@@ -39,7 +43,7 @@ export const RealmSupportObservationSchema = z.strictObject({
 }).refine(value => value.occurredAt <= value.receivedAt + 5_000, 'Provider time is too far in the future');
 export type RealmSupportObservation = z.infer<typeof RealmSupportObservationSchema>;
 
-/** Private Herald → realm evidence for the town's spectacles: Bits, the Hype Train and incoming raids. */
+/** Private Herald → realm evidence for the town's spectacles (Bits, the Hype Train, incoming raids) and the acts that shape it. */
 export const RealmMomentNoticeSchema = z.discriminatedUnion('kind', [
   /** `channel.bits.use`: who (or nobody, when anonymous) and the act. No message, total or rank. */
   z.strictObject({ kind: z.literal('bits'), payer: Payer.nullable(), act: BitsAct }),
@@ -47,6 +51,17 @@ export const RealmMomentNoticeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('hype'), update: HypeUpdate }),
   /** `channel.raid` into this kingdom: the raiding channel's public identity and Twitch's viewer count. */
   z.strictObject({ kind: z.literal('raid'), from: RaidSource, viewers: UIntSchema.min(1).max(10_000_000) }),
+  /** `channel.follow` v2: who followed (by the name Twitch shows) and when. The follow date is tenure evidence. */
+  z.strictObject({ kind: z.literal('follow'), person: Person, followedAt: EpochMsSchema }),
+  /** `stream.online` (a live broadcast only) or `stream.offline`: the night opens or rests. */
+  z.strictObject({ kind: z.literal('stream'), phase: z.enum(['online', 'offline']), streamId: TokenSchema.nullable(), startedAt: EpochMsSchema.nullable() }),
+  /** `channel.channel_points_custom_reward_redemption.add`: the reward's own title and the redeemer. Never the input text. */
+  z.strictObject({ kind: z.literal('redemption'), redemptionId: TokenSchema, rewardId: TokenSchema, rewardTitle: z.string().min(1).max(45),
+    person: Person, status: z.enum(['unfulfilled', 'fulfilled', 'canceled', 'unknown']) }),
+  /** `channel.poll.begin/progress/end`: the question and each choice's votes; `paidVotes` (channel points, and the retired Bits votes when a payload still carries them) are inside `votes`. */
+  z.strictObject({ kind: z.literal('poll'), pollId: TokenSchema, phase: z.enum(['begin', 'progress', 'end']), title: z.string().min(1).max(60),
+    choices: z.array(PollChoice).min(2).max(5), startedAt: EpochMsSchema, endsAt: EpochMsSchema,
+    status: z.enum(['active', 'completed', 'terminated', 'archived', 'moderated', 'invalid']) }),
 ]);
 export type RealmMomentNotice = z.infer<typeof RealmMomentNoticeSchema>;
 /** Durable like support evidence: Herald's outbox resends it under its EventSub message ID until the realm answers. */

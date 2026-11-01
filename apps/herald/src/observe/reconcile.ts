@@ -4,7 +4,7 @@ import type { Capability } from '../auth/grants';
 import { toPresenceInput } from '../source/observations';
 import type { PresenceSource, SubmitResult } from '../source/source';
 import { sweepChatters, type SweepEnd, type SweepResult } from './chatters';
-import { StreamTracker, type StreamHealth, type StreamReason } from './stream';
+import { StreamTracker, type StreamHealth, type StreamReason, type StreamTrackerOptions } from './stream';
 
 /** One Get Streams request, including any wait for the shared budget. */
 const STREAM_DEADLINE_MS = 10_000;
@@ -62,6 +62,7 @@ export interface ReconcilerOptions {
   readonly authority: ObservationAuthority;
   readonly source: PresenceSource;
   readonly tracker?: StreamTracker;
+  readonly reconciled?: StreamTrackerOptions['reconciled'];
   readonly now?: () => number;
   /** Minute cadence; 0 disables the timer (tests call `minute()` themselves). */
   readonly everyMs?: number;
@@ -100,7 +101,8 @@ export class Reconciler {
     this.#options = options;
     this.#now = options.now ?? Date.now;
     this.#log = options.log ?? (() => undefined);
-    this.tracker = options.tracker ?? new StreamTracker({ kingdomId: options.kingdomId, source: options.source, now: this.#now });
+    this.tracker = options.tracker ?? new StreamTracker({ kingdomId: options.kingdomId, source: options.source, now: this.#now,
+      ...(options.reconciled ? { reconciled: options.reconciled } : {}) });
   }
 
   /** Reconciles stream state now (startup), then keeps the minute cadence. Resolves after the first cycle. */

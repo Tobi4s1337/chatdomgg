@@ -4,12 +4,17 @@
  * never from holding the app secret.
  */
 export const READER_SCOPES = ['user:bot', 'user:read:chat', 'user:write:chat'] as const;
-export const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train'] as const;
+/**
+ * The monarch's grant. Follows, rewards and polls ask for the manage scopes: the same grant then lets the monarch's
+ * own scripts create Chatdom's rewards and open a decree poll on their channel, and Herald settle the redemptions.
+ */
+export const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train',
+  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls'] as const;
 export const HERALD_SCOPES: readonly string[] = [...READER_SCOPES, ...BROADCASTER_SCOPES];
 
 export type Role = 'reader' | 'broadcaster';
-export type Capability = 'chat' | 'chatters' | 'stream' | 'revocation' | 'bits' | 'hype';
-export const CAPABILITIES: readonly Capability[] = ['chat', 'chatters', 'stream', 'revocation', 'bits', 'hype'];
+export type Capability = 'chat' | 'chatters' | 'stream' | 'revocation' | 'bits' | 'hype' | 'follows' | 'rewards' | 'polls';
+export const CAPABILITIES: readonly Capability[] = ['chat', 'chatters', 'stream', 'revocation', 'bits', 'hype', 'follows', 'rewards', 'polls'];
 
 export const ROLE_SCOPES: Readonly<Record<Role, readonly string[]>> = { reader: READER_SCOPES, broadcaster: BROADCASTER_SCOPES };
 
@@ -27,6 +32,12 @@ const REQUIREMENTS: Readonly<Record<Capability, ReadonlyArray<{ readonly role: R
   bits: [{ role: 'broadcaster', scopes: ['bits:read'] }],
   // channel.hype_train.begin/progress/end v2: the festival train and the dragon.
   hype: [{ role: 'broadcaster', scopes: ['channel:read:hype_train'] }],
+  // channel.follow v2, the broadcaster as moderator: a new home on the edge of town.
+  follows: [{ role: 'broadcaster', scopes: ['moderator:read:followers'] }],
+  // channel.channel_points_custom_reward_redemption.add: Chatdom's kingdom rewards.
+  rewards: [{ role: 'broadcaster', scopes: ['channel:manage:redemptions'] }],
+  // channel.poll.begin/progress/end: the decree board, and the decrees the kingdom carries out.
+  polls: [{ role: 'broadcaster', scopes: ['channel:manage:polls'] }],
 };
 
 export type AccountState = 'resolved' | 'not_designated' | 'not_found' | 'unchecked';

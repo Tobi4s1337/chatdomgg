@@ -68,7 +68,9 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     names.set(entry.kingdomId, entry.name);
   }
   const castle = createRealmCastle({ origin, kingdomNames: names, safetyKey: evidenceKey });
-  const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe });
+  const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe, evidenceKey,
+    // Bound after boot: the town's own ingress decides whether this is anyone's homecoming tonight.
+    homecoming: (kingdomId, people, at) => boot.ingress.moments.homecoming(kingdomId, people, at) });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
@@ -81,6 +83,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     },
   });
   citizens.use(boot.allocation, boot.services);
+  boot.ingress.moments.useSettler(citizens);
   castle.use(boot.allocation, boot.store);
   const evening = new RealmEveningBridge({ origin, ingress: boot.ingress, gate, approvals,
     beforeObservation: input => citizens.observe(input) });

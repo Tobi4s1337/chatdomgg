@@ -14,9 +14,10 @@ export const BENCH = Object.freeze({
   kingdomId: '129634568',
   kingdomName: 'Willowmere',
   schema: 'live_twitch_bench',
-  realmPort: 5198,
-  webPort: 5199,
-  doorPort: 5175,
+  // Defaults; CHATDOM_BENCH_{REALM,WEB,DOOR}_PORT move them when another worktree already holds one (5170–5186, 5198, 5199).
+  realmPort: Number(process.env.CHATDOM_BENCH_REALM_PORT || 5198),
+  webPort: Number(process.env.CHATDOM_BENCH_WEB_PORT || 5199),
+  doorPort: Number(process.env.CHATDOM_BENCH_DOOR_PORT || 5175),
   // Only when no adopted layout exists to copy.
   fallbackConfig: { seed: 'tobi4s_', tier: 'town', firstYear: 2019, year: 2026 },
 });
@@ -236,6 +237,16 @@ export async function fireAndWatch(fire, match, options = {}) {
   const fired = await fire();
   const found = await watching;
   return { found, fired, ms: Math.round(performance.now() - firedAt), checkpoint };
+}
+
+/**
+ * LIVE: wait on the running realm (read only) for the next LIVE fact of `kind` that passes `test`, telling the person
+ * at the keyboard what to do on twitch.tv/tobi4s_. Nothing is written to Twitch from here.
+ */
+export async function waitLive(kind, ask, test = () => true) {
+  const realm = args('realm', LIVE.realm), minutes = Number(args('minutes', '30'));
+  report([`LIVE · ${ask} · watching ${realm} for ${minutes} min`]);
+  return watchFor(momentOf(kind, fact => fact.origin === 'live' && test(fact)), { realm, timeoutMs: minutes * 60_000 });
 }
 
 /** SIMULATED chatters for the bench; numeric IDs in a range Twitch has not issued. */
