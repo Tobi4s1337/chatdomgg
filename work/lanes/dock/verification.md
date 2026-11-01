@@ -216,3 +216,20 @@ IPv6 `[::1]:5171`; the realm uses an owned Unix socket. IPv4 capture ports were 
 no existing service was touched. Resume/poll the same agent-owned handle. Main has newer
 unrelated lane integrations; defer sync until this capture is terminal so its build inputs
 remain stable, then merge before the next rehearsal. The task stays open and active.
+
+## Synced rehearsal inputs — 2026-11-01
+
+Previous turn was progress: nine inspected UI stills, the disabled-contrast correction and
+native service-loader changes were committed. This continuation synced main through
+`5174156` in merge94a41f5 after an owner poll confirmed60166 had not begun startup. The
+new land/place integrations are available to its fresh build. All29 focused dock tests,
+scoped TypeScript and a fresh native SSR import preflight (seven actual factory exports,
+no DB/listener/browser) pass after the merge; the preflight's owned temp directory was
+removed. Do not repeat these checks without a new change/failure.
+
+The evidence agent then polled the same60166 for45seconds and confirmed it is still live
+and queued, with no admission/startup output. Keep that handle. No service, browser or
+stream result is claimed. Next action remains its actual initial stream+dock still; debug
+real runtime failures, inspect the result, then capture actual presses and clips one at a
+time. Main-only moderator/undo/attendance/fidelity needs remain in needs.md, not replaced
+by fixture claims. DK10 and the goal stay active.
