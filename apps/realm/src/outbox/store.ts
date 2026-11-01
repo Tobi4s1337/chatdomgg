@@ -3,7 +3,7 @@ import type { RealmFact, RealmPublicMessage, RealmWriterLease } from '@chatdom/s
 import { RealmRecoveryError, RealmWriterFencedError, type RealmDatabase } from '../persistence/database';
 import { sha256Hex } from '../persistence/codec';
 import type { RealmOutboxRow } from '../persistence/postgres-repository';
-import { PublicProjection, type PublicPrefix, type RealmPublicCastle, type RealmPublicHome, type RealmPublicPresence } from './projection';
+import { PublicProjection, type PublicPrefix, type RealmPublicCastle, type RealmPublicGrowth, type RealmPublicHome, type RealmPublicPresence } from './projection';
 
 const NOW_MS = 'floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint';
 /** Rows one dispatch pass reads and hands to the transport before acknowledging them. */
@@ -52,7 +52,7 @@ export class PostgresOutboxStore implements RealmOutboxStore {
     while (after < throughId) {
       const found = await this.db.query<{ id: string; sequence: string; event_id: string; plot_id: string | null; message: string }>(
         `SELECT id, sequence, event_id, plot_id, message FROM realm_outbox
-         WHERE kingdom_id = $1 AND id > $2 AND id <= $3 AND kind IN ('home', 'castle', 'forge', 'moment') ORDER BY id LIMIT $4`,
+         WHERE kingdom_id = $1 AND id > $2 AND id <= $3 AND kind IN ('home', 'castle', 'forge', 'moment', 'growth') ORDER BY id LIMIT $4`,
         [kingdomId, after, throughId, OUTBOX_DISPATCH_BATCH]);
       const rows = found.rows.map(r => ({ id: Number(r.id), sequence: Number(r.sequence), eventId: r.event_id, plotId: r.plot_id, message: JSON.parse(r.message) as RealmPublicMessage }));
       const prefix = rows.filter(row => row.id <= throughId);
@@ -69,6 +69,7 @@ export class PostgresOutboxStore implements RealmOutboxStore {
       homes: projection.current().filter((message): message is RealmPublicHome => message.type === 'home'),
       bases,
       castle: projection.current().find((message): message is RealmPublicCastle => message.type === 'castle') ?? null,
+      growth: projection.current().find((message): message is RealmPublicGrowth => message.type === 'growth') ?? null,
       presence: presence.rows[0] ? JSON.parse(presence.rows[0].message) as RealmPublicPresence : null,
       moments: (() => {
         const state = projection.current().find(message => message.type === 'moments.current');

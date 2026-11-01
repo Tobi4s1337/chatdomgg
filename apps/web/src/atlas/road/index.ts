@@ -21,8 +21,9 @@ export const ROAD_SOURCE: PreviewSource = { base: '/map-data', fetch: (input, in
 
 export interface RoadHolding {
   id: string;
-  name: string;
-  login: string;
+  /** The name the survey serves for this holding now; `null` while it serves none (the caller names it). */
+  name: string | null;
+  login: string | null;
   x: number;
   y: number;
   tier: Settler['tier'];
@@ -31,8 +32,8 @@ export interface RoadHolding {
 }
 
 export class RoadAtlasError extends Error {
-  constructor(readonly reason: 'unavailable' | 'missing' | 'withheld', message: string) {
-    super(message);
+  constructor(readonly reason: 'unavailable' | 'missing' | 'withheld', message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'RoadAtlasError';
   }
 }
@@ -71,8 +72,15 @@ export interface RoadAtlas {
   dispose(): void;
 }
 
-function holdingOf(settler: Settler): RoadHolding {
-  return { id: settler.id, name: settler.name ?? settler.login ?? settler.id, login: settler.login ?? '', x: settler.x, y: settler.y, tier: settler.tier, realmName: settler.realmName, region: settler.region };
+/**
+ * The road's end at a channel, or why there is none. A channel off this survey has no holding; a withheld holding is
+ * bare land and no road may name it. A holding whose name the survey is not serving just now (names are served only
+ * while fresh) is still there: the road is drawn to it, unnamed on the map, and the caller names it.
+ */
+export function roadHolding(settler: Settler | null, which: 'raiding' | 'raided'): RoadHolding {
+  if (!settler) throw new RoadAtlasError('missing', `The ${which} channel has no holding on this survey of the Atlas.`);
+  if (settler.withheld) throw new RoadAtlasError('withheld', `The ${which} channel is not shown on the Atlas.`);
+  return { id: settler.id, name: settler.name, login: settler.login, x: settler.x, y: settler.y, tier: settler.tier, realmName: settler.realmName, region: settler.region };
 }
 
 /** Read the holding for a channel: the cities in the world file, then each land's towns and villages in turn. */
@@ -100,16 +108,12 @@ export async function openRoadAtlas(host: HTMLElement, options: {
     world = await fetchWorld(source, pointer, signal);
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw error;
-    throw new RoadAtlasError('unavailable', 'The Atlas could not be read just now, so the road cannot be drawn.');
+    throw new RoadAtlasError('unavailable', 'The Atlas could not be read just now, so the road cannot be drawn.', { cause: error });
   }
   const store = new SettlerStore(world);
   store.applyNames(await fetchNames(source, world, signal));
-  const [a, b] = [await findHolding(store, world, source, options.from, signal), await findHolding(store, world, source, options.to, signal)];
-  for (const [settler, which] of [[a, 'raiding'], [b, 'raided']] as const) {
-    if (!settler) throw new RoadAtlasError('missing', `The ${which} channel has no holding on this survey of the Atlas.`);
-    if (settler.withheld || !settler.name) throw new RoadAtlasError('withheld', `The ${which} channel is not shown on the Atlas.`);
-  }
-  const from = holdingOf(a!), to = holdingOf(b!);
+  const from = roadHolding(await findHolding(store, world, source, options.from, signal), 'raiding');
+  const to = roadHolding(await findHolding(store, world, source, options.to, signal), 'raided');
   const geo = geographyOf(world);
   const path = planRoad(from, to, `${from.id}>${to.id}`, from.region !== to.region);
   const span = Math.hypot(geo.bounds.maxX - geo.bounds.minX, geo.bounds.maxY - geo.bounds.minY);

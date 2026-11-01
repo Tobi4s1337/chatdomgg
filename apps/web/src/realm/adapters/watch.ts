@@ -58,6 +58,7 @@ export function createRealmWatch(options: {
     if (disposed || failed) return;
     stream?.close(); initial = undefined; current = undefined; lastWalkerSampledAt = -1; buffered = []; bufferBytes = 0; clearWalkers();
     const own = ++generation;
+    let revised = false, revisionClosed = false;
     const next = (options.source ?? (path => new EventSource(path)))(REALM_WATCH_ROUTE.replace(':kingdomId', encodeURIComponent(kingdomId)));
     stream = next;
     const listen = (type: string, receive: (payload: unknown, length: number) => void) => next.addEventListener(type, event => {
@@ -107,9 +108,19 @@ export function createRealmWatch(options: {
       walkerTimer = setTimeout(clearWalkers, REALM_WALKER_FRAME_INTERVAL_MS * 10);
       for (const listener of [...walkerListeners]) listener.receive(next);
     });
-    listen('revision', raw => { current = undefined; lastWalkerSampledAt = -1; clearWalkers(); emit('revision', raw); options.revision(); });
-    next.addEventListener('closed', fail);
-    next.addEventListener('error', fail);
+    listen('revision', raw => {
+      const value = raw as { layoutRevision?: unknown; collisionRevision?: unknown } | null;
+      if (!current || !value || typeof value.layoutRevision !== 'string' || !value.layoutRevision.length || value.layoutRevision.length > 256
+        || typeof value.collisionRevision !== 'number' || !Number.isSafeInteger(value.collisionRevision) || value.collisionRevision < 0 || value.collisionRevision > 0xffff_ffff) { fail(); return; }
+      revised = true; current = undefined; lastWalkerSampledAt = -1; clearWalkers(); emit('revision', raw); options.revision();
+    });
+    listen('closed', raw => {
+      // Geometry adoption deliberately ends the old SSE after the last committed world row and its revision.
+      // Retire that transport without turning a healthy, warming scene handoff into an unavailable kingdom.
+      if (revised && (raw as { reason?: unknown } | null)?.reason === 'revision') { revisionClosed = true; next.close(); }
+      else fail();
+    });
+    next.addEventListener('error', () => { if (!revisionClosed) fail(); });
   }
   const dispose = () => {
     if (disposed) return;

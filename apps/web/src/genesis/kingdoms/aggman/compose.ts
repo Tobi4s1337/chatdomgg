@@ -1,13 +1,13 @@
 import type { Vec3 } from '@chatdom/shared';
 import { terrainHeight, transformCardinalPoint, type CardinalTurn, type SettlementPlan } from '@chatdom/world';
-import type { ChannelKingdomRecipe, DeepReadonly, GenesisLandscape } from '@chatdom/world/genesis';
+import { sampleGenesisSurface, type ChannelKingdomRecipe, type DeepReadonly, type GenesisLandscape } from '@chatdom/world/genesis';
 import type { RoyalBrazier } from '../../../kingdom/royal-life';
 import type { Dressing } from '../../../kingdom/settlement-content';
 import { createGenesisSeatContent, type GenesisSeatContent } from '../../seat-content';
 import {
   AGGMAN_LIVERY, HARBOUR_INN_FRONT, composeGenesisEmoteArt, composeGenesisHeraldry, createBuntingRun, createDrawnUpBoat, createFishCrates,
   createFishStall, createGaggle, createGoose, createGooseFamily, createHarbourCoble, createHarbourInn, createHarbourLantern, createHarbourPennant,
-  createLastLantern, createMooringBollard, createNetRack, createPotStack, createQuayBanner, createQuaySegment, createRowingBoat, createSlipwayCapstan,
+  createLastLantern, createMooringBollard, createNetRack, createPotStack, createQuayBanner, createQuaySegment, createRowingBoat, createShingleStrand, createSlipwayCapstan,
   keeperRole, planKeeperRound, proposeGenesisKeepers,
   type AggmanPiece, type GenesisEmoteArt, type GenesisHeraldry, type KeeperFixture, type KeeperPlaceSite, type KeeperProposal, type KeeperRound,
 } from './content';
@@ -92,6 +92,67 @@ function layQuay(plan: SettlementPlan, site: HarbourSite, out: Precinct): void {
   }
 }
 
+/** World z of the waterline at world x: the first ocean sample walking seaward from above the harbour's shore. */
+function waterlineAt(plan: SettlementPlan, site: HarbourSite, x: number): number {
+  for (let z = site.shoreZ + 20; z > site.shoreZ - 20; z -= .25) if (sampleGenesisSurface(plan.genesisSurface!, x, z).water === 'ocean') return z;
+  throw new Error(`No waterline at x ${x} within reach of the harbour.`);
+}
+
+/** Where a boat lies drawn up, in world plan: the shingle runs on round it. */
+interface Berth { readonly minX: number; readonly maxX: number; readonly minZ: number; readonly maxZ: number }
+/** How far up the bank past a berth's edge its stones may run, in metres (the strand's berth margin, 9 cells, at its widest). */
+const BERTH_REACH = 1.5;
+/** Solid stones this far round a drawn-up boat's piece, in metres, before the berth's margin thins into the turf. */
+const BERTH_PAD = .6;
+/** Metres outside the nearest berth at world (x, z); ≤ 0 inside one. */
+function outsideBerths(berths: readonly Berth[], x: number, z: number): number {
+  let best = Infinity;
+  for (const b of berths) {
+    const dx = Math.max(b.minX - x, 0, x - b.maxX), dz = Math.max(b.minZ - z, 0, z - b.maxZ);
+    best = Math.min(best, dx || dz ? Math.hypot(dx, dz) : -Math.min(x - b.minX, b.maxX - x, z - b.minZ, b.maxZ - z));
+  }
+  return best;
+}
+
+/** The shingle runs along the waterline from here to here (world x), in pieces of at most 32 m. */
+const STRAND = { west: 14, east: 112, piece: 24.5, reach: 7 } as const;
+
+/**
+ * The beach the harbour works from: a strand of pale shingle along the waterline either side of the quay and at
+ * its foot, so the boats are drawn up on stones and the turf meets the sea through a beach, not at a seam. The
+ * quay's paving, its slip and the Last Lantern's base stay bare.
+ */
+function layShingle(plan: SettlementPlan, site: HarbourSite, light: readonly Vec3[], berths: readonly Berth[], out: Precinct): void {
+  const land = plan.genesisSurface!;
+  const coping = site.quay.z - site.quay.halfDepth - 68 * CELL;
+  const slip = { minX: site.quay.maxX - 8.5, maxX: site.quay.maxX - 3.5 };
+  const lightBox = { minX: Math.min(...light.map(c => c[0])) - .4, maxX: Math.max(...light.map(c => c[0])) + .4, minZ: Math.min(...light.map(c => c[2])) - .4, maxZ: Math.max(...light.map(c => c[2])) + .4 };
+  const bare = (x: number, z: number) => (x >= site.quay.minX - .2 && x <= site.quay.maxX + .2 && z >= coping - .3)
+    || (x >= slip.minX && x <= slip.maxX && z >= coping - 6)
+    || (x >= lightBox.minX && x <= lightBox.maxX && z >= lightBox.minZ && z <= lightBox.maxZ);
+  for (let west = STRAND.west, i = 0; west < STRAND.east; west += STRAND.piece, i++) {
+    const east = Math.min(STRAND.east, west + STRAND.piece);
+    // The waterline wanders: span the strand from the furthest water to the highest reach along this piece.
+    let wet = Infinity, dry = -Infinity;
+    for (let x = west; x <= east; x += 1) {
+      const z = waterlineAt(plan, site, x);
+      wet = Math.min(wet, z - 3.2); dry = Math.max(dry, z + STRAND.reach * 1.3);
+    }
+    // A berth's margin of stones may lie higher up the bank than the strand reaches: the piece spans it too.
+    for (const berth of berths) if (berth.maxX > west && berth.minX < east) dry = Math.max(dry, berth.maxZ + BERTH_REACH);
+    const length = Math.round((east - west) / CELL), depth = Math.min(256, Math.ceil((dry - wet) / CELL));
+    const world = (x: number, z: number): readonly [number, number] => [west + x * CELL, wet + z * CELL];
+    const strand = createShingleStrand({
+      id: `${i}`, length, depth, water: 0, reach: STRAND.reach / CELL,
+      ground: (x, z) => { const [wx, wz] = world(x, z); return terrainHeight(plan, wx, wz) / CELL; },
+      shore: (x, z) => { const [wx, wz] = world(x, z); return sampleGenesisSurface(land, wx, wz).shoreDistance / CELL; },
+      clear: (x, z) => { const [wx, wz] = world(x, z); return bare(wx, wz); },
+      berth: (x, z) => { const [wx, wz] = world(x, z); return outsideBerths(berths, wx, wz) / CELL; },
+    });
+    out.props.push({ blueprint: strand.blueprint, position: [west, strand.base * CELL, wet], yaw: 0 });
+  }
+}
+
 /**
  * The Wren and Willow on its level pad west of the lane foot, its front on the quay and its back kitchen cut into
  * the slope. Its door is Rowan's fixture; its lanterns burn as the house's own fire, never as people.
@@ -112,7 +173,7 @@ function raiseInn(site: HarbourSite, out: Precinct): void {
  * The Last Lantern at the quay's west end, its lancet turned to the sea and lit from within; the channel's window
  * fills the lancet and its vane turns on the finial. Lamps: the lantern room and the brazier behind the glass.
  */
-function raiseLight(plan: SettlementPlan, site: HarbourSite, art: GenesisEmoteArt, out: Precinct): void {
+function raiseLight(plan: SettlementPlan, site: HarbourSite, art: GenesisEmoteArt, out: Precinct): readonly Vec3[] {
   const light = createLastLantern(art.glass);
   const apron = site.quay.z - site.quay.halfDepth - 68 * CELL;
   const [w, , d] = light.blueprint.size;
@@ -129,6 +190,7 @@ function raiseLight(plan: SettlementPlan, site: HarbourSite, art: GenesisEmoteAr
     const rest = transformCardinalPoint([0, 0, 0], EAST, [vane.rotorPivot[0] * CELL, vane.rotorPivot[1] * CELL, vane.rotorPivot[2] * CELL]);
     out.props.push({ blueprint: vane.rotor, position: [pivot[0] - rest[0], pivot[1] - rest[1], pivot[2] - rest[2]], yaw: facingOf(EAST) });
   }
+  return placed.corners;
 }
 
 /**
@@ -191,7 +253,7 @@ function raiseMonument(plan: SettlementPlan, site: HarbourSite, art: GenesisEmot
   add(out, place(plan, piece, site.market[0] + 8.6, apron - monument.footprint[1] * CELL / 2 - .9, SEA, { level: site.quay.level }), { id: 'quay:statue', turn: SEA, level: site.quay.level });
 }
 
-/** Boats: one coble running in under sail, one lying furled beside the pier, rowing boats at the pier root, and three drawn up on the shingle. */
+/** Boats afloat: one coble running in under sail, one lying furled beside the pier, rowing boats at the pier root. */
 function harbourBoats(plan: SettlementPlan, site: HarbourSite, out: Precinct): void {
   const x = site.market[0];
   const rowing = (variant: 0 | 1 | 2): Placeable => {
@@ -202,10 +264,32 @@ function harbourBoats(plan: SettlementPlan, site: HarbourSite, out: Precinct): v
   add(out, place(plan, placeable(createHarbourCoble(AGGMAN_LIVERY, 0)), x + 12, site.shoreZ - 19, LAND));
   add(out, place(plan, rowing(0), x - 3.4, site.shoreZ - 4.6, SEA));
   add(out, place(plan, rowing(2), x + 3.6, site.shoreZ - 8, LAND));
-  // Drawn up above the tide line: two on the west shingle, one on the east.
-  add(out, place(plan, placeable(createDrawnUpBoat(AGGMAN_LIVERY, 0)), site.quay.minX - 7.5, site.shoreZ + 3.2, SEA));
-  add(out, place(plan, placeable(createDrawnUpBoat(AGGMAN_LIVERY, 1)), site.quay.minX - 12.2, site.shoreZ + 5.4, SEA));
-  add(out, place(plan, placeable(createDrawnUpBoat(AGGMAN_LIVERY, 2)), site.quay.maxX + 5.5, site.quay.z - 5.6, WEST));
+}
+
+/**
+ * Three boats drawn up on the shingle above the wrack line, two on the west strand and one east of the slip. Each
+ * lies along the bank, not down it, heeled over onto her seaward bilge as a boat on a sloping beach settles, her
+ * keel bedded a cell into the stones; so none is buried in the bank and none rests on turf. Returns their berths.
+ */
+function drawUpBoats(plan: SettlementPlan, site: HarbourSite, out: Precinct): Berth[] {
+  // Variants 0 and 2 heel to port, 1 to starboard: turned so the low bilge is the seaward side.
+  const boats: { variant: 0 | 1 | 2; x: number; above: number; turn: CardinalTurn }[] = [
+    { variant: 0, x: site.quay.minX - 6.2, above: 4.2, turn: WEST },
+    { variant: 1, x: site.quay.minX - 12.6, above: 5.5, turn: EAST },
+    { variant: 2, x: site.quay.maxX + 6.5, above: 4.4, turn: WEST },
+  ];
+  const berths: Berth[] = [];
+  for (const boat of boats) {
+    const z = Math.min(site.quay.z - 5.8, waterlineAt(plan, site, boat.x) + boat.above);
+    const placed = place(plan, placeable(createDrawnUpBoat(AGGMAN_LIVERY, boat.variant)), boat.x, z, boat.turn, { level: terrainHeight(plan, boat.x, z) - CELL });
+    add(out, placed);
+    // Her berth is her whole piece (oars, painter, grapnel and pot ashore too) and a stride of stones round it.
+    const [sx, , sz] = placed.dressing.blueprint.size;
+    const corners = [[0, 0], [sx, 0], [0, sz], [sx, sz]].map(([a, b]) => at(placed, boat.turn, [a!, 0, b!]));
+    const xs = corners.map(c => c[0]), zs = corners.map(c => c[2]);
+    berths.push({ minX: Math.min(...xs) - BERTH_PAD, maxX: Math.max(...xs) + BERTH_PAD, minZ: Math.min(...zs) - BERTH_PAD, maxZ: Math.max(...zs) + BERTH_PAD });
+  }
+  return berths;
 }
 
 /** The hamlet's geese: a gaggle on the green by the inn, one on the shingle, a family down the lane, three swimming by the pier and one honking at the stair. */
@@ -249,7 +333,9 @@ export function composeAggman(recipe: DeepReadonly<ChannelKingdomRecipe>, landsc
   const out: Precinct = { props: [], braziers: [], lamps: [] };
   layQuay(plan, site, out);
   raiseInn(site, out);
-  raiseLight(plan, site, emoteArt, out);
+  const light = raiseLight(plan, site, emoteArt, out);
+  const berths = drawUpBoats(plan, site, out);
+  layShingle(plan, site, light, berths, out);
   workQuay(plan, site, out);
   raiseColours(plan, site, heraldry, out);
   raiseMonument(plan, site, emoteArt, out);
@@ -267,13 +353,13 @@ export function composeAggman(recipe: DeepReadonly<ChannelKingdomRecipe>, landsc
 }
 
 /**
- * From the water south-east of the harbour, looking north-west across the quay: the boats, the Last Lantern and
- * the inn in front, the hamlet climbing its slope, and the watchtower keep on the rise against the dusk sky.
+ * From the water south-east of the harbour, on a long lens over the boats: the coble running in and the one moored
+ * at the pier, the quay's dressing and the goose statue close enough that each piece reads, the Last Lantern and
+ * the inn behind, the hamlet climbing its slope, and the watchtower keep on the rise against the dusk sky.
  */
 function heroCamera(site: HarbourSite): { eye: Vec3; target: Vec3; fov: number } {
   const [x] = site.market;
-  const eye: Vec3 = [x + 55, 23, site.shoreZ - 46];
-  const target: Vec3 = [x - 13, site.quay.level + 6, site.quay.z + 21];
-  return { eye, target, fov: 44 };
+  const eye: Vec3 = [x + 47, 22, site.shoreZ - 47.25];
+  const target: Vec3 = [x - 7, site.quay.level + 3, site.quay.z + 13.25];
+  return { eye, target, fov: 38 };
 }
-

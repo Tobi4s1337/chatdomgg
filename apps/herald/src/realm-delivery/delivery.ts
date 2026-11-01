@@ -196,10 +196,12 @@ export class RealmDelivery implements RealmDeliverySink {
     const run = (async () => {
       await this.#serial;
       while (!this.#closed && this.#entries.length) {
-        // Cleanup overtakes queued activity. Reducer timestamps fence any older evidence delivered later.
+        // Cleanup overtakes queued activity. Reducer timestamps fence any older evidence delivered later. A due spectacle
+        // goes next: a cheer or a train's beat is felt the moment it happens, and in a hype train's chat burst it would
+        // otherwise wait out every queued presence post. Presence carries its own timestamps, so it loses nothing.
         const now = this.#now();
         const due = this.#entries.filter(entry => !entry.spectacle || entry.retryAt <= now);
-        const entry = due.find(entry => entry.urgent) ?? due[0];
+        const entry = due.find(entry => entry.urgent) ?? due.find(entry => entry.spectacle) ?? due[0];
         if (!entry) { this.#wakeForSpectacles(); return; }
         try {
           const response = await this.#post(INGRESS_ROUTE, entry.body);

@@ -1,0 +1,53 @@
+{
+  "fixture": {
+    "plot": "plot:2025:11",
+    "from": "hut",
+    "to": "cottage",
+    "qualifiedDays": 7,
+    "manifests": {
+      "before": {
+        "version": 1,
+        "kingdomId": "999000001",
+        "origin": "simulated",
+        "layoutRevision": "settlement:2:6a0d96ac",
+        "collisionRevision": 1,
+        "sceneHash": "1373c63e9272b4223e0bb218916feca26b13b57e640b917af9a303eaa49a6654"
+      },
+      "after": {
+        "version": 1,
+        "kingdomId": "999000001",
+        "origin": "simulated",
+        "layoutRevision": "settlement:2:6a0d96ac",
+        "collisionRevision": 2,
+        "sceneHash": "1792fa19a7a434ccc16109c91c644f303d0d7bd556bff28ce6b192c99294e16b"
+      }
+    }
+  },
+  "runs": [
+    {
+      "variant": "replacement",
+      "during": "shots/magic/growth-handoff-replacement-loading@1920x1080.png",
+      "after": "shots/magic/growth-handoff-replacement-grown@1920x1080.png",
+      "loading": {
+        "phase": "ready",
+        "stats": {
+          "mounts": 2,
+          "alive": 2,
+          "disposed": 0,
+          "cancelled": 0
+        },
+        "source": "simulated",
+        "visible": 1
+      },
+      "requests": [
+        "/api/realm/entry/999000001",
+        "/api/realm/watch/999000001",
+        "/api/realm/founded/scenes/1373c63e9272b4223e0bb218916feca26b13b57e640b917af9a303eaa49a6654",
+        "/api/realm/entry/999000001",
+        "/api/realm/watch/999000001",
+        "/api/realm/founded/scenes/1792fa19a7a434ccc16109c91c644f303d0d7bd556bff28ce6b192c99294e16b"
+      ],
+      "errors": []
+    }
+  ]
+}

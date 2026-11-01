@@ -1,0 +1,80 @@
+[
+  {
+    "kit": "geology",
+    "view": "hero"
+  },
+  {
+    "kit": "geology",
+    "view": "street"
+  },
+  {
+    "kit": "composition",
+    "channel": "tobi4s_"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4"
+  },
+  {
+    "kit": "forest",
+    "species": "gold"
+  },
+  {
+    "kit": "forest",
+    "species": "pine"
+  },
+  {
+    "kit": "forest",
+    "species": "cherry"
+  },
+  {
+    "kit": "forest",
+    "species": "teal"
+  },
+  {
+    "kit": "forest",
+    "species": "birch"
+  },
+  {
+    "kit": "forest",
+    "species": "willow"
+  },
+  {
+    "kit": "tree",
+    "species": "gold",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "pine",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "teal",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "willow",
+    "size": "390x844"
+  }
+]

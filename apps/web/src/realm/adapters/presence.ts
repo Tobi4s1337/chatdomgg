@@ -6,7 +6,7 @@ import type { RealmObserver } from './observer';
  * room checkpoint and its outbox, never from Herald's diagnostic SSE or a browser simulation. The same
  * receipt-silence rule as every other feed applies: a frame older than one lease goes dark honestly.
  */
-export function createRoomPresenceFeed(observer: RealmObserver, origin: KingdomPresenceFrame['origin'], clock: () => number = Date.now): PresenceFeed {
+export function createRoomPresenceFeed(observer: RealmObserver, origin: KingdomPresenceFrame['origin'], clock: () => number = Date.now, holdForSceneRevision = false): PresenceFeed {
   return {
     label: origin === 'live' ? 'LIVE' : 'SIMULATED',
     subscribe(receive, unavailable) {
@@ -24,7 +24,11 @@ export function createRoomPresenceFeed(observer: RealmObserver, origin: KingdomP
       };
       const unsubscribe = observer.subscribe({
         presence: accept,
-        status: status => { if (status !== 'ready' || !observer.current().presence) fail(); },
+        status: status => {
+          // A known asset replacement may retain this last verified frame only for its original lease.
+          if (holdForSceneRevision && status === 'mismatch') return;
+          if (status !== 'ready' || !observer.current().presence) fail();
+        },
       });
       const now = observer.current();
       if (now.status === 'ready' && now.presence) accept(now.presence);

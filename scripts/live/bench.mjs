@@ -1,8 +1,10 @@
+/* global AbortSignal, Buffer */
 // The SIMULATED live-Twitch bench: a private realm, Herald's EventSub door and the web client, side by side with
-// (never instead of) the running services on 5191–5197.
+// (never instead of) the running services on 5190–5197.
 //
 //   node --env-file=<file with DATABASE_URL> scripts/live/bench.mjs up       build, migrate, adopt, start, stay up
 //        … up --fresh                                                        first drop the bench's own schema and scenes
+//        … up --profile                                                      write a CPU profile of the realm on stop
 //   node scripts/live/bench.mjs status                                       health of the three processes
 //   node scripts/live/bench.mjs down                                         stop exactly what `up` started
 // `up` stays in the foreground and owns its three processes: run it in its own terminal (or `&`), stop it with
@@ -11,15 +13,18 @@
 // Ports (development range, none capture-reserved): realm 5198, web 5199, Herald door 5175.
 // State, secrets, logs and the outbox live in ~/.local/state/chatdom/live-twitch-bench (owner-only), never in the
 // repository. Postgres schema: live_twitch_bench. Nothing here prints DATABASE_URL or a secret.
-import { Buffer } from 'node:buffer';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
-import { BENCH, ROOT, cliForward, readState, stateDir, health } from './lib.mjs';
+import { BENCH, ROOT, cliForward, payloadSource, readState, stateDir, health } from './lib.mjs';
 
 const children = new Map();
+// Whatever ends the supervisor (a failure, a thrown error, a signal) ends the processes it started, and only those.
+process.on('exit', () => { for (const child of children.values()) if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM'); });
+process.on('uncaughtException', error => fail(error?.stack ?? String(error)));
+process.on('unhandledRejection', error => fail(error?.stack ?? String(error)));
 const command = process.argv[2] ?? 'status';
 if (command === 'up') await up();
 else if (command === 'down') down();
@@ -59,7 +64,8 @@ async function up() {
   mkdirSync(founded, { recursive: true, mode: 0o700 });
   const pids = {};
   step(`realm on ${BENCH.realmPort} (SIMULATED)`);
-  pids.realm = start('realm', 'node', ['apps/realm/dist/realm.mjs'], env({
+  const profile = process.argv.includes('--profile') ? ['--cpu-prof', '--cpu-prof-dir', join(dir, 'profiles')] : [];
+  pids.realm = start('realm', 'node', [...profile, 'apps/realm/dist/realm.mjs'], env({
     DATABASE_URL: process.env.DATABASE_URL, REALM_DATABASE_SCHEMA: BENCH.schema, REALM_FOUNDED_DIRECTORY: founded, REALM_SIMULATED: '1',
     REALM_ENTRY_KINGDOM_ID: BENCH.kingdomId, REALM_ENTRY_KINGDOM_NAME: BENCH.kingdomName, REALM_INGRESS_HERALD_SECRET: secrets.ingress,
     REALM_EVIDENCE_KEY: secrets.evidence, REALM_PORT: String(BENCH.realmPort),
@@ -106,7 +112,12 @@ async function up() {
     await new Promise(resolve => setTimeout(resolve, 1_000));
   }
   // The broadcast begins, as Twitch would announce it: chat now lights windows in a live evening.
-  cliForward('stream.online', ['-t', BENCH.kingdomId]);
+  try { await cliForward('stream.online', ['-t', BENCH.kingdomId]); } catch (error) {
+    console.error(`bench: stream.online did not reach the door: ${error.message}`);
+    stopAll('stream.online failed');
+    return;
+  }
+  console.info(`  stream.online · ${payloadSource.value}`);
   console.info(`\nbench up · SIMULATED · kingdom ${BENCH.kingdomId} (${BENCH.kingdomName})`);
   console.info(`  watch:  http://127.0.0.1:${BENCH.webPort}/stream?source=realm&kingdom=${BENCH.kingdomId}`);
   console.info(`  door:   POST http://127.0.0.1:${BENCH.doorPort}/eventsub   ·   logs: ${dir}`);
@@ -170,7 +181,7 @@ async function status() {
 
 function alive(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
 async function listening(port) {
-  try { await fetch(`http://127.0.0.1:${port}/`, { signal: globalThis.AbortSignal.timeout(800) }); return true; } catch (error) {
+  try { await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(800) }); return true; } catch (error) {
     return !/ECONNREFUSED/.test(String(error?.cause?.code ?? error?.cause ?? ''));
   }
 }

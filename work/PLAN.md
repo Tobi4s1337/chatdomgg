@@ -330,81 +330,51 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Outcome: the real channel answers, with the team’s moments on stream.** Window wave and
-Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo fill/warm pools, castle/beacon,
-sparse grey-violet smoke, sculpted land/groves and AS10 citizens. No new systems beyond live
-wiring; merge good runtime checkpoints, one visible change per turn, look before accepting.
+**Outcome: one kingdom, landing only.** Grand land must become the ground under the real homes,
+streets, Forge, walk and stream. Growth, civic levels, crier, keepsakes, Chronicle, live moments,
+Atlas entry and dock must meet there. Forge/window wave/look are ACCEPTED/CLOSED; preserve them.
+No new lanes or sub-scopes. Take coherent checkpoints promptly; preserve unfinished producer work.
 
-**Live-Twitch2cdb14d (merged/pushed):** preserved producer snapshot in `../worktrees/main-live-twitch`
-(`integrate/live-twitch-checkpoint`); producer WIP untouched. Main03a50f1 froze private
-observation/strike evidence; public raid body now freezes with producer/renderer consumers.
-Bits, v2 Hype Train, incoming raid → Herald durable outbox → authenticated realm ingress →
-moment facts/realm-owned dragon clock → existing public stream feed. Raid uses existing
-staged gate/road/camera ports; no new exterior-trail system blocks it. Fixed script lint and
-obsolete LIVE5191 default (5197 now). Typecheck/scoped lint/build and134 focused tests pass.
+**Landed:** growth-civic whole (worker can retire); walking-together checkpoint and its six-file
+consumer patch; growth's versioned Emberfold homes; try-it public gateway/front door/panel zip;
+sky's two abandoned files (kept, lane clean); latest Soul, grand-artisan, Chronicle and dock work.
+Native publication recognizes canonical old/v2 home bytes, preserves custom homes and Forge parts,
+and installs cottage-v2 only on the next earned tier, never as a silent same-tier retrofit.
+Cottage-v2 has a real upper storey, new roofline, ten panes and garden/fence; fresh visual acceptance
+is still missing after the software capture failed. Other growth lane WIP remains in its worktree.
 
-Isolated Postgres SIMULATED signed-fixture HTTP smoke: cheer321ms, hype257ms, summon314ms,
-raid312ms; dragon advanced to active on realm clock.16 speakers →16 durable homes and16 lit
-windows;17th new home4735ms. Local Herald capacity12/unplaced4 does NOT cap room allocation:
-evidence crosses before local projection. Correction to prior capacity needs. Adopted plan
-has240 plots; no unlimited-capacity claim. Cold batch settlement took99s, first cold watch
-missed/lease expired: instant first arrival remains weak. Twitch CLI exits99 even for offline
-fixture generation; HTTP proof is NOT CLI-command proof. Owned smoke schema
-`main_live_smoke_20261101` remains; owned5172/5173 services stopped, no live event injected.
+**Public host:** `pnpm public:build`, `pnpm public:start`, `pnpm panel:zip`.
+See `deploy/public/README.md` and `EXTENSION-STEPS.md`. Full build/zip checks passed. Proxy mode uses
+the existing realm; spawn mode binds its public listener before launching its loopback-only child.
+Public realm routes are allowlisted; dock routes retain session/CSRF checks. No deployment or Twitch
+Extension registration performed; extension credentials are not configured. A managed web-only
+rebuild removes the separate door output: public hosting needs the complete public build.
 
-**Native ownership latency9b1c4f8 (pushed):** `founded/provider.ts` now reuses the standing scene for
-additive native-home claims only after actual blueprint hash validation, unchanged prior
-homes/castle/attachments and exact adopted layout checks. Public home binding validation
-remains; custom geometry still rebuilds. Same2.1MB bytes/world; measured three claims
-3702/3424/2927ms →6/1/2ms. Provider tests2/2, typecheck/scoped lint/realm build pass. End-to-end
-HTTP speedup is not yet measured; cold scene/lease work is unchanged.
+**Walking:** shared measured labels/head anchors and gait-contact audio are bound in kingdom/stream.
+Still main-owned: approved persisted appearance/earned tools projection, authenticated gestures,
+owned-door spawn, matching render/physical terrain and continuous deterministic soft push.
+Do not treat component fixtures or prepared optional ports as completed authority integration.
 
-**Real services:** consent completed; read-only `check-auth` confirms `bits:read`,
-`channel:read:hype_train` and all five chat scopes for tobi4s_. Forge5195 is back. Main115bf29
-adds bits/hype to Herald's minute grant watcher (previously only chat/chatters); 61 focused
-tests, typecheck/lint and Herald/Realm builds pass. Managed restart completed: running5194
-reports healthy/available, ready conduit/attached shard, all13 subscriptions enabled, including
-bits.use and all three v2 hype events. Log:4 created,0 stale removed. New consent regression
-and existing no-chat/reconnect checks pass; old raid-era exact-count expectations corrected.
-Realm delivery queued during accompanying cold Realm restart; re-check drain. No actual new
-real events/picture observed yet. Do not start another authorize helper.
-Raid picture attempts terminated/cleaned (dev import failure, then persistent built-preview
-entry503); no raid/frame produced. Backend-only diagnostic completed/cleaned: prepared=true,
-manifest=false, current/origin/world/layout/collision all match, but private owned17/public
-home views0. Sol helper `first_home_latency` completed the publication fix on main:
-`projectRealmFact(home.installAllocated)` lacked an allowlisted home row. Existing bases are
-correctly unpublished, not restart loss. Add real home publication plus fenced/idempotent
-legacy outbox repair in repository.load; never seed projections from private bases or bypass
-manifest checks. Four focused unit tests and three real Postgres cases pass, including 17-home
-legacy repair, idempotence, stale-writer refusal and preserving later builds/Forge. Fresh random
-harness schema torn down; live/smoke schema untouched. Typecheck/lint and Realm build pass.
-Next: restart the owned smoke runtime and confirm entry200 before one raid still. No capture
-active/queued.
+**Grand:** spec56/land interface/paged physical dispatcher remain frozen. Artisan kits are merged.
+GK10 pipeline remains producer WIP; GK11 checkpoint depends on its unmerged types/compiler/hooks.
+Merge those together once coherent, preserving exact installed plots, roads and collision support.
+The captured frozen `/-/grand` landscape is independent WIP, NOT adopted under the live kingdom.
+Producer details: `work/reviews/grand-adoption.md` and grand lane progress. Keep one abortable terrain
+owner inside the existing scene/camera/post stack; no second town, writer or RAF.
 
-**Sky32b0197 / main33fb2e9:** actual drawn terrain now supplies lair, train ring and bunting;
-dragon circles castle and contributes fire/sky light. Root viewed native1920×1080
-`shots/magic/dragon-stream-after.png` and matching pair: seam works, held-wide dragon is
-small/dark. Sky lane next: one nearer warm rim-lit pass across castle, preserve town exposure.
-SIMULATED stills, not real hype/motion proof. Capture92805 finished/cleaned;91423 expired20min
-without a frame. Pure HYPE pipeline settled49ms; static pair kept all data steps while
-avoiding140 intermediate SwiftShader RAF draws. No capture active or queued.
+**Remaining joins:** civic adapter needs actual cleared anchors and rendering/light/water binding;
+earned shelf and crier need trusted production binding/ack; public Chronicle remains unavailable.
+Its isolated SIMULATED history consumer/geometry-seek demo is merged, not a public historical world.
+Dock commands/status/SSE and ordinary stream acts are bound; directed undo, moderator observation,
+raid procession and lasting fire gathering still need actual end-to-end demonstration.
 
-**Raid-road a0024e2 / maina689199:** `/-/raid-gate?bench=simulated&road=1`, observed
-MashaD4 → PinkKittyRose departure/Atlas torch road/welcome rehearsal.25 focused tests/lint/
-type/build passed; no successful welcome after-frame. Old77301 cancelled/preview released.
-Participant board stays out of OBS. Lane next detail: AS10 people in gate light, replacing
-paper SVG figures. Public incoming raid renderer is distinct from this participant rehearsal.
+**Visitor evidence:** `work/evidence/one-kingdom/README.md` records viewed stills, sources and failures.
+Real signed entry succeeded through session→scene→ticket→matchmake. Cold first opening also exposed
+lease expiry during async geometry: renew the same epoch through opening, then hand it off without
+duplicate timers or late revival. The minted test session/tickets were revoked and its private file removed; OAuth consent was not tested.
+Latest keepalive passes focused tests; its first managed cold opening still needs observation after restart.
 
-**Other merges:** Aggman harbour3a6916a/mainc1c2ddb and PinkKittyRose crossing5eb78b6/main2354488
-accepted from viewed producer stills. Next details: shingle below Aggman's boats; break river
-approach into meadow. Keeper/sound mounts and Atlas crest agreement await. Never restore
-technical “Unfounded land” copy or fabricate a missing Atlas holding. Existing sky/crowd/
-caption seams4ab8d36,5151440 accepted; aurora comb needs broader irregular curtains.
-
-**Opening:** `/stream?source=simulated&tier=town&hour=19.5&seam=starting`, no fixed time.
-Immediate named window light; wide0–8s, street8–12s, return24–36s; lantern/smoke at physical
-arrival. Viewed wave pairs/reduced rehearsal in `shots/magic/`. Curtain alarm was sleeping
-Chrome; preserve real loading text, no readiness bypass. Services:5190web/5196API/5197realm/
-5195Forge/5194herald. Logs ONLY `../conductor/state/services.log`. Capture ports via helper;
-queue main once20min, one still/short clip per lease, cleanup owned resources in finally.
-Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.
+**Checks/live:** focused tests, scoped lint, full typecheck, web/realm and complete public builds;
+no new full-suite/GPU claim. Capture one still per lease; main priority plus two FIFO lane places.
+Managed5190/5196/5197/5195/5194 remain the only live setup. Logs ONLY
+`../conductor/state/services.log`. No temporary gateway is left intentionally running.

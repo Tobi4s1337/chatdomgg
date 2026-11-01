@@ -1,0 +1,20 @@
+--- a/apps/web/src/kingdom/observed-walkers.test.ts
++++ b/apps/web/src/kingdom/observed-walkers.test.ts
+@@ -66,9 +66,14 @@
+   expect(scene.children.find(child => child instanceof THREE.InstancedMesh)).toHaveProperty('count', 0);
+   expect(crowd.subject(slot)?.position).toEqual([0, 0, 0]);
+   expect(crowd.lightFrame(at)).toEqual(light);
+-  const point = new THREE.Vector3(0, 1.9, 0).project(camera);
+-  expect(crowd.speechLabels(camera, 1440, 900, at)).toEqual([{ slot, name: 'Juniper', x: (point.x + 1) * 720, y: (1 - point.y) * 450,
+-    parts: [{ kind: 'text', text: 'Here I am.' }] }]);
++  // Speech follows the actual rendered head, never an inferred standing-height offset.
++  expect(crowd.speechLabels(camera, 1440, 900, at)).toEqual([]);
++  const head = new THREE.Vector3(0, 2.05, 0), heads = new Map([[self.id, head]]);
++  const point = head.clone().project(camera);
++  expect(crowd.speechLabels(camera, 1440, 900, at, new Set(), heads)).toEqual([{ slot, name: 'Juniper', distance: head.distanceTo(camera.position),
++    x: (point.x + 1) * 720, y: (1 - point.y) * 450, parts: [{ kind: 'text', text: 'Here I am.' }] }]);
++  heads.clear();
++  expect(crowd.speechLabels(camera, 1440, 900, at, new Set(), heads)).toEqual([]);
+   const interpolation = createObservedWalkerTrack(manifest);
+   interpolation.receive(sample(at, 0), 0); interpolation.receive(sample(at + 200, 2), 200);
+   expect(interpolation.sample(300)[0]?.x).toBe(.5); // 250 ms delay; no extrapolation.

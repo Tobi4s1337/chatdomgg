@@ -43,9 +43,11 @@ it('continues forge walks across a scene rebuild only under the current presence
   const checkpoint = first.checkpoint()!;
   expect(checkpoint.watchers.size).toBe(1);
   const expected = first.motion.sample(now + 5_000);
-  first.dispose();
-  const restored = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, checkpoint);
+  // The candidate warms independently before the visible renderer releases its motion.
+  const restored = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
   restored.applyFrame({ ...frame, sequence: 2, asOf: now + 1_000 });
+  first.dispose();
+  restored.restoreCheckpoint(checkpoint);
   restored.watchForge(false, now + 1_000, [0, 9, 8]);
   restored.update(now + 1_000, 0);
   expect(restored.checkpoint()!.watchers).toEqual(checkpoint.watchers);

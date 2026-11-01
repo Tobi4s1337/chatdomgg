@@ -3,6 +3,8 @@ import { DISTANCE_SCALE } from '../map/camera';
 import { caravanCount, caravanLayout, columnTail, MARCHER_SPACING_PX } from './caravan';
 import { planRoad, rideSeconds, roadStretch, sampleRoad } from './geometry';
 import { farScale, NEAR_SCALE, roadShot } from './shot';
+import { roadHolding, RoadAtlasError } from './index';
+import type { Settler } from '../data/model';
 
 const A = { x: -521.85, y: -342.5 }, B = { x: -323.2, y: 153.5 };
 const view = { width: 1920, height: 1080 };
@@ -77,5 +79,26 @@ describe('the journey camera', () => {
     expect(arrived.x).toBeCloseTo(B.x, 6);
     expect(arrived.scale).toBeCloseTo(NEAR_SCALE);
     expect(roadShot(road, { rise: 1, travel: 1, wake: 1 }, view).scale).toBeCloseTo(NEAR_SCALE * 2.6);
+  });
+});
+
+describe('the ends of a road', () => {
+  const settler = (over: Partial<Settler> = {}): Settler => ({ index: 0, ordinal: 0, id: '41254337', login: 'pinkkittyrose', name: 'PinkKittyRose', freshUntil: 0, withheld: false,
+    tier: 'town', tierRank: 2, x: 12, y: -8, average: 140, game: null, region: 3, realm: 1, realmName: 'the Crossroads', ...over });
+
+  it('rides to a holding whose name the survey is not serving just now, unnamed, for the caller to name', () => {
+    const end = roadHolding(settler({ name: null, login: null }), 'raided');
+    expect(end).toMatchObject({ id: '41254337', name: null, login: null, x: 12, y: -8, region: 3 });
+  });
+
+  it('refuses a withheld holding and a channel off the survey, saying which end', () => {
+    expect(() => roadHolding(settler({ withheld: true }), 'raided')).toThrow(RoadAtlasError);
+    try { roadHolding(settler({ withheld: true, name: 'PinkKittyRose' }), 'raided'); } catch (error) {
+      expect(error).toMatchObject({ reason: 'withheld', message: 'The raided channel is not shown on the Atlas.' });
+    }
+    try { roadHolding(null, 'raiding'); } catch (error) {
+      expect(error).toMatchObject({ reason: 'missing', message: 'The raiding channel has no holding on this survey of the Atlas.' });
+    }
+    expect.assertions(3);
   });
 });

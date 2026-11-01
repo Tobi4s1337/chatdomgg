@@ -1,6 +1,6 @@
 # Lane live-twitch
 Spec (background, Rules and Decisions hold): `chatdom/Twitch.md`, `chatdom/Moments.md`, `chatdom/ChatDom.md` · Branch: `lane/live-twitch` · Worktree: `../worktrees/live-twitch` · Worker: Opus high
-Scope: `apps/herald/**`, `apps/realm/src/{ingress,moments,raid-gate,allocation,wiring}/**` plus the realm's `main.ts`/`server.ts` wiring, `apps/api/**`, the stream view's realm feed in `apps/web/src/realm/**`, the moment presentations in `apps/web/src/twitch-moments/**` and `apps/web/src/raid-gate/**`, `scripts/live/**`, and this lane's PRD, progress and evidence (`work/lanes/live-twitch/**`, `work/evidence/live-twitch/**`).
+Scope: `apps/herald/**`, `apps/realm/src/**` (shared with main: keep changes additive and the running evening working), `apps/api/**`, the stream view's realm feed in `apps/web/src/realm/**`, the moment presentations in `apps/web/src/twitch-moments/**` and `apps/web/src/raid-gate/**`, `scripts/live/**`, and this lane's PRD, progress and evidence (`work/lanes/live-twitch/**`, `work/evidence/live-twitch/**`).
 
 ## The part
 My real channel answers. On a real twitch.tv/tobi4s_ stream, within seconds:
@@ -18,6 +18,7 @@ Work in checkpoints: if a session ends before the part is done, leave everything
 Captures: take the shared capture lock for one still or one short clip at a time and release it in between, so main can capture between your frames; never hold it for a whole series.
 
 ## Tasks
-- [ ] **LT10 — The real channel answers, whole.** Cheer → the sky at its rung, hype train → the dragon, raid → the Raid Gate wakes and the guests arrive, everyone who speaks gets a home window; all LIVE-labelled, proven herald → realm → stream view with the Twitch CLI mocks, a still of each moment on the stream view, and one command per moment in `scripts/live/` with its README.
+- [x] **LT10 — The real channel answers, whole.** Cheer → the sky at its rung, hype train → the dragon, raid → the Raid Gate wakes and the guests arrive, everyone who speaks gets a home window; all LIVE-labelled, proven herald → realm → stream view with the Twitch CLI mocks, a still of each moment on the stream view, and one command per moment in `scripts/live/` with its README.
+- [ ] **LT11 — Every Twitch event shapes the kingdom, and it keeps your place between streams, whole.** Follow → a new home on the edge of town; sub → your banner and your tenure street; channel points and polls → the community shapes the kingdom together (a choice the town makes, visible in the world); the channel going live opens the gate and calls people back with a welcome back, everyone's home still where they left it. Real on tobi4s_ where Twitch allows it, Twitch CLI mock otherwise, labelled LIVE or SIMULATED; each one captured on the stream view, with one command per event added to `scripts/live/`.
 
 ## Backlog

@@ -1,7 +1,7 @@
 // An incoming raid, written by Twitch CLI and signed like Twitch's webhook, waking the Raid Gate for its guests.
 //   node scripts/live/raid.mjs [--viewers 48] [--from 990000777] [--login hollowbrook] [--name Hollowbrook] [--again]
 import { randomUUID } from 'node:crypto';
-import { args, BENCH, cliEvent, deliver, fireAndWatch, flag, label, momentOf, report, sleep, watchFor } from './lib.mjs';
+import { args, BENCH, cliEvent, deliver, fireAndWatch, flag, label, momentOf, payloadSource, report, sleep, watchFor } from './lib.mjs';
 
 const viewers = Number(args('viewers', '48')), from = args('from', '990000777');
 const login = args('login', 'hollowbrook'), name = args('name', 'Hollowbrook'), messageId = randomUUID();
@@ -12,7 +12,7 @@ Object.assign(payload.event, { viewers, from_broadcaster_user_login: login, from
 
 const { found: fact, ms } = await fireAndWatch(() => deliver(payload, { messageId }), momentOf('raid', f => f.body.from.kingdomId === from));
 report([
-  `raid · ${label(fact)} · ${fact.body.from.displayName} brings ${fact.body.viewers} guests to the Raid Gate`,
+  `raid · ${label(fact)} · ${fact.body.from.displayName} brings ${fact.body.viewers} guests to the Raid Gate · written by ${payloadSource.value}`,
   `  reached kingdom ${fact.kingdomId} as moment #${fact.seq} in ${ms} ms · the caravan ${fact.body.founded ? 'comes from their own kingdom' : 'comes up the road (no founded kingdom)'}`,
   `  watch it: http://127.0.0.1:${BENCH.webPort}/stream?source=realm&kingdom=${BENCH.kingdomId}`,
 ]);

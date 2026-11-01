@@ -1,0 +1,107 @@
+[
+  {
+    "name": "coastal-6-walk.wav",
+    "integratedLUFS": -37.9,
+    "truePeakDbfs": -25.3
+  },
+  {
+    "name": "coastal-12-walk.wav",
+    "integratedLUFS": -38.4,
+    "truePeakDbfs": -24.5
+  },
+  {
+    "name": "coastal-18-walk.wav",
+    "integratedLUFS": -38.8,
+    "truePeakDbfs": -24.6
+  },
+  {
+    "name": "coastal-18-stream.wav",
+    "integratedLUFS": -45.2,
+    "truePeakDbfs": -31.2
+  },
+  {
+    "name": "coastal-23-walk.wav",
+    "integratedLUFS": -37.5,
+    "truePeakDbfs": -23.6
+  },
+  {
+    "name": "woodland-6-walk.wav",
+    "integratedLUFS": -42.3,
+    "truePeakDbfs": -29.6
+  },
+  {
+    "name": "woodland-12-walk.wav",
+    "integratedLUFS": -41.6,
+    "truePeakDbfs": -26.6
+  },
+  {
+    "name": "woodland-18-walk.wav",
+    "integratedLUFS": -43.6,
+    "truePeakDbfs": -30.3
+  },
+  {
+    "name": "woodland-18-stream.wav",
+    "integratedLUFS": -50.2,
+    "truePeakDbfs": -37.1
+  },
+  {
+    "name": "woodland-23-walk.wav",
+    "integratedLUFS": -41,
+    "truePeakDbfs": -28.7
+  },
+  {
+    "name": "meadow-6-walk.wav",
+    "integratedLUFS": -42.7,
+    "truePeakDbfs": -30.1
+  },
+  {
+    "name": "meadow-12-walk.wav",
+    "integratedLUFS": -42,
+    "truePeakDbfs": -26.6
+  },
+  {
+    "name": "meadow-18-walk.wav",
+    "integratedLUFS": -43.9,
+    "truePeakDbfs": -30.7
+  },
+  {
+    "name": "meadow-18-stream.wav",
+    "integratedLUFS": -50.5,
+    "truePeakDbfs": -37.2
+  },
+  {
+    "name": "meadow-23-walk.wav",
+    "integratedLUFS": -41.3,
+    "truePeakDbfs": -29.2
+  },
+  {
+    "name": "highland-6-walk.wav",
+    "integratedLUFS": -39.8,
+    "truePeakDbfs": -27.1
+  },
+  {
+    "name": "highland-12-walk.wav",
+    "integratedLUFS": -39.9,
+    "truePeakDbfs": -26
+  },
+  {
+    "name": "highland-18-walk.wav",
+    "integratedLUFS": -40.8,
+    "truePeakDbfs": -26.9
+  },
+  {
+    "name": "highland-18-stream.wav",
+    "integratedLUFS": -47.3,
+    "truePeakDbfs": -33.4
+  },
+  {
+    "name": "highland-23-walk.wav",
+    "integratedLUFS": -39,
+    "truePeakDbfs": -25.5
+  },
+  {
+    "name": "meadow-6-hamlet.wav",
+    "integratedLUFS": -43.5,
+    "truePeakDbfs": -31
+  }
+]

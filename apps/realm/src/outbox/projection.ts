@@ -2,9 +2,13 @@ import { castleHostId, type RealmPrivateState, type RealmPublicMessage } from '@
 import type { RealmOutboxRow } from '../persistence/postgres-repository';
 import { MOMENT_CURRENT_LIMIT, type TwitchMomentFact } from '@chatdom/shared/twitch-moments';
 
+/** Moment kinds with one current slot each (Herald's `CurrentSlot`): the Hype Train and the dragon battle. */
+const SLOTTED: ReadonlySet<string> = new Set(['hype', 'battle']);
+
 export type RealmPublicHome = Extract<RealmPublicMessage, { type: 'home' }>;
 export type RealmPublicCastle = Extract<RealmPublicMessage, { type: 'castle' }>;
 export type RealmPublicPresence = Extract<RealmPublicMessage, { type: 'presence' }>;
+export type RealmPublicGrowth = Extract<RealmPublicMessage, { type: 'growth' }>;
 
 /** The delivered public prefix a projection starts from: what rows at or below `cursor` left standing. */
 export interface PublicPrefix {
@@ -12,6 +16,7 @@ export interface PublicPrefix {
   readonly presence: RealmPublicPresence | null;
   readonly castle?: RealmPublicCastle | null;
   readonly castleBase?: RealmPublicCastle | null;
+  readonly growth?: RealmPublicGrowth | null;
   readonly moments?: { readonly throughSeq: number; readonly facts: readonly TwitchMomentFact[] };
   readonly cursor: number;
   readonly sequence: number;
@@ -30,6 +35,7 @@ export class PublicProjection {
   private castleBase: RealmPublicCastle | null;
   private castle: RealmPublicCastle | null;
   private presence: Extract<RealmPublicMessage, { type: 'presence' }> | null;
+  private growth: RealmPublicGrowth | null;
   private momentThrough = 0;
   private readonly moments = new Map<string, TwitchMomentFact>();
   /** The newest outbox row folded in. */
@@ -45,6 +51,7 @@ export class PublicProjection {
     for (const home of initial.homes) { this.bases.set(home.plotId, home); this.homes.set(home.plotId, home); }
     this.cursor = initial.cursor;
     this.presence = initial.presence;
+    this.growth = initial.growth ?? null;
     this.momentThrough = initial.moments?.throughSeq ?? 0;
     for (const fact of initial.moments?.facts ?? []) this.rememberMoment(fact);
   }
@@ -78,9 +85,11 @@ export class PublicProjection {
         else { this.bases.set(row.plotId, published); this.homes.set(row.plotId, published); }
       }
       if (row.message.type === 'presence' && (!this.presence || row.message.frame.sequence > this.presence.frame.sequence)) this.presence = row.message;
+      if (row.message.type === 'growth' && (!this.growth || row.message.frame.sequence > this.growth.frame.sequence)) this.growth = row.message;
       if (row.message.type === 'moment') {
         this.momentThrough = Math.max(this.momentThrough, row.message.fact.seq);
         if (row.message.current) this.rememberMoment(row.message.fact);
+        else this.releaseMoment(row.message.fact);
       }
       this.cursor = row.id;
       this.sequence = Math.max(this.sequence, row.sequence);
@@ -92,6 +101,7 @@ export class PublicProjection {
     const current: RealmPublicMessage[] = this.momentThrough > 0
       ? [{ type: 'moments.current', throughSeq: this.momentThrough, facts: [...this.moments.values()] }] : [];
     if (this.presence) current.push(this.presence);
+    if (this.growth) current.push({ type: 'growth', frame: { ...this.growth.frame, beats: [] } });
     if (this.castle) current.push(this.castle);
     for (const plot of [...this.homes.keys()].sort()) current.push(this.homes.get(plot)!);
     return current;
@@ -100,7 +110,18 @@ export class PublicProjection {
   private rememberMoment(fact: TwitchMomentFact) {
     const key = `${fact.body.kind}:${fact.body.key}`, previous = this.moments.get(key);
     if (previous && previous.seq >= fact.seq) return;
+    // The one Hype Train and the one battle each hold a single slot: a new occupant replaces the last, as in the records.
+    if (SLOTTED.has(fact.body.kind)) {
+      for (const [other, held] of this.moments) if (held.body.kind === fact.body.kind && other !== key) this.moments.delete(other);
+    }
     if (!previous && this.moments.size >= MOMENT_CURRENT_LIMIT) throw new Error('Moment current state exceeds its budget');
     this.moments.set(key, fact);
+  }
+
+  /** A finished slot occupant (a train or battle that ended) leaves current state, as `releaseSlot` does in the records. */
+  private releaseMoment(fact: TwitchMomentFact) {
+    if (!SLOTTED.has(fact.body.kind)) return;
+    const key = `${fact.body.kind}:${fact.body.key}`, previous = this.moments.get(key);
+    if (previous && previous.seq < fact.seq) this.moments.delete(key);
   }
 }

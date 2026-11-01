@@ -1,0 +1,278 @@
+{
+  "tobi4s_": {
+    "baseline": {
+      "mode": "baseline",
+      "name": "tobi4s_",
+      "generatedMs": 18187.841072000003,
+      "composeMs": 969.8807229999984,
+      "siteMs": [
+        1205.1333269999996,
+        969.8330900000001
+      ],
+      "structures": "a82baf135d15c02600e6380e7b6d9fb8a3dfd8deb27513ae08264f2d5a990a9b",
+      "colours": "a3769386f07aa6cb8a217ae57254f7212fa3ea7f41e839d398fb729b96bd1b12",
+      "trees": "d950c953804678fe9630a2f9322f8552ad34cbe76e4c9a7fa443fb4fb036080e",
+      "placements": "fb5cafa69ccfe0bb31426395fa1dd0b5cb94c956a1f94aa8102d1c2613cadc1d",
+      "structureCount": 3523,
+      "treeCount": 1379,
+      "placementsDescription": [
+        {
+          "id": "windmill",
+          "at": [
+            680,
+            62,
+            342
+          ],
+          "turns": 0,
+          "boxes": 634
+        },
+        {
+          "id": "harbour-quay-modular",
+          "at": [
+            1031,
+            48,
+            622
+          ],
+          "turns": 1,
+          "boxes": 469
+        },
+        {
+          "id": "harbour-lighthouse",
+          "at": [
+            1080,
+            51,
+            468
+          ],
+          "turns": 0,
+          "boxes": 1324
+        },
+        {
+          "id": "harbour-ship",
+          "at": [
+            1076,
+            48,
+            592
+          ],
+          "turns": 1,
+          "boxes": 548
+        },
+        {
+          "id": "harbour-ship",
+          "at": [
+            1076,
+            48,
+            652
+          ],
+          "turns": 1,
+          "boxes": 548
+        }
+      ]
+    },
+    "cached": {
+      "mode": "cached",
+      "name": "tobi4s_",
+      "generatedMs": 13698.209478000004,
+      "composeMs": 1304.825254999996,
+      "siteMs": [
+        605.2641030000013,
+        1304.796322000002
+      ],
+      "structures": "a82baf135d15c02600e6380e7b6d9fb8a3dfd8deb27513ae08264f2d5a990a9b",
+      "colours": "a3769386f07aa6cb8a217ae57254f7212fa3ea7f41e839d398fb729b96bd1b12",
+      "trees": "d950c953804678fe9630a2f9322f8552ad34cbe76e4c9a7fa443fb4fb036080e",
+      "placements": "fb5cafa69ccfe0bb31426395fa1dd0b5cb94c956a1f94aa8102d1c2613cadc1d",
+      "structureCount": 3523,
+      "treeCount": 1379,
+      "placementsDescription": [
+        {
+          "id": "windmill",
+          "at": [
+            680,
+            62,
+            342
+          ],
+          "turns": 0,
+          "boxes": 634
+        },
+        {
+          "id": "harbour-quay-modular",
+          "at": [
+            1031,
+            48,
+            622
+          ],
+          "turns": 1,
+          "boxes": 469
+        },
+        {
+          "id": "harbour-lighthouse",
+          "at": [
+            1080,
+            51,
+            468
+          ],
+          "turns": 0,
+          "boxes": 1324
+        },
+        {
+          "id": "harbour-ship",
+          "at": [
+            1076,
+            48,
+            592
+          ],
+          "turns": 1,
+          "boxes": 548
+        },
+        {
+          "id": "harbour-ship",
+          "at": [
+            1076,
+            48,
+            652
+          ],
+          "turns": 1,
+          "boxes": 548
+        }
+      ]
+    }
+  },
+  "the_aggman": {
+    "baseline": {
+      "mode": "baseline",
+      "name": "the_aggman",
+      "generatedMs": 19745.936106,
+      "composeMs": 2366.2101639999964,
+      "siteMs": [
+        2219.1186739999976,
+        2366.178960999998
+      ],
+      "structures": "98d91572f540d08506ff7c10e04c5ef5bc12391a4a8c971b439f31ff198d272d",
+      "colours": "a3769386f07aa6cb8a217ae57254f7212fa3ea7f41e839d398fb729b96bd1b12",
+      "trees": "ef9c5f00049cf8a388fd574b53a44820e6cd0a64b21daf1d3e7106979af9bc0b",
+      "placements": "0f8ac0b8c25251bb820fae5c5e2c47e1311e25dd45217ef82f4a04bb9b5ae93c",
+      "structureCount": 3546,
+      "treeCount": 1677,
+      "placementsDescription": [
+        {
+          "id": "windmill",
+          "at": [
+            397,
+            66,
+            526
+          ],
+          "turns": 0,
+          "boxes": 617
+        },
+        {
+          "id": "harbour-quay-modular",
+          "at": [
+            829,
+            48,
+            412
+          ],
+          "turns": 0,
+          "boxes": 492
+        },
+        {
+          "id": "harbour-lighthouse",
+          "at": [
+            1070,
+            55,
+            560
+          ],
+          "turns": 0,
+          "boxes": 1341
+        },
+        {
+          "id": "harbour-ship",
+          "at": [
+            799,
+            48,
+            267
+          ],
+          "turns": 0,
+          "boxes": 548
+        },
+        {
+          "id": "harbour-ship",
+          "at": [
+            859,
+            48,
+            367
+          ],
+          "turns": 0,
+          "boxes": 548
+        }
+      ]
+    },
+    "cached": {
+      "mode": "cached",
+      "name": "the_aggman",
+      "generatedMs": 11161.827524,
+      "composeMs": 1645.6187110000028,
+      "siteMs": [
+        2243.1363710000005,
+        1645.5953109999973
+      ],
+      "structures": "98d91572f540d08506ff7c10e04c5ef5bc12391a4a8c971b439f31ff198d272d",
+      "colours": "a3769386f07aa6cb8a217ae57254f7212fa3ea7f41e839d398fb729b96bd1b12",
+      "trees": "ef9c5f00049cf8a388fd574b53a44820e6cd0a64b21daf1d3e7106979af9bc0b",
+      "placements": "0f8ac0b8c25251bb820fae5c5e2c47e1311e25dd45217ef82f4a04bb9b5ae93c",
+      "structureCount": 3546,
+      "treeCount": 1677,
+      "placementsDescription": [
+        {
+          "id": "windmill",
+          "at": [
+            397,
+            66,
+            526
+          ],
+          "turns": 0,
+          "boxes": 617
+        },
+        {
+          "id": "harbour-quay-modular",
+          "at": [
+            829,
+            48,
+            412
+          ],
+          "turns": 0,
+          "boxes": 492
+        },
+        {
+          "id": "harbour-lighthouse",
+          "at": [
+            1070,
+            55,
+            560
+          ],
+          "turns": 0,
+          "boxes": 1341
+        },
+        {
+          "id": "harbour-ship",
+          "at": [
+            799,
+            48,
+            267
+          ],
+          "turns": 0,
+          "boxes": 548
+        },
+        {
+          "id": "harbour-ship",
+          "at": [
+            859,
+            48,
+            367
+          ],
+          "turns": 0,
+          "boxes": 548
+        }
+      ]
+    }
+  }
+}

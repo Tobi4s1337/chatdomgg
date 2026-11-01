@@ -1,0 +1,8 @@
+--- a/scripts/public/look.mjs
++++ b/scripts/public/look.mjs
+@@ -28 +28 @@
+-  release = await acquireCaptureLock({ signal: AbortSignal.timeout(20 * 60_000) });
++  release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(20 * 60_000) });
+@@ -56 +56 @@
+-  finally { clearTimeout(deadline); await release?.(); }
++  finally { globalThis.clearTimeout(deadline); await release?.(); }

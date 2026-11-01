@@ -13,6 +13,6 @@ export { createRowingBoat, createUpturnedBoat, HULL } from '../../places/water/b
 export { createGaggle, createGoose, createGooseFamily, type GoosePose, type GooseVariant } from './geese/index';
 export { createLastLantern, type LastLantern } from './light/light';
 export { createHarbourInn, HARBOUR_INN_FRONT, INN_SIZE } from './inn/inn';
-export { createDrawnUpBoat, createFishCrates, createHarbourCoble, createHarbourLantern, createMooringBollard, createNetRack, createPotStack, createSlipwayCapstan } from './harbour/index';
+export { createDrawnUpBoat, createFishCrates, createHarbourCoble, createHarbourLantern, createMooringBollard, createNetRack, createPotStack, createShingleStrand, createSlipwayCapstan } from './harbour/index';
 export { createBuntingRun, createFishStall, createHarbourPennant, createQuayBanner } from './colours/index';
 export { aggmanApprovedEmotes, loadAggmanEmoteDerivatives, AGGMAN_BROADCASTER, AGGMAN_EMOTE_CHECKS } from './emotes/index';

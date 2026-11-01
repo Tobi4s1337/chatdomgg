@@ -1,5 +1,5 @@
 import type { KingdomId } from '@chatdom/shared';
-import { KingdomPresenceFrameSchema } from '@chatdom/shared';
+import { GrowthSceneFrameSchema, KingdomPresenceFrameSchema } from '@chatdom/shared';
 import type { RealmPublicDelivery } from '@chatdom/shared/realm';
 import { TwitchMomentFactSchema } from '@chatdom/shared/twitch-moments';
 import { RealmWriterFencedError, describeStorageFailure } from '../persistence/database';
@@ -121,7 +121,11 @@ export class OutboxDispatcher {
     if (message.type === 'presence' && !KingdomPresenceFrameSchema.safeParse(message.frame).success) return null;
     if (message.type === 'moment' && (!TwitchMomentFactSchema.safeParse(message.fact).success
       || message.fact.kingdomId !== this.options.kingdomId || typeof message.current !== 'boolean')) return null;
-    if (message.type !== 'presence' && message.type !== 'forge' && message.type !== 'home' && message.type !== 'castle' && message.type !== 'moment') return null;
+    // Growth frames are committed to the same outbox (the store reads them, the projection restores them, the web
+    // observer applies them); refusing one here would hold every later row of the kingdom behind it.
+    if (message.type === 'growth' && (!GrowthSceneFrameSchema.safeParse(message.frame).success || message.frame.kingdomId !== this.options.kingdomId)) return null;
+    if (message.type !== 'presence' && message.type !== 'forge' && message.type !== 'home' && message.type !== 'castle' && message.type !== 'moment'
+      && message.type !== 'growth') return null;
     return { version: 1, kingdomId: this.options.kingdomId, writerEpoch: this.options.writerEpoch, sequence: row.sequence, cursor: row.id, eventId: row.eventId, message };
   }
 

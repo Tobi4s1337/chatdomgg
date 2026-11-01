@@ -10,6 +10,7 @@ import { RealmIngress, type IngressCredentials } from '../ingress';
 import { RealmDiagnostics, RealmReadiness, authProbe, databaseProbe, holdEntry, mountDiagnosticsRoutes, writerProbe } from '../diagnostics';
 import { createRealmServer } from '../server';
 import { mountIngressRoute } from '../ingress';
+import { createNativeHomeGrowth } from '../growth';
 import { createFoundedReader, mountFoundedRoutes, type FoundedReadAccess } from './founded';
 
 export interface DurableRealmBootOptions {
@@ -35,6 +36,7 @@ export function createDurableRealmBoot(options: DurableRealmBootOptions) {
   const store = new FileFoundedStore(options.foundedDirectory), loader = createFoundedWorldLoader(allocation, store);
   const repository = new PostgresRealmRepository(pool, { ...options.repositoryOptions, origin });
   const diagnostics = new RealmDiagnostics(), ingress = new RealmIngress(pool, origin, options.ingressCredentials, log);
+  const growth = createNativeHomeGrowth({ db: pool, log });
   const open = () => services.kingdoms.values();
   const readiness = new RealmReadiness([databaseProbe(pool), authProbe(pool), writerProbe(open)]);
   const held = () => readiness.held();
@@ -44,10 +46,11 @@ export function createDurableRealmBoot(options: DurableRealmBootOptions) {
     attach: kingdom => {
       const forget = kingdom.onClosed(reason => diagnostics.writerClosed(kingdom, reason));
       const detachIngress = ingress.attach(kingdom);
+      const detachGrowth = growth.attach(kingdom);
       let detachAuthority: (() => void) | undefined;
       try { detachAuthority = options.attach?.(kingdom); }
-      catch (error) { forget(); detachIngress(); throw error; }
-      return () => { detachAuthority?.(); detachIngress(); forget(); };
+      catch (error) { forget(); detachGrowth(); detachIngress(); throw error; }
+      return () => { detachAuthority?.(); detachGrowth(); detachIngress(); forget(); };
     },
   });
   // All cold openings prewarm real adopted content before entering the existing writer's acquire/load window.
@@ -65,8 +68,10 @@ export function createDurableRealmBoot(options: DurableRealmBootOptions) {
     return pending;
   };
   const services: DurableRealmServices = { auth: registry.auth, kingdoms: registry.kingdoms,
-    async open(kingdomId) { await prepare(kingdomId); return registry.open(kingdomId); },
-    async retain(kingdomId) { await prepare(kingdomId); return registry.retain(kingdomId); },
+    // A held writer already owns prepared geometry. Re-reading/decoding its native baseline on each manifest,
+    // scene or room retain spends the live lease on cold-start work; adoption still checks the public prefix.
+    async open(kingdomId) { if (!registry.kingdoms.get(kingdomId)?.current) await prepare(kingdomId); return registry.open(kingdomId); },
+    async retain(kingdomId) { if (!registry.kingdoms.get(kingdomId)?.current) await prepare(kingdomId); return registry.retain(kingdomId); },
   };
   ingress.use(services);
   const founded = createFoundedReader({ origin, services, loader, store, access: options.foundedAccess });

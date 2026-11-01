@@ -1,0 +1,1 @@
+All sounds in this folder are original procedural synthesis. The land calls and noise kit imported from `../genesis-biomes` are also procedural; see that folder's THIRD_PARTY.md for their provenance. No third-party recordings are bundled here.

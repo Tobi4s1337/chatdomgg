@@ -18,6 +18,28 @@ watchtower keep on the rise, and a working harbour on the shore below. These are
 - **The quay wall is one authored piece in three segments.** A blueprint caps at 32 m. Each segment samples the
   graded ground, so its face stands down to the real shingle and bed. A stair is cut on the lane's axis down to the
   pier deck, and a slip ramps into the water at the east end for the boats.
+- **The harbour works from a beach.** A strand of pale shingle runs along the waterline from x 14 to 112, in four
+  pieces of 24.5 m (`createShingleStrand`). It follows the graded ground one stone proud, runs on under the shallows
+  as a dark wet bed, carries weed and driftwood on the wrack line, and thins into the turf at a wandering edge
+  instead of stopping on a line. The quay paving, the slip and the Last Lantern's base stay bare. Before it the
+  turf ran straight into the sea, and the boats drawn up on it read as wreckage.
+- **Boats are hauled up from where the water actually is.** The waterline curves about 5 m seaward west of the
+  lane, so the drawn-up boats are placed four to six metres above the local waterline (`waterlineAt`), not from the
+  lane's shore. A test holds that each one lies on stones.
+- **Drawn-up boats lie along the bank, on a berth of stones.** Laid bow to the sea, a 4.9 m hull on the 22 % bank
+  had its stern a metre into the ground: close in only the gunwales showed. Each now lies along the contour, turned
+  so the bilge she heels onto is the seaward one (a boat on a sloping beach settles that way, and the 9–13° heel
+  nearly matches the bank), with her keel seated a cell into the stones at her own middle. Her whole piece and
+  0.6 m round it is a berth (`ShingleSite.berth`): stones however far up the bank it lies, with a margin that thins
+  into the turf like the strand's own edge. A test holds 97 % of every berth and its margin is stones.
+- **Shingle is pebbles, not courses.** Rows of three-cell stones read as laid paving close in. Each stone is now
+  its own shape (cells belong to the nearest of a jittered field of stones of uneven size), the crack between two
+  stones is shadowed a tone darker, and bigger dry stones crown a cell higher at their middles. Lowering the cracks
+  a cell read best but tripled the strand's triangles (~100k a piece, near 400k for the beach against the phone's
+  whole 600k world budget); tone and crown cost about half again a plain skin: 186k for all four pieces as composed.
+- **A ground skin packs in one sweep.** The strand is a thin 196 × 124 cell skin; the harbour grid's six-order box
+  search cost ~0.9 s each at load. The packer now indexes by strides, and the strand packs in one order (x, z, y):
+  ~60 ms warm, ~4,000 boxes and ~46,000 triangles per piece. The mesh comes from the voxels, so the look is unchanged.
 - **The inn is "The Wren and Willow", the innkeeper Rowan's place,** on a level pad west of the lane foot. It faces
   the sea, its back kitchen cut a course into the slope.
 
@@ -51,7 +73,13 @@ watchtower keep on the rise, and a working harbour on the shore below. These are
   fixture); Brindle's lamp round is the quay's lamps (stair-head lanterns, banner lamps, pennant lamp, the stall and
   the statue's lamps), centred on the quay head. The recipe calls Brindle's place Bell Court (`plaza`); in a hamlet
   the quay is that place. Their lamps burn as fire, never as presence.
+- **The first view is a long lens over the boats.** Eye 47 m east and 47 m seaward of the lane's shore, 22 m up,
+  on 38° aimed at the quay: about 10° down, so the dusk sky and the keep on the rise stay in frame, while the
+  narrower lens brings the quay's dressing (statue, banners, stall, stair lanterns, the inn's sign, the lit lancet)
+  close enough to read. A steeper, nearer pose was tried and lost the sky and cropped the sailing coble.
 - **Its own dusk.** The hamlet opens at hour 19.6, low sun over the sea to the south-west (`AGGMAN_HOUR`).
+- **Registered with main's per-kingdom registry.** The one additive line in `apps/web/src/genesis/kingdoms.ts`
+  (`'63920635'`) is the registry entry the PRD allows, so the real route opens at hour 19.6 with the channel's line.
 - **Two seams, one composition.** `index.ts` serves both the shared composer registry (`kingdom`, sync: the
   derivatives are decoded once with a top-level await as the module loads, and the recipe gets exactly the emote
   works `compileChannelGenesis` writes for the approved facts; a test holds them equal) and main's per-kingdom
@@ -62,7 +90,6 @@ watchtower keep on the rise, and a working harbour on the shore below. These are
 
 - `needs: main mount createGenesisSoundscape(kingdomAudioHost(audio), {recipe, landscapeId}) in the Genesis preview scene; The_AGGman's recipe already selects the coastal soundscape (gulls, surf, rigging).`
 - `needs: main render Genesis keepers in the preview (avatar rig is scene-owned); AGGman's composeGenesisKingdom returns keepers (proposal, site, round) in main's shape: Rowan at the inn door, Brindle on the quay lamps.`
-- `needs: main register The_AGGman in apps/web/src/genesis/kingdoms.ts: '63920635': () => import('./kingdoms/aggman/index') — it exports composeGenesisKingdom with hour 19.6, lore, keepers and sound; until then the shared composer path draws it without its hour.`
 - `needs: main export "./genesis-kingdoms/aggman" (and genesis-heraldry, genesis-emotes, genesis-keepers) from @chatdom/content; then swap apps/web/src/genesis/kingdoms/aggman/content.ts to the package specifier.`
 - `needs: main merge seam: the genesis/index.tsx composer fallbacks are the same lines the PinkKittyRose and MashaD4 lanes touch; take one copy.`
 - `needs: main the Atlas preview pv-20261031T133817Z-9303798faebf no longer holds The_AGGman (63920635) among its 3,040 head + 45,305 settlers, so its Atlas door cannot be captured; either the survey keeps the three Genesis showcase channels or the Atlas pins them. capture.mjs --views atlas runs as soon as it is drawn.`

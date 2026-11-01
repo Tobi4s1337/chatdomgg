@@ -1,5 +1,6 @@
 import type { KingdomId, PersonId } from '../identity';
-import type { VoxelBlueprint } from '../voxel';
+import type { HomeTier, VoxelBlueprint } from '../voxel';
+import type { GrowthPrivateState } from '../growth';
 import type { CommittedForgeAttachment, ForgeAttachment, ForgeAttempt, ForgeReservation } from './forge-authority';
 import type { RealmPublicMessage } from './messages';
 import type { PresenceInput, KingdomPresenceFrame } from '../presence';
@@ -47,6 +48,8 @@ export interface RealmPrivateState {
   readonly creditedNights: Readonly<Record<string, true>>;
   /** Closed, unioned evidenced intervals only. An open interval never survives a coverage gap/restart. */
   readonly qualification: Readonly<Record<string, { readonly coveredMs: number; readonly intervals: readonly (readonly [number, number])[] }>>;
+  /** Absent only on pre-growth snapshots; recovery replays their witnessed facts before accepting writes. */
+  readonly growth?: GrowthPrivateState;
 }
 
 /** Internal service commands, not a browser protocol. Services verify receipts before entering the room. */
@@ -54,9 +57,15 @@ export type RealmDomainCommand =
   | { readonly type: 'stream.observe'; readonly sessionId: string | null; readonly startedAt: number; readonly liveUntil: number }
   | { readonly type: 'citizen.rights'; readonly personId: PersonId; readonly rights: RealmPrivateState['rights'][string] }
   | { readonly type: 'home.installAllocated'; readonly home: RealmOwnedHome }
+  /** Allocation binds the immutable deed's installed tier as a floor; this cannot replace geometry or mint attendance. */
+  | { readonly type: 'growth.bindHome'; readonly homeId: string; readonly installedTier: HomeTier; readonly evidenceReceipt: string }
   | { readonly type: 'castle.installNative'; readonly castle: RealmOwnedCastle }
   | { readonly type: 'home.replaceApproved'; readonly homeId: string; readonly expectedRevision: string; readonly home: RealmOwnedHome; readonly approvalReceipt: string;
       readonly attachments: readonly { readonly id: string; readonly placement: Pick<ForgeAttachment, 'hostId' | 'hostFingerprint' | 'socketId' | 'origin'> | null }[] }
+  /** Authored native geometry only: an earned tier, never permission to overwrite a citizen's custom build. */
+  | { readonly type: 'home.growNative'; readonly homeId: string; readonly expectedRevision: string; readonly fromTier: HomeTier;
+      readonly tier: HomeTier; readonly home: RealmOwnedHome; readonly approvalReceipt: string;
+      readonly attachments: readonly { readonly id: string; readonly placement: Pick<ForgeAttachment, 'hostId' | 'hostFingerprint' | 'socketId' | 'origin'> }[] }
   | { readonly type: 'coal.creditQualifiedNight'; readonly personId: PersonId; readonly streamSessionId: string; readonly qualificationReceipt: string }
   | { readonly type: 'presence.confirmInterval'; readonly personId: PersonId; readonly streamSessionId: string; readonly from: number; readonly through: number; readonly evidenceReceipt: string }
   | { readonly type: 'forge.reserve'; readonly record: RealmForgeReservation }

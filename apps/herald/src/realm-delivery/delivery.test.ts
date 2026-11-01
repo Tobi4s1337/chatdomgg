@@ -148,12 +148,13 @@ describe('spectacles', () => {
   async function rig() {
     const directory = await mkdtemp(join(tmpdir(), 'chatdom-spectacle-delivery-'));
     const clock = { now: start };
-    const realm = { moments: 503, observations: 202, strikes: 202, hold: null as Promise<void> | null };
+    const realm = { moments: 503, observations: 202, strikes: 202, hold: null as Promise<void> | null, holdObservations: null as Promise<void> | null };
     const attempts: Array<{ path: string; authorization: string | null; body: Record<string, unknown> }> = [];
     const request: typeof fetch = async (url, init) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       attempts.push({ path: new URL(String(url)).pathname, authorization: new Headers(init?.headers).get('authorization'), body });
       if ('strike' in body && realm.hold) await realm.hold;
+      if ('observation' in body && realm.holdObservations) await realm.holdObservations;
       const status = 'moment' in body ? realm.moments : 'strike' in body ? realm.strikes : realm.observations;
       return Response.json({ version: 1, status: status === 202 ? 'accepted' : 'busy' }, { status });
     };
@@ -224,6 +225,24 @@ describe('spectacles', () => {
       expect(r.of('moment')).toHaveLength(3);
       expect(sender.health()).toMatchObject({ pending: 0, spectacles: 0, fault: null, counters: { delivered: 3, retries: 2, expired: 0 } });
       expect(await r.files()).toEqual([]);
+    } finally { await sender.close(); await r.cleanup(); }
+  });
+
+  it('sends a spectacle ahead of the presence a chat burst has queued, so the beat is not late', async () => {
+    const r = await rig(); r.realm.moments = 202;
+    let release!: () => void;
+    r.realm.holdObservations = new Promise<void>(resolve => { release = resolve; });
+    const sender = await RealmDelivery.open(r.options);
+    try {
+      // The realm is still taking the first presence post when the burst and then the spectacle arrive.
+      void sender.observation(presence('chat:0', start));
+      await vi.waitFor(() => expect(r.of('observation')).toHaveLength(1));
+      for (let i = 1; i <= 3; i++) await sender.observation(presence(`chat:${i}`, start + i));
+      await sender.moment(raid('raid-1', start + 4));
+      r.realm.holdObservations = null; release();
+      await vi.waitFor(() => expect(sender.health().pending).toBe(0));
+      const order = r.attempts.map(attempt => 'moment' in attempt.body ? 'moment' : String((attempt.body.observation as { id: string }).id));
+      expect(order).toEqual(['chat:0', 'moment', 'chat:1', 'chat:2', 'chat:3']);
     } finally { await sender.close(); await r.cleanup(); }
   });
 

@@ -1,0 +1,326 @@
+--- a/apps/web/src/kingdom/citizen-scene.ts
++++ b/apps/web/src/kingdom/citizen-scene.ts
+@@ -4,7 +4,7 @@
+ import { createCitizenMotion, createCitizenBehaviours, dueBehaviourSteps, type CitizenGoalAnswer, type CitizenMotion, type CitizenMotionSample, type SettlementPlan } from '@chatdom/world';
+ import { CitizenChatCueSchema, type CitizenChatCue, type KingdomPresenceFrame, type Vec3 } from '@chatdom/shared';
+ import type { VoxelWorkerPool } from '@chatdom/voxel';
+-import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
++import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
+ import type { ForgeReactionCue } from './forge-flight';
+ import { chooseWatchers, crowdPose, type CrowdCall } from '../twitch-moments/stage-beat';
+ import { walkerSubject, type WalkerSlots } from './observed-walkers';
+@@ -14,7 +14,7 @@
+ const FORGE_AUDIENCE_CAP = 32;
+ const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
+
+-export interface SpeechLabel { slot: number; name: string | null; x: number; y: number; parts: CitizenChatCue['parts'] }
++export interface SpeechLabel { slot: number; name: string | null; x: number; y: number; distance: number; parts: CitizenChatCue['parts'] }
+
+ /** Add public standing points only inside the installed market, without changing the adopted plan. */
+ function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): SettlementPlan {
+@@ -315,17 +315,19 @@
+         present: window.present && arrived.has(window.slot), publicName: window.present && arrived.has(window.slot) ? window.publicName : null })) };
+     },
+     subject(slot: number) { const sample = samples.find(s => s.slot === slot); return sample ? walkerSubject(sample, walkers) : undefined; },
+-    speechLabels(camera: THREE.Camera, width: number, height: number, atMs: number, namedHomes: ReadonlySet<number> = new Set()): SpeechLabel[] {
++    speechLabels(camera: THREE.Camera, width: number, height: number, atMs: number, namedHomes: ReadonlySet<number> = new Set(), walkerHeads?: ReadonlyMap<string, THREE.Vector3>): SpeechLabel[] {
+       const labels: SpeechLabel[] = [];
+       for (const sample of samples) {
+         const cue = speech.get(sample.slot);
+         if (!cue || cue.asOf > atMs || cue.expiresAt <= atMs) continue;
+-        const point = new THREE.Vector3(...walkerSubject(sample, walkers).position);
+-        point.y += 1.9 + (walkers.get(sample.slot)?.posture ? CITIZEN_SEATED_HEAD_OFFSET_METRES : 0);
+-        if (point.distanceTo(camera.position) > 28) continue;
++        const walker = walkers.get(sample.slot);
++        const head = walker ? walkerHeads?.get(walker.id) : renderer?.heads.get(String(sample.slot));
++        if (!head) continue;
++        const point = head.clone(), distance = point.distanceTo(camera.position);
++        if (distance > 28) continue;
+         point.project(camera);
+         if (point.z < 0 || point.z > 1 || Math.abs(point.x) > .85 || Math.abs(point.y) > .8) continue;
+-        labels.push({ slot: sample.slot, name: namedHomes.has(sample.slot) ? null : sample.publicName, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2, parts: cue.parts });
++        labels.push({ slot: sample.slot, distance, name: namedHomes.has(sample.slot) ? null : sample.publicName, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2, parts: cue.parts });
+         if (labels.length >= 3) break;
+       }
+       return labels;
+--- a/apps/web/src/kingdom/index.tsx
++++ b/apps/web/src/kingdom/index.tsx
+@@ -1,5 +1,5 @@
+ import { createDockConnection } from '../stream/dock-connection';
+-import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
++import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+ import { createKingdomScene, type CameraName, type NameLabel, type PotentialKingdomView } from './scene';
+ import type { RealmFoundedScene } from '@chatdom/world';
+ import type { GrowthSceneFeed, PresenceFeed } from '@chatdom/shared';
+@@ -19,6 +19,7 @@
+ import { isEditableTarget, isKeyboardControl } from '../walk';
+ import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
+ import './moment-captions.css';
++import { PeopleLabels, peopleFromLabels, measureReservedElements } from '../walk/labels/index';
+
+ /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
+ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:RealmFoundedScene;growthFeed?:GrowthSceneFeed;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;momentFeed?:TwitchMomentFeed;walkerFeed?:RealmWalkerFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
+@@ -31,7 +32,8 @@
+   const [names,setNames]=createSignal<NameLabel[]>([]),[speech,setSpeech]=createSignal<SpeechLabel[]>([]),[hour,setHour]=createSignal(initialHour),[view,setView]=createSignal<CameraName>(query.get('camera')==='citizen'?'citizen':query.get('camera')==='window'?'window':'hero');
+   const [walkers,setWalkers]=createSignal<readonly WalkerLabel[]>([]),[walking,setWalking]=createSignal(false);
+   const [momentCaptions,setMomentCaptions]=createSignal<readonly ScreenCaption[]>([]);
+-  let host!:HTMLDivElement;
++  let host!:HTMLDivElement, peopleLabelsRoot:HTMLElement|null=null;
++  const peopleHud=()=>peopleLabelsRoot?measureReservedElements(peopleLabelsRoot,[...host.querySelectorAll('.kingdom-heading,.kingdom-seal,.kingdom-controls,.walk-look,.walk-stick,.walk-jump,.walk-gestures-trigger,.walk-gestures-panel:not([hidden]),.kingdom-moment-caption')]):[];
+   const [source,setSource]=createSignal(props.presenceFeed?.label??(query.get('source')==='herald'?'CONNECTING':'SIMULATED')),[error,setError]=createSignal<string|null>(null),[sound,setSound]=createSignal(false);
+   const stream=location.pathname.endsWith('/stream')||location.pathname==='/stream';
+   let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false,openingFrame=0;
+@@ -125,8 +127,7 @@
+     </header>
+     <ProvenanceSeal class="source-ribbon kingdom-seal" state={provenanceFromSource(source())} simulated={!!props.potential||practice()} />
+     <div class="window-names" aria-live="polite"><For each={names()}>{label=><div class="window-name" style={{left:`${label.x}px`,top:`${label.y}px`}}><span class="name-diamond" />{label.name}<small>home again</small></div>}</For></div>
+-    <div class="walker-names" aria-label="People in the street"><Index each={walkers()}>{label=><span class="walker-name" data-walker={label().id} style={{left:`${label().x}px`,top:`${label().y}px`}}>{label().name}<Show when={label().self}><small>you</small></Show></span>}</Index></div>
+-    <div class="citizen-speech"><For each={speech()}>{label=><div class="citizen-bubble" style={{left:`${label.x}px`,top:`${label.y}px`}}><Show when={label.name}><small>{label.name}</small></Show><p><For each={label.parts}>{part=>part.kind==='text'?part.text:<img src={`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(part.id)}/default/dark/1.0`} alt={part.alt} />}</For></p></div>}</For></div>
++    <PeopleLabels people={peopleFromLabels(walkers(),speech())} reserved={peopleHud()} onRoot={root=>{peopleLabelsRoot=root;}} />
+     <div class="kingdom-moment-captions"><For each={momentCaptions()}>{caption=><div class="kingdom-moment-caption" style={{left:`${caption.x}px`,top:`${caption.y}px`,opacity:caption.opacity}}><strong>{caption.title}</strong><p>{caption.line}</p><Show when={caption.detail}><small>{caption.detail}</small></Show></div>}</For></div>
+     <Show when={!ready()||error()}><div class="kingdom-gate" role="status">
+       <svg viewBox="0 0 80 80" aria-hidden="true"><path d="M17 70V25l12-12h22l12 12v45M26 70V31a14 14 0 0 1 28 0v39M12 70h56M31 13V7h6v6m6 0V7h6v6"/></svg>
+--- a/apps/web/src/kingdom/observed-walkers.ts
++++ b/apps/web/src/kingdom/observed-walkers.ts
+@@ -5,7 +5,7 @@
+ import type { VoxelWorkerPool } from '@chatdom/voxel';
+ import type { CitizenMotionSample } from '@chatdom/world';
+ import type { InteractionRegistry } from '@chatdom/world/interactions';
+-import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
++import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
+ import type { RealmWalkerPose } from '../realm/client';
+ import type { WalkerLabel } from './walk-scene';
+ import { presentWalkers, type WalkerPresentation } from './walker-presentation';
+@@ -71,6 +71,7 @@
+   return {
+     get poses() { return poses; },
+     get grips() { return people.grips; },
++    get heads() { return people.heads; },
+     frame(now: number) { poses = presentWalkers(track.sample(now), track.seats, registry); return poses; },
+     draw(now: number, visible = true) {
+       people.update((visible ? poses : []).filter(pose => known.has(pose.look)).map(pose => ({ id: pose.id, look: pose.look,
+@@ -81,11 +82,15 @@
+     labels(): WalkerLabel[] {
+       const labels: WalkerLabel[] = [];
+       for (const pose of poses) {
+-        point.set(pose.x, pose.y + 1.95 + (pose.posture ? CITIZEN_SEATED_HEAD_OFFSET_METRES : 0), pose.z);
+-        if (point.distanceToSquared(camera.position) > 40 ** 2) continue;
++        const head = people.heads.get(pose.id);
++        if (!head) continue;
++        const distance = head.distanceTo(camera.position);
++        if (distance > 40) continue;
++        point.copy(head);
+         point.project(camera);
+         if (point.z < -1 || point.z > 1 || Math.abs(point.x) > .95 || Math.abs(point.y) > .94) continue;
+-        labels.push({ id: pose.id, name: pose.name, self: false, x: (point.x + 1) * canvas.clientWidth / 2, y: (1 - point.y) * canvas.clientHeight / 2 });
++        labels.push({ id: pose.id, name: pose.name, self: false, distance,
++          ...(Number.isInteger(pose.homeSlot) && pose.homeSlot >= 0 && pose.homeSlot < REALM_NO_HOME_SLOT ? { slot: pose.homeSlot } : {}), x: (point.x + 1) * canvas.clientWidth / 2, y: (1 - point.y) * canvas.clientHeight / 2 });
+       }
+       return labels;
+     },
+--- a/apps/web/src/kingdom/scene.ts
++++ b/apps/web/src/kingdom/scene.ts
+@@ -561,7 +561,7 @@
+       const person=people.poses.find(p=>p.id===label.id);
+       return person&&!windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],[person.x,person.y+1.95,person.z]);
+     }));
+-    if(now-lastNames>80){const namedHomes=labels();options.onSpeech?.(crowd.speechLabels(camera,canvas.clientWidth,canvas.clientHeight,presentationMs,namedHomes));options.onMomentCaptions?.(moments?.captions()??[]);lastNames=now;}
++    if(now-lastNames>80){const namedHomes=labels();options.onSpeech?.(crowd.speechLabels(camera,canvas.clientWidth,canvas.clientHeight,presentationMs,namedHomes,people?.heads));options.onMomentCaptions?.(moments?.captions()??[]);lastNames=now;}
+     if(loaded)sunShadows.updateSunDirection(grade.sunDirection);
+     // Fixed evidence frames have no animation between seeks. Keep the public
+     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
+--- a/apps/web/src/kingdom/walk-scene.ts
++++ b/apps/web/src/kingdom/walk-scene.ts
+@@ -1,16 +1,16 @@
+ import * as THREE from 'three';
+-import { kingdomRoomId, type CollisionWorld, type RealmFoundedManifest } from '@chatdom/shared/realm';
++import { REALM_NO_HOME_SLOT, kingdomRoomId, type CollisionWorld, type RealmFoundedManifest } from '@chatdom/shared/realm';
+ import { samplePublicGround, type RealmFoundedScene } from '@chatdom/world';
+ import type { VoxelWorkerPool } from '@chatdom/voxel';
+ import type { VoxelRenderState } from '@chatdom/render';
+ import { MATERIALS } from '@chatdom/content';
+-import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
++import { createCitizenRenderer, createDefaultCitizenLooks, type CitizenRenderLook } from '../citizens';
+ import type { RealmClient, RealmCollision, RealmWalkerPose } from '../realm/client';
+-import { createWalkController } from '../walk';
++import { createWalkController, type WalkControllerOptions } from '../walk';
+ import { createFoundedInteractionRegistry, homeZone, STREET_ZONE } from '@chatdom/world/interactions';
+ import { interactionSound, mountInteractionController, type InteractionPlaces } from '../interactions';
+ import { bindWalkInteractions } from './walk-interactions';
+-import { createHomeStepMaterial, createWalkFootsteps } from './walk-footsteps';
++import { createHomeStepMaterial } from './walk-footsteps';
+ import type { createKingdomSound } from './sound';
+ import { presentWalkers, type WalkerPresentation } from './walker-presentation';
+
+@@ -22,12 +22,16 @@
+   readonly hud?: HTMLElement;
+   /** Arrival view only, in radians. Movement still uses the room's own yaw and quantized input. */
+   readonly heading?: number;
++  /** Approved server-owned worn recipes, including all IDs in the room. */
++  readonly appearances?: readonly CitizenRenderLook[];
++  /** Authenticated current gesture transport, when available. */
++  readonly gestures?: WalkControllerOptions['gestures'];
+   /** Request a new checked scene when authority changes geometry. Called once; entry owns reinstallation. */
+   readonly onSceneNeeded?: () => void;
+   /** A real place's own view, opened only after room acceptance. */
+   readonly interactionPlaces?: InteractionPlaces;
+ }
+-export interface WalkerLabel { readonly id: string; readonly name: string; readonly self: boolean; readonly x: number; readonly y: number }
++export interface WalkerLabel { readonly id: string; readonly name: string; readonly self: boolean; readonly x: number; readonly y: number; readonly distance: number; readonly slot?: number; readonly opacity?: number }
+
+ export function checkWalkBinding(founded: RealmFoundedScene | undefined, binding: KingdomWalkBinding): void {
+   const { manifest, client } = binding, state = client.room.state;
+@@ -45,14 +49,14 @@
+ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement,
+   pool: VoxelWorkerPool, material: VoxelRenderState, binding: KingdomWalkBinding, founded: RealmFoundedScene,
+   sound: Pick<ReturnType<typeof createKingdomSound>, 'cue' | 'enabled'>) {
+-  const looks = createDefaultCitizenLooks();
++  const looks = binding.appearances ?? createDefaultCitizenLooks();
+   const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
+   const client = binding.client;
+   const currentWorld = () => 'query' in binding.collision
+     ? binding.collision.revision === client.room.state.collisionRevision ? binding.collision : null
+     : binding.collision.world(client.room.state.collisionRevision);
+   const controller = createWalkController({ camera, surface: canvas, realm: client, collision: currentWorld,
+-    ...(binding.hud ? { hud: binding.hud } : {}), ...(binding.heading !== undefined ? { heading: binding.heading } : {}) });
++    ...(binding.hud ? { hud: binding.hud } : {}), ...(binding.gestures ? { gestures: binding.gestures } : {}), ...(binding.heading !== undefined ? { heading: binding.heading } : {}) });
+   controller.resize(canvas.clientWidth, canvas.clientHeight);
+   const registry = createFoundedInteractionRegistry(founded, currentWorld()!);
+   const connection = bindWalkInteractions(client.room, interactionSound(sound));
+@@ -61,13 +65,14 @@
+   const interactions = mountInteractionController({ host, surface: canvas, session: connection.session, camera: controller,
+     ...(binding.interactionPlaces ? { places: binding.interactionPlaces } : {}) });
+   const projected = new THREE.Vector3(), direction = new THREE.Vector3(), raycaster = new THREE.Raycaster();
+-  const footsteps = createWalkFootsteps(), homeStepMaterial = createHomeStepMaterial(founded);
++  const homeStepMaterial = createHomeStepMaterial(founded);
++  let lastFootstepContext: { now: number; placement: number; revision: number } | undefined;
+   const earRight = new THREE.Vector3(), footOffset = new THREE.Vector3();
+-  const resetFootsteps = () => footsteps.reset();
++  const resetFootsteps = () => { lastFootstepContext = undefined; };
+   document.addEventListener('visibilitychange', resetFootsteps);
+   window.addEventListener('blur', resetFootsteps);
+   let poses: readonly WalkerPresentation[] = [], walkingPoses: readonly RealmWalkerPose[] = [], connected = true, waiting = false;
+-  const left = () => { connected = false; poses = []; footsteps.reset(); controller.release(); people.update([]); };
++  const left = () => { connected = false; poses = []; resetFootsteps(); controller.release(); people.update([]); };
+   const reconnected = () => { connected = true; };
+   client.room.onLeave(left);
+   client.room.onDrop(left);
+@@ -77,18 +82,19 @@
+     controller,
+     get poses() { return poses; },
+     get grips() { return people.grips; },
++    get heads() { return people.heads; },
+     get connected() { return connected; },
+     frame(now: number, selected: boolean) {
+       const state = client.room.state;
+       if (state.layoutRevision !== binding.manifest.layoutRevision || state.collisionRevision !== binding.manifest.collisionRevision) {
+         connection.session.disconnect();
+-        footsteps.reset(); controller.release(); client.clearInput(); poses = []; people.update([]);
++        resetFootsteps(); controller.release(); client.clearInput(); poses = []; people.update([]);
+         if (!waiting) { waiting = true; binding.onSceneNeeded?.(); }
+         return false;
+       }
+       const active = selected && connected && !waiting;
+       // A place's accepted view holds the same walk token until the interaction controller returns it.
+-      if (active && controller.owner === 'released' && !interactions.debug.held) { footsteps.reset(); camera.clearViewOffset(); controller.resume(); }
++      if (active && controller.owner === 'released' && !interactions.debug.held) { resetFootsteps(); camera.clearViewOffset(); controller.resume(); }
+       else if (!active) { if (interactions.debug.held) interactions.leave(); controller.release(); }
+       walkingPoses = connected && !waiting ? controller.frame(now) : [];
+       poses = presentWalkers(walkingPoses, connection.session.snapshot().seats, registry);
+@@ -125,24 +131,28 @@
+       people.update(connected ? poses.filter(pose => looks.some(look => look.id === pose.look)).map(pose => ({ id: pose.id,
+         look: pose.look,
+         position: [pose.x, pose.y, pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
+-        distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed,
++        distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, gesture: controller.gestureFor(pose.id, now),
+         ...(pose.posture ? { posture: pose.posture } : {}),
+         opacity: pose.self && controller.owner === 'walking' ? controller.selfOpacity : 1, time: now / 1000 })) : [], camera);
+       const self = walkingPoses.find(pose => pose.self), state = client.room.state;
+       const interaction = connection.session.snapshot().self;
+-      const contact = footsteps.update({ now, pose: self,
+-        active: connected && !waiting && controller.owner === 'walking' && !interactions.debug.held
+-          && !document.hidden && sound.enabled && client.predicting && interaction.mode !== 'seated',
+-        // Prediction can land before its interpolated feet do. Wait until the drawn body reaches support too.
+-        grounded: client.predicted.grounded && !!self && Math.abs(self.y - client.predicted.y) <= .15,
+-        placement: state.walkers.get(client.selfId)?.placement ?? -1,
+-        revision: state.collisionRevision });
+-      if (contact !== null && self) {
++      // The renderer now has variable walk/run cycles. Sound follows its actual touchdown, never a
++      // second distance clock. Retain the existing ownership, prediction and relocation fences.
++      const placement = state.walkers.get(client.selfId)?.placement ?? -1, revision = state.collisionRevision;
++      const active = connected && !waiting && controller.owner === 'walking' && !interactions.debug.held
++        && !document.hidden && sound.enabled && client.predicting && interaction.mode !== 'seated'
++        && client.predicted.grounded && !!self && Math.abs(self.y - client.predicted.y) <= .15;
++      const prior = lastFootstepContext;
++      lastFootstepContext = active ? { now, placement, revision } : undefined;
++      const contact = active && prior && now > prior.now && now - prior.now <= 200
++        && placement === prior.placement && revision === prior.revision
++        ? people.footfalls.find(footfall => footfall.id === client.selfId) : undefined;
++      if (contact && self) {
+         // The accepted home's installed floor wins over public terrain. Never infer wood from being indoors.
+-        const ground = samplePublicGround(founded.plan, self.x, self.z);
+-        const surface = homeStepMaterial(interaction.plotId, [self.x, client.predicted.y, self.z])
++        const ground = samplePublicGround(founded.plan, contact.position[0], contact.position[2]);
++        const surface = homeStepMaterial(interaction.plotId, contact.position)
+           ?? (ground && ground.pavingDistance <= 0 ? 'stone' : 'earth');
+-        footOffset.set(self.x, self.y, self.z).sub(camera.position);
++        footOffset.set(...contact.position).sub(camera.position);
+         earRight.setFromMatrixColumn(camera.matrixWorld, 0);
+         const distance = footOffset.length();
+         const pan = distance > 0 ? THREE.MathUtils.clamp(footOffset.dot(earRight) / distance, -1, 1) : 0;
+@@ -153,10 +163,15 @@
+       if (!connected) return [];
+       const labels: WalkerLabel[] = [];
+       for (const pose of poses) {
+-        if ((pose.self && controller.owner === 'walking' && controller.selfOpacity < .1) || camera.position.distanceToSquared(point.set(pose.x, pose.y, pose.z)) > 40 ** 2) continue;
+-        point.set(pose.x, pose.y + 1.95 + (pose.posture ? CITIZEN_SEATED_HEAD_OFFSET_METRES : 0), pose.z).project(camera);
++        const opacity = pose.self && controller.owner === 'walking' ? controller.selfOpacity : 1;
++        const head = people.heads.get(pose.id);
++        if (opacity < .1 || !head) continue;
++        const distance = head.distanceTo(camera.position);
++        if (distance > 40) continue;
++        point.copy(head).project(camera);
+         if (point.z < -1 || point.z > 1 || Math.abs(point.x) > .95 || Math.abs(point.y) > .94) continue;
+-        labels.push({ id: pose.id, name: pose.name, self: pose.self, x: (point.x + 1) * canvas.clientWidth / 2, y: (1 - point.y) * canvas.clientHeight / 2 });
++        labels.push({ id: pose.id, name: pose.name, self: pose.self, distance, opacity,
++          ...(Number.isInteger(pose.homeSlot) && pose.homeSlot >= 0 && pose.homeSlot < REALM_NO_HOME_SLOT ? { slot: pose.homeSlot } : {}), x: (point.x + 1) * canvas.clientWidth / 2, y: (1 - point.y) * canvas.clientHeight / 2 });
+       }
+       return labels;
+     },
+--- a/apps/web/src/stream/index.tsx
++++ b/apps/web/src/stream/index.tsx
+@@ -11,6 +11,7 @@
+ import type { ArrivalAttention } from '../kingdom/arrival-director';
+ import './stream.css';
+ import './speech.css';
++import { PeopleLabels, peopleFromLabels, measureReservedElements } from '../walk/labels/index';
+
+ type SourceKind = 'simulated' | 'connecting' | 'live' | 'resting' | 'lost';
+ interface SourceMark { kind: SourceKind; title: string; note: string }
+@@ -72,6 +73,8 @@
+   const [arrival, setArrival] = createSignal<Pick<ArrivalAttention, 'slot' | 'phase'> | null>(null);
+   const stageSafe = () => layout() === 'stage' ? safe() : null;
+   const named = () => kingdomName() !== 'Kingdom';
++  let peopleLabelsRoot: HTMLElement | null = null;
++  const peopleHud = () => peopleLabelsRoot ? measureReservedElements(peopleLabelsRoot, [...picture.querySelectorAll('.stream-name,.stream-mark,.stream-inscription,.sky-caption,.stream-seam')]) : [];
+   let hour = params.hour, picture!: HTMLDivElement, lens!: HTMLDivElement, holder: HTMLDivElement | undefined, retryTimer = 0, attempts = 0, obsVisible = true;
+
+   const plan = () => planNight({ layout: layout(), mood: mood(), seam: layout() === 'stage' ? seam() : null, camera: params.camera, hour: params.hour });
+@@ -243,16 +246,8 @@
+     <div class="stream-picture" ref={element => { picture = element; }}>
+       <div class="stream-lens" ref={element => { lens = element; }}>
+         <SkyCaptions captions={momentCaptions()} />
+-        <div class="stream-speech citizen-speech"><For each={speech()}>{label =>
+-          <div class="citizen-bubble" style={{ left: `${label.x}px`, top: `${label.y}px` }}>
+-            <Show when={label.name}><small>{label.name}</small></Show>
+-            <p><For each={label.parts}>{part => part.kind === 'text' ? part.text :
+-              <img src={`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(part.id)}/default/dark/1.0`} alt={part.alt} />}</For></p>
+-          </div>
+-        }</For></div>
++        <PeopleLabels class="stream-people-labels" people={peopleFromLabels(walkers(), speech())} reserved={peopleHud()} onRoot={root => { peopleLabelsRoot = root; }} />
+         <div class="stream-names" aria-live="polite">
+-          <For each={walkers()}>{walker => <span class="stream-walker-name" data-walker={walker.id}
+-            style={{ left: `${walker.x}px`, top: `${walker.y}px` }}>{walker.name}</span>}</For>
+           <Show when={shownName()}>{name =>
+             <div class="stream-name" classList={{ shown: !!climaxName() }}
+               style={{ left: `${Math.min(Math.max(name().x, 70), picture.clientWidth - 70)}px`, top: `${Math.max(name().y, 46)}px` }}>

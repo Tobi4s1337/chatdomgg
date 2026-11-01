@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PORTRAIT_FIXTURES, parseLook, seedLook, type CitizenLook } from '../../../../packages/content/src/avatar-style';
 import { TABS } from './catalogue';
-import { HISTORY_DEPTH, commit, isUnchanged, redo, startHistory, undo } from './draft';
+import { HISTORY_DEPTH, commit, createSaveGuard, isUnchanged, reconcileSave, redo, startHistory, undo } from './draft';
+import { capeObject, disposeCape } from './cape';
 
 const looks: readonly CitizenLook[] = [...PORTRAIT_FIXTURES.map(f => f.look), ...Array.from({ length: 12 }, (_, i) => seedLook(`builder-${i}`))];
 
@@ -41,6 +42,23 @@ describe('the builder catalogue', () => {
     if (cap.kind !== 'tiles' || tie.kind !== 'tiles') throw new Error('tiles expected');
     expect(cap.options.find(o => o.id === 'cap')!.apply(look).earned.forgedHat).toBeNull();
     expect(tie.options.find(o => o.id === 'tie')!.apply(look).earned.scarf).toBeNull();
+    const bareNeck = tie.options.find(o => o.id === 'none')!;
+    expect(bareNeck.selected(look)).toBe(false);
+    expect(bareNeck.apply(look).earned.scarf).toBeNull();
+    expect(bareNeck.selected(bareNeck.apply(look))).toBe(true);
+  });
+});
+
+describe('cape dressing', () => {
+  it('dims a lapsed sub cape but leaves a moment cape unchanged', () => {
+    const cape = { id: 'piece', cloth: '#223a7a', lining: '#f3f1ee', trim: '#e6b73a' } as const;
+    const look = looks[0]!;
+    const cheer = capeObject({ ...look, earned: { ...look.earned, cape: { ...cape, kind: 'cheer' } } }, true)!;
+    const sub = capeObject({ ...look, earned: { ...look.earned, cape: { ...cape, kind: 'tier-cloak' } } }, true)!;
+    expect(cheer.userData.cut.dim).toBe(false);
+    expect(sub.userData.cut.dim).toBe(true);
+    disposeCape(cheer);
+    disposeCape(sub);
   });
 });
 
@@ -75,5 +93,35 @@ describe('the draft', () => {
     expect(h.past.length).toBe(HISTORY_DEPTH);
     expect(isUnchanged(JSON.parse(JSON.stringify(a)), a)).toBe(true);
     expect(isUnchanged(b, a)).toBe(false);
+  });
+
+  it('accepts the canonical saved recipe only while the submitted dress is still current', () => {
+    const submitted = { ...a, skin: '#111111' as const };
+    const canonical = { ...submitted, skin: '#222222' as const };
+    const draft = commit(startHistory(a), submitted, 'skin');
+    const saved = reconcileSave(draft, submitted, canonical);
+    expect(saved.present).toBe(canonical);
+    expect(saved.lastKey).toBeNull();
+    expect(undo(saved).present).toBe(a);
+
+    const editedDuringSave = commit(draft, b);
+    const afterSave = reconcileSave(editedDuringSave, submitted, canonical);
+    expect(afterSave).toBe(editedDuringSave);
+    expect(isUnchanged(afterSave.present, canonical)).toBe(false);
+  });
+
+  it('ignores a pending save after an external update or disposal', async () => {
+    const guard = createSaveGuard();
+    let finish!: (look: CitizenLook) => void;
+    const pending = new Promise<CitizenLook>(resolve => { finish = resolve; });
+    const ticket = guard.ticket();
+    const accepted = pending.then(look => guard.current(ticket) ? look : null);
+    guard.invalidate();
+    finish(b);
+    expect(await accepted).toBeNull();
+    const next = guard.ticket();
+    expect(guard.current(next)).toBe(true);
+    guard.dispose();
+    expect(guard.current(next)).toBe(false);
   });
 });

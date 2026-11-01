@@ -1,0 +1,8 @@
+.artisan-review{position:relative;width:100%;height:100%;min-height:100vh;overflow:hidden;background:#c8b5ae;font-family:Georgia,serif;color:#4f3d3e}
+.artisan-sky{position:absolute;inset:0;background:linear-gradient(180deg,#626987 0%,#b09ca5 52%,#e0ba98 84%,#d1ad91 100%)}
+.artisan-scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.artisan-caption{position:absolute;left:24px;top:22px;padding:12px 16px;background:#e4d2b4;border:3px double #967a56;border-radius:2px;box-shadow:0 3px 0 #58453d,0 5px 14px #302b3438;letter-spacing:.04em;pointer-events:none}
+.artisan-caption strong{display:block;font-size:14px;letter-spacing:.13em}
+.artisan-caption span{display:block;font-size:12px;margin-top:4px;color:#69544a}
+.artisan-error{position:absolute;inset:40% 20%;text-align:center;color:#4f3041;font:16px system-ui}
+@media(max-width:500px){.artisan-caption{top:12px;left:12px;padding:8px 10px}.artisan-caption strong{font-size:12px}.artisan-caption span{font-size:11px}}
