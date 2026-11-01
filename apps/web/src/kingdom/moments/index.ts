@@ -3,7 +3,7 @@ import { geometryFromChunks, type VoxelRenderState, type WindowHouse } from '@ch
 import type { KingdomId, KingdomPresenceFrame, MaterialRegistry } from '@chatdom/shared';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import type { SettlementPlan } from '@chatdom/world';
-import { createTwitchMomentView, createTwitchMoments, type CameraLease, type MomentSoundPort, type SkyGlow, type TwitchMomentFeed } from '../../twitch-moments';
+import { createTwitchMomentView, createTwitchMoments, type CameraLease, type CrowdCall, type MomentSoundPort, type SkyGlow, type TwitchMomentFeed } from '../../twitch-moments';
 import { bannerMount, doorOf, giftRouteOf, spectaclePlacesOf, windowOf } from './anchors';
 
 export interface KingdomMomentsOptions {
@@ -21,6 +21,7 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
   let activeFocus: string | null = null, blockedFocus: string | null = null;
   let lastPresence: KingdomPresenceFrame | undefined;
   let skyGlow: SkyGlow | null = null;
+  let crowdCall: CrowdCall | null = null;
   const controller = createTwitchMoments({ kingdomId, expectedOrigin: feed.origin, clock: { now: () => now } });
   controller.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] });
   const bySlot = new Map(houses.map(h => [h.slot, h])), mounts = new Map<number, ReturnType<typeof bannerMount>>();
@@ -29,7 +30,7 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
   const meshLanes: Promise<void>[] = Array.from({ length: 4 }, () => Promise.resolve());
   let nextMeshLane = 0;
   const view = createTwitchMomentView({
-    parent, material: material.material, kit: options.kit, sound: options.sound, light: glow => { skyGlow = glow; },
+    parent, material: material.material, kit: options.kit, sound: options.sound, light: glow => { skyGlow = glow; }, crowd: call => { crowdCall = call; },
     places: spectaclePlacesOf(plan, houses, options.castleKeep),
     async mesh(blueprint) {
       const lane = nextMeshLane++ % meshLanes.length;
@@ -104,6 +105,8 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
     captions: () => disposed || !prepared ? [] : view.labels(camera),
     /** The sky moment’s light on the town this frame, or null. */
     glow: () => disposed ? null : skyGlow,
+    /** Present citizens can turn toward the staged moment without changing their routes. */
+    crowd: () => disposed ? null : crowdCall,
     metrics: () => ({ preparation, preparationError, controller: controller.metrics(), view: view.stats() }),
     dispose,
   };

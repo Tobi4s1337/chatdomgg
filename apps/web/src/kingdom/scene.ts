@@ -441,7 +441,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const feet=walkerSlots(walk ? walk.poses : observed?.poses??[]);
     crowd.watchForge(!!realmForge?.active()||forge.status().busy,presentationMs,[0,layout.market.elevation,8]);
     const night=THREE.MathUtils.smoothstep(Math.abs(((hour%24)+24)%24-12),4.2,6.5);
-    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet,forgeFlight.reaction(now)):[];
+    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet,forgeFlight.reaction(now),moments?.crowd()??null):[];
     const lightFrame=loaded?crowd.lightFrame(presentationMs):frame;
     if(lightFrame)build.setFrame(lightFrame);
     // Potential land may show an anonymous night painting, independently of its empty

@@ -331,52 +331,51 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 ## 10. Current handoff — 2026-11-01
 
 **Outcome: the real channel answers, with the team’s moments on stream.** The window wave and
-Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo street fill and warm pools, castle/beacon,
-sparse grey-violet chimney smoke, sculpted land/groves and AS10 citizens. No new systems or rework
-of accepted pictures. Merge good runtime checkpoints promptly; one visible change per turn.
+Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo street fill/warm pools, castle/beacon,
+sparse grey-violet smoke, sculpted land/groves and AS10 citizens. No new systems or rework of
+accepted pictures. Merge good runtime checkpoints promptly; one visible change per turn.
 
-**Latest merge: Aggman GA10 (3a6916a).** Harbour composition, inn, Last Lantern lighthouse,
-working quay, boats/geese and checked channel emote statue/glass/vane are on main. Added its
-`GENESIS_KINGDOMS` registry entry so `/kingdom/63920635` uses the authored19.6 opening hour and
-lore without a query override. Root viewed the lane’s committed native1920×1080 hero and quay
-stills and `work/evidence/genesis-aggman/before-after-hero.png`: the hamlet now gathers at a
-recognisable working harbour in its own colours. Typecheck, scoped lint, eighteen focused tests
-and web build pass. These are producer route captures, not a fresh post-merge capture. Keepers
-and sound are composed data but still unmounted. The current Atlas survey lacks this holding,
-so the Atlas door is NOT demonstrated; do not invent a mark. The quay’s drawn-up boats still
-need a shingle margin rather than grass beneath them; next visual detail for the lane.
+**Latest slice: citizens answer the sky.** The kingdom retains the existing moment renderer’s
+`CrowdCall` and passes it into citizen presentation. Nearby visible present citizens turn toward
+its point; stationary people turn and gesture, walkers retain their routes and look up. Existing
+stage envelopes stagger the reaction. Reserved players, socket walkers and the Forge audience
+are excluded; the accepted Forge reaction takes priority. No people are created and no paths,
+identity, presence or light timings change. Pure stage helpers are imported directly, avoiding
+an unnecessary UI-barrel dependency in the scene’s unit tests.
 
-**Previous seam (4ab8d36):** the kingdom retains `SkyGlow`, grades materials through
-`skyLitEnvironment`, and the stream mounts `SkyCaptions`. The realm spectator already passes
-`createRoomMomentFeed` into `SceneOptions.momentFeed`; no new feed contract. Viewed native
-`shots/magic/sky-stream-wiring-pair.png` (before LEFT): the town takes the aurora’s light.
-SIMULATED Herald ingest through the real scene/mount at3.6s, preparation ready, no errors;
-lighting proof, not production caption delivery or a real cheer. Nine focused tests passed.
-Idle dusk stays unchanged. Aurora streaks remain too regular; sky lane has that follow-up.
+Root viewed native1920×1080 `shots/magic/moment-crowd-{before,after,pair}.png` (before LEFT):
+the same citizen turns from the wall and raises their lantern. The real stream scene/mount uses
+a SIMULATED Herald cheer, frozen at6.9s with the same held street camera. Capture-only rest12s
+keeps the homecoming on the streets; no forced people or poses.24 actual stage attendees, no
+browser errors. This proves the close reaction, NOT live Twitch delivery or whole-crowd stream
+composition. The window dominates the tight frame. Initial wrongly framed still was rejected.
+Typecheck, scoped lint, ten focused tests and web build pass; browsers/servers/leases closed.
 
-**Team handoff:** raid-road and sky-moments still have uncommitted runtime work; no new runtime
-checkpoint on either branch. Other requested picture/card/Genesis branches had no new runtime commit
-beyond Aggman GA10 at this check. Sky SM10 is already merged; its missing lighting/credit mount is now
-installed. Raid-road’s RR10 stages the gate, Atlas road and arrival, but still needs its visual
-checkpoint; its WIP uses SIMULATED presence, not a live raid feed. The new dragon also remains
-on the sky worktree. Both lanes received a request to checkpoint green slices and send exact
-scene/director `needs:` patches (terrain/crowd hooks may follow). Do not copy their WIP wholesale.
-`lane/live-twitch` owns Herald → realm ingress → public moment facts, live labels, Twitch CLI
-mock commands, and homes/windows beyond twelve speakers. It has the existing feed seam and
-must ask main for any separate raid gate mount. Root has NOT claimed this live path complete.
-Read-only entry and first room-watch requests through5190 returned LIVE and closed promptly;
-they do not prove event delivery or establish home capacity. No Twitch write was made.
+**Previous integrations:** 4ab8d36 connects sky glow to town material grading and stream credits;
+idle dusk stays unchanged. Viewed `shots/magic/sky-stream-wiring-pair.png`; aurora streaks remain
+too regular (sky lane has the follow-up). c1c2ddb merged Aggman GA10 and its per-kingdom registry:
+`/kingdom/63920635` now gets its harbour, checked emote art, own19.6 opening hour and lore.
+Viewed native hero/quay and `work/evidence/genesis-aggman/before-after-hero.png`. Its keepers/sound
+are authored but unmounted; its real holding is missing from the current Atlas survey. Atlas
+entry is NOT proved; never invent a mark. Raid-road has that data-seam request. Aggman’s next
+visual detail is shingle under the drawn-up boats, rather than grass.
 
-**Accepted opening:** windows use witnessed presence immediately; physical arrival drives the door
-lantern/smoke. The scene holds wide0–8s, glides into the street8–12s, returns wide24–36s, without
-an independent director shutter. Greeting6–16s hands over to “Home, at last.” The viewed native
-wave pairs and `arrival-street-greeting-pair.png` remain in `shots/magic/`. Root watched all120
-sampled frames of `arrival-continuous-rehearsal-320.mp4` (0–24s): staging proof, not1080p colour or
-GPU smoothness. No repeat long SwiftShader film. Showcase’s “The evening begins” opens
-`/stream?source=simulated&tier=town&hour=19.5&seam=starting` without fixed time. The curtain alarm
-was withdrawn (sleeping Chrome); keep real loading-step text, no readiness bypass.
+**Team:** no new runtime checkpoint beyond main on the requested picture/card/Genesis, raid,
+sky or live-twitch branches this turn. Raid-road and the new dragon remain uncommitted WIP;
+requested small green checkpoints rather than a full capture series. Live-twitch owns Herald →
+realm ingress → public moment facts, correct live/mock labels, CLI commands and homes/windows
+beyond twelve speakers. The realm spectator already passes `createRoomMomentFeed` into
+`SceneOptions.momentFeed`; no new feed contract. Sky crowd/glow/credit seams are now mounted.
+Give either lane any exact additional scene/director `needs:` promptly. Real cheer/hype/raid and
+expanded home capacity remain UNPROVEN; do not count the SIMULATED bench as live evidence.
+
+**Opening:** `/stream?source=simulated&tier=town&hour=19.5&seam=starting` (Showcase), no fixed time.
+Immediate witnessed window light; wide0–8s, street glide8–12s, return24–36s; greeting6–16s then
+homecoming. Door lantern/smoke follow physical arrival. Viewed native wave/greeting pairs and
+all120 frames of the reduced0–24s rehearsal in `shots/magic/`; no repeat long SwiftShader film.
+Curtain alarm was sleeping Chrome; keep real loading-step text, no readiness bypass.
 
 **Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
 `../conductor/state/services.log`. Capture ports via `capture-ports.mjs`; choose a free allowed
-port, queue main once up to20min, one still/short clip per lease, release in finally. No waiting
+port, queue main once up to20min, one still/short clip per lease, cleanup in finally. No waiting
 observer. Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.
