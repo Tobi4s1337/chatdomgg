@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { ProvenanceSeal } from '@chatdom/ui';
 import '@chatdom/ui/kit.css';
 import './builder.css';
@@ -7,7 +7,7 @@ import {
   type CitizenEntitlements, type CitizenLook, type EarnedOffer, type Hex,
 } from '../../../../packages/content/src/avatar-style';
 import { TABS, type Control, type TabId, type TileOption } from './catalogue';
-import { commit, isUnchanged, redo, startHistory, undo, type LookHistory } from './draft';
+import { commit, createSaveGuard, isUnchanged, reconcileSave, redo, startHistory, undo, type LookHistory } from './draft';
 import { createThumbPainter, type ThumbPainter, type ThumbRequest } from './thumbs';
 import { createTurntable, type Turntable } from './turntable';
 
@@ -19,7 +19,7 @@ import { createTurntable, type Turntable } from './turntable';
 
 export type SaveResult = { readonly ok: true; readonly look: CitizenLook } | { readonly ok: false; readonly reason: string };
 
-/** The person's look authority: main's seam to the saved look (spec: a save uses the real person's authority). */
+/** The person's look authority: keep this reference stable for the session and replace it when the person changes. */
 export interface LookAuthority {
   readonly origin: 'live' | 'simulated';
   save(look: CitizenLook): Promise<SaveResult>;
@@ -51,6 +51,19 @@ export interface AvatarBuilderProps {
 
 type Status = { readonly kind: 'idle' | 'saving' | 'saved' | 'error'; readonly message?: string };
 
+/** Radio groups use one tab stop; arrow keys move focus and select the next choice. */
+function radioKeys(e: KeyboardEvent & { currentTarget: HTMLDivElement }): void {
+  const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+  if (!step || !(e.target instanceof HTMLButtonElement)) return;
+  const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="radio"]'));
+  const index = buttons.indexOf(e.target);
+  if (index < 0 || !buttons.length) return;
+  e.preventDefault();
+  const next = buttons[(index + step + buttons.length) % buttons.length]!;
+  next.focus();
+  next.click();
+}
+
 /** A tile: a small render of the option on your own citizen. */
 function Thumb(props: { painter: ThumbPainter; request: ThumbRequest; alt: string; locked?: boolean }): JSX.Element {
   const [url, setUrl] = createSignal<string | null>(null);
@@ -70,6 +83,8 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
   const [saved, setSaved] = createSignal<CitizenLook>(props.saved);
   const [active, setActive] = createSignal<TabId>(props.tab ?? 'hair');
   const [status, setStatus] = createSignal<Status>({ kind: 'idle' });
+  const [pending, setPending] = createSignal<symbol | null>(null);
+  const [uncertain, setUncertain] = createSignal(false);
   const [portrait, setPortrait] = createSignal<string | null>(null);
   const look = () => history().present;
   const dim = () => subLapsed(props.entitlements);
@@ -77,6 +92,7 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
   const unearned = createMemo(() => checkEarned(look(), props.entitlements));
   const changed = () => !isUnchanged(look(), saved());
   const painter = createThumbPainter();
+  const saveGuard = createSaveGuard();
   const tileSize = () => (panel() ? 96 : 128);
   let canvas: HTMLCanvasElement | undefined;
   let turntable: Turntable | null = null;
@@ -92,20 +108,55 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
   const roll = () => { edit(randomLook(Math.random, look(), props.town ?? [])); sound('brass'); };
   const restart = () => { edit(props.defaultLook); sound('wood'); };
 
+  // A refreshed saved look becomes the new baseline. Preserve any local draft.
+  createEffect(on(() => props.saved, next => {
+    if (isUnchanged(next, saved())) return;
+    saveGuard.invalidate();
+    setHistory(h => isUnchanged(h.present, saved()) ? startHistory(next) : h);
+    setSaved(next);
+    setStatus({ kind: 'idle' });
+  }, { defer: true }));
+  createEffect(on(() => props.authority, () => {
+    saveGuard.invalidate();
+    setSaved(props.saved);
+    setHistory(startHistory(props.saved));
+    setPending(null);
+    setUncertain(false);
+    setStatus({ kind: 'idle' });
+  }, { defer: true }));
+
   const save = async () => {
-    if (unearned().length || status().kind === 'saving') return;
+    if (unearned().length || pending()) return;
+    const submitted = look();
+    const ticket = saveGuard.ticket();
+    const authority = props.authority;
+    const request = Symbol('save');
+    setPending(request);
     setStatus({ kind: 'saving' });
     sound('wood');
+    let result: SaveResult;
     try {
-      const result = await props.authority.save(look());
-      if (result.ok) {
-        setSaved(result.look);
-        setStatus({ kind: 'saved' });
-        props.onSaved?.(result.look);
-      } else setStatus({ kind: 'error', message: result.reason });
+      result = await authority.save(submitted);
     } catch (error) {
+      if (!saveGuard.alive()) return;
+      setPending(current => current === request ? null : current);
+      if (!saveGuard.current(ticket)) return;
       setStatus({ kind: 'error', message: error instanceof Error ? error.message : 'The look could not be saved.' });
+      return;
     }
+    if (!saveGuard.alive()) return;
+    setPending(current => current === request ? null : current);
+    if (!saveGuard.current(ticket)) {
+      if (props.authority === authority) setUncertain(true);
+      return;
+    }
+    if (!result.ok) { setStatus({ kind: 'error', message: result.reason }); return; }
+    setSaved(result.look);
+    setUncertain(false);
+    // The authority can return a canonical look. Do not overwrite edits made while saving.
+    setHistory(h => reconcileSave(h, submitted, result.look));
+    setStatus({ kind: 'saved' });
+    props.onSaved?.(result.look);
   };
 
   onMount(() => {
@@ -122,7 +173,7 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
     addEventListener('keydown', keys);
     onCleanup(() => removeEventListener('keydown', keys));
   });
-  onCleanup(() => { turntable?.dispose(); painter.dispose(); });
+  onCleanup(() => { saveGuard.dispose(); turntable?.dispose(); painter.dispose(); });
 
   // The portrait, as the card and passport will show it, repainted shortly after the look settles.
   createEffect(() => {
@@ -135,10 +186,11 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
   const tab = () => TABS.find(t => t.id === active())!;
 
   const Tiles = (p: { control: Extract<Control, { kind: 'tiles' }> }) => (
-    <div class="ab-tiles" role="radiogroup" aria-label={p.control.label}>
-      <For each={p.control.options}>{(option: TileOption) => {
+    <div class="ab-tiles" role="radiogroup" aria-label={p.control.label} onKeyDown={radioKeys}>
+      <For each={p.control.options}>{(option: TileOption, index) => {
         const chosen = () => option.selected(look());
         return <button type="button" class="ab-tile" role="radio" aria-checked={chosen()} classList={{ 'ab-chosen': chosen() }}
+          tabIndex={chosen() || (index() === 0 && !p.control.options.some(o => o.selected(look()))) ? 0 : -1}
           onClick={() => { edit(option.apply(look())); sound('brass'); }}>
           <Thumb painter={painter} alt="" request={{ look: option.apply(look()), view: p.control.view, size: tileSize(), dim: dim() }} />
           <span class="ab-tile-name">{option.label}</span>
@@ -151,8 +203,9 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
     const current = () => p.control.get(look());
     const known = () => p.control.groups.some(g => g.swatches.some(s => s.hex === current()));
     return <div class="ab-swatches">
-      <For each={p.control.groups}>{group => <div class="ab-swatch-group" role="radiogroup" aria-label={`${p.control.label}: ${group.label}`}>
-        <For each={group.swatches}>{s => <button type="button" class="ab-swatch" role="radio" aria-checked={current() === s.hex} classList={{ 'ab-chosen': current() === s.hex }}
+      <For each={p.control.groups}>{group => <div class="ab-swatch-group" role="radiogroup" aria-label={`${p.control.label}: ${group.label}`} onKeyDown={radioKeys}>
+        <For each={group.swatches}>{(s, index) => <button type="button" class="ab-swatch" role="radio" aria-checked={current() === s.hex} classList={{ 'ab-chosen': current() === s.hex }}
+          tabIndex={current() === s.hex || (index() === 0 && !group.swatches.some(option => option.hex === current())) ? 0 : -1}
           style={{ '--ab-swatch': s.hex }} title={s.label} aria-label={s.label} onClick={() => { edit(p.control.set(look(), s.hex)); sound('brass'); }} />}</For>
       </div>}</For>
       <label class="ab-any" classList={{ 'ab-chosen': !known() }} title="Any colour">
@@ -215,8 +268,9 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
 
   const statusWords = () => {
     const s = status();
-    if (s.kind === 'saving') return 'Saving…';
+    if (pending()) return 'Saving…';
     if (s.kind === 'error') return s.message ?? 'Not saved.';
+    if (uncertain()) return 'The saved look changed while saving. Save again or reopen the wardrobe.';
     if (unearned().length) return 'Something worn is not earned yet.';
     if (s.kind === 'saved' && !changed()) return props.authority.origin === 'simulated' ? 'Saved in this preview.' : 'Saved. This is you everywhere.';
     return changed() ? 'Unsaved changes' : 'This is your saved look';
@@ -281,9 +335,9 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
             </button>
           </Show>
         </div>
-        <p class="ab-status" role="status" aria-live="polite" data-status={status().kind} classList={{ 'ab-warn': !!unearned().length || status().kind === 'error' }}>{statusWords()}</p>
-        <button type="button" class="ab-save" onClick={() => void save()} disabled={!changed() || !!unearned().length || status().kind === 'saving'}>
-          <Show when={status().kind !== 'saving'} fallback={<span>Saving</span>}>
+        <p class="ab-status" role="status" aria-live="polite" data-status={status().kind} classList={{ 'ab-warn': !!unearned().length || uncertain() || status().kind === 'error' }}>{statusWords()}</p>
+        <button type="button" class="ab-save" onClick={() => void save()} disabled={(!changed() && !uncertain()) || !!unearned().length || !!pending()}>
+          <Show when={!pending()} fallback={<span>Saving</span>}>
             <span class="ab-save-long">{panel() ? 'Save' : 'Save my look'}</span><span class="ab-save-short">Save</span>
           </Show>
         </button>

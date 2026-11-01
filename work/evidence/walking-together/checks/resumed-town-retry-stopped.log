@@ -1,0 +1,9 @@
+[capture] waiting for the shared host lock (lane)
+[capture] queued for a lane slot
+[capture] acquired the shared host lock
+SIMULATED town: preparing full collision; allowed realm port 5170
+ℹ️  optional .env file not found: .env.development, .env
+SIMULATED town: compiled 659 native placements
+SIMULATED town: owned memory realm listening on 5170
+SIMULATED town: received SIGTERM during compiling and opening browser page
+SIMULATED town: exited during compiling and opening browser page; capture incomplete

@@ -330,62 +330,51 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Outcome: growth you can see.** Homes, civic places, earned card shelves and a scrubbable engine Chronicle.
-Forge/window wave ACCEPTED/CLOSED. Preserve dusk exposure, indigo fill/warm pools, castle/beacon,
-sparse grey-violet smoke, land/groves and AS10 citizens. One visible change/turn, same-view before/after.
+**Outcome: one kingdom, landing only.** Grand land must become the ground under the real homes,
+streets, Forge, walk and stream. Growth, civic levels, crier, keepsakes, Chronicle, live moments,
+Atlas entry and dock must meet there. Forge/window wave/look are ACCEPTED/CLOSED; preserve them.
+No new lanes or sub-scopes. Take coherent checkpoints promptly; preserve unfinished producer work.
 
-**Growth core:** spec50, shared growth schemas, `@chatdom/world/growth`. Ten confirmed minutes credit
-one UTC session-start date; reconnects/marathons add no days. Offline dates do not break streaks;
-best streak stays. Tent→hut3, cottage7, house30, manor90, hall180 (only hut3 founder-specified;
-others versioned v1 balance). Installed homes keep their floor. Civic levels use size-neutral day gates,
-retaining person-days. No paid inputs, message-count rewards or invented bootstrap attendance.
-Room facts reduce growth in the fenced transaction; public frames use its outbox/watch. Migration0009
-is additive; SQL tests passed retry/replay and the three-home bound (`--no-fsModuleCache` for new SQL).
+**Landed:** growth-civic whole (worker can retire); walking-together checkpoint and its six-file
+consumer patch; growth's versioned Emberfold homes; try-it public gateway/front door/panel zip;
+sky's two abandoned files (kept, lane clean); latest Soul, grand-artisan, Chronicle and dock work.
+Native publication recognizes canonical old/v2 home bytes, preserves custom homes and Forge parts,
+and installs cottage-v2 only on the next earned tier, never as a silent same-tier retrofit.
+Cottage-v2 has a real upper storey, new roofline, ten panes and garden/fence; fresh visual acceptance
+is still missing after the software capture failed. Other growth lane WIP remains in its worktree.
 
-**Native homes170e73d/0c6440c:** retained writer applies earned authored geometry without a browser.
-Only exact native bytes grow; custom builds remain. Guard replans under deed lock and refits Forge parts,
-preserving identity/provenance. Active Forge reservations postpone growth until release/expiry.
-`home-grown` celebrates geometry commit, never eligibility alone. GR10 scaffold/score checkpoint merged.
-Stream now stages the exact old/new home on its existing plot: scaffold, rising courses, roof seating,
-hearth catch and nearby citizen reactions. Quiet bootstrap; bounded witnessed beats survive the hidden
-scene handoff and start only when visible. HOME's Forge digest differs from the founded content hash:
-resolve against actual parsed authored bytes. Expected SSE revision closure no longer cancels replacement.
-A preparing exact target retains its beat without consuming it; unmatched work still expires. At most two
-renderers, old town drawing until the new loaded draw; five-minute preparation bound for SwiftShader.
-Fixed the optional growth clipping ring default that hid temporary house/scaffold meshes.
-Ceremony d01e43c: viewed fresh same-camera1920×1080 before/scaffold at deviceScale0.5; prior full-scale
-settled cottage retained. Final run timed out during after screenshot; no uninterrupted take claimed.
-Evidence: `work/evidence/growth-ceremony/`. SIMULATED transport, actual stream renderer/reducer commit; not Twitch proof.
-Focused feed/watch/mount/material tests, scoped lint, typecheck and web build pass.
+**Public host:** `pnpm public:build`, `pnpm public:start`, `pnpm panel:zip`.
+See `deploy/public/README.md` and `EXTENSION-STEPS.md`. Full build/zip checks passed. Proxy mode uses
+the existing realm; spawn mode binds its public listener before launching its loopback-only child.
+Public realm routes are allowlisted; dock routes retain session/CSRF checks. No deployment or Twitch
+Extension registration performed; extension credentials are not configured. A managed web-only
+rebuild removes the separate door output: public hosting needs the complete public build.
 
-**Five growth lanes running:** card, civic, crier, history, Chronicle (specs51–55). GCR01 anonymous formatter,
-GH01 seven-week source observations merged. New GC01 civic forms, GCR02 batching and CH02 scene/view
-checkpoints merged; exports supplied. Viewed civic sheet;42 focused tests pass. Actual crier delivery and
-a watched Chronicle run remain open. GH02 returned: filter eligibility-only home-grown until geometry commits.
-Growth lane owns additive art in `packages/content/src/growth-homes/**`; cottage must gain a full second storey,
-higher roof, more lit windows and garden/fence. Main owns version-aware native recognition so existing
-floors, doors and Forge parts stay put. Do not duplicate the now-mounted ceremony runtime.
-**Next:** inspect/strengthen tier art, then tavern level + durable batched crier; earned shelf records;
-Chronicle production entry and a watched seeded run. Keep the accepted card/caption treatment. New-deed starter/tent policy remains open: never shrink
-standing native homes. Follow-tenure pieces and custom-build progression remain open.
+**Walking:** shared measured labels/head anchors and gait-contact audio are bound in kingdom/stream.
+Still main-owned: approved persisted appearance/earned tools projection, authenticated gestures,
+owned-door spawn, matching render/physical terrain and continuous deterministic soft push.
+Do not treat component fixtures or prepared optional ports as completed authority integration.
 
-**Grand kingdom:** architect Astra xhigh design/core reviewed by main on high; frozen spec56 and
-`packages/world/src/land-interface.ts` (`@chatdom/world` export), reference `work/references/grand-world-streaming.md`.
-Exact adopted plots/streets/assets/window slots survive; revision-bound physical ground is independent of
-far scenery. `lane/grand-kingdom` adopted main in8f5a7b7; worker entry `/-/grand`, ready to build.
-Hierarchical terrain LOD, bounded workers/uploads, spatial instancing, drainage/strata and single light
-pipeline are specified. Production landform/paged collision migration and real-GPU budgets remain unproved.
+**Grand:** spec56/land interface/paged physical dispatcher remain frozen. Artisan kits are merged.
+GK10 pipeline remains producer WIP; GK11 checkpoint depends on its unmerged types/compiler/hooks.
+Merge those together once coherent, preserving exact installed plots, roads and collision support.
+The captured frozen `/-/grand` landscape is independent WIP, NOT adopted under the live kingdom.
+Producer details: `work/reviews/grand-adoption.md` and grand lane progress. Keep one abortable terrain
+owner inside the existing scene/camera/post stack; no second town, writer or RAF.
 
-**Other checkpoints:** Aggman shingle berths mergedcdeeb8c/2e28e2f (17 focused tests; existing harbour still
-viewed, close berth detail unproved). Sky SM11 obsolete overlapping wiring parked in stash
-26197291772e1299ecf098cec656e0dfd593a6df; only two useful smoke/camera refinements remain WIP on its lane,
-need one matching still before checkpoint. Live-Twitch LT10 and raid-road RR10 are in; LT11 is producer WIP,
-including unfrozen shared proposals. Do not take it wholesale. Real cheer/train/raid proof still open.
+**Remaining joins:** civic adapter needs actual cleared anchors and rendering/light/water binding;
+earned shelf and crier need trusted production binding/ack; public Chronicle remains unavailable.
+Its isolated SIMULATED history consumer/geometry-seek demo is merged, not a public historical world.
+Dock commands/status/SSE and ordinary stream acts are bound; directed undo, moderator observation,
+raid procession and lasting fire gathering still need actual end-to-end demonstration.
 
-**Live services:** managed5190web/5196API/5197realm/5195Forge/5194Herald; logs ONLY
-`../conductor/state/services.log`. Herald healthy,13/13 subscriptions enabled (bits.use + three hype v2),
-no grant refresh needed; channel offline at check. No waiting observer or duplicate writer.
-Owned SQL schema `main_live_smoke_20261101` remains. Capture ports occupied by others: final ceremony
-uses5190 with browser-isolated fixtures, no extra listener. Queue once20min; release in finally.
-Keepers/sound mounts open; Atlas lacks Aggman63920635, never fabricate a holding. Preserve stashes
-7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.
+**Visitor evidence:** `work/evidence/one-kingdom/README.md` records viewed stills, sources and failures.
+Real signed entry succeeded through session→scene→ticket→matchmake. Cold first opening also exposed
+lease expiry during async geometry: renew the same epoch through opening, then hand it off without
+duplicate timers or late revival. The minted test session/tickets were revoked and its private file removed; OAuth consent was not tested.
+Latest keepalive passes focused tests; its first managed cold opening still needs observation after restart.
+
+**Checks/live:** focused tests, scoped lint, full typecheck, web/realm and complete public builds;
+no new full-suite/GPU claim. Capture one still per lease; main priority plus two FIFO lane places.
+Managed5190/5196/5197/5195/5194 remain the only live setup. Logs ONLY
+`../conductor/state/services.log`. No temporary gateway is left intentionally running.

@@ -3,6 +3,7 @@ import { AVATAR_RIG, AVATAR_SOCKETS, VOXEL_METRES, type AvatarAttachmentId, type
 import { geometryFromChunks, type VoxelRenderState } from '@chatdom/render';
 import { VoxelWorkerPool } from '@chatdom/voxel';
 import { createCitizenCapeRenderer } from './capes';
+import { createFootstepState, stepFootsteps, type FootstepState } from './footsteps';
 import { meshStyledCitizen, STYLED_CITIZEN_RIG, type StyledCitizenLook } from './style-adapter';
 import { createStyledCitizenMaterial, styledCitizenGeometry } from './style-material';
 
@@ -13,6 +14,7 @@ export const CITIZEN_SEATED_HEAD_OFFSET_METRES = -4 * VOXEL_METRES.avatar;
 export interface CitizenPart { readonly blueprint: AvatarPartBlueprint; readonly asset: VoxelAsset }
 export interface CitizenLook { readonly id: string; readonly parts: readonly CitizenPart[]; readonly cape?: AvatarCapeBlueprint }
 export type CitizenRenderLook = CitizenLook | StyledCitizenLook;
+export type CitizenGesture = 'none' | 'nod' | 'wave' | 'bow' | 'cheer' | 'dance' | 'sit' | 'point';
 export interface CitizenSample {
   readonly id: string;
   readonly look: string;
@@ -29,7 +31,7 @@ export interface CitizenSample {
   readonly opacity?: number;
   /** Seated position is still the feet/sole datum, not the pelvis. */
   readonly posture?: 'seated';
-  readonly gesture?: 'none' | 'nod' | 'wave';
+  readonly gesture?: CitizenGesture;
   /** Shared simulation time in seconds, for gesture timing. */
   readonly time?: number;
   /** Head rotation relative to the body's heading, in radians. */
@@ -40,6 +42,12 @@ export interface CitizenSample {
   /** Standing rise onto the toes, from 0 to 1. Ease this value at the call site. */
   readonly tiptoe?: number;
 }
+export interface CitizenFootfall {
+  readonly id: string;
+  readonly side: 'left' | 'right';
+  /** Flat-ground sole position in world metres at touchdown. */
+  readonly position: readonly [number, number, number];
+}
 export interface CitizenRendererOptions {
   readonly registry: MaterialRegistry;
   readonly material: VoxelRenderState;
@@ -48,7 +56,7 @@ export interface CitizenRendererOptions {
   readonly pool?: VoxelWorkerPool;
 }
 interface Batch { readonly attachment: AvatarAttachmentId; readonly mesh: THREE.InstancedMesh; readonly pivot: THREE.Matrix4; readonly seatedHem: boolean }
-interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined; readonly rig: typeof AVATAR_RIG }
+interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined; readonly capePaint?: StyledCitizenLook['capePaint']; readonly rig: typeof AVATAR_RIG; readonly headBounds: THREE.Box3 | undefined }
 
 /**
  * Meshed voxel parts share one draw per part/look, not one draw per person.
@@ -79,6 +87,39 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     const pivot = new THREE.Matrix4().makeTranslation(...pivotCells.map(n => -n * VOXEL_METRES.avatar) as [number, number, number]);
     return { attachment, mesh, pivot, seatedHem };
   }
+  // Union head-attached geometry in head-local metres once per look. Sockets
+  // inherit the head pose; body parts and cloth must not affect this anchor.
+  function headBoundsFor(batches: readonly Batch[]): THREE.Box3 | undefined {
+    const bounds = new THREE.Box3().makeEmpty();
+    for (const batch of batches) {
+      const socket = batch.attachment === 'hat' || batch.attachment === 'face' ? AVATAR_SOCKETS[batch.attachment] : undefined;
+      if (batch.attachment !== 'head' && !socket) continue;
+      const geometry = batch.mesh.geometry;
+      const packed = geometry.getAttribute('aPacked'), material = geometry.getAttribute('aMaterial');
+      let partBounds: THREE.Box3;
+      if (packed && material) {
+        // Legacy voxel meshes store positions in two packed integers; their
+        // geometry bounding box covers whole 32-cell chunks, not the model.
+        partBounds = new THREE.Box3().makeEmpty();
+        for (let i = 0; i < packed.count; i++) {
+          const vertex = packed.getX(i) >>> 0, chunk = material.getX(i) >>> 0;
+          partBounds.expandByPoint(new THREE.Vector3(
+            (vertex & 63) + 32 * ((chunk >>> 16) & 31),
+            ((vertex >>> 6) & 63) + 32 * ((chunk >>> 21) & 31),
+            ((vertex >>> 12) & 63) + 32 * ((chunk >>> 26) & 31),
+          ).multiplyScalar(VOXEL_METRES.avatar));
+        }
+      } else {
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+        partBounds = geometry.boundingBox?.clone() ?? new THREE.Box3().makeEmpty();
+      }
+      if (partBounds.isEmpty()) continue;
+      const transform = batch.pivot.clone();
+      if (socket) transform.premultiply(new THREE.Matrix4().makeTranslation(...socket.offset.map(n => n * VOXEL_METRES.avatar) as [number, number, number]));
+      bounds.union(partBounds.applyMatrix4(transform));
+    }
+    return bounds.isEmpty() ? undefined : bounds;
+  }
   try {
     for (const look of options.looks) {
       if (looks.has(look.id)) throw new Error(`Duplicate citizen look ${look.id}.`);
@@ -89,7 +130,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           if (!material) { material = createStyledCitizenMaterial(options.material, part.surface); paintedMaterials.set(part.surface, material); }
           batches.push(addBatch(styledCitizenGeometry(part.mesh, part.surface), material, part.attachment, part.pivot, `Citizen ${look.id} ${part.seatedHem ? 'hem' : part.attachment} ${part.surface}`, part.seatedHem));
         }
-        looks.set(look.id, { batches, cape: look.cape, rig: STYLED_CITIZEN_RIG });
+        looks.set(look.id, { batches, cape: look.cape, ...(look.capePaint ? { capePaint: look.capePaint } : {}), rig: STYLED_CITIZEN_RIG, headBounds: headBoundsFor(batches) });
         continue;
       }
       // Painted-only scenes need no voxel worker. Legacy assets keep their
@@ -102,7 +143,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
         if (!result || result.kind !== 'asset') throw new Error(`Could not mesh avatar part ${blueprint.id}.`);
         batches.push(addBatch(geometryFromChunks(result.chunks, 'avatar'), options.material.material, blueprint.attachment, blueprint.pivot, `Citizen ${look.id} ${blueprint.id}`));
       }
-      looks.set(look.id, { batches, cape: look.cape, rig: AVATAR_RIG });
+      looks.set(look.id, { batches, cape: look.cape, rig: AVATAR_RIG, headBounds: headBoundsFor(batches) });
     }
   } catch (error) {
     for (const geometry of geometries) geometry.dispose();
@@ -118,15 +159,22 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   const scale = new THREE.Vector3(1, 1, 1);
   const poses = new Map<AvatarAttachmentId, THREE.Matrix4>();
   const grips = new Map<string, THREE.Matrix4>();
+  const heads = new Map<string, THREE.Vector3>();
+  const worldHeadBounds = new THREE.Box3();
+  const footfalls: CitizenFootfall[] = [];
   const frustum = new THREE.Frustum(), projectionView = new THREE.Matrix4();
   // A generous radius covers the authored body, gait and short cloak as a
   // single culling unit, including their edges during a stride.
   const citizenBounds = new THREE.Sphere(new THREE.Vector3(), 2.5);
-  const postureById = new Map<string, { value: number; last: number }>();
-  function pose(sample: CitizenSample, seated: number, rig: typeof AVATAR_RIG) {
-    // One full left/right stride over 1.8 metres. The old .75 m cycle made ordinary 4 m/s walking
-    // churn through more than five cycles a second; distance still keeps stops and corrections planted.
-    const phase = sample.distance * Math.PI * 2 / 1.8;
+  type AnimatedGesture = Exclude<CitizenGesture, 'none' | 'sit'>;
+  const gestureNames: readonly AnimatedGesture[] = ['nod', 'wave', 'bow', 'cheer', 'dance', 'point'];
+  const animationById = new Map<string, { seated: number; heading: number; weights: Record<AnimatedGesture, number>; last: number; footsteps?: FootstepState }>();
+  function pose(sample: CitizenSample, seated: number, heading: number, weights: Record<AnimatedGesture, number>, rig: typeof AVATAR_RIG, footstepState: FootstepState, now: number) {
+    const locomotion = stepFootsteps(footstepState, { position: sample.position, heading, distance: sample.distance,
+      moving: sample.moving * (1 - seated) * (1 - Math.max(0, Math.min(1, sample.tiptoe ?? 0))),
+      speed: sample.speed ?? sample.moving * 1.2, timeMs: now });
+    // Arms and torso follow the same distance-driven cycle as the planted legs.
+    const phase = footstepState.phase * Math.PI * 2;
     const gait = Math.max(0, Math.min(1, sample.moving)) * (1 - seated);
     const stride = Math.sin(phase) * gait;
     // A standing-only toe pivot: raise the whole rig and pitch the feet about
@@ -137,36 +185,80 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     const toeLift = toeForward * Math.sin(toeAngle) - ankleHeight * (1 - Math.cos(toeAngle));
     const toeShift = toeForward * (1 - Math.cos(toeAngle)) + ankleHeight * Math.sin(toeAngle);
     // Slight counterrotation and opposing arms make the small silhouette read at street scale.
-    const wave = sample.gesture === 'wave' ? Math.max(0, Math.min(1, sample.waveWeight ?? 1)) : 0;
+    const wave = weights.wave * Math.max(0, Math.min(1, sample.waveWeight ?? 1));
     const waveAngle = sample.waveWeight === undefined ? 1.75 : 2.65;
     const gestureTime = sample.time ?? 0;
     const sitAngle = -Math.PI / 2 * seated;
     const breath = Math.sin(gestureTime * 1.7) * .012 * seated;
+    // Gestures own the upper body while the distance-driven legs keep walking.
+    // Dancing is a planted sway, muted during movement to preserve the gait.
+    const dance = weights.dance * (1 - gait) * (1 - seated);
+    const danceBeat = Math.sin(gestureTime * 4.5);
+    const cheerBeat = Math.sin(gestureTime * 5);
+    const bow = weights.bow * (1 - seated);
+    const point = weights.point;
+    const cheer = weights.cheer;
+    const rightGesture = Math.max(wave, point, cheer, dance);
+    const leftGesture = Math.max(cheer, dance);
     const rotations: Partial<Record<AvatarBoneId, readonly [number, number, number]>> = {
-      chest: [breath, -stride * .055, stride * .025],
-      head: [Math.max(-.65, Math.min(.65, sample.lookPitch ?? 0)) + (sample.gesture === 'nod' ? .14 + .12 * Math.sin(gestureTime * 6) : 0), (sample.lookYaw ?? 0) + stride * .035, -stride * .025],
-      upperArmLeft: [-stride * .30 - seated * .18, 0, .06 + seated * .08], upperArmRight: [(stride * .30 - seated * .18) * (1 - wave) - .18 * wave, 0, (-.06 - seated * .08) * (1 - wave) + (waveAngle + .22 * Math.sin(gestureTime * 8)) * wave],
+      chest: [breath + bow * .48, -stride * .055 + dance * danceBeat * .16, stride * .025 + dance * danceBeat * .10],
+      head: [Math.max(-.65, Math.min(.65, sample.lookPitch ?? 0)) + weights.nod * (.14 + .12 * Math.sin(gestureTime * 6)) + bow * .12, (sample.lookYaw ?? 0) + stride * .035, -stride * .025 - dance * danceBeat * .08],
+      upperArmLeft: [(-stride * .30 - seated * .18) * (1 - leftGesture) - cheer * (.35 + .10 * cheerBeat) - dance * .35, 0, (.06 + seated * .08) * (1 - leftGesture) - cheer * (2.25 + .12 * cheerBeat) - dance * (1.05 + .25 * danceBeat)],
+      upperArmRight: [(stride * .30 - seated * .18) * (1 - rightGesture) - .18 * wave - point * 1.35 - cheer * (.35 + .10 * cheerBeat) - dance * .35, 0, (-.06 - seated * .08) * (1 - rightGesture) + (waveAngle + .22 * Math.sin(gestureTime * 8)) * wave + point * .20 + cheer * (2.25 + .12 * cheerBeat) + dance * (1.05 - .25 * danceBeat)],
       thighLeft: [sitAngle + stride * .42, 0, 0], thighRight: [sitAngle - stride * .42, 0, 0],
       shinLeft: [-sitAngle + Math.max(0, stride) * .38, 0, 0], shinRight: [-sitAngle + Math.max(0, -stride) * .38, 0, 0],
       footLeft: [-stride * .42 - Math.max(0, stride) * .38 + toeAngle, 0, 0],
       footRight: [stride * .42 - Math.max(0, -stride) * .38 + toeAngle, 0, 0],
     };
-    root.makeRotationY(sample.heading); root.setPosition(...sample.position);
-    root.elements[12]! += Math.sin(sample.heading) * toeShift;
+    root.makeRotationY(heading); root.setPosition(...sample.position);
+    root.elements[12]! += Math.sin(heading) * toeShift;
     root.elements[13]! += toeLift;
-    root.elements[14]! += Math.cos(sample.heading) * toeShift;
+    root.elements[14]! += Math.cos(heading) * toeShift;
+    for (const fall of locomotion.footfalls) footfalls.push({ id: sample.id, side: fall.side, position: [fall.sole.x, fall.sole.y, fall.sole.z] });
+    const legBlend = locomotion.blend;
+    const legRotations = new Map<AvatarBoneId, THREE.Quaternion>();
+    if (legBlend > 0) {
+      const inverseRoot = root.clone().invert();
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? 'Left' : 'Right';
+        const hip = new THREE.Vector3(i === 0 ? -.125 : .125,
+          .5 - 4 * (1 - Math.cos(sitAngle)) * VOXEL_METRES.avatar - .075 * legBlend,
+          4 * Math.sin(sitAngle) * VOXEL_METRES.avatar);
+        const neutralFoot = new THREE.Vector3(hip.x, VOXEL_METRES.avatar, 0);
+        const plantedAnkle = locomotion.feet[i]!.clone().add(new THREE.Vector3(Math.sin(heading) * toeShift, toeLift, Math.cos(heading) * toeShift));
+        const target = neutralFoot.lerp(plantedAnkle.applyMatrix4(inverseRoot), legBlend);
+        const reach = target.clone().sub(hip);
+        const length = THREE.MathUtils.clamp(reach.length(), .063, .43749);
+        const axis = reach.normalize();
+        const forward = new THREE.Vector3(0, 0, 1);
+        const bend = forward.addScaledVector(axis, -forward.dot(axis));
+        if (bend.lengthSq() < 1e-6) bend.set(1, 0, 0).addScaledVector(axis, -axis.x);
+        bend.normalize();
+        const upper = .25, lower = .1875;
+        const along = (upper * upper - lower * lower + length * length) / (2 * length);
+        const knee = axis.clone().multiplyScalar(along).addScaledVector(bend, Math.sqrt(Math.max(0, upper * upper - along * along)));
+        const lowerDirection = axis.clone().multiplyScalar(length).sub(knee).normalize();
+        const upperRotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), knee.normalize());
+        const lowerWorld = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), lowerDirection);
+        const lowerRotation = upperRotation.clone().invert().multiply(lowerWorld);
+        legRotations.set(`thigh${side}` as AvatarBoneId, upperRotation);
+        legRotations.set(`shin${side}` as AvatarBoneId, lowerRotation);
+        legRotations.set(`foot${side}` as AvatarBoneId, lowerWorld.clone().invert().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), toeAngle)));
+      }
+    }
     poses.clear();
     for (const bone of rig) {
       const angles = rotations[bone.id] ?? [0, 0, 0];
       rotation.set(...angles); quaternion.setFromEuler(rotation);
+      if (legRotations.has(bone.id)) quaternion.copy(legRotations.get(bone.id)!);
       translation.set(...bone.offset).multiplyScalar(VOXEL_METRES.avatar);
       if (bone.id === 'pelvis') {
         // The four-cell thigh moves forward as it rises; move the body back and
         // down by the same amount so the vertical shins and feet stay planted.
-        translation.y -= 4 * (1 - Math.cos(sitAngle)) * VOXEL_METRES.avatar;
+        translation.y -= 4 * (1 - Math.cos(sitAngle)) * VOXEL_METRES.avatar + .075 * legBlend;
         translation.z += 4 * Math.sin(sitAngle) * VOXEL_METRES.avatar;
       }
-      if (bone.id === 'thighLeft' || bone.id === 'thighRight') {
+      if (legBlend === 0 && (bone.id === 'thighLeft' || bone.id === 'thighRight')) {
         // The authored rig has separate thigh, shin and foot. Keep the sole level
         // and solve the hip's vertical offset from both rotating segments. The
         // planted foot stays at the datum; the swing foot clears the street.
@@ -189,36 +281,60 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   }
   return {
     get grips(): ReadonlyMap<string, THREE.Matrix4> { return grips; },
-    update(samples: readonly CitizenSample[], camera?: THREE.Camera) {
+    /** Visible head bounds top centre plus 8 cm, in world metres, for this update.
+     * Opacity does not suppress an anchor; callers hide first-person labels themselves. */
+    get heads(): ReadonlyMap<string, THREE.Vector3> { return heads; },
+    /** Touchdowns for the most recent update only; consumed synchronously by presentation. */
+    get footfalls(): readonly CitizenFootfall[] { return footfalls; },
+    update(samples: readonly CitizenSample[], camera?: THREE.Camera, now = performance.now()) {
       if (samples.length > capacity) throw new Error(`Citizen count exceeds capacity ${capacity}.`);
       for (const mesh of meshes) mesh.count = 0;
-      grips.clear();
+      grips.clear(); heads.clear(); footfalls.length = 0;
       capes.beginFrame(samples[0]?.time ?? 0);
       if (camera) {
         camera.updateWorldMatrix(true, false);
         projectionView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
         frustum.setFromProjectionMatrix(projectionView, camera.coordinateSystem);
       }
-      const now = performance.now();
       const seen = new Set<string>();
       for (const sample of samples) {
         seen.add(sample.id);
-        const target = sample.posture === 'seated' ? 1 : 0;
-        let transition = postureById.get(sample.id);
-        if (!transition) { transition = { value: target, last: now }; postureById.set(sample.id, transition); }
-        const step = Math.max(0, now - transition.last) / 280;
-        transition.value += Math.max(-step, Math.min(step, target - transition.value));
+        const target = sample.posture === 'seated' || (sample.gesture === 'sit' && sample.moving < .1) ? 1 : 0;
+        let transition = animationById.get(sample.id);
+        if (!transition) {
+          transition = { seated: target, heading: sample.heading, weights: { nod: 0, wave: 0, bow: 0, cheer: 0, dance: 0, point: 0 }, last: now };
+          animationById.set(sample.id, transition);
+        }
+        const elapsed = Math.max(0, Math.min(100, now - transition.last));
+        const step = elapsed / 280;
+        transition.seated += Math.max(-step, Math.min(step, target - transition.seated));
+        // Shortest arc avoids spinning through a full turn at the ±π seam.
+        const turn = Math.atan2(Math.sin(sample.heading - transition.heading), Math.cos(sample.heading - transition.heading));
+        transition.heading += turn * (1 - Math.exp(-elapsed / 90));
+        for (const name of gestureNames) {
+          const goal = sample.gesture === name ? 1 : 0;
+          transition.weights[name] += Math.max(-step, Math.min(step, goal - transition.weights[name]));
+        }
         transition.last = now;
         const look = looks.get(sample.look);
         if (!look) throw new Error(`Unknown citizen look ${sample.look}.`);
-        if (![...sample.position, sample.heading, sample.distance, sample.moving, sample.opacity ?? 1, sample.lookYaw ?? 0, sample.lookPitch ?? 0, sample.waveWeight ?? 1, sample.time ?? 0, sample.tiptoe ?? 0].every(Number.isFinite)) throw new Error(`Invalid citizen sample ${sample.id}.`);
+        if (![...sample.position, sample.heading, sample.distance, sample.moving, sample.speed ?? sample.moving * 1.2, sample.opacity ?? 1, sample.lookYaw ?? 0, sample.lookPitch ?? 0, sample.waveWeight ?? 1, sample.time ?? 0, sample.tiptoe ?? 0].every(Number.isFinite)) throw new Error(`Invalid citizen sample ${sample.id}.`);
         if (camera) {
           citizenBounds.center.set(sample.position[0], sample.position[1] + .75, sample.position[2]);
-          if (!frustum.intersectsSphere(citizenBounds)) continue;
+          if (!frustum.intersectsSphere(citizenBounds)) {
+            // A hidden interval cannot produce delayed audio on re-entry.
+            delete transition.footsteps;
+            continue;
+          }
         }
-        pose(sample, transition.value, look.rig);
+        transition.footsteps ??= createFootstepState({ position: sample.position, heading: transition.heading, distance: sample.distance, moving: sample.moving, speed: sample.speed ?? sample.moving * 1.2, timeMs: now });
+        pose(sample, transition.seated, transition.heading, transition.weights, look.rig, transition.footsteps, now);
         grips.set(sample.id, poses.get('gripRight')!.clone());
-        if (look.cape) capes.add({ id: sample.id, heading: sample.heading, distance: sample.distance, speed: (sample.speed ?? sample.moving * 1.2) * (1 - transition.value), opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!);
+        if (look.headBounds) {
+          worldHeadBounds.copy(look.headBounds).applyMatrix4(poses.get('head')!);
+          heads.set(sample.id, new THREE.Vector3((worldHeadBounds.min.x + worldHeadBounds.max.x) / 2, worldHeadBounds.max.y + .08, (worldHeadBounds.min.z + worldHeadBounds.max.z) / 2));
+        }
+        if (look.cape) capes.add({ id: sample.id, heading: transition.heading, distance: sample.distance, speed: (sample.speed ?? sample.moving * 1.2) * (1 - transition.seated), opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!, look.capePaint);
         for (const batch of look.batches) {
           const attachment = poses.get(batch.attachment);
           if (!attachment) throw new Error(`Unknown avatar attachment ${batch.attachment}.`);
@@ -226,7 +342,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
             // A continuous voxel skirt follows the lap during the same seated
             // blend as the thighs, instead of sinking into the floor or tearing
             // into separate leg columns. This is not a shared rig/socket change.
-            hemRotation.makeRotationX(-Math.PI / 2 * transition.value);
+            hemRotation.makeRotationX(-Math.PI / 2 * transition.seated);
             matrix.multiplyMatrices(attachment, hemRotation).multiply(batch.pivot);
           } else matrix.multiplyMatrices(attachment, batch.pivot);
           const index = batch.mesh.count++;
@@ -235,7 +351,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           fades.setX(index, Math.max(0, Math.min(1, sample.opacity ?? 1)));
         }
       }
-      for (const id of postureById.keys()) if (!seen.has(id)) postureById.delete(id);
+      for (const id of animationById.keys()) if (!seen.has(id)) animationById.delete(id);
       capes.endFrame();
       for (const mesh of meshes) {
         mesh.instanceMatrix.needsUpdate = true;
@@ -243,7 +359,8 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
       }
     },
     dispose() {
-      grips.clear();
+      grips.clear(); heads.clear(); footfalls.length = 0;
+      animationById.clear();
       capes.dispose(); scene.remove(group);
       for (const geometry of geometries) geometry.dispose();
       for (const mesh of meshes) mesh.dispose();
@@ -254,4 +371,4 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
 }
 
 export { createDefaultCitizenLooks } from './default-look';
-export { createStyledCitizenLook, type StyledCitizenLook, type StyledCitizenRecipe } from './style-adapter';
+export { createStyledCitizenLook, createWornCitizenLook, type StyledCitizenLook, type StyledCitizenRecipe } from './style-adapter';

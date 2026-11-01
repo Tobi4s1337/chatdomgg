@@ -1,0 +1,79 @@
+# Capture queue observation — resumed DK10
+
+**Latest checkpoint:** 60166 subsequently acquired the lock and exited 1 during town
+preparation, before a listener/browser. All its owned resources were cleaned up. No dock
+capture is now queued; the following compatibility observation is history, not a current
+request to stop a capture owner.
+
+## Historical compatibility wait — 2026-11-01 17:51
+
+The capture owner freshly polled60166 and confirmed it remains live and queued, before
+any service/browser startup. A read-only v2 registry snapshot showed three waiting tickets
+(sequences5,6,8; lane/main/lane), all `active:false`.
+
+To distinguish a full v2 queue from legacy compatibility exclusion, the lane opened each
+existing legacy file read-only and made one nonblocking shared `flock` probe through an
+inherited descriptor, then closed its descriptors immediately. Both probes returned1:
+
+- `/tmp/chatdom-capture.lock.priority`: blocked by an exclusive holder.
+- `/tmp/chatdom-capture.lock`: blocked by an exclusive holder.
+
+No browser/server was launched for these probes. No file or registry entry was rewritten
+or unlinked, and no foreign process was signalled. This establishes exclusive holders on
+the compatibility files; it does not identify who owns them.
+
+**needs: main/capture owners inspect their own legacy capture handles.** Finish or cancel
+obsolete jobs through the handles they own and confirm terminal cleanup. The v2 queue is
+correctly preserving exclusion while those holders exist. Do not unlink shared lock files,
+remove another ticket, bypass the compatibility locks or guess a namespace-local PID.
+This lane retains its same live60166 job and keeps DK10 active.
+
+## Original liveness diagnosis and fix
+
+**Resolved in main's `d53d9eb`, now merged.** The shared helper uses random ticket leases
+held by kernel advisory locks, and no longer compares namespace-local PIDs. The old
+lane-owned capture41052 was cancelled and confirmed exit130 specifically for that helper
+change. Its replacement23423 remains owned by `/root/dock_evidence` and must be polled
+there. A later read-only snapshot showed five v2 tickets, all inactive; compatibility
+locks may still be held. That observation does not identify an owner or authorize touching
+another capture. The remainder of this note preserves the original diagnosis.
+
+Main's `1bdc9de` queue implementation has been synced. The lane uses the shared helper,
+lane priority, one still/short clip per acquisition, and no observation timeout. This note
+does not authorize bypassing it or removing locks/registry entries.
+
+The current queued capture handle is recorded in `work/evidence/dock/README.md`. Its latest
+tool poll confirmed it remained live after reporting `queued for a lane slot`; it had not
+started a socket or Chrome. A read-only directory inspection found the queue registry empty
+while that handle was still live. This alone does not prove which process removed a ticket.
+
+Two independent concurrent `exec_command` calls each ran this secret-free command:
+
+```js
+import { readFile } from 'node:fs/promises';
+console.log({
+  pid: process.pid,
+  nspid: (await readFile('/proc/self/status', 'utf8'))
+    .split('\n').find(line => line.startsWith('NSpid:')),
+});
+```
+
+Both reported `pid: 2` and `NSpid: 2`. The execution sandboxes therefore have distinct PID
+namespaces. The shared queue supervisor records namespace-local `process.pid` and starttime,
+then other supervisors validate them against **their own** `/proc/<pid>/stat` view. A live
+foreign ticket can consequently look absent or like a reused PID. If it is removed, the owner
+keeps its nonempty `ticket` variable and never registers again, so `head?.name === ticket`
+can never become true. This is a code-level failure path, not an attribution of a specific
+registry deletion.
+
+**needs: main-owned capture helper correction.** Please use cross-namespace liveness rather
+than PID lookup, for example a random ticket identifier and a pipe-bound, kernel-held advisory
+lock per ticket. Stale cleanup may remove an entry only when its liveness lock can actually
+be acquired. Do not replace it with a TTL: a queued or running capture must not expire merely
+because observation is quiet. Migration should ask workers to stop/restart only their own old
+guard processes after the helper changes; never signal a foreign PID or unlink the shared
+capture lock inode. Tests need separate PID namespaces (or an injected liveness mechanism
+that covers collisions), not only children sharing the test runner's namespace.
+
+The lane keeps its existing process tracked and continues independent dock work. No lock,
+registry entry, foreign service or foreign process was changed during this investigation.

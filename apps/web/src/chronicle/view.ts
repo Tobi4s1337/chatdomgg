@@ -1,11 +1,13 @@
 import { createReplay, type History, type ReplayBinding, type ReplayState } from './replay';
+import { provenance } from './provenance';
 import './view.css';
 
 export interface ChronicleViewOptions {
   /** The host owns a separate replay presentation, and restores its live view on dispose. */
   readonly binding: ReplayBinding;
   readonly history: History | null;
-  readonly onClose: () => void;
+  /** Called even if scene cleanup fails, so the host can restore live presentation or report the error. */
+  readonly onClose: (cleanupError?: unknown) => void;
   readonly simulationNote?: string;
   /** Provenance of any host scene still visible when history is unavailable. */
   readonly presentationLabel?: History['label'];
@@ -34,19 +36,16 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
   const stopClock = () => { if (timer !== undefined) clearInterval(timer); timer = undefined; };
   const describeDate = (at: number) => new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(at);
   const show = (state: ReplayState) => {
+    const source = provenance(state, options.presentationLabel, options.simulationNote);
+    origin.textContent = source.origin; note.textContent = source.note;
     if (state.status !== 'ready') {
       stopClock();
-      const simulatedHistory = state.status === 'empty' && state.label === 'SIMULATED';
-      const simulatedScene = options.presentationLabel === 'SIMULATED';
-      origin.textContent = simulatedHistory ? 'SIMULATED · A local history' : simulatedScene ? 'SIMULATED · Scene' : '';
-      note.textContent = simulatedHistory || simulatedScene ? options.simulationNote ?? '' : ''; date.textContent = '';
+      date.textContent = '';
       seek.value = '0'; seek.max = '0'; seek.removeAttribute('aria-valuetext');
       caption.textContent = state.status === 'empty' ? 'There are no recorded nights to read yet.' : 'The Chronicle is unavailable right now.';
       status.textContent = state.status === 'empty' ? 'No recorded nights' : 'History unavailable';
       play.disabled = true; seek.disabled = true; play.textContent = 'Play'; return;
     }
-    origin.textContent = state.label === 'SIMULATED' ? 'SIMULATED · A local history' : 'Recorded history';
-    note.textContent = state.label === 'SIMULATED' ? options.simulationNote ?? '' : '';
     date.textContent = describeDate(state.snapshot.frame.asOf);
     caption.textContent = state.snapshot.caption;
     seek.disabled = false; seek.max = String(state.count - 1); seek.value = String(state.index);
@@ -57,13 +56,14 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
     if (!state.playing) stopClock();
   };
   const replay = createReplay(options.binding, show);
+  const cue = (action: 'seek' | 'play' | 'close') => { try { options.sound(action); } catch { /* A host audio fault must not disable controls. */ } };
   const onSeek = () => {
     const requested = Number(seek.value);
-    options.sound('seek'); replay.pause();
+    cue('seek'); replay.pause();
     try { replay.seek(requested); } catch { /* The unavailable state is already displayed. */ }
   };
   const onPlay = () => {
-    options.sound('play');
+    cue('play');
     if (replay.state().playing) { replay.pause(); return; }
     const current = replay.state();
     if (current.status === 'ready' && current.index === current.count - 1) {
@@ -73,17 +73,27 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
     if (replay.state().playing) timer = setInterval(() => { try { replay.step(); } catch { /* The unavailable state is already displayed. */ } }, 3000);
   };
   let disposed = false;
-  const dispose = () => {
+  const restoreFocus = () => { if (previousFocus?.isConnected) previousFocus.focus(); };
+  const dispose = (restore = true) => {
     if (disposed) return; disposed = true; stopClock(); seek.removeEventListener('input', onSeek);
     play.removeEventListener('click', onPlay); close.removeEventListener('click', onClose); root.removeEventListener('keydown', onKeyDown);
-    const restoreFocus = root.contains(document.activeElement);
-    replay.dispose(); root.replaceChildren();
-    if (restoreFocus && previousFocus?.isConnected) previousFocus.focus();
+    const focusedInside = root.contains(document.activeElement);
+    try { replay.dispose(); } finally {
+      root.replaceChildren();
+      if (restore && focusedInside) restoreFocus();
+    }
   };
-  const onClose = () => { options.sound('close'); dispose(); options.onClose(); };
+  const onClose = () => {
+    cue('close');
+    const focusedInside = root.contains(document.activeElement);
+    let cleanupError: unknown;
+    try { dispose(false); } catch (error) { cleanupError = error; }
+    try { options.onClose(cleanupError); } finally { if (focusedInside) restoreFocus(); }
+  };
   const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); } };
   root.addEventListener('keydown', onKeyDown);
   seek.addEventListener('input', onSeek); play.addEventListener('click', onPlay); close.addEventListener('click', onClose);
   try { replay.load(options.history); } catch { /* Validation already presents the unavailable state. */ }
-  return { replay, dispose };
+  close.focus();
+  return { replay, dispose: () => dispose() };
 }

@@ -20,8 +20,10 @@ export type Connection =
   | { readonly kind: 'knocking' }
   /** The Helper has not answered for a long while. */
   | { readonly kind: 'no-answer' }
-  /** Twitch authorized the view; no kingdom service exists for the panel to read. */
+  /** Twitch authorized the view; no kingdom service answered for the panel to read. */
   | { readonly kind: 'kingdom-unavailable' }
+  /** The kingdom's Extension backend answered with this channel's kingdom and the viewer's own reading. */
+  | { readonly kind: 'connected' }
   /** The kingdom stopped answering. What is shown is as it was at `asOf`, and says so. */
   | { readonly kind: 'lost'; readonly asOf: string };
 
@@ -205,7 +207,10 @@ export type Home =
     readonly kind: 'guest'; readonly displayName: string | null; readonly history: readonly Earned[];
     readonly card: CitizenCard | null; readonly passport: PassportSource;
   }
-  | { readonly kind: 'unknown'; readonly reason: string };
+  /** Their card, with no home here to show beside it (no home yet, or the monarch whose home is the castle). */
+  | { readonly kind: 'known'; readonly card: CitizenCard; readonly passport: PassportSource; readonly note: string }
+  /** `ask: 'share'` when the only thing between the viewer and their card is telling Chatdom who they are. */
+  | { readonly kind: 'unknown'; readonly reason: string; readonly ask?: 'share' };
 
 /** A table in the tavern. Seats are taken inside the kingdom, never from the panel. */
 export interface TavernTable {
@@ -352,6 +357,8 @@ export interface PanelAdapter {
   subscribe(listener: (snapshot: PanelSnapshot) => void): () => void;
   /** Ask to light the viewer's window. Must be called from a user gesture. */
   requestLight(choice: LightChoice): void;
+  /** Ask Twitch to share who the viewer is with Chatdom, so their own card can open. Gesture only. */
+  requestIdentity?(): void;
   /** One tap on the crowd act: one command, under chat's limits. Gesture only. */
   requestAct(option: string): void;
   /** Ask Twitch to confirm Bits for a shelf product. Gesture only; nothing is granted here. */

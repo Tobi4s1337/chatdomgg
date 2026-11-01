@@ -1,8 +1,9 @@
 import { AVATAR_RIG, type AvatarBoneId, type AvatarCapeBlueprint, type Vec3 } from '@chatdom/shared';
 import {
-  buildCitizen, meshCitizen, parseLook, slotColours, VoxelGrid,
+  buildCitizen, capeCut, meshCitizen, parseLook, slotColours, VoxelGrid,
   type Cell, type CitizenLook as StyledCitizenRecipe, type CitizenMesh, type Slot,
 } from '@chatdom/content/avatar-style';
+import { MAT } from '@chatdom/content/materials';
 
 export type { StyledCitizenRecipe };
 
@@ -13,14 +14,38 @@ export interface StyledCitizenLook {
   readonly recipe: StyledCitizenRecipe;
   /** Existing thin cloth remains separate from the painted solid body. */
   readonly cape?: AvatarCapeBlueprint;
+  readonly dim?: boolean;
+  /** Exact authored sRGB colours for a worn cape; the blueprint carries the sheet cut. */
+  readonly capePaint?: { readonly cloth: readonly [number, number, number]; readonly lining: readonly [number, number, number]; readonly trim: readonly [number, number, number]; readonly dim: boolean };
 }
 
 /** Keep the caller's stable appearance ID; portraits consume this exact recipe too. */
 export function createStyledCitizenLook(
-  id: string, recipe: StyledCitizenRecipe, options: { readonly cape?: AvatarCapeBlueprint } = {},
+  id: string, recipe: StyledCitizenRecipe, options: { readonly cape?: AvatarCapeBlueprint; readonly dim?: boolean } = {},
 ): StyledCitizenLook {
   if (!id.trim()) throw new Error('A styled citizen needs a look ID.');
   return { kind: 'paint-grid', id, recipe: parseLook(recipe), ...options };
+}
+
+/** Build the runtime appearance from a worn recipe; eligibility is owned by the caller. */
+export function createWornCitizenLook(id: string, recipe: StyledCitizenRecipe, dim = false): StyledCitizenLook {
+  const worn = createStyledCitizenLook(id, recipe, { dim });
+  const earned = worn.recipe.earned.cape;
+  if (!earned) return worn;
+  const cut = capeCut(earned, dim && earned.kind !== 'cheer');
+  // The shared sheet contract names palette IDs. The renderer uses capePaint for
+  // exact per-person dyes; these registered fallbacks keep the contract valid.
+  const cape: AvatarCapeBlueprint = {
+    version: 1, id: 'cape.worn', kind: 'cape', attachment: 'back',
+    shape: cut.shape, width: cut.width, length: cut.length, hem: cut.hem,
+    trimWidth: cut.trimWidth, mount: cut.mount,
+    colours: { cloth: MAT.fabricRed, lining: MAT.cream, trim: MAT.brass },
+    ...(cut.shimmer ? { shimmer: { swatches: [MAT.fabricRed, MAT.fabricOrange, MAT.fabricGold, MAT.fabricGreen, MAT.fabricBlue, MAT.fabricViolet] as const, strength: cut.shimmer.strength } } : {}),
+  };
+  const rgb = (hex: string): readonly [number, number, number] => [
+    parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255,
+  ];
+  return { ...worn, cape, capePaint: { cloth: rgb(cut.colours.cloth), lining: rgb(cut.colours.lining), trim: rgb(cut.colours.trim), dim: cut.dim } };
 }
 
 /**
@@ -95,7 +120,7 @@ export interface StyledCitizenPart {
 
 /** Once per look at preparation; no meshing, colour conversion or recipes in update(). */
 export function meshStyledCitizen(look: StyledCitizenLook): readonly StyledCitizenPart[] {
-  const colours = slotColours(look.recipe), parts: StyledCitizenPart[] = [];
+  const colours = slotColours(look.recipe, { subLapsed: look.dim }), parts: StyledCitizenPart[] = [];
   for (const [bone, grid] of partitionStyledCitizen(look.recipe)) {
     const attachment = bone === 'hem' ? 'pelvis' : bone;
     for (const surface of ['solid', 'glass'] as const) {

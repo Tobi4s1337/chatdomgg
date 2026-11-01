@@ -1,0 +1,66 @@
+--- a/packages/testing/capture-lock.mjs
++++ b/packages/testing/capture-lock.mjs
+@@ -12,6 +12,7 @@
+ // mutex protects the FIFO registry; it is never held for the capture itself.
+ const supervisorSource = `
+   import { spawn } from 'node:child_process';
++  import { randomUUID } from 'node:crypto';
+   import { openSync, closeSync, mkdirSync, readdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
+   const path = process.argv[1], priority = process.argv[2];
+   const directory = path + '.queue';
+@@ -45,18 +46,17 @@
+       else reject(new Error('flock exited with code ' + code));
+     });
+   });
+-  // Linux starttime protects stale cleanup against PID reuse. Never signal a PID.
+-  const identity = pid => {
+-    try {
+-      const raw = readFileSync('/proc/' + pid + '/stat', 'utf8');
+-      const fields = raw.slice(raw.lastIndexOf(')') + 2).split(' ');
+-      return fields[0] === 'Z' ? undefined : fields[19];
+-    } catch (error) {
+-      if (error.code === 'ENOENT' || error.code === 'ESRCH') return undefined;
+-      throw error;
+-    }
+-  };
+-  const self = identity(process.pid);
++  // Ticket liveness is a kernel-held inode lease, independent of PID namespaces.
++  const stale = async name => {
++    const lease = open(directory + '/' + name + '.owner');
++    try { return await lock('--exclusive', lease); }
++    finally { close(lease); }
++  };
++  const remove = name => {
++    unlinkSync(directory + '/' + name);
++    try { unlinkSync(directory + '/' + name.replace(/\\.tmp$/, '') + '.owner'); }
++    catch (error) { if (error.code !== 'ENOENT') throw error; }
++  };
+   const write = entry => {
+     const temporary = directory + '/' + ticket + '.tmp';
+     writeFileSync(temporary, JSON.stringify(entry));
+@@ -71,18 +71,18 @@
+           const entries = [];
+           const names = readdirSync(directory);
+           for (const name of names.filter(name => name.endsWith('.tmp'))) {
+-            const match = /^(\\d+)-(\\d+)\\.json\\.tmp$/.exec(name);
+-            if (match && identity(match[1]) !== match[2]) unlinkSync(directory + '/' + name);
++            if (await stale(name.slice(0, -4))) remove(name);
+           }
+           for (const name of names.filter(name => name.endsWith('.json'))) {
+-            const entry = JSON.parse(readFileSync(directory + '/' + name, 'utf8'));
+-            if (identity(entry.pid) !== entry.start) unlinkSync(directory + '/' + name);
+-            else entries.push({ ...entry, name });
++            if (await stale(name)) remove(name);
++            else entries.push({ ...JSON.parse(readFileSync(directory + '/' + name, 'utf8')), name });
+           }
+           if (!ticket) {
+             const sequence = Math.max(0, ...entries.map(entry => entry.sequence)) + 1;
+-            ticket = process.pid + '-' + self + '.json';
+-            const entry = { sequence, pid: process.pid, start: self, priority, active: false };
++            ticket = randomUUID() + '.json';
++            const owner = open(directory + '/' + ticket + '.owner');
++            if (!await lock('--exclusive', owner)) throw new Error('Capture ticket lease collision');
++            const entry = { sequence, priority, active: false };
+             write(entry);
+             entries.push({ ...entry, name: ticket });
+             process.stdout.write('queued\\n');

@@ -1,3 +1,4 @@
+import { createGrowthHome } from '@chatdom/content/growth-homes';
 import { assembleForge, checkForge, createNativeForgeHost, findForgeSockets, forgeStyleKit } from '@chatdom/forge';
 import { HomeTierSchema, type HomeTier } from '@chatdom/shared';
 import type { RealmDomainCommand, RealmOwnedHome, RealmPrivateState } from '@chatdom/shared/realm';
@@ -16,17 +17,29 @@ interface InstalledDeed {
   readonly layout_revision: string; readonly plot_id: string; readonly slot: number; readonly status: string; readonly placement: string;
 }
 const deedColumns = 'receipt, person_id, kingdom_id, origin, layout_revision, plot_id, slot, status, placement';
-const generated = new Map<string, { readonly blueprint: RealmOwnedHome['blueprint']; readonly digest: string }>();
+type NativeRevision = 'original' | 'emberfold-v2';
+const generated = new Map<string, { readonly blueprint: RealmOwnedHome['blueprint']; readonly digest: string; readonly bytes: string }>();
 
-function native(placement: SettlementHome, tier: HomeTier) {
-  const key = canonicalJson({ style: placement.style, variant: placement.variant, tier });
+function native(placement: SettlementHome, tier: HomeTier, revision: NativeRevision) {
+  const key = canonicalJson({ style: placement.style, variant: placement.variant, tier, revision });
   const cached = generated.get(key);
   if (cached) return cached;
-  const blueprint = createNativeForgeHost({ ...placement, tier }).blueprint;
-  const value = { blueprint, digest: forgeHomeDigest(blueprint) };
+  const blueprint = revision === 'emberfold-v2' ? createGrowthHome('emberfold', tier)
+    : createNativeForgeHost({ ...placement, tier }).blueprint;
+  const value = { blueprint, digest: forgeHomeDigest(blueprint), bytes: canonicalJson(blueprint) };
   generated.set(key, value);
   if (generated.size > 64) generated.delete(generated.keys().next().value!);
   return value;
+}
+
+function targetRevision(placement: SettlementHome): NativeRevision {
+  return placement.style === 'hearth' && placement.variant === 0 ? 'emberfold-v2' : 'original';
+}
+
+/** Both authored catalogues remain recognizable; an id or native-looking revision alone grants no replacement. */
+function acceptedSources(placement: SettlementHome, tier: HomeTier) {
+  const original = native(placement, tier, 'original');
+  return targetRevision(placement) === 'original' ? [original] : [original, native(placement, tier, 'emberfold-v2')];
 }
 
 /** Pure candidate from current earned state and immutable deed geometry. Custom bytes never get replaced. */
@@ -42,17 +55,16 @@ export function planNativeHomeGrowth(state: RealmPrivateState, homeId: string, p
       return { kind: 'held', reason: 'invalid-deed' };
     }
     const bytes = canonicalJson(home.blueprint);
-    const fromTier = HomeTierSchema.options.find(candidate => {
-      const expected = native(placement, candidate);
-      return expected.digest === home.digest && canonicalJson(expected.blueprint) === bytes;
-    });
+    const fromTier = HomeTierSchema.options.find(candidate => acceptedSources(placement, candidate)
+      .some(expected => expected.digest === home.digest && expected.bytes === bytes));
     if (!fromTier) return { kind: 'held', reason: 'custom-home' };
     if (HomeTierSchema.options.indexOf(fromTier) < HomeTierSchema.options.indexOf(placement.tier)) return { kind: 'held', reason: 'invalid-deed' };
     if (HomeTierSchema.options.indexOf(tier.data) <= HomeTierSchema.options.indexOf(fromTier)) return { kind: 'held', reason: 'unearned' };
     if (Object.values(state.reservations).some(record => record.homeId === homeId && record.reservation.expiresAt > now)) {
       return { kind: 'held', reason: 'active-forge' };
     }
-    const target = native(placement, tier.data), attachments: NativeGrowth['attachments'][number][] = [];
+    // Existing homes keep their canonical bytes until another tier is earned; there is no same-tier refit.
+    const target = native(placement, tier.data, targetRevision(placement)), attachments: NativeGrowth['attachments'][number][] = [];
     const fitted: Record<string, string> = {}, existing = Object.values(home.attachments);
     if (new Set(existing).size !== existing.length) return { kind: 'held', reason: 'unsafe-part' };
     const sockets = existing.length ? findForgeSockets(target.blueprint) : [], kit = forgeStyleKit(home.family);

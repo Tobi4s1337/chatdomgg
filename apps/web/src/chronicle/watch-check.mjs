@@ -1,28 +1,27 @@
-import { spawn, execFile } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { chromium } from '@playwright/test';
-import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
-import { assertCapturePort } from '../../../../packages/testing/capture-ports.mjs';
+import { startChroniclePreview, captureCancellation } from './preview.mjs';
 
 // Local verification only. The recording is evidence of a SIMULATED fixture, not a product video.
-const root = resolve(import.meta.dirname, '../../../..');
-const web = resolve(root, 'apps/web');
 const evidence = resolve(import.meta.dirname, 'evidence');
 const rawDir = resolve(evidence, 'watch-raw');
 const output = resolve(evidence, 'chronicle-simulated-30s.webm');
-const port = assertCapturePort(5171);
 const run = promisify(execFile);
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
-let server, browser, release;
+let server, browser, release, failure;
+const cleanupErrors = [];
+let browserClosing;
+const cancellation = captureCancellation(() => { if (browser) { browserClosing = browser.close(); browserClosing.catch(() => {}); } });
 
 async function ready(page, base) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.goto(`${base}src/chronicle/bench.html`);
+  await page.goto(`${base}src/chronicle/bench.html`, { waitUntil: 'commit', timeout: 120_000 });
   await page.waitForFunction(() => window.__chatdomReady === true || window.__chronicleError === true, null, { timeout: 240_000 });
   if (await page.evaluate(() => window.__chronicleError === true)) throw new Error(`Chronicle failed to open: ${errors.join('\n')}`);
   await page.waitForFunction(() => window.__chronicleLightingReady(), null, { timeout: 120_000 });
@@ -55,23 +54,30 @@ async function accessibility(browser, base, width, height) {
     const slider = page.getByRole('slider', { name: 'Travel through the nights' });
     const caption = page.locator('.chronicle-caption');
     assert(await panel.isVisible() && await caption.isVisible(), 'Chronicle or its fact is not visible');
+    assert(await close.evaluate(element => element === document.activeElement), 'Opening Chronicle did not move focus into its controls');
     assert(await page.locator('.chronicle-fact').getAttribute('aria-live') === 'polite', 'Fact changes are not announced politely');
     const sizes = await page.evaluate(() => {
       const panel = document.querySelector('.chronicle').getBoundingClientRect();
       const caption = document.querySelector('.chronicle-caption');
       const seek = document.querySelector('.chronicle-track input').getBoundingClientRect();
       const close = document.querySelector('.chronicle-close').getBoundingClientRect();
+      const play = document.querySelector('.chronicle-play').getBoundingClientRect();
       return { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom,
         overflow: document.documentElement.scrollWidth > window.innerWidth,
-        font: Number.parseFloat(window.getComputedStyle(caption).fontSize), seekHeight: seek.height, closeWidth: close.width, closeHeight: close.height };
+        font: Number.parseFloat(window.getComputedStyle(caption).fontSize), seekHeight: seek.height, closeWidth: close.width, closeHeight: close.height, playWidth: play.width, playHeight: play.height };
     });
     assert(!sizes.overflow && sizes.left >= 0 && sizes.top >= 0 && sizes.right <= width && sizes.bottom <= height, `Chronicle is clipped or overflows at ${width}x${height}: ${JSON.stringify(sizes)}`);
-    assert(sizes.font >= 18 && sizes.seekHeight >= 44 && sizes.closeWidth >= 44 && sizes.closeHeight >= 44, `Text or touch targets are too small at ${width}x${height}: ${JSON.stringify(sizes)}`);
+    assert(sizes.font >= 18 && sizes.seekHeight >= 44 && sizes.closeWidth >= 44 && sizes.closeHeight >= 44 && sizes.playWidth >= 44 && sizes.playHeight >= 44, `Text or touch targets are too small at ${width}x${height}: ${JSON.stringify(sizes)}`);
     assert((await slider.getAttribute('aria-valuetext'))?.includes('entry 1 of'), 'Slider has no understandable current entry');
     await close.focus(); await page.keyboard.press('Tab');
     assert(await play.evaluate(element => element === document.activeElement), 'Keyboard does not reach Play after Close');
     await page.keyboard.press('Space');
-    await page.waitForFunction(() => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index >= 1, null, { timeout: 15_000 });
+    try {
+      await page.waitForFunction(() => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index >= 1, null, { timeout: 15_000, polling: 250 });
+    } catch (error) {
+      const state = await page.evaluate(() => { const { status, index, playing } = window.__chronicle.state(); return { status, index, playing, active: document.activeElement?.outerHTML, caption: document.querySelector('.chronicle-caption')?.textContent }; });
+      throw new Error(`Playback did not advance after keyboard Play: ${JSON.stringify(state)}; ${error.message}`, { cause: error });
+    }
     const pause = page.getByRole('button', { name: 'Pause', exact: true });
     assert(await pause.evaluate(element => element === document.activeElement), 'Play control lost keyboard focus');
     await page.keyboard.press('Space');
@@ -79,13 +85,33 @@ async function accessibility(browser, base, width, height) {
     await page.waitForTimeout(3_400);
     assert(await slider.inputValue() === stopped, 'The Chronicle advanced while paused');
     await page.keyboard.press('Space');
-    await page.waitForFunction(value => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index > value, Number(stopped), { timeout: 15_000 });
+    await page.waitForFunction(value => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index > value, Number(stopped), { timeout: 15_000, polling: 250 });
     await page.keyboard.press('Space');
     await page.keyboard.press('Tab');
     assert(await slider.evaluate(element => element === document.activeElement), 'Keyboard does not reach timeline');
     await page.keyboard.press('Home'); const first = await slider.getAttribute('aria-valuetext');
     await page.keyboard.press('End'); const last = await slider.getAttribute('aria-valuetext');
     assert(first && last && first !== last, 'Keyboard seeking did not change the accessible night');
+    const track = await slider.boundingBox();
+    assert(track && track.width > 40, 'Timeline has no usable pointer target');
+    await page.mouse.click(track.x + 4, track.y + track.height / 2);
+    const pointerFirst = await slider.inputValue(), firstPixels = await page.evaluate(() => window.__chronicleRenderPixels());
+    await page.mouse.click(track.x + track.width - 4, track.y + track.height / 2);
+    const pointerLast = await slider.inputValue(), lastPixels = await page.evaluate(() => window.__chronicleRenderPixels());
+    assert(Number(pointerFirst) < Number(pointerLast) && firstPixels !== lastPixels, 'Pointer seeking did not advance the recorded world');
+    await page.mouse.click(track.x + 4, track.y + track.height / 2);
+    assert(await slider.inputValue() === pointerFirst && await page.evaluate(() => window.__chronicleRenderPixels()) === firstPixels, 'Pointer seeking backward did not restore the recorded world');
+    const marketCheck = await page.evaluate(() => {
+      const history = window.__chronicleHistory, replay = window.__chronicle;
+      const index = history.snapshots.findIndex(snapshot => snapshot.focus === 'market');
+      if (index < 1) return false;
+      const before = { ...history.snapshots[index - 1], focus: 'market' }, after = { ...history.snapshots[index], focus: 'market' };
+      replay.load({ label: history.label, snapshots: [before, after] });
+      const first = window.__chronicleRenderPixels(); replay.seek(1); const grown = window.__chronicleRenderPixels();
+      replay.seek(0); const restored = window.__chronicleRenderPixels(); replay.load(history);
+      return first !== grown && first === restored;
+    });
+    assert(marketCheck, 'Market forward/backward rendering did not replace and restore construction');
     await page.evaluate(() => window.__chronicle.load({ label: 'SIMULATED', snapshots: [] }));
     assert(await page.getByText('There are no recorded nights to read yet.').isVisible(), 'Empty history state is missing');
     assert(await page.getByText('SIMULATED', { exact: false }).isVisible(), 'Empty simulated history lost its label');
@@ -98,6 +124,41 @@ async function accessibility(browser, base, width, height) {
     await slider.focus(); await page.keyboard.press('Escape');
     assert(await page.getByText('The Chronicle is closed.').isVisible(), 'Escape did not close the Chronicle');
     assert(await page.locator('#chronicle-test-opener').evaluate(element => element === document.activeElement), 'Close did not restore host focus');
+    const recovery = await page.evaluate(async () => {
+      const { mountChronicle } = await import('/src/chronicle/view.ts');
+      const opener = document.querySelector('#chronicle-test-opener');
+      const results = [];
+      for (const failure of ['clear', 'dispose']) {
+        opener.focus();
+        const host = document.createElement('div'); document.body.append(host);
+        let closed = false, reported = false, disposed = false;
+        const view = mountChronicle(host, { history: window.__chronicleHistory,
+          binding: { replace() {}, clear() { if (failure === 'clear') throw new Error('clear failed'); },
+            dispose() { disposed = true; if (failure === 'dispose') throw new Error('dispose failed'); } },
+          sound() { throw new Error('sound failed'); }, onClose(error) { opener.hidden = false; closed = true; reported = error instanceof Error; } });
+        const input = host.querySelector('input'); input.value = '1'; input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        const advanced = view.replay.state().status === 'ready' && view.replay.state().index === 1;
+        const button = host.querySelector('.chronicle-close'); button.focus(); opener.hidden = true; button.click();
+        results.push(advanced && closed && reported && disposed && !host.hasChildNodes() && document.activeElement === opener);
+        host.remove();
+      }
+      const host = document.createElement('div'); document.body.append(host);
+      const first = window.__chronicleHistory.snapshots[0];
+      const mixed = mountChronicle(host, { history: { label: 'LIVE', snapshots: [{ ...first, frame: { ...first.frame, origin: 'live' } }] },
+        presentationLabel: 'SIMULATED', simulationNote: 'Simulated scene', binding: { replace() {}, clear() {}, dispose() {} }, sound() {}, onClose() {} });
+      results.push(host.querySelector('.chronicle-origin').textContent.includes('SIMULATED') && host.querySelector('.chronicle-note').textContent === 'Simulated scene');
+      mixed.dispose(); host.remove();
+      opener.focus();
+      const immediate = document.createElement('div'); document.body.append(immediate);
+      let closedImmediately = false;
+      mountChronicle(immediate, { history: window.__chronicleHistory, binding: { replace() {}, clear() {}, dispose() {} }, sound() {}, onClose() { closedImmediately = true; } });
+      const focusedOnOpen = document.activeElement === immediate.querySelector('.chronicle-close');
+      document.activeElement.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      results.push(focusedOnOpen && closedImmediately && document.activeElement === opener && !immediate.hasChildNodes());
+      immediate.remove();
+      return results.every(Boolean);
+    });
+    assert(recovery, 'Host sound or cleanup failure prevented controls, close, error reporting or focus restoration');
     if (errors.length) throw new Error(errors.join('\n'));
     console.log(`${width}x${height}: readable bounds, labels, keyboard, pause/resume, empty/unavailable, Escape and focus restoration passed with reduced motion`);
   } finally { await context.close(); }
@@ -122,33 +183,39 @@ async function record(browser, base) {
     console.log(`SIMULATED playback reached entry ${end.index + 1} of ${end.count}; recorded entries advance by snapshot replacement.`);
   } finally { await context.close(); }
   if (!raw) throw new Error('No recording was produced');
-  const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', raw]);
+  const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', raw], { signal: cancellation.signal });
   const duration = Number(JSON.parse(probe.stdout).format.duration);
   if (!Number.isFinite(duration) || duration < 30) throw new Error(`Recording is too short: ${duration} seconds`);
-  await run('ffmpeg', ['-v', 'error', '-y', '-ss', String(Math.max(0, duration - 30)), '-i', raw, '-t', '30', '-an', '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '5', '-b:v', '0', '-crf', '33', output], { maxBuffer: 4 * 1024 * 1024 });
-  const finalProbe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', output]);
+  await run('ffmpeg', ['-v', 'error', '-y', '-ss', String(Math.max(0, duration - 30)), '-i', raw, '-t', '30', '-an', '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '5', '-b:v', '0', '-crf', '33', output], { maxBuffer: 4 * 1024 * 1024, signal: cancellation.signal });
+  const finalProbe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', output], { signal: cancellation.signal });
   const finalDuration = Number(JSON.parse(finalProbe.stdout).format.duration);
   if (!Number.isFinite(finalDuration) || finalDuration < 29.9 || finalDuration > 30.2) throw new Error(`Trimmed recording has unexpected duration: ${finalDuration}`);
   await rm(raw, { force: true });
   console.log(`Recorded ${finalDuration.toFixed(2)} seconds at ${output}. Playwright video has no audio; this does not verify sound. Watch the entire file before accepting CH02.`);
 }
 
+const checkIndex = process.argv.indexOf('--check');
+const check = process.argv.includes('--record') ? 'record' : (checkIndex < 0 ? 'desktop' : process.argv[checkIndex + 1]);
+if (!['desktop', 'phone', 'record'].includes(check)) throw new Error('Use --check desktop|phone or --record');
+
 try {
-  release = await acquireCaptureLock();
-  server = spawn(process.execPath, [resolve(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: web, stdio: ['ignore', 'pipe', 'pipe'] });
-  const base = await new Promise((accept, reject) => {
-    const timeout = globalThis.setTimeout(() => reject(new Error('Vite did not start')), 30_000);
-    let output = '';
-    const data = chunk => { output += chunk; const match = output.match(/Local:\s*(https?:\/\/127\.0\.0\.1:\d+\/)/); if (match) { globalThis.clearTimeout(timeout); accept(match[1]); } };
-    server.stdout.on('data', data); server.stderr.on('data', data);
-    server.once('exit', code => { globalThis.clearTimeout(timeout); reject(new Error(`Vite exited ${code}: ${output}`)); });
-  });
+  let base;
+  ({ server, base, release } = await startChroniclePreview({ signal: cancellation.signal }));
   await mkdir(evidence, { recursive: true });
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-  for (const [width, height] of [[1440, 900], [390, 844]]) await accessibility(browser, base, width, height);
-  await record(browser, base);
+  cancellation.signal.throwIfAborted();
+  if (check === 'record') await record(browser, base);
+  else await accessibility(browser, base, ...(check === 'desktop' ? [1440, 900] : [390, 844]));
+} catch (error) {
+  failure = cancellation.signal.aborted && (error.name === 'AbortError' || error.name === 'TargetClosedError') ? cancellation.signal.reason : error;
 } finally {
-  await browser?.close();
-  if (server && server.exitCode === null) { server.kill('SIGTERM'); await new Promise(resolve => server.once('exit', resolve)); }
-  await release?.();
+  try { await (browserClosing ?? browser?.close()); } catch (error) { cleanupErrors.push(error); }
+  try {
+    if (server && server.exitCode === null && server.signalCode === null) { server.kill('SIGTERM'); await new Promise(resolve => server.once('exit', resolve)); }
+  } catch (error) { cleanupErrors.push(error); }
+  try { await release?.(); } catch (error) { cleanupErrors.push(error); }
 }
+cancellation.dispose();
+if (failure && cleanupErrors.length) throw new AggregateError([failure, ...cleanupErrors], 'Capture and cleanup both failed');
+if (failure) throw failure;
+if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Capture cleanup failed');

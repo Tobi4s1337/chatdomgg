@@ -52,7 +52,9 @@ export function stepPlayer(s: PlayerState, input: Readonly<WalkInput>, dt: numbe
   if (!(dt > 0 && dt <= .1) || input.collisionRevision !== world.revision || s.collisionRevision !== world.revision) return;
   // A body still inside solids after bounded recovery stays put; `bodyStuck` lets the adapter request placement.
   if (!recoverBody(s, world)) { s.vx = 0; s.vy = 0; s.vz = 0; return; }
-  const grounded = s.grounded;
+  // Recovery can push a previously grounded body beyond a ledge. Do not grant a jump or ground control from
+  // the old position: support belongs to the recovered position, on both authority and prediction.
+  const grounded = s.grounded && supported(s, world);
   const length = Math.max(127, Math.sqrt(input.moveX * input.moveX + input.moveZ * input.moveZ));
   const speed = input.buttons & WALK_BUTTON.sprint ? SPRINT_SPEED : WALK_SPEED;
   const tx = input.moveX / length * speed, tz = input.moveZ / length * speed;

@@ -19,7 +19,7 @@ Work in checkpoints: if a session ends before the part is done, leave everything
 Captures: take the shared capture lock for one still or one short clip at a time and release it in between, so main can capture between your frames; never hold it for a whole series.
 
 ## Tasks
-- [ ] **GK10 — The grand land, whole.** A channel's land at the Eldermere scale from its seed: terrain with strata, snow, cliffs, rivers, waterfalls, beaches and sea; forests of distinct species, fields and meadows; clouds, golden-hour light, haze, a reflecting sea, dusk; rendered at tens of millions of voxels at 60+ fps on a good GPU (streaming, far LOD, instancing, culling) and graceful on software; orbit view at `/-/grand`.
+- [x] **GK10 — The grand land, whole.** A channel's land at the Eldermere scale from its seed: terrain with strata, snow, cliffs, rivers, waterfalls, beaches and sea; forests of distinct species, fields and meadows; clouds, golden-hour light, haze, a reflecting sea, dusk; rendered at tens of millions of voxels at 60+ fps on a good GPU (streaming, far LOD, instancing, culling) and graceful on software; orbit view at `/-/grand`.
 - [ ] **GK11 — The grand kingdom on it, whole.** The castle on its rock with spires and banners, the walled town with every home on a real street, the harbour, windmills and landmarks, seeded by Genesis per channel (biome, crest colours, emotes in stone and glass, hamlet → capital); homes and growth, citizens, the Forge square, the moments and raid arrivals working inside it on main's frozen seam; tobi4s_ and the three Genesis channels re-founded, with before/after stills.
 
 ## Backlog
