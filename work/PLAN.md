@@ -346,21 +346,31 @@ starting seam begins at0 and keeps dusk. Windows use witnessed presence (1a10d43
 arrival still drives door lanterns and smoke. `shots/magic/arrival-wide-first-pair.png` is viewed:
 old close TOP, town-wide AFTER below;1920×1080/time6/hour19.5/high,121 walkers/windows.
 
-**This turn:** viewed seven640×360 storyboard samples1.2–28s in
-`shots/magic/arrival-handoff-storyboard.png`:1→25→121→208→225→240 windows; broad wave then
-warm Juniper homecoming. These are settled stills, NOT a watched film. Wide opening felt
-anonymous: recent publicly named windows may now carry the stream’s one name plate out to240m,
-with existing facing/occlusion/privacy checks; close and old labels remain local. Root viewed
-`shots/magic/arrival-named-wave-after.png` and `-pair.png` at1920×1080/time6: Rowan clearly
-belongs to the glowing window. Before TOP, after BOTTOM; light/composition unchanged.
-Typecheck, scoped lint, nine arrival/presence-light tests and production build pass. No browser
-errors or forbidden requests. Both serial capture jobs released browser/server/lease.
-**Next:** judge actual wave-to-street motion and its timing, not more fixed stills. The wide
-wave reads most strongly on the left road; people remain tiny until the descent. Opening to view:
-`/stream?source=simulated&tier=town&hour=19.5&seam=starting`. Use ONE capture(time) per offline
-sample, never dozens of resets. Queue once for up to20min; never unlink locks.
+**Latest change:** SIMULATED Starting now constructs scene/light fields at time0, then plays
+from0 as before. Previously it prepared a full town at30, rewound at publishDebug, and briefly
+left warm ground pools at empty homes which then went dark. Root viewed native1920×1080
+first-ready before/after and `shots/magic/arrival-first-ready-pair.png` (before TOP). Both sim0,
+hero/Starting/show/high, zero active windows: borrowed warm pools disappear; castle stays lit.
+Typecheck, scoped lint, six arrival/stream-params tests and production build pass. No browser
+errors. Real sources and explicit fixture times retain their settings.
 
-**Team:** latest main8bc5d99; prior merges7b56cb3 card sharing and f62bc9f aurora. Fresh narrow
+**Motion evidence / next:** `shots/magic/arrival-opening-before-partial.mp4` and `-contact.png`
+cover old opening approx0–8.4s (last logged8.0),640×360/5fps/SHOW mood, controlled clock with
+actual director and Starting caption. Root viewed extracted sequence, NOT a full-speed GPU take.
+Found ghost-light bug above; stopped own slow capture once found. It ends as wooden shutters
+close at8s, before street/homecoming: do not claim whole moment verified. That cut interrupts
+the wave; next lift the uninterrupted wide-to-street handoff. Keep the accepted wide exposure.
+Earlier `arrival-handoff-storyboard.png` shows warm Juniper homecoming at14–20s but is stills.
+GPU request:1920×1080 first25s of `/stream?source=simulated&tier=town&hour=19.5&seam=starting`
+(default calm) for full-speed wave/descent/homecoming. Do not wait on it; fix the observed cut.
+
+**Capture:** motion attempt first failed on temporary-server MIME before browser rendering;
+retry used proven Vite preview. Partial run intentionally interrupted; no final manifest,
+endpoint derived from frame index. Final first-ready pair completed and released browser,
+server and lease. No active job. Avoid another hundreds-frame SwiftShader take. For targeted
+pairs queue once up to20min, use native1920 stills; never unlink locks or kill other holders.
+
+**Team:** prior maina851636; prior merges7b56cb3 card sharing and f62bc9f aurora. Fresh narrow
 scan found no runtime checkpoint on picture-land/trees, effects, avatar, card/passport, Genesis,
 raid-road or sky. Raid-road8543a25 only registers scope; code already on main. Sky’s wiring
 patch is not proof of live cheer hookup. Genesis, card/passport, raid journey and sky stay with
