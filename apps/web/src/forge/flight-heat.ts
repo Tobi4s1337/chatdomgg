@@ -7,7 +7,8 @@ export function forgeFlightHeat(frame: ForgeRitualFrame | null): number {
   const p = THREE.MathUtils.clamp(frame.phaseProgress, 0, 1);
   if (frame.phase === 'cool') return .9 * THREE.MathUtils.smoothstep(p, .35, 1);
   if (frame.phase === 'flight') return .9 - .35 * THREE.MathUtils.smoothstep(p, 0, 1);
-  if (frame.phase === 'landed') return .55 * (1 - THREE.MathUtils.smoothstep(p, 0, .5));
+  // Let the receiving home settle into frame before the hearth warmth cools away.
+  if (frame.phase === 'landed') return .55 * (1 - THREE.MathUtils.smoothstep(p, .3, 1));
   return 0;
 }
 

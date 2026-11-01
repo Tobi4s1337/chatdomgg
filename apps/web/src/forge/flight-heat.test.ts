@@ -19,6 +19,9 @@ it('carries isolated residual heat through the actual flight/contact boundary, t
     expect(gift.material.uniforms.uLight).toBe(source.material.uniforms.uLight);
     expect(forgeFlightHeat(frame(flight[1] - .00001))).toBeCloseTo(forgeFlightHeat(frame(flight[1])), 5);
     expect(forgeFlightHeat(frame(landed[1] - .00001))).toBeCloseTo(forgeFlightHeat(frame(landed[1])), 5);
+    // The gift is still visibly warm when the landing camera first settles.
+    gift.setFlightFrame(frame((landed[1] + landed[2]) / 2));
+    expect(gift.material.uniforms.uFlightHeat!.value).toBeGreaterThan(.4);
     gift.setFlightFrame(frame(landed[2]));
     expect(gift.material.uniforms.uFlightHeat!.value).toBe(0);
     // Both warm treatments must run after the voxel surface colour exists, before its fog is applied.
