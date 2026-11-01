@@ -1,0 +1,1 @@
+next: GM10 lane scope and task recorded; kingdom implementation and before/after captures remain.
