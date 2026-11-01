@@ -6,7 +6,7 @@ Every task is done when focused tests, typecheck, lint and relevant build pass; 
 
 ## Tasks
 
-- [ ] **GH01 — Several weeks of witnessed simulated growth** · evidence: deterministic replay and fact timeline
+- [x] **GH01 — Several weeks of witnessed simulated growth** · evidence: deterministic replay and fact timeline
 - [ ] **GH02 — Safe scene projections for history** · evidence: schema, provenance and transition tests
 
 ## Backlog
