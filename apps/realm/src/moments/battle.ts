@@ -86,7 +86,7 @@ interface KingdomBattles {
 export class RealmDragonBattles {
   private services: DurableRealmServices | null = null;
   private readonly kingdoms = new Map<KingdomId, KingdomBattles>();
-  private readonly unresumed = new Map<KingdomId, { readonly kingdom: DurableKingdom; readonly timer: ReturnType<typeof setTimeout> }>();
+  private readonly unresumed = new Map<KingdomId, { readonly kingdom: DurableKingdom; timer: ReturnType<typeof setTimeout> | null; readonly strikes: RealmStrike[] }>();
   private stopped = false;
   readonly counts = { summoned: 0, strikes: 0, refused: 0, commits: 0, victories: 0, retreats: 0, failures: 0 };
 
@@ -111,7 +111,12 @@ export class RealmDragonBattles {
   /** A witnessed `!strike`. Lands only while this kingdom's dragon is in the fight, at most once per cadence per person. */
   strike(strike: RealmStrike): 'accepted' | 'absent' {
     const waiting = this.unresumed.get(strike.kingdomId);
-    if (waiting) this.resume(waiting.kingdom);
+    if (waiting) {
+      if (strike.origin !== this.origin || waiting.strikes.length >= PENDING_STRIKE_LIMIT) { this.counts.refused++; return 'absent'; }
+      waiting.strikes.push(strike);
+      this.resume(waiting.kingdom);
+      return 'accepted';
+    }
     const battles = this.kingdoms.get(strike.kingdomId);
     const now = this.clock();
     const target = battles && [...battles.records.values()].find(r => r.phase === 'active' || (r.phase === 'summoning' && now >= r.startsAt));
@@ -140,19 +145,19 @@ export class RealmDragonBattles {
     if (this.stopped) return () => {};
     const resume = setTimeout(() => this.resume(kingdom), RESUME_DELAY_MS);
     resume.unref?.();
-    this.unresumed.set(kingdom.kingdomId, { kingdom, timer: resume });
+    this.unresumed.set(kingdom.kingdomId, { kingdom, timer: resume, strikes: [] });
     return () => {
       const waiting = this.unresumed.get(kingdom.kingdomId);
-      if (waiting?.kingdom === kingdom) { clearTimeout(waiting.timer); this.unresumed.delete(kingdom.kingdomId); }
+      if (waiting?.kingdom === kingdom) { if (waiting.timer) clearTimeout(waiting.timer); this.unresumed.delete(kingdom.kingdomId); }
     };
   }
 
   private resume(kingdom: DurableKingdom) {
     const waiting = this.unresumed.get(kingdom.kingdomId);
-    if (!waiting || waiting.kingdom !== kingdom || this.stopped) return;
+    if (!waiting || waiting.kingdom !== kingdom || this.stopped || !waiting.timer) return;
     clearTimeout(waiting.timer);
-    this.unresumed.delete(kingdom.kingdomId);
-    if (!kingdom.current) return;
+    waiting.timer = null;
+    if (!kingdom.current) { this.unresumed.delete(kingdom.kingdomId); return; }
     void kingdom.writeMoments(async (lease, current) => createPostgresMomentRecords(this.db, lease, this.origin, current)
       .transact(kingdom.kingdomId, async tx => {
         const repository = momentRepository(tx), found: DragonRecord[] = [];
@@ -162,13 +167,23 @@ export class RealmDragonBattles {
           if (record && !FINISHED.has(record.phase)) found.push(record);
         }
         return found;
-      })).then(found => { for (const record of found) this.track(kingdom.kingdomId, record); },
-      error => this.log(`[dragon] kingdom ${kingdom.kingdomId} battles not resumed: ${describeStorageFailure(error)}`));
+      })).then(found => {
+      if (this.unresumed.get(kingdom.kingdomId) !== waiting) return;
+      this.unresumed.delete(kingdom.kingdomId);
+      for (const record of found) this.track(kingdom.kingdomId, record);
+      for (const strike of waiting.strikes) this.strike(strike);
+    }, error => {
+      if (this.unresumed.get(kingdom.kingdomId) !== waiting) return;
+      this.log(`[dragon] kingdom ${kingdom.kingdomId} battles not resumed: ${describeStorageFailure(error)}`);
+      // Keep admitted strikes until the read succeeds or this writer is detached.
+      waiting.timer = setTimeout(() => this.resume(kingdom), 2_000);
+      waiting.timer.unref?.();
+    });
   }
 
   stop() {
     this.stopped = true;
-    for (const { timer } of this.unresumed.values()) clearTimeout(timer);
+    for (const { timer } of this.unresumed.values()) if (timer) clearTimeout(timer);
     this.unresumed.clear();
     for (const battles of this.kingdoms.values()) if (battles.timer) clearTimeout(battles.timer);
     this.kingdoms.clear();
