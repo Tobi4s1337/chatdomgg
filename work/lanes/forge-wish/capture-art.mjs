@@ -4,9 +4,10 @@ import { once } from 'node:events';
 import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
 
 // Run the GPU branch only inside chatdom-pc-lease. The CPU fallback takes one still, no timings.
-const gpu = process.argv[2] === 'gpu', port = gpu ? 5192 : 5171;
+const gpu = process.argv[2] === 'gpu', port = gpu ? 5192 : Number(process.env.FORGE_WISH_CAPTURE_PORT ?? 5172);
+if (!gpu && (!Number.isInteger(port) || port < 5170 || port > 5189 || port === 5187)) throw new Error('Choose an unreserved lane preview port.');
 const output = 'work/evidence/forge-wish/contact-sheets';
-const release = gpu ? async () => {} : await acquireCaptureLock({ signal: AbortSignal.timeout(120_000) });
+const release = gpu ? async () => {} : await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(120_000) });
 let server, browser;
 let cleanup;
 function closeOwned() {

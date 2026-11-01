@@ -25,7 +25,7 @@ enables permanent emitters. Seeking is a pure redraw: any sampling interval give
   spit where the stream lands. The contour lets go as the last layer arrives; the crucible rights and leaves.
 - **Seal (11–12.2 s).** A warm bead of wax, then the press: the medallion slams in, settles, and shows the
   Forge's mark (an anvil and a spark, drawn as a height field so it reads as pressed wax). A parchment ribbon
-  unrolls beneath. It reads “Fit for this home · SIMULATED” for local runs; only a `live` frame at `seal` or later
+  unrolls beneath. It reads “Fit for this home”; only a `live` frame at `seal` or later
   reads “Fit for the realm”. Both lines are lettered once at construction. Meanwhile the hammer rises and winds
   up; a seal held by a pending gate waits with the hammer raised and never strikes.
 - **Strike (12.2–12.7 s).** The hammer and crucible are sized to the part (up to 1.8× for a tall chimney), so
@@ -100,7 +100,7 @@ presentation.dispose();
 - Bench: `/-/forge-ritual?part=chimney|lantern|weathervane&family=hearth|tide|grove&hour=19.5&t=12.4&gate=12.2&motion=reduce`
   (`apps/web/src/forge-ritual-bench`). It forges a real part with main's grammar, assembly, checks and worker
   mesher, stands it on main's anvil beside a native home, runs the whole 21 s ceremony, follows the flight side on
-  to the roof with a bench-only camera (a cut, not a sweep, with reduced motion), and labels everything SIMULATED. `gate` holds the reported stage while
+  to the roof with a bench-only camera (a cut, not a sweep, with reduced motion); the bench previews presentation only. `gate` holds the reported stage while
   time passes, as a pending live gate would; a gate on a stage boundary holds the finished earlier stage.
 - Test: `pnpm exec vitest run apps/web/src/forge/presentation`.
 - Capture (holds the shared host capture lock; after `pnpm build`): `node apps/web/src/forge-ritual-bench/capture.mjs`.

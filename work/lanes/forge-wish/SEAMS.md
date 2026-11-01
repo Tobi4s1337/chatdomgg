@@ -126,3 +126,37 @@ private receipt line in its own receipt surface. No new public outcome or change
 The web proxy reads `CHATDOM_FORGE_TARGET` (default unchanged). A standalone `src/forge-wish-bench/index.html`
 build entry renders authored pieces through the production voxel material for visual review. It has no product
 navigation, authority, citizens or successful-wish claim.
+
+## 8. Separate chat grant and the walk panel (FW10 checkpoint)
+
+The exported `openForge`/`ForgeHost` API in section 1 now exists. `AnvilVisit` accepts optional `forgeHost` and
+opens that same panel. No actual play host exists on this checkout, so its default remains channel-chat guidance.
+`needs: play` must supply its empty HUD root and real pointer callbacks, route Escape before its menu, and pass
+the host through its anvil place options to `AnvilVisit`. This lane does not install no-op callbacks or change
+the walk controller. The isolated `forge-wish-panel-bench` proves layout/HTTP behavior, not the walk integration.
+
+New `packages/shared/src/forge-chat.ts` freezes the five exact routes under `/api/realm/forge/chat/`:
+`status`, `authorize`, `callback`, `wish`, `revoke`. The public gateway permits only these literal doors; the web
+proxy sends this prefix to `CHATDOM_REALM_TARGET`. Existing sign-in remains `openid` only. The separate grant
+adds `user:write:chat`, preserving the same person's already-authorized client scopes.
+
+`apps/realm/src/forge-chat` owns encrypted grants, private send receipts and migration `0014-forge-chat.sql`.
+Its own checksum ledger avoids changing the core migration registry. `wiring/forge-chat-runtime.ts` composes it
+through small typed registrations in realm main: setup, mount, startup validation, observer and shutdown.
+The Forge-only evening path emits `working` after witnessed ingress/live checks and a finite owner-only outcome
+after authority work. An observer failure cannot change that work. Exact owner/message recovery reads committed
+attachments; released or sent requests never become invented deliveries.
+
+`needs: configuration` — register `https://chatdom.gg/api/realm/forge/chat/callback` on the Twitch app. An isolated
+loopback preview on this checkpoint's port instead needs `http://localhost:5172/api/realm/forge/chat/callback`,
+with `REALM_PUBLIC_ORIGIN=http://localhost:5172`. Preview hosts require their own exact URI. Configure the existing
+client credentials, `FORGE_CHAT_ENABLED=1`, `FORGE_CHAT_REDIRECT_URI` and an external mode-0600
+`FORGE_CHAT_TOKEN_KEY_FILE` containing a base64 32-byte key. No configuration or registration was changed here.
+
+`needs: isolated database` — a private connection configured in ignored environment data, with realm and API
+sessions in schema `realm_forge_wish`, is required for real SQL race tests and the live-service wish proof.
+There is no database configuration or local server binary in this worktree. No production database was used.
+
+`needs: intake` — the exact coordinated 240→493 patch for the existing Herald/run contracts and Herald guards
+is written in [fw10-panel-contract.md](fw10-panel-contract.md#exact-integration-needs). Current intake rejects
+longer text before posting; it never truncates a wish. The frozen overlong fixture remains unsupported.

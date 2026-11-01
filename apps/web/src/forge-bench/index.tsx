@@ -177,7 +177,7 @@ export default function ForgeBench() {
   const caption = () => {
     const s = state();
     if (!s) return '';
-    const light = s.view === 'window' ? `SIMULATED window presence ${s.presence.toUpperCase()}` : 'unoccupied review assembly';
+    const light = s.view === 'window' ? `Window presence preview ${s.presence.toUpperCase()}` : 'unoccupied review assembly';
     return `${s.view === 'window' ? 'window' : `door ${s.door}`} · ${String(s.hour).padStart(2, '0')}:00 · ${light}`;
   };
   return <section class="forge-bench" style={{ background: sky() || undefined }}>
@@ -185,7 +185,7 @@ export default function ForgeBench() {
     <header>
       <span>CHATDOM · FORGE WORKSHOP</span>
       <strong>{state() ? `${FAMILY_NAMES[state()!.family]} cottage · ${state()!.view}` : 'Forge pieces'}</strong>
-      <small classList={{ simulated: state()?.view === 'window' }}>{caption()}</small>
+      <small>{caption()}</small>
     </header>
     {status() && <div class="forge-bench-status" role={failed() ? 'alert' : 'status'}><strong>{failed() ? 'The cottage could not be shown' : 'At the joiner’s bench'}</strong><p>{status()}</p></div>}
   </section>;

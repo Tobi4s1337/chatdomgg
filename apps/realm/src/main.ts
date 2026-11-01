@@ -17,6 +17,7 @@ import { attachEveningInteractions } from './evening/interactions';
 import { createServer as createPortReservation } from 'node:net';
 import { realmListenHost, realmListenPort } from './listen-port';
 import { ownRealmShutdown } from './lifecycle';
+import { createRealmForgeChat } from './wiring/forge-chat-runtime';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -85,7 +86,9 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   citizens.use(boot.allocation, boot.services);
   boot.ingress.moments.useSettler(citizens);
   castle.use(boot.allocation, boot.store);
+  const forgeChat = await createRealmForgeChat({ pool, origin, services: boot.services, founded: id => !!boot.loader.current(id)?.scene });
   const evening = new RealmEveningBridge({ origin, ingress: boot.ingress, gate, approvals,
+    forgeChatObserver: forgeChat.observe,
     beforeObservation: input => citizens.observe(input) });
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
@@ -93,16 +96,18 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); } });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
+  forgeChat.mount(transport.app);
   ownRealmShutdown(server, transport, async () => {
     dock.stop();
-    try { await evening.stop(); }
-    finally { try { await boot.stop(); } finally { await pool.end(); } }
+    try { await forgeChat.stop(); }
+    finally { try { await evening.stop(); } finally { try { await boot.stop(); } finally { await pool.end(); } } }
   });
   try {
     await boot.readiness.start();
+    await forgeChat.start();
     await releasePort();
     await server.listen(port, host);
-  } catch (error) { dock.stop(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
+  } catch (error) { dock.stop(); await forgeChat.stop(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
     + (boot.ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);

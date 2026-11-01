@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { CitizenChatCueSchema, PRESENCE_LEASE_MS, type CitizenChatCue, type KingdomId, type PresenceInput } from '@chatdom/shared';
+import { CitizenChatCueSchema, PRESENCE_LEASE_MS, type CitizenChatCue, type ForgeChatObservation, type ForgeChatObserver, type KingdomId, type PresenceInput } from '@chatdom/shared';
 import { REALM_CASTLE_SLOT, RealmHeraldEnvelopeSchema, RealmHeraldForgeCommandSchema, type KingdomForgeCommand, type KingdomForgeLease, type KingdomForgeOutcome, type RealmHeraldChat, type RealmPrivateMessage } from '@chatdom/shared/realm';
 import { createKingdomForgeApplication, type KingdomForgeResult } from '../../../codex/src/kingdom-forge/application';
 import { createForgeProviders, type ForgeProviders } from '../../../codex/src/providers';
@@ -23,11 +23,15 @@ export interface RealmEveningOptions {
   readonly providers?: ForgeProviders;
   /** Authenticated normalized Herald evidence only. A failed prerequisite leaves it for the sender to retry. */
   readonly beforeObservation?: (input: PresenceInput) => Promise<void>;
+  /** Owner-only chat progress. Failure cannot undo, refuse or repeat an authoritative Forge run. */
+  readonly forgeChatObserver?: ForgeChatObserver;
 }
 
 type Application = ReturnType<typeof createKingdomForgeApplication>;
 interface Context { readonly kingdom: DurableKingdom; readonly run: Application; readonly stop: () => void }
 interface Pending { readonly command: KingdomForgeCommand; readonly abort: AbortController; readonly promise: Promise<KingdomForgeOutcome> }
+type ForgeChatProgress<T = ForgeChatObservation> = T extends ForgeChatObservation
+  ? Omit<T, 'origin' | 'kingdomId' | 'personId' | 'messageId' | 'at'> : never;
 
 /**
  * Herald's evening consumer. The registry remains the only owner of a writer; this module takes counted
@@ -99,10 +103,16 @@ export class RealmEveningBridge {
     command = parsed.data;
     const key = this.key(command.kingdomId, command.messageId);
     this.sweepWithdrawn();
-    if (this.withdrawn.has(key)) return { kind: 'canceled' };
+    if (this.withdrawn.has(key)) {
+      await this.observe(command, { status: 'canceled', message: 'The wish has stopped. Your coal stays yours.' });
+      return { kind: 'canceled' };
+    }
     const active = this.pending.get(key);
     if (active) return active.promise;
-    if (this.pending.size >= MAX_PENDING) return { kind: 'held' };
+    if (this.pending.size >= MAX_PENDING) {
+      await this.observe(command, { status: 'held', message: 'Every anvil is busy just now. Your wish has not started; your coal stays yours.' });
+      return { kind: 'held' };
+    }
     const abort = new AbortController();
     const signal = incoming ? AbortSignal.any([abort.signal, incoming.signal]) : abort.signal;
     // Reserve the bounded handoff slot BEFORE awaiting the registry, including a cold/slow opening.
@@ -126,6 +136,7 @@ export class RealmEveningBridge {
           this.privateOutcome(kingdom, command, offline);
           return offline;
         }
+        await this.observe(command, { status: 'working' });
         const sessionId = kingdom.privateState.stream.sessionId;
         const current = () => {
           const at = kingdom.databaseNow(), state = kingdom.privateState;
@@ -140,6 +151,7 @@ export class RealmEveningBridge {
         } finally { clearTimeout(timer); }
       } finally { await hold.release(); }
     }).catch((): KingdomForgeOutcome => ({ kind: signal.aborted ? 'canceled' : 'cold' }))
+      .then(async outcome => { await this.observeOutcome(command, outcome); return outcome; })
       .finally(() => { if (this.pending.get(key)?.abort === abort) this.pending.delete(key); });
     this.pending.set(key, { command, abort, promise });
     return promise;
@@ -326,6 +338,27 @@ export class RealmEveningBridge {
       ? 'Your wish waits privately at the Forge.' : 'The forge is cold tonight. Your home is unchanged.');
     const reply: RealmPrivateMessage = { type: 'receipt', receipt: { version: 1, id: `forge:${digest(command.messageId).slice(0, 48)}`, status, message } };
     kingdom.toOwner(command.personId, reply);
+  }
+
+  private async observe(command: KingdomForgeCommand, outcome: ForgeChatProgress): Promise<void> {
+    // No wish words or provider evidence cross this private seam. A failed projection is recoverable
+    // from the durable committed piece, and must never become a retry of the authority or chat write.
+    try { await this.options.forgeChatObserver?.({ origin: this.options.origin, kingdomId: command.kingdomId,
+      personId: command.personId, messageId: command.messageId, at: Date.now(), ...outcome } as ForgeChatObservation); }
+    catch { /* owner projection unavailable; the authoritative outcome remains unchanged */ }
+  }
+
+  private async observeOutcome(command: KingdomForgeCommand, outcome: KingdomForgeResult): Promise<void> {
+    if (outcome.kind === 'committed') {
+      await this.observe(command, { status: 'delivered', attachmentId: outcome.attachment.id,
+        committedAt: outcome.attachment.committedAt, ...(outcome.privateMessage ? { message: outcome.privateMessage } : {}) });
+    } else if (outcome.kind !== 'already-committed') {
+      const status = outcome.kind === 'recovery-needed' ? 'cold' : outcome.kind;
+      await this.observe(command, { status, message: outcome.privateMessage ?? (outcome.kind === 'refused'
+        ? outcome.message : outcome.kind === 'held' ? 'Your wish waits privately at the Forge.'
+          : outcome.kind === 'canceled' ? 'The wish has stopped. Your coal stays yours.'
+            : 'The forge is cold tonight. Your home is unchanged.') });
+    }
   }
 
   private key(kingdomId: KingdomId, messageId: string): string { return digest(JSON.stringify([kingdomId, messageId])); }

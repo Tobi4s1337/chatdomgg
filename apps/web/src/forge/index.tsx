@@ -48,6 +48,6 @@ export function ForgePanel(props:{status:ForgeStatus;submit:(words:string)=>Prom
     <Show when={props.status.kept&&!props.status.busy}><button class="forge-kept" type="button" onClick={props.refit}>Return a kept piece · {props.status.kept}</button></Show>
     <Show when={props.status.plaque&&!props.status.busy}><p class="forge-origin">{props.status.plaque}</p></Show>
     <Show when={props.status.maker}><p class="forge-origin">{props.status.maker}</p></Show>
-    <p class="forge-footnote"><Show when={props.status.runtime==='fixture'}><span>Authored wishes · checks simulated</span></Show><span>Practice Forge · your coals are untouched</span></p>
+    <p class="forge-footnote"><span>Practice Forge · your coals are untouched</span></p>
   </section>;
 }

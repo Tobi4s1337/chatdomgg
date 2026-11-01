@@ -42,6 +42,7 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (pathname === '/healthz') return { kind: 'health' };
   if (pathname.startsWith('/internal/') || pathname === '/internal') return { kind: 'not-found', api: true };
   if (AUTH.test(pathname)) return { kind: 'auth' };
+  if (/^\/api\/realm\/forge\/chat\/(?:status|authorize|callback|wish|revoke)$/.test(pathname)) return { kind: 'realm' };
   if (/^\/api\/dock\/(?:status|actions|presentations|witness)$/.test(pathname)) return { kind: 'dock' };
   if (REALM_READ.test(pathname)) return { kind: 'realm' };
   if (pathname === REALM_PREFIX || pathname.startsWith(`${REALM_PREFIX}/`)) {
