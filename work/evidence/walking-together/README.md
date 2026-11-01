@@ -2,6 +2,12 @@
 
 WT10 is **open**. These are SIMULATED component reviews; actual town acceptance is still pending.
 
+## Actual movement diagnostics
+
+Source checkpoint `ea70aab` preserves the two actual desktop movement failures. Both reached Kingdom ready, three distinct SDK clients, visible names and settled lighting. On the second run the retained exact state shows both peers travelled **25.1 m in authority / 25.36 m predicted**, while self stayed at spawn and its render-driven controller had only **three frames**. No browser errors; walk ownership and prediction remained available. The unchanged 20 s movement assertion failed. The bounded diagnostic screenshot also timed out, so there is **no town PNG to inspect or accept**. See `checks/landed-town-motion-diagnostic*` and `landed-town-motion-timeout*`.
+
+A required 390×844 phone attempt is now running with the same motion thresholds and actual product rendering, no quality override or synthetic time stepping. SwiftShader render cadence is an inference from the diagnostics; real-GPU motion and input feel are still unproven. A third same movement timeout ends this iteration rather than another unchanged retry.
+
 ## Landed consumer review
 
 Main `201f591` has landed the six-file presentation patch; synced here by merge `6087a27`. Source checkpoint `be281e9` recognizes **21/21 already-landed hunks with zero overlays** and aligns two comments in the historical patch. Full typecheck and build pass. `checks/landed-*.log` preserves the results.
