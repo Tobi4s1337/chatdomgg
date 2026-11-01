@@ -2,6 +2,12 @@
 
 WT10 is **open**. These are SIMULATED component reviews; actual town acceptance is still pending.
 
+## Actual movement diagnostics
+
+Source checkpoint `ea70aab` preserves the two actual desktop movement failures. Both reached Kingdom ready, three distinct SDK clients, visible names and settled lighting. On the second run the retained exact state shows both peers travelled **25.1 m in authority / 25.36 m predicted**, while self stayed at spawn and its render-driven controller had only **three frames**. No browser errors; walk ownership and prediction remained available. The unchanged 20 s movement assertion failed. The bounded diagnostic screenshot also timed out, so there is **no town PNG to inspect or accept**. See `checks/landed-town-motion-diagnostic*` and `landed-town-motion-timeout*`.
+
+A required 390×844 phone attempt is now running with the same motion thresholds and actual product rendering, no quality override or synthetic time stepping. SwiftShader render cadence is an inference from the diagnostics; real-GPU motion and input feel are still unproven. A third same movement timeout ends this iteration rather than another unchanged retry.
+
 ## Landed consumer review
 
 Main `201f591` has landed the six-file presentation patch; synced here by merge `6087a27`. Source checkpoint `be281e9` recognizes **21/21 already-landed hunks with zero overlays** and aligns two comments in the historical patch. Full typecheck and build pass. `checks/landed-*.log` preserves the results.
@@ -12,7 +18,11 @@ The second town still was stopped by the host guard at 18:25 and exited 1 with n
 
 The third single still acquired normally and reached browser navigation, then timed out on readiness. Its failure JSON proves a runner root-route bug: offline `/` returned a 404 directory response (body "Missing compiled review asset"), so no Kingdom rendered. See `checks/landed-town-root-route*`. The helper now maps `/` to `/index.html`; the runner asserts HTTP success before readiness and explicitly sets failure exit status before rethrowing past the transport handler. A replacement still is pending. This failure is not evidence of renderer performance or product readiness.
 
-The fourth still (`landed-town-rootfix`) passed HTTP success and reached the actual Kingdom ready flag. Its retained debug metadata shows 240 homes/citizens and 1.29M rendered triangles. It then failed before the first SDK client joined because Chrome denied loopback network permission from the offline HTTPS origin (`checks/landed-town-loopback-denied*`). Source checkpoint `8c93e6a` grants that test origin local-network-access while preserving the owned-realm request allowlist. Final runner/helper ESLint passes; the next single-still attempt is pending. No image or real walking acceptance is inferred from the ready flag.
+The fourth still (`landed-town-rootfix`) passed HTTP success and reached the actual Kingdom ready flag. Its retained debug metadata shows 240 homes/citizens and 1.29M rendered triangles. It then failed before the first SDK client joined because Chrome denied loopback network permission from the offline HTTPS origin (`checks/landed-town-loopback-denied*`). Source checkpoint `8c93e6a` grants that test origin local-network-access while preserving the owned-realm request allowlist. Final runner/helper ESLint passes. The next single-still attempt exited 1 after admission because every allowed port was occupied; it created no listener/browser and saved no image (`checks/landed-town-no-safe-port*`). The permission fix remains runtime-unverified until a safe port is available. No image or real walking acceptance is inferred from the ready flag.
+
+Desktop wardrobe retake completed under one lock with no listener: `wardrobe/wardrobe@1440x900.png` was opened with `view_image`. The full body, earned/lapsed pieces and Unsaved changes footer are readable; no clipping or missing thumbnail was seen. Paired JSON has zero browser errors and real arrow-key checks for tile/swatch selection (one tab stop, one selected/focused choice). This is SIMULATED browser-only wardrobe proof. It does not establish authorized saved clothes in the town or stream.
+
+A fresh read-only probe at 18:48 found allowed port 5182 free; one actual-town still was started on that changed availability, with port preflight both before CPU work and after admission. No service was stopped or reused. That job then found 5171 free after admission, reached the actual Kingdom ready flag and attached three distinct SDK clients. The loopback fix is thus verified through real connection; lighting/movement/still checks are not yet accepted.
 
 ## Main-fix resume checkpoint
 
