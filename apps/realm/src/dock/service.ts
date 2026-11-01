@@ -239,7 +239,11 @@ export class RealmDockService {
       raids.push({ id: fact.body.raidKey, name: fact.body.from.displayName });
     }
     const ready = now - head.lastAt >= CADENCE;
-    const undoWitnessed = !!head.undo && (await tx.query('SELECT 1 FROM realm_dock_presentations WHERE event_id = $1 AND witnessed_ms IS NOT NULL', [head.undo.eventId])).rowCount === 1;
+    const undoRow = head.undo ? (await tx.query<{ presentation: string }>('SELECT presentation FROM realm_dock_presentations WHERE event_id = $1 AND witnessed_ms IS NOT NULL', [head.undo.eventId])).rows[0] : undefined;
+    const undoEvent = undoRow ? RealmDockPresentationSchema.parse(JSON.parse(undoRow.presentation)) : undefined;
+    const undoWitnessed = !!undoEvent;
+    const undoable = undoEvent && undoEvent.kind !== 'undo' && head.undo && head.undo.until > now
+      ? [{ id: `receipt:${undoEvent.id}`, kind: undoEvent.kind, label: undoEvent.kind.replaceAll('-', ' ') }] : [];
     const capabilities = ACTIONS.map(kind => {
       const eligible = kind === 'gate-open' ? head.gate !== 'open' : kind === 'gate-close' ? head.gate !== 'closed'
         : kind === 'fire-light' ? head.fireUntil <= now : kind === 'raid-welcome' ? raids.length > 0
@@ -260,7 +264,7 @@ export class RealmDockService {
         comingLabel: raids.length ? `${raids.length} witnessed arrival${raids.length === 1 ? '' : 's'} at the gate` : 'No pending witnessed arrivals' },
       raids, citizens: citizens.map(({ id, name }) => ({ id, name })),
       moments: [{ id: 'sky-dusk', name: 'Gather beneath the dusk sky', available: ready, reason: ready ? '' : 'Let this moment land.' }],
-      capabilities,
+      capabilities, undoable,
       revision: `dock:${digestOf({ revision, domain: kingdom.sequence, layout: kingdom.layoutRevision, raids, citizens,
         capabilities, fire: head.fireUntil > now, undo: !!head.undo && head.undo.until > now && undoWitnessed })}` });
     return { state, head, revision, now, citizens };
@@ -317,7 +321,7 @@ export class RealmDockService {
       occurredAt: now, expiresAt: now + 60_000, gate: head.gate, fire: head.fireUntil > now ? 'lit' : 'unlit' });
     head.lastAt = now;
     // Welcoming a real raid cannot erase its provenance or restore a consumed incoming raid.
-    head.undo = action.kind === 'undo' ? null : { eventId: event.id, until: now + 30_000, before };
+    head.undo = ['undo', 'raid-welcome', 'moment-play'].includes(action.kind) ? null : { eventId: event.id, until: now + 30_000, before };
     await tx.query(`INSERT INTO realm_dock_heads (kingdom_id, revision, state) VALUES ($1, $2, $3)
       ON CONFLICT (kingdom_id) DO UPDATE SET revision = excluded.revision, state = excluded.state`, [kingdom.kingdomId, snap.revision + 1, JSON.stringify(head)]);
     await tx.query(`INSERT INTO realm_dock_presentations (event_id, kingdom_id, origin, action_id, presentation, created_ms)
