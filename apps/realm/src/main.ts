@@ -1,3 +1,4 @@
+import { RealmDockService, mountRealmDockRoutes } from './dock';
 import { createRealmServer } from './server';
 import { referenceServices } from './reference';
 import { assertRealmSchema, createRealmPool, describeStorageFailure,
@@ -85,10 +86,13 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const evening = new RealmEveningBridge({ origin, ingress: boot.ingress, gate, approvals,
     beforeObservation: input => citizens.observe(input) });
   evening.use(boot.services);
-  const { server, transport } = boot.createServer({ mountIngress: app => mountEveningRoutes(app, evening) });
+  const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
+  dock.use(boot.services);
+  const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); } });
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
   ownRealmShutdown(server, transport, async () => {
+    dock.stop();
     try { await evening.stop(); }
     finally { try { await boot.stop(); } finally { await pool.end(); } }
   });
@@ -96,7 +100,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     await boot.readiness.start();
     await releasePort();
     await server.listen(port, '0.0.0.0');
-  } catch (error) { await evening.stop(); await boot.stop(); await pool.end(); throw error; }
+  } catch (error) { dock.stop(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
     + (boot.ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);

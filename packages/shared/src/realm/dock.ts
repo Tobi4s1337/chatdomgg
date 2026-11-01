@@ -58,3 +58,12 @@ export const REALM_DOCK_ROUTES = {
   status: '/internal/dock/status', action: '/internal/dock/action',
   presentations: '/internal/dock/presentations/:kingdomId', witness: '/internal/dock/witness',
 } as const;
+
+/** Current lasting royal presentation, never a request to replay a ceremony or issue a witness. */
+export const RealmDockStageStateSchema = z.strictObject({
+  version: z.literal(1), kingdomId: KingdomIdSchema, origin: z.enum(['live', 'simulated']),
+  asOf: EpochMsSchema, revision: id, gate: z.enum(['open', 'closed']), fire: z.enum(['lit', 'unlit']), fireUntil: EpochMsSchema,
+  honours: z.array(z.strictObject({ id, name: label, slot: z.number().int().min(0).max(65535),
+    kind: z.enum(['citizen-crown', 'citizen-knight']), expiresAt: EpochMsSchema })).max(1000),
+});
+export type RealmDockStageState = z.infer<typeof RealmDockStageStateSchema>;
