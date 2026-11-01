@@ -86,6 +86,7 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
       assertOpen();
       if (!history?.snapshots.length || !Number.isFinite(next)) return;
       index = Math.max(0, Math.min(history.snapshots.length - 1, Math.round(next)));
+      if (index === history.snapshots.length - 1) playing = false;
       apply(history.snapshots[index]!); emit();
     },
     play() { assertOpen(); if (history && index < history.snapshots.length - 1) playing = true; emit(); },

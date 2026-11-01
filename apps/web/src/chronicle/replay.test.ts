@@ -58,6 +58,14 @@ describe('Chronicle replay', () => {
     replay.play(); replay.step(); expect(replay.state()).toMatchObject({ index: 1, playing: false });
     replay.dispose(); replay.dispose(); expect(binding.clear).toHaveBeenCalledTimes(1); expect(binding.dispose).toHaveBeenCalledTimes(1);
   });
+  it('stops at the final night when seeking during playback', () => {
+    const { replay, binding } = setup();
+    replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
+    replay.play(); replay.seek(1);
+    expect(replay.state()).toMatchObject({ index: 1, playing: false });
+    replay.step();
+    expect(binding.replace).toHaveBeenCalledTimes(2);
+  });
   it('always disposes the host when clearing on close fails', () => {
     const { replay, binding } = setup();
     replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a')] });
