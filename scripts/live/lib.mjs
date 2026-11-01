@@ -75,8 +75,8 @@ export const payloadSource = { value: 'Twitch CLI' };
 /** No update checks or prompts from the CLI; it only generates and signs payloads here. */
 const CLI_ENV = { ...process.env, TWITCH_DISABLE_UPDATE_CHECKS: 'true' };
 function cliFailure(type, error) {
-  const detail = String(error?.stderr ?? '').trim().split('\n').at(-1) || error?.message || 'unknown failure';
-  return `Twitch CLI could not trigger ${type} (exit ${error?.status ?? '?'}: ${detail.slice(0, 200)})`;
+  // Child-process errors may echo the complete -s signing-secret argument. Report the exit status only.
+  return `Twitch CLI could not trigger ${type} (exit ${error?.status ?? '?'})`;
 }
 
 /**
