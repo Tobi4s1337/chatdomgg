@@ -4,6 +4,7 @@ import type { RealmFoundedScene } from '../founded-world/types';
 import { transformCardinalPoint } from '../settlement/geometry';
 import { interactionTargetId } from './ids';
 import { standingClear } from './geometry';
+import { foundedInstalledHomes, homeThreshold } from './homes';
 import { createInteractionRegistry, homeZone, type InteractionPlacement, type InteractionRegistry } from './registry';
 
 /** The hero anvil mounted by the kingdom's Forge, in the market's metre frame. */
@@ -27,7 +28,9 @@ function standingNear(world: CollisionWorld, point: Vec3): Vec3 | null {
  * façade carves, never guessed centres of house bounds. Both thresholds must be supported and clear.
  * Place-producer seats join this registry when installed; an absent place supplies no imaginary target.
  */
-export function createFoundedInteractionRegistry(scene: RealmFoundedScene, world: CollisionWorld): InteractionRegistry {
+export function createFoundedInteractionRegistry(scene: RealmFoundedScene, world: CollisionWorld,
+  /** Private authority only. Empty revisions explicitly withhold a door until its committed geometry is installed. */
+  ownedHomeRevisions?: ReadonlyMap<string, string>): InteractionRegistry {
   if (scene.collisionRevision !== world.revision) throw new Error('Interaction anchors need the installed collision revision.');
   const placements: InteractionPlacement[] = [], anvil = foundedAnvilPosition(scene);
   const approach = standingNear(world, [anvil[0], anvil[1], anvil[2] + 1.7]);
@@ -43,7 +46,9 @@ export function createFoundedInteractionRegistry(scene: RealmFoundedScene, world
           zone: 'street', position: seat.position, approach: seat.approach, rest: seat.rest,
           facing: seat.facing * Math.PI / 2, reach: 3 })) });
     }
-    if (!plot || blueprint?.kind !== 'home') continue;
+    // Authority's owned plots get the exact revision-bound threshold below, including an honest blocked door.
+    // Two-argument public hints keep their existing native doorway metadata without private revisions.
+    if (!plot || blueprint?.kind !== 'home' || ownedHomeRevisions?.has(plot)) continue;
     const at = (local: Vec3) => transformCardinalPoint(placement.position, placement.rotation,
       [local[0] * VOXEL_METRES.build, local[1] * VOXEL_METRES.build, local[2] * VOXEL_METRES.build]);
     const portals = blueprint.boxes.filter(b => b.material === 0 && b.from[1] <= 4
@@ -69,5 +74,6 @@ export function createFoundedInteractionRegistry(scene: RealmFoundedScene, world
       break;
     }
   }
-  return createInteractionRegistry({ layoutRevision: scene.layoutRevision, world, placements });
+  const homes = ownedHomeRevisions ? foundedInstalledHomes(scene, ownedHomeRevisions).homes.map(home => homeThreshold(home, world)) : [];
+  return createInteractionRegistry({ layoutRevision: scene.layoutRevision, world, placements, homes });
 }

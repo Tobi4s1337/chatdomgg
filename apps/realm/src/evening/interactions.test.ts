@@ -25,6 +25,13 @@ it('uses the retained writer, actual native targets, current pose, session right
   const home: RealmOwnedHome = { id: plot.id, ownerId: personId, slot: plot.slot, layoutRevision: scene.layoutRevision,
     allocationReceipt: 'PRIVATE-SIMULATED-deed', revision: 'SIMULATED-approved', digest: placement.assetHash,
     family: plot.style, blueprint, attachments: {}, attribution: { makerName: 'SIMULATED', kingdomName: 'SIMULATED', approvalId: 'SIMULATED' } };
+  const ownedRegistry = createFoundedInteractionRegistry(scene, founded.world, new Map([[home.id, home.revision]]));
+  expect(ownedRegistry.get(door.target.id)?.revision).toBe(home.revision);
+  expect(ownedRegistry.home(home.id)?.interior).not.toBeNull();
+  expect(ownedRegistry.records.filter(record => record.target.id === door.target.id)).toHaveLength(1);
+  expect(ownedRegistry.records.find(record => record.target.kind === 'anvil')?.target).toEqual(anvil.target);
+  expect(createFoundedInteractionRegistry(scene, founded.world, new Map([[home.id, '']])).get(door.target.id)).toBeUndefined();
+  expect(registry.get(door.target.id)?.revision).toBeNull(); // Public two-argument hints remain private-free.
   let state: RealmPrivateState = { ...createRealmState(scene.kingdomId, scene.origin), homes: { [home.id]: home } };
   const lease = { kingdomId: scene.kingdomId, epoch: 'SIMULATED-one-writer', expiresAt: Date.now() + 60_000 };
   const acquire = vi.fn(async () => lease), release = vi.fn(async () => {});
@@ -80,6 +87,23 @@ it('uses the retained writer, actual native targets, current pose, session right
     expect(publicMessages).toContainEqual(expect.objectContaining({ type: 'seats', seats: [] }));
     const exit = registry.records.find(record => record.target.kind === 'home-exit' && record.target.plotId === plot.id)!;
     expect(await act(exit.target.id, 'exit-home')).toMatchObject({ status: 'applied', state: { mode: 'standing' } });
+    // Committed metadata may move ahead of this same adopted scene. A different blueprint must not borrow its door.
+    state = { ...state, homes: { [home.id]: { ...home, revision: 'SIMULATED-waiting-r2',
+      blueprint: { ...home.blueprint, id: `${home.blueprint.id}-changed` } } } };
+    await hold.kingdom.execute('SIMULATED-home-awaiting-install', { type: 'stream.observe', sessionId: null, startedAt: 0, liveUntil: 0 }, 'presence');
+    const beforeWaiting = placed.mock.calls.length;
+    expect(await act(door.target.id, 'enter-home')).toMatchObject({ status: 'refused' });
+    expect(placed).toHaveBeenCalledTimes(beforeWaiting);
+    // Same geometry, a current committed revision: the registry must rebuild even though scene identity is unchanged.
+    state = { ...state, homes: { [home.id]: { ...home, revision: 'SIMULATED-current-r3' } } };
+    await hold.kingdom.execute('SIMULATED-home-metadata-refresh', { type: 'stream.observe', sessionId: null, startedAt: 0, liveUntil: 0 }, 'presence');
+    expect(await act(door.target.id, 'enter-home')).toMatchObject({ status: 'applied', state: { mode: 'interior', plotId: home.id } });
+    // Walking through the real doorway also leaves the interior zone, before the next room interaction is decided.
+    move(door.target.approach);
+    await act(anvil.target.id, 'forge');
+    messages.length = 0;
+    room.bootstrap(principal);
+    expect(messages).toContainEqual(expect.objectContaining({ type: 'interaction', state: expect.objectContaining({ mode: 'standing', plotId: null }) }));
     valid = false;
     expect(await act(door.target.id, 'enter-home')).toMatchObject({ status: 'refused' });
     valid = true;
