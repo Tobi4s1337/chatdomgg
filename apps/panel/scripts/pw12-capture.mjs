@@ -15,6 +15,7 @@ if (!['localhost', '127.0.0.1'].includes(database.hostname) || database.port !==
   throw new Error('Capture requires the isolated panel_window development database.');
 }
 const children = [];
+const completions = new WeakMap();
 const abort = new globalThis.AbortController();
 process.once('SIGINT', () => abort.abort());
 process.once('SIGTERM', () => abort.abort());
@@ -28,6 +29,12 @@ async function start(args, cwd, variables, path) {
   const log = await open(path, 'w', 0o600);
   try {
     const child = spawn(process.execPath, args, { cwd, env: variables, stdio: ['ignore', log.fd, log.fd] });
+    // Observe completion at spawn: a fast failure must not disappear before wait() attaches.
+    const completion = new Promise(resolve => {
+      child.once('error', () => resolve({ error: true }));
+      child.once('close', (code, signal) => resolve({ code, signal }));
+    });
+    completions.set(child, completion);
     children.push(child);
     return child;
   } finally { await log.close(); }
@@ -40,11 +47,9 @@ async function ready(url, child) {
   }
   throw new Error(`Service on ${new URL(url).port} did not become ready.`);
 }
-function wait(child) {
-  return new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code, signal) => code === 0 ? resolve() : reject(new Error(`Capture process failed (${code ?? signal}).`)));
-  });
+async function wait(child) {
+  const result = await completions.get(child);
+  if (result?.code !== 0) throw new Error(`Capture process failed (${result?.error ? 'could not start' : result?.code ?? result?.signal}).`);
 }
 function shot(url, file, size) {
   return new Promise((resolve, reject) => execFile('chatdom-pc', ['shot', url, file, '--size', size, '--timeout', '60', '--settle', '1'],
@@ -90,7 +95,7 @@ try {
   success = true;
 } finally {
   for (const child of [...children].reverse()) if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
-  await Promise.all(children.map(child => child.exitCode !== null || child.signalCode !== null ? undefined : new Promise(resolve => child.once('close', resolve))));
+  await Promise.all(children.map(child => completions.get(child)));
   if (logDir) {
     if (success) await rm(logDir, { recursive: true, force: true });
     else console.error(`Private diagnostic logs retained in ${logDir}.`);

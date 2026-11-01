@@ -143,7 +143,9 @@ tested. Crash/lease-loss injection and real-world effect recovery are not covere
 
 No production effect is acknowledged, no real Bits were spent, no live DB was touched by this subagent, and no
 git commands were run. Hosted Test purchase, all 20 mounted effects, current-decoration restore and production
-world/stream credit revocation remain unchecked requirements, not successful deliveries.
+world/stream credit revocation remain unchecked requirements, not successful deliveries. The follow-up browser
+integration test now proves Helper checkout through the real HTTP and SQL path to a second panel's moment line,
+using an explicitly isolated atomic dispatch port. That port does not acknowledge any production world effect.
 
 ## Erasure integration for these owned records
 

@@ -4,10 +4,10 @@
 .gift-shelf h2, .gift-shelf h3, .gift-shelf p { margin: 0; }
 .gift-shelf h2, .gift-shelf h3 { font-family: 'IM Fell English', Georgia, serif; font-weight: 400; }
 .gift-shelf button { font-family: Alegreya, Georgia, serif; cursor: pointer; }
-.gift-shelf button:focus-visible { outline: 2px solid #8a3c29; outline-offset: 2px; }
+.gift-shelf h2:focus-visible, .gift-shelf button:focus-visible { outline: 2px solid #8a3c29; outline-offset: 2px; }
 .gift-closed, .gift-request { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
 .gift-closed h2, .gift-request h2 { margin: 12px 0 5px; font-size: 25px; line-height: 1.1; }
-.gift-closed p { max-width: none; white-space: nowrap; font-size: 13px; }
+.gift-closed p { max-width: 230px; font-size: 13px; text-wrap: balance; }
 .gift-request > p { max-width: 230px; font-size: 15px; }
 .gift-mark { display: grid; place-items: center; width: 62px; height: 62px; border: 1px solid #a4794d; border-radius: 50%; color: #9a6945; box-shadow: inset 0 0 0 4px #ead9b8, inset 0 0 0 5px #c1a077; }
 .gift-mark span { font-size: 35px; line-height: 1; }

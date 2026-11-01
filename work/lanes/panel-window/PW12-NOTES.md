@@ -94,14 +94,64 @@ holder. The lease batch did not start any services.
 | True product/stream/Helper capability gates | Implemented; absent production effect authority means zero offers |
 | Immutable target before Helper; verified receipt; exactly one durable gift | Protocol tests and isolated SQL dispatch tests; actual Hosted Test not run |
 | Cancellation, hidden/closed viewer and ambiguous payment recovery | Covered by client and Postgres regressions; no invented success |
-| Moment in second actual open panel | API reads committed gift facts; full harness tap-to-second-panel proof outstanding |
+| Moment in second actual open panel | Two real browser panels through the API and realm now pass; canonical provider and atomic effect dispatch are explicit test ports |
 | All gift effects | Exact owner transport patch and twenty mount requirements in PW12-NEEDS; none acknowledged ready |
 | Required stills at both sizes | One reviewed fallback only; full batch outstanding |
 | Real test-mode gift and first PW13 checklist item | HOSTED-TEST.md first item written; C04 purchase bar remains open |
 
-Next stays **PW12**: run the complete GPU batch when connected; integrate real effect capability/dispatch and prove a
-gift in two real lane panels. Do not tick PW12 for test ports, bench captures, or merely applying the transport patch.
+Next stays **PW12**: run the complete GPU batch when connected and integrate real effect capability/dispatch. The
+two-panel browser path now has isolated-stack proof, with the limits below. Do not tick PW12 for test ports, bench
+captures, or merely applying the transport patch.
 See `PW12-NEEDS.md` for exact owner seams. PW13 configuration/registration remains a separate task in strict order.
 The PRD's existing video-studio round-note edit remains unstaged. This turn corrects PW11's historical busy-lease label
 at Tobias's request; erasure and stream disclosure still need their core owners. The progress SHA is the checkpoint's
 base, avoiding an impossible self-referential commit ID.
+
+## Follow-up: real HTTP path and keyboard continuity
+
+The development Helper now supplies explicitly configured Bits products and records each admitted dialog request.
+It completes or cancels only through an explicit harness control; neither `useBits` nor a product list grants a
+gift. Its receipt signer runs in Node, with the signing secret excluded from generated browser source. Eight
+Node tests cover the production Helper bridge, signed claims, bounded product shapes and cancellation.
+
+`apps/api/src/panel/gifts/browser.integration.test.ts` starts its own three free services between 5170 and 5186,
+creates a random isolated schema on development Postgres 5410, and opens two actual panel pages. It composes the
+real panel reader, JWT verifier, API gift service, authenticated realm HTTP door, allocation, ingress and durable
+gift ledger. The final run used realm 5170, API 5171 and panel 5172, all bound to 127.0.0.1 (checked with `ss` during
+the run) and all stopped afterwards. A test-local adapter supplies the native realm listener's loopback host because
+the installed transport ignores its hostname parameter; its normal socket registration and shutdown remain in use.
+Only the remote OAuth/Helix provider and mounted effect dispatch are test ports. The dispatch writes
+an isolated SQL row in the same transaction as the public fact; it is not a renderer or a production capability.
+It makes no Twitch requests or writes, renders no kingdom scene and takes no performance measurements.
+
+The browser test demonstrates a keyboard checkout, an explicitly completed signed receipt, a delivered result
+and the same committed moment in the other panel through its real polling loop. Two API receipt replays still
+leave one transaction, fact, outbox entry and dispatch. A separate cancelled dialog adds none. Both panels keep
+their selected tab, tokens and provider identifiers stay out of the DOM/URLs/storage, and all owned services and
+the test schema are removed afterwards. The shared browser capture lock is acquired before services start, with
+a bounded five-minute queue wait; the browser journey itself has a sixty-second limit. It runs only when both
+flags are explicitly set:
+
+```sh
+REALM_DATABASE_TESTS=1 PANEL_BROWSER_TESTS=1 node --env-file=/tmp/panel-window-realm.env \
+  node_modules/vitest/vitest.mjs run --fsModuleCachePath /tmp/panel-window-pw12-browser-cache \
+  apps/api/src/panel/gifts/browser.integration.test.ts
+```
+
+Checkout transitions now retain keyboard continuity: the new heading receives focus when the replaced control
+owned focus inside the visible shelf; Back restores the originating gift. Background refreshes and hidden shelves
+do not take focus. Paid-choice pagination keeps its control when its last page arrives. Separate local browser
+checks covered all nine bench states at 318×496 and 390×844, page bounds, 44 px controls, and friend-to-confirmation
+keyboard transitions. Those are functional fixture checks, not payment or full visual acceptance.
+
+The real-GPU batch was called with `--wait 30 --max 10` and returned exit 3: Chrome was disconnected, with no live
+queued job. One fallback still under the shared capture lock was inspected and its closed-state wrapping balanced:
+`work/evidence/panel-window/PW12/closed-wrapping-swiftshader@318x496.png`. The message now occupies two balanced lines
+without clipping or a lone last word. This replaces no required GPU evidence. The temporary Vite on 127.0.0.1:5182
+was stopped. The batch runner also observes child completion at spawn, preventing a fast child failure from being
+missed by a later wait.
+
+The follow-up focused panel/API regression suite passed 73 tests, the Helper suite eight tests and the complete
+two-panel browser journey one test. Scoped TypeScript, focused ESLint and the panel build pass. Unscoped typecheck processes started
+during test preparation were stopped; only scoped verification is used as evidence. Full screenshot acceptance,
+real world/stream effects and Twitch Hosted Test remain open; C04's purchase bar is still open. PW12 stays unchecked.
