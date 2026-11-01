@@ -53,7 +53,11 @@ export function createShip(seedKey: string): ArtisanKit {
   }
   // Bowsprit and a small fore-stay, articulated as coherent steps.
   kit.box(22, 7, 0, 12, 1, 1, CLAY.timberLight);
-  for (let i = 0; i < 12; i++) kit.box(21 + i, 8 + Math.floor(i / 3), 0, 1, 1, 1, CLAY.timber);
+  for (let i = 0; i < 12; i++) {
+    const y = 8 + Math.floor(i / 3);
+    // A one-cell riser joins each higher run to the previous horizontal run.
+    kit.box(21 + i, y - (i > 0 && i % 3 === 0 ? 1 : 0), 0, 1, i > 0 && i % 3 === 0 ? 2 : 1, 1, CLAY.timber);
+  }
   return kit.finish('harbour-ship', { waterline: [0, 0, 0], bow: [30, 6, 0], stern: [-25, 5, 0], deck: [0, 6, 0] });
 }
 
@@ -87,6 +91,9 @@ export function createLighthouse(seedKey: string): ArtisanKit {
   kit.box(3, 12, -10, 3, 22, 2, CLAY.stoneLight);
   kit.box(-2, 12, 8, 4, 22, 2, CLAY.stoneLight);
   // The opening remains empty all the way to the interior; no false interactive door.
+  // Both jambs tie the projecting lintel back into the wall and down to the foundation.
+  kit.box(-3, 1, -11, 1, 9, 3, CLAY.stoneLight);
+  kit.box(2, 1, -11, 1, 9, 3, CLAY.stoneLight);
   kit.box(-3, 9, -11, 6, 1, 1, CLAY.trim);
   // Overhanging gallery and guardrails.
   kit.box(-10, 45, -10, 21, 2, 21, CLAY.stoneDark);

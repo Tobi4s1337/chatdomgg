@@ -89,10 +89,27 @@ export function sitePlacements(land: SiteLand, guard?: PlacementGuard, diagnosti
     const [rx,rz] = rotateCell(x,z,turns), wx=rx+at[0], wz=rz+at[2]; if (wx < 0 || wz < 0 || wx >= size || wz >= size) return null;
     const i=wx+wz*size; return { ground:ground[i]!, water:water[i]! };
   };
+  // Kits are immutable during this call. Cache their validated local envelope, then
+  // transform that envelope once: cardinal rotations preserve exact axis-aligned extrema.
+  // Unrepresentable envelopes fall back to the original per-box validation path.
+  const localBounds=new WeakMap<ArtisanKit,KitBox>();
+  function boundsFor(piece:ArtisanKit,at:Point,turns:number):Bounds {
+    if(!piece.boxes.length) return kitBounds(piece,at,turns);
+    let local=localBounds.get(piece);
+    if(!local) {
+      let bounds:Bounds;
+      try {bounds=kitBounds(piece,[0,0,0],0);} catch {return kitBounds(piece,at,turns);}
+      const size:Point=[bounds.max[0]-bounds.min[0],bounds.max[1]-bounds.min[1],bounds.max[2]-bounds.min[2]];
+      if(!size.every(n=>integer(n) && n>0)) return kitBounds(piece,at,turns);
+      local={min:bounds.min,size,colour:''};localBounds.set(piece,local);
+    }
+    const box=placeBox(local,at,turns);
+    return {min:box.min,max:[box.min[0]+box.size[0],box.min[1]+box.size[1],box.min[2]+box.size[2]]};
+  }
   const result: Placement[]=[], acceptedBounds=new WeakMap<Placement,Bounds>();
   const accept:PlacementGuard=(kind,bounds)=>guard(kind,bounds) && result.every(p=>{
     let other=acceptedBounds.get(p);
-    if(!other) {other=kitBounds(p.piece,p.at,p.turns);acceptedBounds.set(p,other);}
+    if(!other) {other=boundsFor(p.piece,p.at,p.turns);acceptedBounds.set(p,other);}
     return [0,1,2].some(d=>bounds.max[d]!<=other.min[d]! || other.max[d]!<=bounds.min[d]!);
   });
   // A sea-level wet cell is useful for a harbour only if connected to open boundary
@@ -144,7 +161,7 @@ export function sitePlacements(land: SiteLand, guard?: PlacementGuard, diagnosti
       const g=sample(probe,0,x,z)!.ground; if(g<hi) base.box(x,g-hi,z,1,hi-g,1,CLAY.stoneDark);
     }
     base.add(windmill);
-    const at:Point=[x0,hi,z0], piece=base.finish('windmill'), bounds=kitBounds(piece,at,0);
+    const at:Point=[x0,hi,z0], piece=base.finish('windmill'), bounds=boundsFor(piece,at,0);
     if(within(bounds) && accept('windmill',bounds)) {result.push({piece,at,turns:0});break;}
   }
   const h=land.sites.harbour, at:Point=[Math.round(h.x),seaLevel,Math.round(h.z)];
@@ -165,7 +182,7 @@ export function sitePlacements(land: SiteLand, guard?: PlacementGuard, diagnosti
       const cell=sample(origin,turns,x,z);
       if(!cell || cell.ground<=seaLevel || cell.ground>seaLevel+9 || cell.water>cell.ground) return null;
     }
-    const preliminary=kitBounds(kit,origin,turns);
+    const preliminary=boundsFor(kit,origin,turns);
     if(!within(preliminary) || !accept('harbour',preliminary)) return null;
     // A real pier, landing approach and adjacent berth must reach navigable open sea;
     // wet-looking terrain or isolated sea-height ponds do not establish a port.
@@ -202,7 +219,7 @@ export function sitePlacements(land: SiteLand, guard?: PlacementGuard, diagnosti
       b.box(p.x,p.start,p.z,extensions[j-1]!.x-p.x+1,p.end-p.start,1,p.colour);i=j;
     }
     b.add(kit);
-    const piece=b.finish(kit.id,kit.anchors), bounds=kitBounds(piece,origin,turns);
+    const piece=b.finish(kit.id,kit.anchors), bounds=boundsFor(piece,origin,turns);
     return within(bounds) && accept('harbour',bounds) ? piece : null;
   }
   // Find a continuous supported stair from the authored cap to genuine dry land.
@@ -227,7 +244,7 @@ export function sitePlacements(land: SiteLand, guard?: PlacementGuard, diagnosti
       if(heights[0]!<maxima[0]! || heights[n-1]!==final || heights.some((h,i)=>i>0 && h>heights[i-1]!)) continue;
       const stairs=createQuayInlandStairs(heights,values.slice(0,n*12),values.slice(n*12),site.slope);
       const b=new KitBuilder();b.add(piece);b.add(stairs,[site.x,0,site.z]);
-      const joined=b.finish(piece.id,piece.anchors), bounds=kitBounds(joined,origin,turns);
+      const joined=b.finish(piece.id,piece.anchors), bounds=boundsFor(joined,origin,turns);
       if(within(bounds) && accept('harbour',bounds)) return joined;
     }
     return null;
@@ -279,7 +296,7 @@ export function sitePlacements(land: SiteLand, guard?: PlacementGuard, diagnosti
         const n=pieces.length;
         // The final guard can inspect the assembled envelope, so retain that envelope
         // in the state: two paths at the same shore can put their pier in different places.
-        const ext=pieces.map(p=>kitBounds(p.piece,[p.x,0,p.z],0));
+        const ext=pieces.map(p=>boundsFor(p.piece,[p.x,0,p.z],0));
         const envelope=ext.length ? [0,1,2].flatMap(i=>[Math.min(...ext.map(b=>b.min[i]!)),Math.max(...ext.map(b=>b.max[i]!))]).join(':') : '';
         // Access can originate at any preceding module, so failed paths only share a
         // memo entry when their actual candidate access positions and slopes match.
@@ -289,7 +306,7 @@ export function sitePlacements(land: SiteLand, guard?: PlacementGuard, diagnosti
         if(n>=3 && hasPier && hasLanding) {
           const assembled=new KitBuilder();for(const p of pieces) assembled.add(p.piece,[p.x,0,p.z]);
           const piece=assembled.finish('harbour-quay-modular',{shoreStart:[-8,6,21],shoreEnd:[n*16-8,6,21+shore]});
-          const bounds=kitBounds(piece,origin,turns);
+          const bounds=boundsFor(piece,origin,turns);
           if(within(bounds) && accept('harbour',bounds)) {
             const access=pieces.map(p=>({x:p.x,z:p.z,top:9,slope:((p.piece.anchors['shore-right']?.[2] ?? 21)-(p.piece.anchors['shore-left']?.[2] ?? 21)) as QuayShoreOffset}));
             const joined=withAccess(piece,origin,access);if(joined) return joined;
@@ -350,7 +367,7 @@ export function sitePlacements(land: SiteLand, guard?: PlacementGuard, diagnosti
           const g=sample(probe,0,x,z)!.ground; if(g<high+bottom) base.box(x,g-high,z,1,high+bottom-g,1,CLAY.stoneDark);
         }
         base.add(lighthouse);
-        const tower=base.finish('harbour-lighthouse'), origin:Point=[hx,high,hz], box=kitBounds(tower,origin,0);
+        const tower=base.finish('harbour-lighthouse'), origin:Point=[hx,high,hz], box=boundsFor(tower,origin,0);
         if(within(box) && accept('lighthouse',box)) {result.push({piece:tower,at:origin,turns:0});break;}
       }
     }
@@ -363,7 +380,7 @@ export function sitePlacements(land: SiteLand, guard?: PlacementGuard, diagnosti
           if(!cell || !deepSea(origin,turns,x,z)) {afloat=false;break;}
         }
         if(!afloat) continue;
-        const box=kitBounds(vessel,origin,turns);
+        const box=boundsFor(vessel,origin,turns);
         if(within(box) && accept('ship',box)) {result.push({piece:vessel,at:origin,turns});break;}
       }
     }

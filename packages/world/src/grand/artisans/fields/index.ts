@@ -42,7 +42,8 @@ function hedgeHorizontal(b: KitBuilder, x0: number, x1: number, z: number): void
   b.box(middle + 2, 1, z, 1, 3, 2, CLAY.timber);
 }
 
-function plantPlot(b: KitBuilder, p: FieldPlot): void {
+function plantPlot(b: KitBuilder, p: FieldPlot, seedKey: string): void {
+  const r = random(`${seedKey}:crop:${p.x0}:${p.z0}:${p.crop}`);
   const c = CROP[p.crop];
   b.box(p.x0, 0, p.z0, p.x1 - p.x0, 1, p.z1 - p.z0, c.bed);
   // Low hedge and gaps bound each plot. Lanes are placed before these plots.
@@ -56,20 +57,35 @@ function plantPlot(b: KitBuilder, p: FieldPlot): void {
   };
   for (let across = acrossStart; across < acrossEnd; across += 3) {
     if (p.crop === 'cabbage') {
-      for (let along = runStart; along < runEnd; along += 3) {
-        boxRow(along, across, 2, 1, c.stem);
+      // Broad green leaves form a small cross around a lighter, smaller head.
+      // Regular rows remain visible from the air; no plant escapes the plot.
+      for (let along = runStart + 1; along < runEnd - 1; along += 4) {
+        boxRow(along - 1, across, 3, 1, c.stem);
+        if (across + 1 < acrossEnd) boxRow(along, across + 1, 1, 1, '#718f59');
+        if (across > acrossStart) boxRow(along, across - 1, 1, 1, '#718f59');
         boxRow(along, across, 1, 2, c.head);
       }
     } else {
-      boxRow(runStart, across, runEnd - runStart, 1, c.stem);
-      // The broad coloured strip keeps the crop legible at the wide, orbiting view.
-      boxRow(runStart, across, runEnd - runStart, 2, c.head);
+      // Deliberate, seeded clusters follow a row but leave earth between them.
+      // Width and height vary in small, coherent patches, never single-cell noise.
+      for (let along = runStart; along < runEnd;) {
+        const length = Math.min(2 + Math.floor(r() * 3), runEnd - along);
+        boxRow(along, across, length, 1, c.stem);
+        if (p.crop === 'lavender' && across + 1 < acrossEnd) {
+          boxRow(along, across + 1, length, 1, c.stem);
+        }
+        boxRow(along, across, length, 2, c.head);
+        if (p.crop === 'wheat' && length >= 3 && r() > 0.55) {
+          boxRow(along + 1, across, length - 2, 3, c.head);
+        }
+        along += length + (r() > 0.82 ? 2 : 1);
+      }
     }
   }
 }
 
 /** Stamp a single, locally supplied dry plot without flattening its surrounding land. */
-export function createFieldPlot(plot: FieldPlot): ArtisanKit {
+export function createFieldPlot(plot: FieldPlot, seedKey = 'field'): ArtisanKit {
   const { x0, z0, x1, z1 } = plot;
   if (![x0, z0, x1, z1].every(Number.isSafeInteger) || x1 - x0 < 12 || z1 - z0 < 12 || x1 - x0 > 256 || z1 - z0 > 256) {
     throw new RangeError('A field plot needs integer half-metre bounds and 12–256 cells on each side');
@@ -78,7 +94,7 @@ export function createFieldPlot(plot: FieldPlot): ArtisanKit {
     throw new RangeError('Unknown crop or row direction');
   }
   const b = new KitBuilder();
-  plantPlot(b, plot);
+  plantPlot(b, plot, seedKey);
   return b.finish(`field-${plot.crop}`, { centre: [Math.floor((x0 + x1) / 2), 1, Math.floor((z0 + z1) / 2)] });
 }
 
@@ -87,7 +103,7 @@ export function createFields(seedKey: string): ArtisanKit {
   const b = new KitBuilder(), layout = fieldLayout(seedKey);
   b.box(0, -1, 0, 108, 1, 108, CLAY.grass);
   b.box(0, 0, 0, 108, 1, 108, '#ae9874');
-  for (const p of layout.plots) plantPlot(b, p);
+  for (const p of layout.plots) plantPlot(b, p, seedKey);
   return b.finish('patchwork-fields', {
     centre: [54, 1, 54],
     lane: [layout.plots[0]!.x1 + 2, 1, layout.plots[0]!.z1 + 2],
