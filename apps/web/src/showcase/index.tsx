@@ -12,6 +12,7 @@ const places: Place[] = [
   { number: '06', title: 'The panel', description: 'See a simulated night in the panel made for Twitch.', status: 'SIMULATED', href: '/panel?source=simulated', action: 'Open the panel' },
   { number: '07', title: 'The Chronicle', description: 'The kingdom’s remembered moments have no public page yet.', status: 'UNAVAILABLE' },
   { number: '08', title: 'Make your citizen', description: 'Find a look that feels like you, with hair, clothes and earned keepsakes.', status: 'SIMULATED', href: '/-/avatar-builder', action: 'Make your citizen' },
+  { number: '09', title: 'The streamer’s throne', description: 'Lead the evening from your kingdom’s dock. Sign in as its monarch.', status: 'LIVE', href: '/dock', action: 'Open the throne' },
 ];
 
 const kingdoms = [

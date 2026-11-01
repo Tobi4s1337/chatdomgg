@@ -116,6 +116,7 @@ export function createSceneMount(hooks: {
     entry.canvas.style.visibility = '';
     // No frame can occur between revealing the loaded canvas and retiring the old one.
     if (old) release(old, 'scene-revision');
+    entry.scene!.activateDock?.();
     entry.scene!.restoreCitizens(citizens);
     hooks.onSpeech?.([]);
     for (const action of entry.publications.values()) action();
@@ -197,7 +198,7 @@ export function createSceneMount(hooks: {
         else if (message.type === 'chat.remove') scene.clearChat(message.cueIds);
         else { scene.clearChat(); hooks.onSpeech?.([]); }
       });
-      if (visible(entry)) hooks.onScene(scene);
+      if (visible(entry)) { scene.activateDock?.(); hooks.onScene(scene); }
       let directing = false;
       const opened = () => {
         if (!owns(entry)) return;

@@ -1,0 +1,7 @@
+# Soul presentation
+
+`createSoulPresentation(scene, { topology, chimney? })` owns only its added objects. Call `update(frame, seconds)` with a `SoulFrame` from `createSoulSampler` each frame; call `dispose()` on teardown. The topology must describe actual connected street and lamps in scene coordinates. It rejects more than 64 lamps; split a larger settlement into districts. weather particles cover the district centred on the supplied routes. The optional chimney is the real bakery mouth; no chimney means no smoke. Keepers are civic workers, never citizens, and this adapter creates no presence lights.
+
+`createSoulWeatherSurfaces({ roofs, snow, puddles })` applies the same wetting and snow visibility as the review to caller-supplied roof materials and geometry. Call `update(frame)` and `dispose()` to restore their initial properties. Supply distinct roof materials if other surfaces should not be darkened.
+
+The `/-/soul` review uses the real authored Hearth home blueprints and the compact default topology. `?seed=42&date=2026-06-20&hour=6&biome=coastal&weather=natural` fixes a capture; omit hour for a live clock. `weather=clear|rain|snow` is a review override, and `view=stream` hides controls. `window.__chatdomReady` indicates the first rendered frame, `window.__soulFrame` exposes the current sample, and `window.__soulSetHour(hour)` fixes the review clock. Audio requires the user's sound button; it shares the kingdom audio host and uses the stream mix in stream view.
