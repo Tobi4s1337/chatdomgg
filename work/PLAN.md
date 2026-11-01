@@ -350,6 +350,15 @@ SIMULATED; no browser errors/Forge POST. Before loses the gift; after holds an o
 scale. After-only close crop viewed. The overly wide camera and bright gold grid were rejected/reverted.
 This is framing/heat evidence, not an isolated material comparison or full-motion signoff.
 
+**Contact wiring, pending visual review:**the kingdom adapter now sends the existing library burst at
+presentation CONTACT (.9 /18.65s), using the validated roof socket separately from the trail crown.
+SIM/room share it; reset/reduced-motion clears it.35 focused tests, typecheck, scoped lint and web/panel
+builds pass. No new Forge image: first runner exited before a frame; bounded retry could not acquire the
+shared capture lease. Next: matched1920 stream frame at ritual18.85/world48.85 plus same-pixel close crop,
+baseline f14e348 versus current. Do not call the burst visually accepted until that comparison is viewed.
+CP10 card/passport721aaab merged in f14e348 and pushed; existing318×496 lane card/passport images viewed.
+Keep its parchment/leather composition; earned-and-worn is too faint, share facts/integration unfinished.
+
 **Next Forge outcomes:**the face still lacks a sleeping-dragon read, the wake is dotted, the receiving home
 needs its contact burst and neighbours looking up. Main owns framing/scale/reactions. AH06/spec25 owns
 head on two paws/coil silhouette; preserve socket/flue/nose. EL11/spec48 owns flowing ember wake and warm

@@ -1,2 +1,3 @@
 follow-up: CP10 Align the share-picture capture’s Wren facts and worn pieces with the panel and card page; capture before/after evidence and complete the share integration.
 next: CP10 Panel card and passport, painted sitter, card page and share composition landed; finish share integration and visual evidence.
+main review: CP10 checkpoint merged in f14e348; panel card and passport captures viewed at 318×496. Keep the parchment/leather composition; lift the very faint earned-and-worn section so its stories read at panel size. Share integration and matching Wren facts remain with the lane. Focused card/passport tests, typecheck, scoped lint and web/panel builds pass.

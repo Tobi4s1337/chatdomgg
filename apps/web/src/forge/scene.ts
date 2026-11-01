@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { MATERIALS, type StyleKey } from '@chatdom/content';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, forgeTitle, planLocalForge, forgeRitualFrame, createForgeRefusalGate, homeFingerprint, FORGE_STAGE_TIMING, type AssembledForge } from '@chatdom/forge';
-import { ForgePlacementSchema, type ForgePlacement, type ForgePhase, type ForgeRitualFrame, type Vec3, type HousePartPlan } from '@chatdom/shared';
+import { ForgePlacementSchema, type ForgePlacement, type ForgePhase, type Vec3, type HousePartPlan } from '@chatdom/shared';
 import { geometryFromChunks, type VoxelRenderState, type WindowHouse } from '@chatdom/render';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { buildBounds } from '../build/composition';
@@ -16,7 +16,7 @@ import {requestForgeRun,ForgeRunStopped} from './run-client';
 import type { createKingdomSound } from '../kingdom/sound';
 
 export interface ForgeStatus {open:boolean;busy:boolean;phase:ForgePhase|'idle'|'preparing'|'refusal';title:string;message:string;privateError:string|null;maker:string|null;placed:number;kept:number;family:StyleKey;plaque:string|null;runtime:'codex'|'fixture'}
-interface Options {onFlight?:(frame:ForgeRitualFrame|null,position:Vec3|null)=>void;scene:THREE.Scene;camera:THREE.PerspectiveCamera;canvas:HTMLCanvasElement;pool:VoxelWorkerPool;material:VoxelRenderState;anvil:THREE.Vector3;home:()=>WindowHouse;source:'simulated'|'herald';seed:string;kingdomName:string;family:StyleKey;sound:ReturnType<typeof createKingdomSound>;onStatus?:(status:ForgeStatus)=>void;onArrival?:(home:WindowHouse)=>void;registerShadow?:(mesh:THREE.Mesh)=>()=>void}
+interface Options {onFlight?:import('./presentation/stage').ForgePresentationOptions['onFlight'];scene:THREE.Scene;camera:THREE.PerspectiveCamera;canvas:HTMLCanvasElement;pool:VoxelWorkerPool;material:VoxelRenderState;anvil:THREE.Vector3;home:()=>WindowHouse;source:'simulated'|'herald';seed:string;kingdomName:string;family:StyleKey;sound:ReturnType<typeof createKingdomSound>;onStatus?:(status:ForgeStatus)=>void;onArrival?:(home:WindowHouse)=>void;registerShadow?:(mesh:THREE.Mesh)=>()=>void}
 type Placed={mesh:THREE.Mesh;heat:ReturnType<typeof addForgeFlightHeat>;result:AssembledForge;receipt:ForgePlacement;emitter:THREE.Vector3;unshadow?:()=>void};
 const LANDED_START=FORGE_STAGE_TIMING.find(([phase])=>phase==='landed')![1];
 export function createKingdomForge(options:Options){

@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import type { VoxelRenderState } from '@chatdom/render';
-import type { ForgeRitualFrame, Vec3 } from '@chatdom/shared';
+import type { ForgeRitualFrame } from '@chatdom/shared';
 import { addForgeFlightHeat } from './flight-heat';
 import { createCodexEngraving } from './engraving';
 import { createAnvilHero } from './anvil-hero';
 import { createForgePresentation, type ForgePresentation } from './presentation';
 
 /** The stage owns its decorative resources; the voxel geometry and lighting textures remain with their callers. */
-export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderState, onFlight?: (frame: ForgeRitualFrame | null, position: Vec3 | null) => void) {
+export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderState, onFlight?: import('./presentation/stage').ForgePresentationOptions['onFlight']) {
   const effects = new THREE.Group(); scene.add(effects);
   let presentation: ForgePresentation | undefined, presenting = false;
   const root = new THREE.Group();

@@ -60,13 +60,14 @@ const uniform = (root: THREE.Object3D, mesh: string, name: string) => ((root.get
 describe('Forge ritual presentation', () => {
   it('reports the posed clone upper surface and clears the sink on reset', () => {
     const h = host();
-    let reported: readonly number[] | null = null;
+    let reported: readonly number[] | null = null, socket: readonly number[] | undefined;
     const stage = createForgeStage({ root: h.root, anvil: h.anvil, landing: h.landing, piece: h.piece,
-      onFlight: (_frame, position) => { reported = position; } }, environment());
+      onFlight: (_frame, position, landing) => { reported = position; socket = landing; } }, environment());
     stage.update(frame('flight', .45, 18));
     h.piece.updateWorldMatrix(true, false);
     const actual = new THREE.Vector3(0, 1.15, 0).applyMatrix4(h.piece.matrixWorld);
     expect(reported).not.toBeNull();
+    expect(socket).toEqual(h.landing);
     expect(new THREE.Vector3(...reported!).distanceTo(actual)).toBeLessThan(1e-6);
     stage.update(null);
     expect(reported).toBeNull();

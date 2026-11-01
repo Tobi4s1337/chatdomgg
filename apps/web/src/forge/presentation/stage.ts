@@ -20,7 +20,7 @@ export interface ForgePresentationOptions {
   landing: Point3;
   /** A disposable presentation clone supplied and owned by the host; never the placed piece. */
   piece: THREE.Object3D;
-  onFlight?(frame: ForgeRitualFrame | null, position: Point3 | null): void;
+  onFlight?(frame: ForgeRitualFrame | null, position: Point3 | null, socket?: Point3): void;
 }
 export interface ForgePresentation { update(frame: ForgeRitualFrame | null): void; dispose(): void }
 /** What the host device asks of motion and particle budgets. Tests and the bench supply fixed answers. */
@@ -477,7 +477,7 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
         if (!environment.reducedMotion() && (read.phase === 'flight' || read.phase === 'landed')) {
           piece.updateWorldMatrix(true, false);
           const world = centre.clone().setY(silhouette.bounds.max.y + .15).applyMatrix4(piece.matrixWorld);
-          options.onFlight(frame, [world.x, world.y, world.z]);
+          options.onFlight(frame, [world.x, world.y, world.z], options.landing);
         } else options.onFlight(null, null);
       }
     },
