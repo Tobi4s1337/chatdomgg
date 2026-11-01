@@ -659,14 +659,24 @@ describe('Twitch moments: a cheer and the sky answers; the earned train brings i
     // walk the walls, and all three fit the sky's budget together, so no curtain ever cuts a letter or a shell.
     now += 30_000; kingdomNow = now;
     local.deliver(bitsUse(JUNIPER, 5000)); await settle(ingest);
-    let busiest = 0, strips = 0;
+    let busiest = 0, strips = 0, deepest = 0, veiled = 0;
     for (let at = now; at <= now + 12_000; at += 200) {
       view.apply(moments.sample(at));
       const sky = view.stats();
       busiest = Math.max(busiest, Number(sky['sky.motes'])); strips = Math.max(strips, Number(sky['sky.auroraColumns']));
+      deepest = Math.max(deepest, view.glow().night ?? 0); veiled = Math.max(veiled, Number(sky['sky.darkness']));
     }
     expect(strips).toBeGreaterThanOrEqual(90);
     expect(busiest).toBeLessThan(SKY_LIMITS.motes);
+    // The sky deepens toward night under the aurora, the painted sky a little further than the town's light, never
+    // to black, and gives the dusk back once the curtains have rolled away.
+    expect(deepest).toBeGreaterThan(0.4);
+    expect(deepest).toBeLessThanOrEqual(0.55);
+    expect(veiled).toBeGreaterThan(deepest);
+    expect(veiled).toBeLessThanOrEqual(0.75);
+    view.apply(moments.sample(now + SKY_BEAT.skyfire.end + 600));
+    expect(view.stats()).toMatchObject({ 'sky.veil': 0, 'sky.auroraColumns': 0 });
+    expect(view.glow().night ?? 0).toBe(0);
 
     // The train sets out on the supplied track and carries its riders' names; level 3 wakes the realm's dragon.
     now += 60_000; kingdomNow = now;

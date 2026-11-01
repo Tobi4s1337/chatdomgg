@@ -15,3 +15,5 @@ export {
   type ApprovedEffect, type BattleStatus, type DragonForm, type DragonFrame, type KingdomScale, type LadderStep, type SkyBeatFrame, type SkyRung,
   type SpectaclePlaces, type TrainFrame,
 } from './spectacle';
+export { SkyCaptions } from './sky-captions';
+export { skyLitEnvironment } from './town-light';
