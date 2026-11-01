@@ -8,22 +8,25 @@ import { observeRealm, type RealmObserver } from '../realm/adapters/observer';
 import { createRoomMomentFeed } from '../realm/adapters/moments';
 import { createRoomPresenceFeed } from '../realm/adapters/presence';
 import { createRoomGrowthFeed } from '../realm/adapters/growth';
+import { createGrowthCeremonySession, deferGrowthCeremonies } from '../kingdom/growth-ceremony-feed';
 import { createRoomChatFeed } from '../realm/adapters/chat';
 import { createRealmForgeFeed, deferRealmForgeFeed } from '../realm/adapters/forge-feed';
 
 /** One read-only stream view owns this closure; a scene replacement keeps only witnessed Forge work. */
 export function createRealmSpectatorSource(options: { kingdomId: KingdomId; fetcher?: RealmFetch; source?: (path: string) => WatchEventSource }) {
-  const kingdomId = KingdomIdSchema.parse(options.kingdomId), forgeFeed = createRealmForgeFeed();
+  const kingdomId = KingdomIdSchema.parse(options.kingdomId), forgeFeed = createRealmForgeFeed(), growth = createGrowthCeremonySession();
   return async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
     signal.throwIfAborted();
     let observer: RealmObserver | undefined, disposed = false, active = false;
     const sceneForgeFeed = deferRealmForgeFeed(forgeFeed);
+    const growthCeremonies = deferGrowthCeremonies(growth.feed);
     const watch = createRealmWatch({ kingdomId, signal, revision, unavailable() { observer?.unavailable(); if (active) forgeFeed.unavailable(); unavailable(); },
       ...(options.source ? { source: options.source } : {}) });
-    let offForge: (() => void) | undefined, chatFeed: ReturnType<typeof createRoomChatFeed> | undefined;
+    let offGrowth: (() => void) | undefined, offForge: (() => void) | undefined, chatFeed: ReturnType<typeof createRoomChatFeed> | undefined;
     const dispose = (reason?: 'scene-revision') => {
       if (disposed) return;
       disposed = true; signal.removeEventListener('abort', aborted);
+      growthCeremonies.dispose(); offGrowth?.(); if (active && reason !== 'scene-revision') growth.clear();
       sceneForgeFeed.dispose(); offForge?.(); if (active && reason !== 'scene-revision') forgeFeed.unavailable();
       chatFeed?.dispose(); observer?.dispose(); watch.dispose();
     };
@@ -42,15 +45,19 @@ export function createRealmSpectatorSource(options: { kingdomId: KingdomId; fetc
       const sceneResponse = await read(REALM_FOUNDED_ROUTES.scene.replace(':sceneHash', manifest.sceneHash));
       const scene: RealmFoundedScene = await decodeFoundedScene(await boundedBytes(sceneResponse), manifest);
       signal.throwIfAborted();
+      await growth.prepare(scene);
+      signal.throwIfAborted();
+      growthCeremonies.preview(scene); // Retain only exact witnessed targets while this candidate prepares.
+      offGrowth = growth.bind(watch.room, checkpoint, scene);
       observer = observeRealm(watch.room, { kingdomId, origin: manifest.origin, layoutRevision: manifest.layoutRevision, collisionRevision: manifest.collisionRevision });
       chatFeed = createRoomChatFeed(watch.room, observer);
       await ready(observer, signal);
       signal.throwIfAborted();
       const activate = () => {
         if (active || disposed) return;
-        active = true; offForge = forgeFeed.bind(observer!); sceneForgeFeed.activate();
+        active = true; offForge = forgeFeed.bind(observer!); sceneForgeFeed.activate(); growthCeremonies.activate();
       };
-      return { scene, manifest, kingdomName: info.name, presenceFeed: createRoomPresenceFeed(observer, manifest.origin, Date.now, true), growthFeed: createRoomGrowthFeed(observer, manifest.origin), walkerFeed: watch.walkerFeed, chatFeed, forgeFeed: sceneForgeFeed, momentFeed: createRoomMomentFeed(observer, manifest.origin), activate, dispose };
+      return { scene, manifest, growthCeremonies, kingdomName: info.name, presenceFeed: createRoomPresenceFeed(observer, manifest.origin, Date.now, true), growthFeed: createRoomGrowthFeed(observer, manifest.origin), walkerFeed: watch.walkerFeed, chatFeed, forgeFeed: sceneForgeFeed, momentFeed: createRoomMomentFeed(observer, manifest.origin), activate, dispose };
     } catch (error) { dispose(); throw error; }
   };
 }

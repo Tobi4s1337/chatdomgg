@@ -25,12 +25,14 @@ interface Motion {
 const vertexShader = /* glsl */ `
   in vec4 aCapeShape, aCapeMotion, aCapeState, aCapeColours;
   in vec3 aCapeFit, aCapeRainbowA, aCapeRainbowB;
+  in vec4 aCapePaintCloth;
   uniform float uCapeTime;
   uniform vec2 uCapeWind;
   out vec3 vWorld, vNormal;
   out vec2 vUv;
   flat out vec4 vColours;
   flat out vec3 vRainbowA, vRainbowB, vDimensions;
+  flat out vec4 vPaintCloth;
   flat out float vFade, vPhase;
 
   // A continuous cut, with a fully pinned shoulder edge. No thickness or cubes.
@@ -69,6 +71,7 @@ const vertexShader = /* glsl */ `
     vec4 world=modelMatrix*instanceMatrix*vec4(p,1.);
     vWorld=world.xyz;
     vNormal=normalize(mat3(modelMatrix*instanceMatrix)*normalize(cross(across,down)));
+    vPaintCloth=aCapePaintCloth;
     vUv=uv;vColours=aCapeColours;vRainbowA=aCapeRainbowA;vRainbowB=aCapeRainbowB;
     vDimensions=vec3(aCapeShape.xy,aCapeFit.z);vFade=aCapeState.z;vPhase=aCapeMotion.z;
     gl_Position=projectionMatrix*viewMatrix*world;
@@ -85,10 +88,17 @@ const fragmentShader = /* glsl */ `
   in vec2 vUv;
   flat in vec4 vColours;
   flat in vec3 vRainbowA,vRainbowB,vDimensions;
+  flat in vec4 vPaintCloth;
   flat in float vFade,vPhase;
   out vec4 capeColour;
   #define gl_FragColor capeColour
   vec3 swatch(float id){return texelFetch(uPalette,ivec2(int(id)%256,int(id)/256),0).rgb;}
+  vec3 linearPaint(vec3 c){return mix(c/12.92,pow((c+.055)/1.055,vec3(2.4)),step(vec3(.04045),c));}
+  vec3 paintedRainbow(int i){
+    if(i==0)return vec3(239.,75.,44.)/255.; if(i==1)return vec3(245.,138.,31.)/255.;
+    if(i==2)return vec3(246.,210.,60.)/255.; if(i==3)return vec3(63.,174.,74.)/255.;
+    if(i==4)return vec3(45.,95.,216.)/255.; return vec3(138.,63.,230.)/255.;
+  }
   float rainbowId(int i){return i<3?vRainbowA[i]:vRainbowB[i-3];}
   float packedSample(sampler3D field,ivec3 p){return floor(texelFetch(field,p,0).r*255.+.5);}
   bool inside(vec3 p,vec3 size){return all(greaterThanEqual(p,vec3(0)))&&all(lessThan(p,size));}
@@ -122,9 +132,22 @@ const fragmentShader = /* glsl */ `
     float noise=fract(52.9829189*fract(dot(floor(gl_FragCoord.xy),vec2(.06711056,.00583715))));
     if(vFade<=noise)discard;
     vec3 n=normalize(vNormal)*(gl_FrontFacing?1.:-1.);
-    vec3 base=swatch(gl_FrontFacing?vColours.x:vColours.y);
     float seam=min(min(vUv.x,1.-vUv.x)*vDimensions.x,(1.-vUv.y)*vDimensions.y);
     float trim=1.-smoothstep(vDimensions.z,vDimensions.z+.004,seam);
+    vec3 base;
+    if(vPaintCloth.w>0.){
+      // Builder paints in sRGB before conversion to linear light.
+      vec3 paint=gl_FrontFacing?vPaintCloth.rgb:vRainbowA;
+      if(vColours.w>0. && gl_FrontFacing){
+        float band=fract(vUv.y*1.4+vUv.x*.35-uCapeTime*.22)*6.;
+        int first=int(floor(band));
+        paint=mix(paint,mix(paintedRainbow(first),paintedRainbow((first+1)%6),fract(band)),vColours.w);
+      }
+      paint=mix(paint,vRainbowB,trim);
+      if(vPaintCloth.w>1.5)paint=mix(paint,vec3(.46,.45,.47),.45);
+      base=linearPaint(paint);
+    } else {
+    base=swatch(gl_FrontFacing?vColours.x:vColours.y);
     if(vColours.w>0.){
       float band=fract(vUv.y*.52+vUv.x*.22-uCapeTime*.055+vPhase*.03)*6.;
       int first=int(floor(band));
@@ -138,6 +161,7 @@ const fragmentShader = /* glsl */ `
       base=mix(base,swatch(vColours.z),star*pulse*vColours.w*.42);
     }
     base=mix(base,swatch(vColours.z),trim);
+    }
     float diffuse=max(dot(n,normalize(uSunDirection)),0.);
     vec3 light=uAmbient*uAmbientIntensity*(.5+.5*max(n.y,0.))+uSun*uSunIntensity*diffuse;
     float warm=warmField(uFarLight,uFarOrigin,uFarExtent,uFarCell,n);
@@ -210,6 +234,7 @@ export function createCitizenCapeRenderer(scene: THREE.Scene, options: CitizenCa
   };
   const shape = attribute('aCapeShape', 4), fit = attribute('aCapeFit', 3);
   const motion = attribute('aCapeMotion', 4), state = attribute('aCapeState', 4);
+  const paintCloth = attribute('aCapePaintCloth', 4);
   const colours = attribute('aCapeColours', 4), rainbowA = attribute('aCapeRainbowA', 3), rainbowB = attribute('aCapeRainbowB', 3);
   const uniforms: Record<string, THREE.IUniform> = {};
   for (const name of ['uPalette', 'uLight', 'uFarLight', 'uBeaconLight', 'uSun', 'uAmbient', 'uSunDirection', 'uFog', 'uLightOrigin', 'uLightExtent', 'uFarOrigin', 'uFarExtent', 'uBeaconOrigin', 'uBeaconExtent', 'uSunIntensity', 'uAmbientIntensity', 'uNight', 'uFarCell', 'uBeaconCell']) {
@@ -256,7 +281,7 @@ export function createCitizenCapeRenderer(scene: THREE.Scene, options: CitizenCa
       (uniforms.uCapeWind!.value as THREE.Vector2).set(...wind).clampLength(0, 2);
       mesh.count = 0; frame++; open = true;
     },
-    add(sample: CitizenCapeSample, source: AvatarCapeBlueprint, backWorldMatrix: THREE.Matrix4) {
+    add(sample: CitizenCapeSample, source: AvatarCapeBlueprint, backWorldMatrix: THREE.Matrix4, paint?: { readonly cloth: readonly [number, number, number]; readonly lining: readonly [number, number, number]; readonly trim: readonly [number, number, number]; readonly dim: boolean }) {
       if (!open) throw new Error('Begin a cape frame before adding a citizen.');
       if (mesh.count >= capacity) throw new Error(`Cape count exceeds capacity ${capacity}.`);
       if (!sample.id || ![sample.heading, sample.distance, sample.speed, sample.opacity ?? 1, ...backWorldMatrix.elements].every(Number.isFinite) || sample.speed < 0) throw new Error('Invalid citizen cape sample.');
@@ -280,14 +305,22 @@ export function createCitizenCapeRenderer(scene: THREE.Scene, options: CitizenCa
       motion.setXYZW(index, item.lift, item.sway, item.phase, sample.distance * Math.PI * 2 / .75);
       state.setXYZW(index, item.speed, sample.heading, THREE.MathUtils.clamp(sample.opacity ?? 1, 0, 1), 0);
       colours.setXYZW(index, cape.colours.cloth, cape.colours.lining, cape.colours.trim, cape.shimmer?.strength ?? 0);
-      const rainbow = cape.shimmer?.swatches;
-      rainbowA.setXYZ(index, rainbow?.[0] ?? cape.colours.cloth, rainbow?.[1] ?? cape.colours.cloth, rainbow?.[2] ?? cape.colours.cloth);
-      rainbowB.setXYZ(index, rainbow?.[3] ?? cape.colours.cloth, rainbow?.[4] ?? cape.colours.cloth, rainbow?.[5] ?? cape.colours.cloth);
+      // The look compiles sRGB paint once; reuse rainbow slots for lining and trim.
+      if (paint) {
+        paintCloth.setXYZW(index, ...paint.cloth, paint.dim ? 2 : 1);
+        rainbowA.setXYZ(index, ...paint.lining);
+        rainbowB.setXYZ(index, ...paint.trim);
+      } else {
+        paintCloth.setXYZW(index, 0, 0, 0, 0);
+        const rainbow = cape.shimmer?.swatches;
+        rainbowA.setXYZ(index, rainbow?.[0] ?? cape.colours.cloth, rainbow?.[1] ?? cape.colours.cloth, rainbow?.[2] ?? cape.colours.cloth);
+        rainbowB.setXYZ(index, rainbow?.[3] ?? cape.colours.cloth, rainbow?.[4] ?? cape.colours.cloth, rainbow?.[5] ?? cape.colours.cloth);
+      }
     },
     endFrame() {
       if (!open) throw new Error('No cape frame is open.');
       for (const [id, item] of history) if (item.seen !== frame) history.delete(id);
-      for (const data of [mesh.instanceMatrix, shape, fit, motion, state, colours, rainbowA, rainbowB]) {
+      for (const data of [mesh.instanceMatrix, shape, fit, motion, state, colours, rainbowA, rainbowB, paintCloth]) {
         data.clearUpdateRanges(); data.addUpdateRange(0, mesh.count * data.itemSize); data.needsUpdate = true;
       }
       open = false;

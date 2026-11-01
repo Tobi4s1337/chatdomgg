@@ -94,12 +94,15 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
 
   const save = async () => {
     if (unearned().length || status().kind === 'saving') return;
+    const submitted = look();
     setStatus({ kind: 'saving' });
     sound('wood');
     try {
-      const result = await props.authority.save(look());
+      const result = await props.authority.save(submitted);
       if (result.ok) {
         setSaved(result.look);
+        // The authority can return a canonical look. Do not overwrite edits made while saving.
+        setHistory(h => isUnchanged(h.present, submitted) ? { ...h, present: result.look } : h);
         setStatus({ kind: 'saved' });
         props.onSaved?.(result.look);
       } else setStatus({ kind: 'error', message: result.reason });

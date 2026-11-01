@@ -5,6 +5,14 @@ import type { RealmWalkerPose } from '../realm/client';
 import { createWalkController, type WalkRealm } from './index';
 
 const hudInput = vi.hoisted(() => ({ jump: undefined as (() => void) | undefined, look: undefined as ((event: MouseEvent) => void) | undefined }));
+const gestureUi = vi.hoisted(() => ({ state: undefined as import('./gestures').GestureState | undefined }));
+vi.mock('./gestures', async importOriginal => ({
+  ...await importOriginal<typeof import('./gestures')>(),
+  mountGestureSelector: (_host: HTMLElement, options: import('./gestures').GestureSelectorOptions) => {
+    gestureUi.state = options.state;
+    return { setAvailable() {}, setVisible() {}, dispose() { gestureUi.state = undefined; } };
+  },
+}));
 vi.mock('./input/hud', async importOriginal => ({
   ...await importOriginal<typeof import('./input/hud')>(),
   createWalkHud: (_container: HTMLElement, jump: () => void, look: (event: MouseEvent) => void) => {
@@ -42,7 +50,7 @@ function realm(at: { x: number; y: number; z: number; yaw: number }) {
 function key(target: EventTarget, type: 'keydown' | 'keyup', code: string, repeat = false) {
   target.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { code, repeat, ctrlKey: false, metaKey: false, altKey: false }));
 }
-function setup(width = 1440, height = 900, heading?: number, collisionOrHud?: CollisionWorld | (() => CollisionWorld | null) | boolean) {
+function setup(width = 1440, height = 900, heading?: number, collisionOrHud?: CollisionWorld | (() => CollisionWorld | null) | boolean, gestures?: import('./index').WalkControllerOptions['gestures']) {
   const withHud = collisionOrHud === true;
   const collision = typeof collisionOrHud === 'boolean' ? undefined : collisionOrHud;
   const keyboard = new EventTarget(), page = Object.assign(new EventTarget(), { hidden: false });
@@ -58,7 +66,7 @@ function setup(width = 1440, height = 900, heading?: number, collisionOrHud?: Co
   const camera = new THREE.PerspectiveCamera(52, width / height, .15, 2200);
   const world = realm({ x: 2, y: 0, z: 9, yaw: 128 });
   const clock = { now: 0 };
-  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }), ...(collision ? { collision } : {}), ...(withHud ? { hud: {} as HTMLElement } : {}) });
+  const controller = createWalkController({ camera, surface, realm: world.fake, keyboard, page, lockDocument, coarse: false, clock: () => clock.now, ...(heading === undefined ? {} : { heading }), ...(collision ? { collision } : {}), ...(withHud ? { hud: {} as HTMLElement } : {}), ...(gestures ? { gestures } : {}) });
   const touch = (type: string, id: number, x: number, y: number) =>
     surface.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { pointerId: id, pointerType: 'touch', isPrimary: id === 1, button: 0, buttons: 1, clientX: x, clientY: y }));
   const mouse = (movementX: number, movementY: number) => lockDocument.dispatchEvent(Object.assign(new Event('mousemove'), { movementX, movementY }));
@@ -66,6 +74,31 @@ function setup(width = 1440, height = 900, heading?: number, collisionOrHud?: Co
 }
 
 describe('the walk controller', () => {
+  it('binds local and witnessed gestures while keeping reset, movement and loss of ownership honest', () => {
+    let available = true;
+    const publish = vi.fn();
+    const { controller, keyboard, sent } = setup(1440, 900, 0, true, { available: () => available, publish, sample: () => 'bow' });
+    controller.frame(0);
+    gestureUi.state!.play('sit', 0); controller.frame(16);
+    expect(controller.gestureFor('me', 16)).toBe('sit');
+    expect(controller.gestureFor('other', 16)).toBe('bow');
+    key(keyboard, 'keydown', 'KeyW'); controller.frame(32);
+    expect(controller.gestureFor('me', 32)).toBe('none');
+    expect(sent.at(-1)?.moveZ).toBe(127);
+    gestureUi.state!.play('wave', 32); controller.reset(); controller.frame(48);
+    // Reset clears the action but retains its live UI/state for the next deliberate action.
+    gestureUi.state!.play('cheer', 48); controller.frame(64);
+    expect(controller.gestureFor('me', 64)).toBe('cheer');
+    controller.release();
+    expect(controller.gestureFor('me', 64)).toBe('none');
+    controller.resume(); gestureUi.state!.play('wave', 64); controller.frame(80);
+    available = false; controller.frame(96);
+    expect(controller.gestureFor('me', 96)).toBe('none');
+    expect(controller.gestureFor('other', 96)).toBe('none');
+    expect(publish.mock.calls.map(([g]) => g)).toEqual(['sit', 'none', 'wave', 'none', 'cheer', 'none', 'wave', 'none']);
+    controller.dispose(); expect(gestureUi.state).toBeUndefined();
+    expect(controller.gestureFor('other', 112)).toBe('none');
+  });
   it('puts the camera on the connected citizen behind the way they face', () => {
     const { controller, camera, sent } = setup();
     expect(controller.debug.ready).toBe(false);

@@ -1,3 +1,5 @@
+import { createHomeGrowthCeremony } from './growth-ceremony';
+import type { GrowthCeremonyFeed } from './growth-ceremony-feed';
 import { createForgeFlight } from './forge-flight';
 import * as THREE from 'three';
 import { createKingdomForge, type ForgeStatus } from '../forge/scene';
@@ -74,7 +76,7 @@ export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number;arrivalAgeSeconds?:number}
 export interface PotentialKingdomView {seat?:GenesisSeatContent;plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
 export interface SceneView {eye:Vec3;target:Vec3;fov:number}
-export interface SceneOptions {initialView?:SceneView;growthFeed?:GrowthSceneFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneOptions {initialView?:SceneView;growthFeed?:GrowthSceneFeed;growthCeremonies?:GrowthCeremonyFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -85,7 +87,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   let fixedTime=options.source==='simulated'&&!options.presenceFeed&&options.time!==null,autoCamera=options.source==='simulated'&&!options.presenceFeed&&!fixedTime&&camName==='hero',frame:KingdomPresenceFrame|undefined,fieldUploads=0,geometryBuilds=0,fieldBytes=0,nearBytes=0,farBytes=0,beaconBytes=0,nearVisited=0,farVisited=0,beaconVisited=0;
   let walk:Awaited<ReturnType<typeof createKingdomWalk>>|undefined,walkSelected=false,walkGeneration=0;
   let observed:Awaited<ReturnType<typeof createObservedWalkers>>|undefined;
-  let moments:ReturnType<typeof createKingdomMoments>|undefined,momentCameraDirected=false;
+  let moments:ReturnType<typeof createKingdomMoments>|undefined,momentCameraDirected=false,growthCameraDirected=false;
   const earlyCleanups:(()=>void)[]=[];
   let fullDispose:(()=>void)|undefined;
   const own=<T extends {dispose():void}>(resource:T):T=>{earlyCleanups.push(()=>resource.dispose());return resource;};
@@ -232,11 +234,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   earlyCleanups.push(unsubscribe);
   const debug:KingdomDebug={citizens:0,walking:0,ready:false,lightingReady:false,workers:pool.stats.size+4,homes:houses.length,activeWindows:0,geometryBuilds:0,fieldUploads:0,drawCalls:0,triangles:0,time:0,hour,camera:camName,fieldBytes:0,source:source.label,fieldSettled:false,shadowUpdates:0,shadowDrawCalls:0,shadowTriangles:0,shadowBytes:0,shadowEnabled:false,windowFieldVisited:0,beaconFieldVisited:0};
   type Placement={position:Vec3;yaw:number;placementId?:string};
-  const hiddenAttachments=new Set<string>();
+  const hiddenAttachments=new Set<string>(),growthHidden=new Set<string>(),growthLifeHidden=new Set<number>();
   type RenderBatch={transitions:Map<Placement,DetailTransition>;blueprint:VoxelBlueprint;placements:readonly Placement[];levels:Map<number,THREE.InstancedMesh>};
   const batches=new Map<string,RenderBatch>();
   let buildHidden=false;
   let instancesDirty=true;
+  const growth=options.founded&&options.growthCeremonies?own(createHomeGrowthCeremony({scene,founded:options.founded,feed:options.growthCeremonies,houses,pool,material:clay,registry,sound,
+    maskHome(id,hidden){if(growthHidden.has(id)===hidden)return;if(hidden)growthHidden.add(id);else growthHidden.delete(id);instancesDirty=true;sunShadows.invalidate();},
+    maskLife(slot,hidden){if(growthLifeHidden.has(slot)===hidden)return;if(hidden)growthLifeHidden.add(slot);else growthLifeHidden.delete(slot);windows.setHidden(slot,hidden);lastField=-Infinity;},
+  })):undefined;
   const build=own(createKingdomBuild({scene,camera,canvas,pool,material:clay,home:layout.homes.find(h=>h.slot===simulation.firstSlot)!,authoredHome:first,
     ownerId:`simulated:${options.seed}:${options.tier}:juniper`,ownerName:'Juniper',source:!installed&&options.source==='simulated'?'SIMULATED':'LIVE',sound,
     onSession:session=>options.onBuild?.(session),onHousewarming:name=>options.onHousewarming?.(name),
@@ -290,7 +296,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       for(const mesh of levels.values())mesh.count=0;
       const conservativeSize=new THREE.Vector3(...blueprint.size.map(axis=>Math.ceil(axis/4)*4)).multiplyScalar(.125),radius=conservativeSize.length()/2;
       for(const p of placements){
-        if((buildHidden&&p===first)||(p.placementId&&hiddenAttachments.has(p.placementId)))continue;
+        if((buildHidden&&p===first)||(p.placementId&&(hiddenAttachments.has(p.placementId)||growthHidden.has(p.placementId))))continue;
         centre.copy(conservativeSize).multiplyScalar(.5).applyAxisAngle(axis,p.yaw).add(new THREE.Vector3(...p.position));
         if(!frustum.intersectsSphere(new THREE.Sphere(centre,radius)))continue;
         const distance=Math.max(0,camera.position.distanceTo(centre)-radius);
@@ -445,12 +451,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     clay.setEnvironment(grade);ground.setEnvironment(grade);forge.setEnvironment(grade);realmForge?.setEnvironment(grade);
     crowd.material.setEnvironment({...grade,ambientIntensity:Math.max(.65,grade.ambientIntensity)});
     const presentationMs=ownSimulation?simulation.epochMs+time*1000:Date.now();
+    growth?.update(now,loaded);
     const walking=walk?.frame(now,walkSelected&&!capturePose&&!build.session&&!build.housewarming&&!forge.status().open)??false;
     observed?.frame(now);
     const feet=walkerSlots(walk ? walk.poses : observed?.poses??[]);
     crowd.watchForge(!!realmForge?.active()||forge.status().busy,presentationMs,[0,layout.market.elevation,8]);
     const night=THREE.MathUtils.smoothstep(Math.abs(((hour%24)+24)%24-12),4.2,6.5);
-    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet,forgeFlight.reaction(now),moments?.crowd()??null):[];
+    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet,forgeFlight.reaction(now)??growth?.reaction()??null,moments?.crowd()??null):[];
     const lightFrame=loaded?crowd.lightFrame(presentationMs):frame;
     if(lightFrame)build.setFrame(lightFrame);
     // Potential land may show an anonymous night painting, independently of its empty
@@ -512,8 +519,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const nextArrival=arrivalShot?`${arrivalShot.slot}:${arrivalShot.phase}`:'';
     if(nextArrival!==arrivalKey){arrivalKey=nextArrival;options.onArrival?.(arrivalShot?{slot:arrivalShot.slot,phase:arrivalShot.phase}:null);}
     if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
-    momentCameraDirected=loaded&&!!moments?.update(presentationMs,frame,!walking&&!build.session&&!capturePose&&!forgeDirected&&!arrivalCameraDirected);
-    if(!walking&&!forgeDirected&&!momentCameraDirected)camera.lookAt(target);
+    momentCameraDirected=loaded&&!!moments?.update(presentationMs,frame,!walking&&!build.session&&!capturePose&&!forgeDirected&&!arrivalCameraDirected&&!growth?.active());
+    growthCameraDirected=growth?.direct(camera,target,!walking&&!build.session&&!capturePose&&!forgeDirected&&!momentCameraDirected)??false;
+    if(!walking&&!forgeDirected&&!momentCameraDirected&&!growthCameraDirected)camera.lookAt(target);
     if(handoffPose&&!walking&&!capturePose){
       // Preserve the outgoing lens, then yield smoothly to the production director.
       if(loaded)handoffPose.elapsed+=dt;
@@ -525,7 +533,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }
     camera.updateMatrixWorld();forgeFlight.update();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);crowd.drawLanterns(time,night,camera,walk?.grips??observed?.grips);updateInstances(fixedTime&&autoCamera?time*1000:now);
     canopy.sync();canopy.setWind(time,[0.8,0.6],0.8);
-    homeLife.update(presentationMs,time,lightFrame,hour,camera);royalLife.update(time,frame,hour);
+    homeLife.update(presentationMs,time,growthLifeHidden.size&&lightFrame?{...lightFrame,windows:lightFrame.windows.filter(w=>!growthLifeHidden.has(w.slot))}:lightFrame,hour,camera);royalLife.update(time,frame,hour);
     forgeFire.update(time,frame,hour);forgeHearth.update(time,frame,hour);
     forgeBreath.update({time,anvil:new THREE.Vector3(0,layout.market.elevation,8),activity:0,landed:forgeSites.noses.map(position=>({position:new THREE.Vector3(...position),kind:'smoke' as const}))});
     if(loaded&&now-lastAmbience>=160){
@@ -547,7 +555,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     ]});
     dressing.hideLot(buildHidden?simulation.firstSlot:null);
     dressing.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
-    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
+    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[]),...(growth?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
     const people=walk??observed;
     if(people)options.onWalkers?.(people.labels().filter(label=>{
       const person=people.poses.find(p=>p.id===label.id);
@@ -586,6 +594,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     instance(b,result.chunks,placements,factor);options.onProgress(castleBuildings.some(module=>module.blueprint.id===b.id)?'Opening the castle gate':treeIndex>=0?'Planting the old woods':'Raising the homes',++completed/total);
     }
   });
+  if(growth)tasks.push(growth.ready);
   tasks.push(dressing.ready);
   tasks.push(shore.prepare());
   tasks.push(loadTerrain(layout,()=>{}, {signal:abort.signal}).then(({chunks,origin})=>{
@@ -595,7 +604,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
@@ -620,7 +629,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     }catch(error){dispose();throw error;}
   loaded=true;lastFrame=performance.now();options.onProgress('The gate is opening',1);
   function detachWalk(){walkGeneration++;walkSelected=false;walk?.dispose();walk=undefined;options.onWalkers?.([]);camera.clearViewOffset();camera.filmOffset=0;camera.updateProjectionMatrix();instancesDirty=true;}
-  return {layout,debug,sound,build,forge,forgeDirecting:()=>forgeCameraDirected,momentDirecting:()=>forgeCameraDirected||arrivalCameraDirected||momentCameraDirected,
+  return {layout,debug,sound,build,forge,forgeDirecting:()=>forgeCameraDirected,momentDirecting:()=>forgeCameraDirected||arrivalCameraDirected||momentCameraDirected||growthCameraDirected,
     async attachWalk(binding:KingdomWalkBinding){
       if(disposed)throw new Error('The kingdom has closed');
       checkWalkBinding(options.founded,binding);
@@ -635,7 +644,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     interactionDebug:()=>walk?.interactionDebug??null,
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
-    inspect:()=>({water:water.diagnostics(),moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
+    seekGrowthCeremony(seconds:number|null){growth?.seek(seconds);},
+    inspect:()=>({growth:growth?.inspect(),water:water.diagnostics(),moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
       if(!crowd.receiveChat(input))return false;
       const cue=CitizenChatCueSchema.parse(input),at=Date.now();
       if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);

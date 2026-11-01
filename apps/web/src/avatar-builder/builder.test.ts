@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PORTRAIT_FIXTURES, parseLook, seedLook, type CitizenLook } from '../../../../packages/content/src/avatar-style';
 import { TABS } from './catalogue';
 import { HISTORY_DEPTH, commit, isUnchanged, redo, startHistory, undo } from './draft';
+import { capeObject, disposeCape } from './cape';
 
 const looks: readonly CitizenLook[] = [...PORTRAIT_FIXTURES.map(f => f.look), ...Array.from({ length: 12 }, (_, i) => seedLook(`builder-${i}`))];
 
@@ -41,6 +42,23 @@ describe('the builder catalogue', () => {
     if (cap.kind !== 'tiles' || tie.kind !== 'tiles') throw new Error('tiles expected');
     expect(cap.options.find(o => o.id === 'cap')!.apply(look).earned.forgedHat).toBeNull();
     expect(tie.options.find(o => o.id === 'tie')!.apply(look).earned.scarf).toBeNull();
+    const bareNeck = tie.options.find(o => o.id === 'none')!;
+    expect(bareNeck.selected(look)).toBe(false);
+    expect(bareNeck.apply(look).earned.scarf).toBeNull();
+    expect(bareNeck.selected(bareNeck.apply(look))).toBe(true);
+  });
+});
+
+describe('cape dressing', () => {
+  it('dims a lapsed sub cape but leaves a moment cape unchanged', () => {
+    const cape = { id: 'piece', cloth: '#223a7a', lining: '#f3f1ee', trim: '#e6b73a' } as const;
+    const look = looks[0]!;
+    const cheer = capeObject({ ...look, earned: { ...look.earned, cape: { ...cape, kind: 'cheer' } } }, true)!;
+    const sub = capeObject({ ...look, earned: { ...look.earned, cape: { ...cape, kind: 'tier-cloak' } } }, true)!;
+    expect(cheer.userData.cut.dim).toBe(false);
+    expect(sub.userData.cut.dim).toBe(true);
+    disposeCape(cheer);
+    disposeCape(sub);
   });
 });
 
