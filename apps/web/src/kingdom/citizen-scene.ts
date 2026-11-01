@@ -4,7 +4,7 @@ import { createVoxelMaterial, type VoxelRenderState } from '@chatdom/render';
 import { createCitizenMotion, createCitizenBehaviours, dueBehaviourSteps, type CitizenGoalAnswer, type CitizenMotion, type CitizenMotionSample, type SettlementPlan } from '@chatdom/world';
 import { CitizenChatCueSchema, type CitizenChatCue, type KingdomPresenceFrame, type Vec3 } from '@chatdom/shared';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
-import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
+import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import type { ForgeReactionCue } from './forge-flight';
 import { chooseWatchers, crowdPose, type CrowdCall } from '../twitch-moments/stage-beat';
 import { walkerSubject, type WalkerSlots } from './observed-walkers';
@@ -14,7 +14,7 @@ export interface ForgeAudienceBarrel { position: Vec3; height: number }
 const FORGE_AUDIENCE_CAP = 32;
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
-export interface SpeechLabel { slot: number; name: string | null; x: number; y: number; parts: CitizenChatCue['parts'] }
+export interface SpeechLabel { slot: number; name: string | null; x: number; y: number; distance: number; parts: CitizenChatCue['parts'] }
 
 /** Add public standing points only inside the installed market, without changing the adopted plan. */
 function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): SettlementPlan {
@@ -315,17 +315,19 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
         present: window.present && arrived.has(window.slot), publicName: window.present && arrived.has(window.slot) ? window.publicName : null })) };
     },
     subject(slot: number) { const sample = samples.find(s => s.slot === slot); return sample ? walkerSubject(sample, walkers) : undefined; },
-    speechLabels(camera: THREE.Camera, width: number, height: number, atMs: number, namedHomes: ReadonlySet<number> = new Set()): SpeechLabel[] {
+    speechLabels(camera: THREE.Camera, width: number, height: number, atMs: number, namedHomes: ReadonlySet<number> = new Set(), walkerHeads?: ReadonlyMap<string, THREE.Vector3>): SpeechLabel[] {
       const labels: SpeechLabel[] = [];
       for (const sample of samples) {
         const cue = speech.get(sample.slot);
         if (!cue || cue.asOf > atMs || cue.expiresAt <= atMs) continue;
-        const point = new THREE.Vector3(...walkerSubject(sample, walkers).position);
-        point.y += 1.9 + (walkers.get(sample.slot)?.posture ? CITIZEN_SEATED_HEAD_OFFSET_METRES : 0);
-        if (point.distanceTo(camera.position) > 28) continue;
+        const walker = walkers.get(sample.slot);
+        const head = walker ? walkerHeads?.get(walker.id) : renderer?.heads.get(String(sample.slot));
+        if (!head) continue;
+        const point = head.clone(), distance = point.distanceTo(camera.position);
+        if (distance > 28) continue;
         point.project(camera);
         if (point.z < 0 || point.z > 1 || Math.abs(point.x) > .85 || Math.abs(point.y) > .8) continue;
-        labels.push({ slot: sample.slot, name: namedHomes.has(sample.slot) ? null : sample.publicName, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2, parts: cue.parts });
+        labels.push({ slot: sample.slot, distance, name: namedHomes.has(sample.slot) ? null : sample.publicName, x: (point.x + 1) * width / 2, y: (1 - point.y) * height / 2, parts: cue.parts });
         if (labels.length >= 3) break;
       }
       return labels;

@@ -10,6 +10,13 @@ import { createWalkLook, LOOK, type LockDocument, type LockSurface, type LookMod
 import { createWalkPointer } from './input/pointer';
 import { createWalkTouch, type TouchSurface } from './input/touch';
 import { createStepEase } from './motion/step-ease';
+import type { CitizenGesture } from '../citizens';
+import { createGestureState, mountGestureSelector } from './gestures';
+
+export { createGestureState, mountGestureSelector } from './gestures';
+export type { GestureState, GestureSelector, PlayableGesture } from './gestures';
+export { layoutWalkLabels } from './labels';
+export type { WalkLabelAnchor, LabelRect, PlacedWalkLabel } from './labels';
 
 export { createShoulderRig, filmOffsetFor, framingFor, shoulderPose, SHOULDER } from './camera/shoulder';
 export type { ShoulderPose, ShoulderRig, ShoulderView } from './camera/shoulder';
@@ -73,6 +80,13 @@ export interface WalkControllerOptions {
    * Without it the camera has no collision, which `debug.camera.collisionRevision === null` reports.
    */
   readonly collision?: CollisionWorld | (() => CollisionWorld | null | undefined);
+  /** Supplied only by a bound, authenticated gesture transport. Absent transports draw no dead control. */
+  readonly gestures?: {
+    available(): boolean;
+    publish(gesture: CitizenGesture): void;
+    /** Present-tense approved peer gesture; no replay of expired actions. */
+    sample(id: string, now: number): CitizenGesture;
+  };
 }
 
 export type WalkOwner = 'walking' | 'released' | 'disposed';
@@ -124,6 +138,8 @@ export interface WalkController {
   readonly owner: WalkOwner;
   /** Feed to the local citizen's `opacity`: it fades away in first person. */
   readonly selfOpacity: number;
+  /** Presentation only. Pass to CitizenSample; movement authority remains in the room. */
+  gestureFor(id: string, now: number): CitizenGesture;
   readonly debug: Readonly<WalkDebug>;
 }
 
@@ -138,6 +154,11 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
   const pointer = createWalkPointer(surface, keyboard);
   const touch = createWalkTouch(surface, keyboard);
   const look = createWalkLook(surface, options.lockDocument ?? document, keyboard, options.clock);
+  const gestures = createGestureState(gesture => options.gestures?.publish(gesture));
+  const selector = options.hud && options.gestures ? mountGestureSelector(options.hud, {
+    state: gestures, available: options.gestures.available(),
+  }) : null;
+  let gesture: CitizenGesture = 'none';
   const coarse = options.coarse ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
   let touchJump = false;
   const hud: WalkHud | null = options.hud ? createWalkHud(options.hud, () => { if (owner === 'walking') touchJump = true; }, event => look.toggle(event)) : null;
@@ -169,9 +190,9 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
     debug.stick = stick ? { x: stick.x, y: stick.y, forward: stick.forward, right: stick.right, sprint: stick.sprint } : null;
     hud?.update({ visible: owner === 'walking', look: look.mode, touch: coarse || touch.used, stick, width, height });
   };
-  const setOwner = (value: WalkOwner) => { owner = value; debug.owner = value; showHud(); };
+  const setOwner = (value: WalkOwner) => { owner = value; debug.owner = value; selector?.setVisible(value === 'walking'); showHud(); };
   /** Blur, hidden page, menu, disconnect: nothing held, nothing pending, no capture, cursor given back. */
-  const drop = () => { keys.clear(); pointer.clear(); touch.clear(); look.exit(); touchJump = false; jumpedLastFrame = false; realm.clearInput?.(); stepEase.reset(); rig.settle(); };
+  const drop = () => { keys.clear(); pointer.clear(); touch.clear(); look.exit(); gestures.clear(); gesture = 'none'; touchJump = false; jumpedLastFrame = false; realm.clearInput?.(); stepEase.reset(); rig.settle(); };
   const hidden = () => { if (page.hidden) drop(); };
   const contextmenu = (event: Event) => { if (!event.defaultPrevented) drop(); };
   const disconnected = () => drop();
@@ -220,6 +241,10 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
         yaw: facing ?? 0, collisionRevision: realm.room.state.collisionRevision,
       };
       let poses = realm.tick(now, input);
+      const available = walking && (options.gestures?.available() ?? false);
+      selector?.setAvailable(available);
+      if (!available) gestures.clear();
+      gesture = available ? gestures.sample(now, move.moveX !== 0 || move.moveZ !== 0 || jump !== 0 || (poses.find(p => p.self)?.speed ?? 0) > .1) : 'none';
       const self = poses.find(p => p.self);
       const authority = realm.room.state.walkers.get(realm.selfId);
       Object.assign(debug, { frames: debug.frames + 1, walkers: poses.length, input, authority: authority ? { x: authority.x, y: authority.y, z: authority.z } : null });
@@ -276,6 +301,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
     reset(heading) {
       if (owner === 'disposed') return;
       keys.clear(); pointer.clear(); touch.clear(); touchJump = false; jumpedLastFrame = false;
+      gestures.clear(); gesture = 'none';
       realm.clearInput?.();
       stepEase.reset();
       rig.reset(heading ?? (facing === null ? rig.view.yaw : headingFromByte(facing)));
@@ -284,6 +310,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
       if (owner === 'disposed') return;
       stopLook(); stopTouch();
       realm.clearInput?.();
+      selector?.dispose(); gestures.dispose(); gesture = 'none';
       keys.dispose(); pointer.dispose(); touch.dispose(); look.dispose(); hud?.dispose();
       keyboard.removeEventListener('blur', drop);
       keyboard.removeEventListener('contextmenu', contextmenu);
@@ -295,6 +322,7 @@ export function createWalkController(options: WalkControllerOptions): WalkContro
     },
     get owner() { return owner; },
     get selfOpacity() { return owner === 'walking' && pose ? pose.selfOpacity : 1; },
+    gestureFor(id, now) { return owner === 'disposed' || !options.gestures?.available() ? 'none' : id === realm.selfId ? gesture : options.gestures.sample(id, now); },
     debug,
   };
 }

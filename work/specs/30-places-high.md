@@ -237,3 +237,8 @@ with their owners. No decorative action may claim it succeeded without that owne
   ground-dressing owns trees/root bench, this lane the matching seat anchor and approach place pieces.
 - **2026-10-30 — No new residents or global banner claim.** Citizens are actual people. These castle banners are this
   lane's; other banner owners and existing anvil-hero remain intact.
+- **2026-10-31 — The court is paved by this lane.** "A court of warm worn stone" had no owner: the founded court is
+  bare terrain. Places-high lays two 20 × 24 m flagstone halves on the supplied court boundary (one cell into the
+  ground, flags one cell proud), never beyond it; land keeps grading and paint everywhere else. Floors are not
+  shadow casters or light-field blockers. The bench runs on the actual founded land/castle with kingdom-land's
+  SIMULATED town fixture, because real founded geography exists while its street generator does not.

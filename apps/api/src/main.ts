@@ -43,6 +43,7 @@ const server = createServer((request, response) => {
         .end(JSON.stringify({ alive: true, database, mode: config.mode === 'live' ? 'LIVE' : 'SIMULATED' }));
       return;
     }
+    if (await (await import('./dock')).handleDock(request, response, { pool, config })) return;
     if (!await routes(request, response)) {
       response.writeHead(404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
         .end(JSON.stringify({ version: 1, status: 'refused', message: 'No such route' }));

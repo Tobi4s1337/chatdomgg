@@ -18,14 +18,17 @@ function gateHref(path: string): string {
   return new URL(path, inWebApp ? location.origin : CHATDOM).href;
 }
 
+/** The site a gate leads to, in the words the link uses ("chatdom.io"). */
+const hostOf = (path: string) => new URL(gateHref(path)).host;
+
 /** "Walk in": secondary, says it leaves Twitch, opens a new tab at the kingdom's own entry gate. */
 export function WalkIn(props: { entry: Entry; kingdom: string }) {
   return <Show when={props.entry.kind === 'gate' ? props.entry : null}>{gate =>
     <p class="cp-walk">
-      <a href={gateHref(gate().path)} target="_blank" rel="noopener noreferrer" aria-label={`Walk in to ${props.kingdom} on chatdom.gg. Opens a new tab outside Twitch.`}>
+      <a href={gateHref(gate().path)} target="_blank" rel="noopener noreferrer" aria-label={`Walk in to ${props.kingdom} on ${hostOf(gate().path)}. Opens a new tab outside Twitch.`}>
         <span>Walk in</span><LeaveGlyph />
       </a>
-      <small>Leaves Twitch for chatdom.gg, in a new tab</small>
+      <small>Leaves Twitch for {hostOf(gate().path)}, in a new tab</small>
     </p>}
   </Show>;
 }

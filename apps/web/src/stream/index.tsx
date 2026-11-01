@@ -1,3 +1,5 @@
+import { createDockFixture } from './dock-fixture';
+import { createDockConnection } from './dock-connection';
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from 'solid-js';
 import type { NameLabel } from '../kingdom/scene';
 import { createSceneMount, type KingdomScene, type StreamPhase } from './mount';
@@ -11,6 +13,7 @@ import type { WalkerLabel } from '../kingdom/walk-scene';
 import type { ArrivalAttention } from '../kingdom/arrival-director';
 import './stream.css';
 import './speech.css';
+import { PeopleLabels, peopleFromLabels, measureReservedElements } from '../walk/labels/index';
 
 type SourceKind = 'simulated' | 'connecting' | 'live' | 'resting' | 'lost';
 interface SourceMark { kind: SourceKind; title: string; note: string }
@@ -72,6 +75,8 @@ export default function StreamView() {
   const [arrival, setArrival] = createSignal<Pick<ArrivalAttention, 'slot' | 'phase'> | null>(null);
   const stageSafe = () => layout() === 'stage' ? safe() : null;
   const named = () => kingdomName() !== 'Kingdom';
+  let peopleLabelsRoot: HTMLElement | null = null;
+  const peopleHud = () => peopleLabelsRoot ? measureReservedElements(peopleLabelsRoot, [...picture.querySelectorAll('.stream-name,.stream-mark,.stream-inscription,.sky-caption,.stream-seam')]) : [];
   let hour = params.hour, picture!: HTMLDivElement, lens!: HTMLDivElement, holder: HTMLDivElement | undefined, retryTimer = 0, attempts = 0, obsVisible = true;
 
   const plan = () => planNight({ layout: layout(), mood: mood(), seam: layout() === 'stage' ? seam() : null, camera: params.camera, hour: params.hour });
@@ -92,18 +97,21 @@ export default function StreamView() {
   });
   hour = director.hour(hour);
 
+  const dockFixture = params.source === 'simulated' && new URLSearchParams(location.search).get('dockFixture') === '1' ? createDockFixture() : undefined;
+  const dockConnection = params.source === 'realm' && params.kingdomId ? createDockConnection(params.kingdomId) : undefined;
+  onCleanup(() => dockConnection?.dispose());
   const spectator = params.source === 'realm' && params.kingdomId ? createRealmSpectatorSource({ kingdomId: params.kingdomId }) : undefined;
 
   const mount = createSceneMount({
     host: () => lens,
     // Build the opening's light fields with nobody home yet. Rewinding a fully
     // inhabited town after loading leaves its warm ground light behind for a beat.
-    settings: () => ({ directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
+    settings: () => ({ ...(dockFixture ? { dockFeed: dockFixture, simulatedDockSites: true, kingdomId: dockFixture.kingdomId } : {}), directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: dockFixture ? 'simulated' : params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
-      return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId,
-        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, growthFeed: connection.growthFeed, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
+      return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId, ...(dockConnection ? { dockFeed: dockConnection } : {}),
+        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, growthFeed: connection.growthFeed, growthCeremonies: connection.growthCeremonies, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
         realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed,
         activate: () => { connection.activate(); setKingdomName(connection.kingdomName); }, dispose: connection.dispose };
     } } : {}),
@@ -134,7 +142,9 @@ export default function StreamView() {
     window.__chatdomKingdom = {
       stats: scene.debug,
       inspect: scene.inspect,
+      ...(dockFixture ? { dock: dockFixture.trigger } : {}),
       pose: scene.pose,
+      seekGrowthCeremony: scene.seekGrowthCeremony,
       seek: (time: number, view?: Shot) => scene.seek(time, view),
       hour: (value: number) => { hour = value; scene.setHour(value); },
       capture: (time: number) => scene.capture(time),
@@ -242,16 +252,8 @@ export default function StreamView() {
     <div class="stream-picture" ref={element => { picture = element; }}>
       <div class="stream-lens" ref={element => { lens = element; }}>
         <SkyCaptions captions={momentCaptions()} />
-        <div class="stream-speech citizen-speech"><For each={speech()}>{label =>
-          <div class="citizen-bubble" style={{ left: `${label.x}px`, top: `${label.y}px` }}>
-            <Show when={label.name}><small>{label.name}</small></Show>
-            <p><For each={label.parts}>{part => part.kind === 'text' ? part.text :
-              <img src={`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(part.id)}/default/dark/1.0`} alt={part.alt} />}</For></p>
-          </div>
-        }</For></div>
+        <PeopleLabels class="stream-people-labels" people={peopleFromLabels(walkers(), speech())} reserved={peopleHud()} onRoot={root => { peopleLabelsRoot = root; }} />
         <div class="stream-names" aria-live="polite">
-          <For each={walkers()}>{walker => <span class="stream-walker-name" data-walker={walker.id}
-            style={{ left: `${walker.x}px`, top: `${walker.y}px` }}>{walker.name}</span>}</For>
           <Show when={shownName()}>{name =>
             <div class="stream-name" classList={{ shown: !!climaxName() }}
               style={{ left: `${Math.min(Math.max(name().x, 70), picture.clientWidth - 70)}px`, top: `${Math.max(name().y, 46)}px` }}>

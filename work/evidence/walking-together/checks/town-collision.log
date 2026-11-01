@@ -1,0 +1,37 @@
+(!) Failed to run dependency scan. Skipping dependency pre-bundling. Error: The following dependencies are imported but could not be resolved:
+
+  three (imported by /root/chatdomgg-harness/worktrees/walking-together/packages/content/src/genesis-heraldry/bench/main.mjs)
+  @chatdom/render (imported by /root/chatdomgg-harness/worktrees/walking-together/packages/content/src/genesis-kingdoms/aggman/bench/main.mjs)
+  @chatdom/voxel (imported by /root/chatdomgg-harness/worktrees/walking-together/packages/content/src/genesis-kingdoms/aggman/bench/main.mjs)
+
+Are they installed?
+    at file:///root/chatdomgg-harness/worktrees/walking-together/node_modules/.pnpm/vite@8.3.5_@types+node@22.19.15/node_modules/vite/dist/node/chunks/node.js:28604:33
+    at async file:///root/chatdomgg-harness/worktrees/walking-together/node_modules/.pnpm/vite@8.3.5_@types+node@22.19.15/node_modules/vite/dist/node/chunks/node.js:35972:15
+SIMULATED native town compiled: 659 placements, 82668 ms
+{
+  "source": "SIMULATED",
+  "knownWorld": "full native founded collision",
+  "preparedMs": 82668,
+  "elapsedMs": 82820,
+  "players": [
+    {
+      "x": -1,
+      "y": 9,
+      "z": 10.006211723534557,
+      "distance": 2.5134733158354816
+    },
+    {
+      "x": 0,
+      "y": 9,
+      "z": 14.006211723534557,
+      "distance": 2.5134733158354816
+    },
+    {
+      "x": 1,
+      "y": 9,
+      "z": 18.00621172353456,
+      "distance": 2.5134733158355864
+    }
+  ],
+  "limitation": "SIMULATED test identities and memory-only authority. Full production founded collision, not a limited market floor. Visible terrain triangles may still differ from the physical support surface."
+}

@@ -6,7 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing/fake-twitch.ts",
-    "./growth-crier": "./src/growth-crier/format.ts"
+    "./growth-crier": "./src/growth-crier/index.ts"
   },
   "dependencies": {
     "@chatdom/shared": "workspace:*",

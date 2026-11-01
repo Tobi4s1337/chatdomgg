@@ -123,6 +123,8 @@ it('supersedes warming revisions, bounds failed refreshes and releases hidden or
   expect(h.scenes[2]!.dispose).toHaveBeenCalledOnce();
   expect(h.mount.stats.alive).toBe(2);
   vi.advanceTimersByTime(60_000);
+  expect(h.mount.stats.alive).toBe(2); // Slow first draws keep their bounded candidate.
+  vi.advanceTimersByTime(4 * 60_000);
   expect(h.hooks.onPhase).toHaveBeenLastCalledWith('failed');
   expect(h.mount.scene).toBe(h.scenes[0]);
   expect(h.scenes[0]!.dispose).not.toHaveBeenCalled();
