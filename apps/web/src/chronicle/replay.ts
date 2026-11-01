@@ -65,10 +65,15 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
   const clearAndEmit = () => {
     try { binding.clear(); } catch (error) { history = undefined; playing = false; throw error; } finally { emit(); }
   };
-  const apply = (snapshot: HistoricalSnapshot) => {
-    try { binding.replace(snapshot); } catch (error) {
-      history = undefined; playing = false; clearAndEmit(); throw error;
+  const failUnavailable = (cause: unknown): never => {
+    history = undefined; playing = false;
+    try { clearAndEmit(); } catch (cleanupError) {
+      throw new AggregateError([cause, cleanupError], 'Chronicle failed and its presentation could not be cleared.', { cause: cleanupError });
     }
+    throw cause;
+  };
+  const apply = (snapshot: HistoricalSnapshot) => {
+    try { binding.replace(snapshot); } catch (error) { failUnavailable(error); }
   };
   return {
     state,
@@ -77,7 +82,7 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
       // Invalid data is unavailable, not a stale successful replay.
       let next: History | undefined;
       try { next = input ? validateHistory(input) : undefined; } catch (error) {
-        history = undefined; playing = false; clearAndEmit(); throw error;
+        failUnavailable(error);
       }
       history = next; index = 0; playing = false;
       if (history?.snapshots.length) { apply(history.snapshots[0]!); emit(); } else clearAndEmit();

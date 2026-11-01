@@ -87,7 +87,10 @@ describe('Chronicle replay', () => {
     replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
     binding.replace.mockImplementationOnce(() => { throw new Error('revision missing'); });
     binding.clear.mockImplementationOnce(() => { throw new Error('host could not clear'); });
-    expect(() => replay.seek(1)).toThrow();
+    try { replay.seek(1); throw new Error('Expected seek to fail'); } catch (error) {
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).errors.map((item: Error) => item.message)).toEqual(['revision missing', 'host could not clear']);
+    }
     expect(changes).toHaveBeenLastCalledWith({ status: 'unavailable', playing: false });
     expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
     binding.clear.mockImplementationOnce(() => { throw new Error('host could not clear'); });
