@@ -2,6 +2,27 @@
 
 WT10 is **open**. These are SIMULATED component reviews, not three authenticated people in the production town.
 
+## Third checkpoint
+
+Source checkpoint `d416c69` follows main sync `160bf83` (through `96b544d`). It adds measured shared name/speech UI, animated head/hair/hat anchors, a reversal/strafe foot-snap fix, and keyboard radio navigation in the wardrobe. The six-file main-owned consumer patch remains unapplied; it passed an in-memory workspace typecheck via `check-integration.mjs` as well as `git apply --check`.
+
+Verified checks:
+
+- Final focused suite: **25 files, 182 tests passed** (`checks/third-focused.log`). It includes the six real-room SDK tests. Main's `e2512e1` fixes the earlier test's injection/warmup ambiguity; the previous correction failure is no longer an active blocker.
+- Full typecheck, workspace lint and final build passed. The initial post-merge typecheck/build could not resolve the new dock package; `pnpm install --frozen-lockfile` restored workspace links without changing tracked manifests or lockfiles, and both checks passed afterward.
+- `checks/integration-typecheck.log` records a passing typecheck with the exact six proposed consumer files overlaid in memory. This verifies types, not production runtime behavior.
+- A fresh full `pnpm test` was attempted and stopped with exit 130 after failures outside lane scope: two kingdom light-field cases, a Herald presence case, a ground-dressing slope case, and two avatar-content cases. Several were timeouts. The complete observed output is retained in `checks/third-full-tests-stopped.log`; this is **not a green full-suite or pnpm verify result**.
+
+Inspected with `view_image`:
+
+- `labels/labels@1440x900.png` and `labels/labels@390x844.png`: actual measured component layout, no browser errors, and automated bounds checks pass. Bubble tails were corrected to meet the marked head anchors and both final stills were inspected. These use SIMULATED anchors, not a kingdom scene.
+- `wardrobe/wardrobe@390x844.png`: full-body wardrobe, earned/lapsed pieces, and visible Unsaved changes status. Browser checks use real arrow-key presses in both tile and swatch radiogroups and confirm one tab stop, one selection and retained focus. The screenshot is mid-list after navigation; it proves the actual current UI.
+- `motion/motion-none-turns-detail-clip@1440x900.mp4`: exactly three seconds/186091 bytes. A derived eight-sample-per-second contact sheet (`motion/turns-contact.png`) and one full-resolution frame were inspected. Forward, reverse, strafe and cloth poses render with no browser errors. **Normal-speed playback and real-GPU feel were not accepted.** A deterministic component clip cannot prove network interpolation or actual town contact. Its runner printed an unroute-after-close cleanup warning after saving; the lock was released and exit was zero. Cleanup order has since been corrected.
+
+The desktop wardrobe (16064), detailed phone motion still (11635) and new one-port town capture (77952) each reported registration and remained live, while a fresh read of `/tmp/chatdom-capture.lock.queue` found **zero** registered tickets. The shared guard registers only once and cannot acquire after its ticket disappears. All three stranded jobs were deliberately canceled and returned exit 130; no pending capture or owned server remains. Their logs are retained in `checks/capture-queue-*.log`. This matches the earlier Chronicle lane report in main commit `91bf5ad`; the cause of removal is unconfirmed and no other process or lock file was touched. Main must repair ticket recovery across the sandbox PID namespaces before more retries.
+
+Offline component captures bind no listener. The town's new offline-page mode would use a real temporary realm on one allowed port, but its canceled job never reached setup, so neither its runtime nor three-person town/stream acceptance has been demonstrated. Main's contracts and owned-door selection also remain required. WT10 is unchecked; no LANE COMPLETE claim.
+
 ## Second checkpoint
 
 Main synced cleanly at ac12111. Flat-ground planted legs, stop/seat/tiptoe transitions, current-update footfall events and fenced wardrobe saves are implemented. The exact main-owned consumer patch now also connects footsteps to gait touchdowns; it remains unapplied in this lane.

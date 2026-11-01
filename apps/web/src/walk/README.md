@@ -361,6 +361,11 @@ The lane's `work/lanes/walking-together/needs.md` records the remaining main-own
 - `layoutWalkLabels(anchors, viewport, reservedRects)` lays out measured names and speech together. Anchors are
   actual head projections, labels are centred above them, speech gets priority, and colliding labels yield rather
   than floating away from the speaker. Use one pass for both walk and stream, with UI safe rectangles.
+- `PeopleLabels`, `peopleFromLabels` and `measureReservedElements` in `./labels/index.tsx` supply that shared
+  Solid layer. Producer inputs must carry real camera distance and authority home slots; names never join identities.
+  `CitizenRenderer.heads` supplies animated head/hair/hat top anchors, including sit, bow and tiptoe, for the
+  producer to project. The six-file main-owned `integration.patch` binds both surfaces and preserves slot-free
+  guest names; guest speech still needs its own witnessed walker association from main.
 
 The `capture-review.mjs` runner acquires the shared lock for exactly one still or one short clip, then closes its
 browser/server and releases it. It picks an allowed free capture port and never touches an existing service:
@@ -371,10 +376,19 @@ node apps/web/src/walk/capture-review.mjs --view motion --width 390 --height 844
 node apps/web/src/walk/capture-review.mjs --view motion --clip
 node apps/web/src/walk/capture-review.mjs --view wardrobe
 node apps/web/src/walk/capture-review.mjs --view selector --width 390 --height 844
+node apps/web/src/walk/capture-review.mjs --view labels --offline
+node apps/web/src/walk/capture-review.mjs --view wardrobe --offline --width 390 --height 844
+node apps/web/src/walk/capture-review.mjs --view motion --trajectory turns --detail --clip --offline
 ```
 
 These labelled SIMULATED benches review the component only. No browser-local chat, wardrobe or gesture is
 presented as server truth.
+
+`--offline` builds the same component entry and routes its static bytes inside Chrome, without a network
+listener or an existing service. It still acquires the shared capture lock for one output. Wardrobe captures
+exercise real arrow-key selection/focus and visible save status; label captures check measured visible bounds.
+The `turns` trajectory reconstructs coherent forward/reverse/strafe samples at 60 Hz; `detail` frames one whole
+citizen closely enough to inspect the feet. These deterministic clips do not establish real network frame pacing.
 
 Flat-ground citizens now solve world-space stance contacts with articulated legs. `renderer.footfalls` reports
 touchdowns for the most recent `update()` only; use it after drawing for sound rather than a second cadence
@@ -392,10 +406,15 @@ connections to a temporary memory-only room:
 node apps/web/src/walk/capture-town.mjs
 node apps/web/src/walk/capture-town.mjs --width 390 --height 844
 node apps/web/src/walk/capture-town.mjs --clip
+node apps/web/src/walk/capture-town.mjs --offline
 ```
 
-This new runner is linted but has **not been runtime-verified**: the allowed capture ports were occupied.
+This new runner is linted but has **not yet completed runtime verification**. The ordinary mode requires two safe
+ports; offline mode compiles the town page and needs only one safe port for its actual memory-only realm server.
 It labels the identities SIMULATED, hashes the adopted native scene, uses its full collision compiler, checks
 keyboard movement and both peer connections, and takes the shared lock for one output. It cannot establish
 real sign-in, owned-door spawning, saved wardrobe or network gestures. Those acceptance checks still require
 main's authority and projection seams, plus actual town and stream captures at the prescribed sizes.
+
+`node apps/web/src/walk/check-integration.mjs` applies the recorded six-file consumer patch entirely in memory
+and typechecks it with the current workspace. It writes no main-owned source and does not replace runtime review.

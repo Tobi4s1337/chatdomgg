@@ -10,14 +10,15 @@ import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { CAPTURE_PORTS } from '../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
+import { createOfflineReview } from './offline-review.mjs';
 
 const { values } = parseArgs({ options: { width: { type: 'string', default: '1440' }, height: { type: 'string', default: '900' },
-  clip: { type: 'boolean', default: false }, out: { type: 'string', default: 'shots/walking-together/town' } } });
+  clip: { type: 'boolean', default: false }, offline: { type: 'boolean', default: false }, out: { type: 'string', default: 'shots/walking-together/town' } } });
 const width = Number(values.width), height = Number(values.height);
 assert.ok([[1440, 900], [390, 844]].some(([w, h]) => w === width && h === height), 'Use a standard web size');
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
-const report = { origin: 'SIMULATED', width, height, clip: values.clip, errors: [], clients: [], checks: [], output: '' };
-let loader, web, realm, browser;
+const report = { origin: 'SIMULATED', width, height, clip: values.clip, offline: values.offline, errors: [], clients: [], checks: [], output: '' };
+let loader, web, realm, browser, offline;
 const cancellation = new globalThis.AbortController();
 for (const name of ['SIGINT', 'SIGTERM']) process.once(name, () => { cancellation.abort(new Error('Town capture cancelled')); void browser?.close().catch(() => {}); });
 const release = await acquireCaptureLock({ signal: cancellation.signal });
@@ -35,7 +36,7 @@ const output = `${values.out}/town${values.clip ? '-clip' : ''}@${width}x${heigh
 try {
   await mkdir(values.out, { recursive: true });
   // Do not spend the full collision compile holding a capture slot if no listener can be started.
-  const [realmPort, webPort] = await freePorts(2), endpoint = `http://127.0.0.1:${realmPort}`;
+  const [realmPort, webPort] = await freePorts(values.offline ? 1 : 2), endpoint = `http://127.0.0.1:${realmPort}`;
   report.ports = { realm: realmPort, web: webPort };
   loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, entries: [] }, server: { middlewareMode: true, hmr: false, ws: false } });
   const [{ createRealmServer }, { referenceServices }, { createSimulatedTownWalkFixture }] = await Promise.all([
@@ -62,6 +63,8 @@ try {
     .writeHeader('Content-Type', 'application/json').end(JSON.stringify(base.issue())));
   await realm.listen(realmPort, '127.0.0.1');
   const main = `import { render } from 'solid-js/web'; import { createComponent } from 'solid-js'; import './style.css'; import Kingdom from './kingdom';
+    import { connectRealm } from './realm/client'; import { compileFoundedScene } from '@chatdom/world/founded-collision';
+    window.__walkingTogetherDependencies = { connectRealm, compileFoundedScene };
     const raw = await (await fetch('/__walk-town/scene')).text(); const fixture = await (await fetch('/__walk-town/fixture')).json();
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))), n => n.toString(16).padStart(2,'0')).join('');
     if(hash!==fixture.manifest.sceneHash)throw new Error('SIMULATED town scene hash mismatch');
@@ -77,19 +80,30 @@ try {
       else { response.statusCode = 404; response.end(); }
     }); },
   };
-  web = await createServer({ root: `${repo}apps/web`, configFile: `${repo}apps/web/vite.config.ts`, plugins: [plugin], logLevel: 'error',
-    server: { host: '127.0.0.1', port: webPort, strictPort: true, hmr: false } });
-  await web.listen();
+  if (!values.offline) {
+    web = await createServer({ root: `${repo}apps/web`, configFile: `${repo}apps/web/vite.config.ts`, plugins: [plugin], logLevel: 'error',
+      server: { host: '127.0.0.1', port: webPort, strictPort: true, hmr: false } });
+    await web.listen();
+  }
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, isMobile: width === 390, hasTouch: width === 390,
     ...(values.clip ? { recordVideo: { dir: `${values.out}/raw-video`, size: { width, height } } } : {}) });
+  if (values.offline) {
+    offline = await createOfflineReview(context, '/index.html', values.out, { plugins: [plugin], allowedOrigins: [endpoint] });
+    await context.route(`${offline.origin}/__walk-town/**`, route => {
+      const path = new URL(route.request().url()).pathname;
+      const body = path === '/__walk-town/scene' ? fixture.sceneBytes
+        : path === '/__walk-town/fixture' ? JSON.stringify({ manifest: fixture.manifest }) : null;
+      return route.fulfill({ status: body === null ? 404 : 200, contentType: 'application/json', body: body ?? 'null' });
+    });
+  }
   const page = await context.newPage();
   page.on('pageerror', error => report.errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico')) report.errors.push(message.text()); });
-  await page.goto(`http://127.0.0.1:${webPort}/?walk=1&source=simulated&hour=19.5&time=30`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${offline?.origin ?? `http://127.0.0.1:${webPort}`}/?walk=1&source=simulated&hour=19.5&time=30`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__chatdomReady === true && window.__chatdomKingdom?.stats.ready, null, { timeout: 240_000 });
-  report.clients = await page.evaluate(async ({ endpoint, collisionModule }) => {
-    const [{ connectRealm }, { compileFoundedScene }] = await Promise.all([import('/src/realm/client.ts'), import(collisionModule)]);
+  report.clients = await page.evaluate(async ({ endpoint }) => {
+    const { connectRealm, compileFoundedScene } = window.__walkingTogetherDependencies;
     const scene = await (await fetch('/__walk-town/scene')).json(), fixture = await (await fetch('/__walk-town/fixture')).json();
     const collision = compileFoundedScene(scene), clients = [];
     for (let i = 0; i < 3; i++) clients.push(await connectRealm(endpoint, { kingdomId: fixture.manifest.kingdomId,
@@ -103,11 +117,11 @@ try {
     state.timer = timer; window.__walkingTogetherTown = state;
     const ribbon = document.querySelector('.source-ribbon'); if (ribbon) ribbon.append(document.createTextNode(' · FULL FOUNDED COLLISION'));
     return clients.map(client => ({ id: client.selfId, roomId: client.room.roomId, name: client.room.state.walkers.get(client.selfId).name }));
-  }, { endpoint, collisionModule: `/@fs${repo}packages/world/src/founded-world/collision.ts` }).catch(error => { throw new Error(`Town binding failed: ${error.message}`); });
+  }, { endpoint }).catch(error => { throw new Error(`Town binding failed: ${error.message}`); });
   assert.equal(new Set(report.clients.map(client => client.id)).size, 3);
   await page.waitForFunction(() => window.__chatdomWalk?.ready === true && window.__chatdomWalk.walkers === 3, null, { timeout: 120_000 });
   await page.getByText(/SIMULATED/).first().waitFor({ state: 'visible' });
-  await page.locator('.walker-name').first().waitFor({ state: 'visible', timeout: 30_000 });
+  await page.locator('.walker-name, .walk-person-label[data-walker][aria-hidden="false"]').first().waitFor({ state: 'visible', timeout: 30_000 });
   await page.waitForFunction(() => window.__chatdomKingdom.stats.fieldSettled, null, { timeout: 180_000 });
   const before = await page.evaluate(() => ({ ...window.__chatdomWalk.authority }));
   await page.evaluate(() => { window.__walkingTogetherTown.moving = true; });
@@ -139,6 +153,7 @@ try {
 } finally {
   // A failed close must not retain the shared lock or strand another owned service.
   try {
+    try { await offline?.close(); } catch (error) { console.error('Offline town cleanup:', error); }
     const closures = await Promise.allSettled([
       browser?.close(), web?.close(), realm?.gracefullyShutdown(false), loader?.close(),
     ]);
