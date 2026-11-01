@@ -4,6 +4,7 @@ import { createSceneMount, type KingdomScene, type StreamPhase } from '../stream
 import { Corner, Crest, StreamDefs } from '../stream/fittings';
 import { DEFAULT_CHEER_LADDER, SkyCaptions, type ScreenCaption, type TwitchMomentFeed } from '../twitch-moments';
 import { benchPerson, createBenchSimulation, type BenchCitizen, type BenchSimulation } from './simulation';
+import { HYPE_RUN, type HypeOutcome } from './hype-run';
 import '../stream/stream.css';
 
 /**
@@ -14,6 +15,9 @@ import '../stream/stream.css';
  *
  *   /-/twitch-moments?stage=stream&rung=skyfire        one cheer of that rung, 2 s after the scene opens
  *   &bits=5000 (instead of rung) · &at=<ms>            frozen at that offset into the beat (for captures)
+ *   ?stage=stream&moment=hype&outcome=victory|retreat  the Hype Train run (`hype-run.ts`): the train dresses the
+ *                                                       town, level 3 wakes the dragon through the SIMULATED realm
+ *                                                       battle authority, and it falls or flies home
  *   &hour=19.5 · &seed=willowmere · &tier=town
  */
 
@@ -31,7 +35,8 @@ export default function StreamSkyBench() {
   const hour = query.has('hour') && Number.isFinite(Number(query.get('hour'))) ? Number(query.get('hour')) : 19.5;
   const rung = DEFAULT_CHEER_LADDER.find(step => step.rung === query.get('rung'));
   const bits = query.has('bits') ? Math.max(1, Math.round(Number(query.get('bits')) || 1)) : rung?.minBits ?? 5000;
-  const frozenAt = query.has('at') ? Math.max(0, Number(query.get('at')) || 0) : null;
+  const frozenAt = query.has('at') ? Math.max(-LEAD_MS, Number(query.get('at')) || 0) : null;
+  const hype = query.get('moment') === 'hype', outcome: HypeOutcome = query.get('outcome') === 'retreat' ? 'retreat' : 'victory';
   const kingdomName = seed.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
   const [phase, setPhase] = createSignal<StreamPhase>('waking'), [progress, setProgress] = createSignal(0);
   const [captions, setCaptions] = createSignal<readonly ScreenCaption[]>([]), [prepared, setPrepared] = createSignal(false);
@@ -63,17 +68,19 @@ export default function StreamSkyBench() {
     onScene: next => { scene = next; if (next) void begin(next); },
   });
 
-  /** The cheerer: Juniper, at home in the middle of the town, named and present like the evening's other people. */
-  function cheerer(s: KingdomScene): BenchCitizen {
+  /** The town's named people nearest the market, at home like the evening's other people: Juniper first. */
+  function neighbours(s: KingdomScene): BenchCitizen[] {
     const homes = s.layout.homes, edge = s.layout.market.boundary;
     const mx = edge.reduce((sum, p) => sum + p[0], 0) / edge.length, mz = edge.reduce((sum, p) => sum + p[1], 0) / edge.length;
-    const home = [...homes].sort((a, b) => Math.hypot(a.position[0] - mx, a.position[2] - mz) - Math.hypot(b.position[0] - mx, b.position[2] - mz))[0]!;
-    return { id: benchPerson(1), name: 'Juniper', slot: home.slot, disclosure: 'named' };
+    const near = [...homes].sort((a, b) => Math.hypot(a.position[0] - mx, a.position[2] - mz) - Math.hypot(b.position[0] - mx, b.position[2] - mz));
+    return HYPE_RUN.riders.map((name, i) => ({ id: benchPerson(i + 1), name, slot: near[i * 3]!.slot, disclosure: 'named' as const }));
   }
+  let riders: BenchCitizen[] = [], done = 0;
 
   async function begin(s: KingdomScene): Promise<void> {
-    who = cheerer(s);
-    sim = createBenchSimulation([who], clock, { battle: 'unbound', outcome: () => 'victory', kingdomId: WORLD_FIXTURE_KINGDOM });
+    riders = neighbours(s); who = riders[0]!;
+    // A hype run binds the SIMULATED realm battle authority; a cheer never needs one (no cheer wakes the dragon).
+    sim = createBenchSimulation(riders, clock, { battle: hype ? 'simulated' : 'unbound', outcome: () => outcome, kingdomId: WORLD_FIXTURE_KINGDOM });
     sim.start();
     if (pending) stop = sim.feed.subscribe(...pending);
     // The moment parts mesh on the scene's own worker lanes after it opens.
@@ -86,13 +93,28 @@ export default function StreamSkyBench() {
     raf = requestAnimationFrame(loop);
   }
 
-  /** Step the scene and the cheer's clock together; the cheer is sent when its moment comes. */
+  /**
+   * Step the scene and the moment's clock together. A cheer is sent when its moment comes; a hype run sends each of
+   * its reports at its own time, and the SIMULATED realm advances its battle on the same clock.
+   */
   async function advance(to: number): Promise<void> {
     if (!scene || !sim) return;
-    if (cheerAt !== null && seconds < cheerAt && to >= cheerAt) {
+    if (!hype && cheerAt !== null && seconds < cheerAt && to >= cheerAt) {
       seconds = cheerAt; scene.seek(seconds);
       sim.cheer(who!, bits);
       await sim.settled();
+    }
+    if (hype && cheerAt !== null) {
+      const steps = HYPE_RUN.steps(outcome);
+      while (done < steps.length && cheerAt + steps[done]!.at / 1000 <= to) {
+        const step = steps[done++]!;
+        seconds = Math.max(seconds, cheerAt + step.at / 1000); scene.seek(seconds);
+        step.run(sim, riders);
+        await sim.settled();
+      }
+      const before = sim.authority?.current()?.revision;
+      sim.authority?.tick();
+      if (sim.authority?.current()?.revision !== before) await sim.settled();
     }
     seconds = to; scene.seek(seconds);
   }
@@ -124,6 +146,8 @@ export default function StreamSkyBench() {
       replay: () => { if (!scene) return; playing = true; },
       inspect: () => scene?.inspect(),
       beat: () => (cheerAt === null ? null : (seconds - cheerAt) * 1000),
+      /** The run's stills for a sequence capture: [name, ms from the moment's start]. */
+      beats: () => (hype ? HYPE_RUN.beats(outcome) : []),
     };
   });
   onCleanup(() => {

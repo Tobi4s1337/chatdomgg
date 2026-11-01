@@ -17,3 +17,4 @@ export {
 } from './spectacle';
 export { SkyCaptions } from './sky-captions';
 export { skyLitEnvironment } from './town-light';
+export { FESTIVAL, festivalPlacesOf, withFestivalPlaces, type FestivalPlaces, type GroundSampler } from './festival-places';
