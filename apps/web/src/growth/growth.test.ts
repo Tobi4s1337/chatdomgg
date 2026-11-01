@@ -133,6 +133,9 @@ describe('the growing town', () => {
     expect(town.quarter.homes.length).toBeGreaterThan(20);
     expect(town.quarter.streets.length).toBeGreaterThan(0);
     expect(town.hero.quarterYear).toBe(2025);
+    // Every tier above the hut is the growth line's, so the cottage is the authored two-storey one.
+    expect(town.hero.tier).toBe('hut');
+    expect(town.before.homes.find(home => home.id === town.hero.id)?.tier).toBe('hut');
     expect(town.before.homes.every(home => home.style === 'hearth')).toBe(true);
   });
   it('gives the neighbours their installed homes as a floor', () => {

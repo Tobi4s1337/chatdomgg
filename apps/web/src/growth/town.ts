@@ -65,8 +65,10 @@ export function planGrowthTown(seed: string, year: number): GrowthTown {
   const score = (home: SettlementHome) => nearestFresh(home.position) + blocked(home) * 40 + Math.abs(home.position[1] - root[1]) * 2;
   const chosen = [...candidates].sort((a, b) => score(a) - score(b) || a.id.localeCompare(b.id))[0];
   if (!chosen) throw new Error(`The ${year} quarter has no plot to give.`);
-  // The new citizen's family is Emberfold, whose growth line is authored to read from across the lane.
-  const hero: SettlementHome = { ...chosen, variant: 0 };
+  // The new citizen's family is Emberfold, whose growth line is authored to read from across the lane. The plan's
+  // tier is what the plot is laid out for; what stands on it is the hut the citizen was given, and every tier above
+  // it is earned on camera through the growth line.
+  const hero: SettlementHome = { ...chosen, variant: 0, tier: 'hut' };
   const keep = (plan: SettlementPlan): SettlementPlan => ({ ...plan, homes: plan.homes.map(home => home.id === hero.id ? hero : home) });
   const neighbours = before.homes.filter(home => home.id !== hero.id)
     .map(home => ({ home, distance: Math.hypot(home.position[0] - hero.position[0], home.position[2] - hero.position[2]) }))

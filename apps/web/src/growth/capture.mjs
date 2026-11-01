@@ -1,5 +1,5 @@
 // Captures the growth sequence: stills at chosen seconds of the score, plus same-view before/after pairs.
-//   node apps/web/src/growth/capture.mjs --only hut   # one still per run
+//   node apps/web/src/growth/capture.mjs --only hut,cottage-street   # the lock is taken once per still
 //   node apps/web/src/growth/capture.mjs --only hall --size 390x844
 //   node apps/web/src/growth/capture.mjs --only none --frames 12 --part 0   # frame 0 of the whole run in 12
 //   node apps/web/src/growth/capture.mjs --base-url http://127.0.0.1:5190/-/growth
@@ -47,7 +47,7 @@ const SHOTS = [
 // `--frames N` adds N evenly spaced frames across the whole score: the sequence as one continuous run.
 const frames = Number(option('--frames') ?? 0);
 if (!Number.isInteger(frames) || frames < 0 || frames === 1 || frames > 48) throw new Error('--frames takes 0 or 2 to 48.');
-// `--part k` takes one frame, so the lock is released between captures.
+// `--part k` takes one frame of the N.
 const part = option('--part') === undefined ? null : Number(option('--part'));
 for (let i = 0; i < frames; i++) if (part === null || i === part) SHOTS.push({ name: `sequence/${String(i).padStart(2, '0')}`, at: `frame:${i}/${frames - 1}` });
 
@@ -57,8 +57,6 @@ process.on('exit', () => { enforcer?.kill(); });
 try {
   if (!SHOTS.length) throw new Error('No growth shot matches --only or --frames.');
   if (frames) await mkdir(`${output}/sequence`, { recursive: true });
-  // The host lock is shared with main: one still per acquisition.
-  if (SHOTS.length !== 1) throw new Error('Select exactly one still with --only or --frames and --part.');
   let url = option('--base-url');
   if (!url) {
     const port = assertCapturePort(0, { allowZero: true, name: 'Growth capture port' });
@@ -81,18 +79,11 @@ try {
   const failed = await page.evaluate(() => window.__chatdomGrowthError ?? null);
   if (failed) throw new Error(failed);
   console.log(`Growth stage ready in ${((Date.now() - started) / 1000).toFixed(1)} s.`);
-  // The stage loads and meshes before the shared lock is taken; the lock covers only seeking and the stills, and a
-  // watchdog gives it back long before anyone else has to wait on a stuck frame.
-  release = await acquireCaptureLock();
-  const held = Date.now();
-  const watchdog = setTimeout(() => {
-    console.error(`Gave the capture lock back after ${HOLD_LIMIT / 1000} s without finishing.`);
-    void release?.().finally(() => process.exit(2));
-  }, HOLD_LIMIT);
-  // A frame stuck in software WebGL can starve this process's event loop, so the limit is also enforced from
-  // outside: killing this process closes the lock guard's pipe, which gives the lock back.
-  enforcer = spawn('sh', ['-c', `sleep ${HOLD_LIMIT / 1000 + 15}; kill -9 ${process.pid}`], { stdio: 'ignore', detached: true });
-  enforcer.unref();
+  // Everything expensive happens before the shared lock: the stage loads and meshes once, then each shot is sought,
+  // its shaders compiled, its light fields solved and its frame drawn into the preserved canvas. The bench draws
+  // nothing while paused, so each lock covers only checks and reading back a picture that already exists, and it is
+  // given back before the next shot is drawn: one still per acquisition. On a loaded host a single SwiftShader frame
+  // at 1080p has taken minutes; none of that time may be spent holding the lock.
   for (const shot of SHOTS) {
     const t0 = Date.now();
     const result = await page.evaluate(async ({ at, view }) => {
@@ -100,16 +91,35 @@ try {
       if (frame) return control.seek(control.report().duration * Number(frame[1]) / Math.max(1, Number(frame[2])) - (frame[1] === frame[2] ? .01 : 0));
       return control.seekTo(at, view ?? null);
     }, shot);
+    // Reading one pixel back makes the software GPU finish the frame now, rather than inside the locked screenshot.
+    await page.evaluate(() => {
+      const canvas = document.querySelector('canvas.growth-canvas'), gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    });
     const label = `${shot.name}@${width}x${height}`;
     if (errors.length) throw new Error(`${label}: ${errors.join('\n')}`);
     if (result.origin !== 'SIMULATED' || !(await page.locator('.growth-seal').innerText()).includes('SIMULATED')) throw new Error(`${label}: the history must be labelled SIMULATED.`);
     const overflow = await page.evaluate(() => ({ x: document.documentElement.scrollWidth - window.innerWidth, y: document.documentElement.scrollHeight - window.innerHeight }));
     if (overflow.x > 0 || overflow.y > 0) throw new Error(`${label}: the page overflows by ${overflow.x}×${overflow.y}px.`);
+    console.log(`${label} drawn · t=${result.t.toFixed(2)} ${result.act} · ${result.heroShown} · lit quarter ${result.quarterHomesLit} · ${result.drawCalls} draws · light ${result.lightingSettled ? 'settled' : 'UNSETTLED'} · ${((Date.now() - t0) / 1000).toFixed(1)} s · ${result.caption}`);
+
+    release = await acquireCaptureLock();
+    const held = Date.now();
+    const watchdog = setTimeout(() => {
+      console.error(`Gave the capture lock back after ${HOLD_LIMIT / 1000} s without finishing.`);
+      void release?.().finally(() => process.exit(2));
+    }, HOLD_LIMIT);
+    // A frame stuck in software WebGL can starve this process's event loop, so the limit is also enforced from
+    // outside: killing this process closes the lock guard's pipe, which gives the lock back.
+    enforcer = spawn('sh', ['-c', `sleep ${HOLD_LIMIT / 1000 + 15}; kill -9 ${process.pid}`], { stdio: 'ignore', detached: true });
+    enforcer.unref();
+    const still = await page.evaluate(() => window.__chatdomGrowth.report());
+    if (Math.abs(still.t - result.t) > 1e-6 || still.playing) throw new Error(`${label}: the drawn frame moved before it was read.`);
     await page.screenshot({ path: `${output}/${label}.png`, timeout: 180_000 });
-    console.log(`${label} · t=${result.t.toFixed(2)} ${result.act} · ${result.heroShown} · lit quarter ${result.quarterHomesLit} · ${result.drawCalls} draws · light ${result.lightingSettled ? 'settled' : 'UNSETTLED'} · ${((Date.now() - t0) / 1000).toFixed(1)} s · ${result.caption}`);
+    clearTimeout(watchdog); enforcer.kill(); enforcer = undefined;
+    const done = release; release = undefined; await done();
+    console.log(`${label} written · held the capture lock for ${((Date.now() - held) / 1000).toFixed(0)} s`);
   }
-  clearTimeout(watchdog);
-  console.log(`Held the capture lock for ${((Date.now() - held) / 1000).toFixed(0)} s.`);
 } catch (error) {
   console.error(error instanceof Error ? error.stack ?? error.message : String(error)); process.exitCode = 1;
 } finally {
