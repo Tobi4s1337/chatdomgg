@@ -1,0 +1,19 @@
+{
+  "source": "SIMULATED review bench",
+  "offline": true,
+  "view": "labels",
+  "gesture": "none",
+  "trajectory": "straight",
+  "detail": false,
+  "width": 1440,
+  "height": 900,
+  "clip": false,
+  "errors": [],
+  "checks": [
+    {
+      "name": "measured visible labels do not overlap or escape the viewport",
+      "count": 3
+    }
+  ],
+  "limitation": "Lane component review only. Production wardrobe and gesture bindings remain main-owned needs."
+}

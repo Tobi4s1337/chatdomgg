@@ -23,6 +23,8 @@ export interface CardSheetProps {
   /** The passport as it is being read, for the keepsakes it carries. Null until the viewer has a passport to read. */
   readonly passport: PassportReadState | null;
   readonly simulated: boolean;
+  /** What the home line says when the card names no home here. A guest by default. */
+  readonly noHome?: string;
   readonly children?: JSX.Element;
 }
 
@@ -53,7 +55,7 @@ export function CardSheet(props: CardSheetProps): JSX.Element {
         <span class="cpc-home-picture"><img src={picture().url} alt={picture().alt} width="76" height="56" decoding="async" /></span>}
       </Show>
       <div class="cpc-home-words">
-        <Show when={props.card.home} fallback={<p class="cpc-home-name">A guest here</p>}>{home =>
+        <Show when={props.card.home} fallback={<p class="cpc-home-name">{props.noHome ?? 'A guest here'}</p>}>{home =>
           <p class="cpc-home-name"><bdi>{home().name}</bdi></p>}
         </Show>
         <Show when={props.street}>{street => <p class="cpc-home-line">{homeLine(props.card.home?.tier ?? null, street())}</p>}</Show>

@@ -20,6 +20,7 @@ it('eases gestures and heading, keeps walking legs distance-driven, and seats on
   const tick = (patch: Partial<CitizenSample>, elapsed = 100) => { now += elapsed; renderer.update([{ ...sample, ...patch }]); };
   try {
     renderer.update([sample]);
+    for (let i = 0; i < 4; i++) tick({ gesture: 'none' });
     const foot = matrix('footRight');
     const poses = new Map<CitizenGesture, THREE.Matrix4>();
     for (const gesture of ['wave', 'bow', 'cheer', 'point'] as const) {
