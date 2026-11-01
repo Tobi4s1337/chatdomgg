@@ -7,7 +7,8 @@ import { startCapturePreview, closeCapturePreview } from '../../../packages/test
 // Run from the repository root after building web. This checks a refusal, not a loaded-world frame.
 process.env.GRAND_GATE_CAPTURE_PORT ??= '5172';
 await mkdir('work/evidence/grand-world', { recursive: true });
-for (const [width, height] of [[1920, 1080], [1280, 720]]) {
+const sizes = process.env.GRAND_GATE_CAPTURE_ONCE === '1' ? [[1920, 1080]] : [[1920, 1080], [1280, 720]];
+for (const [width, height] of sizes) {
   const release = await acquireCaptureLock({ signal: AbortSignal.timeout(60_000) });
   let preview, browser;
   try {

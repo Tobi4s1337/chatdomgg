@@ -6,10 +6,15 @@ import { finiteVec3, standingClear, SUPPORT_GAP } from './interactions/geometry'
 import type { CardinalTurn } from './settlement/types';
 import { planPlaceSites, type KingdomPlaceSites, type PlaceSiteDiagnostic, type PlaceSitePlanningOptions } from './grand-adoption/place-sites';
 import { findTavernDoor } from './grand-adoption/place-sites-tavern';
+import { planPierSites, type LandWaterSource, type PierAnchor, type PierSiteDiagnostic, type PierSitePlanningOptions } from './grand-adoption/pier-sites';
 
 export { planPlaceSites, validatePlaceSite, placeSiteBounds, PLACE_SITE_BUDGET, CAMPFIRE_SITE_FOOTPRINT } from './grand-adoption/place-sites';
 export { findTavernDoor, type TavernDoorAnchor, type TavernDoorSite, type TavernDoorResult } from './grand-adoption/place-sites-tavern';
 export type { KingdomPlaceSites, PlaceKind, PlaceSiteContext, PlaceSiteFailure, PlaceSiteDiagnostic, PlaceSitePlan, PlaceSitePlanningOptions } from './grand-adoption/place-sites';
+export { planPierSites, validatePierSite, pierSiteBounds, PIER_SITE_BUDGET } from './grand-adoption/pier-sites';
+export type { LandWaterSource, LandWaterAt, LandWaterSample, LandWaterCoverage, PierAnchor, PierSiteCandidate,
+  PierPlanningDimensions, PierSiteContext, PierSitePlanningOptions, PierSiteValidation, PierSiteFailure,
+  PierSiteDiagnostic, PierSitePlan, PierSiteWork } from './grand-adoption/pier-sites';
 
 /** Shared local blueprint origin, world metres on physical ground. Local +Z is the open/front side. */
 export interface PlaceSite {
@@ -55,6 +60,9 @@ export interface KingdomLandInterface {
   readonly places?: KingdomPlaceSites;
   /** No site is a real outcome: callers must arrange an explicit migration, never invent ground. */
   readonly placeSiteDiagnostics?: readonly PlaceSiteDiagnostic[];
+  /** Offered only with revision-matched drawn-water evidence and physical support. Never grants deck collision. */
+  readonly piers?: readonly PierAnchor[];
+  readonly pierSiteDiagnostics?: readonly PierSiteDiagnostic[];
 }
 
 /** Preserve public identity; larger landscape support is supplied by its producer, never
@@ -63,6 +71,9 @@ export function createKingdomLandInterface(input: {
   readonly scene: RealmFoundedScene; readonly ground: LandGroundSource; readonly collision?: CollisionWorld;
   /** Opt-in, bounded installation-time work; keep the resulting facade instead of rebuilding it per frame. */
   readonly placeSites?: PlaceSitePlanningOptions;
+  /** Supplied by the adoption producer from actual installed water; absent/unknown water authorizes no pier. */
+  readonly water?: LandWaterSource;
+  readonly pierSites?: PierSitePlanningOptions;
 }): KingdomLandInterface {
   const { scene, ground, collision } = input, plan = scene.plan;
   if (scene.layoutRevision !== plan.revision || ground.layoutRevision !== scene.layoutRevision
@@ -86,6 +97,8 @@ export function createKingdomLandInterface(input: {
   };
   const placePlan = input.placeSites ? planPlaceSites({ scene, groundAt, ...(collision ? { collision } : {}) }, input.placeSites) : undefined;
   const tavern = findTavernDoor({ scene, groundAt, ...(collision ? { collision } : {}) });
+  const pierPlan = input.pierSites ? planPierSites({ scene, groundAt, ...(collision ? { collision } : {}),
+    ...(input.water ? { water: input.water } : {}) }, input.pierSites) : undefined;
   return Object.freeze({ scene, groundAt, collision,
     paths: Object.freeze({ nodes: plan.nodes, streets: plan.streets, activeStreetIds: plan.activeStreetIds }),
     forge: Object.freeze({ square: plan.market, anvil,
@@ -94,5 +107,6 @@ export function createKingdomLandInterface(input: {
     light: Object.freeze({ plan, assets: scene.assets, placements: scene.placements }),
     places: Object.freeze({ ...placePlan?.places, ...(tavern.anchor ? { tavern: tavern.anchor } : {}) }),
     placeSiteDiagnostics: Object.freeze([...(tavern.diagnostic ? [tavern.diagnostic] : []), ...placePlan?.diagnostics ?? []]),
+    ...(pierPlan ? { piers: pierPlan.piers, pierSiteDiagnostics: pierPlan.diagnostics } : {}),
   });
 }

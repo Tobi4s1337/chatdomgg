@@ -248,13 +248,66 @@ Exact additive root export requested for `packages/world/src/index.ts`:
 export { planPlaceSites, validatePlaceSite, findTavernDoor, type PlaceSite, type TavernDoorAnchor, type PlaceSitePlanningOptions, type KingdomPlaceSites } from './land-interface';
 ```
 
-## Pier request — read 2026-11-01
+## Pier anchors and kingdom layers — 2026-11-01
 
-Pier's `work/lanes/pier/SEAMS.md` section 3 is now available and was read. Pending additive GW10 work:
-`KingdomLandInterface.piers?: readonly PierAnchor[]`, with stable `id`, dry supported `root`, cardinal `turn`
-(local +Z over water), matching `waterY`, centreline `depth` at 1 m steps, water kind and Genesis biome.
-The root and complete deck must fit the installed physical region and exclusions without moving existing
-placements. Drawn-water equality on the old and grand lands must be proved before an anchor is exposed.
-Pier already owns a deterministic candidate planner under `apps/realm/src/fishing/site.ts`; inspect its current
-implementation before adding another search. Its world-layer mount, first/rare attention, shared clock and
-water-mood requests are also recorded there. None is claimed implemented by the campfire-only hook above.
+Read pier's section 3. Its proposed `apps/realm/src/fishing/site.ts` was absent at the start of this checkpoint
+and appeared during verification; the new implementation and `packages/content/src/pier/layout.ts` were
+then read. The land seam adds validation of authored candidates, not a second production candidate search.
+
+`KingdomLandInterface.piers?: readonly PierAnchor[]` uses pier's exact shape: stable `id`, dry supported
+`root`, cardinal `turn` (local +Z over water), `waterY`, centreline `depth` at 1 m steps including dry root
+depth 0, `water: 'lake' | 'river' | 'sea'`, and producer-supplied `biome`. The shared old/grand facade accepts
+optional `water: LandWaterSource` and `pierSites: PierSitePlanningOptions`; no options means no planning work.
+The new modules are exported directly from `packages/world/src/land-interface.ts`.
+
+Planning requires explicit deck dimensions (`width`, integral `length`, `landingDepth`, `waterStart`,
+`minDepth`, `minFreeboard`) and authored candidates or an exact saved `pinned` anchor. Store dimensions with
+the anchor. The full rectangle must avoid every reserved lot, road including verge, civic site and existing
+solid placement. Actual collision must continuously support the dry landing and clear the entire standing
+volume. Unknown ground/collision fails closed. Pins never relocate; existing `pier:*` placements stop
+empty-site planning and require a separate installed-content adapter.
+
+`LandWaterSource` is revision-bound and supplies `sample(x,z)` plus a continuous `coverage(bounds)`:
+explicit dry, wet with level/depth/kind/biome, or unknown. Coverage additionally supports `shore` for a known
+mixed shoreline. The complete deck requires a known shore certificate; landing must be entirely dry and
+the wet extension entirely wet at one level. Thus tiny unknown/dry holes cannot hide between probes.
+`apps/web/src/kingdom/grand-land/water-source.ts` adapts the actual renderer's basin/raster inputs and
+physical half-metre bed columns. Depth uses physical ground, never the shader's interpolated bed. Metadata
+is explicitly supplied and detached; no lake, sea or biome is inferred. Multi-basin/reach continuous coverage
+is not yet implemented and returns unknown. Installed arrays remain producer-owned and immutable.
+
+The effects host is exported from `apps/web/src/kingdom/scene.ts`:
+
+```ts
+registerKingdomLayer(id: string, mount: KingdomLayerMounter): () => void;
+// KingdomLayerMounter = (host: KingdomLayerMount) => () => void
+// host: scene, camera, mode, kingdomId, founded, hour(), waterHeight(x,z),
+//       onTick(listener), quality, signal, active()
+```
+
+This implements pier's requested mount plus `active()`. Registration mounts into existing and future founded
+kingdom scenes; unregister/abort disposes every associated mount. Mode/quality/hour are live getters. Stream
+hosts declare `mode:'stream'`; other hosts report walking/watching. `waterHeight` queries the current visible
+water owner, including replacement by the grand raster; hidden old water never supplies a fallback. Tick `dt`
+is seconds and `now` monotonic ms. Effects must check `active()` before witnessing live events: it is false
+for replay, hidden warming canvases, unloaded scenes, suspended rendering and hidden documents. No geometry
+claims are made; founded pier planks and collision remain owned by the normal scene. A throwing initializer
+must release its own partial GPU/network resources; the host clears its callbacks and new roots.
+
+The newly arrived pier uses a 2.5 m walk, an 8 m T-head, a bank ramp and a deck datum 0.75 m above water;
+`root.y` is physical ground, not that raised datum. Its whole geometry cannot be authorized by passing the
+2 m × 12 m flat rectangle used in our initial diagnostic probe. **The current flat rectangular validator is
+not yet an adapter for that authored pier.** The probe found no valid common site among 512 candidates;
+this is evidence of that probe's failure, not proof that Willowmere has no possible pier.
+
+needs: grand-world/pier compose the authored T footprint and ramp/deck-height validation with the real
+renderer-backed water source, preserve pier's stable candidate order, and use the pinned recipe's `woodland`
+biome rather than deriving a biome from a landform or defaulting to meadow. Persist accepted anchors with
+their geometry, add the consumer registration once `mountPierLayer` exists, and mirror the accepted contract
+here in pier's SEAMS. No production pier is installed by this checkpoint. First/rare director attention,
+the shared kingdom clock and water-mood adoption remain pending; the campfire game cue is not a replacement
+for a first/rare attention contract. Main owns the additive package-root export:
+
+```ts
+export { planPierSites, validatePierSite, type PierAnchor, type LandWaterSource, type PierSitePlanningOptions, type PierPlanningDimensions } from './land-interface';
+```

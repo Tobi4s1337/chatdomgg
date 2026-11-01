@@ -69,7 +69,9 @@ import { createCivicLife } from './civic-life';
 import { createPlaceMounts, type PlaceMounter } from './grand-land/place-mount';
 import { createPlaceShot } from './grand-land/place-shot';
 import type { PlaceShot } from '../interactions/places/framing';
+import { createKingdomLayers } from './grand-land/kingdom-layer';
 export type { PlaceMount, PlaceMounter } from './grand-land/place-mount';
+export { registerKingdomLayer, type KingdomLayerMount, type KingdomLayerMounter } from './grand-land/kingdom-layer';
 
 const distantAirAnchor='colour=mix(colour,fogColour,min(.86,fogAmount));';
 const distantAir=`colour=mix(colour,fogColour,min(.86,fogAmount));
@@ -90,7 +92,7 @@ export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number;arrivalAgeSeconds?:number}
 export interface PotentialKingdomView {seat?:GenesisSeatContent;plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
 export interface SceneView {eye:Vec3;target:Vec3;fov:number}
-export interface SceneOptions {readonly places?:readonly PlaceMounter[];/** Read-only isolated history; never hands citizens to the live scene. */replay?:boolean;dockFeed?:DockPresentationConnection;/** Hidden warming scenes must explicitly activate before presenting or witnessing. */dockActive?:boolean;/** Explicit SIMULATED capture fixtures only. */simulatedDockSites?:boolean;initialView?:SceneView;growthFeed?:GrowthSceneFeed;growthCeremonies?:GrowthCeremonyFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneOptions {readonly mode?:'stream';readonly places?:readonly PlaceMounter[];/** Read-only isolated history; never hands citizens to the live scene. */replay?:boolean;dockFeed?:DockPresentationConnection;/** Hidden warming scenes must explicitly activate before presenting or witnessing. */dockActive?:boolean;/** Explicit SIMULATED capture fixtures only. */simulatedDockSites?:boolean;initialView?:SceneView;growthFeed?:GrowthSceneFeed;growthCeremonies?:GrowthCeremonyFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -503,6 +505,16 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   let waterQuality:'reduced'|'full'=canvas.clientWidth<600?'reduced':'full';
   let water=own(createWaterSurface({bodies,reaches:landform.version===2?deriveWaterReaches(landform):[],ground:{data:heightData,width:heightWidth,height:heightDepth,origin:heightOrigin,step:1},quality:waterQuality,...(layout.genesisSurface?{outsideGroundHeight:-8}:{})}));
   water.root.visible=!useGrandLand;scene.add(water.root);
+  // Layers are effects only: founded placements retain all solid geometry and collision.
+  // The getter follows replacement water; the hidden legacy sheet offers no hosted water before installation.
+  const kingdomLayers=options.founded?.kingdomId?own(createKingdomLayers({scene,camera,founded:options.founded,
+    get mode(){return options.mode==='stream'?'stream':walkSelected&&walk?'walking':'watching';},
+    get quality(){const quality=post.diagnostics().quality;return quality==='capture'?'high':quality;},
+    hour:()=>hour,water:()=>water,signal:abort.signal,
+    active:()=>!disposed&&loaded&&debug.ready&&renderHolds===0&&!options.replay&&document.visibilityState!=='hidden'
+      &&canvas.isConnected&&canvas.clientWidth>0&&canvas.clientHeight>0&&canvas.getClientRects().length>0
+      &&canvas.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}),
+  })):undefined;
   let waterFrame=0;
   const shore=own(createShoreDressing({scene,pool,clay,plan:layout,occupied:content,signal:abort.signal,registry,style:options.nativeStyle??options.forgeFamily??layout.homes[0]?.style??'hearth'}));
   function labels(){const names:NameLabel[]=[];for(const s of [...windows.getSources(),...build.getSources()]){
@@ -642,7 +654,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       if(blend===1)handoffPose=undefined;
     }
     camera.updateMatrixWorld();forgeFlight.update();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);crowd.drawLanterns(time,night,camera,walk?.grips??observed?.grips);updateInstances(fixedTime&&autoCamera?time*1000:now);
-    placeMounts.tick(dt,now);
+    placeMounts.tick(dt,now);kingdomLayers?.tick(dt,now);
     canopy.sync();canopy.setWind(time,[0.8,0.6],0.8);
     homeLife.update(presentationMs,time,growthLifeHidden.size&&lightFrame?{...lightFrame,windows:lightFrame.windows.filter(w=>!growthLifeHidden.has(w.slot))}:lightFrame,hour,camera);royalLife.update(time,frame,hour,dockGateFlame);
     forgeFire.update(time,frame,hour);forgeHearth.update(time,frame,hour);
@@ -677,7 +689,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // Fixed evidence frames have no animation between seeks. Keep the public
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
-    const renderKey=[dockCameraDirected?now:0,poseRevision,placeShot.revision,placeMounts.revision,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
+    const renderKey=[dockCameraDirected?now:0,poseRevision,placeShot.revision,placeMounts.revision,kingdomLayers?.revision??0,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
     // The stream curtain covers preparation. Keep the bounded land install/update pump running,
     // but do not redraw a hidden high-quality reflection/post stack for every installed region.
     // The first loaded frame below still draws the full native view before announcing ready.
@@ -734,7 +746,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;const checkpoint=options.founded&&!options.replay&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);kingdomLayers?.dispose();placeMounts.dispose();walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();grandLand?.dispose();clearInterval(soulClockTimer);soul?.dispose();civicLife?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
