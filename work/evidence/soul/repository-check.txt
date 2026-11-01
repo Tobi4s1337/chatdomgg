@@ -1,0 +1,26 @@
+Full repository suite was attempted once and stopped after failures in unchanged, out-of-scope systems; it was not green. No failing test was edited.
+
+Affected test files:
+- apps/codex/src/kingdom-forge/application.test.ts
+- apps/herald/src/acceptance/acceptance.test.ts
+- apps/herald/src/auth/auth.test.ts
+- apps/herald/src/source/source.test.ts
+- apps/realm/src/evening/citizens.test.ts
+- apps/realm/src/founded/provider.test.ts
+- apps/web/src/kingdom/citizen-scene.test.ts
+- apps/web/src/kingdom/ground-dressing/ground-dressing.test.ts
+- apps/web/src/kingdom/light-field.test.ts
+- apps/web/src/kingdom/presence-feed.test.ts
+- apps/web/src/realm/adapters/live.test.ts
+- apps/web/src/twitch-moments/moments.test.ts
+- packages/audio/src/genesis-biomes/genesis-sound.test.ts
+- packages/content/src/genesis-kingdoms/pinkkitty/tavern/tavern.test.ts
+- packages/content/src/genesis-landmarks/crown-tower/crown.test.ts
+- packages/content/src/genesis-landmarks/river-hall/hall.test.ts
+- packages/content/src/homes/hearth/hearth.test.ts
+- packages/content/src/places/water/shore/shore.test.ts
+- packages/content/src/props/dressing/trees/trees.test.ts
+- packages/render/src/lod.test.ts
+- packages/world/src/terrain-art/producer.test.ts
+
+Focused soul verification is recorded separately. Source modules changed during the broad run; use the focused final run for the current soul source.

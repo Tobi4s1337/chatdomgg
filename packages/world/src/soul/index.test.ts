@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSoulSampler, DEFAULT_SOUL_TOPOLOGY, soulAt, type SoulConfig } from './index';
+import { createSoulSampler, DEFAULT_SOUL_TOPOLOGY, SOUL_DUSK_HOUR, soulAt, type SoulConfig } from './index';
 
 const config: SoulConfig = { seed: 427, biome: 'coastal', population: 9 };
 const time = (month: number, day: number, hour = 0) => Date.UTC(2026, month, day, hour);
@@ -58,7 +58,7 @@ describe('kingdom soul', () => {
   });
   it('walks at a readable speed, stops at waypoints, and lights lamps on arrival', () => {
     const topology = { routes: { lamplighter: [[0, 0, 0], [10, 0, 0], [10, 0, 10]] as const }, lamps: [{ position: [5, 0, 0] as const, routeProgress: .25 }, { position: [10, 0, 5] as const, routeProgress: .75 }] };
-    const start = time(4, 2, 17);
+    const start = time(4, 2) + SOUL_DUSK_HOUR * 3_600_000;
     const at = (seconds: number) => soulAt({ ...config, topology }, start + seconds * 1000);
     expect(at(5).keepers[0]!.position[0]).toBeCloseTo(2.75);
     expect(at(9).lamps[0]!.lit).toBe(false);
@@ -96,7 +96,7 @@ describe('kingdom soul', () => {
     expect(() => soulAt({ ...config, topology: { routes: { baker: [[NaN, 0, 0]] }, lamps: [] } }, time(4, 2))).toThrow();
     expect(() => soulAt({ ...config, topology: { routes: {}, lamps: [{ position: [0, 0, 0], routeProgress: NaN }] } }, time(4, 2))).toThrow();
     const sample = createSoulSampler(config);
-    const start = time(4, 2, 17);
+    const start = time(4, 2) + SOUL_DUSK_HOUR * 3_600_000;
     const a = sample(start + 1000); const b = sample(start + 2000);
     expect(a.weather).toBe(b.weather);
     const other = createSoulSampler(config);
