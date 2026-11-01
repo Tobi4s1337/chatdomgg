@@ -335,20 +335,28 @@ Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo street fill/warm pools
 sparse grey-violet smoke, sculpted land/groves and AS10 citizens. No new systems or rework of
 accepted pictures. Merge good runtime checkpoints promptly; one visible change per turn.
 
-**Latest merge: raid-road RR10 checkpoint (`a0024e2`).** The SIMULATED rehearsal at
-`/-/raid-gate?bench=simulated&road=1` now joins two observed holdings (MashaD4 → PinkKittyRose):
-witnessed departure → Atlas torch road → acknowledged destination welcome/gift. This is a
-rehearsal surface, NOT the production stream raid mount. The participant board must stay out
-of OBS. Source/destination load errors now report their cause instead of falsely marking ready.
-Candidate scoped lint and25 focused tests pass; main composition typecheck and web build
-pass. Root viewed the old welcome baseline. No after/welcome image has succeeded yet:
-previous targeted take timed out after departure. One diagnostic take, helper
-`raid_checkpoint_capture` session77301, is running from isolated
-`../worktrees/main-raid-road-checkpoint` (poll same job, no duplicate). It logs actual facts,
-checks refusal/render errors, and retains a failure frame if possible; process-group supervisor
-bounds queue and acquired lease. No full sequence/matrix and no claim of visual acceptance.
-Root checkpoint is merged promptly; original producer WIP remains untouched. Next lane detail:
-replace flat foreground SVG people with the same AS10 citizens in actual gate lighting.
+**Current checkpoint: dragon/train scene integration.** The sky lane's scoped runtime is
+snapshotted in `../worktrees/main-sky-dragon` (`integrate/sky-dragon`); producer WIP is intact.
+The real scene now supplies its drawn `landHeight` to `festivalPlacesOf`: a lair beyond the
+castle, a terrain-following train ring clear of lots/water and market bunting. Previously the
+host returned null for lair/track, so even a delivered hype event could not draw them. The
+dragon circles the castle and contributes its fire/sky light through the existing grade;
+existing camera arbitration, crowd and captions remain. Typecheck/scoped lint/web build pass;
+focused scene/festival tests pass, including the mesh-error queue bound. No live-event or
+visual acceptance yet. Terra capture helper `dragon_stream_capture` owns live session91423:
+matching1920×1080 held-wide before/after, SIMULATED hype at33s, queue priority main, separate
+one-still leases. Before is rendering on free5171; poll that same helper/handle, no duplicate.
+Its first attempt57861 ended before any browser (5198 occupied); cleanup completed. Do not
+change candidate render files or hot-reload the take. Expected `shots/magic/dragon-stream-*.png`.
+
+**Raid-road RR10 (`a0024e2`, merged `a689199`):** SIMULATED rehearsal at
+`/-/raid-gate?bench=simulated&road=1`, observed MashaD4 → PinkKittyRose, departure → Atlas torch
+road → destination welcome/gift. This is not the OBS mount; keep participant board out of OBS.
+25 focused tests/lint/type/build passed. No successful after-welcome still yet; old diagnostic
+capture77301 was cancelled on the goal pause and owned preview5170 released. No repeat queued.
+Next lane picture detail: AS10 citizens in actual gate lighting instead of foreground paper
+SVG figures. Incoming raid renderer may stage its visible gate on the existing connected
+`placeAnchor('gate')`/`giftRoute`; no new exterior-trail system blocks that checkpoint.
 
 **Genesis:** PinkKittyRose GP10 (`5eb78b6`) dresses the river-hall revetments, balcony/fire
 baskets, approach and roses. Viewed producer1920×1080 hero/Atlas-card images and
@@ -366,14 +374,16 @@ whole-crowd composition. Aurora streaks remain too regular (sky lane has the fol
 c1c2ddb merged Aggman’s harbour/checked emote art and own19.6 hour/lore; its keepers/sound are
 unmounted and real holding missing from current Atlas survey. Never invent a map mark.
 
-**Team:** no new committed dragon or live-Twitch runtime checkpoint at this scan; requested
-small green checkpoints without waiting for full films. Live-twitch owns Herald → realm ingress
-→ moment facts, correct origin labels/CLI commands, and homes/windows beyond twelve speakers.
-Its shared-schema WIP is a proposed diff for root review/freeze, not independently frozen.
-Existing `createRoomMomentFeed` → `SceneOptions.momentFeed` reaches the spectator stream with
-sky glow/crowd/captions; give exact additive scene/director needs promptly. Raid-road needs a
-read-only gate/guest mount on that feed; no participant board in stream. Real cheer/hype/raid
-and expanded home capacity remain UNPROVEN. Current channel is offline; no observer left waiting.
+**Live wiring:** main03a50f1 freezes the lane's proposed private `RealmMomentObservation`
+(bits/hype/raid) and transient `RealmStrike`: strict provider IDs, explicit origin, no raw chat.
+Two contract tests incl hype bounds, scoped lint and main typecheck passed; pushed. Public
+raid body freezes with its coherent producer/renderer checkpoint, not ahead of exhaustive
+consumers. Existing `createRoomMomentFeed` → `SceneOptions.momentFeed`, anchors and camera lease
+suffice; lane notified. Its runtime is still WIP. Producer next: durable home-slot expansion
+and matching scene revision BEFORE publishing presence for otherwise-unplaced speakers;
+current source still records capacityHits. No actual live home count inferred from old twelve.
+Also fix mock toolkit's obsolete LIVE5191 default to5197; keep mock realm isolated. Real
+cheer/hype/raid and expanded capacity remain UNPROVEN. No observer waiting for the user.
 
 **Opening:** `/stream?source=simulated&tier=town&hour=19.5&seam=starting` (Showcase), no fixed time.
 Immediate witnessed window light; wide0–8s, street glide8–12s, return24–36s; greeting6–16s then

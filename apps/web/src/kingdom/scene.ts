@@ -593,7 +593,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const kingdomId=options.founded?.kingdomId??options.kingdomId;
       if(!kingdomId||options.founded&&options.momentFeed.origin!==options.founded.origin)throw new Error('Moments need this kingdom and its actual source');
       const castleKeep=installed?installed.forgeHosts.find(h=>h.slot===65534):castleBuildings.find(h=>h.id===layout.castle.beaconModuleId);
-      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal}));
+      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,ground:landHeight,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal}));
       // Optional future spectacles prepare on their four bounded worker lanes after the citizens. The gate
       // opens on the world drawing; a failed moment view detaches itself and reports failure in inspect().
       void moments.ready.catch(()=>{});

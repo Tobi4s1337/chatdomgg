@@ -2,14 +2,20 @@ import * as THREE from 'three';
 import { geometryFromChunks, type VoxelRenderState, type WindowHouse } from '@chatdom/render';
 import type { KingdomId, KingdomPresenceFrame, MaterialRegistry } from '@chatdom/shared';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
-import type { SettlementPlan } from '@chatdom/world';
-import { createTwitchMomentView, createTwitchMoments, type CameraLease, type CrowdCall, type MomentSoundPort, type SkyGlow, type TwitchMomentFeed } from '../../twitch-moments';
+import { terrainHeight, type SettlementPlan } from '@chatdom/world';
+import { createTwitchMoments } from '../../twitch-moments/controller';
+import { createTwitchMomentView, type CameraLease, type MomentSoundPort, type SkyGlow } from '../../twitch-moments/view';
+import { festivalPlacesOf, withFestivalPlaces } from '../../twitch-moments/festival-places';
+import type { CrowdCall } from '../../twitch-moments/stage-beat';
+import type { TwitchMomentFeed } from '../../twitch-moments/contracts';
 import { bannerMount, doorOf, giftRouteOf, spectaclePlacesOf, windowOf } from './anchors';
 
 export interface KingdomMomentsOptions {
   scene: THREE.Scene; camera: THREE.PerspectiveCamera; canvas: HTMLCanvasElement; target: THREE.Vector3;
   plan: SettlementPlan; houses: readonly WindowHouse[]; castleKeep?: WindowHouse; pool: VoxelWorkerPool; material: VoxelRenderState; registry: MaterialRegistry;
   kingdomId: KingdomId; feed: TwitchMomentFeed; sound: MomentSoundPort | null; kit: 'hearth' | 'tide'; signal: AbortSignal;
+  /** Actual adopted surface, including sculpted terrain, for the festival route and dragon lair. */
+  ground?: (x: number, z: number) => number;
 }
 
 /** Attach moments to the adopted kingdom. The caller retains the scene, camera, worker and material. */
@@ -28,19 +34,19 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
   const route = giftRouteOf(plan);
   // The view prepares many shared parts at once; bound submissions to the shared worker pool.
   const meshLanes: Promise<void>[] = Array.from({ length: 4 }, () => Promise.resolve());
-  let nextMeshLane = 0;
+  let nextMeshLane = 0, meshFailed = false;
   const view = createTwitchMomentView({
     parent, material: material.material, kit: options.kit, sound: options.sound, light: glow => { skyGlow = glow; }, crowd: call => { crowdCall = call; },
-    places: spectaclePlacesOf(plan, houses, options.castleKeep),
+    places: withFestivalPlaces(spectaclePlacesOf(plan, houses, options.castleKeep), festivalPlacesOf(plan, options.ground ?? ((x, z) => terrainHeight(plan, x, z)))),
     async mesh(blueprint) {
       const lane = nextMeshLane++ % meshLanes.length;
       const job = meshLanes[lane]!.then(async () => {
-        if (disposed) throw new DOMException('Moments closed while preparing', 'AbortError');
+        if (disposed || meshFailed) throw new DOMException('Moments closed while preparing', 'AbortError');
         const result = await pool.submit({ kind: 'blueprint', blueprint, revision: 1, materials: registry.materials, materialRevision: registry.revision });
-        if (disposed) throw new DOMException('Moments closed while preparing', 'AbortError');
+        if (disposed || meshFailed) throw new DOMException('Moments closed while preparing', 'AbortError');
         if (result?.kind !== 'asset') throw new Error('A moment part could not be meshed');
         return geometryFromChunks(result.chunks, 'build');
-      });
+      }).catch(error => { meshFailed = true; throw error; });
       meshLanes[lane] = job.then(() => {}, () => {});
       return job;
     },
