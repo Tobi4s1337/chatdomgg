@@ -1,3 +1,4 @@
+import 'pixi.js/unsafe-eval';
 import { Application, Container, Graphics, ImageSource } from 'pixi.js';
 import { decodeRings, type Geography, type Ring, type Settler, type SettlerStore } from '../data/model';
 import type { Dab, LivePaint } from '../live/paint';
@@ -166,6 +167,7 @@ export class MapView {
   static async create(host: HTMLElement, data: MapData, events: MapEvents, chromeInsets?: (view: Viewport) => Insets, initial?: CameraState | null): Promise<MapView> {
     const pixelRatio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
     const app = new Application();
+    try {
     await app.init({
       width: host.clientWidth || 1,
       height: host.clientHeight || 1,
@@ -178,7 +180,17 @@ export class MapView {
       sharedTicker: false,
     });
     const sheet = await loadImage(stampSheetUrl);
-    return new MapView(app, host, data, sheet, events, pixelRatio, chromeInsets ?? (() => NO_INSETS), initial ?? null);
+    const mounted = new MapView(app, host, data, sheet, events, pixelRatio, chromeInsets ?? (() => NO_INSETS), initial ?? null);
+    if ((app.renderer as { gl?: WebGLRenderingContext }).gl?.isContextLost()) {
+      mounted.dispose();
+      throw new Error('The WebGL context was lost while mounting the Atlas');
+    }
+    return mounted;
+    } catch (error) {
+      // A retry must release the failed renderer and create its own fresh canvas.
+      try { app.destroy(true, { children: true }); } catch { /* init may have failed before a renderer existed */ }
+      throw error;
+    }
   }
 
   private insets(): Insets {

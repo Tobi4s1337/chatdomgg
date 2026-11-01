@@ -295,7 +295,7 @@ describe('names projection (R16)', () => {
       version: 1, kind: 'chatdom-atlas-survey-preview-served-names', preview: first.preview.id, servedAt: sweepAt(12), withheld: [],
       ids: [CAPITAL, TOWN, VILLAGE], logins: ['fixture_capital', 'fixture_town', 'fixture_village'],
       names: ['Fixture Capital', 'フィクスチャ町', 'Fixture Village'],
-      freshUntil: [sweepAt(4) + 24 * HOUR, sweepAt(2) + 24 * HOUR, sweepAt(4) + 24 * HOUR],
+      freshUntil: Array(3).fill(sweepAt(12) + 24 * HOUR),
     });
     expect(response.text).not.toContain('fixture_small');
     const etag = response.headers.etag as string;
@@ -304,17 +304,18 @@ describe('names projection (R16)', () => {
     expect(gunzipSync(gzipped.body).toString('utf8')).toBe(response.text);
   });
 
-  it('drops a name the source has not confirmed for a day, so the map falls back to the shield', async () => {
+  it('continues serving names when the survey facts are more than a day old', async () => {
     const { dataDir, first } = await imported();
     // The town was last confirmed at sweep 2, the others at sweep 4.
     const port = await start(dataDir, { now: () => sweepAt(3) + 24 * HOUR });
     const names = ServedNamesSchema.parse(JSON.parse((await get(port, `/map-data/v1/preview/${first.preview.id}/names`)).text));
-    expect(names.ids).toEqual([CAPITAL, VILLAGE]);
+    expect(names.ids).toEqual([CAPITAL, TOWN, VILLAGE]);
     expect(names.withheld).toEqual([]);
-    expect(JSON.stringify(names)).not.toContain('fixture_town');
+    expect(names.logins).toContain('fixture_town');
+    expect(names.freshUntil).toEqual(Array(3).fill(sweepAt(3) + 48 * HOUR));
 
     const later = await start(dataDir, { now: () => sweepAt(5) + 24 * HOUR });
-    expect(ServedNamesSchema.parse(JSON.parse((await get(later, `/map-data/v1/preview/${first.preview.id}/names`)).text)).ids).toEqual([]);
+    expect(ServedNamesSchema.parse(JSON.parse((await get(later, `/map-data/v1/preview/${first.preview.id}/names`)).text)).ids).toEqual([CAPITAL, TOWN, VILLAGE]);
   });
 
   it('withholds a hidden channel at the next request, without reasons, and restores it when lifted', async () => {

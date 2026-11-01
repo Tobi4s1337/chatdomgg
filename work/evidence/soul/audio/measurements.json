@@ -1,0 +1,375 @@
+[
+  {
+    "name": "coastal-6-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.05438385531306267,
+    "rms": 0.013435226838934047,
+    "middleRms": 0.014560429102919293,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 6,
+    "peakSources": 12,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3,
+      "rigging": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "coastal-12-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.05991371348500252,
+    "rms": 0.012612506734056212,
+    "middleRms": 0.013514049601000501,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 6,
+    "peakSources": 7,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3,
+      "gull": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "coastal-18-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.0586235411465168,
+    "rms": 0.012133563909098873,
+    "middleRms": 0.013145754303780944,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "coastal-18-stream",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.027683893218636513,
+    "rms": 0.005797652307631091,
+    "middleRms": 0.006266571042021078,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "stream"
+  },
+  {
+    "name": "coastal-23-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.06630505621433258,
+    "rms": 0.01269330283969275,
+    "middleRms": 0.01371509014139856,
+    "voices": 0,
+    "sources": 0,
+    "peakVoices": 1,
+    "peakSources": 1,
+    "played": {
+      "drip": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "woodland-6-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.03295598551630974,
+    "rms": 0.007592212058924881,
+    "middleRms": 0.00819706451899063,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "woodland-12-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.046676091849803925,
+    "rms": 0.0072165671563218965,
+    "middleRms": 0.007315550532632378,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 6,
+    "peakSources": 8,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3,
+      "blackbird": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "woodland-18-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.030479585751891136,
+    "rms": 0.006402195306697973,
+    "middleRms": 0.006968183403298716,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "woodland-18-stream",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.013909395784139633,
+    "rms": 0.0030425362062969936,
+    "middleRms": 0.0032946734050839964,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "stream"
+  },
+  {
+    "name": "woodland-23-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.036711957305669785,
+    "rms": 0.00694450839982174,
+    "middleRms": 0.007488187541137247,
+    "voices": 0,
+    "sources": 0,
+    "peakVoices": 1,
+    "peakSources": 1,
+    "played": {
+      "drip": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "meadow-6-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.031087558716535568,
+    "rms": 0.007236365356782157,
+    "middleRms": 0.007821697902602568,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "meadow-12-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.04617861658334732,
+    "rms": 0.006828975669407368,
+    "middleRms": 0.00691603318086733,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 6,
+    "peakSources": 8,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3,
+      "blackbird": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "meadow-18-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.029272500425577164,
+    "rms": 0.006074498684264579,
+    "middleRms": 0.006561000003992862,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "meadow-18-stream",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.013837888836860657,
+    "rms": 0.002890560629139379,
+    "middleRms": 0.0031026167208275234,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "stream"
+  },
+  {
+    "name": "meadow-23-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.03476171940565109,
+    "rms": 0.006578255253343393,
+    "middleRms": 0.0070885811345917015,
+    "voices": 0,
+    "sources": 0,
+    "peakVoices": 1,
+    "peakSources": 1,
+    "played": {
+      "drip": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "highland-6-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.04395727440714836,
+    "rms": 0.010657895127454823,
+    "middleRms": 0.011559475142809958,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "highland-12-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.04980848357081413,
+    "rms": 0.01000159872709063,
+    "middleRms": 0.010579764877139838,
+    "voices": 4,
+    "sources": 5,
+    "peakVoices": 6,
+    "peakSources": 7,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3,
+      "skylark": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "highland-18-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.045143868774175644,
+    "rms": 0.009422431006187866,
+    "middleRms": 0.010181948391826613,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "highland-18-stream",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.021283430978655815,
+    "rms": 0.004499349264113706,
+    "middleRms": 0.0048457375288628824,
+    "voices": 3,
+    "sources": 3,
+    "peakVoices": 5,
+    "peakSources": 5,
+    "played": {
+      "lute": 6,
+      "strings": 3,
+      "woodwind": 3
+    },
+    "muted": false,
+    "profile": "stream"
+  },
+  {
+    "name": "highland-23-walk",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.0527842678129673,
+    "rms": 0.0099765123112628,
+    "middleRms": 0.010773568339843432,
+    "voices": 0,
+    "sources": 0,
+    "peakVoices": 1,
+    "peakSources": 1,
+    "played": {
+      "drip": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  {
+    "name": "meadow-6-hamlet",
+    "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+    "peak": 0.028057286515831947,
+    "rms": 0.006833232814428408,
+    "middleRms": 0.007374741581068049,
+    "voices": 1,
+    "sources": 1,
+    "peakVoices": 2,
+    "peakSources": 2,
+    "played": {
+      "lute": 6
+    },
+    "muted": false,
+    "profile": "walk"
+  }
+]

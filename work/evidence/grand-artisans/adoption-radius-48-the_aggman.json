@@ -1,0 +1,49 @@
+{
+  "channel": "the_aggman",
+  "radius": 48,
+  "treeCount": 1694,
+  "placements": [
+    {
+      "id": "windmill",
+      "at": [
+        397,
+        66,
+        526
+      ],
+      "turns": 0,
+      "boxes": 685
+    },
+    {
+      "id": "harbour-lighthouse",
+      "at": [
+        1070,
+        55,
+        560
+      ],
+      "turns": 0,
+      "boxes": 1341
+    },
+    {
+      "id": "harbour-ship",
+      "at": [
+        874,
+        48,
+        366
+      ],
+      "turns": 1,
+      "boxes": 548
+    },
+    {
+      "id": "harbour-ship",
+      "at": [
+        1014,
+        48,
+        426
+      ],
+      "turns": 1,
+      "boxes": 548
+    }
+  ],
+  "millis": 27681.795794999998,
+  "note": "CPU source generation with current backtracking fitter, default clearance and pre-flora reservation; radius altered only in Vite memory."
+}

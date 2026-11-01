@@ -1,0 +1,10 @@
+{
+  "checkpoint": "75bfdb5",
+  "kitCount": 19,
+  "comparisons": 760,
+  "loops": 1200,
+  "baselineMs": 239.921828,
+  "cachedMs": 2.000550999999973,
+  "sink": 0,
+  "notes": "Cached local AABB transformed as one half-open box; 0/90/180/270-degree rotations preserve axis alignment exactly. This microbenchmark is not an end-to-end source-run validation. Proposed cache lifetime is one sitePlacements call, after validating all constituent boxes once."
+}

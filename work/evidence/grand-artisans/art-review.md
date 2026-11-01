@@ -23,3 +23,16 @@ No full kit has all required views, mobile, orbit and actual adoption evidence y
 The actual renderer capture is SIMULATED independent land, with no installed residents;
 its clean capture mode hides the UI label. Future lane capture runs add an explicit watermark.
 Do not reuse rejected images as approval for later revisions.
+
+Checkpoint look: revised mill hero is viewed (coherent roof and lighter framed sails;
+hero pass, other angles pending). Revised citadel hero is viewed (small rock improvement;
+body silhouette passes, bedrock still too orderly and needs whole-land context). Walls
+hero is viewed and passes its initial silhouette/gate check. Water's curved flow study
+is viewed and retained as a study; the final range study is viewed and remains unaccepted.
+
+The final candidate harbour still, copied as `tobi4s-harbour-candidate-01.png`, was
+opened with view_image. It visibly renders the modular quay beside ships and the shore,
+with a SIMULATED watermark. Shore access is too small/occluded at this framing to
+accept the complete route; inland/deck/waterline close views remain required. The
+renderer reached ready with no page error. Recorded CPU generation 28.5s and meshing
+25.7s under shared load expose a performance task; they are not GPU/OBS/FPS measurements.

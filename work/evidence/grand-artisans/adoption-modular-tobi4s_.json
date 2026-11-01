@@ -1,0 +1,157 @@
+{
+  "channel": "tobi4s_",
+  "guarded": {
+    "calls": {
+      "harbour-quay": {
+        "calls": 169,
+        "failures": {
+          "shore": 169
+        },
+        "success": 0
+      },
+      "harbour-quay-frontage": {
+        "calls": 904,
+        "failures": {
+          "shore": 764,
+          "cap-cell": 96
+        },
+        "success": 44
+      },
+      "harbour-quay-landing": {
+        "calls": 196,
+        "failures": {
+          "shore": 107,
+          "cap-cell": 53,
+          "deck-cell": 30
+        },
+        "success": 6
+      },
+      "harbour-quay-pier": {
+        "calls": 30,
+        "failures": {
+          "shore": 23,
+          "cap-cell": 7
+        },
+        "success": 0
+      }
+    },
+    "runs": {
+      "0:pier=false:landing=false": 135,
+      "1:pier=false:landing=false": 20,
+      "2:pier=false:landing=false": 6,
+      "2:pier=false:landing=true": 6,
+      "3:pier=false:landing=false": 2
+    },
+    "examples": {
+      "shore": {
+        "x": -61,
+        "z": 21,
+        "cell": {
+          "ground": 49,
+          "water": 50
+        },
+        "seaLevel": 48
+      },
+      "cap-cell": {
+        "x": 1,
+        "z": 4,
+        "cell": {
+          "ground": 47,
+          "water": 49
+        },
+        "seaLevel": 48
+      },
+      "deck-cell": {
+        "x": -6,
+        "z": -8,
+        "top": 0,
+        "cell": {
+          "ground": 49,
+          "water": 0
+        },
+        "seaLevel": 48
+      }
+    }
+  },
+  "unrestricted": {
+    "calls": {
+      "harbour-quay": {
+        "calls": 169,
+        "failures": {
+          "shore": 169
+        },
+        "success": 0
+      },
+      "harbour-quay-frontage": {
+        "calls": 904,
+        "failures": {
+          "shore": 764,
+          "cap-cell": 96
+        },
+        "success": 44
+      },
+      "harbour-quay-landing": {
+        "calls": 196,
+        "failures": {
+          "shore": 107,
+          "cap-cell": 53,
+          "deck-cell": 30
+        },
+        "success": 6
+      },
+      "harbour-quay-pier": {
+        "calls": 30,
+        "failures": {
+          "shore": 23,
+          "cap-cell": 7
+        },
+        "success": 0
+      }
+    },
+    "runs": {
+      "0:pier=false:landing=false": 135,
+      "1:pier=false:landing=false": 20,
+      "2:pier=false:landing=false": 6,
+      "2:pier=false:landing=true": 6,
+      "3:pier=false:landing=false": 2
+    },
+    "examples": {
+      "shore": {
+        "x": -61,
+        "z": 21,
+        "cell": {
+          "ground": 49,
+          "water": 50
+        },
+        "seaLevel": 48
+      },
+      "cap-cell": {
+        "x": 1,
+        "z": 4,
+        "cell": {
+          "ground": 47,
+          "water": 49
+        },
+        "seaLevel": 48
+      },
+      "deck-cell": {
+        "x": -6,
+        "z": -8,
+        "top": 0,
+        "cell": {
+          "ground": 49,
+          "water": 0
+        },
+        "seaLevel": 48
+      }
+    }
+  },
+  "unrestrictedPlacements": [
+    "windmill",
+    "harbour-lighthouse",
+    "harbour-ship",
+    "harbour-ship"
+  ],
+  "millis": 28745.458048,
+  "note": "CPU-only source diagnostic. Guarded is pre-flora producer fitting; unrestricted removes clearance guard solely to diagnose geometry, not for adoption."
+}

@@ -80,43 +80,112 @@ export const GEOLOGY_COLOURS: Readonly<Record<number, string>> = {
   30: '#938b87', 32: '#f0f3f3', 33: '#d3dfec',
 };
 
-function mountainHeight(x: number, z: number, phase: number): number {
-  // One spine with irregular peaks, saddles and folded offshoots; not isolated random cones.
-  const spine = -8 + 4 * Math.sin(x / 19 + phase);
-  const across = Math.abs(z - spine);
-  const peak = 29 + 30 * Math.pow(Math.max(0, Math.sin(x / 13 + phase)), 2)
-    + 15 * Math.pow(Math.max(0, Math.cos(x / 8 - phase)), 5);
-  const mountain = Math.max(0, 1 - across / (27 + 3 * Math.sin(x / 17)));
-  const ridge = peak * Math.pow(mountain, 1.28);
-  const jag = 5 * Math.max(0, Math.sin(x / 3.7 + z / 5 + phase)) * mountain ** 3;
-  return Math.max(3, Math.round(6 + ridge + jag));
+type RidgePoint = readonly [number, number];
+const SPINES: readonly (readonly RidgePoint[])[] = [
+  [[-105, -13], [-66, -29], [-32, -22], [5, -32], [36, -14], [70, -23], [104, -9]],
+  [[-90, 16], [-60, 4], [-34, 11], [-2, -2], [24, 12], [51, 1], [91, 15]],
+];
+
+function distanceToSpine(x: number, z: number, points: readonly RidgePoint[]): number {
+  let best = Infinity;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i]!, b = points[i + 1]!, dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz)));
+    best = Math.min(best, Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz));
+  }
+  return best;
+}
+
+function smooth(t: number): number {
+  const u = Math.max(0, Math.min(1, t));
+  return u * u * (3 - 2 * u);
+}
+
+/** A coherent, locally bounded value field; neighbouring columns share the same knots. */
+function createStudyNoise(seedKey: string) {
+  let seed = 2166136261;
+  for (let i = 0; i < seedKey.length; i++) seed = Math.imul(seed ^ seedKey.charCodeAt(i), 16777619);
+  const corner = (x: number, z: number, salt: number): number => {
+    let v = Math.imul(x, 0x1f123bb5) ^ Math.imul(z, 0x5f356495) ^ seed ^ salt;
+    v = Math.imul(v ^ (v >>> 16), 0x7feb352d);
+    v = Math.imul(v ^ (v >>> 15), 0x846ca68b);
+    return ((v ^ (v >>> 16)) >>> 0) / 4294967295;
+  };
+  return (x: number, z: number, scale: number, salt: number): number => {
+    const fx = x / scale, fz = z / scale, ix = Math.floor(fx), iz = Math.floor(fz);
+    const u = smooth(fx - ix), v = smooth(fz - iz);
+    const a = corner(ix, iz, salt), b = corner(ix + 1, iz, salt);
+    const c = corner(ix, iz + 1, salt), d = corner(ix + 1, iz + 1, salt);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+  };
+}
+
+/**
+ * Independent visual study of the builder's spine-mask + coherent ridge + high jag approach.
+ * It produces heights in half-metre cells, never collision or a persisted landscape recipe.
+ */
+export function createRangeHeightField(seedKey: string): (x: number, z: number) => number {
+  const noise = createStudyNoise(seedKey + ':range-study');
+  return (x, z) => {
+    // Domain warp bends the ridges and makes adjoining valleys meet at different angles.
+    const wx = x + (noise(x, z, 52, 11) - .5) * 18;
+    const wz = z + (noise(x, z, 44, 17) - .5) * 15;
+    const primary = Math.pow(smooth(1 - distanceToSpine(wx, wz, SPINES[0]!) / 37), .66);
+    const secondary = Math.pow(smooth(1 - distanceToSpine(wx, wz, SPINES[1]!) / 30), .75);
+    const cover = Math.max(primary, secondary * .86);
+    const ridged = (scale: number, salt: number) => 1 - Math.abs(noise(wx, wz, scale, salt) * 2 - 1);
+    // Broad folds provide unequal massifs and deep saddle links. Smaller ridge fields add
+    // knife-edge breaks at the crown only, not regularly repeating side-by-side fins.
+    const broad = ridged(59, 23), fold = ridged(27, 29), crag = ridged(9, 37), fine = ridged(4.5, 41);
+    const uplift = cover * (28 + 25 * broad + 14 * fold);
+    const crown = smooth((uplift - 22) / 28);
+    const cuts = Math.pow(1 - ridged(21, 43), 3) * 11 * cover;
+    const jag = crown * (11 * Math.pow(crag, 3) + 5 * Math.pow(fine, 4));
+    const foothills = 4 + 6 * noise(x, z, 35, 47) + 3 * noise(x, z, 16, 53);
+    // Keep the complete landform: an irregular, smooth outer apron falls to the bench
+    // ground beyond the ends and flanks, well outside both warped spine envelopes.
+    const margin = Math.hypot(x / 160, (z + 5) / 104);
+    const apron = smooth((1 - margin) / .26);
+    return Math.max(0, Math.round((foothills + uplift - cuts + jag) * apron));
+  };
 }
 
 /** A non-authoritative sample range to judge bands, snowline, slopes and a talus apron. */
 export function createGeologyReview(seedKey: string): ArtisanKit {
-  const b = new KitBuilder(), phase = seedPhase(seedKey), sampler = createGeologySampler(seedKey), step = 2;
-  for (let z = -44; z < 36; z += step) for (let x = -74; x < 74; x += step) {
-    const top = mountainHeight(x, z, phase);
-    const slope = Math.max(Math.abs(mountainHeight(x + step, z, phase) - top),
-      Math.abs(mountainHeight(x, z + step, phase) - top)) / step;
-    const column = sampler.column(x, z), talus = top < 22 && slope > 0.35;
-    let start = 0;
-    let prev = column.material(0, top, slope, 43, 0.4, talus);
+  const b = new KitBuilder(), height = createRangeHeightField(seedKey), sampler = createGeologySampler(seedKey), step = 2;
+  let summitX = 0, summitZ = 0, summitY = 0;
+  for (let z = -110; z <= 110; z += step) for (let x = -166; x <= 166; x += step) {
+    const top = height(x, z);
+    if (top === 0) continue;
+    if (top > summitY) { summitX = x; summitY = top; summitZ = z; }
+    const slope = Math.max(Math.abs(height(x + step, z) - top),
+      Math.abs(height(x, z + step) - top)) / step;
+    const column = sampler.column(x, z), talus = top < 27 && slope > 0.7;
+    const colourAt = (y: number): string => {
+      // Living foothills and a thin earth lip take the rectangular quarry edge off the range.
+      if (top < 20 && slope < 1.4 && y >= top - 1) return y === top ? '#788d59' : '#796c55';
+      return GEOLOGY_COLOURS[column.material(y, top, slope, 32, 0.3, talus)]!;
+    };
+    let start = 0, prev = colourAt(0);
     for (let y = 1; y <= top + 1; y++) {
-      const material = y <= top ? column.material(y, top, slope, 43, 0.4, talus) : -1;
-      if (material === prev) continue;
-      b.box(x, start, z, step, y - start, step, GEOLOGY_COLOURS[prev]!);
-      start = y; prev = material;
+      const colour = y <= top ? colourAt(y) : '';
+      if (colour === prev) continue;
+      b.box(x, start, z, step, y - start, step, prev);
+      start = y; prev = colour;
     }
   }
-  return b.finish('geology-range', { summit: [0, 65, -8], foot: [0, 6, 32] });
+  return b.finish('geology-range', { summit: [summitX, summitY, summitZ], foot: [0, 6, 43] });
 }
 
 export interface WaterReach { readonly z: number; readonly x: number; readonly y: number; readonly halfWidth: number }
 /** Contiguous, descending stream profile, widening toward the sea; units are half-metre cells. */
 export function watercourseProfile(): readonly WaterReach[] {
   const reaches: WaterReach[] = [];
-  for (let z = 0; z <= 88; z++) reaches.push({ z, x: Math.round(4 * Math.sin(z / 23)), y: z < 25 ? 13 : z < 56 ? 11 : 9, halfWidth: Math.floor(4 + z / 11) });
+  for (let z = 0; z <= 88; z++) reaches.push({
+    z, x: Math.round(13 * Math.sin(z / 19) + 4 * Math.sin(z / 37)),
+    y: z < 25 ? 13 : z < 56 ? 11 : 9,
+    halfWidth: Math.floor(4 + z / 11),
+  });
   return reaches;
 }
 
@@ -132,50 +201,77 @@ function disc(b: KitBuilder, cx: number, y: number, cz: number, rx: number, rz: 
  * sea stacks and foam. Surfaces are static; hydrology and animation remain builder-owned.
  */
 export function createWatercourse(seedKey: string): ArtisanKit {
-  const b = new KitBuilder(), rng = random(seedKey + ':coast');
-  const water = '#66a7b0', deep = '#4b8a9b', light = '#a9d5d2', rock = '#8f8987';
-  // Solid valley bed under the complete scene, plateau and cliff from which the fall spills.
-  b.box(-58, 0, -58, 116, 7, 160, CLAY.earth);
-  b.box(-58, 7, -58, 116, 2, 160, CLAY.grass);
-  b.box(-58, 9, -58, 116, 24, 48, rock);
-  for (let y = 10; y < 33; y += 5) b.box(-58, y, -10, 116, 2, 1, GEOLOGY_COLOURS[14 + (Math.floor(y / 5) % 16)]!);
-  b.box(-58, 33, -58, 116, 2, 48, CLAY.grass);
-  // Upper source meets the fall exactly at z=-10; the drop terminates in its pool.
-  disc(b, 0, 35, -39, 15, 17, water);
-  b.box(-4, 35, -21, 9, 1, 12, water);
-  b.box(-4, 13, -10, 9, 23, 1, water);
-  b.box(-3, 14, -9, 2, 20, 1, light);
-  b.box(1, 17, -9, 1, 17, 1, '#86bdc3');
-  // Dark bed is below the water; layered pool and river meet the fall, then descend.
-  disc(b, 0, 11, 0, 15, 13, deep);
-  disc(b, 0, 12, 0, 14, 12, water);
-  for (const r of watercourseProfile()) {
-    b.box(r.x - r.halfWidth - 3, r.y - 3, r.z, r.halfWidth * 2 + 7, 1, 1, '#8e866e');
-    b.box(r.x - r.halfWidth, r.y - 2, r.z, r.halfWidth * 2 + 1, 2, 1, deep);
-    b.box(r.x - r.halfWidth, r.y, r.z, r.halfWidth * 2 + 1, 1, 1, water);
-    // A graded soft bank sits above the base without blocking the channel.
-    for (const side of [-1, 1] as const) {
-      const edge = r.x + side * (r.halfWidth + 1);
-      b.box(side < 0 ? edge - 3 : edge, r.y - 1, r.z, 4, 1, 1, CLAY.sand);
+  const b = new KitBuilder(), rng = random(seedKey + ':coast'), sampler = createGeologySampler(seedKey);
+  const water = '#66a7b0', deep = '#4b8a9b', light = '#a9d5d2';
+  const reaches = watercourseProfile();
+  // Build a shaped headland in two-cell columns. The fall is at its one deliberately low
+  // notch. Curved cliff edges and living foothills surround rather than frame the water.
+  for (let z = -58; z < 98; z += 2) for (let x = -68; x < 68; x += 2) {
+    const coastline = 82 - 8 * Math.sin(x / 18) - 4 * Math.sin(x / 9);
+    const coastWidth = 58 + 6 * Math.sin(z / 24);
+    if (Math.abs(x) > coastWidth || z > coastline) continue;
+    const edge = -10 + Math.min(1, Math.abs(x) / 9) * (7 * Math.sin(x / 18) + 5 * Math.sin(x / 10));
+    let top: number;
+    if (z < edge) {
+      // The mere has a flat rim; outside it, the crown rolls into irregular stone.
+      const nearMere = Math.abs(x) < 23 && z > -58 && z < -21;
+      top = nearMere ? 33 : 33 + Math.round(2 * Math.sin(x / 9 + z / 13) + 2 * Math.sin(z / 11));
+    } else {
+      const reach = reaches[Math.min(88, Math.max(0, z))]!;
+      const distance = Math.abs(x - reach.x) - reach.halfWidth;
+      top = (z < 0 ? 10 : reach.y - 2) + Math.round(Math.min(5, Math.max(0, distance) * 0.35));
+      if (z < 14 && Math.hypot(x, z) < 16) top = 10; // pool's carved basin
+    }
+    top = Math.max(3, top);
+    const column = sampler.column(x, z);
+    let start = 0;
+    let prior = GEOLOGY_COLOURS[column.band(0) + GEOLOGY.strata]!;
+    for (let y = 1; y <= top + 1; y++) {
+      const material = y > top ? '' : y === top ? (z > coastline - 8 ? CLAY.sand : CLAY.grass)
+        : GEOLOGY_COLOURS[column.band(y) + GEOLOGY.strata]!;
+      if (material === prior) continue;
+      b.box(x, start, z, 2, y - start, 2, prior);
+      start = y; prior = material;
     }
   }
-  // Sea top meets the mouth. Keeping it translucent is a renderer concern, not model occupancy.
-  b.box(-58, 9, 89, 116, 1, 13, '#679fab');
-  for (const [x, z, rx, rz] of [[0, -5, 12, 4], [-2, 90, 19, 3], [30, 96, 11, 2], [-37, 98, 8, 2]] as const) {
-    for (let i = -rx; i < rx; i += 4) {
-      const yy = z < 0 ? 14 : 10;
-      const zz = Math.round(z + rz * (1 - (i / rx) ** 2));
+  // Upper mere, its short stream, waterfall and receiving pool are one connected route.
+  disc(b, 0, 34, -39, 15, 17, water);
+  b.box(-4, 34, -21, 9, 1, 12, water);
+  b.box(-4, 12, -10, 9, 23, 1, water);
+  b.box(-3, 14, -9, 2, 20, 1, light);
+  b.box(1, 17, -9, 1, 17, 1, '#86bdc3');
+  disc(b, 0, 11, 0, 15, 13, deep);
+  disc(b, 0, 12, 0, 14, 12, water);
+  for (const r of reaches) {
+    b.box(r.x - r.halfWidth, r.y - 2, r.z, r.halfWidth * 2 + 1, 2, 1, deep);
+    b.box(r.x - r.halfWidth, r.y, r.z, r.halfWidth * 2 + 1, 1, 1, water);
+    // Unequal banks break into the countryside at different widths.
+    for (const side of [-1, 1] as const) {
+      const edge = r.x + side * (r.halfWidth + 1), width = 1 + Math.round(1.2 * (1 + Math.sin(r.z / 9 + side)));
+      b.box(side < 0 ? edge - width + 1 : edge, r.y - 1, r.z, width, 1, 1, CLAY.sand);
+    }
+  }
+  // Mouth broadens into sea; the coast line intersects it rather than forming a canal end.
+  b.box(-72, 9, 86, 144, 1, 18, '#679fab');
+  for (const [x, z, rx, rz] of [[0, -5, 12, 4], [-2, 90, 19, 3], [32, 96, 10, 2], [-37, 98, 8, 2]] as const) {
+    for (let i = -rx; i < rx; i += 5) {
+      const yy = z < 0 ? 14 : 10, zz = Math.round(z + rz * (1 - (i / rx) ** 2));
       b.box(x + i, yy, zz, 3, 1, 1, CLAY.foam);
     }
   }
-  // Two freestanding layered sea stacks; no emissive stones that could imply a citizen.
-  for (const [sx, sz, h] of [[-37, 93, 20], [38, 96, 14]] as const) {
-    for (let y = 0; y < h; y += 3) {
-      const r = Math.max(2, Math.round(5 * (1 - y / (h * 1.35))));
-      b.box(sx - r, 9 + y, sz - r, 2 * r + 1, Math.min(3, h - y), 2 * r + 1,
-        GEOLOGY_COLOURS[14 + (Math.floor(y / 5) + Math.floor(rng() * 3)) % 16]!);
+  // Weathered, asymmetrical stacks: uneven eroded cross-sections and narrow crowns.
+  for (const [sx, sz, h] of [[-48, 92, 21], [48, 95, 16]] as const) {
+    const phase = rng() * Math.PI * 2;
+    for (let y = 0; y < h; y++) {
+      const radius = 2.2 + (1 - y / h) * 3 + 0.6 * Math.sin(y / 3 + phase);
+      for (let dz = -6; dz <= 6; dz++) {
+        const half = Math.floor(Math.sqrt(Math.max(0, radius * radius - dz * dz)));
+        if (Math.abs(dz) > radius || half < 1) continue;
+        const lean = Math.round(y / h * 2 + Math.sin(dz / 3 + phase));
+        b.box(sx + lean - half, 9 + y, sz + dz, half * 2 + 1, 1, 1,
+          GEOLOGY_COLOURS[GEOLOGY.strata + Math.floor((y + 2 * Math.sin(dz / 5 + phase)) / 5 + 32) % 16]!);
+      }
     }
-    b.box(sx - 2, 9 + h, sz - 2, 5, 1, 5, '#718d5e');
   }
-  return b.finish('watercourse', { source: [0, 35, -39], mere: [0, 35, -39], falls: [0, 24, -10], pool: [0, 13, 0], mouth: [0, 9, 88], coast: [0, 10, 99] });
+  return b.finish('watercourse', { source: [0, 34, -39], mere: [0, 34, -39], falls: [0, 24, -10], pool: [0, 13, 0], mouth: [0, 9, 88], coast: [0, 10, 99] });
 }

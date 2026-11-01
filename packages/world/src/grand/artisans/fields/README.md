@@ -3,8 +3,8 @@
 `createFields(seedKey)` creates a 108 × 108 terrain-cell field vignette (54 × 54 metres),
 four crop parcels, a cross lane and low hedges with open gates. `fieldLayout(seedKey)`
 exposes half-open plots, crop kind, row direction and lane width for a land producer to
-fit the parcel grammar to *its own* dry and gently graded sites. `createFieldPlot(plot)`
-stamps one caller-supplied rectangle and does not cover or flatten land outside it. `createWindmill(seedKey)`
+fit the parcel grammar to *its own* dry and gently graded sites. `createFieldPlot(plot, seedKey?)`
+stamps one caller-supplied rectangle with deterministic planted-clump variation and does not cover or flatten land outside it. `createWindmill(seedKey)`
 returns the mill centered on its base with its front and sails facing +Z. Its hub is at
 `sailHub`, and its doorway at `door`. All coordinates use 0.5 m cells, +Y up.
 

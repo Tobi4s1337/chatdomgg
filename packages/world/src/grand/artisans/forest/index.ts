@@ -94,30 +94,37 @@ export function createTree(species: ForestSpecies, seedKey: string, scale = 1): 
   let top: number;
   if (species === 'pine') {
     top = 29 + Math.floor(rng() * 3);
-    // Tiered pointed profile: asymmetric shelves retain a recognisable conifer at distance.
+    // Irregular overlapping whorls keep a tapered, wind-grown profile.
     for (let i = 0; i < 6; i++) {
-      const y = 9 + i * 3.4, r = 6 - i * 0.8;
-      puff(lean * y / top, y, 0, r, 2.7, r * 0.86);
+      const y = 9 + i * 3.35 + (rng() - 0.5) * 0.8, r = (6 - i * 0.77) * (0.92 + rng() * 0.16);
+      const angle = twist + i * 2.2;
+      puff(lean * y / top + Math.cos(angle) * 0.6, y, Math.sin(angle) * 0.6, r, 2.9, r * (0.84 + rng() * 0.12));
     }
-    puff(lean, top - 3, 0, 1.6, 4, 1.5);
-    branch([0, 0, 0], [lean, top - 1, 0], 1);
+    puff(lean, top - 3, 0, 1.8, 4, 1.7);
+    // Stop the dark central wood inside the upper foliage; it cannot paint over the leader.
+    branch([0, 0, 0], [lean, top - 7, 0], 1);
   } else if (species === 'birch') {
     top = 26 + Math.floor(rng() * 2);
+    // Light, narrow boughs alternate along the stem, with gaps between leaf sprays.
     for (let i = 0; i < 5; i++) {
-      const angle = twist + i * Math.PI * 0.82, y = 16 + i * 2;
-      const x = lean * y / top + Math.cos(angle) * 2.4, z = Math.sin(angle) * 2.4;
-      puff(x, y, z, 3.1, 3.3, 2.8);
-      branch([0, y - 5, 0], [Math.round(x), y, Math.round(z)], 0);
+      const angle = twist + i * Math.PI * 0.88 + (rng() - 0.5) * 0.4, y = 15 + i * 2.2;
+      const distance = 2.2 + rng() * 1.2;
+      const x = lean * y / top + Math.cos(angle) * distance, z = Math.sin(angle) * distance;
+      puff(x, y, z, 2.4 + rng() * 0.6, 2.1 + rng() * 0.7, 2.1 + rng() * 0.6);
+      branch([Math.round(lean * (y - 5) / top), Math.round(y - 5), 0], [Math.round(x), Math.round(y), Math.round(z)], 0);
     }
-    branch([0, 0, 0], [lean, top - 2, 0], 1);
+    branch([0, 0, 0], [lean, top - 3, 0], 0);
   } else if (species === 'willow') {
     top = 20;
-    // Wide, low umbrella with separate hanging curtains, leaving trunk and riverbank readable.
-    puff(lean, 17, 0, 7.5, 3, 7);
-    for (let i = 0; i < 9; i++) {
-      const a = twist + i * Math.PI * 2 / 9, x = Math.cos(a) * 6.1 + lean, z = Math.sin(a) * 5.6;
-      puff(x, 12 + (i % 2), z, 2.3, 4.5, 2);
-      branch([0, 10, 0], [Math.round(x), 16, Math.round(z)]);
+    // Leaf curtains are separated, tapered, and vary in length; one reaches low toward the bank.
+    puff(lean, 17, 0, 6.5, 2.5, 6);
+    for (let i = 0; i < 8; i++) {
+      const a = twist + i * Math.PI * 2 / 8 + (rng() - 0.5) * 0.25;
+      const x = Math.cos(a) * 5.6 + lean, z = Math.sin(a) * 5.2;
+      const bottom = i === 0 ? 3 : 5 + rng() * 5;
+      const topY = 16.5 - rng() * 0.7, centre = (bottom + topY) / 2;
+      puff(x, centre, z, 1.4 + rng() * 0.45, (topY - bottom) / 2, 1.35 + rng() * 0.4);
+      branch([0, 10, 0], [Math.round(x), 16, Math.round(z)], 0);
     }
     branch([0, 0, 0], [lean, 17, 0], 1);
   } else if (species === 'gold') {
@@ -143,23 +150,34 @@ export function createTree(species: ForestSpecies, seedKey: string, scale = 1): 
     }
     branch([0, 0, 0], [shoulder, 9, 0], 1);
     branch([shoulder, 9, 0], [lean, 19, 0], 1);
-  } else {
-    const isCherry = species === 'cherry', isTeal = species === 'teal';
-    top = isCherry ? 19 : 26;
-    const trunkTop = isCherry ? 13 : 19;
-    // Cherry has a low overlapping cloud; gold grows several higher, separated boughs.
-    // Teal retains its wide canopy and more continuous crown.
-    const ring = isCherry ? 5.2 : isTeal ? 5.8 : 7.4, lobeY = isCherry ? 14.2 : 20;
-    puff(lean, lobeY + 1, 0, isTeal ? 5 : isCherry ? 4.5 : 2.8, isCherry ? 3.5 : isTeal ? 4.5 : 3, isTeal ? 5 : isCherry ? 4.5 : 2.8);
-    for (let i = 0; i < 5; i++) {
-      const a = twist + i * Math.PI * 2 / 5, x = lean + Math.cos(a) * ring, z = Math.sin(a) * ring;
-      const y = lobeY + (isCherry || isTeal ? (rng() - 0.5) * 2 : [-1, 2, -2, 3, 0][i]!);
-      puff(x, y, z, isCherry ? 4.2 : isTeal ? 4.5 : 3.6, isCherry ? 2.8 : isTeal ? 3.5 : 2.8, isCherry ? 3.8 : isTeal ? 4 : 3.5);
-      branch([Math.round(lean / 2), trunkTop - 7, 0], [Math.round(x), Math.round(y - 1), Math.round(z)]);
+  } else if (species === 'cherry') {
+    top = 20;
+    // Overlapping low, wide flowering boughs, with visible scallops underneath.
+    const shoulder = Math.round(lean / 2);
+    puff(lean, 15.5, 0, 3.1, 2.5, 3.0);
+    for (let i = 0; i < 4; i++) {
+      const a = twist + i * Math.PI / 2 + (rng() - 0.5) * 0.35;
+      const r = 4.1 + rng() * 1.3, x = lean + Math.cos(a) * r, z = Math.sin(a) * r;
+      const y = 14 + rng() * 2;
+      puff(x, y, z, 3.7 + rng() * 0.5, 2.3 + rng() * 0.3, 3.2 + rng() * 0.5);
+      branch([shoulder, 8, 0], [Math.round(x), Math.round(y - 1), Math.round(z)], 0);
     }
-    // Two linked trunk sections soften its line and leave space under the crown.
-    branch([0, 0, 0], [Math.round(lean / 2), 9, 0], 1);
-    branch([Math.round(lean / 2), 9, 0], [lean, trunkTop, 0], 1);
+    branch([0, 0, 0], [shoulder, 8, 0], 1);
+    branch([shoulder, 8, 0], [lean, 14, 0], 1);
+  } else {
+    top = 26;
+    // A broad, asymmetric fantasy tree: two wing-like, tiered crowns with
+    // a low, visible saddle and a gently crooked dark trunk between them.
+    const shoulder = Math.round(lean / 2), axisX = Math.cos(twist), axisZ = Math.sin(twist);
+    for (let side = -1; side <= 1; side += 2) {
+      const distance = side < 0 ? 5.4 : 6.0, y = side < 0 ? 20 : 23;
+      const x = lean + side * axisX * distance, z = side * axisZ * distance;
+      puff(x, y, z, 5.1, 2.5, 4.2);
+      puff(x + side * axisX * 2, y + 0.3, z + side * axisZ * 2, 3, 1.8, 2.8);
+      branch([shoulder, 12, 0], [Math.round(x), y - 1, Math.round(z)], 1);
+    }
+    branch([0, 0, 0], [shoulder, 9, 0], 1);
+    branch([shoulder, 9, 0], [lean, 16, 0], 1);
   }
   // Four low buttresses reach from the soil into the trunk; no exposed underground plinth.
   const foot = species === 'pine' || species === 'birch' ? 2 : 3;

@@ -1,0 +1,28 @@
+{
+  "origin": "SIMULATED",
+  "width": 1440,
+  "height": 900,
+  "clip": false,
+  "offline": true,
+  "errors": [],
+  "clients": [],
+  "checks": [],
+  "output": "",
+  "ports": {
+    "realm": 5170
+  },
+  "fixture": {
+    "manifest": {
+      "version": 1,
+      "kingdomId": "999000001",
+      "origin": "simulated",
+      "layoutRevision": "settlement:2:43cffdb6",
+      "collisionRevision": 1,
+      "sceneHash": "bf050c54dd377102b4479536cd1acf4f1ebed0387e2eceee74b49f457eccb2f3"
+    },
+    "placements": 659,
+    "limitation": "SIMULATED test identities and memory-only authority. Full production founded collision, not a limited market floor. Visible terrain triangles may still differ from the physical support surface."
+  },
+  "stage": "compiling and opening browser page",
+  "failure": "Process exited 0 before capture completion"
+}

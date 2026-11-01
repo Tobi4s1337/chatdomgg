@@ -1,0 +1,16 @@
+SIMULATED town: preparing full collision before capture admission
+ℹ️  optional .env file not found: .env.development, .env
+SIMULATED town: compiled 659 native placements
+[capture] waiting for the shared host lock (lane)
+[capture] queued for a lane slot
+[capture] acquired the shared host lock
+file:///root/chatdomgg-harness/worktrees/walking-together/apps/web/src/walk/capture-town.mjs:37
+  throw new Error('No free safe town capture ports');
+        ^
+
+Error: No free safe town capture ports
+    at freePorts (file:///root/chatdomgg-harness/worktrees/walking-together/apps/web/src/walk/capture-town.mjs:37:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async file:///root/chatdomgg-harness/worktrees/walking-together/apps/web/src/walk/capture-town.mjs:64:32
+
+Node.js v22.23.4

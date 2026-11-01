@@ -19,10 +19,35 @@ describe('grand fields', () => {
       expect(plots.every(p => lx < p.x0 || lx >= p.x1 || lz < p.z0 || lz >= p.z1)).toBe(true);
     }
   });
+  it('keeps lanes and every hedge gate clear of planted geometry', () => {
+    for (const seed of ['tobi4s_', '63920635', '4363967', '154972160']) {
+      const { plots } = fieldLayout(seed), kit = createFields(seed);
+      const occupied = (x: number, y: number, z: number) => kit.boxes.some(box =>
+        x >= box.min[0] && x < box.min[0] + box.size[0] &&
+        y >= box.min[1] && y < box.min[1] + box.size[1] &&
+        z >= box.min[2] && z < box.min[2] + box.size[2]);
+      const xLane = plots[0]!.x1 + 2, zLane = plots[0]!.z1 + 2;
+      for (let v = 0; v < 108; v++) for (let y = 1; y <= 3; y++) {
+        expect(occupied(xLane, y, v)).toBe(false);
+        expect(occupied(v, y, zLane)).toBe(false);
+      }
+      for (const p of plots) {
+        const middle = Math.floor((p.x0 + p.x1) / 2);
+        for (let x = middle - 2; x < middle + 2; x++) for (let y = 1; y <= 3; y++) {
+          expect(occupied(x, y, p.z0)).toBe(false);
+        }
+      }
+      for (const box of kit.boxes.filter(b => ['#dfbf68', '#9c81b1'].includes(b.colour))) {
+        expect(Math.max(box.size[0], box.size[2])).toBeLessThanOrEqual(4);
+      }
+    }
+  });
   it('accepts individual fitted plots and rejects undersized or fractional bounds', () => {
     const plot = { x0: -20, z0: 12, x1: 10, z1: 40, crop: 'lavender', rows: 'x' } as const;
     const kit = createFieldPlot(plot);
     expect(kit.anchors.centre).toEqual([-5, 1, 26]);
+    expect(createFieldPlot(plot, 'seed-a')).toEqual(createFieldPlot(plot, 'seed-a'));
+    expect(createFieldPlot(plot, 'seed-a').boxes).not.toEqual(createFieldPlot(plot, 'seed-b').boxes);
     expect(kit.boxes.every(box => box.min[0] >= plot.x0 && box.min[2] >= plot.z0 && box.min[0] + box.size[0] <= plot.x1 && box.min[2] + box.size[2] <= plot.z1)).toBe(true);
     expect(() => createFieldPlot({ ...plot, x1: -15 })).toThrow(RangeError);
     expect(() => createFieldPlot({ ...plot, z0: 12.5 })).toThrow(RangeError);
@@ -63,5 +88,12 @@ describe('grand fields', () => {
     expect(parts.sails.boxes.length + parts.body.boxes.length).toBe(mill.boxes.length);
     expect(parts.body.boxes.some(box => box.colour === CLAY.sail)).toBe(false);
     expect(parts.sails.boxes.some(box => box.colour === CLAY.sail)).toBe(true);
+    // The rotating group's entire envelope clears the 5-cell-high stoop at any
+    // angle about its public hub; no need to trust a single still pose.
+    for (const box of parts.sails.boxes) for (const x of [box.min[0], box.min[0] + box.size[0]]) {
+      for (const y of [box.min[1], box.min[1] + box.size[1]]) {
+        expect(Math.hypot(x - hub[0], y - hub[1])).toBeLessThanOrEqual(hub[1] - 5);
+      }
+    }
   });
 });

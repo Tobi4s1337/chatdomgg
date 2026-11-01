@@ -1,6 +1,6 @@
 # Chatdom build map
 
-Owner: `chatdom-main` · Written 2026-10-30 · Status: workspace scaffolded; first identity/event and Atlas interchange v1 frozen; Atlas ready for handoff.
+Owner: Tobias after main-thread handoff · Updated 2026-11-01 · Build paused. Live realm, kingdom, Twitch and public-host foundations exist; the remaining integration is recorded below.
 
 This is the map of the whole build, not a release ladder. Dependencies determine what can run together; Tobias
 chooses the next work. A small working scene is a proving ground for the full system, never a smaller product.
@@ -328,57 +328,61 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Current handoff — 2026-11-01
+## 10. Takeover handoff — build paused, 2026-11-01
 
-**Outcome: one kingdom.** Adopt grand land under the actual signed-in, walking and stream kingdom;
-keep homes, streets, growth, Forge, live moments, Atlas entry, Chronicle and dock together.
-Forge/window wave ACCEPTED/CLOSED. Preserve dusk exposure, indigo fill/warm pools, castle/beacon,
-sparse grey-violet smoke, groves and AS10 citizens. One visible change and same-view pair per turn.
+**Tobias is taking over.** No agents, captures or new work should restart automatically. The whole
+vision remains the target; this pause does not mark it achieved. Forge/window-wave/look are
+ACCEPTED/CLOSED. Preserve them. Every lane head, next seam and preserved dirty checkout is in
+[the lane register](HANDOFF-LANES.md); ancestry counts include merges, not just new feature work.
 
-**Latest integration:** merged dock, Chronicle, Soul, growth-civic, growth-card, grand-artisans,
-kingdom-land and places-high checkpoints. Other reviewed content/Forge/card branches inspected this
-turn contain no new source; do not reopen accepted work. Parked campfire/tavern remain parked.
-Growth-card GCA01/02 authored part is merged; worker can retire after sync. Public component export:
-`@chatdom/ui/growth-card`. Trusted citizen/home and disclosed earned-record binding remains main's.
-Land's integration test now distinguishes generator grading from spec46's deliberate decorative
-cliffs, retaining sampled adopted lot/market/street support checks. No terrain runtime change.
+**On main:** real realm/session entry, live Herald/Twitch ingress, Forge and window/homecoming
+consumers; native earned Emberfold-v2 home publication; growth-civic content/adapter; crier/history/
+Chronicle consumers; dock command/status/witness and ordinary scene acts; walking labels/head anchors/
+gait audio; Soul producers; public gateway/front door/panel zip; GK10/GK11 standalone landscape and
+latest artisan checkpoints. These parts are merged, but the outstanding host joins below are real.
+Growth-civic authored lane is fully merged and can retire. Never retrofit a home at the same tier;
+custom geometry and fitted Forge parts survive the next earned publication.
 
-**Visitor entry checkpoint:** `/showcase` groups live Willowmere stream, walk and throne in one
-featured doorway, keeps simulations/recorded land explicit and exposes the sample card/passport
-without its development controls. Chronicle remains honestly unavailable. This source checkpoint
-is NOT visually accepted: the single main capture request waited20minutes behind a legacy exclusive
-guard and timed out before any browser launched. No valid new before/after exists. Next capture must
-compare the pre-doorway revision805d484 with this entry checkpoint; do not reuse the earlier identical
-showcase pair. Viewed producer stills: dock narrow layout, growth home/shelf, gold-tree study, town
-street and castle court. Grand tree's rectangular trunk base needs refinement (lane progress note).
+**Atlas fixes:** `e066d39` installs Pixi's CSP shim at the only public Pixi renderer entry, logs original
+mount failures, retries once on a fresh renderer and falls back to the selected still. Public CSP
+retains `script-src 'self' 'wasm-unsafe-eval'`. Emitted shader/uniform overrides were checked.
+`9ace174` implements Tobias's newest decision: Atlas names are always served, with `freshUntil` at least 24h after serving;
+withholding remains unchanged. The Surveyor is refreshed every few hours. This overrides the older
+one-day names-expiry rule. Walking's observed-head fixture and public-capture globals are fixed in wrap-up.
 
-**Grand adoption:** spec56, `createKingdomLandInterface` and immutable paged collision dispatcher
-are frozen. Missing physical pages are solid; far visual land is not collision authority. Keep the
-existing Three scene/camera/post/light/lifecycle; host one abortable terrain-only owner, pin exact
-near floors/paving, inverse-transform land-local shader coordinates and key by content hashes.
-No moved doors/plots/Forge/walkers or duplicated town. Producer needs and integration sites remain
-in `work/reviews/grand-adoption.md` and grand lane progress. Kits are merged; GK10/GK11 pipeline
-WIP is preserved, not production-adopted. V2 town capacity/route caveats and court collision metadata
-still prohibit blindly replacing installed worlds. Real-GPU grand scale/performance remains unproved.
+**Grand adoption is NOT on main.** Complete candidate: local branch `wip/grand-land-adoption`,
+commit `5dcc56d`, clean worktree listed by `git worktree list`. It hosts terrain in the existing
+scene/renderer/RAF, preserves exact native floor and placements, and adds native raster water.
+Actual 1080p stream stayed at “Raising the wider kingdom” for 300s. No fix is proven. Before/failure
+frames and limits are in that branch's `work/evidence/grand-adoption-wip/README.md`. The CPU diagnostic
+used the actual plan but a different kingdom identity; its 85s result is not an identical reproduction.
+The named main stash is retained as a backup. Other people's older stashes and lane edits are untouched.
 
-**Growth and memory:** spec50/shared growth/migration0009 remain authoritative. Eligibility is not
-a geometry receipt; only committed home-grown facts celebrate. Deed-locked native refits preserve
-custom homes and fitted Forge parts. Growth lane's second-storey cottage/roofline/panes/garden WIP
-still needs native version-aware publication. Civic adapter/content is merged but requires actual
-cleared place anchors and existing renderer/light/water factories. Crier GCR01/02 and history GH01/02
-are merged; production send/ack, earned shelf binding and a watched engine Chronicle run remain.
-Chronicle needs durable ordered historical geometry and isolated live/replay scene restoration,
-including shadow/light blockers; do not advertise a bench as that public storybook.
+**The remaining main-owned seams:**
+- **Soul:** bind `SoulSceneBinding` to actual supported civic routes/lamps/bakery/quay/forge, a continuous
+  authoritative kingdom clock coordinated with the director, and witnessed arrivals. The proposal is
+  `work/lanes/soul/main-soul.patch`; native weather shader and actual walk/stream remain unproved.
+- **Dock:** verified moderators may observe, only the broadcaster acts; directed undo and honest
+  attendance wording remain. Incoming raid guests/banners and lasting fire gathering need real scene
+  presentation and receipt proof. See `work/lanes/dock/needs.md`; never offer arbitrary dragon spawning.
+- **Walking:** fixture correction is applied/tested. Approved saved looks/earned tools, authenticated
+  gestures, owned-door spawn, matching render/physical terrain, deterministic soft-push and guest speech
+  remain in `work/lanes/walking-together/needs.md`. The optional ports are not authority integration.
+- **Growth/memory:** cleared civic anchors and production renderer/light/water attachment; trusted earned
+  shelf/crier send-and-ack; public Chronicle history plus isolated replay/restoration. Public Chronicle
+  remains unavailable; its SIMULATED bench is not the historical live kingdom. Cottage-v2 new still failed.
 
-**Dock and Soul:** durable dock command/status/SSE/private draw witness and normal scene acts are in.
-Anonymous OBS displays but cannot confirm commands. Remaining: verified moderator observation,
-directed undo, actual raid-welcome procession and lasting fire gathering, each watched. Soul's
-keeper/weather/audio consumer is merged; production topology and witnessed arrival binding remain.
-Walking appearance/gesture authority seam remains main-owned. Do not invent residents to fill streets.
+**What I would pick up first:** confirm Atlas on the real GPU, then reproduce the grand load stall using
+numeric kingdomId 129634568 and expose loading progress before the final scene owner is published.
+Distinguish worker queues, staged installation, shadows and rendering; do not bypass exact floor/readiness
+or substitute a backdrop. Keep the current live kingdom until the joined stream actually opens.
 
-**Checks/live:** typecheck, scoped lint,159 focused tests across merged consumers/content and the
-aligned generator; frozen install and web build checked separately. No full-suite/GPU claim.
-Capture queue has one reserved main place and two FIFO lane places with UUID lifetime leases;
-legacy exclusive guards still exclude all three. Managed5190 web/5196 API/5197 realm/5195 Forge/5194
-Herald. Logs ONLY `../conductor/state/services.log`. Internal realm service secret is configured in
-ignored root environment. Preserve lane WIP/stashes; no duplicate writer or waiting live observer.
+**Operations/evidence:** managed 5190 web, 5196 API, 5197 realm, 5195 Forge, 5194 Herald left running;
+logs ONLY `../conductor/state/services.log`. Same-epoch opening renewal is on main; managed cold opening
+succeeded after restart. All main-owned captures/diagnostics/temporary servers ended; test session revoked.
+`pnpm public:build`, `pnpm public:start`, `pnpm panel:zip`; see `deploy/public/README.md` and
+`EXTENSION-STEPS.md`. No deploy, DNS/Twitch configuration or Extension registration performed. Complete
+public build is required after a web-only build to restore the front door. Final check results and
+limitations: `work/evidence/one-kingdom/README.md`. Final typecheck, full lint, 193 Surveyor tests,
+38 focused integration tests, the workspace build and complete public build/panel zip passed. No full-suite screenshot matrix or GPU
+performance claim.

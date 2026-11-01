@@ -1,47 +1,91 @@
-import { acquireCaptureLock } from '../../../packages/testing/capture-lock.mjs';
+/** Parent-owned resumable art reviews: one still per canonical capture lease. */
+import { acquireArtisanCapture } from './capture-lease.mjs';
 import { chromium } from '@playwright/test';
-import { spawn } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
-const kits = (process.env.ARTISAN_KITS ?? 'tree,forest,geology,water,windmill,fields,ship,lighthouse,harbour,citadel,walls').split(',');
-const views = (process.env.ARTISAN_VIEWS ?? 'hero').split(',');
-const channels = (process.env.ARTISAN_CHANNELS ?? 'tobi4s_').split(',');
-const lods = (process.env.ARTISAN_LODS ?? '0').split(',');
-const sizes = (process.env.ARTISAN_SIZES ?? '1440x900').split(',');
-const speciesList = (process.env.ARTISAN_SPECIES ?? 'gold').split(',');
-const directory = 'shots/grand-artisans'; await mkdir(directory, { recursive: true });
-const stats = [];
-for (const kit of kits) for (const channel of channels) for (const view of views) for (const lod of lods) for (const size of sizes) for (const species of (['forest','tree'].includes(kit) ? speciesList : ['gold'])) {
-  const release = await acquireCaptureLock(); let browser, server;
-  try {
-    server = spawn('pnpm', ['--filter', '@chatdom/web', 'exec', 'vite', '--port', '5180', '--strictPort'], { stdio: ['ignore','pipe','pipe'], detached: true });
-    let serverLog = ''; server.stderr.on('data', b => { serverLog += b; });
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Vite startup timeout '+serverLog)), 20000);
-      server.stdout.on('data', b => { if (b.toString().includes('Local:')) { clearTimeout(timer); resolve(); } });
-      server.once('exit', code => { clearTimeout(timer); reject(new Error(`Vite exited ${code}: ${serverLog}`)); });
-    });
-    browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--no-sandbox'] });
-    const [width,height] = size.split('x').map(Number);
-    const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
-    const errors = []; page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`http://127.0.0.1:5180/src/grand/artisans/review.html?kit=${kit}&channel=${channel}&species=${species}&view=${view}&lod=${lod}&hour=${view==='dusk'?19:17}`, { waitUntil:'networkidle' });
-    await page.waitForFunction(() => window.__chatdomReady === true, undefined, { timeout: 90000 });
-    if (errors.length) throw new Error(errors.join('\n'));
-    const path = `${directory}/${kit}-${channel}-${['forest','tree'].includes(kit)?species+'-':''}${view}-lod${lod}@${size}.png`;
-    await page.screenshot({ path });
-    const result = await page.evaluate(() => window.__artisanReview.stats);
-    stats.push({path,...result}); console.log(JSON.stringify({path,...result}));
-    if (process.env.ARTISAN_ORBIT === '1') {
-      // A short moving camera review through near and far distances; samples are kept for contact review.
-      for (let frame = 0; frame < 12; frame++) {
-        await page.evaluate(({frame}) => window.__artisanReview.setOrbit(frame*Math.PI*2/12, .8+frame/12*.7), {frame});
-        await page.screenshot({path:`${directory}/${kit}-${channel}-orbit-${String(frame).padStart(2,'0')}.png`});
+import { startCaptureServer } from './capture-server.mjs';
+import { canResume, readCaptureRecords, publishCaptureRecord } from './capture-records.mjs';
+import { appendFile, mkdir, readFile, readdir, rename } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+const list = (key, fallback) => (process.env[key] ?? fallback).split(',');
+const directory = process.env.ARTISAN_OUTPUT ?? 'shots/grand-artisans';
+await mkdir(directory, { recursive: true });
+const tasks = [];
+if (process.env.ARTISAN_TASKS) tasks.push(...JSON.parse(await readFile(process.env.ARTISAN_TASKS, 'utf8')));
+else for (const kit of list('ARTISAN_KITS','tree,forest,geology,water,windmill,fields,ship,lighthouse,harbour,citadel,walls'))
+  for (const channel of list('ARTISAN_CHANNELS','tobi4s_')) for (const view of list('ARTISAN_VIEWS','hero'))
+  for (const lod of list('ARTISAN_LODS','0')) for (const size of list('ARTISAN_SIZES','1440x900'))
+  for (const species of (['forest','tree'].includes(kit) ? list('ARTISAN_SPECIES','gold') : ['gold']))
+  for (const shadows of list('ARTISAN_SHADOWS','on')) {
+    tasks.push({kit,channel,view,lod,size,species,shadows});
+    if (process.env.ARTISAN_ORBIT === '1') for (let orbit = 0; orbit < 12; orbit++) tasks.push({kit,channel,view,lod,size,species,shadows,orbit});
+  }
+// Source bytes identify each still, including dirty source, so a resumed queue cannot
+// silently reuse a picture from another model. There is no PID or timeout liveness guess.
+async function fingerprint(cwd, kit) {
+  const hash = createHash('sha256');
+  async function visit(relative) {
+    const path = resolve(cwd, relative);
+    for (const item of (await readdir(path, {withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name))) {
+      const child = `${relative}/${item.name}`;
+      if (item.isDirectory()) await visit(child);
+      else if (item.isFile() && /\.(?:ts|tsx|html|css)$/.test(item.name) && !item.name.includes('.test.')) {
+        hash.update(child); hash.update(await readFile(resolve(cwd,child)));
       }
     }
+  }
+  const folder = ({tree:'forest',forest:'forest',water:'geology',geology:'geology',windmill:'fields',fields:'fields',ship:'harbour',lighthouse:'harbour',harbour:'harbour',quay:'harbour',pier:'harbour',landing:'harbour',citadel:'citadel',walls:'citadel'})[kit];
+  await visit(`packages/world/src/grand/artisans${folder?'/'+folder:''}`);
+  hash.update(await readFile(resolve(cwd,'packages/world/src/grand/artisans/kit.ts')));
+  await visit('apps/web/src/grand/artisans');
+  if (kit === 'composition') await visit('packages/content/src');
+  for (const relative of ['pnpm-lock.yaml','package.json','apps/web/package.json','apps/web/vite.config.ts']) {
+    hash.update(relative);
+    try { hash.update(await readFile(resolve(cwd,relative))); }
+    catch(error) { if(error.code !== 'ENOENT') throw error; hash.update('absent'); }
+  }
+  return hash.digest('hex');
+}
+const log = `${directory}/capture-log.jsonl`;
+const previous=await readCaptureRecords(directory);
+for (const input of tasks) {
+  const task = {channel:'tobi4s_',view:'hero',lod:'0',size:'1440x900',species:'gold',shadows:'on',...input};
+  const {kit,channel,view,lod,size,species,shadows,orbit} = task;
+  const cwd = resolve(task.cwd ?? process.env.ARTISAN_REVIEW_CWD ?? '.');
+  const key = JSON.stringify({...task,cwd});
+  const sourceHash = await fingerprint(cwd,kit);
+  const basename = `${directory}/${kit}-${channel}-${['forest','tree'].includes(kit)?species+'-':''}${view}-lod${lod}${shadows==='off'?'-shadow-off':''}${orbit===undefined?'':`-orbit-${String(orbit).padStart(2,'0')}`}@${size}.png`;
+  const prior=previous.findLast(record=>record.key===key && record.sourceHash===sourceHash);
+  const imageHash=prior && await readFile(prior.path).then(bytes=>createHash('sha256').update(bytes).digest('hex'),error=>{if(error.code !== 'ENOENT') throw error;return undefined;});
+  if(process.env.ARTISAN_RESUME==='1' && prior && canResume(previous,{path:prior.path,key,sourceHash,imageHash})) {
+    console.log(`[capture] resume: ${prior.path}`); continue;
+  }
+  console.log(`[capture] queued still: ${basename}`);
+  const release = await acquireArtisanCapture(); let browser, server;
+  try {
+    // Source can change while a ticket waits. Identify what the browser actually reads.
+    const capturedSourceHash = await fingerprint(cwd,kit);
+    server = await startCaptureServer(cwd);
+    browser = await chromium.launch({channel:'chrome',headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--no-sandbox']});
+    const [width,height] = size.split('x').map(Number);
+    const page = await browser.newPage({viewport:{width,height},deviceScaleFactor:1});
+    const errors=[]; page.on('pageerror',error=>errors.push(error.message));
+    const params = new URLSearchParams({kit,channel,species,view,lod:String(lod),shadows,hour:view==='dusk'?'19':'17'});
+    await page.goto(`http://127.0.0.1:${server.port}/src/grand/artisans/review.html?${params}`,{waitUntil:'networkidle'});
+    await page.waitForFunction(()=>window.__chatdomReady===true,undefined,{timeout:90000});
+    if (orbit !== undefined) await page.evaluate(({frame})=>window.__artisanReview.setOrbit(frame*Math.PI*2/12,.8+frame/12*.7),{frame:orbit});
+    if(errors.length) throw new Error(errors.join('\n'));
+    const identity=createHash('sha256').update(key).digest('hex').slice(0,10);
+    const path=basename.replace(/\.png$/,`-${identity}-${capturedSourceHash.slice(0,12)}-${randomUUID().slice(0,8)}.png`);
+    const temporary=path.replace(/\.png$/,'.pending.png');
+    const result=await page.evaluate(()=>window.__artisanReview.stats);
+    await page.screenshot({path:temporary});
+    if(await fingerprint(cwd,kit)!==capturedSourceHash) throw new Error('Review source changed during capture; pending still not published');
+    await rename(temporary,path);
+    const imageHash=createHash('sha256').update(await readFile(path)).digest('hex');
+    const record={path,key,sourceHash:capturedSourceHash,imageHash,...result,capturedAt:new Date().toISOString()};
+    await publishCaptureRecord(record);
+    await appendFile(log,JSON.stringify(record)+'\n'); previous.push(record); console.log(JSON.stringify(record));
   } finally {
-    await browser?.close();
-    if (server) { process.kill(-server.pid,'SIGTERM'); await new Promise(resolve => server.once('close',resolve)); }
-    await release();
+    try { await browser?.close(); } finally { try { await server?.stop(); } finally { await release(); } }
   }
 }
-await writeFile(`${directory}/stats-${Date.now()}.json`, JSON.stringify(stats,null,2));

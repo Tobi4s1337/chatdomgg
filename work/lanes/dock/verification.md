@@ -1,5 +1,94 @@
 # DK10 checkpoint verification
 
+## Current goal status — blocked after audit 3
+
+The two preceding goal turns were no progress, not verified waits. A third fresh audit
+finds main still at `76ed4a5`, zero commits in `HEAD..main`, and no change in the excluded
+realm/scene/public-script files since that main commit. Realm status still admits only
+the kingdom's broadcaster identity; the scene presenter has no undo act branch. The dock
+checkpoint remains unmerged, required stream clips are absent, and DK10 is still unchecked.
+
+The same main-owned integration/authority/presentation condition has now persisted for
+three consecutive goal turns after the actual checkpoint progress. No later task exists.
+No capture, browser, service or verification job remains live. Under the user's checkpoint
+scope there is no remaining independent work that can supply these missing behaviors.
+The goal is blocked pending main's corrections/integration, not complete or paused. Resume
+with DK10 after that external change, using the existing completion matrix and `needs.md`.
+Do not replace real stream proof with fixture receipts or write LANE COMPLETE.
+
+The audit records below are historical; their earlier active statuses are superseded here.
+
+## Checkpoint revalidation — 2026-11-01
+
+The preceding goal turn made progress: merge `286df74`, final checks and checkpoint
+`f9765e6`. This is the first subsequent unchanged-blocker audit, not another feature task.
+`main` remains `76ed4a5`; `HEAD..main` contains zero commits, and `f9765e6` is not an
+ancestor of main. The worktree was clean before this audit.
+
+`pnpm exec eslint scripts/public/look.mjs` terminated with exit 1 and reproduced the two
+recorded undefined globals. Source inspection confirms realm status still requires the
+kingdom's broadcaster identity; the renderer's `begin()` rejects undo through its default
+branch. No watched action clips exist under this lane's evidence directory. The recorded
+end state is therefore incomplete, even though the dock's own checks passed.
+
+No capture or service was started, and no passing checks were repeated. The lint process
+is terminal. Main owns the missing authority/presentation behavior and integration of the
+checkpoint. Stay within the user's checkpoint scope; keep DK10 unticked and the goal active
+pending an external change. This is not a verified wait on a running job.
+
+## Current checkpoint — 2026-11-01
+
+Second unchanged-blocker audit: the previous audit was no progress, not a verified wait.
+Main remains `76ed4a5`, with zero new commits to merge. Direct inspection again finds the
+same broadcaster-only status guard, no undo branch in the scene presenter, and the two
+unchanged public-script lint references. No job is running and no new scope or capture
+was started. There is no later PRD task. This is audit 2; the goal remains active pending
+the main-owned corrections and integration, with DK10 unchecked.
+
+Dock UI/API implementation and nine individually captured, inspected SIMULATED UI stills
+are committed. See `visual-review.md` for exact paths and `completion.md` for the remaining
+end-state evidence. Every capture held the shared lock for one still and released it.
+No capture, browser, service or backend diagnostic owned by this lane remains running.
+No new sub-scope is being started for this checkpoint. DK10 remains unchecked.
+
+On merged source `3e42d07`, whole-workspace typecheck, lint and sequential workspace build
+passed. The focused dock/API/shared check passed all 29 tests; two opt-in isolated-Postgres
+realm dock tests also passed earlier. These establish boundary behavior, not stream pixels.
+The broad `pnpm test` run reported twelve failed cases in eight files outside dock. It was
+deliberately interrupted with exit 130 after those failures to close the requested
+checkpoint and sync main; it did not finish or produce a full suite summary. The failures
+include assertion mismatches and timeouts, listed in `needs.md`. This is not a passed or
+complete workspace test run. Global `pnpm verify` was not run because its capture phase
+owns reserved services.
+
+Final sync merged main `76ed4a5` into lane merge `286df74` without conflicts. The broad
+test observations above apply to pre-sync `3e42d07`, not a complete test of the new source.
+Fresh whole-workspace typecheck, lint and sequential build plus the 29 focused dock tests
+ran on `286df74`. All owned verification processes are now terminal:
+
+| Check | Result |
+| --- | --- |
+| `pnpm typecheck` | Passed, exit 0 |
+| `pnpm -r --workspace-concurrency=1 --if-present build` | Passed, exit 0; existing chunk-size/dynamic-import warnings |
+| `pnpm exec vitest run apps/api/src/dock apps/dock/src/recovery.test.ts packages/shared/src/realm/dock.test.ts` | Passed, 29 tests across six files |
+| `pnpm exec eslint apps/dock apps/api/src/dock` | Passed, exit 0 |
+| `pnpm lint` | Failed, exit 1: main-owned `scripts/public/look.mjs` has undefined `AbortSignal` at 28:48 and `clearTimeout` at 56:13 |
+| `git diff --check` | Passed |
+
+The checkpoint is buildable with green dock checks, not a green whole-workspace verify.
+No cross-scope edits or additional visual captures were made to close this checkpoint.
+
+Actual integrated stream capture failed before browser startup on town generation.
+Subsequent backend diagnosis found retained-writer lease loss. All owned temporary schemas
+and directories were cleaned up. No real sign-in browser flow, accepted scene action,
+watched clip or directed undo is proved. Main owns the required realm/scene corrections
+and integrates this local lane checkpoint; the lane neither pushes nor changes main.
+
+The sections below are chronological history, including dependencies and captures that
+have since changed. They are not the current queue or completion status.
+
+## Initial checkpoint
+
 2026-11-01. Scope: API boundary, new dock app, rehearsal tooling. DK10 is **not done**.
 
 Passed:
@@ -190,3 +279,46 @@ After its ready390 capture: inspect it, capture remaining UI states one at a tim
 the integration bench, then seed normalized simulated citizen/raid observations through
 real ingress and demonstrate each dock act beside the actual stream. Moderator authority,
 directed undo and attendance-label needs remain in `needs.md`. Task and goal stay active.
+
+## Production UI evidence and native service loader — 2026-11-01
+
+Nine production UI stills have been captured and individually looked at. The visual review
+lists their exact paths and limits. Captures assert no browser errors/overflow; ready
+retains keyboard focus through polling, uncertain reload sends no second POST, simulated
+undo restores the original gate and removes its receipt, and sign-out returns to sign-in.
+The original disabled opacity was too faint; corrected and recaptured the permission and
+uncertain states. Source CSS lint/build pass. After main's frozen undo schema adoption,
+29 focused tests and scoped TypeScript pass.
+
+The real-service scaffold's first attempt21613 failed during module loading, before any
+listener/browser. Import-only diagnosis reproduced Vite runner/CJS `exports is not defined`
+in bootstrap/evening's zod dependency. Building the combined factory entry with the actual
+realm SSR Vite config, then native-importing it, passes an import-only preflight without
+DB/listener/browser; its owned temp directory was removed. New service-loader and capture
+scripts pass syntax checks. Action drivers seed normalized SIMULATED observations through
+the actual authenticated evening service and require the real stream witness; those paths
+are not runtime-proven yet. No action receipt or stream pixel is claimed.
+
+The corrected one-still attempt60166 remains live and queued in `/root/dock_evidence`'s
+tool scope (fresh owner poll confirmed it). Its actual Node front binds exclusively to
+IPv6 `[::1]:5171`; the realm uses an owned Unix socket. IPv4 capture ports were occupied;
+no existing service was touched. Resume/poll the same agent-owned handle. Main has newer
+unrelated lane integrations; defer sync until this capture is terminal so its build inputs
+remain stable, then merge before the next rehearsal. The task stays open and active.
+
+## Synced rehearsal inputs — 2026-11-01
+
+Previous turn was progress: nine inspected UI stills, the disabled-contrast correction and
+native service-loader changes were committed. This continuation synced main through
+`5174156` in merge94a41f5 after an owner poll confirmed60166 had not begun startup. The
+new land/place integrations are available to its fresh build. All29 focused dock tests,
+scoped TypeScript and a fresh native SSR import preflight (seven actual factory exports,
+no DB/listener/browser) pass after the merge; the preflight's owned temp directory was
+removed. Do not repeat these checks without a new change/failure.
+
+The evidence agent then polled the same60166 for45seconds and confirmed it is still live
+and queued, with no admission/startup output. Keep that handle. No service, browser or
+stream result is claimed. Next action remains its actual initial stream+dock still; debug
+real runtime failures, inspect the result, then capture actual presses and clips one at a
+time. Main-only moderator/undo/attendance/fidelity needs remain in needs.md, not replaced
+by fixture claims. DK10 and the goal stay active.

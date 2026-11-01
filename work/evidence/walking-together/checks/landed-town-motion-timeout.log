@@ -1,0 +1,22 @@
+SIMULATED town: preparing full collision before capture admission
+ℹ️  optional .env file not found: .env.development, .env
+SIMULATED town: compiled 659 native placements
+[capture] waiting for the shared host lock (lane)
+[capture] queued for a lane slot
+[capture] acquired the shared host lock
+SIMULATED town: owned memory realm listening on 5171
+SIMULATED town: launching Chrome
+SIMULATED town: building offline page
+SIMULATED town: creating browser page
+SIMULATED town: opening Kingdom
+SIMULATED town: waiting for Kingdom ready
+SIMULATED town: actual Kingdom rendered; connecting three SDK clients
+SIMULATED town: three distinct SDK clients attached
+SIMULATED town: lighting settled; exercising actual keyboard and peer inputs
+page.waitForFunction: Timeout 20000ms exceeded.
+    at /root/chatdomgg-harness/worktrees/walking-together/apps/web/src/walk/capture-town.mjs:168:20
+page.waitForFunction: Timeout 20000ms exceeded.
+    at /root/chatdomgg-harness/worktrees/walking-together/apps/web/src/walk/capture-town.mjs:168:20 {
+  log: [],
+  name: 'TimeoutError'
+}

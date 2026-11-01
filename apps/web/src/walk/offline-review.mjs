@@ -17,7 +17,8 @@ export async function createOfflineReview(context, entry, outputDirectory, { plu
       try {
         const url = new URL(route.request().url());
         if (allowedOrigins.includes(url.origin)) return await route.continue();
-        const file = resolve(directory, `.${decodeURIComponent(url.pathname)}`);
+        const pathname = url.pathname === '/' ? '/index.html' : url.pathname;
+        const file = resolve(directory, `.${decodeURIComponent(pathname)}`);
         const path = relative(directory, file);
         if (url.origin !== origin || path === '..' || path.startsWith(`..${sep}`)) throw new Error('Outside the compiled review');
         const body = await readFile(file);

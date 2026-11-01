@@ -1,0 +1,87 @@
+{
+  "origin": "SIMULATED",
+  "width": 1440,
+  "height": 900,
+  "clip": false,
+  "offline": true,
+  "errors": [],
+  "clients": [
+    {
+      "id": "24d2022a-9a68-46eb-abbd-4dbe1070c254",
+      "roomId": "k:999000001",
+      "name": "SIMULATED Juniper"
+    },
+    {
+      "id": "72ace6a3-7816-4bee-a94e-9af4d2f46d90",
+      "roomId": "k:999000001",
+      "name": "SIMULATED Wren"
+    },
+    {
+      "id": "da1ce30e-aad8-4cbe-ae76-43198abf632e",
+      "roomId": "k:999000001",
+      "name": "SIMULATED Rowan"
+    }
+  ],
+  "checks": [],
+  "output": "",
+  "fixture": {
+    "manifest": {
+      "version": 1,
+      "kingdomId": "999000001",
+      "origin": "simulated",
+      "layoutRevision": "settlement:2:43cffdb6",
+      "collisionRevision": 1,
+      "sceneHash": "bf050c54dd377102b4479536cd1acf4f1ebed0387e2eceee74b49f457eccb2f3"
+    },
+    "placements": 659,
+    "limitation": "SIMULATED test identities and memory-only authority. Full production founded collision, not a limited market floor. Visible terrain triangles may still differ from the physical support surface."
+  },
+  "ports": {
+    "realm": 5171
+  },
+  "stage": "exercising keyboard and peer inputs",
+  "pageState": {
+    "ready": true,
+    "stats": {
+      "citizens": 240,
+      "walking": 56,
+      "ready": true,
+      "lightingReady": true,
+      "workers": 8,
+      "homes": 240,
+      "activeWindows": 240,
+      "geometryBuilds": 197,
+      "fieldUploads": 9,
+      "drawCalls": 274,
+      "triangles": 1551301,
+      "time": 30,
+      "hour": 19.5,
+      "camera": "hero",
+      "fieldBytes": 12436632,
+      "source": "SIMULATED",
+      "fieldSettled": true,
+      "shadowUpdates": 1,
+      "shadowDrawCalls": 104,
+      "shadowTriangles": 4646944,
+      "shadowBytes": 21013696,
+      "shadowEnabled": true,
+      "windowFieldVisited": 15961,
+      "beaconFieldVisited": 449,
+      "post": {
+        "hdr": true,
+        "quality": "high",
+        "width": 1440,
+        "height": 900,
+        "textureBytes": 102812400,
+        "toneMapping": "aces",
+        "fog": "material",
+        "aoSamples": 12,
+        "bloom": true,
+        "focusDistance": 0,
+        "disposed": false
+      }
+    },
+    "text": "A home for your chat · Explore Chatdom\n\nWillowmere\n\nSIMULATED\n\n· FULL FOUNDED COLLISION\nSIMULATED Juniperyou\nSIMULATED Wren\nAbove the streets\nClick\nMouse look\nOr drag to look"
+  },
+  "failure": "page.waitForFunction: Timeout 20000ms exceeded."
+}

@@ -27,6 +27,24 @@ describe('forest grammar', () => {
     }
   });
 
+  it('connects every emitted tree voxel to its ground root through faces', () => {
+    const neighbours = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]] as const;
+    for (const species of FOREST_SPECIES) for (const seed of ['one', 'two', 'three']) {
+      const tree = createTree(species, seed), cells = new Set<string>();
+      for (const b of tree.boxes) for (let y = b.min[1]; y < b.min[1] + b.size[1]; y++) for (let z = b.min[2]; z < b.min[2] + b.size[2]; z++) for (let x = b.min[0]; x < b.min[0] + b.size[0]; x++) cells.add(`${x},${y},${z}`);
+      const root = '0,0,0', visited = new Set<string>([root]), queue = [root];
+      expect(cells.has(root)).toBe(true);
+      for (let i = 0; i < queue.length; i++) {
+        const [x,y,z] = queue[i]!.split(',').map(Number) as [number,number,number];
+        for (const [dx,dy,dz] of neighbours) {
+          const key = `${x+dx},${y+dy},${z+dz}`;
+          if (cells.has(key) && !visited.has(key)) { visited.add(key); queue.push(key); }
+        }
+      }
+      expect(visited.size, `${species} ${seed} disconnected cells`).toBe(cells.size);
+    }
+  });
+
   it('keeps crown envelopes clear of reserved clearings and respects terrain samples', () => {
     const options = { radius: 100, density: 35, clearings: [{ x: 0, z: 0, radius: 20 }], sample: (x: number, z: number) => x > 0 ? null : { groundY: 4, slope: 0.5, waterDistance: 6, reserved: z > 30 } };
     const grove = planForest('realm', 'willow', options);

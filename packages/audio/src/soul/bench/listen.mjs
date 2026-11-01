@@ -55,7 +55,9 @@ if (name === '--finalize') {
     const buildFingerprint = createHash('sha256').update(await readFile(join(outDir, 'index.html'))).digest('hex');
     log('build complete');
     if (name !== '--build-only') {
-      const signal = globalThis.AbortSignal.timeout(60000);
+      // A capture may wait behind other lanes; keep its FIFO place without
+      // starting a browser or server until the lease is actually granted.
+      const signal = globalThis.AbortSignal.timeout(10 * 60 * 1000);
       let release;
       try { release = await acquireCaptureLock({ signal }); }
       catch (error) {

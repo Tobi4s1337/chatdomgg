@@ -9,6 +9,12 @@ supplied and synced. Open main-owned needs are verified moderator observation, d
 undo, attendance wording, and the incoming banner/guest procession and fire gathering
 details below. Earlier request sections are retained as handoff history.
 
+**Checkpoint status:** capture60166 was admitted and exited before opening a browser.
+All owned jobs and temporary resources are cleaned up. The earlier compatibility-lock
+observations are historical; no dock job remains queued. Real stream proof is missing
+because town generation/founded preparation failed, as recorded below. No new sub-scope
+or further capture attempt is being started while landing this checkpoint.
+
 ## Decisions
 
 - All current dock presses are royal acts and therefore broadcaster-only (ChatDom principle 7;
@@ -268,3 +274,79 @@ appropriate. A warm prop without people coming to sit does not demonstrate the r
 
 These findings do not authorize this lane to change the kingdom scene or create substitute
 visuals. The actual stills/clips will decide the remaining visual polish.
+
+**needs: preserve presenter access under public viewing.** `RealmDockService.connect()`
+currently counts every public and authenticated feed against one global32-connection
+ceiling, and `kingdom/index.tsx` opens a feed for each live founded visitor. Public viewers
+can therefore fill the pool before the broadcaster's stream connects. Reserve presenter
+capacity independently of public observers (and bound public observers per kingdom/host
+as appropriate). Test that a full anonymous audience cannot prevent the independently
+authenticated broadcaster from receiving a draw capability. This is a main-owned service
+budget/authority change; the dock must not manufacture a receipt when admission fails.
+
+## Founded town generation found by the real backend rehearsal — 2026-11-01
+
+**needs: main-owned generator regression.** Actual `generateSettlementPlan` rejects these
+otherwise normal town inputs before the dock can start a founded stream:
+
+```ts
+{ seed: 'dock-simulated', tier: 'town', firstYear: 2019, year: 2026 }
+// Quarter 2023 has only 47/48 clear canonical frontages.
+{ seed: 'tobi4s_', tier: 'town', firstYear: 2019, year: 2026 }
+// Quarter 2024 has only 25/48 clear canonical frontages.
+```
+
+The second is the established fallback from `scripts/live/bench.mjs`. Preserve all intended
+homes and clear canonical frontages; do not shrink the town or delete its oldest quarters
+to make the generator pass. Add a deterministic main-owned regression for both complete
+inputs. This lane has not changed world generation.
+
+The backend-only preflight also uses the existing `simulated-founded-town`2022–2026 town
+fixture to continue checking adoption, founded preparation and ingress while main resolves
+the input failures. That fixture is a test dataset, not a replacement for the requested
+dock behavior or proof that the rejected full inputs work. Exact subsequent failures and
+actual-state assertions are recorded with the preflight evidence.
+
+**needs: retained writer survives founded preparation.** The backend-only diagnostic's
+final run passed generation/adoption/readiness, then failed opening the retained kingdom
+with: “The writer lease for kingdom990100001 is no longer held by this process.” The
+public result was503: “The kingdom could not be opened from storage. Nothing was changed.”
+Another run reached ingress; there is no complete passing backend or visual run. These
+are main-owned allocation/bootstrap/persistence paths. Do not fake a presenter receipt or
+reduce the settlement to hide the failure. The incomplete diagnostic script was removed;
+all isolated schemas/tempdirs and owned processes were cleaned up.
+
+## Checkpoint workspace verification — 2026-11-01
+
+Workspace typecheck, lint and the complete sequential workspace build pass on the synced
+checkpoint `3e42d07`. The broad `pnpm test` run reported twelve failed cases outside the dock
+and was deliberately interrupted with exit 130 to close the requested checkpoint and sync
+main. It has no complete suite summary. Fresh final checks after merge `286df74` are recorded
+in `verification.md`: workspace typecheck/build and focused dock tests/lint pass. Do not
+present the whole workspace as green while these remain:
+
+Post-sync workspace lint also fails in main-owned `scripts/public/look.mjs`: `AbortSignal`
+at 28:48 and `clearTimeout` at 56:13 are undefined under the repository's ESLint globals.
+Use explicit Node imports in that script or the appropriate main-owned lint configuration.
+Dock did not change that script or suppress the errors.
+
+- `apps/web/src/twitch-moments/moments.test.ts`: two5000ms timeouts, then sky/attention
+  assertion failures in the same fixture family.
+- `apps/web/src/kingdom/light-field.test.ts`: default5000ms timeout failures in heavy
+  authoritative geometry/budget cases.
+- `apps/herald/src/source/source.test.ts`: the public window-key assertion expects four
+  keys but the current valid frame also contains `look`. Update the test against the
+  frozen public shape while keeping its no-person-ID/privacy assertions intact.
+- `apps/web/src/kingdom/ground-dressing/ground-dressing.test.ts`: the slope-placement
+  assertion expects an empty transform and receives a populated transform.
+- `apps/herald/src/acceptance/acceptance.test.ts`: the overload case times out at 60000ms.
+- `apps/herald/src/auth/auth.test.ts`: the default/invalid port configuration case times
+  out at 5000ms.
+- `packages/audio/src/genesis-biomes/genesis-sound.test.ts`: the seeded continuous weather
+  case exceeds the default 5000ms timeout.
+- `apps/realm/src/founded/scene.test.ts`: the simulated town artifact decode case exceeds
+  the default 5000ms timeout.
+
+These files are main/other-lane owned. No cross-scope test, timeout, fixture or implementation
+was changed by dock to conceal a failure. The dock's focused29 tests have passed; its end
+state still lacks real stream evidence. This is a checkpoint handoff, with DK10 unchecked.
