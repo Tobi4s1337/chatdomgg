@@ -28,7 +28,7 @@ Dependent site/tree/light consumers wait for their actual producer, not another 
 
 ## Tasks
 
-- [ ] **PH01 — Put the court in front of our eyes.** Build the isolated labelled real-renderer bench/capture script
+- [x] **PH01 — Put the court in front of our eyes.** Build the isolated labelled real-renderer bench/capture script
   and first supported court pieces with actual material/AO. Capture court-arrive/court-town at 1440×900/390×844.
   No fake world imports. Build readiness, errors, serial lock and owned-server cleanup; document measured footprint
   and light-owned stair/banner-release `needs:` before writing the keep consumer.
@@ -68,3 +68,6 @@ Dependent site/tree/light consumers wait for their actual producer, not another 
 ## Backlog
 
 Worker appends discoveries here and never selects from this list without a new brief.
+
+- The keep's front terrace face sits at z −61.25 while the founded court stops at −60: a 1.25 m strip of keep footprint stays bare terrain beside the flags until the stair release (H-M2) decides who paves it.
+- Bound capture teardown (browser/Vite close) with a deadline so a failed page can never hold the host capture lock.
