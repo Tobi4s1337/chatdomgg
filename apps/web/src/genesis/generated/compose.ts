@@ -293,4 +293,3 @@ function squareFrame(plan: SettlementPlan, market: XZ, toward: CardinalTurn) {
   };
   return { width, depth, facing: ((toward + 2) % 4) as CardinalTurn, at };
 }
-

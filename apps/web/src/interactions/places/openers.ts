@@ -82,4 +82,3 @@ export function composeInteractionPlaces(openers: { readonly bench?: PlaceOpener
     home: ({ plotId, door }) => openers.home?.enter({ plotId, revision: door?.revision ?? null }) ?? null,
   };
 }
-

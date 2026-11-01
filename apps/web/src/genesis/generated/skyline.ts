@@ -118,4 +118,3 @@ function seaward(landscape: DeepReadonly<GenesisLandscape>, x: number, z: number
   }
   return false;
 }
-

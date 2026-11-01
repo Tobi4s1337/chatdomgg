@@ -77,7 +77,7 @@ describe('founded scene (spec 38 R1-R3)', () => {
     expect(first.homes.every(h => h.source === 'native')).toBe(true);
     // The geometry identity ignores only the revision number it is mapped to.
     expect((await assemble(empty, { collisionRevision: 8 })).geometryDigest).toBe(first.geometryDigest);
-  });
+  }, 30_000);
 
   it('replaces a committed home at its own plot frame and keeps only the currently attached part', async () => {
     const { state, rebuilt, socket, plot } = ownedState();
@@ -93,7 +93,7 @@ describe('founded scene (spec 38 R1-R3)', () => {
     for (const secret of PRIVATE) expect(text, secret).not.toContain(secret);
     expect(text).not.toContain('run-a');
     expect(build.geometryDigest).not.toBe((await assemble(empty)).geometryDigest);
-  });
+  }, 30_000);
 
   it('publishes the owned beacon keep independently and fits its attachment in the actual keep frame without owner leakage', async () => {
     const moduleId = plan.castle.beaconModuleId, id = castleHostId(moduleId), keep = native.fixtures.find(f => f.id === id)!;

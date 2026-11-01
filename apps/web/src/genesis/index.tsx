@@ -222,4 +222,3 @@ function fallbackCamera(plan: SettlementPlan, landscape: DeepReadonly<GenesisLan
   const direction = offset(-.46, .72);
   return { eye: [centreX + span * direction[0], plan.market.elevation + span * .43, centreZ + span * direction[1]], target: [centreX, plan.market.elevation + 6, centreZ], fov: 50 };
 }
-

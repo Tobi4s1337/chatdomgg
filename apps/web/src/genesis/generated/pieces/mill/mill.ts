@@ -284,7 +284,7 @@ export function createWindmill(options: PieceOptions): GeneratedPiece {
   const L = windmillLayout(options.seed);
   const r = stream(options.seed, 0x4d111);
   const salt = (options.seed ^ 0x51e7) | 0;
-  const [cx, cz] = L.centre;
+  const [cx] = L.centre;
   const g = new Grid(L.width, 168, L.depth);
   const lanterns: Vec3[] = [];
   const [gx0, gz0, gx1, gz1] = L.ground;
@@ -446,7 +446,7 @@ function tower(g: Grid, kit: PieceKit, L: WindmillLayout, salt: number, r: Strea
   }
   const capY = curb + 3;
   const roofBand = kit.style === 'hearth' ? MAT.brick : kit.style === 'tide' ? MAT.darkStone : MAT.moss;
-  let top = capY, shaftFrom = cz, pennantZ = cz;
+  let top: number, shaftFrom: number, pennantZ: number;
   if (L.cap === 'boat') {
     const a = rTop + 3, b = rTop + 7, czc = cz + 3, capH = Math.round(rTop * 0.85) + 3;
     for (let z = czc - b - 1; z <= czc + b + 1; z++) for (let x = cx - a - 1; x <= cx + a + 1; x++) {
@@ -616,7 +616,6 @@ function postMill(g: Grid, kit: PieceKit, L: WindmillLayout, salt: number, r: St
     const isBody = (m: number) => m === kit.wall || m === kit.trim;
     const mx = (hx0 + hx1) / 2;
     cut(g, kit, mx, (hz0 + hz1) / 2, { dir: 0, a0: -4, a1: 4, y0: 1, y1: 14, arch: false, kind: 'door' }, isBody, kit.wood, field, (hz1 - hz0) / 2 + 2);
-    door = { x: mx, z: hz1 + 1, y: 0, wall: hz1 };
     // Its door lamp under the eaves.
     door = { x: mx, z: hz1 + 1, y: 0, wall: hz1 };
   }
