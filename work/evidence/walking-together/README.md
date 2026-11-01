@@ -2,12 +2,25 @@
 
 WT10 is **open**. These are SIMULATED component reviews, not three authenticated people in the production town.
 
+## Second checkpoint
+
+Main synced cleanly at ac12111. Flat-ground planted legs, stop/seat/tiptoe transitions, current-update footfall events and fenced wardrobe saves are implemented. The exact main-owned consumer patch now also connects footsteps to gait touchdowns; it remains unapplied in this lane.
+
+- `motion/motion@390x844.png` was opened with view_image. Three whole citizens render and their clothes are readable, with no browser errors in the paired JSON. The plain bench has excessive empty space and no contact shadows; it is not a product composition or terrain-contact proof. It predates the final transition fixes. No clip was successfully captured or watched this iteration.
+- Final focused verification passed **85 tests** across the citizen, builder, controller, label and movement files. See `checks/scoped-final.log`. This is a focused pass, not a full-suite pass.
+- Final `pnpm typecheck`, scoped ESLint and `pnpm build` passed. Build retains the repository's chunk/timing warnings. The full typecheck completed without diagnostics.
+- Full-town CPU diagnostic passed for three supported bodies, 659 native placements and forward/reverse/stop movement with no solid entry or support loss. See `checks/town-collision.log`. It does not render the town or use a network connection. Compilation took about 83 s.
+- `checks/aggregate-before-fixes.log` preserves the 172/174 pass aggregate. The coherent motion fix to the style-adapter test subsequently passed. The unchanged SDK camera correction assertion remained red; `checks/prediction-isolated-red.log` preserves the isolated failure. It directly perturbs exact predicted state, so pre-ack injected drift still needs to be distinguished from actual correction. No assertion was weakened and no green SDK correction result is claimed for this checkpoint.
+- `git apply --check work/lanes/walking-together/integration.patch` and `git diff --check` passed.
+
+Phone wardrobe and wave-clip component captures terminated with `No free review port`; a later read-only probe found every allowed capture port occupied. Existing services were untouched. The new `capture-town.mjs` has only been linted/reviewed and has not run: its real-time three-connection town evidence remains outstanding. Phone wardrobe status changes and the final gait transitions still need visual judgement. Main's appearance, gesture, tool, terrain and crowd contracts are still required for the whole task.
+
 ## Looked at
 
 - `controls/selector@1440x900.png`, `controls/selector@390x844.png`: opened with view_image. Six consistent engraved icons, legible parchment choices, 44+ px targets, and the phone's left-thumb band remains clear. The component-only backdrop is deliberately not a kingdom.
 - `motion/motion@1440x900.png`: opened with view_image. Three whole styled citizens render together, hats/clothing/boots remain readable, the cloth shader links without browser errors. The plain review ground has no contact shadows and is not evidence for world grounding. No network gestures are claimed.
 
-## Checks
+## First checkpoint checks
 
 - `pnpm typecheck`: passed, including the final controller/label changes.
 - `pnpm lint`: passed; the final capture runner also passed scoped ESLint.

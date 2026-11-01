@@ -154,7 +154,7 @@
   .ab-page .ab-foot { gap: 8px; padding: 8px; }
   .ab-page .ab-tool { padding: 0 10px; }
   .ab-page .ab-tool:not(.ab-dice) span { display: none; }
-  .ab-page .ab-status { display: none; }
+  .ab-page .ab-status { display: block; font-size: 12px; line-height: 1.1; }
   .ab-page .ab-save { margin-left: auto; }
   .ab-page .ab-earned-list { grid-template-columns: minmax(0, 1fr); }
 }

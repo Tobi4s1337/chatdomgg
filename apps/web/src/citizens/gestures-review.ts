@@ -25,13 +25,17 @@ const chosen = new URLSearchParams(location.search).get('gesture') as CitizenGes
 function seek(seconds: number) {
   const gesture = chosen && names.includes(chosen) ? chosen : names[Math.floor(Math.max(0, seconds) / 3) % names.length]!;
   const walking = gesture === 'none';
-  const travel = walking ? (Math.max(0, seconds) % 3) * .8 : 0;
-  // Feed a reproducible blend history at fixed intervals, independent of screenshot cadence.
-  citizens.update([], camera, seconds * 1000);
-  for (let step = 0; step <= 8; step++) citizens.update(looks.map((look, i) => ({
-    id: `simulated-${i}`, look: look.id, position: [(i - 1) * 1.7 + Math.sin(-.32) * travel, 0, walking ? -1.2 + Math.cos(-.32) * travel : 0] as const,
-    heading: -.32, distance: walking ? travel + i * .25 : 0, moving: walking ? 1 : 0, speed: walking ? .8 : 0, gesture, time: seconds,
-  })), camera, step * 100 + seconds * 1000);
+  const passTime = walking ? Math.max(0, seconds) % 3 : .8;
+  // Reconstruct the trajectory at fixed steps so a seek includes real stance history.
+  citizens.update([], camera, 0);
+  const steps = Math.max(1, Math.ceil(passTime * 60));
+  for (let step = 0; step <= steps; step++) {
+    const t = passTime * step / steps, travel = walking ? t * .8 : 0;
+    citizens.update(looks.map((look, i) => ({
+      id: `simulated-${i}`, look: look.id, position: [(i - 1) * 1.7 + Math.sin(-.32) * travel, 0, walking ? -1.2 + Math.cos(-.32) * travel : 0] as const,
+      heading: -.32, distance: walking ? travel + i * .25 : 0, moving: walking ? 1 : 0, speed: walking ? .8 : 0, gesture, time: walking ? t : seconds + t,
+    })), camera, t * 1000);
+  }
   document.querySelector('.label')!.textContent = `SIMULATED · ${gesture === 'none' ? 'walking' : gesture}`;
   renderer.render(scene, camera);
 }

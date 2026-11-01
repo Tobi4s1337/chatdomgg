@@ -9,6 +9,9 @@ WT10 remains unchecked. This lane can build movement, wardrobe rendering, contro
 - `WalkControllerOptions.gestures` accepts an authenticated port: `available()`, `publish(gesture)`, `sample(walkerId, monotonicNow)`. The controller mounts the selector only when this port exists, clears on ownership loss/disconnect/hidden page, and exposes `gestureFor(id, now)` for rendering. No invented room messages are sent.
 - `layoutWalkLabels` accepts measured names/bubbles and HUD rectangles, prioritizes active speech, bounds labels to the screen, and avoids overlap without detaching text from the actual head. Bind it once across walker labels and crowd bubbles, in web and stream, rather than running separate layouts.
 - Door overlap recovery rechecks support before jumping/accelerating; a closed door can no longer push an avatar off a ledge and still allow a grounded jump.
+- Flat-ground gait now keeps world-space stance contacts and solves the articulated legs against them. Stop recovery puts one foot home at a time; seat/tiptoe transitions preserve contact. Terrain height changes, placement corrections and hidden intervals rebase instead of stretching a leg. It has not yet been judged in a town clip.
+- `CitizenRenderer.footfalls` contains only the latest update's actual gait touchdowns (`id`, `side`, world-space sole `position`). Consume synchronously after `update`; it is empty after discontinuities, entry or culling. `integration.patch` replaces the kingdom's independent 0.9 m audio clock with these contacts and retains the existing authority, placement, floor-material and mute guards. The patch is unapplied because kingdom is main-owned.
+- Wardrobe save completions are fenced against authority replacement, external saved-look refresh and unmount. Canonical saves preserve newer local edits. Main must keep a person's `LookAuthority` reference stable and replace it when the authenticated person changes; the public display name is not an identity key. Phone save status is now visible, pending a new screenshot.
 
 ## needs: approved appearance projection and tools
 
@@ -47,3 +50,15 @@ Walkers currently have no neighbour query in the movement contract. Freeze a bou
 - Three connected people traverse the full founded terrain, stairs and doors, greet, gather/part, and speak with deletion/clear respected.
 - Web 1440×900 and 390×844, stream 1920×1080 and 1280×720 stills; short watched clips of the actual town. The lane's SIMULATED component review is not this proof.
 - Real GPU/device check for frame pacing and cloth contact. SwiftShader cannot establish performance.
+
+## needs: isolate the existing SDK correction regression
+
+The unchanged `apps/web/src/walk/realm-predict.test.ts` case `keeps the moving camera on SDK render feet through a real acknowledged correction above the fixed-step rate` failed again in the aggregate and isolated checks. Aggregate render delta was 0.23037076 m against a 0.167983756 m frame bound; isolated delta was 0.0973500264 m against 0.094083348 m. This assertion has failed in three observed runs across the two checkpoints, though an earlier isolated run passed. No tolerance was relaxed and no third current-turn retry was made.
+
+This test directly adds 0.24 m to the exact `client.predicted.x`, then samples the SDK render value while real acknowledgements arrive. That can expose the injected drift before the first correcting acknowledgement as well as the subsequent reconcile. Read-only SDK inspection shows live `snapshotPrev()` reads the mutated local state plus error. Therefore the failing assertion establishes an unresolved test/path regression, not yet a proven production reconciler defect. Main owns `apps/web/src/realm/client.ts` and the SDK patch. Instrument the acknowledgement/reconcile boundaries and distinguish pre-ack injection from correction before choosing a fix; retain the camera-anchor and all-field parity checks. Logs are copied into this lane's evidence directory.
+
+## Full-town diagnostic and capture readiness
+
+`node apps/web/src/walk/check-town.mjs` compiles all 659 native founded placements and uses the production movement step for three separate supported spawns. Forward, reverse and idle samples passed without entering solids or losing support; each travelled 2.51347 m. This is CPU collision evidence only. Compilation took about 83 seconds on this host.
+
+`capture-town.mjs` is a prepared, **unexecuted** three-SDK-connection capture runner for the actual Kingdom component and the same complete collision world. It uses memory-only SIMULATED identities and single-use reference tickets, with no persisted ownership claim, approved wardrobe projection or gesture transport. It takes one still or three-second real-time clip per shared capture lock. It is linted and reviewed, but runtime readiness is not established. Two existing component capture attempts ended with no allowed free port; a separate read-only probe found every allowed capture port occupied. No existing service was stopped or alternate reserved port used. Resume capture only after capacity changes.

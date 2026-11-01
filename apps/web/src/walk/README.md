@@ -373,5 +373,29 @@ node apps/web/src/walk/capture-review.mjs --view wardrobe
 node apps/web/src/walk/capture-review.mjs --view selector --width 390 --height 844
 ```
 
-These labelled SIMULATED benches review the component only. Actual town evidence must still come from
-`capture.mjs` with real connected clients. No browser-local chat, wardrobe or gesture is presented as server truth.
+These labelled SIMULATED benches review the component only. No browser-local chat, wardrobe or gesture is
+presented as server truth.
+
+Flat-ground citizens now solve world-space stance contacts with articulated legs. `renderer.footfalls` reports
+touchdowns for the most recent `update()` only; use it after drawing for sound rather than a second cadence
+clock. Height discontinuities reset contact history: exact contact with the kingdom's differently sampled visible
+terrain remains a main-owned seam. The optional consumer patch in the lane records includes the audio binding.
+
+`node apps/web/src/walk/check-town.mjs` is a CPU-only diagnostic: it compiles the complete native founded
+collision and moves three SIMULATED bodies forward, backward and to rest, checking support and solid clearance.
+It opens no listener, browser or capture slot. The full compile can take roughly 83 seconds on this host.
+
+`capture-town.mjs` prepares one actual-town still or a three-second real-time clip with three real SDK
+connections to a temporary memory-only room:
+
+```
+node apps/web/src/walk/capture-town.mjs
+node apps/web/src/walk/capture-town.mjs --width 390 --height 844
+node apps/web/src/walk/capture-town.mjs --clip
+```
+
+This new runner is linted but has **not been runtime-verified**: the allowed capture ports were occupied.
+It labels the identities SIMULATED, hashes the adopted native scene, uses its full collision compiler, checks
+keyboard movement and both peer connections, and takes the shared lock for one output. It cannot establish
+real sign-in, owned-door spawning, saved wardrobe or network gestures. Those acceptance checks still require
+main's authority and projection seams, plus actual town and stream captures at the prescribed sizes.

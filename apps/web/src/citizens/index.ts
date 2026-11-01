@@ -3,6 +3,7 @@ import { AVATAR_RIG, AVATAR_SOCKETS, VOXEL_METRES, type AvatarAttachmentId, type
 import { geometryFromChunks, type VoxelRenderState } from '@chatdom/render';
 import { VoxelWorkerPool } from '@chatdom/voxel';
 import { createCitizenCapeRenderer } from './capes';
+import { createFootstepState, stepFootsteps, type FootstepState } from './footsteps';
 import { meshStyledCitizen, STYLED_CITIZEN_RIG, type StyledCitizenLook } from './style-adapter';
 import { createStyledCitizenMaterial, styledCitizenGeometry } from './style-material';
 
@@ -40,6 +41,12 @@ export interface CitizenSample {
   readonly waveWeight?: number;
   /** Standing rise onto the toes, from 0 to 1. Ease this value at the call site. */
   readonly tiptoe?: number;
+}
+export interface CitizenFootfall {
+  readonly id: string;
+  readonly side: 'left' | 'right';
+  /** Flat-ground sole position in world metres at touchdown. */
+  readonly position: readonly [number, number, number];
 }
 export interface CitizenRendererOptions {
   readonly registry: MaterialRegistry;
@@ -119,17 +126,20 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   const scale = new THREE.Vector3(1, 1, 1);
   const poses = new Map<AvatarAttachmentId, THREE.Matrix4>();
   const grips = new Map<string, THREE.Matrix4>();
+  const footfalls: CitizenFootfall[] = [];
   const frustum = new THREE.Frustum(), projectionView = new THREE.Matrix4();
   // A generous radius covers the authored body, gait and short cloak as a
   // single culling unit, including their edges during a stride.
   const citizenBounds = new THREE.Sphere(new THREE.Vector3(), 2.5);
   type AnimatedGesture = Exclude<CitizenGesture, 'none' | 'sit'>;
   const gestureNames: readonly AnimatedGesture[] = ['nod', 'wave', 'bow', 'cheer', 'dance', 'point'];
-  const animationById = new Map<string, { seated: number; heading: number; weights: Record<AnimatedGesture, number>; last: number }>();
-  function pose(sample: CitizenSample, seated: number, heading: number, weights: Record<AnimatedGesture, number>, rig: typeof AVATAR_RIG) {
-    // One full left/right stride over 1.8 metres. The old .75 m cycle made ordinary 4 m/s walking
-    // churn through more than five cycles a second; distance still keeps stops and corrections planted.
-    const phase = sample.distance * Math.PI * 2 / 1.8;
+  const animationById = new Map<string, { seated: number; heading: number; weights: Record<AnimatedGesture, number>; last: number; footsteps?: FootstepState }>();
+  function pose(sample: CitizenSample, seated: number, heading: number, weights: Record<AnimatedGesture, number>, rig: typeof AVATAR_RIG, footstepState: FootstepState, now: number) {
+    const locomotion = stepFootsteps(footstepState, { position: sample.position, heading, distance: sample.distance,
+      moving: sample.moving * (1 - seated) * (1 - Math.max(0, Math.min(1, sample.tiptoe ?? 0))),
+      speed: sample.speed ?? sample.moving * 1.2, timeMs: now });
+    // Arms and torso follow the same distance-driven cycle as the planted legs.
+    const phase = footstepState.phase * Math.PI * 2;
     const gait = Math.max(0, Math.min(1, sample.moving)) * (1 - seated);
     const stride = Math.sin(phase) * gait;
     // A standing-only toe pivot: raise the whole rig and pitch the feet about
@@ -169,18 +179,51 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     root.elements[12]! += Math.sin(heading) * toeShift;
     root.elements[13]! += toeLift;
     root.elements[14]! += Math.cos(heading) * toeShift;
+    for (const fall of locomotion.footfalls) footfalls.push({ id: sample.id, side: fall.side, position: [fall.sole.x, fall.sole.y, fall.sole.z] });
+    const legBlend = locomotion.blend;
+    const legRotations = new Map<AvatarBoneId, THREE.Quaternion>();
+    if (legBlend > 0) {
+      const inverseRoot = root.clone().invert();
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? 'Left' : 'Right';
+        const hip = new THREE.Vector3(i === 0 ? -.125 : .125,
+          .5 - 4 * (1 - Math.cos(sitAngle)) * VOXEL_METRES.avatar - .075 * legBlend,
+          4 * Math.sin(sitAngle) * VOXEL_METRES.avatar);
+        const neutralFoot = new THREE.Vector3(hip.x, VOXEL_METRES.avatar, 0);
+        const plantedAnkle = locomotion.feet[i]!.clone().add(new THREE.Vector3(Math.sin(heading) * toeShift, toeLift, Math.cos(heading) * toeShift));
+        const target = neutralFoot.lerp(plantedAnkle.applyMatrix4(inverseRoot), legBlend);
+        const reach = target.clone().sub(hip);
+        const length = THREE.MathUtils.clamp(reach.length(), .063, .43749);
+        const axis = reach.normalize();
+        const forward = new THREE.Vector3(0, 0, 1);
+        const bend = forward.addScaledVector(axis, -forward.dot(axis));
+        if (bend.lengthSq() < 1e-6) bend.set(1, 0, 0).addScaledVector(axis, -axis.x);
+        bend.normalize();
+        const upper = .25, lower = .1875;
+        const along = (upper * upper - lower * lower + length * length) / (2 * length);
+        const knee = axis.clone().multiplyScalar(along).addScaledVector(bend, Math.sqrt(Math.max(0, upper * upper - along * along)));
+        const lowerDirection = axis.clone().multiplyScalar(length).sub(knee).normalize();
+        const upperRotation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), knee.normalize());
+        const lowerWorld = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), lowerDirection);
+        const lowerRotation = upperRotation.clone().invert().multiply(lowerWorld);
+        legRotations.set(`thigh${side}` as AvatarBoneId, upperRotation);
+        legRotations.set(`shin${side}` as AvatarBoneId, lowerRotation);
+        legRotations.set(`foot${side}` as AvatarBoneId, lowerWorld.clone().invert().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), toeAngle)));
+      }
+    }
     poses.clear();
     for (const bone of rig) {
       const angles = rotations[bone.id] ?? [0, 0, 0];
       rotation.set(...angles); quaternion.setFromEuler(rotation);
+      if (legRotations.has(bone.id)) quaternion.copy(legRotations.get(bone.id)!);
       translation.set(...bone.offset).multiplyScalar(VOXEL_METRES.avatar);
       if (bone.id === 'pelvis') {
         // The four-cell thigh moves forward as it rises; move the body back and
         // down by the same amount so the vertical shins and feet stay planted.
-        translation.y -= 4 * (1 - Math.cos(sitAngle)) * VOXEL_METRES.avatar;
+        translation.y -= 4 * (1 - Math.cos(sitAngle)) * VOXEL_METRES.avatar + .075 * legBlend;
         translation.z += 4 * Math.sin(sitAngle) * VOXEL_METRES.avatar;
       }
-      if (bone.id === 'thighLeft' || bone.id === 'thighRight') {
+      if (legBlend === 0 && (bone.id === 'thighLeft' || bone.id === 'thighRight')) {
         // The authored rig has separate thigh, shin and foot. Keep the sole level
         // and solve the hip's vertical offset from both rotating segments. The
         // planted foot stays at the datum; the swing foot clears the street.
@@ -203,10 +246,12 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   }
   return {
     get grips(): ReadonlyMap<string, THREE.Matrix4> { return grips; },
+    /** Touchdowns for the most recent update only; consumed synchronously by presentation. */
+    get footfalls(): readonly CitizenFootfall[] { return footfalls; },
     update(samples: readonly CitizenSample[], camera?: THREE.Camera, now = performance.now()) {
       if (samples.length > capacity) throw new Error(`Citizen count exceeds capacity ${capacity}.`);
       for (const mesh of meshes) mesh.count = 0;
-      grips.clear();
+      grips.clear(); footfalls.length = 0;
       capes.beginFrame(samples[0]?.time ?? 0);
       if (camera) {
         camera.updateWorldMatrix(true, false);
@@ -235,12 +280,17 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
         transition.last = now;
         const look = looks.get(sample.look);
         if (!look) throw new Error(`Unknown citizen look ${sample.look}.`);
-        if (![...sample.position, sample.heading, sample.distance, sample.moving, sample.opacity ?? 1, sample.lookYaw ?? 0, sample.lookPitch ?? 0, sample.waveWeight ?? 1, sample.time ?? 0, sample.tiptoe ?? 0].every(Number.isFinite)) throw new Error(`Invalid citizen sample ${sample.id}.`);
+        if (![...sample.position, sample.heading, sample.distance, sample.moving, sample.speed ?? sample.moving * 1.2, sample.opacity ?? 1, sample.lookYaw ?? 0, sample.lookPitch ?? 0, sample.waveWeight ?? 1, sample.time ?? 0, sample.tiptoe ?? 0].every(Number.isFinite)) throw new Error(`Invalid citizen sample ${sample.id}.`);
         if (camera) {
           citizenBounds.center.set(sample.position[0], sample.position[1] + .75, sample.position[2]);
-          if (!frustum.intersectsSphere(citizenBounds)) continue;
+          if (!frustum.intersectsSphere(citizenBounds)) {
+            // A hidden interval cannot produce delayed audio on re-entry.
+            delete transition.footsteps;
+            continue;
+          }
         }
-        pose(sample, transition.seated, transition.heading, transition.weights, look.rig);
+        transition.footsteps ??= createFootstepState({ position: sample.position, heading: transition.heading, distance: sample.distance, moving: sample.moving, speed: sample.speed ?? sample.moving * 1.2, timeMs: now });
+        pose(sample, transition.seated, transition.heading, transition.weights, look.rig, transition.footsteps, now);
         grips.set(sample.id, poses.get('gripRight')!.clone());
         if (look.cape) capes.add({ id: sample.id, heading: transition.heading, distance: sample.distance, speed: (sample.speed ?? sample.moving * 1.2) * (1 - transition.seated), opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!, look.capePaint);
         for (const batch of look.batches) {
@@ -267,7 +317,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
       }
     },
     dispose() {
-      grips.clear();
+      grips.clear(); footfalls.length = 0;
       animationById.clear();
       capes.dispose(); scene.remove(group);
       for (const geometry of geometries) geometry.dispose();

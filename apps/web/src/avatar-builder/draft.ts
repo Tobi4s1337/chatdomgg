@@ -38,3 +38,20 @@ export function redo(h: LookHistory): LookHistory {
 }
 
 export const isUnchanged = (look: CitizenLook, saved: CitizenLook): boolean => same(look, saved);
+
+/** Accept canonicalisation only if the draft is still the submitted look. */
+export function reconcileSave(history: LookHistory, submitted: CitizenLook, canonical: CitizenLook): LookHistory {
+  return same(history.present, submitted) ? { ...history, present: canonical, lastKey: null } : history;
+}
+
+/** Ignore a completion from a previous authority, external saved look, or disposed builder. */
+export function createSaveGuard() {
+  let generation = 0, disposed = false;
+  return {
+    ticket: () => generation,
+    alive: () => !disposed,
+    current: (ticket: number) => !disposed && ticket === generation,
+    invalidate: () => { generation++; },
+    dispose: () => { disposed = true; generation++; },
+  };
+}
