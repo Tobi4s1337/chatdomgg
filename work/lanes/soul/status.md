@@ -1,6 +1,6 @@
 # SO10 current checkpoint
 
-The first and only PRD task remains open. Commits on `lane/soul`: `4d1de96` (world), `02cead7` (presentation/sound/needs), `95468be` (checkpoint record). No main branch writes and no push. A further correction checkpoint follows these commits.
+The first and only PRD task remains open. Commits on `lane/soul`: `4d1de96` (world), `02cead7` (presentation/sound/needs), `95468be` (checkpoint record). No main branch writes and no push. Correction checkpoint: `71ddc57` (dusk alignment, looked-at framing fixes, single-case capture tooling).
 
 ## What is real
 
