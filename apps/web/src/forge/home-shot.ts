@@ -10,7 +10,9 @@ export function forgeFlightShot(home: THREE.Box3, piece: THREE.Box3, pieceWorld:
   const size = piece.getSize(new THREE.Vector3());
   const distance = Math.max(27, size.length() * 2.5 * Math.max(1, height / Math.max(1, width)));
   const target = centre.add(new THREE.Vector3(0, -2, 0));
-  const offset = new THREE.Vector3(-.3, .32, 1).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(distance);
+  // Retain the above-anvil launch view; look up only once the gift has gained height.
+  const elevation = THREE.MathUtils.lerp(.32, .03, THREE.MathUtils.smootherstep(progress, 0, .2));
+  const offset = new THREE.Vector3(-.3, elevation, 1).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(distance);
   // The receiving home is too distant to share a tight frame at launch. Hold the gift until it is near.
   const approach = THREE.MathUtils.smootherstep(progress, .65, .95);
   return { target: target.lerp(receive.target, approach), offset: offset.lerp(receive.offset, approach) };

@@ -330,60 +330,53 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Order:** picture only. Main stays on the whole Forge, then chat-arrival window wave and lantern
-homecoming. One visible beat/turn with a looked-at pair; medium routine helpers. Team owns Genesis,
-panel/card/passport, raid journey and sky moments. No new systems/contracts/system lanes.
+**Order:** picture only. Finish the whole Forge from chat words to warm roof settle, then the
+chat-arrival window wave and lantern homecoming. One visible beat per turn with a looked-at pair.
+Team owns Genesis, panel/passport, raid journey and sky moments; medium routine helpers.
 
-**Latest landed beat:** the gift retains existing hearth heat through landed progress.3 and eases
-to its kingdom colours at1, instead of becoming cold by.5. Root viewed full1920×1080
-`shots/magic/forge-warm-settle-pair.png` and `forge-warm-settle-close-pair.png`: formerly blue-grey gift
-now peach-gold at the camera's early settle, its solid facets still readable. The native blue is
-intentionally subdued while hot and returns by the end; no palette/global lighting/camera change.
-One focused existing heat/material test extended and passed; typecheck, scoped lint and web build pass.
-Actual head/paws still need the AH06 sculpt. Do not call the whole Forge finished from this frame.
+**Main:** pushed5f4dc8b holds the gift's hearth heat through early landing, easing to native colours
+by the end. Root viewed `shots/magic/forge-warm-settle-pair.png` and its close pair: blue-grey to
+peach-gold, solid facets retained. d545d0e neighbours turn/look up and up to3 stationary eligible
+people wave; walkers retain routes. No more tiny pose iterations. Landing/contact warmth is accepted.
 
-**Capture state:** warm-settle job64101 completed exit0, cleanup confirmed, no browser errors or
-forbidden POST, settled fields, HIGH1920×1080, SIMULATED ritual20/world50/hour19.5. NO root capture
-remains queued/running. Before is the approved raised-wave after; same camera/poses/world clock.
-Frozen candidate temporary `chatdom-forge-warm-settle-built`; keep the matched pair above.
-Root never touched another holder or removed a lock. Serial captures with deadlines/finally continue.
+**Latest accepted flight camera:** `home-shot.ts` retains original target centreY-2 and blends
+view elevation+.32 at launch to+.03 by progress.2. Launch stays above the smithy; the warm treasure
+then silhouettes against peach/lilac sky, with a substantial band of lit streets below. Receive and
+landing remain unchanged. Root viewed `shots/magic/forge-sky-flight-pair.png`, full after1920×1080
+and same-pixel close pair. This is visibly clearer than the hillside backdrop. Head/paws are still
+indistinct at stream distance; do not call the whole Forge finished from this frame.
 
-**Next private experiment, NOT on main/viewed:** `../worktrees/main-forge-settle-warmth`, branch
-`work/forge-settle-warmth`. After the heat checkpoint, update this worktree to main while preserving
-ONLY home-shot.ts's two-number flight experiment: target centreY-.5 rather than-2, directionY-.14
-rather than+.32. This puts the camera below the flying gift to try its silhouette against the sky;
-receive/landing camera is unchanged. Port only that file, build/freeze and compare the SAME midflight
-frame with the accepted `forge-treasure-after.png` (ritual17.3/world47.3); look before accepting.
-No extra camera tests are needed for these reversible look parameters. Do not accidentally use an
-old private whole build with stale citizen poses. Original main-forge-neighbours is an archival WIP copy.
+The steeper negative-angle version was REJECTED for excessive underside/lost town, preserved only
+in temporary `chatdom-rejected-sky-flight.png`. The current after/pairs now show the accepted balanced
+version. Baseline is accepted forge-treasure-after, same SIMULATED ritual17.3/world47.3/hour19.5/HIGH.
+One launch/cruise guard test plus existing heat test, typecheck/scoped lint and web build passed.
+Immutable accepted build: temporary `chatdom-forge-flight-sky-balanced`; private
+`../worktrees/main-forge-settle-warmth` has the same camera/test backup. Main is authoritative.
 
-**Reaction checkpoint d545d0e:** real stationary neighbours turn toward the gift; walkers retain
-routes/look up, up to3 eligible nearby people raise a hand at landing. Private pose only; ordinary
-ambient waves unchanged, room cue priority, fixed ritual clocks, tail expires23s. Root viewed
-`forge-neighbours-pair.png`/close crop: upturned blonde face/hat turn read close; wave is quiet wide.
-Keep this checkpoint and stop tiny pose iterations.12 targeted tests/typecheck/lint/build passed.
+**Capture:**67563 completed exit0, actual active flight/world47.3/HIGH, settled fields, no browser
+errors or forbidden Forge POST, cleanup confirmed. No root capture remains. Earlier97267 queued out;
+27893 was cancelled on pause. GPU availability question unanswered. Next: review the whole moving
+Forge with its real planning runway; preserve this flight angle and accepted landing framing.
 
-**Whole-sequence verdict:** root viewed `forge-whole-phase-sheet.png` (eight SIMULATED phases0–21),
-NOT a continuous video/live wish. Fire has focus, gift stays in frame; flight wake is dotted and the
-sleeping silhouette weak. Instant fixture has no crowd at pour; LIVE judging/planning already triggers
-gathering before compilation. Do not add a delay or infer a live gathering bug from the fast fixture.
-Still need a whole motion review with its planning runway, not a full-Forge goosebumps signoff yet.
+**Whole-sequence verdict:** root reviewed the existing eight-phase `forge-whole-phase-sheet.png`
+and warm landing pair; NOT a fresh continuous motion/audio review or real-chat wish. Fire has focus,
+warm landing reads; flight wake remains dotted and sleeping head/paws weak (AH06/spec25 sculpt;
+EL11/spec48 wake/library burst). Live public judging/drafting stages ALREADY trigger gathering before
+approval. Instant fixture lacks that planning runway; never fake citizens or add a delay from it.
+Still need the whole moving sequence reviewed before calling Forge finished or advancing to arrivals.
 
-**Keep Forge:**9a8dba4 actual rotated foot/yaw anchors roof contact; older forge-contact-after/pair
-still show a REJECTED offset wall flash. SIM noop stage sink stays: manual host reports actual
-crown/foot. d6e3c1b flight heat/framing;9be5870 local fire;3a84d28 ring32 normal routes;9ddf895 home
-receive/settle. AH06/spec25 owns sleeping head/paws/horns; EL11/spec48 flowing ember wake/library burst.
-Main owns adapters/camera. Trace confirmed authored muzzle points local−X, house-front camera sees
-its intended profile; no evident rotation/palette bridge bug. Never invent/teleport live citizens.
+**Preserve:**9a8dba4 rotated physical-foot contact;489d3a8 SIM actual-pose host/noop stage sink;
+d6e3c1b warm flight;9be5870 local fire;3a84d28 ring32 ordinary routes;9ddf895 home receive/settle.
+Older forge-contact-after/pair show REJECTED offset wall flash. Authored dragon muzzle local−X is
+intentional profile; no missing slot rotation found. Keep accepted exposure/street pools/castle/beacon,
+sparse smoke/stable lights, terraced land/lilac groves, AS10 citizens and homecomings.
 
-**Team:** no fresh committed runtime checkpoints at recon. Masha cbf8bf2 merged/pushed via5ea162a;
-hero/inn images viewed,28 tests/typecheck/lint/build passed. Next taste: warm readable inn doorway.
-Still a SIMULATED potential preview; Atlas category/arms and keeper/sound/light mounts remain. CP10
-card721aaab merged f14e348; share/Wren facts unfinished. Preserve all three Genesis dispatches/river
-flag; founded bytes win. Raid/sky scope notes aren't runtime checkpoints. Don't merge dirty lane trees.
+**Team:** fresh recon found no new committed runtime checkpoints. Masha GM10 cbf8bf2 is already
+merged via5ea162a; root viewed hero/inn,28 focused tests and checks passed. Next taste remains a warm
+readable inn doorway. CP10 card721aaab merged f14e348; share/Wren facts unfinished. Raid/sky scope
+notes are not runtime checkpoints. Merge good committed work; never take dirty lane trees.
 
-**Keep/operations:** accepted exposure/street pools/castle/beacon/sparse smoke/stable lights, terraced
-land/lilac groves, AS10 citizens/capes/homecomings/carts. AS11 browser-local SIM. Preserve city stash
-7c6f1f9d324042998fff71e4d5ea7863ea46cf0a; park land6f60ae2. Managed5190web/5196API/5197realm/5195Forge/5194herald.
-Logs ONLY `../conductor/state/services.log`. Own processes only; never unlink lock inodes. No observer
-waiting for real chat; real Forge only when Tobias announces live. Software shots prove no GPU timing.
+**Operations:** services5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
+`../conductor/state/services.log`; own processes only; never unlink capture locks. No observer waiting
+for real chat; real Forge only when Tobias announces live. Preserve city stash
+7c6f1f9d324042998fff71e4d5ea7863ea46cf0a; park land6f60ae2. Software shots prove no GPU timing.
