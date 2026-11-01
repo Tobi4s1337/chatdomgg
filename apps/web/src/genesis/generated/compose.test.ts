@@ -4,6 +4,7 @@ import { compileChannelGenesis, GENESIS_ATLAS_REALMS, type GenesisAtlasRealm } f
 import type { DoorHolding } from '../../atlas/data/holding';
 import { chooseLandscape, holdingFacts } from '../holding-facts';
 import { atlasArmsTargets, composeGeneratedKingdom } from './compose';
+import { chooseKingdomKit } from './kit-choice';
 
 const holding = (id: string, average: number, realm: GenesisAtlasRealm, game: string | null = null): DoorHolding => ({
   version: 1, id, login: `c${id}`, name: `Channel ${id}`, freshUntil: 1793540000000, tier: 'town', average, game: game ? { id: null, name: game } : null,
@@ -34,8 +35,8 @@ describe('a generated kingdom', () => {
         expect(camera.eye[1]).toBeGreaterThan(terrainHeight(plan, camera.eye[0], camera.eye[2]) + 10);
         expect(camera.target.every(Number.isFinite)).toBe(true);
         expect(kingdom.lore!.length).toBeGreaterThan(30);
-        expect(kingdom.hour).toBeGreaterThanOrEqual(18.9);
-        expect(kingdom.hour).toBeLessThanOrEqual(19.8);
+        expect(kingdom.hour).toBeGreaterThanOrEqual(18.5);
+        expect(kingdom.hour).toBeLessThanOrEqual(19.7);
       }
     }
     expect(seen.size).toBeGreaterThan(8);
@@ -63,4 +64,55 @@ describe('a generated kingdom', () => {
     expect(other.kingdomId).not.toBe(recipe.kingdomId);
     expect(colours.size).toBeGreaterThan(2);
   }, 120_000);
+  it('builds in every kit on every kind of land, and grows some towns in two', () => {
+    const kits = new Map<string, Set<string>>(), mixed = new Set<string>();
+    for (let i = 0; i < 90; i++) {
+      const realm = GENESIS_ATLAS_REALMS[i % GENESIS_ATLAS_REALMS.length]!;
+      const recipe = compileChannelGenesis(holdingFacts(holding(String(70_000_003 + i * 15_485_863 % 900_000_000), [30, 120, 700][i % 3]!, realm)));
+      for (const landscape of recipe.landscapes) {
+        const kit = chooseKingdomKit(recipe, landscape, atlasArmsTargets(String(recipe.kingdomId)));
+        kits.set(landscape.character, (kits.get(landscape.character) ?? new Set()).add(kit.primary));
+        if (kit.secondary) { expect(kit.secondary).not.toBe(kit.primary); expect(kit.share).toBeGreaterThan(.2); mixed.add(`${kit.primary}+${kit.secondary}`); }
+        if (recipe.size.homeCapacity < 160) expect(kit.secondary).toBeNull();
+      }
+    }
+    for (const seen of kits.values()) expect(seen.size).toBe(3);
+    expect(mixed.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('builds the town in its kit, the outer lanes in the second one', () => {
+    for (let i = 0; i < 40; i++) {
+      const recipe = compileChannelGenesis(holdingFacts(holding(String(80_000_011 + i * 7_919), 700, 'mmo')));
+      const landscape = chooseLandscape(recipe);
+      const kit = chooseKingdomKit(recipe, landscape, atlasArmsTargets(String(recipe.kingdomId)));
+      if (!kit.secondary) continue;
+      const kingdom = composeGeneratedKingdom(recipe, landscape);
+      expect(kingdom.style).toBe(kit.primary);
+      const outer = kingdom.plan.homes.filter(home => home.style === kit.secondary).length / kingdom.plan.homes.length;
+      expect(Math.abs(outer - kit.share)).toBeLessThan(.02);
+      expect(kingdom.plan.revision).toContain(`kit:${kit.primary}+${kit.secondary}`);
+      return;
+    }
+    throw new Error('No two-kit town among the sampled channels.');
+  }, 120_000);
+
+  it('raises the realm’s tall landmark on the skyline where the land allows it', () => {
+    const found = new Map<string, number>();
+    const games: [GenesisAtlasRealm, string][] = [['roleplay', 'Grand Theft Auto V'], ['shooters', 'Valorant'], ['cozy', 'Stardew Valley']];
+    for (const [realm, game] of games) for (let i = 0; i < 6; i++) {
+      const recipe = compileChannelGenesis(holdingFacts(holding(String(90_000_007 + i * 104_723), 140, realm, game)));
+      const kingdom = composeGeneratedKingdom(recipe, chooseLandscape(recipe));
+      for (const piece of kingdom.sites.skyline) {
+        found.set(piece.kind, (found.get(piece.kind) ?? 0) + 1);
+        expect(piece.height).toBeGreaterThan(9);
+        const d = Math.hypot(piece.at[0] - kingdom.sites.market[0], piece.at[2] - kingdom.sites.market[2]);
+        expect(d).toBeGreaterThan(35); expect(d).toBeLessThan(270);
+        expect(piece.at[1]).toBeGreaterThan(-.5);
+      }
+      if (recipe.identity.landmark === 'watermill') expect(kingdom.sites.skyline.some(piece => piece.kind === 'windmill')).toBe(true);
+    }
+    expect(found.get('lighthouse') ?? 0).toBeGreaterThan(0);
+    expect(found.get('watchtower') ?? 0).toBeGreaterThan(0);
+    expect(found.get('windmill') ?? 0).toBeGreaterThan(0);
+  }, 300_000);
 });

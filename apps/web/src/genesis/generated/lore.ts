@@ -34,7 +34,7 @@ const LANDMARK: Readonly<Record<ChannelKingdomRecipe['identity']['landmark'], re
   'open-air-stage': ['On the green the stage is never dark for long.', 'Someone is always tuning a lute on the green.'],
   'stone-circle': ['Old stones stand in a ring beyond the last house, older than any name.', 'Beyond the lanes, a ring of standing stones keeps its own counsel.'],
   'bell-garden': ['In the bell garden, one note at dusk calls everyone home.', 'A bell hangs in the garden for the evenings worth remembering.'],
-  'watermill': ['The wheel turns, the bread rises, the kettle sings.', 'Flour on the doorsteps and a wheel that never rests.'],
+  'watermill': ['The sails turn, the bread rises, the kettle sings.', 'Flour on the doorsteps and a mill on the rise that never rests.'],
   'lighthouse': ['Its lamp has never once been allowed to go out.', 'The light on the point turns for anyone still out on the water.'],
   'watchtower': ['From the tower you can see every road that leads home.', 'A watch fire burns on the tower for travellers still on the road.'],
 };
@@ -49,9 +49,10 @@ const SIZE: Readonly<Record<ChannelKingdomRecipe['size']['tier'], string>> = {
 
 const pick = <T,>(items: readonly T[], key: string): T => items[Math.floor(unit(key) * items.length)]!;
 
-export function generatedLore(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>): string {
+/** `landmarkStands` is false when the composition found no site for the realm's landmark: the line never names one that is not there. */
+export function generatedLore(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>, placed: { readonly landmarkStands?: boolean } = {}): string {
   const land = pick(LAND[landscape.character], `${recipe.seedKey}/lore/land`);
-  const second = unit(`${recipe.seedKey}/lore/second`) < .7
+  const second = placed.landmarkStands !== false && unit(`${recipe.seedKey}/lore/second`) < .7
     ? pick(LANDMARK[recipe.identity.landmark], `${recipe.seedKey}/lore/landmark`)
     : SIZE[recipe.size.tier];
   return `${land} ${second}`;

@@ -17,7 +17,7 @@ export function frameCamera(plan: SettlementPlan, landscape: DeepReadonly<Genesi
     const inside = x > plan.bounds.minX && x < plan.bounds.maxX && z > plan.bounds.minZ && z < plan.bounds.maxZ;
     return inside ? terrainHeight(plan, x, z) : Math.max(sampleGenesisSurface(landscape, x, z).ground, 0);
   };
-  const keyPoints: { p: Vec3; w: number }[] = [
+  const keyPoints: { p: Vec3; w: number; reach?: number }[] = [
     { p: [sites.market[0], sites.market[1] + 3, sites.market[2]], w: 3 },
     { p: [sites.castle[0], sites.castle[1] + 14, sites.castle[2]], w: 2.5 },
   ];
@@ -25,18 +25,22 @@ export function frameCamera(plan: SettlementPlan, landscape: DeepReadonly<Genesi
   if (sites.family) keyPoints.push({ p: [sites.family.at[0], sites.family.at[1] + 3, sites.family.at[2]], w: 1.5 });
   if (sites.inn) keyPoints.push({ p: [sites.inn[0], sites.inn[1] + 5, sites.inn[2]], w: 1 });
   if (sites.cathedral) keyPoints.push({ p: [sites.cathedral[0], sites.cathedral[1] + 2, sites.cathedral[2]], w: .8 });
+  // The skyline's tall pieces read from much farther off: framed by their upper half, out to a longer reach.
+  for (const piece of sites.skyline) keyPoints.push({ p: [piece.at[0], piece.at[1] + piece.height * .6, piece.at[2]], w: 1.6, reach: 260 });
   // A site far out beyond the lanes is not part of the heart the view frames.
   for (let i = keyPoints.length - 1; i >= 2; i--) {
-    if (Math.hypot(keyPoints[i]!.p[0] - sites.market[0], keyPoints[i]!.p[2] - sites.market[2]) > 150) keyPoints.splice(i, 1);
+    if (Math.hypot(keyPoints[i]!.p[0] - sites.market[0], keyPoints[i]!.p[2] - sites.market[2]) > (keyPoints[i]!.reach ?? 150)) keyPoints.splice(i, 1);
   }
 
   // The homes nearest the market: the part of town the view should hold.
   const distances = plan.homes.map(home => Math.hypot(home.position[0] - sites.market[0], home.position[2] - sites.market[2])).sort((a, b) => a - b);
   const reach = distances[Math.min(distances.length - 1, Math.max(0, Math.floor(Math.min(distances.length, 160) * .85) - 1))] ?? 60;
-  const weight = keyPoints.reduce((sum, k) => sum + k.w, 0);
+  // The skyline leans the view toward itself but does not widen it: a tall piece reads above the town from afar.
+  const pull = (k: typeof keyPoints[number]) => k.reach ? k.w * .3 : k.w;
+  const weight = keyPoints.reduce((sum, k) => sum + pull(k), 0);
   const centre: [number, number, number] = [0, 0, 0];
-  for (const k of keyPoints) for (const i of [0, 1, 2] as const) centre[i] += k.p[i] * k.w / weight;
-  const spread = Math.max(...keyPoints.map(k => Math.hypot(k.p[0] - centre[0], k.p[2] - centre[2])));
+  for (const k of keyPoints) for (const i of [0, 1, 2] as const) centre[i] += k.p[i] * pull(k) / weight;
+  const spread = Math.max(...keyPoints.filter(k => !k.reach).map(k => Math.hypot(k.p[0] - centre[0], k.p[2] - centre[2])));
   // A street-height hero view, not a map: close enough that the heart of the town fills the frame and low enough that
   // the land's backdrop and the dusk sky stand above it. A big town runs on past the frame's edges, which is how a
   // big town should read.

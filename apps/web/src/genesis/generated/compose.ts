@@ -20,6 +20,8 @@ import { frameCamera } from './camera';
 import { generatedLore } from './lore';
 import { createBellGarden, createOpenAirStage, createStandingStones, type GeneratedPiece, type PieceOptions } from './pieces';
 import { CELL, facing, Ground, stand, type Footprint } from './site';
+import { applyKit, chooseKingdomKit, type KitChoice } from './kit-choice';
+import { placeSkyline, type SkylinePiece } from './skyline';
 
 /** What the hero view and the tests read back about where the composition put things. */
 export interface GeneratedSites {
@@ -30,15 +32,22 @@ export interface GeneratedSites {
   readonly family: { readonly kind: string; readonly at: Vec3; readonly front: readonly [number, number] } | null;
   readonly inn: Vec3 | null;
   readonly cathedral: Vec3 | null;
+  /** The tall pieces beyond the keep the town is known by from the road: lighthouse, lookout, mill. */
+  readonly skyline: readonly SkylinePiece[];
 }
 
 export interface GeneratedKingdom extends GenesisKingdomComposition {
   readonly sites: GeneratedSites;
   readonly heraldry: GenesisHeraldry;
+  /** The building kit the town, the keep and the trees are drawn in (the old town's, when it grew in two). */
+  readonly style: KitChoice['primary'];
+  readonly kit: KitChoice;
 }
 
 type PieceFactory = (options: PieceOptions) => GeneratedPiece;
-/** The realm's own landmark, by the recipe's landmark family; the lighthouse and the watermill have none of their own. */
+/** The realm's own low landmark, by the recipe's landmark family; the tall ones stand on the skyline (`./skyline`). */
+/** The skyline piece that stands for a realm landmark of that family. */
+const SKYLINE_OF: Partial<Record<string, SkylinePiece['kind']>> = { lighthouse: 'lighthouse', watchtower: 'watchtower', watermill: 'windmill' };
 const FAMILY_PIECES: Partial<Record<string, PieceFactory>> = {
   'open-air-stage': createOpenAirStage, 'stone-circle': createStandingStones, 'bell-garden': createBellGarden,
 };
@@ -61,10 +70,14 @@ export function atlasArmsTargets(broadcasterId: string): string[] {
  * Deterministic; every site is proved free, dry and gentle before anything stands on it, and a piece with no such
  * site is left out rather than floated.
  */
-export function composeGeneratedKingdom(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>, options: { plan?: SettlementPlan } = {}): GeneratedKingdom {
-  const plan = options.plan ?? compileGenesisSettlement(recipe, landscape.id);
+export function composeGeneratedKingdom(source: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>, options: { plan?: SettlementPlan } = {}): GeneratedKingdom {
+  // The kit the land, the realm and the arms choose builds the town; the recipe itself is not rewritten.
+  const arms = atlasArmsTargets(String(source.kingdomId));
+  const kit = chooseKingdomKit(source, landscape, arms);
+  const recipe = { ...source, identity: { ...source.identity, styleFamily: kit.primary } } as DeepReadonly<ChannelKingdomRecipe>;
+  const plan = options.plan ?? applyKit(compileGenesisSettlement(recipe, landscape.id), kit);
   const ground = new Ground(plan, landscape);
-  const style = recipe.identity.styleFamily;
+  const style = kit.primary;
   const seed = Number.parseInt(recipe.seedKey.replace(/\D/g, '').slice(-9) || '0', 10) >>> 0;
   const roll = (slot: string) => unit(`${recipe.seedKey}/generated/${slot}`);
   const props: Dressing[] = [];
@@ -72,7 +85,7 @@ export function composeGeneratedKingdom(recipe: DeepReadonly<ChannelKingdomRecip
   const turnYaw = (turn: CardinalTurn) => turn * Math.PI / 2;
 
   // The arms: the Atlas shield's tinctures snapped to the heraldic kit, as a proposal.
-  const armed = { ...recipe, identity: { ...recipe.identity, profileColourTargets: atlasArmsTargets(String(recipe.kingdomId)) } } as DeepReadonly<ChannelKingdomRecipe>;
+  const armed = { ...recipe, identity: { ...recipe.identity, profileColourTargets: arms } } as DeepReadonly<ChannelKingdomRecipe>;
   let heraldry: GenesisHeraldry;
   try { heraldry = composeGenesisHeraldry(armed, landscape); } catch { heraldry = composeGenesisHeraldry(recipe, landscape); }
   const colours = heraldry.colours;
@@ -178,6 +191,11 @@ export function composeGeneratedKingdom(recipe: DeepReadonly<ChannelKingdomRecip
     }
   }
 
+  // The skyline beyond the keep: the realm's lighthouse, lookout or mill, and often a mill on farmland.
+  const skyline = placeSkyline({ ground, plan, landscape, recipe, market, castle: castleXZ, options: { style, colours, seed } });
+  props.push(...skyline.props);
+  braziers.push(...skyline.braziers);
+
   // The arms: two standards on the market's castle side, the crest at the head of the Crown Way.
   const towardCastle = facing(market, castleXZ);
   const square = squareFrame(plan, market, towardCastle);
@@ -226,12 +244,14 @@ export function composeGeneratedKingdom(recipe: DeepReadonly<ChannelKingdomRecip
 
   const sites: GeneratedSites = {
     market: [market[0], plan.market.elevation, market[1]], castle: plan.castle.centre,
-    landmark, family, inn, cathedral,
+    landmark, family, inn, cathedral, skyline: skyline.pieces,
   };
   const camera = frameCamera(plan, landscape, sites, roll('camera'));
-  const hour = Math.round((18.9 + roll('hour') * .9) * 20) / 20;
+  // Each kingdom opens at its own moment of dusk: some while the last amber is on the horizon, some in the blue hour.
+  const hour = Math.round((18.5 + roll('hour') * 1.2) * 20) / 20;
   seat = { buildings, props, braziers, beaconPosition: beacon };
-  return { recipe, landscape, plan, seat, camera, hour, lore: generatedLore(recipe, landscape), sites, heraldry };
+  return { recipe: source, landscape, plan, seat, camera, hour, lore: generatedLore(source, landscape, { landmarkStands: !!family || skyline.pieces.some(piece => piece.kind === SKYLINE_OF[source.identity.landmark])
+    || (source.identity.landmark === 'watchtower' && landmark?.kind === 'harbour-watchtower') }), sites, heraldry, style, kit };
 }
 
 const lerp2 = (a: XZ, b: XZ, t: number): XZ => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];

@@ -316,7 +316,8 @@ try {
         const file = `${out}/.label-title.txt`, small = `${out}/.label-title-small.txt`;
         await writeFile(file, 'Every channel\'s kingdom');
         await writeFile(small, [`Ten holdings drawn at random from the Atlas survey${survey ? ` ${survey.revision}` : ''},`,
-          'each opened through its door and seen at dusk,', 'beside the three authored kingdoms.', '', 'Land from the broadcaster ID, landmarks from the realm,', 'colours from the holding\'s Atlas arms, size from its audience.'].join('\n'));
+          'each opened through its door and seen at dusk,', 'beside the three authored kingdoms.', '', 'Land from the broadcaster ID, landmarks from the realm,', 'colours from the holding\'s Atlas arms, size from its audience.',
+          ...(SIMULATE ? ['', 'Names SIMULATED: the survey\'s names have lapsed,', 'so each holding shows its ID. Lands are real.'] : [])].join('\n'));
         filters.push(`color=c=0x2a2420:s=${tile.w}x${h + label}:d=1,drawtext=fontfile=${serif}:textfile=${file}:fontcolor=0xf1dbaf:fontsize=44:x=48:y=70,drawtext=fontfile=${font}:textfile=${small}:fontcolor=0xd2c4a4:fontsize=19:line_spacing=10:x=50:y=150[t${i}]`);
         continue;
       }
@@ -324,7 +325,7 @@ try {
       const { shot } = tile;
       inputs.push('-i', shot.path);
       const info = shot.info ?? {};
-      const text = `${info.name ?? shot.id}  ·  ${info.tier ?? ''} · ${String(info.landscape ?? '').replaceAll('-', ' ')} · ${info.landmark ?? ''}${info.generated ? '' : '  (authored)'}`;
+      const text = `${info.name ?? shot.id}  ·  ${info.tier ?? ''} · ${String(info.landscape ?? '').replaceAll('-', ' ')} · ${info.landmark ?? ''} · ${info.kit ?? info.style ?? ''}${info.generated ? '' : '  (authored)'}`;
       const file = `${out}/.label-${i}.txt`;
       await writeFile(file, text);
       filters.push(`[${input++}:v]scale=${w}:${h},pad=${w}:${h + label}:0:0:color=0x2a2420,drawtext=fontfile=${font}:textfile=${file}:fontcolor=0xf1dbaf:fontsize=17:x=12:y=${h + 14}[t${i}]`);

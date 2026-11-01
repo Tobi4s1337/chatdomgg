@@ -57,6 +57,22 @@ direct /kingdom/:id          ─┘                                             
 - **Captures hold the lock for seconds.** A kingdom loads and settles without the lock; only its last frames and the
   still are taken under it (the capture guard stops lane captures over ten minutes while main waits).
 
+- **Each town is built in its own kit** (`generated/kit-choice.ts`). Measured on the survey (one holding in seven,
+  6,900 holdings): with the recipe's family alone 70% of towns were Hearth terracotta; with the Atlas arms alone 57%
+  were Grove thatch. Now the land leans the kit (harbour → slate, valley → thatch or terracotta, pass → terracotta or
+  slate), the realm's biome nudges it, the arms pull toward the nearest roof, and the channel's seed rolls among them:
+  31% Tide, 34% Hearth, 34% Grove, every kit on every land. Towns of 160 homes and more grow in two kits a little over
+  half the time (the outer 28–48% of homes, farthest from the market, in the second kit). The kit also builds the
+  keep, the inn, the pieces and the trees. Pure function of (recipe, landscape, arms), so the grand land can take it.
+- **A skyline beyond the keep** (`generated/skyline.ts`). 40% of holdings had a realm landmark with no piece of its
+  own (watchtower 27%, lighthouse 9%, watermill 4%). Now the lighthouse stands on the shore nearest the town (a beacon
+  tower on the heights when no shore is in the drawn land), the lookout on the highest gentle ground at the edge of
+  town (not on a harbour, where the keep is the watchtower), and a windmill on an open rise away from the castle for
+  the watermill family and for 40% of farmland towns besides. The hero view leans toward them without widening.
+- **Each kingdom opens at its own moment of dusk**, 18.5–19.7 (the last amber band through the blue hour), and the
+  contact sheet shows each at its own hour, as a visitor arriving through the door would see it.
+- **Lore never names a landmark that did not find a site.**
+
 ## Needs (for main)
 
 - **A fresh survey import.** The Atlas service on 5193 serves preview `pv-20261031T133817Z` and the Surveyor drops a

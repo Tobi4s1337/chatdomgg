@@ -114,6 +114,7 @@ export default function GenesisPreview() {
     const composed = authored ? await composeAuthored(id, authored) : await composeFromHolding(holding!);
     if (abort.signal.aborted) return;
     const { recipe, landscape, plan, seat, camera, openingHour, lore, style } = composed;
+    const generated = 'kit' in composed && 'skyline' in composed ? { kit: composed.kit, skyline: composed.skyline } : {};
     if (openingHour !== undefined && !query.has('hour')) {
       const address = new URL(location.href); address.searchParams.set('hour', String(openingHour)); history.replaceState(history.state, '', address);
     }
@@ -138,7 +139,7 @@ export default function GenesisPreview() {
     // Read by captures and checks: what this door opened.
     (window as Window & { __chatdomGenesis?: unknown }).__chatdomGenesis = {
       id, name, tier: recipe.size.tier, landscape: landscape.character, landmark: recipe.identity.landmark, biome: recipe.identity.biome,
-      style, homes: plan.homes.length, generated: !authored, hour: openingHour ?? null,
+      style, ...generated, homes: plan.homes.length, generated: !authored, hour: openingHour ?? null,
     };
     // The world wakes under the parchment once its first full frame is drawn.
     const wake = () => {
@@ -182,7 +183,8 @@ export default function GenesisPreview() {
     step(`${capitalise(SIZE_NAMES[recipe.size.tier])} streets are laid out`);
     await nextFrame();
     const kingdom = composeGeneratedKingdom(recipe, landscape);
-    return { recipe, landscape, plan: kingdom.plan, seat: kingdom.seat, camera: kingdom.camera, openingHour: kingdom.hour, lore: kingdom.lore!, style: recipe.identity.styleFamily };
+    return { recipe, landscape, plan: kingdom.plan, seat: kingdom.seat, camera: kingdom.camera, openingHour: kingdom.hour, lore: kingdom.lore!, style: kingdom.style,
+      kit: kingdom.kit.secondary ? `${kingdom.kit.primary}+${kingdom.kit.secondary}` : kingdom.kit.primary, skyline: kingdom.sites.skyline.map(piece => piece.kind) };
   }
 
   return <>
