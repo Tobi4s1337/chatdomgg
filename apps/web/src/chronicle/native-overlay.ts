@@ -2,6 +2,7 @@ import type { KingdomPresenceFrame, PresenceFeed } from '@chatdom/shared';
 import { createKingdomScene } from '../kingdom/scene';
 import { createKingdomSound } from '../kingdom/sound';
 import { readDurableChronicle, type DurableChronicle } from './durable';
+import { createCandidateLifetime } from './candidate';
 import { mountChronicle } from './view';
 import type { ReplayBinding } from './replay';
 import './native-overlay.css';
@@ -27,14 +28,14 @@ export function openDurableChronicle(options: NativeChronicleOptions) {
   const dismiss = root.querySelector<HTMLButtonElement>('.chronicle-native-dismiss')!;
   const abort = new AbortController(), pending = new Set<Engine>();
   const lightStatus = setInterval(() => { root.dataset.lightingReady = String(!!active?.engine.debug.lightingReady); root.dataset.settled = String(!!active?.engine.debug.fieldSettled); }, 250);
-  let closed = false, active: { revision: string; engine: Engine; canvas: HTMLCanvasElement } | undefined;
+  let closed = false, active: { revision: string; engine: Engine; canvas: HTMLCanvasElement; lifetime: ReturnType<typeof createCandidateLifetime> } | undefined;
   let view: ReturnType<typeof mountChronicle> | undefined, data: DurableChronicle | undefined;
   let requestedRevision = '', sceneError: unknown;
   const liveWalk = options.liveEngine?.walkSelected() ?? false, liveDock = options.liveEngine?.inspect().dock.active ?? false;
   const resumeLive = options.liveEngine?.suspendRendering();
   const ownSound = options.liveEngine ? undefined : createKingdomSound(), audio = options.liveEngine?.sound ?? ownSound!;
   const sound = () => { void audio.unlock().catch(() => {}); audio.cue('wood'); };
-  const clear = () => { active?.engine.dispose(); active?.canvas.remove(); active = undefined; root.dataset.ready = 'false'; root.dataset.worldRevision = ''; };
+  const clear = () => { active?.lifetime.dispose(); active?.engine.dispose(); active?.canvas.remove(); active = undefined; root.dataset.ready = 'false'; root.dataset.worldRevision = ''; };
   const close = (error?: unknown) => {
     if (closed) return; closed = true; abort.abort(); clearInterval(lightStatus);
     try { view?.dispose(); } catch (failure) { error ??= failure; }
@@ -70,6 +71,7 @@ export function openDurableChronicle(options: NativeChronicleOptions) {
           if (!world) throw new Error('The selected night has no complete kingdom geometry.');
           loading.textContent = 'Remembering the shape of this night…'; root.dataset.settled = 'false'; root.dataset.lightingReady = 'false';
           const canvas = document.createElement('canvas'); canvas.style.visibility = 'hidden'; canvas.setAttribute('aria-label', 'Recorded kingdom'); stage.append(canvas);
+          const lifetime = createCandidateLifetime(signal, abort.signal);
           let engine: Engine | undefined, candidateError: unknown;
           try {
             const selected = world.scene.plan.homes.find(home => home.id === focusPlot);
@@ -79,22 +81,22 @@ export function openDurableChronicle(options: NativeChronicleOptions) {
               hour: 17.8, time: 30, camera: selected ? 'window' : 'hero', ...(selected ? { focusSlot: selected.slot } : {}),
               source: world.scene.origin === 'simulated' ? 'simulated' : 'herald', presenceOrigin: world.scene.origin,
               presenceFeed: unrecordedPresence(world.scene.kingdomId, world.scene.origin, snapshot.frame.asOf),
-              signal: signal ?? abort.signal, onProgress: text => { if (!signal?.aborted && !closed) root.dataset.stage = text; }, onNames: () => {}, onSource: () => {}, onError: message => {
+              signal: lifetime.signal, onProgress: text => { if (!lifetime.signal.aborted && !closed) root.dataset.stage = text; }, onNames: () => {}, onSource: () => {}, onError: message => {
                 candidateError = new Error(message);
-                if (!signal?.aborted && !closed) {
+                if (!lifetime.signal.aborted && !closed) {
                   sceneError = candidateError;
                   if (active?.engine === engine) { loading.textContent = 'The recorded kingdom could not render.'; view?.replay.load(null); }
                 }
               },
             });
             pending.add(engine);
-            await waitForDraw(engine, signal ?? abort.signal, () => candidateError);
+            await waitForDraw(engine, lifetime.signal, () => candidateError);
             signal?.throwIfAborted(); abort.signal.throwIfAborted();
             if (closed || requestedRevision !== snapshot.worldRevision) throw new DOMException('A newer night was selected.', 'AbortError');
-            clear(); active = { revision: snapshot.worldRevision, engine, canvas }; pending.delete(engine);
+            lifetime.promote(); clear(); active = { revision: snapshot.worldRevision, engine, canvas, lifetime }; pending.delete(engine);
             canvas.style.visibility = 'visible'; loading.textContent = ''; sceneError = undefined;
             root.dataset.ready = 'true'; root.dataset.loading = 'false'; root.dataset.worldRevision = snapshot.worldRevision;
-          } catch (error) { if (engine) { pending.delete(engine); engine.dispose(); } canvas.remove(); throw error; }
+          } catch (error) { lifetime.dispose(); if (engine) { pending.delete(engine); engine.dispose(); } canvas.remove(); throw error; }
         },
         clear,
         dispose() { clear(); },
