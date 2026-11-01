@@ -1,3 +1,19 @@
+# WT10 resumed — 2026-11-01
+
+User resumed the goal and authorized the existing captures after main fixed lost tickets in d53d9eb. Fresh blocked audit starts here; the prior blocked status below is historical. No new sub-scopes or agents. Main fast-forwarded cleanly to 1bb78bd, which already contains source checkpoints d416c69/6859185.
+
+LIVE owned handle (poll, never duplicate): 1116 = one actual-Kingdom 1440×900 replacement still, `capture-town.mjs --offline --out shots/walking-together/resumed-town-retry`, log `/tmp/walking-resume-town-retry.log`. Queued under the v2 lease guard. Original 51500 is terminal: the host capture guard added a progress line saying it stopped this single-artifact job at 18:13 after 12 minutes holding the lock while six lanes waited. It saved no image/failure report. Do not poll it or claim success from its tool-reported exit 0. It had compiled all 659 placements and started its owned memory realm on allowed port 5171, then ended before the ready-stage log. Owned partial build was removed after process termination; no unrelated service or lock was touched.
+
+Full typecheck 15028, workspace lint 36421, build 66047, and exact six-file in-memory integration typecheck 27568 are terminal success. Focused session 14617 completed: 26 files, 200 tests passed, including the 18 capture-lock regressions and six real-room SDK movement cases. Script ESLint 91417 and final 55943 completed successfully. Frozen dependency install 87092 completed successfully. Logs copied into work/evidence/walking-together/checks/resumed-*.log.
+
+The v2 queue retained registered tickets and admitted the original job; the old missing-ticket failure has not recurred. Never touch another worker's guard or existing service. One artifact per lock, sequential captures in this lane. The runner now logs the exact preparation stage and signals and writes a failure report for an early process exit; an incomplete exit 0 becomes exit 1. Clip offline cleanup precedes context close. Source checkpoint: 79e89c8.
+
+The six-file integration.patch context now includes main's dock import; apply check and in-memory typecheck pass. Main has not yet bound PeopleLabels, approved saved appearances, or gestures in the actual consumers at synced 1bb78bd; no WT10 tick. No rendered capture or whole-kingdom acceptance is claimed until the retry completes and its output is looked at.
+
+Everything below is the previous checkpoint history, not current live-job status.
+
+---
+
 # WT10 working state — 2026-11-01
 
 WT10 is the only task and remains unchecked. Do not write LANE COMPLETE. Read PRD and needs.md before resuming. The previous goal turn made concrete progress (ad7a286/ca01520); this turn also changed authoritative code and evidence. Goal is being marked blocked after three consecutive turns with the same main-owned contract gaps, now with no remaining safe lane action that can complete acceptance.

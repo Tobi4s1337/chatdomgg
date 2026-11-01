@@ -1,6 +1,12 @@
 # WT10 checkpoint evidence — 2026-11-01
 
-WT10 is **open**. These are SIMULATED component reviews, not three authenticated people in the production town.
+WT10 is **open**. These are SIMULATED component reviews; actual town acceptance is still pending.
+
+## Main-fix resume checkpoint
+
+Source checkpoint `79e89c8` follows clean main sync `1bb78bd`, including the capture lease fix `d53d9eb`. All **26 files / 200 focused tests**, full typecheck, workspace lint, build, patch apply check, and the refreshed six-file in-memory consumer typecheck pass. See `checks/resumed-*.log`. This does not establish a full `pnpm verify` pass.
+
+The new queue retained tickets and admitted one actual-town still. It compiled 659 native placements and started the owned memory realm on allowed port 5171. The host capture guard then stopped the single-artifact job at 18:13 after twelve minutes holding the lock while other lanes waited. No image or failure report was saved; the tool's exit 0 is not capture success (`checks/resumed-town-early-exit.log`). The runner now logs stages/signals, persists early-exit failures, and rejects an incomplete zero exit. Clip routes close before the browser context. The replacement single-still job is pending; no resumed town capture has been visually accepted.
 
 ## Third checkpoint
 
