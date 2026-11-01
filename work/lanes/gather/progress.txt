@@ -1,0 +1,2 @@
+# gather progress
+GA10: checkpoint — adopted portal decision in PRD/Scope/SEAMS; added independent tavern room, walkers/seats, hearth/tide interior and Pong; additive hooks: server registration and shared export; scoped types/lint, 19 tests and both builds pass; four stills looked at; GPU lease busy twice; ports 5182 tests and 5173 preview stopped; needs: play portal/return and grand-world exterior door anchor; next: GA10 browser/game input, prediction, turn games, durability and full acceptance (box remains open) — 0e92df4 (base) — 2026-11-01 23:35

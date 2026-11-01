@@ -1,0 +1,11 @@
+{
+  "extends": "../../../tsconfig.json",
+  "include": [
+    "../../../apps/realm/src/games/**/*.ts",
+    "../../../apps/web/src/tavern/**/*.ts",
+    "../../../apps/web/src/tavern/**/*.tsx",
+    "../../../apps/web/src/games/**/*.ts",
+    "../../../packages/content/src/tavern/**/*.ts",
+    "../../../packages/shared/src/games.ts"
+  ]
+}

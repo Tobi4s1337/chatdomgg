@@ -1,0 +1,13 @@
+.gather-tavern { position: fixed; inset: 0; overflow: hidden; color: var(--cd-cream); background: #27334d; font-family: var(--cd-face-body); }
+.gather-tavern-stage { position: absolute; inset: 0; }
+.gather-tavern-stage canvas { display: block; width: 100%; height: 100%; }
+.gather-tavern-title { position: absolute; left: 38px; top: 30px; pointer-events: none; text-shadow: 0 2px 6px #19121c; }
+.gather-tavern-title p { margin: 0 0 5px; }
+.gather-tavern-title h1 { font: 42px/1.1 var(--cd-face-story); letter-spacing: 0; margin: 0; }
+.gather-tavern-views { position: absolute; display: flex; gap: 6px; bottom: 40px; left: 50%; translate: -50% 0; padding: 9px; width: min(430px, calc(100% - 28px)); }
+.gather-tavern-views button { min-width: 0; flex: 1; min-height: 44px; font-size: 16px; }
+.gather-tavern-views button[aria-pressed='true'] { color: var(--cd-ink); background: var(--cd-parch); border-color: var(--cd-brass); }
+.gather-tavern-inspection { position: absolute; bottom: 7px; width: 100%; text-align: center; font-size: 13px; color: var(--cd-cream-soft); margin: 0; text-shadow: 0 1px 4px #120e1b; }
+.gather-tavern-status { position: absolute; top: 48%; left: 50%; translate: -50% -50%; padding: 18px 25px; }
+@media (max-width: 600px) { .gather-tavern-title { left: 20px; top: 26px; } .gather-tavern-title h1 { font-size: 34px; } .gather-tavern-views button { font-size: 15px; padding: 8px 5px; } }
+@media (prefers-reduced-motion: reduce) { .gather-tavern * { transition: none !important; } }
