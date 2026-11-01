@@ -8,6 +8,7 @@ import { createNativeTown, type NativeTown } from './native';
 import { FoundedSceneError, encodeFoundedScene, validateFoundedScene } from './validate';
 import { FOUNDED_PHYSICS_VERSION } from './collision';
 import { arrivalFurnishings } from './arrival-furnishings';
+import { installFoundedCivicGrowth, type FoundedCivicDiagnostic } from './civic-growth';
 
 export interface FoundedSceneInput {
   readonly kingdomId: KingdomId;
@@ -51,6 +52,8 @@ export interface FoundedSceneBuild {
   readonly geometryDigest: string;
   readonly homes: readonly FoundedHomeBinding[];
   readonly castle: FoundedCastleBinding | null;
+  /** Physical places that could not be installed without changing accepted content or reserved ground. */
+  readonly civicUnavailable: readonly FoundedCivicDiagnostic[];
   readonly counts: { readonly assets: number; readonly placements: number; readonly boxes: number; readonly ownedHomes: number; readonly attachments: number };
 }
 
@@ -135,7 +138,8 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
     castle = { moduleId: ownedCastle.moduleId, revision: ownedCastle.revision, digest: ownedCastle.digest, attachments: parts };
   }
   for (const [id, item] of Object.entries(state.attachments)) if (item.attached && !attachedIds.has(id)) fail(`attached part ${id} is not listed by its host`);
-  for (const fixture of native.fixtures) pieces.push({ id: fixture.id,
+  const civic = installFoundedCivicGrowth(plan, native, state.growth);
+  for (const fixture of civic.fixtures) pieces.push({ id: fixture.id,
     blueprint: ownedCastle && fixture.id === keepId ? ownedCastle.blueprint : fixture.blueprint,
     position: fixture.position, rotation: fixture.rotation });
   pieces.push(...arrivalFurnishings(plan, pieces));
@@ -160,7 +164,7 @@ export async function assembleFoundedScene(input: FoundedSceneInput): Promise<Fo
   const geometry = { compiler: FOUNDED_PHYSICS_VERSION, version: scene.version, kingdomId: scene.kingdomId, origin: scene.origin, layoutRevision: scene.layoutRevision,
     plan: scene.plan, materials: scene.materials, assets: scene.assets, placements: scene.placements };
   const geometryDigest = await sha256Hex(utf8(canonicalSceneJson(geometry)));
-  return { scene, bytes, manifest, geometryDigest, homes, castle,
+  return { scene, bytes, manifest, geometryDigest, homes, castle, civicUnavailable: civic.unavailable,
     counts: { assets: scene.assets.length, placements: scene.placements.length, boxes: scene.assets.reduce((n, a) => n + a.blueprint.boxes.length, 0),
       ownedHomes: owned.size, attachments: attachedIds.size } };
 }

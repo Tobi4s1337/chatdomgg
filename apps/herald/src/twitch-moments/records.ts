@@ -135,7 +135,7 @@ export const BattleRecordSchema = z.strictObject({
 export type BattleRecord = z.infer<typeof BattleRecordSchema>;
 
 /** Families with at most one current public fact. `order` (a start time) decides which occupant is newest. */
-export type CurrentSlot = 'hype' | 'battle';
+export type CurrentSlot = 'hype' | 'battle' | 'poll';
 export const CurrentSlotRecordSchema = z.strictObject({ version: z.literal(1), key: TokenSchema, order: EpochMsSchema });
 /** Claim families claimed only once their delivery changed something. */
 export type ChangeClaimFamily = 'observation' | 'battle-revision';

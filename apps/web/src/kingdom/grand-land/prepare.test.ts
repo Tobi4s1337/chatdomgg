@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { generateSettlementPlan } from '@chatdom/world';
-import { seedForInstalledPlan, installedVisualHeight, regionTouchesPhysical, restoreInstalledFloor } from './prepare';
+import { grandRecipeFor } from './recipes';
+import { grandLandRecipeHash } from '../../../../../packages/world/src/grand/recipe';
+import { installedVisualHeight, regionTouchesPhysical, restoreInstalledFloor } from './prepare';
 import type { SeatedKingdom } from '../../../../../packages/world/src/grand/kingdom';
 import type { GrandLand } from '../../../../../packages/world/src/grand/types';
 import { HOSTED_PAVING } from './palette';
@@ -13,15 +14,15 @@ const seated = {
 } as unknown as SeatedKingdom;
 
 describe('the hosted land keeps the installed floor', () => {
-  it('uses the whole installed identity and never infers a replacement placement plan', () => {
-    const plan = generateSettlementPlan({ seed: 'channel:1234567890123456789', tier: 'hamlet', firstYear: 2026, year: 2026 });
-    const before = JSON.stringify(plan), a = seedForInstalledPlan(plan, '1234567890123456789');
-    const b = seedForInstalledPlan(plan, '2234567890123456789');
-    expect(a.seedKey).toContain('1234567890123456789');
-    expect(a.seedKey).toContain(plan.config.seed);
-    expect(b.seedKey).not.toBe(a.seedKey);
-    expect(a.minSize).toBeGreaterThan((plan.bounds.maxX - plan.bounds.minX) * 2);
-    expect(JSON.stringify(plan)).toBe(before);
+  it('opts in only the kingdom with a pinned adoption recipe', async () => {
+    const recipe = grandRecipeFor('129634568')!;
+    expect(recipe.seed.seedKey).toContain('129634568');
+    expect(recipe.seed.minSize).toBe(2560);
+    expect(grandRecipeFor('other-kingdom')).toBeUndefined();
+    expect(grandRecipeFor(undefined)).toBeUndefined();
+    expect(grandRecipeFor('tobi4s_')).toBeUndefined();
+    expect(await grandLandRecipeHash(recipe)).toMatch(/^[a-f0-9]{64}$/);
+    expect(Object.isFrozen(recipe.frame.envelope)).toBe(true);
   });
 
   it('restores exact top, paving and empty air after the cosmetic voxeliser, including halos', () => {

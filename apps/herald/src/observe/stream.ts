@@ -52,6 +52,8 @@ export interface StreamTrackerOptions {
   readonly kingdomId: KingdomId;
   readonly source: PresenceSource;
   readonly now?: () => number;
+  /** Accepted Helix state changes restore the town's night after startup or a missed EventSub delivery. */
+  readonly reconciled?: (observation: StreamObservation, startedAt: number | null) => void;
 }
 
 /**
@@ -125,7 +127,7 @@ export class StreamTracker {
           outcome = 'lagging';
         } else {
           this.#counters.observedLive++;
-          this.#accept({ kind: 'stream', at, live: true, streamId: stream.id }, 'helix', reason === 'gap');
+          this.#accept({ kind: 'stream', at, live: true, streamId: stream.id }, 'helix', reason === 'gap', stream.startedAt);
           outcome = 'live';
         }
       } else if (this.#pushed?.live && at - this.#pushed.at < HELIX_LAG_MS) {
@@ -154,9 +156,10 @@ export class StreamTracker {
     return this.#observedAt !== null && this.#condition !== 'unknown' && now < this.#observedAt + STREAM_LEASE_MS;
   }
 
-  #accept(observation: StreamObservation, via: 'eventsub' | 'helix', recovered: boolean): void {
+  #accept(observation: StreamObservation, via: 'eventsub' | 'helix', recovered: boolean, startedAt: number | null = null): void {
     // Match the reducer's observation order, including offline winning an equal-time online.
     if (!this.#accepts(observation.at, observation.live)) return;
+    const changed = this.#condition !== (observation.live ? 'live' : 'offline') || observation.live && this.#streamId !== observation.streamId;
     if (this.live !== observation.live || observation.live && this.#streamId !== observation.streamId) this.#generation++;
     this.#condition = observation.live ? 'live' : 'offline';
     this.#via = via;
@@ -166,6 +169,7 @@ export class StreamTracker {
     for (const listener of this.#listeners) listener();
     const input = toPresenceInput(observation, this.#options.kingdomId, this.#options.source.origin);
     if (input) void this.#options.source.submit(input).catch(() => undefined);
+    if (via === 'helix' && changed) this.#options.reconciled?.(observation, startedAt);
   }
 
   #accepts(at: number, live: boolean): boolean {

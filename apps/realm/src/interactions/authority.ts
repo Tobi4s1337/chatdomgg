@@ -3,8 +3,8 @@ import type { RealmInteractionAction, RealmInteractionContext, RealmInteractionL
 import type { RealmIntentContext } from '../ports';
 import {
   ACTION_FOR_KIND, SEAT_KINDS, STANDING, STREET_ZONE, claimSeat, createSeatBook, dropSession, endSeat as endLease, expireSeats, homeZone,
-  interactionLegality, publicSeats, reconnectSession, releasePerson, releaseSession, releaseTargets, resumeSeat, seatAt, seatOfSession, standSeat,
-  type InteractionBlock, type InteractionRecord, type SeatBook,
+  insideHome, interactionLegality, interactionTargetId, publicSeats, reconnectSession, releasePerson, releaseSession, releaseTargets, resumeSeat, seatAt, seatOfSession, standSeat,
+  standingClear, type InteractionBlock, type InteractionRecord, type SeatBook,
 } from '../../../../packages/world/src/interactions';
 import { buildInteractionContext } from './context';
 import type {
@@ -23,11 +23,16 @@ export const REFUSAL_WORDS = {
   'wrong-zone': 'That is not in here with you.',
   'not-yours': 'Only the owner of this home can open its door.',
   'not-inside': 'You are not inside this home.',
+  'inside-blocked': 'Something stands just inside your door, so there is no room to step in.',
+  'passage-blocked': 'Your doorway is blocked, so there is no way in just now.',
+  'home-changed': 'Your home has just changed. Try the door again in a moment.',
   'wrong-action': 'That is not something to do here.',
   rights: 'You cannot do that in this kingdom right now.',
   placement: 'There is not room to do that safely just now. Nothing has changed.',
   'no-host': 'The table is not open right now. Nothing has changed.',
   'host-refused': 'The table did not take a new guest just now.',
+  'no-fire': 'The fire is not answering just now. Nothing has changed.',
+  'fire-held': 'That log is kept for the game at the fire.',
   'no-room': 'The kingdom is not ready for that yet. Nothing has changed.',
   epoch: 'The kingdom moved on. Reconnect to try again.',
   limited: 'One moment, that was quick.',
@@ -35,10 +40,14 @@ export const REFUSAL_WORDS = {
 type Why = keyof typeof REFUSAL_WORDS;
 const REASON_FOR: Readonly<Record<Why, Extract<RealmInteractionResult, { kind: 'refused' }>['reason']>> = {
   occupied: 'occupied', unreachable: 'unreachable', seated: 'forbidden', 'wrong-zone': 'unreachable', 'not-yours': 'forbidden', 'not-inside': 'unreachable',
-  'wrong-action': 'forbidden', rights: 'forbidden', placement: 'unavailable', 'no-host': 'unavailable', 'host-refused': 'unavailable',
+  'inside-blocked': 'unavailable', 'passage-blocked': 'unavailable', 'home-changed': 'unavailable',
+  'wrong-action': 'forbidden', rights: 'forbidden', placement: 'unavailable', 'no-host': 'unavailable', 'host-refused': 'unavailable', 'no-fire': 'unavailable', 'fire-held': 'occupied',
   'no-room': 'unavailable', epoch: 'unavailable', limited: 'unavailable',
 };
-function whyOf(block: InteractionBlock): Why { return block; }
+/** A blocked home door says which way it is blocked; every other rule has one sentence. */
+function whyOf(block: InteractionBlock, record?: Pick<InteractionRecord, 'blocked'>): Why {
+  return block === 'blocked' ? record?.blocked === 'passage-blocked' ? 'passage-blocked' : 'inside-blocked' : block;
+}
 
 interface Self {
   readonly personId: PersonId; readonly sessionId: string;
@@ -47,6 +56,10 @@ interface Self {
 /** Why the room stopped waiting for a request's rights check or host admission. */
 type Abandoned = 'revoked' | 'left' | 'closed';
 interface InFlight { readonly personId: PersonId; readonly controller: AbortController }
+interface Admission {
+  readonly targetId: string; readonly cancel: () => void;
+  readonly seated?: (seat: { readonly targetId: string; readonly generation: number }) => void;
+}
 type Decision =
   | { readonly kind: 'accepted'; readonly result: Extract<RealmInteractionResult, { kind: 'accepted' }> }
   | { readonly kind: 'refused'; readonly result: Extract<RealmInteractionResult, { kind: 'refused' }>; readonly why: Why };
@@ -72,9 +85,16 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
   const inflight = new Map<string, Set<InFlight>>();
   const listeners = new Set<(change: InteractionChange) => void>();
   /** Sessions holding an accepted host admission for this exact target, consumed by the next synchronous act. */
-  const admissions = new Map<string, { readonly targetId: string; readonly cancel: () => void }>();
+  const admissions = new Map<string, Admission>();
   /** Admissions granted to a seat that is still held: cancelled when that lease ends. */
   const hosted = new Map<number, () => void>();
+  /** Seat kinds whose existing host admits before the claim: a table chair always, a campfire log when its host asks. */
+  const decides = new Set<string>(['tavern-seat', ...(options.hosts?.decides ?? [])]);
+  const hostedKind = (action: RealmInteractionAction, targetId: string) => {
+    const kind = options.registry()?.get(targetId)?.target.kind;
+    return kind && decides.has(kind) && ACTION_FOR_KIND[kind] === action ? kind : null;
+  };
+  const hostWords = (kind: string, refused: boolean): Why => kind === 'campfire-seat' ? refused ? 'fire-held' : 'no-fire' : refused ? 'host-refused' : 'no-host';
 
   const seatsMessage = (): SeatsMessage => ({ type: 'seats', writerEpoch, revision: book.revision, seats: publicSeats(book) });
   const self = (sessionId: string, personId: PersonId, walkerId: string): Self => {
@@ -131,6 +151,33 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     return entry;
   }
 
+  /**
+   * Interior holds while the body is inside its own home. A body that walked back out through its open doorway is in
+   * the street again: its self state says so (unsolicited), so the street's places answer it and no exit is offered.
+   */
+  function settleInterior(entry: Self, feet: Vec3): boolean {
+    if (entry.state.mode !== 'interior' || !entry.state.plotId) return false;
+    const home = options.registry()?.home(entry.state.plotId);
+    if (!home?.interior || insideHome(home.interior, feet)) return false;
+    setState(entry, { mode: 'standing', targetId: null, plotId: null });
+    return true;
+  }
+  /**
+   * Put a body out of its home onto that home's own street route: the first point the room accepts, else the
+   * movement owner's recovery (verified supported, clear and outside before it counts). Never a guessed point.
+   */
+  function stepOut(walkerId: string, plotId: string, first: Vec3 | null, revision: number): Vec3 | null {
+    if (!effects) return null;
+    const world = options.world(), home = options.registry()?.home(plotId);
+    for (const point of [...(first ? [first] : []), ...(home?.route ?? [])]) {
+      if (world.revision === revision && standingClear(world, point) && effects.placeWalker(walkerId, point, revision)) return point;
+    }
+    if (!options.recovery?.(walkerId, revision)) return null;
+    const body = effects.readWalker(walkerId);
+    const feet: Vec3 | null = body ? [body.x, body.y, body.z] : null;
+    return feet && body!.collisionRevision === revision && standingClear(world, feet) && !insideHome(home?.interior ?? null, feet) ? feet : null;
+  }
+
   function refuse(why: Why): Decision {
     return { kind: 'refused', result: { kind: 'refused', reason: REASON_FOR[why] }, why };
   }
@@ -149,6 +196,7 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     if (!registry || registry.collisionRevision !== context.collisionRevision) return refuse('no-room');
     const entry = self(context.sessionId, context.personId, context.walkerId);
     const before = book;
+    if (settleInterior(entry, context.position)) publish(book, [entry], []);
 
     if (action === 'stand') {
       const mine = seatOfSession(book, context.sessionId);
@@ -174,7 +222,7 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     const legality = interactionLegality(
       { walkerId: context.walkerId, zone: zoneFor(entry, context.walkerId, context.position), state: entry.state, ownedPlotId: context.ownedPlotId },
       record, seatAt(book, target.id)?.seat ?? null);
-    if (!legality.legal) return refuse(whyOf(legality.reason));
+    if (!legality.legal) return refuse(whyOf(legality.reason, record));
     // Asking for your own seat again while on it: nothing to change.
     if (legality.action === 'stand') return accept(entry.state, null);
     if (!context.unobstructed) return refuse('unreachable');
@@ -191,7 +239,7 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
   function seat(context: RealmInteractionContext, entry: Self, record: InteractionRecord, requestId: string | null): Decision {
     const targetId = record.target.id;
     const admission = admissions.get(context.sessionId);
-    if (record.target.kind === 'tavern-seat' && admission?.targetId !== targetId) return refuse(options.hosts?.admit ? 'host-refused' : 'no-host');
+    if (decides.has(record.target.kind) && admission?.targetId !== targetId) return refuse(hostWords(record.target.kind, !!options.hosts?.admit));
     const before = book;
     const claim = claimSeat(book, { targetId, walkerId: context.walkerId, sessionId: context.sessionId, personId: context.personId, writerEpoch });
     if (claim.kind === 'occupied') return refuse('occupied');
@@ -213,18 +261,29 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     }
     setState(entry, { mode: 'seated', targetId, plotId: null });
     publish(before, changed, released, requestId);
+    // The host learns the exact generation it may end later, only once the seat is really held and published.
+    admission?.seated?.({ targetId, generation: claim.lease.seat.generation });
     return accept(entry.state, record.target.approach);
   }
 
   function threshold(context: RealmInteractionContext, entry: Self, record: InteractionRecord, requestId: string | null): Decision {
-    if (!record.rest || !effects) return refuse('placement');
-    if (!effects.placeWalker(entry.walkerId, record.rest, context.collisionRevision)) return refuse('placement');
     const plotId = record.target.plotId ?? null;
-    const state = record.target.kind === 'home-door'
-      ? setState(entry, { mode: 'interior', targetId: record.target.id, plotId })
-      : setState(entry, { mode: 'standing', targetId: null, plotId: null });
+    if (!record.rest || !effects || !plotId) return refuse('placement');
+    if (record.target.kind === 'home-door') {
+      // The door belongs to one installed home revision: a shell or furnishing replaced since it was derived is
+      // another room, and the door is looked at again once the room has adopted it.
+      if (options.homes.revisionOf && (record.revision === null || options.homes.revisionOf(plotId) !== record.revision)) return refuse('home-changed');
+      if (!effects.placeWalker(entry.walkerId, record.rest, context.collisionRevision)) return refuse('placement');
+      const state = setState(entry, { mode: 'interior', targetId: record.target.id, plotId });
+      publish(book, [entry], [], requestId);
+      return accept(state, record.rest);
+    }
+    // Out through the same doorway onto this home's own street route. An exit nobody can stand at is never said yes to.
+    const landed = stepOut(entry.walkerId, plotId, record.rest, context.collisionRevision);
+    if (!landed) return refuse('placement');
+    const state = setState(entry, { mode: 'standing', targetId: null, plotId: null });
     publish(book, [entry], [], requestId);
-    return accept(state, record.rest);
+    return accept(state, landed);
   }
 
   function receipt(id: string, decision: Decision): RealmReceipt {
@@ -265,17 +324,18 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     const current = await options.rights.current(principal, options.clock());
     if (signal.aborted) return abandoned(intent.id, signal);
     if (!current) return receipt(intent.id, refuse('rights'));
-    let admission: { readonly targetId: string; readonly cancel: () => void } | null = null;
-    if (intent.action === 'tavern') {
-      // Ask the existing table host only for a chair this person could take right now; then decide again after.
+    let admission: Admission | null = null;
+    const kind = hostedKind(intent.action, intent.targetId);
+    if (kind) {
+      // Ask the existing host only for a seat this person could take right now; then decide again after.
       const early = contextFor(request, intent, options.clock());
       if (!early) return unavailable('no-room');
-      const preview = previewSeat(early);
+      const preview = previewSeat(early, kind);
       if (preview) return receipt(intent.id, preview);
-      if (!options.hosts?.admit) return unavailable('no-host');
+      if (!options.hosts?.admit) return unavailable(hostWords(kind, false));
       const answer = await options.hosts.admit({ targetId: intent.targetId, personId: principal.personId, walkerId: request.walkerId, signal });
-      if (!answer.admitted) return signal.aborted ? abandoned(intent.id, signal) : answer.reason === 'unavailable' ? unavailable('no-host') : receipt(intent.id, refuse('host-refused'));
-      admission = { targetId: intent.targetId, cancel: answer.cancel };
+      if (!answer.admitted) return signal.aborted ? abandoned(intent.id, signal) : answer.reason === 'unavailable' ? unavailable(hostWords(kind, false)) : receipt(intent.id, refuse(hostWords(kind, true)));
+      admission = { targetId: intent.targetId, cancel: answer.cancel, ...(answer.seated ? { seated: answer.seated } : {}) };
       // Moderation, leave or writer loss while the host was answering: the admission is returned, nobody sits.
       if (signal.aborted || disposed) { admission.cancel(); return abandoned(intent.id, signal); }
     }
@@ -288,16 +348,31 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
     return receipt(intent.id, decision);
   }
   /** The refusal a seat claim would get right now, without mutating anything. */
-  function previewSeat(context: RealmInteractionContext): Decision | null {
+  function previewSeat(context: RealmInteractionContext, kind: string): Decision | null {
     if (!context.permitted) return refuse('rights');
     const record = context.target ? options.registry()?.get(context.target.id) : undefined;
-    if (!record || record.target.kind !== 'tavern-seat') return context.target ? refuse('wrong-action') : refuse('unreachable');
+    if (!record || record.target.kind !== kind) return context.target ? refuse('wrong-action') : refuse('unreachable');
     const entry = selves.get(context.sessionId);
     const legality = interactionLegality(
       { walkerId: context.walkerId, zone: zoneFor(entry, context.walkerId, context.position), state: entry?.state ?? STANDING, ownedPlotId: context.ownedPlotId },
       record, seatAt(book, record.target.id)?.seat ?? null);
-    if (!legality.legal) return refuse(whyOf(legality.reason));
+    if (!legality.legal) return refuse(whyOf(legality.reason, record));
     return context.unobstructed ? null : refuse('unreachable');
+  }
+
+  /**
+   * A reload or a newer window of someone who was at home: when the room put the new body back inside that same home
+   * (which they still own, with its exit registered), they are at home again; anywhere else they are in the street.
+   */
+  function resumeInterior(entry: Self): void {
+    const earlier = [...selves.values()].filter(other => other !== entry && other.personId === entry.personId && other.state.mode === 'interior')
+      .sort((a, b) => b.state.revision - a.state.revision)[0];
+    const plotId = earlier?.state.plotId;
+    if (!earlier || !plotId) return;
+    const body = effects?.readWalker(entry.walkerId), registry = options.registry();
+    if (!body || !registry || options.homes.ownedPlotId(entry.personId) !== plotId || !registry.get(interactionTargetId.homeExit(plotId))) return;
+    if (!insideHome(registry.home(plotId)?.interior ?? null, [body.x, body.y, body.z])) return;
+    setState(entry, { mode: 'interior', targetId: earlier.state.targetId, plotId });
   }
 
   function lifecycleRelease(released: readonly RealmInteractionLease[], cause: InteractionReleaseCause, before: SeatBook): void {
@@ -359,7 +434,7 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
         // Nothing is held for this person any more (grace ran out while away): stand, honestly.
         setState(entry, { mode: 'standing', targetId: null, plotId: null });
         effects?.allowWalking(walkerId, true);
-      }
+      } else if (entry.state.mode === 'standing') resumeInterior(entry);
       publish(before, changed, ended);
       delivery?.owner(entry.personId, { type: 'interaction', requestId: null, writerEpoch, state: entry.state });
     },
@@ -416,6 +491,17 @@ export function createInteractionAuthority(options: InteractionAuthorityOptions)
       const { book: next, released } = releaseTargets(book, id => !!registry?.get(id) && SEAT_KINDS.has(registry.get(id)!.target.kind));
       book = next;
       lifecycleRelease(released, 'target-removed', before);
+      // Someone at home whose home no longer has a registered way out (an edit closed the doorway, the deed moved on)
+      // is put out on that home's own street route now, not left in a room they could not leave.
+      const revision = options.world().revision, out: Self[] = [];
+      for (const entry of selves.values()) {
+        const plotId = entry.state.mode === 'interior' ? entry.state.plotId : null;
+        if (!plotId || (registry?.get(interactionTargetId.homeExit(plotId)) && options.homes.ownedPlotId(entry.personId) === plotId)) continue;
+        if (!stepOut(entry.walkerId, plotId, null, revision)) continue;
+        setState(entry, { mode: 'standing', targetId: null, plotId: null });
+        out.push(entry);
+      }
+      if (out.length) publish(book, out, []);
     },
     nextExpiry() {
       const finite = book.leases.map(lease => lease.expiresAt).filter(Number.isFinite);

@@ -1,29 +1,22 @@
 import type { SettlementPlan } from '@chatdom/world';
 import { generateGrandLand } from '../../../../../packages/world/src/grand/generate';
-import { frameSettlement, landColumnsFor, seatKingdomOnLand, settlementGround, clearKingdomStructures, type SeatedKingdom } from '../../../../../packages/world/src/grand/kingdom';
-import { GRAND_REGION, type GrandLand, type GrandLandSeed } from '../../../../../packages/world/src/grand/types';
+import { seatKingdomOnLand, settlementGround, clearKingdomStructures, type SeatedKingdom } from '../../../../../packages/world/src/grand/kingdom';
+import { GRAND_REGION, type GrandLand } from '../../../../../packages/world/src/grand/types';
 import { HOSTED_PAVING } from './palette';
 
-export const HOSTED_GRAND_COMPILER = 'hosted-grand-land-1';
+import type { GrandLandRecipe } from '../../../../../packages/world/src/grand/recipe';
 
-/** These are rendering inputs. Neither the generated mountains nor their height query grant walking support. */
-export function seedForInstalledPlan(plan: SettlementPlan, kingdomId?: string): GrandLandSeed {
-  const style = plan.homes[0]?.style;
-  return {
-    seedKey: JSON.stringify(['installed-kingdom', kingdomId ?? null, plan.config.seed]),
-    kingdomId: kingdomId ?? plan.config.seed, name: kingdomId ?? plan.config.seed,
-    biome: style === 'grove' ? 'woodland' : style === 'tide' ? 'coastal' : 'meadow',
-    tier: plan.config.tier, character: plan.genesisSurface?.character ?? 'river-valley',
-    minSize: landColumnsFor(frameSettlement(plan)),
-  };
-}
+export const HOSTED_GRAND_COMPILER = 'hosted-grand-land-2';
 
 export interface PreparedGrandLand { readonly land: GrandLand; readonly seated: SeatedKingdom }
 
 /** The installed plan is a constraint on the larger recipe, never regenerated or moved. */
-export function prepareInstalledLand(plan: SettlementPlan, seed: GrandLandSeed = seedForInstalledPlan(plan)): PreparedGrandLand {
-  const land = generateGrandLand(seed);
-  const seated = seatKingdomOnLand(land, plan);
+export function prepareInstalledLand(plan: SettlementPlan, recipe: GrandLandRecipe): PreparedGrandLand {
+  if (recipe.mesher !== HOSTED_GRAND_COMPILER || recipe.generator !== 'grand-land-1'
+    || recipe.grader !== 'gk11-grade-2' || recipe.kit !== 'grand-artisans-1')
+    throw new Error('This land recipe requires its pinned compiler');
+  const land = generateGrandLand(recipe.seed);
+  const seated = seatKingdomOnLand(land, plan, recipe.frame);
   if (!seated.seat.fits) throw new Error('The grand landscape cannot contain the installed physical region');
   // A clamp or unsupported quantisation would make a different visible floor from the one the server
   // compiled. Compare every adopted column, not just a few anchors or the grade's extrema.

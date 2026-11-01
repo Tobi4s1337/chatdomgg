@@ -19,6 +19,10 @@ import {
 import { describeAction } from './previews';
 import { RAID_BEAT, RAID_LIMITS, planRaid, raidCaption, raidCues, raidFrame, raidProfile, type RaidBeat, type RaidFrame } from './raid-beat';
 import { mergeSky, seedOf, skyCaption, skyCues, skyFrame, skyHold, skyLength, type SkyBeat } from './sky-beat';
+import type { TownColour, TownFrame } from './town';
+import {
+  applyTownState, boardCaption, createTownState, planTownBeat, townCandidate, townCaption, townCues, townFocus, townFrame, townHold, type TownBeat,
+} from './town-beat';
 import { bannerProfile, battleCandidate, giftProfile, skyProfile, stageCues, stageOf, trainCandidate, type StageCandidate, type StageFrame } from './stage-beat';
 import {
   DEFAULT_CHEER_LADDER, SKY_LIMITS, SKY_MERGE_MS, TRAIN_BEAT, rungFor, type ApprovedEffect, type BattleStatus, type DragonFrame, type KingdomScale,
@@ -111,6 +115,13 @@ export interface FocusFrame {
   readonly follow: { readonly subject: MomentSubject; readonly at: number } | null;
   /** Where the beat's located parcels are bound (at most twelve), so a gathering shot looks toward them. */
   readonly toward: readonly MomentSubject[];
+  /**
+   * A framing other than the subject's usual one. `garden`: a home's front garden rather than its banner, the house,
+   * its door and what grows beside it seen from the street with the words over the door in frame (a sapling, a planted
+   * tree, a window answering, a welcome home). `board`: the plaza's decree board seen from across the square, its
+   * question and every pennant in frame, rather than the sky over the plaza.
+   */
+  readonly framing?: 'garden' | 'board';
 }
 /** One parcel: in flight (`elapsed` ms since its launch) or resting at its destination (`elapsed` null). */
 export interface ParcelFrame {
@@ -138,6 +149,10 @@ export interface MomentMetrics {
   readonly suppressed: Readonly<Record<'expired' | 'recovered' | 'anonymous' | 'coalesced' | 'unchanged' | 'unapproved', number>>;
   readonly rejected: Readonly<Record<FactRejection | `reset-${ResetRejection}` | 'presence', number>>;
   readonly peak: Readonly<{ beats: number; captions: number; audio: number; current: number; parcels: number; sky: number }>;
+  /** The beat admitted last (its stage ID and when it takes the stage), so a capture can find its peak. */
+  readonly latest: Readonly<{ id: string; kind: string; startAt: number }> | null;
+  /** The last fact taken in (its sequence and kind), whether or not it put a beat on the stage. */
+  readonly lastFact: Readonly<{ seq: number; kind: string }> | null;
 }
 export interface MomentFrame {
   readonly atMs: number;
@@ -164,6 +179,8 @@ export interface MomentFrame {
   readonly stage: StageFrame | null;
   /** Incoming raids past their start: the gate's wake and the caravan, at most RAID_LIMITS.caravans. */
   readonly raids: readonly RaidFrame[];
+  /** The town as its channel shaped it: the grove, the gate's night, its colours, the decree board, a festival, the bell. */
+  readonly town: TownFrame;
 }
 
 interface BannerBeat {
@@ -173,7 +190,9 @@ interface BannerBeat {
   readonly id: string; readonly slot: number; readonly name: string; readonly line: string; readonly startAt: number; readonly endAt: number;
   readonly newRibbon: boolean;
 }
-type Beat = BannerBeat | GiftBeat | SkyBeat | RaidBeat;
+type Beat = BannerBeat | GiftBeat | SkyBeat | RaidBeat | TownBeat;
+/** Facts that shape the town: lasting state, and a beat when they happen live. */
+const TOWN_KINDS: ReadonlySet<string> = new Set(['follow', 'homecoming', 'night', 'grove', 'decree', 'redemption', 'poll']);
 interface HomeDress {
   readonly tier: HomeDressFrame['tier']; readonly active: boolean; readonly months: number; readonly founder: boolean;
   /** Kingdom time of a live quiet change, and the cloth's rest before it; restoration has no motion. */
@@ -247,6 +266,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
   /** Raids already welcomed this session, bounded: a raid is one caravan however often its fact is seen. */
   const raidSeen = new Set<string>();
   let train: TrainState | null = null, battle: BattleState | null = null;
+  let town = createTownState();
   const inFlightMoments = new Map<string, Promise<ActionAttempt>>();
   let presentation: Presentation = { layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] };
   const inFlight = new Map<string, Promise<ActionAttempt>>();
@@ -256,6 +276,8 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     rejected: { 'not-ready': 0, epoch: 0, invalid: 0, kingdom: 0, origin: 0, replay: 0, 'reset-invalid': 0, 'reset-kingdom': 0, 'reset-origin': 0,
       'reset-sequence': 0, 'reset-partial': 0, presence: 0 },
     peak: { beats: 0, captions: 0, audio: 0, current: 0, parcels: 0, sky: 0 },
+    latest: null as { id: string; kind: string; startAt: number } | null,
+    lastFact: null as { seq: number; kind: string } | null,
   };
 
   function cancelTransient(): void { beats = []; nextSlotAt = -Infinity; }
@@ -265,11 +287,20 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     const body = fact.body;
     // Cheers, Power-ups and raids are moments, not state: nothing of them lasts in the current view.
     if (body.kind === 'cheer' || body.kind === 'power-up' || body.kind === 'raid') return;
-    current.set(fact.body.key, fact);
+    // A follow, a homecoming and a reward are moments too; only their names and a called festival last (in the town).
+    if (body.kind === 'follow' || body.kind === 'homecoming' || (body.kind === 'redemption' && body.key !== 'festival')) {
+      applyTownState(town, fact, clock.now(), live);
+      return;
+    }
+    if (body.kind === 'poll') {
+      for (const [key, held] of current) if (held.body.kind === 'poll') current.delete(key);
+      if (body.phase !== 'end') current.set(body.key, fact);
+    } else current.set(body.key, fact);
     metrics.peak.current = Math.max(metrics.peak.current, current.size);
     const now = clock.now(), animate = live && now <= body.displayUntil;
     if (body.kind === 'hype') train = nextTrain(train ?? undefined, body, now, animate);
     if (body.kind === 'battle') battle = nextBattle(battle ?? undefined, body, now, animate);
+    if (TOWN_KINDS.has(body.kind)) applyTownState(town, fact, now, animate);
     if (body.kind === 'subscription' && body.credit?.slot != null) {
       const previous = homes.get(body.credit.slot), now = clock.now();
       const moved = live && previous !== undefined && previous.active !== body.active;
@@ -295,6 +326,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     nextSlotAt = beat.startAt + holdsFor;
     beats = [...pending(now), beat].slice(-MOMENT_LIMITS.beats);
     metrics.admitted++;
+    metrics.latest = { id: beat.id, kind: beat.kind, startAt: beat.startAt };
     metrics.peak.beats = Math.max(metrics.peak.beats, beats.length);
   }
 
@@ -441,10 +473,23 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     push(beat, beat.holdUntil - startAt, now);
   }
 
+  /** A town fact's live beat (a sapling, a relight, the gate, a reward, the board, a decree) takes its turn on the stage. */
+  function scheduleTown(fact: TwitchMomentFact, colourBefore: TownColour): void {
+    const now = clock.now();
+    if (!planTownBeat(fact, now, colourBefore, truncate)) return;
+    const startAt = slot(now, now);
+    if (startAt === null) return;
+    if (startAt > fact.body.displayUntil) { metrics.suppressed.expired++; return; }
+    const beat = planTownBeat(fact, startAt, colourBefore, truncate)!;
+    push(beat, townHold(beat), now);
+  }
+
   function admit(fact: TwitchMomentFact): void {
     const body = fact.body;
+    const colourBefore = town.colour;
     const previous = body.kind === 'subscription' && body.credit?.slot != null ? homes.get(body.credit.slot) : undefined;
     applyState(fact, fact.origin !== 'recovered');
+    metrics.lastFact = { seq: fact.seq, kind: body.kind };
     const now = clock.now();
     if (fact.origin === 'recovered') { metrics.suppressed.recovered++; return; }
     if (now > body.displayUntil || body.displayUntil === fact.occurredAt) { metrics.suppressed.expired++; return; }
@@ -453,6 +498,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     else if (body.kind === 'cheer') scheduleCheer(fact, body);
     else if (body.kind === 'power-up') schedulePowerUp(fact, body);
     else if (body.kind === 'raid') scheduleRaid(fact, body);
+    else if (TOWN_KINDS.has(body.kind)) scheduleTown(fact, colourBefore);
   }
 
   const originOk = (origin: TwitchMomentFact['origin']) => origin === expectedOrigin || origin === 'recovered';
@@ -474,7 +520,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
       facts.push(fact.data);
     }
     // Replace bounded state; a restored snapshot has no "just happened" beat.
-    cancelTransient(); current.clear(); homes.clear(); train = null; battle = null;
+    cancelTransient(); current.clear(); homes.clear(); train = null; battle = null; town = createTownState();
     for (const fact of facts.sort((a, b) => a.seq - b.seq)) {
       applyState(fact, false);
       // A restored group was someone's moment already; a late sibling notice for it is state only.
@@ -607,6 +653,13 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
         }
         continue;
       }
+      if (beat.kind === 'town') {
+        const words = townCaption(beat, atMs);
+        if (words) caption(words);
+        const shot = townFocus(beat, presentation.mood === 'show');
+        if (!focus && shot && atMs < shot.endAt && !presentation.busy) focus = shot;
+        continue;
+      }
       if (beat.kind === 'home-banner') {
         const opacity = beat.style === 'unfurl' ? bannerPose(t).caption : flourishPose(t).caption;
         caption({ id: beat.id, at: { kind: 'home', slot: beat.slot }, title: beat.name, line: beat.line, detail: null, opacity });
@@ -625,7 +678,10 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     if (visible && battle && dragonNow?.key === battle.battleKey) add(dragonCues(battle, atMs));
     if (visible && train && trainNow) add(trainCues(train));
     if (visible && train && dragonNow?.phase === 'stir') add(stirCues(train));
-    for (const beat of live) add(beat.kind === 'home-banner' ? bannerCues(beat) : beat.kind === 'gift' ? giftCues(beat) : beat.kind === 'raid' ? raidCues(beat) : skyCues(beat));
+    for (const beat of live) {
+      add(beat.kind === 'home-banner' ? bannerCues(beat) : beat.kind === 'gift' ? giftCues(beat) : beat.kind === 'raid' ? raidCues(beat)
+        : beat.kind === 'town' ? townCues(beat) : skyCues(beat));
+    }
     // The train's closing fireworks fly over the castle, credited to nobody.
     const sky = live.filter((b): b is SkyBeat => b.kind === 'sky' && atMs >= b.startAt).slice(0, SKY_LIMITS.beats).map(b => skyFrame(b, atMs));
     if (trainNow?.closingFireworks && train?.endedAt != null && Number.isFinite(train.endedAt)) {
@@ -652,6 +708,8 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
         candidates.push({ beat: beat.id, subject: { kind: 'home', slot: beat.slot }, startAt: beat.startAt, profile: bannerProfile(beat.style) });
       } else if (beat.kind === 'raid') {
         candidates.push({ beat: beat.id, subject: { kind: 'place', place: 'gate' }, startAt: beat.startAt, profile: raidProfile(beat) });
+      } else if (beat.kind === 'town') {
+        candidates.push(townCandidate(beat));
       } else {
         const subject: MomentSubject = beat.mode === 'cart' ? { kind: 'place', place: 'market' } : subjectOf(beat.parcels[0]!.to);
         candidates.push({ beat: beat.id, subject, startAt: beat.startAt, profile: giftProfile(beat) });
@@ -661,12 +719,15 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     const stage = visible ? stageOf(candidates, atMs, present) : null;
     const raids = live.filter((b): b is RaidBeat => b.kind === 'raid' && atMs >= b.startAt).slice(0, RAID_LIMITS.caravans).map(b => raidFrame(b, atMs));
     if (stage) add(stageCues(stage));
+    const townBeats = live.filter((b): b is TownBeat => b.kind === 'town');
+    if (visible) { const words = boardCaption(town, atMs, townBeats); if (words) caption(words); }
     metrics.peak.captions = Math.max(metrics.peak.captions, captions.length);
     metrics.peak.audio = Math.max(metrics.peak.audio, audio.length);
     metrics.peak.parcels = Math.max(metrics.peak.parcels, parcels.length);
     metrics.peak.sky = Math.max(metrics.peak.sky, sky.length);
     return { atMs, status, label: expectedOrigin === 'simulated' ? 'SIMULATED' : 'LIVE', visible, homes: homeFrames.sort((a, b) => a.slot - b.slot),
-      parcels, carts, captions, audio, focus, sky, train: trainNow, dragon: dragonNow, battle: battleStatus, stage, raids };
+      parcels, carts, captions, audio, focus, sky, train: trainNow, dragon: dragonNow, battle: battleStatus, stage, raids,
+      town: townFrame(town, townBeats, atMs, visible) };
   }
 
   /**
@@ -826,7 +887,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     currentFacts: (): readonly TwitchMomentFact[] => [...current.values()],
     dispose() {
       disposed = true; cancelTransient(); current.clear(); homes.clear(); celebrated.clear(); skySeen.clear(); raidSeen.clear(); presence = null; inFlight.clear();
-      inFlightMoments.clear(); train = null; battle = null;
+      inFlightMoments.clear(); train = null; battle = null; town = createTownState();
     },
   };
 }

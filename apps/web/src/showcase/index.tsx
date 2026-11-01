@@ -10,7 +10,7 @@ const places: Place[] = [
   { number: '04', title: 'The panel', description: 'See a simulated night in the panel made for Twitch.', status: 'SIMULATED', href: '/panel?source=simulated', action: 'Open the panel' },
   { number: '05', title: 'Make your citizen', description: 'Find a look that feels like you, with hair, clothes and earned keepsakes.', status: 'SIMULATED', href: '/-/avatar-builder', action: 'Make your citizen' },
   { number: '06', title: 'Citizen card & passport', description: 'Meet Wren through their portrait, keepsakes and ink-stamped travels.', status: 'SIMULATED', href: '/-/citizen-card?fixture=wren&mode=page&light=dusk&chrome=0', action: 'See the card' },
-  { number: '07', title: 'The Chronicle', description: 'Return to the nights that shaped your kingdom. Its public storybook is not open yet.', status: 'UNAVAILABLE' },
+  { number: '07', title: 'The Chronicle', description: 'Read Willowmere’s recorded nights and see how its homes changed.', status: 'LIVE', href: '/stream?source=realm&kingdom=129634568&chronicle=1', action: 'Open the kingdom’s story' },
 ];
 
 const kingdoms = [

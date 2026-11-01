@@ -1,6 +1,7 @@
 import { VoxelBlueprintSchema, type KingdomId, type Vec3 } from '@chatdom/shared';
 import type { CollisionWorld, RealmBootstrap, RealmFoundedManifest, RealmPrivateState } from '@chatdom/shared/realm';
 import type { RealmFoundedScene, SettlementPlan } from '@chatdom/world';
+import { createFoundedInteractionRegistry, interactionTargetId } from '@chatdom/world/interactions';
 import type { DurableKingdomOptions } from '../persistence/kingdom';
 import { foundedSpawnAnchors } from './anchors';
 import { compileFoundedScene, sampleFoundedTerrain } from './collision';
@@ -34,6 +35,27 @@ export function createFoundedWorld(scene: RealmFoundedScene): FoundedWorld {
   return { scene, world, anchors, options };
 }
 
+/** Bind only committed deeds to the actual installed, collision-checked outside door threshold. */
+function withOwnedDoorSpawns(physical: FoundedWorld, state: RealmPrivateState): FoundedWorld {
+  const doors = new Map<string, Vec3>();
+  const homes = Object.values(state.homes).filter(home => home.layoutRevision === physical.scene.layoutRevision);
+  if (homes.length) {
+    const registry = createFoundedInteractionRegistry(physical.scene, physical.world);
+    for (const home of homes) {
+      const door = registry.get(interactionTargetId.homeDoor(home.id));
+      if (door?.target.kind === 'home-door' && door.target.plotId === home.id) doors.set(home.ownerId, door.target.approach);
+    }
+  }
+  const fallback: DurableKingdomOptions['spawn'] = (_principal, arrival) => {
+    const anchor = physical.anchors[arrival];
+    if (!anchor) throw new Error('The founded arrival anchor capacity is exhausted.');
+    return anchor;
+  };
+  return { ...physical, options: { ...physical.options, spawn: (principal, arrival) =>
+    principal.kingdomId === state.kingdomId && principal.origin === state.origin
+      ? doors.get(principal.personId) ?? fallback(principal, arrival) : fallback(principal, arrival) } };
+}
+
 /** Durable artifact and collision-revision authority; implemented by FileFoundedStore below. */
 export interface FoundedWorldStore {
   /** One exact geometry identity gets one uint32; another identity must never reuse it within this kingdom. */
@@ -61,26 +83,26 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
   current(kingdomId: KingdomId): FoundedPreparedWorld | undefined;
 } {
   const current = new Map<KingdomId, FoundedPreparedWorld>();
-  const staged = new Map<KingdomId, { homes: RealmPrivateState['homes']; castle: RealmPrivateState['castle']; attachments: RealmPrivateState['attachments']; prepared: FoundedPreparedWorld }>();
+  const staged = new Map<KingdomId, { homes: RealmPrivateState['homes']; castle: RealmPrivateState['castle']; attachments: RealmPrivateState['attachments']; civic: NonNullable<RealmPrivateState['growth']>['civic'] | undefined; prepared: FoundedPreparedWorld }>();
   const publish = (kingdomId: KingdomId, prepared: FoundedPreparedWorld) => {
     current.delete(kingdomId); current.set(kingdomId, prepared);
     while (current.size > 64) current.delete(current.keys().next().value!);
   };
   const stage = async (kingdomId: KingdomId, state: RealmPrivateState): Promise<FoundedPreparedWorld> => {
     const cached = staged.get(kingdomId), head = await source.currentLayout(kingdomId);
-    if (cached && cached.homes === state.homes && cached.castle === state.castle && cached.attachments === state.attachments
+    if (cached && cached.homes === state.homes && cached.castle === state.castle && cached.attachments === state.attachments && cached.civic === state.growth?.civic
       && head?.revision === cached.prepared.scene.layoutRevision) return cached.prepared;
     // First chat claims a native home already standing here. Rebind its public ownership only after checking
     // the actual blueprint against that placement's immutable asset; no geometry or scene bytes change.
     if (cached && head?.revision === cached.prepared.scene.layoutRevision && state.kingdomId === kingdomId
-      && state.origin === source.origin && cached.castle === state.castle && cached.attachments === state.attachments) {
+      && state.origin === source.origin && cached.castle === state.castle && cached.attachments === state.attachments && cached.civic === state.growth?.civic) {
       const build = await claimNativeHomes(cached.prepared.build, cached.homes, state.homes);
       if (build) {
         const latest = await source.currentLayout(kingdomId);
         if (!latest || latest.revision !== head.revision) throw new Error('The adopted layout changed during founded world preparation.');
-        const prepared: FoundedPreparedWorld = { ...cached.prepared, build,
+        const prepared: FoundedPreparedWorld = { ...withOwnedDoorSpawns(cached.prepared, state), build,
           manifestFor: checkpoint => foundedCheckpointMatches(build, checkpoint) ? build.manifest : null };
-        staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, prepared });
+        staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, civic: state.growth?.civic, prepared });
         return prepared;
       }
     }
@@ -96,12 +118,12 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
     // A public home metadata change can retain identical geometry. Keep the exact current collision object so
     // its stable revision does not cause a false physical adoption or reset occupied walkers.
     const active = current.get(kingdomId), physical = active?.build.geometryDigest === build.geometryDigest ? active : createFoundedWorld(scene);
-    const prepared: FoundedPreparedWorld = { ...physical, scene, build,
+    const prepared: FoundedPreparedWorld = { ...withOwnedDoorSpawns({ ...physical, scene }, state), scene, build,
       manifestFor: checkpoint => foundedCheckpointMatches(build, checkpoint) ? build.manifest : null };
     // Recheck layout head after asynchronous preparation. Caller still checks held writer/poses at adoption.
     const latest = await source.currentLayout(kingdomId);
     if (!latest || latest.revision !== adopted.revision) throw new Error('The adopted layout changed during founded world preparation.');
-    staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, prepared });
+    staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, civic: state.growth?.civic, prepared });
     while (staged.size > 64) staged.delete(staged.keys().next().value!);
     return prepared;
   };

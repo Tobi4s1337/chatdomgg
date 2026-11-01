@@ -26,8 +26,10 @@ const REMEMBERED = 1024;
  * before anyone was watching, so they set the stage without a ceremony. Older or foreign frames are ignored.
  */
 export function createCeremonyLedger() {
-  let kingdomId: string | null = null, sequence = -1;
+  let kingdomId: string | null = null, sequence = -1, bootstrapFloor = -1;
   const stages = new Map<string, GrowthHomeStage>();
+  /** The highest stage each home has been celebrated at: a housewarming never repeats or goes back. */
+  const celebrated = new Map<string, GrowthHomeStage>();
   const seen = new Set<string>(), order: string[] = [];
   const remember = (key: string) => {
     seen.add(key); order.push(key);
@@ -40,20 +42,28 @@ export function createCeremonyLedger() {
       const frame = parsed.data;
       if (kingdomId !== null && frame.kingdomId !== kingdomId || frame.sequence <= sequence) return { stages, ceremonies: [], accepted: false };
       const bootstrap = kingdomId === null;
+      if (bootstrap) bootstrapFloor = frame.sequence;
       kingdomId = frame.kingdomId; sequence = frame.sequence;
-      const before = new Map(stages);
       for (const home of frame.homes) {
         const known = stages.get(home.plotId);
         if (!known || rank(home.stage) > rank(known)) stages.set(home.plotId, home.stage);
       }
       const ceremonies: GrowthCeremony[] = [];
       for (const beat of frame.beats) {
+        // A later frame can carry history omitted from bootstrap. The initial source floor stays fixed so an
+        // eligibility update cannot consume a physical commit that is still owed after this connection began.
+        if (beat.sourceSeq <= bootstrapFloor) continue;
         const key = beatKey(frame.kingdomId, beat);
         if (seen.has(key)) continue;
         remember(key);
+        if (beat.kind === 'home-grown') {
+          // An eligibility frame may already show the earned stage before its geometry commits; the committed beat is
+          // still owed. Only a beat at or below a stage this home was already celebrated at has nothing to celebrate.
+          const floor = celebrated.get(beat.plotId);
+          if (floor !== undefined && rank(beat.to) <= rank(floor)) continue;
+          celebrated.set(beat.plotId, beat.to);
+        }
         if (bootstrap) continue;
-        // A home beat that does not move this home forward from what was already shown has nothing to celebrate.
-        if (beat.kind === 'home-grown' && before.has(beat.plotId) && rank(beat.to) <= rank(before.get(beat.plotId)!)) continue;
         ceremonies.push({ key, beat, frame });
       }
       return { stages, ceremonies, accepted: true };

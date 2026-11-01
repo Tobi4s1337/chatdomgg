@@ -3,7 +3,9 @@ import { geometryFromChunks, type VoxelRenderState, type WindowHouse } from '@ch
 import type { KingdomId, KingdomPresenceFrame, MaterialRegistry } from '@chatdom/shared';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { terrainHeight, type SettlementPlan } from '@chatdom/world';
-import { createTwitchMoments } from '../../twitch-moments/controller';
+import { createTwitchMoments, type MomentFrame } from '../../twitch-moments/controller';
+import { planRaid, raidCaption, raidFrame, type RaidBeat } from '../../twitch-moments/raid-beat';
+import type { DockAct } from '../dock-acts';
 import { createTwitchMomentView, type CameraLease, type MomentSoundPort, type SkyGlow } from '../../twitch-moments/view';
 import { festivalPlacesOf, withFestivalPlaces } from '../../twitch-moments/festival-places';
 import type { CrowdCall } from '../../twitch-moments/stage-beat';
@@ -28,7 +30,16 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
   let lastPresence: KingdomPresenceFrame | undefined;
   let skyGlow: SkyGlow | null = null;
   let crowdCall: CrowdCall | null = null;
+  let royalRaid: { act: DockAct; beat: RaidBeat; elapsed: number } | undefined;
   const controller = createTwitchMoments({ kingdomId, expectedOrigin: feed.origin, clock: { now: () => now } });
+  const royalFrame = (frame: MomentFrame): MomentFrame => {
+    if (!royalRaid) return frame;
+    const { beat } = royalRaid, elapsed = Math.max(royalRaid.elapsed, now - beat.startAt);
+    if (now >= royalRaid.act.expiresAt || elapsed >= 8500) { royalRaid = undefined; return frame; }
+    const caption = raidCaption(beat, beat.startAt + elapsed);
+    return { ...frame, focus: null, raids: [raidFrame(beat, beat.startAt + elapsed)],
+      captions: [...(caption ? [caption] : []), ...frame.captions.filter(item => item.at.kind !== 'place' || item.at.place !== 'gate')] };
+  };
   controller.setPresentation({ layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] });
   const bySlot = new Map(houses.map(h => [h.slot, h])), mounts = new Map<number, ReturnType<typeof bannerMount>>();
   const route = giftRouteOf(plan);
@@ -101,12 +112,22 @@ export function createKingdomMoments(options: KingdomMomentsOptions) {
         lastPresence = presenceFrame;
       }
       if (prepared) {
-        const frame = controller.sample(atMs);
+        const frame = royalFrame(controller.sample(atMs));
         if (blockedFocus && frame.focus?.id !== blockedFocus) blockedFocus = null;
         activeFocus = frame.focus?.id ?? null;
         view.apply(blockedFocus && frame.focus?.id === blockedFocus ? { ...frame, focus: null } : frame);
       }
       return wrote;
+    },
+    /** Re-stage the already witnessed incoming source through the existing banner/caravan layer. No Twitch action. */
+    welcomeRaid(act: DockAct, elapsed: number): boolean {
+      if (disposed || !prepared || !route || act.kind !== 'raid-welcome' || !act.raid || act.targetId !== act.raid.raidKey
+        || act.targetName !== act.raid.from.displayName || act.kingdomId !== kingdomId || act.origin !== feed.origin) return false;
+      if (royalRaid?.act.id !== act.id) royalRaid = { act, elapsed,
+        beat: planRaid(act.id, { kind: 'raid', key: act.raid.raidKey, displayUntil: act.expiresAt, ...act.raid }, now, name => name) };
+      royalRaid.elapsed = elapsed;
+      view.apply(royalFrame(controller.sample(now)));
+      return elapsed === 0 || Number(view.stats()['raid.gate']) > 0;
     },
     captions: () => disposed || !prepared ? [] : view.labels(camera),
     /** The sky moment’s light on the town this frame, or null. */

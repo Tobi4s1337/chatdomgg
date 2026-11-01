@@ -27,8 +27,9 @@ export function createSoulSceneHost(
   binding: SoulSceneBinding,
   /** Null before unlock, while hidden/muted, or after the kingdom sound owner closes. */
   audioHost: () => SoulAudioHost | null,
+  keeperRenderer?: { update(frame: SoulFrame, seconds: number): void; dispose(): void },
 ) {
-  const picture = createSoulPresentation(scene, { topology: binding.config.topology, chimney: binding.chimney });
+  const picture = createSoulPresentation(scene, { topology: binding.config.topology, chimney: binding.chimney, externalKeepers: !!keeperRenderer });
   const surfaces = binding.surfaces && createSoulWeatherSurfaces(binding.surfaces);
   let arrivals = [...(binding.config.shipArrivals ?? [])];
   let sample = createSoulSampler({ ...binding.config, population: 0, shipArrivals: arrivals });
@@ -51,6 +52,7 @@ export function createSoulSceneHost(
       }
       frame = sample(input.epochMs);
       picture.update(frame, input.seconds);
+      keeperRenderer?.update(frame, input.seconds);
       surfaces?.update(frame);
       const host = audioHost();
       if (host?.context !== context) {
@@ -82,7 +84,7 @@ export function createSoulSceneHost(
       if (disposed) return;
       disposed = true;
       sound?.dispose(); sound = undefined; context = undefined;
-      surfaces?.dispose(); picture.dispose();
+      surfaces?.dispose(); picture.dispose(); keeperRenderer?.dispose();
     },
   };
 }

@@ -46,10 +46,10 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
       status.textContent = state.status === 'empty' ? 'No recorded nights' : 'History unavailable';
       play.disabled = true; seek.disabled = true; play.textContent = 'Play'; return;
     }
-    date.textContent = describeDate(state.snapshot.frame.asOf);
+    date.textContent = describeDate(state.snapshot.nightAt ?? state.snapshot.frame.asOf);
     caption.textContent = state.snapshot.caption;
     seek.disabled = false; seek.max = String(state.count - 1); seek.value = String(state.index);
-    seek.setAttribute('aria-valuetext', `${describeDate(state.snapshot.frame.asOf)}; entry ${state.index + 1} of ${state.count}`);
+    seek.setAttribute('aria-valuetext', `${describeDate(state.snapshot.nightAt ?? state.snapshot.frame.asOf)}; entry ${state.index + 1} of ${state.count}`);
     play.disabled = state.count < 2;
     play.textContent = state.playing ? 'Pause' : state.index === state.count - 1 ? 'Play again' : 'Play';
     status.textContent = `Entry ${state.index + 1} of ${state.count}`;
@@ -60,17 +60,21 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
   const onSeek = () => {
     const requested = Number(seek.value);
     cue('seek'); replay.pause();
-    try { replay.seek(requested); } catch { /* The unavailable state is already displayed. */ }
+    try { replay.seek(requested)?.catch(() => {}); } catch { /* The unavailable state is already displayed. */ }
   };
   const onPlay = () => {
     cue('play');
     if (replay.state().playing) { replay.pause(); return; }
+    const start = () => {
+      if (disposed) return;
+      replay.play();
+      if (replay.state().playing && timer === undefined) timer = setInterval(() => { try { replay.step()?.catch(() => {}); } catch { /* The unavailable state is already displayed. */ } }, 3000);
+    };
     const current = replay.state();
     if (current.status === 'ready' && current.index === current.count - 1) {
-      try { replay.seek(0); } catch { return; }
+      try { const moving = replay.seek(0); if (moving) { void moving.then(start, () => {}); return; } } catch { return; }
     }
-    replay.play();
-    if (replay.state().playing) timer = setInterval(() => { try { replay.step(); } catch { /* The unavailable state is already displayed. */ } }, 3000);
+    start();
   };
   let disposed = false;
   const restoreFocus = () => { if (previousFocus?.isConnected) previousFocus.focus(); };
@@ -93,7 +97,7 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
   const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); } };
   root.addEventListener('keydown', onKeyDown);
   seek.addEventListener('input', onSeek); play.addEventListener('click', onPlay); close.addEventListener('click', onClose);
-  try { replay.load(options.history); } catch { /* Validation already presents the unavailable state. */ }
+  try { replay.load(options.history)?.catch(() => {}); } catch { /* Validation already presents the unavailable state. */ }
   close.focus();
   return { replay, dispose: () => dispose() };
 }

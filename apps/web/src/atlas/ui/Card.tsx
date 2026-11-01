@@ -1,11 +1,13 @@
 import { createEffect, onCleanup, Show } from 'solid-js';
 import { blazon, shieldDesign } from '../heraldry';
+import type { CardReply, CardRoad } from '../data/directory';
 import type { Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatTime, TIER_NAMES, watchUrl } from './format';
 import { LIVE_CLASS_NAMES } from './live-line';
 import { ShieldIcon } from './marks';
-import { genesisPreviewPath } from '../../genesis/channels';
+import { doorHolding, type DoorHolding } from '../data/holding';
+import { RegisterFacts, ShareButton, WatchLink, type RegisterState } from './Register';
 
 export type NamesState = 'loading' | 'ready' | 'failed';
 
@@ -24,7 +26,12 @@ export function Card(props: {
   world: PreviewWorld;
   /** What the live frame shown says of this holding, or null before any frame was taken. */
   live: { liveClass: number; startedAt: number | null; asOf: number } | null;
+  /** This holding's register entry: its last stream and strongest roads. */
+  register: RegisterState<CardReply>;
   onClose: () => void;
+  onRoad: (road: CardRoad) => void;
+  onRetry: () => void;
+  onEnter?: (holding: DoorHolding) => void;
 }) {
   let closeButton: HTMLButtonElement | undefined;
   const region = () => props.world.regions[props.settler.region];
@@ -33,11 +40,18 @@ export function Card(props: {
   const url = () => (props.login ? watchUrl(props.login) : null);
   const showLogin = () => props.name !== null && props.login !== null && props.name.toLowerCase() !== props.login;
   const title = () => props.name ?? `Unnamed ${TIER_NAMES[props.settler.tierRank]!.toLowerCase()}`;
+  // A named, shown holding has a door. Reading the name keeps it in step with a refreshed or expired name.
+  const door = () => (props.name !== null && props.login !== null ? doorHolding(props.settler, props.world) : null);
+  const enter = (event: MouseEvent, holding: DoorHolding) => {
+    if (!props.onEnter || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    props.onEnter(holding);
+  };
   const missing = () => {
     if (props.name !== null) return null;
     if (props.names === 'loading') return 'Reading the names of this survey…';
     if (props.names === 'failed') return 'The names of this survey could not be read just now, so this holding shows its arms alone. Its name and Watch link return when the Atlas service answers.';
-    return 'Twitch names appear on the map only while the survey has seen them within a day. This channel has not been seen since, so it keeps its arms alone until it is.';
+    return 'This holding is not named in the current public projection.';
   };
 
   createEffect(() => {
@@ -62,7 +76,7 @@ export function Card(props: {
         </Show>
         <div class="atlas-card-names">
           <p class="atlas-card-status">Mapped holding · not yet founded</p>
-          <h2 id="atlas-card-title" classList={{ 'atlas-card-unnamed': props.name === null }}>{title()}</h2>
+          <h2 id="atlas-card-title" dir="auto" classList={{ 'atlas-card-unnamed': props.name === null }}>{title()}</h2>
           <Show when={showLogin()}><p class="atlas-card-login">{props.settler.login}</p></Show>
         </div>
       </header>
@@ -102,20 +116,29 @@ export function Card(props: {
         <Show when={props.settler.game}><div><dt>Most streamed</dt><dd>{props.settler.game}</dd></div></Show>
         <div><dt>Arms</dt><dd class="atlas-blazon">{arms()}</dd></div>
       </dl>
+      <RegisterFacts
+        state={props.register}
+        world={props.world}
+        onAirNow={props.live ? props.live.liveClass > 0 : null}
+        onRoad={props.onRoad}
+        onRetry={props.onRetry}
+      />
       <p class="atlas-card-note">
         Survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} (UTC). Draft land: this holding may still move before the first edition.
       </p>
       <Show when={missing()}>{(text) => <p class="atlas-card-missing">{text()}</p>}</Show>
-      <Show when={genesisPreviewPath(props.settler.id)}>{href => <a class="atlas-watch" href={href()}>See this kingdom’s land <span aria-hidden="true">↗</span></a>}</Show>
-      <Show when={url()}>
-        {(href) => (
-          <a class="atlas-watch" href={href()} target="_blank" rel="noopener noreferrer">
-            Watch on Twitch
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3L4 12" /></svg>
-            <span class="atlas-visually-hidden"> (opens twitch.tv in a new tab)</span>
+      <Show when={door()}>
+        {(holding) => (
+          <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} onClick={(event) => enter(event, holding())}>
+            Enter the land
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
           </a>
         )}
       </Show>
+      <div class="atlas-card-actions">
+        <Show when={url()}>{(href) => <WatchLink href={href()} />}</Show>
+        <Show when={props.login}>{(login) => <ShareButton path={`/map/${login()}`} title={`${props.name} on the Atlas of Kingdoms`} />}</Show>
+      </div>
     </section>
   );
 }

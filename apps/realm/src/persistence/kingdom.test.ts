@@ -16,6 +16,37 @@ const deferred = <T>() => {
   return { promise, resolve };
 };
 
+it('publishes an updated spawn lookup only after a same-world candidate matches the public checkpoint', async () => {
+  const kingdomId = KingdomIdSchema.parse('999000001'), personId = PersonIdSchema.parse('990000001');
+  const initial = createRealmState(kingdomId, 'simulated');
+  const lease: RealmWriterLease = { kingdomId, epoch: 'spawn-writer', expiresAt: Date.now() + 60_000 };
+  const principal: RealmPrincipal = { kingdomId, personId, origin: 'simulated', sessionId: 'entry:1', expiresAt: Date.now() + 60_000, publicName: 'SIMULATED', look: 'hearth' };
+  let matches = false;
+  const adopted = vi.fn();
+  const repository: DurableRepository = { leaseMs: 60_000, acquire: async () => lease,
+    renew: async () => ({ ...lease, expiresAt: Date.now() + 60_000 }), load: async () => initial,
+    committedState: () => initial, execute: async () => ({ status: 'committed', sequence: 0, at: 0 }),
+    lookup: async () => null, loadIngress: async () => null, executeIngress: async () => ({ status: 'unchanged', reason: 'unused' }),
+    snapshot: async () => 0, release: async () => {} };
+  const outbox: RealmOutboxStore = { open: async () => 0, prefix: async () => ({ homes: [], presence: null, sequence: 0, committed: 0 }),
+    read: async () => [], acknowledge: async () => {} };
+  const services = createDurableRealmServices({ repository, outbox, auth: { authenticate: vi.fn(), current: async () => true },
+    kingdom: () => ({ world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6],
+      prepareWorld: async () => ({ world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [1, 0, 6],
+        matches: () => matches, positions: () => new Map(), adopted }) }) });
+  const hold = await services.retain(kingdomId);
+  try {
+    await hold.kingdom.execute('spawn:update', { type: 'stream.observe', sessionId: null, startedAt: 0, liveUntil: 0 }, 'presence');
+    expect(hold.kingdom.spawn(principal)).toEqual([0, 0, 6]);
+    expect(adopted).not.toHaveBeenCalled();
+    matches = true;
+    await hold.kingdom.preparePublicCheckpoint();
+    expect(hold.kingdom.spawn(principal)).toEqual([1, 0, 6]);
+    expect(adopted).toHaveBeenCalledOnce();
+    expect(hold.kingdom.world).toBe(REFERENCE_WORLD);
+  } finally { await hold.release(); }
+});
+
 it('renews an opening lease before its remaining safe window is consumed by founded preparation', async () => {
   vi.useFakeTimers();
   const clock = vi.spyOn(performance, 'now').mockImplementation(() => Date.now());

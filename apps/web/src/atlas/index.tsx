@@ -1,21 +1,27 @@
 import { batch, createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import './atlas.css';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
+import { dabHashOf, DirectoryError, fetchCard, fetchRoad, type CardReply, type CardRoad, type ChannelFace, type Lookup, type RoadReply, type SearchResult } from './data/directory';
 import { decodeRings, geographyOf, SettlerStore, type Geography, type Ring, type Settler } from './data/model';
 import { fetchChunk, fetchNames, type PreviewSource } from './data/preview';
 import { atlasFailureState, mountAtlasWithRetry } from './recovery';
 import { LiveFeed, type LiveStatus } from './live/feed';
 import { LivePaint, type Dab } from './live/paint';
-import { MAX_SCALE, type Distance, type Insets, type Viewport } from './map/camera';
+import { DISTANCE_STOP, MAX_SCALE, type Distance, type Insets, type Viewport } from './map/camera';
 import type { CameraState } from './map/motion';
 import { MapView, type MapStats } from './map/view';
 import { Still } from './still/Still';
 import { Card, type NamesState } from './ui/Card';
+import { DoorCartouche } from './ui/Door';
+import { handOffHolding, holdingPlace, type DoorHolding } from './data/holding';
 import { Cartouche, Compass, Controls, Notice, ScaleBar } from './ui/chrome';
 import { formatMoment } from './ui/format';
 import { CardHistory } from './ui/history';
 import { LegendBody } from './ui/Legend';
 import { DabCard, LiveSeal, type LiveSummary } from './ui/Live';
+import { RoadCard, WaitingCard, type RegisterState } from './ui/Register';
+import { formatRoute, parseRoute, type AtlasRoute } from './ui/route';
+import { Search } from './ui/Search';
 
 type State = 'loading' | 'ready' | 'still' | 'empty' | 'unavailable' | 'invalid' | 'unsupported';
 
@@ -37,6 +43,11 @@ const LIVE_WAIT_MS = 4_000;
 const FACES = ['16px "IM Fell English"', 'italic 16px "IM Fell English"', '16px "IM Fell English SC"', '16px "Alegreya"', 'italic 16px "Alegreya"'];
 /** Narrower than this the Atlas is laid out for a phone: the card is a bottom sheet, search sits at the top. */
 const PHONE_WIDTH = 720;
+/** The distance a found holding is shown at, by tier: where its mark and name are drawn (R7), never further out. */
+const TIER_STOP = [DISTANCE_STOP.continent, DISTANCE_STOP.continent, DISTANCE_STOP.realm, DISTANCE_STOP.kingdom] as const;
+
+/** A road being opened: its two ends as the reader asked for them (IDs from a card, logins from a route). */
+type RoadAsk = { a: { id: string } | { login: string }; b: { id: string } | { login: string } };
 
 function sessionStore(): Storage | null {
   try {
@@ -108,6 +119,20 @@ export default function Atlas() {
   const [context, setContext] = createSignal<'ok' | 'lost'>('ok');
   /** Bumped whenever names change on the same holdings, so the card follows them. */
   const [namesTick, setNamesTick] = createSignal(0);
+  /** A named channel without land and not on air, opened from search, a road or a route. */
+  const [waiting, setWaiting] = createSignal<ChannelFace | null>(null);
+  /** The open road card and the ends it was asked for. */
+  const [road, setRoad] = createSignal<{ ask: RoadAsk; state: RegisterState<RoadReply> } | null>(null);
+  /** The open channel card's register entry (stream and roads). */
+  const [register, setRegister] = createSignal<RegisterState<CardReply>>({ status: 'loading' });
+  /** Text handed to the search by a route that found nothing. */
+  const [searchSeed, setSearchSeed] = createSignal<{ text: string; at: number } | null>(null);
+  let registerController: AbortController | null = null;
+  /** Bumped whenever a card opens or closes, so a late register reply never lands on another card. */
+  let cardGeneration = 0;
+  /** The route the page was opened on, applied once the first view is drawn. */
+  let pendingRoute: { route: AtlasRoute; adopted: boolean } | null = null;
+  const anyOpen = () => !!selected() || !!selectedDab() || !!waiting() || !!road();
 
   const settle = () => {
     window.__chatdomReady = true;
@@ -136,13 +161,26 @@ export default function Atlas() {
 
   const history = new CardHistory(window.history, (before) => {
     // Back: the card closes and the camera returns to where it was before the card moved it.
-    setSelected(null);
-    setSelectedDab(null);
-    view?.select(null);
+    clearCards();
     view?.setCardInsets(null);
     view?.restore(before);
     restoreFocus();
   });
+
+  /** Nothing chosen: every card's subject, the chosen mark and an inked road go, and any late register reply is dropped. */
+  const clearCards = () => {
+    cardGeneration++;
+    registerController?.abort();
+    registerController = null;
+    batch(() => {
+      setSelected(null);
+      setSelectedDab(null);
+      setWaiting(null);
+      setRoad(null);
+    });
+    view?.select(null);
+    view?.setRoad(null);
+  };
 
   const restoreFocus = () => {
     const target = opener && opener.isConnected ? opener : host;
@@ -151,12 +189,12 @@ export default function Atlas() {
   };
 
   /** A card is opening: remember the view and the focus to return to, and give the map its provisional space. */
-  const opening = (id: string) => {
+  const opening = (id: string, url = '/map') => {
     if (!history.isOpen) {
       const active = document.activeElement;
       opener = active instanceof HTMLElement && root?.contains(active) ? active : null;
     }
-    history.opened(id, view?.cameraState() ?? { x: 0, y: 0, scale: 1 });
+    history.opened(id, view?.cameraState() ?? { x: 0, y: 0, scale: 1 }, url);
     // The previous card's mark is no longer kept clear: the new estimate must not fly the map back to it.
     view?.revealPoint(null);
     view?.setCardInsets(cardInsets(null));
@@ -164,42 +202,218 @@ export default function Atlas() {
 
   const onKey = (event: KeyboardEvent) => {
     // The open key is the top surface on a phone when no card is showing; the card handles its own Escape.
-    if (event.key === 'Escape' && keyOpen() && !selected() && !selectedDab()) {
+    if (event.key === 'Escape' && keyOpen() && !anyOpen()) {
       setKeyOpen(false);
       host?.focus({ preventScroll: true });
     }
   };
 
   const onPop = () => {
-    history.popped();
+    if (history.popped()) return;
+    // Forward onto a card's entry: reopen that card from its route.
+    if (history.adopt()) void applyRoute(parseRoute(window.location.pathname), true);
   };
 
-  const choose = (settler: Settler | null) => {
+  const urlFor = (login: string | null | undefined) => (login ? formatRoute({ kind: 'channel', login }) : '/map');
+
+  /**
+   * Read the open card's register entry (its last stream and roads). A reply for a card that has since closed or
+   * changed is dropped. A name the register supplies (a pencil flag's) puts the channel's route in the address bar.
+   */
+  const readRegister = (lookup: Lookup, cardId: string) => {
+    registerController?.abort();
+    const controller = new AbortController();
+    registerController = controller;
+    const generation = cardGeneration;
+    setRegister({ status: 'loading' });
+    fetchCard(SOURCE, loaded()!.world.id, lookup, controller.signal).then((reply) => {
+      if (generation !== cardGeneration) return;
+      setRegister({ status: 'ready', reply });
+      if (reply.channel.login && history.isOpen) history.opened(cardId, view?.cameraState() ?? { x: 0, y: 0, scale: 1 }, urlFor(reply.channel.login));
+    }, (error: unknown) => {
+      if (generation !== cardGeneration || (error as Error).name === 'AbortError') return;
+      if (error instanceof DirectoryError && error.reason === 'not-found') setRegister({ status: 'missing' });
+      else setRegister({ status: 'failed', reason: error instanceof DirectoryError ? error.reason : 'unavailable' });
+    });
+  };
+
+  /** Choose a holding. `fly` (search, roads, routes) flies to the distance its mark is drawn at; a tap keeps the scale. */
+  const choose = (settler: Settler | null, fly = false) => {
     if (!settler) {
       // A tap on bare paper closes an open card, as its button does.
-      if (selected() || selectedDab()) closeCard();
+      if (anyOpen()) closeCard();
       return;
     }
-    setSelectedDab(null);
+    clearCards();
     setSelected(settler);
     setKeyOpen(false);
-    opening(settler.id);
-    view?.select(settler, true);
+    opening(settler.id, urlFor(settler.login));
+    readRegister({ id: settler.id }, settler.id);
+    if (fly && view) {
+      view.select(settler);
+      view.flyTo(settler.x, settler.y, Math.max(view.cameraState().scale, TIER_STOP[settler.tierRank] ?? DISTANCE_STOP.kingdom));
+    } else {
+      view?.select(settler, true);
+    }
   };
 
-  const chooseDab = (dab: Dab) => {
-    setSelected(null);
+  // The hand-off carries only the currently served public projection.
+  const [entering, setEntering] = createSignal<DoorHolding | null>(null);
+  let enterTimer: ReturnType<typeof setTimeout> | undefined;
+  const enter = (holding: DoorHolding) => {
+    if (entering()) return;
+    handOffHolding(sessionStore(), holding);
+    setEntering(holding);
+    const settler = selected();
+    if (view && settler) view.flyTo(settler.x, settler.y, MAX_SCALE);
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    enterTimer = setTimeout(() => location.assign(`/kingdom/${encodeURIComponent(holding.id)}`), reduce ? 60 : 720);
+  };
+  onCleanup(() => clearTimeout(enterTimer));
+  const onShow = (event: PageTransitionEvent) => { if (event.persisted) setEntering(null); };
+  window.addEventListener('pageshow', onShow);
+  onCleanup(() => window.removeEventListener('pageshow', onShow));
+
+  /** Choose a pencil flag and read its public register entry. */
+  const chooseDab = (dab: Dab, fly = false, face?: ChannelFace) => {
+    clearCards();
     setSelectedDab(dab);
     setKeyOpen(false);
-    opening(`dab:${dab.hash}`);
-    view?.select(null);
-    if (dab.placed) view?.revealPoint(dab);
+    const id = `dab:${dab.hash}`;
+    opening(id, urlFor(face?.login));
+    readRegister(face ? { id: face.id } : { dab: dab.hash }, id);
+    if (fly && view) view.flyTo(dab.x, dab.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
+    else if (dab.placed) view?.revealPoint(dab);
+  };
+
+  /** A named channel without land and off the air: its card, and the map shows the realm it would be pencilled into. */
+  const openWaiting = (face: ChannelFace) => {
+    clearCards();
+    setWaiting(face);
+    setKeyOpen(false);
+    const id = `waiting:${face.id}`;
+    opening(id, urlFor(face.login));
+    readRegister({ id: face.id }, id);
+    const realm = geo()?.realms[face.realm ?? -1];
+    if (realm && view) view.flyTo(realm.x, realm.y, Math.max(view.cameraState().scale, DISTANCE_STOP.continent));
+  };
+
+  /** Where a face is drawn now: its holding (loading its region first), its pencil flag while live, or nowhere. */
+  const locate = async (face: ChannelFace): Promise<{ settler: Settler } | { dab: Dab } | null> => {
+    const holdings = store;
+    if (!holdings || face.place === 'unseen') return null;
+    if (face.place === 'mapped' && face.region !== null) {
+      if (!holdings.byId.has(face.id) && !holdings.hasRegion(face.region)) await loadChunk(face.region).catch(() => undefined);
+      const settler = holdings.byId.get(face.id);
+      if (settler && !settler.withheld) return { settler };
+      return null;
+    }
+    const hash = dabHashOf(face.id);
+    const dab = paint?.dabs.find((candidate) => candidate.hash === hash);
+    return dab ? { dab } : null;
+  };
+
+  /** Open any channel the register named (a search result, a road's end, a route): its holding, its flag, or its waiting card. */
+  const openFace = async (face: ChannelFace) => {
+    const generation = ++cardGeneration;
+    const place = await locate(face);
+    if (generation !== cardGeneration) return;
+    if (place && 'settler' in place) return choose(place.settler, true);
+    if (place && 'dab' in place) return chooseDab(place.dab, true, face);
+    if (face.place === 'waiting') return openWaiting(face);
+    // A holding the map no longer draws (withheld since the register answered) has no card to open.
+    setNotice({ text: 'That channel is no longer drawn on this map.' });
+  };
+
+  const openSearchResult = (result: SearchResult) => void openFace(result.channel);
+
+  /** Whether a search result is on air in the frame shown now (its holding's class, or its pencil flag). */
+  const onAirResult = (result: SearchResult): boolean => {
+    void liveTick();
+    if (!paint?.frame) return false;
+    if (result.channel.ordinal !== null) return paint.classAt(result.channel.ordinal) > 0 && !store?.byId.get(result.channel.id)?.withheld;
+    const hash = dabHashOf(result.channel.id);
+    return paint.dabs.some((dab) => dab.hash === hash);
+  };
+
+  const roadUrl = (reply: RoadReply | null, ask: RoadAsk) => {
+    const a = reply?.a.login ?? ('login' in ask.a ? ask.a.login : null);
+    const b = reply?.b.login ?? ('login' in ask.b ? ask.b.login : null);
+    return a && b ? formatRoute({ kind: 'road', a, b }) : '/map';
+  };
+
+  /** Open the road between two channels: its card, both ends inked and framed on the map when both are drawn. */
+  const openRoad = (ask: RoadAsk) => {
+    clearCards();
+    setKeyOpen(false);
+    const id = `road:${JSON.stringify(ask)}`;
+    setRoad({ ask, state: { status: 'loading' } });
+    opening(id, roadUrl(null, ask));
+    const controller = new AbortController();
+    registerController = controller;
+    const generation = cardGeneration;
+    fetchRoad(SOURCE, loaded()!.world.id, ask.a, ask.b, controller.signal).then(async (reply) => {
+      if (generation !== cardGeneration) return;
+      setRoad({ ask, state: { status: 'ready', reply } });
+      if (history.isOpen) history.opened(id, view?.cameraState() ?? { x: 0, y: 0, scale: 1 }, roadUrl(reply, ask));
+      const [a, b] = await Promise.all([locate(reply.a), locate(reply.b)]);
+      if (generation !== cardGeneration) return;
+      const point = (place: Awaited<ReturnType<typeof locate>>) => (place ? ('settler' in place ? place.settler : place.dab) : null);
+      const pa = point(a);
+      const pb = point(b);
+      if (pa && pb) view?.setRoad({ ax: pa.x, ay: pa.y, bx: pb.x, by: pb.y }, true);
+      else if (pa ?? pb) view?.flyTo((pa ?? pb)!.x, (pa ?? pb)!.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
+    }, (error: unknown) => {
+      if (generation !== cardGeneration || (error as Error).name === 'AbortError') return;
+      setRoad({ ask, state: error instanceof DirectoryError && error.reason === 'not-found' ? { status: 'missing' } : { status: 'failed', reason: error instanceof DirectoryError ? error.reason : 'unavailable' } });
+    });
+  };
+
+  const openCardRoad = (from: ChannelFace | Settler, road: CardRoad) => openRoad({ a: { id: from.id }, b: { id: road.other.id } });
+
+  /**
+   * Open what a route names, once the map is drawn. `adopted` means the route's history entry already exists (a reload
+   * or Forward), so the card takes it over rather than pushing another. A route that names nothing on this map says so
+   * and leaves the map at its usual view with the address back at `/map`.
+   */
+  const applyRoute = async (route: AtlasRoute, adopted: boolean): Promise<void> => {
+    const drop = (text: string, action?: NoticeState['action']) => {
+      if (adopted) history.closed();
+      else window.history.replaceState(window.history.state, '', '/map');
+      setNotice(action ? { text, action } : { text });
+    };
+    if (route.kind === 'map') {
+      if (adopted) history.closed();
+      return;
+    }
+    if (route.kind === 'channel') {
+      try {
+        const reply = await fetchCard(SOURCE, loaded()!.world.id, { login: route.login });
+        await openFace(reply.channel);
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') return;
+        if (error instanceof DirectoryError && error.reason === 'not-found') {
+          drop(`No channel called “${route.login}” is on this survey’s map. Names show only for channels seen live within a day.`, {
+            label: 'Search for it',
+            run: () => {
+              setNotice(null);
+              setSearchSeed({ text: route.login, at: Date.now() });
+            },
+          });
+        } else {
+          drop(`The register could not be read, so ${route.login}’s card did not open.`, { label: 'Try again', run: () => { setNotice(null); void applyRoute(route, false); } });
+        }
+      }
+      return;
+    }
+    if (route.kind === 'road') return openRoad({ a: { login: route.a }, b: { login: route.b } });
+    if (route.kind === 'line') return drop('Train lines are drawn once raid trains are surveyed; until then the map opens at its usual view.');
+    if (route.kind === 'season') return drop('Seasons begin with the first founded edition; until then the map opens at its usual view.');
+    drop('That address is not a place on this map, so it opens at its usual view.');
   };
 
   const closeCard = () => {
-    setSelected(null);
-    setSelectedDab(null);
-    view?.select(null);
+    clearCards();
     view?.setCardInsets(null);
     history.closed();
     restoreFocus();
@@ -207,7 +421,7 @@ export default function Atlas() {
 
   // The open card's measured box keeps the chosen mark clear of it while it opens, grows and shrinks.
   createEffect(() => {
-    const open = !!selected() || !!selectedDab();
+    const open = anyOpen();
     void phone();
     cardObserver?.disconnect();
     cardObserver = null;
@@ -216,9 +430,9 @@ export default function Atlas() {
     if (!open || !root) return;
     queueMicrotask(() => {
       const card = root?.querySelector('.atlas-card');
-      if (!card || (!selected() && !selectedDab())) return;
+      if (!card || !anyOpen()) return;
       const measureCard = () => {
-        if (selected() || selectedDab()) view?.setCardInsets(cardInsets(card));
+        if (anyOpen()) view?.setCardInsets(cardInsets(card));
       };
       measureCard();
       cardObserver = new ResizeObserver(measureCard);
@@ -289,7 +503,17 @@ export default function Atlas() {
         livePaint.apply(frame);
         setLiveTick(liveTick() + 1);
         const dab = selectedDab();
-        if (dab) setSelectedDab(livePaint.dabs.find((next) => next.hash === dab.hash) ?? null);
+        if (dab) {
+          const next = livePaint.dabs.find((candidate) => candidate.hash === dab.hash) ?? null;
+          const known = register();
+          // A named flag whose stream ended keeps its card, now as a channel waiting off the air.
+          if (!next && known.status === 'ready') batch(() => {
+            setSelectedDab(null);
+            setWaiting(known.reply.channel);
+          });
+          else if (!next) closeCard();
+          else setSelectedDab(next);
+        }
       }
       setLive({ status, holdings: livePaint.liveCount, dabs: livePaint.dabs.length });
       if (frame || status.refused || status.source) settled();
@@ -342,6 +566,10 @@ export default function Atlas() {
         if (!mapDrawn || !namesSettled || !liveSettled || signal.aborted) return;
         setState(still ? 'still' : 'ready');
         settle();
+        // The route the page was opened on (a shared link, a reload on a card) opens once the map is there to show it.
+        const route = pendingRoute;
+        pendingRoute = null;
+        if (route) void applyRoute(route.route, route.adopted);
       };
       void readNames(holdings, world.id, signal).then(() => {
         namesSettled = true;
@@ -440,7 +668,9 @@ export default function Atlas() {
         // Read after the wait: Back may have closed the card meanwhile.
         const chosen = selected();
         next.select(chosen);
-        if (chosen || selectedDab()) next.setCardInsets(cardInsets(root?.querySelector('.atlas-card') ?? null));
+        if (anyOpen()) next.setCardInsets(cardInsets(root?.querySelector('.atlas-card') ?? null));
+        const inked = road();
+        if (inked?.state.status === 'ready') void openRoad(inked.ask);
         setContext('ok');
       };
       setTimeout(liveIn, LIVE_WAIT_MS);
@@ -468,7 +698,10 @@ export default function Atlas() {
     window.addEventListener('resize', measure);
     window.addEventListener('keydown', onKey);
     window.addEventListener('popstate', onPop);
-    history.resume();
+    const route = parseRoute(window.location.pathname);
+    const adopted = history.resume() !== null;
+    if (!adopted && route.kind !== 'map') history.arrived();
+    pendingRoute = route.kind === 'map' && !adopted ? null : { route, adopted };
     window.__chatdomAtlas = { stats: () => view?.stats() ?? null, marks: (limit) => view?.drawnMarks(limit) ?? [] };
     void start();
   });
@@ -481,6 +714,7 @@ export default function Atlas() {
     cardMeasure?.();
     clearTimeout(namesTimer);
     clearTimeout(expiryTimer);
+    registerController?.abort();
     stopLive();
     store = null;
     rebuild = null;
@@ -494,7 +728,7 @@ export default function Atlas() {
     if (!newer) return;
     adoptPreview(sessionStore(), newer);
     setNotice(null);
-    if (selected() || selectedDab()) closeCard();
+    if (anyOpen()) closeCard();
     void start();
   };
 
@@ -574,6 +808,9 @@ export default function Atlas() {
           <>
             <Cartouche world={w()}>
               <Show when={live()}>{(summary) => <LiveSeal summary={summary()} />}</Show>
+              <Show when={drawn()}>
+                <Search source={SOURCE} world={w()} onAir={onAirResult} onChoose={openSearchResult} seed={searchSeed()} />
+              </Show>
             </Cartouche>
             <Show when={!phone()}><Compass size={92} /></Show>
             <Show when={phone()}><Compass size={46} /></Show>
@@ -610,14 +847,73 @@ export default function Atlas() {
                   names={names()}
                   world={w()}
                   live={(liveTick(), paint?.frame ? { liveClass: paint.liveClass(settler()), startedAt: paint.startedAt(settler()), asOf: paint.frame.asOf } : null)}
+                  register={register()}
                   onClose={closeCard}
+                  onRoad={(next) => openCardRoad(settler(), next)}
+                  onRetry={() => readRegister({ id: settler().id }, settler().id)}
+                  onEnter={enter}
                 />
               )}
             </Show>
-            <Show when={selectedDab() && geo()}>
-              <DabCard dab={selectedDab()!} world={w()} geo={geo()!} asOf={live()?.status.frameAsOf ?? null} onClose={closeCard} />
+            <Show when={selectedDab() && geo() ? selectedDab() : null}>
+              {(dab) => (
+                <Show
+                  when={(() => {
+                    const known = register();
+                    return known.status === 'ready' ? known : null;
+                  })()}
+                  fallback={<DabCard dab={dab()} world={w()} geo={geo()!} asOf={live()?.status.frameAsOf ?? null} onClose={closeCard} />}
+                >
+                  {(known) => (
+                    <WaitingCard
+                      face={known().reply.channel}
+                      state={known()}
+                      world={w()}
+                      live={{ startedAt: dab().startedAt, asOf: live()?.status.frameAsOf ?? dab().startedAt }}
+                      onAir={true}
+                      onClose={closeCard}
+                      onEnter={enter}
+                      onRoad={(next) => openCardRoad(known().reply.channel, next)}
+                      onRetry={() => readRegister({ dab: dab().hash }, `dab:${dab().hash}`)}
+                    />
+                  )}
+                </Show>
+              )}
+            </Show>
+            <Show when={waiting()}>
+              {(face) => (
+                <WaitingCard
+                  face={register().status === 'ready' ? (register() as { reply: CardReply }).reply.channel : face()}
+                  state={register()}
+                  world={w()}
+                  live={(liveTick(), paint?.frame ? { startedAt: null, asOf: paint.frame.asOf } : null)}
+                  onAir={false}
+                  onClose={closeCard}
+                  onEnter={enter}
+                  onRoad={(next) => openCardRoad(face(), next)}
+                  onRetry={() => readRegister({ id: face().id }, `waiting:${face().id}`)}
+                />
+              )}
+            </Show>
+            <Show when={road()}>
+              {(current) => (
+                <RoadCard
+                  state={current().state}
+                  world={w()}
+                  onClose={closeCard}
+                  onOpen={(face) => void openFace(face)}
+                  onRetry={() => openRoad(current().ask)}
+                />
+              )}
             </Show>
             <Show when={!stillShown() && notice()}>{(current) => noticeView(current())}</Show>
+            <Show when={entering()}>
+              {(holding) => (
+                <DoorCartouche id={holding().id} name={holding().name} phase="stamp"
+                  subtitle={holdingPlace(holding())}
+                  steps={[{ text: 'The gate is opened', done: true }, { text: 'The road leads down into the land', done: false }]} />
+              )}
+            </Show>
           </>
         )}
       </Show>

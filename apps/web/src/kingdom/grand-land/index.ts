@@ -6,9 +6,11 @@ import type { GrandMaterial } from '../../../../../packages/world/src/grand/pale
 import { GRAND_LEVELS, GRAND_REGION, type GrandLand, type GrandLandSeed } from '../../../../../packages/world/src/grand/types';
 import type { SeatedKingdom } from '../../../../../packages/world/src/grand/kingdom';
 import { balanceLevels, chooseLevel, type LodState } from '../../grand/lod';
-import { HOSTED_GRAND_COMPILER, installedVisualHeight, regionTouchesPhysical, seedForInstalledPlan } from './prepare';
+import { HOSTED_GRAND_COMPILER, installedVisualHeight, regionTouchesPhysical } from './prepare';
 import { HOSTED_RESULT_BYTES, type HostedMesh, type HostedReply, type HostedRequest } from './protocol';
 import type { HostedGrandMaterial } from './material';
+import { grandLandRecipeHash, type GrandLandRecipe } from '../../../../../packages/world/src/grand/recipe';
+import { canonicalSceneJson, sha256Hex, utf8 } from '../../../../../packages/world/src/founded-world/codec';
 export { createHostedGrandMaterial, hostedPalette } from './material';
 
 const MiB = 1024 * 1024;
@@ -18,11 +20,12 @@ const RESIDENT_BYTES = 128 * MiB;
 export interface HostedGrandIdentity {
   readonly compiler: typeof HOSTED_GRAND_COMPILER;
   readonly parameterHash: string;
+  readonly recipeHash: string;
   readonly seed: GrandLandSeed;
   readonly planRevision: string;
   readonly region: SeatedKingdom['identity']['region'];
   readonly seat: SeatedKingdom['seat']['offset'];
-  readonly provenance: 'installed-plan-and-home-style';
+  readonly provenance: 'pinned-adoption-recipe';
 }
 export interface HostedGrandStats {
   phase: 'meshing' | 'ready' | 'failed' | 'disposed';
@@ -48,9 +51,8 @@ export interface HostedGrandOptions {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
   readonly plan: SettlementPlan;
-  readonly kingdomId?: string;
-  /** Optional exact recipe projection; it never replaces or regenerates plan. */
-  readonly seed?: GrandLandSeed;
+  readonly kingdomId: string;
+  readonly recipe: GrandLandRecipe;
   readonly signal?: AbortSignal;
   readonly materialFactory: (palette: readonly GrandMaterial[]) => HostedGrandMaterial;
   readonly register?: (mesh: THREE.Mesh) => (() => void) | void;
@@ -73,7 +75,10 @@ interface Install { readonly reply: HostedMesh; readonly region: Region; readonl
 export async function prepareHostedGrandLand(options: HostedGrandOptions): Promise<HostedGrandLand> {
   const { plan, camera, renderer } = options;
   if (options.signal?.aborted) throw new DOMException('The kingdom closed', 'AbortError');
-  const seed = options.seed ?? seedForInstalledPlan(plan, options.kingdomId);
+  const recipe = options.recipe, seed = recipe.seed;
+  if (seed.kingdomId !== options.kingdomId) throw new Error('The land recipe belongs to another kingdom');
+  const recipeHash = await grandLandRecipeHash(recipe);
+  if (options.signal?.aborted) throw new DOMException('The kingdom closed', 'AbortError');
   const workers: Worker[] = [], idle: Worker[] = [];
   const busy = new Map<Worker, Job>();
   let stopped = false, failed: Error | undefined;
@@ -141,17 +146,16 @@ export async function prepareHostedGrandLand(options: HostedGrandOptions): Promi
       worker.onerror = event => fail(new Error(event.message || 'A kingdom landscape worker stopped'));
       workers.push(worker);
     }
-    send(workers[0]!, { type: 'generate', plan, seed });
+    send(workers[0]!, { type: 'generate', plan, recipe });
     const { land, seated } = await landReady;
     if (stopped) throw failed ?? new DOMException('The kingdom closed', 'AbortError');
     for (const worker of workers.slice(1)) send(worker, { type: 'adopt', land, seated });
-    const parameterBytes = new TextEncoder().encode(JSON.stringify({ compiler: HOSTED_GRAND_COMPILER, seed, plan }));
-    const digest = await crypto.subtle.digest('SHA-256', parameterBytes);
-    const parameterHash = [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
+    // Recipe identity survives growth; installed geometry still has its own revision-bound digest.
+    const parameterHash = await sha256Hex(utf8(canonicalSceneJson({ recipeHash, plan })));
     if (stopped) throw failed ?? new DOMException('The kingdom closed', 'AbortError');
-    const identity: HostedGrandIdentity = { compiler: HOSTED_GRAND_COMPILER, parameterHash, seed,
+    const identity: HostedGrandIdentity = { compiler: HOSTED_GRAND_COMPILER, parameterHash, recipeHash, seed,
       planRevision: plan.revision, region: seated.identity.region, seat: seated.seat.offset,
-      provenance: 'installed-plan-and-home-style' };
+      provenance: 'pinned-adoption-recipe' };
     material = options.materialFactory(landMaterials(land));
     root.position.set(...seated.seat.offset).multiplyScalar(-1);
     options.scene.add(root);

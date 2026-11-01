@@ -6,6 +6,7 @@ import { createNativeForgeHost } from '@chatdom/forge';
 import { KingdomIdSchema, PersonIdSchema, type Vec3 } from '@chatdom/shared';
 import { REALM_CASTLE_SLOT, castleHostId, type RealmBootstrap, type RealmFoundedManifest, type RealmOwnedCastle, type RealmOwnedHome } from '@chatdom/shared/realm';
 import { generateSettlementPlan, terrainHeight } from '@chatdom/world';
+import { createFoundedInteractionRegistry, interactionTargetId } from '@chatdom/world/interactions';
 import { createRealmState } from '@chatdom/world/realm';
 import { embeddedSolids, stepPlayer, supported } from '@chatdom/world/movement';
 import { prepareFoundedWalkerPositions } from './anchors';
@@ -79,6 +80,15 @@ describe('founded physical town and persisted loader (SIMULATED)', () => {
       expect(nativeRead).not.toHaveBeenCalled(); expect(sceneWrite).not.toHaveBeenCalled();
       expect(claimed.world).toBe(first.world); expect(claimed.build.bytes).toBe(first.build.bytes);
       expect(claimed.build.counts.ownedHomes).toBe(1);
+      const door = createFoundedInteractionRegistry(claimed.scene, claimed.world).get(interactionTargetId.homeDoor(claimPlot.id));
+      expect(door).toBeDefined();
+      const principal = { kingdomId, personId: claimedHome.ownerId, origin: 'simulated' as const,
+        sessionId: 'SIMULATED-entry', expiresAt: Date.now() + 10_000, publicName: 'SIMULATED owner', look: 'neutral' as const };
+      expect(claimed.options.spawn(principal, 0)).toEqual(door!.target.approach);
+      expect(claimed.options.spawn({ ...principal, personId: PersonIdSchema.parse('900001112') }, 0)).toEqual(claimed.anchors[0]);
+      expect(claimed.options.spawn({ ...principal, origin: 'live' }, 0)).toEqual(claimed.anchors[0]);
+      const removed = await loader.load(kingdomId, empty);
+      expect(removed.options.spawn(principal, 0)).toEqual(removed.anchors[0]);
       expect(claimed.manifestFor(checkpoint)).toBeNull();
       const claimView = { type: 'home' as const, plotId: claimedHome.id, revision: claimedHome.revision, assetHash: claimedHome.digest, attachments: [] };
       expect(claimed.manifestFor({ ...checkpoint, current: [claimView] })).toEqual(first.build.manifest);

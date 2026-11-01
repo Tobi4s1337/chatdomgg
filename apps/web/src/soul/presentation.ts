@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { SoulFrame, SoulRole, SoulTopology, SoulPoint } from '../../../../packages/world/src/soul';
 
-export interface SoulPresentationOptions { topology: SoulTopology; chimney?: SoulPoint | undefined }
+export interface SoulPresentationOptions { topology: SoulTopology; chimney?: SoulPoint | undefined; /** The shared avatar renderer owns keeper bodies. */ externalKeepers?: boolean }
 export interface SoulWeatherSurfaceOptions { roofs: readonly THREE.MeshStandardMaterial[]; snow: readonly THREE.Object3D[]; puddles: readonly THREE.Object3D[] }
 /** Modify caller-owned surfaces reversibly; caller supplies actual roof and precipitation geometry. */
 export function createSoulWeatherSurfaces(options: SoulWeatherSurfaceOptions) {
@@ -29,6 +29,7 @@ export function createSoulPresentation(scene: THREE.Scene, options: SoulPresenta
   const limbs = new Map<SoulRole, { left: THREE.Group; right: THREE.Group; leftArm: THREE.Group; rightArm: THREE.Group }>();
   (['baker','lamplighter','smith','harbour-master'] as const).forEach((role,i) => {
     const g = new THREE.Group(); root.add(g); keepers.set(role,g);
+    if (!options.externalKeepers) {
     mesh(g,coats[i]!,0,.65,0,.65,.8,.45); mesh(g,skin,0,1.35,0,.7,.7,.65);
     mesh(g,wood,0,1.74,0,.78,.13,.72);
     mesh(g,eyes,-.18,1.4,.33,.09,.1,.04);mesh(g,eyes,.18,1.4,.33,.09,.1,.04);
@@ -38,6 +39,10 @@ export function createSoulPresentation(scene: THREE.Scene, options: SoulPresenta
     if(role==='baker'){mesh(g,skin,0,1.88,0,.6,.2,.58);mesh(g,skin,0,.7,.25,.44,.58,.05);}
     if(role==='smith'){mesh(rightArm,wood,.08,-.55,0,.1,.55,.1);mesh(rightArm,wood,.08,-.8,0,.38,.18,.18);}
     if(role==='lamplighter')mesh(g,gold,.55,.7,0,.25,.3,.25);
+    } else {
+      const left=new THREE.Group(),right=new THREE.Group(),leftArm=new THREE.Group(),rightArm=new THREE.Group();
+      limbs.set(role,{left,right,leftArm,rightArm});
+    }
     const canvas=document.createElement('canvas');canvas.width=256;canvas.height=64;const ctx=canvas.getContext('2d')!;ctx.font='bold 24px Georgia';ctx.textAlign='center';ctx.fillStyle='#342c26';ctx.fillRect(12,8,232,48);ctx.strokeStyle='#d1ac72';ctx.strokeRect(12,8,232,48);ctx.fillStyle='#f6e4c2';ctx.fillText(role==='harbour-master'?'Harbour master':role[0]!.toUpperCase()+role.slice(1),128,40);const texture=new THREE.CanvasTexture(canvas);const labelMat=new THREE.SpriteMaterial({map:texture,depthTest:false});materials.push(labelMat);const label=new THREE.Sprite(labelMat);label.position.set(0,2.3,0);label.scale.set(2,.5,1);g.add(label);
 
   });

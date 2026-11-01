@@ -74,9 +74,9 @@ export interface BridgeFrame {
 }
 
 function checkSite(water: number, bank: number): void {
-  if (!Number.isInteger(water) || water < 2 || water > 12) throw new RangeError(`bridge: water must be a whole 2..12 cells, not ${water}.`);
-  if (!Number.isInteger(bank) || bank < water + 1 || bank > 24) {
-    throw new RangeError(`bridge: bank must be a whole ${water + 1}..24 cells above the bed, not ${bank}.`);
+  if (!Number.isInteger(water) || water < 2 || water > 32) throw new RangeError(`bridge: water must be a whole 2..32 cells, not ${water}.`);
+  if (!Number.isInteger(bank) || bank < water + 1 || bank > 64) {
+    throw new RangeError(`bridge: bank must be a whole ${water + 1}..64 cells above the bed, not ${bank}.`);
   }
 }
 
@@ -314,7 +314,7 @@ export function createHumpbackBridge(style: CivicStyle, water: number, bank: num
 
   const blueprint: VoxelBlueprint = {
     version: 1, id: `water-${style}-bridge-${water}-${bank}`, styleId: STYLES[style].id, kind: 'civic', lattice: 'build',
-    size: [L, HEIGHT, D], boxes: settle(b.list), windows: [],
+    size: [L, Math.max(HEIGHT, ...b.list.map(box => box.to[1])), D], boxes: settle(b.list), windows: [],
   };
   return { blueprint, ...metadata(deck, top, displaced, water, frame) };
 }

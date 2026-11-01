@@ -63,12 +63,17 @@ export function planGrowthTown(seed: string, year: number): GrowthTown {
     return ahead > 0 && ahead < 20 && aside < 9;
   }).length;
   const score = (home: SettlementHome) => nearestFresh(home.position) + blocked(home) * 40 + Math.abs(home.position[1] - root[1]) * 2;
-  const hero = [...candidates].sort((a, b) => score(a) - score(b) || a.id.localeCompare(b.id))[0];
-  if (!hero) throw new Error(`The ${year} quarter has no plot to give.`);
-  const neighbours = before.homes.filter(home => home !== hero)
+  const chosen = [...candidates].sort((a, b) => score(a) - score(b) || a.id.localeCompare(b.id))[0];
+  if (!chosen) throw new Error(`The ${year} quarter has no plot to give.`);
+  // The new citizen's family is Emberfold, whose growth line is authored to read from across the lane. The plan's
+  // tier is what the plot is laid out for; what stands on it is the hut the citizen was given, and every tier above
+  // it is earned on camera through the growth line.
+  const hero: SettlementHome = { ...chosen, variant: 0, tier: 'hut' };
+  const keep = (plan: SettlementPlan): SettlementPlan => ({ ...plan, homes: plan.homes.map(home => home.id === hero.id ? hero : home) });
+  const neighbours = before.homes.filter(home => home.id !== hero.id)
     .map(home => ({ home, distance: Math.hypot(home.position[0] - hero.position[0], home.position[2] - hero.position[2]) }))
     .filter(item => item.distance < 34).sort((a, b) => a.distance - b.distance).slice(0, 3).map(item => item.home);
-  return { seed, before, after, hero, neighbours, quarter: { year: year + 1, name: record.name, homes: fresh, streets, root, centre, reach } };
+  return { seed, before: keep(before), after: keep(after), hero, neighbours, quarter: { year: year + 1, name: record.name, homes: fresh, streets, root, centre, reach } };
 }
 
 /** Neighbours keep their installed homes as a floor and earn on from there at their own pace. */

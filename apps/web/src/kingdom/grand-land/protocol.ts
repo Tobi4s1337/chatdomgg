@@ -1,9 +1,10 @@
+import type { GrandLandRecipe } from '../../../../../packages/world/src/grand/recipe';
 import type { SettlementPlan } from '@chatdom/world';
-import type { GrandLand, GrandLandSeed } from '../../../../../packages/world/src/grand/types';
+import type { GrandLand } from '../../../../../packages/world/src/grand/types';
 import type { SeatedKingdom } from '../../../../../packages/world/src/grand/kingdom';
 
 export type HostedRequest =
-  | { type: 'generate'; plan: SettlementPlan; seed: GrandLandSeed }
+  | { type: 'generate'; plan: SettlementPlan; recipe: GrandLandRecipe }
   | { type: 'adopt'; land: GrandLand; seated: SeatedKingdom }
   | { type: 'mesh'; id: number; level: number; rx: number; rz: number };
 export type HostedMesh = { type: 'mesh'; id: number; level: number; rx: number; rz: number;

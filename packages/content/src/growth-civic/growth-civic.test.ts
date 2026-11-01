@@ -150,3 +150,13 @@ it.each(['hearth', 'tide'] as const)('%s mature bridge raises four distinct stan
     expect(at(after.voxels, 60)).not.toBe(0);
   }
 });
+
+
+it('sizes mature bridge additions from the actual deep site and preserves the full walking width', () => {
+  const form = createGrowthCivicForm('bridge', 'tide', 4, { water: 20, bank: 28 });
+  expect(form.size[1]).toBeGreaterThan(80);
+  for (const box of form.boxes) {
+    expect(box.to[1]).toBeLessThanOrEqual(form.size[1]);
+    expect(box.to[2] <= 4 || box.from[2] >= 28).toBe(true);
+  }
+});

@@ -65,7 +65,7 @@ scope.onmessage = (event: MessageEvent<HostedRequest>) => {
   try {
     const message = event.data;
     if (message.type === 'generate') {
-      const prepared = prepareInstalledLand(message.plan, message.seed);
+      const prepared = prepareInstalledLand(message.plan, message.recipe);
       adopt(prepared.land, prepared.seated);
       scope.postMessage({ type: 'land', ...prepared } satisfies HostedReply);
     } else if (message.type === 'adopt') {

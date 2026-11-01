@@ -1,0 +1,8 @@
+{
+  "extends": "../../../tsconfig.json",
+  "include": [
+    "../../../apps/web/src/kingdom/scene.ts",
+    "../../../apps/web/src/kingdom/grand-land/**/*.ts",
+    "../../../packages/world/src/grand/**/*.ts"
+  ]
+}

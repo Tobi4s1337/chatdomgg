@@ -122,3 +122,37 @@ describe('Chronicle replay', () => {
     replay.load(null); expect(replay.state().status).toBe('unavailable'); expect(binding.clear).toHaveBeenCalledTimes(5);
   });
 });
+
+it('keeps the latest seek when asynchronous scene preparation completes out of order, and cancels on close', async () => {
+  const waits: { signal: AbortSignal | undefined; resolve: () => void }[] = [];
+  const binding = { replace: vi.fn((_snapshot: HistoricalSnapshot, signal?: AbortSignal) => new Promise<void>(resolve => waits.push({ signal, resolve }))), clear: vi.fn(), dispose: vi.fn() };
+  const replay = createReplay(binding);
+  const first = replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
+  const second = replay.seek(1);
+  expect(waits[0]?.signal?.aborted).toBe(true);
+  waits[1]!.resolve(); await second;
+  expect(replay.state()).toMatchObject({ index: 1, snapshot: { caption: 'Night 2' } });
+  waits[0]!.resolve(); await first;
+  expect(replay.state()).toMatchObject({ index: 1 });
+  const late = replay.seek(0); replay.dispose();
+  expect(waits[2]?.signal?.aborted).toBe(true);
+  waits[2]!.resolve(); await late;
+  expect(binding.clear).toHaveBeenCalledTimes(1);
+});
+it('does not advance playback over a pending scene or leak an asynchronous failure', async () => {
+  let reject!: (error: Error) => void;
+  const binding = { replace: vi.fn(() => new Promise<void>((_resolve, fail) => { reject = fail; })), clear: vi.fn(), dispose: vi.fn() };
+  const replay = createReplay(binding);
+  const load = replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
+  replay.play(); replay.step();
+  expect(binding.replace).toHaveBeenCalledTimes(1);
+  reject(new Error('geometry unavailable'));
+  await expect(load).rejects.toThrow('geometry unavailable');
+  expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
+  expect(binding.clear).toHaveBeenCalledTimes(1);
+});
+it('preserves the witnessed stream date while ordering by durable committed sequence', () => {
+  const earlier = { ...snapshot(1, 'a'), nightAt: 100 };
+  expect(validateHistory({ label: 'SIMULATED', snapshots: [earlier] }).snapshots[0]?.nightAt).toBe(100);
+  expect(() => validateHistory({ label: 'SIMULATED', snapshots: [{ ...earlier, nightAt: 1001 }] })).toThrow(/witnessed stream date/);
+});

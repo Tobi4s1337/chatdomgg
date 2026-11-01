@@ -27,8 +27,11 @@ export interface InteractionCandidate {
   readonly distance: number;
   readonly alignment: number;
 }
-/** Why a seen target is not offered. Only `occupied` and `not-yours` are ever said on the look; a pick can say `far`. */
-export type InteractionHold = Extract<InteractionBlock, 'occupied' | 'not-yours'> | 'far';
+/**
+ * Why a seen target is not offered. Only `occupied`, `not-yours` and an owner's `blocked` doorway are ever said on the
+ * look; a pick can say `far`.
+ */
+export type InteractionHold = Extract<InteractionBlock, 'occupied' | 'not-yours' | 'blocked'> | 'far';
 export interface InteractionQuiet {
   readonly record: InteractionRecord;
   readonly reason: InteractionHold;
@@ -96,7 +99,7 @@ export function assessTarget(world: CollisionWorld, feet: Vec3, record: Interact
   }
   if (!withinReach(world, feet, record.target)) return { usable: false, hold: 'far', distance };
   const legality = interactionLegality(actor, record, occupant);
-  if (!legality.legal) return { usable: false, hold: legality.reason === 'occupied' || legality.reason === 'not-yours' ? legality.reason : null, distance };
+  if (!legality.legal) return { usable: false, hold: legality.reason === 'occupied' || legality.reason === 'not-yours' || legality.reason === 'blocked' ? legality.reason : null, distance };
   if (!standingClear(world, record.target.approach)) return { usable: false, hold: null, distance };
   return { usable: true, action: legality.action, distance };
 }

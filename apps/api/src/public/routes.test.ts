@@ -26,12 +26,14 @@ describe('the public origin route table', () => {
 
   it('sends the realm routes and its live data to the realm', () => {
     for (const path of [
-      '/api/realm/founded/1001', '/api/realm/entry/1001', '/api/realm/watch/1001',
+      '/api/realm/founded/1001', '/api/realm/entry/1001', '/api/realm/watch/1001', '/api/realm/chronicle/1001', '/api/realm/clock',
+      '/live-realm-data/api/realm/chronicle/1001', '/live-realm-data/api/realm/clock',
       `/api/realm/founded/scenes/${'a'.repeat(64)}`,
       '/live-realm-data/healthz', '/live-realm-data/api/realm/entry/1001', '/live-realm-data/api/realm/watch/1001',
       '/live-realm-data/matchmake/joinOrCreate/kingdom', '/live-realm-data/matchmake/reconnect/k:1001',
       '/live-realm-data/matchmake/joinById/k:1001', '/live-realm-data/process_123/k:1001',
     ]) expect(classify(path, ''), path).toEqual({ kind: 'realm' });
+    for (const path of ['/api/realm/chronicle', '/api/realm/chronicle/001', '/api/realm/chronicle/1001/private', '/api/realm/clock/private', '/live-realm-data/api/realm/clock/private']) expect(classify(path, '')).toEqual({ kind: 'not-found', api: true });
     // A realm verb with nothing after it names no kingdom.
     expect(classify('/api/realm/founded/', '')).toEqual({ kind: 'not-found', api: true });
     expect(classify('/api/realm/entry', '')).toEqual({ kind: 'not-found', api: true });
@@ -70,6 +72,15 @@ describe('the public origin route table', () => {
     for (const path of ['/map-data/v1/sql', '/map-data/current.json', `/map-data/v1/preview/${preview}/private.json`,
       `/map-data/v1/live/${preview}/${frame}/manifest.json`, `/map-data/v1/preview/${preview}/worldXjson`,
     ]) expect(classify(path, ''), path).toEqual({ kind: 'not-found', api: true });
+  });
+
+  it('publishes only the exact channel register and road projections', () => {
+    const preview = 'pv-20261101T120000Z-aaaaaaaaaaaa', base = `/map-data/v1/preview/${preview}`;
+    for (const suffix of ['search', 'card/123', 'card/login/tobi4s_', 'card/dab/abcdef0123456789',
+      'road/123/456', 'road/login/tobi4s_/mashad4']) expect(classify(`${base}/${suffix}`, '?q=willow')).toEqual({ kind: 'optional', service: 'map' });
+    for (const suffix of ['card/0', 'card/01', 'card/login/Tobi', 'card/login/a%2fb', 'card/dab/abc',
+      'road/123', 'road/123/456/private', 'search/private', 'internal']) expect(classify(`${base}/${suffix}`, '')).toEqual({ kind: 'not-found', api: true });
+    expect(classify('/map/road/tobi4s_/mashad4', '')).toEqual({ kind: 'page' });
   });
 
   it('refuses nested service doors and any encoded path before it can reach an upstream decoder', () => {
@@ -125,6 +136,15 @@ describe('the public origin route table', () => {
     }
     for (const path of ['/showcase/', '/map/Tobi4s', '/map/a-b', '/map/abcdefghijklmnopqrstuvwxyz', '/kingdom/0', '/kingdom/01', '/kingdom/abc', '/kingdom/1001/x', '/bench', '/-/other', '/dock/bench', '/-/citizen-card/bench']) {
       expect(classify(path, ''), path).toEqual({ kind: 'file' });
+    }
+  });
+
+  it('serves the grand view with its channel, hour and camera query', () => {
+    expect(at('/-/grand')).toEqual({ kind: 'page' });
+    expect(at('/-/grand?channel=tobi4s_&hour=19.5&view=hero')).toEqual({ kind: 'page' });
+    expect(at('/-/grand?channel=The_AGGman&hour=17&view=coast')).toEqual({ kind: 'page' });
+    for (const path of ['/-/grand/', '/-/grand/bench', '/-/grand-artisans']) {
+      expect(at(path), path).toEqual({ kind: 'file' });
     }
   });
 

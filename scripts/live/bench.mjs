@@ -5,6 +5,7 @@
 //   node --env-file=<file with DATABASE_URL> scripts/live/bench.mjs up       build, migrate, adopt, start, stay up
 //        … up --fresh                                                        first drop the bench's own schema and scenes
 //        … up --profile                                                      write a CPU profile of the realm on stop
+//        … up --skip-build                                                   reuse this isolate's existing built outputs
 //   node scripts/live/bench.mjs status                                       health of the three processes
 //   node scripts/live/bench.mjs down                                         stop exactly what `up` started
 // `up` stays in the foreground and owns its three processes: run it in its own terminal (or `&`), stop it with
@@ -15,10 +16,19 @@
 // repository. Postgres schema: live_twitch_bench. Nothing here prints DATABASE_URL or a secret.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, openSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 import { BENCH, ROOT, cliForward, payloadSource, readState, stateDir, health } from './lib.mjs';
+import { assertCapturePort } from '../../packages/testing/capture-ports.mjs';
+
+// A named isolate never borrows the managed schema. State/build output follows XDG_STATE_HOME, which capture runners
+// set to their own /tmp directory. No build below writes apps/*/dist or replaces a managed service's bundle.
+const schema = process.env.CHATDOM_BENCH_SCHEMA ?? BENCH.schema;
+if (!/^(?:live_twitch_bench(?:_[a-z0-9_]+)?|winddown_round_[a-z0-9_]+)$/u.test(schema) || schema.length > 63) {
+  throw new Error('CHATDOM_BENCH_SCHEMA must name live_twitch_bench or an isolated live_twitch_bench_/winddown_round_ schema.');
+}
 
 const children = new Map();
 // Whatever ends the supervisor (a failure, a thrown error, a signal) ends the processes it started, and only those.
@@ -36,28 +46,50 @@ async function up() {
   const dir = stateDir();
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const previous = readState();
-  if (previous?.supervisor && alive(previous.supervisor)) fail('the bench is already running; run `bench.mjs down` first.');
+  if (recordedSupervisor(previous)) fail('the bench is already running; run `bench.mjs down` first.');
   const secrets = previous?.secrets ?? {
     ingress: randomBytes(32).toString('hex'), door: randomBytes(24).toString('hex'), evidence: randomBytes(32).toString('hex'),
   };
+  const ports = [BENCH.realmPort, BENCH.webPort, BENCH.doorPort];
+  for (const port of ports) assertCapturePort(port, { name: 'Bench port' });
+  if (new Set(ports).size !== ports.length) fail('the realm, web and door need distinct ports.');
   for (const port of [BENCH.realmPort, BENCH.webPort, BENCH.doorPort]) if (await listening(port)) fail(`port ${port} is in use by something else; the bench never shares a port.`);
 
-  step('building realm and Herald');
-  for (const app of ['@chatdom/realm', '@chatdom/herald']) {
-    const built = spawnSync('pnpm', ['--filter', app, 'build'], { cwd: ROOT, stdio: 'inherit' });
+  const buildRoot = join(dir, 'build');
+  const buildEnv = { ...process.env, CHATDOM_REALM_TARGET: `http://127.0.0.1:${BENCH.realmPort}`, CHATDOM_API_TARGET: 'http://127.0.0.1:9' };
+  const skipBuild = process.argv.includes('--skip-build');
+  if (skipBuild && !['realm/realm.mjs', 'herald/herald.mjs', 'web/index.html'].every(file => existsSync(join(buildRoot, file)))) {
+    fail('--skip-build requires this isolate’s own existing realm, Herald and web outputs.');
+  }
+  step(skipBuild ? 'reusing this isolate’s existing bundles' : 'building isolated realm, Herald and web bundles');
+  for (const app of skipBuild ? [] : ['realm', 'herald', 'web']) {
+    const output = join(buildRoot, app);
+    const built = spawnSync('pnpm', ['exec', 'vite', 'build', '--logLevel', 'warn', '--outDir', output, '--emptyOutDir'],
+      { cwd: join(ROOT, 'apps', app), stdio: 'inherit', env: buildEnv });
     if (built.status !== 0) fail(`${app} did not build.`);
+    if (app !== 'web' && !existsSync(join(output, 'node_modules'))) symlinkSync(join(ROOT, 'apps', app, 'node_modules'), join(output, 'node_modules'), 'dir');
   }
 
   if (process.argv.includes('--fresh')) {
-    step(`dropping the bench's own schema ${BENCH.schema} and scenes`);
+    step(`dropping the bench's own schema ${schema} and scenes`);
     const pg = (await import('pg')).default;
     const owner = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1, application_name: 'chatdom-live-twitch-bench' });
-    try { await owner.query(`DROP SCHEMA IF EXISTS ${BENCH.schema} CASCADE`); } finally { await owner.end(); }
+    try { await owner.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); } finally { await owner.end(); }
     rmSync(join(dir, 'founded'), { recursive: true, force: true });
     rmSync(join(dir, 'outbox'), { recursive: true, force: true });
   }
-  step(`preparing schema ${BENCH.schema}`);
+  step(`preparing schema ${schema}`);
   await prepare(secrets.evidence);
+
+  // Trusted local capture setup only: seed witnessed history before the first current-day stream is sent. A module
+  // owns and closes any temporary writer it opens before returning. No path is accepted from HTTP or Twitch input.
+  const prepareModule = process.env.CHATDOM_BENCH_PREPARE_MODULE;
+  if (prepareModule) {
+    if (!isAbsolute(prepareModule)) fail('CHATDOM_BENCH_PREPARE_MODULE must be an absolute local path.');
+    const { seed } = await import(pathToFileURL(prepareModule).href);
+    if (typeof seed !== 'function') fail('The local preparation module must export seed().');
+    await seed({ schema, kingdomId: BENCH.kingdomId, evidenceHex: secrets.evidence, foundedDirectory: join(dir, 'founded') });
+  }
 
   const env = (extra) => ({ PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'production', ...extra });
   const founded = join(dir, 'founded'), outbox = join(dir, 'outbox');
@@ -65,8 +97,8 @@ async function up() {
   const pids = {};
   step(`realm on ${BENCH.realmPort} (SIMULATED)`);
   const profile = process.argv.includes('--profile') ? ['--cpu-prof', '--cpu-prof-dir', join(dir, 'profiles')] : [];
-  pids.realm = start('realm', 'node', [...profile, 'apps/realm/dist/realm.mjs'], env({
-    DATABASE_URL: process.env.DATABASE_URL, REALM_DATABASE_SCHEMA: BENCH.schema, REALM_FOUNDED_DIRECTORY: founded, REALM_SIMULATED: '1',
+  pids.realm = start('realm', 'node', [...profile, join(buildRoot, 'realm/realm.mjs')], env({
+    DATABASE_URL: process.env.DATABASE_URL, REALM_DATABASE_SCHEMA: schema, REALM_FOUNDED_DIRECTORY: founded, REALM_SIMULATED: '1',
     REALM_ENTRY_KINGDOM_ID: BENCH.kingdomId, REALM_ENTRY_KINGDOM_NAME: BENCH.kingdomName, REALM_INGRESS_HERALD_SECRET: secrets.ingress,
     REALM_EVIDENCE_KEY: secrets.evidence, REALM_PORT: String(BENCH.realmPort),
   }));
@@ -81,15 +113,16 @@ async function up() {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   step(`Herald door on ${BENCH.doorPort} (SIMULATED)`);
-  pids.door = start('door', 'node', ['apps/herald/dist/herald.mjs', 'mock', '--kingdom', BENCH.kingdomId, '--port', String(BENCH.doorPort)], env({
+  pids.door = start('door', 'node', [join(buildRoot, 'herald/herald.mjs'), 'mock', '--kingdom', BENCH.kingdomId, '--port', String(BENCH.doorPort)], env({
     HERALD_REALM_URL: `http://127.0.0.1:${BENCH.realmPort}`, REALM_INGRESS_HERALD_SECRET: secrets.ingress, HERALD_MOCK_SECRET: secrets.door,
     HERALD_REALM_OUTBOX_DIR: outbox,
   }));
   step(`web on ${BENCH.webPort}`);
-  pids.web = start('web', join(ROOT, 'node_modules/.bin/vite'), ['--port', String(BENCH.webPort), '--strictPort', '--host', '127.0.0.1'], env({
-    CHATDOM_REALM_TARGET: `http://127.0.0.1:${BENCH.realmPort}`, CHATDOM_API_TARGET: 'http://127.0.0.1:9', NODE_ENV: 'development',
+  pids.web = start('web', join(ROOT, 'node_modules/.bin/vite'), ['preview', '--outDir', join(buildRoot, 'web'), '--port', String(BENCH.webPort), '--strictPort', '--host', '127.0.0.1'], env({
+    CHATDOM_REALM_TARGET: `http://127.0.0.1:${BENCH.realmPort}`, CHATDOM_API_TARGET: 'http://127.0.0.1:9',
   }), join(ROOT, 'apps/web'));
-  writeFileSync(join(dir, 'state.json'), JSON.stringify({ secrets, supervisor: process.pid, pids, startedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  writeFileSync(join(dir, 'state.json'), JSON.stringify({ secrets, schema, supervisor: process.pid,
+    supervisorIdentity: processIdentity(process.pid), pids, startedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
   let stopping = false;
   const stopAll = (why) => {
     if (stopping) return;
@@ -137,7 +170,7 @@ async function prepare(evidenceHex) {
   const { generateSettlementPlan } = await load('packages/world/src/index.ts');
   const owner = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1, application_name: 'chatdom-live-twitch-bench' });
   try {
-    const ran = await migrateRealmSchema(owner, BENCH.schema);
+    const ran = await migrateRealmSchema(owner, schema);
     if (ran.length) console.info(`  migrated ${ran.length} step(s)`);
     // The real kingdom's adopted streets, so the bench looks like the place chat lives in. Read only.
     let plan = null;
@@ -150,7 +183,7 @@ async function prepare(evidenceHex) {
       plan = generateSettlementPlan(BENCH.fallbackConfig);
       console.info(`  no adopted layout to copy; generated ${plan.revision}`);
     }
-    const db = createRealmPool({ connectionString: process.env.DATABASE_URL, schema: BENCH.schema });
+    const db = createRealmPool({ connectionString: process.env.DATABASE_URL, schema });
     try {
       const allocation = new AllocationService(db, { origin: 'simulated', verifier: new TenureEvidenceVerifier('simulated', Buffer.from(evidenceHex, 'hex')), furnish: simulatedFurnisher });
       const adopted = await allocation.adoptLayout(BENCH.kingdomId, plan);
@@ -169,7 +202,7 @@ function start(name, command, args, env, cwd = ROOT) {
 
 function down() {
   const state = readState();
-  if (!state?.supervisor || !alive(state.supervisor)) { console.info('bench: nothing recorded as running'); return; }
+  if (!recordedSupervisor(state)) { console.info('bench: no matching supervisor in this process namespace; stop it from its owning session.'); return; }
   // The supervisor stops its own three processes and exits.
   process.kill(state.supervisor, 'SIGTERM');
   console.info(`  asked the bench (${state.supervisor}) to stop`);
@@ -179,7 +212,16 @@ async function status() {
   console.info(JSON.stringify(await health(), null, 2));
 }
 
-function alive(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
+/** A PID alone is unsafe across tool-session namespaces and process reuse. Never signal an unmatched process. */
+function processIdentity(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return `${readlinkSync(`/proc/${pid}/ns/pid`)}:${stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]}`;
+  } catch { return null; }
+}
+function recordedSupervisor(state) {
+  return !!state?.supervisorIdentity && processIdentity(state.supervisor) === state.supervisorIdentity;
+}
 async function listening(port) {
   try { await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(800) }); return true; } catch (error) {
     return !/ECONNREFUSED/.test(String(error?.cause?.code ?? error?.cause ?? ''));

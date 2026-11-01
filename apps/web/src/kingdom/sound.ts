@@ -81,6 +81,8 @@ export function createKingdomSound() {
   return {
     unlock,
     moments,
+    /** Soul shares the existing unlocked mixer and follows its mute/visibility policy. */
+    soulHost: () => !disposed && canSound() ? kingdomAudioHost(audio) : null,
     ...({ forgeUpdate } as { forgeUpdate?: typeof forgeUpdate }),
     get enabled() {
       const { status, settings } = audio.getState();

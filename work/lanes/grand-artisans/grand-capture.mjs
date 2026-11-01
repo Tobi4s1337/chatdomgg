@@ -1,23 +1,30 @@
 /** Actual builder renderer in a disposable adoption candidate; one still/short orbit per lock. */
-import { acquireArtisanCapture } from './capture-lease.mjs';
 import { chromium } from '@playwright/test';
-import { startCaptureServer } from './capture-server.mjs';
+import { leaseCaptureServer } from './capture-server.mjs';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
-const directory='shots/grand-artisans/in-land'; await mkdir(directory,{recursive:true});
+const directory=process.env.ARTISAN_OUTPUT ?? 'shots/grand-artisans/in-land'; await mkdir(directory,{recursive:true});
 const channels=(process.env.ARTISAN_CHANNELS ?? 'tobi4s_,the_aggman,pinkkittyrose,mashad4').split(',');
 const views=(process.env.ARTISAN_VIEWS ?? 'orbit,castle,harbour,fields,summit,mere').split(',');
 const sizes=(process.env.ARTISAN_SIZES ?? '1440x900').split(',');
 const stats=[];
 for(const channel of channels) for(const view of views) for(const size of sizes) {
-  const release=await acquireArtisanCapture(); let server,browser;
+  const {release,server}=await leaseCaptureServer(process.env.ARTISAN_REVIEW_CWD ?? '/tmp/grand-artisans-candidate'); let browser;
   try {
-    server=await startCaptureServer('/tmp/grand-artisans-candidate');
     browser=await chromium.launch({channel:'chrome',headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--no-sandbox']});
     const [width,height]=size.split('x').map(Number),page=await browser.newPage({viewport:{width,height},deviceScaleFactor:1});
+    await page.route('**/favicon.ico',route=>route.fulfill({status:204,body:''}));
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
     const hour=process.env.ARTISAN_HOUR ?? '17.6';
     await page.goto(`http://127.0.0.1:${server.port}/-/grand?channel=${channel}&view=${view}&hour=${hour}&tier=software&capture=1&t=0&still=1`,{waitUntil:'domcontentloaded'});
-    await page.waitForFunction(()=>window.__chatdomReady===true,undefined,{timeout:360000});
+    const deadline=Date.now()+360000;
+    while(true) {
+      try {await page.waitForFunction(()=>window.__chatdomReady===true,undefined,{timeout:15000});break;}
+      catch(error) {
+        if(error.name!=='TimeoutError' || Date.now()>=deadline) throw error;
+        console.log(JSON.stringify({phase:'waiting-for-land',channel,view,stats:await page.evaluate(()=>window.__chatdomGrand?.stats())}));
+      }
+    }
     if(errors.length)throw new Error(errors.join('\n'));
     // Clean builder captures hide its chrome. Keep the independent study's status visible.
     await page.evaluate(()=>{
@@ -26,9 +33,30 @@ for(const channel of channels) for(const view of views) for(const size of sizes)
       document.body.appendChild(label);
     });
     const path=`${directory}/${channel}-${view}-hour${hour}@${size}.png`;
-    await page.screenshot({path});
     const result=await page.evaluate(()=>window.__chatdomGrand.stats());
-    const record={path,...result,capturedAt:new Date().toISOString()};stats.push(record);
+    console.log(JSON.stringify({phase:'ready-before-still',channel,view,size,stats:result}));
+    // Readiness means commands were submitted. An explicit GPU fence distinguishes
+    // slow software drawing from compositor readback without changing visual quality.
+    if(process.env.ARTISAN_GL_FINISH==='1') {
+      console.log(JSON.stringify({phase:'waiting-for-gpu-fence',channel,view,size}));
+      let timer;
+      try {
+        const fence=await Promise.race([
+          page.evaluate(()=>{
+            const canvas=document.querySelector('canvas');
+            const gl=canvas?.getContext('webgl2');
+            if(!gl)throw new Error('Grand WebGL2 canvas is missing');
+            const start=performance.now();gl.finish();
+            return {millis:performance.now()-start,error:gl.getError(),lost:gl.isContextLost()};
+          }),
+          new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('GPU fence timed out after 120 seconds')),120000);}),
+        ]);
+        console.log(JSON.stringify({phase:'gpu-fence-complete',channel,view,size,...fence}));
+        if(fence.error!==0 || fence.lost)throw new Error('Grand GPU fence reported a lost or invalid context');
+      }finally{clearTimeout(timer);}
+    }
+    await page.screenshot({path,timeout:120000});
+    const record={path,gpuFence:process.env.ARTISAN_GL_FINISH==='1',...result,capturedAt:new Date().toISOString()};stats.push(record);
     await appendFile(`${directory}/capture-log.jsonl`,JSON.stringify(record)+'\n');console.log(JSON.stringify(record));
   }finally{
     try { await browser?.close(); } finally { try { await server?.stop(); } finally { await release(); } }

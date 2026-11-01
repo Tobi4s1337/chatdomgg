@@ -8,6 +8,8 @@ export interface HistoricalSnapshot {
   /** Opaque host-owned, complete scene revision, including civic places, streets and castle. */
   readonly worldRevision: string;
   readonly caption: string;
+  /** UTC date of the witnessed stream start; ordering remains the durable source sequence. */
+  readonly nightAt?: number;
   /** Optional presentation focus; the host still applies the entire snapshot. */
   readonly focus?: 'home' | 'market';
 }
@@ -17,7 +19,7 @@ export interface History {
 }
 /** A separate replay presentation: replace is a full replacement, never an event or ceremony. */
 export interface ReplayBinding {
-  replace(snapshot: HistoricalSnapshot): void;
+  replace(snapshot: HistoricalSnapshot, signal?: AbortSignal): void | Promise<void>;
   clear(): void;
   dispose(): void;
 }
@@ -47,22 +49,26 @@ export function validateHistory(input: History): History {
     if (previous && (frame.kingdomId !== previous.kingdomId || frame.sequence <= previous.sequence || frame.asOf < previous.asOf)) throw new Error('History must be ordered within one kingdom.');
     const framePlots = new Set(frame.homes.map(home => home.plotId));
     if (item.focus !== undefined && item.focus !== 'home' && item.focus !== 'market' || !item.worldRevision.trim() || !item.caption.trim() || item.homes.some(home => !home.plotId.trim() || !home.assetRevision.trim()) || new Set(item.homes.map(home => home.plotId)).size !== item.homes.length || item.homes.length !== frame.homes.length || item.homes.some(home => !framePlots.has(home.plotId))) throw new Error('History needs complete scene revisions and a factual caption.');
+    if (item.nightAt !== undefined && (!Number.isSafeInteger(item.nightAt) || item.nightAt < 0 || item.nightAt > frame.asOf)) throw new Error('History needs a witnessed stream date.');
     previous = frame;
     // A room frame's recent beats are presentation tail, not a historical fact log.
     // Never hand them to a replay binding where they could become live ceremonies.
-    return { frame: { ...frame, beats: [] }, homes: item.homes.map(home => ({ ...home })), worldRevision: item.worldRevision, caption: item.caption, ...(item.focus ? { focus: item.focus } : {}) };
+    return { frame: { ...frame, beats: [] }, homes: item.homes.map(home => ({ ...home })), worldRevision: item.worldRevision, caption: item.caption, ...(item.nightAt !== undefined ? { nightAt: item.nightAt } : {}), ...(item.focus ? { focus: item.focus } : {}) };
   });
   return freezeSnapshot({ label: input.label, snapshots });
 }
 
 export function createReplay(binding: ReplayBinding, onChange: (state: ReplayState) => void = () => {}) {
   let history: History | undefined, index = 0, playing = false, disposed = false;
+  let generation = 0, pending = false, request: AbortController | undefined;
+  const cancel = () => { generation++; pending = false; request?.abort(); request = undefined; };
   const assertOpen = () => { if (disposed) throw new Error('Chronicle is closed.'); };
   const state = (): ReplayState => history ? history.snapshots.length
     ? { status: 'ready', label: history.label, index, count: history.snapshots.length, snapshot: history.snapshots[index]!, playing }
     : { status: 'empty', label: history.label, playing: false } : { status: 'unavailable', playing: false };
   const emit = () => onChange(state());
   const clearAndEmit = () => {
+    cancel();
     try { binding.clear(); } catch (error) { history = undefined; playing = false; throw error; } finally { emit(); }
   };
   const failUnavailable = (cause: unknown): never => {
@@ -72,8 +78,17 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
     }
     throw cause;
   };
-  const apply = (snapshot: HistoricalSnapshot) => {
-    try { binding.replace(snapshot); } catch (error) { failUnavailable(error); }
+  const apply = (snapshot: HistoricalSnapshot, next: number): void | Promise<void> => {
+    cancel(); const revision = generation, controller = new AbortController(); request = controller;
+    const complete = () => { if (!disposed && revision === generation) { pending = false; index = next; if (history && index === history.snapshots.length - 1) playing = false; emit(); } };
+    try {
+      const result = binding.replace(snapshot, controller.signal);
+      if (result && typeof result.then === 'function') {
+        pending = true;
+        return result.then(complete, error => { if (!disposed && revision === generation) failUnavailable(error); });
+      }
+      complete();
+    } catch (error) { failUnavailable(error); }
   };
   return {
     state,
@@ -85,24 +100,23 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
         failUnavailable(error);
       }
       history = next; index = 0; playing = false;
-      if (history?.snapshots.length) { apply(history.snapshots[0]!); emit(); } else clearAndEmit();
+      if (history?.snapshots.length) return apply(history.snapshots[0]!, 0);
+      clearAndEmit();
     },
     seek(next: number) {
       assertOpen();
       if (!history?.snapshots.length || !Number.isFinite(next)) return;
-      index = Math.max(0, Math.min(history.snapshots.length - 1, Math.round(next)));
-      if (index === history.snapshots.length - 1) playing = false;
-      apply(history.snapshots[index]!); emit();
+      const target = Math.max(0, Math.min(history.snapshots.length - 1, Math.round(next)));
+      if (target === history.snapshots.length - 1) playing = false;
+      return apply(history.snapshots[target]!, target);
     },
     play() { assertOpen(); if (history && index < history.snapshots.length - 1) playing = true; emit(); },
     pause() { assertOpen(); playing = false; emit(); },
     step() {
-      assertOpen(); if (!playing || !history) return;
-      index = Math.min(index + 1, history.snapshots.length - 1);
-      apply(history.snapshots[index]!);
-      if (index === history.snapshots.length - 1) playing = false;
-      emit();
+      assertOpen(); if (!playing || !history || pending) return;
+      const next = Math.min(index + 1, history.snapshots.length - 1);
+      return apply(history.snapshots[next]!, next);
     },
-    dispose() { if (disposed) return; disposed = true; playing = false; try { binding.clear(); } finally { binding.dispose(); } },
+    dispose() { if (disposed) return; disposed = true; playing = false; cancel(); try { binding.clear(); } finally { binding.dispose(); } },
   };
 }

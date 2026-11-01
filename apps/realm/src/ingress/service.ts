@@ -100,7 +100,9 @@ export class RealmIngress {
   /** Registry hook: drain this kingdom's inbox and observe its walkers while it is open here. */
   attach(kingdom: DurableKingdom): () => void {
     const detachBattles = this.support.battles.attach(kingdom);
-    const drain = new KingdomDrain(kingdom, this.inbox, this.log);
+    const drain = new KingdomDrain(kingdom, this.inbox, this.log, async row => {
+      if (row.service === 'herald') await this.support.homecoming(kingdom, row.observation);
+    });
     const walkers = new WalkerPresence(kingdom, this, drain);
     this.drains.set(kingdom.kingdomId, drain);
     drain.kick();
@@ -163,7 +165,8 @@ class KingdomDrain {
   private stopped = false;
   private readonly timer: ReturnType<typeof setInterval>;
 
-  constructor(private readonly kingdom: DurableKingdom, private readonly inbox: PostgresIngressInbox, private readonly log: (line: string) => void) {
+  constructor(private readonly kingdom: DurableKingdom, private readonly inbox: PostgresIngressInbox, private readonly log: (line: string) => void,
+    private readonly afterCommit: (row: PendingObservation) => Promise<void>) {
     this.timer = setInterval(() => this.kick(), INGRESS_POLL_MS);
     this.timer.unref?.();
   }
@@ -191,6 +194,9 @@ class KingdomDrain {
     try {
       outcome = await this.kingdom.ingest({ source: row.service, digest: row.digest, receivedAt: row.receivedAt, observation: row.observation },
         presenceTransition({ service: row.service, observation: row.observation, writerEpoch: this.kingdom.writerEpoch }));
+      // A returning citizen is named only by the committed checkpoint. Keep this inbox row pending until the
+      // idempotent town transaction succeeds too: a crash, uncertain commit or fenced writer retries both safely.
+      if (outcome.status === 'committed') await this.afterCommit(row);
     } catch (error) {
       if (error instanceof RealmBusyError || error instanceof RealmWriterFencedError) return false;
       if (error instanceof RealmRecoveryError) { this.log(`[ingress] kingdom ${this.kingdom.kingdomId} holds ingress: ${error.message}`); this.stop(); return false; }

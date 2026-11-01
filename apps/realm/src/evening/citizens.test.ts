@@ -45,6 +45,7 @@ it('recovers an interrupted native installation from durable provider names, ret
       const deed = deeds.find(deed => deed.deed_id === args[0]);
       if (deed?.status === 'pending' && !deed.install_command) deed.install_command = args[1];
     } else if (sql.includes('FROM realm_deeds') && sql.includes("status = 'pending'")) rows = deeds.filter(deed => deed.status === 'pending');
+    else if (sql.includes('FROM realm_deeds') && sql.includes("status = 'installed'")) rows = deeds.filter(deed => deed.status === 'installed');
     else if (sql.includes('FROM realm_deeds') && sql.includes('person_id = $2')) rows = deeds.filter(deed => deed.person_id === args[1]);
     else throw new Error(`Unexpected SIMULATED query: ${sql}`);
     return { rows, rowCount: rows.length };
@@ -61,7 +62,7 @@ it('recovers an interrupted native installation from durable provider names, ret
       const previous = receipts.get(id); if (previous) return previous;
       const decision = decide(state, now);
       if (decision.kind !== 'accepted') return { status: decision.kind, reason: decision.reason };
-      expect(command.type).toBe('home.installAllocated');
+      expect(['home.installAllocated', 'growth.bindHome']).toContain(command.type);
       if (command.type === 'home.installAllocated') {
         const deed = deeds.find(deed => deed.receipt === command.home.allocationReceipt)!;
         deed.status = 'installed'; deed.installed_seq = String(decision.state.sequence);
@@ -106,7 +107,7 @@ it('recovers an interrupted native installation from durable provider names, ret
     expect(installed.slot).toBe(pending?.slot);
     expect(installed.attribution).toEqual({ makerName: 'SIMULATED Wren', kingdomName: 'SIMULATED kingdom', approvalId: 'provider-display-name-v1' });
     await restarted.observe(observe);
-    expect(state.sequence).toBe(1); expect(deeds).toHaveLength(1);
+    expect(state.sequence).toBe(2); expect(deeds).toHaveLength(1);
     expect(state.rights).toEqual({}); expect(state.coals).toEqual({});
     await restarted.observe({ ...observe, people: [{ personId: PersonIdSchema.parse(kingdomId), disclosure: 'named', displayName: 'SIMULATED monarch' }] });
     expect(deeds).toHaveLength(1); expect(repository.acquire).toHaveBeenCalledTimes(1);

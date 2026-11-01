@@ -106,3 +106,18 @@ describe('kingdom soul host', () => {
     expect(host.sources()).toEqual([]);
   });
 });
+
+it('updates and disposes an externally rendered keeper rig', () => {
+  vi.clearAllMocks();
+  const keeperRenderer = { update: vi.fn(), dispose: vi.fn() };
+  const host = createSoulSceneHost({} as Scene, {
+    config: { seed: 42, biome: 'woodland', topology: DEFAULT_SOUL_TOPOLOGY },
+  }, () => null, keeperRenderer);
+  expect(vi.mocked(createSoulPresentation)).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ externalKeepers: true }));
+  const input = { epochMs: Date.UTC(2026, 5, 20, 10), seconds: 3, population: 0,
+    listener: { position: [0, 1, 0] as const, right: [1, 0, 0] as const } };
+  const frame = host.update(input);
+  expect(keeperRenderer.update).toHaveBeenCalledWith(frame, 3);
+  host.dispose(); host.dispose();
+  expect(keeperRenderer.dispose).toHaveBeenCalledOnce();
+});

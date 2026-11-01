@@ -46,6 +46,21 @@ describe('the ceremony ledger', () => {
     expect(late.ceremonies.some(c => c.beat.kind === 'home-grown' && c.beat.to === 'hut')).toBe(false);
   });
 
+  it('ignores a historical beat first delivered after bootstrap and still celebrates a new physical commit', () => {
+    const committed = history.frames.find(frame => frame.beats.some(beat => beat.kind === 'home-grown' && beat.to === 'cottage'))!;
+    const oldBeat = committed.beats.find(beat => beat.kind === 'home-grown' && beat.to === 'cottage')!;
+    const bootstrap = { ...committed, sequence: committed.sequence + 100, beats: [] };
+    const ledger = createCeremonyLedger();
+    expect(ledger.accept(bootstrap).accepted).toBe(true);
+    const tail = ledger.accept({ ...bootstrap, sequence: bootstrap.sequence + 1, beats: [oldBeat] });
+    expect(tail.accepted).toBe(true);
+    expect(tail.ceremonies).toEqual([]);
+    const house = history.frames.find(frame => frame.beats.some(beat => beat.kind === 'home-grown' && beat.to === 'house'))!;
+    const fresh = ledger.accept(house);
+    expect(fresh.accepted).toBe(true);
+    expect(fresh.ceremonies.filter(c => c.beat.kind === 'home-grown' && c.beat.to === 'house')).toHaveLength(1);
+  });
+
   it('never repeats a housewarming for a replayed frame and never lets a home shrink', () => {
     const ledger = createCeremonyLedger();
     const grown = history.frames.findIndex(frame => frame.beats.some(beat => beat.kind === 'home-grown' && beat.to === 'cottage'));
@@ -59,6 +74,23 @@ describe('the ceremony ledger', () => {
     ledger.accept(regressed);
     expect(ledger.stage('plot:2025:9')).toBe('cottage');
     expect(ledger.accept({ ...regressed, kingdomId: '999', sequence: regressed.sequence + 1 }).accepted).toBe(false);
+  });
+
+  it('celebrates the committed geometry even when an eligibility frame already showed the stage', () => {
+    const ledger = createCeremonyLedger();
+    const grown = history.frames.findIndex(frame => frame.beats.some(beat => beat.kind === 'home-grown' && beat.to === 'cottage' && beat.plotId === 'plot:2025:9'));
+    for (const frame of history.frames.slice(0, grown)) ledger.accept(frame);
+    const committed = history.frames[grown]!;
+    // The eligibility frame: the home's stage is already cottage, but no beat has been committed yet.
+    expect(ledger.accept({ ...committed, beats: [] }).accepted).toBe(true);
+    expect(ledger.stage('plot:2025:9')).toBe('cottage');
+    const update = ledger.accept({ ...committed, sequence: committed.sequence + 1 });
+    expect(update.ceremonies.filter(c => c.beat.kind === 'home-grown' && c.beat.plotId === 'plot:2025:9')).toHaveLength(1);
+    // A later beat at the same stage with a new source sequence is not a second housewarming.
+    const beat = committed.beats.find(b => b.kind === 'home-grown' && b.plotId === 'plot:2025:9')!;
+    const again = ledger.accept({ ...committed, sequence: committed.sequence + 2, beats: [{ ...beat, sourceSeq: beat.sourceSeq + 1 }] });
+    expect(again.accepted).toBe(true);
+    expect(again.ceremonies).toEqual([]);
   });
 
   it('keys a beat by kingdom, source sequence, kind and target', () => {
@@ -116,6 +148,9 @@ describe('the growing town', () => {
     expect(town.quarter.homes.length).toBeGreaterThan(20);
     expect(town.quarter.streets.length).toBeGreaterThan(0);
     expect(town.hero.quarterYear).toBe(2025);
+    // Every tier above the hut is the growth line's, so the cottage is the authored two-storey one.
+    expect(town.hero.tier).toBe('hut');
+    expect(town.before.homes.find(home => home.id === town.hero.id)?.tier).toBe('hut');
     expect(town.before.homes.every(home => home.style === 'hearth')).toBe(true);
   });
   it('gives the neighbours their installed homes as a floor', () => {

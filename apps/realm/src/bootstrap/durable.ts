@@ -1,4 +1,7 @@
 import type { Pool } from 'pg';
+import { createChronicleReader } from '../chronicle/read';
+import { mountChronicleRoutes } from '../chronicle/http';
+import { mountSoulClockRoute } from '../soul/clock';
 import type { uWebSocketsTransport } from '@colyseus/uwebsockets-transport';
 import type { KingdomId } from '@chatdom/shared';
 import { createRealmAuthenticator } from '../auth/authenticator';
@@ -75,6 +78,7 @@ export function createDurableRealmBoot(options: DurableRealmBootOptions) {
   };
   ingress.use(services);
   const founded = createFoundedReader({ origin, services, loader, store, access: options.foundedAccess });
+  const chronicle = createChronicleReader({ pool, origin, services, founded, allocation, store });
   let stopped = false;
   const stop = async () => {
     if (stopped) return;
@@ -82,7 +86,7 @@ export function createDurableRealmBoot(options: DurableRealmBootOptions) {
     readiness.stop(); diagnostics.stop(); await ingress.stop();
     await Promise.all([...services.kingdoms.values()].map(kingdom => kingdom.dispose()));
   };
-  return { services, repository, allocation, store, loader, ingress, diagnostics, readiness, founded,
+  return { services, repository, allocation, store, loader, ingress, diagnostics, readiness, founded, chronicle,
     prepare, stop,
     /** Mount the real transport once; server shutdown releases our services, while caller closes the pool. */
     createServer(routes: { readonly mountIngress?: (app: uWebSocketsTransport['app']) => void } = {}) {
@@ -90,6 +94,8 @@ export function createDurableRealmBoot(options: DurableRealmBootOptions) {
       diagnostics.watch({ pool });
       mountDiagnosticsRoutes(runtime.transport.app, readiness, diagnostics, open);
       mountFoundedRoutes(runtime.transport.app, founded);
+      mountChronicleRoutes(runtime.transport.app, chronicle);
+      mountSoulClockRoute(runtime.transport.app);
       if (routes.mountIngress) routes.mountIngress(runtime.transport.app);
       else if (ingress.gate.configured) mountIngressRoute(runtime.transport.app, ingress);
       return runtime;

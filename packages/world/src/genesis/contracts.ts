@@ -10,6 +10,12 @@ import type { BoundsXZ, CardinalTurn, XZ } from '../settlement/types';
 export const GENESIS_VERSION = 'channel-genesis-1' as const;
 export const GENESIS_LIMITS = Object.freeze({ categories: 16, emotes: 12, colours: 4, recipeBytes: 65_536 });
 export type GenesisTier = z.infer<typeof AtlasTierSchema>;
+/** The Atlas game families (taxonomy families-1) and the realms that hold no family. */
+export const GENESIS_ATLAS_REALMS = [
+  'just-chatting', 'creative', 'shooters', 'arenas', 'mmo', 'roleplay', 'sandbox', 'survival', 'adventure', 'strategy',
+  'sports', 'fighting', 'retro', 'cozy', 'crossroads', 'wilds', 'isle', 'outer',
+] as const;
+export type GenesisAtlasRealm = typeof GENESIS_ATLAS_REALMS[number];
 export type GenesisBiome = 'meadow' | 'woodland' | 'coastal' | 'highland';
 export type GenesisLandmark = 'watermill' | 'lighthouse' | 'watchtower' | 'bell-garden' | 'stone-circle' | 'open-air-stage';
 export type EmoteUse = 'statue' | 'weathervane' | 'stained-glass';
@@ -60,6 +66,11 @@ export const ChannelGenesisFactsSchema = z.strictObject({
   }).nullable(),
   /** Actual follower evidence only. Null reserves Old Row without inventing a follow year. */
   oldestFollowYear: z.number().int().min(2007).max(9999).nullable(),
+  /**
+   * The Atlas realm the channel's holding stands in: its game family, or the shared Crossroads, Wilds and language
+   * isles. A theme only for a game the curated dictionary does not know; absent means unknown.
+   */
+  atlasRealm: z.enum(GENESIS_ATLAS_REALMS).optional(),
 }).superRefine((facts, context) => {
   for (const [field, values] of [
     ['categories', facts.categories.map(category => category.categoryId)],

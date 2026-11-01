@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Vec3 } from '@chatdom/shared';
 import type { CollisionWorld, SolidBox } from '@chatdom/shared/realm';
-import { STANDING, createInteractionRegistry, interactionTargetId } from '../../../../packages/world/src/interactions';
+import { createHearthHome, MATERIALS } from '@chatdom/content';
+import { compileCollisionWorld } from '@chatdom/voxel/collision';
+import { STANDING, createInteractionRegistry, homeDoorway, homeThreshold, homeZone, interactionTargetId, interactionZone } from '../../../../packages/world/src/interactions';
 import { FINISHED_FAMILIES, type AudioCue, type AudioCueOptions } from '@chatdom/audio';
 import { createInteractionController } from './controller';
 import { interactionSound } from './feedback';
@@ -203,5 +205,69 @@ describe('the browser only hints, and never takes back what it let go', () => {
     for (const action of ['sit', 'tavern', 'forge', 'stand', 'enter-home', 'exit-home'] as const) for (const kind of ['pending', 'accepted', 'refused', 'unavailable'] as const) sound.cue(kind, action);
     expect(new Set(calls)).toEqual(new Set(['wood:brass', 'place:wood', 'place:metal', 'remove:wood', 'wood:wood', 'wood:parchment']));
     for (const family of calls) expect(FINISHED_FAMILIES).toContain(family);
+  });
+
+  it('at your own door: the look offers it to its owner only, the home follows the room’s word, and walking never stops', () => {
+    const cottage = createHearthHome('cottage', 0), doorway = homeDoorway(cottage)!;
+    const flat = { origin: [-20, -16, -20] as const, columns: 100, rows: 100, heights: new Array(100 * 100).fill(0), ceilingY: 60 };
+    const solid = cottage.boxes.find(b => b.material !== 0)!.material;
+    const town = (shell: typeof cottage) => {
+      const world = compileCollisionWorld({ revision: 1, materials: MATERIALS, assets: [{ assetHash: 'shell', blueprint: shell }], placements: [{ id: 'mine', assetHash: 'shell', position: [0, 0, 0], rotation: 0 }], terrain: flat });
+      return { world, registry: createInteractionRegistry({ layoutRevision: 'a', world, placements: [], homes: [homeThreshold({ plotId: 'plot:3', revision: 'r1', blueprint: shell, position: [0, 0, 0], rotation: 0 }, world)] }) };
+    };
+    const { world, registry } = town(cottage);
+    const door = registry.get(interactionTargetId.homeDoor('plot:3'))!, exit = registry.get(interactionTargetId.homeExit('plot:3'))!;
+    const sent: InteractIntent[] = [];
+    const session = createInteractionSession({ realm: { send: intent => { sent.push(intent); } }, clock: () => 0 });
+    session.connect('e1');
+    let owner: 'walking' | 'released' | 'disposed' = 'walking';
+    const camera = { get owner() { return owner; }, release() { owner = 'released'; }, resume() { owner = 'walking'; } };
+    const homes: string[] = [];
+    const places: InteractionPlaces = { open: () => null, home: ({ plotId, door: by }) => { homes.push(`open ${plotId} ${by?.revision}`); return { close() { homes.push(`close ${plotId}`); } }; } };
+    const keyboard = new EventTarget(), page = Object.assign(new EventTarget(), { hidden: false });
+    const surface = Object.assign(new EventTarget(), { getBoundingClientRect: () => ({ left: 0, top: 0 }) as DOMRect });
+    const controller = createInteractionController({ prompt: () => ({ update() {}, dispose() {} }), surface, session, camera, places, keyboard, page, gamepads: () => [] });
+    const toward = (from: Vec3, to: Vec3): Vec3 => [to[0] - from[0], -.2, to[2] - from[2]];
+    let feet: Vec3 = door.target.approach, ownedPlotId: string | null = 'plot:3', records = registry.records;
+    const frame = (forward: Vec3) => controller.frame({ now: 0, look: { feet, forward }, records, world,
+      actor: { walkerId: 'w', zone: interactionZone(session.snapshot().self, feet, registry), ownedPlotId }, project: () => ({ x: 1, y: 1 }) });
+    const words = () => controller.debug.prompt?.words ?? null;
+    const press = () => { keyboard.dispatchEvent(Object.assign(new Event('keydown', { cancelable: true }), { code: 'KeyE', key: 'e', repeat: false, isComposing: false, ctrlKey: false, metaKey: false, altKey: false })); keyboard.dispatchEvent(Object.assign(new Event('keyup'), { code: 'KeyE' })); };
+    let revision = 0;
+    const reply = (state: { mode: 'standing' | 'interior'; targetId: string | null; plotId: string | null }) => session.receive({ type: 'receipt', receipt: { version: 1, id: sent.at(-1)!.id, status: 'applied', writerEpoch: 'e1', state: { revision: ++revision, ...state } } });
+
+    // A neighbour at this door sees a quiet line; its owner sees the one verb.
+    ownedPlotId = 'plot:9'; frame(toward(feet, door.target.position));
+    expect(controller.debug.prompt).toMatchObject({ tone: 'quiet', words: 'A neighbour’s home', actionable: false });
+    ownedPlotId = 'plot:3'; frame(toward(feet, door.target.position));
+    expect(words()).toBe('Go inside');
+    press();
+    expect(sent.at(-1)).toMatchObject({ targetId: door.target.id, action: 'enter-home' });
+    expect(words()).toBe('Opening the door…');
+    // The room says you are home: the interior presentation opens for this home and revision; the camera stays walking.
+    reply({ mode: 'interior', targetId: door.target.id, plotId: 'plot:3' });
+    expect([homes, owner, controller.debug.held, controller.debug.home]).toEqual([['open plot:3 r1'], 'walking', null, 'plot:3']);
+    feet = door.rest!; frame(toward(feet, exit.target.position));
+    expect(words()).toBe('Step outside');
+    press();
+    reply({ mode: 'standing', targetId: null, plotId: null });
+    expect([homes.at(-1), owner, controller.debug.home]).toEqual(['close plot:3', 'walking', null]);
+
+    // Walking back out through the open doorway on foot is the street again, before the room next says so.
+    reply({ mode: 'interior', targetId: door.target.id, plotId: 'plot:3' });
+    expect(interactionZone(session.snapshot().self, door.rest!, registry)).toBe(homeZone('plot:3'));
+    expect(interactionZone(session.snapshot().self, registry.home('plot:3')!.route[2]!, registry)).toBe('street');
+    // A disconnect lets go of the home's presentation like any other held thing.
+    session.disconnect(); frame(toward(feet, exit.target.position));
+    expect([homes.at(-1), controller.debug.home]).toEqual(['close plot:3', null]);
+
+    // An edited room with a cupboard behind the door: its owner is told so quietly, and E sends nothing.
+    const blocked = town({ ...cottage, boxes: [...cottage.boxes, { from: [doorway.from[0], doorway.from[1], doorway.from[2] - 12], to: [doorway.to[0], doorway.from[1] + 10, doorway.from[2]], material: solid }] });
+    session.connect('e1'); records = blocked.registry.records; feet = door.target.approach;
+    controller.frame({ now: 0, look: { feet, forward: toward(feet, door.target.position) }, records, world: blocked.world, actor: { walkerId: 'w', zone: 'street', ownedPlotId }, project: () => ({ x: 1, y: 1 }) });
+    expect(controller.debug.prompt).toMatchObject({ tone: 'quiet', words: 'Your doorway is blocked inside', actionable: false });
+    const before = sent.length; press();
+    expect(sent).toHaveLength(before);
+    controller.dispose();
   });
 });

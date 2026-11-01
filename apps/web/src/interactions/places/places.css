@@ -1,0 +1,88 @@
+/* The anvil visit: a carved plate beside the hero anvil. Same wood, brass and parchment as the prompt. */
+.ix-anvil-layer { position: absolute; inset: 0; z-index: 4; pointer-events: none; display: flex; align-items: center; justify-content: flex-end;
+  padding: 24px clamp(20px, 5vw, 72px) 24px 24px; }
+.ix-anvil {
+  --ix-wood: #4f3322; --ix-wood-lo: #2f1d12; --ix-edge: #1d120a;
+  --ix-brass-hi: #f6dfa2; --ix-brass: #c99f5b; --ix-brass-lo: #7c5a2a;
+  --ix-parch: #f4e7c8; --ix-parch-lo: #dfc99b; --ix-ink: #33231a; --ix-ink-soft: #6e5339; --ix-ember: #f08a3a;
+  pointer-events: auto; width: min(372px, 100%); font-synthesis: none; color: var(--ix-ink);
+  animation: ix-anvil-in .32s cubic-bezier(.2, .8, .3, 1) both;
+}
+.ix-anvil-plate {
+  position: relative; padding: 22px 24px 18px; border-radius: 10px; border: 1px solid var(--ix-edge);
+  background:
+    radial-gradient(ellipse at 22% 8%, #fff9e6 0, transparent 60%),
+    radial-gradient(ellipse at 90% 100%, #c9a26a33 0, transparent 55%),
+    repeating-linear-gradient(91deg, #8a643a07 0 3px, transparent 3px 11px),
+    linear-gradient(172deg, var(--ix-parch), var(--ix-parch-lo));
+  box-shadow:
+    inset 0 0 0 1px #fffbe955, inset 0 -10px 22px #a0784026,
+    0 0 0 4px var(--ix-wood), 0 0 0 5px var(--ix-edge), 0 1px 0 5px #ffd9a01c,
+    0 22px 48px #07060fa6, 0 6px 14px #07060f80;
+}
+/* Brass corner studs: the plate is nailed to its board. */
+.ix-anvil-plate::before, .ix-anvil-plate::after { content: ''; position: absolute; top: 9px; width: 7px; height: 7px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--ix-brass-hi), var(--ix-brass) 55%, var(--ix-brass-lo)); box-shadow: 0 1px 0 #1d120a88; }
+.ix-anvil-plate::before { left: 9px; } .ix-anvil-plate::after { right: 9px; }
+
+.ix-anvil-eyebrow { margin: 0 0 4px; font: 11.5px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .2em; color: var(--ix-ink-soft); text-align: center; }
+.ix-anvil-title { margin: 0; font: 400 27px/1.08 'IM Fell English', Georgia, serif; letter-spacing: -.005em; text-align: center; text-wrap: balance; }
+.ix-anvil-fire { display: flex; gap: 10px; align-items: baseline; margin: 14px 0 0; padding: 10px 12px; border-radius: 6px;
+  font: italic 16px/1.3 'IM Fell English', Georgia, serif; color: #4a2f1c; background: #3b23120d; box-shadow: inset 0 0 0 1px #6e533924; }
+.ix-anvil-ember { flex: none; width: 9px; height: 9px; border-radius: 50%; translate: 0 -1px;
+  background: radial-gradient(circle at 40% 35%, #fff2c0, #f0a040 55%, #a8461c); box-shadow: 0 0 10px #f3a24bcc; }
+.ix-anvil[data-tone='working'] .ix-anvil-ember { animation: ix-anvil-ember .9s ease-in-out infinite alternate; }
+.ix-anvil[data-tone='waiting'] .ix-anvil-ember { opacity: .55; }
+.ix-anvil[data-tone='cold'] .ix-anvil-ember { background: radial-gradient(circle at 40% 35%, #d9d2c3, #8d8170 60%, #5a5044); box-shadow: none; }
+.ix-anvil[data-tone='cold'] .ix-anvil-fire { color: var(--ix-ink-soft); }
+
+.ix-anvil-how { margin: 14px 0 0; }
+.ix-anvil-step { margin: 8px 0 0; font: 16px/1.35 'IM Fell English', Georgia, serif; text-wrap: pretty; }
+.ix-anvil-step:first-child { margin-top: 0; }
+/* The chat line, chalked on a slate. */
+.ix-anvil-chalk { margin: 7px 0 2px; padding: 10px 12px 9px; border-radius: 6px; background:
+    radial-gradient(ellipse at 30% 20%, #3c4148 0, transparent 70%), linear-gradient(170deg, #2b2f35, #202328);
+  box-shadow: inset 0 1px 0 #ffffff14, inset 0 0 0 1px #00000066, 0 0 0 2px #5c3e28, 0 0 0 3px var(--ix-edge); }
+.ix-anvil-chalk code { display: block; font: 15px/1.35 ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; color: #efe9dc;
+  letter-spacing: .01em; overflow-wrap: anywhere; text-shadow: 0 0 1px #ffffff55; }
+.ix-anvil-note { margin: 10px 0 0; font: italic 14px/1.35 'IM Fell English', Georgia, serif; color: var(--ix-ink-soft); text-wrap: pretty; }
+.ix-anvil-made { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid #6e533930; font: 14.5px/1.35 'IM Fell English', Georgia, serif; color: var(--ix-ink-soft); text-wrap: pretty; }
+.ix-anvil-sim { font: 10.5px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .14em; color: #8f3826; padding: 1px 5px; border: 1px solid #8f382655; border-radius: 3px; white-space: nowrap; }
+
+.ix-anvil-leave {
+  appearance: none; margin: 16px auto 0; display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 44px; min-width: 196px;
+  padding: 6px 18px 6px 8px; border-radius: 7px; border: 1px solid var(--ix-edge); cursor: pointer; color: #f6e7c4;
+  font: 16.5px/1 'IM Fell English', Georgia, serif; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  background: linear-gradient(175deg, #6f4a31, #4f3322 60%, #3e2819);
+  box-shadow: inset 0 1px 0 #a57a5299, inset 0 -2px 0 #2a1a0f, 0 2px 0 #1d120a, 0 6px 12px #0a081866;
+  transition: filter .16s, transform .12s;
+}
+.ix-anvil-leave:hover { filter: brightness(1.08); }
+.ix-anvil-leave:active { transform: translateY(1px); }
+.ix-anvil-leave:focus-visible { outline: 2px solid var(--ix-brass-hi); outline-offset: 4px; }
+.ix-anvil-key { display: grid; place-items: center; min-width: 38px; height: 30px; padding: 0 6px; border-radius: 5px;
+  font: 14px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .04em; color: #3a2610; text-shadow: 0 1px 0 #ffeec280;
+  background: radial-gradient(circle at 34% 28%, var(--ix-brass-hi), var(--ix-brass) 56%, var(--ix-brass-lo));
+  box-shadow: inset 0 1px 0 #fff3cc, inset 0 -2px 0 #5e421d, 0 0 0 1px #3d2a12; }
+.ix-anvil-leave:not(:has(.ix-anvil-key)) { padding-left: 18px; }
+
+/* Tall screens: the plate becomes a sheet under the anvil, inside the thumb's reach and the safe area. */
+@media (max-aspect-ratio: 1/1) {
+  .ix-anvil-layer { align-items: flex-end; justify-content: center; padding: 0 10px max(10px, env(safe-area-inset-bottom)); }
+  .ix-anvil { width: min(460px, 100%); animation-name: ix-anvil-up; }
+  .ix-anvil-plate { padding: 16px 18px 12px; }
+  .ix-anvil-title { font-size: 23px; }
+  .ix-anvil-fire { margin-top: 10px; padding: 8px 10px; font-size: 15px; }
+  .ix-anvil-how { margin-top: 10px; }
+  .ix-anvil-step { font-size: 15px; }
+  .ix-anvil-chalk code { font-size: 13.5px; }
+  .ix-anvil-note { margin-top: 7px; font-size: 13.5px; }
+  .ix-anvil-made { margin-top: 8px; padding-top: 7px; font-size: 13.5px; }
+  .ix-anvil-leave { margin-top: 12px; width: 100%; }
+}
+
+@keyframes ix-anvil-in { from { opacity: 0; translate: 14px 0; } to { opacity: 1; translate: 0 0; } }
+@keyframes ix-anvil-up { from { opacity: 0; translate: 0 18px; } to { opacity: 1; translate: 0 0; } }
+@keyframes ix-anvil-ember { from { opacity: .55; scale: .86; } to { opacity: 1; scale: 1.06; } }
+@media (prefers-reduced-motion: reduce) { .ix-anvil, .ix-anvil-ember { animation: none !important; } .ix-anvil-leave { transition: none; } }
+[data-motion='reduce'] .ix-anvil, [data-motion='reduce'] .ix-anvil-ember { animation: none !important; }

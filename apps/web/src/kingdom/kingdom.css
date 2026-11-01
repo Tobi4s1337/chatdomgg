@@ -22,3 +22,5 @@
 .kingdom .kingdom-seal[data-provenance='simulated']{padding:5px 8px;border:1px solid #d2ae7766;border-radius:3px;background:#2b2424df;box-shadow:none}
 .kingdom .kingdom-seal[data-provenance='simulated'] .cd-seal{display:none}
 .kingdom .kingdom-seal[data-provenance='simulated'] .cd-provenance-word{color:#f3dfbb;font:700 11px/1 Georgia,serif;letter-spacing:.1em}
+
+.kingdom-chronicle-button{position:fixed;right:1.1rem;top:6rem;z-index:25;padding:.6rem 1rem;border:1px solid #b88a4e;border-radius:.35rem;background:#302945e8;color:#f5dfb4;font:600 .9rem Georgia,serif;cursor:pointer}

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RealmFoundedScene } from '../../founded-world/types';
 import { compileFoundedScene, foundedGroundAt } from '../../founded-world/collision';
 import { foundedAnvilPosition } from '../../interactions/founded';
+import { generateSettlementPlan } from '../../settlement/generator';
 import { frameSettlement, settlementGround } from './frame';
 import { landColumnsFor, SEAT_BAND_METRES, seatSettlement } from './seat';
 import { gradeSettlement } from './grade';
@@ -79,6 +80,15 @@ describe('the grand kingdom seat', () => {
   it('paves the public ground and floods only the settlement’s own water', () => {
     expect(grade.paved).toBeGreaterThan(10_000);
     expect(grade.wet).toBeGreaterThan(1_000);
+    // Paving is its own cover, and the rest of the town is the settlement's lawn, never the wild grass with flowers.
+    let pavedCover = 0, wild = 0;
+    for (let z = seat.columns.z0; z < seat.columns.z1; z++) for (let x = seat.columns.x0; x < seat.columns.x1; x++) {
+      const i = x + z * field.size;
+      if (grade.pavedMask[i]) { expect(field.cover[i]).toBe(KINGDOM_COVER.paved); pavedCover++; }
+      else if (field.cover[i] === KINGDOM_COVER.grass || field.cover[i] === KINGDOM_COVER.meadow) wild++;
+    }
+    expect(pavedCover).toBe(grade.paved);
+    expect(wild).toBe(0);
     const lake = scene.plan.lake;
     const i = column(field, lake.x + seat.offset[0], lake.z + seat.offset[2]);
     expect(field.water[i]! * LAND_CELL).toBe(lake.level + seat.offset[1]);
@@ -136,6 +146,81 @@ describe('the grand kingdom seat', () => {
     gradeSettlement(again.field, seat2, settlementGround(scene.plan));
     expect(seat2.offset).toEqual(seat.offset);
     expect(Buffer.from(again.field.ground.buffer).equals(Buffer.from(field.ground.buffer))).toBe(true);
+  }, 60_000);
+});
+
+describe('the castle on its rock', () => {
+  it('breaks the castle’s ground off at the region edge as a rock face, and leaves the exact region alone', () => {
+    const frame = frameSettlement(scene.plan);
+    const plain = island(), rocky = island();
+    const seat = seatSettlement(plain.field, plain.sites, frame);
+    const natural = Uint16Array.from(plain.field.ground);
+    const eased = gradeSettlement(plain.field, seat, settlementGround(scene.plan));
+    const crag = gradeSettlement(rocky.field, seat, settlementGround(scene.plan), frame.castle.bounds);
+    const { x0, x1, z0, z1 } = seat.columns, size = plain.field.size;
+    for (let z = z0; z < z1; z += 3) for (let x = x0; x < x1; x += 3) expect(rocky.field.ground[x + z * size]).toBe(plain.field.ground[x + z * size]);
+    // Walk out of the region from the castle's nearest edge: 12 m out the crag has met the land, the plain band has not.
+    const c = frame.castle.bounds, cx = Math.round(((c.minX + c.maxX) / 2 + seat.offset[0]) / LAND_CELL);
+    const edges = [{ d: Math.abs((c.minZ + seat.offset[2]) / LAND_CELL - z0), at: (n: number) => cx + (z0 - 1 - n) * size },
+      { d: Math.abs(z1 - (c.maxZ + seat.offset[2]) / LAND_CELL), at: (n: number) => cx + (z1 + n) * size }];
+    const near = edges.sort((a, b) => a.d - b.d)[0]!;
+    const out = near.at(Math.round(12 / LAND_CELL));
+    expect(rocky.field.ground[out]).toBe(natural[out]);
+    const step = Math.abs(plain.field.ground[near.at(0)]! - natural[near.at(0)]!);
+    if (step > 4) expect(plain.field.ground[out]).not.toBe(natural[out]);
+    expect(crag.rock).toBeGreaterThan(eased.rock);
+    // Inland water above the sea stands only on ground the band did not cut down.
+    const band = seat.band;
+    for (let z = Math.max(0, z0 - band); z < Math.min(size, z1 + band); z += 2) for (let x = Math.max(0, x0 - band); x < Math.min(size, x1 + band); x += 2) {
+      if (x >= x0 && x < x1 && z >= z0 && z < z1) continue;
+      const i = x + z * size;
+      if (rocky.field.water[i]! > rocky.field.seaLevel) expect(rocky.field.ground[i]).toBeGreaterThanOrEqual(natural[i]!);
+    }
+    expect(crag.exact).toBe(eased.exact);
+  }, 60_000);
+});
+
+describe('the grand kingdom as it grows', () => {
+  // A hamlet becomes a town on the same reserved addresses: the land around it must not move.
+  const config = { seed: 'willowmere', firstYear: 2025, year: 2026 };
+  const hamlet = generateSettlementPlan({ ...config, tier: 'hamlet' }), town = generateSettlementPlan({ ...config, tier: 'town' });
+  const small = frameSettlement(hamlet), grown = frameSettlement(town);
+
+  it('frames growth inside an envelope that building reserved plots does not change', () => {
+    expect(town.homes.length).toBeGreaterThan(hamlet.homes.length);
+    expect(grown.region).not.toEqual(small.region);
+    expect(grown.envelope).toEqual(small.envelope);
+    expect(grown.centre).toEqual(small.centre);
+    for (const frame of [small, grown]) {
+      expect(frame.envelope.minX).toBeLessThanOrEqual(frame.region.minX);
+      expect(frame.envelope.maxX).toBeGreaterThanOrEqual(frame.region.maxX);
+      expect(frame.envelope.minZ).toBeLessThanOrEqual(frame.region.minZ);
+      expect(frame.envelope.maxZ).toBeGreaterThanOrEqual(frame.region.maxZ);
+    }
+    expect(landColumnsFor(grown)).toBe(landColumnsFor(small));
+  });
+
+  it('keeps the seat, and every home and door already built at the same place on the land', () => {
+    const before = island(), after = island();
+    const a = seatSettlement(before.field, before.sites, small), b = seatSettlement(after.field, after.sites, grown);
+    expect(b.offset).toEqual(a.offset);
+    for (const home of hamlet.homes) {
+      const same = town.homes.find(next => next.id === home.id)!;
+      expect(same.position).toEqual(home.position);
+      expect(same.rotation).toBe(home.rotation);
+    }
+    // The town's new exact ground is graded in; land past the grown region's band is the same land either way.
+    gradeSettlement(before.field, a, settlementGround(hamlet, small.region));
+    gradeSettlement(after.field, b, settlementGround(town, grown.region));
+    const band = SEAT_BAND_METRES / LAND_CELL, x0 = b.columns.x0 - band - 1, x1 = b.columns.x1 + band + 1;
+    let compared = 0;
+    for (let z = 0; z < after.field.size; z += 7) for (let x = 0; x < after.field.size; x += 7) {
+      if (x >= x0 && x < x1 && z >= b.columns.z0 - band - 1 && z < b.columns.z1 + band + 1) continue;
+      const i = x + z * after.field.size;
+      expect(after.field.ground[i]).toBe(before.field.ground[i]);
+      compared++;
+    }
+    expect(compared).toBeGreaterThan(10_000);
   }, 60_000);
 });
 

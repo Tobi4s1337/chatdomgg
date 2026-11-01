@@ -13,6 +13,9 @@ import type { ForgeCommandSink } from '../forge/commands';
 import { startPresenceServer, type PresenceServer, type SourceHost, type UnstartedHealth } from './server';
 import { PresenceSource } from './source';
 import type { RealmDelivery } from '../realm-delivery/delivery';
+import { RealmMomentObservationSchema } from '@chatdom/shared/realm';
+import { streamNotice } from '../ingest/spectacles';
+import { providerToken } from '../twitch-moments/credit';
 
 export interface LiveSourceHandle {
   readonly server: PresenceServer;
@@ -23,9 +26,11 @@ export interface LiveSourceHandle {
 /** The capabilities a live source cannot publish without: chat and its cleanup are one delivery family. */
 const REQUIRED: readonly Capability[] = ['chat'];
 /** Grants a running source waits for. While one is missing it is reread each minute, not only hourly. */
-const AWAITED: readonly Capability[] = ['chat', 'chatters', 'bits', 'hype'];
-const GRANT_READY: Partial<Record<Capability, string>> = { chat: 'attaching chat delivery', chatters: 'sweeping Chatters', bits: 'enabling cheers and Power-ups', hype: 'enabling hype trains' };
-const GRANT_MISSING: Partial<Record<Capability, string>> = { chat: 'not publishing', chatters: 'not sweeping Chatters', bits: 'cheers and Power-ups unavailable', hype: 'hype trains unavailable' };
+const AWAITED: readonly Capability[] = ['chat', 'chatters', 'bits', 'hype', 'follows', 'rewards', 'polls'];
+const GRANT_READY: Partial<Record<Capability, string>> = { chat: 'attaching chat delivery', chatters: 'sweeping Chatters', bits: 'enabling cheers and Power-ups', hype: 'enabling hype trains',
+  follows: 'enabling follows', rewards: 'enabling kingdom rewards', polls: 'enabling polls and decrees' };
+const GRANT_MISSING: Partial<Record<Capability, string>> = { chat: 'not publishing', chatters: 'not sweeping Chatters', bits: 'cheers and Power-ups unavailable', hype: 'hype trains unavailable',
+  follows: 'follows unavailable', rewards: 'kingdom rewards unavailable', polls: 'polls and decrees unavailable' };
 const GRANT_RECHECK_MS = 60_000;
 
 /**
@@ -121,7 +126,14 @@ export async function startLiveSource(options: {
   print(`  kingdom ${kingdomId.data} · ${kingdom.config.tier} ${kingdom.config.firstYear}–${kingdom.config.year} · ${kingdom.slots.length} home slots · bindings kept in ${config.dataDir}`);
 
   // Stream state needs only the app token, so it is observed even while chat delivery is not authorized.
-  const observed = new Reconciler({ kingdomId: kingdomId.data, helix, authority, source: live, log: line => print(`  ${line}`) });
+  const observed = new Reconciler({ kingdomId: kingdomId.data, helix, authority, source: live, log: line => print(`  ${line}`),
+    reconciled: (change, startedAt) => {
+      if (!options.realm) return;
+      const evidence = RealmMomentObservationSchema.safeParse({ version: 1, kingdomId: kingdomId.data, origin: 'live',
+        id: providerToken('reconcile', `${change.live ? change.streamId : 'offline'}.${change.at}`),
+        occurredAt: change.at, receivedAt: Math.floor(Date.now()), notice: streamNotice(change.live, change.live ? change.streamId : null, startedAt) });
+      if (evidence.success) void options.realm.moment(evidence.data).catch(() => undefined);
+    } });
   reconciler = observed;
   host = { get current() { return live.current; }, subscribe: listener => live.subscribe(listener), health: () => ({ ...health(), observed: observed.health() }) };
   const startup = observed.start();

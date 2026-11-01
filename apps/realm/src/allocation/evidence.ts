@@ -5,7 +5,7 @@ import { canonicalJson } from '../persistence/codec';
 
 /**
  * Tenure evidence: what the Herald actually observed on Twitch, signed with the realm's evidence key.
- * A follow record carries Helix `followed_at`; a subscription record carries cumulative months from badge info or a
+ * A follow record carries Helix or EventSub `followed_at`; a subscription record carries cumulative months from badge info or a
  * resub message. There is no record for what was not observed: unknown history stays unknown, and nothing here is
  * ever inferred from a slot, a sign-in or a payment.
  */
@@ -14,7 +14,7 @@ const signed = {
   origin: z.enum(['live', 'simulated']), observedAt: EpochMsSchema, signature: z.string().regex(/^[a-f0-9]{64}$/),
 };
 export const TenureEvidenceSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ ...signed, kind: z.literal('follow'), source: z.literal('helix.channel-followers'), followedAt: EpochMsSchema }),
+  z.strictObject({ ...signed, kind: z.literal('follow'), source: z.enum(['helix.channel-followers', 'eventsub.follow']), followedAt: EpochMsSchema }),
   z.strictObject({ ...signed, kind: z.literal('subscription'), source: z.enum(['chat.badge-info', 'eventsub.subscription-message']),
     months: z.number().int().min(1).max(1_200) }),
 ]);

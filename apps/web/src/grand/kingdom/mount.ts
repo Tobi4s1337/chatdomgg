@@ -3,6 +3,9 @@ import { MATERIALS } from '@chatdom/content';
 import { createVoxelMaterial, createWindowLights, geometryFromChunks, getEnvironment, type WindowHouse } from '@chatdom/render';
 import { VoxelWorkerPool } from '@chatdom/voxel';
 import type { KingdomPresenceFrame, MaterialRegistry, Vec3, VoxelBlueprint } from '@chatdom/shared';
+import type { SettlementPlan } from '@chatdom/world';
+import { createKingdomCitizens } from '../../kingdom/citizen-scene';
+import type { SimulatedPresence } from '../../kingdom/presence-feed';
 
 /** One placed voxel model of the kingdom, in settlement metres at its blueprint's local origin. */
 export interface KingdomPlacement {
@@ -27,6 +30,12 @@ export interface GrandKingdomLayerInput {
   readonly presence: KingdomPresenceFrame | null;
   /** Open flames (court and gate braziers, Forge square fires), in settlement metres: a warm glow after dusk. */
   readonly fires?: readonly Vec3[];
+  /**
+   * The citizens who walk the streets: today's kingdom citizens on the same plan, driven by a presence producer. Only
+   * the labelled SIMULATED producer exists in the grand view; its frames light the windows the citizens walk home to.
+   * A potential kingdom has none: nobody lives there yet.
+   */
+  readonly citizens?: { readonly plan: SettlementPlan; readonly simulation: SimulatedPresence };
 }
 
 /** What the grand engine lends a layer. */
@@ -45,6 +54,9 @@ export interface GrandKingdomLayerStats {
   triangles: number;
   /** Blueprint jobs the workers could not mesh; their placements stay at a coarser level or absent. */
   failed: number;
+  /** Citizens drawn this frame, and how many of them are out on the streets rather than home. */
+  citizens: number;
+  walking: number;
 }
 
 export interface GrandKingdomLayer {
@@ -114,12 +126,43 @@ export function mountGrandKingdom(host: GrandLayerHost, input: GrandKingdomLayer
     }
     (batch as { level: Uint8Array }).level = new Uint8Array(batch.placements.length).fill(4);
   }
-  const stats: GrandKingdomLayerStats = { blueprints: batches.size, placements: input.placements.length, meshed: 0, instancesByLevel: [0, 0, 0], triangles: 0, failed: 0 };
+  const stats: GrandKingdomLayerStats = { blueprints: batches.size, placements: input.placements.length, meshed: 0, instancesByLevel: [0, 0, 0], triangles: 0, failed: 0, citizens: 0, walking: 0 };
   let disposed = false, dirty = true, finished = 0;
   const lastEye = new THREE.Vector3(Infinity, 0, 0);
 
   const windows = input.houses.length ? createWindowLights(root, input.houses) : null;
-  if (windows && input.presence) windows.setFrame(input.presence);
+  if (windows && input.presence && !input.citizens) windows.setFrame(input.presence);
+
+  // Citizens walk in settlement metres under the seat, on the exact ground the grade wrote, with today's renderer.
+  const people = input.citizens ? (() => {
+    const { plan, simulation } = input.citizens;
+    const crowd = createKingdomCitizens(root, plan, pool, clay);
+    let prepared = false, lastLight = '';
+    const unsubscribe = simulation.feed.subscribe(frame => crowd.applyFrame(frame), () => undefined);
+    const preparing = crowd.prepare().then(() => { prepared = true; host.invalidate(); });
+    return {
+      preparing,
+      isReady: () => prepared,
+      update(seconds: number, hour: number) {
+        simulation.advance(seconds);
+        const atMs = simulation.epochMs + seconds * 1000;
+        const samples = crowd.update(atMs, seconds, host.camera);
+        stats.citizens = samples.length;
+        stats.walking = samples.filter(sample => !sample.homeLit).length;
+        // The windows show who has arrived home, from the same producer the walkers follow.
+        const light = crowd.lightFrame(atMs);
+        const key = light ? light.windows.map(w => (w.present ? 1 : 0)).join('') : '';
+        if (light && key !== lastLight) { windows?.setFrame(light); lastLight = key; }
+        const night = THREE.MathUtils.smoothstep(Math.abs(((hour % 24) + 24) % 24 - 12), 4.2, 6.5);
+        crowd.drawLanterns(seconds, night, host.camera);
+      },
+      /** People keep the kingdom view's ambient floor, so a citizen never reads as a silhouette at dusk. */
+      setEnvironment(environment: Parameters<typeof clay.setEnvironment>[0]) {
+        crowd.material.setEnvironment({ ...environment, ambientIntensity: Math.max(0.65, environment.ambientIntensity) });
+      },
+      dispose() { unsubscribe(); crowd.dispose(); },
+    };
+  })() : null;
 
   const install = (batch: Batch, factor: Factor, chunks: Parameters<typeof geometryFromChunks>[0]) => {
     const geometry = geometryFromChunks(chunks, 'build');
@@ -200,25 +243,32 @@ export function mountGrandKingdom(host: GrandLayerHost, input: GrandKingdomLayer
   };
 
   const fires = input.fires?.length ? createFireGlow(root, input.fires) : null;
-  let hour = 17.6;
+  let hour = 17.6, previous: number | null = null;
   return {
     ready, stats, root,
-    isReady: () => finished === jobs.length,
+    isReady: () => finished === jobs.length && (people?.isReady() ?? true),
     setLight(nextHour, sunDirection) {
       hour = nextHour;
       const env = getEnvironment(hour);
-      clay.setEnvironment({ ...env, sunDirection: [sunDirection.x, sunDirection.y, sunDirection.z] });
+      const lit = { ...env, sunDirection: [sunDirection.x, sunDirection.y, sunDirection.z] as [number, number, number] };
+      clay.setEnvironment(lit);
+      people?.setEnvironment(lit);
       host.invalidate();
     },
     update(seconds) {
       if (disposed) return;
       assign();
-      windows?.update(seconds, hour);
+      // The engine hands total seconds (frozen for stills); window fades step by the time since the last frame.
+      const elapsed = previous === null ? 0 : Math.max(0, seconds - previous);
+      previous = seconds;
+      people?.update(seconds, hour);
+      windows?.update(elapsed, hour);
       fires?.update(seconds, hour);
     },
     dispose() {
       if (disposed) return;
       disposed = true;
+      people?.dispose();
       pool.dispose();
       windows?.dispose();
       fires?.dispose();

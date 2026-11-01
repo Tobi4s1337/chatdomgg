@@ -18,15 +18,28 @@ const OCEAN: Readonly<Record<0 | 1 | 2 | 3, readonly [number, number]>> = { 0: [
 export function frameSettlement(plan: SettlementPlan): SettlementFrame {
   const b = plan.bounds;
   if (![b.minX, b.maxX, b.minZ, b.maxZ].every(Number.isFinite) || b.minX >= b.maxX || b.minZ >= b.maxZ) throw new Error('A settlement frame needs finite nonempty bounds');
-  const c = PHYSICAL_CHUNK_METRES;
-  const minX = Math.floor(b.minX / c) * c, minZ = Math.floor(b.minZ / c) * c;
-  const region = { minX, minZ, maxX: minX + Math.ceil((b.maxX - minX) / c) * c, maxZ: minZ + Math.ceil((b.maxZ - minZ) / c) * c };
+  const region = alignBounds(b);
+  // The envelope is the plan's whole tenure: the bounds the generator would draw if every reservation were built.
+  const points: (readonly [number, number])[] = [];
+  for (const plot of [...plan.reservations, ...plan.homes]) points.push([plot.lot.minX, plot.lot.minZ], [plot.lot.maxX, plot.lot.maxZ]);
+  for (const street of plan.streets) for (const p of street.points) points.push([p[0], p[2]]);
+  const lake = plan.landform.lake, castle = plan.castle.bounds;
+  points.push([castle.minX, castle.minZ], [castle.maxX, castle.maxZ],
+    [lake.x - lake.radiusX * 1.3, lake.z - lake.radiusZ * 1.3], [lake.x + lake.radiusX * 1.3, lake.z + lake.radiusZ * 1.3]);
+  const xs = points.map(p => p[0]), zs = points.map(p => p[1]);
+  const reach = alignBounds({ minX: Math.min(...xs) - ENVELOPE_MARGIN, maxX: Math.max(...xs) + ENVELOPE_MARGIN, minZ: Math.min(...zs) - ENVELOPE_MARGIN, maxZ: Math.max(...zs) + ENVELOPE_MARGIN });
+  const envelope = { minX: Math.min(reach.minX, region.minX), minZ: Math.min(reach.minZ, region.minZ), maxX: Math.max(reach.maxX, region.maxX), maxZ: Math.max(reach.maxZ, region.maxZ) };
   let sx = plan.market.boundary.reduce((s, p) => s + p[0], 0) / plan.market.boundary.length;
   let sz = plan.market.boundary.reduce((s, p) => s + p[1], 0) / plan.market.boundary.length;
-  // The inhabited centre weighs the homes and the square equally, so one long quarter cannot drag it off the town.
-  if (plan.homes.length) {
-    const hx = plan.homes.reduce((s, h) => s + h.position[0], 0) / plan.homes.length;
-    const hz = plan.homes.reduce((s, h) => s + h.position[2], 0) / plan.homes.length;
+  // The centre weighs the plots and the square equally, so one long quarter cannot drag it off the town. Built and
+  // reserved plots alike: a reservation keeps its lot when it is built, so growth never moves the centre.
+  // Summed in address order: floating sums must not depend on which plots happen to be built.
+  // Reservations list every address, built or not; a home is its reservation built, so each address counts once.
+  const plots = [...new Map([...plan.reservations, ...plan.homes].map(plot => [plot.id, plot] as const)).values()]
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  if (plots.length) {
+    const hx = plots.reduce((s, h) => s + h.position[0], 0) / plots.length;
+    const hz = plots.reduce((s, h) => s + h.position[2], 0) / plots.length;
     sx = (sx + hx) / 2; sz = (sz + hz) / 2;
   }
   const surface = plan.genesisSurface;
@@ -41,7 +54,17 @@ export function frameSettlement(plan: SettlementPlan): SettlementFrame {
     seaward = length > 1e-6 ? [dx / length, dz / length] : null;
     waterLevel = plan.lake.level;
   }
-  return { plan, region, waterLevel, seaward, centre: [sx, sz], castle: { centre: plan.castle.centre, bounds: plan.castle.bounds } };
+  return { plan, region, envelope, waterLevel, seaward, centre: [sx, sz], castle: { centre: plan.castle.centre, bounds: plan.castle.bounds } };
+}
+
+/** The generator's own margin around what a settlement occupies (`generateSettlementPlan` bounds). */
+const ENVELOPE_MARGIN = 16;
+
+/** Bounds aligned outward to whole physical chunks. */
+function alignBounds(b: BoundsXZ): BoundsXZ {
+  const c = PHYSICAL_CHUNK_METRES;
+  const minX = Math.floor(b.minX / c) * c, minZ = Math.floor(b.minZ / c) * c;
+  return { minX, minZ, maxX: minX + Math.ceil((b.maxX - minX) / c) * c, maxZ: minZ + Math.ceil((b.maxZ - minZ) / c) * c };
 }
 
 /**

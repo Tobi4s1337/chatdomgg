@@ -594,7 +594,8 @@ export class DurableKingdom implements RealmRoomHandle {
           }
           this.preparedGeometry = { homes: state.homes, castle: state.castle, attachments: state.attachments, candidate };
           if (!candidate.matches(this.publicCheckpoint())) continue;
-          if (candidate.world === this.world) { candidate.adopted(); continue; }
+          // Geometry identity can stay fixed while committed ownership changes the authorised spawn lookup.
+          if (candidate.world === this.world) { this.geometry = candidate; candidate.adopted(); continue; }
           const walkers: { id: string; position: Vec3 }[] = [];
           for (const id of this.walkers) {
             for (const effects of this.effects) {

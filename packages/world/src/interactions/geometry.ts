@@ -6,6 +6,8 @@ import type { Vec3 } from '@chatdom/shared';
  * recovery stay with the movement owner. Boxes that merely touch a probe do not count as overlap.
  */
 const TOUCH = 1e-6;
+/** Query boxes are padded by this much so none is ever empty. */
+const QUERY_PAD = 1e-4;
 /** Feet may rest up to this far above the supporting top (float drift after a sweep), never below it. */
 export const SUPPORT_GAP = .05;
 /** The eye height used for every reach/occlusion question, on both ends of the wire. */
@@ -52,7 +54,9 @@ export function standingClear(world: CollisionWorld, feet: Vec3): boolean {
  */
 export function segmentClear(world: CollisionWorld, from: Vec3, to: Vec3): boolean {
   if (!finiteVec3(from) || !finiteVec3(to)) return false;
-  const bounds: SolidBox = { min: [Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.min(from[2], to[2])], max: [Math.max(from[0], to[0]), Math.max(from[1], to[1]), Math.max(from[2], to[2])] };
+  // Padded so a segment along an axis (eye straight at a door) is still a box with volume: the collision compiler
+  // refuses an empty query rather than answering it.
+  const bounds: SolidBox = { min: [Math.min(from[0], to[0]) - QUERY_PAD, Math.min(from[1], to[1]) - QUERY_PAD, Math.min(from[2], to[2]) - QUERY_PAD], max: [Math.max(from[0], to[0]) + QUERY_PAD, Math.max(from[1], to[1]) + QUERY_PAD, Math.max(from[2], to[2]) + QUERY_PAD] };
   for (const box of world.query(bounds)) {
     if (contains(box, to)) continue;
     if (segmentHitsBox(from, to, box)) return false;
