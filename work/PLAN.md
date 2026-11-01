@@ -335,28 +335,27 @@ Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo street fill/warm pools
 sparse grey-violet smoke, sculpted land/groves and AS10 citizens. No new systems or rework of
 accepted pictures. Merge good runtime checkpoints promptly; one visible change per turn.
 
-**Latest merge: PinkKittyRose GP10 (5eb78b6).** The river hall’s abutments have dressed
-revetments, a far-bank balcony/fire baskets, a turf approach and roses. Root viewed the lane’s
-native1920×1080 hero and Atlas-card images and made/viewed `shots/magic/pinkkitty-crossing-pair.png`
-from the two committed hero crops (before LEFT). These are producer captures, not a fresh main
-capture; the pair also includes the earlier crossing/footbridge integration. The new green bank
-still reads as a pedestal: lane’s next visual detail is to broaden and break its silhouette into
-the meadow. Typecheck, scoped lint,17 focused tests and web build pass. Removed the size test’s
-redundant second full kingdom build (4.7s →2.8s locally); size, slots and quarters stay checked.
-Keep the small SIMULATED chip and own lore; do not restore the earlier technical “Unfounded
-land” caption Tobias asked to remove. Keeper/sound mounts and Atlas/kingdom crest agreement remain.
+**Latest merge: raid-road RR10 checkpoint (`a0024e2`).** The SIMULATED rehearsal at
+`/-/raid-gate?bench=simulated&road=1` now joins two observed holdings (MashaD4 → PinkKittyRose):
+witnessed departure → Atlas torch road → acknowledged destination welcome/gift. This is a
+rehearsal surface, NOT the production stream raid mount. The participant board must stay out
+of OBS. Source/destination load errors now report their cause instead of falsely marking ready.
+Candidate scoped lint and25 focused tests pass; main composition typecheck and web build
+pass. Root viewed the old welcome baseline. No after/welcome image has succeeded yet:
+previous targeted take timed out after departure. One diagnostic take, helper
+`raid_checkpoint_capture` session77301, is running from isolated
+`../worktrees/main-raid-road-checkpoint` (poll same job, no duplicate). It logs actual facts,
+checks refusal/render errors, and retains a failure frame if possible; process-group supervisor
+bounds queue and acquired lease. No full sequence/matrix and no claim of visual acceptance.
+Root checkpoint is merged promptly; original producer WIP remains untouched. Next lane detail:
+replace flat foreground SVG people with the same AS10 citizens in actual gate lighting.
 
-**Raid checkpoint in progress, isolated:** `integrate/raid-road-rr10` at
-`../worktrees/main-raid-road-checkpoint` is based on main5151440 with a scoped snapshot of the
-producer’s uncommitted RR10 runtime. Original producer files are untouched. Helper
-`raid_checkpoint_capture` owns only its capture harness: added `--only welcome`, supervised
-cleanup/deadlines, main-priority20min queue and free allowed-port selection. Candidate web build
-passed. First targeted run exited cleanly: fast seeking outran async facts, never reaching welcome;
-helper corrected the traversal to await actual departure/arrival/welcome facts. Current capture
-session93166 is live/queued under that helper (poll same owner/handle; do not restart on a timeout).
-No after frame yet, no RR10 runtime merged. Next: inspect one welcome still and run the focused
-road/director/frame/controller/welcome tests plus typecheck; checkpoint/merge the reviewed slice.
-No full sequence or capture matrix. Candidate must absorb main’s GP10 merge after the take ends.
+**Genesis:** PinkKittyRose GP10 (`5eb78b6`) dresses the river-hall revetments, balcony/fire
+baskets, approach and roses. Viewed producer1920×1080 hero/Atlas-card images and
+`shots/magic/pinkkitty-crossing-pair.png`;17 tests/typecheck/lint/build passed. Its green approach
+still reads as a pedestal; lane's next detail is broadening/breaking it into the meadow. Keep
+own lore/small SIMULATED chip, never restore technical “Unfounded land” copy. Aggman's accepted
+harbour/inn/lighthouse/boats remain; keeper/sound mounts and Atlas/kingdom crest agreement await.
 
 **Accepted moment seams:** 4ab8d36 connects sky glow to town grading and stream credits;
 5151440 connects `CrowdCall` to visible present citizens, excluding reserved/socket walkers and
@@ -367,14 +366,14 @@ whole-crowd composition. Aurora streaks remain too regular (sky lane has the fol
 c1c2ddb merged Aggman’s harbour/checked emote art and own19.6 hour/lore; its keepers/sound are
 unmounted and real holding missing from current Atlas survey. Never invent a map mark.
 
-**Team:** GP10 is the new runtime checkpoint; other requested picture/card/Genesis branches have
-no new runtime commit. Raid-road and the new dragon remain uncommitted on their producer branches;
-requested small green checkpoints rather than a full capture series. Live-twitch owns Herald →
-realm ingress → public moment facts, correct live/mock labels, CLI commands and homes/windows
-beyond twelve speakers. The realm spectator already passes `createRoomMomentFeed` into
-`SceneOptions.momentFeed`; no new feed contract. Sky crowd/glow/credit seams are now mounted.
-Give either lane any exact additional scene/director `needs:` promptly. Real cheer/hype/raid and
-expanded home capacity remain UNPROVEN; do not count the SIMULATED bench as live evidence.
+**Team:** no new committed dragon or live-Twitch runtime checkpoint at this scan; requested
+small green checkpoints without waiting for full films. Live-twitch owns Herald → realm ingress
+→ moment facts, correct origin labels/CLI commands, and homes/windows beyond twelve speakers.
+Its shared-schema WIP is a proposed diff for root review/freeze, not independently frozen.
+Existing `createRoomMomentFeed` → `SceneOptions.momentFeed` reaches the spectator stream with
+sky glow/crowd/captions; give exact additive scene/director needs promptly. Raid-road needs a
+read-only gate/guest mount on that feed; no participant board in stream. Real cheer/hype/raid
+and expanded home capacity remain UNPROVEN. Current channel is offline; no observer left waiting.
 
 **Opening:** `/stream?source=simulated&tier=town&hour=19.5&seam=starting` (Showcase), no fixed time.
 Immediate witnessed window light; wide0–8s, street glide8–12s, return24–36s; greeting6–16s then
