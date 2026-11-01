@@ -43,3 +43,12 @@ stamp without being cached; their generation remains counted in `treeVoxels`. `c
 reports the cached arrays, not transient shapes, object overhead, or total worker memory.
 The owner must still budget the combined caches across all workers and other working data. Review and test that patch in the builder's branch; it has not been applied there.
 The watercourse study is not a hydrology solver and must not replace canonical drainage.
+
+The per-call local kit-bounds cache was compared against the frozen grand candidate using the
+`tobi4s_` and `the_aggman` producer seeds. For both, SHA-256 matched for the generated structure
+array, ordered structure-colour table, tree array and complete post-flora placements including
+all boxes. On the shared host, single-pass pre/post placement timings were 1.205/0.970 s before
+and 0.605/1.305 s after for `tobi4s_`, and 2.219/2.366 s before and 2.243/1.646 s after for
+`the_aggman`. These noisy, unpaired measurements do not establish an end-to-end speedup. The
+exact comparison data and script for this run are `/tmp/adoption-aabb-results.json` and
+`/tmp/adoption-aabb-compare.mjs`.

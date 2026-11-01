@@ -19,6 +19,16 @@ describe('grand citadel dressing', () => {
     expect(kit.boxes.some(b => b.colour === '#4d597e' && b.min[1] > 100)).toBe(true);
     // The entrance is a shadowed recess, not a painted slab flush with the frontage.
     expect(occupies(kit, 0, 18, -24)).toBe(false);
+    // Each full riser is supported to ground and rises one cell into the entry.
+    for (let step = 0; step < 13; step++) {
+      const z = -62 + step * 2;
+      for (let y = 0; y <= step; y++) expect(occupies(kit, 0, y, z)).toBe(true);
+      expect(occupies(kit, 0, step + 1, z)).toBe(false);
+    }
+    expect(occupies(kit, 0, 12, -32)).toBe(true);
+    expect(occupies(kit, 0, 13, -32)).toBe(false);
+    expect(Math.min(...kit.boxes.map(b => b.min[2]))).toBe(-62);
+    expect(Math.max(...kit.boxes.map(b => b.min[2] + b.size[2]))).toBeLessThanOrEqual(46);
     expect(occupies(kit, 0, 18, -13)).toBe(true);
   });
   it('leaves a clear entry beneath the gate lintel', () => {

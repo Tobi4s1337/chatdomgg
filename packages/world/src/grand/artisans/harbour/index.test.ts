@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHarbour, createLighthouse, createQuay, createQuayInlandStairs, createQuaySection, createShip } from './index';
-import { KitBuilder, type ArtisanKit, type Point } from '../kit';
+import { CLAY, KitBuilder, type ArtisanKit, type Point } from '../kit';
 
 function occupied(kit: ArtisanKit, [x, y, z]: Point): boolean {
   return kit.boxes.some(({ min, size }) => x >= min[0] && x < min[0] + size[0]
@@ -136,6 +136,28 @@ describe('grand harbour kit', () => {
     expect(occupied(ship, [12, 6, 0])).toBe(true);
   });
 
+  it('face-connects every ship voxel for both sail palettes without extending its footprint', () => {
+    const variants = ['variant-0', 'variant-1'].map(createShip);
+    expect(variants[0]!.boxes.some(b => b.colour === CLAY.banner)).not.toBe(variants[1]!.boxes.some(b => b.colour === CLAY.banner));
+    for (const ship of variants) {
+      const cells = new Set<string>();
+      for (const { min, size } of ship.boxes) for (let y = min[1]; y < min[1] + size[1]; y++) for (let z = min[2]; z < min[2] + size[2]; z++) for (let x = min[0]; x < min[0] + size[0]; x++) cells.add(`${x},${y},${z}`);
+      const first = cells.values().next().value;
+      expect(first).toBeDefined();
+      const queue = [first!]; cells.delete(first!);
+      for (let i = 0; i < queue.length; i++) {
+        const [x, y, z] = queue[i]!.split(',').map(Number) as [number, number, number];
+        for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const) {
+          const next = `${x + dx},${y + dy},${z + dz}`;
+          if (cells.delete(next)) queue.push(next);
+        }
+      }
+      expect(cells.size).toBe(0);
+      expect([0, 1, 2].map(i => Math.min(...ship.boxes.map(b => b.min[i]!)))).toEqual([-25, -3, -7]);
+      expect([0, 1, 2].map(i => Math.max(...ship.boxes.map(b => b.min[i]! + b.size[i]!)))).toEqual([34, 41, 8]);
+    }
+  });
+
   it('ties the quay, piers and landing to the waterline and foundations', () => {
     const harbour = createHarbour('test');
     expect(harbour.anchors.seaLevel).toEqual([0, 0, 0]);
@@ -151,8 +173,31 @@ describe('grand harbour kit', () => {
   it('keeps the lighthouse entry clear through to its room, over a solid floor', () => {
     const tower = createLighthouse('test');
     for (let z = -11; z <= 0; z++) {
-      for (let y = 1; y <= 8; y++) expect(occupied(tower, [0, y, z])).toBe(false);
+      for (let x = -2; x <= 1; x++) for (let y = 1; y <= 8; y++) expect(occupied(tower, [x, y, z])).toBe(false);
       expect(occupied(tower, [0, 0, z])).toBe(true);
+    }
+  });
+
+  it('connects the lighthouse lintel, jambs and whole tower without changing its footprint or anchors', () => {
+    const variants = ['tobi4s_', 'variant-2'].map(createLighthouse);
+    expect(variants[0]!.boxes.at(-1)!.colour).not.toBe(variants[1]!.boxes.at(-1)!.colour);
+    for (const tower of variants) {
+      const cells = new Set<string>();
+      for (const { min, size } of tower.boxes) for (let y = min[1]; y < min[1] + size[1]; y++) for (let z = min[2]; z < min[2] + size[2]; z++) for (let x = min[0]; x < min[0] + size[0]; x++) cells.add(`${x},${y},${z}`);
+      const first = cells.values().next().value;
+      expect(first).toBeDefined();
+      const queue = [first!]; cells.delete(first!);
+      for (let i = 0; i < queue.length; i++) {
+        const [x, y, z] = queue[i]!.split(',').map(Number) as [number, number, number];
+        for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] as const) {
+          const next = `${x + dx},${y + dy},${z + dz}`;
+          if (cells.delete(next)) queue.push(next);
+        }
+      }
+      expect(cells.size).toBe(0);
+      expect([0, 1, 2].map(i => Math.min(...tower.boxes.map(b => b.min[i]!)))).toEqual([-11, -3, -11]);
+      expect([0, 1, 2].map(i => Math.max(...tower.boxes.map(b => b.min[i]! + b.size[i]!)))).toEqual([12, 72, 12]);
+      expect(tower.anchors).toEqual({ foundation: [0, 0, 0], entrance: [0, 1, -11], lantern: [0, 53, 0], top: [0, 72, 0] });
     }
   });
 });

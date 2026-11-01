@@ -82,6 +82,36 @@ function bedrock(b: KitBuilder): void {
   b.box(33, 9, -22, 3, 1, 8, '#7c865e');
 }
 
+/** Ceremonial approach in terrain cells. Solid risers carry each succeeding tread;
+ * the upper landing meets the entry floor, while the lower landing meets y=0. */
+function citadelApproach(b: KitBuilder): void {
+  for (let i = 0; i < 13; i++) {
+    const z = -62 + i * 2;
+    b.box(-6, 0, z, 12, i + 1, 2, i % 3 === 0 ? CLAY.stoneLight : CLAY.stone);
+  }
+  b.box(-6, 0, -36, 12, 13, 6, CLAY.stone);
+  // Low, continuous flanking masonry gives the broad flight a finished edge.
+  for (let i = 0; i < 13; i++) {
+    const z = -62 + i * 2;
+    for (const x of [-8, 6]) b.box(x, 0, z, 2, i + 2, 2, CLAY.stoneDark);
+  }
+}
+
+/** A few engaged buttresses and deep bays establish the major structural rhythm. */
+function citadelButtresses(b: KitBuilder): void {
+  for (const x of [-9, 1, 9]) {
+    b.box(x, 35, -20, 3, 20, 3, CLAY.stone);
+    b.box(x - 1, 35, -21, 5, 2, 4, CLAY.stoneDark);
+    b.box(x - 1, 54, -21, 5, 2, 4, CLAY.trim);
+  }
+  // Two lower buttresses terminate beneath the upper terrace.
+  for (const x of [-28, 25]) {
+    b.box(x, 13, -32, 3, 18, 4, CLAY.stone);
+    b.box(x - 1, 13, -33, 5, 3, 5, CLAY.stoneDark);
+    b.box(x - 1, 29, -33, 5, 2, 5, CLAY.trim);
+  }
+}
+
 /**
  * An unoccupied architectural study for the castle's surrounding visual silhouette. The caller must
  * fit it around the installed castle/physical supports; it is never an authoritative replacement.
@@ -95,6 +125,7 @@ export function createCitadel(seedKey: string): ArtisanKit {
   // Irregular native rock below one worked stone course.
   bedrock(b);
   round(b, 0, 11, 0, 37, 2, CLAY.trim);
+  citadelApproach(b);
 
   // Compound volume: a lower wall and a stepped, narrower inner court. Kept unlit.
   b.box(-31, 13, -24, 25, 11, 49, CLAY.stone);
@@ -125,6 +156,7 @@ export function createCitadel(seedKey: string): ArtisanKit {
     b.box(x, 38, -18, 3, 9, 1, '#667080');
     b.box(x - 1, 47, -18, 5, 1, 1, CLAY.trim);
   }
+  citadelButtresses(b);
   // Terraced family of spires, with a single clear central peak.
   tower(b, 0, 0, 72, 29 + high, 7, 22, banner);
   tower(b, -19, -11, 53, 25, 6, 17, banner);
@@ -135,7 +167,7 @@ export function createCitadel(seedKey: string): ArtisanKit {
   tower(b, 31, -22, 28, 22, 5, 15, banner);
   tower(b, -11, 14, 59, 22, 5, 15, banner);
   tower(b, 11, 14, 59, 23, 5, 16, banner);
-  return b.finish('citadel', { base: [0, 0, 0], gate: [0, 13, -32], summit: [0, 137 + high, 0] });
+  return b.finish('citadel', { base: [0, 0, 0], approach: [0, 0, -62], gate: [0, 13, -32], summit: [0, 137 + high, 0] });
 }
 
 /** Open-front town wall study. `gate` is the empty passage centre, not a navigation anchor. */

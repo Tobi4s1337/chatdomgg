@@ -1,0 +1,54 @@
+[
+  {
+    "kit": "fields",
+    "view": "street"
+  },
+  {
+    "kit": "fields",
+    "view": "hero"
+  },
+  {
+    "kit": "citadel",
+    "view": "street"
+  },
+  {
+    "kit": "citadel",
+    "view": "hero"
+  },
+  {
+    "kit": "ship",
+    "view": "street"
+  },
+  {
+    "kit": "ship",
+    "view": "hero"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "street"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "hero"
+  },
+  {
+    "kit": "tree",
+    "species": "pine"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry"
+  },
+  {
+    "kit": "tree",
+    "species": "teal"
+  },
+  {
+    "kit": "tree",
+    "species": "birch"
+  },
+  {
+    "kit": "tree",
+    "species": "willow"
+  }
+]

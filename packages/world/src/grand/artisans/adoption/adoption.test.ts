@@ -8,6 +8,8 @@ describe('artisan adoption seam', () => {
   it('preserves half-open rotated boxes at negative coordinates', () => {
     expect(placeBox({min:[-2,1,-3],size:[4,2,5],colour:'#112233'},[-10,4,-20],1)).toEqual({min:[-12,5,-22],size:[5,2,4],colour:'#112233'});
     expect(() => placeBox({min:[0,0,0],size:[1,-1,1],colour:'#112233'},[0,0,0],0)).toThrow();
+    expect(() => placeBox({min:[Number.MAX_SAFE_INTEGER,0,0],size:[1,1,1],colour:'#112233'},[0,0,0],0)).toThrow(RangeError);
+    expect(() => placeBox({min:[0,0,0],size:[1,1,1],colour:'#112233'},[0,0,0],0.5)).toThrow(RangeError);
   });
   it('will not propose a structure without explicit clearance and supported terrain', () => {
     const size=256, ground=new Uint16Array(size*size).fill(50), water=new Uint16Array(size*size);
