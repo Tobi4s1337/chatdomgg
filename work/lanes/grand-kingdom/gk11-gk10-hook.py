@@ -49,6 +49,16 @@ edit('apps/web/src/grand/engine.ts', [
     ("    this.disposed = true;\n", "    this.disposed = true;\n    for (const layer of this.layers) layer.dispose();\n"),
 ])
 print('hook applied')
+# A street view of the seated town (GK11): over the roofs from the castle side, where the citizens are seen walking.
+edit('apps/web/src/grand/engine.ts', [
+    ("export type GrandView = 'orbit' | 'high' | 'castle' | 'harbour' | 'summit' | 'fields' | 'mere';",
+     "export type GrandView = 'orbit' | 'high' | 'castle' | 'harbour' | 'summit' | 'fields' | 'mere' | 'town';"),
+    ("export const GRAND_VIEWS: readonly GrandView[] = ['orbit', 'high', 'castle', 'harbour', 'summit', 'fields', 'mere'];",
+     "export const GRAND_VIEWS: readonly GrandView[] = ['orbit', 'high', 'castle', 'harbour', 'summit', 'fields', 'mere', 'town'];"),
+    ("      case 'mere': {",
+     "      case 'town': {\n        const market = (s as { focus?: readonly { id: string; x: number; y: number; z: number }[] }).focus?.find(f => f.id === 'kingdom:market') ?? { x: s.town.x, y: s.town.level, z: s.town.z };\n        place(market.x * M, market.y * M, market.z * M, toward(market, s.castle) + 0.35, 70, deg(30));\n        break;\n      }\n      case 'mere': {"),
+])
+
 
 edit('apps/web/src/grand/index.tsx', [
     ("import './grand.css';", "import './grand.css';\nimport { composeGrandKingdom } from './kingdom/content';\nimport { attachGrandKingdom } from './kingdom/attach';"),
@@ -56,6 +66,24 @@ edit('apps/web/src/grand/index.tsx', [
     ("    void engine.start().then(() => {", "    void composeGrandKingdom(channel.login).then(kingdom => {\n      engine!.settlement = kingdom.content.plan;\n      return engine!.start().then(() => { attachGrandKingdom(engine!, kingdom.content, kingdom.dressing); });\n    }).then(() => {"),
 ])
 print('entry hook applied')
+# The town's ground (GK11 grade): paved public ground is its own cover, drawn in the kingdom view's paving colour with
+# a slow worn tone (no per-voxel noise), and the settlement's lawns (reserved) carry grass tufts but no flowers.
+edit('packages/world/src/grand/types.ts', [
+    ("riverbed: 10, lakebed: 11, cliff: 12, reserved: 13, hedge: 14, lava: 15,",
+     "riverbed: 10, lakebed: 11, cliff: 12, reserved: 13, hedge: 14, lava: 15, paved: 16,"),
+])
+edit('packages/world/src/grand/palette.ts', [
+    ("  sea: 37,\n", "  sea: 37,\n  /** The kingdom's paved streets and squares (GK11): today's kingdom paving, and its worn tone. */\n  paving: 38, pavingWorn: 39,\n"),
+    ("put(M.sea, '#2c6e8a', GrandKind.water);", "put(M.sea, '#2c6e8a', GrandKind.water);\n  put(M.paving, '#b3a28a', GrandKind.earth); put(M.pavingWorn, '#a8977e', GrandKind.earth);"),
+])
+edit('packages/world/src/grand/voxelize.ts', [
+    ("    case Cover.shingle: return depth < 2 ? M.shingle : strata(ctx, x, y, z, warp);",
+     "    case Cover.shingle: return depth < 2 ? M.shingle : strata(ctx, x, y, z, warp);\n    case Cover.paved: return depth === 0 ? (ctx.patch(x / 11, z / 11) > 0.42 ? M.pavingWorn : M.paving) : depth < 4 ? M.dirt : strata(ctx, x, y, z, warp);"),
+    ("  if (cover !== Cover.meadow && h < 0.5) return M.grass[2];",
+     "  if (cover === Cover.reserved || (cover !== Cover.meadow && h < 0.5)) return M.grass[2];"),
+])
+print('town ground hook applied')
+
 
 # Size the land to the settlement (run with --size). Without it a town larger than the land's tier island is seated
 # with its region running to a straight coast. Cost: land area grows to what the town asks for (tobi4s_ 2560

@@ -8,7 +8,7 @@ import { gatePainter, PARAPET, TOWER, towerApex, towerPainter, towerPoleTop, tow
 import { planRing } from './ring';
 import { WallSite } from './site';
 import type { TownBannerAnchor, TownGate, TownWallOptions, TownWallPiece, TownWalls, TownWallSegment, TownWallSpan, TownWallTower } from './types';
-import { cellExtent, rasterise, type PieceBounds } from './voxels';
+import { BUILD, cellExtent, rasterise, type Painter, type PieceBounds } from './voxels';
 
 export type { TownBannerAnchor, TownGate, TownWallOptions, TownWallPiece, TownWalls, TownWallSegment, TownWallSpan, TownWallTower, WallStyle, RingSpanKind } from './types';
 export { WALL_KITS, WALL_MATERIAL } from './pieces';
@@ -39,27 +39,32 @@ export function planTownWalls(plan: SettlementPlan, options: TownWallOptions): T
   const add = (id: string, kind: TownWallPiece['kind'], raster: ReturnType<typeof rasterise>) => {
     if (raster.blueprint.boxes.length) pieces.push({ id, kind, blueprint: raster.blueprint, position: raster.position, rotation: 0 });
   };
+  // A piece standing on steep ground can reach deeper than one blueprint is tall: its footing goes down in courses of
+  // its own, each a piece directly below the last, so the masonry meets the ground however far the slope falls.
+  const paint = (id: string, kind: TownWallPiece['kind'], painter: Painter) => {
+    for (const [n, slice] of courses(painter).entries()) add(n ? `${id}:footing${n}` : id, kind, rasterise(blueprintId(n ? `${id}:footing${n}` : id), options.style, slice, site));
+  };
 
-  for (const stretch of layout.stretches) buildStretch(stretch, kit, options, (id, painter) => add(id, 'wall', rasterise(blueprintId(id), options.style, painter, site)), segments);
+  for (const stretch of layout.stretches) buildStretch(stretch, kit, options, (id, painter) => paint(id, 'wall', painter), segments);
 
   const towers: TownWallTower[] = [];
   const gateTowersLoose = new Set<string>();
   for (const gate of layout.gates) {
     if (gate.kind !== 'arch') continue;
     const bounds = gateBounds(gate);
-    if (cellExtent(bounds).some(n => n > MAX_CELLS)) { gateTowersLoose.add(gate.id); continue; }
-    add(gate.id, 'gatehouse', rasterise(blueprintId(gate.id), options.style, gatePainter(gate.shape, bounds), site));
+    if (horizontal(bounds)) { gateTowersLoose.add(gate.id); continue; }
+    paint(gate.id, 'gatehouse', gatePainter(gate.shape, bounds));
   }
   if (gateTowersLoose.size) {
     // Too wide for one blueprint: the arch block alone, with its towers as their own pieces.
     for (const gate of layout.gates) if (gateTowersLoose.has(gate.id)) {
       const shape = { ...gate.shape, towers: [] };
-      add(gate.id, 'gatehouse', rasterise(blueprintId(gate.id), options.style, gatePainter(shape, gateBounds({ ...gate, shape })), site));
+      paint(gate.id, 'gatehouse', gatePainter(shape, gateBounds({ ...gate, shape })));
     }
   }
   for (const tower of layout.towers) {
     const loose = tower.standalone || (tower.gateId !== undefined && gateTowersLoose.has(tower.gateId));
-    if (loose) add(tower.id, 'tower', rasterise(blueprintId(tower.id), options.style, towerPainter(tower.shape, towerBounds(tower)), site));
+    if (loose) paint(tower.id, 'tower', towerPainter(tower.shape, towerBounds(tower)));
     towers.push(describeTower(tower));
     bannerAnchors.push({ id: tower.id, position: [tower.shape.centre[0], towerPoleTop(tower.shape), tower.shape.centre[1]], facing: yawOf(tower.shape.normal) });
   }
@@ -87,6 +92,25 @@ export function planTownWalls(plan: SettlementPlan, options: TownWallOptions): T
   const beyond = plan.reservations.filter(plot => !homes.has(plot.id) && (!ring.enclosedLots.has(plot.id) || !enclosed(plot.lot))).map(plot => plot.id).sort();
 
   return { ring: loop, spans, segments, towers, gates, pieces, bannerAnchors, beyond };
+}
+
+/** True when a piece is wider or deeper than one blueprint allows (height is laid in courses instead). */
+const horizontal = (bounds: PieceBounds): boolean => { const [x, , z] = cellExtent(bounds); return x > MAX_CELLS || z > MAX_CELLS; };
+
+/**
+ * The painter as courses no taller than one blueprint, top course first (it keeps the piece's id). The painter fills
+ * absolute metres, so each course is the same painter with its bounds cut: a course paints only what falls inside it.
+ */
+function courses(painter: Painter): Painter[] {
+  const b = painter.bounds, tall = MAX_CELLS * BUILD - 2 * BUILD;
+  if (cellExtent(b)[1] <= MAX_CELLS) return [painter];
+  const out: Painter[] = [];
+  // Course joints on the build lattice, so no cell is laid twice or missed between two courses.
+  for (let top = Math.ceil(b.maxY / BUILD - 1e-9) * BUILD; top > b.minY + 1e-9; top -= tall) {
+    const bounds = { ...b, minY: Math.max(b.minY, top - tall), maxY: top };
+    out.push({ bounds, headroom: painter.headroom, paint: (x, z, column) => painter.paint(x, z, column) });
+  }
+  return out;
 }
 
 function describeTower(tower: PlannedTower): TownWallTower {
@@ -150,7 +174,7 @@ function buildStretch(stretch: Stretch, kit: WallKit, options: TownWallOptions, 
   let part = 0;
   const place = (k0: number, k1: number) => {
     const bounds = pieceBounds(k0, k1);
-    if (k1 - k0 > 1 && cellExtent(bounds).some(n => n > MAX_CELLS)) { const mid = (k0 + k1) >> 1; place(k0, mid); place(mid, k1); return; }
+    if (k1 - k0 > 1 && horizontal(bounds)) { const mid = (k0 + k1) >> 1; place(k0, mid); place(mid, k1); return; }
     const from = k0 === 0 ? -before : k0 * stepLength, to = k1 === count ? L + after + 1e-6 : k1 * stepLength;
     emit(`${stretch.id}:${part++}`, wallPainter({ path, from, to, before, after, stepLength, steps, phase: stretch.phase, kit, bounds }));
   };
