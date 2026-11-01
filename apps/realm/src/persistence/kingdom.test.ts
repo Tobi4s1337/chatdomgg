@@ -16,6 +16,43 @@ const deferred = <T>() => {
   return { promise, resolve };
 };
 
+it('renews an opening lease before its remaining safe window is consumed by founded preparation', async () => {
+  vi.useFakeTimers();
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+  vi.setSystemTime(0);
+  const kingdomId = KingdomIdSchema.parse('999000001'), initial = createRealmState(kingdomId, 'simulated');
+  const lease: RealmWriterLease = { kingdomId, epoch: 'slow-founded-open', expiresAt: 15_000 };
+  const renew = vi.fn(async () => ({ ...lease, expiresAt: Date.now() + 15_000 }));
+  const repository: DurableRepository = {
+    leaseMs: 15_000, acquire: async () => lease, renew, load: async () => initial,
+    committedState: () => initial, execute: async () => ({ status: 'unchanged', reason: 'unused' }),
+    lookup: async () => null, loadIngress: async () => null, executeIngress: async () => ({ status: 'unchanged', reason: 'unused' }),
+    snapshot: async () => 0, release: async () => {},
+  };
+  const outbox: RealmOutboxStore = {
+    open: async () => 0, prefix: async () => ({ homes: [], presence: null, sequence: 0, committed: 0 }),
+    read: async () => [], acknowledge: async () => {},
+  };
+  const services = createDurableRealmServices({ repository, outbox, auth: { authenticate: vi.fn(), current: async () => true },
+    kingdom: () => {
+      // Founded compilation fits the 13s safe opening window, but leaves less than one renewal interval.
+      vi.setSystemTime(10_000);
+      return { world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] };
+    },
+  });
+  let hold: DurableKingdomHold | undefined;
+  try {
+    hold = await services.retain(kingdomId);
+    expect(hold.kingdom.current).toBe(true);
+    await vi.advanceTimersByTimeAsync(3_001);
+    expect(renew).toHaveBeenCalled();
+    expect(hold.kingdom.current).toBe(true);
+  } finally {
+    await hold?.release();
+    clock.mockRestore(); vi.useRealTimers();
+  }
+});
+
 it('keeps bootstrap at the delivered prefix and closes on the deadline despite a stalled renewal and outbox read', async () => {
   vi.useFakeTimers();
   const clock = vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
