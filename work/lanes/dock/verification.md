@@ -158,3 +158,17 @@ presenter receipts, durable idempotency/reopening and revocation; it does not pr
 The scene renderer is still main's uncommitted integration work. Current moderator source,
 directed undo presentation and cross-device receipt metadata requests are in `needs.md`.
 DK10 remains unchecked. No real-Twitch writes or main-branch edits were performed.
+
+## Scene integration sync — 2026-11-01
+
+Merged main through `767a74b`, including `821b71d` real scene act consumer. Ten focused
+scene/presenter/royal-life tests pass. The actual web build passes with the dock imported
+through its new same-origin route. Dock build, scoped TypeScript and ESLint also pass.
+
+Source review found inherited web landing-page layout leaking into the `/dock` mount and
+the font kit being imported only by the standalone entry. The dock now owns those layout
+resets and loads its font kit through App. Small product labels are at least12px. Anonymous
+sessions have a neutral sign-in masthead; controls refresh authoritatively after the realm
+cadence instead of waiting for the next ten-second poll. These are functional/source-reviewed
+checkpoints, not a completed visual review. Capture23423 is still live and queued under the
+new helper, owned by the evidence agent. No screenshot or clip is claimed yet.
