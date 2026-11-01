@@ -13,6 +13,8 @@ import { CHAPTERS, chapterOf, mapFrame, momentAt, REDUCED_TIMING, ROAD_TIMING, t
 import { emptyPresence, ROAD_PAIR, roadLand, type RoadLand } from './lands';
 import { RoadDefs, ramp } from './procession';
 import { Arrival, Gathering, type Words } from './tableaux';
+import { createRoadArrivalFeed } from './arrival-feed';
+import { sourceGateShot } from './gate-shot';
 import '../raid-gate.css';
 import '../welcome.css';
 import './road.css';
@@ -32,7 +34,7 @@ import './road.css';
 type RoadWindow = Window & { __chatdomReady?: boolean; __raidRoad?: RoadHook };
 type RoadHook = {
   seek(t: number): Promise<void>;
-  state(): { t: number; act: string; progress: number; holding: boolean; facts: RoadFacts; sourceReady: boolean; destReady: boolean; mapSettled: boolean; mapError: string | null; worldError: string | null; snapshot: GateSnapshot | null };
+  state(): { t: number; act: string; progress: number; holding: boolean; facts: RoadFacts; sourceReady: boolean; destReady: boolean; mapSettled: boolean; mapError: string | null; mapCause: string | null; worldError: string | null; snapshot: GateSnapshot | null };
   spans(): ReturnType<typeof momentAt>['spans'];
   timing: RoadTiming;
   /** Under `capture=1` only: the page's animation frames, let go only as the capture asks. */
@@ -47,6 +49,8 @@ const RIDERS = 612;
 /** SIMULATED walkers who choose to march, besides this viewer, and when each chooses. */
 const WALKER_CUES = [1.1, 2.0, 3.6, 4.4, 5.6];
 const SIMULATED_HOST = '53000001' as PersonId;
+/** Waits before asking the survey again after a read that failed or ran out of time. */
+const MAP_RETRIES = [1500, 4000, 9000];
 
 function castFor(from: RoadLand, to: RoadLand): BenchCast {
   const channel = AtlasChannelSchema.parse({ kingdomId: to.id, login: to.login, displayName: to.name, language: 'en', founded: true, kingdomName: to.name, contentClassification: 'general' });
@@ -70,6 +74,8 @@ export default function RaidRoad() {
   const timing: RoadTiming = reduced ? REDUCED_TIMING : ROAD_TIMING;
   const from = roadLand(ROAD_PAIR.from), to = roadLand(ROAD_PAIR.to);
   const life = new AbortController();
+  /** The destination's own raid arrival: the road hands it the witnessed raid when the guests reach its gate. */
+  const arrival = createRoadArrivalFeed();
 
   const [t, setT] = createSignal(0);
   // The SIMULATED authority keeps the presentation's time, so a call's countdown, a preview's life and every receipt
@@ -82,6 +88,8 @@ export default function RaidRoad() {
   const [rideSeconds, setRideSeconds] = createSignal(timing.ride);
   const [atlas, setAtlas] = createSignal<RoadAtlas | null>(null);
   const [mapError, setMapError] = createSignal<string | null>(null);
+  /** Why the last read of the survey failed, for captures and diagnosis (never shown as the road's words). */
+  const [mapCause, setMapCause] = createSignal<string | null>(null);
   const [worldError, setWorldError] = createSignal<string | null>(null);
   const failWorld = (name: string, error: unknown) => {
     if (!life.signal.aborted) setWorldError(`${name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -91,7 +99,6 @@ export default function RaidRoad() {
   const [destStarted, setDestStarted] = createSignal(false);
   const [seats, setSeats] = createSignal<number[]>([]);
   const [you, setYou] = createSignal<number | null>(null);
-  const [giftAt, setGiftAt] = createSignal<number | null>(null);
   const [marks, setMarks] = createSignal<ReturnType<RoadAtlas['marks']> | null>(null);
   const [surveyed, setSurveyed] = createSignal<number | null>(null);
 
@@ -125,8 +132,6 @@ export default function RaidRoad() {
     if (next.raid) note('departedAt');
     if (next.journey?.kind === 'raid' && next.journey.state === 'committed' && destReady()) note('arrivedAt');
     if (next.welcome?.status === 'ready' && next.welcome.view) note('welcomedAt');
-    const offer = next.welcome?.view?.offers.find(each => each.receipt !== null);
-    if (offer && giftAt() === null) setGiftAt(t());
   };
 
   // ── The SIMULATED world around this viewer, on the presentation clock ───────────────────────────────────────
@@ -175,6 +180,9 @@ export default function RaidRoad() {
     }).then(scene => {
       if (life.signal.aborted) { scene.dispose(); return; }
       disposeSource = () => scene.dispose();
+      // Stand at the gate the party will leave by, looking in over the dressed near streets to the town in its haze.
+      const shot = sourceGateShot(scene.layout, window.innerHeight > window.innerWidth);
+      if (shot) scene.pose(shot.eye, shot.target, shot.fov);
       const settle = () => { if (life.signal.aborted || !disposeSource) return; if (scene.debug.ready && scene.debug.fieldSettled) setSourceReady(true); else requestAnimationFrame(settle); };
       settle();
     }, error => failWorld(from.name, error));
@@ -185,14 +193,17 @@ export default function RaidRoad() {
     void createKingdomScene(dstCanvas, {
       signal: life.signal, potential: to.potential, nativeStyle: to.potential.style, forgeFamily: to.potential.style,
       tier: to.potential.plan.config.tier, seed: to.potential.plan.config.seed, realmName: to.name, kingdomId: to.id as KingdomId,
-      presenceFeed: sceneFeed(to.id), presenceOrigin: 'simulated', hour: 19.8, time: null, camera: 'hero', source: 'simulated',
+      presenceFeed: sceneFeed(to.id), presenceOrigin: 'simulated', momentFeed: arrival, hour: 19.8, time: null, camera: 'hero', source: 'simulated',
       onProgress: () => undefined, onNames: () => undefined, onSource: () => undefined, onError: message => failWorld(to.name, message),
     }).then(scene => {
       if (life.signal.aborted) { scene.dispose(); return; }
       disposeDest = () => scene.dispose();
       const settle = () => {
         if (life.signal.aborted) return;
-        if (scene.debug.ready && scene.debug.fieldSettled) { setDestReady(true); const s = snap(); if (s) observe(s); } else requestAnimationFrame(settle);
+        // The gate's raid parts are meshed after the world opens; the guests may arrive only once they can be drawn.
+        const parts = (scene.inspect().moments as { preparation?: string; preparationError?: string | null } | undefined);
+        if (parts?.preparation === 'failed' || parts?.preparation === 'disposed') { failWorld(to.name, parts.preparationError ?? 'its gate could not be prepared'); return; }
+        if (scene.debug.ready && scene.debug.fieldSettled && parts?.preparation === 'ready') { setDestReady(true); const s = snap(); if (s) observe(s); } else requestAnimationFrame(settle);
       };
       settle();
     }, error => failWorld(to.name, error));
@@ -211,6 +222,12 @@ export default function RaidRoad() {
     if ((m.act === 'ride' || m.act === 'hold') && !destStarted()) startDest();
     if (m.act !== 'gather' && m.act !== 'setout' && m.act !== 'rise' && disposeSource) { disposeSource(); disposeSource = undefined; }
     if (m.act === 'welcome' && map) { map.dispose(); setAtlas(null); }
+    // The guests reach the destination's gate as its world wakes: the kingdom raises its gate under the leaving
+    // kingdom's banner and the caravan rolls in, sized by Twitch's own count for the witnessed raid.
+    const witnessed = snap()?.raid;
+    if ((m.act === 'wake' || m.act === 'welcome') && destReady() && witnessed) {
+      arrival.arrive({ raidId: witnessed.id, kingdomId: to.id, from: { kingdomId: from.id, name: from.name }, viewers: witnessed.viewers, founded: true }, Date.now());
+    }
     void advance();
   };
 
@@ -218,16 +235,32 @@ export default function RaidRoad() {
     const roadWindow = window as RoadWindow;
     roadWindow.__chatdomReady = false;
     document.body.classList.add('rg-page', 'rr-page');
-    startSource();
-    void openRoadAtlas(mapHost, { from: from.id, to: to.id, viewers: RIDERS, signal: life.signal, reduceMotion: () => reduced }).then(async map => {
-      if (life.signal.aborted) { map.dispose(); return; }
-      setAtlas(map); setRideSeconds(map.rideSeconds); setSurveyed(map.surveyedAt);
-      await map.ready;
-      note('mapReadyAt');
-    }, (error: unknown) => {
-      if (life.signal.aborted) return;
-      setMapError(error instanceof RoadAtlasError ? error.message : 'The Atlas could not be drawn just now.');
-    });
+    // The survey is read before the kingdom unfolds: a software-drawn kingdom can hold the page for many seconds at a
+    // time, and the survey's reads have deadlines. The gate opens either way; a road that cannot be drawn says so.
+    let unfolding = false;
+    const unfold = () => { if (!unfolding && !life.signal.aborted) { unfolding = true; startSource(); } };
+    // A slow or dropped read of the survey is asked again a few times before the road says it cannot be drawn; a
+    // channel off the survey or withheld from it is an answer, not a failure, and is never asked again.
+    void (async () => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const map = await openRoadAtlas(mapHost, { from: from.id, to: to.id, viewers: RIDERS, signal: life.signal, reduceMotion: () => reduced });
+          if (life.signal.aborted) { map.dispose(); return; }
+          setAtlas(map); setRideSeconds(map.rideSeconds); setSurveyed(map.surveyedAt);
+          unfold();
+          await map.ready;
+          note('mapReadyAt');
+          return;
+        } catch (error) {
+          if (life.signal.aborted) return;
+          const retry = error instanceof RoadAtlasError && error.reason === 'unavailable' && attempt < MAP_RETRIES.length;
+          const cause = error instanceof Error ? error.cause ?? error : error;
+          setMapCause(cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause));
+          if (!retry) { setMapError(error instanceof RoadAtlasError ? error.message : 'The Atlas could not be drawn just now.'); unfold(); return; }
+          await new Promise(resolve => setTimeout(resolve, MAP_RETRIES[attempt]));
+        }
+      }
+    })();
     void (async () => {
       const { createGateBench } = await import('../bench');
       bench = createGateBench({ viewer: 'walker', authority: 'ready', clock, cast: castFor(from, to) });
@@ -259,7 +292,7 @@ export default function RaidRoad() {
     roadWindow.__raidRoad = {
       timing: effective(),
       async seek(value) { setT(value); frame(); await advance(); await advance(); frame(); },
-      state: () => ({ t: t(), act: act(), progress: moment().progress, holding: moment().holding, facts: facts(), sourceReady: sourceReady(), destReady: destReady(), mapSettled: atlas()?.settled() ?? false, mapError: mapError(), worldError: worldError(), snapshot: snap() }),
+      state: () => ({ t: t(), act: act(), progress: moment().progress, holding: moment().holding, facts: facts(), sourceReady: sourceReady(), destReady: destReady(), mapSettled: atlas()?.settled() ?? false, mapError: mapError(), mapCause: mapCause(), worldError: worldError(), snapshot: snap() }),
       spans: () => moment().spans,
       frames: captureFrames,
     };
@@ -364,9 +397,7 @@ export default function RaidRoad() {
     <Show when={mapError() && onRoad()}><p class="rr-map-note" role="status">{mapError()}</p></Show>
 
     <Show when={act() === 'welcome' || (act() === 'wake' && wake() > 0.55)}>
-      <Arrival hostId={to.id} hostName={to.name} monarchName={welcomeView()?.monarch.name ?? to.name} homeId={from.id}
-        party={Math.max(1, party())} giver={giver()?.name ?? null} gift={giftAt() === null ? 0 : ramp(0, 1.2, t() - giftAt()!)}
-        elapsed={act() === 'welcome' ? moment().elapsed : 0} time={t()} words={arrivalWords()} simulated reveal={act() === 'welcome' ? 1 : ramp(0.55, 1, wake())} />
+      <Arrival hostName={to.name} words={arrivalWords()} simulated reveal={act() === 'welcome' ? 1 : ramp(0.55, 1, wake())} />
     </Show>
 
     <Show when={controller() && (act() === 'gather' || act() === 'setout' || act() === 'welcome')}>

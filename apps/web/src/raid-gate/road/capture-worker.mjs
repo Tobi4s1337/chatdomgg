@@ -14,8 +14,10 @@ import { startCapturePreview, closeCapturePreview } from '../../../../../package
 
 const run = promisify(execFile);
 const arg = (name, fallback) => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : fallback);
+// One still per lease: the gate gathering, the whole road, or the welcome.
+const STILLS = ['gate', 'road', 'welcome'];
 const only = arg('--only', 'welcome');
-if (only !== null && only !== 'welcome') throw new Error('Only --only welcome is supported');
+if (only !== null && !STILLS.includes(only)) throw new Error(`--only takes one of ${STILLS.join(', ')}`);
 if (only && process.argv.includes('--sequence')) throw new Error('--only cannot be combined with --sequence');
 const stills = process.argv.includes('--stills') || !process.argv.includes('--sequence');
 const sequence = process.argv.includes('--sequence');
@@ -45,6 +47,10 @@ try {
   page = await browser.newPage({ viewport: { width, height }, reducedMotion: reduced ? 'reduce' : 'no-preference' });
   page.on('pageerror', error => report.errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') report.errors.push(message.text()); });
+  // The kingdoms' own moments (the destination's raid arrival) run on the page's Date.now; pin it to the presentation
+  // clock so a seek moves them exactly as it moves the road, however long SwiftShader takes over a frame.
+  const EPOCH = Date.UTC(2026, 10, 1, 19, 40);
+  await page.clock.setFixedTime(EPOCH);
   const opened = Date.now();
   await page.goto(`${base}/-/raid-gate?bench=simulated&road=1&capture=1${reduced ? '&motion=reduced' : ''}`);
   await page.waitForFunction(() => (window.__chatdomReady === true && !!window.__raidRoad) || !!window.__raidRoad?.state().worldError, null, { timeout: 400_000 });
@@ -54,7 +60,7 @@ try {
   await page.evaluate(() => window.__raidRoad.frames.hold(true));
   const state = async () => {
     const s = await page.evaluate(() => window.__raidRoad.state());
-    if (s.worldError || s.mapError) throw new Error(`Road error: ${s.worldError ?? s.mapError}`);
+    if (s.worldError || s.mapError) throw new Error(`Road error: ${s.worldError ?? s.mapError}${s.mapCause ? ` (${s.mapCause})` : ""}`);
     if (s.snapshot?.journey?.refusal) throw new Error(`Journey refused: ${JSON.stringify(s.snapshot.journey)}`);
     return s;
   };
@@ -92,6 +98,7 @@ try {
    */
   async function seek(t, passing = false, frames = 2) {
     const began = Date.now();
+    await page.clock.setFixedTime(EPOCH + Math.round(t * 1000));
     await page.evaluate(value => window.__raidRoad.seek(value), t);
     if (passing) return state();
     await until(drawnFor);
@@ -129,7 +136,18 @@ try {
       report.stills.push({ name, path, t: s.t, act: s.act, progress: s.progress, holding: s.holding });
       console.log(`still ${name} t=${s.t.toFixed(2)} ${s.act} ${s.progress.toFixed(2)}`);
     };
-    if (only === 'welcome') {
+    if (only === 'gate') {
+      await take('1-gate-gathers', reduced ? 2.5 : 5.2);
+    } else if (only === 'road') {
+      await walkTo(reduced ? 4.1 : 9.1, 0.5, false);
+      await until(s => s.facts.departedAt !== null);
+      const all = await spans();
+      const rise = all.find(span => span.act === 'rise');
+      await walkTo((rise ? rise.start + rise.length : (await state()).t + 6) + 0.2, 0.5, false);
+      const ride = (await spans()).find(span => span.act === 'ride');
+      if (!ride) throw new Error('Ride act never began');
+      await take('6-road-whole', ride.start + ride.length * 0.5);
+    } else if (only === 'welcome') {
       // Facts come from asynchronous authority work; do not race the clock past them.
       await walkTo(reduced ? 4.1 : 9.1, 0.5, false);
       await until(s => s.facts.departedAt !== null);
