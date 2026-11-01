@@ -6,3 +6,4 @@ export { foundPlantingZones, CROWN_REACH, TRUNK_CLEARANCE, CLEARING_CROWN_MARGIN
   type PlantingPlan, type PlantingTown, type PlantingSightline } from './planting-zones';
 export { foundKingdomRoutes, EXPLORE_PACE_MPS, BEAT_SPACING, TRAIL_WIDTH, CROWN_ROAD, PIER_DECK_HEIGHT, OAK_ROOT_CLEARANCE,
   CLEARING_ROUND, DRESSING_FOOTPRINT, type RouteTown, type KingdomRoutes } from './routes';
+export { foundKingdomTown, TownCapacityError, TOWN_STREETS, LOTS_PER_QUARTER, MARKET_HEART_RADIUS, MARKET_SITE_SIZE, type KingdomTown } from './generator';
