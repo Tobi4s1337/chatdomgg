@@ -6,7 +6,7 @@ import type { RealmOwnedHome, RealmPrincipal, RealmPublicDelivery, RealmWriterLe
 import { createRealmState } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { RealmRoomEffects } from '../ports';
-import { createDurableRealmServices, RealmBusyError, type DurableKingdom, type DurableKingdomHold, type DurableRepository } from './kingdom';
+import { createDurableRealmServices, RealmBusyError, type DurableKingdom, type DurableKingdomHold, type DurableKingdomOptions, type DurableRepository } from './kingdom';
 import type { RealmOutboxRow } from './postgres-repository';
 import type { RealmOutboxStore } from '../outbox';
 
@@ -49,6 +49,65 @@ it('renews an opening lease before its remaining safe window is consumed by foun
     expect(hold.kingdom.current).toBe(true);
   } finally {
     await hold?.release();
+    clock.mockRestore(); vi.useRealTimers();
+  }
+});
+
+it('renews the same lease during async founded opening and refuses a renewal after its old deadline', async () => {
+  vi.useFakeTimers();
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
+  vi.setSystemTime(0);
+  const kingdomId = KingdomIdSchema.parse('999000001'), initial = createRealmState(kingdomId, 'simulated');
+  const lease: RealmWriterLease = { kingdomId, epoch: 'async-founded-open', expiresAt: 15_000 };
+  const late = deferred<RealmWriterLease>();
+  const prepared = deferred<DurableKingdomOptions>();
+  let stalled = false;
+  const acquire = vi.fn(async () => lease), release = vi.fn(async () => {});
+  const renew = vi.fn(async (held: RealmWriterLease) => {
+    expect(held.epoch).toBe(lease.epoch);
+    return stalled ? late.promise : { ...lease, expiresAt: Date.now() + 15_000 };
+  });
+  const repository: DurableRepository = {
+    leaseMs: 15_000, acquire, renew, load: async () => initial, release,
+    committedState: () => initial, execute: async () => ({ status: 'unchanged', reason: 'unused' }),
+    lookup: async () => null, loadIngress: async () => null, executeIngress: async () => ({ status: 'unchanged', reason: 'unused' }),
+    snapshot: async () => 0,
+  };
+  const outbox: RealmOutboxStore = {
+    open: async () => 0, prefix: async () => ({ homes: [], presence: null, sequence: 0, committed: 0 }),
+    read: async () => [], acknowledge: async () => {},
+  };
+  const services = createDurableRealmServices({ repository, outbox, auth: { authenticate: vi.fn(), current: async () => true },
+    kingdom: async () => {
+      if (stalled) return prepared.promise;
+      await vi.advanceTimersByTimeAsync(20_000);
+      return { world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] };
+    },
+  });
+  let hold: DurableKingdomHold | undefined;
+  try {
+    hold = await services.retain(kingdomId);
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(renew).toHaveBeenCalledTimes(4);
+    expect(hold.kingdom.current).toBe(true);
+    // The opening timer is gone; only the handle renews at the next tick, with no duplicate request.
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(renew).toHaveBeenCalledTimes(5);
+    await hold.release(); hold = undefined;
+
+    stalled = true; vi.setSystemTime(0);
+    const refused = expect(services.retain(kingdomId)).rejects.toMatchObject({ code: 503 });
+    await vi.advanceTimersByTimeAsync(5_000);
+    prepared.resolve({ world: REFERENCE_WORLD, layoutRevision: 'court', spawn: () => [0, 0, 6] });
+    // Geometry is ready, but handoff must refuse the stalled renewal at the old deadline.
+    await vi.advanceTimersByTimeAsync(8_001);
+    await refused;
+    expect(release).toHaveBeenCalledTimes(2);
+    late.resolve({ ...lease, expiresAt: Date.now() + 15_000 });
+    await Promise.resolve(); await Promise.resolve();
+    expect(services.kingdoms.size).toBe(0);
+  } finally {
+    late.resolve(lease); await hold?.release();
     clock.mockRestore(); vi.useRealTimers();
   }
 });

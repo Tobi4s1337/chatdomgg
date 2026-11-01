@@ -330,55 +330,51 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Outcome: one kingdom.** Adopt grand land under the actual signed-in, walking and stream kingdom;
-keep homes, streets, growth, Forge, live moments, Atlas entry, Chronicle and dock together.
-Forge/window wave ACCEPTED/CLOSED. Preserve dusk exposure, indigo fill/warm pools, castle/beacon,
-sparse grey-violet smoke, groves and AS10 citizens. One visible change and same-view pair per turn.
+**Outcome: one kingdom, landing only.** Grand land must become the ground under the real homes,
+streets, Forge, walk and stream. Growth, civic levels, crier, keepsakes, Chronicle, live moments,
+Atlas entry and dock must meet there. Forge/window wave/look are ACCEPTED/CLOSED; preserve them.
+No new lanes or sub-scopes. Take coherent checkpoints promptly; preserve unfinished producer work.
 
-**Latest integration:** merged dock, Chronicle, Soul, growth-civic, growth-card, grand-artisans,
-kingdom-land and places-high checkpoints. Other reviewed content/Forge/card branches inspected this
-turn contain no new source; do not reopen accepted work. Parked campfire/tavern remain parked.
-Growth-card GCA01/02 authored part is merged; worker can retire after sync. Public component export:
-`@chatdom/ui/growth-card`. Trusted citizen/home and disclosed earned-record binding remains main's.
-Land's integration test now distinguishes generator grading from spec46's deliberate decorative
-cliffs, retaining sampled adopted lot/market/street support checks. No terrain runtime change.
+**Landed:** growth-civic whole (worker can retire); walking-together checkpoint and its six-file
+consumer patch; growth's versioned Emberfold homes; try-it public gateway/front door/panel zip;
+sky's two abandoned files (kept, lane clean); latest Soul, grand-artisan, Chronicle and dock work.
+Native publication recognizes canonical old/v2 home bytes, preserves custom homes and Forge parts,
+and installs cottage-v2 only on the next earned tier, never as a silent same-tier retrofit.
+Cottage-v2 has a real upper storey, new roofline, ten panes and garden/fence; fresh visual acceptance
+is still missing after the software capture failed. Other growth lane WIP remains in its worktree.
 
-**Visitor entry checkpoint:** `/showcase` groups live Willowmere stream, walk and throne in one
-featured doorway, keeps simulations/recorded land explicit and exposes the sample card/passport
-without its development controls. Chronicle remains honestly unavailable. This source checkpoint
-is NOT visually accepted: the single main capture request waited20minutes behind a legacy exclusive
-guard and timed out before any browser launched. No valid new before/after exists. Next capture must
-compare the pre-doorway revision805d484 with this entry checkpoint; do not reuse the earlier identical
-showcase pair. Viewed producer stills: dock narrow layout, growth home/shelf, gold-tree study, town
-street and castle court. Grand tree's rectangular trunk base needs refinement (lane progress note).
+**Public host:** `pnpm public:build`, `pnpm public:start`, `pnpm panel:zip`.
+See `deploy/public/README.md` and `EXTENSION-STEPS.md`. Full build/zip checks passed. Proxy mode uses
+the existing realm; spawn mode binds its public listener before launching its loopback-only child.
+Public realm routes are allowlisted; dock routes retain session/CSRF checks. No deployment or Twitch
+Extension registration performed; extension credentials are not configured. A managed web-only
+rebuild removes the separate door output: public hosting needs the complete public build.
 
-**Grand adoption:** spec56, `createKingdomLandInterface` and immutable paged collision dispatcher
-are frozen. Missing physical pages are solid; far visual land is not collision authority. Keep the
-existing Three scene/camera/post/light/lifecycle; host one abortable terrain-only owner, pin exact
-near floors/paving, inverse-transform land-local shader coordinates and key by content hashes.
-No moved doors/plots/Forge/walkers or duplicated town. Producer needs and integration sites remain
-in `work/reviews/grand-adoption.md` and grand lane progress. Kits are merged; GK10/GK11 pipeline
-WIP is preserved, not production-adopted. V2 town capacity/route caveats and court collision metadata
-still prohibit blindly replacing installed worlds. Real-GPU grand scale/performance remains unproved.
+**Walking:** shared measured labels/head anchors and gait-contact audio are bound in kingdom/stream.
+Still main-owned: approved persisted appearance/earned tools projection, authenticated gestures,
+owned-door spawn, matching render/physical terrain and continuous deterministic soft push.
+Do not treat component fixtures or prepared optional ports as completed authority integration.
 
-**Growth and memory:** spec50/shared growth/migration0009 remain authoritative. Eligibility is not
-a geometry receipt; only committed home-grown facts celebrate. Deed-locked native refits preserve
-custom homes and fitted Forge parts. Growth lane's second-storey cottage/roofline/panes/garden WIP
-still needs native version-aware publication. Civic adapter/content is merged but requires actual
-cleared place anchors and existing renderer/light/water factories. Crier GCR01/02 and history GH01/02
-are merged; production send/ack, earned shelf binding and a watched engine Chronicle run remain.
-Chronicle needs durable ordered historical geometry and isolated live/replay scene restoration,
-including shadow/light blockers; do not advertise a bench as that public storybook.
+**Grand:** spec56/land interface/paged physical dispatcher remain frozen. Artisan kits are merged.
+GK10 pipeline remains producer WIP; GK11 checkpoint depends on its unmerged types/compiler/hooks.
+Merge those together once coherent, preserving exact installed plots, roads and collision support.
+The captured frozen `/-/grand` landscape is independent WIP, NOT adopted under the live kingdom.
+Producer details: `work/reviews/grand-adoption.md` and grand lane progress. Keep one abortable terrain
+owner inside the existing scene/camera/post stack; no second town, writer or RAF.
 
-**Dock and Soul:** durable dock command/status/SSE/private draw witness and normal scene acts are in.
-Anonymous OBS displays but cannot confirm commands. Remaining: verified moderator observation,
-directed undo, actual raid-welcome procession and lasting fire gathering, each watched. Soul's
-keeper/weather/audio consumer is merged; production topology and witnessed arrival binding remain.
-Walking appearance/gesture authority seam remains main-owned. Do not invent residents to fill streets.
+**Remaining joins:** civic adapter needs actual cleared anchors and rendering/light/water binding;
+earned shelf and crier need trusted production binding/ack; public Chronicle remains unavailable.
+Its isolated SIMULATED history consumer/geometry-seek demo is merged, not a public historical world.
+Dock commands/status/SSE and ordinary stream acts are bound; directed undo, moderator observation,
+raid procession and lasting fire gathering still need actual end-to-end demonstration.
 
-**Checks/live:** typecheck, scoped lint,159 focused tests across merged consumers/content and the
-aligned generator; frozen install and web build checked separately. No full-suite/GPU claim.
-Capture queue has one reserved main place and two FIFO lane places with UUID lifetime leases;
-legacy exclusive guards still exclude all three. Managed5190 web/5196 API/5197 realm/5195 Forge/5194
-Herald. Logs ONLY `../conductor/state/services.log`. Internal realm service secret is configured in
-ignored root environment. Preserve lane WIP/stashes; no duplicate writer or waiting live observer.
+**Visitor evidence:** `work/evidence/one-kingdom/README.md` records viewed stills, sources and failures.
+Real signed entry succeeded through session→scene→ticket→matchmake. Cold first opening also exposed
+lease expiry during async geometry: renew the same epoch through opening, then hand it off without
+duplicate timers or late revival. The minted test session/tickets were revoked and its private file removed; OAuth consent was not tested.
+Latest keepalive passes focused tests; its first managed cold opening still needs observation after restart.
+
+**Checks/live:** focused tests, scoped lint, full typecheck, web/realm and complete public builds;
+no new full-suite/GPU claim. Capture one still per lease; main priority plus two FIFO lane places.
+Managed5190/5196/5197/5195/5194 remain the only live setup. Logs ONLY
+`../conductor/state/services.log`. No temporary gateway is left intentionally running.

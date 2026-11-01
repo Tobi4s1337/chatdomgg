@@ -110,24 +110,67 @@ export class DurableKingdom implements RealmRoomHandle {
 
   static async open(repository: DurableRepository, outbox: RealmOutboxStore, kingdomId: KingdomId,
     options: DurableKingdomOptions | ((state: RealmPrivateState) => DurableKingdomOptions | Promise<DurableKingdomOptions>)): Promise<DurableKingdom> {
-    const started = performance.now(), wall = Date.now();
-    const lease = await repository.acquire(kingdomId);
+    let started = performance.now(), wall = Date.now();
+    let lease = await repository.acquire(kingdomId);
+    // Cold geometry is asynchronous work under this same writer, before a room/handle exists to renew it.
+    // Keep its epoch alive without ever accepting a renewal response beyond the previous safe deadline.
+    let active = true, fenced = false;
+    let renewing: Promise<void> | null = null;
+    const current = () => !fenced && performance.now() < started + repository.leaseMs - LEASE_MARGIN_MS;
+    const assertCurrent = () => { if (!current()) throw new RealmWriterFencedError(kingdomId); };
+    const renew = () => {
+      if (!active || renewing) return;
+      if (!current()) { fenced = true; return; }
+      const nextStarted = performance.now(), nextWall = Date.now();
+      renewing = (async () => {
+        try {
+          const next = await repository.renew(lease);
+          if (!active) return;
+          if (!current()) { fenced = true; return; }
+          lease = next; started = nextStarted; wall = nextWall;
+        } catch (error) {
+          if (error instanceof RealmWriterFencedError || !current()) fenced = true;
+        }
+      })().finally(() => { renewing = null; });
+    };
+    const interval = Math.max(100, Math.floor((repository.leaseMs - LEASE_MARGIN_MS) / 3));
+    let renewal = setTimeout(() => {
+      renewal = setInterval(renew, interval); renewal.unref?.(); renew();
+    }, Math.max(0, started + interval - performance.now()));
+    renewal.unref?.();
     try {
+      assertCurrent();
       const state = await repository.load(lease);
+      assertCurrent();
       // Founded geometry reads this writer's committed state, including approved home replacements. Never
       // resolve it before acquiring the lease, or acquire a second writer inside the geometry loader.
       const resolved = typeof options === 'function' ? await options(state) : options;
-      if (performance.now() >= started + repository.leaseMs - LEASE_MARGIN_MS) throw new RealmWriterFencedError(kingdomId);
+      assertCurrent();
       const delivered = await outbox.open(lease);
       const prefix = await outbox.prefix(kingdomId, delivered);
-      if (performance.now() >= started + repository.leaseMs - LEASE_MARGIN_MS) throw new RealmWriterFencedError(kingdomId);
+      // Stop opening's cadence and settle its in-flight request before handing the latest lease to the handle.
+      // A stalled reply may only hold that handoff until the existing deadline, never create another window.
+      clearInterval(renewal);
+      if (renewing) {
+        assertCurrent();
+        let expiry: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([renewing, new Promise<never>((_, reject) => {
+            expiry = setTimeout(() => reject(new RealmWriterFencedError(kingdomId)),
+              Math.max(0, Math.ceil(started + repository.leaseMs - LEASE_MARGIN_MS - performance.now())));
+            expiry.unref?.();
+          })]);
+        } finally { clearTimeout(expiry); }
+      }
+      assertCurrent();
       const sequence = delivered >= prefix.committed ? state.sequence : prefix.sequence;
       const projection = new PublicProjection({ ...prefix, cursor: delivered, sequence });
       return new DurableKingdom(repository, outbox, lease, state, resolved, projection, delivered, prefix.committed, started, wall);
     } catch (error) {
+      active = false;
       await repository.release(lease).catch(() => {});
       throw error;
-    }
+    } finally { active = false; clearInterval(renewal); }
   }
 
   private constructor(private readonly repository: DurableRepository, private readonly outbox: RealmOutboxStore, lease: RealmWriterLease, state: RealmPrivateState,
@@ -659,7 +702,7 @@ export function createDurableRealmServices(input: {
   readonly outbox: RealmOutboxStore;
   readonly auth: RealmAuthenticator;
   /** Resolve adopted geometry from committed state after writer acquisition/load, before public bootstrap.
-   * The loader must finish within the opening lease's safe window; it never acquires another writer. */
+   * Opening renews its held epoch while this awaits; the loader never acquires another writer. */
   readonly kingdom: (kingdomId: KingdomId, state: RealmPrivateState) => DurableKingdomOptions | Promise<DurableKingdomOptions>;
   /**
    * Trusted work after the lease is held and before the first walker enters, such as installing deeds left pending
