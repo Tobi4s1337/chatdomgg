@@ -7,9 +7,9 @@ export const SEAT_BAND_METRES = 48;
 const snap = (metres: number): number => Math.round(metres / LAND_CELL) * LAND_CELL;
 
 export interface SeatChoice extends GrandSeat {
-  /** Whole region and band inside the land. False means the land is smaller than the town asks for. */
+  /** Whole envelope and band inside the land. False means the land is smaller than the town asks for. */
   readonly fits: boolean;
-  /** Share of the region's columns that were dry natural land before grading. */
+  /** Share of the envelope's columns that were dry natural land before grading. */
   readonly landShare: number;
   /** The settlement's open-water side meets the land's sea within reach of its edge. */
   readonly seaMet: boolean;
@@ -23,7 +23,8 @@ export interface SeatChoice extends GrandSeat {
  */
 export function seatSettlement(field: GrandField, sites: Pick<GrandFieldSites, 'town' | 'harbour'>, frame: SettlementFrame): SeatChoice {
   const size = field.size * LAND_CELL, band = SEAT_BAND_METRES;
-  const r = frame.region, width = r.maxX - r.minX, depth = r.maxZ - r.minZ;
+  // The seat is judged over the envelope (all the town can grow into), so building a reserved plot never moves it.
+  const r = frame.region, e = frame.envelope, width = e.maxX - e.minX, depth = e.maxZ - e.minZ;
   const town: readonly [number, number] = [(sites.town.x + 0.5) * LAND_CELL, (sites.town.z + 0.5) * LAND_CELL];
   const offsetY = snap(field.seaLevel * LAND_CELL - frame.waterLevel);
   const at = (mx: number, mz: number): number => {
@@ -32,7 +33,7 @@ export function seatSettlement(field: GrandField, sites: Pick<GrandFieldSites, '
   };
   const cx0 = (ox: number) => frame.centre[0] + ox, cz0 = (oz: number) => frame.centre[1] + oz;
   const evaluate = (ox: number, oz: number) => {
-    const x0 = r.minX + ox, z0 = r.minZ + oz;
+    const x0 = e.minX + ox, z0 = e.minZ + oz;
     const fits = x0 - band >= 0 && z0 - band >= 0 && x0 + width + band <= size && z0 + depth + band <= size;
     let land = 0, samples = 0;
     const step = 8;
@@ -43,7 +44,7 @@ export function seatSettlement(field: GrandField, sites: Pick<GrandFieldSites, '
     const landShare = samples ? land / samples : 0;
     let seaMet = false;
     if (frame.seaward) {
-      // Walk out from the town centre past the region's edge on its water side; the sea must be there.
+      // Walk out from the town centre past the envelope's edge on its water side; the sea must be there.
       const [sx, sz] = frame.seaward, cx = frame.centre[0] + ox, cz = frame.centre[1] + oz;
       for (let d = 0; d < Math.max(width, depth) + band * 2 && !seaMet; d += 4) {
         const x = cx + sx * d, z = cz + sz * d;
@@ -81,12 +82,22 @@ export function toSettlement(seat: Pick<GrandSeat, 'offset'>, point: Vec3): Vec3
   return [point[0] - seat.offset[0], point[1] - seat.offset[1], point[2] - seat.offset[2]];
 }
 
-/**
- * The least land, in columns per side, a settlement asks for: its exact region and blend band inside the island's
- * narrow axis (at its slimmest a little over half the land's side), with a beach and some country beyond. Rounded up
- * to whole 128-column tiles. A land generated smaller than this meets the town with a straight coast at its region.
- */
-export function landColumnsFor(frame: Pick<SettlementFrame, 'region'>): number {
-  const r = frame.region, side = Math.max(r.maxX - r.minX, r.maxZ - r.minZ) + 2 * SEAT_BAND_METRES;
+/** The most land, columns per side, the town's growth room may ask for (1536 m): a land this size raises and meshes in
+ * minutes on a software renderer. The exact region and its band always get their land, past this if they must. */
+export const LAND_COLUMNS_CAP = 3072;
+
+const columnsFor = (b: SettlementFrame['region']): number => {
+  const side = Math.max(b.maxX - b.minX, b.maxZ - b.minZ) + 2 * SEAT_BAND_METRES;
   return Math.ceil(side * 1.2 / 0.54 / LAND_CELL / 128) * 128;
+};
+
+/**
+ * The least land, in columns per side, a settlement asks for: its envelope (all it can grow into) and blend band inside
+ * the island's narrow axis (at its slimmest a little over half the land's side), with a beach and some country beyond,
+ * rounded up to whole 128-column tiles. Growth room is capped at `LAND_COLUMNS_CAP`; the built region never is. The
+ * answer does not change as a town builds its reserved plots while its region stays within the cap. A land generated
+ * smaller than this meets the town with a straight coast at its region.
+ */
+export function landColumnsFor(frame: Pick<SettlementFrame, 'region' | 'envelope'>): number {
+  return Math.max(columnsFor(frame.region), Math.min(columnsFor(frame.envelope), LAND_COLUMNS_CAP));
 }

@@ -35,8 +35,12 @@ export interface GrandFieldSites {
   readonly fields: { readonly x: number; readonly z: number; readonly radius: number };
 }
 
-/** Mirrors `Cover` in `grand/types.ts`; the grade writes only these. */
-export const KINGDOM_COVER = { sea: 0, sand: 1, shingle: 2, grass: 3, meadow: 4, rock: 7, riverbed: 10, lakebed: 11, reserved: 13 } as const;
+/**
+ * Mirrors `Cover` in `grand/types.ts`; the grade writes only these. `reserved` is the settlement's own ground (lawns
+ * and verges, no wild flowers); `paved` is public paving (streets, squares, aprons), drawn as the kingdom's paving.
+ * A land that does not know `paved` yet draws it as its default ground.
+ */
+export const KINGDOM_COVER = { sea: 0, sand: 1, shingle: 2, grass: 3, meadow: 4, rock: 7, riverbed: 10, lakebed: 11, reserved: 13, paved: 16 } as const;
 export const TREE_STRIDE = 6;
 
 /**
@@ -47,11 +51,17 @@ export interface SettlementFrame {
   readonly plan: SettlementPlan;
   /** Exact physical region, 16 m chunk aligned. Outside it nothing is known or walkable. */
   readonly region: BoundsXZ;
+  /**
+   * Everything the settlement can grow into: every plot (built or reserved), every street (active or reserved), the
+   * castle and its water, aligned out to 16 m like the region. It contains the region and stays the same while
+   * reserved plots are built, so the seat, and with it the land around the town, does not move as the town grows.
+   */
+  readonly envelope: BoundsXZ;
   /** The settlement's water level (v1 lake, Genesis coast) that the grand sea level takes. */
   readonly waterLevel: number;
   /** Where the settlement's own sea or open water lies, as a unit XZ direction, if it has one. */
   readonly seaward: readonly [number, number] | null;
-  /** Centre of the inhabited town (homes and market), not of the bounds. */
+  /** Centre of the town (every plot, built or reserved, and the market), not of the bounds. Unchanged by growth. */
   readonly centre: readonly [number, number];
   readonly castle: { readonly centre: Vec3; readonly bounds: BoundsXZ };
 }

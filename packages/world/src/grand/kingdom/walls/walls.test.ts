@@ -318,6 +318,25 @@ describe.each([
   }, SLOW);
 });
 
+describe('town walls on a mountainside', () => {
+  it('lays a footing deeper than one blueprint in courses, each within the size budget', () => {
+    // A town on a 40° flank (MashaD4's castle mountain): gates and towers on the low side reach far down to the ground.
+    const plan = generateSettlementPlan({ seed: 'walls-hamlet', tier: 'hamlet', firstYear: 2025, year: 2026 });
+    const flat = optionsFor(plan, 'hearth', 'walls-steep');
+    const walls = planTownWalls(plan, { ...flat, ground: (x, z) => terrainHeight(plan, x, z) + 0.85 * x });
+    const footings = walls.pieces.filter(piece => piece.id.includes(':footing'));
+    expect(footings.length).toBeGreaterThan(0);
+    for (const piece of walls.pieces) for (const n of VoxelBlueprintSchema.parse(piece.blueprint).size) expect(n).toBeLessThanOrEqual(256);
+    for (const footing of footings) {
+      // Each course stands directly under the piece it carries: same column origin, its top at that piece's foot.
+      const id = footing.id.replace(/:footing(\d+)$/, (_, n: string) => (Number(n) > 1 ? `:footing${Number(n) - 1}` : ''));
+      const above = walls.pieces.find(piece => piece.id === id);
+      if (!above) continue; // the course above was carved away entirely (a street or lot under it)
+      expect(footing.position[1] + footing.blueprint.size[1] * CELL).toBeCloseTo(above.position[1], 6);
+    }
+  }, SLOW);
+});
+
 describe('wall materials', () => {
   it('mirror the content palette by name', () => {
     for (const [name, id] of Object.entries(WALL_MATERIAL)) expect(MAT[name as keyof typeof MAT], name).toBe(id);
