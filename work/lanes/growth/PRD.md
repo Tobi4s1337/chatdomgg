@@ -1,5 +1,5 @@
 # Lane growth
-Spec (background, Rules and Decisions hold): `chatdom/World-Tree.md` §8 "Time and growth", with `work/specs/04-homes-hearth.md` and `02b-settlement-plan.md` · Branch: `lane/growth` · Worktree: `../worktrees/growth` · Worker: Opus high
+Spec (Rules and Decisions hold): `work/specs/50-growth.md`, with `work/specs/04-homes-hearth.md` and `02b-settlement-plan.md` · Branch: `lane/growth` · Worktree: `../worktrees/growth` · Worker: team
 Scope: `apps/web/src/growth/**`, `shots/growth/**`, and this lane's PRD, progress and evidence (`work/lanes/growth/**`, `work/evidence/growth/**`).
 
 ## The part
@@ -12,6 +12,13 @@ Work in checkpoints: if a session ends before the part is done, leave everything
 Captures: take the shared capture lock for one still or one short clip at a time and release it in between, so main can capture between your frames; never hold it for a whole series.
 
 ## Tasks
+
+First consumer seam: import `GrowthSceneFrameSchema`, `GrowthSceneFeed`, `GrowthHomeView` from `@chatdom/shared`;
+use `@chatdom/world/growth` to generate earned SIMULATED frames. Main owns live binding and actual house revision
+commits. Preserve your ceremony work; no replacement progression model. Key a beat by kingdom/source sequence/kind/plot
+so a repeated frame does not repeat a housewarming. Tent is an entitlement until the camp asset is supplied; don't call
+a hut a tent. Main will mount `apps/web/src/growth/index.tsx` at `/-/growth` on its first checkpoint. Send exact scene
+ports as `needs:`; build the owned visual sequence while main provides them. No full-suite screenshot matrix.
 - [ ] **GR10 — Growth over time, whole.** One home grows hut → hall on its lot with a warm moment at each step; the town around it grows a new quarter at its growth edge with lit homes; captured as one sequence plus before/after stills (close and wide).
 
 ## Backlog

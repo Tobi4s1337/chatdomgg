@@ -1,1 +1,2 @@
 next: GR10 Lane PRD is in place; the growth sequence and captures remain to be built.
+main: 2026-11-01 first growth model/read feed frozen in spec50 and @chatdom/shared growth schemas; @chatdom/world/growth exports real policy/reducer/projectors for SIMULATED sequence frames. Existing full home families reused; no thresholds in the renderer. Start/continue the home ceremony and growing quarter; send one exact needs: for any missing kingdom scene mount. Main owns durable room application, custom-house/Forge preservation and live feed. No live growth claimed yet.
