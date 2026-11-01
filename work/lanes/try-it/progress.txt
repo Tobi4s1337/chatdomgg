@@ -1,0 +1,2 @@
+2026-11-01 13:13 lane opened: see PRD.
+next: TI10 lane opened; implementation, public hosting instructions and captures remain.
