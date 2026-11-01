@@ -1,0 +1,75 @@
+{
+  "channel": "tobi4s_",
+  "diagnostics": {
+    "orientations": [
+      {
+        "turns": 1,
+        "work": 3619,
+        "exhausted": true,
+        "truncatedCandidates": 6
+      },
+      {
+        "turns": 1,
+        "work": 1655,
+        "exhausted": false,
+        "truncatedCandidates": 0
+      }
+    ],
+    "accessAttempts": 4
+  },
+  "treeCount": 1379,
+  "placements": [
+    {
+      "id": "windmill",
+      "at": [
+        680,
+        62,
+        342
+      ],
+      "turns": 0,
+      "boxes": 702
+    },
+    {
+      "id": "harbour-quay-modular",
+      "at": [
+        1031,
+        48,
+        622
+      ],
+      "turns": 1,
+      "boxes": 469
+    },
+    {
+      "id": "harbour-lighthouse",
+      "at": [
+        1080,
+        51,
+        468
+      ],
+      "turns": 0,
+      "boxes": 1324
+    },
+    {
+      "id": "harbour-ship",
+      "at": [
+        1076,
+        48,
+        592
+      ],
+      "turns": 1,
+      "boxes": 548
+    },
+    {
+      "id": "harbour-ship",
+      "at": [
+        1076,
+        48,
+        652
+      ],
+      "turns": 1,
+      "boxes": 548
+    }
+  ],
+  "millis": 24440.488631,
+  "note": "CPU source generation and render-only fit with boundary-connected sea, berth and supported access; default guard and pre-flora reservation. Not visual evidence."
+}

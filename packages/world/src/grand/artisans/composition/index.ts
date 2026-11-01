@@ -30,7 +30,7 @@ export const CHANNEL_COMPOSITIONS: readonly ChannelComposition[] = [
 export function channelComposition(identity: string): ChannelComposition {
   const key = identity.toLowerCase();
   const result = CHANNEL_COMPOSITIONS.find(p => p.broadcasterId === identity || p.login.toLowerCase() === key);
-  if (!result) throw new Error(`No reviewed grand composition for ${identity}`);
+  if (!result) throw new Error(`No authored grand composition for ${identity}`);
   return result;
 }
 
@@ -75,7 +75,7 @@ export function createComposition(identity: string): ArtisanKit {
     } else b.box(x,sea,z,2,y-sea,2,CLAY.earth);
     if (!wet(x,z)) b.box(x,y,z,2,1,2,y < 4 ? CLAY.sand : y > 22 && slope > 1.1 ? GEOLOGY_COLOURS[col.material(y,y,slope,56,.4,false)]! : CLAY.grass);
   }
-  // The open sea is a single reviewed surface. A warmer sand shelf makes the coast legible.
+  // The open sea is a single study surface. A warmer sand shelf makes the coast legible.
   b.box(-228,sea-1,-180,456,1,350,'#4b8797');
   for (let z=-140;z<92;z++) {
     const x=Math.round(river(z)), width=Math.round(5+Math.max(0,80-z)/22), level=riverLevel(z);

@@ -1,7 +1,8 @@
 # Citadel and town-wall studies
 
 `createCitadel(seedKey)` returns a seeded, unoccupied silhouette on a tiered rock in
-half-metre integer cells; its axis is +Y and its entrance faces −Z. The clustered
+half-metre integer cells; its axis is +Y and its entrance faces −Z. Its native-rock
+base uses offset strata and broad moss ledges under a single worked stone plinth. The clustered
 indigo roofs and warm stone courses are restrained rather than copying the reference's
 blue-and-white castle. Banners are solid-colour cloth reserved for a validated channel
 crest. `base`, `gate` and `summit` are visual framing hints.

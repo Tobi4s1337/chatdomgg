@@ -1,65 +1,81 @@
-# GA10 kit checkpoint in progress
+# GA10 checkpoint and continuation — 2026-11-01
 
-2026-11-01: all work stays in artisans folders. Main synced into lane; no push.
+GA10 is first/only and remains UNCHECKED. No LANE COMPLETE. Work on lane/grand-artisans,
+owned scopes only, never push. Main was synced this turn in450972e. Gold tree/grove
+hero checkpoint is cf026de; user requested landing all best current work green now,
+then continuing at full ambition. All agents froze source for this checkpoint.
 
-Builder seam requested: adopt compact ArtisanKit boxes through the new `artisans/adoption` adapter
-and geology sampler from `artisans/geology`. Exact patch will be written at `adoption.patch` beside
-this note. The builder owns pipeline and route and must apply it in its checkout; artisans will not
-edit either. Tree factories, fitted parcel/mill modules, harbour and castle silhouette studies are
-ready for art review in `/src/grand/artisans/review.html`. Each kit README identifies its origin,
-anchors and integration constraints. Preserve exact installed native homes/Forge/streets and their
-light slots; these kits grant no collision or ownership. Castle and whole composition studies do
-not replace installed geometry. Coast/water review surfaces do not replace the canonical drainage.
+## Source/checks
 
-Needs: builder-owned `/-/grand` hook to mount the additive review view and adopt reviewed kit boxes,
-material table and sampler in generation + worker/render palette. The source tree for the pipeline
-exists only in ../grand-kingdom on this branch base. Artisans can produce exact patch text and run
-isolated kit reviews here, but cannot claim in-land/LOD/shadow acceptance before that seam lands.
+Frozen source: 83 focused artisan tests, repository typecheck/lint/build, disposable
+builder candidate web build, capture-script syntax checks and producer-patch dry-runs
+all pass. See work/evidence/grand-artisans/VALIDATION.md and logs. Broad suite reproduced
+three unchanged Twitch-moment failures and was stopped; pnpm verify is NOT green/claimed.
+No outside-scope source was edited. Tests were parameterized to separate six independent
+corruption cases after one aggregate timeout under load; no timeout increase.
 
-The capture runner holds the shared lock for one still/short orbit at a time and releases between
-captures. Current port is 5180, started only when acquired and shut down before release. Queue wait
-is not a blocked task. Review shots and final evidence will be copied after looking.
+Both exact needs patches apply only in /tmp/grand-artisans-candidate, never sibling:
+adoption.patch (kits.ts/voxelize.ts sampler, palette overflow, source-order replay,
+cache byte cap), adoption-sites.needs.patch (fit protected pieces before flora, reserve
+whole envelopes). Candidate is recreated by ARTISAN_APPLY_SITE_PROPOSAL=1 node
+work/lanes/grand-artisans/candidate.mjs. Mounted ArtisanReview is available but not a
+route hook in adoption.patch. Builder/main owns pipeline/route/renderer and GK11.
 
-Integration seam is now available in builder `grand/kits.ts`: eager-discover artisans/index.ts.
-`GRAND_ARTISAN_KITS` matches it structurally and provides six species through all fourteen builder
-names; deterministic variants/rotations retain source identity. GK10 composition supplies terrain-
-fitted mills, independent ships and lighthouses when the full harbour cannot be supported. It excludes
-canonical reserved cover, town/castle areas and existing tree envelopes. GK11 must bind the exported
-`sitePlacements` to the actual installed scene's protected regions; GK10 masks are visual only.
+## Placement state
 
-The exact patch passes dry-run against the sibling: sampler adoption, palette overflow rejection,
-ordered structure replay across halos, and `/-/grand?artReview=1`. `candidate.mjs` assembles a disposable
-source copy in /tmp for testing; it never writes the builder checkout. `grand-capture.mjs` captures
-its actual renderer; `capture.mjs` captures isolated kits. These remain distinct evidence classes.
+Earlier radius96/module success claims were invalid: dry worlds, tiny sand strips,
+shore drops and overlapping pieces were accepted. Astra high reviewed twice; see
+placement-review.md. Current code requires boundary-connected wet outer pier/landing
+approach, a deep whole ship-sized berth, genuine supported inland stairs/apron and
+local occupied bounds. Shallow/dry landward pier connectors remain supported; ship
+depth is required in the berth rather than beneath every connector. Adjacent cardinal
+orientations, ranked origins, feature-first pruning, per-origin/global work budgets,
+fit caching and access-history memoization bound the search. Optional diagnostics
+report truncation separately from geometric rejection.
 
-Checks so far: focused artisans 33 tests pass, repo typecheck/lint/build pass. The broad test run
-already exposes unrelated failures/timeouts in existing Twitch moments, light fields, Herald source,
-and ground dressing; no source outside lane scope was edited to suppress those failures.
+Exact current CPU source proves guarded modular quay + real shore access in ALL FOUR
+channels: adoption-guarded-{tobi4s_,the_aggman,pinkkittyrose,mashad4}.json. Other historical
+JSONs describe earlier algorithms and cannot validate current placement. These are
+positive fits, not exhaustive/optimal siting. Shared-host generation+compose takes tens
+of seconds (Aggman55.6s/Pink43.1s/Masha45.5s), so performance needs work after checkpoint.
+Do not grade canonical terrain to conceal a search failure. Actual final quay stills,
+inland/deck/waterline and moving LOD/shadows remain required.
 
-16:40 checkpoint status: initial kit captures still queued for the shared host lock; no browser or
-preview from this lane has started. No visual approval or task tick is claimed. Keep the queue alive,
-inspect the first pixels, then checkpoint looked kits on lane/grand-artisans for builder adoption.
-The broad repository test run was interrupted after concrete failures in unchanged light/Twitch/
-Herald/ground-dressing tests; it did not finish green. Scoped kit checks remain green. Candidate web
-build is running to verify the actual worker + route bundle. Native build/street geometry stays
-read-only and native-scale; composition sea level and boat waterlines now agree at cell zero.
+## Capture status at checkpoint
 
-Next turn: GA10 stays first/unchecked. Poll active capture exec session **12986** first; it has not
-started any preview/browser yet. It will capture tree/forest/geology/water/mill/fields/ship/lighthouse/
-harbour/citadel/walls hero stills, lock released between stills. Do not duplicate the queue. Inspect
-first pixels immediately and send relevant paths to the same Terra agents for refinement; do not
-claim the source checkpoint is art approval. Then six species, hero/street/coast/dusk for each kit,
-four channel compositions at standard sizes, and moving LOD/shadow review in the actual candidate.
-Capture runner uses port 5180 only while locked and closes its process group before release.
+- 64519: TERMINAL exit0; current final candidate tobi4s_ harbour still was viewed and
+  copied into evidence with SIMULATED watermark. Quay is visible but access needs close
+  views. CPU generation28.5s/mesh25.7s under shared load: performance work remains.
+- 53139: TERMINAL exit0; revised citadel hero was viewed and copied into evidence.
+- 11676: updated geology/water/mill batch TERMINAL exit0. Geology/water were viewed;
+  latest mill hero was viewed and copied into evidence (hero pass).
+- 76783,90241,99405: all TERMINAL exit0. Initial heroes all viewed; gold latest passes;
+  99405 older actual tobi orbit was viewed (older radius48/old gold; no accepted quay).
 
-Final source checks: 41 focused tests passed; final disposable candidate web build passed. Source
-review fixed stoop contact, rotated bowsprit clearance and stray square lighthouse support columns.
-The source candidate lives at /tmp/grand-artisans-candidate; recreate via candidate.mjs after edits.
-The exact adoption patch includes the mountable /-/grand?artReview=1 entry and cache byte cap.
-No production/GPU/visual claim. No task box tick and no LANE COMPLETE until all required proof exists.
+No lane capture or source-edit agent remains active at this checkpoint. It is safe to
+recreate the disposable candidate after recording the commit. Keep one still per lock.
 
-16:52 final draft checks: all **41** focused tests, repository typecheck, scoped ESLint and the
-latest disposable candidate web build passed. Full repository lint/build also passed earlier.
-The full test run remains non-green (interrupted after out-of-scope failures), so pnpm verify is
-not claimed. All source changes remain in the lane's owned folders; the builder changes exist only
-as patch text and a disposable /tmp test copy. Source checkpoint is explicitly unjudged by eye.
+Use ARTISAN_CAPTURE_COMPAT=1. Canonical inode exclusive compatibility lease for ONE
+still/shortclip, released between; no foreign process/queue/lock changes. Main's FIFO
+PID namespace bug and isolated owner-inode proposal are in capture-slots.md and
+capture-slots.needs.patch, not applied to shared tooling. Runners probe only allowed
+ports, preserve startup errors, clean owned children and append per-shot logs. Orbit
+names now include species/view/LOD. Actual-land new captures add SIMULATED watermark.
+Do not cancel merely for observation timeout; capture waits never justify blocked.
+
+## Art/next
+
+Every initial hero and all6 references were viewed. Gold hero tree/grove, fields,
+ship/lighthouse and castle silhouette pass first hero. Gold evidence committed.
+Current mill has framed sails/coherent roof; latest hero passes, other views remain.
+Castle rock revision was viewed; body passes but base still needs better land context.
+Water now has a curved valley/cliff/mouth; viewed, better flow study, other angles remain.
+Range study's final comb-like ridges remain weak/unaccepted; sampler in actual builder
+terrain looks better. Don't call the weak study a shipped mountain target.
+
+Next after checkpoint: inspect live/revised stills immediately, publish looked kit
+checkpoints, all6 species and4 views at desktop/mobile, four channel compositions,
+actual final harbour access and moving LOD/shadows. Current whole source still lacks
+native installed settlement/castle integration; studies never replace native identities.
+No fake people/presence, physical routes or ownership. Keep full ambition and GA10 open.
+Resume agents for remaining work only after checkpoint commit is recorded.

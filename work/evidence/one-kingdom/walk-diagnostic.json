@@ -1,0 +1,32 @@
+{
+  "ready": true,
+  "walk": true,
+  "gate": null,
+  "responses": [
+    {
+      "path": "/assets/scene-EOq99MqP.css",
+      "status": 200
+    },
+    {
+      "path": "/assets/scene-DJSZcpev.js",
+      "status": 200
+    },
+    {
+      "path": "/api/realm/session",
+      "status": 200
+    },
+    {
+      "path": "/api/realm/founded/scenes/[hash]",
+      "status": 200
+    },
+    {
+      "path": "/api/realm/ticket",
+      "status": 200
+    },
+    {
+      "path": "/live-realm-data/matchmake/joinOrCreate/kingdom",
+      "status": 200
+    }
+  ],
+  "errors": []
+}

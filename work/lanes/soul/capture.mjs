@@ -10,6 +10,8 @@ async function bounded(job, milliseconds, label) {
   try { return await Promise.race([job, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out`)), milliseconds); })]); }
   finally { clearTimeout(timer); }
 }
+const queueMs = Number(process.env.SOUL_CAPTURE_QUEUE_MS ?? 600_000);
+if (!Number.isInteger(queueMs) || queueMs < 1000 || queueMs > 1_800_000) throw new RangeError('SOUL_CAPTURE_QUEUE_MS must be 1000–1800000');
 const requested = process.argv.slice(2);
 if (requested.length > 1) throw new Error('Capture exactly one still per invocation. Choose dawn, noon, rain, lamplighter, dusk, night, snow, phone or stream.');
 const cases = [
@@ -40,8 +42,9 @@ async function startPreview() {
 }
   const log = [];
   for (const [name, hour, weather, date, width, height] of cases) {
+    // Keep the FIFO ticket while other lanes finish; no browser/server exists while queued.
     // A still owns the capture lock only for its own browser's lifetime.
-    const queued = globalThis.AbortSignal.timeout(60_000);
+    const queued = globalThis.AbortSignal.timeout(queueMs);
     const release = await acquireCaptureLock({ signal: queued }).catch(error => {
       if (!queued.aborted) throw error;
       console.log(`${new Date().toISOString()} queue timeout; no browser launched`);
@@ -64,10 +67,10 @@ async function startPreview() {
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
       const path = `/-/soul?seed=42&hour=${hour}&weather=${weather}&date=${date}&biome=${name === 'snow' ? 'highland' : 'coastal'}${name === 'stream' ? '&view=stream' : ''}`;
       await page.goto(`http://127.0.0.1:${address.port}${path}`, { timeout: 15_000 });
-      await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 15_000 });
+      await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 60_000 });
       await bounded(page.evaluate(() => document.fonts.ready), 5000, 'Fonts');
       await bounded(page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))), 10_000, 'First frames');
-      const status = await bounded(page.evaluate(() => ({ frame: window.__soulFrame, overflow: document.documentElement.scrollWidth > innerWidth })), 5000, 'Scene inspection');
+      const status = await bounded(page.evaluate(() => ({ frame: window.__soulFrame, scene: window.__soulStats, overflow: document.documentElement.scrollWidth > innerWidth })), 5000, 'Scene inspection');
       if (!status.frame || status.overflow || errors.length) throw new Error(`${name}: ${JSON.stringify({ errors, ...status })}`);
       const file = `${name}@${width}x${height}.png`;
       await page.screenshot({ path: `shots/soul/${file}`, timeout: 15_000 });
