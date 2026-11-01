@@ -19,14 +19,13 @@ const width = Number(values.width), height = Number(values.height);
 assert.ok([[1440, 900], [390, 844]].some(([w, h]) => w === width && h === height), 'Use a standard web size');
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
 const report = { origin: 'SIMULATED', width, height, clip: values.clip, offline: values.offline, errors: [], clients: [], checks: [], output: '' };
-let loader, web, realm, browser, offline, page;
+let loader, web, realm, browser, offline, page, release;
 let complete = false, stage = 'waiting for capture lock';
 const cancellation = new globalThis.AbortController();
 for (const name of ['SIGINT', 'SIGTERM', 'SIGUSR2']) process.once(name, () => {
   console.error(`SIMULATED town: received ${name} during ${stage}`);
   cancellation.abort(new Error(`Town capture cancelled by ${name}`)); void browser?.close().catch(() => {});
 });
-const release = await acquireCaptureLock({ signal: cancellation.signal });
 const freePorts = async count => {
   const ports = [];
   for (const port of CAPTURE_PORTS) {
@@ -48,11 +47,9 @@ process.once('exit', code => {
 });
 try {
   await mkdir(values.out, { recursive: true });
-  // Do not spend the full collision compile holding a capture slot if no listener can be started.
-  const [realmPort, webPort] = await freePorts(values.offline ? 1 : 2), endpoint = `http://127.0.0.1:${realmPort}`;
-  report.ports = { realm: realmPort, web: webPort };
+  // Pure CPU preparation needs neither a browser nor a listener. Keep it outside the shared capture slot.
   stage = 'compiling full collision';
-  console.log(`SIMULATED town: preparing full collision; allowed realm port ${realmPort}`);
+  console.log('SIMULATED town: preparing full collision before capture admission');
   loader = await createServer({ root: repo, configFile: false, appType: 'custom', logLevel: 'error', optimizeDeps: { noDiscovery: true, entries: [] }, server: { middlewareMode: true, hmr: false, ws: false } });
   const [{ createRealmServer }, { referenceServices }, { createSimulatedTownWalkFixture }] = await Promise.all([
     loader.ssrLoadModule('/apps/realm/src/server.ts'), loader.ssrLoadModule('/apps/realm/src/reference.ts'), loader.ssrLoadModule('/apps/web/src/walk/town-fixture.ts'),
@@ -60,6 +57,12 @@ try {
   const fixture = createSimulatedTownWalkFixture();
   report.fixture = { manifest: fixture.manifest, placements: fixture.scene.placements.length, limitation: fixture.limitation };
   console.log(`SIMULATED town: compiled ${fixture.scene.placements.length} native placements`);
+  cancellation.signal.throwIfAborted();
+  stage = 'waiting for capture lock';
+  release = await acquireCaptureLock({ signal: cancellation.signal });
+  cancellation.signal.throwIfAborted();
+  const [realmPort, webPort] = await freePorts(values.offline ? 1 : 2), endpoint = `http://127.0.0.1:${realmPort}`;
+  report.ports = { realm: realmPort, web: webPort };
   const base = referenceServices();
   let spawnIndex = 0, effects;
   const created = createRealmServer({ auth: { ...base.auth, authenticate: async join => {
@@ -103,10 +106,12 @@ try {
       server: { host: '127.0.0.1', port: webPort, strictPort: true, hmr: false } });
     await web.listen();
   }
+  stage = 'launching Chrome'; console.log(`SIMULATED town: ${stage}`);
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, isMobile: width === 390, hasTouch: width === 390,
     ...(values.clip ? { recordVideo: { dir: `${values.out}/raw-video`, size: { width, height } } } : {}) });
   if (values.offline) {
+    stage = 'building offline page'; console.log(`SIMULATED town: ${stage}`);
     offline = await createOfflineReview(context, '/index.html', values.out, { plugins: [plugin], allowedOrigins: [endpoint] });
     await context.route(`${offline.origin}/__walk-town/**`, route => {
       const path = new URL(route.request().url()).pathname;
@@ -115,10 +120,12 @@ try {
       return route.fulfill({ status: body === null ? 404 : 200, contentType: 'application/json', body: body ?? 'null' });
     });
   }
+  stage = 'creating browser page'; console.log(`SIMULATED town: ${stage}`);
   page = await context.newPage();
-  page.on('pageerror', error => report.errors.push(error.message));
+  page.on('pageerror', error => { report.errors.push(error.message); console.error('SIMULATED town browser:', error.message); });
   page.on('console', message => { if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico')) report.errors.push(message.text()); });
-  await page.goto(`${offline?.origin ?? `http://127.0.0.1:${webPort}`}/?walk=1&source=simulated&hour=19.5&time=30`, { waitUntil: 'domcontentloaded' });
+  stage = 'opening Kingdom'; console.log(`SIMULATED town: ${stage}`);
+  await page.goto(`${offline?.origin ?? `http://127.0.0.1:${webPort}`}/?walk=1&source=simulated&hour=19.5&time=30`, { waitUntil: 'commit' });
   stage = 'waiting for Kingdom ready'; console.log(`SIMULATED town: ${stage}`);
   await page.waitForFunction(() => window.__chatdomReady === true && window.__chatdomKingdom?.stats.ready, null, { timeout: 240_000 });
   console.log('SIMULATED town: actual Kingdom rendered; connecting three SDK clients');
@@ -178,8 +185,11 @@ try {
   complete = true;
   console.log(`Actual town capture: ${report.output}`);
 } catch (error) {
-  const pageState = await page?.evaluate(() => ({ ready: window.__chatdomReady, stats: window.__chatdomKingdom?.stats,
-    text: document.body.innerText.slice(0, 4000) })).catch(() => undefined);
+  const pageState = await Promise.race([
+    page?.evaluate(() => ({ ready: window.__chatdomReady, stats: window.__chatdomKingdom?.stats,
+      text: document.body.innerText.slice(0, 4000) })).catch(() => undefined),
+    new Promise(resolve => setTimeout(resolve, 3000)),
+  ]);
   await writeFile(`${output}.failure.json`, JSON.stringify({ ...report, stage, pageState, failure: error.message }, null, 2)).catch(() => {});
   complete = true; // The caught failure is recorded above; preserve it rather than overwriting it on exit.
   throw error;
@@ -191,5 +201,5 @@ try {
       browser?.close(), web?.close(), realm?.gracefullyShutdown(false), loader?.close(),
     ]);
     for (const result of closures) if (result.status === 'rejected') console.error('Town capture cleanup:', result.reason);
-  } finally { await release(); }
+  } finally { await release?.(); }
 }
