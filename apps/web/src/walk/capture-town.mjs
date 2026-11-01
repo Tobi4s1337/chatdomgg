@@ -113,6 +113,9 @@ try {
   if (values.offline) {
     stage = 'building offline page'; console.log(`SIMULATED town: ${stage}`);
     offline = await createOfflineReview(context, '/index.html', values.out, { plugins: [plugin], allowedOrigins: [endpoint] });
+    // Chrome protects loopback access from an HTTPS page. Grant only this isolated evidence origin;
+    // routing still permits network requests solely to the realm listener owned by this capture.
+    await context.grantPermissions(['local-network-access'], { origin: offline.origin });
     await context.route(`${offline.origin}/__walk-town/**`, route => {
       const path = new URL(route.request().url()).pathname;
       const body = path === '/__walk-town/scene' ? fixture.sceneBytes
@@ -125,7 +128,8 @@ try {
   page.on('pageerror', error => { report.errors.push(error.message); console.error('SIMULATED town browser:', error.message); });
   page.on('console', message => { if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico')) report.errors.push(message.text()); });
   stage = 'opening Kingdom'; console.log(`SIMULATED town: ${stage}`);
-  await page.goto(`${offline?.origin ?? `http://127.0.0.1:${webPort}`}/?walk=1&source=simulated&hour=19.5&time=30`, { waitUntil: 'commit' });
+  const response = await page.goto(`${offline?.origin ?? `http://127.0.0.1:${webPort}`}/?walk=1&source=simulated&hour=19.5&time=30`, { waitUntil: 'commit' });
+  assert.equal(response?.ok(), true, `Kingdom document returned HTTP ${response?.status()}`);
   stage = 'waiting for Kingdom ready'; console.log(`SIMULATED town: ${stage}`);
   await page.waitForFunction(() => window.__chatdomReady === true && window.__chatdomKingdom?.stats.ready, null, { timeout: 240_000 });
   console.log('SIMULATED town: actual Kingdom rendered; connecting three SDK clients');
@@ -192,6 +196,7 @@ try {
   ]);
   await writeFile(`${output}.failure.json`, JSON.stringify({ ...report, stage, pageState, failure: error.message }, null, 2)).catch(() => {});
   complete = true; // The caught failure is recorded above; preserve it rather than overwriting it on exit.
+  process.exitCode = 1; // Colyseus installs an uncaught-exception handler; do not let it swallow failure status.
   throw error;
 } finally {
   // A failed close must not retain the shared lock or strand another owned service.
