@@ -47,4 +47,24 @@ describe('royal life', () => {
     expect(scene.children).toHaveLength(0);
     clay.dispose();
   });
+  it('scales the installed flame and its light together for a dock gate act, then restores ordinary life', () => {
+    const clay = createVoxelMaterial(MATERIALS, 'build'), scene = new THREE.Scene();
+    const life = createRoyalLife(scene, clay, undefined, [{ position: [1, 2, 3], normal: [0, 1, 0] }]);
+    const frame: KingdomPresenceFrame = { version: 1, kingdomId: KingdomIdSchema.parse('1'), epoch: 'one', sequence: 1, asOf: 0, origin: 'live', connection: 'fresh', streamLive: true, windows: [] };
+    life.update(1, frame, 19, .25);
+    expect(scene.children[0]?.children[0]?.scale.toArray()).toEqual([.25, .25, .25]);
+    expect(scene.children[0]?.children[0]?.position.toArray()).toEqual([1, 2, 3]);
+    expect(life.sources()[0]?.strength).toBe(.2);
+    life.update(2, frame, 19, 0);
+    expect(scene.children[0]?.visible).toBe(false);
+    expect(life.sources()[0]?.strength).toBe(0);
+    life.update(3, frame, 19, null);
+    expect(scene.children[0]?.visible).toBe(true);
+    expect(scene.children[0]?.children[0]?.scale.toArray()).toEqual([1, 1, 1]);
+    expect(life.sources()[0]?.strength).toBe(.8);
+    life.update(4, undefined, 19, 1);
+    expect(scene.children[0]?.visible).toBe(false);
+    expect(life.sources()[0]?.strength).toBe(0);
+    life.dispose(); clay.dispose();
+  });
 });
