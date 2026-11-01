@@ -16,6 +16,8 @@ export const DockStateSchema = z.strictObject({
   moments: z.array(z.strictObject({ id, name: label, available: z.boolean(), reason: z.string().max(200) })).max(100),
   capabilities: z.array(z.strictObject({ kind: z.enum(ACTIONS), allowed: z.boolean(), reason: z.string().max(200) })).max(8),
   revision: id,
+  /** Receipt IDs the realm currently permits this broadcaster to undo. Omitted by older bridges. */
+  undoable: z.array(z.strictObject({ id, kind: z.enum(ACTIONS.filter(kind => kind !== 'undo')), label })).max(20).optional(),
 });
 export type DockState = z.infer<typeof DockStateSchema>;
 export const DockWitnessSchema = z.strictObject({ actionId: id, kingdomId: person, origin: z.enum(['live', 'simulated']), streamEventId: id });
