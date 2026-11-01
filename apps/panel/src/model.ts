@@ -1,3 +1,5 @@
+import type { PassportDisclosureView, PassportTransport } from '@chatdom/ui/passport';
+
 // The panel's local view model. It describes only what the panel may show and why;
 // it is not a shared contract and grants nothing. Every state that looks like an
 // outcome says who decided it, so "pending" and "unavailable" can never pass for
@@ -122,6 +124,66 @@ export type Tenure = { readonly kind: 'known'; readonly since: string } | { read
 /** One earned line of a home's history, e.g. "Helped raise the well-house". */
 export interface Earned { readonly id: string; readonly text: string; readonly at: string | null }
 
+/**
+ * The citizen's own portrait as an authority supplied it: always a finished picture, painted by the citizen portrait
+ * renderer from their saved look. The panel never paints one, and never stands in a face for a missing one.
+ */
+export interface CardPortrait {
+  readonly url: string;
+  readonly alt: string;
+  readonly width: number;
+  readonly height: number;
+  readonly origin: 'simulated' | 'live';
+}
+
+/** A home's size, from a first hut to a hall: tenure as architecture. */
+export type HomeTier = 'hut' | 'cottage' | 'house' | 'manor' | 'hall';
+
+/** One earned piece the citizen chose to wear, as their verified records name it. Never bought, only shown. */
+export type WornPiece =
+  | { readonly id: string; readonly family: 'ribbons'; readonly name: string; readonly story: string | null; readonly months: number }
+  | { readonly id: string; readonly family: 'hood' | 'scarf' | 'cape'; readonly name: string; readonly story: string | null; readonly colours: readonly [string, string] }
+  | { readonly id: string; readonly family: 'pin'; readonly name: string; readonly story: string | null; readonly shape: 'heater' | 'round' | 'swallowtail' | 'founder' | 'forged'; readonly colours: readonly [string, string] }
+  | { readonly id: string; readonly family: 'forgedHat'; readonly name: string; readonly story: string | null; readonly colours: readonly [string, string] };
+
+/**
+ * The viewer's own citizen card, as the kingdom's card authority projects it for them (spec 19). Words arrive formatted;
+ * null is "not known yet", never zero or a guessed date. It is the viewer's own panel, so their name shows here even
+ * while they keep their window unnamed to the town.
+ */
+export interface CitizenCard {
+  readonly name: string;
+  /** Their chat colour, set on a readable backing when it would not read on parchment. */
+  readonly colour: string | null;
+  /** Office and number in words: "Citizen No. 212", "Knight of the Watch, Citizen No. 31". */
+  readonly standing: string;
+  readonly portrait: CardPortrait | null;
+  /** "30 Aug 2024". */
+  readonly following: string | null;
+  /** "14 months, Tier 1"; a lapsed sub keeps its months and claims no tier. */
+  readonly subscribed: string | null;
+  /** Their home here and its tier; null for a guest. */
+  readonly home: { readonly name: string; readonly tier: HomeTier | null } | null;
+  /** Their other disclosed homes, by kingdom and street. Never more than the card publishes. */
+  readonly elsewhere: readonly { readonly kingdom: string; readonly home: string }[];
+  readonly worn: readonly WornPiece[];
+}
+
+/**
+ * Where the viewer's passport is read from. A passport is only ever read through its checked transport, whose
+ * reading follows the card's disclosure; the panel decides nothing about whose book it is.
+ */
+export type PassportSource =
+  | {
+    readonly kind: 'readable';
+    readonly transport: PassportTransport;
+    /** Kingdom names the card already shows publicly (its disclosed homes), so a road can say where it began. */
+    readonly places: ReadonlyMap<string, string>;
+    readonly disclosure: PassportDisclosureView | null;
+    readonly simulated: boolean;
+  }
+  | { readonly kind: 'unavailable'; readonly reason: string };
+
 export type Home =
   | {
     readonly kind: 'citizen';
@@ -134,9 +196,15 @@ export type Home =
     readonly picture: Picture;
     readonly tenure: Tenure;
     readonly history: readonly Earned[];
+    /** Their citizen card, when the card authority supplied it. */
+    readonly card: CitizenCard | null;
+    readonly passport: PassportSource;
   }
   /** Three homes are already kept elsewhere: here the light burns as a guest's. */
-  | { readonly kind: 'guest'; readonly displayName: string | null; readonly history: readonly Earned[] }
+  | {
+    readonly kind: 'guest'; readonly displayName: string | null; readonly history: readonly Earned[];
+    readonly card: CitizenCard | null; readonly passport: PassportSource;
+  }
   | { readonly kind: 'unknown'; readonly reason: string };
 
 /** A table in the tavern. Seats are taken inside the kingdom, never from the panel. */

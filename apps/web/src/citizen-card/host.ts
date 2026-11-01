@@ -13,6 +13,17 @@ export type CardLoad =
   /** The authority could not answer just now. */
   | { readonly status: 'unavailable' };
 
+/**
+ * One earned piece the citizen wears, as the host's look authority names it (`EarnedOffer.name` and `.story` for a
+ * piece their verified records unlock). Not part of the public card document: a host supplies it beside the card
+ * only for pieces the saved look really wears, and the card never infers one.
+ */
+export interface CardWorn {
+  readonly name: string;
+  /** What it remembers ("Rode the raid to Emberfold, 30 Oct 2026"), or null when the record tells no story. */
+  readonly story: string | null;
+}
+
 /** Cues for the host's existing sound kit; the card never creates audio of its own. */
 export type CardCue = 'open' | 'close' | 'press';
 

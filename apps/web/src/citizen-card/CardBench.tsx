@@ -1,6 +1,6 @@
-import { For, Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import type { CitizenKey } from '@chatdom/shared';
-import type { CardAssetRef } from '../../../api/src/citizen-card/contracts';
+import type { CardAssetRef, CitizenCardDocument } from '../../../api/src/citizen-card/contracts';
 import { CitizenCard, type CardMode } from './CitizenCard';
 import { CARD_FIXTURES, findFixture, type CardFixture } from './fixtures';
 import type { CardHost, CardLight, CardLoad } from './host';
@@ -9,7 +9,7 @@ import './bench.css';
 declare global {
   interface Window {
     __chatdomReady?: boolean;
-    __chatdomCardBench?: { readonly fixture: string; readonly mode: CardMode; readonly state: BenchState; readonly portraits: number };
+    __chatdomCardBench?: { readonly fixture: string; readonly mode: CardMode; readonly state: BenchState; readonly portraits: number; readonly passport: string | null };
     __chatdomCardError?: string;
   }
 }
@@ -25,8 +25,9 @@ const pick = <T extends string>(value: string | null, options: readonly T[], fal
 
 /**
  * The citizen card bench, a SIMULATED kingdom ledger: deterministic fixtures, their portraits painted by the
- * product citizen renderer, every designed state, dialog and page modes. It is the lane's runnable proof and the
- * default export main mounts; it stores nothing and talks to no server.
+ * product citizen renderer, every designed state, dialog and page modes. On the page, a citizen who holds a
+ * SIMULATED passport (Wren Tarnwalker) has it read beneath their card, through the real passport reader. It is the
+ * lane's runnable proof and the default export main mounts; it stores nothing and talks to no server.
  *
  *   /src/citizen-card/bench.html?fixture=wren&mode=page&light=dusk&state=ready&chrome=0
  */
@@ -39,6 +40,10 @@ export default function CitizenCardBench() {
   const chrome = params.get('chrome') !== '0';
   const [subject, setSubject] = createSignal<CitizenKey | null>(null);
   const [status, setStatus] = createSignal<string | null>('Painting the portraits…');
+  type Beneath = (document: CitizenCardDocument) => JSX.Element;
+  const [beneath, setBeneath] = createSignal<Beneath>();
+  /** The passport's reading state on the page: the capture waits until it has settled. */
+  let passport: string | null = null;
   const portraits = new Map<string, string>();
   const sitting = new AbortController();
   let disposed = false;
@@ -48,7 +53,7 @@ export default function CitizenCardBench() {
   const announce = () => {
     void settle().then(() => {
       if (disposed) return;
-      window.__chatdomCardBench = { fixture: fixture.id, mode, state, portraits: portraits.size };
+      window.__chatdomCardBench = { fixture: fixture.id, mode, state, portraits: portraits.size, passport };
       window.__chatdomReady = true;
     });
   };
@@ -73,9 +78,17 @@ export default function CitizenCardBench() {
 
   onMount(() => {
     void (async () => {
-      const sitters = CARD_FIXTURES.filter((item): item is CardFixture & { portraitLook: string } => item.portraitLook !== null && item.document.identity.portrait !== null);
+      const sitters = CARD_FIXTURES.filter((item): item is CardFixture & { portraitLook: NonNullable<CardFixture['portraitLook']> } => item.portraitLook !== null && item.document.identity.portrait !== null);
       // three.js and the voxel pipeline load only here, never with the card itself.
       const { paintPortraits } = await import('./portrait');
+      // Their passport, read beneath their card on the page. The reader and its SIMULATED authorities load only here.
+      const book = fixture.passport;
+      if (mode === 'page' && book) {
+        passport = 'pending';
+        const { simulatedCardPassport } = await import('./passport');
+        if (disposed) return;
+        setBeneath(() => (card: CitizenCardDocument) => simulatedCardPassport(card, book, reading => { passport = reading.kind; }));
+      }
       const painted = await paintPortraits(sitters.map(item => ({ id: item.id, look: item.portraitLook })), { signal: sitting.signal });
       if (disposed) return;
       for (const item of sitters) {
@@ -127,7 +140,8 @@ export default function CitizenCardBench() {
       </section>
     </Show>
     <Show when={status()}>{text => <p class="ccb-status" role={window.__chatdomCardError ? 'alert' : 'status'}>{text()}</p>}</Show>
-    <CitizenCard mode={mode} subject={subject()} host={host} light={light} />
+    <CitizenCard mode={mode} subject={subject()} host={host} light={light} beneath={beneath()}
+      worn={fixture.worn ? { key: fixture.document.key, pieces: fixture.worn } : null} />
   </div>;
 }
 
@@ -140,8 +154,10 @@ function Choice(props: { label: string; items: readonly { value: string; text: s
 
 /** Fonts, every image in the card, finished entrances and two frames: the card a person would actually see, not a half-drawn one. */
 async function settle(): Promise<void> {
+  // A passport on the page settles first: its reading answers, then its book draws.
+  for (let wait = 0; document.querySelector('.cpc[data-state="pending"]') && wait < 600; wait++) await new Promise(resolve => setTimeout(resolve, 50));
   await document.fonts.ready;
-  const images = [...document.querySelectorAll<HTMLImageElement>('.cc-plaque img')];
+  const images = [...document.querySelectorAll<HTMLImageElement>('.cc-plaque img, .cpc img')];
   await Promise.all(images.map(image => image.decode().catch(() => undefined)));
   // Let the card's entrance and the seal's press finish; a looping quill never does, so it is not awaited.
   const finite = document.getAnimations().filter(animation => Number.isFinite(animation.effect?.getComputedTiming().iterations ?? Infinity));

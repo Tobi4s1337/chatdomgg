@@ -3,6 +3,6 @@
  * `CardHost`; the default export is the SIMULATED bench. Neither pulls in three.js: portraits arrive as images.
  */
 export { CitizenCard, type CardMode } from './CitizenCard';
-export type { CardCue, CardHost, CardLight, CardLoad } from './host';
+export type { CardCue, CardHost, CardLight, CardLoad, CardWorn } from './host';
 export type { CardAssetRef, CitizenCardDocument } from './host';
 export { default } from './CardBench';
