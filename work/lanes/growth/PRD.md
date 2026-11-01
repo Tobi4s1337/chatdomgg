@@ -22,8 +22,8 @@ ports as `needs:`; build the owned visual sequence while main provides them. No 
 - [ ] **GR10 — Growth over time, whole.** One home grows hut → hall on its lot with a warm moment at each step; the town around it grows a new quarter at its growth edge with lit homes; captured as one sequence plus before/after stills (close and wide).
 
 Next content checkpoint inside GR10: a Hearth hut/cottage pair unmistakable from across the street, in the
-same light and at the same camera. Reuse the authored families; give the cottage a street-visible roof/front
-change or height, extra warm panes, and a small fence/garden. Other tiers should earn an obvious storey/roofline
+same light and at the same camera. The cottage must gain a full second storey, a higher and clearly different
+roof line, more warm panes, and a garden or fence. A rear extension alone does not pass. Other tiers should earn an obvious storey/roofline
 and richer plot silhouette. Author any new variants under `packages/content/src/growth-homes/**`; do not edit
 existing families or native-host selection. Main integrates version-aware native publication without reducing
 existing homes or changing their door/Forge slots. This art can proceed independently of civic/card/crier/history.
