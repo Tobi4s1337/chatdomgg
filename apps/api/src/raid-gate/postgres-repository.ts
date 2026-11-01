@@ -180,7 +180,8 @@ export async function serializable<Tx, T>(pool: SqlPool, open: (client: SqlClien
   }
 }
 
-function transactionOn(client: SqlClient): RaidGateTransaction {
+/** Binds gate reads and writes to the caller's existing SQL transaction without opening or committing one. */
+export function createRaidGateTransaction(client: SqlClient): RaidGateTransaction {
   return {
     getGate: (kingdomId: KingdomId) => select(client, POINTERS, [kingdomId]),
     putGate: (record, expected) => put(client, POINTERS, record, expected),
@@ -196,5 +197,5 @@ function transactionOn(client: SqlClient): RaidGateTransaction {
 }
 
 export function createPostgresRaidGateRepository(options: PostgresRaidGateRepositoryOptions): RaidGateRepository {
-  return { transaction: (work, signal) => serializable(options.pool, transactionOn, work, signal) };
+  return { transaction: (work, signal) => serializable(options.pool, createRaidGateTransaction, work, signal) };
 }

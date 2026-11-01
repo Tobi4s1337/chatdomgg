@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -10,6 +10,7 @@ import { hypeTrainBegin, hypeTrainProgress } from '../twitch-moments/hype';
 import { IGNORED } from '../twitch-moments/normalizer';
 import { planSubscriptions } from '../ingest/subscriptions';
 import { adaptCliEvent, MOCK_CONDUIT_ID, MOCK_READER_ID, startMockDoor, toFrame, verifySignature } from './door';
+import { RaidObservationEnvelopeSchema } from '../../../api/src/raid-gate/observations';
 
 const KINGDOM = KingdomIdSchema.parse('129634568');
 const plans = planSubscriptions({ broadcasterId: KINGDOM, readerId: MOCK_READER_ID, clientId: 'simulatedmockdoor' });
@@ -96,6 +97,35 @@ describe('SIMULATED EventSub door', () => {
 });
 
 describe('SIMULATED door, end to end into Herald', () => {
+  it('acknowledges raids after file commit and returns retryable 503 for refused storage, including a same-ID retry', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'herald-raid-door-')), directory = join(dir, 'outbox');
+    const now = 1_800_000_000_000, secret = 'simulated-door-secret';
+    const realm = await RealmDelivery.open({ url: 'http://127.0.0.1:9', secret: 'x'.repeat(40), directory, origin: 'simulated',
+      now: () => now, retryMs: 60_000, fetch: async () => Response.json({ status: 'busy' }, { status: 503 }) });
+    const door = await startMockDoor({ kingdomId: KINGDOM, secret, realm, port: 0, now: () => now });
+    const id = 'exact-retry-id', stamp = new Date(now).toISOString();
+    const body = JSON.stringify({ subscription: { type: 'channel.raid', version: '1' }, event: {
+      from_broadcaster_user_id: '41245072', from_broadcaster_user_login: 'simulated_source', from_broadcaster_user_name: 'SIMULATED Source',
+      to_broadcaster_user_id: KINGDOM, to_broadcaster_user_login: 'tobi4s_', to_broadcaster_user_name: 'tobi4s_', viewers: 140 } });
+    const send = () => fetch(`http://127.0.0.1:${door.port}/eventsub`, { method: 'POST', body, headers: {
+      'Twitch-Eventsub-Message-Id': id, 'Twitch-Eventsub-Message-Timestamp': stamp,
+      'Twitch-Eventsub-Message-Signature': sign(secret, id, stamp, body), 'Twitch-Eventsub-Message-Type': 'notification' } });
+    try {
+      await rm(directory, { recursive: true });
+      const refused = await send(); expect(refused.status).toBe(503); await refused.body?.cancel();
+      expect(realm.health()).toMatchObject({ pending: 0, counters: { accepted: 0, refused: 1 } });
+      expect(door.ingest.health().counters).toMatchObject({ raids: 0, raidRefused: 1 });
+      await mkdir(directory, { mode: 0o700 });
+      const responses = await Promise.all([send(), send()]);
+      expect(responses.map(response => response.status)).toEqual([204, 204]);
+      const files = (await readdir(directory)).filter(file => file.endsWith('.json'));
+      expect(files).toHaveLength(1);
+      const saved = RaidObservationEnvelopeSchema.parse(JSON.parse(await readFile(join(directory, files[0]!), 'utf8')));
+      expect(saved.raid).toMatchObject({ id, origin: 'simulated', viewers: 140, occurredAt: now, receivedAt: now });
+      expect(door.ingest.health().counters).toMatchObject({ raids: 1, raidRefused: 1, duplicateDeliveries: 1 });
+    } finally { await door.stop(); await realm.close(); await rm(dir, { recursive: true, force: true }); }
+  });
+
   it('a signed stream.online and a chat message apply as SIMULATED presence and queue for the realm', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'herald-door-'));
     const posted: string[] = [];

@@ -11,6 +11,7 @@ export * from './avatar-cape';
 export * from './forge-pieces';
 export * from './build';
 export * from './citizen-chat';
+export * from './chat-commands';
 export * from './citizen-look';
 export * from './forge';
 export * from './growth';

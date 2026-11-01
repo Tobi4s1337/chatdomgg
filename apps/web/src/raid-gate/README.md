@@ -11,6 +11,7 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | Durable records and the CAS transaction port | `apps/api/src/raid-gate/repository.ts` | Gate pointer, raid action, party member |
 | Application: gate status, preview, join, leave, read-action, close, start, Twitch cancel, reconcile | `apps/api/src/raid-gate/application.ts` | Real. Travel, passport and gift ops answer `denied: unavailable` until their task lands |
 | Witnessed departure: `ingestRaid`, `recover` | `apps/api/src/raid-gate/application.ts` | Server-only; lands a correlated raid once and hands it to the Atlas road ingestion |
+| Verified raid evidence and recovery | `apps/realm/src/raid-gate/{observations,http}.ts` | Mounted on the existing realm listener; immutable history, roads and pennants, with current incoming beats through the existing moment authority |
 | Outbox for Twitch writes and the road handoff | `apps/api/src/raid-gate/repository.ts` | `queued` sendable, `claimed` reconcile-only, `settled` |
 | Durable repository over the realm schema | `apps/api/src/raid-gate/postgres-repository.ts`, `0011_realm_raid_gate.sql` | Serializable CAS; every row passes its strict reader |
 | Session principal from realm-auth's cookie | `apps/api/src/raid-gate/session.ts` | Role derived on the server: monarch by Twitch identity, citizen by deed, otherwise guest |
@@ -62,11 +63,15 @@ Short version, with the pieces above:
    says `unknown` when it cannot tell) and `roads` (the Atlas's `AtlasRoadIngress`, idempotent by raid ID). Without
    `raids` the gate gathers but `start` answers `unavailable`; without `roads` witnessed raids wait in the outbox.
    The service runs `recover()` every 15 s and once at start-up; `close()` stops it.
-   In the verified EventSub ingress, for every `channel.raid` whose `from_broadcaster_user_id` is a kingdom with a
-   gate request the transport sent, call
-   `raidGate.application.ingestRaid({ raid, upstreamEventId: messageId, actionRequestId, receivedAt })` with
-   `raid.source = 'herald'` and observed evidence. `actionRequestId` is the request whose start the transport sent
-   for that source and target; pass `null` when it cannot tell, and the gate will not land anything on it. `grants` (the source's `channel:manage:raids` state, telling revoked apart from never connected),
+   Verified EventSub raid delivery is now mounted separately: Herald's durable outbox sends the strict
+   `RaidObservationEnvelopeSchema` to `/internal/realm/raid-gate/observe`. The realm freezes the source/target
+   request correlation on first receipt, then commits the history, outgoing landing and delivered road outbox
+   together. Do not also send it through the legacy spectacle path or the API's `ingestRaid`. On live origins,
+   `raid.source = 'herald'`; simulated evidence is isolated. Incoming beats keep the original event ID through the
+   existing moment writer and expire after 60 seconds; history and roads do not expire. The feed/pennant route,
+   migration `0011b` and cursor contract are in `work/lanes/raid-show/SEAMS.md` §2. API change subscribers still need
+   cross-process revision refresh when the API gate is mounted: realm landing cannot notify an in-process API listener.
+   `grants` (the source's `channel:manage:raids` state, telling revoked apart from never connected),
    `consent` (the monarch's Twitch-write switch) and `directory` (Atlas classification and whether this source may
    raid the target) have no store yet; they are main's.
 3. Travel (RG09). Bind a `RealmTravelTransport` over the realm's rooms (`apps/realm/src/raid-gate/ports.ts` states the

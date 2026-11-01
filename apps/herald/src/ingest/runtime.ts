@@ -221,7 +221,7 @@ export class DeliveryRuntime {
 
   #frame(frame: DeliveryFrame): void {
     if (this.#stopped) return;
-    this.#ingest.handle(frame);
+    void this.#ingest.handle(frame)?.catch(() => this.#log('evidence could not be durably queued; see ingest and realm delivery health'));
   }
 
   #revoked(plan: SubscriptionPlan, status: string): void {

@@ -105,9 +105,10 @@ export async function startMockDoor(options: MockDoorOptions): Promise<MockDoor>
     if (type !== 'notification') return reply(response, 204, null);
     const frame = toFrame(payload, id, at, plans);
     if (!frame) { counts.refused++; return reply(response, 422, { error: 'not a planned subscription' }); }
+    try { await ingest.handle(frame); }
+    catch { counts.refused++; return reply(response, 503, { error: 'evidence could not be durably queued' }); }
     counts.delivered++;
-    ingest.handle(frame);
-    // Twitch only needs a 2xx; the act itself is now in Herald's hands exactly as from the conduit.
+    // Raid evidence is on disk before the webhook is acknowledged; refusals remain retryable.
     reply(response, 204, null);
   }
   await new Promise<void>((resolve, reject) => {
