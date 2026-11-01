@@ -8,6 +8,8 @@ export interface HistoricalSnapshot {
   /** Opaque host-owned, complete scene revision, including civic places, streets and castle. */
   readonly worldRevision: string;
   readonly caption: string;
+  /** Optional presentation focus; the host still applies the entire snapshot. */
+  readonly focus?: 'home' | 'market';
 }
 export interface History {
   readonly label: 'LIVE' | 'SIMULATED';
@@ -33,9 +35,9 @@ export function validateHistory(input: History): History {
     const frame = GrowthSceneFrameSchema.parse(item.frame);
     if (frame.origin !== (input.label === 'LIVE' ? 'live' : 'simulated')) throw new Error('History provenance does not match its label.');
     if (previous && (frame.kingdomId !== previous.kingdomId || frame.sequence <= previous.sequence || frame.asOf < previous.asOf)) throw new Error('History must be ordered within one kingdom.');
-    if (!item.worldRevision.trim() || !item.caption.trim() || item.homes.some(home => !home.plotId.trim() || !home.assetRevision.trim()) || new Set(item.homes.map(home => home.plotId)).size !== item.homes.length || item.homes.length !== frame.homes.length || item.homes.some(home => !frame.homes.some(view => view.plotId === home.plotId))) throw new Error('History needs complete scene revisions and a factual caption.');
+    if (item.focus !== undefined && item.focus !== 'home' && item.focus !== 'market' || !item.worldRevision.trim() || !item.caption.trim() || item.homes.some(home => !home.plotId.trim() || !home.assetRevision.trim()) || new Set(item.homes.map(home => home.plotId)).size !== item.homes.length || item.homes.length !== frame.homes.length || item.homes.some(home => !frame.homes.some(view => view.plotId === home.plotId))) throw new Error('History needs complete scene revisions and a factual caption.');
     previous = frame;
-    return { frame, homes: item.homes.map(home => ({ ...home })), worldRevision: item.worldRevision, caption: item.caption };
+    return { frame, homes: item.homes.map(home => ({ ...home })), worldRevision: item.worldRevision, caption: item.caption, ...(item.focus ? { focus: item.focus } : {}) };
   });
   return { label: input.label, snapshots };
 }

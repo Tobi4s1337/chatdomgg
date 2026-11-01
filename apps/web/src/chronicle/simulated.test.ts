@@ -13,11 +13,19 @@ describe('simulated Chronicle history', () => {
     expect(history.snapshots.filter(snapshot => snapshot.caption.includes('was built'))).toHaveLength(5);
     expect(history.snapshots.some(snapshot => !snapshot.caption.includes('was built'))).toBe(true);
     for (const snapshot of history.snapshots) {
-      expect(snapshot.worldRevision).toBe(simulatedWorldRevision(plan));
+      expect(snapshot.worldRevision).toBe(simulatedWorldRevision(plan, snapshot.frame.civic.market as 1 | 2));
+      expect(snapshot.frame.civic).toEqual({ tavern: 1, forge: 1, market: snapshot.frame.civic.market, bridge: 1, 'castle-court': 1 });
       expect(snapshot.homes).toHaveLength(plan.homes.length);
       expect(snapshot.frame.beats).toEqual([]);
     }
     expect(new Set(history.snapshots.map(snapshot => snapshot.homes.find(home => home.plotId === hero.id)!.assetRevision)).size).toBe(5);
+    const marketIndex = history.snapshots.findIndex(snapshot => snapshot.focus === 'market');
+    expect(marketIndex).toBeGreaterThan(0);
+    expect(history.snapshots[marketIndex]!.caption).toContain('market gained');
+    expect(history.snapshots[marketIndex - 1]!.frame.civic.market).toBe(1);
+    expect(history.snapshots[marketIndex]!.frame.civic.market).toBe(2);
+    expect(history.snapshots[marketIndex + 1]!.focus).toBe('home');
+    expect(history.snapshots.filter(snapshot => snapshot.focus === 'market')).toHaveLength(1);
     for (let i = 1; i < history.snapshots.length; i++) {
       const before = history.snapshots[i - 1]!, after = history.snapshots[i]!;
       if (!after.caption.includes('was built')) expect(after.homes).toEqual(before.homes);

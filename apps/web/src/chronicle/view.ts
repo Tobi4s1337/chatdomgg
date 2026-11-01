@@ -7,8 +7,8 @@ export interface ChronicleViewOptions {
   readonly history: History | null;
   readonly onClose: () => void;
   readonly simulationNote?: string;
-  /** Optional host sound, shared with the rest of the kingdom. */
-  readonly sound?: () => void;
+  /** Host UI sound, shared with the rest of the kingdom. */
+  readonly sound: (action: 'seek' | 'play' | 'close') => void;
 }
 
 /** Mount only within a host-provided replay scene. No historical beat is sent to the live feeds. */
@@ -32,7 +32,8 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
   const describeDate = (at: number) => new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(at);
   const show = (state: ReplayState) => {
     if (state.status !== 'ready') {
-      stopClock(); origin.textContent = ''; note.textContent = ''; date.textContent = '';
+      stopClock(); origin.textContent = options.history?.label === 'SIMULATED' ? 'SIMULATED · A local history' : '';
+      note.textContent = options.history?.label === 'SIMULATED' ? options.simulationNote ?? '' : ''; date.textContent = '';
       caption.textContent = state.status === 'empty' ? 'There are no recorded nights to read yet.' : 'The Chronicle is unavailable right now.';
       status.textContent = state.status === 'empty' ? 'No recorded nights' : 'History unavailable';
       play.disabled = true; seek.disabled = true; play.textContent = 'Play'; return;
@@ -49,9 +50,9 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
     if (!state.playing) stopClock();
   };
   const replay = createReplay(options.binding, show);
-  const onSeek = () => { options.sound?.(); replay.pause(); try { replay.seek(Number(seek.value)); } catch { /* The unavailable state is already displayed. */ } };
+  const onSeek = () => { options.sound('seek'); replay.pause(); try { replay.seek(Number(seek.value)); } catch { /* The unavailable state is already displayed. */ } };
   const onPlay = () => {
-    options.sound?.();
+    options.sound('play');
     if (replay.state().playing) { replay.pause(); return; }
     const current = replay.state();
     if (current.status === 'ready' && current.index === current.count - 1) {
@@ -66,7 +67,7 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
     play.removeEventListener('click', onPlay); close.removeEventListener('click', onClose);
     replay.dispose(); root.replaceChildren();
   };
-  const onClose = () => { options.sound?.(); dispose(); options.onClose(); };
+  const onClose = () => { options.sound('close'); dispose(); options.onClose(); };
   seek.addEventListener('input', onSeek); play.addEventListener('click', onPlay); close.addEventListener('click', onClose);
   try { replay.load(options.history); } catch { /* Validation already presents the unavailable state. */ }
   return { replay, dispose };

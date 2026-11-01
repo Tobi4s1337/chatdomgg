@@ -3,6 +3,7 @@ import { createNativeForgeHost } from '@chatdom/forge';
 import type { HomeTier } from '@chatdom/shared';
 import { homeFrame, terrainHeight, type SettlementHome } from '@chatdom/world';
 import { createMomentStage, type MomentStage } from '../twitch-moments-bench/stage';
+import { placeMarketContent, type Dressing } from '../kingdom/settlement-content';
 import type { HistoricalSnapshot, ReplayBinding } from './replay';
 import { simulatedHistory, simulatedWorldRevision } from './simulated';
 
@@ -38,12 +39,10 @@ function sameGeometry(left: THREE.BufferGeometry, right: THREE.BufferGeometry): 
   return true;
 }
 
-/** Find and hide precisely one installed instance; other homes in the original scene remain untouched. */
-function originalInstance(stage: MomentStage, plot: SettlementHome, originalGeometry: THREE.BufferGeometry): { mesh: THREE.InstancedMesh; index: number; matrix: THREE.Matrix4 } {
-  const house = stage.houses.find(item => item.slot === plot.slot);
-  if (!house) throw new Error('The simulated plot has no installed geometry.');
-  const desired = new THREE.Matrix4().compose(new THREE.Vector3(...house.position),
-    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), house.yaw), new THREE.Vector3(1, 1, 1));
+/** Find exactly the installed instance for an authored placement, even where other props share a mesh. */
+function originalInstance(stage: MomentStage, placement: Pick<Dressing, 'position' | 'yaw'>, originalGeometry: THREE.BufferGeometry): { mesh: THREE.InstancedMesh; index: number; matrix: THREE.Matrix4 } {
+  const desired = new THREE.Matrix4().compose(new THREE.Vector3(...placement.position),
+    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), placement.yaw), new THREE.Vector3(1, 1, 1));
   const matrix = new THREE.Matrix4();
   let result: { mesh: THREE.InstancedMesh; index: number; matrix: THREE.Matrix4 } | undefined;
   stage.parent.parent?.traverse(object => {
@@ -55,20 +54,32 @@ function originalInstance(stage: MomentStage, plot: SettlementHome, originalGeom
       }
     }
   });
-  if (!result) throw new Error('The installed simulated home could not be isolated.');
+  if (!result) throw new Error('An installed simulated asset could not be isolated.');
   return result;
+}
+
+/** Sightline to the open middle of the actual generated market, with the stall fronts in frame. */
+function marketPose(stage: MomentStage): Pose {
+  const square = stage.layout.market, centre = square.boundary.reduce((sum, p) => [sum[0]! + p[0], sum[1]! + p[1]], [0, 0]);
+  const x = centre[0]! / square.boundary.length, z = centre[1]! / square.boundary.length, y = square.elevation;
+  for (const [dx, dz] of [[32, 42], [40, -32], [-36, 40], [-40, -32]] as const) {
+    const ex = x + dx, ez = z + dz;
+    const pose: Pose = { eye: [ex, Math.max(y, terrainHeight(stage.layout, ex, ez)) + 24, ez], target: [x, y + 2, z], fov: 42 };
+    if (stage.validatePose(pose)) return pose;
+  }
+  throw new Error('The simulated market has no clear view.');
 }
 
 /**
  * A separate, read-only simulated scene. It uses the existing kingdom stage, authored houses, voxel worker,
- * terrain, lights and renderer. Only the selected home's published geometry changes; the generated castle,
- * streets, civic places and other homes are fixed scenery, not claimed historical reconstructions.
+ * terrain, lights and renderer. The selected home and market use explicit construction revisions; the generated castle,
+ * streets, other civic places and other homes are fixed scenery, not claimed historical reconstructions.
  */
 export async function createSimulatedScene(canvas: HTMLCanvasElement, options: { signal: AbortSignal; onProgress(fraction: number): void }) {
   const stage = await createMomentStage(canvas, { seed: SEED, hour: 19.6, signal: options.signal, onProgress: fraction => options.onProgress(fraction * .8) });
   const geometry: THREE.BufferGeometry[] = [];
   try {
-    const { plot, pose } = selectPlot(stage), history = simulatedHistory(stage.layout, plot);
+    const { plot, pose } = selectPlot(stage), marketView = marketPose(stage), history = simulatedHistory(stage.layout, plot);
     const variants = new Map<string, THREE.Mesh>();
     const revisions = new Map(stage.layout.homes.filter(home => home.id !== plot.id).map(home => [home.id, createNativeForgeHost(home).blueprint.id]));
     for (const [index, tier] of TIERS.entries()) {
@@ -77,23 +88,38 @@ export async function createSimulatedScene(canvas: HTMLCanvasElement, options: {
       const meshGeometry = await stage.mesh(native.blueprint); geometry.push(meshGeometry);
       const mesh = new THREE.Mesh(meshGeometry, stage.material);
       mesh.position.set(...native.position); mesh.rotation.y = native.yaw; mesh.visible = false;
-      stage.parent.add(mesh); variants.set(native.blueprint.id, mesh); options.onProgress(.8 + (index + 1) * .04);
+      stage.parent.add(mesh); variants.set(native.blueprint.id, mesh); options.onProgress(.8 + (index + 1) * .025);
     }
     if (options.signal.aborted) throw new DOMException('Chronicle closed while loading.', 'AbortError');
     const installed = createNativeForgeHost(plot).blueprint.id;
     const originalGeometry = variants.get(installed)?.geometry;
     if (!originalGeometry) throw new Error('The installed home asset is unavailable.');
-    const original = originalInstance(stage, plot, originalGeometry);
+    const house = stage.houses.find(item => item.slot === plot.slot);
+    if (!house) throw new Error('The simulated plot has no installed geometry.');
+    const original = originalInstance(stage, house, originalGeometry);
+    // The original stage contains the entire authored market. Level one retains its well and first stall;
+    // the recorded level-two construction installs the second stall, cart and stores at their real anchors.
+    const marketAssets = placeMarketContent(stage.layout.market).filter((_, index) => index === 2 || index === 3 || index === 4);
+    const marketInstances: ReturnType<typeof originalInstance>[] = [];
+    for (const [index, asset] of marketAssets.entries()) {
+      if (options.signal.aborted) throw new DOMException('Chronicle closed while loading.', 'AbortError');
+      const reference = await stage.mesh(asset.blueprint); geometry.push(reference);
+      marketInstances.push(originalInstance(stage, asset, reference));
+      options.onProgress(.925 + (index + 1) * .025);
+    }
     stage.setPose(pose);
     let disposed = false;
     const restore = () => {
       for (const mesh of variants.values()) mesh.visible = false;
       original.mesh.setMatrixAt(original.index, original.matrix); original.mesh.instanceMatrix.needsUpdate = true;
+      for (const item of marketInstances) { item.mesh.setMatrixAt(item.index, item.matrix); item.mesh.instanceMatrix.needsUpdate = true; }
     };
     const binding: ReplayBinding = {
       replace(snapshot: HistoricalSnapshot) {
         if (disposed) throw new Error('Chronicle scene is closed.');
-        if (snapshot.worldRevision !== simulatedWorldRevision(stage.layout) || snapshot.frame.origin !== 'simulated'
+        const market = snapshot.frame.civic.market;
+        if ((market !== 1 && market !== 2) || snapshot.worldRevision !== simulatedWorldRevision(stage.layout, market) || snapshot.frame.origin !== 'simulated'
+          || snapshot.frame.civic.tavern !== 1 || snapshot.frame.civic.forge !== 1 || snapshot.frame.civic.bridge !== 1 || snapshot.frame.civic['castle-court'] !== 1
           || snapshot.homes.length !== stage.layout.homes.length
           || snapshot.homes.some(home => home.plotId !== plot.id && revisions.get(home.plotId) !== home.assetRevision)) throw new Error('The simulated scene revision is unavailable.');
         const revision = snapshot.homes.find(home => home.plotId === plot.id)?.assetRevision;
@@ -102,10 +128,15 @@ export async function createSimulatedScene(canvas: HTMLCanvasElement, options: {
         for (const mesh of variants.values()) mesh.visible = mesh === chosen;
         original.mesh.setMatrixAt(original.index, new THREE.Matrix4().makeScale(0, 0, 0));
         original.mesh.instanceMatrix.needsUpdate = true;
+        for (const item of marketInstances) {
+          item.mesh.setMatrixAt(item.index, market === 2 ? item.matrix : new THREE.Matrix4().makeScale(0, 0, 0));
+          item.mesh.instanceMatrix.needsUpdate = true;
+        }
+        stage.setPose(snapshot.focus === 'market' ? marketView : pose);
       },
       clear() { if (!disposed) restore(); },
       dispose() { if (disposed) return; restore(); disposed = true; for (const mesh of variants.values()) stage.parent.remove(mesh); geometry.forEach(item => item.dispose()); stage.dispose(); },
     };
-    return { history, binding, render: (atMs: number) => { if (!disposed) stage.render(atMs); }, plotId: plot.id };
+    return { history, binding, render: (atMs: number) => { if (!disposed) stage.render(atMs); }, lightingReady: () => !disposed && stage.stats().lightingReady, plotId: plot.id };
   } catch (error) { geometry.forEach(item => item.dispose()); stage.dispose(); throw error; }
 }

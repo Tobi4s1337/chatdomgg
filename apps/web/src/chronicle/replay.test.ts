@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { KingdomIdSchema, type GrowthSceneFrame } from '@chatdom/shared';
-import { createReplay, type HistoricalSnapshot } from './replay';
+import { createReplay, validateHistory, type HistoricalSnapshot } from './replay';
 
 const snapshot = (sequence: number, revision: string): HistoricalSnapshot => ({
   frame: { version: 1, kingdomId: KingdomIdSchema.parse('123'), origin: 'simulated', sequence, asOf: sequence * 1000,
@@ -17,6 +17,10 @@ describe('Chronicle replay', () => {
     replay.seek(1); replay.seek(0); replay.seek(1);
     expect(binding.replace.mock.calls.map(([s]) => s.homes[0].assetRevision)).toEqual(['tent', 'hut', 'tent', 'hut']);
     expect(replay.state()).toMatchObject({ status: 'ready', label: 'SIMULATED', index: 1, snapshot: { caption: 'Night 2' } });
+  });
+  it('preserves a selected scene focus while validating history', () => {
+    const market = { ...snapshot(1, 'a'), focus: 'market' as const };
+    expect(validateHistory({ label: 'SIMULATED', snapshots: [market] }).snapshots[0]?.focus).toBe('market');
   });
   it('pauses and disposes without leaving replay state in the host', () => {
     const { replay, binding } = setup(); replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
