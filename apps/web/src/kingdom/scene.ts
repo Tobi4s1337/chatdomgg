@@ -504,7 +504,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const listenerRight=new THREE.Vector3();
   let forgeShade=0;
   function render(now:number){
-    if(disposed)return;try {grandLand?.update(now);const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
+    if(disposed)return;try {grandLand?.update(now);if(grandLand)canvas.dataset.hostedLand=JSON.stringify({...grandLand.stats,identity:grandLand.identity});const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&debug.ready&&!fixedTime)time+=dt;
     if(ownSimulation)simulation.advance(time);
     // A transport retry does not revoke a still-valid presence lease or send everyone home again.
@@ -649,7 +649,10 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
     const renderKey=[dockCameraDirected?now:0,poseRevision,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
-    if((loaded&&(!fixedTime||!!walk))||renderKey!==lastRenderedKey){renderPhase='drawing';renderStartedAt=performance.now();water.reflect({renderer,scene,camera,frame:++waterFrame,exclusions:atmosphere.reflectionExclusions});post.render(dt);renderCompletedAt=performance.now();renderPhase='drawn';lastRenderedKey=renderKey;if(dockVisible){dockActs?.drawn();if(dockVisuals?.finished())dockActs?.finish();}}
+    // The stream curtain covers preparation. Keep the bounded land install/update pump running,
+    // but do not redraw a hidden high-quality reflection/post stack for every installed region.
+    // The first loaded frame below still draws the full native view before announcing ready.
+    if((loaded||!useGrandLand)&&((loaded&&(!fixedTime||!!walk))||renderKey!==lastRenderedKey)){renderPhase='drawing';renderStartedAt=performance.now();water.reflect({renderer,scene,camera,frame:++waterFrame,exclusions:atmosphere.reflectionExclusions});post.render(dt);renderCompletedAt=performance.now();renderPhase='drawn';lastRenderedKey=renderKey;if(dockVisible){dockActs?.drawn();if(dockVisuals?.finished())dockActs?.finish();}}
     // The gate covers loading the place, not background light refinement. The
     // full scene and presence windows have drawn; independently scheduled light
     // workers may still be waking. Captures can wait on lightingReady separately.
@@ -680,6 +683,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   tasks.push(dressing.ready);
   tasks.push(shore.prepare());
   if(useGrandLand){
+    canvas.dataset.hostedLand=JSON.stringify({phase:'raising',kingdomId:String(options.founded!.kingdomId)});
     tasks.push(prepareHostedGrandLand({scene,camera,renderer,plan:layout,kingdomId:String(options.founded!.kingdomId),signal:abort.signal,
       materialFactory:palette=>{const material=createHostedGrandMaterial(palette,ground);sunShadows.bindReceiver(material.material);return material;},
       register:mesh=>sunShadows.register(mesh),
