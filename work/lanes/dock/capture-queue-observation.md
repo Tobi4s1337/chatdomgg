@@ -1,5 +1,13 @@
 # Capture queue observation — resumed DK10
 
+**Resolved in main's `d53d9eb`, now merged.** The shared helper uses random ticket leases
+held by kernel advisory locks, and no longer compares namespace-local PIDs. The old
+lane-owned capture41052 was cancelled and confirmed exit130 specifically for that helper
+change. Its replacement23423 remains owned by `/root/dock_evidence` and must be polled
+there. A later read-only snapshot showed five v2 tickets, all inactive; compatibility
+locks may still be held. That observation does not identify an owner or authorize touching
+another capture. The remainder of this note preserves the original diagnosis.
+
 Main's `1bdc9de` queue implementation has been synced. The lane uses the shared helper,
 lane priority, one still/short clip per acquisition, and no observation timeout. This note
 does not authorize bypassing it or removing locks/registry entries.
