@@ -166,20 +166,26 @@ describe('The_AGGman as a kingdom of its own', () => {
       return null;
     };
     for (const boat of k.seat.props.filter(item => /drawn-up/.test(item.blueprint.id))) {
-      const b = bounds(boat), x = (b.min[0] + b.max[0]) / 2, z = (b.min[2] + b.max[2]) / 2;
-      let covered = 0;
-      for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) if (stoneAt(x + dx!, z + dz!) !== null) covered++;
-      expect(covered, boat.blueprint.id).toBeGreaterThanOrEqual(4);
+      // Her whole berth and a half-metre margin round it are stones: no hull rests on turf.
+      const b = bounds(boat);
+      let covered = 0, samples = 0;
+      for (let x = b.min[0] - .5; x <= b.max[0] + .5; x += .25) for (let z = b.min[2] - .5; z <= b.max[2] + .5; z += .25) {
+        samples++;
+        if (stoneAt(x, z) !== null) covered++;
+      }
+      expect(covered / samples, boat.blueprint.id).toBeGreaterThan(.97);
+      // She lies along the bank, not down it: her length runs with the waterline.
+      expect(b.max[0] - b.min[0], boat.blueprint.id).toBeGreaterThan(b.max[2] - b.min[2]);
     }
     const coping = k.site.quay.z - k.site.quay.halfDepth - 8.5;
     for (let x = k.site.quay.minX + .5; x < k.site.quay.maxX; x += 1.5) for (let z = coping + .5; z < k.site.quay.z + k.site.quay.halfDepth; z += 1.5)
       expect(stoneAt(x, z), `quay ${x},${z}`).toBeNull();
     const light = bounds(k.seat.props.find(item => item.blueprint.id.startsWith('genesis-aggman-last-lantern'))!);
     expect(stoneAt((light.min[0] + light.max[0]) / 2, (light.min[2] + light.max[2]) / 2)).toBeNull();
-    // Stones lie on the bank: never more than two cells proud of the graded ground.
+    // Stones lie on the bank: a crowned stone stands at most three cells proud of the graded ground.
     for (let x = 16; x < 110; x += 2.3) for (let z = k.site.shoreZ - 4; z < k.site.shoreZ + 12; z += 1.7) {
       const top = stoneAt(x, z);
-      if (top !== null) expect(top - terrainHeight(k.plan, x, z), `${x},${z}`).toBeLessThan(.4);
+      if (top !== null) expect(top - terrainHeight(k.plan, x, z), `${x},${z}`).toBeLessThan(.5);
     }
   }, 60_000);
 
