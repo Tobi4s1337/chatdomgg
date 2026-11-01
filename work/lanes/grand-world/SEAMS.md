@@ -130,3 +130,53 @@ The scene inspector exposes `land.identity.recipeHash` separately from the insta
 `planRevision`. No walking or scene-receipt contract changed, and the query entry points in seam 1 are unchanged.
 The real founded scene at collision revision 11 passed an exhaustive 772,096-column drawn/physical/collision
 check. Evidence and remaining interaction proofs are in `work/evidence/grand-world/GW10.md`.
+
+## GW10 stream source boundary — 2026-11-01
+
+`/stream` requires a live founded realm receipt; staged stream playback is registered at `/-/stream` with
+one additive entry-map line. The existing internal source/provenance values and shared contracts are unchanged.
+The bench also accepts explicitly selected local realm receipts for revision/ceremony rehearsals.
+
+needs: integration update shared capture URLs (these files are outside this lane's write scope):
+
+```diff
+--- packages/testing/shots.mjs
++++ packages/testing/shots.mjs
+@@
+-      await capture('/stream', 'stream', [[1920, 1080], [1280, 720]], true);
++      await capture('/-/stream', 'stream', [[1920, 1080], [1280, 720]], true);
+```
+
+In `packages/testing/growth-handoff.mjs`, replace the middleware predicate `path==='/stream'` with
+`path==='/-/stream'` and the capture URL suffix `/stream?source=realm&kingdom=999000001` with
+`/-/stream?source=realm&kingdom=999000001`. Make those same two literal replacements in
+`packages/testing/growth-ceremony.mjs`. These staged receipts deliberately retain their original provenance;
+do not change it to live to bypass the public-stream guard. Comments referring to the capture route should
+use `/-/stream` as well.
+
+needs: signed-in walk check `http://localhost:5192/?walk=1&kingdom=129634568` during our GPU lease, with an
+authenticated isolated realm and Tobias's actual deed mapping. The private public scene proves the floor,
+representative doorway/wall and Forge/moment/raid support but cannot identify the broadcaster's owned plot.
+
+## Gather and pier requests — received 2026-11-01
+
+Read gather's `work/lanes/gather/SEAMS.md` section 2 in its worktree. This is a pending additive GW10 seam,
+not yet implemented or frozen:
+
+- Add `PlaceSite { origin: Vec3; turn: CardinalTurn; footprint: readonly [number, number] }` and optional
+  `KingdomLandInterface.places: { tavern?: PlaceSite; campfire?: PlaceSite }` on both land producers.
+  Expose a site only after proving physical support across its footprint and excluding reserved home lots,
+  roads and solids. The tavern footprint comes from gather's content export; the campfire needs its 9 m
+  clearing radius. Existing founded layout and placements must not move to make room.
+- Add gather's typed `PlaceMount`/`PlaceMounter` and optional `SceneOptions.places`, with host-owned tick,
+  resize and disposal, the shared hour, quality and local feet. Transfer `gather:` visual ownership only
+  when a registered mounter owns those placements; never leave existing geometry invisible without an owner.
+  Collision remains installed and authoritative.
+- Add stream director game cues below raid and major-moment priority. Reuse `PlaceShot` from
+  `apps/web/src/interactions/places/framing.ts`; `DirectorCueSource` still needs its concrete subscription,
+  expiry-clock and cancellation contract before both seam files can freeze it.
+
+Current `land-interface.ts` has no place sites, and the old bench's forest clearing is not a proven site in
+the real founded coordinate system. Do not substitute that bench coordinate or an unchecked centre point.
+Pier's seam file was not yet present at `/srv/chatdom/pier/work/lanes/pier/SEAMS.md`;
+read its water-anchor contract when available and add it to the same physical-land interface.

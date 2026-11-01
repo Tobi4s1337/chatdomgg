@@ -20,6 +20,7 @@ const lanePaths: Record<string, string> = {
   '/-/citizen-card':'./citizen-card/index.tsx', '/-/twitch-moments':'./twitch-moments-bench/index.tsx', '/-/campfire':'./campfire/index.tsx',
   '/-/tavern':'./tavern/index.tsx', '/-/raid-gate':'./raid-gate/index.tsx', '/-/emotes':'./emotes/index.tsx',
   '/panel': '../../panel/src/Panel.tsx', '/stream': './stream/index.tsx',
+  '/-/stream': './stream/index.tsx',
   '/-/forge-ritual':'./forge-ritual-bench/index.tsx','/-/forge-refusal':'./forge-refusal-bench/index.tsx',
   '/-/templates': './template-bench/index.tsx', '/-/citizen-behaviour': './citizen-behaviour-bench/index.tsx',
   '/-/avatars': './avatar-bench/index.tsx', '/-/forge': './forge-bench/index.tsx', '/-/audio': './audio-bench/index.tsx',
