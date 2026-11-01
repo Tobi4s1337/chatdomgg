@@ -932,60 +932,61 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
             <Show when={context() === 'lost'}>
               <p class="atlas-redraw" role="status">Redrawing the map…</p>
             </Show>
-            <Show when={selected()}>
+            <Show when={selected()} keyed>
               {(settler) => (
                 <Card
-                  settler={settler()}
-                  name={(namesTick(), settler().name)}
-                  login={(namesTick(), settler().login)}
+                  settler={settler}
+                  name={(namesTick(), settler.name)}
+                  login={(namesTick(), settler.login)}
                   names={names()}
                   world={w()}
-                  live={(liveTick(), paint?.frame ? { liveClass: paint.liveClass(settler()), startedAt: paint.startedAt(settler()), asOf: paint.frame.asOf } : null)}
+                  live={(liveTick(), paint?.frame ? { liveClass: paint.liveClass(settler), startedAt: paint.startedAt(settler), asOf: paint.frame.asOf } : null)}
                   register={register()}
                   onClose={closeCard}
-                  onRoad={(next) => openCardRoad(settler(), next)}
-                  onRetry={() => readRegister({ id: settler().id }, settler().id)}
+                  onRoad={(next) => openCardRoad(settler, next)}
+                  onRetry={() => readRegister({ id: settler.id }, settler.id)}
                   onEnter={enter}
                 />
               )}
             </Show>
-            <Show when={selectedDab() && geo() ? selectedDab() : null}>
+            <Show when={selectedDab() && geo() ? selectedDab() : null} keyed>
               {(dab) => (
                 <Show
+                  keyed
                   when={(() => {
                     const known = register();
                     return known.status === 'ready' ? known : null;
                   })()}
-                  fallback={<DabCard dab={dab()} world={w()} geo={geo()!} asOf={live()?.status.frameAsOf ?? null} onClose={closeCard} />}
+                  fallback={<DabCard dab={dab} world={w()} geo={geo()!} asOf={live()?.status.frameAsOf ?? null} onClose={closeCard} />}
                 >
                   {(known) => (
                     <WaitingCard
-                      face={known().reply.channel}
-                      state={known()}
+                      face={known.reply.channel}
+                      state={known}
                       world={w()}
-                      live={{ startedAt: dab().startedAt, asOf: live()?.status.frameAsOf ?? dab().startedAt }}
+                      live={{ startedAt: dab.startedAt, asOf: live()?.status.frameAsOf ?? dab.startedAt }}
                       onAir={true}
                       onClose={closeCard}
                       onEnter={enter}
-                      onRoad={(next) => openCardRoad(known().reply.channel, next)}
-                      onRetry={() => readRegister({ dab: dab().hash }, `dab:${dab().hash}`)}
+                      onRoad={(next) => openCardRoad(known.reply.channel, next)}
+                      onRetry={() => readRegister({ dab: dab.hash }, `dab:${dab.hash}`)}
                     />
                   )}
                 </Show>
               )}
             </Show>
-            <Show when={waiting()}>
+            <Show when={waiting()} keyed>
               {(face) => (
                 <WaitingCard
-                  face={register().status === 'ready' ? (register() as { reply: CardReply }).reply.channel : face()}
+                  face={register().status === 'ready' ? (register() as { reply: CardReply }).reply.channel : face}
                   state={register()}
                   world={w()}
                   live={(liveTick(), paint?.frame ? { startedAt: null, asOf: paint.frame.asOf } : null)}
                   onAir={false}
                   onClose={closeCard}
                   onEnter={enter}
-                  onRoad={(next) => openCardRoad(face(), next)}
-                  onRetry={() => readRegister({ id: face().id }, `waiting:${face().id}`)}
+                  onRoad={(next) => openCardRoad(face, next)}
+                  onRetry={() => readRegister({ id: face.id }, `waiting:${face.id}`)}
                 />
               )}
             </Show>

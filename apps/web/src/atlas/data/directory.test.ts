@@ -60,9 +60,20 @@ describe('register replies', () => {
   it('refuses a card for an unseen channel, another preview, extra fields and more than three roads', () => {
     expect(() => validateCard(card({ channel: unseen }), PREVIEW)).toThrow();
     expect(() => validateCard(card(), 'pv-20261030T052009Z-000000000000')).toThrow();
-    expect(() => validateCard({ ...card(), avatar: 'https://example.invalid/a.png' }, PREVIEW)).toThrow();
+    expect(() => validateCard({ ...card(), privateNotes: 'never public' }, PREVIEW)).toThrow();
     const four = Array.from({ length: 4 }, () => ({ other: unseen, sent: 1, received: 0, travellers: 1, lastAt: AT }));
     expect(() => validateCard(card({ roads: { window, total: 4, strongest: four } }), PREVIEW)).toThrow();
+  });
+
+  it('accepts short-lived card and search pictures, preserves older replies and refuses an unbounded or foreign image', () => {
+    const portrait = { url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/channel-70x70.png', freshUntil: AT + 86_400_000 };
+    expect(validateCard(card({ portrait }), PREVIEW).portrait).toEqual(portrait);
+    expect(validateSearch(search([{ channel: mapped(), portrait, average: 1, language: 'en' }]), PREVIEW).results[0]!.portrait).toEqual(portrait);
+    expect(validateCard(card(), PREVIEW).portrait).toBeUndefined();
+    expect(validateCard(card({ portrait: null }), PREVIEW).portrait).toBeNull();
+    expect(() => validateCard(card({ portrait: { ...portrait, url: 'https://example.invalid/a.png' } }), PREVIEW)).toThrow();
+    expect(() => validateCard(card({ portrait: { ...portrait, freshUntil: AT + 2 * 86_400_000 } }), PREVIEW)).toThrow(/source day/);
+    expect(() => validateSearch(search([{ channel: mapped(), portrait: { ...portrait, freshUntil: AT + 2 * 86_400_000 }, average: 1, language: 'en' }]), PREVIEW)).toThrow(/source day/);
   });
 
   it('accepts a road with one way unseen and refuses a tally with no raid', () => {
@@ -81,10 +92,10 @@ describe('register reads', () => {
   it('asks the preview’s own search, card and road paths', async () => {
     const s = answering(200, search([]));
     await fetchSearch(s.source, PREVIEW, 'Éloïse café');
-    expect(s.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/search?q=%C3%89lo%C3%AFse%20caf%C3%A9`);
+    expect(s.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/search?q=%C3%89lo%C3%AFse%20caf%C3%A9&portraits=1`);
     const c = answering(200, card());
     await fetchCard(c.source, PREVIEW, { login: 'kaicenat' });
-    expect(c.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/card/login/kaicenat`);
+    expect(c.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/card/login/kaicenat?portraits=1`);
     const r = answering(200, road());
     await fetchRoad(r.source, PREVIEW, { login: 'kaicenat' }, { login: 'chrisnxtdoor' });
     expect(r.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/road/login/kaicenat/chrisnxtdoor`);

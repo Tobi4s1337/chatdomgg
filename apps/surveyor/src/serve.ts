@@ -467,12 +467,14 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     if (searchMatch) {
       const params = new URLSearchParams(query >= 0 ? url.slice(query + 1) : '');
       const q = params.get('q') ?? '';
-      return answerDirectory(res, searchMatch[1]!, head, (register, ids, at) => register.search(q, ids, at));
+      return answerDirectory(res, searchMatch[1]!, head, (register, ids, at) => register.search(q, ids, at, params.get('portraits') === '1'));
     }
     const cardMatch = DIRECTORY_CARD.exec(path);
     if (cardMatch) {
       const lookup: Lookup = cardMatch[2] ? { id: cardMatch[2] } : cardMatch[3] ? { login: cardMatch[3] } : { dab: cardMatch[4]! };
-      return answerDirectory(res, cardMatch[1]!, head, (register, ids, at) => register.card(lookup, ids, at));
+      // Opt-in keeps older clients' strict v1 decoders usable during a rolling web/service adoption.
+      const portraits = new URLSearchParams(query >= 0 ? url.slice(query + 1) : '').get('portraits') === '1';
+      return answerDirectory(res, cardMatch[1]!, head, (register, ids, at) => register.card(lookup, ids, at, portraits));
     }
     const roadMatch = DIRECTORY_ROAD.exec(path);
     if (roadMatch) {

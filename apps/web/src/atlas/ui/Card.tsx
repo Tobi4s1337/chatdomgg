@@ -5,7 +5,7 @@ import type { Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatTime, TIER_NAMES, watchUrl } from './format';
 import { LIVE_CLASS_NAMES } from './live-line';
-import { ShieldIcon } from './marks';
+import { ChannelFaceSeal } from './Face';
 import { doorHolding, type DoorHolding } from '../data/holding';
 import { RegisterFacts, ShareButton, WatchLink, type RegisterState } from './Register';
 
@@ -72,10 +72,7 @@ export function Card(props: {
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" /></svg>
       </button>
       <header class="atlas-card-head">
-        {/* Keyed so the canvas redraws when another holding is chosen. */}
-        <Show when={props.settler.id} keyed>
-          {(id) => <ShieldIcon channelId={id} width={52} label={`Arms: ${arms()}`} />}
-        </Show>
+        <ChannelFaceSeal channelId={props.settler.id} name={props.name} portrait={props.name && props.register.status === 'ready' && props.register.reply.channel.id === props.settler.id ? props.register.reply.portrait : null} />
         <div class="atlas-card-names">
           <p class="atlas-card-status">Mapped holding · not yet founded</p>
           <h2 id="atlas-card-title" dir="auto" classList={{ 'atlas-card-unnamed': props.name === null }}>{title()}</h2>

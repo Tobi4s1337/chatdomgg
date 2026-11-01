@@ -35,7 +35,7 @@ const NOW = sweepAt(12);
 const NONE: ReadonlySet<string> = new Set();
 
 /** The standard fixture plus names in other scripts, a gambling and a gone channel, and raids touching each kind. */
-async function imported() {
+async function imported(change?: (source: FixtureSource) => void) {
   const source = FixtureSource.standard();
   source.addChannel({ id: ACCENTED, login: 'eloise_cafe', name: 'Éloïse Café', lang: 'fr', firstSweep: 0, lastSweep: 4, live: true, liveMin: 15, viewerMin: 600 });
   source.addChannel({ id: WIDE, login: 'widechannel', name: 'ＷｉｄｅＣｈａｎｎｅｌ', firstSweep: 0, lastSweep: 4, live: false, liveMin: 15, viewerMin: 450 });
@@ -48,6 +48,7 @@ async function imported() {
   source.addRaidPair(CAPITAL, GONE, 3, 900, sweepAt(1));
   source.addRaidPair(CAPITAL, UNSEEN, 1, 12, sweepAt(3));
   source.addRaidPair(SMALL, CAPITAL, 1, 6, sweepAt(4));
+  change?.(source);
   const dataDir = tempDataDir();
   cleanup.push(() => source.close(), () => rmSync(dataDir, { recursive: true, force: true }));
   const outcome = await runImport(configFor(source, dataDir), { fetchImpl: fakeSurveyor({ status: source.status(), 'raids/recent': RECENT }).fetchImpl, now: clock(sweepAt(10)) });
@@ -92,6 +93,23 @@ describe('search keys', () => {
 });
 
 describe('the register of a preview', () => {
+  it('uses the avatar refresh clock for cards and search, never a later live/name confirmation', async () => {
+    const avatarAt = sweepAt(1);
+    const { dataDir, preview } = await imported(source => source.db.prepare('UPDATE channels SET facts_at = ? WHERE id = ?').run(avatarAt, CAPITAL));
+    const register = await loadDirectory(dataDir, preview);
+    const fresh = ok(register.card({ id: CAPITAL }, NONE, NOW));
+    expect(fresh.portrait).toEqual({ url: expect.stringMatching(/^https:\/\/static-cdn\.jtvnw\.net\//), freshUntil: avatarAt + DAY });
+    expect(fresh.channel.freshUntil).toBeGreaterThan(fresh.portrait!.freshUntil);
+    expect(ok(register.search('fixture_capital', NONE, NOW)).results[0]!.portrait).toEqual(fresh.portrait);
+    expect(ok(register.card({ id: SMALL }, NONE, NOW)).portrait).toBeNull();
+    expect(ok(register.card({ id: CAPITAL }, NONE, avatarAt + DAY - 1)).portrait).not.toBeNull();
+    expect(ok(register.card({ id: CAPITAL }, NONE, avatarAt + DAY)).portrait).toBeNull();
+    expect(ok(register.search('fixture_capital', NONE, avatarAt + DAY)).results[0]!.portrait).toBeNull();
+    expect(register.card({ id: CAPITAL }, new Set([CAPITAL]), NOW)).toBe('not-found');
+    expect(ok(register.search('fixture_capital', new Set([CAPITAL]), NOW)).results).toEqual([]);
+    expect(JSON.stringify(ok(register.road({ id: CAPITAL }, { id: TOWN }, NONE, NOW)))).not.toMatch(/portrait|jtvnw/);
+  });
+
   it('finds names in every script with their original spelling, best match first, and only public channels', async () => {
     const { dataDir, preview, revision } = await imported();
     const register = await loadDirectory(dataDir, preview);
@@ -208,6 +226,13 @@ describe('register routes', () => {
     expect(search.status).toBe(200);
     expect(search.headers['cache-control']).toBe('no-cache');
     expect(SearchReplySchema.parse(JSON.parse(search.text)).results[0]!.channel.id).toBe(ACCENTED);
+    expect(JSON.parse(search.text).results[0]).not.toHaveProperty('portrait');
+    const picturedSearch = JSON.parse((await get(port, `${base}/search?q=fixture_capital&portraits=1`)).text);
+    expect(picturedSearch.results[0].portrait).toMatchObject({ freshUntil: sweepAt(4) + DAY });
+    const olderCard = JSON.parse((await get(port, `${base}/card/${CAPITAL}`)).text);
+    expect(olderCard).not.toHaveProperty('portrait');
+    const picturedCard = JSON.parse((await get(port, `${base}/card/${CAPITAL}?portraits=1`)).text);
+    expect(picturedCard.portrait).toEqual(picturedSearch.results[0].portrait);
 
     expect(CardReplySchema.parse(JSON.parse((await get(port, `${base}/card/${CAPITAL}`)).text)).channel.id).toBe(CAPITAL);
     expect(CardReplySchema.parse(JSON.parse((await get(port, `${base}/card/login/fixture_town`)).text)).channel.id).toBe(TOWN);

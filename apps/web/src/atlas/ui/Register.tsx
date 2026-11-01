@@ -4,6 +4,7 @@ import { waitingDoorHolding, type DoorHolding } from '../data/holding';
 import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatMoment, formatTime, TIER_NAMES, watchUrl } from './format';
 import { ShieldIcon } from './marks';
+import { ChannelFaceSeal } from './Face';
 
 /** What the page knows of the open card's register entry. */
 export type RegisterState<T> =
@@ -250,7 +251,7 @@ export function WaitingCard(props: {
     <section class="atlas-card" aria-labelledby="atlas-card-title" data-kind="waiting">
       <CloseButton ref={close} onClose={props.onClose} />
       <header class="atlas-card-head">
-        <PlaceMark face={props.face} onAir={props.onAir} size={48} />
+        <ChannelFaceSeal channelId={props.face.id} name={props.face.name} portrait={card()?.channel.id === props.face.id ? card()?.portrait : null} />
         <div class="atlas-card-names">
           <p class="atlas-card-status">{props.onAir ? 'On air · no land of its own' : 'Waiting · no land of its own'}</p>
           <h2 id="atlas-card-title" dir="auto" classList={{ 'atlas-card-unnamed': !props.face.name }}>{faceName(props.face)}</h2>

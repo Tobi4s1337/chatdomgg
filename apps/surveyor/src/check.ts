@@ -150,7 +150,7 @@ export function checkRevisionDir(dir: string): CheckReport {
       if (channel.live && channel.lastLiveAt !== manifest.asOf) problems.add(`${at}: live but not seen by the last sweep.`);
       if (channel.stream && manifest.asOf - channel.lastLiveAt > RAW_CONTENT_MAX_AGE_MS) problems.add(`${at}: keeps stream facts past retention.`);
       if (channel.stream?.startedAt != null && channel.stream.startedAt > manifest.asOf) problems.add(`${at}: stream starts after the cut.`);
-      if (channel.avatarUrl && manifest.asOf - channel.factsAt > RAW_CONTENT_MAX_AGE_MS) problems.add(`${at}: keeps an avatar past retention.`);
+      if (channel.avatarUrl && manifest.asOf - (channel.avatarFactsAt ?? channel.factsAt) > RAW_CONTENT_MAX_AGE_MS) problems.add(`${at}: keeps an avatar past retention.`);
       if (channel.kingdomCandidate !== isKingdomCandidate(channel.liveMinutes, channel.viewerMinutes)) {
         problems.add(`${at}: candidate flag disagrees with its average.`);
       }

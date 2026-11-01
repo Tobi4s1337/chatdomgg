@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { DisplayNameSchema, EpochMsSchema, KingdomIdSchema, TwitchLoginSchema, UIntSchema } from '@chatdom/shared';
-import { RevisionIdSchema } from '../export/schema';
+import { AvatarUrlSchema, RevisionIdSchema } from '../export/schema';
 import { PreviewIdSchema } from '../preview/schema';
 
 /**
@@ -51,6 +51,10 @@ export const ChannelFaceSchema = z.strictObject({
 });
 export type ChannelFace = z.infer<typeof ChannelFaceSchema>;
 
+/** The source avatar's own expiry; never the name freshness clock or time of serving. */
+export const ChannelPortraitSchema = z.strictObject({ url: AvatarUrlSchema, freshUntil: EpochMsSchema });
+export type ChannelPortrait = z.infer<typeof ChannelPortraitSchema>;
+
 const Reply = {
   version: z.literal(1),
   preview: PreviewIdSchema,
@@ -62,6 +66,7 @@ const Reply = {
 
 export const SearchResultSchema = z.strictObject({
   channel: ChannelFaceSchema,
+  portrait: ChannelPortraitSchema.nullable().optional(),
   /** Observed average audience over the survey window, rounded. */
   average: UIntSchema,
   language: z.string().min(1).max(16),
@@ -111,6 +116,7 @@ export const CardReplySchema = z.strictObject({
   ...Reply,
   kind: z.literal(`${DIRECTORY_KIND}-card`),
   channel: ChannelFaceSchema,
+  portrait: ChannelPortraitSchema.nullable().optional(),
   average: UIntSchema,
   language: z.string().min(1).max(16),
   firstSeenAt: EpochMsSchema,

@@ -2,7 +2,7 @@ import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switc
 import { DirectoryError, fetchSearch, type SearchReply, type SearchResult } from '../data/directory';
 import type { PreviewSource, PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, TIER_NAMES } from './format';
-import { PlaceMark } from './Register';
+import { ChannelFaceSeal } from './Face';
 
 type Phase =
   | { kind: 'idle' }
@@ -217,7 +217,7 @@ export function Search(props: {
                       on:pointerdown={(event) => event.preventDefault()}
                       on:click={() => choose(result)}
                     >
-                      <PlaceMark face={result.channel} onAir={props.onAir(result)} size={26} />
+                      <ChannelFaceSeal channelId={result.channel.id} name={result.channel.name} portrait={result.portrait} compact />
                       <span class="atlas-search-text">
                         <span class="atlas-search-name" dir="auto">
                           {result.channel.name}

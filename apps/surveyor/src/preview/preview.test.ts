@@ -123,7 +123,8 @@ function synthesize(plans: readonly LanguagePlan[], seed: number, revision = 'ob
       live: false,
       stream: opts.stream ?? null,
       categories: categories.sort((a, b) => compareIds(a.gameId, b.gameId)),
-      avatarUrl: null,
+      avatarUrl: 'https://static-cdn.jtvnw.net/jtv_user_pictures/preview-fresh-70x70.png',
+      avatarFactsAt: asOf - HOUR,
       factsAt: asOf - HOUR,
       goneAt: opts.gone ? asOf - 2 * HOUR : null,
       contentClassification: 'unknown',
@@ -447,6 +448,7 @@ describe('survey preview build', () => {
   it('R16: the immutable files hold geometry by channel ID and no raw name; names.json alone carries them, dated', () => {
     const { world, chunks, names, all } = decoded;
     const immutable = ['world.json', ...world.regions.map((r) => r.chunk.path)].map((name) => new TextDecoder().decode(preview.files.get(name)!)).join('\n');
+    for (const bytes of preview.files.values()) expect(new TextDecoder().decode(bytes)).not.toMatch(/jtvnw\.net|avatarUrl|avatarFactsAt|portrait/);
     for (const holding of all) {
       expect(immutable.includes(`"${holding.login}"`), holding.login).toBe(false);
       expect(immutable.includes(`"${holding.name}"`), holding.name).toBe(false);

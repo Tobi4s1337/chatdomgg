@@ -100,6 +100,7 @@ function projectChannel(row: SourceChannelRow, asOf: number, categories: Map<str
     } : null,
     categories: categories.get(id) ?? [],
     avatarUrl: avatar.success && avatarFresh ? avatar.data : null,
+    avatarFactsAt: avatar.success && avatarFresh ? row.facts_at : null,
     factsAt,
     goneAt: row.gone_at,
     contentClassification: 'unknown',
