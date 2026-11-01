@@ -45,7 +45,8 @@ export function validateHistory(input: History): History {
     const frame = GrowthSceneFrameSchema.parse(item.frame);
     if (frame.origin !== (input.label === 'LIVE' ? 'live' : 'simulated')) throw new Error('History provenance does not match its label.');
     if (previous && (frame.kingdomId !== previous.kingdomId || frame.sequence <= previous.sequence || frame.asOf < previous.asOf)) throw new Error('History must be ordered within one kingdom.');
-    if (item.focus !== undefined && item.focus !== 'home' && item.focus !== 'market' || !item.worldRevision.trim() || !item.caption.trim() || item.homes.some(home => !home.plotId.trim() || !home.assetRevision.trim()) || new Set(item.homes.map(home => home.plotId)).size !== item.homes.length || item.homes.length !== frame.homes.length || item.homes.some(home => !frame.homes.some(view => view.plotId === home.plotId))) throw new Error('History needs complete scene revisions and a factual caption.');
+    const framePlots = new Set(frame.homes.map(home => home.plotId));
+    if (item.focus !== undefined && item.focus !== 'home' && item.focus !== 'market' || !item.worldRevision.trim() || !item.caption.trim() || item.homes.some(home => !home.plotId.trim() || !home.assetRevision.trim()) || new Set(item.homes.map(home => home.plotId)).size !== item.homes.length || item.homes.length !== frame.homes.length || item.homes.some(home => !framePlots.has(home.plotId))) throw new Error('History needs complete scene revisions and a factual caption.');
     previous = frame;
     // A room frame's recent beats are presentation tail, not a historical fact log.
     // Never hand them to a replay binding where they could become live ceremonies.
@@ -61,10 +62,18 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
     ? { status: 'ready', label: history.label, index, count: history.snapshots.length, snapshot: history.snapshots[index]!, playing }
     : { status: 'empty', label: history.label, playing: false } : { status: 'unavailable', playing: false };
   const emit = () => onChange(state());
-  const apply = (snapshot: HistoricalSnapshot) => {
-    try { binding.replace(snapshot); } catch (error) {
-      history = undefined; playing = false; binding.clear(); emit(); throw error;
+  const clearAndEmit = () => {
+    try { binding.clear(); } catch (error) { history = undefined; playing = false; throw error; } finally { emit(); }
+  };
+  const failUnavailable = (cause: unknown): never => {
+    history = undefined; playing = false;
+    try { clearAndEmit(); } catch (cleanupError) {
+      throw new AggregateError([cause, cleanupError], 'Chronicle failed and its presentation could not be cleared.', { cause: cleanupError });
     }
+    throw cause;
+  };
+  const apply = (snapshot: HistoricalSnapshot) => {
+    try { binding.replace(snapshot); } catch (error) { failUnavailable(error); }
   };
   return {
     state,
@@ -73,16 +82,16 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
       // Invalid data is unavailable, not a stale successful replay.
       let next: History | undefined;
       try { next = input ? validateHistory(input) : undefined; } catch (error) {
-        history = undefined; playing = false; binding.clear(); emit(); throw error;
+        failUnavailable(error);
       }
       history = next; index = 0; playing = false;
-      if (history?.snapshots.length) apply(history.snapshots[0]!); else binding.clear();
-      emit();
+      if (history?.snapshots.length) { apply(history.snapshots[0]!); emit(); } else clearAndEmit();
     },
     seek(next: number) {
       assertOpen();
       if (!history?.snapshots.length || !Number.isFinite(next)) return;
       index = Math.max(0, Math.min(history.snapshots.length - 1, Math.round(next)));
+      if (index === history.snapshots.length - 1) playing = false;
       apply(history.snapshots[index]!); emit();
     },
     play() { assertOpen(); if (history && index < history.snapshots.length - 1) playing = true; emit(); },

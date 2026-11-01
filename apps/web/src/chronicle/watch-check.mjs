@@ -1,21 +1,18 @@
-import { spawn, execFile } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { chromium } from '@playwright/test';
-import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
-import { assertCapturePort } from '../../../../packages/testing/capture-ports.mjs';
+import { startChroniclePreview } from './preview.mjs';
 
 // Local verification only. The recording is evidence of a SIMULATED fixture, not a product video.
-const root = resolve(import.meta.dirname, '../../../..');
-const web = resolve(root, 'apps/web');
 const evidence = resolve(import.meta.dirname, 'evidence');
 const rawDir = resolve(evidence, 'watch-raw');
 const output = resolve(evidence, 'chronicle-simulated-30s.webm');
-const port = assertCapturePort(5171);
 const run = promisify(execFile);
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
-let server, browser, release;
+let server, browser, release, failure;
+const cleanupErrors = [];
 
 async function ready(page, base) {
   const errors = [];
@@ -61,12 +58,13 @@ async function accessibility(browser, base, width, height) {
       const caption = document.querySelector('.chronicle-caption');
       const seek = document.querySelector('.chronicle-track input').getBoundingClientRect();
       const close = document.querySelector('.chronicle-close').getBoundingClientRect();
+      const play = document.querySelector('.chronicle-play').getBoundingClientRect();
       return { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom,
         overflow: document.documentElement.scrollWidth > window.innerWidth,
-        font: Number.parseFloat(window.getComputedStyle(caption).fontSize), seekHeight: seek.height, closeWidth: close.width, closeHeight: close.height };
+        font: Number.parseFloat(window.getComputedStyle(caption).fontSize), seekHeight: seek.height, closeWidth: close.width, closeHeight: close.height, playWidth: play.width, playHeight: play.height };
     });
     assert(!sizes.overflow && sizes.left >= 0 && sizes.top >= 0 && sizes.right <= width && sizes.bottom <= height, `Chronicle is clipped or overflows at ${width}x${height}: ${JSON.stringify(sizes)}`);
-    assert(sizes.font >= 18 && sizes.seekHeight >= 44 && sizes.closeWidth >= 44 && sizes.closeHeight >= 44, `Text or touch targets are too small at ${width}x${height}: ${JSON.stringify(sizes)}`);
+    assert(sizes.font >= 18 && sizes.seekHeight >= 44 && sizes.closeWidth >= 44 && sizes.closeHeight >= 44 && sizes.playWidth >= 44 && sizes.playHeight >= 44, `Text or touch targets are too small at ${width}x${height}: ${JSON.stringify(sizes)}`);
     assert((await slider.getAttribute('aria-valuetext'))?.includes('entry 1 of'), 'Slider has no understandable current entry');
     await close.focus(); await page.keyboard.press('Tab');
     assert(await play.evaluate(element => element === document.activeElement), 'Keyboard does not reach Play after Close');
@@ -98,6 +96,33 @@ async function accessibility(browser, base, width, height) {
     await slider.focus(); await page.keyboard.press('Escape');
     assert(await page.getByText('The Chronicle is closed.').isVisible(), 'Escape did not close the Chronicle');
     assert(await page.locator('#chronicle-test-opener').evaluate(element => element === document.activeElement), 'Close did not restore host focus');
+    const recovery = await page.evaluate(async () => {
+      const { mountChronicle } = await import('/src/chronicle/view.ts');
+      const opener = document.querySelector('#chronicle-test-opener');
+      const results = [];
+      for (const failure of ['clear', 'dispose']) {
+        opener.focus();
+        const host = document.createElement('div'); document.body.append(host);
+        let closed = false, reported = false, disposed = false;
+        const view = mountChronicle(host, { history: window.__chronicleHistory,
+          binding: { replace() {}, clear() { if (failure === 'clear') throw new Error('clear failed'); },
+            dispose() { disposed = true; if (failure === 'dispose') throw new Error('dispose failed'); } },
+          sound() { throw new Error('sound failed'); }, onClose(error) { opener.hidden = false; closed = true; reported = error instanceof Error; } });
+        const input = host.querySelector('input'); input.value = '1'; input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        const advanced = view.replay.state().status === 'ready' && view.replay.state().index === 1;
+        const button = host.querySelector('.chronicle-close'); button.focus(); opener.hidden = true; button.click();
+        results.push(advanced && closed && reported && disposed && !host.hasChildNodes() && document.activeElement === opener);
+        host.remove();
+      }
+      const host = document.createElement('div'); document.body.append(host);
+      const first = window.__chronicleHistory.snapshots[0];
+      const mixed = mountChronicle(host, { history: { label: 'LIVE', snapshots: [{ ...first, frame: { ...first.frame, origin: 'live' } }] },
+        presentationLabel: 'SIMULATED', simulationNote: 'Simulated scene', binding: { replace() {}, clear() {}, dispose() {} }, sound() {}, onClose() {} });
+      results.push(host.querySelector('.chronicle-origin').textContent.includes('SIMULATED') && host.querySelector('.chronicle-note').textContent === 'Simulated scene');
+      mixed.dispose(); host.remove();
+      return results.every(Boolean);
+    });
+    assert(recovery, 'Host sound or cleanup failure prevented controls, close, error reporting or focus restoration');
     if (errors.length) throw new Error(errors.join('\n'));
     console.log(`${width}x${height}: readable bounds, labels, keyboard, pause/resume, empty/unavailable, Escape and focus restoration passed with reduced motion`);
   } finally { await context.close(); }
@@ -133,22 +158,26 @@ async function record(browser, base) {
   console.log(`Recorded ${finalDuration.toFixed(2)} seconds at ${output}. Playwright video has no audio; this does not verify sound. Watch the entire file before accepting CH02.`);
 }
 
+const checkIndex = process.argv.indexOf('--check');
+const check = process.argv.includes('--record') ? 'record' : (checkIndex < 0 ? 'desktop' : process.argv[checkIndex + 1]);
+if (!['desktop', 'phone', 'record'].includes(check)) throw new Error('Use --check desktop|phone or --record');
+
 try {
-  release = await acquireCaptureLock();
-  server = spawn(process.execPath, [resolve(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: web, stdio: ['ignore', 'pipe', 'pipe'] });
-  const base = await new Promise((accept, reject) => {
-    const timeout = globalThis.setTimeout(() => reject(new Error('Vite did not start')), 30_000);
-    let output = '';
-    const data = chunk => { output += chunk; const match = output.match(/Local:\s*(https?:\/\/127\.0\.0\.1:\d+\/)/); if (match) { globalThis.clearTimeout(timeout); accept(match[1]); } };
-    server.stdout.on('data', data); server.stderr.on('data', data);
-    server.once('exit', code => { globalThis.clearTimeout(timeout); reject(new Error(`Vite exited ${code}: ${output}`)); });
-  });
+  let base;
+  ({ server, base, release } = await startChroniclePreview());
   await mkdir(evidence, { recursive: true });
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-  for (const [width, height] of [[1440, 900], [390, 844]]) await accessibility(browser, base, width, height);
-  await record(browser, base);
+  if (check === 'record') await record(browser, base);
+  else await accessibility(browser, base, ...(check === 'desktop' ? [1440, 900] : [390, 844]));
+} catch (error) {
+  failure = error;
 } finally {
-  await browser?.close();
-  if (server && server.exitCode === null) { server.kill('SIGTERM'); await new Promise(resolve => server.once('exit', resolve)); }
-  await release?.();
+  try { await browser?.close(); } catch (error) { cleanupErrors.push(error); }
+  try {
+    if (server && server.exitCode === null && server.signalCode === null) { server.kill('SIGTERM'); await new Promise(resolve => server.once('exit', resolve)); }
+  } catch (error) { cleanupErrors.push(error); }
+  try { await release?.(); } catch (error) { cleanupErrors.push(error); }
 }
+if (failure && cleanupErrors.length) throw new AggregateError([failure, ...cleanupErrors], 'Capture and cleanup both failed');
+if (failure) throw failure;
+if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Capture cleanup failed');
