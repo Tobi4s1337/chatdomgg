@@ -98,7 +98,12 @@ describe('kingdom soul', () => {
     const sample = createSoulSampler(config);
     const start = time(4, 2) + SOUL_DUSK_HOUR * 3_600_000;
     const a = sample(start + 1000); const b = sample(start + 2000);
-    expect(a.weather).toBe(b.weather);
+    expect(a.weather).not.toEqual(b.weather);
+    const boundaryBefore = sample(start + 59_999).weather;
+    const boundaryAfter = sample(start + 60_001).weather;
+    for (const key of Object.keys(boundaryBefore) as (keyof typeof boundaryBefore)[]) {
+      expect(Math.abs(boundaryBefore[key] - boundaryAfter[key])).toBeLessThan(.001);
+    }
     const other = createSoulSampler(config);
     other(start + 59_000);
     expect(other(start + 2000).weather).toEqual(b.weather);

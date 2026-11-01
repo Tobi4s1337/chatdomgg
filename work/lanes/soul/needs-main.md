@@ -1,15 +1,15 @@
 # SO10 — live kingdom seam
 
-`main-soul.patch` is an exact proposed patch against the lane's base. `git apply --check work/lanes/soul/main-soul.patch` passes. It is a proposal, not an applied or live-tested change: kingdom, stream, and renderer source remain main-owned.
+`main-soul.patch` is refreshed against the current main-owned files. `git apply --check work/lanes/soul/main-soul.patch` passes after the main sync. It is a proposal, not an applied or live-tested change: kingdom, stream, and renderer source remain main-owned.
 
 ## What the patch connects
 
 - `Kingdom` and `SceneOptions` accept `SoulSceneBinding`. Stream mounting forces its stream mix.
-- The scene owns `createSoulSceneHost`, advances it with absolute time and real present windows, supplies the current camera listener, feeds civic emitters to its existing light field, and disposes the layer with the scene.
+- The scene owns `createSoulSceneHost`, advances it with absolute time and real present windows, supplies the existing walk/camera listener, feeds civic emitters to its existing light field and water reflections, and disposes the layer with the scene.
 - The sound owner exposes its existing, unlocked, audible host. Soul creates no context and replaces the old air/water ambience only while mounted. Hidden, muted and closed hosts return null.
-- Witnessed moment sounds duck the land/music for their bounded cue duration. The host also exposes `duck({ depthDb, seconds })` for main's Voice consumer; a rendered frame never cancels an active duck.
+- Witnessed moment sounds schedule ducking at the cue time for their bounded duration; canceling the cue cancels pending ducking. The host also exposes `duck({ depthDb, seconds })` for main's Voice consumer; a rendered frame never cancels an active duck.
 - Existing clay shader uniforms receive wetness and snow. The proposed shader extension darkens exposed roof/stone/terrain and applies snow to upward exposed roof/terrain faces. Zero weights retain the existing scene. This shader proposal still needs main's real scene compilation and visual review; the soul review demonstrates the independent standard-material surface adapter.
-- The director's sky hour stays authoritative. Keepers and weather follow absolute kingdom time, rather than a client's elapsed animation. Only explicitly simulated fixed scenes may supply `soulEpochMs` for evidence.
+- The director retains authority over the sky, including the go-live turn to dusk. `soulClock` is an optional absolute kingdom epoch callback; without one the proposal falls back to `Date.now()` for offline use. Main must supply a continuous authoritative kingdom clock coordinated with the director's go-live dusk transition and the binding's UTC offset, then demonstrate that weather and routines remain coherent with the sky through that transition and across midnight. Do not derive the clock from a frozen manual sky hour. Only simulated fixed evidence can override it with `soulEpochMs`. This seam does not itself solve clock coordination.
 
 ## needs: supply installed civic sites, then demonstrate the actual walk and stream
 
@@ -19,4 +19,4 @@ Main must construct and pass a `SoulSceneBinding` from the founded kingdom's act
 
 This binding is deliberately not guessed from a plot count, a random street or an undocumented shared-contract field. No shared contract has been changed in this lane. The review route is an explicitly simulated district using the same world/audio modules and surface adapter; it is not proof that main's public kingdom has mounted them.
 
-After applying and binding, main should look at the existing kingdom and stream at dawn, rain, dusk, night and winter (1440×900, 390×844 and 1920×1080), walk both keeper routes, check collisions and civic-light cost, and hear the stream mix under a real voice. Until that seam is installed and demonstrated, the PRD's whole-kingdom SO10 checkbox remains open.
+The refreshed proposal has only been dry-run, not applied, compiled, rendered, or heard in main. In particular the new shader and coexistence with growth/dock light sources remain unproven. After applying and binding, main should look at the existing kingdom and stream at dawn, rain, dusk, night and winter (1440×900, 390×844 and 1920×1080), walk both keeper routes, check collisions and civic-light cost, and hear the stream mix under a real voice. Until that seam is installed and demonstrated, the PRD's whole-kingdom SO10 checkbox remains open.
