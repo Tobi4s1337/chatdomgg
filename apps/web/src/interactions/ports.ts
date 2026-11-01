@@ -42,8 +42,19 @@ export interface InteractionFeedback {
  */
 export interface InteractionPlaces {
   open(accepted: { readonly action: RealmInteractionAction; readonly record: InteractionRecord }, closed: () => void): InteractionView | null;
+  /**
+   * The room says you are at home on this plot (after "Go inside", or a reload that put you back inside). The home's
+   * interior presentation runs for exactly as long as that holds; walking and the walking camera carry on. `door` is
+   * the record you came in by, with the installed home revision. Null when no interior presentation is installed.
+   */
+  home?(home: { readonly plotId: string; readonly door: InteractionRecord | null }): { close(): void } | null;
 }
 export interface InteractionView {
+  /**
+   * The place's tick while it holds the camera (its framing eases the scene camera here). Called first in the
+   * controller's frame, so the look, picks and the prompt use the camera that draws this frame.
+   */
+  frame?(now: number): void;
   /** Close presentation only. Never cancels durable work (a Forge request in flight, a game in progress). */
   close(): void;
 }

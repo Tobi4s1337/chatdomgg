@@ -11,10 +11,13 @@ export interface InteractionActor {
   /** Plot of the installed deed this person owns, or null. Never a slot, a name or a browser choice. */
   readonly ownedPlotId: string | null;
 }
-export type InteractionBlock = 'seated' | 'wrong-zone' | 'occupied' | 'not-yours' | 'not-inside';
+export type InteractionBlock = 'seated' | 'wrong-zone' | 'occupied' | 'not-yours' | 'not-inside' | 'blocked';
 export type InteractionLegality =
   | { readonly legal: true; readonly action: RealmInteractionAction }
   | { readonly legal: false; readonly action: RealmInteractionAction; readonly reason: InteractionBlock };
+
+/** What the law reads of a record. `blocked` is a home door's honest "not at this revision". */
+export type InteractionLawRecord = Pick<InteractionRecord, 'target' | 'zone'> & { readonly blocked?: InteractionRecord['blocked'] };
 
 export const STANDING: RealmInteractionState = Object.freeze({ revision: 0, mode: 'standing', targetId: null, plotId: null });
 
@@ -23,7 +26,7 @@ export const STANDING: RealmInteractionState = Object.freeze({ revision: 0, mode
  * Reach, occlusion and approach clearance are physical checks made separately; this is the family/state law.
  * While seated, your own seat offers `stand` and everything else waits until you stand.
  */
-export function interactionLegality(actor: InteractionActor, record: Pick<InteractionRecord, 'target' | 'zone'>, occupant: RealmSeat | null): InteractionLegality {
+export function interactionLegality(actor: InteractionActor, record: InteractionLawRecord, occupant: RealmSeat | null): InteractionLegality {
   const { target } = record;
   const action = ACTION_FOR_KIND[target.kind];
   if (actor.state.mode === 'seated') {
@@ -36,17 +39,19 @@ export function interactionLegality(actor: InteractionActor, record: Pick<Intera
     case 'anvil':
       return { legal: true, action };
     case 'home-door':
-      return actor.ownedPlotId !== null && target.plotId === actor.ownedPlotId ? { legal: true, action } : { legal: false, action, reason: 'not-yours' };
+      // Ownership first: a neighbour learns nothing about the inside of a home that is not theirs.
+      if (actor.ownedPlotId === null || target.plotId !== actor.ownedPlotId) return { legal: false, action, reason: 'not-yours' };
+      return record.blocked ? { legal: false, action, reason: 'blocked' } : { legal: true, action };
     case 'home-exit':
       return actor.state.mode === 'interior' && actor.state.plotId === target.plotId ? { legal: true, action } : { legal: false, action, reason: 'not-inside' };
   }
 }
 /** The legal actions for this target: empty, or exactly one. */
-export function legalInteractionActions(actor: InteractionActor, record: Pick<InteractionRecord, 'target' | 'zone'>, occupant: RealmSeat | null): readonly RealmInteractionAction[] {
+export function legalInteractionActions(actor: InteractionActor, record: InteractionLawRecord, occupant: RealmSeat | null): readonly RealmInteractionAction[] {
   const legality = interactionLegality(actor, record, occupant);
   return legality.legal ? [legality.action] : [];
 }
 /** The frozen refusal vocabulary for each blocked rule. */
 export function refusalFor(reason: InteractionBlock): Extract<RealmInteractionResult, { kind: 'refused' }>['reason'] {
-  return reason === 'occupied' ? 'occupied' : reason === 'not-yours' || reason === 'seated' ? 'forbidden' : 'unreachable';
+  return reason === 'occupied' ? 'occupied' : reason === 'not-yours' || reason === 'seated' ? 'forbidden' : reason === 'blocked' ? 'unavailable' : 'unreachable';
 }
