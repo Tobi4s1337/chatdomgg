@@ -52,6 +52,36 @@ function crenellations(b: KitBuilder, x0: number, x1: number, y: number, z: numb
   for (let x = x0 + 1; x < x1 - 1; x += 6) b.box(x, y + 2, z, Math.min(3, x1 - x), 3, thickness, CLAY.stoneLight);
 }
 
+/** A broken outcrop: broad beds are cut into offset, shallow ledges. The central
+ * mass supports the plinth; coarse folds break the outline without cell noise. */
+function bedrock(b: KitBuilder): void {
+  const beds = [
+    { y: 0, h: 3, r: 44, colour: CLAY.stoneDark, phase: 0 },
+    { y: 3, h: 3, r: 43, colour: '#8b7e7b', phase: 1.4 },
+    { y: 6, h: 3, r: 41, colour: '#9d8e83', phase: 2.1 },
+    { y: 9, h: 2, r: 40, colour: '#a79889', phase: 3.6 },
+  ] as const;
+  // Each run is a whole geological band. One long slanted break and two large
+  // folds make the rock feel fractured, while ensuring no part exceeds r=46.
+  for (const bed of beds) for (let z = -42; z <= 42; z++) {
+    const zz = z / (bed.r * .93);
+    if (Math.abs(zz) >= 1) continue;
+    const half = Math.sqrt(1 - zz * zz) * bed.r;
+    const fold = 1.8 * Math.sin(z * .13 + bed.phase) + 1.2 * Math.sin(z * .063 - bed.phase);
+    const cut = z > -18 && z < 10 ? 2 : z > 25 ? -2 : 0;
+    const lo = Math.max(-46, Math.ceil(-half + fold - 1));
+    const hi = Math.min(45, Math.floor(half + fold + cut));
+    if (hi >= lo) b.box(lo, bed.y, z, hi - lo + 1, bed.h, 1, bed.colour);
+  }
+  // Solid support is hidden under the castle and does not form its outer edge.
+  b.box(-32, 0, -25, 64, 11, 50, '#9d8e83');
+  // A few broad, shaded moss seams rest on exposed ledges rather than speckling rock.
+  b.box(-32, 6, -31, 10, 1, 3, '#727e5b');
+  b.box(25, 6, 30, 9, 1, 3, '#727e5b');
+  b.box(-38, 9, 9, 3, 1, 9, '#7c865e');
+  b.box(33, 9, -22, 3, 1, 8, '#7c865e');
+}
+
 /**
  * An unoccupied architectural study for the castle's surrounding visual silhouette. The caller must
  * fit it around the installed castle/physical supports; it is never an authoritative replacement.
@@ -62,10 +92,8 @@ export function createCitadel(seedKey: string): ArtisanKit {
   const banner = rnd() < 0.5 ? CLAY.banner : '#a96876';
   const high = Math.floor(rnd() * 5);
 
-  // Rock tiers break the cliff edge into readable, gently offset strata.
-  round(b, 0, 0, 0, 46, 4, CLAY.stoneDark);
-  round(b, -2, 4, 1, 42, 4, '#8c8180');
-  round(b, 1, 8, 0, 39, 3, CLAY.stone);
+  // Irregular native rock below one worked stone course.
+  bedrock(b);
   round(b, 0, 11, 0, 37, 2, CLAY.trim);
 
   // Compound volume: a lower wall and a stepped, narrower inner court. Kept unlit.

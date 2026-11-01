@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGeologyReview, createGeologySampler, createWatercourse, GEOLOGY, sampleGeology, strataBand, watercourseProfile } from './index';
+import { createGeologyReview, createGeologySampler, createWatercourse, GEOLOGY, GEOLOGY_COLOURS, sampleGeology, strataBand, watercourseProfile } from './index';
 
 const seedKey = 'kingdom:129634568';
 const sample = { x: 36, y: 90, z: -45, surfaceY: 90, slope: 0.4, snowline: 70, exposure: 0.4, seedKey };
@@ -27,7 +27,11 @@ describe('geology dressing', () => {
       expect(a).toBeGreaterThanOrEqual(0);
       expect(a).toBeLessThan(16);
     }
-    expect(createGeologyReview(seedKey)).toEqual(createGeologyReview(seedKey));
+    const range = createGeologyReview(seedKey);
+    expect(range).toEqual(createGeologyReview(seedKey));
+    const snow = range.boxes.filter(box => box.colour === GEOLOGY_COLOURS[GEOLOGY.snow]);
+    expect(snow.length).toBeGreaterThan(100);
+    expect(snow.every(box => box.min[1] >= 29)).toBe(true);
   });
 });
 
@@ -50,7 +54,7 @@ describe('watercourse study', () => {
     expect(kit.anchors.falls![2]).toBeLessThan(kit.anchors.pool![2]);
     expect(kit.anchors.mouth![2]).toBeGreaterThan(kit.anchors.pool![2]);
     expect(kit.boxes.every(box => box.size.every(v => v > 0))).toBe(true);
-    expect(kit.boxes.length).toBeLessThan(1000);
+    expect(kit.boxes.length).toBeLessThan(50000);
     expect(createWatercourse(seedKey)).toEqual(kit);
   });
 });

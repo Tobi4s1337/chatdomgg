@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CHANNEL_COMPOSITIONS, channelComposition, createComposition } from './index';
 
-describe('reviewed channel compositions', () => {
-  it('selects by full broadcaster identity and rejects unreviewed identities', () => {
+describe('authored channel compositions', () => {
+  it('selects by full broadcaster identity and rejects unknown identities', () => {
     for (const p of CHANNEL_COMPOSITIONS) expect(channelComposition(p.broadcasterId)).toBe(channelComposition(p.login));
-    expect(() => channelComposition('unknown')).toThrow('No reviewed');
+    expect(() => channelComposition('unknown')).toThrow('No authored');
     expect(new Set(CHANNEL_COMPOSITIONS.map(p=>p.character)).size).toBe(4);
   });
   for (const p of CHANNEL_COMPOSITIONS) it(`grounds native home origins in ${p.login} and retains fixed review anchors`, () => {

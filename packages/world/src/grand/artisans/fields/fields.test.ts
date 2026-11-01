@@ -63,5 +63,12 @@ describe('grand fields', () => {
     expect(parts.sails.boxes.length + parts.body.boxes.length).toBe(mill.boxes.length);
     expect(parts.body.boxes.some(box => box.colour === CLAY.sail)).toBe(false);
     expect(parts.sails.boxes.some(box => box.colour === CLAY.sail)).toBe(true);
+    // The rotating group's entire envelope clears the 5-cell-high stoop at any
+    // angle about its public hub; no need to trust a single still pose.
+    for (const box of parts.sails.boxes) for (const x of [box.min[0], box.min[0] + box.size[0]]) {
+      for (const y of [box.min[1], box.min[1] + box.size[1]]) {
+        expect(Math.hypot(x - hub[0], y - hub[1])).toBeLessThanOrEqual(hub[1] - 5);
+      }
+    }
   });
 });

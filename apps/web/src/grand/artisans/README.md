@@ -6,7 +6,7 @@ or presence demonstration. The standalone HTML uses the Vite dev server. For the
 `ArtisanReview` Solid component behind `artReview=1`; that owner controls routing and production registration.
 Acquire the shared capture lock around each individual still or clip.
 
-`?kit=forest|tree|geology|water|fields|windmill|harbour|ship|lighthouse|citadel|walls|composition`
+`?kit=forest|tree|geology|water|fields|windmill|harbour|ship|lighthouse|quay|pier|landing|citadel|walls|composition`
 selects a kit. `channel`, `seed`, `species`, `view=hero|street|coast|dusk`, `hour`, and `lod=0|1|2|3`
 fix the review parameters. `tree` and `forest` accept `species=gold|pine|cherry|teal|birch|willow`.
 The default channel is `tobi4s_`. Unknown or missing kits fail visibly instead of showing substitute content.

@@ -1,0 +1,106 @@
+--- a/packages/world/src/grand/generate.ts
++++ b/packages/world/src/grand/generate.ts
+@@ -2,8 +2,8 @@
+ import { shapeLand } from './terrain';
+ import { classifyCover } from './cover';
+ import { placeTrees } from './flora';
+-import { composeStructures } from './kits';
+-import { Cover, type GrandLand, type GrandLandSeed, type GrandSites } from './types';
++import { GRAND_KITS, placeBoxes } from './kits';
++import { Cover, type GrandComposeInput, type GrandKitPlacement, type GrandLand, type GrandLandSeed, type GrandSites } from './types';
+ 
+ /**
+  * One channel's land, whole, from its seed. Pure and deterministic: the same seed gives the same bytes on
+@@ -30,23 +30,42 @@
+   }
+   const bed = shaped.bed;
+   const { cover, plot, plots, forest } = classifyCover({ plan, ground, water, coast, mountain: shaped.mountain, bed });
+-  const flora = placeTrees({ plan, ground, water, cover, coast, forest });
+   const sites = siteLand(plan, ground, coast, cover, shaped.mere);
+   const stats = {
+-      size, solidVoxels: solid, trees: flora.count, treesBySpecies: flora.bySpecies, riverCells: shaped.riverCells,
+-      lakeCells: shaped.lakeCells, waterfalls: shaped.waterfalls, fieldPlots: plots.length, seaStacks: shaped.stacks, landCells,
+-      millis: 0,
++    size, solidVoxels: solid, trees: 0, treesBySpecies: {}, riverCells: shaped.riverCells,
++    lakeCells: shaped.lakeCells, waterfalls: shaped.waterfalls, fieldPlots: plots.length, seaStacks: shaped.stacks,
++    landCells, millis: 0,
+   };
+-  const bare = {
+-    seed, style: plan.style, size, height: plan.height, seaLevel: sea, snowline: plan.snowline, treeline: plan.treeline, ground, water, cover, plot, plots, coast,
+-    trees: flora.trees, treeCount: flora.count, sites, stats,
++  // GK10's provisional scene has no physical residents. Fitted pieces still pass the artisan
++  // composer’s terrain, water, cover, town and castle guard. GK11 must instead bind site
++  // selection to the installed scene's exact protected lots, streets, Forge and revision.
++  const preliminary: GrandComposeInput = {
++    seed, style: plan.style, size, height: plan.height, seaLevel: sea, snowline: plan.snowline,
++    treeline: plan.treeline, ground, water, cover, plot, plots, coast,
++    trees: new Float32Array(), treeCount: 0, sites, stats,
+   };
+-  // The dressing kits compose their pieces on the finished land (see "Dressing kits" in ./types.ts).
+-  const structures = composeStructures(bare);
++  const placements = GRAND_KITS.compose.flatMap(compose => compose(preliminary));
++  const protectedAreas = placements.filter(p => p.piece.id !== 'harbour-ship').map(placementBounds);
++  const flora = placeTrees({ plan, ground, water, cover, coast, forest, protectedAreas });
++  const structures = placeBoxes(placements, size, plan.height);
+   return {
+-    ...bare, structures: structures.boxes, structureCount: structures.count, structureColours: structures.colours,
+-    stats: { ...stats, millis: clock() - started },
++    ...preliminary, trees: flora.trees, treeCount: flora.count,
++    structures: structures.boxes, structureCount: structures.count, structureColours: structures.colours,
++    stats: { ...stats, trees: flora.count, treesBySpecies: flora.bySpecies, millis: clock() - started },
+   };
++}
++
++/** Conservative XZ coverage of a placed kit; future fitted growth/scene occupancy is separate. */
++function placementBounds(p: GrandKitPlacement): readonly [number, number, number, number] {
++  let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
++  const turns = ((p.turns % 4) + 4) % 4;
++  for (const box of p.piece.boxes) {
++    let x = box.min[0], z = box.min[2], sx = box.size[0], sz = box.size[2];
++    for (let t = 0; t < turns; t++) { [x,z] = [-z-sz,x]; [sx,sz] = [sz,sx]; }
++    minX = Math.min(minX, x + p.at[0]); minZ = Math.min(minZ, z + p.at[2]);
++    maxX = Math.max(maxX, x + sx + p.at[0]); maxZ = Math.max(maxZ, z + sz + p.at[2]);
++  }
++  return [minX,minZ,maxX,maxZ];
+ }
+ 
+ function siteLand(plan: GrandPlan, ground: Uint16Array, coast: Int8Array, cover: Uint8Array, mere: { x: number; z: number; level: number } | null): GrandSites {
+--- a/packages/world/src/grand/flora.ts
++++ b/packages/world/src/grand/flora.ts
+@@ -11,6 +11,8 @@
+   readonly cover: Uint8Array;
+   readonly coast: Int8Array;
+   readonly forest: Float32Array;
++  /** Terrain-fitted, protected kit bounds selected before vegetation; source-cell XZ. */
++  readonly protectedAreas?: readonly (readonly [number, number, number, number])[];
+ }
+ 
+ /**
+@@ -54,6 +56,9 @@
+     }
+     return true;
+   };
++  const clearOfProtected = (x: number, z: number, radius: number) =>
++    (input.protectedAreas ?? []).every(([x0, z0, x1, z1]) =>
++      x + radius < x0 || x - radius >= x1 || z + radius < z0 || z - radius >= z1);
+   const add = (x: number, z: number, species: TreeSpecies, scale: number, radius: number) => {
+     const index = xs.length;
+     xs.push(x); zs.push(z); rs.push(radius);
+@@ -74,7 +79,7 @@
+     if ((x - castle[0]) ** 2 + (z - castle[1]) ** 2 < (plan.castle.radius * 1.5) ** 2) continue;
+     const species = heroes[heroPlaced]!;
+     const radius = GRAND_KITS.trees.extent(species, 1).radius;
+-    if (!fits(x, z, radius * 1.6)) continue;
++    if (!clearOfProtected(x, z, radius + 4) || !fits(x, z, radius * 1.6)) continue;
+     add(x, z, species, 1, radius * 0.95);
+     heroPlaced++;
+   }
+@@ -113,7 +118,7 @@
+     }
+     const scale = 0.78 + hash2(z, x, seed ^ 0x321) * 0.42 + (density > 0.8 ? 0.12 : 0);
+     const radius = Math.max(3, GRAND_KITS.trees.extent(species, scale).radius * spacing * 0.95);
+-    if (!fits(x, z, radius)) continue;
++    if (!clearOfProtected(x, z, GRAND_KITS.trees.extent(species, scale).radius + 4) || !fits(x, z, radius)) continue;
+     add(x, z, species, scale, radius);
+   }
+   return { trees: Float32Array.from(out), count: xs.length, bySpecies };

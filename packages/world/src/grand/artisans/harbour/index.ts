@@ -113,8 +113,9 @@ export function createLighthouse(seedKey: string): ArtisanKit {
   return kit.finish('harbour-lighthouse', { foundation: [0, 0, 0], entrance: [0, 1, -11], lantern: [0, 53, 0], top: [0, 72, 0] });
 }
 
-/** A quay with two finger piers and a stepped boat landing. +z points inland. */
-export function createHarbour(seedKey: string): ArtisanKit {
+/** Quay and piers alone. Local y=0 is the water plane and +z points inland. */
+export function createQuay(seedKey: string): ArtisanKit {
+  void seedKey; // Reserved for independent material/style variation; geometry is stable.
   const kit = new KitBuilder();
   // Lower courses are submerged. Front is built as deliberately staggered stone blocks,
   // while the broad cap and inner mass merge into the builder's graded shoreline.
@@ -150,12 +151,108 @@ export function createHarbour(seedKey: string): ArtisanKit {
     kit.box(x, 5, z, 3, 2, 5, CLAY.stone);
     kit.box(x, 7, z, 3, 1, 5, CLAY.stoneLight);
   }
+  return kit.finish('harbour-quay', {
+    seaLevel: [0, 0, 0], quayTop: [0, 8, 10], shoreJoin: [0, 6, 21],
+    westPier: [-34, 9, -16], eastPier: [26, 9, -16], landing: [10, 0, -8],
+  });
+}
+
+export type QuaySectionKind = 'frontage' | 'pier' | 'landing';
+export type QuayShoreOffset = -4 | -2 | 0 | 2 | 4;
+
+/**
+ * Fit a dry inland connection to sampled terrain. All heights are source-cell top
+ * coordinates relative to sea level, not occupied-cell indices. Ground samples run
+ * z-major then x-major, starting at x=-3, z=23. Nothing here implies walkability.
+ */
+export function createQuayInlandStairs(treadHeights: readonly number[], ground: readonly number[], apronGround: readonly number[], shoreOffset: QuayShoreOffset = 0): ArtisanKit {
+  if (![-4, -2, 0, 2, 4].includes(shoreOffset)) throw new RangeError('Unsupported shoreline offset');
+  if (treadHeights.length < 1 || treadHeights.length > 64 || ground.length !== treadHeights.length * 12 || apronGround.length !== 12) {
+    throw new RangeError('Invalid inland stair footprint');
+  }
+  if ((treadHeights[0] !== 8 && treadHeights[0] !== 9) || treadHeights.some((h, i) => !Number.isSafeInteger(h) || h <= 0 || (i > 0 && (h > treadHeights[i - 1]! || treadHeights[i - 1]! - h > 1)))) {
+    throw new RangeError('Inland stairs must descend from the cap by at most one cell per tread');
+  }
+  const last = treadHeights[treadHeights.length - 1]!;
+  if (ground.some((g, i) => !Number.isSafeInteger(g) || g <= 0 || g > treadHeights[Math.floor(i / 12)]!) || ground.slice(-12).some(g => g !== last) || apronGround.some(g => !Number.isSafeInteger(g) || g !== last)) {
+    throw new RangeError('Inland stairs require sampled dry support and a level joined apron');
+  }
+  const kit = new KitBuilder();
+  const shift = (x: number) => Math.round((x + 8) / 15 * shoreOffset);
+  for (let row = 0; row < treadHeights.length * 2; row++) for (let col = 0; col < 6; col++) {
+    const top = treadHeights[Math.floor(row / 2)]!, support = ground[row * 6 + col]!;
+    // A flush paving cell replaces the existing top cell when support already
+    // reaches the intended surface; otherwise fill only the sampled gap.
+    kit.box(col - 3, Math.min(support, top - 1), 23 + row + shift(col - 3), 1, Math.max(1, top - support), 1, (Math.floor(row / 2) % 2) ? CLAY.stone : CLAY.stoneLight);
+  }
+  const apronZ = 23 + treadHeights.length * 2;
+  for (let row = 0; row < 2; row++) for (let col = 0; col < 6; col++) {
+    kit.box(col - 3, last - 1, apronZ + row + shift(col - 3), 1, 1, 1, CLAY.stone);
+  }
+  return kit.finish('harbour-quay-inland-stairs', {
+    quay: [0, treadHeights[0]!, 23 + shift(0)], land: [0, last, apronZ + shift(0)], 'apron-end': [0, last, apronZ + 2 + shift(0)],
+  });
+}
+
+/**
+ * A 16-cell frontage, optionally carrying a pier or a boat landing. `shoreOffset`
+ * advances the right end along local Z, allowing neighbouring sections to follow
+ * a changing shore while both ends still meet at the same deck elevation.
+ */
+export function createQuaySection(seedKey: string, kind: QuaySectionKind = 'frontage', shoreOffset: QuayShoreOffset = 0): ArtisanKit {
+  void seedKey;
+  if (!(['frontage', 'pier', 'landing'] as const).includes(kind) || ![-4, -2, 0, 2, 4].includes(shoreOffset)) {
+    throw new RangeError('Unsupported quay section');
+  }
+  const kit = new KitBuilder();
+  const shift = (x: number) => Math.round((x + 8) / 15 * shoreOffset);
+  // Each column overlaps its neighbours along Z; a one-cell change of shoreline
+  // leaves a continuous stone core, cap and seam at a single shared height.
+  for (let x = -8; x < 8; x++) {
+    const dz = shift(x);
+    kit.box(x, -5, 3 + dz, 1, 11, 18, CLAY.stoneDark);
+    for (let row = 0; row < 4; row++) {
+      const joint = ((x + 8 + (row % 2) * 3) % 7 + 7) % 7 === 6;
+      kit.box(x, -2 + row * 2, 2 + dz, 1, 2, 1, joint ? CLAY.stoneDark : row % 2 ? CLAY.stone : CLAY.stoneLight);
+    }
+    kit.box(x, 6, 1 + dz, 1, 3, 22, CLAY.stoneLight);
+    kit.box(x, 8, 1 + dz, 1, 1, 2, CLAY.trim);
+  }
+  for (const x of [-5, 4]) {
+    const dz = shift(x);
+    kit.box(x, 9, 4 + dz, 2, 3, 2, CLAY.timber);
+    kit.box(x - 1, 11, 4 + dz, 4, 1, 2, CLAY.brass);
+  }
+  const middle = shift(0);
+  if (kind === 'pier') {
+    kit.box(-5, 6, -32 + middle, 11, 2, 34, CLAY.timber);
+    for (let z = -31; z < 2; z += 4) kit.box(-5, 8, z + middle, 11, 1, 3, CLAY.timberLight);
+    for (const x of [-4, 3]) for (let z = -29; z <= -1; z += 9) {
+      kit.box(x, -5, z + middle, 2, 14, 2, CLAY.timber);
+      kit.box(x, 9, z + middle, 2, 1, 2, CLAY.brass);
+    }
+  }
+  if (kind === 'landing') {
+    for (let n = 0; n < 9; n++) kit.box(-6, -1 + n, -8 + n + middle, 12, 1, 2, n % 2 ? CLAY.stoneLight : CLAY.stone);
+  }
+  return kit.finish(`harbour-quay-${kind}`, {
+    seaLevel: [0, 0, 0], 'shore-left': [-8, 6, 21], 'shore-right': [8, 6, 21 + shoreOffset],
+    shoreJoin: [0, 6, 21 + middle], deck: [0, 9, 10 + middle], seaward: [0, 9, 1 + middle],
+    ...(kind === 'pier' ? { pier: [0, 9, -16 + middle] as const } : {}),
+    ...(kind === 'landing' ? { landing: [0, 0, -8 + middle] as const } : {}),
+  });
+}
+
+/** The same assembled review view; install each part separately against actual land. */
+export function createHarbour(seedKey: string): ArtisanKit {
+  const kit = new KitBuilder();
+  const quay = createQuay(seedKey);
+  kit.add(quay);
   kit.add(createShip(`${seedKey}:west-berth`), [-35, 0, -45]);
   kit.add(createShip(`${seedKey}:east-berth`), [28, 0, -48], 2);
   kit.add(createLighthouse(seedKey), [54, 8, 20]);
   return kit.finish('harbour', {
-    seaLevel: [0, 0, 0], quayTop: [0, 9, 10], shoreJoin: [0, 6, 21],
-    westPier: [-34, 9, -16], eastPier: [26, 9, -16], landing: [10, 0, -8],
+    ...quay.anchors,
     lighthouseFoundation: [54, 8, 20], westShipWaterline: [-35, 0, -45], eastShipWaterline: [28, 0, -48],
   });
 }

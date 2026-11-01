@@ -1,0 +1,59 @@
+{
+  "channel": "tobi4s_",
+  "radius": 96,
+  "treeCount": 1384,
+  "placements": [
+    {
+      "id": "windmill",
+      "at": [
+        680,
+        62,
+        342
+      ],
+      "turns": 0,
+      "boxes": 702
+    },
+    {
+      "id": "harbour-quay-modular",
+      "at": [
+        1031,
+        48,
+        622
+      ],
+      "turns": 1,
+      "boxes": 385
+    },
+    {
+      "id": "harbour-lighthouse",
+      "at": [
+        1080,
+        51,
+        468
+      ],
+      "turns": 0,
+      "boxes": 1324
+    },
+    {
+      "id": "harbour-ship",
+      "at": [
+        1076,
+        48,
+        592
+      ],
+      "turns": 1,
+      "boxes": 548
+    },
+    {
+      "id": "harbour-ship",
+      "at": [
+        1076,
+        48,
+        652
+      ],
+      "turns": 1,
+      "boxes": 548
+    }
+  ],
+  "millis": 25985.565468999994,
+  "note": "CPU source generation with current backtracking fitter, default clearance and pre-flora reservation; radius altered only in Vite memory."
+}
