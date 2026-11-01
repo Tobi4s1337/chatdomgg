@@ -2,7 +2,8 @@ import { batch, createEffect, createMemo, createSignal, Match, onCleanup, onMoun
 import './atlas.css';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
 import { decodeRings, geographyOf, SettlerStore, type Geography, type Ring, type Settler } from './data/model';
-import { fetchChunk, fetchNames, PreviewError, type PreviewSource } from './data/preview';
+import { fetchChunk, fetchNames, type PreviewSource } from './data/preview';
+import { atlasFailureState, mountAtlasWithRetry } from './recovery';
 import { LiveFeed, type LiveStatus } from './live/feed';
 import { LivePaint, type Dab } from './live/paint';
 import { MAX_SCALE, type Distance, type Insets, type Viewport } from './map/camera';
@@ -341,8 +342,8 @@ export default function Atlas() {
     setState('loading');
     setNames('loading');
     try {
-      const still = !webglAvailable();
-      const [preview] = await Promise.all([loadPreview(SOURCE, sessionStore(), signal), loadFaces()]);
+      let still = !webglAvailable();
+      const [preview] = await Promise.all([loadPreview(SOURCE, sessionStore(), signal), loadFaces().catch(error => console.error('Atlas lettering could not load', error))]);
       if (signal.aborted) return;
       const { world } = preview;
       const holdings = new SettlerStore(world);
@@ -420,7 +421,18 @@ export default function Atlas() {
           else if (view) void rebuild?.(view.cameraState());
         },
       }, chromeInsets, initial);
-      view = await mount(null);
+      view = await mountAtlasWithRetry(() => mount(null), error => console.error('Atlas renderer could not mount', error));
+      if (!view) {
+        if (signal.aborted) return;
+        still = true;
+        stillReady = () => { mapDrawn = true; reveal(); };
+        setContext('ok');
+        setState('still');
+        setTimeout(liveIn, LIVE_WAIT_MS);
+        startLive(preview, holdings, decodeRings(world), liveIn);
+        if (preview.newer) noticeNewer(preview);
+        return;
+      }
       if (signal.aborted) {
         view.dispose();
         view = null;
@@ -434,7 +446,8 @@ export default function Atlas() {
         let next: MapView;
         try {
           next = await mount(camera);
-        } catch {
+        } catch (error) {
+          console.error('Atlas renderer could not rebuild', error);
           if (signal.aborted) return;
           // No new context either: the still draws this same revision, with the open card kept.
           rebuild = null;
@@ -457,9 +470,8 @@ export default function Atlas() {
       if (preview.newer) noticeNewer(preview);
     } catch (error) {
       if ((error as Error).name === 'AbortError') return;
-      if (error instanceof PreviewError) setState(error.reason === 'mismatch' ? 'invalid' : error.reason);
-      else if (/webgl|context/i.test(String((error as Error).message))) setState('unsupported');
-      else setState('unavailable');
+      console.error('Atlas could not open', error);
+      setState(atlasFailureState(error));
       settle();
     }
   }
