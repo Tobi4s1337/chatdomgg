@@ -100,7 +100,7 @@ export function createTree(species: ForestSpecies, seedKey: string, scale = 1): 
       puff(lean * y / top, y, 0, r, 2.7, r * 0.86);
     }
     puff(lean, top - 3, 0, 1.6, 4, 1.5);
-    branch([0, -2, 0], [lean, top - 1, 0], 1);
+    branch([0, 0, 0], [lean, top - 1, 0], 1);
   } else if (species === 'birch') {
     top = 26 + Math.floor(rng() * 2);
     for (let i = 0; i < 5; i++) {
@@ -109,7 +109,7 @@ export function createTree(species: ForestSpecies, seedKey: string, scale = 1): 
       puff(x, y, z, 3.1, 3.3, 2.8);
       branch([0, y - 5, 0], [Math.round(x), y, Math.round(z)], 0);
     }
-    branch([0, -2, 0], [lean, top - 2, 0], 1);
+    branch([0, 0, 0], [lean, top - 2, 0], 1);
   } else if (species === 'willow') {
     top = 20;
     // Wide, low umbrella with separate hanging curtains, leaving trunk and riverbank readable.
@@ -119,22 +119,51 @@ export function createTree(species: ForestSpecies, seedKey: string, scale = 1): 
       puff(x, 12 + (i % 2), z, 2.3, 4.5, 2);
       branch([0, 10, 0], [Math.round(x), 16, Math.round(z)]);
     }
-    branch([0, -2, 0], [lean, 17, 0], 1);
+    branch([0, 0, 0], [lean, 17, 0], 1);
+  } else if (species === 'gold') {
+    top = 26;
+    // A mature broadleaf grows two or three uneven major boughs, each carrying a
+    // joined foliage mass. Small offsets break the edge without leaf speckle.
+    // The open wedge between boughs gives the crown breathing room from below.
+    const groups = rng() < 0.25 ? 2 : 3;
+    const angleStep = Math.PI * 2 / groups;
+    const shoulder = Math.round(lean / 2);
+    puff(lean * 0.55, 20.5, 0, 3.5, 2.8, 3.7);
+    for (let i = 0; i < groups; i++) {
+      const angle = twist + i * angleStep + (rng() - 0.5) * 0.65;
+      const distance = 4.8 + rng() * 1.5;
+      const x = lean + Math.cos(angle) * distance, z = Math.sin(angle) * distance;
+      const y = 19 + rng() * 3.5;
+      const rx = 4.2 + rng() * 1.2, rz = 3.6 + rng() * 1.2;
+      puff(x, y, z, rx, 2.7 + rng() * 0.8, rz);
+      // An adjacent, partially overlapping shoulder gives each group a natural,
+      // flattened profile rather than a perfect sphere repeated on every limb.
+      puff(x + Math.cos(angle + 0.85) * 2.4, y + 0.6, z + Math.sin(angle + 0.85) * 2.4, rx * 0.65, 2.2, rz * 0.68);
+      branch([shoulder, 12 + (i % 2), 0], [Math.round(x), Math.round(y - 1), Math.round(z)]);
+    }
+    branch([0, 0, 0], [shoulder, 9, 0], 1);
+    branch([shoulder, 9, 0], [lean, 19, 0], 1);
   } else {
     const isCherry = species === 'cherry', isTeal = species === 'teal';
-    top = isCherry ? 19 : 25;
-    const trunkTop = isCherry ? 13 : 18;
-    // Overlapping crowns form broad clouds; different lobe widths make cherry a low, spreading tree.
-    const ring = isCherry ? 5.2 : 5.8, lobeY = isCherry ? 14.2 : 20;
-    puff(lean, lobeY + 1, 0, isTeal ? 5 : 4.5, isCherry ? 3.5 : 4.5, isTeal ? 5 : 4.5);
+    top = isCherry ? 19 : 26;
+    const trunkTop = isCherry ? 13 : 19;
+    // Cherry has a low overlapping cloud; gold grows several higher, separated boughs.
+    // Teal retains its wide canopy and more continuous crown.
+    const ring = isCherry ? 5.2 : isTeal ? 5.8 : 7.4, lobeY = isCherry ? 14.2 : 20;
+    puff(lean, lobeY + 1, 0, isTeal ? 5 : isCherry ? 4.5 : 2.8, isCherry ? 3.5 : isTeal ? 4.5 : 3, isTeal ? 5 : isCherry ? 4.5 : 2.8);
     for (let i = 0; i < 5; i++) {
       const a = twist + i * Math.PI * 2 / 5, x = lean + Math.cos(a) * ring, z = Math.sin(a) * ring;
-      const y = lobeY + (rng() - 0.5) * 2;
-      puff(x, y, z, isCherry ? 4.2 : 4.5, isCherry ? 2.8 : 3.5, isCherry ? 3.8 : 4);
-      branch([0, trunkTop - 5, 0], [Math.round(x), Math.round(y - 1), Math.round(z)]);
+      const y = lobeY + (isCherry || isTeal ? (rng() - 0.5) * 2 : [-1, 2, -2, 3, 0][i]!);
+      puff(x, y, z, isCherry ? 4.2 : isTeal ? 4.5 : 3.6, isCherry ? 2.8 : isTeal ? 3.5 : 2.8, isCherry ? 3.8 : isTeal ? 4 : 3.5);
+      branch([Math.round(lean / 2), trunkTop - 7, 0], [Math.round(x), Math.round(y - 1), Math.round(z)]);
     }
-    branch([0, -2, 0], [lean, trunkTop, 0], 2);
+    // Two linked trunk sections soften its line and leave space under the crown.
+    branch([0, 0, 0], [Math.round(lean / 2), 9, 0], 1);
+    branch([Math.round(lean / 2), 9, 0], [lean, trunkTop, 0], 1);
   }
+  // Four low buttresses reach from the soil into the trunk; no exposed underground plinth.
+  const foot = species === 'pine' || species === 'birch' ? 2 : 3;
+  for (const [x, z] of [[foot, 0], [-foot, 0], [0, foot], [0, -foot]] as const) branch([0, 2, 0], [x, 0, z], 0);
   // Bark wins over overlapping leaves, giving visible connected branches.
   for (const b of branches) c.limb(b.a, b.b, b.radius, p.bark);
   if (species === 'birch') {
