@@ -2,6 +2,8 @@ import type { SettlementPlan } from '@chatdom/world';
 import type { Vec3 } from '@chatdom/shared';
 import type { ChannelGenesisFacts, ChannelKingdomRecipe, DeepReadonly, GenesisLandscape } from '@chatdom/world/genesis';
 import type { GenesisSeatContent } from './seat-content';
+import type { KeeperProposal } from '../../../../packages/content/src/genesis-keepers/adapter';
+import type { KeeperPlaceSite, KeeperRound } from '../../../../packages/content/src/genesis-keepers/routine';
 
 /** What the preview hands a kingdom's own composition: the facts it compiled and the showcase landscape choice. */
 export interface GenesisKingdomInput {
@@ -19,6 +21,12 @@ export interface GenesisKingdomComposition {
   /** The realm hour the view opens at when the address names none. */
   readonly hour?: number;
   readonly lore?: string;
+  /**
+   * The recipe's keepers at the places the composition built for them: the proposal (look, temperament, retreat,
+   * greeting speaker), the site's real fixtures and the round at the opening hour. Drawing, walking and voicing them
+   * is the scene's keeper mount; a keeper is never counted, lit or shown as a citizen.
+   */
+  readonly keepers?: readonly { readonly proposal: KeeperProposal; readonly site: KeeperPlaceSite; readonly round: KeeperRound }[];
 }
 
 /**
