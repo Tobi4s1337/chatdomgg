@@ -5,7 +5,7 @@ import type { VoxelRenderState } from '@chatdom/render';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import type { CitizenMotionSample } from '@chatdom/world';
 import type { InteractionRegistry } from '@chatdom/world/interactions';
-import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
+import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import type { RealmWalkerPose } from '../realm/client';
 import type { WalkerLabel } from './walk-scene';
 import { presentWalkers, type WalkerPresentation } from './walker-presentation';
@@ -71,6 +71,7 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
   return {
     get poses() { return poses; },
     get grips() { return people.grips; },
+    get heads() { return people.heads; },
     frame(now: number) { poses = presentWalkers(track.sample(now), track.seats, registry); return poses; },
     draw(now: number, visible = true) {
       people.update((visible ? poses : []).filter(pose => known.has(pose.look)).map(pose => ({ id: pose.id, look: pose.look,
@@ -81,11 +82,15 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
     labels(): WalkerLabel[] {
       const labels: WalkerLabel[] = [];
       for (const pose of poses) {
-        point.set(pose.x, pose.y + 1.95 + (pose.posture ? CITIZEN_SEATED_HEAD_OFFSET_METRES : 0), pose.z);
-        if (point.distanceToSquared(camera.position) > 40 ** 2) continue;
+        const head = people.heads.get(pose.id);
+        if (!head) continue;
+        const distance = head.distanceTo(camera.position);
+        if (distance > 40) continue;
+        point.copy(head);
         point.project(camera);
         if (point.z < -1 || point.z > 1 || Math.abs(point.x) > .95 || Math.abs(point.y) > .94) continue;
-        labels.push({ id: pose.id, name: pose.name, self: false, x: (point.x + 1) * canvas.clientWidth / 2, y: (1 - point.y) * canvas.clientHeight / 2 });
+        labels.push({ id: pose.id, name: pose.name, self: false, distance,
+          ...(Number.isInteger(pose.homeSlot) && pose.homeSlot >= 0 && pose.homeSlot < REALM_NO_HOME_SLOT ? { slot: pose.homeSlot } : {}), x: (point.x + 1) * canvas.clientWidth / 2, y: (1 - point.y) * canvas.clientHeight / 2 });
       }
       return labels;
     },
