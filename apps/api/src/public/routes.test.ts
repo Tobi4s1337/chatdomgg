@@ -26,12 +26,14 @@ describe('the public origin route table', () => {
 
   it('sends the realm routes and its live data to the realm', () => {
     for (const path of [
-      '/api/realm/founded/1001', '/api/realm/entry/1001', '/api/realm/watch/1001',
+      '/api/realm/founded/1001', '/api/realm/entry/1001', '/api/realm/watch/1001', '/api/realm/chronicle/1001', '/api/realm/clock',
+      '/live-realm-data/api/realm/chronicle/1001', '/live-realm-data/api/realm/clock',
       `/api/realm/founded/scenes/${'a'.repeat(64)}`,
       '/live-realm-data/healthz', '/live-realm-data/api/realm/entry/1001', '/live-realm-data/api/realm/watch/1001',
       '/live-realm-data/matchmake/joinOrCreate/kingdom', '/live-realm-data/matchmake/reconnect/k:1001',
       '/live-realm-data/matchmake/joinById/k:1001', '/live-realm-data/process_123/k:1001',
     ]) expect(classify(path, ''), path).toEqual({ kind: 'realm' });
+    for (const path of ['/api/realm/chronicle', '/api/realm/chronicle/001', '/api/realm/chronicle/1001/private', '/api/realm/clock/private', '/live-realm-data/api/realm/clock/private']) expect(classify(path, '')).toEqual({ kind: 'not-found', api: true });
     // A realm verb with nothing after it names no kingdom.
     expect(classify('/api/realm/founded/', '')).toEqual({ kind: 'not-found', api: true });
     expect(classify('/api/realm/entry', '')).toEqual({ kind: 'not-found', api: true });

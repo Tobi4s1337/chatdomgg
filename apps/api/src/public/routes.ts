@@ -16,7 +16,7 @@ export type PublicRoute =
   | { readonly kind: 'not-found'; readonly api: boolean };
 
 const AUTH = /^\/api\/realm\/(?:session|ticket|signout|auth\/(?:start|callback)|simulated-oidc\/.*)$/;
-const REALM_READ = /^\/api\/realm\/(?:(?:founded|entry|watch)\/[1-9][0-9]{0,31}|founded\/scenes\/[a-f0-9]{64})$/;
+const REALM_READ = /^\/api\/realm\/(?:clock|(?:founded|entry|watch|chronicle)\/[1-9][0-9]{0,31}|founded\/scenes\/[a-f0-9]{64})$/;
 const MATCHMAKE = /^\/matchmake\/(?:(?:joinOrCreate|create|join)\/kingdom|(?:joinById|reconnect)\/k:[1-9][0-9]{0,31})$/;
 const ROOM_SOCKET = /^\/[A-Za-z0-9_-]{1,128}\/k:[1-9][0-9]{0,31}$/;
 const REALM_PREFIX = '/live-realm-data';
