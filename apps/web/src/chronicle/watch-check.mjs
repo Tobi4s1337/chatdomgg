@@ -72,7 +72,12 @@ async function accessibility(browser, base, width, height) {
     await close.focus(); await page.keyboard.press('Tab');
     assert(await play.evaluate(element => element === document.activeElement), 'Keyboard does not reach Play after Close');
     await page.keyboard.press('Space');
-    await page.waitForFunction(() => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index >= 1, null, { timeout: 15_000 });
+    try {
+      await page.waitForFunction(() => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index >= 1, null, { timeout: 15_000 });
+    } catch (error) {
+      const state = await page.evaluate(() => ({ replay: window.__chronicle.state(), active: document.activeElement?.outerHTML, caption: document.querySelector('.chronicle-caption')?.textContent }));
+      throw new Error(`Playback did not advance after keyboard Play: ${JSON.stringify(state)}; ${error.message}`, { cause: error });
+    }
     const pause = page.getByRole('button', { name: 'Pause', exact: true });
     assert(await pause.evaluate(element => element === document.activeElement), 'Play control lost keyboard focus');
     await page.keyboard.press('Space');
