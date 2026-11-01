@@ -1,6 +1,6 @@
 # SO10 current checkpoint
 
-Instruction remains: **no new sub-scopes; land the existing work cleanly**. Stay on `lane/soul`; never push or write main. Main merged cleanly in `9338d8f`. The only PRD task remains open; no LANE COMPLETE.
+Instruction remains: **no new sub-scopes; land the existing work cleanly**. Stay on `lane/soul`; never push or write main. Main merged cleanly in `9338d8f`; complete inspected review matrix committed in `96016d8`. The only PRD task remains open; no LANE COMPLETE.
 
 ## Working source and current proof
 
