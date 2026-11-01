@@ -19,10 +19,16 @@ export const HERALD_EVENT_TYPES = [
   'channel.hype_train.progress',
   'channel.hype_train.end',
   'channel.raid',
+  'channel.follow',
+  'channel.channel_points_custom_reward_redemption.add',
+  'channel.poll.begin',
+  'channel.poll.progress',
+  'channel.poll.end',
 ] as const;
 /** Spectacle evidence: delivered durably to the realm, never required for chat to publish. */
 export const SPECTACLE_EVENT_TYPES: ReadonlySet<HeraldEventType> = new Set(['channel.bits.use', 'channel.hype_train.begin',
-  'channel.hype_train.progress', 'channel.hype_train.end', 'channel.raid']);
+  'channel.hype_train.progress', 'channel.hype_train.end', 'channel.raid', 'channel.follow', 'channel.channel_points_custom_reward_redemption.add',
+  'channel.poll.begin', 'channel.poll.progress', 'channel.poll.end']);
 export type HeraldEventType = (typeof HERALD_EVENT_TYPES)[number];
 
 export interface SubscriptionPlan extends SubscriptionRequest {
@@ -60,6 +66,12 @@ export function planSubscriptions(ids: PlanIds): SubscriptionPlan[] {
     { type: 'channel.hype_train.end', version: '2', condition: stream, capability: 'hype', required: false },
     // Incoming raids need no grant: the app token may read any channel's raids.
     { type: 'channel.raid', version: '1', condition: { to_broadcaster_user_id: ids.broadcasterId }, capability: 'stream', required: false },
+    // The broadcaster reads their own followers as their own moderator.
+    { type: 'channel.follow', version: '2', condition: { broadcaster_user_id: ids.broadcasterId, moderator_user_id: ids.broadcasterId }, capability: 'follows', required: false },
+    { type: 'channel.channel_points_custom_reward_redemption.add', version: '1', condition: stream, capability: 'rewards', required: false },
+    { type: 'channel.poll.begin', version: '1', condition: stream, capability: 'polls', required: false },
+    { type: 'channel.poll.progress', version: '1', condition: stream, capability: 'polls', required: false },
+    { type: 'channel.poll.end', version: '1', condition: stream, capability: 'polls', required: false },
   ];
 }
 

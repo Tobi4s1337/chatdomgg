@@ -16,7 +16,7 @@ export const MOMENT_DISPLAY_WINDOW_MS = 300_000;
 /** A reset carrying more current facts than this is partial evidence, never a complete snapshot. */
 export const MOMENT_CURRENT_LIMIT = 1024;
 /** Upper bound for one serialized transport message (one fact or one reset). */
-export const MOMENT_MESSAGE_BYTES = 256 * 1024;
+export const MOMENT_MESSAGE_BYTES = 288 * 1024;
 
 // Bidirectional overrides, isolates and C0/C1 controls can disguise a name or a line of text.
 // eslint-disable-next-line no-control-regex -- Reject control characters at the public boundary.
@@ -44,6 +44,15 @@ export type MomentChannel = z.infer<typeof ChannelSchema>;
 export const ChoiceSchema = z.strictObject({ id: TokenSchema, title: publicText(1, 80), votes: UIntSchema });
 export const StatePhaseSchema = z.enum(['begin', 'progress', 'end']);
 
+/** The town's colours a decree may choose; a poll whose every choice is one of these is a decree the kingdom carries out. */
+export const TOWN_COLOURS = ['ember', 'gold', 'rose', 'tide', 'meadow', 'dusk', 'snow', 'night'] as const;
+export type TownColour = typeof TOWN_COLOURS[number];
+/** Plantings the grove fact may carry at once (one per home slot). */
+export const GROVE_LIMIT = 4096;
+export const GroveEntrySchema = z.strictObject({ slot: SlotSchema, sapling: EpochMsSchema.nullable(), tree: EpochMsSchema.nullable() })
+  .refine(entry => entry.sapling !== null || entry.tree !== null, 'A planting has something planted');
+export type GroveEntry = z.infer<typeof GroveEntrySchema>;
+
 const base = { key: TokenSchema, displayUntil: EpochMsSchema };
 const variant = <const K extends string, S extends z.ZodRawShape>(kind: K, shape: S) =>
   z.strictObject({ kind: z.literal(kind), ...base, ...shape });
@@ -52,7 +61,7 @@ const variant = <const K extends string, S extends z.ZodRawShape>(kind: K, shape
 const TWITCH_CLIP_URL = /^https:\/\/(?:clips\.twitch\.tv\/[A-Za-z0-9_-]{1,100}|www\.twitch\.tv\/[a-z0-9_]{1,64}\/clip\/[A-Za-z0-9_-]{1,100})$/u;
 
 export const MOMENT_KINDS = ['follow', 'subscription', 'gifts', 'cheer', 'power-up', 'redemption', 'hype', 'battle', 'goal', 'poll',
-  'prediction', 'shared-chat', 'shoutout', 'ad', 'channel', 'office', 'charity', 'clip-still', 'raid'] as const;
+  'prediction', 'shared-chat', 'shoutout', 'ad', 'channel', 'office', 'charity', 'clip-still', 'raid', 'night', 'homecoming', 'grove', 'decree'] as const;
 export type MomentKind = typeof MOMENT_KINDS[number];
 
 export const TwitchMomentBodySchema = z.discriminatedUnion('kind', [
@@ -91,6 +100,17 @@ export const TwitchMomentBodySchema = z.discriminatedUnion('kind', [
    * count and only sizes the caravan; `founded` says whether the raiding channel has a kingdom of its own here.
    */
   variant('raid', { raidKey: TokenSchema, from: ChannelSchema, viewers: UIntSchema.min(1).max(10_000_000), founded: z.boolean() }),
+  /**
+   * The night: the channel went live (`open`) or offline (`rest`). Lasting state, one current fact (key `night`);
+   * `number` counts the broadcasts the kingdom has witnessed, so the gate can say which night this is.
+   */
+  variant('night', { nightKey: TokenSchema, phase: z.enum(['open', 'rest']), number: UIntSchema.min(1), openedAt: EpochMsSchema }),
+  /** A citizen's first words tonight, home already standing from an earlier night: the relight. `awayDays` from 14 days away. */
+  variant('homecoming', { credit: CreditSchema, nightKey: TokenSchema, awayDays: UIntSchema.min(14).max(100_000).nullable() }),
+  /** Everything planted by the town's homes, by slot: a follower's sapling, a tree from the Plant a Tree reward. Lasting, key `grove`. */
+  variant('grove', { plantings: z.array(GroveEntrySchema).max(GROVE_LIMIT) }),
+  /** A decree the kingdom carried out. `colours`: the town flies `choice` on its bunting and standards. Lasting, key `decree.<subject>`. */
+  variant('decree', { subject: z.literal('colours'), choice: z.enum(TOWN_COLOURS), title: publicText(1, 120), pollKey: TokenSchema }),
 ]).superRefine((body, ctx) => {
   const issue = (message: string, path: (string | number)[] = []) => ctx.addIssue({ code: 'custom', message, path });
   const unique = (keys: readonly string[], what: string) => { if (new Set(keys).size !== keys.length) issue(`Duplicate ${what}`); };
@@ -122,6 +142,9 @@ export const TwitchMomentBodySchema = z.discriminatedUnion('kind', [
       break;
     case 'shared-chat':
       unique(body.channels.map(c => c.kingdomId), 'channel');
+      break;
+    case 'grove':
+      unique(body.plantings.map(p => String(p.slot)), 'planting slot');
       break;
     case 'charity':
       if (body.donation !== null && body.phase !== 'progress') issue('A donation arrives during a campaign', ['donation']);

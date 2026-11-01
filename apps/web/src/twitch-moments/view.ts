@@ -14,6 +14,9 @@ import { createSkyLightLayer } from './sky-light-view';
 import type { CrowdCall } from './stage-beat';
 import type { SpectacleLayerHost, SpectaclePlaces } from './spectacle';
 import { createTrainLayer } from './train-view';
+import { createDecreeLayer } from './decree-view';
+import type { TownLayerHost } from './town';
+import { createTownLayer } from './town-view';
 
 export type { DoorAnchor, GiftRoute, PlaceAnchor } from './gift-view';
 
@@ -196,10 +199,16 @@ export function createTwitchMomentView(host: MomentViewHost) {
   const skyLight = createSkyLightLayer(root, spectacleHost), flight = createSkyFlightLayer(root, spectacleHost);
   const trainLayer = createTrainLayer(root, spectacleHost), dragon = createDragonLayer(root, spectacleHost);
   const spectacles = [skyLight, flight, trainLayer, dragon];
+  // The town as its channel shapes it: the grove, the relight, the gate's night and the bell; the decree board, the
+  // town's colours on its bunting and a festival. Both stand only on what the host supplies.
+  const townHost: TownLayerHost = { ...spectacleHost, door, window: slot => host.windowAnchor?.(slot) ?? null, gate: () => host.placeAnchor?.('gate') ?? null };
+  const townLayer = createTownLayer(root, townHost), decree = createDecreeLayer(root, townHost);
+  const glowNow = (): SkyGlow => mergeGlow(mergeGlow(skyLight.glow(), dragon.glow()), mergeGlow(townLayer.glow(), decree.glow()));
 
   /** Mesh every banner and gift part before the first meaningful frame, so no beat waits on a worker. */
   async function prepare(): Promise<void> {
-    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...raid.blueprints(), ...spectacles.flatMap(layer => layer.blueprints())];
+    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...raid.blueprints(), ...spectacles.flatMap(layer => layer.blueprints()),
+      ...townLayer.blueprints(), ...decree.blueprints()];
     for (const tier of BANNER_TIERS) {
       const p = bannerParts(tier, host.kit);
       parts.push(p.head, p.roll, p.rollLapsed, ...p.rows, ...p.shimmer.flat());
@@ -367,6 +376,38 @@ export function createTwitchMomentView(host: MomentViewHost) {
     const subject = mount.clone().lerp(doorstep, 0.35).add(new THREE.Vector3(0, -0.15, 0));
     const eye = subject.clone().addScaledVector(normal, portrait ? 9.5 : 7.4).addScaledVector(right, portrait ? 1.4 : 2.6).add(new THREE.Vector3(0, portrait ? 1.6 : 1.2, 0));
     return checked(eye, subject, portrait ? 56 : 44);
+  }
+
+  /**
+   * A home's front garden from the street: the whole house front, its door and the planting beside it, the eye a
+   * little above head height and far enough out that the words over the door stay in frame.
+   */
+  function gardenShot(slot: number): CameraPose | null {
+    const { width, height } = host.viewport(), portrait = height > width;
+    const d = door(slot);
+    if (!d) return homeShot(slot);
+    const anchor = host.homeAnchor(slot);
+    const normal = new THREE.Vector3(...d.normal), right = new THREE.Vector3(...d.right);
+    const doorstep = new THREE.Vector3(...d.doorstep);
+    const words = anchor ? new THREE.Vector3(...anchor.mount) : doorstep.clone().add(new THREE.Vector3(0, 2.4, 0));
+    // Aim between the doorstep and the words, a touch toward the sapling's side of the door.
+    const subject = doorstep.clone().lerp(words, 0.45).addScaledVector(right, 0.8);
+    const eye = subject.clone().addScaledVector(normal, portrait ? 15 : 12).addScaledVector(right, portrait ? 2 : 4.2).add(new THREE.Vector3(0, portrait ? 3.4 : 2.8, 0));
+    return checked(eye, subject, portrait ? 56 : 44) ?? homeShot(slot);
+  }
+
+  /** The decree board from across the square: its question over the poles and every pennant, the plaza behind. */
+  function boardShot(): CameraPose | null {
+    const { width, height } = host.viewport(), portrait = height > width;
+    const stand = decree.stand();
+    if (!stand) return null;
+    const target = stand.origin.clone().add(new THREE.Vector3(0, portrait ? 3.8 : 3.4, 0));
+    for (const [out, aside] of [[15, 2.5], [15, -2.5], [19, 0], [12, 4]] as const) {
+      const eye = target.clone().addScaledVector(stand.facing, portrait ? out * 1.3 : out).addScaledVector(stand.right, aside).add(new THREE.Vector3(0, 0.6, 0));
+      const pose = checked(eye, target, portrait ? 58 : 44);
+      if (pose) return pose;
+    }
+    return null;
   }
 
   /**
@@ -622,10 +663,13 @@ export function createTwitchMomentView(host: MomentViewHost) {
     const { width, height } = host.viewport();
     return first(raid.shots(height > width));
   };
-  const shotFor = (subject: MomentSubject, prior: CameraPose, toward: readonly MomentSubject[] = [], skyward = false) =>
-    subject.kind === 'home' ? (skyward ? homeSkyShot(subject.slot, prior) : homeShot(subject.slot))
-      : subject.place === 'gate' ? raidShot() ?? placeShot('gate', prior, toward)
-      : subject.place === 'market' ? placeShot(subject.place, prior, toward) : spectacleShot(subject.place, prior);
+  /** Pixels between two pennant labels' centres below which the board is too far away to label each pennant. */
+  const BOARD_LABEL_GAP = 150;
+  const shotFor = (subject: MomentSubject, prior: CameraPose, toward: readonly MomentSubject[] = [], skyward = false, framing?: FocusFrame['framing']): CameraPose | null =>
+    subject.kind === 'home' ? (skyward ? homeSkyShot(subject.slot, prior) : framing === 'garden' ? gardenShot(subject.slot) : homeShot(subject.slot))
+      : (framing === 'board' ? boardShot() : null)
+        ?? (subject.place === 'gate' ? raidShot() ?? placeShot('gate', prior, toward)
+          : subject.place === 'market' ? placeShot(subject.place, prior, toward) : spectacleShot(subject.place, prior));
 
   /** World point a caption hangs above. */
   function captionPoint(subject: MomentSubject): THREE.Vector3 | null {
@@ -648,7 +692,8 @@ export function createTwitchMomentView(host: MomentViewHost) {
       // Sky captions hang low in the sky, under the bursts, so the words never cover the light they describe.
       case 'sky': return sky ? new THREE.Vector3(...sky.centre).add(new THREE.Vector3(0, sky.ceiling * 0.3, 0)) : null;
       case 'castle': { const c = places.castle(); return c ? new THREE.Vector3(...c.crown).add(new THREE.Vector3(0, 3, 0)) : null; }
-      case 'plaza': { const p = places.plaza(); return p ? new THREE.Vector3(...p).add(new THREE.Vector3(0, 4.5, 0)) : null; }
+      // A standing decree board carries the question over its poles.
+      case 'plaza': { const board = decree.captionPoint(); if (board) return board; const p = places.plaza(); return p ? new THREE.Vector3(...p).add(new THREE.Vector3(0, 4.5, 0)) : null; }
       case 'train': return trainLayer.focus()?.clone().add(new THREE.Vector3(0, 3.4, 0)) ?? null;
       case 'dragon': return (dragon.head() ?? dragon.focus())?.clone().add(new THREE.Vector3(0, 4, 0))
         ?? (() => { const l = places.lair(); return l ? new THREE.Vector3(...l.position).add(new THREE.Vector3(0, 8, 0)) : null; })();
@@ -696,7 +741,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       const abort = new AbortController(), lease = host.camera.acquire('twitch-moments', DIRECTOR_PRIORITY, abort.signal);
       const subject = focus.subject, skyward = subject.kind === 'home'
         && frame.sky.some(beat => beat.kind === 'cheer' && beat.origin.kind === 'home' && beat.origin.slot === subject.slot);
-      const prior = lease?.read(), shot = lease && prior ? shotFor(subject, prior, focus.follow ? [focus.follow.subject] : focus.toward, skyward) : null;
+      const prior = lease?.read(), shot = lease && prior ? shotFor(subject, prior, focus.follow ? [focus.follow.subject] : focus.toward, skyward, focus.framing) : null;
       // No legal shot of a supplied subject: hand the camera straight back rather than guess one.
       if (lease && prior && shot) director = { focus, lease, prior, shot, abort, leaving: null, from: null };
       else if (lease) { lease.release(); abort.abort(); }
@@ -755,7 +800,9 @@ export function createTwitchMomentView(host: MomentViewHost) {
       flight.apply(frame.visible ? frame.sky : [], frame.atMs);
       trainLayer.apply(frame.visible ? frame.train : null, frame.atMs);
       dragon.apply(frame.visible ? frame.dragon : null, frame.atMs);
-      host.light?.(frame.visible ? { ...mergeGlow(skyLight.glow(), dragon.glow()), hush: Math.min(1, Math.max(0, frame.stage?.hush ?? 0)) } : { colour: [0, 0, 0], strength: 0, hush: 0 });
+      townLayer.apply(frame.town, frame.atMs);
+      decree.apply(frame.town, frame.atMs);
+      host.light?.(frame.visible ? { ...glowNow(), hush: Math.min(1, Math.max(0, frame.stage?.hush ?? 0)) } : { colour: [0, 0, 0], strength: 0, hush: 0 });
       callCrowd(frame);
       syncAudio(frame);
       if (frame.visible) direct(frame); else release();
@@ -770,6 +817,23 @@ export function createTwitchMomentView(host: MomentViewHost) {
         if (p.z < 0 || p.z > 1 || Math.abs(p.x) > 0.95 || Math.abs(p.y) > 0.95) continue;
         out.push({ id: caption.id, title: caption.title, line: caption.line, detail: caption.detail, opacity: caption.opacity, x: (p.x + 1) * width / 2, y: (1 - p.y) * height / 2 });
       }
+      // Each pennant on the decree board is labelled under it: the choice, and its share of one-person votes.
+      const board = lastFrame.town.board, points = board ? decree.choicePoints() : [];
+      if (board && board.raised > 0.6) {
+        const labels: ScreenCaption[] = [];
+        board.choices.forEach((choice, i) => {
+          const point = points[i];
+          if (!point) return;
+          const p = point.clone().project(camera);
+          if (p.z < 0 || p.z > 1 || Math.abs(p.x) > 0.95 || Math.abs(p.y) > 0.95) return;
+          labels.push({ id: `${board.key}:${choice.id}`, title: choice.title, line: `${Math.round(choice.share * 100)}%`, detail: choice.winner ? 'chosen' : null,
+            opacity: Math.min(1, (board.raised - 0.6) / 0.4), x: (p.x + 1) * width / 2, y: (1 - p.y) * height / 2 });
+        });
+        // Seen from across the town the pennants stand a few pixels apart: their labels would pile on each other and on
+        // the question, so only a board near enough to read gets one under each pennant.
+        const apart = labels.every((a, i) => labels.every((b, j) => j <= i || Math.abs(a.x - b.x) >= BOARD_LABEL_GAP || Math.abs(a.y - b.y) >= 64));
+        if (apart) out.push(...labels);
+      }
       return out;
     },
     /** The train's carriage nameplates: the observed contributors riding it, never an amount. */
@@ -783,10 +847,11 @@ export function createTwitchMomentView(host: MomentViewHost) {
       });
     },
     /** The sky's light this frame, for hosts that tint their own lighting rather than take `light()` calls. */
-    glow: (): SkyGlow => mergeGlow(skyLight.glow(), dragon.glow()),
+    glow: glowNow,
     stats: (): Record<string, number | boolean> => ({ banners: banners.size, meshes: [...banners.values()].reduce((n, b) => n + b.root.children.length, 0), edges: edges.size,
       ...gifts.stats(), ...prefixed('sky', skyLight.stats()), ...prefixed('flight', flight.stats()), ...prefixed('train', trainLayer.stats()),
-      ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent,
+      ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()),
+      ...prefixed('town', townLayer.stats()), ...prefixed('decree', decree.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent,
       'stage.watchers': lastFrame?.visible && lastFrame.stage ? lastFrame.stage.watchers : 0, crowd: crowdCalled }),
     dispose(): void {
       if (disposed) return;
@@ -800,6 +865,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       for (const edge of edges.values()) root.remove(edge.group);
       edges.clear(); gifts.dispose(); raid.dispose();
       for (const layer of spectacles) layer.dispose();
+      townLayer.dispose(); decree.dispose();
       host.parent.remove(root);
       for (const material of edgeMaterials.values()) material.dispose();
       edgeMaterials.clear(); edgeGeometry.dispose();

@@ -19,6 +19,8 @@ describe('tenure evidence and the address rule', () => {
     const verifier = new TenureEvidenceVerifier('live', key);
     const expected = { kingdomId, personId, now };
     expect(verifier.verify([follow(Date.UTC(2024, 1, 1)), months(14)], expected)).toMatchObject({ followedAt: Date.UTC(2024, 1, 1), subscribedMonths: 14 });
+    expect(verifier.verify([follow(Date.UTC(2024, 1, 1), { source: 'eventsub.follow' })], expected))
+      .toMatchObject({ followedAt: Date.UTC(2024, 1, 1), records: [{ source: 'eventsub.follow' }] });
     expect(verifier.verify([], expected)).toEqual({ followedAt: null, subscribedMonths: null, records: [] });
     const refused = (records: unknown[], label: string) => expect(() => verifier.verify(records, expected), label).toThrow(TenureEvidenceError);
     refused([{ ...follow(Date.UTC(2020, 0, 1)), followedAt: Date.UTC(2019, 0, 1) }], 'a rewritten follow date');

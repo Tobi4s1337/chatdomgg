@@ -19,7 +19,8 @@ import type { RealmDelivery } from '../realm-delivery/delivery';
  *
  * The CLI still speaks the retired `channel.cheer` v1 and `channel.hype_train.*` v1; production reads
  * `channel.bits.use` v1 and the v2 trains. The door maps the old shapes onto the new ones field by field and
- * marks nothing it cannot know (an all-time high, a shared train) as true.
+ * marks nothing it cannot know (an all-time high, a shared train) as true. The CLI cannot write a chat notice, so
+ * its `channel.subscribe` and `channel.subscription.message` become the `sub` and `resub` notices production reads.
  */
 export const MOCK_CONDUIT_ID = 'simulated-mock-door';
 /** The reader account the door's chat plans are written for; it reads nothing on Twitch. */
@@ -168,6 +169,18 @@ export function adaptCliEvent(type: string, version: string, event: Record<strin
     delete train.is_golden_kappa_train;
     delete train.last_contribution;
     return { type, version: '2', event: train };
+  }
+  // Production reads subs from the chat notices a subscriber shares (tier 1); the CLI writes the EventSub sub types.
+  if ((type === 'channel.subscribe' || type === 'channel.subscription.message') && version === '1') {
+    const tier = event.tier === '2000' || event.tier === '3000' ? event.tier : '1000';
+    const resub = type === 'channel.subscription.message';
+    const months = typeof event.cumulative_months === 'number' ? event.cumulative_months : 1;
+    return { type: 'channel.chat.notification', version: '1', event: {
+      broadcaster_user_id: event.broadcaster_user_id, broadcaster_user_login: event.broadcaster_user_login, broadcaster_user_name: event.broadcaster_user_name,
+      chatter_user_id: event.user_id, chatter_user_login: event.user_login, chatter_user_name: event.user_name, chatter_is_anonymous: false,
+      message_id: `cli-${type}-${String(event.user_id)}-${months}`, notice_type: resub ? 'resub' : 'sub', source_broadcaster_user_id: null,
+      ...(resub ? { resub: { cumulative_months: months, sub_tier: tier, is_prime: false, is_gift: false } } : { sub: { sub_tier: tier, is_prime: false } }),
+    } };
   }
   return { type, version, event };
 }

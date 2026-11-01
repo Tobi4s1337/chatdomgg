@@ -53,6 +53,30 @@ describe('SIMULATED EventSub door', () => {
     expect(hypeTrainProgress.parse(progress.event, KINGDOM)).toMatchObject({ phase: 'progress', level: 2 });
   });
 
+  it('turns the CLI\'s sub and resub into the shared chat notices production reads, one notice per person and month', () => {
+    const resub = adaptCliEvent('channel.subscription.message', '1', { user_id: '60365105', user_login: 'testfromuser', user_name: 'testFromUser',
+      broadcaster_user_id: '129634568', broadcaster_user_login: 'testBroadcaster', broadcaster_user_name: 'testBroadcaster', tier: '1000',
+      message: { text: 'SIMULATED private words', emotes: [] }, cumulative_months: 63, streak_months: 55, duration_months: 1 });
+    expect(resub).toMatchObject({ type: 'channel.chat.notification', version: '1', event: { chatter_user_id: '60365105', chatter_user_name: 'testFromUser',
+      notice_type: 'resub', message_id: 'cli-channel.subscription.message-60365105-63', resub: { cumulative_months: 63, sub_tier: '1000', is_gift: false } } });
+    expect(JSON.stringify(resub)).not.toContain('private');
+    const sub = adaptCliEvent('channel.subscribe', '1', { user_id: '60365106', user_login: 'a', user_name: 'A', broadcaster_user_id: '129634568',
+      broadcaster_user_login: 'b', broadcaster_user_name: 'B', tier: '2000', is_gift: false });
+    expect(sub.event).toMatchObject({ notice_type: 'sub', sub: { sub_tier: '2000', is_prime: false } });
+    expect(toFrame({ subscription: { type: 'channel.subscribe', version: '1' }, event: { user_id: '60365106', user_login: 'a', user_name: 'A',
+      broadcaster_user_id: '129634568', broadcaster_user_login: 'b', broadcaster_user_name: 'B', tier: '1000', is_gift: false } }, 'd', 5, plans))
+      .toMatchObject({ subscription: { type: 'channel.chat.notification', version: '1' } });
+  });
+
+  it('frames the town\'s own CLI events (follow v2, rewards, polls) onto Herald\'s plans as they are', () => {
+    for (const [type, version] of [['channel.follow', '2'], ['channel.channel_points_custom_reward_redemption.add', '1'], ['channel.poll.begin', '1'],
+      ['channel.poll.progress', '1'], ['channel.poll.end', '1']] as const) {
+      expect(toFrame({ subscription: { type, version }, event: { broadcaster_user_id: '129634568' } }, 'd', 5, plans)).toMatchObject({ subscription: { type, version } });
+    }
+    // The retired follow v1 is not a plan.
+    expect(toFrame({ subscription: { type: 'channel.follow', version: '1' }, event: { broadcaster_user_id: '129634568' } }, 'd', 5, plans)).toBeNull();
+  });
+
   it('frames only Herald\'s planned subscriptions, on the door\'s own conduit', () => {
     const raid = { to_broadcaster_user_id: '129634568', to_broadcaster_user_login: 'tobi4s_', to_broadcaster_user_name: 'tobi4s_',
       from_broadcaster_user_id: '41245072', from_broadcaster_user_login: 'testfromuser', from_broadcaster_user_name: 'testFromUser', viewers: 40 };
@@ -60,7 +84,7 @@ describe('SIMULATED EventSub door', () => {
     expect(frame).toMatchObject({ kind: 'notification', meta: { messageId: 'delivery-1', at: 5 },
       subscription: { type: 'channel.raid', version: '1', status: 'enabled', conduitId: MOCK_CONDUIT_ID, condition: { to_broadcaster_user_id: KINGDOM } } });
     expect(toFrame({ subscription: { type: 'channel.cheer', version: '1' }, event: CLI_CHEER }, 'd', 5, plans)?.subscription.type).toBe('channel.bits.use');
-    expect(toFrame({ subscription: { type: 'channel.follow', version: '2' }, event: {} }, 'd', 5, plans)).toBeNull();
+    expect(toFrame({ subscription: { type: 'channel.prediction.begin', version: '1' }, event: {} }, 'd', 5, plans)).toBeNull();
     expect(toFrame({ subscription: { type: 'channel.raid', version: '2' }, event: raid }, 'd', 5, plans)).toBeNull();
     expect(toFrame('nonsense', 'd', 5, plans)).toBeNull();
   });

@@ -12,6 +12,9 @@ const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   revocation: 'revocation notices',
   bits: 'cheers and Power-ups',
   hype: 'hype trains',
+  follows: 'follows',
+  rewards: 'kingdom rewards',
+  polls: 'polls and decrees',
 };
 const CAPABILITY_USE: Readonly<Record<Capability, string>> = {
   chat: 'a message lights its author\'s window; deletes and clears put it out',
@@ -20,6 +23,9 @@ const CAPABILITY_USE: Readonly<Record<Capability, string>> = {
   revocation: 'Herald stops when a grant is withdrawn',
   bits: 'a cheer lights the sky over the town at its rung',
   hype: 'the festival train circles the walls; at level 3 the dragon wakes',
+  follows: 'a follower is settled on the edge of town and a sapling is planted by their door',
+  rewards: 'channel points ring the bell, call a festival, plant a tree or show your home',
+  polls: 'a poll stands as a decree board in the plaza; a colours decree is carried out',
 };
 const FILTER = 'pnpm --filter @chatdom/herald';
 

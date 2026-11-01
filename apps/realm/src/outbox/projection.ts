@@ -2,8 +2,8 @@ import { castleHostId, type RealmPrivateState, type RealmPublicMessage } from '@
 import type { RealmOutboxRow } from '../persistence/postgres-repository';
 import { MOMENT_CURRENT_LIMIT, type TwitchMomentFact } from '@chatdom/shared/twitch-moments';
 
-/** Moment kinds with one current slot each (Herald's `CurrentSlot`): the Hype Train and the dragon battle. */
-const SLOTTED: ReadonlySet<string> = new Set(['hype', 'battle']);
+/** Moment kinds with one current slot each (Herald's `CurrentSlot`): the Hype Train, the dragon battle and the running poll. */
+const SLOTTED: ReadonlySet<string> = new Set(['hype', 'battle', 'poll']);
 
 export type RealmPublicHome = Extract<RealmPublicMessage, { type: 'home' }>;
 export type RealmPublicCastle = Extract<RealmPublicMessage, { type: 'castle' }>;
@@ -110,7 +110,7 @@ export class PublicProjection {
   private rememberMoment(fact: TwitchMomentFact) {
     const key = `${fact.body.kind}:${fact.body.key}`, previous = this.moments.get(key);
     if (previous && previous.seq >= fact.seq) return;
-    // The one Hype Train and the one battle each hold a single slot: a new occupant replaces the last, as in the records.
+    // The one Hype Train, the one battle and the one poll each hold a single slot: a new occupant replaces the last, as in the records.
     if (SLOTTED.has(fact.body.kind)) {
       for (const [other, held] of this.moments) if (held.body.kind === fact.body.kind && other !== key) this.moments.delete(other);
     }

@@ -1,4 +1,5 @@
-import { KingdomIdSchema, type KingdomId } from '@chatdom/shared';
+import { KingdomIdSchema, PersonIdSchema, type KingdomId } from '@chatdom/shared';
+import { parseTwitchTime } from '@chatdom/twitch';
 import { RealmMomentNoticeSchema, type RealmMomentNotice } from '@chatdom/shared/realm';
 import { z } from 'zod';
 import { channelBitsUse } from '../twitch-moments/bits';
@@ -14,6 +15,28 @@ const RaidEvent = z.object({
   to_broadcaster_user_id: z.string().max(64),
   viewers: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
+
+const UserId = z.string().regex(/^[1-9][0-9]{0,19}$/u);
+const Time = z.string().min(1).max(64);
+/** `channel.follow` v2: only who followed and when. */
+const FollowEvent = z.object({
+  user_id: UserId, user_name: z.string().min(1).max(128), broadcaster_user_id: z.string().max(64), followed_at: Time,
+});
+/** A redemption of a channel-point reward: the reward's title and the redeemer. `user_input` is never read. */
+const RedemptionEvent = z.object({
+  id: z.string().min(1).max(128), broadcaster_user_id: z.string().max(64), user_id: UserId, user_name: z.string().min(1).max(128),
+  status: z.string().max(32), reward: z.object({ id: z.string().min(1).max(128), title: z.string().min(1).max(45) }),
+});
+/** A poll's question and choices with their votes. Bits voting is retired on Twitch and never read. */
+const PollEvent = z.object({
+  id: z.string().min(1).max(128), broadcaster_user_id: z.string().max(64), title: z.string().min(1).max(60),
+  choices: z.array(z.object({ id: z.string().min(1).max(128), title: z.string().min(1).max(25),
+    votes: z.number().int().min(0).optional(), channel_points_votes: z.number().int().min(0).optional(),
+    bits_votes: z.number().int().min(0).optional() })).min(2).max(5),
+  started_at: Time, ends_at: Time.optional(), ended_at: Time.optional(), status: z.string().max(32).optional(),
+});
+const POLL_STATUS = new Set(['active', 'completed', 'terminated', 'archived', 'moderated', 'invalid']);
+const REDEMPTION_STATUS = new Set(['unfulfilled', 'fulfilled', 'canceled']);
 
 /**
  * One verified spectacle notification, stripped to the realm's private evidence: who cheered (never the message),
@@ -36,8 +59,43 @@ export function spectacleNotice(type: HeraldEventType, event: unknown, kingdomId
       return checked({ kind: 'raid', from: { kingdomId: from.data, login: e.from_broadcaster_user_login, name: e.from_broadcaster_user_name.slice(0, 128) },
         viewers: Math.min(e.viewers, 10_000_000) });
     }
+    case 'channel.follow': {
+      const parsed = FollowEvent.safeParse(event);
+      if (!parsed.success || parsed.data.broadcaster_user_id !== kingdomId) return null;
+      const e = parsed.data, followedAt = parseTwitchTime(e.followed_at);
+      // The broadcaster cannot follow their own channel; a follow without a time is not evidence.
+      if (e.user_id === kingdomId || followedAt === null) return null;
+      return checked({ kind: 'follow', person: { personId: PersonIdSchema.parse(e.user_id), name: e.user_name }, followedAt });
+    }
+    case 'channel.channel_points_custom_reward_redemption.add': {
+      const parsed = RedemptionEvent.safeParse(event);
+      if (!parsed.success || parsed.data.broadcaster_user_id !== kingdomId) return null;
+      const e = parsed.data;
+      return checked({ kind: 'redemption', redemptionId: e.id, rewardId: e.reward.id, rewardTitle: e.reward.title,
+        person: { personId: PersonIdSchema.parse(e.user_id), name: e.user_name },
+        status: REDEMPTION_STATUS.has(e.status) ? e.status as 'unfulfilled' : 'unknown' });
+    }
+    case 'channel.poll.begin': case 'channel.poll.progress': case 'channel.poll.end': {
+      const parsed = PollEvent.safeParse(event);
+      if (!parsed.success || parsed.data.broadcaster_user_id !== kingdomId) return null;
+      const e = parsed.data, phase = type === 'channel.poll.begin' ? 'begin' : type === 'channel.poll.end' ? 'end' : 'progress';
+      const startedAt = parseTwitchTime(e.started_at), endsAt = parseTwitchTime(e.ended_at ?? e.ends_at ?? '');
+      if (startedAt === null || endsAt === null) return null;
+      const status = phase === 'end' ? (POLL_STATUS.has(e.status ?? '') ? e.status as 'completed' : 'invalid') : 'active';
+      return checked({ kind: 'poll', pollId: e.id, phase, title: e.title, startedAt, endsAt, status,
+        choices: e.choices.map(choice => {
+          const votes = choice.votes ?? 0;
+          // One person, one vote: votes bought with channel points (or Bits, retired on Twitch) are counted apart.
+          return { id: choice.id, title: choice.title, votes, paidVotes: Math.min(votes, (choice.channel_points_votes ?? 0) + (choice.bits_votes ?? 0)) };
+        }) });
+    }
     default: return IGNORED;
   }
+}
+
+/** A broadcast opened (only a `live` stream) or closed: the night's evidence, beside the presence beacon. */
+export function streamNotice(live: boolean, streamId: string | null, startedAt: number | null): RealmMomentNotice | null {
+  return checked({ kind: 'stream', phase: live ? 'online' : 'offline', streamId: streamId !== null && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u.test(streamId) ? streamId : null, startedAt });
 }
 
 const hype = (update: HypeUpdate): RealmMomentNotice => ({ kind: 'hype', update: {

@@ -14,7 +14,8 @@ const BROADCASTER = { id: '129634568', login: 'tobi4s_', displayName: 'tobi4s_' 
 const READER = { id: '900000001', login: 'herald_reader', displayName: 'HeraldReader' };
 const STRANGER = { id: '900000002', login: 'someone_else', displayName: 'SomeoneElse' };
 const REDIRECT = 'http://localhost:5195/herald/callback';
-const FULL_GRANTS = { [READER.id]: ['user:read:chat', 'user:bot', 'user:write:chat'], [BROADCASTER.id]: ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train'] };
+const FULL_GRANTS = { [READER.id]: ['user:read:chat', 'user:bot', 'user:write:chat'], [BROADCASTER.id]: ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train',
+  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls'] };
 
 function config(overrides: Partial<HeraldConfig> = {}): HeraldConfig {
   return {
@@ -107,7 +108,8 @@ describe('capabilities', () => {
 
   it('app credentials alone authorize only stream state and revocation', () => {
     const result = assessCapabilities(valid, { reader: account('reader', []), broadcaster: account('broadcaster', []) });
-    expect(Object.fromEntries(result.map(status => [status.capability, status.available]))).toEqual({ chat: false, chatters: false, stream: true, revocation: true, bits: false, hype: false });
+    expect(Object.fromEntries(result.map(status => [status.capability, status.available]))).toEqual({ chat: false, chatters: false, stream: true, revocation: true, bits: false, hype: false,
+      follows: false, rewards: false, polls: false });
   });
 
   it('chat needs the reader pair and channel:bot; chatters needs only the broadcaster', () => {
@@ -127,9 +129,11 @@ describe('capabilities', () => {
 
   it('re-consent preserves every existing scope and adds the crier permission', () => {
     expect(scopesToRequest('reader', ['channel:bot', 'moderator:read:chatters', 'user:write:chat', 'channel:manage:polls'])).toEqual(['channel:bot', 'channel:manage:polls', 'moderator:read:chatters', 'user:bot', 'user:read:chat', 'user:write:chat']);
-    expect(scopesToRequest('broadcaster', ['user:write:chat', 'channel:manage:polls'])).toEqual(['bits:read', 'channel:bot', 'channel:manage:polls', 'channel:read:hype_train', 'moderator:read:chatters', 'user:write:chat']);
+    expect(scopesToRequest('broadcaster', ['user:write:chat', 'channel:manage:polls'])).toEqual(['bits:read', 'channel:bot', 'channel:manage:polls', 'channel:manage:redemptions',
+      'channel:read:hype_train', 'moderator:read:chatters', 'moderator:read:followers', 'user:write:chat']);
     expect(assessCapabilities({ state: 'valid', expiresAt: 999999 }, { reader: account('reader', ['user:bot', 'user:read:chat']), broadcaster: account('broadcaster', ['channel:bot']) }).find(status => status.capability === 'chat')?.available).toBe(true);
-    expect(scopesToRequest('broadcaster', [])).toEqual(['bits:read', 'channel:bot', 'channel:read:hype_train', 'moderator:read:chatters']);
+    expect(scopesToRequest('broadcaster', [])).toEqual(['bits:read', 'channel:bot', 'channel:manage:polls', 'channel:manage:redemptions', 'channel:read:hype_train',
+      'moderator:read:chatters', 'moderator:read:followers']);
   });
 });
 
@@ -427,7 +431,8 @@ describe('authorize', () => {
       const state = new URL(consentUrl).searchParams.get('state') ?? '';
       await callback(port, { code: fake.consent(BROADCASTER.id, ['channel:bot'], REDIRECT), state });
     }, {}, 'broadcaster');
-    expect(outcome).toEqual({ status: 'missing_scopes', scopes: ['moderator:read:chatters', 'bits:read', 'channel:read:hype_train'] });
+    expect(outcome).toEqual({ status: 'missing_scopes', scopes: ['moderator:read:chatters', 'bits:read', 'channel:read:hype_train',
+      'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls'] });
   });
 
   it('expires when nobody comes back', async () => {

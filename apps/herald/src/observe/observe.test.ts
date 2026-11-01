@@ -172,10 +172,11 @@ describe('Chatters sweep', () => {
 describe('stream state', () => {
   function tracker() {
     let clock = T0;
-    const submitted: unknown[] = [];
+    const submitted: unknown[] = [], reconciled: unknown[] = [];
     const source = { origin: 'live' as const, submit: (input: unknown) => (submitted.push(input), Promise.resolve('applied' as const)) } as unknown as PresenceSource;
-    const t = new StreamTracker({ kingdomId: KINGDOM, source, now: () => clock });
-    return { t, submitted, at: (ms: number) => (clock = T0 + ms) };
+    const t = new StreamTracker({ kingdomId: KINGDOM, source, now: () => clock,
+      reconciled: (observation, startedAt) => reconciled.push({ observation, startedAt }) });
+    return { t, submitted, reconciled, at: (ms: number) => (clock = T0 + ms) };
   }
   const listed = (id: string, type = 'live') => [{ id, userId: BROADCASTER.id, type, startedAt: T0 }];
 
@@ -197,6 +198,23 @@ describe('stream state', () => {
     expect(s.t.polled(listed('1', ''), T0, 'minute')?.outcome).toBe('unknown');
     expect(s.submitted).toEqual([]);
     expect(s.t.health().counters.notLive).toBe(1);
+  });
+
+  it('restores the town night on accepted reconciliation, without repeating minute refreshes or cached answers', () => {
+    const s = tracker();
+    s.t.polled(listed('1'), T0 + 1000, 'startup');
+    expect(s.reconciled).toEqual([{ observation: { kind: 'stream', at: T0 + 1000, live: true, streamId: '1' }, startedAt: T0 }]);
+    s.t.polled(listed('1'), T0 + 60_000, 'minute');
+    s.t.polled(null, T0 + 120_000, 'gap');
+    expect(s.reconciled).toHaveLength(1);
+    s.t.push({ kind: 'stream', at: T0 + 130_000, live: false });
+    s.t.polled(listed('1'), T0 + 140_000, 'minute');
+    expect(s.reconciled).toHaveLength(1);
+    // The offline push has its own evidence; a missed next broadcast is recovered by Get Streams.
+    s.t.polled(listed('2'), T0 + 260_000, 'gap');
+    expect(s.reconciled).toHaveLength(2);
+    s.t.polled([], T0 + 320_000, 'minute');
+    expect(s.reconciled.at(-1)).toEqual({ observation: { kind: 'stream', at: T0 + 320_000, live: false }, startedAt: null });
   });
 
   it('a failed request keeps the last observation and its time; it ages out instead of guessing', () => {

@@ -126,7 +126,7 @@ describe('PresenceSource', () => {
     expect(frame.windows.filter(window => window.publicName !== null).map(window => window.publicName)).toEqual(['Juniper']);
     const text = JSON.stringify(h.frames);
     for (const id of ['201', '202', '101']) expect(text).not.toMatch(new RegExp(`"${id}"`));
-    expect(Object.keys(frame.windows[0]!).sort()).toEqual(['present', 'publicName', 'since', 'slot']);
+    expect(Object.keys(frame.windows[0]!).sort()).toEqual(['look', 'present', 'publicName', 'since', 'slot']);
   });
 
   it('publishes a new person only after their binding is durable', async () => {

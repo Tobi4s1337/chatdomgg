@@ -24,7 +24,8 @@ const SECRET = 'simulated-client-secret-value-0001';
 const BROADCASTER = { id: '129634568', login: 'tobi4s_', displayName: 'tobi4s_' };
 const READER = { id: '900000001', login: 'herald_reader', displayName: 'HeraldReader' };
 const READER_SCOPES = ['user:read:chat', 'user:bot'];
-const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train'];
+const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train',
+  'moderator:read:followers', 'channel:manage:redemptions', 'channel:manage:polls'];
 const PLANNED = HERALD_EVENT_TYPES.length;
 const FULL_GRANTS = { [READER.id]: READER_SCOPES, [BROADCASTER.id]: BROADCASTER_SCOPES };
 const KINGDOM = KingdomIdSchema.parse(BROADCASTER.id);
@@ -205,7 +206,8 @@ describe('subscription reconciliation', () => {
     const r = await started();
     const ours = r.eventsub.subscriptions.filter(entry => entry.transport.method === 'conduit' && entry.transport.conduit_id === r.conduitId);
     expect(ours.map(entry => entry.type).sort()).toEqual([...HERALD_EVENT_TYPES].sort());
-    expect(ours.every(entry => entry.version === (entry.type.startsWith('channel.hype_train.') ? '2' : '1'))).toBe(true);
+    expect(ours.every(entry => entry.version === (entry.type.startsWith('channel.hype_train.') || entry.type === 'channel.follow' ? '2' : '1'))).toBe(true);
+    expect(ours.find(entry => entry.type === 'channel.follow')!.condition).toEqual({ broadcaster_user_id: BROADCASTER.id, moderator_user_id: BROADCASTER.id });
     expect(ours.find(entry => entry.type === 'channel.raid')!.condition).toEqual({ to_broadcaster_user_id: BROADCASTER.id });
     expect(ours.find(entry => entry.type === 'channel.bits.use')!.condition).toEqual({ broadcaster_user_id: BROADCASTER.id });
     expect(ours.find(entry => entry.type === 'channel.chat.message')!.condition).toEqual({ broadcaster_user_id: BROADCASTER.id, user_id: READER.id });
@@ -228,7 +230,9 @@ describe('subscription reconciliation', () => {
       'channel.chat.message': 'unauthorized', 'channel.chat.notification': 'unauthorized', 'channel.chat.message_delete': 'unauthorized', 'channel.chat.clear': 'unauthorized',
       'channel.chat.clear_user_messages': 'unauthorized', 'stream.online': 'enabled', 'stream.offline': 'enabled', 'user.authorization.revoke': 'enabled',
       'channel.bits.use': 'unauthorized', 'channel.hype_train.begin': 'unauthorized', 'channel.hype_train.progress': 'unauthorized',
-      'channel.hype_train.end': 'unauthorized', 'channel.raid': 'enabled',
+      'channel.hype_train.end': 'unauthorized', 'channel.raid': 'enabled', 'channel.follow': 'unauthorized',
+      'channel.channel_points_custom_reward_redemption.add': 'unauthorized', 'channel.poll.begin': 'unauthorized', 'channel.poll.progress': 'unauthorized',
+      'channel.poll.end': 'unauthorized',
     });
     expect(r.fake.calls.filter(call => call.status === 403)).toEqual([]);
     expect(r.source.available).toBe(false);

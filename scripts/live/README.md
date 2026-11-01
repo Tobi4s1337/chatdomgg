@@ -74,6 +74,29 @@ Twitch CLI writes the payloads; it is never asked to send anything to Twitch.
 - **What you should see:** the gate's braziers catch and the raider's standard unrolls. A caravan of wagons, sized by the viewer count, rolls up the road under the caption `‹name› rides in · A raid of N · Raiders who chat are our guests tonight`.
 - **How you know it reached the kingdom:** `raid · SIMULATED · Hollowbrook brings 48 guests to the Raid Gate`, then the moment number and latency.
 
+### The channel shapes the town
+
+Each of these fires one event through the door and waits for its fact on the kingdom's watch. Each takes `--live` instead: it then reads the managed LIVE realm and waits for the real act on twitch.tv/tobi4s_ (nothing is written to Twitch from these scripts).
+
+- **A follow: a new home and a sapling.** `node scripts/live/follow.mjs [--id 990000300] [--name Hollis_Reed] [--again]`
+  - Twitch CLI's `channel.follow` v2, with the follower set. The realm settles the follower in a home placed by their follow date (the edge of the newest quarter), then plants a sapling by the door with their name tag.
+  - You see the soil break by the new door, the sapling unfold and its tag swing, under `Hollis_Reed · follows · a new home on the edge of town`. The sapling stays: it is in the `grove` fact.
+  - Prints `follow · SIMULATED · Hollis_Reed follows`, the home slot and the grove. An unfollow and a follow again plays nothing new.
+- **A sub: the banner and the tenure street.** `node scripts/live/sub.mjs [--id 990000301] [--name Maren_Holt] [--months 14] [--tier 1000]`
+  - Twitch CLI's `channel.subscribe` (one month) or `channel.subscription.message` (more). The door turns it into the shared chat notice production reads. Someone with no home yet is settled first on their tenure street: more months, a street nearer the castle.
+  - You see the banner unfurl at their home, under `‹name› · 14 months under the banner`.
+- **The channel goes live: the gate opens, everyone comes home.** `node scripts/live/online.mjs [--returning 4]`, and `--rest` for `stream.offline`
+  - Twitch CLI's `stream.online`. The realm opens the night (`Night N`): the gate's braziers catch, its standard climbs in the town's colours and the castle beacon is lit. With `--returning`, SIMULATED citizens who already have homes speak; each is welcomed home once tonight. Their window flares and the neighbours' windows answer, under `Welcome back, ‹name›` (with the days counted after fourteen or more away).
+  - `--rest` closes the gate. Every home, sapling, banner and colour stays where it was for the next night.
+- **Channel points: the kingdom rewards.** `node scripts/live/redeem.mjs [--reward "Call a Festival"] [--id 990000100] [--name Wrenna]`
+  - Twitch CLI's redemption, with the reward's title set. Herald reads the title only, never what the viewer typed. The four kingdom rewards are **Ring the Bell** (three strokes from the castle), **Call a Festival** (the streets dress in the town's colours for ten minutes), **Plant a Tree** (a tree grows by the redeemer's home, one to a plot) and **Show My Home** (the camera visits it and its window flares). Any other reward is the streamer's own, and nothing happens in the town.
+  - To make them real on tobi4s_, create four custom rewards with exactly these titles in the Creator Dashboard (Viewer Rewards → Channel Points). Then `redeem.mjs --live` waits for one.
+- **A poll: the town decides together.** `node scripts/live/poll.mjs [--title "Our colours"] [--choices Ember,Tide,Meadow] [--votes 3,7,2] [--paid 0,1,0] [--seconds 20]`
+  - Twitch CLI's `channel.poll.begin`, `channel.poll.progress` (twice) and `channel.poll.end`, as one poll. The decree board rises in the plaza and each pennant climbs to its share of votes.
+  - One person, one vote: votes bought with channel points are counted apart (`--paid`).
+  - A poll whose every choice is one of the town's colours (Ember, Gold, Rose, Tide, Meadow, Dusk, Snow, Night) is a decree: the winner's colours run out across the town's bunting and the gate's standard, and stay. A tie, or a poll Twitch moderated, decides nothing, and the board says so. Any other poll is decided on the board and changes nothing.
+- **For the LIVE ones:** see the grants below.
+
 ### Everyone who speaks gets a home window, beyond the old 12
 
 `node scripts/live/chatters.mjs [--count 40] [--pace 2500]`
@@ -94,16 +117,16 @@ Herald also drops a repeated `Twitch-Eventsub-Message-Id`; `--again` above shows
 
 `node scripts/live/live-watch.mjs [--realm http://127.0.0.1:5197] [--minutes 30]`
 
-Reads the managed LIVE realm (default `http://127.0.0.1:5197`, or `CHATDOM_LIVE_REALM`) and prints every **LIVE** moment fact for kingdom 129634568 as it lands, with its delay after Twitch. Cheer, start a Hype Train or raid on twitch.tv/tobi4s_ to see it.
+Reads the managed LIVE realm (default `http://127.0.0.1:5197`, or `CHATDOM_LIVE_REALM`) and prints every **LIVE** moment fact for kingdom 129634568 as it lands, with its delay after Twitch. Cheer, start a Hype Train, raid, follow, subscribe, redeem a kingdom reward, start a poll or go live on twitch.tv/tobi4s_ to see it.
 
-- **Grants:** Bits and Hype Train need the broadcaster's `bits:read` and `channel:read:hype_train`; both are granted on tobi4s_ (`pnpm --filter @chatdom/herald check:auth` lists every capability as available). If they are ever withdrawn, run `pnpm --filter @chatdom/herald authorize -- --role broadcaster`, then `provision:source`. Raids need no grant.
-- **Before going live:** `check:auth` should end `Every Herald read capability is authorized.` Herald's conduit then carries `channel.bits.use`, `channel.hype_train.begin/progress/end` (v2), `channel.raid` and the chat types for 129634568, all enabled.
+- **Grants:** Bits and Hype Train need the broadcaster's `bits:read` and `channel:read:hype_train`; both are granted on tobi4s_. Follows, kingdom rewards and polls need three more from the broadcaster: `moderator:read:followers`, `channel:manage:redemptions` and `channel:manage:polls` (Twitch requires the manage scopes even to read redemptions and polls). Until they are granted, `check:auth` lists `follows`, `rewards` and `polls` as waiting, and everything else carries on. To grant them, run `pnpm --filter @chatdom/herald authorize -- --role broadcaster` as tobi4s_ (it keeps every scope already granted), then `provision:source`. Raids and going live need no grant.
+- **Before going live:** `check:auth` should end `Every Herald read capability is authorized.` Herald's conduit then carries `channel.bits.use`, `channel.hype_train.begin/progress/end` (v2), `channel.raid`, `channel.follow` (v2), `channel.channel_points_custom_reward_redemption.add`, `channel.poll.begin/progress/end`, `stream.online/offline` and the chat types for 129634568, all enabled.
 - **What you should see on stream:** the same presentations as on the bench, labelled LIVE instead of SIMULATED, a few seconds after the cheer, train or raid lands on Twitch.
 - **Labels:** SIMULATED acts never appear here.
 
 ### Stills
 
-`node scripts/live/stills.mjs [homes] [raid] [cheer] [hype]` captures one 1920×1080 still per moment on the stream view while firing it, into `work/evidence/live-twitch/`. Each still holds the shared capture lock only for its own page.
+`node scripts/live/stills.mjs [homes] [raid] [cheer] [hype] [follow] [sub] [online] [homecoming] [bell] [festival] [tree] [poll] [decree]` captures one 1920×1080 still per moment on the stream view while firing it, into `work/evidence/live-twitch/`. Each still holds the shared capture lock only for its own page. The town's beats last seconds and a software-rendered 1080p frame takes most of a minute, so for those stills the page's wall clock is held at the beat's peak while the frame is drawn. A follow, a sub and a planted tree use fresh people each run; the homecoming welcomes `CHATDOM_RETURNING=ID:name` (default `990000310:Hollis_Reed`), who must already have a home from before tonight. A decree only plays when it changes the colours the town flies: its still elects Ember unless `CHATDOM_DECREE_VOTES` (votes for Ember,Tide,Meadow) says otherwise.
 
 ## Many brand-new speakers at once
 

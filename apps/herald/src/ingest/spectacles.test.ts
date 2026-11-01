@@ -2,7 +2,7 @@ import { KingdomIdSchema, PersonIdSchema } from '@chatdom/shared';
 import { RealmMomentNoticeSchema } from '@chatdom/shared/realm';
 import { describe, expect, it } from 'vitest';
 import { IGNORED } from '../twitch-moments/normalizer';
-import { isStrike, spectacleNotice } from './spectacles';
+import { isStrike, spectacleNotice, streamNotice } from './spectacles';
 
 const K = KingdomIdSchema.parse('424242');
 const NEIGHBOUR = KingdomIdSchema.parse('515151');
@@ -145,5 +145,52 @@ describe('isStrike', () => {
     expect(isStrike({})).toBe(false);
     expect(isStrike(null)).toBe(false);
     expect(isStrike('!strike')).toBe(false);
+  });
+});
+
+describe('the town’s evidence: follows, rewards, polls and the night', () => {
+  const FOLLOWER = PersonIdSchema.parse('15395959');
+  const follow = (overrides: Record<string, unknown> = {}) => ({ user_id: FOLLOWER, user_login: 'testfromuser', user_name: 'testFromUser',
+    broadcaster_user_id: K, broadcaster_user_login: 'kingdom', broadcaster_user_name: 'Kingdom', followed_at: '2026-11-01T13:49:06.624686193Z', ...overrides });
+
+  it('keeps a follow’s person, public name and Twitch’s own follow time (nanoseconds and all)', () => {
+    expect(spectacleNotice('channel.follow', follow(), K)).toEqual({ kind: 'follow', person: { personId: FOLLOWER, name: 'testFromUser' },
+      followedAt: Date.UTC(2026, 10, 1, 13, 49, 6, 624) });
+    expect(spectacleNotice('channel.follow', follow({ broadcaster_user_id: NEIGHBOUR }), K)).toBeNull();
+    expect(spectacleNotice('channel.follow', follow({ user_id: K }), K)).toBeNull();
+    expect(spectacleNotice('channel.follow', follow({ followed_at: 'yesterday' }), K)).toBeNull();
+  });
+
+  it('reads a redemption by its reward’s title and never by what the viewer typed', () => {
+    const notice = spectacleNotice('channel.channel_points_custom_reward_redemption.add', {
+      id: '95f79965-3cca-818c-b8bd-cea0bdb94e47', broadcaster_user_id: K, broadcaster_user_login: 'kingdom', broadcaster_user_name: 'Kingdom',
+      user_id: '84617073', user_login: 'testfromuser', user_name: 'testFromUser', user_input: 'SIMULATED private words', status: 'unfulfilled',
+      reward: { id: '6047fec9-0135-0b8e-f64b-82f3d0fcd6a2', title: 'Ring the Bell', cost: 150, prompt: 'SIMULATED prompt' }, redeemed_at: '2026-11-01T13:49:06.703918586Z',
+    }, K);
+    expect(notice).toEqual({ kind: 'redemption', redemptionId: '95f79965-3cca-818c-b8bd-cea0bdb94e47', rewardId: '6047fec9-0135-0b8e-f64b-82f3d0fcd6a2',
+      rewardTitle: 'Ring the Bell', person: { personId: PersonIdSchema.parse('84617073'), name: 'testFromUser' }, status: 'unfulfilled' });
+    expect(JSON.stringify(notice)).not.toContain('private');
+    expect(JSON.stringify(notice)).not.toContain('prompt');
+  });
+
+  it('carries a poll’s tallies with what was paid for counted apart, and its result only at the end', () => {
+    const event = { id: '4001115b-5a62-a821-dcc9-58e69559f349', broadcaster_user_id: K, broadcaster_user_login: 'kingdom', broadcaster_user_name: 'Kingdom',
+      title: 'Our colours', choices: [{ id: 'c1', title: 'Ember', bits_votes: 0, channel_points_votes: 1, votes: 10 }, { id: 'c2', title: 'Tide', bits_votes: 9, channel_points_votes: 8, votes: 24 }],
+      bits_voting: { is_enabled: true, amount_per_vote: 10 }, channel_points_voting: { is_enabled: true, amount_per_vote: 500 },
+      status: 'completed', started_at: '2026-11-01T13:49:06.7878314Z', ended_at: '2026-11-01T14:04:06.7878314Z' };
+    const end = spectacleNotice('channel.poll.end', event, K);
+    expect(end).toMatchObject({ kind: 'poll', phase: 'end', status: 'completed', title: 'Our colours',
+      choices: [{ id: 'c1', votes: 10, paidVotes: 1 }, { id: 'c2', votes: 24, paidVotes: 17 }] });
+    expect(spectacleNotice('channel.poll.end', { ...event, status: 'unexpected-provider-status' }, K)).toMatchObject({ status: 'invalid' });
+    const running: Record<string, unknown> = { ...event };
+    delete running.ended_at; delete running.status;
+    expect(spectacleNotice('channel.poll.progress', { ...running, ends_at: '2026-11-01T14:04:06Z' }, K)).toMatchObject({ phase: 'progress', status: 'active' });
+    expect(spectacleNotice('channel.poll.begin', { ...running, choices: [{ id: 'c1', title: 'Ember' }, { id: 'c2', title: 'Tide' }], ends_at: '2026-11-01T14:04:06Z' }, K))
+      .toMatchObject({ phase: 'begin', choices: [{ votes: 0, paidVotes: 0 }, { votes: 0, paidVotes: 0 }] });
+  });
+
+  it('turns a broadcast into the night’s evidence', () => {
+    expect(streamNotice(true, '40078987165', Date.UTC(2026, 10, 1, 19))).toEqual({ kind: 'stream', phase: 'online', streamId: '40078987165', startedAt: Date.UTC(2026, 10, 1, 19) });
+    expect(streamNotice(false, null, null)).toEqual({ kind: 'stream', phase: 'offline', streamId: null, startedAt: null });
   });
 });
