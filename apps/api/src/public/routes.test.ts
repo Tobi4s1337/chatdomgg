@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classify } from './routes';
+import { classify, isRealmSocket } from './routes';
 
 /** Classifies a URL the way the public server does: through WHATWG URL parsing first. */
 const at = (path: string) => {
@@ -26,8 +26,11 @@ describe('the public origin route table', () => {
 
   it('sends the realm routes and its live data to the realm', () => {
     for (const path of [
-      '/api/realm/founded/1001', '/api/realm/entry/1001', '/api/realm/watch/1001', '/api/realm/watch/1001/stream',
-      '/live-realm-data', '/live-realm-data/', '/live-realm-data/matchmake/joinOrCreate/kingdom',
+      '/api/realm/founded/1001', '/api/realm/entry/1001', '/api/realm/watch/1001',
+      `/api/realm/founded/scenes/${'a'.repeat(64)}`,
+      '/live-realm-data/healthz', '/live-realm-data/api/realm/entry/1001', '/live-realm-data/api/realm/watch/1001',
+      '/live-realm-data/matchmake/joinOrCreate/kingdom', '/live-realm-data/matchmake/reconnect/k:1001',
+      '/live-realm-data/matchmake/joinById/k:1001', '/live-realm-data/process_123/k:1001',
     ]) expect(classify(path, ''), path).toEqual({ kind: 'realm' });
     // A realm verb with nothing after it names no kingdom.
     expect(classify('/api/realm/founded/', '')).toEqual({ kind: 'not-found', api: true });
@@ -41,9 +44,52 @@ describe('the public origin route table', () => {
     expect(classify('/api/panel', '')).toEqual({ kind: 'not-found', api: true });
     expect(classify('/api/public/door', '')).toEqual({ kind: 'door-data' });
     expect(classify('/api/public/door/x', '')).toEqual({ kind: 'not-found', api: true });
-    expect(classify('/presence-data/1001', '')).toEqual({ kind: 'optional', service: 'herald' });
-    expect(classify('/map-data/tiles', '')).toEqual({ kind: 'optional', service: 'map' });
-    expect(classify('/forge-data/spells', '')).toEqual({ kind: 'optional', service: 'forge' });
+    expect(classify('/presence-data/stream', '')).toEqual({ kind: 'optional', service: 'herald' });
+    expect(classify('/map-data/v1/preview', '')).toEqual({ kind: 'optional', service: 'map' });
+    expect(classify('/forge-data/run', '')).toEqual({ kind: 'optional', service: 'forge' });
+    expect(classify('/forge-data/status', '')).toEqual({ kind: 'optional', service: 'forge' });
+  });
+
+  it('exposes the existing authenticated dock handler only through its four product routes', () => {
+    for (const verb of ['status', 'actions', 'presentations', 'witness']) {
+      expect(classify(`/api/dock/${verb}`, '')).toEqual({ kind: 'dock' });
+      expect(classify(`/api/dock/${verb}/extra`, '')).toEqual({ kind: 'not-found', api: true });
+    }
+    for (const path of ['/api/dock/internal', '/api/dock', '/api/dock/action']) {
+      expect(classify(path, '')).toEqual({ kind: 'not-found', api: true });
+    }
+  });
+
+  it('keeps the Surveyor public projections and event streams reachable', () => {
+    const preview = 'pv-20261101T120000Z-aaaaaaaaaaaa', frame = 'lf-20261101T120000Z-bbbbbbbbbbbb';
+    for (const path of ['/map-data/v1/health', '/map-data/v1/survey', '/map-data/v1/preview',
+      ...['world.json', 'region-42.json', 'names'].map(file => `/map-data/v1/preview/${preview}/${file}`),
+      `/map-data/v1/live/${preview}`, `/map-data/v1/live/${preview}/events`,
+      ...['live.bin', 'starts.json', 'dabs.bin'].map(file => `/map-data/v1/live/${preview}/${frame}/${file}`),
+    ]) expect(classify(path, ''), path).toEqual({ kind: 'optional', service: 'map' });
+    for (const path of ['/map-data/v1/sql', '/map-data/current.json', `/map-data/v1/preview/${preview}/private.json`,
+      `/map-data/v1/live/${preview}/${frame}/manifest.json`, `/map-data/v1/preview/${preview}/worldXjson`,
+    ]) expect(classify(path, ''), path).toEqual({ kind: 'not-found', api: true });
+  });
+
+  it('refuses nested service doors and any encoded path before it can reach an upstream decoder', () => {
+    for (const prefix of ['/live-realm-data', '/presence-data', '/forge-data', '/map-data']) {
+      for (const suffix of ['', '/', '/internal', '/internal/realm/ingress', '/internal/realm/herald',
+        '/internal/dock/action', '/live-realm-data/internal/realm/ingress',
+        '/%69nternal/realm/ingress', '/%2569nternal/realm/ingress', '/%252569nternal/realm/ingress',
+        '/api/realm/watch/1001%2f..%2f..%2f..%2finternal/realm/ingress',
+        '/api/realm/watch/1001%252f..%252f..%252f..%252finternal/realm/ingress',
+        '/matchmake/reconnect/internal', '/process/internal', '/internal/k:1001', '/reference/session',
+      ]) expect(at(`${prefix}${suffix}`), `${prefix}${suffix}`).toEqual({ kind: 'not-found', api: true });
+    }
+  });
+
+  it('upgrades only actual kingdom room sockets, never a public read or matchmaker endpoint', () => {
+    expect(isRealmSocket('/live-realm-data/process_123/k:1001')).toBe(true);
+    for (const path of ['/live-realm-data/healthz', '/live-realm-data/api/realm/watch/1001',
+      '/live-realm-data/matchmake/reconnect/k:1001', '/live-realm-data/internal/realm/ingress',
+      '/live-realm-data/internal/k:1001', '/live-realm-data/process_123/k%3a1001',
+    ]) expect(isRealmSocket(path), path).toBe(false);
   });
 
   it('never publishes the internal service doors', () => {
@@ -74,10 +120,10 @@ describe('the public origin route table', () => {
   });
 
   it('serves the listed product pages and nothing that merely looks like one', () => {
-    for (const path of ['/showcase', '/stream', '/panel', '/map', '/map/tobi4s_', '/kingdom/1001', '/-/avatar-builder']) {
+    for (const path of ['/showcase', '/stream', '/panel', '/map', '/map/tobi4s_', '/kingdom/1001', '/-/avatar-builder', '/dock', '/dock/', '/-/citizen-card']) {
       expect(classify(path, ''), path).toEqual({ kind: 'page' });
     }
-    for (const path of ['/showcase/', '/map/Tobi4s', '/map/a-b', '/map/abcdefghijklmnopqrstuvwxyz', '/kingdom/0', '/kingdom/01', '/kingdom/abc', '/kingdom/1001/x', '/bench', '/-/other']) {
+    for (const path of ['/showcase/', '/map/Tobi4s', '/map/a-b', '/map/abcdefghijklmnopqrstuvwxyz', '/kingdom/0', '/kingdom/01', '/kingdom/abc', '/kingdom/1001/x', '/bench', '/-/other', '/dock/bench', '/-/citizen-card/bench']) {
       expect(classify(path, ''), path).toEqual({ kind: 'file' });
     }
   });

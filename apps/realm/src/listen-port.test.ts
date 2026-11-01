@@ -1,5 +1,11 @@
 import { expect, it } from 'vitest';
-import { realmListenPort } from './listen-port';
+import { realmListenHost, realmListenPort } from './listen-port';
+
+it('supports an explicit loopback realm without changing managed defaults', () => {
+  expect(realmListenHost({})).toBe('0.0.0.0');
+  expect(realmListenHost({ REALM_HOST: '127.0.0.1' })).toBe('127.0.0.1');
+  for (const host of ['', 'https://localhost', '127.0.0.1:5173']) expect(() => realmListenHost({ REALM_HOST: host })).toThrow();
+});
 
 it('binds the advertised local realm unless an explicit port wins, and rejects invalid listen ports', () => {
   expect(realmListenPort({ CHATDOM_REALM_TARGET: 'http://127.0.0.1:5197' })).toBe(5197);

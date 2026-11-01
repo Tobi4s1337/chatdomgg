@@ -13,9 +13,9 @@ import { createPanelHttp } from './panel/http';
 import { createPanelAuthority } from './panel/reading';
 import { createTwitchUsers } from './panel/twitch-users';
 import { fetchTargetJson, proxyHttp, proxyUpgrade, type ProxyTarget } from './proxy';
-import { classify } from './routes';
+import { classify, isRealmSocket } from './routes';
 import { indexBuild, sendFile, type StaticFile } from './static';
-import { supervise, type Supervised } from './supervisor';
+import { bindPublicGateway, supervise, type Supervised } from './supervisor';
 
 /**
  * chatdom.io on one port: the web app, Twitch sign-in, the panel's Extension backend and the realm (its HTTP routes
@@ -28,6 +28,8 @@ import { supervise, type Supervised } from './supervisor';
 const repoRoot = process.env.PUBLIC_REPO_ROOT ?? resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const config = readPublicConfig(process.env, repoRoot);
 const auth = readRealmAuthConfig({ ...process.env, API_PORT: String(config.port), REALM_PUBLIC_ORIGIN: process.env.REALM_PUBLIC_ORIGIN ?? `http://localhost:${config.port}` });
+// The existing dock bridge reads this default too; an explicit DOCK_REALM_URL still takes precedence there.
+process.env.CHATDOM_REALM_TARGET ??= `http://${config.realm.target.host.includes(':') ? `[${config.realm.target.host}]` : config.realm.target.host}:${config.realm.target.port}`;
 
 const pool = new pg.Pool({
   connectionString: auth.databaseUrl, max: Number(process.env.PUBLIC_DATABASE_POOL ?? 20), connectionTimeoutMillis: 3_000, idleTimeoutMillis: 30_000,
@@ -98,12 +100,6 @@ const panel = createPanelHttp({
 
 // The realm: a supervised child on its loopback port, or an existing realm the host already runs.
 let realm: Supervised | null = null;
-if (config.realm.mode === 'spawn') {
-  realm = supervise({
-    name: 'realm', command: process.execPath, args: [config.realm.entry], cwd: resolve(repoRoot, 'apps/realm'),
-    env: { ...process.env, REALM_PORT: String(config.realm.target.port) },
-  });
-}
 
 const optionalTargets: Record<'herald' | 'map' | 'forge', ProxyTarget | null> = config.optional;
 const PAGE_HEADERS = {
@@ -141,6 +137,8 @@ async function doorData(response: ServerResponse) {
 async function route(request: IncomingMessage, response: ServerResponse) {
   const url = new URL(request.url ?? '/', 'http://public.invalid');
   const target = classify(url.pathname, url.search);
+  // Forward the same normalized path we authorized, never the raw spelling a downstream parser may interpret differently.
+  request.url = `${url.pathname}${url.search}`;
   switch (target.kind) {
     case 'health': {
       const { ok, body } = await health();
@@ -150,12 +148,16 @@ async function route(request: IncomingMessage, response: ServerResponse) {
     case 'auth':
       if (!await authRoutes(request, response)) unavailableJson(response, 404, 'No such route');
       return;
+    case 'dock':
+      if (!await (await import('../dock')).handleDock(request, response, { pool, config: auth })) unavailableJson(response, 404, 'No such route');
+      return;
     case 'realm': proxyHttp(config.realm.target, request, response, config.proto); return;
     case 'panel': await panel(request, response, url.pathname); return;
     case 'door-data': await doorData(response); return;
     case 'optional': {
       const upstream = optionalTargets[target.service];
-      if (upstream) proxyHttp(upstream, request, response, config.proto);
+      // Herald, Surveyor and the Forge already mount their own public prefixes. Only the realm mount is stripped.
+      if (upstream) proxyHttp({ name: upstream.name, host: upstream.host, port: upstream.port }, request, response, config.proto);
       else unavailableJson(response, 503, 'This part of Chatdom is not running on this host.');
       return;
     }
@@ -181,10 +183,13 @@ const server = createServer((request, response) => {
   });
 });
 server.on('upgrade', (request, socket, head) => {
-  const url = new URL(request.url ?? '/', 'http://public.invalid');
-  // Only the realm's rooms accept sockets; anything else is closed at once.
-  if (classify(url.pathname, url.search).kind === 'realm' && url.pathname.startsWith('/live-realm-data/')) proxyUpgrade(config.realm.target, request, socket, head, config.proto);
-  else socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+  try {
+    const url = new URL(request.url ?? '/', 'http://public.invalid');
+    request.url = `${url.pathname}${url.search}`;
+    // Only the realm's rooms accept sockets; anything else is closed at once.
+    if (isRealmSocket(url.pathname)) proxyUpgrade(config.realm.target, request, socket, head, config.proto);
+    else socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+  } catch { socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); }
 });
 server.headersTimeout = 15_000;
 server.requestTimeout = 0; // Long-lived watch streams; idle sockets are bounded by keepAliveTimeout instead.
@@ -194,22 +199,42 @@ server.maxHeadersCount = 64;
 const sweep = setInterval(() => { service.sweep().catch(() => console.error('public: sign-in record sweep failed; it will retry')); }, 10 * 60_000);
 sweep.unref();
 
-await new Promise<void>((done, fail) => { server.once('error', fail); server.listen(config.port, config.host, done); });
-console.info(`Chatdom public origin ${auth.publicOrigin} on ${config.host}:${config.port}: ${auth.mode === 'live' ? 'LIVE Twitch sign-in' : 'SIMULATED sign-in, no real accounts'}; `
-  + `realm ${config.realm.mode === 'spawn' ? `supervised on ${config.realm.target.port}` : `at ${config.realm.target.host}:${config.realm.target.port}`}; `
-  + `panel backend ${config.extension ? `for extension ${config.extension.clientId.slice(0, 6)}…` : 'not configured (TWITCH_EXTENSION_CLIENT_ID)'}; `
-  + `door kingdoms ${config.doorKingdoms.map(kingdom => kingdom.login).join(', ')}`);
-
 let stopping = false;
 const stop = () => {
   if (stopping) return;
   stopping = true;
   clearInterval(sweep);
-  server.close();
+  const closed = new Promise<void>(resolve => server.close(() => resolve()));
   server.closeIdleConnections();
   setTimeout(() => server.closeAllConnections(), 5_000).unref();
-  void Promise.allSettled([realm?.stop(15_000)]).then(() => pool.end()).finally(() => process.exit(0));
+  void Promise.allSettled([closed, realm?.stop(15_000)]).then(() => pool.end()).finally(() => process.exit(0));
   setTimeout(() => process.exit(1), 25_000).unref();
 };
 process.once('SIGTERM', stop);
 process.once('SIGINT', stop);
+
+try {
+  realm = await bindPublicGateway({ server, port: config.port, host: config.host, realmMode: config.realm.mode,
+    startRealm: () => {
+      if (stopping) throw new Error('The public server stopped during startup.');
+      return supervise({
+        name: 'realm', command: process.execPath, args: [config.realm.entry], cwd: resolve(repoRoot, 'apps/realm'),
+        env: { ...process.env, REALM_PORT: String(config.realm.target.port), REALM_HOST: '127.0.0.1',
+          REALM_DATABASE_SCHEMA: auth.schema, REALM_SIMULATED: auth.mode === 'simulated' ? '1' : '0' },
+      });
+    } });
+} catch (error) {
+  clearInterval(sweep);
+  process.removeListener('SIGTERM', stop);
+  process.removeListener('SIGINT', stop);
+  server.closeAllConnections();
+  server.close();
+  await realm?.stop(15_000);
+  await pool.end();
+  throw error;
+}
+server.on('error', error => { console.error(`public: listener failed (${error.name})`); stop(); });
+console.info(`Chatdom public origin ${auth.publicOrigin} on ${config.host}:${config.port}: ${auth.mode === 'live' ? 'LIVE Twitch sign-in' : 'SIMULATED sign-in, no real accounts'}; `
+  + `realm ${config.realm.mode === 'spawn' ? `supervised on ${config.realm.target.port}` : `at ${config.realm.target.host}:${config.realm.target.port}`}; `
+  + `panel backend ${config.extension ? `for extension ${config.extension.clientId.slice(0, 6)}…` : 'not configured (TWITCH_EXTENSION_CLIENT_ID)'}; `
+  + `door kingdoms ${config.doorKingdoms.map(kingdom => kingdom.login).join(', ')}`);
