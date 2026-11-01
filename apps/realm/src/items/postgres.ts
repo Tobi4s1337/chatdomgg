@@ -2,6 +2,7 @@ import type { ItemEvent, ItemRecord, KingdomId, PersonId } from '@chatdom/shared
 import type { PoolClient } from 'pg';
 import type { RealmDatabase } from '../persistence/database';
 import { ItemCommitUncertainError, redactItem, type GrantReceipt, type ItemStore, type ItemTransaction } from './store';
+import { ITEM_PAGE_ROWS } from './pages';
 
 const clients = new WeakMap<ItemTransaction, { client: PoolClient; active: boolean }>();
 
@@ -84,6 +85,17 @@ export function createPostgresItemStore({ pool }: { pool: RealmDatabase }): Item
     async get(id) { const r = await pool.query<{ record: ItemRecord; hidden: boolean }>("SELECT i.record, (h.person_id IS NOT NULL) AS hidden FROM realm_items i LEFT JOIN realm_item_hidden_names h ON h.person_id=i.record->'story'->'by'->>'personId' WHERE i.id=$1", [id]); const row = r.rows[0]; return row ? redactItem(row.record, new Set(row.hidden && row.record.story.by ? [row.record.story.by.personId] : [])) : null; },
     async list(ownerId: PersonId, kingdomId: KingdomId) { const r = await pool.query<{ record: ItemRecord; hidden: boolean }>("SELECT i.record, (h.person_id IS NOT NULL) AS hidden FROM realm_items i LEFT JOIN realm_item_hidden_names h ON h.person_id=i.record->'story'->'by'->>'personId' WHERE i.kingdom_id=$1 AND i.record->>'ownerId'=$2 ORDER BY i.id", [kingdomId, ownerId]); return r.rows.map(row => redactItem(row.record, new Set(row.hidden && row.record.story.by ? [row.record.story.by.personId] : []))); },
     async history(id) { const r = await pool.query<{ event: ItemEvent }>('SELECT event FROM realm_item_events WHERE item_id=$1 ORDER BY sequence', [id]); return r.rows.map(row => row.event); },
+    async listPage(ownerId, kingdomId, origin, after) {
+      const r = await pool.query<{ record: ItemRecord; hidden: boolean }>(`SELECT i.record, (h.person_id IS NOT NULL) AS hidden FROM realm_items i
+        LEFT JOIN realm_item_hidden_names h ON h.person_id=i.record->'story'->'by'->>'personId'
+        WHERE i.kingdom_id=$1 AND i.record->>'ownerId'=$2 AND i.record->>'origin'=$3 AND i.record->>'place'<>'spent'
+          AND i.id > $4 ORDER BY i.id LIMIT $5`, [kingdomId, ownerId, origin, after ?? '', ITEM_PAGE_ROWS + 1]);
+      return r.rows.map(row => redactItem(row.record, new Set(row.hidden && row.record.story.by ? [row.record.story.by.personId] : [])));
+    },
+    async historyPage(id, after) {
+      const r = await pool.query<{ sequence: string; event: ItemEvent }>('SELECT e.sequence::text AS sequence, e.event FROM realm_item_events e WHERE e.item_id=$1 AND e.sequence>$2::bigint ORDER BY e.sequence LIMIT $3', [id, after ?? '0', ITEM_PAGE_ROWS + 1]);
+      return r.rows.map(row => ({ cursor: row.sequence, value: row.event }));
+    },
     async forgetName(personId) { await pool.query('INSERT INTO realm_item_hidden_names (person_id) VALUES ($1) ON CONFLICT DO NOTHING', [personId]); },
   };
   return store;

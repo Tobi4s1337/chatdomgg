@@ -33,6 +33,9 @@ export interface ItemStore {
   get(id: ItemId): Promise<ItemRecord | null>;
   list(ownerId: PersonId, kingdomId: KingdomId): Promise<readonly ItemRecord[]>;
   history(id: ItemId): Promise<readonly ItemEvent[]>;
+  /** Keyset reads, at most 33 rows including one lookahead. Private browser reads never load whole collections. */
+  listPage(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin'], after?: string): Promise<readonly ItemRecord[]>;
+  historyPage(id: ItemId, after?: string): Promise<readonly { readonly cursor: string; readonly value: ItemEvent }[]>;
   /** Redaction is applied at read time, including to future grants; provenance stays intact. */
   forgetName(personId: PersonId): Promise<void>;
 }

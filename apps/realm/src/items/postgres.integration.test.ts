@@ -1,13 +1,17 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { KingdomIdSchema, PersonIdSchema, type ItemRecord } from '@chatdom/shared';
-import type { Pool } from 'pg';
+import pg, { type Pool } from 'pg';
+import { runnerImport } from 'vite';
+import { resolve } from 'node:path';
 import { createRealmPool, type RealmDatabase } from '../persistence/database';
 import { createItemCatalogue, createRealmItems, type GrantInput } from './index';
 import { ItemCommitUncertainError } from './store';
-import { migrateRealmSchema } from '../persistence/migrate';
 import { createPostgresItemStore, postgresItemClient } from './postgres';
 import type { ItemTransaction } from './store';
+import { createPostgresItemAdmission } from './entry';
+import { createRealmAuthenticator } from '../auth/authenticator';
+import type { RealmChannelSender } from '../room-channels';
 
 const enabled = process.env.REALM_DATABASE_TESTS === '1';
 let pool: Pool;
@@ -19,7 +23,11 @@ describe.runIf(enabled)('pier item store on isolated Postgres', () => {
     const url = new URL(process.env.DATABASE_URL);
     if (url.hostname !== '127.0.0.1' || url.port !== '5410') throw new Error('Pier tests require Postgres at 127.0.0.1:5410.');
     pool = createRealmPool({ connectionString: process.env.DATABASE_URL, schema: 'pier' });
-    await migrateRealmSchema(pool, 'pier');
+    expect((await pool.query('SELECT current_schema() AS schema')).rows[0]?.schema).toBe('pier');
+    // A disk-cached glob can miss a newly added SQL file. Use the same fresh source runner as the migration CLI.
+    const { module } = await runnerImport<typeof import('../persistence/migrate')>(resolve('apps/realm/src/persistence/migrate.ts'), { configFile: false });
+    await module.migrateRealmSchema(pool, 'pier');
+    expect((await pool.query("SELECT 1 FROM pg_indexes WHERE schemaname='pier' AND indexname='realm_items_owner_page'")).rowCount).toBe(1);
   });
   afterAll(async () => { if (pool) await pool.end(); });
 
@@ -69,6 +77,111 @@ describe.runIf(enabled)('pier item store on isolated Postgres', () => {
     expect(await store.transaction(kingdomId, tx => tx.nextNumber('keepsake:fish'))).toBe(10);
     await expect(store.transaction(kingdomId, async tx => { tx.afterCommit(() => { throw new Error('listener'); }); return 42; })).resolves.toBe(42);
   });
+  it('rolls back SQL item writes and history if the room entry ends before commit', async () => {
+    const kingdomId = KingdomIdSchema.parse(id()), ownerId = PersonIdSchema.parse(id());
+    const store = createPostgresItemStore({ pool });
+    const catalogue = createItemCatalogue([{ id: 'fish:perch', branch: 'gathered', title: 'Perch', lore: 'A fish.', stack: 99, keepsake: false, model: 'fish:perch', places: ['bag', 'away'] }]);
+    const items = createRealmItems({ store, catalogue, clock: () => 100 });
+    let sawGrant!: () => void;
+    const firstPush = new Promise<void>(resolve => { sawGrant = resolve; });
+    const pushes: unknown[] = []; items.onChange((...change) => { pushes.push(change); sawGrant(); });
+    const fish = await items.grant({ key: id(), ownerId, kingdomId, origin: 'live', defId: 'fish:perch', count: 3,
+      story: { by: null, kingdomId, at: 10, where: 'pier', line: 'Caught here' }, source: { kind: 'fishing', ref: id() } });
+    await firstPush; pushes.length = 0;
+    let current = true;
+    let callbacks = 0;
+    const transaction = store.transaction.bind(store);
+    store.transaction = (kingdom, work) => transaction(kingdom, tx => {
+      const append = tx.append.bind(tx);
+      const committed = tx.afterCommit.bind(tx);
+      tx.afterCommit = callback => committed(() => { callbacks++; callback(); });
+      tx.append = async event => { await append(event); current = false; };
+      return work(tx);
+    });
+    for (const action of ['move', 'release'] as const) {
+      current = true;
+      const access = { kingdomId, origin: 'live' as const, current: async () => current };
+      const result = action === 'move' ? await items.move(ownerId, fish.id, { place: 'away', slot: null }, 0, access)
+        : await items.release(ownerId, fish.id, 1, 0, access);
+      expect(result).toMatchObject({ ok: false });
+      expect(await items.get(fish.id)).toEqual(fish);
+      expect((await items.history(fish.id)).map(event => event.kind)).toEqual(['granted']);
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    expect(pushes).toEqual([]);
+    expect(callbacks).toBe(0);
+  });
+  it('checks eight concurrent guarded owners through their own transaction on a one-connection pool', async () => {
+    const single = new pg.Pool({ connectionString: process.env.DATABASE_URL!, max: 1, connectionTimeoutMillis: 500,
+      statement_timeout: 5000, query_timeout: 6000, idle_in_transaction_session_timeout: 10000, options: '-c search_path=pier' });
+    single.on('error', () => {});
+    try {
+      const kingdomId = KingdomIdSchema.parse(id()), store = createPostgresItemStore({ pool: single });
+      const catalogue = createItemCatalogue([{ id: 'fish:perch', branch: 'gathered', title: 'Perch', lore: 'A fish.', stack: 99, keepsake: false, model: 'fish:perch', places: ['bag', 'away'] }]);
+      const items = createRealmItems({ store, catalogue, clock: Date.now });
+      const auth = createRealmAuthenticator({ pool: single, origin: 'simulated' });
+      let available = true;
+      const admit = createPostgresItemAdmission({ pool: single, origin: 'simulated', readiness: { held: () => available ? null : 'unavailable' } });
+      const owners: { from: RealmChannelSender; item: ItemRecord; sessionId: string }[] = [];
+      for (let i = 0; i < 8; i++) {
+        const ownerId = PersonIdSchema.parse(id()), sessionId = randomUUID(), entryId = randomUUID();
+        await single.query("INSERT INTO realm_persons(person_id,origin,identity_issuer) VALUES($1,'simulated','pier-test')", [ownerId]);
+        await single.query("INSERT INTO realm_sessions(session_id,handle_hash,person_id,origin,resume_scope,expires_at) VALUES($1,$2,$3,'simulated',$4,now()+interval '1 hour')", [sessionId, randomBytes(32), ownerId, randomUUID()]);
+        await single.query("INSERT INTO realm_entries(entry_id,session_id,person_id,kingdom_id,origin) VALUES($1,$2,$3,$4,'simulated')", [entryId, sessionId, ownerId, kingdomId]);
+        const principal = { personId: ownerId, kingdomId, origin: 'simulated' as const, sessionId: entryId, expiresAt: Date.now() + 3_600_000, publicName: 'A fisher', look: 'reference' };
+        const from: RealmChannelSender = { principal, walkerId: entryId, pose: () => null, present: () => true, current: () => auth.current(principal, Date.now()) };
+        const item = await items.grant({ key: id(), ownerId, kingdomId, origin: 'simulated', defId: 'fish:perch', count: 3,
+          story: { by: null, kingdomId, at: 10, where: 'pier', line: 'Caught here' }, source: { kind: 'fishing', ref: id() } });
+        owners.push({ from, item, sessionId });
+      }
+      const replies = await Promise.all(owners.map(({ from, item }) => items.move(item.ownerId, item.id, { place: 'away', slot: null }, 0,
+        { kingdomId, origin: 'simulated', current: tx => admit(from, tx) })));
+      expect(replies.every(reply => reply.ok && reply.item.revision === 1)).toBe(true);
+      const first = owners[0]!;
+      await single.query("UPDATE realm_sessions SET revoked_at=now(),revoked_reason='revoked' WHERE session_id=$1", [first.sessionId]);
+      expect(await items.release(first.item.ownerId, first.item.id, 1, 1, { kingdomId, origin: 'simulated', current: tx => admit(first.from, tx) })).toMatchObject({ ok: false });
+      available = false;
+      expect(await items.move(owners[1]!.item.ownerId, owners[1]!.item.id, { place: 'bag', slot: null }, 1,
+        { kingdomId, origin: 'simulated', current: tx => admit(owners[1]!.from, tx) })).toMatchObject({ ok: false });
+      expect((await items.get(first.item.id))?.revision).toBe(1);
+    } finally { await single.end(); }
+  }, 30_000);
+
+  it('keyset-pages retained Postgres records and history with the same scope and byte ceilings', async () => {
+    const kingdomId = KingdomIdSchema.parse(id()), ownerId = PersonIdSchema.parse(id());
+    const store = createPostgresItemStore({ pool });
+    const catalogue = createItemCatalogue([{ id: 'tool:rod', branch: 'held', title: 'Rod', lore: 'A rod.', stack: null, keepsake: false, model: 'tool:rod', places: ['bag', 'away'] }]);
+    const items = createRealmItems({ store, catalogue, clock: Date.now });
+    const input: GrantInput = { key: id(), ownerId, kingdomId, origin: 'simulated', defId: 'tool:rod',
+      story: { by: { personId: ownerId, name: 'Juniper' }, kingdomId, at: 10, where: 'pier', line: 'Taken here' }, source: { kind: 'pier', ref: id() } };
+    const records = await store.transaction(kingdomId, async tx => {
+      const records = [];
+      for (let i = 0; i < 75; i++) records.push(await items.grant({ ...input, key: `${input.key}-${i}` }, tx));
+      return records;
+    });
+    await items.grant({ ...input, key: `${input.key}-live`, origin: 'live' });
+    await items.forgetName(ownerId);
+    const seen: string[] = [];
+    let after: string | undefined;
+    do {
+      const page = await items.listPage(ownerId, kingdomId, 'simulated', after);
+      expect(page.items.length).toBeLessThanOrEqual(32);
+      expect(page.items.every(item => item.story.by?.name === 'a citizen')).toBe(true);
+      expect(Buffer.byteLength(JSON.stringify({ type: 'items.list', id: 'x', ...page }))).toBeLessThanOrEqual(48 * 1024);
+      seen.push(...page.items.map(item => item.id)); after = page.next ?? undefined;
+    } while (after);
+    expect(seen).toEqual(records.map(item => item.id).sort());
+    const first = records[0]!;
+    for (let revision = 0; revision < 105; revision++) expect(await items.move(ownerId, first.id, { place: revision % 2 ? 'bag' : 'away', slot: null }, revision)).toMatchObject({ ok: true });
+    const history = [];
+    after = undefined;
+    do {
+      const page = await items.historyPage(first.id, after);
+      expect(page.events.length).toBeLessThanOrEqual(32);
+      history.push(...page.events); after = page.next ?? undefined;
+    } while (after);
+    expect(history).toEqual(await items.history(first.id)); expect(history).toHaveLength(106);
+  }, 30_000);
   it('serializes real grants, survives recreation, and retains a spent gathered record', async () => {
     const kingdomId = KingdomIdSchema.parse(id()), ownerId = PersonIdSchema.parse(id());
     const store = createPostgresItemStore({ pool });

@@ -18,6 +18,8 @@ import { createServer as createPortReservation } from 'node:net';
 import { realmListenHost, realmListenPort } from './listen-port';
 import { ownRealmShutdown } from './lifecycle';
 import { composeRealmItems } from './items/compose';
+import { createItemRoomChannel } from './items/channel';
+import { createPostgresItemAdmission } from './items/entry';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -84,6 +86,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
       return () => { detachInteractions(); detachEvening(); };
     },
   });
+  Object.assign(boot.services, { channels: [...(boot.services.channels ?? []), createItemRoomChannel(itemFoundation.items, createPostgresItemAdmission({ pool, origin, readiness: boot.readiness }))] });
   citizens.use(boot.allocation, boot.services);
   boot.ingress.moments.useSettler(citizens);
   castle.use(boot.allocation, boot.store);

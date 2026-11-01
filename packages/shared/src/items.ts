@@ -81,19 +81,24 @@ export interface ItemEvent {
   /** The fact that changed a stack; its original catch remains traceable after merging. */
   readonly source?: ItemSource;
 }
+export interface ItemListPage { readonly items: readonly ItemRecord[]; readonly next: string | null }
+export interface ItemHistoryPage { readonly events: readonly ItemEvent[]; readonly next: string | null }
+export const ItemListCursorSchema = z.string().regex(/^[a-zA-Z0-9-]{1,64}$/);
+export const ItemHistoryCursorSchema = z.string().refine(value => /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n);
 
 /** Walker requests over the 'items' room channel (section 5a). Grants never come from a browser. */
 export const ItemRequestSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('items.list'), id: z.string().min(1).max(64) }),
+  z.strictObject({ type: z.literal('items.list'), id: z.string().min(1).max(64), after: ItemListCursorSchema.optional() }),
   z.strictObject({ type: z.literal('items.move'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64),
     revision: z.number().int().nonnegative(), to: z.enum(ITEM_PLACES), slot: z.number().int().min(0).max(63).nullable() }),
   z.strictObject({ type: z.literal('items.release'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64),
     revision: z.number().int().nonnegative(), count: z.number().int().min(1).max(999) }),
-  z.strictObject({ type: z.literal('items.history'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64) }),
+  z.strictObject({ type: z.literal('items.history'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64), after: ItemHistoryCursorSchema.optional() }),
 ]);
 export type ItemRequest = z.infer<typeof ItemRequestSchema>;
 export type ItemReply =
-  | { readonly type: 'items.list'; readonly id: string; readonly items: readonly ItemRecord[] }
-  | { readonly type: 'items.changed'; readonly items: readonly ItemRecord[] }            // pushed after any change
-  | { readonly type: 'items.history'; readonly id: string; readonly itemId: ItemId; readonly events: readonly ItemEvent[] }
+  | { readonly type: 'items.list'; readonly id: string; readonly items: readonly ItemRecord[]; readonly next?: string | null }
+  | { readonly type: 'items.changed'; readonly id?: string; readonly items: readonly ItemRecord[] } // id on a direct reply
+  | { readonly type: 'items.history'; readonly id: string; readonly itemId: ItemId; readonly events: readonly ItemEvent[]; readonly next?: string | null }
+  | { readonly type: 'items.invalidated' } // coalesced overflow; refresh the bag using bounded pages
   | { readonly type: 'items.refused'; readonly id: string; readonly message: string };   // plain words for the person

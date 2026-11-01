@@ -122,20 +122,24 @@ export interface ItemEvent {
   readonly source?: ItemSource;                       // the catch or other fact added to a stack
 }
 
+// These cursor schemas are exported from packages/shared/src/items.ts.
+export const ItemListCursorSchema = z.string().regex(/^[a-zA-Z0-9-]{1,64}$/);
+export const ItemHistoryCursorSchema = z.string().refine(value => /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n);
 /** Walker requests over the 'items' room channel (section 5a). Grants never come from a browser. */
 export const ItemRequestSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('items.list'), id: z.string().min(1).max(64) }),
+  z.strictObject({ type: z.literal('items.list'), id: z.string().min(1).max(64), after: ItemListCursorSchema.optional() }),
   z.strictObject({ type: z.literal('items.move'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64),
     revision: z.number().int().nonnegative(), to: z.enum(ITEM_PLACES), slot: z.number().int().min(0).max(63).nullable() }),
   z.strictObject({ type: z.literal('items.release'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64),
     revision: z.number().int().nonnegative(), count: z.number().int().min(1).max(999) }),
-  z.strictObject({ type: z.literal('items.history'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64) }),
+  z.strictObject({ type: z.literal('items.history'), id: z.string().min(1).max(64), itemId: z.string().min(1).max(64), after: ItemHistoryCursorSchema.optional() }),
 ]);
 export type ItemRequest = z.infer<typeof ItemRequestSchema>;
 export type ItemReply =
-  | { readonly type: 'items.list'; readonly id: string; readonly items: readonly ItemRecord[] }
-  | { readonly type: 'items.changed'; readonly items: readonly ItemRecord[] }            // pushed after any change
-  | { readonly type: 'items.history'; readonly id: string; readonly itemId: ItemId; readonly events: readonly ItemEvent[] }
+  | { readonly type: 'items.list'; readonly id: string; readonly items: readonly ItemRecord[]; readonly next?: string | null }
+  | { readonly type: 'items.changed'; readonly id?: string; readonly items: readonly ItemRecord[] }
+  | { readonly type: 'items.history'; readonly id: string; readonly itemId: ItemId; readonly events: readonly ItemEvent[]; readonly next?: string | null }
+  | { readonly type: 'items.invalidated' } // refresh through bounded bag pages
   | { readonly type: 'items.refused'; readonly id: string; readonly message: string };   // plain words for the person
 ```
 
@@ -177,6 +181,9 @@ export interface RealmItems {
   list(ownerId: PersonId, kingdomId: KingdomId, filter?: { readonly place?: ItemPlace }): Promise<readonly ItemRecord[]>;
   get(itemId: ItemId): Promise<ItemRecord | null>;
   history(itemId: ItemId): Promise<readonly ItemEvent[]>;
+  /** Private client reads: at most 32 rows / 48 KiB, next is null when complete. */
+  listPage(ownerId: PersonId, kingdomId: KingdomId, origin: 'live' | 'simulated', after?: string): Promise<{ items: readonly ItemRecord[]; next: string | null }>;
+  historyPage(itemId: ItemId, after?: string): Promise<{ events: readonly ItemEvent[]; next: string | null }>;
   /** Pushes 'items.changed' to the owner's seat after commit. */
   onChange(listener: (ownerId: PersonId, kingdomId: KingdomId, items: readonly ItemRecord[]) => void): () => void;
   /** For panel-window's forget: hides the person's name from public pages; their records stay theirs. */
@@ -257,8 +264,10 @@ All item mutations serialize on a kingdom advisory lock. Nothing notifies before
 `ItemCommitUncertainError` means to retry the same grant key; never mint a replacement key. A rollback failure
 destroys the pooled connection. The memory store is explicitly for tests, never a durability fallback.
 
-Migration `0017_realm_pier.sql` is already applied to the lane's isolated `pier` schema. Do not edit it: use `0017b`
-for catch/Almanac tables and any further changes. Focused checks are recorded in `work/evidence/pier/README.md`.
+Migration `0017_realm_pier.sql` is already applied to the lane's isolated `pier` schema. The room checkpoint
+adds `0017b_realm_pier_pages.sql`, an owner/origin/id index for private keyset reads, also applied only in
+`pier`. Never edit either applied migration; catch/Almanac tables now start at `0017c`. Focused checks are
+recorded in `work/evidence/pier/README.md`.
 
 ### 1c. Client pieces other lanes may mount (`apps/web/src/bag/`)
 
@@ -422,6 +431,70 @@ What pier tells grand-world:
 
 ## 5. Small realm hooks pier writes itself (additive, typed; the integrator is told)
 
+### PI10 room and items channel decisions — 2 November
+
+Section 5a is implemented with a transport adapter in `room-channels.ts`. The adapter takes only
+the existing room's seats, clients, pose, world and auth check; no second socket or identity map. Channel
+handlers may return a promise. One handler per channel runs at a time for each person, including across
+replacement tabs; its slot stays occupied until the actual work settles. A fixed one-second per-person
+rate window drops and counts excess messages. There are at most 16 channels, each rate 1–60, with at most
+300 person slots per channel. Reserved protocol names and duplicate registrations refuse at setup.
+Disconnected people's idle rate slots remain until their window expires, so re-entry cannot reset them.
+The returned binding exposes counts without names or payloads. There is no unbounded request queue.
+
+Every admitted request asks the existing auth service and rechecks the live socket, controlling seat,
+held state, expiry and authority afterwards. `sender.current()` repeats those checks; `sender.pose()` reads
+the latest server pose. `sender.present()` is the synchronous socket/seat/expiry/authority gate, for a feature
+checking the session through its transaction. An auth exception ends the seat with the existing 4503
+unavailable flow, rather than leaving a request silently waiting. `room.person(personId)` supplies the
+existing seat's sender for server pushes. `toPerson` itself is a local delivery gate; sensitive pushes must
+first await that sender's `current()`, then recheck `present()`. Feature callbacks detach with the room and
+cannot publish after disposal.
+
+`createItemRoomChannel(items, admit)` registers `items` at 8 messages/second. It parses the strict shared request
+schema, never grants, and never broadcasts. Lists, history, moves, releases and commit notifications are
+owner-only and filtered by the room's kingdom and origin. Move/release gain an optional server-only
+`ItemOwnerAccess { kingdomId, origin, current(tx): Promise<boolean> }` argument; it is checked inside the
+store transaction before writing and immediately before commit. Existing server writers keep their
+existing signatures. Direct `items.changed` replies gain an optional `id`; unsolicited changes omit it.
+Notifications remain at least once, so clients merge records by id and revision and recover with a list.
+
+Durable composition passes `createPostgresItemAdmission({ pool, origin, readiness: boot.readiness })`.
+It invokes the actual readiness `held()` method and reuses the existing realm authenticator's SQL through
+the item transaction's query-only connection. No nested pool checkout is allowed. Do not pass a normal
+pool-backed `sender.current()` as a Postgres transaction guard: concurrent transactions can exhaust that
+same pool. Memory-only tests explicitly inject their in-memory auth callback.
+
+Private changes coalesce behind fresh auth, at most 300 pending owners and 32 records per owner; record or
+byte overflow becomes `items.invalidated`, never an unbounded message queue. A missing notification is
+recovered by listing. Subscription removal and room disposal cancel pending delivery. The commit captures
+its current listeners, so subscribing afterwards does not receive an old grant's delayed callback.
+
+Browser lists/history use `listPage`/`historyPage` (new additive service methods). Requests omit `after` for
+the first page, then send the reply's `next` until it is null. IDs are the bag keyset; decimal bigint event
+sequences are the history keyset. The store reads at most 33 rows, including one lookahead; replies contain
+at most 32 records/events and 48 KiB of JSON. Details are bounded to 64 fields and 24 KiB when granted.
+History is ordered by the numeric database column, not its text cursor alias. The old full `list`/`history`
+methods remain server-only. Paging is a live read, so merge intervening pushes by item id and revision.
+
+Composition adds two imports and one line to `main.ts`, appending the channel on `boot.services` before
+the transport is created. The room takes one optional `channels` field on `RealmRoomServices` and one
+registration block; feature rules stay in pier's module. No other lane's SEAMS file is present in this
+checkout. This freezes this lane's implementation of the already agreed room hook, without another lane
+needing to change its files.
+
+needs: integrator apply the reviewed `0017b_realm_pier_pages.sql` migration alongside 0017 when preparing
+the release schema; this lane migrated only `pier`, never live data. Use the existing migration runner
+against the intended integration schema, with its normal environment loaded, before starting that build.
+For the standard integration schema the command is
+`node --env-file-if-exists=.env apps/realm/scripts/migrate.mjs --schema realm`; the integrator owns its target
+environment. The lane did not run that command.
+
+needs: integrator remove “Nothing has changed” from `REALM_SEAT_ENDINGS.unavailable.reason` in
+`apps/realm/src/auth/seats.ts`. Exact replacement: “The kingdom could not check your session. Walk in again
+shortly to check your work.” This core file is outside the lane's allowed hooks. A session check can fail
+after an already committed request; reconnecting must always recover by listing, not assume rollback.
+
 ### 5a. The room channel hook (realm core; gather may reuse it)
 
 `RealmIntentSchema` and `RealmTransientMessage` are closed shared unions, so features get their own Colyseus message
@@ -438,14 +511,16 @@ export interface RealmRoomChannel {
 }
 export interface RealmChannelRoom {
   readonly kingdomId: KingdomId; readonly origin: 'live' | 'simulated';
-  onMessage(listener: (from: RealmChannelSender, raw: unknown) => void): void;
+  onMessage(listener: (from: RealmChannelSender, raw: unknown) => void | Promise<void>): void;
   broadcast(message: unknown): void;                        // everyone in the room, under `type`
   toPerson(personId: PersonId, message: unknown): void;     // that person's seat, under `type`
+  person(personId: PersonId): RealmChannelSender | null;   // existing current seat, for a fresh push check
   world(): CollisionWorld;
 }
 export interface RealmChannelSender {
   readonly principal: RealmPrincipal; readonly walkerId: string;
   pose(): { readonly position: Vec3; readonly yaw: number; readonly grounded: boolean; readonly collisionRevision: number } | null;
+  present(): boolean;                                     // synchronous socket/seat/expiry/authority gate
   current(): Promise<boolean>;                              // session and rights still valid
 }
 // apps/realm/src/ports.ts:  RealmRoomServices gains   readonly channels?: readonly RealmRoomChannel[];

@@ -1,5 +1,6 @@
 import type { ItemEvent, ItemId, ItemRecord, KingdomId, PersonId } from '@chatdom/shared';
 import { redactItem, type GrantReceipt, type ItemStore, type ItemTransaction } from './store';
+import { ITEM_PAGE_ROWS } from './pages';
 
 interface MemoryState {
   items: Map<string, ItemRecord>;
@@ -81,6 +82,15 @@ export function createMemoryItemStore(): ItemStore {
     async get(id: ItemId) { const item = state.items.get(id); return item ? structuredClone(redactItem(item, hidden)) : null; },
     async list(ownerId, kingdomId) { return rawList(state, ownerId, kingdomId).map(item => structuredClone(redactItem(item, hidden))); },
     async history(id) { return structuredClone(state.events.get(id) ?? []); },
+    async listPage(owner, kingdom, origin, after) {
+      return [...state.items.values()].filter(item => item.ownerId === owner && item.kingdomId === kingdom && item.origin === origin
+        && item.place !== 'spent' && (!after || item.id > after)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+        .slice(0, ITEM_PAGE_ROWS + 1).map(item => structuredClone(redactItem(item, hidden)));
+    },
+    async historyPage(id, after) {
+      return (state.events.get(id) ?? []).map((event, i) => ({ cursor: String(i + 1), value: event }))
+        .filter(row => !after || BigInt(row.cursor) > BigInt(after)).slice(0, ITEM_PAGE_ROWS + 1).map(row => structuredClone(row));
+    },
     async forgetName(personId) { hidden.add(personId); },
   };
   return store;

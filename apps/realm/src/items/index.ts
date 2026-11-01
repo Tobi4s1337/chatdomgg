@@ -1,12 +1,15 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { z } from 'zod';
 import {
   EpochMsSchema, ITEM_PLACES, ITEM_SOURCE_KINDS, ItemDefIdSchema, KingdomIdSchema, PersonIdSchema,
   type ItemDefinition, type ItemId, type ItemPlace, type ItemRecord, type ItemSource, type ItemStory,
   type KingdomId, type PersonId,
+  ItemListCursorSchema, ItemHistoryCursorSchema, type ItemListPage, type ItemHistoryPage,
 } from '@chatdom/shared';
 import { type ItemCatalogue } from './catalogue';
 import type { ItemStore, ItemTransaction } from './store';
+import { itemPage } from './pages';
 export { createItemCatalogue, itemCatalogue, registerItemDefinitions } from './catalogue';
 export type { ItemCatalogue } from './catalogue';
 export type { ItemStore, ItemTransaction } from './store';
@@ -31,14 +34,21 @@ export type SharedGrantInput = Omit<GrantInput, 'ownerId' | 'key' | 'story'> & {
   readonly story: Omit<ItemStory, 'by'>;
 };
 export type ItemResult = { readonly ok: true; readonly item: ItemRecord } | { readonly ok: false; readonly message: string };
+/** Server-only admission for browser writes; checked inside the kingdom transaction. */
+export interface ItemOwnerAccess {
+  readonly kingdomId: KingdomId; readonly origin: ItemRecord['origin'];
+  current(tx: ItemTransaction): Promise<boolean>;
+}
 export interface RealmItems {
   grant(input: GrantInput, tx?: ItemTransaction): Promise<ItemRecord>;
   grantShared(input: SharedGrantInput): Promise<readonly ItemRecord[]>;
-  move(ownerId: PersonId, itemId: ItemId, to: { place: ItemPlace; slot: number | null }, revision: number): Promise<ItemResult>;
-  release(ownerId: PersonId, itemId: ItemId, count: number, revision: number): Promise<ItemResult>;
+  move(ownerId: PersonId, itemId: ItemId, to: { place: ItemPlace; slot: number | null }, revision: number, access?: ItemOwnerAccess): Promise<ItemResult>;
+  release(ownerId: PersonId, itemId: ItemId, count: number, revision: number, access?: ItemOwnerAccess): Promise<ItemResult>;
   list(ownerId: PersonId, kingdomId: KingdomId, filter?: { readonly place?: ItemPlace }): Promise<readonly ItemRecord[]>;
   get(itemId: ItemId): Promise<ItemRecord | null>;
   history(itemId: ItemId): ReturnType<ItemStore['history']>;
+  listPage(ownerId: PersonId, kingdomId: KingdomId, origin: ItemRecord['origin'], after?: string): Promise<ItemListPage>;
+  historyPage(itemId: ItemId, after?: string): Promise<ItemHistoryPage>;
   onChange(listener: (ownerId: PersonId, kingdomId: KingdomId, items: readonly ItemRecord[]) => void): () => void;
   forgetName(personId: PersonId): Promise<void>;
 }
@@ -54,7 +64,8 @@ const GrantSchema = z.strictObject({
   count: z.number().int().min(1).max(999).default(1), place: z.enum(ITEM_PLACES).optional(),
   storied: z.literal(true).optional(), story: StorySchema,
   source: z.strictObject({ kind: z.enum(ITEM_SOURCE_KINDS), ref: z.string().min(1).max(256) }),
-  detail: z.record(z.string().min(1).max(64), z.union([z.string().max(500), z.number().finite()])).default({}),
+  detail: z.record(z.string().min(1).max(64), z.union([z.string().max(500), z.number().finite()]))
+    .refine(value => Object.keys(value).length <= 64 && Buffer.byteLength(JSON.stringify(value), 'utf8') <= 24 * 1024).default({}),
 });
 class ItemRuleError extends Error {}
 const refuse = (message: string): never => { throw new ItemRuleError(message); };
@@ -80,10 +91,12 @@ export function createRealmItems(options: { store: ItemStore; catalogue: ItemCat
       owners = new Map(); pending.set(tx, owners);
       const changed = owners;
       tx.afterCommit(() => {
+        const committedListeners = [...listeners];
+        if (!committedListeners.length) return;
         for (const [ownerId, ids] of changed) {
           void Promise.all([...ids].map(id => store.get(id))).then(records => {
             const items = records.filter((item): item is ItemRecord => item !== null);
-            for (const listener of listeners) { try { listener(ownerId, tx.kingdomId, items); } catch { /* Committed changes remain valid if a seat disconnected. */ } }
+            for (const listener of committedListeners) if (listeners.has(listener)) { try { listener(ownerId, tx.kingdomId, items); } catch { /* Committed changes remain valid if a seat disconnected. */ } }
           }).catch(() => { /* The next items.list recovers a missed notification. */ });
         }
       });
@@ -152,17 +165,22 @@ export function createRealmItems(options: { store: ItemStore; catalogue: ItemCat
     notify(tx, item);
     return item;
   };
-  const mutate = async (ownerId: PersonId, id: ItemId, revision: number, write: (item: ItemRecord, tx: ItemTransaction) => Promise<ItemRecord>): Promise<ItemResult> => {
+  const mutate = async (ownerId: PersonId, id: ItemId, revision: number, write: (item: ItemRecord, tx: ItemTransaction) => Promise<ItemRecord>, access?: ItemOwnerAccess): Promise<ItemResult> => {
     // Do not expose either another person's record or its kingdom through refusal text.
     const current = await store.get(id);
-    if (!current || current.ownerId !== ownerId) return { ok: false, message: 'This thing is not yours.' };
+    const belongs = (item: ItemRecord) => item.ownerId === ownerId && (!access || item.kingdomId === access.kingdomId && item.origin === access.origin);
+    if (!current || !belongs(current)) return { ok: false, message: 'This thing is not yours here.' };
+    const admit = async (tx: ItemTransaction) => { if (access && !await access.current(tx)) refuse('Your kingdom entry has ended. Open your bag after walking in again.'); };
     try {
       const item = await store.transaction(current.kingdomId, async tx => {
         const item = await tx.get(id);
-        if (!item || item.ownerId !== ownerId) return refuse('This thing is not yours.');
+        if (!item || !belongs(item)) return refuse('This thing is not yours here.');
         if (item.revision !== revision) return refuse('This thing has changed. Open your bag again.');
         if (item.place === 'spent') return refuse('This thing has already been let go.');
-        return write(item, tx);
+        await admit(tx);
+        const changed = await write(item, tx);
+        await admit(tx);
+        return changed;
       });
       return { ok: true, item: await store.get(item.id) ?? item };
     } catch (error) {
@@ -188,7 +206,7 @@ export function createRealmItems(options: { store: ItemStore; catalogue: ItemCat
         return items;
       });
     },
-    async move(ownerId, id, to, revision) {
+    async move(ownerId, id, to, revision, access) {
       return mutate(ownerId, id, revision, async (item, tx) => {
         const def = definition(item.defId);
         if (!def.places.includes(to.place) || to.place === 'spent') refuse('This thing cannot live there.');
@@ -201,9 +219,9 @@ export function createRealmItems(options: { store: ItemStore; catalogue: ItemCat
         await tx.save(moved);
         await tx.append({ itemId: id, kind: to.place === 'away' ? 'put-away' : 'moved', from: item.place, to: to.place, at: now(), actor: 'owner' });
         notify(tx, moved); return moved;
-      });
+      }, access);
     },
-    async release(ownerId, id, count, revision) {
+    async release(ownerId, id, count, revision, access) {
       return mutate(ownerId, id, revision, async (item, tx) => {
         if (item.storied || item.branch !== 'gathered' || !['bag', 'away'].includes(item.place)) refuse('A thing with a story stays yours. You can put it away.');
         if (!Number.isInteger(count) || count < 1 || count > item.count) refuse('Choose how many to let go from this stack.');
@@ -212,10 +230,20 @@ export function createRealmItems(options: { store: ItemStore; catalogue: ItemCat
         await tx.save(released);
         await tx.append({ itemId: id, kind: 'released', from: item.place, to: released.place, count, at: now(), actor: 'owner' });
         notify(tx, released); return released;
-      });
+      }, access);
     },
     async list(ownerId, kingdomId, filter) { return (await store.list(ownerId, kingdomId)).filter(item => filter?.place ? item.place === filter.place : item.place !== 'spent'); },
     get: id => store.get(id), history: id => store.history(id),
+    async listPage(owner, kingdom, origin, after) {
+      if (after !== undefined) ItemListCursorSchema.parse(after);
+      const page = itemPage((await store.listPage(owner, kingdom, origin, after)).map(item => ({ cursor: item.id, value: item })));
+      return { items: page.values, next: page.next };
+    },
+    async historyPage(id, after) {
+      if (after !== undefined) ItemHistoryCursorSchema.parse(after);
+      const page = itemPage(await store.historyPage(id, after));
+      return { events: page.values, next: page.next };
+    },
     onChange(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     forgetName: personId => store.forgetName(personId),
   };
