@@ -43,9 +43,11 @@ export function planNight({ layout, mood, seam, camera, hour }: { layout: Stream
     : held('window');
   const slow = mood === 'calm' ? 1.5 : 1, cut: Cut = mood === 'show' ? 'shutter' : 'dip';
   const tour = (beats: Beat[]): Beat[] => beats.map(beat => ({ ...beat, hold: beat.hold * slow }));
-  // Starting: see chat light the town before joining the lantern street and its homecoming.
+  // The opening is one continuous arrival: its scene follows the wave into the
+  // lantern street. An independent tour would shut the town behind doors mid-wave
+  // and replace that moving lens. Real arrivals likewise own their homecoming lens.
   if (seam === 'starting') return {
-    beats: tour([{ shot: 'hero', hold: 8 }, { shot: 'citizen', hold: 14 }, { shot: 'window', hold: 10, climax: true }]), cut,
+    ...held('hero'),
     // The opening is dusk already: the people, rather than a changing sun, light the town.
     sky: null, drift: mood === 'calm',
   };
