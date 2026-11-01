@@ -7,7 +7,7 @@
 
 export interface HelperAuthorized { channelId: string; clientId: string; token: string; helixToken: string; userId: string }
 interface HelperViewer { readonly isLinked: boolean; readonly role: string; onChanged(callback: () => void): void }
-interface HelperContext { theme?: 'light' | 'dark'; mode?: 'viewer' | 'dashboard' | 'config' }
+interface HelperContext { theme?: 'light' | 'dark'; mode?: 'viewer' | 'dashboard' | 'config'; isPaused?: boolean }
 /** The part of `window.Twitch.ext` the panel uses. */
 export interface HelperExt {
   onAuthorized(callback: (auth: HelperAuthorized) => void): void;
@@ -32,6 +32,11 @@ export interface HelperBridge {
   subscribe(listener: (status: HelperStatus) => void): () => void;
   /** The latest token for a future kingdom request; never rendered or stored. */
   token(): string | null;
+  /** Helper visibility and playback are gates, never proof of presence. */
+  visible?(): boolean;
+  active?(): boolean;
+  /** Increments only on onAuthorized, never on viewer.onChanged. */
+  authorization?(): number;
   /** Asks Twitch to share the viewer's identity. Only meaningful from a gesture. */
   requestIdShare(): boolean;
 }
@@ -50,6 +55,7 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
   const listeners = new Set<(status: HelperStatus) => void>();
   let current: HelperStatus = ext ? { kind: 'waiting' } : { kind: 'absent' };
   let token: string | null = null;
+  let visible = true, playing = false, authorization = 0;
   const emit = (next: HelperStatus) => { current = next; for (const listener of listeners) listener(next); };
   if (ext) {
     let last: HelperAuthorized | undefined;
@@ -58,7 +64,11 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
       // An `A…` opaque ID is a logged-out viewer and a `U…` one is logged in. Neither is a Chatdom person.
       emit({ kind: 'authorized', loggedIn: last.userId.startsWith('U'), shared: ext.viewer?.isLinked === true, role: ext.viewer?.role ?? 'viewer', bits: ext.features?.isBitsEnabled === true });
     };
-    ext.onAuthorized(auth => { last = auth; token = auth.token; read(); });
+    ext.onAuthorized(auth => { last = auth; token = auth.token; authorization++; read(); });
+    ext.onVisibilityChanged?.(value => { visible = value; emit(current); });
+    ext.onContext(context => {
+      if (typeof context.isPaused === 'boolean') { playing = !context.isPaused; emit(current); }
+    });
     ext.viewer?.onChanged(read);
     // Twitch's feature flags arrive after the first authorization and may change during a stream.
     ext.features?.onChanged?.(read);
@@ -67,10 +77,12 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
     status: () => current,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     token: () => token,
+    visible: () => visible,
+    active: () => visible && playing,
+    authorization: () => authorization,
     requestIdShare() {
       if (!ext?.actions || current.kind !== 'authorized' || !current.loggedIn) return false;
-      ext.actions.requestIdShare();
-      return true;
+      try { ext.actions.requestIdShare(); return true; } catch { return false; }
     },
   };
 }

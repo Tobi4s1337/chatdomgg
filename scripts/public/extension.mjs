@@ -52,6 +52,9 @@ for (const file of files) {
   if (!['.html', '.js', '.css', '.svg'].includes(type)) continue;
   const text = await readFile(file, 'utf8');
   if (type === '.js') {
+    if (/createFixtureAdapter|willowmere-|wren-portrait|openSimulationWire|source=simulated/.test(text)) problems.push(`${name}: development fixture code in the extension`);
+    if (/simulated/i.test(text)) problems.push(`${name}: simulation string in the extension`);
+    if (/WebGLRenderer|three\.module|THREE\.REVISION/.test(text)) problems.push(`${name}: three.js in the extension`);
     // zod probes whether it may compile validators with `try { new Function("") } catch`; under Twitch's CSP the probe
     // throws, zod falls back to its interpreter, and nothing is ever evaluated. Any other eval or Function fails the zip.
     const probes = text.match(/try\s*\{\s*new Function\(""\);\s*return true;\s*\}\s*catch/g)?.length ?? 0;
@@ -99,7 +102,7 @@ const expected = new Set([origin, 'https://extension-files.twitch.tv', 'https://
 const reached = [...origins.keys()].sort();
 report += `\nhttps origins named in the code:\n${reached.map(host => `  ${host}${expected.has(host) ? '' : '   (only as text or a link; not fetched)'}  <- ${[...origins.get(host)].slice(0, 3).join(', ')}`).join('\n')}\n`;
 report += notes.length ? `\nNotes for the reviewer:\n${notes.map(line => `  ${line}`).join('\n')}\n` : '';
-report += `\nConsole allowlists for this zip:\n  URL Fetching Domains: ${origin}\n  Image Domains: (none)\n  Media Domains: (none)\n  Panel URLs (links): ${origin}\n`;
+report += `\nConsole allowlists for this zip:\n  URL Fetching Domains: ${origin}\n  Image Domains: ${origin} (kingdom paintings; fetched with the Extension token)\n  Media Domains: (none)\n  Panel URLs (links): ${origin}\n`;
 
 if (problems.length) {
   console.error(`\nThe panel zip would not pass Twitch's hosted rules:\n${problems.map(line => `  - ${line}`).join('\n')}`);

@@ -96,9 +96,6 @@ function Portrait(props: { card: CitizenCard; simulated: boolean }): JSX.Element
         <img src={portrait().url} alt={portrait().alt} width={portrait().width} height={portrait().height} decoding="async" onError={() => setFailed(true)} />}
       </Show>
     </span>
-    <Show when={props.simulated && props.card.portrait?.origin === 'simulated'}>
-      <figcaption class="cpc-portrait-note">Simulated citizen</figcaption>
-    </Show>
   </figure>;
 }
 

@@ -1,236 +1,227 @@
-// The real panel reads one thing: this channel's kingdom and the viewer's own card, from the Extension backend,
-// signed with the token Twitch's Helper gave this view. These tests stand in for the Helper and the backend.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PanelReading } from '../../../api/src/public/panel/contracts';
 import type { HelperBridge, HelperStatus } from '../helper';
-import type { PanelAdapter, PanelSnapshot } from '../model';
-import { createProductionAdapter, HELPER_PATIENCE_MS, READING_REFRESH_MS } from './production';
+import type { PanelAdapter } from '../model';
+import { createProductionAdapter, HELPER_PATIENCE_MS, KINGDOM_REFRESH_MS, READING_REFRESH_MS } from './production';
 
 const BACKEND = 'https://chatdom.io';
-const READING_URL = `${BACKEND}/api/panel/v1/reading`;
 const AUTHORIZED: HelperStatus = { kind: 'authorized', loggedIn: true, shared: true, role: 'viewer', bits: false };
+const KINGDOM = { name: 'Lanternmere', tier: 'hamlet', motto: 'A town lit by chat', walk: 'https://chatdom.io/?walk=1&kingdom=1001' } as const;
+const CARD = { name: 'Wren', colour: '#8a2be2', standing: 'Citizen of Lanternmere', following: null, subscribed: null, home: { name: 'Number 5', tier: 'cottage' }, elsewhere: [] } as const;
+const HOME = { street: 'Lantern Row', place: 'Number 5 on Lantern Row', description: 'A cottage of warm timber.', since: '1 Nov 2026' };
+const READING: PanelReading = { version: 1, kingdom: KINGDOM, viewer: { kind: 'citizen', card: CARD, home: HOME } };
+const KINGDOM_STATE = { version: 1, status: 'kingdom', stream: 'live', lights: 3, moment: 'A home rose on Lantern Row.', picture: null, pledges: null };
 
-/** A Helper bridge under the test's control: Twitch's status and token change only when the test says so. */
 function standIn(status: HelperStatus = AUTHORIZED, token: string | null = 'token-1') {
   const listeners = new Set<(status: HelperStatus) => void>();
+  let visible = true, playing = true, authorization = 1;
+  const notify = () => { for (const listener of listeners) listener(status); };
   const requestIdShare = vi.fn(() => true);
   const bridge: HelperBridge = {
-    status: () => status,
-    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    token: () => token,
-    requestIdShare,
+    status: () => status, token: () => token, visible: () => visible, active: () => visible && playing, authorization: () => authorization,
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); }, requestIdShare,
   };
   return {
     bridge, requestIdShare,
-    /** Twitch calls `onAuthorized` again: a new token, and possibly new viewer facts. */
-    authorize(next: string, nextStatus: HelperStatus = AUTHORIZED) { token = next; status = nextStatus; for (const listener of listeners) listener(status); },
+    authorize(next: string, nextStatus: HelperStatus = AUTHORIZED) { token = next; status = nextStatus; authorization++; notify(); },
+    viewer(next: HelperStatus) { status = next; notify(); },
+    visible(next: boolean) { visible = next; notify(); },
+    playing(next: boolean) { playing = next; notify(); },
   };
 }
-
-const KINGDOM = { name: 'Lanternmere', tier: 'hamlet', motto: 'One home lit by chat, of 12', walk: 'https://chatdom.io/?walk=1&kingdom=1001' } as const;
-const CARD = {
-  name: 'Wren', colour: '#8a2be2', standing: 'Citizen of Lanternmere', following: null, subscribed: null,
-  home: { name: 'Number 5', tier: 'cottage' }, elsewhere: [{ kingdom: 'Millbrook', home: 'Number 2, Mill Lane' }],
-} as const;
-const HOME = { street: 'Lantern Row', place: 'Number 5 on Lantern Row', description: 'A cottage of warm timber.', since: '1 Nov 2026' };
-const reading = (viewer: PanelReading['viewer'], kingdom: PanelReading['kingdom'] = KINGDOM): PanelReading => ({ version: 1, kingdom, viewer });
-
-type Answer = PanelReading | { status: number } | 'unreadable' | 'offline';
-/** A backend that answers each reading request with the next queued answer (the last one repeats). */
-function backend(...answers: Answer[]) {
-  const send = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () => {
-    const answer = answers.length > 1 ? answers.shift()! : answers[0]!;
-    if (answer === 'offline') throw new TypeError('fetch failed');
-    if (answer === 'unreadable') return { ok: true, status: 200, text: async () => '{"version":1,"kingdom":null}' } as Response;
-    if ('status' in answer) return { ok: false, status: answer.status, text: async () => '' } as Response;
-    return { ok: true, status: 200, text: async () => JSON.stringify(answer) } as Response;
+function backend() {
+  let reading: unknown = READING, kingdom: unknown = KINGDOM_STATE, light: unknown = { status: 'deed', lit: true };
+  let fail = false;
+  const send = vi.fn<typeof fetch>(async (input, init) => {
+    if (fail) throw new TypeError('offline');
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith('/picture')) return new Response(new Blob(['webp'], { type: 'image/webp' }));
+    const body = path.endsWith('/reading') ? reading : path.endsWith('/kingdom') ? kingdom : path.endsWith('/light') ? light : path.endsWith('/pledge') ? { status: 'pledged', band: 'A handful of tents' } : { status: 'accepted', lit: false };
+    expect(init?.signal?.aborted).toBe(false);
+    return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
   });
-  return { send, fetch: send as unknown as typeof fetch };
+  return { send, reading(value: unknown) { reading = value; }, kingdom(value: unknown) { kingdom = value; }, light(value: unknown) { light = value; }, fail() { fail = true; } };
 }
-
-/** Lets the in-flight reading finish: the fetch, its body and the snapshot that follows. */
-const settle = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
-
+const settle = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
+const calls = (server: ReturnType<typeof backend>, suffix: string) => server.send.mock.calls.filter(([url]) => String(url).endsWith(suffix));
 const open: PanelAdapter[] = [];
 const track = (adapter: PanelAdapter) => { open.push(adapter); return adapter; };
-
+const mount = (helper = standIn(), server = backend()) => ({ helper, server, adapter: track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: server.send })) });
 beforeEach(() => { vi.useFakeTimers(); });
-afterEach(() => {
-  for (const adapter of open.splice(0)) adapter.dispose();
-  vi.useRealTimers();
-});
+afterEach(() => { for (const adapter of open.splice(0)) adapter.dispose(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
-describe('the production panel adapter', () => {
-  it('sends nothing at all when it was built without a backend', async () => {
-    const helper = standIn();
-    const server = backend(reading({ kind: 'anonymous' }));
-    const adapter = track(createProductionAdapter(helper.bridge, { fetch: server.fetch }));
-    helper.authorize('token-2');
-    await vi.advanceTimersByTimeAsync(READING_REFRESH_MS * 2);
-    expect(server.send).not.toHaveBeenCalled();
-    expect(adapter.get().connection).toEqual({ kind: 'kingdom-unavailable' });
-    expect(adapter.get().kingdom).toBeNull();
-    expect(adapter.get().entry).toEqual({ kind: 'none' });
-    expect(adapter.get().home.kind).toBe('unknown');
-  });
-
-  it('asks the backend for the reading with the Helper\'s token and no cookies', async () => {
-    const server = backend(reading({ kind: 'anonymous' }));
-    track(createProductionAdapter(standIn().bridge, { backend: BACKEND, fetch: server.fetch }));
-    await settle();
-    expect(server.send).toHaveBeenCalledTimes(1);
-    const [url, init] = server.send.mock.calls[0]!;
-    expect(url).toBe(READING_URL);
-    expect(init).toMatchObject({ method: 'POST', credentials: 'omit', mode: 'cors', cache: 'no-store', body: '{}' });
-    expect(init?.headers).toMatchObject({ authorization: 'Bearer token-1', 'content-type': 'application/json' });
-  });
-
-  it('waits for Twitch\'s token before asking anything', async () => {
-    const helper = standIn({ kind: 'waiting' }, null);
-    const server = backend(reading({ kind: 'anonymous' }));
-    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: server.fetch }));
-    expect(adapter.get().connection).toEqual({ kind: 'knocking' });
+describe('verified panel transport', () => {
+  it('never sends without a backend or before Twitch authorizes', async () => {
+    const helper = standIn({ kind: 'waiting' }, null), server = backend();
+    const noBackend = track(createProductionAdapter(helper.bridge, { fetch: server.send }));
+    const waiting = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: server.send }));
     await vi.advanceTimersByTimeAsync(HELPER_PATIENCE_MS);
-    expect(adapter.get().connection).toEqual({ kind: 'no-answer' });
-    expect(server.send).not.toHaveBeenCalled();
-    helper.authorize('token-1');
-    await settle();
-    expect(server.send).toHaveBeenCalledTimes(1);
-    expect(adapter.get().connection).toEqual({ kind: 'connected' });
+    expect(waiting.get().connection.kind).toBe('no-answer'); expect(server.send).not.toHaveBeenCalled();
+    helper.authorize('token-2'); await settle();
+    expect(noBackend.get().connection.kind).toBe('kingdom-unavailable');
+    expect(waiting.get().connection.kind).toBe('connected');
   });
 
-  it('shows a citizen their kingdom, their home and the way in', async () => {
-    const server = backend(reading({ kind: 'citizen', card: CARD, home: HOME }));
-    const adapter = track(createProductionAdapter(standIn().bridge, { backend: BACKEND, fetch: server.fetch }));
-    const seen: PanelSnapshot[] = [];
-    adapter.subscribe(snapshot => seen.push(snapshot));
-    await settle();
-    const snapshot = adapter.get();
-    expect(seen.at(-1)).toBe(snapshot);
-    expect(snapshot.source).toEqual({ kind: 'production', label: null });
-    expect(snapshot.connection).toEqual({ kind: 'connected' });
-    expect(snapshot.kingdom).toEqual({ name: 'Lanternmere', tier: 'hamlet', motto: 'One home lit by chat, of 12' });
-    expect(snapshot.entry).toEqual({ kind: 'gate', path: KINGDOM.walk });
-    expect(snapshot.home).toMatchObject({
-      kind: 'citizen', street: 'Lantern Row', place: 'Number 5 on Lantern Row', description: 'A cottage of warm timber.', displayName: 'Wren',
-      tenure: { kind: 'known', since: '1 Nov 2026' }, history: [],
-      card: { ...CARD, portrait: null, worn: [] },
-      passport: { kind: 'readable', simulated: false },
-    });
-    // Only a kingdom service could light a window, and none answers the panel yet.
-    expect(snapshot.light.kind).not.toBe('lit');
-    expect(JSON.stringify(snapshot)).not.toContain('token-1');
+  it('reads the verified home, lights and moment using header authentication only', async () => {
+    const { server, adapter } = mount(); await settle();
+    expect(adapter.get()).toMatchObject({ connection: { kind: 'connected' }, kingdom: { name: 'Lanternmere' }, stream: 'live', kingdomLights: 3, moment: KINGDOM_STATE.moment, home: { kind: 'citizen', displayName: 'Wren', street: 'Lantern Row' } });
+    expect(adapter.get().light.kind).not.toBe('lit');
+    for (const [url, init] of server.send.mock.calls) {
+      expect(String(url)).not.toContain('token');
+      expect(init).toMatchObject({ method: 'POST', credentials: 'omit', cache: 'no-store', body: '{}', headers: { authorization: 'Bearer token-1' } });
+    }
+    expect(JSON.stringify(adapter.get())).not.toContain('token-1');
   });
 
-  it('maps each kind of viewer to the home the panel shows', async () => {
-    const cases: [PanelReading['viewer'], Partial<Record<string, unknown>>][] = [
-      [{ kind: 'guest', card: { ...CARD, standing: 'Guest of Lanternmere', home: null } }, { kind: 'guest', displayName: 'Wren' }],
-      [{ kind: 'newcomer', card: { ...CARD, standing: 'Welcome to Lanternmere', home: null } }, { kind: 'known', note: expect.stringContaining('No home in Lanternmere yet') }],
-      [{ kind: 'monarch', card: { ...CARD, standing: 'Monarch of Lanternmere', home: { name: 'The castle', tier: null } } }, { kind: 'known', note: expect.stringContaining('Lanternmere is yours') }],
-      [{ kind: 'unshared' }, { kind: 'unknown', ask: 'share', reason: expect.stringContaining('Share who you are') }],
-      [{ kind: 'anonymous' }, { kind: 'unknown', reason: 'Log in to Twitch to see your citizen card.' }],
-      [{ kind: 'unknown', reason: 'Twitch has not told us your name just now.' }, { kind: 'unknown', reason: 'Twitch has not told us your name just now.' }],
+  it('maps guest, monarch, anonymous and unshared readings without fabricating homes', async () => {
+    const cases: [PanelReading['viewer'], string][] = [
+      [{ kind: 'guest', card: { ...CARD, home: null } }, 'guest'], [{ kind: 'monarch', card: CARD }, 'known'],
+      [{ kind: 'anonymous' }, 'unknown'], [{ kind: 'unshared' }, 'unknown'],
     ];
-    for (const [viewer, home] of cases) {
-      const server = backend(reading(viewer));
-      const adapter = track(createProductionAdapter(standIn().bridge, { backend: BACKEND, fetch: server.fetch }));
-      await settle();
-      expect(adapter.get().connection, viewer.kind).toEqual({ kind: 'connected' });
-      expect(adapter.get().home, viewer.kind).toMatchObject(home);
-      if (viewer.kind === 'anonymous') expect(adapter.get().home).not.toHaveProperty('ask');
+    for (const [viewer, expected] of cases) {
+      const server = backend(); server.reading({ ...READING, viewer });
+      const { adapter } = mount(standIn(), server); await settle(); expect(adapter.get().home.kind).toBe(expected);
     }
   });
 
-  it('keeps the gate closed when the channel has no kingdom yet', async () => {
-    const server = backend(reading({ kind: 'unknown', reason: 'This channel has no kingdom yet.' }, null));
-    const adapter = track(createProductionAdapter(standIn().bridge, { backend: BACKEND, fetch: server.fetch }));
-    await settle();
-    expect(adapter.get().kingdom).toBeNull();
-    expect(adapter.get().entry).toEqual({ kind: 'none' });
+  it('claims and lights only after a verified affirmative realm answer', async () => {
+    const { server, adapter } = mount(); await settle();
+    server.light({ status: 'deed', lit: false }); adapter.requestLight('named'); await settle();
+    expect(adapter.get().light.kind).not.toBe('lit');
+    server.light({ status: 'deed', lit: true }); adapter.requestLight('named'); await settle();
+    expect(adapter.get().light).toEqual({ kind: 'lit', choice: 'named', as: 'citizen', by: 'realm' });
+    expect(calls(server, '/light')).toHaveLength(2);
+    expect(calls(server, '/light')[0]?.[1]?.body).toBe('{"observe":true}');
+    expect(calls(server, '/reading').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('refreshes the reading while open, and says the kingdom was lost after a failure that follows a success', async () => {
-    const server = backend(reading({ kind: 'citizen', card: CARD, home: HOME }), 'offline');
-    const adapter = track(createProductionAdapter(standIn().bridge, { backend: BACKEND, fetch: server.fetch }));
-    await settle();
-    expect(adapter.get().connection).toEqual({ kind: 'connected' });
-
-    await vi.advanceTimersByTimeAsync(READING_REFRESH_MS - 1);
-    expect(server.send).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(server.send).toHaveBeenCalledTimes(2);
-    const lost = adapter.get();
-    expect(lost.connection).toMatchObject({ kind: 'lost', asOf: expect.any(String) });
-    // What was last read stays on screen, and says how old it is.
-    expect(lost.kingdom?.name).toBe('Lanternmere');
-    expect(lost.home.kind).toBe('citizen');
+  it('continues the original gesture only after onAuthorized, never viewer.onChanged', async () => {
+    const helper = standIn({ ...AUTHORIZED, shared: false }); const { adapter, server } = mount(helper); await settle();
+    adapter.requestLight('named');
+    expect(helper.requestIdShare).toHaveBeenCalledOnce(); expect(adapter.get().light).toMatchObject({ kind: 'pending', step: 'sharing' });
+    helper.viewer(AUTHORIZED); await settle(); expect(calls(server, '/light')).toHaveLength(0);
+    helper.authorize('shared-token'); await settle();
+    expect(calls(server, '/light')).toHaveLength(1);
+    expect(calls(server, '/light')[0]?.[1]?.headers).toMatchObject({ authorization: 'Bearer shared-token' });
+    expect(adapter.get().light.kind).toBe('lit');
   });
 
-  it('retries a failed reading after 15 seconds, then backs off, and recovers', async () => {
-    const server = backend({ status: 503 }, 'unreadable', 'offline', reading({ kind: 'anonymous' }));
-    const adapter = track(createProductionAdapter(standIn().bridge, { backend: BACKEND, fetch: server.fetch }));
-    await settle();
-    // Never read anything yet: nothing to call lost.
-    expect(adapter.get().connection).toEqual({ kind: 'kingdom-unavailable' });
-    expect(adapter.get().home).toMatchObject({ kind: 'unknown', reason: expect.stringContaining('not answering the panel') });
-
-    await vi.advanceTimersByTimeAsync(15_000);
-    expect(server.send).toHaveBeenCalledTimes(2);
-    expect(adapter.get().connection).toEqual({ kind: 'kingdom-unavailable' });
-    await vi.advanceTimersByTimeAsync(29_999);
-    expect(server.send).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(server.send).toHaveBeenCalledTimes(3);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(server.send).toHaveBeenCalledTimes(4);
-    expect(adapter.get().connection).toEqual({ kind: 'connected' });
+  it('keeps a refusal private and lets the viewer ask Twitch again', async () => {
+    const helper = standIn({ ...AUTHORIZED, shared: false }), { adapter, server } = mount(helper); await settle();
+    adapter.requestLight('named'); helper.authorize('refused-token', { ...AUTHORIZED, shared: false }); await settle();
+    expect(adapter.get().light.kind).toBe('refused'); expect(calls(server, '/light')).toHaveLength(0);
+    adapter.requestLight('named'); expect(helper.requestIdShare).toHaveBeenCalledTimes(2);
   });
 
-  it('reads again at once when Twitch refreshes the token, and not for the same token twice', async () => {
-    const helper = standIn();
-    const server = backend(reading({ kind: 'unshared' }), reading({ kind: 'citizen', card: CARD, home: HOME }));
-    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: server.fetch }));
-    await settle();
-    helper.authorize('token-1');
-    await settle();
-    expect(server.send).toHaveBeenCalledTimes(1);
-    helper.authorize('token-2');
-    await settle();
-    expect(server.send).toHaveBeenCalledTimes(2);
-    expect(server.send.mock.calls[1]?.[1]?.headers).toMatchObject({ authorization: 'Bearer token-2' });
-    expect(adapter.get().home.kind).toBe('citizen');
+  it('can finish sharing while paused and allocates without requesting presence', async () => {
+    const helper = standIn({ ...AUTHORIZED, shared: false }), { adapter, server } = mount(helper); await settle();
+    server.light({ status: 'deed', lit: false });
+    adapter.requestLight('named'); helper.playing(false); helper.authorize('shared-token'); await settle();
+    expect(calls(server, '/light')).toHaveLength(1); expect(calls(server, '/light')[0]?.[1]?.body).toBe('{"observe":false}');
+    expect(calls(server, '/presence')).toHaveLength(0);
+    expect(adapter.get().light.kind).not.toBe('lit');
   });
 
-  it('asks Twitch to share the viewer\'s identity only when that is all that stands between them and their card', async () => {
-    const unshared = standIn();
-    const first = track(createProductionAdapter(unshared.bridge, { backend: BACKEND, fetch: backend(reading({ kind: 'unshared' })).fetch }));
-    first.requestIdentity?.();
-    expect(unshared.requestIdShare).not.toHaveBeenCalled();
-    await settle();
-    first.requestIdentity?.();
-    expect(unshared.requestIdShare).toHaveBeenCalledTimes(1);
-
-    for (const viewer of [{ kind: 'anonymous' }, { kind: 'citizen', card: CARD, home: HOME }] as PanelReading['viewer'][]) {
-      const helper = standIn();
-      const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: backend(reading(viewer)).fetch }));
-      await settle();
-      adapter.requestIdentity?.();
-      expect(helper.requestIdShare, viewer.kind).not.toHaveBeenCalled();
+  it('shows guest, castle and private hold outcomes exactly as the realm answered', async () => {
+    for (const [status, expected] of [['guest', { kind: 'lit', as: 'guest' }], ['castle', { kind: 'lit', as: 'castle' }], ['held', { kind: 'held' }]] as const) {
+      const { server, adapter } = mount(); await settle(); server.light({ status, lit: true }); adapter.requestLight('named'); await settle();
+      expect(adapter.get().light).toMatchObject(expected);
     }
   });
 
-  it('stops reading and stops telling anyone once disposed', async () => {
-    const helper = standIn();
-    const server = backend(reading({ kind: 'anonymous' }));
-    const adapter = createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: server.fetch });
-    const listener = vi.fn();
-    adapter.subscribe(listener);
-    await settle();
-    expect(listener).toHaveBeenCalledTimes(1);
-    adapter.dispose();
-    helper.authorize('token-2');
-    await vi.advanceTimersByTimeAsync(READING_REFRESH_MS * 3);
-    expect(server.send).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledTimes(1);
+  it('pledges waiting land privately without claiming a home or lighting a window', async () => {
+    const server = backend(); server.kingdom({ ...KINGDOM_STATE, status: 'unfounded', pledges: 'A few tents' }); server.reading({ version: 1, kingdom: null, viewer: { kind: 'unknown', reason: 'Waiting land.' } });
+    const { adapter } = mount(standIn(), server); await settle();
+    expect(adapter.get().entry.kind).toBe('none'); expect(adapter.get().light).toEqual({ kind: 'unfounded', pledged: false, band: 'A few tents' });
+    adapter.requestLight('named'); await settle();
+    expect(adapter.get().light).toEqual({ kind: 'unfounded', pledged: true, band: 'A handful of tents' });
+    expect(calls(server, '/light')).toHaveLength(0); expect(calls(server, '/presence')).toHaveLength(0);
+  });
+
+  it('ignores malformed claim results and never infers success from Helper identity', async () => {
+    const { adapter, server } = mount(); await settle();
+    server.light({ status: 'deed', lit: 'true' }); adapter.requestLight('named'); await settle(); expect(adapter.get().light.kind).not.toBe('lit');
+    server.fail(); adapter.requestLight('named'); await settle(); expect(adapter.get().light.kind).not.toBe('lit');
+  });
+
+  it('polls moments every five seconds, reads home each minute and marks a lost kingdom', async () => {
+    const { adapter, server } = mount(); await settle();
+    server.kingdom({ ...KINGDOM_STATE, lights: 7, moment: 'The gate opened.' });
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS);
+    expect(adapter.get()).toMatchObject({ kingdomLights: 7, moment: 'The gate opened.' });
+    expect(calls(server, '/reading')).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(READING_REFRESH_MS - KINGDOM_REFRESH_MS);
+    expect(calls(server, '/reading')).toHaveLength(2);
+    server.fail(); await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS);
+    expect(adapter.get().connection.kind).toBe('lost'); expect(adapter.get().kingdom?.name).toBe('Lanternmere');
+  });
+
+  it('fetches changed paintings as authenticated blobs and revokes URLs on replacement and disposal', async () => {
+    const create = vi.fn().mockReturnValueOnce('blob:first').mockReturnValueOnce('blob:second'), revoke = vi.fn();
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL: create, revokeObjectURL: revoke }));
+    const server = backend(); const picture = { capturedAt: 1_793_520_000_000, revision: 'one', kind: 'realm' };
+    server.kingdom({ ...KINGDOM_STATE, picture }); const { adapter } = mount(standIn(), server); await settle();
+    expect(adapter.get().picture).toMatchObject({ kind: 'still', url: 'blob:first', provenance: { origin: 'realm', capturedOn: expect.any(String) } });
+    expect(calls(server, '/picture')[0]?.[1]).toMatchObject({ method: 'GET', headers: { authorization: 'Bearer token-1' } });
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(calls(server, '/picture')).toHaveLength(1);
+    server.kingdom({ ...KINGDOM_STATE, picture: { ...picture, revision: 'two', kind: 'sketch' } });
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(revoke).toHaveBeenCalledWith('blob:first');
+    expect(adapter.get().picture).toMatchObject({ provenance: { origin: 'sketch' } });
+    adapter.dispose(); expect(revoke).toHaveBeenCalledWith('blob:second');
+  });
+
+  it('stops polling, aborts pending requests and cancels a queued share gesture when hidden', async () => {
+    const helper = standIn({ ...AUTHORIZED, shared: false }); const { adapter, server } = mount(helper); await settle(); adapter.requestLight('named');
+    helper.visible(false); const count = server.send.mock.calls.length;
+    helper.authorize('shared-token'); await vi.advanceTimersByTimeAsync(READING_REFRESH_MS * 2);
+    expect(server.send).toHaveBeenCalledTimes(count); expect(adapter.get().light.kind).not.toBe('pending');
+    helper.visible(true); await settle(); expect(calls(server, '/light')).toHaveLength(0);
+    expect(server.send.mock.calls.length).toBeGreaterThan(count);
+    adapter.dispose(); const stopped = server.send.mock.calls.length; await vi.advanceTimersByTimeAsync(READING_REFRESH_MS * 2); expect(server.send).toHaveBeenCalledTimes(stopped);
+  });
+
+  it('discards a claim answer arriving after the panel was hidden even if fetch ignores abort', async () => {
+    let resolve: ((response: Response) => void) | undefined;
+    let signal: AbortSignal | null | undefined;
+    const helper = standIn(), server = backend();
+    const send: typeof fetch = (input, init) => String(input).endsWith('/light') ? new Promise(done => { resolve = done; signal = init?.signal; }) : server.send(input, init);
+    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: send })); await settle(); adapter.requestLight('named');
+    helper.visible(false); expect(signal?.aborted).toBe(true); resolve?.(new Response(JSON.stringify({ status: 'deed', lit: true }))); await settle();
+    expect(adapter.get().light.kind).not.toBe('lit');
+  });
+
+  it('also respects document visibility when Twitch still reports visible', async () => {
+    const page = Object.assign(new EventTarget(), { hidden: false }); vi.stubGlobal('document', page);
+    const { server } = mount(); await settle();
+    page.hidden = true; page.dispatchEvent(new Event('visibilitychange')); const count = server.send.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(READING_REFRESH_MS * 2); expect(server.send).toHaveBeenCalledTimes(count);
+    page.hidden = false; page.dispatchEvent(new Event('visibilitychange')); await settle(); expect(server.send.mock.calls.length).toBeGreaterThan(count);
+  });
+
+  it('gates initial presence on live, playing, visible and shared, and waits for server confirmation', async () => {
+    const helper = standIn(); helper.playing(false); const { server, adapter } = mount(helper); await settle(); expect(calls(server, '/presence')).toHaveLength(0);
+    helper.playing(true); await settle(); expect(calls(server, '/presence')).toHaveLength(1); expect(adapter.get().light.kind).not.toBe('lit');
+    helper.playing(false); helper.visible(false); helper.playing(true); await settle(); expect(calls(server, '/presence')).toHaveLength(1);
+    helper.visible(true); await settle(); expect(calls(server, '/presence')).toHaveLength(2);
+    helper.viewer({ ...AUTHORIZED, shared: false }); await settle(); expect(adapter.get().home.kind).toBe('unknown');
+    adapter.requestLight('named'); expect(calls(server, '/light')).toHaveLength(0);
+  });
+
+  it('allows resting claims but never sends presence offline or any claim for logged-out viewers', async () => {
+    for (const loggedIn of [false, true]) {
+      const helper = standIn({ ...AUTHORIZED, loggedIn }), server = backend(); server.kingdom({ ...KINGDOM_STATE, stream: 'resting' }); server.light({ status: 'deed', lit: false }); helper.playing(false);
+      const { adapter } = mount(helper, server); await settle(); adapter.requestLight('named'); await settle();
+      expect(calls(server, '/light')).toHaveLength(loggedIn ? 1 : 0); expect(calls(server, '/presence')).toHaveLength(0);
+      if (loggedIn) expect(calls(server, '/light')[0]?.[1]?.body).toBe('{"observe":false}');
+      expect(adapter.get().light.kind).toBe(loggedIn ? 'resting' : 'logged-out');
+    }
+  });
+
+  it('does not observe or allocate a shared newcomer until their gesture', async () => {
+    const server = backend(); server.reading({ ...READING, viewer: { kind: 'newcomer', card: { ...CARD, home: null } } });
+    const { adapter } = mount(standIn(), server); await settle();
+    await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS * 2);
+    expect(calls(server, '/presence')).toHaveLength(0); expect(calls(server, '/light')).toHaveLength(0);
+    adapter.requestLight('named'); await settle(); expect(calls(server, '/light')).toHaveLength(1);
   });
 });

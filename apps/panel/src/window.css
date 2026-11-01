@@ -1,0 +1,37 @@
+/* The panel is a single framed object, with the picture as its centre. */
+.cp.cw { --pad: 10px; gap: 0; padding: 10px; background-color: #342217; }
+.cw-head { flex: none; display: flex; align-items: center; gap: 9px; min-height: 44px; padding: 0 5px 7px; }
+.cw-head h1 { margin: 0; color: #f4e3c3; font: 400 23px/1 'IM Fell English', Georgia, serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cw-mark { color: #d4aa6a; font-size: 21px; line-height: 1; }
+.cw-main { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #110b07; box-shadow: 0 1px #8c6540, inset 0 0 0 1px #b58c5266; background: #211912; }
+.cw-picture { flex: 1; min-height: 0; position: relative; margin: 0; overflow: hidden; background: #251c17; }
+.cw-picture-image { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cw-picture figcaption { position: absolute; bottom: 0; left: 0; right: 0; padding: 18px 9px 5px; color: #f7e7c9; background: linear-gradient(transparent, #1a110de0); font: 13px/1.15 Alegreya, Georgia, serif; }
+.cw-absence { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 17px; color: #d2b993; background: radial-gradient(ellipse at 50% 55%, #3f3025, #211a16 75%); }
+.cw-absence p { margin: 0; padding: 0 20px; text-align: center; font-size: 14px; }
+.cw-absence-arch { width: 92px; height: 125px; border: 2px solid #9a7549; border-radius: 48px 48px 2px 2px; padding: 6px; box-shadow: 0 0 0 4px #271b13, 0 0 0 5px #735336, inset 0 0 0 1px #c39b6266; display: grid; place-items: center; color: #a68150; font-size: 22px; }
+.cw-absence-arch span { display: grid; place-items: center; width: 100%; height: 100%; border: 1px solid #654c34; border-radius: 42px 42px 0 0; }
+.cw-kingdom-foot { flex: none; min-height: 50px; padding: 5px 10px; background: #ead9b8 url('./assets/parchment.svg') center / 300px; color: #463223; }
+.cw-moment { margin: 0; font-size: 13px; line-height: 1.2; }
+.cw-moment:empty { display: none; }
+.cw-light-dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #bd7936; box-shadow: 0 0 5px #eeb65f; }
+.cw-links { display: flex; align-items: center; gap: 14px; min-height: 38px; }
+.cw-links a { color: #723b26; font-weight: 700; text-decoration-color: #a86b4e; text-underline-offset: 3px; }
+.cw-links small { margin-left: auto; font-size: 12px; color: #6b5540; }
+.cw-nav { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding-top: 8px; }
+.cw-nav button { min-height: 44px; border: 1px solid #150d08; border-radius: 2px; background: #3d2a1c; color: #d0b894; box-shadow: inset 0 1px #896544; font: 700 14px Alegreya, Georgia, serif; cursor: pointer; }
+.cw-nav button[aria-current] { color: #3e291c; background: #e4d0aa url('./assets/parchment.svg') center / 250px; box-shadow: inset 0 1px #fff2d0, 0 1px 2px #0008; }
+.cw-you, .cw-gifts { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; background: #ead9b8 url('./assets/parchment.svg') center / 350px; color: #493324; }
+.cw-window { width: 72px; height: 100px; margin-bottom: 24px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px; padding: 8px; border: 3px solid #775334; border-radius: 38px 38px 3px 3px; background: #62452e; box-shadow: 0 1px #f9edcf, inset 0 0 0 1px #dfbc84; overflow: hidden; }
+.cw-window span { background: #42372c; } .cw-window.lit span { background: #edb65e; box-shadow: inset 0 0 12px #fff1bd; }
+.cw-primary { min-height: 48px; padding: 0 27px; border: 1px solid #4e2419; border-radius: 3px; background: #8e3f2c; color: #fff1d2; box-shadow: inset 0 1px #c97e5c, 0 2px 3px #63402366; font: 700 16px Alegreya, Georgia, serif; cursor: pointer; }
+.cw-status { margin: 0; font-size: 16px; font-weight: 700; }
+.cw-home { margin: 6px 0 0; font-size: 14px; }
+.cw-card-link { min-height: 44px; margin-top: 15px; padding: 0 12px; border: 0; background: transparent; color: #803f2b; font: 700 14px Alegreya, Georgia, serif; cursor: pointer; }
+.cw-card-link span { font-size: 20px; vertical-align: -1px; }
+.cw-gift-mark { color: #9a6945; font-size: 44px; line-height: 1; } .cw-gifts h2 { margin: 10px 0 5px; font: 400 25px 'IM Fell English', Georgia, serif; } .cw-gifts p { max-width: 220px; margin: 0; font-size: 15px; }
+.cw-deep { position: absolute; inset: 0; overflow: auto; background: #ead9b8 url('./assets/parchment.svg') center / 350px; color: #493324; }
+.cw-back { min-height: 44px; padding: 0 14px; border: 0; background: transparent; color: #783d2a; font: 700 14px Alegreya, Georgia, serif; cursor: pointer; }
+.cw-deep .cp-sheet { padding: 8px 13px 35px; }
+.cw-deep .cp-passport-corner { position: sticky; bottom: 0; }
+.cw-sound { margin-left: auto; flex: none; width: 44px; height: 44px; border: 0; background: transparent; color: #d4aa6a; font: 20px Alegreya, Georgia, serif; cursor: pointer; }

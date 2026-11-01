@@ -35,10 +35,10 @@ export interface Kingdom {
 }
 
 export interface PictureProvenance {
-  readonly origin: 'simulated';
+  readonly origin: 'simulated' | 'realm' | 'sketch';
   /** Human words for the caption. */
   readonly caption: string;
-  readonly render: { readonly route: string; readonly seed: string; readonly hour: number; readonly camera: string };
+  readonly render?: { readonly route: string; readonly seed: string; readonly hour: number; readonly camera: string };
   readonly capturedOn: string;
 }
 
@@ -58,10 +58,11 @@ export type LightStep = 'sharing' | 'confirming';
 
 /**
  * The viewer's window. Only an authority may produce `lit`: the SIMULATED fixture
- * (which says so) or, one day, the kingdom's own server. Twitch identity, opaque
+ * (which says so) or the kingdom's own server. Twitch identity, opaque
  * IDs, decoded tokens, URLs and storage never do.
  */
 export type Light =
+  | { readonly kind: 'ready' }
   | { readonly kind: 'outside-twitch' }
   | { readonly kind: 'logged-out' }
   | { readonly kind: 'unshared' }
@@ -69,7 +70,11 @@ export type Light =
   | { readonly kind: 'refused' }
   | { readonly kind: 'pending'; readonly choice: LightChoice; readonly step: LightStep }
   /** Confirmed present. `as: 'guest'` when the person already keeps three homes elsewhere. */
-  | { readonly kind: 'lit'; readonly choice: LightChoice; readonly as: 'citizen' | 'guest'; readonly by: 'simulation' }
+  | { readonly kind: 'lit'; readonly choice: LightChoice; readonly as: 'citizen' | 'guest' | 'castle'; readonly by: 'simulation' | 'realm' }
+  /** A private moderation hold; no public accusation is shown. */
+  | { readonly kind: 'held' }
+  /** Waiting land, with a private pledge outside the three-home cap. */
+  | { readonly kind: 'unfounded'; readonly pledged: boolean; readonly band: string | null }
   /** The stream is resting: no window is lit from the panel until it returns. */
   | { readonly kind: 'resting'; readonly choice: LightChoice | null }
   /** The kingdom stopped answering; the light's state is unknown, not assumed. */
@@ -337,6 +342,8 @@ export interface PanelSnapshot {
   /** Null when no service has told us which kingdom this channel holds. */
   readonly kingdom: Kingdom | null;
   readonly stream: 'live' | 'resting' | 'unknown';
+  readonly kingdomLights?: number | null;
+  readonly moment?: string | null;
   readonly picture: Picture;
   readonly light: Light;
   readonly tonight: Tonight;
