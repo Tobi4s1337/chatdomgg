@@ -1,0 +1,8 @@
+{
+  "extends": "../../../tsconfig.json",
+  "include": [
+    "../../../packages/shared/src/items.ts",
+    "../../../apps/realm/src/main.ts",
+    "../../../apps/realm/src/items/**/*.ts"
+  ]
+}
