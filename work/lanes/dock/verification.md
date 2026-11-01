@@ -1,5 +1,23 @@
 # DK10 checkpoint verification
 
+## Current goal status — blocked after audit 3
+
+The two preceding goal turns were no progress, not verified waits. A third fresh audit
+finds main still at `76ed4a5`, zero commits in `HEAD..main`, and no change in the excluded
+realm/scene/public-script files since that main commit. Realm status still admits only
+the kingdom's broadcaster identity; the scene presenter has no undo act branch. The dock
+checkpoint remains unmerged, required stream clips are absent, and DK10 is still unchecked.
+
+The same main-owned integration/authority/presentation condition has now persisted for
+three consecutive goal turns after the actual checkpoint progress. No later task exists.
+No capture, browser, service or verification job remains live. Under the user's checkpoint
+scope there is no remaining independent work that can supply these missing behaviors.
+The goal is blocked pending main's corrections/integration, not complete or paused. Resume
+with DK10 after that external change, using the existing completion matrix and `needs.md`.
+Do not replace real stream proof with fixture receipts or write LANE COMPLETE.
+
+The audit records below are historical; their earlier active statuses are superseded here.
+
 ## Checkpoint revalidation — 2026-11-01
 
 The preceding goal turn made progress: merge `286df74`, final checks and checkpoint
