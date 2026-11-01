@@ -1,0 +1,51 @@
+--- a/apps/web/src/kingdom/walk-scene.ts
++++ b/apps/web/src/kingdom/walk-scene.ts
+@@ -4,9 +4,9 @@
+ import type { VoxelWorkerPool } from '@chatdom/voxel';
+ import type { VoxelRenderState } from '@chatdom/render';
+ import { MATERIALS } from '@chatdom/content';
+-import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
++import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks, type CitizenRenderLook } from '../citizens';
+ import type { RealmClient, RealmCollision, RealmWalkerPose } from '../realm/client';
+-import { createWalkController } from '../walk';
++import { createWalkController, type WalkControllerOptions } from '../walk';
+ import { createFoundedInteractionRegistry, homeZone, STREET_ZONE } from '@chatdom/world/interactions';
+ import { interactionSound, mountInteractionController, type InteractionPlaces } from '../interactions';
+ import { bindWalkInteractions } from './walk-interactions';
+@@ -22,6 +22,10 @@
+   readonly hud?: HTMLElement;
+   /** Arrival view only, in radians. Movement still uses the room's own yaw and quantized input. */
+   readonly heading?: number;
++  /** Main supplies approved server-owned worn recipes, including all IDs in the room. */
++  readonly appearances?: readonly CitizenRenderLook[];
++  /** Main binds the authenticated current gesture transport; omit until ready. */
++  readonly gestures?: WalkControllerOptions['gestures'];
+   /** Request a new checked scene when authority changes geometry. Called once; entry owns reinstallation. */
+   readonly onSceneNeeded?: () => void;
+   /** A real place's own view, opened only after room acceptance. */
+@@ -45,14 +49,14 @@
+ export async function createKingdomWalk(scene: THREE.Scene, camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement,
+   pool: VoxelWorkerPool, material: VoxelRenderState, binding: KingdomWalkBinding, founded: RealmFoundedScene,
+   sound: Pick<ReturnType<typeof createKingdomSound>, 'cue' | 'enabled'>) {
+-  const looks = createDefaultCitizenLooks();
++  const looks = binding.appearances ?? createDefaultCitizenLooks();
+   const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
+   const client = binding.client;
+   const currentWorld = () => 'query' in binding.collision
+     ? binding.collision.revision === client.room.state.collisionRevision ? binding.collision : null
+     : binding.collision.world(client.room.state.collisionRevision);
+   const controller = createWalkController({ camera, surface: canvas, realm: client, collision: currentWorld,
+-    ...(binding.hud ? { hud: binding.hud } : {}), ...(binding.heading !== undefined ? { heading: binding.heading } : {}) });
++    ...(binding.hud ? { hud: binding.hud } : {}), ...(binding.gestures ? { gestures: binding.gestures } : {}), ...(binding.heading !== undefined ? { heading: binding.heading } : {}) });
+   controller.resize(canvas.clientWidth, canvas.clientHeight);
+   const registry = createFoundedInteractionRegistry(founded, currentWorld()!);
+   const connection = bindWalkInteractions(client.room, interactionSound(sound));
+@@ -125,7 +129,7 @@
+       people.update(connected ? poses.filter(pose => looks.some(look => look.id === pose.look)).map(pose => ({ id: pose.id,
+         look: pose.look,
+         position: [pose.x, pose.y, pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
+-        distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed,
++        distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, gesture: controller.gestureFor(pose.id, now),
+         ...(pose.posture ? { posture: pose.posture } : {}),
+         opacity: pose.self && controller.owner === 'walking' ? controller.selfOpacity : 1, time: now / 1000 })) : [], camera);
+       const self = walkingPoses.find(pose => pose.self), state = client.room.state;
