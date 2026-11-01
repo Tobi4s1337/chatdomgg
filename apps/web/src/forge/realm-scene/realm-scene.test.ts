@@ -9,6 +9,7 @@ import { executeVoxelJob, type VoxelJobInput, type VoxelWorkerPool } from '@chat
 import { canonicalSceneJson } from '@chatdom/world/founded-codec';
 import type { ForgeObservationHandlers } from '../../realm/adapters/forge';
 import type { createKingdomSound } from '../../kingdom/sound';
+import { buildBounds } from '../../build/composition';
 import { createRealmForgeScene } from './index';
 
 // The tested boundary is room authority -> actual assembly/meshing -> lifecycle/camera/standing emitter.
@@ -94,6 +95,16 @@ describe('room-fed Forge scene', () => {
       }
       expect(smokeAlpha()).toBe(false);
       expect(hide).toHaveBeenCalledWith(attachment.id, true); expect(settled).not.toHaveBeenCalled();
+      // Flight used to aim at the house early and leave the gift above the frame.
+      for(const at of [18500,19500,20100]){
+      adapter.update(at, true); camera.updateMatrixWorld(true); clone.updateWorldMatrix(true, false);
+      const flyingBounds = buildBounds(expected.blueprint);
+      for (const x of [flyingBounds.min.x, flyingBounds.max.x]) for (const y of [flyingBounds.min.y, flyingBounds.max.y]) for (const z of [flyingBounds.min.z, flyingBounds.max.z]) {
+        const p = clone.localToWorld(new THREE.Vector3(x, y, z)).project(camera);
+        expect(Math.abs(p.x)).toBeLessThan(1); expect(Math.abs(p.y)).toBeLessThan(1);
+      }
+      }
+      expect((clone as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>).material.uniforms.uFlightHeat!.value).toBeGreaterThan(.5);
       expect(adapter.update(20200, true)).toBe(true);
       expect(hide).toHaveBeenLastCalledWith(attachment.id, true); expect(settled).toHaveBeenCalledExactlyOnceWith(attachment.id);
       expect(clone.visible).toBe(true);

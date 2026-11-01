@@ -1,0 +1,4 @@
+next: GA10 lane brief established; kingdom implementation and visual evidence remain.
+next: GA10 checkpoint: harbour plan, quay, boats, colours, geese and inn assets authored; place remaining pieces, complete identity and capture before/after hero and Atlas views.
+follow-up: GA10 decisions describe the inn, geese and harbour dressing as placed, but the current composition does not yet place them; reconcile as composition continues.
+integration: GA10 checkpoint merged on main; continue the whole PRD. Next visible outcome: place and make the harbour quay, boats and dressing legible in the first view.

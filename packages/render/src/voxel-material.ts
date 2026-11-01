@@ -49,7 +49,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
   let farLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);farLightTexture.format=THREE.RedFormat;farLightTexture.needsUpdate=true;
   let beaconLightTexture=new THREE.Data3DTexture(new Uint8Array(1),1,1,1);beaconLightTexture.format=THREE.RedFormat;beaconLightTexture.needsUpdate=true;
   let heightTexture=new THREE.DataTexture(new Float32Array(1),1,1,THREE.RedFormat,THREE.FloatType);heightTexture.needsUpdate=true;
-  const uniforms={uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uBeaconPosition:{value:new THREE.Vector3()},uBeaconStrength:{value:0},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
+  const uniforms={uSmithyPower:{value:0},uSmithyOrigin:{value:new THREE.Vector3()},uScale:{value:VOXEL_METRES[lattice]},uPalette:{value:texture},uSun:{value:new THREE.Color()},uAmbient:{value:new THREE.Color()},uSunDirection:{value:new THREE.Vector3()},uSunIntensity:{value:1},uAmbientIntensity:{value:1},uFog:{value:new THREE.Color()},uShadow:{value:new THREE.Color()},uGlow:{value:new THREE.Color()},uFogDensity:{value:.00115},uSkyZenith:{value:new THREE.Color()},uSkyHorizon:{value:new THREE.Color()},uNight:{value:0},uLight:{value:lightTexture},uLightOrigin:{value:new THREE.Vector3()},uLightExtent:{value:new THREE.Vector3(1,1,1)},uFarLight:{value:farLightTexture},uFarOrigin:{value:new THREE.Vector3()},uFarExtent:{value:new THREE.Vector3(1,1,1)},uFarCell:{value:2},uBeaconLight:{value:beaconLightTexture},uBeaconOrigin:{value:new THREE.Vector3()},uBeaconExtent:{value:new THREE.Vector3(1,1,1)},uBeaconCell:{value:2},uBeaconPosition:{value:new THREE.Vector3()},uBeaconStrength:{value:0},uTerrainHeight:{value:heightTexture},uTerrainOrigin:{value:new THREE.Vector2()},uTerrainSize:{value:new THREE.Vector2(1,1)},uTerrainStep:{value:1},uTerrain:{value:0},uShoreLevel:{value:-1e6},uShoreBounds:{value:new THREE.Vector4()},uTerrainSoil:{value:new THREE.Color(registry.materials.find(m=>m.surface==='earth')?.colour??'#87664d')},uTerrainGrass:{value:new THREE.Color(registry.materials.find(m=>m.surface==='grass')?.colour??'#667f52')},uGlassKind:{value:kinds.indexOf('glass')},uGlassDither:{value:0}};
   const material=new THREE.ShaderMaterial({glslVersion:THREE.GLSL3,uniforms,alphaToCoverage:true,vertexShader:`
     in uint aPacked; in uint aMaterial;
     out float vLodFade;
@@ -79,6 +79,7 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
     #define gl_FragColor voxelColour
     precision highp sampler3D;
     uniform sampler2D uPalette;uniform sampler3D uLight,uFarLight,uBeaconLight;
+    uniform vec3 uSmithyOrigin; uniform float uSmithyPower;
     uniform vec3 uSun,uAmbient,uSunDirection,uFog,uShadow,uGlow,uSkyZenith,uSkyHorizon,uLightOrigin,uLightExtent,uFarOrigin,uFarExtent,uBeaconOrigin,uBeaconExtent,uBeaconPosition;
     uniform float uSunIntensity,uAmbientIntensity,uFogDensity,uNight,uFarCell,uBeaconCell,uBeaconStrength,uTerrain,uShoreLevel;
     uniform float uGlassKind,uGlassDither;
@@ -238,6 +239,11 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
         sunLit=max(sunLit,sheltered*line);
       }
       vec3 light=cool+uSun*uSunIntensity*diffuse*sunLit;
+      vec3 toSmithy=uSmithyOrigin-vWorld;
+      float smithyDistance=length(toSmithy);
+      float smithyInfluence=uSmithyPower*(1.-smoothstep(9.,22.,smithyDistance));
+      // The smithy is a pool of fire within dusk, not a uniformly illuminated stage.
+      light*=1.-.72*smithyInfluence;
       vec3 uvw=(vWorld-uLightOrigin)/uLightExtent;
       float warm=surfaceField(uFarLight,uFarOrigin,uFarExtent,uFarCell,n);
       float nearBlend=0.;
@@ -274,9 +280,15 @@ export function createVoxelMaterial(registry:MaterialRegistry,lattice:VoxelLatti
       float aboveCrown=1.-smoothstep(12.,40.,fromBeacon.y);
       beaconAmount+=beaconReach*beaconReach*reflectedRim*aboveCrown*vSky*uBeaconStrength*uNight*2.8;
       // Overlapping warm light shares one soft cap, so lit plaster never clips to white.
+      poolAmount*=1.-.6*smithyInfluence*smoothstep(2.,8.,smithyDistance);
       float warmTotal=poolAmount+beaconAmount;
       float warmCapped=warmTotal<.6?warmTotal:.6+.6*(1.-exp((.6-warmTotal)/.6));
       light+=(poolColour*poolAmount+vec3(1.,.64,.32)*beaconAmount)*(warmCapped/max(warmTotal,1e-4));
+      // Molten bounce follows the surface normal and the occluded field; walls
+      // outside the fire's reach retain the accepted kingdom lighting.
+      float smithyBounce=uSmithyPower*pow(1.-smoothstep(1.,11.,smithyDistance),2.)*
+        (.15+.85*max(dot(n,toSmithy/max(.1,smithyDistance)),0.))*smoothstep(.06,.35,warm);
+      light+=vec3(3.4,1.05,.25)*smithyBounce;
       if(uTerrain>.5){
         float contact=groundContact(uFarLight,uFarOrigin,uFarExtent,uFarCell,n);
         if(nearBlend>0.)contact=mix(contact,groundContact(uLight,uLightOrigin,uLightExtent,.5,n),nearBlend);

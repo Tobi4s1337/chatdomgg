@@ -9,6 +9,7 @@ import { walkerSubject, type WalkerSlots } from './observed-walkers';
 import { createWalkerLanterns } from './walker-lanterns';
 
 export interface ForgeAudienceBarrel { position: Vec3; height: number }
+const FORGE_AUDIENCE_CAP = 32;
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 
 export interface SpeechLabel { slot: number; name: string | null; x: number; y: number; parts: CitizenChatCue['parts'] }
@@ -30,7 +31,11 @@ function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): 
   // The back row uses the open west side; the other arc wraps the workshop's
   // front apron. A second row on the same west side hid half the audience.
   const standingPoints = [[-3.4, 8], [-3.6, 6.1], [-3.7, 4.1], [-3.2, 2.1], [-1.8, .6], [.2, .5],
-    [-3.6, 10.4], [-1.8, 12], [.6, 12.7], [2.8, 12.2], [4.5, 11.6], [5.8, 10.9], [7.3, 11.3], [-5.5, 5], [-.8, 3.8], [6.2, 13]];
+    [-3.6, 10.4], [-1.8, 12], [.6, 12.7], [2.8, 12.2], [4.5, 11.6], [5.8, 10.9], [7.3, 11.3], [-5.5, 5], [-.8, 3.8], [6.2, 13],
+    // A staggered second bank keeps shoulders visible between the front row,
+    // continuing around the open apron instead of stacking everybody to the west.
+    [-5.2,9.2],[-5.6,7.1],[-7.1,5.2],[-5.2,2.9],[-4,1],[-2.1,-.9],[.1,-1],
+    [-5.3,12.1],[-3.5,14],[-1.3,14.4],[1,14.6],[3.3,14.4],[5.6,14],[7.7,13.3],[9.4,11.6],[9.7,9.4]];
   const installedBarrel = barrel && insideMarket(barrel.position[0], barrel.position[2]);
   if (installedBarrel) standingPoints[14] = [barrel.position[0], barrel.position[2]];
   const addPath = (from: string, to: string) => {
@@ -41,11 +46,12 @@ function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): 
       const workshop = x > -.65 && x < 9.2 && z > 1.45 && z < 9.9;
       const anvil = x > -1.4 && x < 1.4 && z > 6.7 && z < 9.3;
       return insideMarket(x, z) && !workshop && !anvil;
-    }).every(Boolean)) return;
+    }).every(Boolean)) return false;
     const id = `${from}:${to}:path`;
-    if (streets.some(edge => edge.id === id)) return;
+    if (streets.some(edge => edge.id === id)) return true;
     streets.push({ id, from, to, kind: 'lane', name: 'Market', points: [start, end], width: 1.4, verge: 0 });
     activeStreetIds.push(id);
+    return true;
   };
   const entryId = 'forge:walk:entry', entry: Vec3 = [-3, market.position[1], 12];
   if (!insideMarket(entry[0], entry[2])) return plan;
@@ -66,6 +72,14 @@ function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): 
   addPath(watch(3), watch(13));
   addPath(watch(11), watch(15));
   addPath(watch(2), watch(14));
+  // Each extra place joins two nearby, already connected standing points. The
+  // same swept path guard keeps routes out of the hearth and the casting.
+  for(let index=16;index<standingPoints.length;index++){
+    const at=standingPoints[index]!;
+    const neighbours=standingPoints.slice(0,index).map((point,id)=>({id,distance:Math.hypot(point[0]!-at[0]!,point[1]!-at[1]!)})).sort((a,b)=>a.distance-b.distance);
+    let joined=0;
+    for(const neighbour of neighbours)if(addPath(watch(neighbour.id),watch(index))&&++joined===2)break;
+  }
   return { ...plan, nodes, streets, activeStreetIds };
 }
 
@@ -96,8 +110,8 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
   const material = createVoxelMaterial(MATERIALS, 'avatar');
   // Moving people receive open-sky fill; per-part baked cavities must not turn
   // darker skin into a silhouette before a nearby window lights.
-  material.material.fragmentShader = material.material.fragmentShader.replace('float sky=mix(.24,1.,vSky);', 'float sky=mix(.72,1.,vSky);').replace('vec3 colour=base*edge*light*ao;', 'vec3 colour=base*edge*(light+vec3(.4,.32,.25))*ao;');
-  for (const key of ['uLight','uLightOrigin','uLightExtent','uFarLight','uFarOrigin','uFarExtent','uFarCell','uBeaconLight','uBeaconOrigin','uBeaconExtent','uBeaconCell']) material.material.uniforms[key] = clay.material.uniforms[key]!;
+  material.material.fragmentShader = material.material.fragmentShader.replace('float sky=mix(.24,1.,vSky);', 'float sky=mix(.72,1.,vSky);').replace('vec3 colour=base*edge*light*ao;', 'vec3 colour=base*edge*(light+vec3(.4,.32,.25)*(1.-.85*smithyInfluence))*ao;');
+  for (const key of ['uSmithyPower','uSmithyOrigin','uLight','uLightOrigin','uLightExtent','uFarLight','uFarOrigin','uFarExtent','uFarCell','uBeaconLight','uBeaconOrigin','uBeaconExtent','uBeaconCell']) material.material.uniforms[key] = clay.material.uniforms[key]!;
   const lanterns = createWalkerLanterns(scene, capacity);
   const looks = createDefaultCitizenLooks();
   const knownLooks = new Set(looks.map(look => look.id)), suppliedLooks = new Map<number, string>();
@@ -187,7 +201,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
         const candidates = current.filter(sample => sample.homeLit && present.has(sample.slot) && !watchers.has(sample.slot) && !reservedSlots.has(sample.slot) && !walkers.has(sample.slot))
           .sort((a, b) => Math.hypot(a.position[0] - forge!.anchor[0], a.position[2] - forge!.anchor[2]) - Math.hypot(b.position[0] - forge!.anchor[0], b.position[2] - forge!.anchor[2]));
         for (const sample of candidates) {
-          if (watchers.size >= 16) break;
+          if (watchers.size >= FORGE_AUDIENCE_CAP) break;
           const destination = motion.destinationsForSlot(sample.slot).find(item => item.nodeId.startsWith('forge:watch:') && !occupied.has(item.nodeId)
             && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) >= 3
             && Math.hypot(item.position[0] - forge!.anchor[0], item.position[2] - forge!.anchor[2]) <= 13);
@@ -214,7 +228,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       const bodies = samples.filter(sample => !walkers.has(sample.slot) && (!suppliedLooks.has(sample.slot) || knownLooks.has(suppliedLooks.get(sample.slot)!)));
       renderer?.update(bodies.map(sample => ({ id: String(sample.slot), look: suppliedLooks.get(sample.slot) ?? looks[sample.slot % looks.length]!.id,
         position: sample.position, heading: sample.heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time:overlays.get(sample.slot)?.time??time,
-        tiptoe: sample.goalReached && ['forge:watch:8', 'forge:watch:12', 'forge:watch:15'].includes(watchers.get(sample.slot) ?? '')
+        tiptoe: sample.goalReached && ['forge:watch:8', 'forge:watch:12', 'forge:watch:15', 'forge:watch:18', 'forge:watch:24', 'forge:watch:27', 'forge:watch:30'].includes(watchers.get(sample.slot) ?? '')
           ? smooth((atMs - (watcherArrivals.get(sample.slot) ?? atMs) - 500) / 900) * (.82 + .18 * Math.sin(time * 1.3 + sample.slot)) : 0,
         lookYaw:watchers.has(sample.slot) ? 0 : overlays.get(sample.slot)?.lookYaw??0,
         gesture: reservedSlots.has(sample.slot) || watchers.has(sample.slot)?'none' as const:speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : overlays.get(sample.slot)?.gesture??'none' as const })), camera);

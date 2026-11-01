@@ -11,6 +11,8 @@ export type GenesisSeatContent = {
   props: Dressing[];
   braziers: RoyalBrazier[];
   beaconPosition: Vec3;
+  /** The seat carries its own way over the river, so the generic footbridge stands aside. */
+  crossing?: true;
 };
 
 /** Mount only on the already accepted castle parcel, after testing the actual footing against displayed terrain. */

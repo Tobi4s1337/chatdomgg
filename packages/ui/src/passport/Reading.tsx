@@ -2,7 +2,7 @@ import '../kit.css';
 import './passport.css';
 import { createRenderEffect, createSignal, Match, onCleanup, Show, Switch, type Accessor, type JSX } from 'solid-js';
 import { ProvenanceSeal } from '../ProvenanceSeal';
-import { CoverEmblem, PassportBook } from './Book';
+import { CoverEmblem, PassportBook, type PassportBookProps } from './Book';
 import type { BookLayout, PageDensity } from './pages';
 import {
   createPassportSession, followDisclosure,
@@ -20,6 +20,8 @@ export interface PassportReadingProps {
   readonly onMore?: (collection: PassportCollection) => void;
   /** Read again after an unavailable answer. Without it, the closed book only says so. */
   readonly onRetry?: () => void;
+  /** Told after every page the reader turns in a visible book. */
+  readonly onTurn?: PassportBookProps['onTurn'];
   readonly class?: string;
 }
 
@@ -34,7 +36,7 @@ export function PassportReading(props: PassportReadingProps): JSX.Element {
   return <Switch>
     <Match when={visible()}>{read => <PassportBook book={read().book} shelf={read().shelf} layout={props.layout ?? 'spread'}
       {...(props.density ? { density: props.density } : {})} {...(props.initialView === undefined ? {} : { initialView: props.initialView })} {...(props.places ? { places: props.places } : {})}
-      {...(props.onMore ? { onMore: props.onMore } : {})} {...(props.class ? { class: props.class } : {})} />}</Match>
+      {...(props.onMore ? { onMore: props.onMore } : {})} {...(props.onTurn ? { onTurn: props.onTurn } : {})} {...(props.class ? { class: props.class } : {})} />}</Match>
     <Match when={props.state.kind === 'hidden' ? props.state : undefined}>{hidden =>
       <ClosedPassport state="private" layout={props.layout ?? 'spread'} simulated={hidden().origin === 'simulated'} class={props.class} />}</Match>
     <Match when={props.state.kind === 'unavailable'}>

@@ -1,0 +1,5 @@
+next: GP10 Lane scope and task recorded; kingdom implementation and visual evidence remain.
+follow-up: GP10 Wire seat.crossing through apps/web/src/kingdom/scene.ts so the generic bridge stands aside; this seam is outside lane scope.
+follow-up: GP10 Supply the referenced emote CHECKS.md and before/after hero and Atlas-door visual evidence; finish keepers and sound.
+next: GP10 River town, hall, roses, emote composition and preview integration landed; keepers, sound, shared crossing seam and visual evidence remain.
+integration: GP10 checkpoint merged on main and the crossing seam wired; continue the whole PRD. Next visible outcome: finish and show the river hall crossing and its banks.

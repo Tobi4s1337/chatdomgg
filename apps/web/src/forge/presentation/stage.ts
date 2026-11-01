@@ -20,7 +20,7 @@ export interface ForgePresentationOptions {
   landing: Point3;
   /** A disposable presentation clone supplied and owned by the host; never the placed piece. */
   piece: THREE.Object3D;
-  onFlight?(frame: ForgeRitualFrame | null, position: Point3 | null): void;
+  onFlight?(frame: ForgeRitualFrame | null, position: Point3 | null, contact?: Point3): void;
 }
 export interface ForgePresentation { update(frame: ForgeRitualFrame | null): void; dispose(): void }
 /** What the host device asks of motion and particle budgets. Tests and the bench supply fixed answers. */
@@ -44,7 +44,7 @@ export const CONTACT = .9;
 const RAISED = 2.06;
 const WARM = new THREE.Color('#ffbf6b'), PALE = new THREE.Color('#cfeaff'), EMBER = new THREE.Color('#ff9a4a');
 const WHITE_HOT = new THREE.Color('#fff2cf'), MOLTEN = new THREE.Color('#ff7a22'), RED = new THREE.Color('#d2401c'), POUR = new THREE.Color('#ffc65c');
-const STEAM = new THREE.Color('#c9d3dc'), DUST = new THREE.Color('#bba98c'), SNAP = new THREE.Color('#ffd9a0');
+const STEAM = new THREE.Color('#c9d3dc'), DUST = new THREE.Color('#bba98c'), CONTACT_GLOW = new THREE.Color(6, 2.6, .65);
 const SECONDS = Object.fromEntries(FORGE_STAGE_TIMING.map(([phase, from, to]) => [phase, to - from])) as Record<ForgePhase, number>;
 const GRAVITY = 7.5;
 
@@ -398,7 +398,7 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
   /** Dust and a soft warm ring where the part met its socket, `t` seconds after contact. */
   function arrival(t: number) {
     const ringAt = scratch.copy(to);
-    flash.set(t < .6, ringAt, Math.max(.9, reach * 1.6), .55 * Math.exp(-t * 9), .25 + .75 * smooth(0, .6, t), .55 * (1 - smooth(0, .6, t)), SNAP);
+    flash.set(t < .75, ringAt, Math.max(1.5, reach * 1.8), 2.4 * Math.exp(-t * 7), .2 + .65 * smooth(0, .75, t), .6 * (1 - smooth(0, .75, t)), CONTACT_GLOW, true);
     for (let i = 0; i < share(24); i++) {
       const life = .9 + .6 * hash(i, 22);
       if (t >= life) continue;
@@ -477,7 +477,7 @@ export function createForgeStage(options: ForgePresentationOptions, environment:
         if (!environment.reducedMotion() && (read.phase === 'flight' || read.phase === 'landed')) {
           piece.updateWorldMatrix(true, false);
           const world = centre.clone().setY(silhouette.bounds.max.y + .15).applyMatrix4(piece.matrixWorld);
-          options.onFlight(frame, [world.x, world.y, world.z]);
+          options.onFlight(frame, [world.x, world.y, world.z], to.toArray());
         } else options.onFlight(null, null);
       }
     },
