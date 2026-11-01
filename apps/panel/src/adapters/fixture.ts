@@ -3,7 +3,7 @@
 // changes this fixture alone, the shelf never uses Bits, and every snapshot it
 // produces carries the SIMULATED mark. Its words are authored fixture copy standing
 // in for what a kingdom service would one day supply.
-import { ALL_SECTIONS, type ActStatus, type Ballad, type Coals, type CrowdAct, type Earned, type Forge, type Home, type Light, type LightChoice, type PanelAdapter, type PanelSnapshot, type Picture, type Raising, type Sections, type Shelf, type ShelfRequest, type SourceMark, type Tavern, type Tonight } from '../model';
+import { ALL_SECTIONS, type ActStatus, type Ballad, type CitizenCard, type Coals, type CrowdAct, type Earned, type Forge, type Home, type PassportSource, type Light, type LightChoice, type PanelAdapter, type PanelSnapshot, type Picture, type Raising, type Sections, type Shelf, type ShelfRequest, type SourceMark, type Tavern, type Tonight } from '../model';
 import { DEFAULT_SHELF, SHELF_MENU, shelfProducts } from '../shelf-menu';
 import { openSimulationWire } from './simulation';
 import { FIXTURE_PROVENANCE } from '../assets/fixture/provenance';
@@ -11,6 +11,9 @@ import kingdomStill from '../assets/fixture/willowmere-kingdom.webp';
 import portraitStill from '../assets/fixture/willowmere-portrait.webp';
 import restingStill from '../assets/fixture/willowmere-resting.webp';
 import windowStill from '../assets/fixture/willowmere-window.webp';
+import sitterPortrait from '../assets/fixture/wren-portrait.webp';
+import { SITTER_PORTRAIT, SITTER_WORN } from '../assets/fixture/sitter';
+import { wornPiece } from '../card/worn';
 
 /** The deterministic cases a review can ask for with `state=`. */
 export const FIXTURE_STATES = [
@@ -30,8 +33,11 @@ export const FIXTURE_CONFIRM_MS = 1400;
 /** How long the kingdom takes to count a tap, and how long Twitch's Bits window stays open before it is closed. */
 export const FIXTURE_ACT_MS = 700;
 export const FIXTURE_BITS_MS = 1600;
-/** The simulated viewer. A Twitch display name, as the kingdom would supply it once identity is shared. */
-const VIEWER = 'Wrenfeather';
+/**
+ * The simulated viewer, as the kingdom would name them once identity is shared: the same SIMULATED citizen the card
+ * page, the builder and the passport show (`apps/web/src/citizen-card/sitter.ts`), so one person reads as one person.
+ */
+const VIEWER = 'Wren Tarnwalker';
 /** The long-names case: a kingdom name near its 64-character limit and a full 25-character Twitch name. */
 const LONG = { kingdom: 'Saint Wilhelmina’s Rest under the Thornwood Hills', viewer: 'Bartholomew_Featherstone7', street: 'The Lamplighters’ Long Walk' } as const;
 const LOST_AT = '9:12 pm';
@@ -111,19 +117,47 @@ function tonightFor(state: FixtureState): Tonight {
   };
 }
 
+function cardFor(name: string | null, as: 'citizen' | 'guest', long: boolean): CitizenCard {
+  return {
+    // The card is the viewer's own: their name shows to them even while the town sees an unnamed light.
+    name: name ?? (long ? LONG.viewer : VIEWER), colour: '#2f6f5e',
+    standing: as === 'guest' ? 'A guest in Willowmere' : 'Citizen No. 212',
+    portrait: { url: sitterPortrait, alt: SITTER_PORTRAIT.alt, width: SITTER_PORTRAIT.width, height: SITTER_PORTRAIT.height, origin: 'simulated' },
+    following: '30 Aug 2024',
+    subscribed: as === 'guest' ? null : '14 months, Tier 1',
+    home: as === 'guest' ? null : { name: 'The Lantern House', tier: 'cottage' },
+    elsewhere: [{ kingdom: 'Tarnhollow', home: 'The Lantern Loft, Ferry Row' }],
+    worn: SITTER_WORN.map(wornPiece),
+  };
+}
+
+/** The card's disclosed homes, which let a road in the book name where it began. */
+const SIMULATED_PLACES: ReadonlyMap<string, string> = new Map([['910000102', 'Tarnhollow']]);
+
+/**
+ * The sitter's SIMULATED passport, read through the real passport reader. The reader and its fixtures load only when
+ * the viewer first turns to the book, and one adapter keeps one source, so the reading is never restarted by a redraw.
+ */
+export function simulatedPassportSource(): PassportSource {
+  let opening: Promise<import('../passport/simulated-reading').SimulatedPanelPassport> | undefined;
+  const open = () => opening ??= import('../passport/simulated-reading').then(module => module.simulatedPanelPassport());
+  return { kind: 'readable', transport: async (request, signal) => (await open()).transport(request, signal), places: SIMULATED_PLACES, disclosure: null, simulated: true };
+}
+
 const CITIZEN_HISTORY: readonly Earned[] = [
   { id: 'moved', text: 'Moved in on Lantern Row', at: '3 October' },
   { id: 'riddle', text: 'Sat at the hearth table for a riddle game', at: '21 October' },
   { id: 'well', text: 'Helped raise the well-house scaffold', at: 'Tonight' },
 ];
 
-function homeFor(state: FixtureState, light: Light): Home {
+function homeFor(state: FixtureState, light: Light, passport: PassportSource): Home {
   const long = state === 'long-names';
   const citizen = (named: boolean): Home => ({
     kind: 'citizen', street: long ? LONG.street : 'Lantern Row', place: 'Fourth house on the left, two doors from the lane',
     description: 'A cream-walled house with a flower box under the front window.',
     displayName: named ? (long ? LONG.viewer : VIEWER) : null, picture: still('window', windowStill),
     tenure: { kind: 'known', since: '3 October' }, history: CITIZEN_HISTORY,
+    card: cardFor(named ? (long ? LONG.viewer : VIEWER) : null, 'citizen', long), passport,
   });
   switch (light.kind) {
     case 'logged-out': return { kind: 'unknown', reason: 'Log in to Twitch to find your home.' };
@@ -135,7 +169,7 @@ function homeFor(state: FixtureState, light: Light): Home {
         ? { kind: 'guest', displayName: light.choice === 'named' ? VIEWER : null, history: [
           { id: 'first', text: 'First lit a window in Willowmere', at: '24 October' },
           { id: 'riddle', text: 'Watched a riddle game at the hearth table', at: 'Tonight' },
-        ] }
+        ], card: cardFor(VIEWER, 'guest', false), passport }
         : citizen(light.choice === 'named');
     case 'resting': return citizen(light.choice !== 'unnamed');
     // Out of reach: the card is the one the kingdom last sent, from before it stopped answering.
@@ -250,9 +284,9 @@ export interface FixtureAdapter extends PanelAdapter {
 
 interface Night { readonly light: Light; readonly act: CrowdAct | null; readonly request: ShelfRequest; readonly raised: number }
 
-function snapshotFor(state: FixtureState, night: Night, settings: FixtureSettings): PanelSnapshot {
+function snapshotFor(state: FixtureState, night: Night, settings: FixtureSettings, passport: PassportSource): PanelSnapshot {
   const resting = state === 'resting', light = night.light;
-  const home = homeFor(state, light);
+  const home = homeFor(state, light, passport);
   const tonight = tonightFor(state);
   const raise = (raising: Raising | null): Raising | null => raising && { ...raising, progress: Math.min(1, raising.progress + night.raised) };
   const act = night.act && !settings.hidden && settings.sections.acts ? { ...night.act, raising: raise(night.act.raising) } : null;
@@ -279,13 +313,14 @@ export function createFixtureAdapter(state: FixtureState = 'unshared', initial: 
   const light = initialLight(state);
   let night: Night = { light, act: actFor(state, light), request: { kind: 'idle' }, raised: 0 };
   let settings: FixtureSettings = { ...DEFAULT_SETTINGS, ...initial };
-  let snapshot = snapshotFor(state, night, settings);
+  const passport = simulatedPassportSource();
+  let snapshot = snapshotFor(state, night, settings, passport);
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const later = (ms: number, run: () => void) => { const timer = setTimeout(() => { timers.delete(timer); run(); }, ms); timers.add(timer); };
   // The simulated viewer struck from chat a moment before opening the panel, so the dragon's first tap meets chat's own pause.
   let struckFromChat = state === 'dragon';
   const publish = () => {
-    snapshot = snapshotFor(state, night, settings);
+    snapshot = snapshotFor(state, night, settings, passport);
     for (const listener of listeners) listener(snapshot);
   };
   const set = (next: Partial<Night>) => { night = { ...night, ...next }; publish(); };

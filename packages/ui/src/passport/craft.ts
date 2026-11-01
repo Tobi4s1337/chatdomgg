@@ -24,3 +24,7 @@ export {
   SHARE_GIFTS, SHARE_KINGDOMS, SHARE_SIZE, SHARE_STAMPS, composePassportShare, curateShareSpread, shareAlt,
   type PassportShare, type ShareOptions, type ShareSpread,
 } from './share';
+export {
+  CITIZEN_SHARE_FACTS, CITIZEN_SHARE_SIZE, CITIZEN_SHARE_STAMPS, CITIZEN_SHARE_WORN, acceptedPortrait, citizenShareAlt, composeCitizenShare, nameInk,
+  type CitizenShare, type CitizenShareCard, type CitizenShareFact, type CitizenShareHome, type CitizenShareOptions, type CitizenSharePassport, type CitizenSharePortrait, type CitizenShareWorn,
+} from './card-share';

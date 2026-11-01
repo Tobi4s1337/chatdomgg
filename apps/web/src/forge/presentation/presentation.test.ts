@@ -58,15 +58,18 @@ const shown = (root: THREE.Object3D) => root.children.filter(o => o.visible).map
 const uniform = (root: THREE.Object3D, mesh: string, name: string) => ((root.getObjectByName(mesh) as THREE.Mesh).material as THREE.ShaderMaterial).uniforms[name]!.value as number;
 
 describe('Forge ritual presentation', () => {
-  it('reports the posed clone upper surface and clears the sink on reset', () => {
+  it('reports the posed crown and rotated physical foot, then clears the sink on reset', () => {
     const h = host();
-    let reported: readonly number[] | null = null;
+    h.geometry.translate(1.2,0,.8);
+    const contact = new THREE.Vector3(1.2,-1,.8).applyMatrix4(h.piece.matrixWorld);
+    let reported: readonly number[] | null = null, socket: readonly number[] | undefined;
     const stage = createForgeStage({ root: h.root, anvil: h.anvil, landing: h.landing, piece: h.piece,
-      onFlight: (_frame, position) => { reported = position; } }, environment());
+      onFlight: (_frame, position, landing) => { reported = position; socket = landing; } }, environment());
     stage.update(frame('flight', .45, 18));
     h.piece.updateWorldMatrix(true, false);
-    const actual = new THREE.Vector3(0, 1.15, 0).applyMatrix4(h.piece.matrixWorld);
+    const actual = new THREE.Vector3(1.2, 1.15, .8).applyMatrix4(h.piece.matrixWorld);
     expect(reported).not.toBeNull();
+    expect(new THREE.Vector3().fromArray(socket!).distanceTo(contact)).toBeLessThan(1e-6);
     expect(new THREE.Vector3(...reported!).distanceTo(actual)).toBeLessThan(1e-6);
     stage.update(null);
     expect(reported).toBeNull();

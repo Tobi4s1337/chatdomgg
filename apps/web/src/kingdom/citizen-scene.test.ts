@@ -65,7 +65,7 @@ it('continues forge walks across a scene rebuild only under the current presence
 
 it('walks the existing rehearsal neighbours around both sides of the anvil, including the installed barrel', () => {
   // Same graph/config as the hash-verified adopted rehearsal; no cached file or
-  // invented square residents. The closest doors begin 22–66 metres away.
+  // invented square residents. The nearest doors begin tens of metres away.
   const layout = generateSettlementPlan({ seed: 'willowmere', tier: 'town', firstYear: 2022, year: 2026 });
   const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
   const barrel = { position: [-8, 9, 1.125] as const, height: 11 / 8 };
@@ -105,13 +105,17 @@ it('walks the existing rehearsal neighbours around both sides of the anvil, incl
         expect(sample.speed).toBe(0);
       }
       if (ms === 38_000) {
-        expect(watchers.size).toBe(16);
-        expect(new Set(watchers.values()).size).toBe(16);
+        expect(watchers.size).toBe(32);
+        expect(new Set(watchers.values()).size).toBe(32);
         expect(samples.filter(sample => watchers.has(sample.slot)).every(sample => !sample.goalReached && sample.position[1] < 10)).toBe(true);
       }
       if (ms === 132_000) {
-        expect(arrived.length).toBeGreaterThanOrEqual(10);
-        expect(arrived.length).toBeLessThanOrEqual(16);
+        expect(arrived.length).toBeGreaterThanOrEqual(20);
+        expect(arrived.length).toBeLessThanOrEqual(32);
+        for(let index=0;index<arrived.length;index++)for(const other of arrived.slice(index+1)){
+          const person=arrived[index]!;
+          expect(Math.hypot(person.position[0]-other.position[0],person.position[2]-other.position[2])).toBeGreaterThanOrEqual(1);
+        }
         const side = (sample: typeof arrived[number]) => sample.position[0] * 12 - (sample.position[2] - 8) * 4.8;
         expect(arrived.some(sample => side(sample) > 26)).toBe(true);
         expect(arrived.some(sample => side(sample) < -26)).toBe(true);
@@ -124,6 +128,8 @@ it('walks the existing rehearsal neighbours around both sides of the anvil, incl
       }
     }
     // The old 72s still was necessarily early: accepted goals were not arrivals.
-    expect(arrivedCounts).toEqual([0, 0, 0, 2, 13]);
+    expect(arrivedCounts.slice(0,3)).toEqual([0,0,0]);
+    expect(arrivedCounts[3]).toBeGreaterThan(0);
+    expect(arrivedCounts[4]).toBeGreaterThanOrEqual(20);
   } finally { citizens.dispose(); clay.dispose(); }
 });
