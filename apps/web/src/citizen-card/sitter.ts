@@ -70,5 +70,9 @@ const dressed: CitizenLook = {
 
 export const SITTER_LOOK: CitizenLook = SITTER_OFFERS.filter(WEARS).reduce((look, offer) => wearPiece(look, offer.piece), dressed);
 
+/** A piece that remembers a journey: a keepsake from a passport, or the scarf knitted on a raid's road. */
+export const remembersTravel = (offer: EarnedOffer): boolean =>
+  offer.piece.family === 'scarf' || (offer.piece.family === 'pin' && offer.piece.value.kind === 'keepsake');
+
 /** The worn pieces as the card names them, each with the story its record tells. */
 export const SITTER_WORN: readonly EarnedOffer[] = SITTER_OFFERS.filter(WEARS);

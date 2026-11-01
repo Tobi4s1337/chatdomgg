@@ -14,8 +14,8 @@ import { passportLocalTransport } from '../passport/transport';
  * The disclosure is the authority's projected card (the person revision the reading follows); the places are the
  * card on the page's own disclosed homes, so a road can say it began in Tarnhollow. Loaded only by the bench.
  */
-export function simulatedCardPassport(card: CitizenCardDocument, book: 'many', onState: (state: PassportReadState) => void): JSX.Element {
-  const authorities = simulatedPassportAuthorities(book, { signedIn: true, travelsHidden: false });
+export function simulatedCardPassport(card: CitizenCardDocument, book: 'many' | 'none', onState: (state: PassportReadState) => void, travelsHidden = false): JSX.Element {
+  const authorities = simulatedPassportAuthorities(book, { signedIn: true, travelsHidden });
   // The book belongs to the card's own person; a card for anyone else never carries this one.
   if (authorities.key.personId !== card.key.personId) throw new Error(`The SIMULATED ${book} passport is not ${card.identity.name}’s.`);
   const reader = createPassportReader(authorities.ports);

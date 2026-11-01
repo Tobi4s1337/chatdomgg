@@ -2,7 +2,7 @@ import { CitizenKeySchema } from '@chatdom/shared';
 import type { CitizenLook } from '@chatdom/content/avatar-style';
 import type { CitizenCardDocument } from '../../../api/src/citizen-card/contracts';
 import type { CardWorn } from './host';
-import { SITTER, SITTER_LOOK, SITTER_WORN } from './sitter';
+import { SITTER, SITTER_LOOK, SITTER_WORN, remembersTravel } from './sitter';
 
 /**
  * SIMULATED citizens for the card bench. Every document says `origin: 'simulated'` and the card prints that on
@@ -22,8 +22,10 @@ export interface CardFixture {
   readonly document: CitizenCardDocument;
   /** Earned pieces they wear, named with the story each remembers. */
   readonly worn?: readonly CardWorn[];
-  /** The SIMULATED passport this citizen holds, read beneath the card on their page. */
-  readonly passport?: 'many';
+  /** The SIMULATED passport this citizen holds (the craft's book of that name), read beneath the card on their page. */
+  readonly passport?: 'many' | 'none';
+  /** Their home's tier in words, as the house authority would say it (the card document does not carry it). */
+  readonly homeTier?: string;
 }
 
 interface Kingdom { readonly id: string; readonly name: string }
@@ -64,8 +66,9 @@ export const CARD_FIXTURES: readonly CardFixture[] = [
     id: 'wren',
     note: 'Wren Tarnwalker: subscribed, a home in Willowmere and one in Tarnhollow, wearing what they earned, with their passport',
     portraitLook: SITTER_LOOK,
-    worn: SITTER_WORN.map(offer => ({ name: offer.name, story: offer.story })),
+    worn: SITTER_WORN.map(offer => ({ name: offer.name, story: offer.story, travel: remembersTravel(offer) })),
     passport: 'many',
+    homeTier: 'A cottage',
     document: document(WILLOWMERE, SITTER.personId, {
       revision: { person: 3, citizen: 7 },
       identity: {
@@ -76,6 +79,19 @@ export const CARD_FIXTURES: readonly CardFixture[] = [
       citizenNumber: 212,
       address: { home: 'The Lantern House', street: 'Lantern Row' },
     }, [{ kingdom: TARNHOLLOW, home: 'The Lantern Loft', street: 'Ferry Row' }]),
+  },
+  {
+    id: 'juniper',
+    note: 'Juniper Ashdown: arrived this month, no home or portrait yet, and a passport waiting for its first journey',
+    portraitLook: null,
+    passport: 'none',
+    document: document(WILLOWMERE, '930000001', {
+      revision: { person: 1, citizen: 1 },
+      identity: { login: 'juniper_ashdown', name: 'Juniper Ashdown', colour: '#b5541c', office: null, portrait: null },
+      tenure: { followedAt: day(2026, 10, 2), subscribedMonths: null, activeTier: null },
+      citizenNumber: 1047,
+      address: null,
+    }),
   },
   {
     id: 'knight',

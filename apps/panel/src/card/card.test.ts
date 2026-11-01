@@ -8,7 +8,7 @@ import { createProductionAdapter } from '../adapters/production';
 import type { HelperBridge } from '../helper';
 import type { Home, PanelSnapshot } from '../model';
 import { homeLine, nameInk } from './words';
-import { wornPiece } from './worn';
+import { remembersTravel, wornPiece } from './worn';
 
 const cardOf = (home: Home) => (home.kind === 'citizen' || home.kind === 'guest' ? home : null);
 const settled = (session: ReturnType<typeof createPassportSession>) => new Promise<PassportReadState>(resolve => {
@@ -74,5 +74,15 @@ describe('the citizen card in the panel', () => {
       .toMatchObject({ family: 'pin', shape: 'founder' });
     expect(wornPiece({ key: 'scarf:r1', name: 'Raid scarf: Emberfold', story: 'Rode the raid', piece: { family: 'scarf', value: { colours: ['#9b2d20', '#24485a'] } } }))
       .toEqual({ id: 'scarf:r1', family: 'scarf', name: 'Raid scarf: Emberfold', story: 'Rode the raid', colours: ['#9b2d20', '#24485a'] });
+  });
+
+  it('knows which worn pieces remember a journey, so private travels name no road', () => {
+    const adapter = createFixtureAdapter('named');
+    const card = cardOf(adapter.get().home)?.card;
+    const travel = card?.worn.filter(remembersTravel).map(piece => piece.name);
+    // The keepsake pin and the raid scarf name where the road went; the hood and the ribbons are tenure.
+    expect(travel).toEqual(['A sprig of salt lavender', 'Raid scarf: Emberfold']);
+    expect(card?.worn.filter(piece => !remembersTravel(piece)).map(piece => piece.family)).toEqual(['ribbons', 'hood']);
+    adapter.dispose();
   });
 });
