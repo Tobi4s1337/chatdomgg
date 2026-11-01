@@ -31,7 +31,7 @@ it('rejects invalid inputs rather than inventing a level or kit', () => {
 
 it('exposes civic light locations separately from citizen presence at every growth level', async () => {
   const { growthCivicLights } = await import('./index');
-  expect([1, 2, 3, 4].map(level => growthCivicLights('tavern', level).length)).toEqual([2, 4, 6, 6]);
+  expect([1, 2, 3, 4].map(level => growthCivicLights('tavern', level).length)).toEqual([2, 4, 7, 7]);
   expect([1, 2, 3, 4].map(level => growthCivicLights('bridge', level, { water: 6, bank: 14 }).length)).toEqual([2, 4, 6, 8]);
   expect(growthCivicLights('bridge', 8, { water: 6, bank: 14 })).toEqual(growthCivicLights('bridge', 4, { water: 6, bank: 14 }));
   expect(growthCivicLights('forge', 1)[0]?.kind).toBe('hearth');
@@ -74,7 +74,7 @@ it('places bridge light anchors at the supplied bridge site and provides the fou
 
 it.each(['hearth', 'tide'] as const)('%s bridge lamps sit above the existing masonry and leave the walk clear', async style => {
   const { createHumpbackBridge } = await import('../places/water/bridge/bridge');
-  for (const site of [{ water: 6, bank: 14 }, { water: 10, bank: 20 }]) {
+  for (const site of [{ water: 2, bank: 3 }, { water: 6, bank: 14 }, { water: 10, bank: 20 }, { water: 12, bank: 24 }]) {
     const base = rasterizeBlueprint(createHumpbackBridge(style, site.water, site.bank).blueprint);
     const added = rasterizeBlueprint(createGrowthCivicForm('bridge', style, 4, site));
     const [sx, sy, sz] = added.size;
@@ -84,9 +84,10 @@ it.each(['hearth', 'tide'] as const)('%s bridge lamps sit above the existing mas
       const [x, y, z] = light.centre;
       expect(added.voxels[x + sx * (y + sy * z)]).toBe(MAT.glass);
     }
-    for (let z = 0; z < sz; z++) for (let x = 0; x < sx; x++) {
-      const first = Array.from({ length: sy }, (_, y) => y).find(y => added.voxels[x + sx * (y + sy * z)] !== 0);
-      if (first !== undefined) expect(base.voxels[x + sx * (first - 1 + base.size[1] * z)]).not.toBe(0);
+    // Every lamp and standard has four feet resting on the existing coping; hanging cloth need not touch it.
+    for (const z of [0, 28]) for (const x of [20, 40, 54, 86, 100, 120]) for (let dx = 0; dx < 4; dx++) {
+      const y = Array.from({ length: sy }, (_, h) => h).find(h => added.voxels[x + dx + sx * (h + sy * z)] !== 0)!;
+      expect(base.voxels[x + dx + sx * (y - 1 + base.size[1] * z)]).not.toBe(0);
     }
     for (let z = 0; z < sz; z++) for (let y = 0; y < sy; y++) for (let x = 0; x < sx; x++) {
       if (!added.voxels[x + sx * (y + sy * z)]) continue;
@@ -106,5 +107,46 @@ it.each(['hearth', 'tide'] as const)('%s forge additions preserve the original h
         && box.to[axis]! > FORGE_EXTENSION_HEARTH_OFFSET[axis]!);
       expect(overlaps).toBe(false);
     }
+  }
+});
+
+it.each(['hearth', 'tide'] as const)('%s mature court lanterns remain exposed in front of the arcade', async style => {
+  const { growthCivicLights } = await import('./index');
+  const { MAT } = await import('../materials');
+  const { voxels, size: [sx, sy] } = rasterizeBlueprint(createGrowthCivicForm('castle-court', style, 4));
+  const at = (x: number, y: number, z: number) => voxels[x + sx * (y + sy * z)];
+  for (const { centre: [x, y, z] } of growthCivicLights('castle-court', 4)) {
+    expect(at(x, y, z)).toBe(MAT.glass);
+    expect(at(x, y, z + 2)).toBe(0);
+    expect(at(x, y, z - 2)).toBe(0);
+  }
+});
+
+it.each(['hearth', 'tide'] as const)('%s adds the defining large silhouettes at successive stages', style => {
+  for (const [place, level, x, y, z] of [
+    ['tavern', 3, 30, 52, 20], // dormer roof above the original ridge
+    ['tavern', 4, 10, 21, 30], // projecting porch canopy
+    ['forge', 3, 32, 39, 10], // smithy roof spanning the hearth
+    ['forge', 4, 53, 45, 5], // tall side chimney
+    ['castle-court', 4, 32, 30, 5], // arcade above the fountain
+  ] as const) {
+    const sample = (stage: number) => {
+      const { voxels, size: [sx, sy] } = rasterizeBlueprint(createGrowthCivicForm(place, style, stage));
+      return voxels[x + sx * (y + sy * z)];
+    };
+    expect(sample(level - 1)).toBe(0);
+    expect(sample(level)).not.toBe(0);
+  }
+});
+
+it.each(['hearth', 'tide'] as const)('%s mature bridge raises four distinct standards', style => {
+  const site = { water: 6, bank: 14 };
+  const before = rasterizeBlueprint(createGrowthCivicForm('bridge', style, 3, site));
+  const after = rasterizeBlueprint(createGrowthCivicForm('bridge', style, 4, site));
+  const [sx, sy] = after.size;
+  for (const z of [1, 29]) for (const x of [55, 87]) {
+    const at = (cells: typeof after.voxels, y: number) => cells[x + sx * (y + sy * z)];
+    expect(at(before.voxels, 60)).toBe(0);
+    expect(at(after.voxels, 60)).not.toBe(0);
   }
 });

@@ -3,6 +3,12 @@
 2026-11-01. DK10 remains unchecked. The dock and API boundary can be reviewed independently; a
 successful HTTP rehearsal is not evidence of a ceremony on stream.
 
+**Current status after `2c9a722`:** command/status, authenticated stream witness, scene
+binding, same-origin route, workspace importer and authoritative undoable metadata are
+supplied and synced. Open main-owned needs are verified moderator observation, directed
+undo, attendance wording, and the incoming banner/guest procession and fire gathering
+details below. Earlier request sections are retained as handoff history.
+
 ## Decisions
 
 - All current dock presses are royal acts and therefore broadcaster-only (ChatDom principle 7;
@@ -34,8 +40,8 @@ The action and witness schemas now come directly from shared. The API layers onl
 backward-compatible undo presentation hints described below. The original request patch below
 is retained as handoff history; main's shared request schemas now supersede that proposal.
 
-The current realm has authenticated Herald observation ingress and public watch feeds, but no
-dock command/status authority. The dock API already calls the following exact endpoints when
+At the original request, the realm had authenticated Herald observation ingress and public
+watch feeds but no dock command/status authority. The dock API calls these exact endpoints when
 `DOCK_REALM_URL` and `REALM_INTERNAL_SECRET` are configured. Main owns their implementation in
 `apps/realm/**`, any shared contracts, and ceremony rendering in `apps/web/src/kingdom/**` and
 `apps/web/src/stream/**`.
@@ -240,3 +246,25 @@ field from the current public presence projection (a safe attendance count and, 
 disclosure permits, a short approved name sample). Keep unknown coverage explicit; do not
 substitute viewer count or number of homes for observed people. No schema change is needed;
 the dock already displays the authoritative label beside Here.
+
+## Stream act fidelity from the supplied renderer — 2026-11-01
+
+`821b71d` now provides a real draw/witness seam and installed-site camera effects. These
+source findings concern the requested visible acts, beyond command delivery:
+
+**needs: incoming welcome with its banner.** `dock-visuals.ts` handles `raid-welcome` by
+reusing the gate flare and generic attention call; it never reads `act.targetName`, and
+contains no incoming banner/road procession. Bind this act to the existing real incoming
+raid presentation, using its witnessed raid key and approved source name. Show the banner
+and direct currently disclosed real guests up the road, without inventing identified
+visitors or issuing a second Twitch raid. The dock's one press is already wired to the
+authority-supplied raid target. A gate flare alone does not demonstrate this PRD requirement.
+
+**needs: gathering at the lit fire.** The fire mesh/light persists, but the current crowd
+call lasts8.5seconds and only asks for generic cheering/attention. Bind the lasting fire
+state to a gathering/seated behavior for actual present citizens at the installed plaza,
+with expiry/undo restoring their ordinary life. Reuse the existing campfire behavior where
+appropriate. A warm prop without people coming to sit does not demonstrate the requested act.
+
+These findings do not authorize this lane to change the kingdom scene or create substitute
+visuals. The actual stills/clips will decide the remaining visual polish.

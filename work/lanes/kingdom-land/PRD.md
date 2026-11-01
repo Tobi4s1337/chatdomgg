@@ -20,7 +20,7 @@ lands, then use the actual module. All independent tasks can start without a sce
 
 ## Tasks
 
-- [ ] **LD01 — Homes gather along winding streets into a square.** Build connected varied streets/frontages and
+- [x] **LD01 — Homes gather along winding streets into a square.** Build connected varied streets/frontages and
   an irregular usable market on today's geography; preserve full lots/access and canonical IDs. Show roofs and
   street fronts at dusk in a lane-owned composition bench, plus a small plan-map. One meaningful regression test.
 - [x] **LD02 — Shape the land and freeze its real destinations.** Implement v2 sampler/water query and grading
@@ -43,3 +43,5 @@ Add findings here; do not pick from this list without the brief changing.
 
 - LD02's `places.forest.path` passes 0.6–0.9 m from the elder oak's trunk (`places.forest.oak`); LD04's forest trail should route around the oak's root/seat envelope (≥4 m) instead of through it. Resolved for the walked trail by LD04's Oak Path (≥4 m + half-width); `places.forest.path` itself is unchanged and LD05 should set it from the Oak Path.
 - The hearth lookout trail (LD02) runs ~100 m along the land frame on a 4 m cross-slope: no bench fits there, so that walk keeps a 104 m beat gap.
+- LD04's `foundKingdomRoutes` fails on many seeds with real or fixture towns: LD01's town routes on chatdom, tobi4s_, oakhollow and stormbay, but not lanternmere ("beacon gap"), willowmere ("mill"), riverbend and emberfall ("No clear walk past the elder oak", also with zero lots); the SIMULATED v1 fixture fails on willowmere, riverbend, emberfall and oakhollow. `leaveTown` only tries the six best-scored nodes and trails may never cross a street, so a trailhead behind a street row is unreachable. LD01 keeps lot-free trailheads (mill door yard, oak meadow, beacon-gap foot) with a street node at the nearest street; routing should consider those feet and allow crossing a street at a node.
+- LD01's founded land holds 145–190 full lots by seed (3–3.9 quarters of 48); towns of four or more quarters throw `TownCapacityError`. Older channels need realm streaming/adoption of larger founded layouts (R10).

@@ -18,3 +18,8 @@ main.dock{display:block;width:100%;min-height:100vh;margin:0;padding:14px;text-a
 .dock .statusline .dot{height:7px}
 .dock .foot{margin:16px 2px 1px;color:#c2a77f;font:12px/1.4 Alegreya,Georgia,serif}
 @media(max-width:330px){main.dock{padding:7px}}
+/* Disabled royal acts stay legible for moderators and explain why they cannot be pressed. */
+.dock .action:disabled{opacity:1;cursor:not-allowed;background:#38291f;border-color:#765a3d;box-shadow:none;color:#ead6b4}
+.dock .action:disabled .action-detail{color:#d8c09b}
+.dock .action:disabled .action-icon{color:#c5a77b;border-color:#806b4d;background:#30241c}
+.dock .action:disabled .arrow{color:#a98f6b}
