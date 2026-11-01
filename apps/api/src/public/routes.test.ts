@@ -139,6 +139,15 @@ describe('the public origin route table', () => {
     }
   });
 
+  it('serves the grand view with its channel, hour and camera query', () => {
+    expect(at('/-/grand')).toEqual({ kind: 'page' });
+    expect(at('/-/grand?channel=tobi4s_&hour=19.5&view=hero')).toEqual({ kind: 'page' });
+    expect(at('/-/grand?channel=The_AGGman&hour=17&view=coast')).toEqual({ kind: 'page' });
+    for (const path of ['/-/grand/', '/-/grand/bench', '/-/grand-artisans']) {
+      expect(at(path), path).toEqual({ kind: 'file' });
+    }
+  });
+
   it('leaves everything else to the built files', () => {
     expect(classify('/assets/index-AbCdEf12.js', '')).toEqual({ kind: 'file' });
     expect(classify('/door/assets/door-AbCdEf12.css', '')).toEqual({ kind: 'file' });

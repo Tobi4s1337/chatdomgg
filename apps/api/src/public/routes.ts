@@ -36,7 +36,7 @@ export function isRealmSocket(pathname: string): boolean {
  * The product's pages. Everything else the web build can draw (lane benches, references) stays off the public
  * origin. A new public page is added here deliberately.
  */
-const PAGES = /^\/(?:showcase|stream|panel|dock\/?|map(?:\/(?:[a-z0-9_]{1,25}|road\/[a-z0-9_]{1,25}\/[a-z0-9_]{1,25}))?|kingdom\/[1-9][0-9]{0,31}|-\/(?:avatar-builder|citizen-card))$/;
+const PAGES = /^\/(?:showcase|stream|panel|dock\/?|map(?:\/(?:[a-z0-9_]{1,25}|road\/[a-z0-9_]{1,25}\/[a-z0-9_]{1,25}))?|kingdom\/[1-9][0-9]{0,31}|-\/(?:avatar-builder|citizen-card|grand))$/;
 
 export function classify(pathname: string, search: string): PublicRoute {
   if (pathname === '/healthz') return { kind: 'health' };
