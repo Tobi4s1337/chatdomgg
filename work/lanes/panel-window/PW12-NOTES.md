@@ -99,10 +99,15 @@ holder. The lease batch did not start any services.
 | Required stills at both sizes | One reviewed fallback only; full batch outstanding |
 | Real test-mode gift and first PW13 checklist item | HOSTED-TEST.md first item written; C04 purchase bar remains open |
 
-Next stays **PW12**: run the complete GPU batch when connected and integrate real effect capability/dispatch. The
-two-panel browser path now has isolated-stack proof, with the limits below. Do not tick PW12 for test ports, bench
-captures, or merely applying the transport patch.
-See `PW12-NEEDS.md` for exact owner seams. PW13 configuration/registration remains a separate task in strict order.
+Next is **PW13** under the repeated-failure rule. Three consecutive PW12 turns invoked the full batch with
+`--wait 30 --max 10` and received exit 3 because GPU Chrome was disconnected. None created a queued lease job or
+started services. This is missing visual proof, not a failed test, a busy lease, or evidence that PW12 is complete.
+PW11 is not blocked on shared lease contention. Resume the outstanding PW12 capture once Chrome is connected,
+using the same complete batch; do not shorten the lease wait or restart a live queued job.
+
+The two-panel browser path has isolated-stack proof, with the limits below. Production gift capability/dispatch
+still needs its effect owner (`PW12-NEEDS.md`). Do not tick PW12 for test ports, bench captures, or merely applying
+the transport patch. PW13 configuration/registration is the next separate task; its work does not waive PW12's bar.
 The PRD's existing video-studio round-note edit remains unstaged. This turn corrects PW11's historical busy-lease label
 at Tobias's request; erasure and stream disclosure still need their core owners. The progress SHA is the checkpoint's
 base, avoiding an impossible self-referential commit ID.
