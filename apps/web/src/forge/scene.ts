@@ -1,3 +1,4 @@
+import { CONTACT } from './presentation/stage';
 import * as THREE from 'three';
 import { MATERIALS, type StyleKey } from '@chatdom/content';
 import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, forgeTitle, planLocalForge, forgeRitualFrame, createForgeRefusalGate, homeFingerprint, FORGE_STAGE_TIMING, type AssembledForge } from '@chatdom/forge';
@@ -102,13 +103,13 @@ export function createKingdomForge(options:Options){
     if(frame&&frame.phase!==lastPhase){playForgeSound(options.sound,frame.phase);lastPhase=frame.phase;}
     if(current&&frame){
       if(frame.phase==='flight'){
-        const t=THREE.MathUtils.smootherstep(frame.phaseProgress,0,1),from=options.anvil.clone().add(new THREE.Vector3(-current.bounds.getCenter(new THREE.Vector3()).x,1.6-current.bounds.min.y,-current.bounds.getCenter(new THREE.Vector3()).z));
+        const t=THREE.MathUtils.smootherstep(frame.phaseProgress/CONTACT,0,1),from=options.anvil.clone().add(new THREE.Vector3(-current.bounds.getCenter(new THREE.Vector3()).x,1.6-current.bounds.min.y,-current.bounds.getCenter(new THREE.Vector3()).z));
         const world=from.lerp(current.destination,t);world.y+=Math.sin(Math.PI*t)*Math.min(28,10+options.anvil.distanceTo(current.destination)*.15);
         view.piece.position.copy(view.root.worldToLocal(world));view.piece.rotation.y=current.home.yaw*t;view.piece.visible=true;
       }
       if(open&&!hidden&&!preparing&&(frame.phase==='flight'||frame.phase==='landed')&&options.onFlight){
         const reduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if(reduced)options.onFlight(null,null);else{view.piece.updateWorldMatrix(true,false);const at=current.bounds.getCenter(new THREE.Vector3()).setY(current.bounds.max.y+.15).applyMatrix4(view.piece.matrixWorld);options.onFlight(frame,[at.x,at.y,at.z]);}
+        if(reduced)options.onFlight(null,null);else{view.piece.updateWorldMatrix(true,false);const at=current.bounds.getCenter(new THREE.Vector3()).setY(current.bounds.max.y+.15).applyMatrix4(view.piece.matrixWorld);options.onFlight(frame,[at.x,at.y,at.z],current.destination.toArray());}
       }
       if(frame.phase==='landed'&&!current.committed){try{install(current);options.onArrival?.(current.home);}catch(error){privateError=String(error);current.geometry.dispose();current=null;}view.piece.visible=false;}
       if(frame.phase==='landed')view.piece.visible=false;

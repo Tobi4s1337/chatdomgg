@@ -126,7 +126,8 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     // The shared effect captures the real landing pose before it brings a clone to the anvil.
     const destination=landing??anvil;
     piece.position.copy(root.worldToLocal(destination.clone()));piece.updateWorldMatrix(true,false);
-    presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:destination.toArray(),piece,...(onFlight ? {onFlight} : {})});
+    // The host reports its final posed flight; suppress the legacy guessed trail here.
+    presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:destination.toArray(),piece,onFlight:onFlight??(()=>{})});
     piece.position.copy(castingPosition);piece.updateWorldMatrix(true,false);
   }
   /** The room's external casting owns its effects; it still heats this same physical stage. */
@@ -139,7 +140,8 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
   }
   function update(frame: ForgeRitualFrame | null, shaping = false) {
     const early=frame?.phase==='words'||frame?.phase==='blueprint';
-    if(!early&&presenting){presentation?.update(null);piece.position.copy(castingPosition);piece.rotation.set(0,0,0);piece.scale.set(1,1,1);presenting=false;}
+    const staged=early||frame?.phase==='flight'||frame?.phase==='landed';
+    if(!staged&&presenting){presentation?.update(null);piece.position.copy(castingPosition);piece.rotation.set(0,0,0);piece.scale.set(1,1,1);presenting=false;}
     const orbitTime=frame?.elapsed??0;
     const t = frame?.phase==='words'?Math.min(2.99,orbitTime):orbitTime;
     const active = frame !== null;
@@ -159,7 +161,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     stamp.visible = active && t >= 11 && t < 15.5 && frame.source === 'simulated';
     piece.visible = active && t >= 5;
     ritualMaterial.uniforms.uForgeReveal!.value = t < 5 ? -1 : t < 11 ? THREE.MathUtils.lerp(pieceBounds.min.y, pieceBounds.max.y + .01, (t - 5) / 6) : pieceBounds.max.y + 1;
-    if(early&&presentation){presentation.update(frame);presenting=true;blueprint.visible=false;wordsGroup.visible=false;}
+    if(staged&&presentation){presentation.update(frame);presenting=true;blueprint.visible=false;wordsGroup.visible=false;}
     flightHeat.update(frame);
     ritualMaterial.uniforms.uForgeHeat!.value = t < 5 ? 0 : t < 11 ? .55 : t < 12.7 ? 1 : Math.max(0, 1 - (t - 12.7) / 2.8);
   }
