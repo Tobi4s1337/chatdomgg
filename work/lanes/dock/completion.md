@@ -17,10 +17,12 @@ stream act. Main owns all scene/realm/shared changes.
 | Chosen eligible moment | Only harmless dusk offered; no arbitrary dragon | Actual sky transition still and watched clip |
 | Undo/gentle safety | Last witnessed receipt,30s eligibility, authoritative undo entries; browser fixture reload/restore | Main's directed visible reversal plus real-service undo still/clip; refusal on stale receipt |
 | Lost replies and session replacement | Focused tests; unknown reload remains locked with exactly one POST | Remaining browser state rehearsals and real-service unavailable/presenter outcome |
-| Scope and git | Local lane commits, no push; shared/realm/web updates arrive only by main merge | Final focused checks, tickDK10 only after all required evidence, then last lineLANE COMPLETE |
+| Scope and git | Local lane commits, no push; shared/realm/web updates arrive only by main merge | Main integrates the checkpoint; tick DK10 only after all required evidence, then write LANE COMPLETE |
 
-Current real-service rehearsal is explicitly opt-in and still being runtime-validated.
-Use the evidence agent's recorded live tool handle; never replace a live capture merely
-because observation is silent. Acquire/release the queue slot separately for each still
-or short clip. No fake witness, invented moderator grant or substitute stage belongs in
-the completion proof.
+The real-service rehearsal is explicitly opt-in and failed before browser startup; main's
+town generation and retained-writer preparation need correction. No owned job remains
+running or queued. The incomplete backend diagnostic was removed after cleanup. This is
+a working dock UI/API checkpoint, not a completed DK10. No new sub-scope or capture is being
+started while landing it. When real visual verification resumes, acquire/release the queue
+slot separately for each still or short clip. No fake witness, invented moderator grant or
+substitute stage belongs in the completion proof.

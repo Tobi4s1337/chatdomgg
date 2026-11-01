@@ -96,11 +96,11 @@ services; it opened no listener or browser and produced no image. Its supervisor
 no cleanup error. Import-only preflight found Vite runner/CJS interop failing on zod; a
 temporary SSR build using the realm's Vite configuration and a native Node import then exposed
 all required service factories successfully without starting a server or touching the database.
-The corrected bench itself has not run yet. The wrapper
+The corrected bench later failed during town preparation, as recorded below. The wrapper
 requires `CHATDOM_DOCK_BENCH_UNTESTED=1`. After admission its supervisor has an eight-minute
 deadline, tracks its worker and Chrome process groups, waits for them to stop, then removes
 only its generated schema and temporary directory before releasing the lock. These cleanup
-paths are not yet runtime-tested. If Chrome cannot be tracked or confirmed closed, it retains
+paths have run before browser startup, but browser shutdown remains unverified. If Chrome cannot be tracked or confirmed closed, it retains
 the lock for intervention. Do not run alongside another lane-owned browser capture.
 
 The scaffold now seeds simulated stream and named chat observations through the real
@@ -121,9 +121,8 @@ schema, signs in through the real simulated OIDC provider and builds current pro
 assets. Witness metadata written beside an action capture contains only simulated action,
 receipt and public witness IDs; no CSRF or presenter capability is recorded.
 
-Next: poll the corrected initial isolated real-service still in agent-owned exec session 60166;
-it has not yet reported admission. Queue remaining UI stills separately. Validate the scaffold's
-owned socket, isolated schema cleanup, real sign-in and both SSE relays before relying on
-its still. Then seed actual simulated observations, use dock controls and verify stream
-draws and witnesses one act at a time. A read-only queue snapshot showed five inactive
-tickets; compatibility locks may still be held. This does not identify an owner.
+The corrected capture in agent-owned session 60166 acquired the lock and exited 1 before opening a browser: the `dock-simulated` town with firstYear 2019 and year 2026 failed generation (quarter 2023, 47/48 clear canonical frontages). Its supervisor reported cleanup and no image was created. The requested `tobi4s_` 2019–2026 town also failed generation (quarter 2024, 25/48 frontages); both inputs and failures were sent to main as world-generator needs. No capture is currently queued. Do not use either seed as if it had passed.
+
+A separate backend-only diagnostic loaded the real service graph and created an isolated simulated schema and founded directory; it opened no listener, browser, presentation or witness. The incomplete experimental script was removed. Its session is directly inserted and is not an OIDC test. The established `simulated-founded-town` 2022–2026 seed passed generation, adoption and readiness; one run opened the retained realm and encountered an ingress refusal, while subsequent attempts returned a storage-opening 503 after slow preparation; the final attempt reported that its writer lease was no longer held. No complete backend preflight or real-stream evidence has passed yet. Each completed run reported removal of its own schema and tempdir. The diagnostic did not reach a complete passing run, and no integrated capture was requeued.
+
+Next: resolve the world-generator and writer-lease failures, validate the backend inputs, then queue the integrated still one at a time under the shared lock. Verify the real socket, OIDC, stream, dock and draw witnesses before claiming any action evidence.

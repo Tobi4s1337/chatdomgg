@@ -1,5 +1,51 @@
 # DK10 checkpoint verification
 
+## Current checkpoint — 2026-11-01
+
+Dock UI/API implementation and nine individually captured, inspected SIMULATED UI stills
+are committed. See `visual-review.md` for exact paths and `completion.md` for the remaining
+end-state evidence. Every capture held the shared lock for one still and released it.
+No capture, browser, service or backend diagnostic owned by this lane remains running.
+No new sub-scope is being started for this checkpoint. DK10 remains unchecked.
+
+On merged source `3e42d07`, whole-workspace typecheck, lint and sequential workspace build
+passed. The focused dock/API/shared check passed all 29 tests; two opt-in isolated-Postgres
+realm dock tests also passed earlier. These establish boundary behavior, not stream pixels.
+The broad `pnpm test` run reported twelve failed cases in eight files outside dock. It was
+deliberately interrupted with exit 130 after those failures to close the requested
+checkpoint and sync main; it did not finish or produce a full suite summary. The failures
+include assertion mismatches and timeouts, listed in `needs.md`. This is not a passed or
+complete workspace test run. Global `pnpm verify` was not run because its capture phase
+owns reserved services.
+
+Final sync merged main `76ed4a5` into lane merge `286df74` without conflicts. The broad
+test observations above apply to pre-sync `3e42d07`, not a complete test of the new source.
+Fresh whole-workspace typecheck, lint and sequential build plus the 29 focused dock tests
+ran on `286df74`. All owned verification processes are now terminal:
+
+| Check | Result |
+| --- | --- |
+| `pnpm typecheck` | Passed, exit 0 |
+| `pnpm -r --workspace-concurrency=1 --if-present build` | Passed, exit 0; existing chunk-size/dynamic-import warnings |
+| `pnpm exec vitest run apps/api/src/dock apps/dock/src/recovery.test.ts packages/shared/src/realm/dock.test.ts` | Passed, 29 tests across six files |
+| `pnpm exec eslint apps/dock apps/api/src/dock` | Passed, exit 0 |
+| `pnpm lint` | Failed, exit 1: main-owned `scripts/public/look.mjs` has undefined `AbortSignal` at 28:48 and `clearTimeout` at 56:13 |
+| `git diff --check` | Passed |
+
+The checkpoint is buildable with green dock checks, not a green whole-workspace verify.
+No cross-scope edits or additional visual captures were made to close this checkpoint.
+
+Actual integrated stream capture failed before browser startup on town generation.
+Subsequent backend diagnosis found retained-writer lease loss. All owned temporary schemas
+and directories were cleaned up. No real sign-in browser flow, accepted scene action,
+watched clip or directed undo is proved. Main owns the required realm/scene corrections
+and integrates this local lane checkpoint; the lane neither pushes nor changes main.
+
+The sections below are chronological history, including dependencies and captures that
+have since changed. They are not the current queue or completion status.
+
+## Initial checkpoint
+
 2026-11-01. Scope: API boundary, new dock app, rehearsal tooling. DK10 is **not done**.
 
 Passed:

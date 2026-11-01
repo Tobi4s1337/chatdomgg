@@ -1,6 +1,11 @@
 # Capture queue observation — resumed DK10
 
-## Current compatibility wait — 2026-11-01 17:51
+**Latest checkpoint:** 60166 subsequently acquired the lock and exited 1 during town
+preparation, before a listener/browser. All its owned resources were cleaned up. No dock
+capture is now queued; the following compatibility observation is history, not a current
+request to stop a capture owner.
+
+## Historical compatibility wait — 2026-11-01 17:51
 
 The capture owner freshly polled60166 and confirmed it remains live and queued, before
 any service/browser startup. A read-only v2 registry snapshot showed three waiting tickets
