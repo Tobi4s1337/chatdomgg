@@ -74,6 +74,15 @@ describe('the public origin route table', () => {
     ]) expect(classify(path, ''), path).toEqual({ kind: 'not-found', api: true });
   });
 
+  it('publishes only the exact channel register and road projections', () => {
+    const preview = 'pv-20261101T120000Z-aaaaaaaaaaaa', base = `/map-data/v1/preview/${preview}`;
+    for (const suffix of ['search', 'card/123', 'card/login/tobi4s_', 'card/dab/abcdef0123456789',
+      'road/123/456', 'road/login/tobi4s_/mashad4']) expect(classify(`${base}/${suffix}`, '?q=willow')).toEqual({ kind: 'optional', service: 'map' });
+    for (const suffix of ['card/0', 'card/01', 'card/login/Tobi', 'card/login/a%2fb', 'card/dab/abc',
+      'road/123', 'road/123/456/private', 'search/private', 'internal']) expect(classify(`${base}/${suffix}`, '')).toEqual({ kind: 'not-found', api: true });
+    expect(classify('/map/road/tobi4s_/mashad4', '')).toEqual({ kind: 'page' });
+  });
+
   it('refuses nested service doors and any encoded path before it can reach an upstream decoder', () => {
     for (const prefix of ['/live-realm-data', '/presence-data', '/forge-data', '/map-data']) {
       for (const suffix of ['', '/', '/internal', '/internal/realm/ingress', '/internal/realm/herald',

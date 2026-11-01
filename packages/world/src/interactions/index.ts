@@ -8,5 +8,3 @@ export { createFoundedInteractionRegistry, foundedAnvilPosition } from './founde
 export { CONNECTED, claimSeat, createSeatBook, dropSession, endSeat, expireSeats, publicSeats, reconnectSession, releasePerson, releaseSession, releaseTargets, resumeSeat, seatAt, seatOfPerson, seatOfSession, standSeat, type SeatBook, type SeatClaim, type SeatClaimResult } from './seats';
 export type { InteractionLawRecord } from './legal';
 export { foundedInstalledHomes, homeDoorway, homeThreshold, insideHome, interactionZone, passageClear, settleOnFloor, type HomeBlock, type HomeThreshold, type InstalledHome } from './homes';
-
-export { createFoundedInteractionRegistry, foundedAnvilPosition } from './founded';

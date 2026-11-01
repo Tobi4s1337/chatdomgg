@@ -24,6 +24,8 @@ const REALM_PREFIX = '/live-realm-data';
 const PREVIEW_ID = 'pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}';
 const FRAME_ID = 'lf-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}';
 const MAP_READ = new RegExp(`^/map-data/v1/(?:health|survey|preview(?:/${PREVIEW_ID}/(?:world\\.json|region-[0-9]{1,5}\\.json|names))?|live/${PREVIEW_ID}(?:/events|/${FRAME_ID}/(?:live\\.bin|starts\\.json|dabs\\.bin))?)$`);
+const CHANNEL_ID = '[1-9][0-9]{0,31}', LOGIN = '[a-z0-9_]{1,25}';
+const MAP_DIRECTORY = new RegExp(`^/map-data/v1/preview/${PREVIEW_ID}/(?:search|card/(?:${CHANNEL_ID}|login/${LOGIN}|dab/[a-f0-9]{16})|road/(?:${CHANNEL_ID}/${CHANNEL_ID}|login/${LOGIN}/${LOGIN}))$`);
 
 /** Only actual Colyseus room paths may upgrade; public HTTP reads never become raw socket tunnels. */
 export function isRealmSocket(pathname: string): boolean {
@@ -34,7 +36,7 @@ export function isRealmSocket(pathname: string): boolean {
  * The product's pages. Everything else the web build can draw (lane benches, references) stays off the public
  * origin. A new public page is added here deliberately.
  */
-const PAGES = /^\/(?:showcase|stream|panel|dock\/?|map(?:\/[a-z0-9_]{1,25})?|kingdom\/[1-9][0-9]{0,31}|-\/(?:avatar-builder|citizen-card))$/;
+const PAGES = /^\/(?:showcase|stream|panel|dock\/?|map(?:\/(?:[a-z0-9_]{1,25}|road\/[a-z0-9_]{1,25}\/[a-z0-9_]{1,25}))?|kingdom\/[1-9][0-9]{0,31}|-\/(?:avatar-builder|citizen-card))$/;
 
 export function classify(pathname: string, search: string): PublicRoute {
   if (pathname === '/healthz') return { kind: 'health' };
@@ -52,7 +54,7 @@ export function classify(pathname: string, search: string): PublicRoute {
   if (pathname.startsWith('/api/panel/')) return { kind: 'panel' };
   if (pathname === '/api/public/door') return { kind: 'door-data' };
   if (pathname === '/presence-data/stream') return { kind: 'optional', service: 'herald' };
-  if (MAP_READ.test(pathname)) return { kind: 'optional', service: 'map' };
+  if (MAP_READ.test(pathname) || MAP_DIRECTORY.test(pathname)) return { kind: 'optional', service: 'map' };
   if (pathname === '/forge-data/run' || pathname === '/forge-data/status') return { kind: 'optional', service: 'forge' };
   if (/^\/(?:presence-data|map-data|forge-data)(?:\/|$)/.test(pathname)) return { kind: 'not-found', api: true };
   if (pathname.startsWith('/api/')) return { kind: 'not-found', api: true };
