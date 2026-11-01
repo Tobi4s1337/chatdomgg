@@ -1,9 +1,12 @@
 import { Client, type Room } from '@colyseus/sdk';
+import { createServer as createPortProbe } from 'node:net';
 import { KingdomIdSchema, TavernRoomState, type GatherFrame, type GatherSelf } from '@chatdom/shared';
 import type { RealmWalkInput } from '@chatdom/shared/realm';
 import { expect, it } from 'vitest';
 import { createRealmServer } from '../server';
 import { REFERENCE_KINGDOM, referenceServices } from '../reference';
+import { createTavernInterior } from './interior';
+import { seatApproachDriver } from '../../../web/src/games/walker';
 
 const waitFor = async (predicate: () => boolean, timeout = 8_000) => {
   const until = Date.now() + timeout;
@@ -12,6 +15,18 @@ const waitFor = async (predicate: () => boolean, timeout = 8_000) => {
     await new Promise(resolve => setTimeout(resolve, 25));
   }
 };
+
+async function freeTestPort(): Promise<number> {
+  for (const port of [5182, 5170, 5171, 5172, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180, 5181, 5183, 5184, 5185, 5186, 5188, 5189]) {
+    const free = await new Promise<boolean>(resolve => {
+      const probe = createPortProbe();
+      probe.once('error', () => resolve(false));
+      probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
+    });
+    if (free) return port;
+  }
+  throw new Error('No approved free port for the tavern socket test');
+}
 
 it('accepts separate authenticated walkers in the same tavern and refuses wrong-kingdom and remote chair claims', async () => {
   // Reference services issue one-use local test tickets; this is transport evidence, not database-session evidence.
@@ -24,9 +39,10 @@ it('accepts separate authenticated walkers in the same tavern and refuses wrong-
   } } };
   const { server } = createRealmServer(services);
   const sockets: Room<InstanceType<typeof TavernRoomState>>[] = [];
-  await server.listen(5182, '127.0.0.1');
+  const port = await freeTestPort();
+  await server.listen(port, '127.0.0.1');
   try {
-    const client = new Client('http://127.0.0.1:5182');
+    const client = new Client(`http://127.0.0.1:${port}`);
     const first = await client.joinOrCreate<InstanceType<typeof TavernRoomState>>('tavern', base.issue(), TavernRoomState);
     sockets.push(first);
     for (const type of ['interior', 'transient']) first.onMessage(type, () => {});
@@ -50,7 +66,7 @@ it('accepts separate authenticated walkers in the same tavern and refuses wrong-
     first.onMessage('self', (value: GatherSelf) => { own = value; });
     first.onMessage('private', value => { if (value.type === 'receipt') receipt = value.receipt; });
     await waitFor(() => !!frame && !!own);
-    expect(own).toEqual({ table: null, seat: null });
+    expect(own).toEqual({ table: null, seat: null, seatIndex: null, playerIndex: null });
     first.send('intent', { version: 1, type: 'interact', id: 'distant-chair', targetId: 'tavern:west:seat:1', action: 'tavern' });
     await waitFor(() => receipt?.id === 'distant-chair');
     expect(receipt?.status).not.toBe('applied');
@@ -77,11 +93,15 @@ it('accepts separate authenticated walkers in the same tavern and refuses wrong-
     let secondReceipt: { id: string; status: string } | undefined;
     second.onMessage('private', value => { if (value.type === 'receipt') secondReceipt = value.receipt; });
     const secondInput = second.input<RealmWalkInput>({ mode: 'reliable' });
-    for (let i = 0; i < 32; i++) {
-      Object.assign(secondInput.data, { moveX: 0, moveZ: -127, buttons: 0, yaw: 128, collisionRevision: 1, placement: 0 });
+    const interior = createTavernInterior(), approach = interior.registry.get('tavern:middle:seat:1')!.target.approach;
+    const body = second.state.walkers.get(second.sessionId)!;
+    const driver = seatApproachDriver(interior.world, [body.x, body.y, body.z], approach, [14, 10]);
+    for (let i = 0; i < 800 && !driver.done; i++) {
+      const current = second.state.walkers.get(second.sessionId)!;
+      Object.assign(secondInput.data, driver.input(current), { placement: current.placement });
       secondInput.send(); await new Promise(resolve => setTimeout(resolve, 34));
     }
-    await waitFor(() => (second.state.walkers.get(second.sessionId)?.z ?? 10) < 5);
+    expect(driver.done).toBe(true);
     second.send('intent', { version: 1, type: 'interact', id: 'opposite-chair', targetId: 'tavern:middle:seat:1', action: 'tavern' });
     await waitFor(() => secondReceipt?.id === 'opposite-chair');
     expect(secondReceipt?.status).toBe('applied');
@@ -100,4 +120,4 @@ it('accepts separate authenticated walkers in the same tavern and refuses wrong-
     await Promise.all(sockets.map(room => room.leave().catch(() => {})));
     await server.gracefullyShutdown(false);
   }
-}, 20_000);
+}, 40_000);

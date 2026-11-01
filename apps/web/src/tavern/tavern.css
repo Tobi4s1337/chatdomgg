@@ -26,4 +26,5 @@
 .gather-paddle-touch { display: none; min-height: 48px; margin-top: 8px; border: 1px solid var(--cd-brass-lo); border-radius: 6px; background: var(--cd-wood-well); color: var(--cd-cream-soft); place-items: center; touch-action: none; }
 .gather-tavern--live canvas:focus { outline: none; }
 .gather-tavern--live:has([data-pong-hud]) .ix-layer { visibility: hidden; pointer-events: none; }
+.gather-tavern--live:has([data-turn-hud]) .ix-layer { visibility: hidden; pointer-events: none; }
 @media (max-width: 600px), (pointer: coarse) { .gather-game-hud { padding: 12px 14px 4px; top: auto; right: auto; bottom: 14px; left: 50%; translate: -50% 0; width: calc(100% - 28px); } .gather-paddle-touch { display: grid; } .gather-game-hud .gather-game-help { display: none; } .gather-game-score { gap: 8px; } .gather-game-score > span { font-size: 16px; } }

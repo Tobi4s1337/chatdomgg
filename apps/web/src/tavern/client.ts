@@ -1,7 +1,7 @@
 import { Predict } from '@colyseus/sdk/predict';
 import type { Room } from '@colyseus/sdk';
 import { GatherFrameSchema, GatherInteriorSchema, GatherSelfSchema, TavernRoomState,
-  type GatherFrame, type GatherInterior, type GatherSelf, type PongView } from '@chatdom/shared';
+  type GatherFrame, type GatherInterior, type GatherSelf, type PongView, type GatherMove } from '@chatdom/shared';
 import { PLAYER_FIELDS, RealmJoinSchema, sanitizeRealmWalkInput,
   type CollisionWorld, type PlayerState, type RealmWalkInput, type WalkInput } from '@chatdom/shared/realm';
 import { stepPlayer } from '@chatdom/world/movement';
@@ -22,6 +22,8 @@ export interface TavernClient extends WalkRealm {
   subscribe(listener: () => void): () => void;
   start(table: string): void;
   aim(value: number, now: number): void;
+  move(action: 'drop' | 'roll' | 'hold', column?: number): void;
+  serverNow(): number;
   gameFrame(now: number): GatherFrame;
   dispose(): void;
 }
@@ -42,11 +44,12 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
   if (room.roomId !== `t:${entry.kingdomId}`) { void room.leave(); throw new Error('The door opened into another tavern.'); }
   const listeners = new Set<() => void>(), offs: (() => void)[] = [];
   let disposed = false, connected = true, interior: GatherInterior | null = null;
-  let tables: GatherFrame = { at: 0, tables: [] }, self: GatherSelf = { table: null, seat: null };
+  let tables: GatherFrame = { at: 0, tables: [] }, self: GatherSelf = { table: null, seat: null }, frameReceivedAt = performance.now();
   const presentations = new Map<string, PongPresentation>();
   const notify = () => { for (const listener of listeners) listener(); };
   const receive = (frame: GatherFrame) => {
     tables = frame;
+    frameReceivedAt = performance.now();
     for (const table of frame.tables) {
       if (!table.pong) { presentations.delete(table.table); continue; }
       let presentation = presentations.get(table.table);
@@ -141,6 +144,14 @@ export async function connectTavern(endpoint: string, entry: RealmEntry, storage
       const presentation = self.table ? presentations.get(self.table) : undefined, phase = presentation?.latest?.phase;
       if (phase === 'serve' || phase === 'rally') presentation?.aim(value, now);
     },
+    move(action, column) {
+      const table = tables.tables.find(t => t.table === self.table), game = table?.stones ?? table?.dice;
+      if (!connected || !table || !game || game.phase !== 'playing' || table.status === 'saving') return;
+      const common = { id: crypto.randomUUID(), table: table.table, match: game.match, revision: game.revision };
+      const command: GatherMove = action === 'drop' ? { ...common, action, column: column ?? -1 } : { ...common, action };
+      room.send('move', command);
+    },
+    serverNow() { return tables.at + performance.now() - frameReceivedAt; },
     gameFrame(now) {
       const own = self.table ? tables.tables.find(t => t.table === self.table)?.pong : undefined;
       const presentation = self.table ? presentations.get(self.table) : undefined;

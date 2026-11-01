@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { Room, ServerError, type Client } from '@colyseus/core';
-import { KingdomIdSchema, GATHER_HZ, GatherPongInputSchema, GatherStartSchema, TavernRoomState } from '@chatdom/shared';
+import { KingdomIdSchema, GATHER_HZ, GatherPongInputSchema, GatherStartSchema, GatherMoveSchema, TavernRoomState } from '@chatdom/shared';
 import { RealmJoinSchema, RealmIntentSchema, WalkInputSchema, WalkerSchema, sanitizeRealmWalkInput,
   type RealmPrincipal, type PlayerState } from '@chatdom/shared/realm';
 import { stepPlayer, embeddedSolids, supported } from '@chatdom/world/movement';
 import { RealmSeats, RealmSeatRefusedError, REALM_SESSION_CHECK_MS, REALM_RECONNECT_GRACE_MS } from '../auth/seats';
 import { createInteractionAuthority, composeInteractionHosts, type InteractionAuthority } from '../interactions';
 import type { RealmRoomServices } from '../ports';
-import { GatherTables } from './tables';
+import { GatherTables, TAVERN_TABLES } from './tables';
+import { gatherStoreFor } from './store';
 import { createTavernInterior, TAVERN_ENTRY } from './interior';
 
 /** Its own world and physical seats. The generic portal controller supplies a fresh session entry ticket. */
@@ -18,13 +19,15 @@ export function createTavernRoom(services: RealmRoomServices) {
     maxMessagesPerSecond = 90;
     patchRate = 1000 / GATHER_HZ;
     private readonly interior = createTavernInterior();
-    private readonly tables = new GatherTables(['west', 'hearth', 'middle', 'east', 'corner']);
+    private tables!: GatherTables;
     private seats!: RealmSeats;
     private authority!: InteractionAuthority;
     private readonly owner = new Map<string, string>();
     private readonly walking = new Map<string, boolean>();
     private readonly actions = new Set<string>();
     private accepting = true;
+    private tableSignature = '';
+    private tableSentAt = 0;
     readonly inputs = this.defineInput(WalkInputSchema, { bufferMaxSize: 30, sanitize: sanitizeRealmWalkInput });
 
     static async onAuth(_token: string, raw: unknown) {
@@ -32,10 +35,12 @@ export function createTavernRoom(services: RealmRoomServices) {
       if (!join.success) throw new ServerError(400, 'Invalid tavern entry');
       return services.auth.authenticate(join.data);
     }
-    onCreate(options: { kingdomId: string }) {
+    async onCreate(options: { kingdomId: string }) {
       const kingdom = KingdomIdSchema.parse(options.kingdomId);
       this.roomId = `t:${kingdom}`;
       this.state.kingdomId = kingdom; this.state.writerEpoch = randomUUID();
+      this.tables = new GatherTables(TAVERN_TABLES, { kingdom, store: gatherStoreFor(services) });
+      await this.tables.restore(Date.now());
       this.state.collisionRevision = this.interior.world.revision;
       this.seats = new RealmSeats({ auth: services.auth, close: (id, code, reason) => this.clients.getById(id)?.leave(code, reason) });
       const readWalker = (id: string): PlayerState | null => this.state.walkers.get(id) ?? null;
@@ -58,10 +63,17 @@ export function createTavernRoom(services: RealmRoomServices) {
         const id = this.owner.get(person); if (id) this.clients.getById(id)?.send('private', message);
       } });
       this.onMessage('bootstrap', client => { if (this.current(client)) this.bootstrap(client); });
-      this.onMessage('start', (client, raw) => {
+      this.onMessage('start', async (client, raw) => {
         const request = GatherStartSchema.safeParse(raw);
         if (!request.success || !this.current(client)) return;
-        client.send('receipt', { id: request.data.id, accepted: this.tables.start(client.auth!.personId, request.data, Date.now()) });
+        const accepted = await this.tables.start(client.auth!.personId, request.data, Date.now());
+        if (this.current(client)) client.send('receipt', { id: request.data.id, accepted });
+      });
+      this.onMessage('move', async (client, raw) => {
+        const request = GatherMoveSchema.safeParse(raw);
+        if (!request.success || !this.current(client)) return;
+        const accepted = await this.tables.move(client.auth!.personId, request.data, Date.now());
+        if (this.current(client)) client.send('receipt', { id: request.data.id, accepted });
       });
       this.onMessage('paddle', (client, raw) => {
         const input = GatherPongInputSchema.safeParse(raw);
@@ -88,10 +100,14 @@ export function createTavernRoom(services: RealmRoomServices) {
           const input = this.inputs.get(id).next();
           if (input && input.placement === walker.placement) stepPlayer(walker, input, ctx.dt, this.interior.world);
         }
-        this.authority.expire(Date.now()); this.tables.tick();
+        this.authority.expire(Date.now()); this.tables.tick(Date.now());
         const frame = this.tables.view(Date.now());
-        for (const client of this.clients) if (this.current(client)) {
-          client.send('tables', frame); client.send('self', this.tables.self(client.auth!.personId));
+        const signature = frame.tables.map(table => `${table.revision}:${table.status}:${table.pong?.tick}:${table.pong?.phase}`).join('|');
+        if (signature !== this.tableSignature || frame.at - this.tableSentAt >= 1000) {
+          this.tableSignature = signature; this.tableSentAt = frame.at;
+          for (const client of this.clients) if (this.current(client)) {
+            client.send('tables', frame); client.send('self', this.tables.self(client.auth!.personId));
+          }
         }
       }, GATHER_HZ);
       this.clock.setInterval(() => this.seats.check(), REALM_SESSION_CHECK_MS);
@@ -143,6 +159,6 @@ export function createTavernRoom(services: RealmRoomServices) {
     private remove(id: string) {
       this.inputs.get(id).clear(); this.walking.delete(id); this.actions.delete(id); this.state.walkers.delete(id); this.seats.left(id);
     }
-    onDispose() { this.accepting = false; this.authority?.dispose(); this.seats?.dispose(); }
+    async onDispose() { this.accepting = false; const drained = this.tables?.close(); this.authority?.dispose(); this.seats?.dispose(); await drained; }
   };
 }

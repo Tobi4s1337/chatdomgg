@@ -92,6 +92,13 @@ The bar: every place and game is pleasant to watch without reading anything, fun
 
 ## Decisions
 
+- **2026-11-02 — Turn tables and recovery.** Middle plays Pong, hearth plays two-to-four-player Hearth Dice,
+  and the other three tables play Stones. The hearth has four reachable physical chairs. Dice grants thirty
+  seconds per decision; expiry banks the current pot or passes an empty turn. Accepted moves and private RNG
+  checkpoints commit atomically before publication. A restart reserves original turn-game chairs for thirty
+  seconds without inventing bodies; players must reseat, and total abandonment draws. Pong saves its terminal
+  result before publication and interrupts without a winner after restart. Public match names stay immutable
+  as chairs change. Optional fields extend only this lane's `games.ts`; the original two-chair tuple stays stable.
 - **2026-11-01 — Hand-made games, not the Chalk engine.** Tobias asked for "a few basic fun ones … like PONG". Each game is plain, reviewed TypeScript on the server: a pure state machine with `start`, `act` and `tick` and per-seat views, all randomness from a persisted seed and cursor, and all time from the room's clock. The Chalk interpreter, the Taster, prompted games and crowning (spec 22 R3, R5, R7 to R9) stay in the vision and the Backlog. TT02 is not merged. Borrow its good patterns (idempotency keys, revisions, persisted end times, a result outbox) and write them small.
 - **2026-11-01 — The five games.** Pong, Stones, Hearth Dice, Arm Wrestling and the Axe Board give the most fun for the least rules text: each is explained in one sentence and is good to watch on stream. Pong and the Axe Board are skill games for walkers. Stones, Hearth Dice and Arm Wrestling also work for chat as one player, by vote or by pulling together; Pong does not, because stream delay makes real-time voting unplayable. Liar's dice and card games wait (Backlog): they need hidden hands, and chat cannot hold one in secret.
 - **2026-11-01 — Tavern portal (founder correction; supersedes the larger-building decision).** The exterior stays exactly as installed. Its door transfers the walker from `kingdom` to a separate `tavern` Colyseus room filtered by `kingdomId`; return spawns outside at the door facing out. Session, look and identity carry across, with a quick, beautiful transition provided by play. Gather owns the independent interior scene, light, walkers and games. No tavern replacement, footprint reservation, founded-scene edit or civic-growth edit. The campfire stays in the kingdom world. Initial authored interior bounds are 14 × 10 m, chosen for the furniture and routes, with no land reservation implied.

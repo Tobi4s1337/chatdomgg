@@ -4,13 +4,14 @@ import type { GameInputLease } from '../games/input';
 import { createTavernStage } from './stage';
 import type { TavernClient } from './client';
 import { mountTavernWalk, type TavernWalkState } from './walk';
+import { TurnGameHud } from '../games/TurnHud';
 
 const EMPTY: GatherFrame = { at: 0, tables: [] };
 function result(table: GatherTableView): string {
   const game = table.pong;
   if (!game) return table.seats.every(Boolean) ? 'Ready when you are.' : 'A chair for a friend.';
   if (game.phase === 'interrupted') return 'The game was interrupted. No win was recorded.';
-  if (game.phase === 'finished') return `${table.seats[game.winner ?? 0] ?? 'The other player'} wins${game.reason === 'conceded' ? ' as the other player leaves' : ''}.`;
+  if (game.phase === 'finished') return `${table.players?.[game.winner ?? 0] ?? table.seats[game.winner ?? 0] ?? 'The other player'} wins${game.reason === 'conceded' ? ' as the other player leaves' : ''}.`;
   if (game.phase === 'serve') return 'The next serve is yours to meet.';
   return 'First to seven.';
 }
@@ -69,11 +70,12 @@ export function TavernRoomSurface(props: {
     <Show when={!state().ready || failed()}><p class="gather-tavern-status cd-slip" role="status">{failed() ? 'The tavern could not be opened. Return to the door and try again.' : 'Opening the door…'}</p></Show>
     <Show when={state().ready && !state().connected}><p class="gather-tavern-status cd-slip" role="status">The road is quiet. Reconnecting to your chair…</p></Show>
     <For each={state().names}>{name => <span class="gather-citizen-name" style={{ left: `${name.x}px`, top: `${name.y}px` }}>{name.name}</span>}</For>
-    <Show when={table()}>{current => <section class="gather-game-hud cd-plate" aria-label="Pong table" data-pong-hud>
+    <Show when={table()}>{current => <Show when={!current().game || current().game === 'pong'} fallback={<TurnGameHud table={current} seat={() => client?.self.playerIndex ?? null}
+      connected={() => state().connected} now={() => client?.serverNow() ?? Date.now()} onStart={start} onMove={(action, column) => client?.move(action, column)} onLeave={() => walk?.interactions.leave()} />}><section class="gather-game-hud cd-plate" aria-label="Pong table" data-pong-hud>
       <p class="cd-label">Pong · First to seven</p>
       <div class="gather-game-score">
-        <span title={current().seats[0] ?? ''}>{current().seats[0] ?? 'Open chair'}</span><strong aria-label="score">{current().pong?.score[0] ?? 0} <i>:</i> {current().pong?.score[1] ?? 0}</strong>
-        <span title={current().seats[1] ?? ''}>{current().seats[1] ?? 'Open chair'}</span>
+        <span>{current().players?.[0] ?? current().seats[0] ?? 'Open chair'}</span><strong aria-label="score">{current().pong?.score[0] ?? 0} <i>:</i> {current().pong?.score[1] ?? 0}</strong>
+        <span>{current().players?.[1] ?? current().seats[1] ?? 'Open chair'}</span>
       </div>
       <p class="gather-game-words" role="status">{result(current())}</p>
       <Show when={running()}><p class="gather-game-help">Mouse, A / D or arrows · Click the tabletop to focus</p></Show>
@@ -88,6 +90,6 @@ export function TavernRoomSurface(props: {
           client?.aim(currentTarget + (event.code === 'ArrowRight' ? .12 : -.12) * sign, performance.now());
         }}><span>Slide to move your paddle</span></div>
       <button class="gather-game-leave cd-focus" onClick={() => walk?.interactions.leave()}>Stand up <kbd>E</kbd> <kbd>Esc</kbd></button>
-    </section>}</Show>
+    </section></Show>}</Show>
   </div>;
 }

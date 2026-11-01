@@ -5,6 +5,7 @@ import { rasterizeBlueprint, VoxelWorkerPool } from '@chatdom/voxel';
 import type { GatherFrame, Vec3 } from '@chatdom/shared';
 import { createTavernKit, type TavernKit } from '../../../../packages/content/src/tavern';
 import { tavernLight } from './light';
+import { createTurnBoards, tableGame } from '../games/boards';
 
 export interface TavernMount {
   readonly kit: TavernKit;
@@ -39,15 +40,17 @@ export function mountTavern(scene: THREE.Scene, options: { style?: 'hearth' | 't
   const wood = new THREE.MeshStandardMaterial({ color: '#e6bd7c', roughness: .92 });
   const ballMaterial = new THREE.MeshBasicMaterial({ color: '#ffe7b8' });
   const paddleGeometry = new THREE.BoxGeometry(.2604, .06, .07), ballGeometry = new THREE.BoxGeometry(.0558, .0558, .0252);
-  const paddles = new THREE.InstancedMesh(paddleGeometry, wood, kit.tables.length * 2);
-  const balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, kit.tables.length);
+  const pongTables = kit.tables.filter(table => tableGame(table.id) === 'pong');
+  const turnBoards = createTurnBoards(root, kit.tables);
+  const paddles = new THREE.InstancedMesh(paddleGeometry, wood, pongTables.length * 2);
+  const balls = new THREE.InstancedMesh(ballGeometry, ballMaterial, pongTables.length);
   const markGeometry = new THREE.BoxGeometry(1, 1, 1), markMaterial = new THREE.MeshBasicMaterial({ color: '#bd955e' });
-  const marks = new THREE.InstancedMesh(markGeometry, markMaterial, kit.tables.length * 11);
+  const marks = new THREE.InstancedMesh(markGeometry, markMaterial, pongTables.length * 11);
   const boardGeometry = new THREE.BoxGeometry(1.25, .016, .9), boardMaterial = new THREE.MeshStandardMaterial({ color: '#29473f', roughness: 1 });
-  const boards = new THREE.InstancedMesh(boardGeometry, boardMaterial, kit.tables.length);
+  const boards = new THREE.InstancedMesh(boardGeometry, boardMaterial, pongTables.length);
   root.add(paddles, balls, marks, boards); const matrix = new THREE.Matrix4();
   let mark = 0;
-  for (const [index, table] of kit.tables.entries()) {
+  for (const [index, table] of pongTables.entries()) {
     matrix.makeTranslation(table.centre[0], table.centre[1] + .008, table.centre[2]); boards.setMatrixAt(index, matrix);
     const line = (x: number, z: number, w: number, d: number) => {
       matrix.makeScale(w, .005, d); matrix.setPosition(table.centre[0] + x, table.centre[1] + .019, table.centre[2] + z);
@@ -59,8 +62,9 @@ export function mountTavern(scene: THREE.Scene, options: { style?: 'hearth' | 't
   boards.instanceMatrix.needsUpdate = true; boards.computeBoundingSphere();
   marks.instanceMatrix.needsUpdate = true; marks.computeBoundingSphere();
   const projectGames = (frame: GatherFrame) => {
+    turnBoards.frame(frame, performance.now());
     let ballCount = 0;
-    kit.tables.forEach((table, index) => {
+    pongTables.forEach((table, index) => {
       const pong = frame.tables.find(t => t.table === table.id)?.pong;
       for (const seat of [0, 1] as const) {
         // Seat 1 is on the -Z side of the authored table; logical +Y is that player's end.
@@ -98,7 +102,7 @@ export function mountTavern(scene: THREE.Scene, options: { style?: 'hearth' | 't
     },
     games: projectGames,
     dispose() {
-      disposed = true; pool.dispose(); scene.remove(root);
+      disposed = true; pool.dispose(); turnBoards.dispose(); scene.remove(root);
       for (const layer of layers.values()) { layer.mesh.geometry.dispose(); layer.material.dispose(); }
       layers.clear(); paddles.dispose(); balls.dispose(); marks.dispose(); boards.dispose(); boardGeometry.dispose(); boardMaterial.dispose(); wood.dispose(); ballMaterial.dispose(); markMaterial.dispose(); markGeometry.dispose(); paddleGeometry.dispose(); ballGeometry.dispose();
     },

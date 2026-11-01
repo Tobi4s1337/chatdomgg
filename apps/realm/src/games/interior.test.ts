@@ -8,7 +8,7 @@ describe('tavern destination', () => {
     const { kit, registry, world } = createTavernInterior();
     expect(kit.tables).toHaveLength(5);
     expect(registry.disabled).toEqual([]);
-    expect(registry.targets()).toHaveLength(10);
+    expect(registry.targets()).toHaveLength(12);
     for (const { id, approach, position, reach, kind } of registry.targets()) {
       expect(kind, id).toBe('tavern-seat');
       expect(standingClear(world, approach), id).toBe(true);

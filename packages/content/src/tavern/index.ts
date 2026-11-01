@@ -84,11 +84,21 @@ export function createTavernKit(style: CivicStyle): TavernKit {
   const tables = centres.map(({ id, x, z }) => {
     table(room, k, x, z, id === 'corner');
     const seats = ([-1, 1] as const).map((direction, i): TavernSeat => {
-      chair(room, k, x, z + direction * 9, direction);
+      chair(room, k, x, z + direction * 9, direction < 0 ? 'north' : 'south');
       const cz = z + direction * 9;
       // Approach just beyond the chair, on the floor; not inside its own collision.
       return { key: `${id}:${i + 1}`, tableId: id, position: point(x, 5, cz), approach: point(x, 1, cz + direction * 6), facing: direction < 0 ? 0 : Math.PI };
     });
+    if (id === 'hearth') {
+      for (const direction of [-1, 1] as const) {
+        const cx = x + direction * 9;
+        chair(room, k, cx, z, direction < 0 ? 'west' : 'east');
+        seats.push({ key: `${id}:${direction < 0 ? 3 : 4}`, tableId: id,
+          position: point(cx, 5, z), approach: point(cx + direction * 5, 1, z + 6),
+          facing: direction < 0 ? Math.PI / 2 : -Math.PI / 2 });
+        solids.push(solid(cx - 3, 1, z - 3, cx + 3, 12, z + 3));
+      }
+    }
     solids.push(solid(x - 6, 1, z - 4, x + 6, 8, z + 4));
     for (const direction of [-1, 1]) solids.push(solid(x - 3, 1, z + direction * 9 - 3, x + 3, 12, z + direction * 9 + 3));
     return { id, centre: point(x, 8, z), size: [1.5, 1] as const, seats, corner: id === 'corner' };
@@ -131,14 +141,21 @@ function table(b: Boxes, k: CivicKit, x: number, z: number, corner: boolean): vo
   for (const dx of [-4, 3]) for (const dz of [-2, 1]) b.add(x + dx, 1, z + dz, x + dx + 1, 7, z + dz + 1, k.trim);
   b.add(x - 4, 3, z - 1, x + 4, 4, z + 1, MAT.bark);
 }
-function chair(b: Boxes, k: CivicKit, x: number, z: number, direction: number): void {
+function chair(b: Boxes, k: CivicKit, x: number, z: number, side: 'north' | 'south' | 'west' | 'east'): void {
   b.add(x - 3, 4, z - 3, x + 3, 5, z + 3, k.trim);
   b.add(x - 2, 4, z - 2, x + 2, 5, z + 2, k.field);
   for (const dx of [-2, 1]) for (const dz of [-2, 1]) b.add(x + dx, 1, z + dz, x + dx + 1, 4, z + dz + 1, k.trim);
-  const back = direction < 0 ? z - 3 : z + 2;
-  b.add(x - 3, 5, back, x + 3, 11, back + 1, k.trim);
-  b.add(x - 2, 10, back, x + 2, 12, back + 1, k.trim);
-  for (const dx of [-2, 1]) b.add(x + dx, 8, back, x + dx + 1, 9, back + 1, MAT.brass);
+  if (side === 'north' || side === 'south') {
+    const back = side === 'north' ? z - 3 : z + 2;
+    b.add(x - 3, 5, back, x + 3, 11, back + 1, k.trim);
+    b.add(x - 2, 10, back, x + 2, 12, back + 1, k.trim);
+    for (const dx of [-2, 1]) b.add(x + dx, 8, back, x + dx + 1, 9, back + 1, MAT.brass);
+  } else {
+    const back = side === 'west' ? x - 3 : x + 2;
+    b.add(back, 5, z - 3, back + 1, 11, z + 3, k.trim);
+    b.add(back, 10, z - 2, back + 1, 12, z + 2, k.trim);
+    for (const dz of [-2, 1]) b.add(back, 8, z + dz, back + 1, 9, z + dz + 1, MAT.brass);
+  }
 }
 function bar(b: Boxes, k: CivicKit): void {
   b.add(8, 1, 6, 43, 10, 14, k.trim);

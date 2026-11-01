@@ -31,8 +31,8 @@ describe('tavern table authority', () => {
     expect(first.admitted).toBe(true);
     expect(second).toEqual({ admitted: false, reason: 'refused' });
     expect(await reserve(tables, alice, '2', 'east')).toEqual({ admitted: false, reason: 'refused' });
-    expect(tables.self(alice)).toEqual({ table: null, seat: null });
-    expect(tables.start(alice, { table: 'west', revision: table(tables).revision, id: 'pending' }, 0)).toBe(false);
+    expect(tables.self(alice)).toEqual({ table: null, seat: null, seatIndex: null, playerIndex: null });
+    expect(await tables.start(alice, { table: 'west', revision: table(tables).revision, id: 'pending' }, 0)).toBe(false);
     expect(tables.input(alice, { match: 'unknown', sequence: 0, paddle: 0 })).toBe(false);
     if (first.admitted) first.cancel();
     const replacement = await reserve(tables, bob, '1');
@@ -60,12 +60,12 @@ describe('tavern table authority', () => {
     release(tables, alice, '1', 4);
     release(tables, bob, '1', 5);
     old.cancel();
-    expect(tables.self(alice)).toEqual({ table: 'west', seat: 0 });
+    expect(tables.self(alice)).toEqual({ table: 'west', seat: 0, seatIndex: 0, playerIndex: null });
     expect((await reserve(tables, bob, '1')).admitted).toBe(false);
     current.cancel();
-    expect(tables.self(alice)).toEqual({ table: 'west', seat: 0 });
+    expect(tables.self(alice)).toEqual({ table: 'west', seat: 0, seatIndex: 0, playerIndex: null });
     release(tables, alice, '1', 5);
-    expect(tables.self(alice)).toEqual({ table: null, seat: null });
+    expect(tables.self(alice)).toEqual({ table: null, seat: null, seatIndex: null, playerIndex: null });
     expect((await reserve(tables, bob, '1')).admitted).toBe(true);
   });
 
@@ -73,12 +73,12 @@ describe('tavern table authority', () => {
     const tables = new GatherTables();
     const admission = await sit(tables, alice, '1', 1);
     await sit(tables, bob, '2', 2);
-    expect(tables.start(alice, { table: 'west', revision: table(tables).revision, id: 'start' }, 0)).toBe(true);
+    expect(await tables.start(alice, { table: 'west', revision: table(tables).revision, id: 'start' }, 0)).toBe(true);
     admission.cancel();
     expect(table(tables).pong?.phase).toBe('serve');
     tables.host.released?.({ place: { table: 'west', seat: '1' }, personId: alice, generation: 1, sessionId: 'session' }, 'closed');
     expect(table(tables).pong).toMatchObject({ phase: 'interrupted', winner: null, reason: 'restart' });
-    expect(tables.self(alice)).toEqual({ table: null, seat: null });
+    expect(tables.self(alice)).toEqual({ table: null, seat: null, seatIndex: null, playerIndex: null });
   });
 
   it('accepts starts and paddle inputs only from committed seats, once per revision and sequence', async () => {
@@ -88,17 +88,17 @@ describe('tavern table authority', () => {
     if (!pendingBob.admitted) throw new Error('second chair refused');
     const before = structuredClone(tables.view(100));
     const revision = table(tables).revision;
-    expect(tables.start(alice, { table: 'west', revision, id: 'early' }, 100)).toBe(false);
-    expect(tables.start(bob, { table: 'west', revision, id: 'pending' }, 100)).toBe(false);
-    expect(tables.start(eve, { table: 'west', revision, id: 'intruder' }, 100)).toBe(false);
+    expect(await tables.start(alice, { table: 'west', revision, id: 'early' }, 100)).toBe(false);
+    expect(await tables.start(bob, { table: 'west', revision, id: 'pending' }, 100)).toBe(false);
+    expect(await tables.start(eve, { table: 'west', revision, id: 'intruder' }, 100)).toBe(false);
     expect(tables.view(100)).toEqual(before);
     pendingBob.seated?.({ targetId: 'tavern:west:seat:2', generation: 2 });
-    expect(tables.start(alice, { table: 'west', revision: revision - 1, id: 'stale' }, 100)).toBe(false);
+    expect(await tables.start(alice, { table: 'west', revision: revision - 1, id: 'stale' }, 100)).toBe(false);
     const request = { table: 'west', revision: table(tables).revision, id: 'start-1' };
-    expect(tables.start(alice, request, 100)).toBe(true);
+    expect(await tables.start(alice, request, 100)).toBe(true);
     const started = structuredClone(tables.view(100));
-    expect(tables.start(alice, request, 100)).toBe(true);
-    expect(tables.start(bob, { table: 'west', revision: table(tables).revision, id: 'second-start' }, 100)).toBe(false);
+    expect(await tables.start(alice, request, 100)).toBe(true);
+    expect(await tables.start(bob, { table: 'west', revision: table(tables).revision, id: 'second-start' }, 100)).toBe(false);
     expect(tables.view(100)).toEqual(started);
     const match = table(tables).pong!.match;
     expect(tables.input(eve, { match, sequence: 0, paddle: .5 })).toBe(false);
@@ -117,7 +117,7 @@ describe('tavern table authority', () => {
     await sit(tables, bob, '2', 2);
     tables.name(alice, 'Alice'); tables.name(bob, 'Bob');
     expect(table(tables).seats).toEqual(['Alice', 'Bob']);
-    expect(tables.start(alice, { table: 'west', revision: table(tables).revision, id: 'match-1' }, 100)).toBe(true);
+    expect(await tables.start(alice, { table: 'west', revision: table(tables).revision, id: 'match-1' }, 100)).toBe(true);
     const match = table(tables).pong!.match;
     expect(tables.input(alice, { match, sequence: 0, paddle: -1 })).toBe(true);
     expect(tables.input(bob, { match, sequence: 0, paddle: -1 })).toBe(true);
@@ -126,8 +126,9 @@ describe('tavern table authority', () => {
     const final = table(tables).pong!;
     expect(final.winner).not.toBeNull();
     expect(final.score[final.winner!]).toBe(7);
-    expect(tables.start(bob, { table: 'west', revision: table(tables).revision, id: 'match-2' }, 200_000)).toBe(true);
+    expect(await tables.start(bob, { table: 'west', revision: table(tables).revision, id: 'match-2' }, 200_000)).toBe(true);
     release(tables, alice, '1', 1);
+    await tables.flush();
     expect(table(tables).pong).toMatchObject({ phase: 'finished', reason: 'conceded', winner: 1 });
     expect(table(tables).seats).toEqual([null, 'Bob']);
   });
@@ -137,15 +138,15 @@ describe('tavern table authority', () => {
     await sit(tables, alice, '1', 1);
     await sit(tables, bob, '2', 2);
     const first = { table: 'west', revision: table(tables).revision, id: 'once' };
-    expect(tables.start(alice, first, 100)).toBe(true);
+    expect(await tables.start(alice, first, 100)).toBe(true);
     const match = table(tables).pong!.match;
-    expect(tables.start(alice, { table: 'west', revision: table(tables).revision, id: 'while-playing' }, 101)).toBe(false);
+    expect(await tables.start(alice, { table: 'west', revision: table(tables).revision, id: 'while-playing' }, 101)).toBe(false);
     expect(tables.input(alice, { match, sequence: 0, paddle: -1 })).toBe(true);
     expect(tables.input(bob, { match, sequence: 0, paddle: -1 })).toBe(true);
     for (let i = 0; i < 30_000 && table(tables).pong?.phase !== 'finished'; i++) tables.tick();
     expect(table(tables).pong?.phase).toBe('finished');
     const finished = structuredClone(tables.view(0));
-    expect(tables.start(alice, first, 200_000)).toBe(true);
+    expect(await tables.start(alice, first, 200_000)).toBe(true);
     expect(tables.view(0)).toEqual(finished);
   });
 });

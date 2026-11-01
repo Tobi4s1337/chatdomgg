@@ -19,6 +19,7 @@ import type { createTavernStage } from './stage';
 import { tavernLight } from './light';
 import { seatApproachDriver } from '../games/walker';
 import { TAVERN_ROOM_BOUNDS } from '../../../../packages/content/src/tavern';
+import { tableGame } from '../games/boards';
 
 export interface TavernWalkState {
   readonly ready: boolean;
@@ -75,19 +76,24 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
     open({ action, record }) {
       const chair = tavernSeatOf(record.target.id), table = kit.tables.find(t => t.id === chair?.table);
       if (action !== 'tavern' || !chair || !table) return null;
-      const seat = chair.seat === '1' ? 0 : 1, direction = seat === 0 ? -1 : 1;
+      const seat = Number(chair.seat) - 1, authoredSeat = table.seats.find(s => s.key === `${table.id}:${chair.seat}`);
+      if (!authoredSeat) return null;
+      const game = tableGame(table.id), fx = Math.sin(authoredSeat.facing), fz = Math.cos(authoredSeat.facing);
       let portrait = stage.camera.aspect < 1;
       // Same board as the miniature. Frame over this end, above the actual seat; hide only the local body.
-      const framing = () => clearShot(client.world, { eye: [table.centre[0], table.centre[1] + (portrait ? 2.6 : 1.15), table.centre[2] + direction * (portrait ? 1.75 : 1.15)],
-        at: [table.centre[0], table.centre[1] + .03, table.centre[2] + (portrait ? direction * .35 : 0)] });
+      const framing = () => {
+        const back = game === 'stones' ? portrait ? 2.8 : 1.8 : portrait ? 1.75 : 1.15;
+        const high = game === 'stones' ? portrait ? 2.5 : 1.3 : portrait ? 2.6 : 1.15;
+        return clearShot(client.world, { eye: [table.centre[0] - fx * back, table.centre[1] + high, table.centre[2] - fz * back],
+          at: [table.centre[0] - fx * (portrait && game !== 'stones' ? .35 : 0), table.centre[1] + (game === 'stones' ? .48 : .12), table.centre[2] - fz * (portrait && game !== 'stones' ? .35 : 0)] });
+      };
       const shot = framing();
       if (!shot) return null;
       const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
       stage.camera.fov = portrait ? 56 : 43; stage.camera.filmOffset = 0; stage.camera.updateProjectionMatrix();
       let ease = createShotEase(stage.camera, shot, { reducedMotion });
-      const lease = options.requestInput(`pong:${table.id}`);
-      const hand = bindPongHand(lease, seat, { target: () => client.presentations.get(table.id)?.aimPosition ?? 0,
-        aim: (value, now) => client.aim(value, now), start: () => client.start(table.id) }, () => performance.now());
+      const hand = game === 'pong' ? bindPongHand(options.requestInput(`pong:${table.id}`), seat as 0 | 1, { target: () => client.presentations.get(table.id)?.aimPosition ?? 0,
+        aim: (value, now) => client.aim(value, now), start: () => client.start(table.id) }, () => performance.now()) : null;
       selected = table.id;
       const view = { frame(dt: number, now: number) {
         if (portrait !== (stage.camera.aspect < 1)) {
@@ -95,9 +101,9 @@ export async function mountTavernWalk(stage: ReturnType<typeof createTavernStage
           const next = framing(); if (next) ease = createShotEase(stage.camera, next, { reducedMotion });
           stage.camera.fov = portrait ? 56 : 43; stage.camera.updateProjectionMatrix();
         }
-        ease.frame(now); hand.frame(dt, now);
+        ease.frame(now); hand?.frame(dt, now);
       },
-        close() { hand.dispose(); if (tableView === view) { tableView = null; selected = null; } } };
+        close() { hand?.dispose(); if (tableView === view) { tableView = null; selected = null; } } };
       tableView = view;
       return { close: () => view.close() };
     },

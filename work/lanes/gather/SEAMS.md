@@ -50,6 +50,9 @@ gather does not edit play's files or implement a second generic transfer control
   recreate an abandoned local interaction. E/Esc and the HUD's stand action go through the existing interaction
   owner and server seat release. The carved game HUD is within the surface; moving it to play's HUD slot remains
   pending play's confirmed adapter. No `play-slot.ts` implementation is claimed.
+- The current Stones/Dice inspection controls are native buttons after the standalone walk camera releases
+  its pointer. Gather still needs to bind those actions to the supplied game lease before the destination can
+  satisfy integrated always-locked input. This is open GA10 work, not a request for play to build game controls.
 
 The existing action/target contract has no generic portal action. Gather will add portal contracts only to its new
 `packages/shared/src/games.ts`; it will not widen `RealmIntentSchema` or existing target kinds silently.
@@ -133,6 +136,19 @@ export const GATHER_CHAT_ROUTE = '/internal/realm/gather/chat';
   person's presentation. All public game projection happens before serialization. The stream sees public views.
 - Leaving/disconnect behavior is owned by the physical room lease, not by an extra game socket. Restart interrupts
   Pong without a winner; turn games retain exact persisted state, RNG cursor and absolute deadline.
+- The production attach is `installGatherStore(boot.services, createPostgresGatherStore(pool))` immediately after
+  the existing dock service install in `main.ts`. It shares the boot pool and schema and owns no second pool or
+  shutdown resource. `0016` currently creates only `gather_table_checkpoints` and `gather_table_moves`; result,
+  tally and keepsake derivation remains GA12. The checkpoint and immutable accepted move commit together.
+- Tables expose additive optional `game`, `stones`, `dice`, `players`, `status` and `extraSeats` fields in
+  `games.ts`. The original two-chair `seats` tuple remains stable. Hearth Dice has physical chairs 1–4;
+  `self.seatIndex` identifies the physical chair, while `self.playerIndex` indexes immutable match participants.
+  `self.seat` retains its original two-chair meaning. A new sitter never inherits an old participant's moves.
+- Recovered active turn-game participants reserve their original chairs for thirty seconds without creating a
+  body or authenticated self. They re-enter through normal physical seating. At expiry, concessions persist;
+  simultaneous total abandonment draws. Lifecycle retries are coalesced per table and bypass the bounded user
+  command queue. Uncertain storage freezes mutation until durable truth is reconciled. Pong's live physics is
+  memory-only; start, interruption/concession and terminal points have durable checkpoints.
 
 ## 5. Read routes (gather offers; panel-window, play and the future bag read)
 

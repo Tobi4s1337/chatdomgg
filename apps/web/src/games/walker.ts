@@ -33,7 +33,7 @@ export function seatApproachDriver(world: CollisionWorld, start: Vec3, goal: Vec
       const dx = point[0] - body.x, dz = point[2] - body.z, distance = Math.hypot(dx, dz);
       // Inspection frames may cover eight fixed steps on software rendering. A slow test walk cannot skip
       // a narrow waypoint between frames; real walking keeps its own full-speed controller unchanged.
-      return { moveX: Math.round(dx / distance * 12), moveZ: Math.round(dz / distance * 12), buttons: 0,
+      return { moveX: Math.round(dx / distance * 20), moveZ: Math.round(dz / distance * 20), buttons: 0,
         yaw: ((Math.round(Math.atan2(dx, dz) * 128 / Math.PI) % 256) + 256) % 256, collisionRevision: world.revision };
     },
   };

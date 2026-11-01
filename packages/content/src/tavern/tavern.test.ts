@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { VoxelBlueprintSchema, type VoxelBlueprint } from '@chatdom/shared';
 import { WALK_BODY } from '@chatdom/shared/realm';
+import { standingClear, withinReach } from '../../../world/src/interactions';
+import { createTavernInterior, TAVERN_ENTRY } from '../../../../apps/realm/src/games/interior';
 import { MAT, MATERIALS, STYLES } from '../materials';
 import { createTavernKit, TAVERN_DOOR, TAVERN_FLOOR, TAVERN_ROOM_BOUNDS, type TavernSolid } from './index';
 
@@ -50,6 +52,32 @@ describe('authored tavern', () => {
     }
   });
 
+  it('installs twelve reachable seats in the actual interior collision and interaction registry', () => {
+    const { kit, registry, world } = createTavernInterior();
+    expect(kit.tables.map(table => [table.id, table.seats.length])).toEqual([
+      ['west', 2], ['hearth', 4], ['middle', 2], ['east', 2], ['corner', 2],
+    ]);
+    expect(registry.disabled).toEqual([]);
+    expect(registry.targets()).toHaveLength(12);
+    const key = (x: number, z: number) => `${x},${z}`;
+    const start: [number, number] = [Math.round(TAVERN_ENTRY.feet[0] / step), Math.round(TAVERN_ENTRY.feet[2] / step)];
+    const queue: [number, number][] = [start], seen = new Set([key(...start)]);
+    for (let i = 0; i < queue.length; i++) {
+      const [x, z] = queue[i]!;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = x + dx, nz = z + dz, id = key(nx, nz);
+        if (nx < 0 || nx > 112 || nz < 0 || nz > 80 || seen.has(id)) continue;
+        if (!standingClear(world, [nx * step, TAVERN_FLOOR, nz * step])) continue;
+        seen.add(id); queue.push([nx, nz]);
+      }
+    }
+    for (const target of registry.targets()) {
+      expect(standingClear(world, target.approach), target.id).toBe(true);
+      expect(withinReach(world, target.approach, target), target.id).toBe(true);
+      expect(seen.has(key(Math.round(target.approach[0] / step), Math.round(target.approach[2] / step))), target.id).toBe(true);
+    }
+  });
+
   it('leaves a walkable doorway, each unique chair approach and the bar accessible', () => {
     const { tables, solids, pieces } = createTavernKit('hearth');
     expect(TAVERN_ROOM_BOUNDS).toEqual([14, 10]);
@@ -57,7 +85,7 @@ describe('authored tavern', () => {
     expect(tables).toHaveLength(5);
     expect(tables.filter(table => table.corner)).toHaveLength(1);
     const seats = tables.flatMap(table => table.seats);
-    expect(new Set(seats.map(seat => seat.key)).size).toBe(10);
+    expect(new Set(seats.map(seat => seat.key)).size).toBe(12);
     const seen = reachable(solids);
     for (const seat of seats) {
       const [x, y, z] = seat.approach;
