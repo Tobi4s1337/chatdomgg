@@ -24,6 +24,13 @@ describe('Chronicle replay', () => {
     replay.play(); replay.step(); expect(replay.state()).toMatchObject({ index: 1, playing: false });
     replay.dispose(); replay.dispose(); expect(binding.clear).toHaveBeenCalledTimes(1); expect(binding.dispose).toHaveBeenCalledTimes(1);
   });
+  it('reports unavailable and clears the scene if the engine cannot apply a revision', () => {
+    const { replay, binding } = setup(); replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
+    binding.replace.mockImplementationOnce(() => { throw new Error('missing revision'); });
+    expect(() => replay.seek(1)).toThrow('missing revision');
+    expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
+    expect(binding.clear).toHaveBeenCalledTimes(1);
+  });
   it('clears unavailable, empty, invalid or mismatched histories rather than retaining a stale view', () => {
     const { replay, binding } = setup(); replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a')] });
     expect(() => replay.load({ label: 'LIVE', snapshots: [snapshot(1, 'a')] })).toThrow(/provenance/);

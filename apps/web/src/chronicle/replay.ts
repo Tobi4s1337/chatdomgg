@@ -47,6 +47,11 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
     ? { status: 'ready', label: history.label, index, count: history.snapshots.length, snapshot: history.snapshots[index]!, playing }
     : { status: 'empty', playing: false } : { status: 'unavailable', playing: false };
   const emit = () => onChange(state());
+  const apply = (snapshot: HistoricalSnapshot) => {
+    try { binding.replace(snapshot); } catch (error) {
+      history = undefined; playing = false; binding.clear(); emit(); throw error;
+    }
+  };
   return {
     state,
     load(input: History | null) {
@@ -57,24 +62,24 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
         history = undefined; playing = false; binding.clear(); emit(); throw error;
       }
       history = next; index = 0; playing = false;
-      if (history?.snapshots.length) binding.replace(history.snapshots[0]!); else binding.clear();
+      if (history?.snapshots.length) apply(history.snapshots[0]!); else binding.clear();
       emit();
     },
     seek(next: number) {
       assertOpen();
       if (!history?.snapshots.length || !Number.isFinite(next)) return;
       index = Math.max(0, Math.min(history.snapshots.length - 1, Math.round(next)));
-      binding.replace(history.snapshots[index]!); emit();
+      apply(history.snapshots[index]!); emit();
     },
     play() { assertOpen(); if (history && index < history.snapshots.length - 1) playing = true; emit(); },
     pause() { assertOpen(); playing = false; emit(); },
     step() {
       assertOpen(); if (!playing || !history) return;
       index = Math.min(index + 1, history.snapshots.length - 1);
-      binding.replace(history.snapshots[index]!);
+      apply(history.snapshots[index]!);
       if (index === history.snapshots.length - 1) playing = false;
       emit();
     },
-    dispose() { if (disposed) return; disposed = true; playing = false; binding.clear(); binding.dispose(); },
+    dispose() { if (disposed) return; disposed = true; playing = false; try { binding.clear(); } finally { binding.dispose(); } },
   };
 }
