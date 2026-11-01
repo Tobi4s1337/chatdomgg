@@ -32,3 +32,13 @@ Proposed inode-lease proof (same audit, separate exec namespaces, both PID 2):
   1793549014978 ms and released 1793549060105 ms (44 ms after the first released).
 - This validates the namespace-specific liveness repair on an isolated path. It does not replace
   main's full scheduler/migration checks or authorize changes to that owner’s source.
+
+## Main repair adopted at d175db5
+
+Main now owns a UUID/inode-lease scheduler in a new queue-v2 directory; default lane
+leases no longer depend on cross-namespace PIDs. The two parent compatibility waits
+were intentionally migrated (both terminal exit130), and new captures use the shared
+scheduler normally. One initial attempt found no allowed port; after5182 became free
+the next queue captured13 stills with individual leases. No foreign service was stopped.
+Resumable parent capture records use immutable artifact names and atomic per-PNG
+manifests with source/image digests; the JSONL journal is not a resume authority.
