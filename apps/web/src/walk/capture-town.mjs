@@ -47,6 +47,9 @@ process.once('exit', code => {
 });
 try {
   await mkdir(values.out, { recursive: true });
+  // Preflight without reserving a socket; repeat after admission because another capture may take it.
+  stage = 'checking safe listener availability';
+  await freePorts(values.offline ? 1 : 2);
   // Pure CPU preparation needs neither a browser nor a listener. Keep it outside the shared capture slot.
   stage = 'compiling full collision';
   console.log('SIMULATED town: preparing full collision before capture admission');
