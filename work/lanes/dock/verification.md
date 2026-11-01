@@ -98,3 +98,77 @@ holds the exact contract and proposed shared request patch for main. The goal is
 blocked after three consecutive goal turns, rather than marked complete or left in a retry
 loop. Resume DK10 after main supplies the seam and workspace importer; then verify real
 sign-in/authority, capture and inspect the UI, and demonstrate each real stream act.
+
+## Resumed checkpoint — 2026-11-01 17:03
+
+The user resumed the goal while main builds the realm/stream seam and asked the lane to keep
+building and let capture queue. The prior blocked status is historical. This turn made real
+implementation progress and is not another blocked audit.
+
+- `9963c96`: canonical session and CSRF-checked sign-out, sign-in callback/expiry states,
+  moderator-safe view, session-and-kingdom recovery, post-command session recheck, optional
+  authoritative undo receipt list with compatible local fallback, and compact town facts.
+- Main was synced through `7a0830f`, including queue `1bdc9de`, importer `1bf6b26` and shared
+  contract `13f1a36`. The only conflict was inside the lane's API contracts and was resolved
+  using main's action/witness schemas, with an optional API undo-hint extension.
+- `5bd02d6`: a thin capture queue wrapper loads the latest rehearsal after admission;
+  labelled session/moderator/sign-out/pending/refused/unknown/undo/replacement fixtures;
+  owned random Unix socket directories; header wrapping and designed narrow scrollbars.
+
+Passed before shared sync: 28 focused dock/recovery/OIDC/return-path tests, scoped TypeScript
+and ESLint, and API/dock builds. Passed after shared sync: 26 dock/recovery/shared-boundary
+tests, scoped TypeScript and ESLint, and both builds. The final small CSS change was rebuilt.
+Both rehearsal scripts pass `node --check`; `git diff --check` passes. Browser assertions
+remain unrun, and no new whole-workspace verification result is claimed.
+
+**Live capture:** tool session `41052`, owned by `/root/dock_evidence`, was confirmed live
+by that agent's tool poll after reporting `queued for a lane slot`. No acquisition was
+reported, so no socket/Chrome/screenshot has started. The root tool scope cannot poll that
+ID (`Unknown process id`); this is an ownership boundary, not proof of termination. Resume
+the same agent with `collaboration.followup_task` and ask it to poll the same handle. Do not
+restart merely because output is silent or an observation wait ends. The earlier obsolete
+pre-session/old-helper jobs were explicitly cancelled and confirmed terminal only when their
+inputs/helper changed; the current job has no observation timeout.
+
+`capture-queue-observation.md` records a possible PID-namespace failure in the main-owned
+queue and the evidence for it; the lane did not alter shared locks, registry entries or
+foreign processes. `needs.md` records current handoff compatibility and the one added
+`@chatdom/shared` importer dependency main must include when adopting this checkpoint.
+
+Main's realm/presentation implementation is still in flight; only its shared boundary is
+committed here. Required next work is unchanged: sync the implementation, exercise real
+session/authority and undo across that seam, inspect the UI at target sizes, and show every
+required act beside the real stream in looked-at stills and watched clips. DK10 is unchecked.
+
+## Supplied realm boundary checkpoint — 2026-11-01
+
+Synced `96b544d` (real retained-writer service and API presentation bridge), then `d53d9eb`
+(cross-sandbox capture liveness correction). The obsolete capture41052 was explicitly
+cancelled and confirmed exit130 before its replacement; the new handle is agent-owned23423.
+
+Passed: 29 focused dock API/recovery/shared tests; scoped API+dock TypeScript and ESLint;
+API and dock builds; `git diff --check`. Witness responses now enforce their byte budget
+while reading, with a real Unix-socket HTTP regression verifying cancellation and503.
+
+Also passed both realm dock tests with `REALM_DATABASE_TESTS=1`, loading main's existing
+ignored environment in-process without copying or printing credentials. The test owns a
+random isolated schema and drops it. It demonstrates fenced storage, independently checked
+presenter receipts, durable idempotency/reopening and revocation; it does not prove pixels.
+
+The scene renderer is still main's uncommitted integration work. Current moderator source,
+directed undo presentation and cross-device receipt metadata requests are in `needs.md`.
+DK10 remains unchecked. No real-Twitch writes or main-branch edits were performed.
+
+## Scene integration sync — 2026-11-01
+
+Merged main through `767a74b`, including `821b71d` real scene act consumer. Ten focused
+scene/presenter/royal-life tests pass. The actual web build passes with the dock imported
+through its new same-origin route. Dock build, scoped TypeScript and ESLint also pass.
+
+Source review found inherited web landing-page layout leaking into the `/dock` mount and
+the font kit being imported only by the standalone entry. The dock now owns those layout
+resets and loads its font kit through App. Small product labels are at least12px. Anonymous
+sessions have a neutral sign-in masthead; controls refresh authoritatively after the realm
+cadence instead of waiting for the next ten-second poll. These are functional/source-reviewed
+checkpoints, not a completed visual review. Capture23423 is still live and queued under the
+new helper, owned by the evidence agent. No screenshot or clip is claimed yet.

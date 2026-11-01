@@ -104,6 +104,9 @@ importers:
       '@chatdom/audio':
         specifier: workspace:*
         version: link:../../packages/audio
+      '@chatdom/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@chatdom/ui':
         specifier: workspace:*
         version: link:../../packages/ui
