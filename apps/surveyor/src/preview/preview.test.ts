@@ -533,14 +533,20 @@ describe('survey preview build', () => {
     }
   });
 
-  it('R4: names are real: language endonyms and English names from Intl, category names only from the games input', () => {
+  it('keeps retained v4 geometry readable while v5 moves labels out of immutable bytes', () => {
+    const retained = { ...preview.world, algorithm: 'survey-preview-4' };
+    expect(PreviewWorldSchema.parse(retained).algorithm).toBe('survey-preview-4');
+    expect(PreviewWorldSchema.parse(preview.world).algorithm).toBe('survey-preview-5');
+  });
+
+  it('R4: immutable regions store codes, with display names resolved separately', () => {
     const { world } = decoded;
     const names = Object.fromEntries(spoken(world).map((r) => [r.language, [r.name, r.englishName]]));
     expect(names).toEqual({
-      en: ['English', 'English'], es: ['Español', 'Spanish'], pt: ['Português', 'Portuguese'], de: ['Deutsch', 'German'],
-      ja: ['日本語', 'Japanese'], fr: ['Français', 'French'], other: ['Other tongues', 'Other languages'],
+      en: ['en', 'en'], es: ['es', 'es'], pt: ['pt', 'pt'], de: ['de', 'de'],
+      ja: ['ja', 'ja'], fr: ['fr', 'fr'], other: ['other', 'other'],
     });
-    expect(languageNames('ko')).toEqual({ name: '한국어', englishName: 'Korean' });
+    expect(languageNames('ko')).toEqual({ name: 'Korean', englishName: 'Korean' });
 
     const inputNames = new Map(input.games.map((g) => [g.gameId, g.name]));
     const { mapped } = previewChannels(input.channels, currentTaxonomy());

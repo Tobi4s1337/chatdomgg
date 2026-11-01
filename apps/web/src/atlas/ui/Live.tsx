@@ -58,7 +58,7 @@ export function DabCard(props: { dab: Dab; world: PreviewWorld; geo: Geography; 
               <dt>Pencilled in</dt>
               <dd>
                 <Show when={region()?.kind === 'continent'}>{r().name} · </Show>
-                <span lang={region()?.language ?? undefined}>{region()?.name}</span>
+                <span lang="en">{region()?.name}</span>
                 <Show when={region() && region()!.englishName !== region()!.name}><span class="atlas-quiet"> · {region()!.englishName}</span></Show>
               </dd>
             </div>

@@ -132,7 +132,7 @@ describe('layoutStill', () => {
       expect(mark.name?.text).toBe(mark.settler.name);
     }
     expect(result.marks[0]!.label).toBe('zackrawrr, capital in Just Chatting & IRL, English');
-    expect(result.marks[2]!.label).toBe('GRONKH, city in Deutsch');
+    expect(result.marks[2]!.label).toBe('GRONKH, city in German');
     expect(result.names).toBe(3);
     expect(result.shields).toBe(3);
   });
@@ -156,7 +156,7 @@ describe('layoutStill', () => {
     expect(result.marks.map((mark) => mark.label)).toEqual([
       'Unnamed capital in Just Chatting & IRL, English',
       'Unnamed city in Just Chatting & IRL, English',
-      'Unnamed city in Deutsch',
+      'Unnamed city in German',
     ]);
   });
 

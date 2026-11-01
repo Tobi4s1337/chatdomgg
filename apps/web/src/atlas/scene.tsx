@@ -5,7 +5,7 @@ import type { AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, Atl
 import type { HistoryLike } from './ui/history';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
 import { dabHashOf, DirectoryError, fetchCard, fetchRoad, type CardReply, type CardRoad, type ChannelFace, type Lookup, type RoadReply, type SearchResult } from './data/directory';
-import { decodeRings, geographyOf, SettlerStore, type Geography, type Ring, type Settler } from './data/model';
+import { decodeRings, geographyOf, labelWorld, SettlerStore, type Geography, type Ring, type Settler } from './data/model';
 import { fetchChunk, fetchNames, type PreviewSource } from './data/preview';
 import { atlasFailureState, mountAtlasWithRetry } from './recovery';
 import { LiveFeed, type LiveStatus } from './live/feed';
@@ -580,13 +580,13 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       let still = noWebgl;
       const [preview] = await Promise.all([loadPreview(SOURCE, sessionStore(), signal), loadFaces(signal).catch(error => console.error('Atlas lettering could not load', error))]);
       if (signal.aborted) return;
-      const { world } = preview;
+      const world = labelWorld(preview.world);
       const holdings = new SettlerStore(world);
       store = holdings;
       const geography = geographyOf(world);
       // Together, so nothing draws the new revision with the old holdings (the still is made once per store).
       batch(() => {
-        setLoaded(preview);
+        setLoaded({ ...preview, world });
         setSettlers(holdings);
         setGeo(geography);
       });

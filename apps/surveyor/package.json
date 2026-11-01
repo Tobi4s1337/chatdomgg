@@ -6,6 +6,7 @@
   "scripts": {
     "build": "vite build --logLevel warn",
     "atlas:import": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs import",
+    "atlas:preview": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs preview",
     "atlas:check": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs check",
     "atlas:serve": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs serve",
     "atlas:found": "vite build --logLevel warn && node --disable-warning=ExperimentalWarning dist/atlas.mjs found",

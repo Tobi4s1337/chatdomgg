@@ -548,7 +548,7 @@ export class Overlay {
       const subSize = Math.max(11, Math.round(size * 0.42));
       const c = camera.worldToScreen(region.x, region.y, view);
       // Culled before any type is set: a generous reach (about an em per letter) around every candidate.
-      const reachW = Math.max(region.name.length * size * 0.62, (subtitle?.length ?? 0) * subSize * 0.62) + 8;
+      const reachW = Math.max(Math.max(...region.name.split('\n').map(line => line.length)) * size * 0.62, (subtitle?.length ?? 0) * subSize * 0.62) + 8;
       const reachH = screenR * 0.6 + size * 1.6 + subSize * 1.4;
       if (!onScreen({ x: c.x - reachW, y: c.y - reachH, w: reachW * 2, h: reachH * 2 }, view.width, view.height, 40)) continue;
       const label = this.text(`r:${region.index}:${size}`, region.name, {

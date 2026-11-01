@@ -1,0 +1,599 @@
+{
+  "version": 1,
+  "kind": "chatdom-atlas-language-names",
+  "id": "language-names-1",
+  "review": {
+    "status": "proposed",
+    "proposedAt": "2026-11-01",
+    "reviewedBy": null,
+    "reviewedAt": null
+  },
+  "basis": {
+    "iso6391Count": 184,
+    "extraCodes": [
+      "asl",
+      "other",
+      "zh-hk"
+    ],
+    "checkedAt": "2026-11-01",
+    "sources": [
+      "https://dev.twitch.tv/docs/api/reference/#get-channel-information",
+      "https://help.twitch.tv/s/article/languages-on-twitch#streamlang",
+      "https://blog.twitch.tv/en/2016/07/15/say-hello-hallo-bonjour-ni-hao-hola-or-kon-nichiwa-to-multi-language-filters-twitch-blog-fa37fbbc4c07/"
+    ],
+    "note": "The complete ISO 639-1 set is a coverage superset, not a claim that Twitch offers every one. English labels are curated here; runtime locale data is never used."
+  },
+  "names": {
+    "aa": {
+      "label": "Afar"
+    },
+    "ab": {
+      "label": "Abkhaz"
+    },
+    "ae": {
+      "label": "Avestan"
+    },
+    "af": {
+      "label": "Afrikaans"
+    },
+    "ak": {
+      "label": "Akan"
+    },
+    "am": {
+      "label": "Amharic"
+    },
+    "an": {
+      "label": "Aragonese"
+    },
+    "ar": {
+      "label": "Arabic"
+    },
+    "as": {
+      "label": "Assamese"
+    },
+    "asl": {
+      "label": "American Sign Language",
+      "note": "American Sign Language is the language name; not a generic label for every sign language."
+    },
+    "av": {
+      "label": "Avaric"
+    },
+    "ay": {
+      "label": "Aymara"
+    },
+    "az": {
+      "label": "Azerbaijani"
+    },
+    "ba": {
+      "label": "Bashkir"
+    },
+    "be": {
+      "label": "Belarusian"
+    },
+    "bg": {
+      "label": "Bulgarian"
+    },
+    "bh": {
+      "label": "Bihari languages"
+    },
+    "bi": {
+      "label": "Bislama"
+    },
+    "bm": {
+      "label": "Bambara"
+    },
+    "bn": {
+      "label": "Bengali"
+    },
+    "bo": {
+      "label": "Tibetan"
+    },
+    "br": {
+      "label": "Breton"
+    },
+    "bs": {
+      "label": "Bosnian"
+    },
+    "ca": {
+      "label": "Catalan"
+    },
+    "ce": {
+      "label": "Chechen"
+    },
+    "ch": {
+      "label": "Chamorro"
+    },
+    "co": {
+      "label": "Corsican"
+    },
+    "cr": {
+      "label": "Cree"
+    },
+    "cs": {
+      "label": "Czech"
+    },
+    "cu": {
+      "label": "Church Slavonic"
+    },
+    "cv": {
+      "label": "Chuvash"
+    },
+    "cy": {
+      "label": "Welsh"
+    },
+    "da": {
+      "label": "Danish"
+    },
+    "de": {
+      "label": "German"
+    },
+    "dv": {
+      "label": "Dhivehi"
+    },
+    "dz": {
+      "label": "Dzongkha"
+    },
+    "ee": {
+      "label": "Ewe"
+    },
+    "el": {
+      "label": "Greek"
+    },
+    "en": {
+      "label": "English"
+    },
+    "eo": {
+      "label": "Esperanto"
+    },
+    "es": {
+      "label": "Spanish"
+    },
+    "et": {
+      "label": "Estonian"
+    },
+    "eu": {
+      "label": "Basque"
+    },
+    "fa": {
+      "label": "Persian"
+    },
+    "ff": {
+      "label": "Fulah"
+    },
+    "fi": {
+      "label": "Finnish"
+    },
+    "fj": {
+      "label": "Fijian"
+    },
+    "fo": {
+      "label": "Faroese"
+    },
+    "fr": {
+      "label": "French"
+    },
+    "fy": {
+      "label": "Western Frisian"
+    },
+    "ga": {
+      "label": "Irish"
+    },
+    "gd": {
+      "label": "Scottish Gaelic"
+    },
+    "gl": {
+      "label": "Galician"
+    },
+    "gn": {
+      "label": "Guarani"
+    },
+    "gu": {
+      "label": "Gujarati"
+    },
+    "gv": {
+      "label": "Manx"
+    },
+    "ha": {
+      "label": "Hausa"
+    },
+    "he": {
+      "label": "Hebrew"
+    },
+    "hi": {
+      "label": "Hindi"
+    },
+    "ho": {
+      "label": "Hiri Motu"
+    },
+    "hr": {
+      "label": "Croatian"
+    },
+    "ht": {
+      "label": "Haitian Creole"
+    },
+    "hu": {
+      "label": "Hungarian"
+    },
+    "hy": {
+      "label": "Armenian"
+    },
+    "hz": {
+      "label": "Herero"
+    },
+    "ia": {
+      "label": "Interlingua"
+    },
+    "id": {
+      "label": "Indonesian"
+    },
+    "ie": {
+      "label": "Interlingue"
+    },
+    "ig": {
+      "label": "Igbo"
+    },
+    "ii": {
+      "label": "Sichuan Yi"
+    },
+    "ik": {
+      "label": "Inupiaq"
+    },
+    "io": {
+      "label": "Ido"
+    },
+    "is": {
+      "label": "Icelandic"
+    },
+    "it": {
+      "label": "Italian"
+    },
+    "iu": {
+      "label": "Inuktitut"
+    },
+    "ja": {
+      "label": "Japanese"
+    },
+    "jv": {
+      "label": "Javanese"
+    },
+    "ka": {
+      "label": "Georgian"
+    },
+    "kg": {
+      "label": "Kongo"
+    },
+    "ki": {
+      "label": "Kikuyu"
+    },
+    "kj": {
+      "label": "Kuanyama"
+    },
+    "kk": {
+      "label": "Kazakh"
+    },
+    "kl": {
+      "label": "Kalaallisut"
+    },
+    "km": {
+      "label": "Khmer"
+    },
+    "kn": {
+      "label": "Kannada"
+    },
+    "ko": {
+      "label": "Korean"
+    },
+    "kr": {
+      "label": "Kanuri"
+    },
+    "ks": {
+      "label": "Kashmiri"
+    },
+    "ku": {
+      "label": "Kurdish"
+    },
+    "kv": {
+      "label": "Komi"
+    },
+    "kw": {
+      "label": "Cornish"
+    },
+    "ky": {
+      "label": "Kirghiz"
+    },
+    "la": {
+      "label": "Latin"
+    },
+    "lb": {
+      "label": "Luxembourgish"
+    },
+    "lg": {
+      "label": "Ganda"
+    },
+    "li": {
+      "label": "Limburgan"
+    },
+    "ln": {
+      "label": "Lingala"
+    },
+    "lo": {
+      "label": "Lao"
+    },
+    "lt": {
+      "label": "Lithuanian"
+    },
+    "lu": {
+      "label": "Luba-Katanga"
+    },
+    "lv": {
+      "label": "Latvian"
+    },
+    "mg": {
+      "label": "Malagasy"
+    },
+    "mh": {
+      "label": "Marshallese"
+    },
+    "mi": {
+      "label": "Maori"
+    },
+    "mk": {
+      "label": "Macedonian"
+    },
+    "ml": {
+      "label": "Malayalam"
+    },
+    "mn": {
+      "label": "Mongolian"
+    },
+    "mr": {
+      "label": "Marathi"
+    },
+    "ms": {
+      "label": "Malay",
+      "note": "Observed in the survey even though no holding meets the map threshold yet."
+    },
+    "mt": {
+      "label": "Maltese"
+    },
+    "my": {
+      "label": "Burmese"
+    },
+    "na": {
+      "label": "Nauru"
+    },
+    "nb": {
+      "label": "Norwegian Bokmål"
+    },
+    "nd": {
+      "label": "Northern Ndebele"
+    },
+    "ne": {
+      "label": "Nepali"
+    },
+    "ng": {
+      "label": "Ndonga"
+    },
+    "nl": {
+      "label": "Dutch"
+    },
+    "nn": {
+      "label": "Norwegian Nynorsk"
+    },
+    "no": {
+      "label": "Norwegian"
+    },
+    "nr": {
+      "label": "Southern Ndebele"
+    },
+    "nv": {
+      "label": "Navajo"
+    },
+    "ny": {
+      "label": "Chichewa"
+    },
+    "oc": {
+      "label": "Occitan"
+    },
+    "oj": {
+      "label": "Ojibwa"
+    },
+    "om": {
+      "label": "Oromo"
+    },
+    "or": {
+      "label": "Oriya"
+    },
+    "os": {
+      "label": "Ossetian"
+    },
+    "other": {
+      "label": "Other languages",
+      "note": "Twitch does not identify which language. Do not call it English or infer a nationality."
+    },
+    "pa": {
+      "label": "Punjabi"
+    },
+    "pi": {
+      "label": "Pali"
+    },
+    "pl": {
+      "label": "Polish"
+    },
+    "ps": {
+      "label": "Pashto"
+    },
+    "pt": {
+      "label": "Portuguese"
+    },
+    "qu": {
+      "label": "Quechua"
+    },
+    "rm": {
+      "label": "Romansh"
+    },
+    "rn": {
+      "label": "Rundi"
+    },
+    "ro": {
+      "label": "Romanian"
+    },
+    "ru": {
+      "label": "Russian",
+      "mapLabel": "Streams in\nRussian",
+      "note": "Names a broadcast language, not Russia or the nationality of a streamer. Does not include Ukrainian-language land."
+    },
+    "rw": {
+      "label": "Kinyarwanda"
+    },
+    "sa": {
+      "label": "Sanskrit"
+    },
+    "sc": {
+      "label": "Sardinian"
+    },
+    "sd": {
+      "label": "Sindhi"
+    },
+    "se": {
+      "label": "Northern Sami"
+    },
+    "sg": {
+      "label": "Sango"
+    },
+    "si": {
+      "label": "Sinhala"
+    },
+    "sk": {
+      "label": "Slovak"
+    },
+    "sl": {
+      "label": "Slovenian"
+    },
+    "sm": {
+      "label": "Samoan"
+    },
+    "sn": {
+      "label": "Shona"
+    },
+    "so": {
+      "label": "Somali"
+    },
+    "sq": {
+      "label": "Albanian"
+    },
+    "sr": {
+      "label": "Serbian"
+    },
+    "ss": {
+      "label": "Swati"
+    },
+    "st": {
+      "label": "Southern Sotho"
+    },
+    "su": {
+      "label": "Sundanese"
+    },
+    "sv": {
+      "label": "Swedish"
+    },
+    "sw": {
+      "label": "Swahili"
+    },
+    "ta": {
+      "label": "Tamil"
+    },
+    "te": {
+      "label": "Telugu"
+    },
+    "tg": {
+      "label": "Tajik"
+    },
+    "th": {
+      "label": "Thai"
+    },
+    "ti": {
+      "label": "Tigrinya"
+    },
+    "tk": {
+      "label": "Turkmen"
+    },
+    "tl": {
+      "label": "Tagalog",
+      "note": "Tagalog follows the supplied tl language code; do not infer a nationality."
+    },
+    "tn": {
+      "label": "Tswana"
+    },
+    "to": {
+      "label": "Tongan"
+    },
+    "tr": {
+      "label": "Turkish"
+    },
+    "ts": {
+      "label": "Tsonga"
+    },
+    "tt": {
+      "label": "Tatar"
+    },
+    "tw": {
+      "label": "Twi"
+    },
+    "ty": {
+      "label": "Tahitian"
+    },
+    "ug": {
+      "label": "Uyghur"
+    },
+    "uk": {
+      "label": "Ukrainian",
+      "mapLabel": "Streams in\nUkrainian",
+      "note": "Independent Ukrainian-language land; never grouped into Russian-language land."
+    },
+    "ur": {
+      "label": "Urdu"
+    },
+    "uz": {
+      "label": "Uzbek"
+    },
+    "ve": {
+      "label": "Venda"
+    },
+    "vi": {
+      "label": "Vietnamese"
+    },
+    "vo": {
+      "label": "Volapük"
+    },
+    "wa": {
+      "label": "Walloon"
+    },
+    "wo": {
+      "label": "Wolof"
+    },
+    "xh": {
+      "label": "Xhosa"
+    },
+    "yi": {
+      "label": "Yiddish"
+    },
+    "yo": {
+      "label": "Yoruba"
+    },
+    "za": {
+      "label": "Zhuang"
+    },
+    "zh": {
+      "label": "Chinese",
+      "note": "Twitch supplies the language code zh. Do not infer a country, script or Mandarin-only identity."
+    },
+    "zh-hk": {
+      "label": "Cantonese",
+      "note": "Twitch code retained for identity; the label names Cantonese, never Hong Kong or a political region."
+    },
+    "zu": {
+      "label": "Zulu"
+    }
+  }
+}

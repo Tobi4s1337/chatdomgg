@@ -13,7 +13,7 @@ import { GameIdSchema, RevisionIdSchema } from '../export/schema';
  * request (withheld channels removed, names older than a day dropped) with a short cache (R16).
  */
 export const PREVIEW_KIND = 'chatdom-atlas-survey-preview';
-export const PREVIEW_ALGORITHM = 'survey-preview-4';
+export const PREVIEW_ALGORITHM = 'survey-preview-5';
 export const PREVIEW_LABEL = 'Survey preview · land awaiting founding';
 export const ISLES_NAME = 'The Isles of Many Tongues';
 export const OUTER_NAME = 'The Outer Isles';
@@ -58,7 +58,7 @@ export const RegionFields = {
   index: UIntSchema,
   /** Null only for the Outer Isles, which belong to no language. */
   language: z.string().min(1).max(16).nullable(),
-  /** The language's own name for itself (an observed fact, not an invented community name). */
+  /** Legacy label fields. New artifacts keep the language code here; display labels live outside geometry. */
   name: DisplayNameSchema,
   englishName: DisplayNameSchema,
   kind: z.enum(['continent', 'isle', 'outer']),
@@ -112,7 +112,8 @@ export const PreviewWorldSchema = z.strictObject({
   version: z.literal(1),
   kind: z.literal(PREVIEW_KIND),
   id: PreviewIdSchema,
-  algorithm: z.literal(PREVIEW_ALGORITHM),
+  // Retained v4 previews keep serving open sessions and their aligned live frames.
+  algorithm: z.enum(['survey-preview-4', PREVIEW_ALGORITHM]),
   label: z.literal(PREVIEW_LABEL),
   status: z.literal('preview'),
   revision: RevisionIdSchema,

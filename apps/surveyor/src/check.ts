@@ -239,7 +239,7 @@ export function checkDataDir(dataDir: string, revision?: string): CheckReport {
 export function checkPreview(dataDir: string, manifest: SnapshotManifest, offMap?: ReadonlySet<string>, records?: RevisionRecords): string[] {
   const id = previewIdFor(manifest.revision, manifest.asOf);
   const dir = previewDir(dataDir, id);
-  if (!existsSync(dir)) return [`Survey preview ${id} for revision ${manifest.revision} is missing. Run atlas:import to draw it.`];
+  if (!existsSync(dir)) return [`Survey preview ${id} for revision ${manifest.revision} is missing. Run atlas:preview to draw it from the local revision.`];
   const problems = verifyPreviewDir(dir, { id, revision: manifest.revision });
   if (offMap && problems.length === 0) {
     const drawn = readPreviewNames(dataDir, id).ids.filter((channel) => offMap.has(channel));

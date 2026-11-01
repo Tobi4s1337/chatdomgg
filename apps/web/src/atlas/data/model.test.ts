@@ -71,7 +71,7 @@ describe('geographyOf', () => {
   it('converts every geometric field to world units and names clusters by their game', () => {
     const geo = geographyOf(makeWorld());
     expect(geo.bounds).toEqual({ minX: -100, minY: -60, maxX: 120, maxY: 50 });
-    expect(geo.regions[1]).toEqual({ index: 1, name: 'Deutsch', englishName: 'German', kind: 'isle', x: 80, y: 20, r: 15, members: 2 });
+    expect(geo.regions[1]).toEqual({ index: 1, name: 'German', englishName: 'German', kind: 'isle', x: 80, y: 20, r: 15, members: 2 });
     expect(geo.regions[2]).toMatchObject({ name: 'The Outer Isles', kind: 'outer', members: 0 });
     expect(geo.clusters).toEqual([
       { region: 0, realm: 1, name: 'Just Chatting', x: 0, y: 0, r: 20, members: 3 },
@@ -87,7 +87,7 @@ describe('geographyOf', () => {
   it('keeps each realm with its region, kind, family, name and circle in world units', () => {
     const geo = geographyOf(makeWorld());
     expect(geo.realms.map((realm) => `${realm.region}:${realm.kind}:${realm.name}`)).toEqual([
-      '0:crossroads:The Crossroads', '0:family:Just Chatting & IRL', '0:family:Arenas & MOBAs', '0:wilds:The Wilds', '1:isle:Deutsch', '2:outer:The Outer Isles',
+      '0:crossroads:The Crossroads', '0:family:Just Chatting & IRL', '0:family:Arenas & MOBAs', '0:wilds:The Wilds', '1:isle:German', '2:outer:The Outer Isles',
     ]);
     expect(geo.realms[2]).toEqual({ index: 2, region: 0, kind: 'family', family: 1, name: 'Arenas & MOBAs', x: -35, y: -20, r: 10, members: 1 });
   });
@@ -127,7 +127,7 @@ describe('SettlerStore', () => {
       tier: 'capital', tierRank: 0, x: 6, y: -6, average: 33_015, game: 'Just Chatting', region: 0, realm: 1, realmName: 'Just Chatting & IRL', ordinal: 0,
     });
     // An isle is one realm, named for its language.
-    expect(store.byId.get('36926489')).toMatchObject({ name: 'GRONKH', tier: 'city', game: null, region: 1, realm: 4, realmName: 'Deutsch' });
+    expect(store.byId.get('36926489')).toMatchObject({ name: 'GRONKH', tier: 'city', game: null, region: 1, realm: 4, realmName: 'German' });
     expect(store.hasRegion(0)).toBe(false);
   });
 

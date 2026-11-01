@@ -91,7 +91,7 @@ export function Card(props: {
               <dd>
                 {/* An isle is one realm and the Outer Isles one archipelago: their realm is the land itself. */}
                 <Show when={r().kind === 'continent' && props.settler.realmName}>{props.settler.realmName} · </Show>
-                <span lang={r().language ?? undefined}>{r().name}</span>
+                <span lang="en">{r().name}</span>
                 <Show when={r().englishName !== r().name}><span class="atlas-quiet"> · {r().englishName}</span></Show>
                 <Show when={r().kind === 'isle'}><span class="atlas-quiet"> · isle</span></Show>
               </dd>
