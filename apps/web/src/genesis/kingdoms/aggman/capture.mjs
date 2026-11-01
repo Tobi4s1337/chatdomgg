@@ -1,8 +1,9 @@
-/* global requestAnimationFrame */
+/* global requestAnimationFrame, AbortController, clearTimeout */
 // Captures The_AGGman's harbour hamlet in the real kingdom route, and its door from the Atlas.
 // Run from the repository root:
 //   node apps/web/src/genesis/kingdoms/aggman/capture.mjs [--views hero,quay,light,atlas] [--hour 19.6] [--tag after]
-// It takes the machine-wide capture lock for each still and releases it in between, starts its own Vite dev server on a free capture port (never 5187 or
+// The kingdom views share one loaded page, posed in turn; the page loads before the lock is taken. With no --hour the route opens at the hamlet's own hour,
+// exactly as a visitor arrives. It takes the machine-wide capture lock for each still and releases it in between, starts its own Vite dev server on a free capture port (never 5187 or
 // 5190–5197), and fails on any page or console error. The adopted-land service is not part of this capture: its
 // manifest request is answered in the browser with the realm's own "no adopted record" reply (HTTP 404), which is
 // exactly what an unfounded channel receives, so the page opens the potential kingdom, labelled unfounded land and
@@ -18,8 +19,8 @@ const ID = '63920635';
 const args = process.argv.slice(2);
 const option = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const views = (option('--views') ?? 'hero,atlas').split(',');
-// The hamlet's own dusk (AGGMAN_HOUR); the preview opens there once the per-kingdom registry carries it.
-const hour = option('--hour') ?? '19.6';
+// Absent, the per-kingdom registry opens the hamlet at its own dusk (AGGMAN_HOUR).
+const hour = option('--hour');
 const tag = option('--tag') ?? 'after';
 const [width, height] = (option('--size') ?? '1920x1080').split('x').map(Number);
 const out = 'shots/genesis/aggman';
@@ -27,6 +28,8 @@ const PORTS = CAPTURE_PORTS.filter(port => (port >= 5170 && port <= 5186) || por
 
 /** Close views, as camera poses in world metres: [eye, target, fov]. */
 const POSES = {
+  // The hero view as it stood before the shingle and the lower, nearer hero camera.
+  'hero-v1': [[120, 23, -214.75], [52, 9, -132.25], 44],
   // The quay from the water off the pier head: the statue, the stair, the stall and the inn behind.
   quay: [[82, 9, -186], [60, 4, -150], 46],
   // The Last Lantern from the west shingle: the lit window, the boats drawn up, the geese on the stones.
@@ -41,6 +44,20 @@ async function start() {
     catch (error) { await server.close(); if (!/EADDRINUSE|in use/i.test(String(error?.message ?? error))) throw error; }
   }
   throw new Error('No safe capture port available.');
+}
+
+/**
+ * The shared lock, queued for in short turns: the host's capture guard measures a hold from when the lock's
+ * supervisor started, queue time included, so a fresh supervisor is queued every three minutes. A lane supervisor
+ * polls either way, so the order others are admitted in is unchanged.
+ */
+async function takeLock() {
+  for (;;) {
+    const turn = new AbortController(), timer = setTimeout(() => turn.abort(new Error('requeue')), 180_000);
+    try { return await acquireCaptureLock({ signal: turn.signal }); }
+    catch (error) { if (!turn.signal.aborted) throw error; }
+    finally { clearTimeout(timer); }
+  }
 }
 
 const UNADOPTED = { version: 1, status: 'unavailable', message: 'No adopted record exists for this kingdom.' };
@@ -61,16 +78,44 @@ try {
   console.log(`Serving ${started.base} (started here)`);
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   await mkdir(out, { recursive: true });
-  for (const view of views) {
-    // One still per hold of the shared capture lock, released in between so others can capture between our frames.
-    release = await acquireCaptureLock();
-    const page = await browser.newPage({ viewport: { width, height } });
+  const watch = page => {
     const errors = [];
     page.on('pageerror', error => errors.push(`pageerror: ${error.message}`));
     page.on('console', message => { if (message.type() === 'error' && !/404/.test(message.text())) errors.push(`console: ${message.text()}`); });
-    await page.route(`**/api/realm/founded/${ID}`, route => route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify(UNADOPTED) }));
-    const query = hour ? `?hour=${hour}` : '';
+    return errors;
+  };
+  const check = (errors, view) => { if (errors.length) throw new Error(`Errors on ${view}:\n${errors.join('\n')}`); };
+  const unadopted = page => page.route(`**/api/realm/founded/${ID}`, route => route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify(UNADOPTED) }));
+  const query = hour ? `?hour=${hour}` : '';
+  let kingdom, kingdomErrors = [];
+  for (const view of views) {
+    if (view !== 'atlas' && !kingdom) {
+      // Loading and settling the kingdom is not a capture: it runs before the lock is taken, so a hold lasts only
+      // one pose, its settle and its screenshot.
+      kingdom = await browser.newPage({ viewport: { width, height } });
+      kingdomErrors = watch(kingdom);
+      await unadopted(kingdom);
+      await kingdom.goto(`${started.base}/kingdom/${ID}${query}`, { waitUntil: 'domcontentloaded' });
+      await kingdomReady(kingdom);
+      console.log('Opened at', await kingdom.evaluate(() => window.location.search));
+    }
+    if (view !== 'atlas') {
+      // Pose and settle before the lock: the hold is a few frames and one screenshot.
+      // The hero view is the kingdom's own opening camera, so it is only true before any pose moves it.
+      if (view === 'hero' && views.indexOf('hero') !== views.findIndex(item => item !== 'atlas')) throw new Error('Capture the hero view before any posed view.');
+      const pose = POSES[view] ?? (view.startsWith('pose:') ? JSON.parse(view.slice(5)) : null);
+      if (pose) {
+        await kingdom.evaluate(([eye, target, fov]) => window.__chatdomKingdom.pose(eye, target, fov), pose);
+        await frames(kingdom, 20);
+        await kingdom.waitForFunction(() => window.__chatdomKingdom.stats.fieldSettled, null, { timeout: 600_000 });
+      }
+      await frames(kingdom, 20);
+    }
+    // One still per hold of the shared capture lock, released in between so others can capture between our frames.
     if (view === 'atlas') {
+      const page = await browser.newPage({ viewport: { width, height } });
+      const errors = watch(page);
+      await unadopted(page);
       await page.goto(`${started.base}/map`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => window.__chatdomReady === true && document.querySelector('[data-chatdom-atlas]')?.getAttribute('data-state') === 'ready', null, { timeout: 300_000 });
       // A hamlet is not drawn at the whole-map distance: find its holding in the survey and zoom in about it until
@@ -105,34 +150,34 @@ try {
       const door = page.locator(`a[href="/kingdom/${ID}"]`).first();
       await door.waitFor({ timeout: 30_000 });
       await frames(page, 60);
+      release = await takeLock();
       await page.screenshot({ path: `${out}/${tag}-atlas-card@${width}x${height}.png`, timeout: 180_000 });
       console.log(`Captured ${out}/${tag}-atlas-card@${width}x${height}.png`);
+      await release();
+      release = undefined;
       await door.click();
       await page.waitForURL(`**/kingdom/${ID}**`);
       await kingdomReady(page);
       await frames(page);
+      release = await takeLock();
+      await frames(page, 4);
       await page.screenshot({ path: `${out}/${tag}-atlas-door@${width}x${height}.png`, timeout: 180_000 });
       console.log(`Captured ${out}/${tag}-atlas-door@${width}x${height}.png`);
+      await page.close();
+      check(errors, view);
     } else {
-      await page.goto(`${started.base}/kingdom/${ID}${query}`, { waitUntil: 'domcontentloaded' });
-      await kingdomReady(page);
-      const pose = POSES[view] ?? (view.startsWith('pose:') ? JSON.parse(view.slice(5)) : null);
-      if (pose) {
-        await page.evaluate(([eye, target, fov]) => window.__chatdomKingdom.pose(eye, target, fov), pose);
-        await frames(page, 20);
-        await page.waitForFunction(() => window.__chatdomKingdom.stats.fieldSettled, null, { timeout: 300_000 });
-      }
-      await frames(page);
+      const page = kingdom;
+      release = await takeLock();
+      await frames(page, 4);
       const name = view.startsWith('pose:') ? `pose-${views.indexOf(view)}` : view;
       await page.screenshot({ path: `${out}/${tag}-${name}@${width}x${height}.png`, timeout: 180_000 });
       console.log(`Captured ${out}/${tag}-${name}@${width}x${height}.png`, JSON.stringify(await page.evaluate(() => {
         const s = window.__chatdomKingdom.stats; return { source: s.source, citizens: s.citizens, activeWindows: s.activeWindows };
       })));
+      check(kingdomErrors, view);
     }
-    await page.close();
     await release();
     release = undefined;
-    if (errors.length) throw new Error(`Errors on ${view}:\n${errors.join('\n')}`);
   }
 } finally {
   await browser?.close();
