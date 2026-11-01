@@ -21,3 +21,5 @@ export { samplePublicGround, settlementTerrainHeight, settlementTerrainWorkspace
 export * from './citizen-behaviours';
 export { homeLifeAnchors, type HomeLifeAnchors } from './home-life';
 export type { RealmFoundedBlueprint, RealmFoundedPlacement, RealmFoundedScene } from './founded-world/types';
+
+export { createKingdomLandInterface, type KingdomLandInterface, type LandGroundSource, type LandGroundAt } from './land-interface';
