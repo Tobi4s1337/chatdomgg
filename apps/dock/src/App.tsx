@@ -18,11 +18,11 @@ export function App() {
   const [status, setStatus] = createSignal<Status>();
   const [loading, setLoading] = createSignal(true);
   const [connected, setConnected] = createSignal(false);
-  const [pending, setPending] = createSignal(false);
+  const [pending, setPending] = createSignal<{ kind: Kind; target?: string }>();
   const [notice, setNotice] = createSignal<{ text: string; error: boolean }>();
-  const [raid, setRaid] = createSignal('');
-  const [citizen, setCitizen] = createSignal('');
-  const [moment, setMoment] = createSignal('');
+  const [raidPage, setRaidPage] = createSignal(0);
+  const [citizenPage, setCitizenPage] = createSignal(0);
+  const [momentPage, setMomentPage] = createSignal(0);
   const [receipt, setReceipt] = createSignal('');
   const [uncertain, setUncertain] = createSignal(sessionStorage.getItem('chatdom-dock-uncertain') ?? '');
   let alive = true;
@@ -62,7 +62,7 @@ export function App() {
     generation++;
     const actionId = crypto.randomUUID();
     sessionStorage.setItem('chatdom-dock-uncertain', actionId);
-    setPending(true); setNotice(undefined);
+    setPending({ kind, ...(targetId ? { target: targetId } : {}) }); setNotice(undefined);
     try {
       const response = await fetch('/api/dock/actions', { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000), headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': state.csrfToken }, body: JSON.stringify({ id: actionId, kingdomId: state.kingdom.id, kind, ...(targetId ? { targetId } : {}), expectedRevision: state.revision }) });
       const raw = await response.json() as Reply;
@@ -79,9 +79,25 @@ export function App() {
       if (result.status === 'unavailable') setConnected(false);
     } catch {
       if (alive) { sound.cue('wood', { ui: 'wood' }); setUncertain(actionId); setConnected(false); setNotice({ text: 'The reply was lost. This action may have reached the kingdom; check its state before trying again.', error: true }); }
-    } finally { if (alive) { setPending(false); void refresh(); } }
+    } finally { if (alive) { setPending(undefined); void refresh(); } }
   }
-  const Action = (props: { kind: Kind; icon: string; title: string; detail: string; target?: string }) => <button class="action" type="button" disabled={!can(props.kind) || (props.target !== undefined && !props.target)} onClick={() => void act(props.kind, props.target)} title={capability(props.kind)?.reason || undefined}><span class="action-icon" aria-hidden="true"><Insignia kind={props.kind} /></span><span class="action-copy"><span class="action-title">{pending() ? 'Sending…' : props.title}</span><span class="action-detail">{capability(props.kind)?.allowed === false ? capability(props.kind)?.reason : props.detail}</span></span><span class="arrow" aria-hidden="true">›</span></button>;
+  const pageStart = (page: number, length: number) => Math.min(page * 3, Math.max(0, Math.ceil(length / 3) - 1) * 3);
+  const Action = (props: { kind: Kind; title: string; detail: string; target?: string; unavailable?: boolean }) => {
+    const sending = () => pending()?.kind === props.kind && pending()?.target === props.target;
+    return <button class="action" type="button" disabled={!can(props.kind) || props.unavailable} onClick={() => void act(props.kind, props.target)} title={capability(props.kind)?.reason || undefined}>
+      <span class="action-icon" aria-hidden="true"><Insignia kind={props.kind} /></span>
+      <span class="action-copy"><span class="action-title">{sending() ? 'Sending…' : props.title}</span><span class="action-detail">{props.unavailable ? props.detail : capability(props.kind)?.allowed === false ? capability(props.kind)?.reason : props.detail}</span></span>
+      <span class="arrow" aria-hidden="true">›</span>
+    </button>;
+  };
+  const Pages = (props: { label: string; page: number; count: number; change: (page: number) => void }) => {
+    const current = () => pageStart(props.page, props.count) / 3;
+    return <Show when={props.count > 3}><nav class="pages" aria-label={`${props.label} pages`}>
+      <button type="button" disabled={!!pending() || !!uncertain() || current() === 0} onClick={() => props.change(current() - 1)}>‹ Previous</button>
+      <span>{current() + 1} / {Math.ceil(props.count / 3)}</span>
+      <button type="button" disabled={!!pending() || !!uncertain() || current() >= Math.ceil(props.count / 3) - 1} onClick={() => props.change(current() + 1)}>Next ›</button>
+    </nav></Show>;
+  };
   return <main class="dock"><div class="frame">
     <header class="masthead"><span class="crest" aria-hidden="true"><Insignia kind="throne" /></span><div><div class="eyebrow">Chatdom · The throne</div><h1>{ready()?.kingdom.name ?? 'Your kingdom'}</h1><div class="statusline"><span classList={{ dot: true, live: connected() && !!ready() }} />{loading() ? 'Finding your kingdom…' : !connected() ? 'Connection unavailable' : ready() ? `${ready()!.principal.displayName} · ${ready()!.principal.role === 'broadcaster' ? 'Monarch' : 'Moderator'}` : 'The throne'}</div></div></header>
     <Show when={status()?.mode === 'SIMULATED' || params.get('rehearsal') === '1'}><div class="notice"><strong>SIMULATED</strong> · Rehearsal data, not a live kingdom.</div></Show>
@@ -95,13 +111,37 @@ export function App() {
       <div class="paper summary"><div class="section-label">Around the kingdom</div><h2>{state().town.presenceLabel}</h2><p>{state().town.growthLabel}<br />{state().town.comingLabel}</p></div>
       <Show when={state().principal.role === 'moderator'}><div class="notice">You’re here as a moderator. Royal acts belong to the monarch.</div></Show>
       <section class="section"><h2 class="section-heading section-label">The kingdom</h2>
-        <Action kind={state().town.gate === 'open' ? 'gate-close' : 'gate-open'} icon="♜" title={state().town.gate === 'open' ? 'Close the gate' : 'Open the gate'} detail={state().town.gate === 'open' ? 'Send the kingdom a goodnight' : 'Wake the town and gather everyone'} />
-        <Action kind="fire-light" icon="♨" title={state().town.fire === 'lit' ? 'The fire is burning' : 'Light the fire'} detail={state().town.fire === 'lit' ? 'A warm place to gather' : 'Bring everyone together in the square'} />
+        <Action kind={state().town.gate === 'open' ? 'gate-close' : 'gate-open'} title={state().town.gate === 'open' ? 'Close the gate' : 'Open the gate'} detail={state().town.gate === 'open' ? 'Send the kingdom a goodnight' : 'Wake the town and gather everyone'} />
+        <Action kind="fire-light" title={state().town.fire === 'lit' ? 'The fire is burning' : 'Light the fire'} detail={state().town.fire === 'lit' ? 'A warm place to gather' : 'Bring everyone together in the square'} />
       </section>
-      <section class="section"><h2 class="section-heading section-label">At the gate</h2><Show when={state().raids.length} fallback={<p class="empty">No visitors on the road just now.</p>}><label class="field-label" for="raid">Visitors to welcome</label><select id="raid" class="field" disabled={pending() || !!uncertain()} value={raid()} onInput={e => setRaid(e.currentTarget.value)}><option value="">Choose a raid</option><For each={state().raids}>{item => <option value={item.id}>{item.name}</option>}</For></select><Action kind="raid-welcome" icon="⚑" title="Welcome the raid" detail="Bring the visitors up the road" target={raid()} /></Show></section>
-      <section class="section"><h2 class="section-heading section-label">A royal honour</h2><Show when={state().citizens.length} fallback={<p class="empty">No citizens are available for a ceremony just now.</p>}><label class="field-label" for="citizen">Citizen</label><select id="citizen" class="field" disabled={pending() || !!uncertain()} value={citizen()} onInput={e => setCitizen(e.currentTarget.value)}><option value="">Choose a citizen</option><For each={state().citizens}>{item => <option value={item.id}>{item.name}</option>}</For></select><Action kind="citizen-crown" icon="♛" title="Crown a citizen" detail="A ceremony for someone special" target={citizen()} /><Action kind="citizen-knight" icon="⚔" title="Knight for the day" detail="Give a citizen their moment" target={citizen()} /></Show></section>
-      <section class="section"><h2 class="section-heading section-label">A moment for the realm</h2><Show when={state().moments.length} fallback={<p class="empty">There are no moments ready to play just now.</p>}><label class="field-label" for="moment">Choose a moment</label><select id="moment" class="field" disabled={pending() || !!uncertain()} value={moment()} onInput={e => setMoment(e.currentTarget.value)}><option value="">Choose a moment</option><For each={state().moments}>{item => <option value={item.id} disabled={!item.available}>{item.name}{!item.available ? ` — ${item.reason}` : ''}</option>}</For></select><Action kind="moment-play" icon="✦" title="Play the moment" detail="Let the kingdom take the stage" target={moment()} /></Show></section>
-      <Show when={capability('undo')?.allowed && receipt()}><section class="section"><Action kind="undo" icon="↶" title="Undo last act" detail="Return the kingdom to its previous state" target={receipt()} /></section></Show>
+      <section class="section"><h2 class="section-heading section-label">At the gate</h2>
+        <Show when={state().raids.length} fallback={<p class="empty">No visitors on the road just now.</p>}>
+          <For each={state().raids.slice(pageStart(raidPage(), state().raids.length), pageStart(raidPage(), state().raids.length) + 3).map(item => item.id)}>{id =>
+            <Action kind="raid-welcome" title={`Welcome ${state().raids.find(item => item.id === id)?.name ?? ''}`} detail="Bring the visitors up the road" target={id} />
+          }</For>
+          <Pages label="Visitors" page={raidPage()} count={state().raids.length} change={setRaidPage} />
+        </Show>
+      </section>
+      <section class="section"><h2 class="section-heading section-label">A royal honour</h2>
+        <Show when={state().citizens.length} fallback={<p class="empty">No citizens are available for a ceremony just now.</p>}>
+          <For each={state().citizens.slice(pageStart(citizenPage(), state().citizens.length), pageStart(citizenPage(), state().citizens.length) + 3).map(item => item.id)}>{id =>
+            <div class="honour-row">
+              <Action kind="citizen-crown" title={`Crown ${state().citizens.find(item => item.id === id)?.name ?? ''}`} detail="A royal ceremony" target={id} />
+              <Action kind="citizen-knight" title={`Knight ${state().citizens.find(item => item.id === id)?.name ?? ''}`} detail="Knight for the day" target={id} />
+            </div>
+          }</For>
+          <Pages label="Citizens" page={citizenPage()} count={state().citizens.length} change={setCitizenPage} />
+        </Show>
+      </section>
+      <section class="section"><h2 class="section-heading section-label">A moment for the realm</h2>
+        <Show when={state().moments.length} fallback={<p class="empty">There are no moments ready to play just now.</p>}>
+          <For each={state().moments.slice(pageStart(momentPage(), state().moments.length), pageStart(momentPage(), state().moments.length) + 3).map(item => item.id)}>{id =>
+            <Action kind="moment-play" title={`Play ${state().moments.find(item => item.id === id)?.name ?? ''}`} detail={state().moments.find(item => item.id === id)?.available ? 'Let the kingdom take the stage' : state().moments.find(item => item.id === id)?.reason || 'Not available just now'} target={id} unavailable={!state().moments.find(item => item.id === id)?.available} />
+          }</For>
+          <Pages label="Moments" page={momentPage()} count={state().moments.length} change={setMomentPage} />
+        </Show>
+      </section>
+      <Show when={capability('undo')?.allowed && receipt()}><section class="section"><Action kind="undo" title="Undo last act" detail="Return the kingdom to its previous state" target={receipt()} /></section></Show>
     </>}</Show>
     <footer class="foot"><span>The kingdom carries on, even while you’re away.</span><button class="sound-toggle" type="button" aria-pressed={!muted()} onClick={() => { const next = !muted(); setMuted(next); sound.setSettings({ muted: next }); if (!next) void sound.unlock().then(() => sound.cue('wood', { ui: 'brass' })); }}>{muted() ? 'Sound off' : 'Sound on'}</button></footer>
   </div></main>;

@@ -17,6 +17,9 @@ successful HTTP rehearsal is not evidence of a ceremony on stream.
   disable further presses until the streamer explicitly checks the stream. No automatic resend.
 - Success means a realm-issued delivery receipt. It cannot mean merely enqueued or dispatched.
   A press may have reached the realm even when its reply is lost.
+- Named targets are direct buttons, with at most three target entries shown per group. Paging
+  reveals other authoritative targets; it never invents candidates. Stable target IDs preserve
+  focus across status polling. Only the pressed action changes its label while pending.
 - The app stays unavailable when the realm bridge is absent. There is no browser-local live
   fallback and no fabricated Twitch observation. Rehearsal evidence is visibly SIMULATED.
 
@@ -81,7 +84,12 @@ Emit committed presentation through the existing realm public watch/outbox. Main
 gate wake/goodnight, fire gathering, witnessed incoming raid welcome, crown/knight ceremonies,
 and chosen eligible moment to its stream director/scene consumers. A receipt acknowledges a
 connected stream consumer's presentation of that committed moment, not just the mutation.
-Return `{status:'accepted',message,receipt,state?}` only after that witness. Return
+Return `{status:'accepted',message,receipt,witness,state?}` only after that witness. The exact
+`witness` shape is `{actionId,kingdomId,origin,streamEventId}`; it must match the requested
+action ID, kingdom and origin and identify the presentation event acknowledged by the stream.
+Both receipt and event identifiers use the existing shared `TokenSchema`, including realm
+tokens with colons and periods. An arbitrary witness object is not independent proof of
+presentation: the trusted realm must obtain that acknowledgment before issuing it. Return
 `{status:'unknown',message}` if presentation cannot be established after dispatch; refusal and
 definitely-undispatched unavailability have distinct outcomes. Every act must be undoable or
 gentle; only offer `undo` when a real eligible receipt can be reversed.

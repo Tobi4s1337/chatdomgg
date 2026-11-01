@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { TokenSchema } from '@chatdom/shared';
 
 export const ACTIONS = ['gate-open', 'gate-close', 'fire-light', 'raid-welcome', 'citizen-crown', 'citizen-knight', 'moment-play', 'undo'] as const;
-const id = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
+const id = TokenSchema;
 const person = z.string().regex(/^[1-9][0-9]{0,31}$/);
 const label = z.string().min(1).max(200);
 export const DockActionSchema = z.strictObject({ id, kingdomId: person, kind: z.enum(ACTIONS), targetId: id.optional(), expectedRevision: id });
@@ -17,8 +18,11 @@ export const DockStateSchema = z.strictObject({
   revision: id,
 });
 export type DockState = z.infer<typeof DockStateSchema>;
+export const DockWitnessSchema = z.strictObject({ actionId: id, kingdomId: person, origin: z.enum(['live', 'simulated']), streamEventId: id });
+export type DockWitness = z.infer<typeof DockWitnessSchema>;
 export const DockOutcomeSchema = z.strictObject({ status: z.enum(['accepted', 'refused', 'unknown', 'unavailable']), message: label,
-  receipt: id.optional(), state: DockStateSchema.optional() }).refine(value => value.status !== 'accepted' || !!value.receipt, 'Accepted requires a delivery receipt');
+  receipt: id.optional(), witness: DockWitnessSchema.optional(),
+  state: DockStateSchema.optional() }).refine(value => value.status !== 'accepted' || (!!value.receipt && !!value.witness), 'Accepted requires a delivery receipt and stream witness');
 export type DockOutcome = z.infer<typeof DockOutcomeSchema>;
 
 /** Status replies are private to the authenticated session and never contain the session handle. */

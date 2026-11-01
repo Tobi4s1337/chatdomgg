@@ -14,7 +14,9 @@ Once the public origin serves this build and its API, add the `/dock/` URL as an
 Browser Dock. A moderator selects their kingdom with `/dock/?kingdom=<Twitch broadcaster ID>`;
 the API verifies access. Sign-in returns to `/dock`; the selected kingdom is restored from
 this browser's session storage. No credentials belong in the dock URL. The page also works directly
-in a browser. At narrow widths it scrolls vertically; selections stay focused during polling.
+in a browser. At narrow widths it scrolls vertically. Named targets are direct action buttons,
+three entries per group, with paging for additional targets. Stable IDs preserve their focus
+during polling; only the pressed button changes its label while a request is pending.
 
 The realm bridge is a required integration dependency, detailed in
 `work/lanes/dock/needs.md`. Until it exists the dock deliberately reports unavailable and

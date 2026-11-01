@@ -29,7 +29,7 @@ describe('dock boundary', () => {
     expect(f.result().body.status).toBe('unavailable');
   });
   it('requires CSRF, broadcaster authority, an enabled capability, and a current revision', async () => {
-    const action = vi.fn(async () => ({ status: 'accepted' as const, message: 'Seen on stream.', receipt: 'receipt-1' }));
+    const action = vi.fn(async () => ({ status: 'accepted' as const, message: 'Seen on stream.', receipt: 'receipt-1', witness: { actionId: 'one', kingdomId: '42', origin: 'simulated' as const, streamEventId: 'stream:1' } }));
     let current = state;
     const backend: DockBackend = { status: async () => current, action };
     const badCsrf = request('POST', '/api/dock/actions', command, { 'x-csrf-token': 'bad' });
@@ -79,7 +79,7 @@ describe('dock refusal cases', () => {
     }
   });
   it('rejects cross-origin, malformed, disabled and invalid target actions', async () => {
-    const action = vi.fn(async () => ({ status: 'accepted' as const, message: 'Seen.', receipt: 'r' }));
+    const action = vi.fn(async () => ({ status: 'accepted' as const, message: 'Seen.', receipt: 'r', witness: { actionId: 'one', kingdomId: '42', origin: 'simulated' as const, streamEventId: 'stream:1' } }));
     const backend: DockBackend = { status: async () => ({ ...state, capabilities: [...state.capabilities, { kind: 'citizen-crown', allowed: true, reason: '' }] }), action };
     for (const [payload, overrides] of [[command, { origin: 'https://evil.test' }], [{ ...command, kind: 'bad' }, {}], [{ ...command, kind: 'fire-light' }, {}], [{ ...command, kind: 'citizen-crown', targetId: 'noncitizen' }, {}]] as const) {
       const f = request('POST', '/api/dock/actions', payload, overrides);
@@ -93,4 +93,26 @@ describe('dock refusal cases', () => {
     await handleDock(f.req, f.res, { pool, config, backend: { status: async () => state, action: async () => ({ status: 'accepted', message: 'Done.' }) } });
     expect(f.result().body.status).toBe('unknown');
   });
+});
+
+it('requires the stream witness to match the action, kingdom and origin', async () => {
+  for (const witness of [
+    { actionId: 'other', kingdomId: '42', origin: 'simulated' as const, streamEventId: 'stream:1' },
+    { actionId: 'one', kingdomId: '43', origin: 'simulated' as const, streamEventId: 'stream:1' },
+    { actionId: 'one', kingdomId: '42', origin: 'live' as const, streamEventId: 'stream:1' },
+  ]) {
+    const f = request('POST', '/api/dock/actions', command);
+    await handleDock(f.req, f.res, { pool, config, backend: { status: async () => state,
+      action: async () => ({ status: 'accepted', message: 'Done.', receipt: 'receipt:1', witness }) } });
+    expect(f.result().body.status).toBe('unknown');
+  }
+});
+
+it('accepts realm token identifiers such as colon-bearing moment IDs', async () => {
+  const f = request('POST', '/api/dock/actions', { ...command, id: 'dock:1', kind: 'moment-play', targetId: 'moment:dragon.1' });
+  const momentState: DockState = { ...state, capabilities: [{ kind: 'moment-play', allowed: true, reason: '' }],
+    moments: [{ id: 'moment:dragon.1', name: 'Dragon', available: true, reason: '' }] };
+  await handleDock(f.req, f.res, { pool, config, backend: { status: async () => momentState,
+    action: async () => ({ status: 'accepted', message: 'Seen.', receipt: 'receipt:1', witness: { actionId: 'dock:1', kingdomId: '42', origin: 'simulated', streamEventId: 'stream:1' } }) } });
+  expect(f.result().body.status).toBe('accepted');
 });

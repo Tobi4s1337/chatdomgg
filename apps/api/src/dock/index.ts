@@ -96,6 +96,7 @@ export async function handleDock(req: IncomingMessage, res: ServerResponse, opti
     let outcome: DockOutcome;
     try { outcome = DockOutcomeSchema.parse(await backend.action(auth.principal, action)); }
     catch { outcome = { status: 'unknown', message: 'The kingdom may have received this action. Check the stream before trying again.' }; }
+    if (outcome.status === 'accepted' && (outcome.witness?.actionId !== action.id || outcome.witness.kingdomId !== action.kingdomId || outcome.witness.origin !== config.mode)) outcome = { status: 'unknown', message: 'The stream delivery could not be verified. Check the stream.' };
     if (outcome.state && !validState(outcome.state, auth.principal.personId, action.kingdomId)) outcome = { status: 'unknown', message: 'The action outcome could not be verified. Check the stream.' };
     if (outcome.state) outcome = { ...outcome, state: visibleState(outcome.state) };
     reply(res, outcome.status === 'accepted' ? 200 : outcome.status === 'refused' ? 409 : 503, { version: 1, ...outcome }); return true;

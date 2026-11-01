@@ -28,13 +28,16 @@ states can be reviewed. No real stream imagery or event delivery is fabricated h
 assert that an act was delivered.
 
 Each capture checks browser exceptions and console errors (excluding expected failed
-HTTP resource messages), as well as horizontal document overflow. The ready scenario
-checks that selection focus survives a status poll. The ambiguous scenario reloads and
+HTTP resource messages on intentional failure scenarios), as well as horizontal document overflow. The ready scenario
+checks that action focus survives a status poll. The ambiguous scenario reloads and
 checks that actions stay locked and no second POST is sent.
 
 ## Outstanding evidence
 
-The shared capture lock has not yet admitted a rehearsal capture. No image or clip in
+The shared capture lock has not yet admitted a rehearsal capture. Three consecutive
+bounded attempts across the previous and current goal turns timed out; the latest,
+against the updated focus handling, exited with code 1 and `TimeoutError` before starting
+the server or Chrome. Browser assertions have not run. No image or clip in
 this folder has been reviewed. Capture and inspect ready at 390×844 and 1440×900,
 real-unavailable at 318×900, the ambiguous reply after reload, and one action UI clip.
 Exercise anonymous, forbidden, expired, fault, moderator and remaining action states as
