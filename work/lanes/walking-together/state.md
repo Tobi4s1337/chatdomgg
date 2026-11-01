@@ -1,14 +1,24 @@
-# WT10 resumed — 2026-11-01
+# WT10 current — 2026-11-01 18:32
 
-User resumed the goal and authorized the existing captures after main fixed lost tickets in d53d9eb. Fresh blocked audit starts here; the prior blocked status below is historical. No new sub-scopes or agents. Main fast-forwarded cleanly to 1bb78bd, which already contains source checkpoints d416c69/6859185.
+User's latest constraint stands: no new sub-scopes, clean local checkpoints, never push. WT10 stays unchecked until whole kingdom/stream acceptance. Previous goal turn was progress (79e89c8/15a9c37); this second resumed turn merged main's real presentation binding and improved its verification. No new agents or product features.
 
-LIVE owned handle (poll, never duplicate): 1116 = one actual-Kingdom 1440×900 replacement still, `capture-town.mjs --offline --out shots/walking-together/resumed-town-retry`, log `/tmp/walking-resume-town-retry.log`. Queued under the v2 lease guard. Original 51500 is terminal: the host capture guard added a progress line saying it stopped this single-artifact job at 18:13 after 12 minutes holding the lock while six lanes waited. It saved no image/failure report. Do not poll it or claim success from its tool-reported exit 0. It had compiled all 659 placements and started its owned memory realm on allowed port 5171, then ended before the ready-stage log. Owned partial build was removed after process termination; no unrelated service or lock was touched.
+Main 76ed4a5 synced cleanly by merge 6087a27, including 201f591's six-file walking presentation integration. PeopleLabels, actual animated heads and gait-footfall audio are now bound in kingdom/stream. Approved saved outfits/tools and authenticated current gesture transport are still main-owned missing sources; optional ports alone are not whole behavior. Owned-door spawn, visible/physical terrain agreement, continuous deterministic soft-push and guest speech association also remain required.
 
-Full typecheck 15028, workspace lint 36421, build 66047, and exact six-file in-memory integration typecheck 27568 are terminal success. Focused session 14617 completed: 26 files, 200 tests passed, including the 18 capture-lock regressions and six real-room SDK movement cases. Script ESLint 91417 and final 55943 completed successfully. Frozen dependency install 87092 completed successfully. Logs copied into work/evidence/walking-together/checks/resumed-*.log.
+Source checkpoint be281e9: checker recognizes all 21 exact landed hunks (zero overlays), two patch comments aligned to main, and a new exact observed-head test fixture patch is prepared for main. Collision CPU preparation is now before capture admission; cancellation is checked immediately afterward. Browser sub-stages/signals are logged, navigation waits for commit then actual meaningful ready flag, and failure diagnostics are bounded to three seconds. No main-owned source was changed.
 
-The v2 queue retained registered tickets and admitted the original job; the old missing-ticket failure has not recurred. Never touch another worker's guard or existing service. One artifact per lock, sequential captures in this lane. The runner now logs the exact preparation stage and signals and writes a failure report for an early process exit; an incomplete exit 0 becomes exit 1. Clip offline cleanup precedes context close. Source checkpoint: 79e89c8.
+LIVE owned handles (poll, never duplicate):
+- 50409: one actual-Kingdom 1440×900 still, `node apps/web/src/walk/capture-town.mjs --offline --out shots/walking-together/landed-town`, `/tmp/walking-landed-town.log`. Compiled all 659 native placements outside the slot and is now queued for admission. No listener/browser/port yet. Will use merged 201f591 consumers.
 
-The six-file integration.patch context now includes main's dock import; apply check and in-memory typecheck pass. Main has not yet bound PeopleLabels, approved saved appearances, or gestures in the actual consumers at synced 1bb78bd; no WT10 tick. No rendered capture or whole-kingdom acceptance is claimed until the retry completes and its output is looked at.
+Terminal this turn:
+- 24580: exact observed-head test patch passed its real integration case through an in-memory Vitest transform (1/1). No main-owned file was written. Log saved as checks/landed-observed-overlay.log.
+- 1116: host capture guard stopped it (progress line 18:25). Exit 1, no image. It was still queued through 18:23, acquired around 18:24, compiled 659 placements, started owned realm 5170, then received SIGTERM before browser setup. Failure JSON/log retained in evidence/checks/resumed-town-retry*. The guard line calls it ten minutes holding the lock; queue time is part of command age. Main owns watchdog admission timing. No third unchanged retry: 50409 prepares CPU work outside capture slot and has finer stages. Do not poll 1116/51500 again.
+- 54708 full typecheck success; 28942 integration typecheck success (21/21 landed); 94298 build success. Logs evidence/checks/landed-*.log.
+- 30421 expanded focused suite: 27 files passed, one failed; 186 tests passed, one failed. Failure is main-owned observed-walkers.test.ts:70, still expecting synthetic 1.9 m speech with no actual renderer head map. `observed-heads-test.patch` supplies a witnessed head and checks coordinates/distance plus no-anchor/cleared-anchor suppression. Apply check passes and exact runtime overlay passed (1/1). Main still needs to apply the test fixture patch.
+- 62515 full lint exit 1: only scripts/public/look.mjs undefined AbortSignal (28) and clearTimeout (56). Exact suggested fix in needs.md: qualify globalThis. Lane runner/checker ESLint 47429 success; earlier 13101 also success.
+
+No resumed town image/clip is accepted. Do not tick WT10 or write LANE COMPLETE. Real town web/stream, persistent wardrobe/gesture propagation and real GPU pacing remain unproven. All earlier component evidence is historical, not a substitute.
+
+---
 
 Everything below is the previous checkpoint history, not current live-job status.
 

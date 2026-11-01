@@ -2,6 +2,14 @@
 
 WT10 is **open**. These are SIMULATED component reviews; actual town acceptance is still pending.
 
+## Landed consumer review
+
+Main `201f591` has landed the six-file presentation patch; synced here by merge `6087a27`. Source checkpoint `be281e9` recognizes **21/21 already-landed hunks with zero overlays** and aligns two comments in the historical patch. Full typecheck and build pass. `checks/landed-*.log` preserves the results.
+
+The expanded 28-file suite has **186 passed / one failed**: main's `observed-walkers.test.ts:70` still supplies no actual head map and expects a fixed 1.9 m speech anchor. `observed-heads-test.patch` is an exact apply-checked handoff that asserts missing-anchor suppression, supplies the actual walker-head projection with distance, and clears it to check stale suppression. The exact patch passes its actual Vitest case through an in-memory source transform (**1/1**, `checks/landed-observed-overlay.log`), with no kingdom source written. Main still needs to apply it. Workspace lint reports two errors in main's new `scripts/public/look.mjs` (unqualified AbortSignal/clearTimeout); lane runner/checker ESLint passes. These results do not establish a green `pnpm verify`.
+
+The second town still was stopped by the host guard at 18:25 and exited 1 with no image. It had been observed queued through 18:23 and acquired around 18:24; the guard line calls its whole ten-minute process age lock-hold time. Stage/signal reporting preserved this (`checks/resumed-town-retry-stopped.log`, `checks/resumed-town-retry.failure.json`). The next one-still job compiles collision before capture admission with no listener/browser, then takes one slot for actual capture. No new town screenshot has been accepted.
+
 ## Main-fix resume checkpoint
 
 Source checkpoint `79e89c8` follows clean main sync `1bb78bd`, including the capture lease fix `d53d9eb`. All **26 files / 200 focused tests**, full typecheck, workspace lint, build, patch apply check, and the refreshed six-file in-memory consumer typecheck pass. See `checks/resumed-*.log`. This does not establish a full `pnpm verify` pass.
