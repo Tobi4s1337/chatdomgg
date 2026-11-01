@@ -125,3 +125,27 @@ The longer contract each port honours:
 
 The route stays unbound until (1)–(7) exist. It shows the honest "The gate is shut here" state and offers no
 action it cannot perform.
+
+## The raid road (RR10)
+
+One continuous journey from one gate to the other, at dusk: `/-/raid-gate?bench=simulated&road=1`.
+
+| Piece | File | What it does |
+|---|---|---|
+| Director | `road/director.ts` | A pure schedule of acts (`gather`, `setout`, `rise`, `ride`, `hold`, `wake`, `welcome`) on a presentation clock, each gated by a fact the authority gave: the party sets out only once Twitch's raid is witnessed, the map rises only once it is drawn, the column waits at the destination gate (`hold`) until the arrival commits, and the welcome waits for the welcome reply. Pure: the same facts and time give the same frame |
+| The two lands | `road/lands.ts` | MashaD4's mountain citadel rides to PinkKittyRose's river valley: real channels with real Atlas holdings, their land grown from each channel's observed seed exactly as the Genesis previews grow it. Potential land is scenery: no room, deed or audience comes with it |
+| Tableaux | `road/procession.tsx`, `road/tableaux.tsx` | Seekable SVG: the gate wakes (braziers, banners unfurling), walkers arrive one by one with their own pennants, the monarch leads the column into the arch; at the far end the guests file in under the source's banner to the host monarch and a gift-bearer |
+| The road on the Atlas | `../atlas/road/` | `openRoadAtlas` finds both holdings in the survey, plans one deterministic road (a sea lane when the lands differ), and draws it in ink as the column walks: pencilled ahead, trodden behind. The torch column is a mark, sized by the log of the travellers, never a roster; torches are pigment dabs (the Atlas has no night) |
+| Journey camera | `../atlas/road/shot.ts` | Rises out of the source drawing, rides close, pulls back to hold the whole road, closes in on arrival and dives into the destination |
+| The route | `road/RaidRoad.tsx`, `road/road.css` | The real gate application on the SIMULATED bench (`bench.ts` takes a `BenchCast`), both kingdoms' worlds at dusk, the map between them, the gate board while the gate acts; every surface says SIMULATED |
+| Captures | `road/capture.mjs` | `node apps/web/src/raid-gate/road/capture.mjs [--stills] [--sequence] [--fps 8] [--reduced]` after `pnpm build`; the clock is frozen (`capture=1`) and seeked, so every frame is exact |
+
+What main binds for the live road:
+
+1. The kingdom host mounts the route's three layers in place of its own canvases: the source kingdom scene keeps
+   rendering through `gather` and `setout`, the Atlas road takes over at `rise`, and the destination scene is
+   revealed at `wake`. The facts come from the gate controller's snapshot exactly as `RaidRoad.observe()` reads them.
+2. `AtlasGateHost.travel(stage)` can be implemented by `openRoadAtlas(...).show(mapFrame(momentAt(...)))`; the
+   ride length is `rideSeconds` (12–30 s by distance, spec 23).
+3. The welcome stays the overlay tableau over the destination valley until the kingdom scene exposes a gate
+   anchor (a world point and a facing); then the arrival tableau's walkers become the guests' avatars walking in.

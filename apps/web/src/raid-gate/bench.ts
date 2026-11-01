@@ -16,10 +16,11 @@ import { createMemoryRaidGateRepository } from '../../../api/src/raid-gate/memor
 import type { AtlasRoadIngress, AuthorizedRaidTransport, RaidObservationReceipt, RaidWriteOutcome, SourceStanding, TargetVerdict } from '../../../api/src/raid-gate/ports';
 import type { AtlasGateEvent, AtlasGateHost, GateKingdom, GateLand, RaidGateApi } from './ports';
 
-const SOURCE = { kingdomId: '41000001' as KingdomId, name: 'Willowmere', login: 'willowmere' } satisfies GateKingdom;
+const WILLOWMERE = { kingdomId: '41000001' as KingdomId, name: 'Willowmere', login: 'willowmere' } satisfies GateKingdom;
 
 /** SIMULATED channels. None of these is a real Twitch channel's data. */
-const DESTINATIONS: readonly (Readonly<{ channel: AtlasChannel; land: GateLand; live: boolean; group: 'road' | 'realm' }>)[] = [
+export type BenchDestination = Readonly<{ channel: AtlasChannel; land: GateLand; live: boolean; group: 'road' | 'realm' }>;
+const WILLOWMERE_DESTINATIONS: readonly BenchDestination[] = [
   { channel: AtlasChannelSchema.parse({ kingdomId: '41000002', login: 'fernhollow', displayName: 'Fernhollow', language: 'en', founded: true, kingdomName: 'Fernhollow', contentClassification: 'general' }), land: 'founded', live: true, group: 'road' },
   { channel: AtlasChannelSchema.parse({ kingdomId: '41000003', login: 'oakenfold_plays', displayName: 'oakenfold_plays', language: 'en', founded: false, kingdomName: null, contentClassification: 'general' }), land: 'waiting', live: true, group: 'realm' },
   { channel: AtlasChannelSchema.parse({ kingdomId: '41000005', login: 'saltmarsh', displayName: 'Saltmarsh', language: 'en', founded: true, kingdomName: 'Saltmarsh Reach', contentClassification: 'general' }), land: 'founded', live: true, group: 'realm' },
@@ -34,26 +35,49 @@ const STANDINGS: Readonly<Record<GateAuthority, Partial<SourceStanding>>> = {
 const WALKERS = ['52000001', '52000002', '52000003', '52000004', '52000005', '52000006', '52000007'];
 
 /** SIMULATED Fernhollow: its monarch (the channel's own ID) and one citizen with a deed, there to welcome guests. */
-const FERN = '41000002' as KingdomId;
-const FERN_HOSTS = { monarch: FERN as unknown as PersonId, ash: '53000001' as PersonId } as const;
-const NAMES: Readonly<Record<string, string>> = {
-  [FERN]: 'Queen Hazel', [FERN_HOSTS.ash]: 'Ash of the Mill', [SOURCE.kingdomId]: 'King Alder', '52000001': 'Wren', '52000002': 'Tamsin',
+const FERNHOLLOW = '41000002' as KingdomId;
+const ASH = '53000001' as PersonId;
+const WILLOWMERE_NAMES: Readonly<Record<string, string>> = {
+  [FERNHOLLOW]: 'Queen Hazel', [ASH]: 'Ash of the Mill', [WILLOWMERE.kingdomId]: 'King Alder', '52000001': 'Wren', '52000002': 'Tamsin',
 };
 
-/** SIMULATED things in the SIMULATED item store: what Wren carries from home, and what Fernhollow's hosts may give. */
-function benchItems(): GiftItem[] {
+/**
+ * Who stands where on a bench: the kingdom whose gate it is, the destinations its stand-in finder offers, the founded
+ * kingdoms with worlds to enter, the kingdom whose hosts welcome the party (its monarch is the channel itself, and one
+ * SIMULATED citizen keeps a gift ready) and every name the SIMULATED hosts directory answers with.
+ */
+export type BenchCast = Readonly<{
+  source: GateKingdom;
+  destinations: readonly BenchDestination[];
+  rooms: readonly KingdomId[];
+  welcome: Readonly<{ kingdomId: KingdomId; name: string; host: PersonId; things: Readonly<{ hostGift: string; monarchGift: string }> }>;
+  names: Readonly<Record<string, string>>;
+  /** What the viewer (the first SIMULATED walker) carries from home. */
+  carried: Readonly<{ crafted: string; forged: string }>;
+}>;
+
+/** The default bench: Willowmere's gate, Fernhollow's welcome. All SIMULATED. */
+export const WILLOWMERE_CAST: BenchCast = {
+  source: WILLOWMERE, destinations: WILLOWMERE_DESTINATIONS, rooms: [WILLOWMERE.kingdomId, FERNHOLLOW, '41000005' as KingdomId],
+  welcome: { kingdomId: FERNHOLLOW, name: 'Fernhollow', host: ASH, things: { hostGift: 'Lantern of the sleeping fox', monarchGift: 'Fern-sprig welcome loaf' } },
+  names: WILLOWMERE_NAMES, carried: { crafted: 'A copper acorn', forged: 'Willow-bark lantern' },
+};
+
+/** SIMULATED things in the SIMULATED item store: what the viewer carries from home, and what the hosts may give. */
+function benchItems(cast: BenchCast): GiftItem[] {
+  const home = cast.source.kingdomId, away = cast.welcome.kingdomId;
   const thing = (itemId: string, ownerId: string, kind: GiftItem['kind'], title: string, makerId: string, originKingdomId: KingdomId): GiftItem => ({
-    itemId, revision: 1, ownerId: ownerId as PersonId, kind, title, makerId: makerId as PersonId, makerName: NAMES[makerId] ?? null,
-    originKingdomId, originName: originKingdomId === FERN ? 'Fernhollow' : 'Willowmere', transferable: kind !== 'light' && kind !== 'keepsake', paid: false, origin: 'simulated',
+    itemId, revision: 1, ownerId: ownerId as PersonId, kind, title, makerId: makerId as PersonId, makerName: cast.names[makerId] ?? null,
+    originKingdomId, originName: originKingdomId === away ? cast.welcome.name : cast.source.name, transferable: kind !== 'light' && kind !== 'keepsake', paid: false, origin: 'simulated',
   });
   return [
-    thing('willow-acorn', '52000001', 'crafted', 'A copper acorn', '52000001', SOURCE.kingdomId),
-    thing('willow-lantern', '52000001', 'forged', 'Willow-bark lantern', '52000002', SOURCE.kingdomId),
+    thing('home-crafted', '52000001', 'crafted', cast.carried.crafted, '52000001', home),
+    thing('home-forged', '52000001', 'forged', cast.carried.forged, '52000002', home),
     // Bound things never show on a shelf: a light and a keepsake stay with their holder.
-    thing('willow-hearth', '52000001', 'light', 'Hearth light', '52000001', SOURCE.kingdomId),
-    thing('willow-medal', '52000001', 'keepsake', 'First-snow keepsake', '52000001', SOURCE.kingdomId),
-    thing('fern-fox-lantern', FERN_HOSTS.ash, 'forged', 'Lantern of the sleeping fox', FERN_HOSTS.ash, FERN),
-    thing('fern-bread', FERN_HOSTS.monarch, 'welcome-offering', 'Fern-sprig welcome loaf', FERN_HOSTS.monarch, FERN),
+    thing('home-hearth', '52000001', 'light', 'Hearth light', '52000001', home),
+    thing('home-medal', '52000001', 'keepsake', 'First-snow keepsake', '52000001', home),
+    thing('host-forged', cast.welcome.host, 'forged', cast.welcome.things.hostGift, cast.welcome.host, away),
+    thing('host-offering', away as unknown as PersonId, 'welcome-offering', cast.welcome.things.monarchGift, away, away),
   ];
 }
 
@@ -67,14 +91,14 @@ export type BenchTwitch = 'accept' | 'lose' | 'refuse';
  * arrival's answer lost on the way back (`lose`), or refused at the door (`deny`).
  */
 export type BenchRooms = 'ready' | 'slow' | 'hold' | 'lose' | 'deny';
-export type GateBenchOptions = Readonly<{ viewer: 'monarch' | 'walker'; authority: GateAuthority; clock: () => number; twitch?: BenchTwitch; rooms?: BenchRooms }>;
+export type GateBenchOptions = Readonly<{ viewer: 'monarch' | 'walker'; authority: GateAuthority; clock: () => number; twitch?: BenchTwitch; rooms?: BenchRooms; cast?: BenchCast }>;
 
 export type GateBench = Readonly<{
   source: GateKingdom;
   api: RaidGateApi;
   atlas: AtlasGateHost;
   /** The stand-in finder's state, for the bench view to draw. */
-  finder: Readonly<{ open: () => boolean; entries: typeof DESTINATIONS; pick: (kingdomId: KingdomId) => void; close: () => void; onChange: (listener: () => void) => void }>;
+  finder: Readonly<{ open: () => boolean; entries: readonly BenchDestination[]; pick: (kingdomId: KingdomId) => void; close: () => void; onChange: (listener: () => void) => void }>;
   /** Runs the monarch's own preview as the monarch, for a walker bench. */
   monarchPreview(target: KingdomId): Promise<GateReply>;
   /** Runs the monarch's own close as the monarch, for a walker bench. */
@@ -96,7 +120,7 @@ export type GateBench = Readonly<{
   /** SIMULATED: these marchers (after the viewer) follow the witnessed raid through the gate themselves. */
   partyTravel(requestId: string, raidId: string, count: number): Promise<number>;
   /** SIMULATED: a Fernhollow host greets the viewer's arrival and offers the first thing on their shelf. */
-  hostOffer(host: keyof typeof FERN_HOSTS): Promise<GateReply>;
+  hostOffer(host: 'monarch' | 'ash'): Promise<GateReply>;
 }>;
 
 async function sha256Hex(text: string): Promise<string> {
@@ -105,6 +129,9 @@ async function sha256Hex(text: string): Promise<string> {
 }
 
 export function createGateBench(options: GateBenchOptions): GateBench {
+  const cast = options.cast ?? WILLOWMERE_CAST;
+  const SOURCE = cast.source, DESTINATIONS = cast.destinations, FERN = cast.welcome.kingdomId, NAMES = cast.names;
+  const FERN_HOSTS = { monarch: FERN as unknown as PersonId, ash: cast.welcome.host } as const;
   const repository = createMemoryRaidGateRepository();
   let authority = options.authority;
   const subscribers = new Set<() => void>();
@@ -137,10 +164,10 @@ export function createGateBench(options: GateBenchOptions): GateBench {
     async observe(raid) { if (!log.roads.some(each => each.id === raid.id)) log.roads.push(raid); },
   };
   const tokens = new Map<string, string>();
-  // SIMULATED rooms: Fernhollow and Saltmarsh Reach are founded kingdoms with worlds to enter; waiting land has none.
+  // SIMULATED rooms: the cast's founded kingdoms have worlds to enter; waiting land has none.
   const roomMode = options.rooms ?? 'ready';
   const rooms = createSimulatedRooms({
-    clock: options.clock, rooms: [SOURCE.kingdomId, '41000002' as KingdomId, '41000005' as KingdomId],
+    clock: options.clock, rooms: [...cast.rooms],
     prepareSteps: roomMode === 'hold' ? Number.MAX_SAFE_INTEGER : roomMode === 'slow' ? 9 : 2,
   });
   if (roomMode === 'lose') rooms.loseNextCommitAnswer();
@@ -150,7 +177,7 @@ export function createGateBench(options: GateBenchOptions): GateBench {
     repository: journeys, rooms: rooms.transport, marches: createRaidMarchCheck(repository), origin: 'simulated', clock: options.clock,
   });
   const items = createMemoryItemTransfers('simulated');
-  items.seed(benchItems());
+  items.seed(benchItems(cast));
   const hosts: GiftHosts = {
     origin: 'simulated',
     async standing(personId, kingdomId) {

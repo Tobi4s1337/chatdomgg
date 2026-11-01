@@ -4,7 +4,7 @@
  * kingdom. Without a bound authority the board says the gate is shut here. `?bench=simulated` runs the real
  * application in the page, labelled SIMULATED throughout.
  */
-import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { createSignal, For, lazy, onCleanup, onMount, Show } from 'solid-js';
 import type { KingdomId } from '../../../api/src/raid-gate/contracts';
 import { createKingdomScene } from '../kingdom/scene';
 import type { GateBench } from './bench';
@@ -32,7 +32,18 @@ const UNBOUND_SOURCE: GateKingdom = { kingdomId: '41000001' as KingdomId, name: 
 /** The bench's founded destination, whose valley the welcome is staged in. */
 const WELCOME_HOST = { kingdomId: '41000002' as KingdomId, name: 'Fernhollow', seed: 'fernhollow' } as const;
 
-export default function RaidGateRoute() {
+/**
+ * `/-/raid-gate?bench=simulated&road=1` is the raid road: the whole journey from this gate along the Atlas road to the
+ * destination's welcome, between two real holdings, with the raid itself SIMULATED (see `road/RaidRoad.tsx`).
+ */
+const RaidRoad = lazy(() => import('./road/RaidRoad'));
+
+export default function RaidGatePage() {
+  const query = new URLSearchParams(location.search);
+  return <Show when={query.get('road') === '1' && query.get('bench') === 'simulated'} fallback={<RaidGateRoute />}><RaidRoad /></Show>;
+}
+
+function RaidGateRoute() {
   const query = new URLSearchParams(location.search);
   const benchMode = query.get('bench') === 'simulated';
   const viewer = query.get('viewer') === 'walker' ? 'walker' : 'monarch';
