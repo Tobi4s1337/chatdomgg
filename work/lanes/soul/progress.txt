@@ -1,0 +1,3 @@
+2026-11-01 16:02 lane opened: see PRD.
+capture-guard 16:33: stopped 'node work/lanes/soul/capture.mjs dawn phone dusk' after 23 min holding the shared capture lock while 14 lanes waited. Take the lock for ONE still or one short clip at a time and release it in between; never a whole series.
+SO10 checkpoint: absolute-clock keeper routines, visited street lamps, seasonal weather and offline surface history; 9 world tests pass; whole task still open for looked/heard evidence and main scene binding — 4d1de96 — 2026-11-01 16:33
