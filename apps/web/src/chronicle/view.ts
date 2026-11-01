@@ -13,12 +13,13 @@ export interface ChronicleViewOptions {
 
 /** Mount only within a host-provided replay scene. No historical beat is sent to the live feeds. */
 export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions) {
+  const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   root.innerHTML = `<section class="chronicle" aria-label="Kingdom Chronicle">
     <div class="chronicle-heading"><div><p class="chronicle-eyebrow">THE KINGDOM REMEMBERS</p><h1>Chronicle</h1></div><button class="chronicle-close" type="button" aria-label="Close Chronicle">×</button></div>
     <p class="chronicle-origin" aria-live="polite"></p><p class="chronicle-note"></p>
     <div class="chronicle-fact" aria-live="polite" aria-atomic="true"><p class="chronicle-date"></p><p class="chronicle-caption"></p></div>
     <div class="chronicle-controls"><button class="chronicle-play" type="button">Play</button><div class="chronicle-track"><label>Travel through the nights<input type="range" min="0" max="0" value="0" step="1"></label><div class="chronicle-ends"><span>First entry</span><span>Most recent</span></div></div></div>
-    <p class="chronicle-status" role="status"></p>
+    <p class="chronicle-status" aria-hidden="true"></p>
   </section>`;
   const get = <T extends Element>(selector: string): T => {
     const node = root.querySelector<T>(selector); if (!node) throw new Error(`Chronicle element missing: ${selector}`); return node;
@@ -59,15 +60,19 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
       try { replay.seek(0); } catch { return; }
     }
     replay.play();
-    if (replay.state().playing) timer = setInterval(() => { try { replay.step(); } catch { /* The unavailable state is already displayed. */ } }, 1000);
+    if (replay.state().playing) timer = setInterval(() => { try { replay.step(); } catch { /* The unavailable state is already displayed. */ } }, 3000);
   };
   let disposed = false;
   const dispose = () => {
     if (disposed) return; disposed = true; stopClock(); seek.removeEventListener('input', onSeek);
-    play.removeEventListener('click', onPlay); close.removeEventListener('click', onClose);
+    play.removeEventListener('click', onPlay); close.removeEventListener('click', onClose); root.removeEventListener('keydown', onKeyDown);
+    const restoreFocus = root.contains(document.activeElement);
     replay.dispose(); root.replaceChildren();
+    if (restoreFocus && previousFocus?.isConnected) previousFocus.focus();
   };
   const onClose = () => { options.sound('close'); dispose(); options.onClose(); };
+  const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); } };
+  root.addEventListener('keydown', onKeyDown);
   seek.addEventListener('input', onSeek); play.addEventListener('click', onPlay); close.addEventListener('click', onClose);
   try { replay.load(options.history); } catch { /* Validation already presents the unavailable state. */ }
   return { replay, dispose };
