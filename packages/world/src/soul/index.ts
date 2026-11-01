@@ -239,16 +239,23 @@ function soulAtWithWeather(config: SoulConfig, epochMs: number, cachedWeather?: 
   return { epochMs, hour, season, weather, daylight, night: 1 - daylight, keepers, lamps, chimneySmoke: baker ? smooth((hour - 3.5) / .5) * (1 - smooth((hour - 7) / 1)) : 0, breadCart: { position: baker?.position ?? [0, 0, 0], visible: !!baker?.visible && baker.activity === 'delivering bread' }, shipBell: bell };
 }
 
-/** For animation loops: weather is refreshed at most once per local minute; motion remains frame-accurate. */
+/** For animation loops: interpolate minute weather samples while motion remains frame-accurate. */
 export function createSoulSampler(config: SoulConfig): (epochMs: number) => SoulFrame {
   let minute = NaN;
-  let cached: SoulFrame['weather'] | undefined;
+  let start: SoulFrame['weather'] | undefined;
+  let end: SoulFrame['weather'] | undefined;
   return epochMs => {
     const currentMinute = Math.floor(epochMs / 60_000);
-    if (currentMinute !== minute || !cached) {
-      cached = soulAt(config, currentMinute * 60_000).weather;
+    if (currentMinute !== minute || !start || !end) {
+      start = currentMinute === minute + 1 && end ? end : soulAt(config, currentMinute * 60_000).weather;
+      const endTime = (currentMinute + 1) * 60_000;
+      end = { ...atmosphere(config, endTime), ...accumulated(config, endTime) };
       minute = currentMinute;
     }
-    return soulAtWithWeather(config, epochMs, cached);
+    const fraction = (epochMs - currentMinute * 60_000) / 60_000;
+    const weather = Object.fromEntries(
+      (Object.keys(start) as (keyof SoulFrame['weather'])[]).map(key => [key, mix(start![key], end![key], fraction)]),
+    ) as SoulFrame['weather'];
+    return soulAtWithWeather(config, epochMs, weather);
   };
 }

@@ -94,5 +94,6 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
   root.addEventListener('keydown', onKeyDown);
   seek.addEventListener('input', onSeek); play.addEventListener('click', onPlay); close.addEventListener('click', onClose);
   try { replay.load(options.history); } catch { /* Validation already presents the unavailable state. */ }
+  close.focus();
   return { replay, dispose: () => dispose() };
 }

@@ -1,0 +1,19 @@
+{
+  "name": "coastal-12-walk",
+  "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+  "peak": 0.05991371348500252,
+  "rms": 0.012612506734056212,
+  "middleRms": 0.013514049601000501,
+  "voices": 3,
+  "sources": 3,
+  "peakVoices": 6,
+  "peakSources": 7,
+  "played": {
+    "lute": 6,
+    "strings": 3,
+    "woodwind": 3,
+    "gull": 1
+  },
+  "muted": false,
+  "profile": "walk"
+}

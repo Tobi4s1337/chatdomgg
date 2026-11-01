@@ -1,0 +1,16 @@
+{
+  "name": "coastal-23-walk",
+  "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f",
+  "peak": 0.06630505621433258,
+  "rms": 0.01269330283969275,
+  "middleRms": 0.01371509014139856,
+  "voices": 0,
+  "sources": 0,
+  "peakVoices": 1,
+  "peakSources": 1,
+  "played": {
+    "drip": 1
+  },
+  "muted": false,
+  "profile": "walk"
+}
