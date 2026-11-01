@@ -62,9 +62,12 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
     ? { status: 'ready', label: history.label, index, count: history.snapshots.length, snapshot: history.snapshots[index]!, playing }
     : { status: 'empty', label: history.label, playing: false } : { status: 'unavailable', playing: false };
   const emit = () => onChange(state());
+  const clearAndEmit = () => {
+    try { binding.clear(); } catch (error) { history = undefined; playing = false; throw error; } finally { emit(); }
+  };
   const apply = (snapshot: HistoricalSnapshot) => {
     try { binding.replace(snapshot); } catch (error) {
-      history = undefined; playing = false; binding.clear(); emit(); throw error;
+      history = undefined; playing = false; clearAndEmit(); throw error;
     }
   };
   return {
@@ -74,11 +77,10 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
       // Invalid data is unavailable, not a stale successful replay.
       let next: History | undefined;
       try { next = input ? validateHistory(input) : undefined; } catch (error) {
-        history = undefined; playing = false; binding.clear(); emit(); throw error;
+        history = undefined; playing = false; clearAndEmit(); throw error;
       }
       history = next; index = 0; playing = false;
-      if (history?.snapshots.length) apply(history.snapshots[0]!); else binding.clear();
-      emit();
+      if (history?.snapshots.length) { apply(history.snapshots[0]!); emit(); } else clearAndEmit();
     },
     seek(next: number) {
       assertOpen();

@@ -65,6 +65,19 @@ describe('Chronicle replay', () => {
     expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
     expect(binding.clear).toHaveBeenCalledTimes(1);
   });
+  it('announces unavailable even if clearing the host presentation also fails', () => {
+    const binding = { replace: vi.fn(), clear: vi.fn(), dispose: vi.fn() };
+    const changes = vi.fn(), replay = createReplay(binding, changes);
+    replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
+    binding.replace.mockImplementationOnce(() => { throw new Error('revision missing'); });
+    binding.clear.mockImplementationOnce(() => { throw new Error('host could not clear'); });
+    expect(() => replay.seek(1)).toThrow();
+    expect(changes).toHaveBeenLastCalledWith({ status: 'unavailable', playing: false });
+    expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
+    binding.clear.mockImplementationOnce(() => { throw new Error('host could not clear'); });
+    expect(() => replay.load({ label: 'SIMULATED', snapshots: [] })).toThrow();
+    expect(changes).toHaveBeenLastCalledWith({ status: 'unavailable', playing: false });
+  });
   it('clears unavailable, empty, invalid or mismatched histories rather than retaining a stale view', () => {
     const { replay, binding } = setup(); replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a')] });
     expect(() => replay.load({ label: 'LIVE', snapshots: [snapshot(1, 'a')] })).toThrow(/provenance/);
