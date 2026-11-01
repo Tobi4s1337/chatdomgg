@@ -55,6 +55,7 @@ export default function StreamView() {
   const [safe, setSafe] = createSignal<SafeArea | null>(params.safe);
   const [phase, setPhase] = createSignal<StreamPhase>('waking');
   const [progress, setProgress] = createSignal(0);
+  const [loading, setLoading] = createSignal('Opening the kingdom');
   const [label, setLabel] = createSignal(params.source === 'simulated' ? 'SIMULATED' : 'CONNECTING');
   const [fonts, setFonts] = createSignal(false);
   const [scale, setScale] = createSignal(1);
@@ -109,7 +110,7 @@ export default function StreamView() {
       if (next === 'ready') { attempts = 0; director.start(); } else director.stop();
       if (next === 'failed') scheduleRetry();
     },
-    onProgress: (_text, fraction) => setProgress(fraction),
+    onProgress: (text, fraction) => { setLoading(text); setProgress(fraction); },
     // A remounted real source starts unconfirmed: nothing seen before hiding is presented as fresh.
     onSource: setLabel,
     onNames: next => {
@@ -194,6 +195,7 @@ export default function StreamView() {
     window.__chatdomStream = {
       stats: mount.stats,
       get phase() { return phase(); },
+      get loading() { return loading(); },
       get layout() { return layout(); },
       get source() { return mark().kind; },
       hold: (on: boolean) => director.hold(on),
@@ -293,7 +295,7 @@ export default function StreamView() {
         </Match>
         <Match when={true}>
           <h2>{kingdomName()}</h2>
-          <p>The lamps are being lit</p>
+          <p>{loading()}</p>
           <div class="stream-progress"><i style={{ transform: `scaleX(${Math.max(.04, progress())})` }} /></div>
         </Match>
       </Switch>

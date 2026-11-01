@@ -330,50 +330,49 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Order:** the Forge is ACCEPTED and CLOSED by Tobias. Leave it alone. Main's whole outcome is
-chat arriving: each speaker's window lights immediately, a wave across the dusk town on the stream,
-then lantern homecomings. One visible change per turn with a matched stream before/after.
-Keep the accepted lighting. Merge good team checkpoints; no new systems/contracts/system lanes.
+**First: stream gate regression, NOT FIXED YET.** Tobias's RTX Chrome on
+`/stream?source=simulated&tier=town&hour=19.5` reaches full progress but stays waking with
+`__chatdomReady=false` and a dim town behind the curtain. Fix before the window-wave comparison.
+Goal explicitly resumed. Forge remains ACCEPTED/CLOSED; preserve its picture and behaviour.
 
-**Current step — code green, visual acceptance PENDING:** the opening lens now holds the town wide
-for the first eight seconds, enters the lantern street over8–12s and returns wide over24–36s in the
-existing automatic sequence. Fresh live arrivals wait8s before taking the close lens; presence,
-windows and citizens are never delayed. Historical snapshots/reconnects are not replayed.
-The stream's starting tour goes town → street → window. Its explicitly SIMULATED opening starts
-at0 rather than the already-filled30s town, and holds the chosen dusk instead of starting in afternoon.
-Ordinary held wide views, light, movement and the accepted Forge are unchanged.
-Preview: `/stream?source=simulated&seam=starting&seed=willowmere&tier=town&hour=19.5`.
+**Proven / unknown:** d2ab9f4's `scene.play()` in publishDebug runs only for SIMULATED
+`seam=starting` without a fixed time; it does NOT run on the failing bare stream URL.
+The served5190 scene bundle contains `ready: loaded && renderCompletedAt>0`, not the old
+light-field/shader-completion gate. Stream mount waits for the scene promise, then polls debug.ready.
+Progress reaching1 counts the asset jobs, not completion of the remaining initialization.
+The subsequent awaits are scene tasks → citizen preparation → saved home → saved Forge parts.
+This setup chain predates d2ab9f4 (blame3d3ffc75), but the actual pending await and the hang's
+introduction are NOT established. Do not claim the curtain fixed or attribute it from guesses.
 
-**Evidence so far:** root viewed `shots/magic/arrival-wide-first-before.png` at1920×1080:
-the old opening at6s is already close in the street, warm and alive, but hides the town-wide arrival.
-121 walkers/121 active windows, ready and settled, no browser errors or Forge requests.
-The two-frame capture timed out before saving AFTER; the shorter after-only attempt then timed out
-in the shared queue. NO after frame/pair exists and this camera change is NOT visually accepted yet.
-All runners have terminated; previews closed, nothing queued. The timed-out two-frame run did not
-log graceful cleanup, so do not invent that assurance. No further capture retry this turn.
-Next: capture ONLY the missing after6s using `capture(6)`, compare/view it with the saved before,
-then judge the whole wave-to-homecoming in lean motion. Do NOT use49 incremental capture resets;
-that unnecessary work made the still capture slow. Source paths: `kingdom/scene.ts`,
-`kingdom/arrival-director.ts`, `stream/director.ts`, `stream/index.tsx` under `apps/web/src`.
-30 focused arrival/card/panel/sky tests, scoped lint, typecheck and web production build passed.
+**Diagnostic change:** stream now displays the real loading-step text and exposes
+`window.__chatdomStream.loading`. Scene reports “Welcoming the citizens”, “Remembering your home”,
+“Remembering your forged gifts”, then “The gate is opening”. This replaces the uninformative
+permanent “The lamps are being lit” line; it does NOT bypass readiness or add a timeout.
+Five stream-parameter tests, typecheck, scoped lint and production build passed.
+A console-data question is pending with Tobias: stream.stats, scene.stats and scene.inspect().
+If scene is absent, the factory has not returned; the new loading text narrows the await.
+If present, use loaded/renderPhase/renderCompletedAt/ready to distinguish drawing from handoff.
 
-**Keep the witnessed-light fix (`1a10d43`):** render windows from presence `frame`, NOT
-`crowd.lightFrame()` which masks every home until arrival. Keep arrival-gated lightFrame for
-home-life, beacon and homecoming cues. Door lantern/chimney smoke start at physical arrival.
-Root viewed `shots/magic/window-chat-wave-pair.png`: same world4.5/hero/hour19.5/HIGH,
-0→56 lit homes, clearly visible. That proves early glow, not the complete directed moment.
-Preserve the accepted exposure, indigo fill/warm street pools, castle/beacon, sparse grey-violet
-chimney smoke, stable lights, sculpted land/groves, AS10 citizens and thin capes.
+**Runtime constraint:** both a120-second and a2-second host probe failed to acquire the priority
+gate, despite the team series being stopped. Direct nonblocking flock checks also found both
+capture locks occupied. No browser started; no probe remains queued. Do not unlink locks or kill
+unowned processes. Remote Playwright requires unavailable approval; do not retry that tool.
+Get actual GPU console data or a host slot rather than making speculative readiness changes.
 
-**Team checkpoints merged:** `7b56cb3` card-passport9e329f6 (sharing and new portrait),
-`f62bc9f` sky-momentsbc52c93 (aurora/sky presentation). Root viewed their committed share and
-aurora before/after evidence; no visible blockers. Sky includes a producer wiring patch; merging
-its renderer is not proof of a newly wired live cheer. Other scanned picture/Genesis/avatar lanes
-had no fresh runtime checkpoint. Prior: Pinkkitty GP10 via2255345, Masha GM10 via5ea162a,
-CP10 viaf14e348. Pinkkitty keeper/sound/doorway-light mounting remain producer seams.
-Team owns Genesis, card/passport, raid journey and sky moments. Never merge dirty lane trees.
+**Then evening's first moment:** d2ab9f4 holds the automatic town view0–8s, enters the street8–12s,
+returns wide24–36s. Live fresh arrivals wait8s for a close lens; windows/citizens never wait.
+The SIMULATED starting stream starts at0 and holds chosen dusk. Full before/after still pending:
+`shots/magic/arrival-wide-first-before.png` is valid at6s (121 walkers/windows); no after/pair exists.
+Capture only the missing after with ONE `capture(6)`; never49 intermediate resets. Judge it,
+then the whole wave/homecoming in lean motion. Keep windows from raw witnessed presence frame
+(1a10d43), while arrival-gated lightFrame still drives door lanterns, smoke and homecoming cues.
+Keep accepted dusk exposure, warm pools, castle/beacon, sparse smoke, groves/land and AS10 citizens.
+
+**Team:** last merges7b56cb3 card sharing and f62bc9f aurora. No fresh runtime checkpoint at last
+scan. Sky's producer wiring patch is not proof of a newly wired live cheer. Genesis, card/passport,
+raid journey and sky moments stay with the team. Pinkkitty keeper/sound/doorway mounts remain seams.
 
 **Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
-`../conductor/state/services.log`; own processes only; never unlink capture locks. No observer
-waiting for real chat. No software-renderer timing claims. Preserve city stash
-7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.
+`../conductor/state/services.log`; own processes only; capture ports via capture-ports.mjs.
+No observer waiting for real chat. Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a
+and parked land6f60ae2. No software-renderer timing claims; no doc-only commits.

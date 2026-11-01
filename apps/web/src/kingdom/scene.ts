@@ -581,7 +581,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // remain pending even while the scene draws. The first fully loaded render
   // opens the gate; background light readiness is reported independently.
   try {await Promise.all(tasks);
-    if(disposed)throw new Error('Scene closed while loading');await crowd.prepare();if(!installed){await build.prepare();await forge.prepare();}if(options.walkerFeed&&options.founded){const next=await createObservedWalkers(scene,camera,canvas,pool,crowd.material,options.founded,options.walkerFeed,createFoundedInteractionRegistry(options.founded,compileFoundedScene(options.founded)));if(disposed){next.dispose();throw new Error('Scene closed while preparing walkers');}observed=next;}if(disposed)throw new Error('Scene closed while preparing citizens');
+    if(disposed)throw new Error('Scene closed while loading');
+    options.onProgress('Welcoming the citizens',1);await crowd.prepare();
+    if(!installed){options.onProgress('Remembering your home',1);await build.prepare();options.onProgress('Remembering your forged gifts',1);await forge.prepare();}if(options.walkerFeed&&options.founded){const next=await createObservedWalkers(scene,camera,canvas,pool,crowd.material,options.founded,options.walkerFeed,createFoundedInteractionRegistry(options.founded,compileFoundedScene(options.founded)));if(disposed){next.dispose();throw new Error('Scene closed while preparing walkers');}observed=next;}if(disposed)throw new Error('Scene closed while preparing citizens');
     if(options.momentFeed){
       const kingdomId=options.founded?.kingdomId??options.kingdomId;
       if(!kingdomId||options.founded&&options.momentFeed.origin!==options.founded.origin)throw new Error('Moments need this kingdom and its actual source');
