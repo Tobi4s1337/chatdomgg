@@ -52,6 +52,7 @@ async function accessibility(browser, base, width, height) {
     const slider = page.getByRole('slider', { name: 'Travel through the nights' });
     const caption = page.locator('.chronicle-caption');
     assert(await panel.isVisible() && await caption.isVisible(), 'Chronicle or its fact is not visible');
+    assert(await close.evaluate(element => element === document.activeElement), 'Opening Chronicle did not move focus into its controls');
     assert(await page.locator('.chronicle-fact').getAttribute('aria-live') === 'polite', 'Fact changes are not announced politely');
     const sizes = await page.evaluate(() => {
       const panel = document.querySelector('.chronicle').getBoundingClientRect();
@@ -129,6 +130,14 @@ async function accessibility(browser, base, width, height) {
         presentationLabel: 'SIMULATED', simulationNote: 'Simulated scene', binding: { replace() {}, clear() {}, dispose() {} }, sound() {}, onClose() {} });
       results.push(host.querySelector('.chronicle-origin').textContent.includes('SIMULATED') && host.querySelector('.chronicle-note').textContent === 'Simulated scene');
       mixed.dispose(); host.remove();
+      opener.focus();
+      const immediate = document.createElement('div'); document.body.append(immediate);
+      let closedImmediately = false;
+      mountChronicle(immediate, { history: window.__chronicleHistory, binding: { replace() {}, clear() {}, dispose() {} }, sound() {}, onClose() { closedImmediately = true; } });
+      const focusedOnOpen = document.activeElement === immediate.querySelector('.chronicle-close');
+      document.activeElement.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      results.push(focusedOnOpen && closedImmediately && document.activeElement === opener && !immediate.hasChildNodes());
+      immediate.remove();
       return results.every(Boolean);
     });
     assert(recovery, 'Host sound or cleanup failure prevented controls, close, error reporting or focus restoration');
