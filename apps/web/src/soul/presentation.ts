@@ -44,6 +44,8 @@ export function createSoulPresentation(scene: THREE.Scene, options: SoulPresenta
   // A district costs two draws regardless of its lamp count. Positions are fixed by topology.
   const lampCount=options.topology.lamps.length;
   const lampPosts=new THREE.InstancedMesh(box,wood,lampCount), lampGlass=new THREE.InstancedMesh(box,gold,lampCount);
+  // Glass grows from a zero-scale unlit instance; a cached zero-radius bound would clip first light.
+  lampGlass.frustumCulled=false;
   root.add(lampPosts,lampGlass);
   const lampMatrix=new THREE.Matrix4(), lampPosition=new THREE.Vector3(), lampScale=new THREE.Vector3(), lampRotation=new THREE.Quaternion();
   const lampStates=Array<boolean | undefined>(lampCount).fill(undefined);
@@ -51,12 +53,20 @@ export function createSoulPresentation(scene: THREE.Scene, options: SoulPresenta
   lampPosts.instanceMatrix.needsUpdate=true;
 
   const cart = new THREE.Group(); root.add(cart); mesh(cart,wood,0,.4,0,1,.3,.65); mesh(cart,wood,-.35,.2,.38,.25,.4,.12); mesh(cart,wood,.35,.2,.38,.25,.4,.12); mesh(cart,bread,-.25,.65,-.08,.3,.19,.3);mesh(cart,bread,.1,.65,-.08,.3,.19,.3);mesh(cart,bread,-.08,.68,.2,.3,.19,.28);
-  const mistMat = new THREE.MeshBasicMaterial({color:'#e9e4d1',transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}); materials.push(mistMat);
+  // Feather the valley haze to nothing at its edges; a flat alpha rectangle reads as a platform.
+  const mistPixels = new Uint8Array(32 * 32 * 4);
+  for(let y=0;y<32;y++)for(let x=0;x<32;x++){
+    const at=(x+y*32)*4, radius=((x-15.5)/15.5)**2+((y-15.5)/15.5)**2;
+    mistPixels[at]=mistPixels[at+1]=mistPixels[at+2]=255;
+    mistPixels[at+3]=Math.round(255*Math.max(0,1-radius)**2);
+  }
+  const mistTexture=new THREE.DataTexture(mistPixels,32,32);mistTexture.magFilter=THREE.LinearFilter;mistTexture.minFilter=THREE.LinearFilter;mistTexture.needsUpdate=true;
+  const mistMat = new THREE.MeshBasicMaterial({color:'#e9e4d1',map:mistTexture,transparent:true,opacity:0,depthWrite:false,side:THREE.DoubleSide}); materials.push(mistMat);
   const mistGeo = new THREE.PlaneGeometry(36,20); geometries.push(mistGeo); const mist = new THREE.Mesh(mistGeo,mistMat); mist.rotation.x=-Math.PI/2; mist.position.set(centre.x,centre.y+.4,centre.z); root.add(mist);
   const smokeMat = new THREE.MeshBasicMaterial({color:'#ddd4c1',transparent:true,opacity:.25,depthWrite:false}); materials.push(smokeMat);
   const smokeGeo = new THREE.SphereGeometry(.28,6,4); geometries.push(smokeGeo); const smoke = new THREE.InstancedMesh(smokeGeo,smokeMat,8); root.add(smoke); const smokeMatrix=new THREE.Matrix4(), smokePosition=new THREE.Vector3(), smokeScale=new THREE.Vector3(), smokeRotation=new THREE.Quaternion();
   const precipitationGeo = new THREE.BufferGeometry(); geometries.push(precipitationGeo); const drops = new Float32Array(450*3); for(let i=0;i<450;i++){drops[i*3]=((i*73)%397)/11-18; drops[i*3+1]=((i*47)%137)/11; drops[i*3+2]=((i*101)%359)/10-18;} precipitationGeo.setAttribute('position',new THREE.BufferAttribute(drops,3));
-  const rainMat = new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{time:{value:0},opacity:{value:0},size:{value:3},speed:{value:3}},vertexShader:`uniform float time; uniform float size; uniform float speed; void main(){vec3 p=position; p.y=mod(p.y-time*speed+1200.0,12.0); gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0); gl_PointSize=size;}`,fragmentShader:`uniform float opacity; void main(){float d=length(gl_PointCoord-.5);gl_FragColor=vec4(.78,.86,.89,opacity*smoothstep(.5,.15,d));}`}); materials.push(rainMat); const rain=new THREE.Points(precipitationGeo,rainMat); rain.position.copy(centre); root.add(rain);
+  const rainMat = new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{time:{value:0},opacity:{value:0},size:{value:3},speed:{value:3}},vertexShader:`uniform float time; uniform float size; uniform float speed; void main(){vec3 p=position; p.y=mod(p.y-time*speed+1200.0,12.0); gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0); gl_PointSize=size;}`,fragmentShader:`uniform float opacity; void main(){float d=length(gl_PointCoord-.5);gl_FragColor=vec4(.78,.86,.89,opacity*(1.0-smoothstep(.15,.5,d)));}`}); materials.push(rainMat); const rain=new THREE.Points(precipitationGeo,rainMat); rain.position.copy(centre); root.add(rain);
 
   return {
     update(frame: SoulFrame, seconds: number) {
@@ -67,6 +77,6 @@ export function createSoulPresentation(scene: THREE.Scene, options: SoulPresenta
       mistMat.opacity=frame.weather.fog*.27; mist.position.x=centre.x+Math.sin(seconds*.025)*1.2;
       rainMat.uniforms.opacity!.value=Math.max(frame.weather.rain,frame.weather.snow)*.8; rainMat.uniforms.size!.value=frame.weather.snow>.1?5:2; rainMat.uniforms.speed!.value=frame.weather.snow>.1?.4:3; rainMat.uniforms.time!.value=seconds;
     },
-    dispose(){ scene.remove(root); smoke.dispose(); lampPosts.dispose(); lampGlass.dispose(); geometries.forEach(g=>g.dispose()); materials.forEach(m=>{if(m instanceof THREE.SpriteMaterial)m.map?.dispose();m.dispose();}); }
+    dispose(){ scene.remove(root); mistTexture.dispose(); smoke.dispose(); lampPosts.dispose(); lampGlass.dispose(); geometries.forEach(g=>g.dispose()); materials.forEach(m=>{if(m instanceof THREE.SpriteMaterial)m.map?.dispose();m.dispose();}); }
   };
 }
