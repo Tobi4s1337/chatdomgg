@@ -84,6 +84,15 @@ async function accessibility(browser, base, width, height) {
     await page.keyboard.press('Home'); const first = await slider.getAttribute('aria-valuetext');
     await page.keyboard.press('End'); const last = await slider.getAttribute('aria-valuetext');
     assert(first && last && first !== last, 'Keyboard seeking did not change the accessible night');
+    const track = await slider.boundingBox();
+    assert(track && track.width > 40, 'Timeline has no usable pointer target');
+    await page.mouse.click(track.x + 4, track.y + track.height / 2);
+    const pointerFirst = await slider.inputValue(), firstPixels = await page.evaluate(() => window.__chronicleRenderPixels());
+    await page.mouse.click(track.x + track.width - 4, track.y + track.height / 2);
+    const pointerLast = await slider.inputValue(), lastPixels = await page.evaluate(() => window.__chronicleRenderPixels());
+    assert(Number(pointerFirst) < Number(pointerLast) && firstPixels !== lastPixels, 'Pointer seeking did not advance the recorded world');
+    await page.mouse.click(track.x + 4, track.y + track.height / 2);
+    assert(await slider.inputValue() === pointerFirst && await page.evaluate(() => window.__chronicleRenderPixels()) === firstPixels, 'Pointer seeking backward did not restore the recorded world');
     await page.evaluate(() => window.__chronicle.load({ label: 'SIMULATED', snapshots: [] }));
     assert(await page.getByText('There are no recorded nights to read yet.').isVisible(), 'Empty history state is missing');
     assert(await page.getByText('SIMULATED', { exact: false }).isVisible(), 'Empty simulated history lost its label');
