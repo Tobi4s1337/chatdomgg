@@ -13,6 +13,7 @@ export const CITIZEN_SEATED_HEAD_OFFSET_METRES = -4 * VOXEL_METRES.avatar;
 export interface CitizenPart { readonly blueprint: AvatarPartBlueprint; readonly asset: VoxelAsset }
 export interface CitizenLook { readonly id: string; readonly parts: readonly CitizenPart[]; readonly cape?: AvatarCapeBlueprint }
 export type CitizenRenderLook = CitizenLook | StyledCitizenLook;
+export type CitizenGesture = 'none' | 'nod' | 'wave' | 'bow' | 'cheer' | 'dance' | 'sit' | 'point';
 export interface CitizenSample {
   readonly id: string;
   readonly look: string;
@@ -29,7 +30,7 @@ export interface CitizenSample {
   readonly opacity?: number;
   /** Seated position is still the feet/sole datum, not the pelvis. */
   readonly posture?: 'seated';
-  readonly gesture?: 'none' | 'nod' | 'wave';
+  readonly gesture?: CitizenGesture;
   /** Shared simulation time in seconds, for gesture timing. */
   readonly time?: number;
   /** Head rotation relative to the body's heading, in radians. */
@@ -48,7 +49,7 @@ export interface CitizenRendererOptions {
   readonly pool?: VoxelWorkerPool;
 }
 interface Batch { readonly attachment: AvatarAttachmentId; readonly mesh: THREE.InstancedMesh; readonly pivot: THREE.Matrix4; readonly seatedHem: boolean }
-interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined; readonly rig: typeof AVATAR_RIG }
+interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined; readonly capePaint?: StyledCitizenLook['capePaint']; readonly rig: typeof AVATAR_RIG }
 
 /**
  * Meshed voxel parts share one draw per part/look, not one draw per person.
@@ -89,7 +90,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           if (!material) { material = createStyledCitizenMaterial(options.material, part.surface); paintedMaterials.set(part.surface, material); }
           batches.push(addBatch(styledCitizenGeometry(part.mesh, part.surface), material, part.attachment, part.pivot, `Citizen ${look.id} ${part.seatedHem ? 'hem' : part.attachment} ${part.surface}`, part.seatedHem));
         }
-        looks.set(look.id, { batches, cape: look.cape, rig: STYLED_CITIZEN_RIG });
+        looks.set(look.id, { batches, cape: look.cape, ...(look.capePaint ? { capePaint: look.capePaint } : {}), rig: STYLED_CITIZEN_RIG });
         continue;
       }
       // Painted-only scenes need no voxel worker. Legacy assets keep their
@@ -122,8 +123,10 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   // A generous radius covers the authored body, gait and short cloak as a
   // single culling unit, including their edges during a stride.
   const citizenBounds = new THREE.Sphere(new THREE.Vector3(), 2.5);
-  const postureById = new Map<string, { value: number; last: number }>();
-  function pose(sample: CitizenSample, seated: number, rig: typeof AVATAR_RIG) {
+  type AnimatedGesture = Exclude<CitizenGesture, 'none' | 'sit'>;
+  const gestureNames: readonly AnimatedGesture[] = ['nod', 'wave', 'bow', 'cheer', 'dance', 'point'];
+  const animationById = new Map<string, { seated: number; heading: number; weights: Record<AnimatedGesture, number>; last: number }>();
+  function pose(sample: CitizenSample, seated: number, heading: number, weights: Record<AnimatedGesture, number>, rig: typeof AVATAR_RIG) {
     // One full left/right stride over 1.8 metres. The old .75 m cycle made ordinary 4 m/s walking
     // churn through more than five cycles a second; distance still keeps stops and corrections planted.
     const phase = sample.distance * Math.PI * 2 / 1.8;
@@ -137,24 +140,35 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     const toeLift = toeForward * Math.sin(toeAngle) - ankleHeight * (1 - Math.cos(toeAngle));
     const toeShift = toeForward * (1 - Math.cos(toeAngle)) + ankleHeight * Math.sin(toeAngle);
     // Slight counterrotation and opposing arms make the small silhouette read at street scale.
-    const wave = sample.gesture === 'wave' ? Math.max(0, Math.min(1, sample.waveWeight ?? 1)) : 0;
+    const wave = weights.wave * Math.max(0, Math.min(1, sample.waveWeight ?? 1));
     const waveAngle = sample.waveWeight === undefined ? 1.75 : 2.65;
     const gestureTime = sample.time ?? 0;
     const sitAngle = -Math.PI / 2 * seated;
     const breath = Math.sin(gestureTime * 1.7) * .012 * seated;
+    // Gestures own the upper body while the distance-driven legs keep walking.
+    // Dancing is a planted sway, muted during movement to preserve the gait.
+    const dance = weights.dance * (1 - gait) * (1 - seated);
+    const danceBeat = Math.sin(gestureTime * 4.5);
+    const cheerBeat = Math.sin(gestureTime * 5);
+    const bow = weights.bow * (1 - seated);
+    const point = weights.point;
+    const cheer = weights.cheer;
+    const rightGesture = Math.max(wave, point, cheer, dance);
+    const leftGesture = Math.max(cheer, dance);
     const rotations: Partial<Record<AvatarBoneId, readonly [number, number, number]>> = {
-      chest: [breath, -stride * .055, stride * .025],
-      head: [Math.max(-.65, Math.min(.65, sample.lookPitch ?? 0)) + (sample.gesture === 'nod' ? .14 + .12 * Math.sin(gestureTime * 6) : 0), (sample.lookYaw ?? 0) + stride * .035, -stride * .025],
-      upperArmLeft: [-stride * .30 - seated * .18, 0, .06 + seated * .08], upperArmRight: [(stride * .30 - seated * .18) * (1 - wave) - .18 * wave, 0, (-.06 - seated * .08) * (1 - wave) + (waveAngle + .22 * Math.sin(gestureTime * 8)) * wave],
+      chest: [breath + bow * .48, -stride * .055 + dance * danceBeat * .16, stride * .025 + dance * danceBeat * .10],
+      head: [Math.max(-.65, Math.min(.65, sample.lookPitch ?? 0)) + weights.nod * (.14 + .12 * Math.sin(gestureTime * 6)) + bow * .12, (sample.lookYaw ?? 0) + stride * .035, -stride * .025 - dance * danceBeat * .08],
+      upperArmLeft: [(-stride * .30 - seated * .18) * (1 - leftGesture) - cheer * (.35 + .10 * cheerBeat) - dance * .35, 0, (.06 + seated * .08) * (1 - leftGesture) - cheer * (2.25 + .12 * cheerBeat) - dance * (1.05 + .25 * danceBeat)],
+      upperArmRight: [(stride * .30 - seated * .18) * (1 - rightGesture) - .18 * wave - point * 1.35 - cheer * (.35 + .10 * cheerBeat) - dance * .35, 0, (-.06 - seated * .08) * (1 - rightGesture) + (waveAngle + .22 * Math.sin(gestureTime * 8)) * wave + point * .20 + cheer * (2.25 + .12 * cheerBeat) + dance * (1.05 - .25 * danceBeat)],
       thighLeft: [sitAngle + stride * .42, 0, 0], thighRight: [sitAngle - stride * .42, 0, 0],
       shinLeft: [-sitAngle + Math.max(0, stride) * .38, 0, 0], shinRight: [-sitAngle + Math.max(0, -stride) * .38, 0, 0],
       footLeft: [-stride * .42 - Math.max(0, stride) * .38 + toeAngle, 0, 0],
       footRight: [stride * .42 - Math.max(0, -stride) * .38 + toeAngle, 0, 0],
     };
-    root.makeRotationY(sample.heading); root.setPosition(...sample.position);
-    root.elements[12]! += Math.sin(sample.heading) * toeShift;
+    root.makeRotationY(heading); root.setPosition(...sample.position);
+    root.elements[12]! += Math.sin(heading) * toeShift;
     root.elements[13]! += toeLift;
-    root.elements[14]! += Math.cos(sample.heading) * toeShift;
+    root.elements[14]! += Math.cos(heading) * toeShift;
     poses.clear();
     for (const bone of rig) {
       const angles = rotations[bone.id] ?? [0, 0, 0];
@@ -189,7 +203,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   }
   return {
     get grips(): ReadonlyMap<string, THREE.Matrix4> { return grips; },
-    update(samples: readonly CitizenSample[], camera?: THREE.Camera) {
+    update(samples: readonly CitizenSample[], camera?: THREE.Camera, now = performance.now()) {
       if (samples.length > capacity) throw new Error(`Citizen count exceeds capacity ${capacity}.`);
       for (const mesh of meshes) mesh.count = 0;
       grips.clear();
@@ -199,15 +213,25 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
         projectionView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
         frustum.setFromProjectionMatrix(projectionView, camera.coordinateSystem);
       }
-      const now = performance.now();
       const seen = new Set<string>();
       for (const sample of samples) {
         seen.add(sample.id);
-        const target = sample.posture === 'seated' ? 1 : 0;
-        let transition = postureById.get(sample.id);
-        if (!transition) { transition = { value: target, last: now }; postureById.set(sample.id, transition); }
-        const step = Math.max(0, now - transition.last) / 280;
-        transition.value += Math.max(-step, Math.min(step, target - transition.value));
+        const target = sample.posture === 'seated' || (sample.gesture === 'sit' && sample.moving < .1) ? 1 : 0;
+        let transition = animationById.get(sample.id);
+        if (!transition) {
+          transition = { seated: target, heading: sample.heading, weights: { nod: 0, wave: 0, bow: 0, cheer: 0, dance: 0, point: 0 }, last: now };
+          animationById.set(sample.id, transition);
+        }
+        const elapsed = Math.max(0, Math.min(100, now - transition.last));
+        const step = elapsed / 280;
+        transition.seated += Math.max(-step, Math.min(step, target - transition.seated));
+        // Shortest arc avoids spinning through a full turn at the ±π seam.
+        const turn = Math.atan2(Math.sin(sample.heading - transition.heading), Math.cos(sample.heading - transition.heading));
+        transition.heading += turn * (1 - Math.exp(-elapsed / 90));
+        for (const name of gestureNames) {
+          const goal = sample.gesture === name ? 1 : 0;
+          transition.weights[name] += Math.max(-step, Math.min(step, goal - transition.weights[name]));
+        }
         transition.last = now;
         const look = looks.get(sample.look);
         if (!look) throw new Error(`Unknown citizen look ${sample.look}.`);
@@ -216,9 +240,9 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           citizenBounds.center.set(sample.position[0], sample.position[1] + .75, sample.position[2]);
           if (!frustum.intersectsSphere(citizenBounds)) continue;
         }
-        pose(sample, transition.value, look.rig);
+        pose(sample, transition.seated, transition.heading, transition.weights, look.rig);
         grips.set(sample.id, poses.get('gripRight')!.clone());
-        if (look.cape) capes.add({ id: sample.id, heading: sample.heading, distance: sample.distance, speed: (sample.speed ?? sample.moving * 1.2) * (1 - transition.value), opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!);
+        if (look.cape) capes.add({ id: sample.id, heading: transition.heading, distance: sample.distance, speed: (sample.speed ?? sample.moving * 1.2) * (1 - transition.seated), opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!, look.capePaint);
         for (const batch of look.batches) {
           const attachment = poses.get(batch.attachment);
           if (!attachment) throw new Error(`Unknown avatar attachment ${batch.attachment}.`);
@@ -226,7 +250,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
             // A continuous voxel skirt follows the lap during the same seated
             // blend as the thighs, instead of sinking into the floor or tearing
             // into separate leg columns. This is not a shared rig/socket change.
-            hemRotation.makeRotationX(-Math.PI / 2 * transition.value);
+            hemRotation.makeRotationX(-Math.PI / 2 * transition.seated);
             matrix.multiplyMatrices(attachment, hemRotation).multiply(batch.pivot);
           } else matrix.multiplyMatrices(attachment, batch.pivot);
           const index = batch.mesh.count++;
@@ -235,7 +259,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           fades.setX(index, Math.max(0, Math.min(1, sample.opacity ?? 1)));
         }
       }
-      for (const id of postureById.keys()) if (!seen.has(id)) postureById.delete(id);
+      for (const id of animationById.keys()) if (!seen.has(id)) animationById.delete(id);
       capes.endFrame();
       for (const mesh of meshes) {
         mesh.instanceMatrix.needsUpdate = true;
@@ -244,6 +268,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     },
     dispose() {
       grips.clear();
+      animationById.clear();
       capes.dispose(); scene.remove(group);
       for (const geometry of geometries) geometry.dispose();
       for (const mesh of meshes) mesh.dispose();
@@ -254,4 +279,4 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
 }
 
 export { createDefaultCitizenLooks } from './default-look';
-export { createStyledCitizenLook, type StyledCitizenLook, type StyledCitizenRecipe } from './style-adapter';
+export { createStyledCitizenLook, createWornCitizenLook, type StyledCitizenLook, type StyledCitizenRecipe } from './style-adapter';

@@ -1,0 +1,3 @@
+2026-11-01 16:03 lane opened: see PRD.
+WT10 checkpoint: six accessible local gesture controls, engraved icons, desktop/phone component review; door recovery rechecks support before grounded jump; needs: authenticated gesture/appearance/terrain seams listed in needs.md; task remains unchecked — aff3fcb — 2026-11-01 16:21
+WT10 checkpoint: worn full-body recipe/cloth-dye bridge, blended gestures and shortest-arc turning, optional authenticated gesture port, label clearance; typecheck/lint/build and focused tests pass, desktop component render looked at; needs: main-owned appearance/gesture/terrain/soft-push seams in needs.md with exact integration.patch; real foot planting and town/stream acceptance still open — d341507 — 2026-11-01 16:31
