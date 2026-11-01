@@ -1,6 +1,6 @@
 # SO10 current checkpoint
 
-The only PRD task remains open. Stay on `lane/soul`; no main writes or pushes. Main was merged cleanly in `70cf816`. The smooth-weather correction is committed in `79f3158`; earlier owned-module and correction commits remain in history.
+The only PRD task remains open. Stay on `lane/soul`; no main writes or pushes. Main was merged cleanly in `70cf816`. The smooth-weather correction is committed in `79f3158`; inspected dusk/partial audio and refreshed integration handoff are in `d91c927`. Earlier owned-module and correction commits remain in history.
 
 ## What is real
 
