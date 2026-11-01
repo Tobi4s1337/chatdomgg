@@ -2,8 +2,10 @@
 
 `channelComposition(broadcasterIdOrLogin)` selects an authored composition by full broadcaster ID.
 The four profiles deliberately change geometry as well as foliage: tobi4s_ frames a mere and gold
-woodland, The_AGGman opens onto a broad harbour, PinkKittyRose follows a cherry-lined river,
-and MashaD4 places the castle below a taller pine-and-birch range. These are reviewed art choices
+woodland, The_AGGman opens a horseshoe harbour, PinkKittyRose spreads across two river banks
+linked by bridges and willows, and MashaD4 climbs terraces into a saddle between two massifs.
+Only the mere has the patchwork fields; harbour structures are specific to the cove. The castle
+is sited in the mere and mountain studies rather than repeated at every town centre. These are reviewed art choices
 for the four proof channels, not claims about their audiences or invented channel facts.
 
 `createComposition(identity)` is a **SIMULATED unoccupied art study**. It combines the compact kits,

@@ -1,0 +1,26 @@
+[
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "street",
+    "size": "390x844"
+  }
+]

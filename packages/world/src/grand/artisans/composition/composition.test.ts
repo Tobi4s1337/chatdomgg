@@ -14,9 +14,12 @@ describe('authored channel compositions', () => {
       const homes = Object.entries(kit.anchors).filter(([id])=>id.startsWith('home-'));
       expect(homes.length).toBeGreaterThan(4);
       for (const [, origin] of homes) {
-        expect(origin[1]).toBe(p.town[1]+1);
-        const support = kit.boxes.some(b=>b.min[0]<=origin[0] && b.min[0]+b.size[0]>origin[0] && b.min[2]<=origin[2] && b.min[2]+b.size[2]>origin[2] && b.min[1]+b.size[1]===origin[1]);
-        expect(support, `${p.login} home foundation`).toBe(true);
+        if (p.character !== 'mountain') expect(origin[1]).toBe(p.town[1]+1);
+        for (let dz=0;dz<24;dz+=2) for (let dx=0;dx<16;dx+=2) {
+          const x=origin[0]+dx, z=origin[2]+dz;
+          const support = kit.boxes.some(b=>b.min[0]<=x && b.min[0]+b.size[0]>x && b.min[2]<=z && b.min[2]+b.size[2]>z && b.min[1]+b.size[1]===origin[1] && b.colour !== '#5a9da5');
+          expect(support, `${p.login} home foundation ${x},${z}`).toBe(true);
+        }
       }
   }, 30000);
 });
