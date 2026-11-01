@@ -25,7 +25,11 @@ const lanePaths: Record<string, string> = {
   '/-/avatars': './avatar-bench/index.tsx', '/-/forge': './forge-bench/index.tsx', '/-/audio': './audio-bench/index.tsx',
 };
 const loadLane = laneViews[lanePaths[window.location.pathname] ?? ''];
-if (/^\/kingdom\/[1-9][0-9]*$/.test(window.location.pathname)) {
+if (window.location.pathname === '/dock' || window.location.pathname === '/dock/') {
+  const { App: Dock } = await import('../../dock/src/App');
+  await import('../../dock/src/style.css');
+  render(() => <Dock />, root);
+} else if (/^\/kingdom\/[1-9][0-9]*$/.test(window.location.pathname)) {
   const { default: GenesisPreview } = await import('./genesis');
   render(() => <GenesisPreview />, root);
 } else if (window.location.pathname === '/-/avatar-builder') {

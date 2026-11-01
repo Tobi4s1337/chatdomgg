@@ -23,3 +23,5 @@ export { homeLifeAnchors, type HomeLifeAnchors } from './home-life';
 export type { RealmFoundedBlueprint, RealmFoundedPlacement, RealmFoundedScene } from './founded-world/types';
 
 export { createKingdomLandInterface, type KingdomLandInterface, type LandGroundSource, type LandGroundAt } from './land-interface';
+
+export * from './grand-adoption';

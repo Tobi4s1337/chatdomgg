@@ -330,55 +330,64 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Outcome: growth you can see.** Homes, civic places, earned card shelves and a scrubbable engine Chronicle.
+**Outcome: one kingdom.** The grand landscape must become the actual signed-in, walking and stream
+kingdom, retaining homes, streets, growth, Forge, live moments, Atlas entry, Chronicle and the dock.
 Forge/window wave ACCEPTED/CLOSED. Preserve dusk exposure, indigo fill/warm pools, castle/beacon,
-sparse grey-violet smoke, land/groves and AS10 citizens. One visible change/turn, same-view before/after.
+sparse grey-violet smoke, sculpted land/groves and AS10 citizens. One visible change per turn;
+look at same-view before/after. Merge checkpoints promptly; no repeated deep audits.
 
-**Growth core:** spec50, shared growth schemas and `@chatdom/world/growth`. Ten confirmed minutes credit
-one UTC session-start date; reconnects/marathons add no days. Offline dates do not break streaks;
-best streak stays. Tent→hut3, cottage7, house30, manor90, hall180 (only hut3 founder-specified;
-others versioned v1 balance). Installed homes keep their floor. Civic levels use size-neutral day gates,
-retaining person-days. No paid inputs, message-count rewards or invented bootstrap attendance.
-Room stream/confirmed-presence facts reduce growth in the fenced transaction; public frames use its
-outbox/watch. `growth.bindHome` verifies installed deed/tier; legacy snapshots replay original facts once.
-Migration0009 additive; new-SQL Vitest needs `--no-fsModuleCache` (persistent transformed glob).
-Two real Postgres cases passed for growth retry/replay and the global three-home bound.
+**Dock seam supplied:** shared royal action/status, private actor, public stage state and bounded
+presentation contracts live in `packages/shared/src/realm/dock.ts`. `apps/realm/src/dock/` owns
+durable commands in the retained writer's fenced transaction (migration0010), independent session
+checks, exact target/raid eligibility, deduplication, quiet state restore and expiry. API forwards
+checked sessions through `/api/dock/*`; its realm target falls back to `CHATDOM_REALM_TARGET`.
+A public OBS feed cannot confirm a command. Only a session-bound presenter grant and an actual
+visible scene draw can witness it; otherwise the result stays unknown. No fake Twitch observations.
+The normal kingdom/stream scene mounts gate/fire/honours/dusk acts, crowd, sound and light sources;
+hidden scene replacements cannot witness or take over the camera. `/dock` is same-origin and linked
+from `/showcase`. DK10 recovery/undo-hint checkpoints merged; shared owns the optional undo list.
+Lane can verify the acts now. Remaining exact needs: verified moderator read grants; directed undo
+with resolved original subject; actual raid welcome sequence and each-act visual verification.
+The gate remains ceremonial, never an admission ban. No arbitrary dragon button.
 
-**Native homes170e73d/0c6440c:** retained writer applies earned authored geometry without a browser.
-Only exact native bytes grow; custom builds remain. Guard replans under deed lock and refits all Forge
-parts, preserving identity/provenance; active Forge reservations postpone growth until release/expiry.
-`home-grown` celebrates geometry commit, never eligibility alone. Viewed1920×1080 hut/cottage pair in
-`work/evidence/growth-home/`: obvious rear wing, stable door. SIMULATED founded renderer, not a ceremony.
-**Stream handoff:** old town now keeps drawing while at most one hidden replacement warms; swap only
-after its loaded draw. Camera blends into the continuing director; crowd motion transfers after old stops.
-Hidden renderer cannot consume/settle the visible Forge feed or publish labels. Revision keeps only the
-original presence lease, never extends it. Timeout/failure/hiding release owned resources; retries remain.
-Focused mount/Forge/crowd/observer/lease tests, scoped lint, typecheck and web build pass.
-Before/after capture helper: `packages/testing/growth-handoff.mjs`; staged SIMULATED actual stream revision.
+**Growth:** spec50, shared schemas and `@chatdom/world/growth`; migration0009. Ten confirmed
+minutes credit one UTC session-start date; offline dates do not break streaks. No paid inputs or
+message-count rewards. Native geometry grows on the retained writer; exact custom builds remain.
+Deed-locked refits preserve Forge parts; active reservations postpone replacement. `home-grown`
+means geometry committed, never eligibility alone. Ceremony is mounted on the existing stream
+scene with old/new plot revisions, scaffold, courses, roof seating and hearth catch. Entitlement-only
+beats are filtered from simulated history (GH02 merged). **Cottage art still needs a full second
+storey, higher roofline, more warm panes and garden/fence:** an extension is insufficient.
+Five growth lanes: card/civic/history/Chronicle checkpoints continue; GCR01/02 crier and GH01/02
+history are merged and their workers can retire once synced. Production crier send/ack, earned
+shelf binding and a watched engine Chronicle run remain. Keep the accepted card/caption treatment.
 
-**Next:** mount GR10 scaffold/storey/chimney/neighbours on the delivered geometry beat and inspect it on
-stream. New deeds still inherit standing native tiers: apply starter/tent policy without reducing existing
-homes. Follow-tenure pieces, custom-build depth, earned keepsake ledger and historical replay are open.
-Growth lane owns `apps/web/src/growth/**` (WIP preserved, no runtime checkpoint yet). Specs51–55 own civic
-craft, card shelf, crier, Chronicle and seeded history independently. Feeds already reach walking/stream
-SceneOptions; bootstrap is quiet. Brief0034 exists in conductor briefs; old depth-progression file absent.
+**Grand architecture:** spec56 and `@chatdom/world` land interface frozen. New immutable physical
+page dispatcher is `packages/world/src/grand-adoption/`; absent physical pages are solid, far visual
+terrain is never collision authority. Production adoption keeps the existing Three scene, camera,
+post/light and lifecycle: one terrain-only hosted owner, exact graded/paved adopted floors, inverse
+seat transform on land-local shaders and actual content hashes. No moved doors/plots/Forge/walkers,
+no second renderer or duplicate town. Exact producer needs are in the grand lane progress files;
+`work/reviews/grand-adoption.md` maps integration sites. GK10/GK11/artisans source WIP is preserved,
+not yet adopted. Real-GPU scale/performance and far physical streaming remain unproved.
 
-**Checkpoint integration:** live-twitch LT10 and raid-road RR10 reviewed with focused tests and existing
-1920×1080 evidence; incoming raid now uses destination momentFeed rather than an SVG arrival. Dragon
-restoration retains bounded pending strikes before replaying normal battle/cadence checks. Next pictures:
-AS10 departure gate party instead of paper figures; dragon larger/warm-rimmed in closer battle framing.
-Real Twitch cheer/train/raid remains unproved; CLI exits99, signed fixture fallback is explicit SIMULATED.
-Prior merges: growth PRD1207db1, raid-road87b79a8, Aggman harbourf027d66/1e33a90. Berth-margin WIP untouched.
+**Other checkpoints:** walking appearance/gesture/door-support work, Chronicle replacement/seek
+work and Soul keepers/weather/audio checkpoints merged. Camera test now waits for actual fixed-step
+movement/ack before injecting drift; runtime thresholds unchanged. Public walking appearance/gesture
+authority and production keeper topology/mount remain seams, not reasons to duplicate systems.
+LT10/RR10 are in; live-Twitch and Atlas-door producer WIP/shared proposals are not blanket-approved.
+Parked campfire/tavern work stays parked; never merge a half-finished replacement.
 
-**Live services:** Herald5194 healthy, all13 subscriptions enabled (bits.use + three hype v2), pending0,
-faultnull; realm5197 ready200. Channel offline at check; no reauthorization or waiting observer needed.
-Managed5190web/5196API/5197realm/5195Forge/5194Herald; logs ONLY `../conductor/state/services.log`.
-Native additive binding reuses adopted240-plot scene; cold new-deed latency remains weak. Owned smoke
-schema `main_live_smoke_20261101` remains; owned5172/5173 stopped; no duplicate live writer.
+**Checks/captures:** focused PG dock lifecycle, API/session/recovery/contracts, grand collision,
+Soul/audio/Chronicle and render integration tests; scoped lint/typecheck/build. No full-suite or
+new GPU claim. Actual `/dock` desktop/mobile sign-in captures viewed; fire rehearsal is explicitly
+SIMULATED and cannot issue a realm receipt. Showcase before/after from this turn were identical
+and are not a valid change pair. Capture queue now has one reserved main place and two FIFO lane
+places; UUID lifetime flocks survive PID namespaces and reap orphaned tickets (18 tests).
 
-**Picture handoffs:** sky uses drawn terrain; groves/land accepted. Aggman/PinkKittyRose harbour/crossing
-accepted; keeper/sound mounts open. Current Atlas survey lacks Aggman63920635: never fabricate a holding.
-Opening `/stream?source=simulated&tier=town&hour=19.5&seam=starting`: window immediate, wide0–8s,
-street8–12s, return24–36s; lantern/smoke on arrival. Original curtain alarm was sleeping Chrome.
-Capture queues once20min, one still/short clip per lease, cleanup in finally. Preserve stash
-7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.
+**Live:** managed5190 web/5196 API/5197 realm/5195 Forge/5194 Herald. Logs ONLY
+`../conductor/state/services.log`. Ignored root environment now supplies the missing internal realm
+service secret; public dock SSE returned200 after managed restart, without a presenter grant.
+No Twitch writes, duplicate writer or waiting live observer this turn. Preserve existing lane WIP
+and stashes; Atlas still must not fabricate a missing holding. Next: finish dock visual verification,
+then adopt the exact grand surface and make the stronger home tier visible in the same kingdom.
