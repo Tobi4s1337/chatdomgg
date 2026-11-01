@@ -3,12 +3,17 @@ import type { RealmPublicMessage, RealmWriterLease } from '@chatdom/shared/realm
 import { MOMENT_FACT_TYPE, MOMENT_MESSAGE_BYTES, TwitchMomentFactSchema, type TwitchMomentFact } from '@chatdom/shared/twitch-moments';
 import type pg from 'pg';
 import type { MomentRecordPort, MomentRecordTransaction } from '../../../herald/src/twitch-moments/ports';
-import { CurrentIndexSchema, ForwardRecordSchema, GiftGroupRecordSchema, GifterWindowRecordSchema, SubscriberRecordSchema,
-  WatermarkSchema, WrappingRecordSchema, momentRepository } from '../../../herald/src/twitch-moments/records';
+import { BattleRecordSchema, CurrentIndexSchema, CurrentSlotRecordSchema, ForwardRecordSchema, GiftGroupRecordSchema, GifterWindowRecordSchema,
+  HypeTrainRecordSchema, SubscriberRecordSchema, WatermarkSchema, WrappingRecordSchema, momentRepository } from '../../../herald/src/twitch-moments/records';
+import { DragonRecordSchema } from './dragon-record';
 import { RealmCommitUncertainError, RealmStorageUnavailableError, RealmWriterFencedError, type RealmDatabase } from '../persistence/database';
 
 const NOW_MS = 'floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint';
 const KEY = /^twitch-moments:([a-z-]+)(?::([A-Za-z0-9_.:-]{1,160}))?$/u;
+/** Families written only by `claim`: once true, never changed. */
+const CLAIMS: ReadonlySet<string> = new Set(['delivery', 'observation', 'summon', 'battle-revision']);
+/** Families whose occupant may be cleared: `put(key, null)` leaves a cleared row, read back as absent. */
+const CLEARABLE: ReadonlySet<string> = new Set(['current', 'current-slot']);
 // The bounded private gift ledger can contain 100,000 recipients. Public facts remain capped at 256 KiB.
 const RECORD_BYTES = 32 * 1024 * 1024;
 
@@ -46,14 +51,14 @@ export function createPostgresMomentRecords(db: RealmDatabase, lease: RealmWrite
           async put(key, value) {
             check();
             const parsed = normalize(key, value);
-            if (recordKey(key).family === 'delivery' || recordKey(key).family === 'observation') throw new TypeError('Claims use claim()');
+            if (CLAIMS.has(recordKey(key).family)) throw new TypeError('Claims use claim()');
             const encoded = boundedJson(parsed, RECORD_BYTES);
             await sql.query(`INSERT INTO realm_moment_values (kingdom_id, record_key, value) VALUES ($1, $2, $3)
               ON CONFLICT (kingdom_id, record_key) DO UPDATE SET value = excluded.value`, [kingdomId, key, encoded]);
           },
           async claim(key) {
             check(); const { family, id } = recordKey(key);
-            if (!id || (family !== 'delivery' && family !== 'observation')) throw new TypeError('Only delivery and observation keys are claims');
+            if (!id || !CLAIMS.has(family)) throw new TypeError('Only delivery, observation, summon and battle-revision keys are claims');
             const claimed = await sql.query('INSERT INTO realm_moment_values (kingdom_id, record_key, value) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [kingdomId, key, 'true']);
             return claimed.rowCount === 1;
           },
@@ -109,10 +114,15 @@ function recordKey(key: string): { family: string; id: string | undefined } {
 /** Strict record schemas are the only storage entrance: extra provider fields are rejected, never serialized. */
 function normalizedRecord(key: string, value: unknown, kingdomId: string, origin: string): unknown {
   const { family, id } = recordKey(key);
+  if (value === null && CLEARABLE.has(family)) return null;
   switch (family) {
-    case 'delivery': case 'observation':
+    case 'delivery': case 'observation': case 'summon': case 'battle-revision':
       if (!id || value !== true) break;
       return true;
+    case 'hype-train': { const r = HypeTrainRecordSchema.parse(value); if (id === r.trainKey) return r; break; }
+    case 'battle': { const r = BattleRecordSchema.parse(value); if (id === r.battleKey) return r; break; }
+    case 'dragon': { const r = DragonRecordSchema.parse(value); if (id === r.battleKey) return r; break; }
+    case 'current-slot': if (id === 'hype' || id === 'battle') return CurrentSlotRecordSchema.parse(value); break;
     case 'subscriber': { const r = SubscriberRecordSchema.parse(value); if (id === r.personId) return r; break; }
     case 'gift-group': { const r = GiftGroupRecordSchema.parse(value); if (id === r.groupKey) return r; break; }
     case 'wrapping': { const r = WrappingRecordSchema.parse(value); if (id === `${r.personId}:${r.groupKey}`) return r; break; }

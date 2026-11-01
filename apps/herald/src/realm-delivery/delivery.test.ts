@@ -1,14 +1,14 @@
 import { KingdomIdSchema, PersonIdSchema, type PresenceInput } from '@chatdom/shared';
-import { RealmHeraldEnvelopeSchema } from '@chatdom/shared/realm';
+import { RealmHeraldEnvelopeSchema, type RealmMomentObservation, type RealmStrike } from '@chatdom/shared/realm';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ChatIngest } from '../ingest/ingest';
 import { planSubscriptions, type HeraldEventType } from '../ingest/subscriptions';
 import { MemoryBindingStore } from '../source/bindings';
 import { PresenceSource } from '../source/source';
-import { RealmDelivery } from './delivery';
+import { MAX_SPECTACLES, MAX_STRIKES_IN_FLIGHT, RealmDelivery, SPECTACLE_LIFETIME_MS } from './delivery';
 
 it('signs person-bound transient delivery, sends cleanup immediately, and retries only normalized durable evidence after restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'chatdom-herald-delivery-'));
@@ -132,4 +132,187 @@ it('persists only verified normalized support and retries it after restart', asy
   } finally {
     await sender.close(); await rm(directory, { recursive: true, force: true });
   }
+});
+
+describe('spectacles', () => {
+  const kingdomId = KingdomIdSchema.parse('123'), start = 1_800_000_000_000, retryMs = 1_000;
+  const secret = 'simulated-service-secret-000000000000';
+  const raid = (id: string, at: number): RealmMomentObservation => ({ version: 1, id, kingdomId, origin: 'live', occurredAt: at, receivedAt: at,
+    notice: { kind: 'raid', from: { kingdomId: KingdomIdSchema.parse('555'), login: 'neighbour', name: 'SIMULATED Neighbour' }, viewers: 12 } });
+  const strike = (messageId: string, at: number): RealmStrike => ({ version: 1, kingdomId, personId: PersonIdSchema.parse('789'), messageId,
+    origin: 'live', observedAt: at });
+  const presence = (id: string, at: number): PresenceInput => ({ version: 1, id, kingdomId, kind: 'stream', origin: 'live', observedAt: at,
+    live: true, sessionId: 'session:simulated' });
+
+  /** A realm that answers each kind of evidence on its own terms, and a clock the test moves. */
+  async function rig() {
+    const directory = await mkdtemp(join(tmpdir(), 'chatdom-spectacle-delivery-'));
+    const clock = { now: start };
+    const realm = { moments: 503, observations: 202, strikes: 202, hold: null as Promise<void> | null, holdObservations: null as Promise<void> | null };
+    const attempts: Array<{ path: string; authorization: string | null; body: Record<string, unknown> }> = [];
+    const request: typeof fetch = async (url, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      attempts.push({ path: new URL(String(url)).pathname, authorization: new Headers(init?.headers).get('authorization'), body });
+      if ('strike' in body && realm.hold) await realm.hold;
+      if ('observation' in body && realm.holdObservations) await realm.holdObservations;
+      const status = 'moment' in body ? realm.moments : 'strike' in body ? realm.strikes : realm.observations;
+      return Response.json({ version: 1, status: status === 202 ? 'accepted' : 'busy' }, { status });
+    };
+    const options = { url: 'http://127.0.0.1:5191', secret, directory, origin: 'live' as const, fetch: request, now: () => clock.now, retryMs };
+    const files = async () => (await readdir(directory)).filter(file => file.endsWith('.json'));
+    const of = (kind: 'moment' | 'strike' | 'observation') => attempts.filter(attempt => kind in attempt.body);
+    return { directory, clock, realm, attempts, options, files, of, cleanup: () => rm(directory, { recursive: true, force: true }) };
+  }
+
+  it('posts a moment to the realm ingress with the bearer and forgets it once the realm takes it', async () => {
+    const r = await rig(); r.realm.moments = 202;
+    const sender = await RealmDelivery.open(r.options);
+    try {
+      const moment = raid('raid-1', start);
+      await sender.moment(moment); await sender.flush();
+      expect(r.of('moment')).toEqual([{ path: '/internal/realm/ingress', authorization: `Bearer ${secret}`, body: { version: 1, moment } }]);
+      expect(sender.health()).toMatchObject({ pending: 0, spectacles: 0, bytes: 0, fault: null, counters: { accepted: 1, delivered: 1 } });
+      expect(await r.files()).toEqual([]);
+    } finally { await sender.close(); await r.cleanup(); }
+  });
+
+  it('keeps a moment the realm has not taken across a restart and delivers it from the outbox', async () => {
+    const r = await rig();
+    let sender = await RealmDelivery.open(r.options);
+    try {
+      const moment = raid('raid-1', start);
+      await sender.moment(moment);
+      await vi.waitFor(() => expect(sender.health().counters.retries).toBe(1));
+      expect(sender.health()).toMatchObject({ pending: 1, spectacles: 1, fault: null });
+      await sender.close();
+      const files = await r.files();
+      expect(files).toHaveLength(1);
+      expect(JSON.parse(await readFile(join(r.directory, files[0]!), 'utf8'))).toEqual({ version: 1, moment });
+
+      r.realm.moments = 202; const before = r.attempts.length;
+      sender = await RealmDelivery.open(r.options); await sender.flush();
+      expect(r.attempts.slice(before)).toEqual([{ path: '/internal/realm/ingress', authorization: `Bearer ${secret}`, body: { version: 1, moment } }]);
+      expect(sender.health()).toMatchObject({ pending: 0, spectacles: 0, counters: { delivered: 1 } });
+      expect(await r.files()).toEqual([]);
+    } finally { await sender.close(); await r.cleanup(); }
+  });
+
+  it('never holds presence behind a spectacle the realm refuses, and retries the spectacle on its own backoff', async () => {
+    const r = await rig();
+    const sender = await RealmDelivery.open(r.options);
+    try {
+      await sender.moment(raid('raid-1', start));
+      await sender.observation(presence('stream:start', start));
+      await vi.waitFor(() => expect(sender.health().counters.delivered).toBe(1));
+      expect(r.of('observation')).toHaveLength(1);
+      expect(r.of('moment')).toHaveLength(1);
+      expect(sender.health()).toMatchObject({ pending: 1, spectacles: 1, fault: null, counters: { retries: 1 } });
+
+      // Later presence still flows while the spectacle waits for its clock.
+      await sender.observation(presence('stream:again', start + 10)); await sender.flush();
+      expect(r.of('observation')).toHaveLength(2);
+      expect(r.of('moment')).toHaveLength(1);
+
+      r.clock.now = start + retryMs - 1; await sender.flush();
+      expect(r.of('moment')).toHaveLength(1);
+      r.clock.now = start + retryMs; await sender.flush();
+      expect(r.of('moment')).toHaveLength(2);
+      // The second refusal doubles the wait.
+      r.clock.now = start + retryMs + 2 * retryMs - 1; await sender.flush();
+      expect(r.of('moment')).toHaveLength(2);
+      r.realm.moments = 202;
+      r.clock.now = start + 3 * retryMs; await sender.flush();
+      expect(r.of('moment')).toHaveLength(3);
+      expect(sender.health()).toMatchObject({ pending: 0, spectacles: 0, fault: null, counters: { delivered: 3, retries: 2, expired: 0 } });
+      expect(await r.files()).toEqual([]);
+    } finally { await sender.close(); await r.cleanup(); }
+  });
+
+  it('sends a spectacle ahead of the presence a chat burst has queued, so the beat is not late', async () => {
+    const r = await rig(); r.realm.moments = 202;
+    let release!: () => void;
+    r.realm.holdObservations = new Promise<void>(resolve => { release = resolve; });
+    const sender = await RealmDelivery.open(r.options);
+    try {
+      // The realm is still taking the first presence post when the burst and then the spectacle arrive.
+      void sender.observation(presence('chat:0', start));
+      await vi.waitFor(() => expect(r.of('observation')).toHaveLength(1));
+      for (let i = 1; i <= 3; i++) await sender.observation(presence(`chat:${i}`, start + i));
+      await sender.moment(raid('raid-1', start + 4));
+      r.realm.holdObservations = null; release();
+      await vi.waitFor(() => expect(sender.health().pending).toBe(0));
+      const order = r.attempts.map(attempt => 'moment' in attempt.body ? 'moment' : String((attempt.body.observation as { id: string }).id));
+      expect(order).toEqual(['chat:0', 'moment', 'chat:1', 'chat:2', 'chat:3']);
+    } finally { await sender.close(); await r.cleanup(); }
+  });
+
+  it('lets a spectacle go as expired once its lifetime has passed rather than retrying it forever', async () => {
+    const r = await rig();
+    const sender = await RealmDelivery.open(r.options);
+    try {
+      await sender.moment(raid('raid-1', start));
+      await vi.waitFor(() => expect(sender.health().counters.retries).toBe(1));
+      r.clock.now = start + SPECTACLE_LIFETIME_MS; await sender.flush();
+      expect(r.of('moment')).toHaveLength(2);
+      expect(sender.health()).toMatchObject({ spectacles: 1, counters: { expired: 0 } });
+      r.clock.now = start + SPECTACLE_LIFETIME_MS + 2 * retryMs; await sender.flush();
+      expect(r.of('moment')).toHaveLength(3);
+      expect(sender.health()).toMatchObject({ pending: 0, spectacles: 0, counters: { expired: 1, delivered: 0 } });
+      expect(await r.files()).toEqual([]);
+      r.clock.now += 60 * 60_000; await sender.flush();
+      expect(r.of('moment')).toHaveLength(3);
+    } finally { await sender.close(); await r.cleanup(); }
+  });
+
+  it('holds at most its spectacle cap waiting and still takes presence beyond it', async () => {
+    const r = await rig();
+    const sender = await RealmDelivery.open(r.options);
+    try {
+      for (let i = 0; i < MAX_SPECTACLES; i++) await sender.moment(raid(`raid-${i}`, start));
+      expect(sender.health()).toMatchObject({ spectacles: MAX_SPECTACLES, counters: { accepted: MAX_SPECTACLES, refused: 0 } });
+      await sender.moment(raid('raid-overflow', start));
+      expect(sender.health()).toMatchObject({ spectacles: MAX_SPECTACLES, fault: 'capacity', counters: { accepted: MAX_SPECTACLES, refused: 1 } });
+      expect(await r.files()).toHaveLength(MAX_SPECTACLES);
+      await sender.observation(presence('stream:start', start)); await sender.flush();
+      expect(r.of('observation')).toHaveLength(1);
+      expect(sender.health()).toMatchObject({ pending: MAX_SPECTACLES, counters: { accepted: MAX_SPECTACLES + 1, delivered: 1 } });
+    } finally { await sender.close(); await r.cleanup(); }
+  }, 60_000);
+
+  it('relays a strike once and transiently, never into the outbox, and drops it when its chat is gone or the crowd is too many', async () => {
+    const r = await rig();
+    const sender = await RealmDelivery.open(r.options);
+    try {
+      sender.strike(strike('strike-1', start), () => true);
+      await vi.waitFor(() => expect(sender.health().counters.strikesSent).toBe(1));
+      expect(r.of('strike')).toEqual([{ path: '/internal/realm/ingress', authorization: `Bearer ${secret}`, body: { version: 1, strike: strike('strike-1', start) } }]);
+      expect(await r.files()).toEqual([]);
+      expect(sender.health()).toMatchObject({ pending: 0, counters: { accepted: 0, strikesSent: 1, strikesDropped: 0 } });
+
+      sender.strike(strike('strike-gone', start), () => false);
+      sender.strike({ ...strike('strike-simulated', start), origin: 'simulated' }, () => true);
+      expect(sender.health().counters).toMatchObject({ strikesSent: 1, strikesDropped: 2 });
+
+      r.realm.strikes = 503;
+      sender.strike(strike('strike-refused', start), () => true);
+      await vi.waitFor(() => expect(sender.health().counters.strikesDropped).toBe(3));
+      expect(r.of('strike')).toHaveLength(2);
+
+      r.realm.strikes = 202;
+      let release!: () => void;
+      r.realm.hold = new Promise(resolve => { release = resolve; });
+      for (let i = 0; i < MAX_STRIKES_IN_FLIGHT; i++) sender.strike(strike(`strike-crowd-${i}`, start), () => true);
+      sender.strike(strike('strike-one-too-many', start), () => true);
+      expect(sender.health().counters).toMatchObject({ strikesSent: 1, strikesDropped: 4 });
+      release();
+      await vi.waitFor(() => expect(sender.health().counters.strikesSent).toBe(1 + MAX_STRIKES_IN_FLIGHT));
+      expect(r.of('strike')).toHaveLength(2 + MAX_STRIKES_IN_FLIGHT);
+      expect(r.of('strike').some(attempt => (attempt.body.strike as RealmStrike).messageId === 'strike-one-too-many')).toBe(false);
+      // Room again once the crowd's strikes have landed; none of them was ever written down.
+      sender.strike(strike('strike-after', start), () => true);
+      await vi.waitFor(() => expect(sender.health().counters.strikesSent).toBe(2 + MAX_STRIKES_IN_FLIGHT));
+      expect(sender.health()).toMatchObject({ pending: 0, counters: { accepted: 0, retries: 0 } });
+      expect(await r.files()).toEqual([]);
+    } finally { await sender.close(); await r.cleanup(); }
+  });
 });

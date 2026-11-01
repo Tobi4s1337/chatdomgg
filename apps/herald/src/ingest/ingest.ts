@@ -3,7 +3,8 @@ import {
   AuthorizationRevokeEventSchema, ChatClearEventSchema, ChatClearUserMessagesEventSchema, ChatMessageDeleteEventSchema,
   ChatMessageEventSchema, type DeliveryFrame, matchesRequest, StreamOfflineEventSchema, StreamOnlineEventSchema,
 } from '@chatdom/twitch';
-import { RealmSupportObservationSchema } from '@chatdom/shared/realm';
+import { RealmMomentObservationSchema, RealmSupportObservationSchema } from '@chatdom/shared/realm';
+import { isStrike, spectacleNotice } from './spectacles';
 import { channelChatNotification } from '../twitch-moments/notices';
 import { IGNORED } from '../twitch-moments/normalizer';
 import { toPresenceInput, type Observation } from '../source/observations';
@@ -56,6 +57,10 @@ export interface IngestCounters {
   notLive: number;
   revocations: number;
   authorizationRevokes: number;
+  /** Bits, Hype Train and raid notifications handed to the realm's durable outbox. */
+  spectacles: number;
+  /** `!strike` messages relayed to the realm's battle. */
+  strikes: number;
 }
 
 /** One chat act's timing, numbers only: when Twitch stamped it, when it reached us and when its frame went out. */
@@ -136,6 +141,7 @@ export class ChatIngest {
     deliveries: 0, duplicateDeliveries: 0, duplicateMessages: 0, malformed: 0, unverified: 0, notCovered: 0, future: 0,
     expired: 0, preStart: 0, tombstoned: 0, sharedChatGuests: 0, canceled: 0, pendingOverflow: 0, chatSubmitted: 0,
     deletes: 0, userClears: 0, roomClears: 0, streamChanges: 0, notLive: 0, revocations: 0, authorizationRevokes: 0,
+    spectacles: 0, strikes: 0,
   };
   #roomClearedAt = -1;
   #lastChatAt: number | null = null;
@@ -193,6 +199,9 @@ export class ChatIngest {
       case 'stream.online': return this.#online(frame.event, at);
       case 'stream.offline': return this.#offline(frame.event, at);
       case 'user.authorization.revoke': return this.#authorizationRevoke(frame.event);
+      case 'channel.bits.use': case 'channel.hype_train.begin': case 'channel.hype_train.progress': case 'channel.hype_train.end':
+      case 'channel.raid':
+        return this.#spectacle(plan.type, frame.event, frame.meta.messageId, at, receivedAt);
     }
   }
 
@@ -237,6 +246,22 @@ export class ChatIngest {
       origin: this.#options.source.origin, occurredAt: at, receivedAt, notice });
     if (!result.success) { this.#counters.malformed++; return; }
     void this.#options.realm?.support?.(result.data).catch(() => undefined);
+  }
+
+  /**
+   * Bits, the Hype Train and incoming raids. Verified frames from our own conduit; they do not wait for chat
+   * coverage, because they light no window and name nobody beyond what Twitch made public.
+   */
+  #spectacle(type: HeraldEventType, raw: unknown, id: string, at: number | null, receivedAt: number): void {
+    if (at === null) { this.#counters.future++; return; }
+    const notice = spectacleNotice(type, raw, this.kingdomId);
+    if (notice === IGNORED) return;
+    if (notice === null) { this.#counters.malformed++; return; }
+    const result = RealmMomentObservationSchema.safeParse({ version: 1, id, kingdomId: this.kingdomId,
+      origin: this.#options.source.origin, occurredAt: at, receivedAt, notice });
+    if (!result.success) { this.#counters.malformed++; return; }
+    this.#counters.spectacles++;
+    void this.#options.realm?.moment?.(result.data).catch(() => undefined);
   }
 
   #chat(raw: unknown, at: number | null, receivedAt: number): void {
@@ -287,12 +312,18 @@ export class ChatIngest {
     this.#counters.chatSubmitted++;
     this.#lastChatAt = receivedAt;
     const words = this.#forge || this.#options.realm ? extractForgeWords(raw) : null;
+    const strike = this.#options.realm ? isStrike(raw) : false;
     const parts = this.#options.realm ? speechParts(raw) : [];
     const valid = () => !pending.canceled && this.#options.covered();
     const broadcast = this.#options.forge?.broadcast, generation = broadcast?.generation, liveAtReceipt = broadcast?.live;
     const forgeValid = () => valid() && liveAtReceipt === true && broadcast?.generation === generation;
     void this.#options.source.submit(input, valid).then(result => {
       this.#settled(event.message_id, pending, result);
+      if (result === 'applied' && strike && valid() && this.#options.realm?.strike) {
+        this.#counters.strikes++;
+        this.#options.realm.strike({ version: 1, kingdomId: this.kingdomId, personId: PersonIdSchema.parse(event.chatter_user_id),
+          messageId: event.message_id, origin: this.#options.source.origin, observedAt: at }, valid);
+      }
       if (result === 'applied' && valid()) this.#options.realm?.speech({ kingdomId: this.kingdomId,
         personId: PersonIdSchema.parse(event.chatter_user_id), messageId: event.message_id,
         observedAt: at, parts, words }, valid);
@@ -411,7 +442,7 @@ export class ChatIngest {
 
   #input(observation: Observation) {
     try {
-      return toPresenceInput(observation, this.kingdomId, 'live');
+      return toPresenceInput(observation, this.kingdomId, this.#options.source.origin);
     } catch {
       this.#counters.malformed++;
       return null;

@@ -32,6 +32,8 @@ export type IngressReply =
 export class RealmIngress {
   readonly gate: IngressGate;
   readonly inbox: PostgresIngressInbox;
+  /** The town's spectacles and the dragon's battles share the moment records. */
+  get moments(): RealmSupportIngress { return this.support; }
   private services: DurableRealmServices | null = null;
   private readonly drains = new Map<KingdomId, KingdomDrain>();
   private readonly keep = new Map<KingdomId, { hold: DurableKingdomHold; timer: ReturnType<typeof setTimeout> }>();
@@ -65,6 +67,10 @@ export class RealmIngress {
     if (admitted.kind === 'support') return this.stopped
       ? { http: 503, body: { version: 1, status: 'unavailable', message: 'The realm is stopping; send this act again.' } }
       : this.support.accept(admitted.observation);
+    if (admitted.kind === 'moment') return this.stopped
+      ? { http: 503, body: { version: 1, status: 'unavailable', message: 'The realm is stopping; send this act again.' } }
+      : this.support.acceptMoment(admitted.observation);
+    if (admitted.kind === 'strike') return { http: 202, body: { version: 1, status: this.support.strike(admitted.strike) === 'accepted' ? 'accepted' : 'absent' } };
     if (admitted.kind === 'cue') {
       const kingdom = this.services?.kingdoms.get(admitted.kingdomId);
       const relayed = kingdom?.transient({ type: 'chat', cue: admitted.cue }) ?? false;
@@ -93,18 +99,20 @@ export class RealmIngress {
 
   /** Registry hook: drain this kingdom's inbox and observe its walkers while it is open here. */
   attach(kingdom: DurableKingdom): () => void {
+    const detachBattles = this.support.battles.attach(kingdom);
     const drain = new KingdomDrain(kingdom, this.inbox, this.log);
     const walkers = new WalkerPresence(kingdom, this, drain);
     this.drains.set(kingdom.kingdomId, drain);
     drain.kick();
     return () => {
-      walkers.stop(); drain.stop();
+      detachBattles(); walkers.stop(); drain.stop();
       if (this.drains.get(kingdom.kingdomId) === drain) this.drains.delete(kingdom.kingdomId);
     };
   }
 
   async stop() {
     this.stopped = true;
+    this.support.battles.stop();
     if (this.sweep) clearInterval(this.sweep);
     const held = [...this.keep.values()];
     this.keep.clear();

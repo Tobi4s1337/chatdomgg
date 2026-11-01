@@ -114,7 +114,7 @@ class Timeline {
  * One prepared part drawn many times with the kingdom clay. The geometry is a clone of the host's prepared mesh
  * (which stays the host's), carrying its own per-instance dissolve: the clay's `aLodFade` dither.
  */
-class Pool {
+export class Pool {
   readonly mesh: THREE.InstancedMesh;
   private readonly fades: THREE.InstancedBufferAttribute;
   count = 0;

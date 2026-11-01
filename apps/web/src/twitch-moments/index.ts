@@ -10,6 +10,7 @@ export {
   type StageProfile, type StageReach,
 } from './stage-beat';
 export { BANNER_BEAT, MONTH_RIBBONS, MOMENT_LIMITS } from './choreography';
+export { RAID_BEAT, RAID_DETAIL, RAID_LIMITS, raidLine, raidUnits, type RaidFrame } from './raid-beat';
 export {
   DEFAULT_CHEER_LADDER, DRAGON_BEAT, DRAGON_FORMS, POWER_UP_BEAT, SKY_BEAT, SKY_LIMITS, SKY_MERGE_MS, SKY_RUNGS, TRAIN_BEAT, WYRM_BELL, rungFor,
   type ApprovedEffect, type BattleStatus, type DragonForm, type DragonFrame, type KingdomScale, type LadderStep, type SkyBeatFrame, type SkyRung,

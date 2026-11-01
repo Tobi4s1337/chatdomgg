@@ -21,3 +21,18 @@ it('freezes stripped private support evidence separately from its public committ
   expect(TwitchMomentFactSchema.safeParse({ ...fact, personId: '123' }).success).toBe(false);
   expect(TwitchMomentFactSchema.safeParse({ ...fact, actor: '123' }).success).toBe(false);
 });
+
+it('carries spectacle evidence additively, stripped of messages and amounts it never needs', async () => {
+  const { RealmMomentObservationSchema, RealmStrikeSchema } = await import('./moments');
+  const base = { version: 1, id: 'eventsub:bits:1', kingdomId: '129634568', origin: 'live', occurredAt: 1000, receivedAt: 1100 };
+  const cheer = { ...base, notice: { kind: 'bits', payer: { personId: '41245072', name: 'fernwood' }, act: { kind: 'cheer', bits: 5000 } } };
+  expect(RealmMomentObservationSchema.parse(cheer)).toEqual(cheer);
+  expect(RealmMomentObservationSchema.safeParse({ ...cheer, notice: { ...cheer.notice, message: 'Cheer5000 hi' } }).success).toBe(false);
+  const raid = { ...base, notice: { kind: 'raid', from: { kingdomId: '41245072', login: 'fernwood', name: 'fernwood' }, viewers: 140 } };
+  expect(RealmMomentObservationSchema.parse(raid)).toEqual(raid);
+  expect(RealmMomentObservationSchema.safeParse({ ...raid, notice: { ...raid.notice, viewers: 0 } }).success).toBe(false);
+  expect(RealmSupportObservationSchema.safeParse(cheer).success).toBe(false);
+  const strike = { version: 1, kingdomId: '129634568', personId: '41245072', messageId: 'm-1', origin: 'live', observedAt: 1000 };
+  expect(RealmStrikeSchema.parse(strike)).toEqual(strike);
+  expect(RealmStrikeSchema.safeParse({ ...strike, damage: 99 }).success).toBe(false);
+});

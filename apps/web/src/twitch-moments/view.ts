@@ -8,6 +8,7 @@ import { CameraPoseSchema, type CameraPose } from './contracts';
 import type { FocusFrame, HomeDressFrame, MomentCue, MomentFrame, MomentPlace, MomentSubject, Tint } from './controller';
 import { createDragonLayer } from './dragon-view';
 import { createGiftLayer, type DoorAnchor, type GiftRoute, type PlaceAnchor } from './gift-view';
+import { createRaidLayer } from './raid-view';
 import { createSkyFlightLayer } from './sky-flight-view';
 import { createSkyLightLayer } from './sky-light-view';
 import type { CrowdCall } from './stage-beat';
@@ -176,6 +177,9 @@ export function createTwitchMomentView(host: MomentViewHost) {
   const door = (slot: number): DoorAnchor | null => host.doorAnchor?.(slot) ?? host.homeAnchor(slot);
   const gifts = createGiftLayer(root, { kit: host.kit, door, place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null,
     mesh: (blueprint, offset) => meshOf(blueprint, offset) });
+  // The Raid Gate and its caravan, on the same supplied gate and road as the gift cart.
+  const raid = createRaidLayer(root, { kit: host.kit, material: host.material, mesh: (blueprint, offset) => meshOf(blueprint, offset),
+    place: place => host.placeAnchor?.(place) ?? null, route: () => host.giftRoute?.() ?? null });
 
   // The spectacle layers: the sky's light, what flies through it, the festival train and the dragon.
   const places = host.places ?? NO_PLACES;
@@ -187,7 +191,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
 
   /** Mesh every banner and gift part before the first meaningful frame, so no beat waits on a worker. */
   async function prepare(): Promise<void> {
-    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...spectacles.flatMap(layer => layer.blueprints())];
+    const parts: VoxelBlueprint[] = [bannerBracket(host.kit), ...RIBBON_SLOTS.flatMap((_, i) => [bannerRibbon(host.kit, i), bannerRibbon(host.kit, i, true)]), ...gifts.blueprints(), ...raid.blueprints(), ...spectacles.flatMap(layer => layer.blueprints())];
     for (const tier of BANNER_TIERS) {
       const p = bannerParts(tier, host.kit);
       parts.push(p.head, p.roll, p.rollLapsed, ...p.rows, ...p.shimmer.flat());
@@ -599,9 +603,16 @@ export function createTwitchMomentView(host: MomentViewHost) {
   }
 
   const MOVING = new Set<string>(['train', 'dragon']);
+  /** While a raid holds the gate: from over the road inside the town, looking back at the standard and the column. */
+  const raidShot = () => {
+    if (!lastFrame?.visible || lastFrame.raids.length === 0) return null;
+    const { width, height } = host.viewport();
+    return first(raid.shots(height > width));
+  };
   const shotFor = (subject: MomentSubject, prior: CameraPose, toward: readonly MomentSubject[] = [], skyward = false) =>
     subject.kind === 'home' ? (skyward ? homeSkyShot(subject.slot, prior) : homeShot(subject.slot))
-      : subject.place === 'market' || subject.place === 'gate' ? placeShot(subject.place, prior, toward) : spectacleShot(subject.place, prior);
+      : subject.place === 'gate' ? raidShot() ?? placeShot('gate', prior, toward)
+      : subject.place === 'market' ? placeShot(subject.place, prior, toward) : spectacleShot(subject.place, prior);
 
   /** World point a caption hangs above. */
   function captionPoint(subject: MomentSubject): THREE.Vector3 | null {
@@ -614,6 +625,9 @@ export function createTwitchMomentView(host: MomentViewHost) {
     const sky = places.sky();
     switch (subject.place) {
       case 'market': case 'gate': {
+        // A woken Raid Gate carries its words over the standard's crossbar.
+        const raised = subject.place === 'gate' ? raid.captionPoint() : null;
+        if (raised) return raised;
         const point = subject.place === 'market' ? gifts.stop()?.position : (() => { const g = host.placeAnchor?.('gate'); return g ? new THREE.Vector3(...g.position) : null; })();
         // Just over the cart's pennant (2.1 m), so the card reads as the cart's, not the stall's behind it.
         return point ? point.clone().add(new THREE.Vector3(0, 2.6, 0)) : null;
@@ -723,6 +737,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       for (const slot of [...banners.keys()]) if (!present.has(slot)) remove(slot);
       syncEdges(frame);
       gifts.apply(frame);
+      raid.apply(frame.visible ? frame.raids : [], frame.atMs);
       skyLight.apply(frame.visible ? frame.sky : [], frame.atMs);
       flight.apply(frame.visible ? frame.sky : [], frame.atMs);
       trainLayer.apply(frame.visible ? frame.train : null, frame.atMs);
@@ -758,7 +773,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
     glow: (): SkyGlow => skyLight.glow(),
     stats: (): Record<string, number | boolean> => ({ banners: banners.size, meshes: [...banners.values()].reduce((n, b) => n + b.root.children.length, 0), edges: edges.size,
       ...gifts.stats(), ...prefixed('sky', skyLight.stats()), ...prefixed('flight', flight.stats()), ...prefixed('train', trainLayer.stats()),
-      ...prefixed('dragon', dragon.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent,
+      ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent,
       'stage.watchers': lastFrame?.visible && lastFrame.stage ? lastFrame.stage.watchers : 0, crowd: crowdCalled }),
     dispose(): void {
       if (disposed) return;
@@ -770,7 +785,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       playing.clear();
       for (const slot of [...banners.keys()]) remove(slot);
       for (const edge of edges.values()) root.remove(edge.group);
-      edges.clear(); gifts.dispose();
+      edges.clear(); gifts.dispose(); raid.dispose();
       for (const layer of spectacles) layer.dispose();
       host.parent.remove(root);
       for (const material of edgeMaterials.values()) material.dispose();
