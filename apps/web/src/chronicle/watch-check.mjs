@@ -73,9 +73,9 @@ async function accessibility(browser, base, width, height) {
     assert(await play.evaluate(element => element === document.activeElement), 'Keyboard does not reach Play after Close');
     await page.keyboard.press('Space');
     try {
-      await page.waitForFunction(() => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index >= 1, null, { timeout: 15_000 });
+      await page.waitForFunction(() => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index >= 1, null, { timeout: 15_000, polling: 250 });
     } catch (error) {
-      const state = await page.evaluate(() => ({ replay: window.__chronicle.state(), active: document.activeElement?.outerHTML, caption: document.querySelector('.chronicle-caption')?.textContent }));
+      const state = await page.evaluate(() => { const { status, index, playing } = window.__chronicle.state(); return { status, index, playing, active: document.activeElement?.outerHTML, caption: document.querySelector('.chronicle-caption')?.textContent }; });
       throw new Error(`Playback did not advance after keyboard Play: ${JSON.stringify(state)}; ${error.message}`, { cause: error });
     }
     const pause = page.getByRole('button', { name: 'Pause', exact: true });
@@ -85,7 +85,7 @@ async function accessibility(browser, base, width, height) {
     await page.waitForTimeout(3_400);
     assert(await slider.inputValue() === stopped, 'The Chronicle advanced while paused');
     await page.keyboard.press('Space');
-    await page.waitForFunction(value => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index > value, Number(stopped), { timeout: 15_000 });
+    await page.waitForFunction(value => window.__chronicle.state().status === 'ready' && window.__chronicle.state().index > value, Number(stopped), { timeout: 15_000, polling: 250 });
     await page.keyboard.press('Space');
     await page.keyboard.press('Tab');
     assert(await slider.evaluate(element => element === document.activeElement), 'Keyboard does not reach timeline');
