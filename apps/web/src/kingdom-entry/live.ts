@@ -9,6 +9,7 @@ import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
 import { observeRealm, observedRoom, type RealmObserver } from '../realm/adapters/observer';
 import { createRoomMomentFeed } from '../realm/adapters/moments';
 import { createRoomPresenceFeed } from '../realm/adapters/presence';
+import { createRoomGrowthFeed } from '../realm/adapters/growth';
 import type { KingdomEntrySource } from './types';
 
 export interface LiveKingdomEntryOptions {
@@ -82,7 +83,7 @@ export function createLiveKingdomEntrySource(options: LiveKingdomEntryOptions): 
     signal.addEventListener('abort', aborted, { once: true });
     try { await readyCheckpoint(observer, signal); signal.throwIfAborted(); }
     catch (error) { dispose(); throw error; }
-    return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), chatFeed, forgeFeed, momentFeed: createRoomMomentFeed(observer, origin),
+    return { scene, manifest, collision, client, presenceFeed: createRoomPresenceFeed(observer, origin), growthFeed: createRoomGrowthFeed(observer, origin), chatFeed, forgeFeed, momentFeed: createRoomMomentFeed(observer, origin),
       kingdomName, ...(options.notice ? { notice: options.notice } : {}), dispose };
     } catch (error) {
       if (signal.aborted || error instanceof RealmEntryError) throw error;

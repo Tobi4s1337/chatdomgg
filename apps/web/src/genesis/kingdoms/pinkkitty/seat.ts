@@ -2,6 +2,7 @@ import { STYLES, MAT } from '@chatdom/content';
 import type { LandmarkPiece } from '@chatdom/content/genesis-landmarks';
 import { VOXEL_METRES, type Vec3, type VoxelBlueprint } from '@chatdom/shared';
 import { sampleLandWater, terrainHeight, transformCardinalPoint, type CardinalTurn, type SettlementPlan } from '@chatdom/world';
+import { bankTop, batterTop, createAbutmentRevetment } from '../../../../../../packages/content/src/genesis-kingdoms/pinkkitty/abutment/index';
 import { createGlassScreen, createHallLanding } from '../../../../../../packages/content/src/genesis-kingdoms/pinkkitty/landing/index';
 import { createRiverCresset, createRoseArch, createRoseBush, createRosePlanter, roseArchFrame, ROSE_ARCH_WIDTHS, ROSE_PLANTER, type RoseBushVariant } from '../../../../../../packages/content/src/genesis-kingdoms/pinkkitty/roses/index';
 import type { GenesisHeraldry } from '../../../../../../packages/content/src/genesis-heraldry/index';
@@ -136,6 +137,33 @@ export function createPinkKittySeat(town: RiverTown, pieces: SeatPieces): PinkKi
   // The lamps under the arches burn as open flames over the water; the gallery's marquee stays dark glass until
   // people are inside, as no light stands in for a person.
   for (const emitter of pieces.hall.emitters) if (/arch|door/.test(emitter.id)) braziers.push({ position: placeAt(hall, [emitter.position[0], emitter.position[1], emitter.position[2]]), normal: [0, 1, 0] });
+  // Where the abutments stand above the levee and the meadow, a battered revetment wraps them down to the ground;
+  // the far end's balcony lights the far bank from its corner piers.
+  const hallGround = (x: number, z: number) => { const p = placeAt(hall, [x, 0, z]); return (terrainHeight(plan, p[0], p[2]) - hall.origin[1]) / CELL; };
+  const revetments: Rect[] = [];
+  for (const end of ['far', 'near'] as const) {
+    const revetment = createAbutmentRevetment({ end, ground: hallGround });
+    const at: Placement = { origin: placeAt(hall, revetment.offset), turn: hall.turn };
+    props.push(dressing(revetment.blueprint, at));
+    for (const fire of revetment.fires) braziers.push({ position: placeAt(hall, fire), normal: [0, 1, 0] });
+    revetments.push(footprint(revetment.size, at));
+  }
+  // Roses on the far meadow below the balcony: a border along the foot of the approach bank, where the ground lies
+  // flat enough to stand a bush, the nearest such ground to the bank's toe.
+  for (let x = 14, beat = 0; x <= 98; x += 12, beat++) {
+    const variant = ((beat * 3) % 4) as RoseBushVariant, bush = createRoseBush(variant), size = bush.size, half = size[0] * CELL / 2;
+    let z = -10;
+    while (z > -80 && Math.max(batterTop(-z), bankTop(-z)) > hallGround(x, z)) z -= 1;
+    for (let zc = z - size[2] / 2 - 1; zc > -100; zc -= 2) {
+      const centre = placeAt(hall, [x, 0, zc]);
+      const ground = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => terrainHeight(plan, centre[0] + a! * half, centre[2] + b! * half));
+      if (Math.max(...ground) - Math.min(...ground) > .4) continue;
+      const bushAt = centredOn([size[0] / 2, 0, size[2] / 2], [centre[0], centre[2]], Math.min(...ground), (beat % 4) as CardinalTurn);
+      props.push(dressing(bush, bushAt));
+      revetments.push(footprint(size, bushAt));
+      break;
+    }
+  }
 
   // The landing: a stone platform at the bank and a grand stair down to the square, its foot flush with the paving.
   const rise = Math.round(town.landing.drop / CELL);
@@ -143,7 +171,7 @@ export function createPinkKittySeat(town: RiverTown, pieces: SeatPieces): PinkKi
   const landingAt: Placement = { origin: [site.bounds.maxX, market[1] - 1, site.centre[1] - landing.size[2] * CELL / 2], turn: 0 };
   props.push(dressing(landing.blueprint, landingAt));
   for (const fire of landing.fires) braziers.push({ position: placeAt(landingAt, [fire[0], fire[1], fire[2]]), normal: [0, 1, 0] });
-  const taken: Rect[] = [footprint(pieces.hall.blueprint.size, hall), footprint(landing.size, landingAt), ...plan.homes.map(home => home.lot)];
+  const taken: Rect[] = [footprint(pieces.hall.blueprint.size, hall), footprint(landing.size, landingAt), ...revetments, ...plan.homes.map(home => home.lot)];
   // The scene sets the market's well, stalls and stores around the market node; keep clear of them too.
   const node = plan.nodes.find(item => item.id === plan.market.nodeId)!.position;
   for (const prop of placeMarketContent(plan.market)) {

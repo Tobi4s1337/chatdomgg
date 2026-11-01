@@ -10,6 +10,7 @@ You own it end to end and make the design calls.
 Context: `shots/genesis/63920635@1920x1080.png` (where it stands now) and `shots/genesis/showcase-full@1440x900.png`; `apps/web/src/genesis/` (channels.ts holds its captured public data); `packages/world/src/genesis/`; the finished Genesis content lanes in `packages/content/src/genesis-*`; the effects vocabulary in `packages/render/src/effects/`; `chatdom/ChatDom.md`, `chatdom/Artstyle-Soul-Feel.md`, `chatdom/Quality.md`, `chatdom/Moments.md`.
 Boundaries: shared contracts in `packages/shared`, engines, shaders, package manifests, the stream and Willowmere scenes are main's.
 Work in checkpoints: if a session ends before the part is done, leave everything building and working, write `next: <id> <what is done, what remains>` and carry on next session. For visual changes, show a before/after of the same view. Hand main exact `needs:` for any seam outside scope and keep going.
+Captures: take the shared capture lock for one still or one short clip at a time and release it in between, so main can capture between your frames; never hold it for a whole series.
 
 ## Tasks
 - [ ] **GA10 — The_AGGman, a kingdom of its own.** Land, landmarks, crest and banners, emote art, keepers, sound and its own dusk light at its own size, captured from its hero view and the Atlas door with a before/after against `shots/genesis/63920635@1920x1080.png`.

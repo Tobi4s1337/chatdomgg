@@ -1,18 +1,21 @@
 import { REALM_CASTLE_SLOT, castleHostId, forgeHostForPerson, ownedForgeHost, ownedHostProfile } from '@chatdom/shared/realm';
 import type { RealmCapability, RealmDecision, RealmDecisionContext, RealmDomainCommand, RealmFact, RealmForgeReservation, RealmPrivateState, RealmPublicMessage } from '@chatdom/shared/realm';
-import { ForgeDraftSchema, TokenSchema, kingdomForBroadcaster, type KingdomId } from '@chatdom/shared';
+import { ForgeDraftSchema, HomeTierSchema, TokenSchema, kingdomForBroadcaster, type KingdomId } from '@chatdom/shared';
+import { createGrowthState, projectGrowthScene } from '../growth';
+import { growRealmFact } from './growth';
 
 const capability: Record<RealmDomainCommand['type'], RealmCapability> = {
   'stream.observe': 'presence', 'citizen.rights': 'moderation', 'home.installAllocated': 'allocation', 'castle.installNative': 'allocation',
   'home.replaceApproved': 'publication', 'coal.creditQualifiedNight': 'presence',
   'presence.confirmInterval': 'presence',
+  'growth.bindHome': 'allocation',
   'forge.reserve': 'forge', 'forge.release': 'forge', 'forge.commitApproved': 'forge',
 };
 const own = <T>(record: Readonly<Record<string, T>>, key: string): T | undefined => Object.hasOwn(record, key) ? record[key] : undefined;
 const without = <T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> => Object.fromEntries(Object.entries(record).filter(([id]) => id !== key));
 
 export function createRealmState(kingdomId: KingdomId, origin: 'live' | 'simulated'): RealmPrivateState {
-  return { version: 1, kingdomId, origin, sequence: 0, stream: { sessionId: null, startedAt: 0, liveUntil: 0 }, rights: {}, homes: {}, castle: null, coals: {}, reservations: {}, forgeOutcomes: {}, attachments: {}, creditedNights: {}, qualification: {} };
+  return { version: 1, kingdomId, origin, sequence: 0, stream: { sessionId: null, startedAt: 0, liveUntil: 0 }, rights: {}, homes: {}, castle: null, coals: {}, reservations: {}, forgeOutcomes: {}, attachments: {}, creditedNights: {}, qualification: {}, growth: createGrowthState(kingdomId, origin) };
 }
 
 /** Pure intent -> facts. Only a fenced room may commit these proposals; clients never submit internal commands. */
@@ -80,6 +83,15 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
         || c.from < s.stream.startedAt || c.through <= c.from || c.through > ctx.now
         || c.through > s.stream.liveUntil || c.streamSessionId !== s.stream.sessionId) return reject('conflict');
       break;
+    case 'growth.bindHome': {
+      const home = own(s.homes, c.homeId);
+      if (!home || c.evidenceReceipt !== home.allocationReceipt || !TokenSchema.safeParse(c.evidenceReceipt).success
+        || !HomeTierSchema.safeParse(c.installedTier).success) return reject('conflict');
+      const bound = s.growth ? own(s.growth.citizens, home.ownerId)?.home : undefined;
+      if (bound && bound.plotId !== home.id) return reject('conflict');
+      if (bound && bound.stage !== 'tent' && HomeTierSchema.options.indexOf(bound.stage) >= HomeTierSchema.options.indexOf(c.installedTier)) return same;
+      break;
+    }
     case 'forge.reserve': {
       const r = c.record, a = r.attempt, reservation = r.reservation;
       if (own(s.forgeOutcomes,a.key))return same;
@@ -119,7 +131,7 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
     occurredAt: ctx.occurredAt ?? ctx.now, receivedAt: ctx.receivedAt ?? ctx.now, committedAt: ctx.now,
     origin: s.origin, type: 'realm.transaction', actor: ctx.actor ?? null, cause: ctx.cause ?? { kind: 'intent', id: ctx.commandId }, body: c };
   const state = applyRealmFact(s, fact);
-  return { kind: 'accepted', fact, state, public: projectRealmFact(state, fact) };
+  return { kind: 'accepted', fact, state, public: projectRealmFact(state, fact, s) };
 }
 
 function validReservation(s: RealmPrivateState, r: RealmForgeReservation, now: number): boolean {
@@ -135,12 +147,18 @@ function validReservation(s: RealmPrivateState, r: RealmForgeReservation, now: n
 /** Replay committed facts only; gaps/cross-kingdom facts fail loudly. No clocks or external services. */
 export function applyRealmFact(s: RealmPrivateState, f: RealmFact): RealmPrivateState {
   if (f.version !== 1 || f.kingdomId !== s.kingdomId || f.seq !== s.sequence + 1 || f.origin !== s.origin) throw new Error('Realm fact continuity mismatch');
+  const next = applyRealmDomainFact(s, f);
+  return { ...next, growth: growRealmFact(s, next, f).state };
+}
+
+function applyRealmDomainFact(s: RealmPrivateState, f: RealmFact): RealmPrivateState {
   const c = f.body, next = { ...s, castle: s.castle ?? null, sequence: f.seq };
   switch (c.type) {
     case 'stream.observe': return { ...next, stream: { sessionId: c.sessionId, startedAt: c.startedAt, liveUntil: c.liveUntil } };
     case 'citizen.rights': return { ...next, rights: { ...s.rights, [c.personId]: c.rights } };
     case 'castle.installNative': return { ...next, castle: c.castle };
     case 'home.installAllocated': return { ...next, homes: { ...s.homes, [c.home.id]: c.home } };
+    case 'growth.bindHome': return next;
     case 'home.replaceApproved': {
       const attachments = {...s.attachments};
       for(const disposition of c.attachments){
@@ -192,8 +210,17 @@ export function applyRealmFact(s: RealmPrivateState, f: RealmFact): RealmPrivate
 }
 
 /** Public allowlist. A raw fact includes private ownership/words; it is never a broadcast payload. */
-export function projectRealmFact(s: RealmPrivateState, f: RealmFact): readonly RealmPublicMessage[] {
+export function projectRealmFact(s: RealmPrivateState, f: RealmFact, prior?: RealmPrivateState): readonly RealmPublicMessage[] {
+  const messages = projectRealmDomainFact(s, f);
+  if (!s.growth || s.growth.sequence !== f.seq) return messages;
+  // Legacy callers have no before-state to prove a crossing. They get current progress, never a fresh ceremony.
+  const milestones = prior ? growRealmFact(prior, s, f).milestones : [];
+  return [...messages, { type: 'growth', frame: projectGrowthScene(s.growth, milestones) }];
+}
+
+function projectRealmDomainFact(s: RealmPrivateState, f: RealmFact): readonly RealmPublicMessage[] {
   const c = f.body;
+  if (c.type === 'home.installAllocated') return [{ type: 'home', plotId: c.home.id, revision: c.home.revision, assetHash: c.home.digest, attachments: [] }];
   if (c.type === 'forge.commitApproved') return [{ type: 'forge', event: { type: 'committed', activityId: c.attempt.attemptId, attachment: s.attachments[c.attachment.id]!.attachment } }];
   if (c.type === 'castle.installNative') return [{ type: 'castle', moduleId: c.castle.moduleId, revision: c.castle.revision, assetHash: c.castle.digest, attachments: [] }];
   if (c.type === 'home.replaceApproved') return [{ type: 'home', plotId: c.homeId, revision: c.home.revision, assetHash: c.home.digest,attachments:Object.values(c.home.attachments).map(id=>s.attachments[id]!.attachment) }];

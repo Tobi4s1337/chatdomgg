@@ -23,7 +23,9 @@ export interface LiveSourceHandle {
 /** The capabilities a live source cannot publish without: chat and its cleanup are one delivery family. */
 const REQUIRED: readonly Capability[] = ['chat'];
 /** Grants a running source waits for. While one is missing it is reread each minute, not only hourly. */
-const AWAITED: readonly Capability[] = ['chat', 'chatters'];
+const AWAITED: readonly Capability[] = ['chat', 'chatters', 'bits', 'hype'];
+const GRANT_READY: Partial<Record<Capability, string>> = { chat: 'attaching chat delivery', chatters: 'sweeping Chatters', bits: 'enabling cheers and Power-ups', hype: 'enabling hype trains' };
+const GRANT_MISSING: Partial<Record<Capability, string>> = { chat: 'not publishing', chatters: 'not sweeping Chatters', bits: 'cheers and Power-ups unavailable', hype: 'hype trains unavailable' };
 const GRANT_RECHECK_MS = 60_000;
 
 /**
@@ -159,8 +161,8 @@ export async function startLiveSource(options: {
     if (event.type === 'revoked' && event.role === 'broadcaster') void live.erase().catch(() => undefined);
     if (event.type !== 'report') return;
     const now = new Set(AWAITED.filter(capability => !watched.available(capability)));
-    for (const capability of missing) if (!now.has(capability)) print(`  ${capability} grant recorded; ${capability === 'chat' ? 'attaching chat delivery' : 'sweeping Chatters'}`);
-    for (const capability of now) if (!missing.has(capability)) print(`  ${capability} grant no longer recorded; ${capability === 'chat' ? 'not publishing' : 'not sweeping Chatters'}`);
+    for (const capability of missing) if (!now.has(capability)) print(`  ${capability} grant recorded; ${GRANT_READY[capability]}`);
+    for (const capability of now) if (!missing.has(capability)) print(`  ${capability} grant no longer recorded; ${GRANT_MISSING[capability]}`);
     missing = now;
   });
   // Someone running authorize (or re-consenting after a withdrawal) while Herald runs is noticed within a

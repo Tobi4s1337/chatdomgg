@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createNativeForgeHost } from '@chatdom/forge';
 import { KingdomIdSchema, PersonIdSchema, type Vec3 } from '@chatdom/shared';
 import { REALM_CASTLE_SLOT, castleHostId, type RealmBootstrap, type RealmFoundedManifest, type RealmOwnedCastle, type RealmOwnedHome } from '@chatdom/shared/realm';
@@ -69,6 +69,21 @@ describe('founded physical town and persisted loader (SIMULATED)', () => {
       const checkpoint: RealmBootstrap = { version: 1, kingdomId, writerEpoch: 'SIMULATED-writer', throughCursor: 0, throughSequence: 0,
         layoutRevision: plan.revision, collisionRevision: first.world.revision, current: [] };
       expect(first.manifestFor(checkpoint)).toEqual(first.build.manifest);
+      const claimPlot = plan.homes[0]!, claimHost = createNativeForgeHost(claimPlot);
+      const claimedHome: RealmOwnedHome = { id: claimPlot.id, ownerId: PersonIdSchema.parse('900001111'), slot: claimPlot.slot,
+        layoutRevision: plan.revision, allocationReceipt: 'PRIVATE-SIMULATED-claim', revision: 'native:claim', digest: 'd'.repeat(64),
+        family: claimHost.family, blueprint: claimHost.blueprint, attachments: {},
+        attribution: { makerName: 'PRIVATE-SIMULATED-person', kingdomName: 'PRIVATE-SIMULATED-name', approvalId: 'PRIVATE-SIMULATED-approval' } };
+      const nativeRead = vi.spyOn(store, 'native'), sceneWrite = vi.spyOn(store, 'put');
+      const claimed = await loader.load(kingdomId, { ...empty, homes: { [claimedHome.id]: claimedHome } });
+      expect(nativeRead).not.toHaveBeenCalled(); expect(sceneWrite).not.toHaveBeenCalled();
+      expect(claimed.world).toBe(first.world); expect(claimed.build.bytes).toBe(first.build.bytes);
+      expect(claimed.build.counts.ownedHomes).toBe(1);
+      expect(claimed.manifestFor(checkpoint)).toBeNull();
+      const claimView = { type: 'home' as const, plotId: claimedHome.id, revision: claimedHome.revision, assetHash: claimedHome.digest, attachments: [] };
+      expect(claimed.manifestFor({ ...checkpoint, current: [claimView] })).toEqual(first.build.manifest);
+      expect(claimed.manifestFor({ ...checkpoint, current: [{ ...claimView, revision: 'stale' }] })).toBeNull();
+      nativeRead.mockRestore(); sceneWrite.mockRestore();
       const native = await store.native(kingdomId, plan, 'simulated');
       expect(native.fixtures.some(piece => piece.id.startsWith('market:wares:v1:'))).toBe(false); // Pinned baseline is retained.
       const moduleId = plan.castle.beaconModuleId, keep = native.fixtures.find(f => f.id === castleHostId(moduleId))!;
@@ -103,6 +118,17 @@ describe('founded physical town and persisted loader (SIMULATED)', () => {
       const identities = ['b'.repeat(64), 'c'.repeat(64), 'b'.repeat(64)];
       const revisions = await Promise.all(identities.map(hash => store.revision(kingdomId, hash)));
       expect(revisions[0]).toBe(revisions[2]); expect(revisions[0]).not.toBe(revisions[1]);
+      // A new home cannot borrow a native revision/digest to smuggle different physical bytes past assembly.
+      const otherPlot = plan.homes[1]!, otherHost = createNativeForgeHost(otherPlot);
+      const different = { ...otherHost.blueprint, boxes: [...otherHost.blueprint.boxes,
+        { from: [1, 0, 1] as [number, number, number], to: [2, 1, 2] as [number, number, number], material: 1 }] };
+      const customRead = vi.spyOn(store, 'native'), customWrite = vi.spyOn(store, 'put');
+      const custom = await loader.load(kingdomId, { ...empty, homes: { [home.id]: home,
+        [otherPlot.id]: { ...claimedHome, id: otherPlot.id, slot: otherPlot.slot, family: otherHost.family, blueprint: different } } });
+      expect(customRead).toHaveBeenCalled(); expect(customWrite).toHaveBeenCalled();
+      expect(custom.world.revision).not.toBe(next.world.revision);
+      expect(custom.build.manifest.sceneHash).not.toBe(next.build.manifest.sceneHash);
+      customRead.mockRestore(); customWrite.mockRestore();
       await writeFile(join(directory, 'scenes', `${first.build.manifest.sceneHash}.json`), 'corrupt');
       await expect(store.get(first.build.manifest.sceneHash)).rejects.toThrow('corrupt');
     } finally { await rm(directory, { recursive: true, force: true }); }

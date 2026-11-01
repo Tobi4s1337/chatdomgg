@@ -1,4 +1,4 @@
-/* global requestAnimationFrame */
+/* global requestAnimationFrame, AbortController, clearTimeout */
 // Captures PinkKittyRose's river town in the real kingdom route, and its door from the Atlas.
 // Run from the repository root:
 //   node apps/web/src/genesis/kingdoms/pinkkitty/capture.mjs [--views hero,market,tavern,atlas] [--hour 19.25] [--tag after]
@@ -31,6 +31,11 @@ const POSES = {
   // The Lantern and Oar on the levee, from the meadow south-east of it: the terrace, the landing and the flight
   // down to Millwater Lane, the jetty and the river behind.
   tavern: [[-66, 17, 34], [-96, 8, 58], 46],
+  // The crossing from downstream on the water: the hall's three arches over the river, both abutments in their
+  // battered revetments, the far balcony's fires on the left and the landing on the right.
+  crossing: [[-98, 14, -40], [-90, 10, 5], 50],
+  // The far bank from its meadow: the closed pavilion over the balcony, the corner piers and the batter's foot.
+  farbank: [[-132, 15, -18], [-101, 9, 6], 48],
 };
 
 async function start() {
@@ -41,6 +46,20 @@ async function start() {
     catch (error) { await server.close(); if (!/EADDRINUSE|in use/i.test(String(error?.message ?? error))) throw error; }
   }
   throw new Error('No safe capture port available.');
+}
+
+/**
+ * The shared lock, queued for at most four minutes at a time: the host's capture guard measures a hold from when the
+ * lock's supervisor started, queue included, so a long wait would count against the still. Requeueing keeps the
+ * measured hold to the still itself.
+ */
+async function takeLock() {
+  for (;;) {
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(new Error('requeue')), 240_000);
+    try { return await acquireCaptureLock({ signal: controller.signal }); }
+    catch (error) { if (!controller.signal.aborted) throw error; }
+    finally { clearTimeout(timer); }
+  }
 }
 
 const UNADOPTED = { version: 1, status: 'unavailable', message: 'No adopted record exists for this kingdom.' };
@@ -63,7 +82,7 @@ try {
   await mkdir(out, { recursive: true });
   for (const view of views) {
     // One still per hold of the shared capture lock, released in between so others can capture between our frames.
-    release = await acquireCaptureLock();
+    release = await takeLock();
     const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on('pageerror', error => errors.push(`pageerror: ${error.message}`));
@@ -73,14 +92,42 @@ try {
     if (view === 'atlas') {
       await page.goto(`${started.base}/map`, { waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => window.__chatdomReady === true && document.querySelector('[data-chatdom-atlas]')?.getAttribute('data-state') === 'ready', null, { timeout: 300_000 });
-      const mark = await page.evaluate(id => window.__chatdomAtlas.marks(100000).find(item => item.id === id), ID);
-      if (!mark) throw new Error('PinkKittyRose has no drawn mark on the Atlas at its opening view.');
-      await page.mouse.click(mark.x, mark.y);
-      const door = page.locator('.atlas-card a[href="/kingdom/4363967"]');
+      // A town of about 140 viewers is not drawn at the whole-map distance: find its holding in the survey and zoom
+      // in about it until its own mark is drawn, as a visitor would.
+      const canvas = await page.locator('canvas').first().boundingBox();
+      const holding = await page.evaluate(async id => {
+        const read = async url => (await fetch(url)).json();
+        const pointer = await read('/map-data/v1/preview');
+        const world = await read(`/map-data/v1/preview/${pointer.id}/world.json`);
+        const find = columns => { const i = columns.ids.indexOf(id); return i < 0 ? null : { x: columns.x[i] / world.coordScale, y: columns.y[i] / world.coordScale }; };
+        let found = find(world.head);
+        for (const region of world.regions) {
+          if (found) break;
+          found = find((await read(`/map-data/v1/preview/${world.id}/${region.chunk.path}`)).settlers);
+        }
+        return found;
+      }, ID);
+      if (!holding) throw new Error('PinkKittyRose is not in the current survey.');
+      const drawn = () => page.evaluate(id => window.__chatdomAtlas.marks(100000).find(item => item.id === id) ?? null, ID);
+      let mark = await drawn();
+      for (let step = 0; !mark && step < 16; step++) {
+        const camera = await page.evaluate(() => window.__chatdomAtlas.stats()?.camera ?? null);
+        if (!camera) throw new Error('The Atlas camera is not readable.');
+        await page.mouse.move(canvas.x + (holding.x - camera.x) * camera.scale + canvas.width / 2, canvas.y + (holding.y - camera.y) * camera.scale + canvas.height / 2);
+        await page.mouse.wheel(0, -240);
+        await page.waitForTimeout(1200);
+        mark = await drawn();
+      }
+      if (!mark) throw new Error('PinkKittyRose is not drawn on the Atlas, even close in.');
+      await page.mouse.click(canvas.x + mark.x, canvas.y + mark.y);
+      const door = page.locator(`.atlas-card a.atlas-watch[href^="/kingdom/${ID}"]`);
       await door.waitFor({ timeout: 30_000 });
       await frames(page, 60);
       await page.screenshot({ path: `${out}/${tag}-atlas-card@${width}x${height}.png`, timeout: 180_000 });
       console.log(`Captured ${out}/${tag}-atlas-card@${width}x${height}.png`);
+      await release();
+      release = undefined;
+      release = await takeLock();
       await door.click();
       await page.waitForURL(`**/kingdom/${ID}**`);
       await kingdomReady(page);

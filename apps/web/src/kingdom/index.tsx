@@ -1,7 +1,7 @@
 import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
 import { createKingdomScene, type CameraName, type NameLabel, type PotentialKingdomView } from './scene';
 import type { RealmFoundedScene } from '@chatdom/world';
-import type { PresenceFeed } from '@chatdom/shared';
+import type { GrowthSceneFeed, PresenceFeed } from '@chatdom/shared';
 import type { RealmWalkerFeed } from '@chatdom/shared/realm';
 import type { RealmChatFeed } from '../realm/adapters/chat';
 import { realmEntryFailureMessage } from '../realm/adapters/entry';
@@ -21,7 +21,7 @@ import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
 import './moment-captions.css';
 
 /** Wiring supplies checked geometry and public presence; the ordinary stream view remains a spectator. */
-export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;momentFeed?:TwitchMomentFeed;walkerFeed?:RealmWalkerFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
+export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:RealmFoundedScene;growthFeed?:GrowthSceneFeed;presenceFeed?:PresenceFeed;chatFeed?:RealmChatFeed;forgeFeed?:RealmForgeFeed;momentFeed?:TwitchMomentFeed;walkerFeed?:RealmWalkerFeed;walk?:KingdomWalkBinding;kingdomName?:string}={}) {
   const query=new URLSearchParams(location.search),tier=props.founded?.plan.config.tier??props.potential?.plan.config.tier??(query.get('tier')==='hamlet'?'hamlet':'town');
   const presentation=parseKingdomPresentationParams(query,tier);
   const realm=query.get('realm'),realmFamily=props.potential?.style??(realm==='hearth'?'hearth':realm==='grove'?'grove':'tide'),realmName=props.kingdomName??(realm==='hearth'?'Emberwick':realm==='grove'?'Mossmere':'Willowmere');
@@ -74,7 +74,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
     const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
-    void createKingdomScene(canvas,{...(props.potential?{potential:props.potential,nativeStyle:props.potential.style}:{}),...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:props.potential?.plan.config.seed??query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(!props.potential&&(realm==='hearth'||realm==='grove')?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
+    void createKingdomScene(canvas,{...(props.potential?{potential:props.potential,nativeStyle:props.potential.style}:{}),...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.growthFeed?{growthFeed:props.growthFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:props.potential?.plan.config.seed??query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(!props.potential&&(realm==='hearth'||realm==='grove')?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
       onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onMomentCaptions:setMomentCaptions,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:message=>{setError(message||'The kingdom renderer did not give a reason.');setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;

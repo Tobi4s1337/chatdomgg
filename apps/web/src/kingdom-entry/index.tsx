@@ -40,6 +40,7 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
       if (closed || current !== generation || controller.signal.aborted) { next.dispose(); return; }
       connection = next;
       unmount = render(() => <Kingdom founded={next.scene} presenceFeed={next.presenceFeed} {...(next.chatFeed ? { chatFeed: next.chatFeed } : {})}
+        {...(next.growthFeed ? { growthFeed: next.growthFeed } : {})}
         {...(next.forgeFeed ? { forgeFeed: next.forgeFeed } : {})}
         {...(next.momentFeed ? { momentFeed: next.momentFeed } : {})}
         kingdomName={next.kingdomName} walk={{ client: next.client, collision: next.collision,

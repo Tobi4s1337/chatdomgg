@@ -9,7 +9,7 @@ import { attachCanopy, createCanopyMaterial, groveBatches, plantGrove, type Tree
 import { VoxelWorkerPool, type AssetChunkMesh } from '@chatdom/voxel';
 import { createAtmosphere, getEnvironment, createVoxelMaterial, geometryFromChunks, createWindowLights, createPostStack, type WindowHouse } from '@chatdom/render';
 import { generateSettlementPlan, terrainHeight, samplePublicGround, randomUnit, seedHash, type KingdomTier, type SettlementPlan, type RealmFoundedScene } from '@chatdom/world';
-import type { KingdomId, KingdomPresenceFrame, Vec3, VoxelBlueprint, PresenceFeed } from '@chatdom/shared';
+import type { KingdomId, KingdomPresenceFrame, Vec3, VoxelBlueprint, PresenceFeed, GrowthSceneFeed } from '@chatdom/shared';
 import { CitizenChatCueSchema, PRESENCE_LEASE_MS } from '@chatdom/shared';
 import { createSimulatedPresence, createHeraldPresence } from './presence-feed';
 import { loadTerrain } from './terrain-client';
@@ -51,7 +51,7 @@ import type { AmbienceTarget } from './ambience/types';
 import { createArrivalDirector, type ArrivalAttention } from './arrival-director';
 import { createShoreDressing } from './shore-dressing';
 import { createKingdomMoments } from './moments';
-import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
+import { skyLitEnvironment, type ScreenCaption, type TwitchMomentFeed } from '../twitch-moments';
 import { createWaterSurface } from '../places/water/surface';
 import { deriveWaterReaches } from '../../../../packages/world/src/places/water/reaches';
 
@@ -73,7 +73,7 @@ let citizenHandoff: { at: number; checkpoint: CitizenSceneCheckpoint } | undefin
 export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number;arrivalAgeSeconds?:number}
 export interface PotentialKingdomView {seat?:GenesisSeatContent;plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
-export interface SceneOptions {potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneOptions {growthFeed?:GrowthSceneFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -424,7 +424,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       crowd.clear();arrivalDirector?.clear();frame=undefined;
       lastLightFrameKey='';lastField=-Infinity;
     }
-    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);
+    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=skyLitEnvironment(getEnvironment(hour),moments?.glow());
     // Only the hot casting carries this local fire treatment. The receiving
     // house, ordinary dusk and walking retain their accepted lighting.
     const stageHeat=!walkSelected&&!capturePose?Math.max(forgeCameraDirected?(realmForge?.heat??0):0,forge.status().open?forge.heat:0):0;
@@ -441,7 +441,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const feet=walkerSlots(walk ? walk.poses : observed?.poses??[]);
     crowd.watchForge(!!realmForge?.active()||forge.status().busy,presentationMs,[0,layout.market.elevation,8]);
     const night=THREE.MathUtils.smoothstep(Math.abs(((hour%24)+24)%24-12),4.2,6.5);
-    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet,forgeFlight.reaction(now)):[];
+    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet,forgeFlight.reaction(now),moments?.crowd()??null):[];
     const lightFrame=loaded?crowd.lightFrame(presentationMs):frame;
     if(lightFrame)build.setFrame(lightFrame);
     // Potential land may show an anonymous night painting, independently of its empty
@@ -593,7 +593,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const kingdomId=options.founded?.kingdomId??options.kingdomId;
       if(!kingdomId||options.founded&&options.momentFeed.origin!==options.founded.origin)throw new Error('Moments need this kingdom and its actual source');
       const castleKeep=installed?installed.forgeHosts.find(h=>h.slot===65534):castleBuildings.find(h=>h.id===layout.castle.beaconModuleId);
-      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal}));
+      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,ground:landHeight,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal}));
       // Optional future spectacles prepare on their four bounded worker lanes after the citizens. The gate
       // opens on the world drawing; a failed moment view detaches itself and reports failure in inspect().
       void moments.ready.catch(()=>{});

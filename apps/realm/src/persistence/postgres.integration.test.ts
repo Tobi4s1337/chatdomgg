@@ -16,7 +16,7 @@ import { RealmIngress, presenceTransition } from '../ingress';
 import { REFERENCE_KINGDOM, referenceServices } from '../reference';
 import { AllocationService, TenureEvidenceVerifier, signTenureEvidence, type Deed, type HomeFurnisher } from '../allocation';
 import { PostgresRealmRepository, RealmCommitUncertainError, RealmLeaseHeldError, RealmWriterFencedError, assertRealmSchema, createDurableRealmServices,
-  createRealmPool, digestOf, migrateRealmSchema, canonicalJson, type DurableKingdom, type RealmDatabase } from './index';
+  createRealmPool, digestOf, migrateRealmSchema, canonicalJson, RealmRecoveryError, type DurableKingdom, type RealmDatabase } from './index';
 
 /**
  * Spec 34 R1/R2 against real Postgres. Runs only with REALM_DATABASE_TESTS=1 and then fails, never skips, without
@@ -34,7 +34,7 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     if (!connectionString) throw new Error('REALM_DATABASE_TESTS=1 requires DATABASE_URL (load it with --env-file).');
     pool = () => { const p = createRealmPool({ connectionString, schema }); pools.push(p); return p; };
     const first = pool();
-    expect(await migrateRealmSchema(first, schema)).toEqual(expect.arrayContaining(['0002_realm_authority', '0003_realm_allocation']));
+    expect(await migrateRealmSchema(first, schema)).toEqual(expect.arrayContaining(['0002_realm_authority', '0003_realm_allocation', '0009_realm_growth']));
     expect(await migrateRealmSchema(first, schema)).toEqual([]);
     await assertRealmSchema(first);
   });
@@ -43,6 +43,139 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     if (owner) await owner.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await Promise.all(pools.map(p => p.end()));
   });
+
+  it('persists witnessed growth with its source, retries one milestone, and rebuilds a legacy snapshot from original facts once', async () => {
+    const kingdomId = KingdomIdSchema.parse(String(800_000_000 + randomBytes(3).readUIntBE(0, 3)));
+    const person = PersonIdSchema.parse(String(700_000_000 + randomBytes(3).readUIntBE(0, 3)));
+    const db = pool(), faults = interruptible(db), allocation = allocations('simulated', db);
+    await allocation.adoptLayout(kingdomId, founding(`growth-${kingdomId}`));
+    const allocated = await allocation.allocate({ kingdomId, personId: person, evidence: [] });
+    if (allocated.status !== 'deed') throw new Error('Expected a growth fixture deed');
+    const deed = allocated.deed, install = await allocation.prepare(deed);
+    let repository = new PostgresRealmRepository(faults.db, { origin: 'simulated', snapshotEvery: 1 });
+    let lease = await repository.acquire(kingdomId);
+    const run = (id: string, command: RealmDomainCommand, capability: RealmCapability) => repository.execute(lease, id, command,
+      (state, now) => decideRealm(state, command, { now, writerEpoch: lease.epoch, commandId: id, capability, current: true, anvilCapacity: 2 }), () => true);
+    try {
+      await repository.load(lease);
+      expect(await run('install', install, 'allocation')).toMatchObject({ status: 'committed' });
+      const binding: RealmDomainCommand = { type: 'growth.bindHome', homeId: deed.plotId, installedTier: deed.placement.tier, evidenceReceipt: deed.receipt };
+      expect(await run('bind', binding, 'allocation')).toMatchObject({ status: 'committed' });
+      const dayMs = 86_400_000, now = await dbNow(db), firstStart = Math.floor(now / dayMs) * dayMs - 8 * dayMs;
+      let throughBeforeMilestone = 0;
+      for (let day = 0; day < 7; day++) {
+        const startedAt = firstStart + day * dayMs, sessionId = `growth-night:${day}`;
+        expect(await run(`night:${day}`, { type: 'stream.observe', sessionId, startedAt, liveUntil: now + 3_600_000 }, 'presence')).toMatchObject({ status: 'committed' });
+        const command: RealmDomainCommand = { type: 'presence.confirmInterval', personId: person, streamSessionId: sessionId,
+          from: startedAt, through: startedAt + 600_000, evidenceReceipt: `observed:${day}` };
+        if (day < 6) expect(await run(`present:${day}`, command, 'presence')).toMatchObject({ status: 'committed' });
+        else {
+          throughBeforeMilestone = Number((await db.query('SELECT max(id) AS id FROM realm_outbox WHERE kingdom_id = $1', [kingdomId])).rows[0].id);
+          faults.loseNextCommitReply();
+          await expect(run(`present:${day}`, command, 'presence')).rejects.toBeInstanceOf(RealmCommitUncertainError);
+          const committed = await repository.lookup(kingdomId, `present:${day}`);
+          expect(committed).toMatchObject({ status: 'committed' });
+          expect(await run(`present:${day}`, command, 'presence')).toEqual(committed);
+        }
+      }
+      const expected = await repository.load(lease);
+      expect(expected.growth?.citizens[person]?.qualifiedDays).toBe(7);
+      expect(expected.growth?.civic).toMatchObject({ qualifiedDays: 7, personDays: 7, levels: { tavern: 2 } });
+      expect(expected.coals).toEqual({});
+      expect(expected.homes[deed.plotId]).toEqual(install.home);
+      const store = new PostgresOutboxStore(db), rows = await store.read(kingdomId, throughBeforeMilestone);
+      expect(rows).toHaveLength(1);
+      const milestone = rows[0]!;
+      expect(milestone.message.type).toBe('growth');
+      if (milestone.message.type !== 'growth') throw new Error('Expected committed growth milestone');
+      expect(milestone.message.frame.beats).toContainEqual({ kind: 'civic-levelled', sourceSeq: expected.sequence,
+        at: milestone.message.frame.asOf, place: 'tavern', from: 1, to: 2 });
+      expect(milestone.eventId).toBe(`${kingdomId}:${expected.sequence}:0`);
+      expect((await store.prefix(kingdomId, throughBeforeMilestone)).growth?.frame.homes[0]?.qualifiedDays).toBe(6);
+      const current = (await store.prefix(kingdomId, milestone.id)).growth;
+      expect(current?.frame.homes[0]?.qualifiedDays).toBe(7);
+      expect(current?.frame.beats).toEqual([]);
+      expect(JSON.stringify(rows)).not.toMatch(/personId|evidenceReceipt|observed:|allocationReceipt/);
+      expect(await run('bind-again', binding, 'allocation')).toMatchObject({ status: 'unchanged' });
+
+      // Old snapshots had totals but no growth projection. Only their original interval/stream facts prove days.
+      // Deliberately exaggerated counters demonstrate recovery never turns snapshot totals into attendance.
+      const legacy = { ...expected, qualification: Object.fromEntries(Object.keys(expected.qualification).map(key =>
+        [key, { intervals: [], coveredMs: 99_000_000 }])) };
+      Reflect.deleteProperty(legacy, 'growth');
+      const text = canonicalJson(legacy), digest = createHash('sha256').update(text).digest('hex');
+      await db.query('UPDATE realm_snapshots SET state = $3, digest = $4 WHERE kingdom_id = $1 AND seq = $2', [kingdomId, expected.sequence, text, digest]);
+      await repository.release(lease);
+      repository = new PostgresRealmRepository(db, { origin: 'simulated' });
+      lease = await repository.acquire(kingdomId);
+      expect(await repository.load(lease)).toEqual(expected);
+      const upgraded = (await db.query('SELECT state FROM realm_snapshots WHERE kingdom_id = $1 AND seq = $2', [kingdomId, expected.sequence])).rows[0].state;
+      expect(JSON.parse(upgraded)).toEqual(expected);
+      expect(await repository.load(lease)).toEqual(expected);
+      expect(await store.read(kingdomId, throughBeforeMilestone)).toEqual(rows); // Recovery never republishes old ceremonies.
+      expect(Number((await db.query('SELECT count(*) AS n FROM realm_facts WHERE kingdom_id = $1', [kingdomId])).rows[0].n)).toBe(expected.sequence);
+    } finally { await repository.release(lease); }
+  });
+
+  it('recovers legacy allocated home views once behind the delivery cursor, preserving later publications and fencing stale writers', async () => {
+    const kingdomId = KingdomIdSchema.parse(String(800_000_000 + randomBytes(3).readUIntBE(0, 3)));
+    const db = pool(), repository = new PostgresRealmRepository(db, { origin: 'simulated' }), allocation = allocations('simulated', db);
+    let lease = await repository.acquire(kingdomId);
+    const run = (id: string, command: RealmDomainCommand, capability: RealmCapability) => repository.execute(lease, id, command,
+      (state, now) => decideRealm(state, command, { now, writerEpoch: lease.epoch, commandId: id, capability, current: true, anvilCapacity: 2 }), () => true);
+    try {
+      await repository.load(lease);
+      const homes: RealmOwnedHome[] = [], initialEvents: string[] = [];
+      for (let i = 0; i < 17; i++) {
+        const person = PersonIdSchema.parse(String(700_000_000 + randomBytes(3).readUIntBE(0, 3)));
+        const command = await settle(allocation, kingdomId, person);
+        homes.push(command.home);
+        const outcome = await run(`install:${i}`, command, 'allocation');
+        if (outcome.status !== 'committed') throw new Error('Expected an installed legacy fixture home');
+        initialEvents.push(`${kingdomId}:${outcome.sequence}:0`);
+        lease = await repository.renew(lease);
+      }
+      const edited = homes[15]!, forged = homes[16]!;
+      await run('builder-rights', { type: 'citizen.rights', personId: edited.ownerId,
+        rights: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'PRIVATE-safety' } }, 'moderation');
+      expect(await run('later-build', { type: 'home.replaceApproved', homeId: edited.id, expectedRevision: edited.revision,
+        home: { ...edited, revision: 'later-build', digest: 'b'.repeat(64) }, approvalReceipt: 'PRIVATE-judges', attachments: [] }, 'publication')).toMatchObject({ status: 'committed' });
+      const forge = forgeFixture(kingdomId, forged.ownerId, forged, await dbNow(db));
+      for (const [id, command, capability] of forge.setup.slice(1)) expect(await run(`later:${id}`, command, capability)).toMatchObject({ status: 'committed' });
+      if (forge.commit.type !== 'forge.commitApproved') throw new Error('Expected a Forge fixture');
+      expect(await run('later-forge', { ...forge.commit, attachment: { ...forge.commit.attachment,
+        provenance: { ...forge.commit.attachment.provenance, source: 'simulated' } } }, 'forge')).toMatchObject({ status: 'committed' });
+      const store = new PostgresOutboxStore(db), delivered = await store.open(lease);
+      await db.query('DELETE FROM realm_outbox WHERE kingdom_id = $1 AND event_id = ANY($2::text[])', [kingdomId, initialEvents]);
+      expect((await store.prefix(kingdomId, delivered)).homes).toHaveLength(2);
+
+      const state = await repository.load(lease);
+      expect(Object.keys(state.homes)).toHaveLength(17);
+      expect((await store.prefix(kingdomId, delivered)).homes).toHaveLength(2); // Repair never jumps delivery.
+      const repair = await store.read(kingdomId, delivered);
+      expect(repair).toHaveLength(15);
+      expect(repair.map(row => row.eventId)).toEqual(initialEvents.slice(0, 15));
+      expect(JSON.stringify(repair)).not.toMatch(/ownerId|allocationReceipt|blueprint|attribution|PRIVATE/);
+      await store.acknowledge(lease, repair.at(-1)!.id);
+      const published = await store.prefix(kingdomId, repair.at(-1)!.id);
+      expect(published.homes).toHaveLength(17);
+      expect(published.homes.find(home => home.plotId === edited.id)).toMatchObject({ revision: 'later-build', assetHash: 'b'.repeat(64) });
+      expect(published.homes.find(home => home.plotId === forged.id)?.attachments).toHaveLength(1);
+      await repository.load(lease);
+      expect(await store.read(kingdomId, repair.at(-1)!.id)).toEqual([]);
+
+      await db.query('DELETE FROM realm_outbox WHERE event_id = $1', [initialEvents[0]]);
+      await repository.release(lease);
+      await expect(repository.load(lease)).rejects.toBeInstanceOf(RealmWriterFencedError);
+      expect((await db.query('SELECT id FROM realm_outbox WHERE event_id = $1', [initialEvents[0]])).rows).toEqual([]);
+      lease = await repository.acquire(kingdomId);
+      await repository.load(lease);
+      // A changed current home with no later public row cannot be repaired with its obsolete allocation.
+      await db.query("DELETE FROM realm_outbox WHERE kingdom_id = $1 AND plot_id = $2 AND kind = 'home'", [kingdomId, edited.id]);
+      await expect(repository.load(lease)).rejects.toBeInstanceOf(RealmRecoveryError);
+      expect((await db.query('SELECT id FROM realm_outbox WHERE event_id = $1', [initialEvents[15]])).rows).toEqual([]);
+    } finally { await repository.release(lease); }
+  }, 30_000);
 
   it('cancellation after the final fence rolls back the complete Forge commit and leaves the writer healthy', async () => {
     const kingdomId = KingdomIdSchema.parse(String(800_000_000 + randomBytes(3).readUIntBE(0, 3)));
@@ -68,7 +201,7 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
       expect(Object.keys(kingdom.privateState.reservations)).toEqual(['wish:1']);
       expect(await kingdom.lookup('canceled-after-fence')).toBeNull();
       for (const table of ['realm_designs', 'realm_outbox']) {
-        expect(Number((await db.query(`SELECT count(*) AS n FROM ${table} WHERE kingdom_id = $1`, [kingdomId])).rows[0].n)).toBe(0);
+        expect(Number((await db.query(`SELECT count(*) AS n FROM ${table} WHERE kingdom_id = $1`, [kingdomId])).rows[0].n)).toBe(table === 'realm_outbox' ? 3 : 0);
       }
       expect(Number((await db.query('SELECT count(*) AS n FROM realm_facts WHERE kingdom_id = $1', [kingdomId])).rows[0].n)).toBe(fixture.setup.length);
       expect((await db.query('SELECT delta FROM realm_coal_ledger WHERE kingdom_id = $1 ORDER BY seq', [kingdomId])).rows).toEqual([{ delta: 1 }]);
@@ -150,17 +283,18 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     const ledger = (await db.query(`SELECT delta, balance, reason FROM "${schema}".realm_coal_ledger WHERE kingdom_id = $1 ORDER BY seq`, [kingdomId])).rows;
     expect(ledger).toEqual([{ delta: 1, balance: 1, reason: 'coal.creditQualifiedNight' }, { delta: -1, balance: 0, reason: 'forge.commitApproved' }]);
     expect(await count(`SELECT count(*) AS n FROM "${schema}".realm_designs WHERE kingdom_id = $1`)).toBe(1);
-    const outbox = (await db.query(`SELECT event_id, kind, message FROM "${schema}".realm_outbox WHERE kingdom_id = $1`, [kingdomId])).rows;
-    expect(outbox.map(r => [r.event_id, r.kind])).toEqual([[`${kingdomId}:${fixture.setup.length + 1}:0`, 'forge']]);
+    const outbox = (await db.query(`SELECT event_id, kind, message FROM "${schema}".realm_outbox WHERE kingdom_id = $1 ORDER BY id`, [kingdomId])).rows;
+    expect(outbox.map(r => [r.event_id, r.kind])).toEqual([[`${kingdomId}:1:0`, 'home'], [`${kingdomId}:3:0`, 'growth'],
+      [`${kingdomId}:4:0`, 'growth'], [`${kingdomId}:${fixture.setup.length + 1}:0`, 'forge']]);
     expect(outbox[0].message).not.toMatch(/PRIVATE|opaque-safety|judges|personId|ownerId|deed:|names:/);
     expect(outbox[0].message).not.toContain(fixture.person);
-    // Recovery uses public rows through the durable cursor, including a first Forge with no home row.
+    // Recovery uses public rows through the durable cursor, including allocation before its first Forge.
     const deliveredId = Number((await db.query(`SELECT max(id) AS id FROM realm_outbox WHERE kingdom_id = $1`, [kingdomId])).rows[0].id);
     const publicStore = new PostgresOutboxStore(db);
     expect((await publicStore.prefix(kingdomId, deliveredId)).homes).toMatchObject([
       { plotId: state.attachments['run:1']!.homeId, revision: `r${fixture.setup.length + 1}`, attachments: [{ id: 'run:1' }] },
     ]);
-    expect((await publicStore.prefix(kingdomId, deliveredId - 1)).homes).toEqual([]);
+    expect((await publicStore.prefix(kingdomId, deliveredId - 1)).homes).toMatchObject([{ revision: 'home:1', attachments: [] }]);
     const epochs = (await db.query(`SELECT writer_epoch, writer_generation FROM "${schema}".realm_kingdoms WHERE kingdom_id = $1`, [kingdomId])).rows[0];
     expect(epochs).toEqual({ writer_epoch: null, writer_generation: '3' });
   }, 30_000);
@@ -188,8 +322,8 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     expect(await kingdom.execute('rights-1', { type: 'citizen.rights', personId: person, rights: { revision: 1, forge: true, build: true, blocked: false, safetyIdentifier: 'opaque-safety' } }, 'moderation')).toMatchObject({ status: 'committed', sequence: 2 });
     const rebuilt = { ...home, revision: 'house:2', digest: 'c'.repeat(64) };
     expect(await kingdom.execute('publish-1', { type: 'home.replaceApproved', homeId: home.id, expectedRevision: home.revision, home: rebuilt, approvalReceipt: 'build:2', attachments: [] }, 'publication')).toMatchObject({ status: 'committed', sequence: 3 });
-    await waitUntil(() => deliveries.length === 1);
-    expect(deliveries[0]).toMatchObject({ kingdomId: REFERENCE_KINGDOM, writerEpoch: firstEpoch, sequence: 3, eventId: `${REFERENCE_KINGDOM}:3:0`, message: { type: 'home', plotId: home.id, revision: 'house:2' } });
+    await waitUntil(() => deliveries.length === 2);
+    expect(deliveries[1]).toMatchObject({ kingdomId: REFERENCE_KINGDOM, writerEpoch: firstEpoch, sequence: 3, eventId: `${REFERENCE_KINGDOM}:3:0`, message: { type: 'home', plotId: home.id, revision: 'house:2' } });
     await waitUntil(() => room.state.factSequence === 3);
     await room.leave(true);
     await waitUntil(() => !first.durable.kingdoms.has(REFERENCE_KINGDOM));
@@ -456,7 +590,8 @@ describe.runIf(enabled)('durable realm authority (Postgres)', () => {
     // A fresh join installs the current crowd at throughSequence; the browser rule then ignores the redelivery.
     const bootstrap = resumed.bootstrap({ personId: person, kingdomId, sessionId: 'not-used', expiresAt: 0, origin: 'live', publicName: 'Citizen', look: 'neutral' });
     expect(bootstrap.throughSequence).toBe(resumed.sequence);
-    expect(bootstrap.current).toEqual([{ type: 'presence', frame: lit }]);
+    expect(bootstrap.current.filter(message => message.type !== 'growth')).toEqual([{ type: 'presence', frame: lit }]);
+    expect(bootstrap.current.find(message => message.type === 'growth')).toMatchObject({ type: 'growth', frame: { beats: [] } });
     const browser = deliveryCursor(bootstrap);
     expect(seenB.filter(browser.accept)).toEqual([]);
 

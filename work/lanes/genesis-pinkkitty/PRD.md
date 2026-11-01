@@ -13,6 +13,6 @@ Work in checkpoints: if a session ends before the part is done, leave everything
 Captures: take the shared capture lock for one still or one short clip at a time and release it in between, so main can capture between your frames; never hold it for a whole series.
 
 ## Tasks
-- [ ] **GP10 — PinkKittyRose, a kingdom of its own.** Land, landmarks, crest and banners, emote art, keepers, sound and its own dusk light at its own size, captured from its hero view and the Atlas door with a before/after against `shots/genesis/4363967@1920x1080.png`.
+- [x] **GP10 — PinkKittyRose, a kingdom of its own.** Land, landmarks, crest and banners, emote art, keepers, sound and its own dusk light at its own size, captured from its hero view and the Atlas door with a before/after against `shots/genesis/4363967@1920x1080.png`.
 
 ## Backlog

@@ -31,6 +31,13 @@ it('carries spectacle evidence additively, stripped of messages and amounts it n
   const raid = { ...base, notice: { kind: 'raid', from: { kingdomId: '41245072', login: 'fernwood', name: 'fernwood' }, viewers: 140 } };
   expect(RealmMomentObservationSchema.parse(raid)).toEqual(raid);
   expect(RealmMomentObservationSchema.safeParse({ ...raid, notice: { ...raid.notice, viewers: 0 } }).success).toBe(false);
+  const hype = { ...base, notice: { kind: 'hype', update: {
+    trainKey: 'train:1', sharedSessionKey: null, phase: 'begin', level: 1, total: 0, progress: 0, goal: 100,
+    startedAt: 1000, endsAt: 301000, golden: false, treasure: false,
+    allTimeHighLevel: null, recordVerified: false, contributors: [],
+  } } };
+  expect(RealmMomentObservationSchema.parse(hype)).toEqual(hype);
+  expect(RealmMomentObservationSchema.safeParse({ ...hype, notice: { ...hype.notice, update: { ...hype.notice.update, level: 0 } } }).success).toBe(false);
   expect(RealmSupportObservationSchema.safeParse(cheer).success).toBe(false);
   const strike = { version: 1, kingdomId: '129634568', personId: '41245072', messageId: 'm-1', origin: 'live', observedAt: 1000 };
   expect(RealmStrikeSchema.parse(strike)).toEqual(strike);

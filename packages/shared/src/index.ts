@@ -13,3 +13,4 @@ export * from './build';
 export * from './citizen-chat';
 export * from './citizen-look';
 export * from './forge';
+export * from './growth';

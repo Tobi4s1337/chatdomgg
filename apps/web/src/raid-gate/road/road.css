@@ -1,0 +1,75 @@
+/* The raid road: one journey across three layers (the leaving kingdom, the Atlas, the destination), with the gate's
+   tableaux, a carved header that names the chapter, and the caravan's parchment tag riding with the column on the map. */
+
+.rr-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.rr-route { background: #e2d3ae; }
+.rr-map { position: absolute; inset: 0; z-index: 1; background: #e2d3ae; pointer-events: none; }
+.rr-map canvas { display: block; }
+.rr-world { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 2; transform-origin: 50% 46%; }
+.rr-dest { z-index: 3; }
+.rr-shade { z-index: 4; transition: opacity .6s; }
+.rr-route[data-act='rise'] .rr-shade, .rr-route[data-act='ride'] .rr-shade, .rr-route[data-act='hold'] .rr-shade { opacity: 0; }
+.rr-route[data-act='welcome'] .rr-shade { background: linear-gradient(90deg, transparent 45%, #12142466 78%, #10121fa6), linear-gradient(180deg, #11142450, transparent 22%), linear-gradient(0deg, #0d0f1ccc, #0d0f1c66 24%, transparent 46%); }
+
+/* ---- The carved header: chapter, place and provenance ---------------------------------------------------------- */
+.rr-header { position: absolute; z-index: 7; top: 26px; left: 30px; display: flex; align-items: center; gap: 14px; padding: 12px 22px 13px 14px; pointer-events: none;
+  background: linear-gradient(180deg, #4a3426f2, #2c1f18f2); border: 1px solid #b48a52; border-radius: 4px;
+  box-shadow: inset 0 1px 0 #f3d69c55, inset 0 0 0 3px #2c1f18, inset 0 0 0 4px #b48a5266, 0 8px 22px #0b0c1873, 0 2px 0 #1a120c; }
+.rr-header h1 { margin: 2px 0 3px; font: 400 32px/1.02 'IM Fell English', Georgia, serif; color: #fbecd0; letter-spacing: -.005em; text-shadow: 0 1px 0 #1a120c; }
+.rr-pair { display: inline-flex; align-items: center; gap: 2px; }
+.rr-pair i { width: 30px; height: 2px; background: repeating-linear-gradient(90deg, #f3d69c 0 6px, transparent 6px 10px); opacity: .8; }
+.rr-chapters { display: flex; gap: 14px; margin: 0; padding: 0; list-style: none; font: 12px 'IM Fell English SC', Georgia, serif; letter-spacing: .14em; text-transform: lowercase; color: #b9a07a; }
+.rr-chapters li { display: inline-flex; align-items: baseline; gap: 6px; opacity: .55; }
+.rr-chapters li span { font: italic 12px 'IM Fell English', Georgia, serif; letter-spacing: 0; color: #d9b77a; }
+.rr-chapters li.rr-past { opacity: .8; }
+.rr-chapters li.rr-now { opacity: 1; color: #f3d69c; }
+.rr-chapters li.rr-now::before { content: ''; width: 6px; height: 6px; background: #e7b864; transform: rotate(45deg) translateY(-1px); box-shadow: 0 0 8px #e7b864aa; align-self: center; }
+.rr-provenance { display: flex; align-items: center; gap: 7px; margin: 0; font: italic 13.5px Alegreya, Georgia, serif; color: #e6cfa6; }
+
+/* ---- The tableau stage at the foot of each kingdom ----------------------------------------------------------- */
+.rr-stage { position: absolute; z-index: 5; left: 0; bottom: 0; width: min(1400px, calc(100vw - 490px)); height: min(50vh, 500px); pointer-events: none; opacity: var(--reveal); }
+.rr-stage::before { content: ''; position: absolute; inset: -14% 0 0 0; z-index: -1;
+  background: radial-gradient(ellipse 72% 64% at 0% 100%, #0b0c18f2 0, #0b0c18c4 45%, transparent 100%), linear-gradient(0deg, #0b0c18e6 0, #0b0c1880 18%, transparent 46%); }
+.rr-words { position: absolute; left: 44px; top: 0; max-width: 760px; text-shadow: 0 2px 12px #0b0c18, 0 1px 0 #0b0c18; }
+.rr-eyebrow { margin: 0 0 6px; font: 13px 'IM Fell English SC', Georgia, serif; letter-spacing: .2em; text-transform: lowercase; color: #f0c98b; }
+.rr-title { margin: 0; font: 400 46px/1.02 'IM Fell English', Georgia, serif; color: #fff1d6; letter-spacing: -.01em; text-wrap: balance; }
+.rr-line { margin: 10px 0 0; max-width: 660px; font: italic 19.5px/1.4 Alegreya, Georgia, serif; color: #f0dcbc; text-wrap: pretty; }
+.rr-scene { position: absolute; left: 0; right: 0; bottom: 0; height: 74%; }
+.rr-scene svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.rr-chip { position: absolute; right: 18px; bottom: 14px; margin: 0; display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border: 1px solid #d0b58160; background: #20243acc; color: #f2d8b3; font: 10px/1 Alegreya, Georgia, serif; letter-spacing: .16em; }
+.rr-bloom, .rr-ember { mix-blend-mode: screen; }
+.rr-ember { fill: #ffcb7a; }
+.rr-gate-seal { overflow: visible; filter: drop-shadow(0 0 10px #ffc4704d) drop-shadow(0 3px 2px #0b0c18aa); }
+.rr-gate-seal > * { display: block; margin: 3px auto 0; }
+.rr-you { font: 13px 'IM Fell English SC', Georgia, serif; letter-spacing: .12em; fill: #f7dca4; paint-order: stroke; stroke: #120d14; stroke-width: 3px; }
+.rr-more { font: italic 18px Alegreya, Georgia, serif; fill: #e8d1ac; paint-order: stroke; stroke: #120d14; stroke-width: 3px; }
+
+/* ---- The caravan's tag, riding with the column on the map ----------------------------------------------------- */
+.rr-caravan { position: absolute; z-index: 6; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.rr-caravan::before { content: ''; position: absolute; left: 0; bottom: 46px; width: 1px; height: 30px; background: linear-gradient(#3b2f25, #3b2f2500); transform: translateX(-.5px); }
+.rr-caravan-tag { position: absolute; left: -24px; bottom: 74px; display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; white-space: nowrap; color: #3b2f25;
+  background: linear-gradient(#f6ecd3, #ead9b2); border: 1px solid #3b2f25; border-radius: 2px;
+  box-shadow: 0 0 0 3px #f6ecd3, 0 0 0 4px #3b2f2566, 0 6px 14px #3b2f2533; }
+.rr-caravan-tag b { display: block; font: 400 21px/1.05 'IM Fell English', Georgia, serif; }
+.rr-caravan-tag small { display: block; margin-top: 2px; font: italic 14.5px/1.2 Alegreya, Georgia, serif; color: #5b4128; }
+.rr-caravan-tag em { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; margin-left: 4px; font: normal 9.5px/1 Alegreya, Georgia, serif; letter-spacing: .16em; color: #6b5238; }
+.rr-caravan-tag .rg-pip { background: #b0532a; box-shadow: none; }
+.rr-map-note { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 520px; margin: 0; padding: 16px 20px; text-align: center;
+  font: italic 18px/1.4 Alegreya, Georgia, serif; color: #3b2f25; background: #f3e7c9; border: 1px solid #3b2f25; }
+
+.rr-board { display: contents; }
+.rr-board .rg-pane { z-index: 8; }
+
+@media (max-width: 760px) {
+  .rr-header { top: 12px; left: 12px; right: 12px; padding: 9px 12px; gap: 10px; }
+  .rr-header h1 { font-size: 22px; }
+  .rr-chapters { gap: 8px; font-size: 10px; }
+  .rr-chapters li:not(.rr-now) { display: none; }
+  .rr-provenance { font-size: 12px; }
+  .rr-stage { width: 100vw; height: 40vh; bottom: 38vh; }
+  .rr-words { left: 16px; right: 16px; }
+  .rr-title { font-size: 26px; }
+  .rr-line { font-size: 15px; }
+  .rr-route[data-act='welcome'] .rr-stage, .rr-route[data-act='gather'] .rr-stage, .rr-route[data-act='setout'] .rr-stage { bottom: 42vh; }
+  .rr-caravan-tag b { font-size: 17px; }
+}

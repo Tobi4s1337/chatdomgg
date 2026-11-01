@@ -93,6 +93,14 @@ export interface SkyGlow {
    */
   readonly night?: number;
 }
+/**
+ * The sky's light and the dragon's on the town, as one: colours weighted by strength, strengths combined as lights
+ * (never past the sky's 0.6 cap), and the deeper of the two dusks.
+ */
+export function mergeGlow(a: SkyGlow, b: SkyGlow): SkyGlow {
+  const total = a.strength + b.strength, mixed = (i: 0 | 1 | 2) => total > 0 ? (a.colour[i] * a.strength + b.colour[i] * b.strength) / total : 0;
+  return { colour: [mixed(0), mixed(1), mixed(2)], strength: Math.min(0.6, 1 - (1 - a.strength) * (1 - b.strength)), night: Math.max(a.night ?? 0, b.night ?? 0) };
+}
 export interface ScreenNameplate { readonly id: string; readonly name: string; readonly x: number; readonly y: number }
 
 const NO_PLACES: SpectaclePlaces = {
@@ -527,10 +535,11 @@ export function createTwitchMomentView(host: MomentViewHost) {
         const at = trainLayer.focus();
         if (!sky || !at) return null;
         // From trackside, outside the loop, the town behind the train: the shot rides along with it.
-        const out = at.clone().sub(new THREE.Vector3(...sky.centre)).setY(0).normalize(), target = at.clone().add(new THREE.Vector3(0, 1.4, 0));
+        // Low, at a child's height by the rails, so the train stands against the town's roofs and the dusk over them.
+        const out = at.clone().sub(new THREE.Vector3(...sky.centre)).setY(0).normalize(), target = at.clone().add(new THREE.Vector3(0, 2.6, 0));
         return first(function* () {
-          for (const reach of [portrait ? 20 : 16, 24, 12]) for (const turn of [0, 0.35, -0.35, 0.7, -0.7]) {
-            yield [at.clone().addScaledVector(turned(out, turn), reach).add(new THREE.Vector3(0, portrait ? 8 : 6.5, 0)), target, portrait ? 62 : 50] as const;
+          for (const reach of [portrait ? 20 : 17, 24, 12]) for (const turn of [0, 0.35, -0.35, 0.7, -0.7]) {
+            yield [at.clone().addScaledVector(turned(out, turn), reach).add(new THREE.Vector3(0, portrait ? 4.6 : 3.4, 0)), target, portrait ? 62 : 50] as const;
           }
         }());
       }
@@ -742,7 +751,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       flight.apply(frame.visible ? frame.sky : [], frame.atMs);
       trainLayer.apply(frame.visible ? frame.train : null, frame.atMs);
       dragon.apply(frame.visible ? frame.dragon : null, frame.atMs);
-      host.light?.(frame.visible ? { ...skyLight.glow(), hush: Math.min(1, Math.max(0, frame.stage?.hush ?? 0)) } : { colour: [0, 0, 0], strength: 0, hush: 0 });
+      host.light?.(frame.visible ? { ...mergeGlow(skyLight.glow(), dragon.glow()), hush: Math.min(1, Math.max(0, frame.stage?.hush ?? 0)) } : { colour: [0, 0, 0], strength: 0, hush: 0 });
       callCrowd(frame);
       syncAudio(frame);
       if (frame.visible) direct(frame); else release();
@@ -770,7 +779,7 @@ export function createTwitchMomentView(host: MomentViewHost) {
       });
     },
     /** The sky's light this frame, for hosts that tint their own lighting rather than take `light()` calls. */
-    glow: (): SkyGlow => skyLight.glow(),
+    glow: (): SkyGlow => mergeGlow(skyLight.glow(), dragon.glow()),
     stats: (): Record<string, number | boolean> => ({ banners: banners.size, meshes: [...banners.values()].reduce((n, b) => n + b.root.children.length, 0), edges: edges.size,
       ...gifts.stats(), ...prefixed('sky', skyLight.stats()), ...prefixed('flight', flight.stats()), ...prefixed('train', trainLayer.stats()),
       ...prefixed('dragon', dragon.stats()), ...prefixed('raid', raid.stats()), geometries: ready.size, sounds: playing.size, leased: director !== null, attached: root.parent === host.parent,

@@ -6,6 +6,7 @@ import { CitizenChatCueSchema, type CitizenChatCue, type KingdomPresenceFrame, t
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { CITIZEN_SEATED_HEAD_OFFSET_METRES, createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import type { ForgeReactionCue } from './forge-flight';
+import { chooseWatchers, crowdPose, type CrowdCall } from '../twitch-moments/stage-beat';
 import { walkerSubject, type WalkerSlots } from './observed-walkers';
 import { createWalkerLanterns } from './walker-lanterns';
 
@@ -191,7 +192,7 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       restoredForgePending = false; restoredForgeGraceStart = undefined;
       forge = { anchor, atMs };
     },
-    update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set(), walkerFeet: WalkerSlots = new Map(), reaction: ForgeReactionCue | null = null) {
+    update(atMs: number, time: number, camera?: THREE.Camera, reservedSlots: ReadonlySet<number> = new Set(), walkerFeet: WalkerSlots = new Map(), reaction: ForgeReactionCue | null = null, call: CrowdCall | null = null) {
       walkers = walkerFeet;
       if (forge && frame && atMs >= forge.atMs && atMs >= nextForgeGatherMs) {
         nextForgeGatherMs = atMs + 1_000;
@@ -233,6 +234,9 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
           .sort((a, b) => Math.hypot(a.position[0] - reaction.socket![0], a.position[2] - reaction.socket![2])
             - Math.hypot(b.position[0] - reaction.socket![0], b.position[2] - reaction.socket![2]) || a.slot - b.slot)
           .slice(0, 3).map(sample => sample.slot) : []);
+      const attending = new Set(call && !reaction && call.watchers > 0
+        ? chooseWatchers(call, bodies.filter(sample => sample.opacity > .1 && !reservedSlots.has(sample.slot) && !watchers.has(sample.slot)))
+          .map(sample => sample.slot) : []);
       renderer?.update(bodies.map(sample => {
         const overlay = overlays.get(sample.slot);
         let heading = sample.heading, lookYaw = watchers.has(sample.slot) ? 0 : overlay?.lookYaw ?? 0, lookPitch = 0, waveWeight = 0;
@@ -253,12 +257,27 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
             waveWeight = smooth(waveAge / .5) * (1 - smooth((waveAge - 2) / .8));
           }
         }
+        let crowdGesture: 'none' | 'nod' | 'wave' = 'none', crowdOffset = 0;
+        if (call && attending.has(sample.slot)) {
+          const pose = crowdPose(call, sample, atMs);
+          const dx = call.point[0] - sample.position[0], dz = call.point[2] - sample.position[2];
+          const angle = Math.atan2(Math.sin(Math.atan2(dx, dz) - sample.heading), Math.cos(Math.atan2(dx, dz) - sample.heading));
+          const turn = sample.speed < .05 ? angle * pose.turned : 0;
+          heading += turn;
+          lookYaw = lookYaw * (1 - pose.turned) + Math.max(-1.15, Math.min(1.15, angle - turn)) * pose.turned;
+          lookPitch = -Math.max(0, Math.min(.7, Math.atan2(call.point[1] - sample.position[1] - 1.3, Math.max(.1, Math.hypot(dx, dz))))) * pose.turned;
+          if (sample.speed < .05) {
+            crowdGesture = pose.gesture;
+            crowdOffset = pose.offset;
+            if (pose.gesture === 'wave') waveWeight = call.cheer;
+          }
+        }
         return ({ id: String(sample.slot), look: suppliedLooks.get(sample.slot) ?? looks[sample.slot % looks.length]!.id,
-        position: sample.position, heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time:overlays.get(sample.slot)?.time??time,
+        position: sample.position, heading, distance: sample.distance, moving: Math.min(1, sample.speed / 1.2), speed: sample.speed, opacity: sample.opacity, time:(overlays.get(sample.slot)?.time??time) + crowdOffset,
         tiptoe: sample.goalReached && ['forge:watch:8', 'forge:watch:12', 'forge:watch:15', 'forge:watch:18', 'forge:watch:24', 'forge:watch:27', 'forge:watch:30'].includes(watchers.get(sample.slot) ?? '')
           ? smooth((atMs - (watcherArrivals.get(sample.slot) ?? atMs) - 500) / 900) * (.82 + .18 * Math.sin(time * 1.3 + sample.slot)) : 0,
         lookYaw, lookPitch, ...(waveWeight > 0 ? { waveWeight } : {}),
-        gesture: waveWeight > 0 ? 'wave' as const : reservedSlots.has(sample.slot) || watchers.has(sample.slot)?'none' as const:speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : overlay?.gesture??'none' as const }); }), camera);
+        gesture: waveWeight > 0 ? 'wave' as const : crowdGesture === 'nod' ? 'nod' as const : reservedSlots.has(sample.slot) || watchers.has(sample.slot)?'none' as const:speech.has(sample.slot) && speech.get(sample.slot)!.expiresAt > atMs ? 'nod' as const : overlay?.gesture??'none' as const }); }), camera);
       carrying = [...bodies, ...samples.filter(sample => {
         const walker = walkers.get(sample.slot);
         return walker && knownLooks.has(walker.look) && !walker.posture;
