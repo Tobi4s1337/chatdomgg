@@ -3,7 +3,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { chromium } from '@playwright/test';
-import { startChroniclePreview } from './preview.mjs';
+import { startChroniclePreview, captureCancellation } from './preview.mjs';
 
 // Local verification only. The recording is evidence of a SIMULATED fixture, not a product video.
 const evidence = resolve(import.meta.dirname, 'evidence');
@@ -13,6 +13,8 @@ const run = promisify(execFile);
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 let server, browser, release, failure;
 const cleanupErrors = [];
+let browserClosing;
+const cancellation = captureCancellation(() => { if (browser) { browserClosing = browser.close(); browserClosing.catch(() => {}); } });
 
 async function ready(page, base) {
   const errors = [];
@@ -176,11 +178,11 @@ async function record(browser, base) {
     console.log(`SIMULATED playback reached entry ${end.index + 1} of ${end.count}; recorded entries advance by snapshot replacement.`);
   } finally { await context.close(); }
   if (!raw) throw new Error('No recording was produced');
-  const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', raw]);
+  const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', raw], { signal: cancellation.signal });
   const duration = Number(JSON.parse(probe.stdout).format.duration);
   if (!Number.isFinite(duration) || duration < 30) throw new Error(`Recording is too short: ${duration} seconds`);
-  await run('ffmpeg', ['-v', 'error', '-y', '-ss', String(Math.max(0, duration - 30)), '-i', raw, '-t', '30', '-an', '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '5', '-b:v', '0', '-crf', '33', output], { maxBuffer: 4 * 1024 * 1024 });
-  const finalProbe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', output]);
+  await run('ffmpeg', ['-v', 'error', '-y', '-ss', String(Math.max(0, duration - 30)), '-i', raw, '-t', '30', '-an', '-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '5', '-b:v', '0', '-crf', '33', output], { maxBuffer: 4 * 1024 * 1024, signal: cancellation.signal });
+  const finalProbe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', output], { signal: cancellation.signal });
   const finalDuration = Number(JSON.parse(finalProbe.stdout).format.duration);
   if (!Number.isFinite(finalDuration) || finalDuration < 29.9 || finalDuration > 30.2) throw new Error(`Trimmed recording has unexpected duration: ${finalDuration}`);
   await rm(raw, { force: true });
@@ -193,20 +195,22 @@ if (!['desktop', 'phone', 'record'].includes(check)) throw new Error('Use --chec
 
 try {
   let base;
-  ({ server, base, release } = await startChroniclePreview());
+  ({ server, base, release } = await startChroniclePreview({ signal: cancellation.signal }));
   await mkdir(evidence, { recursive: true });
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  cancellation.signal.throwIfAborted();
   if (check === 'record') await record(browser, base);
   else await accessibility(browser, base, ...(check === 'desktop' ? [1440, 900] : [390, 844]));
 } catch (error) {
-  failure = error;
+  failure = cancellation.signal.aborted && (error.name === 'AbortError' || error.name === 'TargetClosedError') ? cancellation.signal.reason : error;
 } finally {
-  try { await browser?.close(); } catch (error) { cleanupErrors.push(error); }
+  try { await (browserClosing ?? browser?.close()); } catch (error) { cleanupErrors.push(error); }
   try {
     if (server && server.exitCode === null && server.signalCode === null) { server.kill('SIGTERM'); await new Promise(resolve => server.once('exit', resolve)); }
   } catch (error) { cleanupErrors.push(error); }
   try { await release?.(); } catch (error) { cleanupErrors.push(error); }
 }
+cancellation.dispose();
 if (failure && cleanupErrors.length) throw new AggregateError([failure, ...cleanupErrors], 'Capture and cleanup both failed');
 if (failure) throw failure;
 if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Capture cleanup failed');

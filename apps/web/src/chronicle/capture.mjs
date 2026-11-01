@@ -1,7 +1,7 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from '@playwright/test';
-import { buildChroniclePreview, startChroniclePreview } from './preview.mjs';
+import { buildChroniclePreview, startChroniclePreview, captureCancellation } from './preview.mjs';
 
 // One image per lock: the shared host must remain available to other lanes between captures.
 const args = process.argv.slice(2), option = name => { const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1]; };
@@ -11,12 +11,15 @@ const [width, height] = size === 'desktop' ? [1440, 900] : [390, 844];
 const evidence = resolve(import.meta.dirname, 'evidence');
 let server, browser, release, failure, buildDir;
 const cleanupErrors = [];
+let browserClosing;
+const cancellation = captureCancellation(() => { if (browser) { browserClosing = browser.close(); browserClosing.catch(() => {}); } });
 try {
   let base;
-  buildDir = await buildChroniclePreview();
-  ({ server, base, release } = await startChroniclePreview({ buildDir }));
+  buildDir = await buildChroniclePreview({ signal: cancellation.signal });
+  ({ server, base, release } = await startChroniclePreview({ buildDir, signal: cancellation.signal }));
   await mkdir(evidence, { recursive: true });
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  cancellation.signal.throwIfAborted();
   const page = await browser.newPage({ viewport: { width, height }, reducedMotion: 'reduce' });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -44,13 +47,14 @@ try {
   await page.screenshot({ path, timeout: 120_000 });
   console.log(`Captured ${path}; seek and reversal checks run separately in watch-check.mjs`);
 } catch (error) {
-  failure = error;
+  failure = cancellation.signal.aborted && (error.name === 'AbortError' || error.name === 'TargetClosedError') ? cancellation.signal.reason : error;
 } finally {
-  try { await browser?.close(); } catch (error) { cleanupErrors.push(error); }
+  try { await (browserClosing ?? browser?.close()); } catch (error) { cleanupErrors.push(error); }
   try { if (server && server.exitCode === null && server.signalCode === null) { server.kill('SIGTERM'); await new Promise(resolve => server.once('exit', resolve)); } } catch (error) { cleanupErrors.push(error); }
   try { await release?.(); } catch (error) { cleanupErrors.push(error); }
   try { if (buildDir) await rm(buildDir, { recursive: true, force: true }); } catch (error) { cleanupErrors.push(error); }
 }
+cancellation.dispose();
 if (failure && cleanupErrors.length) throw new AggregateError([failure, ...cleanupErrors], 'Capture and cleanup both failed');
 if (failure) throw failure;
 if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Capture cleanup failed');
