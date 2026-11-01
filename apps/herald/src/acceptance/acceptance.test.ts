@@ -248,6 +248,21 @@ afterEach(async () => {
 });
 
 describe('the dev composition under SIMULATED Twitch', { timeout: 60_000 }, () => {
+  it('discovers newly granted bits and hype while chat and chatters are already authorized', async () => {
+    const r = await rig();
+    await boot(r);
+    await publishing(r);
+    const optional = ['channel.bits.use', 'channel.hype_train.begin', 'channel.hype_train.progress', 'channel.hype_train.end'];
+    expect(r.eventsub.subscriptions.some(subscription => optional.includes(subscription.type))).toBe(false);
+
+    r.fake.grants.set(BROADCASTER.id, new Set([...BROADCASTER_SCOPES, 'bits:read', 'channel:read:hype_train']));
+    await until(() => r.log.some(line => line.includes('hype grant recorded')), 60_000, 100);
+    expect(r.log).toContain('  bits grant recorded; enabling cheers and Power-ups');
+    expect(r.log).toContain('  hype grant recorded; enabling hype trains');
+    // Subscription verification is settled separately after the grant is noticed.
+    await until(() => optional.every(type => r.eventsub.subscriptions.some(subscription => subscription.type === type)), 5_000, 100);
+  });
+
   it('without the chat grants it observes the broadcast but never publishes or asks Twitch for chat', async () => {
     const r = await rig({ grants: {} });
     await boot(r);
@@ -256,7 +271,7 @@ describe('the dev composition under SIMULATED Twitch', { timeout: 60_000 }, () =
     expect(h.source).toMatchObject({ available: false, reason: 'unauthorized' });
     expect((await get(r.handle!.server.port, STREAM_PATH)).status).toBe(503);
     const requested = r.eventsub.subscriptions.map(subscription => subscription.type).sort();
-    expect(requested).toEqual(['stream.offline', 'stream.online', 'user.authorization.revoke']);
+    expect(requested).toEqual(['channel.raid', 'stream.offline', 'stream.online', 'user.authorization.revoke']);
     expect(r.fake.count('GET', 'api.twitch.tv/helix/chat/chatters')).toBe(0);
     await expectNothingPrivateEscaped(r);
   });
@@ -363,6 +378,7 @@ describe('the dev composition under SIMULATED Twitch', { timeout: 60_000 }, () =
     const r = await rig();
     await boot(r);
     await publishing(r);
+    const subscriptionPosts = r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions');
     const reader = await stream(r);
     const old = socket(r);
     r.eventsub.autoWelcome = false;
@@ -383,7 +399,7 @@ describe('the dev composition under SIMULATED Twitch', { timeout: 60_000 }, () =
     expect(h.source.available).toBe(true);
     expect(h.source.delivery?.ingest.counters).toMatchObject({ chatSubmitted: 1, duplicateDeliveries: 1, duplicateMessages: 1 });
     expect(named(reader.frames.at(-1)!).map(window => window.publicName)).toEqual(['Wren']);
-    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(7);
+    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(subscriptionPosts);
     expect(r.eventsub.sockets.length).toBe(2);
     await expectNothingPrivateEscaped(r);
   });
