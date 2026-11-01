@@ -148,6 +148,7 @@ export default function StreamView() {
     window.__chatdomKingdom = {
       stats: scene.debug,
       inspect: scene.inspect,
+      suspendRendering: scene.suspendRendering,
       ...(dockFixture ? { dock: dockFixture.trigger } : {}),
       pose: scene.pose,
       seekGrowthCeremony: scene.seekGrowthCeremony,
