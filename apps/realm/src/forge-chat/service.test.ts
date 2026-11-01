@@ -434,6 +434,27 @@ describe('a recorded wish has one irreversible send', () => {
     expect(recoverCommitted).toHaveBeenCalledTimes(1);
   });
 
+  it('retains Twitch confirmation when the surrounding grant transaction loses its reply', async () => {
+    class LostReplyStore extends SimulatedStore {
+      override async withGrantLock<T>(owner: string, action: (current: ChatGrant | null, save: (next: ChatGrant | null) => Promise<void>, context?: ChatGrantContext) => Promise<T>): Promise<T> {
+        const result = await super.withGrantLock(owner, action);
+        if (result && typeof result === 'object' && 'kind' in result && result.kind === 'sent') {
+          throw new Error('SIMULATED lost grant COMMIT reply');
+        }
+        return result;
+      }
+    }
+    const store = new LostReplyStore(); store.grants.set(personId, grant());
+    const fetcher = vi.fn(async () => sent());
+    const recoverCommitted = vi.fn(async () => ({ attachmentId: 'SIMULATED-piece', committedAt: NOW }));
+    const { service } = setup({ store, fetcher: fetcher as typeof fetch, recoverCommitted });
+    expect((await service.wish(principal, body, async () => true)).wish).toMatchObject({ status: 'sent', messageId: 'SIMULATED-chat-message' });
+    expect((await service.status(principal, { version: 1, kingdomId, requestId })).wish?.status).toBe('delivered');
+    expect((await service.wish(principal, body, async () => true)).wish.status).toBe('delivered');
+    expect(recoverCommitted).toHaveBeenCalledWith({ kingdomId, personId, messageId: 'SIMULATED-chat-message' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['held', 'refused', 'cold', 'canceled'] as const)('corrects a stale %s outcome only when the exact owned commit exists', async status => {
     let committed = false;
     const recoverCommitted = vi.fn(async () => committed

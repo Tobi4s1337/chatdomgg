@@ -153,9 +153,12 @@ with `REALM_PUBLIC_ORIGIN=http://localhost:5172`. Preview hosts require their ow
 client credentials, `FORGE_CHAT_ENABLED=1`, `FORGE_CHAT_REDIRECT_URI` and an external mode-0600
 `FORGE_CHAT_TOKEN_KEY_FILE` containing a base64 32-byte key. No configuration or registration was changed here.
 
-`needs: isolated database` — a private connection configured in ignored environment data, with realm and API
-sessions in schema `realm_forge_wish`, is required for real SQL race tests and the live-service wish proof.
-There is no database configuration or local server binary in this worktree. No production database was used.
+**Isolated database available (2026-11-02).** The existing connection can be loaded privately from the integration
+checkout's ignored environment file. The lane created only its authorized `realm_forge_wish` schema and installed
+the additive realm/Forge migrations there. Real SQL race tests now pass; the production realm schema and its rows
+were not read or changed. The opt-in harness checks the exact search path before migrations and the current schema
+afterwards, and cleans up only its unique fixture rows. A private served realm/API session setup and actual Forge
+service wish proof remain to be built in this namespace, with data under `/tmp/chatdom-forge-wish/`.
 
 `needs: intake` — the exact coordinated 240→493 patch for the existing Herald/run contracts and Herald guards
 is written in [fw10-panel-contract.md](fw10-panel-contract.md#exact-integration-needs). Current intake rejects

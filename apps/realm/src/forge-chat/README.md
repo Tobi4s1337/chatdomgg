@@ -31,11 +31,27 @@ The keyed body digest and durable request ID claim precede the irreversible send
 server errors and interrupted claims never trigger a second send. Only a definitive first 401 permits one
 refresh and retry, bound to the rejected token so concurrent senders reuse a completed rotation. A 200
 `is_sent:false` remains not-sent. Provider text never becomes a private explanation.
+Once Twitch supplies a valid message ID, it survives a failed grant transaction reply or receipt binding.
+Only the idempotent database binding gets one recovery attempt; the Twitch POST is never repeated for this.
+If the database remains unavailable, the durable claim still prevents another send; this does not close the
+crash window between Twitch's reply and durable binding or replace the durable wish queue.
 
 OAuth consent reads the actual same-client authorization and preserves its scopes while adding only
 `user:write:chat`. State is hashed, expiring, single-use and bound to the exact app session and grant
 generation. Callback return paths are fixed. A user token sends to active Shared Chat channels according to
 Twitch's behavior; it cannot use `for_source_only`.
 
-Tests use authored SIMULATED fixtures and mocked HTTP/storage. No test performs a real Twitch write.
-The own migration and PostgreSQL locking behavior still need an isolated database integration run.
+Unit tests use authored SIMULATED fixtures and mocked HTTP/storage. `postgres.test.ts` instead exercises the
+actual migration, encrypted grants, request ledger, transactions and advisory locks against PostgreSQL, with
+controlled HTTP responses. No test performs a real Twitch write. Opt in only with `DATABASE_URL` loaded without
+printing it and `REALM_DATABASE_SCHEMA=realm_forge_wish`:
+
+```sh
+FORGE_CHAT_POSTGRES_TEST=1 REALM_DATABASE_SCHEMA=realm_forge_wish nice -n 10 pnpm exec vitest run apps/realm/src/forge-chat --no-file-parallelism --testTimeout=30000
+```
+
+The integration harness refuses any other schema/search path, installs the additive realm and Forge migrations
+there, and deletes only its random fixture rows. It never drops a schema. Two contention cases observe actual
+waiting locks, and the slow callback spans the realm pool's ten-second idle-transaction ceiling. Startup tests
+scope maintenance to their fixture; they do not exercise the global retention sweep. Receipt expiry is modeled
+by tombstoning only the fixture row. Ordinary runs skip the PostgreSQL suite unless explicitly enabled.

@@ -239,6 +239,7 @@ export function createForgeChatService(options: ForgeChatServiceOptions) {
       };
       let wish: ForgeChatWish;
       let sending = false;
+      let confirmed: Extract<ForgeChatWish, { status: 'sent' }> | undefined;
       try {
         const resolved = await target(body.kingdomId);
         if (!resolved || resolved.availability.status !== 'ready') {
@@ -289,6 +290,9 @@ export function createForgeChatService(options: ForgeChatServiceOptions) {
               if (!message.success) throw unavailable();
               const sent: Extract<ForgeChatWish, { status: 'sent' }> = { requestId: body.requestId, kingdomId: body.kingdomId, status: 'sent', updatedAt: now(),
                 messageId: message.data, receiptId: `forge:${createHash('sha256').update(message.data).digest('hex').slice(0, 48)}` };
+              // Retain Twitch's exact confirmation even if the surrounding grant transaction loses
+              // its COMMIT reply. Only the idempotent receipt binding may be retried, never this send.
+              confirmed = sent;
               return { kind: 'sent', wish: sent };
             });
           };
@@ -299,7 +303,9 @@ export function createForgeChatService(options: ForgeChatServiceOptions) {
           else wish = await saveFailure('consent-required', consent().message);
         }
       } catch (error) {
-        if (sending) {
+        if (confirmed) {
+          wish = await store.bindSent(principal.personId, confirmed, now());
+        } else if (sending) {
           wish = { requestId: body.requestId, kingdomId: body.kingdomId, status: 'unknown', updatedAt: now(),
             message: 'Twitch did not confirm the send. Check chat before making another wish; this request will not send again.' };
           await store.setWish(principal.personId, wish);
