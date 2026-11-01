@@ -43,9 +43,16 @@ export async function handleDockPresentation(req: IncomingMessage, res: ServerRe
       const response = await fetch(new URL('/internal/dock/witness', base), { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
         headers: { 'content-type': 'application/json', authorization: `Bearer ${config.internalSecret}` },
         body: JSON.stringify({ version: 1, origin: config.mode, principal: session.principal, ...parsed.data }) });
-      const text = await response.text();
-      if (text.length > 4096 || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Invalid realm acknowledgement');
-      const value: unknown = JSON.parse(text);
+      if (!response.headers.get('content-type')?.includes('application/json') || !response.body) throw new Error('Invalid realm acknowledgement');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = []; let size = 0;
+      for (;;) {
+        const part = await reader.read(); if (part.done) break;
+        size += part.value.byteLength;
+        if (size > 4096) { await reader.cancel(); throw new Error('Realm acknowledgement too large'); }
+        chunks.push(part.value);
+      }
+      const value: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       res.writeHead(response.status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }).end(JSON.stringify(value));
     } catch { reply(res, 503, 'unavailable', 'The kingdom could not confirm this presentation.'); }
     return true;

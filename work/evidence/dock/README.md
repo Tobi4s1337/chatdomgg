@@ -15,15 +15,19 @@ node work/evidence/dock/capture.mjs ready 318x900 still
 node work/evidence/dock/capture.mjs open 390x844 clip
 ```
 
-Scenarios are `ready`, `anonymous`, `forbidden`, `expired`, `fault`, `unavailable`,
-`real-unavailable`, `moderator`, `ambiguous`, `open`, `close`, `fire`, `raid`, `crown`, `knight`, and `moment`. Sizes are `318x900`,
-`390x844`, and `1440x900`; formats are `still` (full-page PNG) and `clip` (WebM).
-The expired scenario currently exercises the same anonymous response the API returns
-for an expired session. Unavailable is a fixture response, not evidence of the live API.
+Scenarios are `ready`, `anonymous`, `declined`, `forbidden`, `expired`, `fault`, `offline`, `unavailable`,
+`real-unavailable`, `moderator`, `empty`, `pending`, `refused`, `unknown`, `undo`, `sessionreplace`, `signout`, `ambiguous`, `open`, `close`, `fire`, `raid`, `crown`, `knight`, and `moment`. Sizes are `318x900`,
+`390x844`, and `1440x900`; formats are `still` (PNG) and `clip` (WebM).
+Still captures default to the viewport; append `full` as a fourth argument for a full-page
+PNG in a separate lock hold.
+The fixture models a SIMULATED session cookie and CSRF token. The expired scenario exercises
+the anonymous session response with the expired sign-in return. Unavailable is a fixture
+response, not evidence of the live API.
 `real-unavailable` executes the actual dock HTTP handler with a simulated session lookup
 and no bridge configured. It tests the handler's response, not a deployed service.
 The actions use a delayed simulated receipt so the dock's pending and acknowledgement
-states can be reviewed. No real stream imagery or event delivery is fabricated here.
+states can be reviewed. Their witness fields are fixture values that exercise the protocol;
+they are not evidence of stream delivery. No real stream imagery is fabricated here.
 `ambiguous` closes the HTTP reply after the request to exercise uncertainty; it does not
 assert that an act was delivered.
 
@@ -34,15 +38,20 @@ checks that actions stay locked and no second POST is sent.
 
 ## Outstanding evidence
 
-The shared capture lock has not yet admitted a rehearsal capture. Three consecutive
-bounded attempts across the previous and current goal turns timed out; the latest,
-against the updated focus handling, exited with code 1 and `TimeoutError` before starting
-the server or Chrome. Browser assertions have not run. No image or clip in
+The shared capture lock has not yet admitted a rehearsal capture. Three earlier bounded
+attempts timed out before starting the server or Chrome. A new unbounded lane-priority
+capture is queued as exec session 41052, owned by `/root/dock_evidence` (tool sessions
+are agent-scoped; follow up that agent to poll), which imports the latest rehearsal only after
+admission. Browser assertions have not run. No image or clip in
 this folder has been reviewed. Capture and inspect ready at 390×844 and 1440×900,
 real-unavailable at 318×900, the ambiguous reply after reload, and one action UI clip.
 Exercise anonymous, forbidden, expired, fault, moderator and remaining action states as
-the lock permits. Each invocation waits at most 60 seconds for the lock, starts no server
-before acquiring it, and releases it after closing Chrome and its socket.
+the lock permits. Each invocation starts no server before acquiring the lock and releases
+it after closing Chrome and its socket. It has no automatic queue timeout.
+
+The process remains live after reporting it queued. The main thread is investigating a
+possible [shared queue registry](../../../packages/testing/capture-lock.mjs) issue across isolated PID namespaces; no conclusion about
+this particular wait is established, and the lock has not been altered here.
 
 The realm/stream bridge is absent: these UI rehearsals cannot establish that a royal act
 reaches a real stream. Once that seam exists, separately demonstrate every required act

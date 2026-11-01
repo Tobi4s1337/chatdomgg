@@ -87,7 +87,7 @@ export async function handleDock(req: IncomingMessage, res: ServerResponse, opti
     const validTarget = action.kind === 'raid-welcome' ? state.raids.some(item => item.id === target)
       : action.kind === 'citizen-crown' || action.kind === 'citizen-knight' ? state.citizens.some(item => item.id === target)
         : action.kind === 'moment-play' ? state.moments.some(item => item.id === target && item.available)
-          : action.kind === 'undo' ? !!target : target === undefined;
+          : action.kind === 'undo' ? !!target && (state.undoable === undefined || state.undoable.some(item => item.id === target)) : target === undefined;
     if (!allowed || state.principal.role !== 'broadcaster' || !validTarget || state.revision !== action.expectedRevision) {
       reply(res, 409, { version: 1, status: 'refused', message: 'The kingdom has changed or this action is not available. Refresh the dock.' }); return true;
     }

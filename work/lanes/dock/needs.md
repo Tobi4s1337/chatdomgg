@@ -25,6 +25,15 @@ successful HTTP rehearsal is not evidence of a ceremony on stream.
 
 ## needs: main-owned authoritative bridge and stream presentation
 
+**Resumed 2026-11-01:** main is implementing this seam. The lane is active again and continues
+building session states, sign-out, moderator presentation, recovery, undo and town glance while
+capture waits in the shared queue. The earlier blocked audits are historical, not the current
+work state. Main's `966e371`, capture queue/importer changes, and shared boundary `13f1a36`
+have been synced into `lane/dock`; unrelated reviewed main work through `7a0830f` is synced too.
+The action and witness schemas now come directly from shared. The API layers only the optional,
+backward-compatible undo presentation hints described below. The original request patch below
+is retained as handoff history; main's shared request schemas now supersede that proposal.
+
 The current realm has authenticated Herald observation ingress and public watch feeds, but no
 dock command/status authority. The dock API already calls the following exact endpoints when
 `DOCK_REALM_URL` and `REALM_INTERNAL_SECRET` are configured. Main owns their implementation in
@@ -100,12 +109,66 @@ dragon before earned; forbidden hidden targets; success witness after reconnect;
 gentle action state; broadcaster/moderator permissions. Then run the dock beside the actual
 stream and capture each press and its ceremony, one shared capture lock per still/short clip.
 
+### Additive undo status and in-flight compatibility notes
+
+The API now accepts optional `undoable: [{id,kind,label}]` on `DockState`, at most 20 entries.
+`id` is the **receipt ID**, `kind` is the original act kind excluding `undo`, and `label` is an
+approved public phrase. A present list is authoritative (empty denies every undo); absent
+retains compatibility and lets the realm decide the cached receipt's validity atomically.
+The browser persists that cached receipt by the root session's opaque `resumeScope` and
+kingdom, never by a client-asserted person or role. The shared schema may adopt the optional
+field when main freezes it; it does not change a required bridge field.
+
+Read-only inspection of main's in-flight implementation found a receipt-target mismatch:
+`RealmDockService.commit` rejects a target on `undo`, while the agreed API requires a receipt
+as its target. If that implementation remains in place, this exact adjustment preserves the
+existing public contract (main applies it in its own worktree):
+
+```diff
+--- a/apps/realm/src/dock/service.ts
++++ b/apps/realm/src/dock/service.ts
+@@
+-    if (['gate-open', 'gate-close', 'fire-light', 'undo'].includes(action.kind) && target !== undefined) rejection = 'That royal act has no named target.';
++    if (['gate-open', 'gate-close', 'fire-light'].includes(action.kind) && target !== undefined) rejection = 'That royal act has no named target.';
++    if (action.kind === 'undo' && (!snap.head.undo || target !== `receipt:${snap.head.undo.eventId}`)) rejection = 'That receipt is no longer available to undo.';
+```
+
+The current in-flight status implementation also admits only the broadcaster. Verified
+moderators still need read access derived from authoritative Twitch grants; they must never
+gain royal action rights from a client role. The lane API and UI already enforce that split.
+These are integration observations, not claims that main's uncommitted work is final.
+
+The dock now handles `/dock?signin=expired|declined|refused|unavailable`. The existing root
+OIDC callback uses `/?signin=expired` when an attempt/binding cannot be recovered; main's root
+routing should preserve an intended dock return for that case. We do not weaken root callback
+binding or accept an arbitrary return URL inside this lane.
+
 ## needs: workspace lock importer
 
-`pnpm-lock.yaml` is outside lane scope. Main must run `pnpm install --lockfile-only` after
-adopting `apps/dock/package.json` so frozen workspace installs include the new app. During lane
-verification dependencies were installed with `pnpm install --ignore-scripts --lockfile=false`;
-the tracked lockfile was left untouched. No package versions were upgraded in manifests.
+`pnpm-lock.yaml` is outside lane scope. Main's `1bf6b26` has now supplied the dock importer,
+and the lane has synced it. This resumed session also added the app's direct dependency on
+`@chatdom/shared` for canonical session schemas and realm token validation; main should include
+that one additive dependency when taking this checkpoint. Exact lockfile change:
+
+```diff
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@
+   apps/dock:
+     dependencies:
+       '@chatdom/audio':
+         specifier: workspace:*
+         version: link:../../packages/audio
++      '@chatdom/shared':
++        specifier: workspace:*
++        version: link:../../packages/shared
+       '@chatdom/ui':
+```
+
+Alternatively run `pnpm install --lockfile-only` after adopting `apps/dock/package.json`.
+During lane verification dependencies were installed with
+`pnpm install --ignore-scripts --lockfile=false`; the tracked lockfile was left untouched by
+the lane. No package versions were upgraded in manifests.
 
 ## Serving
 
@@ -143,3 +206,30 @@ moment currently offered is the harmless dusk change; no unearned dragon or arbi
 Moderator observation still requires an independently verified moderator-ID source. Undo state restores,
 but its directed visual receipt remains unavailable until the restored subject is identified. These are
 remaining integration needs, not permission to invent targets, authority or a success reply.
+
+## Dock follow-up against the supplied boundary — 2026-11-01
+
+The lane has exercised `apps/realm/src/dock/service.test.ts` with `REALM_DATABASE_TESTS=1`
+against a random isolated Postgres schema: both tests pass, including durable unknown →
+presenter witness → accepted retrieval and reopening/revocation. This proves storage and
+authority, not drawn pixels. UI recovery accepts the exact `receipt:dock:<48 hex>` format.
+
+**needs: main-owned moderator observation.** `RealmDockService.status()` currently admits
+only `principal.personId === kingdomId`. Supply a current independently verified moderator
+grant for read access; retain broadcaster-only capabilities for every royal act. The dock
+already accepts `principal.role: 'moderator'`, displays the role, and disables every mutation.
+Neither query parameters, browser role claims nor a fixture may establish that grant.
+
+**needs: main-owned directed undo presentation.** `undoOf` alone identifies an earlier
+event, but its target/kind is absent from the current undo event. Have the realm resolve the
+stored original presentation in the same transaction and publish enough approved subject
+and restored state for the scene to display the reversal and witness it. A current stage
+checkpoint may restore state silently; it must not be counted as the visible undo ceremony.
+If the restored subject is no longer public/installed, keep the receipt unknown/refused.
+
+For cross-device undo recovery, adopt the optional `undoable` state extension already
+implemented in `apps/api/src/dock/contracts.ts` into shared and the realm snapshot:
+`[{ id: 'receipt:' + head.undo.eventId, kind: original.kind, label: approvedLabel }]`, only
+while the original act is witnessed and `head.undo.until > now`. An empty list explicitly
+denies undo. Existing same-session reload already recovers the accepted receipt locally;
+the realm remains responsible for atomic authorization and expiry.
