@@ -46,8 +46,9 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
       status.textContent = state.status === 'empty' ? 'No recorded nights' : 'History unavailable';
       play.disabled = true; seek.disabled = true; play.textContent = 'Play'; return;
     }
-    origin.textContent = state.label === 'SIMULATED' ? 'SIMULATED · A local history' : 'Recorded history';
-    note.textContent = state.label === 'SIMULATED' ? options.simulationNote ?? '' : '';
+    const simulatedScene = options.presentationLabel === 'SIMULATED';
+    origin.textContent = state.label === 'SIMULATED' ? 'SIMULATED · A local history' : simulatedScene ? 'Recorded history · SIMULATED scene' : 'Recorded history';
+    note.textContent = state.label === 'SIMULATED' || simulatedScene ? options.simulationNote ?? '' : '';
     date.textContent = describeDate(state.snapshot.frame.asOf);
     caption.textContent = state.snapshot.caption;
     seek.disabled = false; seek.max = String(state.count - 1); seek.value = String(state.index);

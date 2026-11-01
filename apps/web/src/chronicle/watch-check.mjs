@@ -58,12 +58,13 @@ async function accessibility(browser, base, width, height) {
       const caption = document.querySelector('.chronicle-caption');
       const seek = document.querySelector('.chronicle-track input').getBoundingClientRect();
       const close = document.querySelector('.chronicle-close').getBoundingClientRect();
+      const play = document.querySelector('.chronicle-play').getBoundingClientRect();
       return { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom,
         overflow: document.documentElement.scrollWidth > window.innerWidth,
-        font: Number.parseFloat(window.getComputedStyle(caption).fontSize), seekHeight: seek.height, closeWidth: close.width, closeHeight: close.height };
+        font: Number.parseFloat(window.getComputedStyle(caption).fontSize), seekHeight: seek.height, closeWidth: close.width, closeHeight: close.height, playWidth: play.width, playHeight: play.height };
     });
     assert(!sizes.overflow && sizes.left >= 0 && sizes.top >= 0 && sizes.right <= width && sizes.bottom <= height, `Chronicle is clipped or overflows at ${width}x${height}: ${JSON.stringify(sizes)}`);
-    assert(sizes.font >= 18 && sizes.seekHeight >= 44 && sizes.closeWidth >= 44 && sizes.closeHeight >= 44, `Text or touch targets are too small at ${width}x${height}: ${JSON.stringify(sizes)}`);
+    assert(sizes.font >= 18 && sizes.seekHeight >= 44 && sizes.closeWidth >= 44 && sizes.closeHeight >= 44 && sizes.playWidth >= 44 && sizes.playHeight >= 44, `Text or touch targets are too small at ${width}x${height}: ${JSON.stringify(sizes)}`);
     assert((await slider.getAttribute('aria-valuetext'))?.includes('entry 1 of'), 'Slider has no understandable current entry');
     await close.focus(); await page.keyboard.press('Tab');
     assert(await play.evaluate(element => element === document.activeElement), 'Keyboard does not reach Play after Close');
@@ -113,6 +114,12 @@ async function accessibility(browser, base, width, height) {
         results.push(advanced && closed && reported && disposed && !host.hasChildNodes() && document.activeElement === opener);
         host.remove();
       }
+      const host = document.createElement('div'); document.body.append(host);
+      const first = window.__chronicleHistory.snapshots[0];
+      const mixed = mountChronicle(host, { history: { label: 'LIVE', snapshots: [{ ...first, frame: { ...first.frame, origin: 'live' } }] },
+        presentationLabel: 'SIMULATED', simulationNote: 'Simulated scene', binding: { replace() {}, clear() {}, dispose() {} }, sound() {}, onClose() {} });
+      results.push(host.querySelector('.chronicle-origin').textContent.includes('SIMULATED') && host.querySelector('.chronicle-note').textContent === 'Simulated scene');
+      mixed.dispose(); host.remove();
       return results.every(Boolean);
     });
     assert(recovery, 'Host sound or cleanup failure prevented controls, close, error reporting or focus restoration');
