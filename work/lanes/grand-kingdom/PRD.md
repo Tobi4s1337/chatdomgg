@@ -1,5 +1,5 @@
 # Lane grand-kingdom
-Spec (background, Rules and Decisions hold): `chatdom/World-Tree.md`, `chatdom/Atlas.md`, `chatdom/Artstyle-Soul-Feel.md`, `chatdom/ChatDom.md`, `chatdom/Quality.md` · Branch: `lane/grand-kingdom` · Worktree: `../worktrees/grand-kingdom` · Worker: Opus high
+Spec: `work/specs/56-grand-kingdom.md` (frozen architecture and seam); background, Rules and Decisions hold: `chatdom/World-Tree.md`, `chatdom/Atlas.md`, `chatdom/Artstyle-Soul-Feel.md`, `chatdom/ChatDom.md`, `chatdom/Quality.md` · Branch: `lane/grand-kingdom` · Worktree: `../worktrees/grand-kingdom` · Worker: Opus high
 Scope: the grand land and its own entry in `apps/web/src/grand/**` (served at `/-/grand`, one line in the `lanePaths` map of `apps/web/src/main.tsx`), its generation in `packages/world/src/grand/**`, new modules in `packages/voxel/src/**` and `packages/render/src/**` (additive: what exists keeps its behaviour and its exports, so every current view still works), `shots/grand/**`, and this lane's PRD, progress, references and evidence (`work/lanes/grand-kingdom/**`, `work/evidence/grand-kingdom/**`, `work/references/grand-kingdom/**`).
 
 ## The part
