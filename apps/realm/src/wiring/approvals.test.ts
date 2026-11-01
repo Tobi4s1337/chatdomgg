@@ -15,6 +15,7 @@ async function fixture() {
 }
 function audit(): KingdomForgeAudit {
   return { key: `forge-chat-${'a'.repeat(64)}`, runId: 'simulated-run', at: 123, judgment: 'approved',
+    candidate: { draftDigest: 'd'.repeat(64), homeDigest: 'e'.repeat(64) },
     verdicts: [false, true].map(image => {
       const quality = { recognisability: 0.9, completeness: 1, cleanMarks: 1 };
       const base = { backend: 'codex-cli', status: 'complete', policy: FORGE_JUDGE_POLICY_VERSION, evidenceHash: (image ? 'b' : 'a').repeat(64),
@@ -41,9 +42,12 @@ it('persists immutable per-run judge evidence across instances with opaque recei
   expect((await stat(join(directory, files[0]!))).mode & 0o777).toBe(0o600);
   await expect(approvals.record({ ...input, at: 124 })).rejects.toThrow('immutable');
   expect(await reader.approved(input.key, input.runId)).toBe(receipt);
+  expect(await reader.approved(input.key, input.runId, input.candidate!)).toBe(receipt);
+  expect(await reader.approved(input.key, input.runId, { ...input.candidate!, draftDigest: 'f'.repeat(64) })).toBeNull();
+  expect(await reader.approved(input.key, input.runId, { ...input.candidate!, homeDigest: 'f'.repeat(64) })).toBeNull();
 });
 
-it('requires two registered independent judges at both words and result gates', async () => {
+it('requires complete registered evidence at the independent words and result gates', async () => {
   const { approvals } = await fixture(), input = audit();
   const edits: ((value: Record<string, unknown>) => void)[] = [
     record => { record.status = 'unavailable'; }, record => { record.judge = 'unknown'; },
@@ -55,11 +59,34 @@ it('requires two registered independent judges at both words and result gates', 
     await expect(approvals.record(invalid)).rejects.toThrow('both independent');
   }
   await expect(approvals.record({ ...input, verdicts: input.verdicts.slice(0, 1) })).rejects.toThrow('both independent');
-  const missing = structuredClone(input); missing.verdicts[0]!.records.pop();
+  const missing = structuredClone(input); missing.verdicts[0]!.records.shift();
   await expect(approvals.record(missing)).rejects.toThrow('both independent');
   const held = structuredClone(input); (held.verdicts[0] as { outcome: string }).outcome = 'hold';
   await expect(approvals.record(held)).rejects.toThrow('both independent');
   expect(await approvals.approved(input.key, input.runId)).toBeNull();
+});
+
+it('accepts a single confident read, but never an uncertain single read or invented second quality score', async () => {
+  const { approvals } = await fixture(), input = audit();
+  for (const verdict of input.verdicts) verdict.records.pop();
+  const uncertain = structuredClone(input);
+  ((uncertain.verdicts[1]!.records[0] as { answers: Record<string, number> }).answers).hate = 0.2;
+  await expect(approvals.record(uncertain)).rejects.toThrow('both independent');
+  await approvals.record(input);
+  expect(await approvals.approved(input.key, input.runId)).not.toBeNull();
+});
+
+it('authorizes only the selected retry evidence and rejects failed-draft records or excess normal calls', async () => {
+  const { approvals } = await fixture(), input = audit();
+  const first = { ...input.verdicts[1]!, records: [], quality: scoreForgeQuality({ recognisability: 0.2, completeness: 1, cleanMarks: 1 }) };
+  const retried: KingdomForgeAudit = { ...input, verdicts: [input.verdicts[0]!, first, input.verdicts[1]!], attempts: 2, modelCalls: 5,
+    selection: { verdict: 2, attempt: 2, delivery: 'retried', shared: 'subject' } };
+  await expect(approvals.record({ ...retried, modelCalls: 6 })).rejects.toThrow('both independent');
+  const leaked = structuredClone(retried); leaked.verdicts[1]!.records.push({ privateWords: 'PRIVATE SENTINEL' });
+  await expect(approvals.record(leaked)).rejects.toThrow('both independent');
+  await expect(approvals.record({ ...retried, selection: { ...retried.selection!, verdict: 1 } })).rejects.toThrow('both independent');
+  await approvals.record(retried);
+  expect(await approvals.approved(input.key, input.runId)).not.toBeNull();
 });
 
 it('holds uncertain words, unknown language and image safety disagreements without an override', async () => {

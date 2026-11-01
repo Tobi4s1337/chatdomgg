@@ -7,6 +7,7 @@ import type { ForgeAttachment, ForgeAttempt, ForgeReservation, KingdomForgeAutho
 import { REALM_BASE_ANVILS, RealmBusyError, RealmHeldError, RealmWriterFencedError, type DurableKingdom, type DurableKingdomHold,
   type RealmCommandMeta } from '../persistence';
 import type { RealmForgeAttemptStatus, RealmForgeAuthority, RealmForgeOptions, RealmWiringLog } from './types';
+import { forgeDraftDigest } from '../../../codex/src/kingdom-forge/candidate';
 
 /** Long enough for the coordinator's three-minute run and its checks; it accepts at most ten minutes. */
 export const FORGE_RESERVATION_MS = 300_000;
@@ -36,11 +37,21 @@ const attemptDigest = (attempt: ForgeAttempt) => sha256(JSON.stringify([attempt.
 type Step = 'reserve' | 'commit' | 'release' | 'expire';
 const commandId = (step: Step, attempt: ForgeAttempt) => `forge:${step}:${attemptDigest(attempt)}`;
 
-type Reserved = Awaited<ReturnType<KingdomForgeAuthority['reserve']>>;
-type Revalidated = Awaited<ReturnType<KingdomForgeAuthority['revalidate']>>;
-type Committed = Awaited<ReturnType<KingdomForgeAuthority['commit']>>;
+type Reserved = Awaited<ReturnType<KingdomForgeAuthority['reserve']>> & { readonly privateMessage?: string };
+type Revalidated = Awaited<ReturnType<KingdomForgeAuthority['revalidate']>> & { readonly privateMessage?: string };
+type Committed = Awaited<ReturnType<KingdomForgeAuthority['commit']>> & { readonly privateMessage?: string };
 type Refusal = { readonly kind: 'held' | 'cold'; readonly reason: string };
 type Eligible = { readonly kind: 'eligible'; readonly home: RealmOwnedForgeHost; readonly rights: RealmPrivateState['rights'][string]; readonly blueprint: VoxelBlueprint };
+
+const privateCause = (cause: string) => ({
+  'no-home': 'Your own home needs a hearth before the forge can make a part for it. Settle in first; your coal stays yours.',
+  'no-rights': 'The smith is saving your own words for a returning night. Keep showing up; your coal stays yours.',
+  offline: 'The forge fire rests while the stream is offline. Bring your wish when the kingdom wakes; your coal stays yours.',
+  hold: 'Your wish waits privately for the Watch. Your coal stays yours.',
+  coal: 'Your scuttle is empty. Your hearth gives you a coal each live night you are here.',
+  busy: 'All the anvils are busy. Your coal stays yours; the smith needs a little time.',
+  working: 'You already have a wish in the fire. Let it reach your home first; this wish costs nothing.',
+}[cause] ?? 'The smith needs to check your home before this wish can land. Your coal stays yours.');
 
 /**
  * What a person must actually hold for free words, read from committed authority only: their own home
@@ -218,8 +229,13 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
         // A wish spoken before this broadcast began belongs to no live night.
         if (input.observedAt < state.stream.startedAt || input.observedAt > now + OBSERVED_SKEW_MS) { note('reserve', 'cold', 'outside-night'); return { kind: 'cold' } as const; }
         const found = eligibility(state, input.personId, now, kingdom.layoutRevision);
-        if (found.kind !== 'eligible') { note('reserve', found.kind, found.reason); return { kind: found.kind } as const; }
+        if (found.kind !== 'eligible') { note('reserve', found.kind, found.reason); return { kind: found.kind, privateMessage: privateCause(found.reason) } as const; }
         const { home, rights, blueprint } = found;
+        // Explain the actual committed prerequisite privately. The reducer still rechecks these in its transaction.
+        if ((own(state.coals, input.personId) ?? 0) < 1) return { kind: 'held', privateMessage: privateCause('coal') } as const;
+        const active = Object.values(state.reservations).filter(record => record.reservation.expiresAt > now);
+        if (active.some(record => record.reservation.personId === input.personId)) return { kind: 'held', privateMessage: privateCause('working') } as const;
+        if (active.length >= anvils) return { kind: 'held', privateMessage: privateCause('busy') } as const;
         const reservation: ForgeReservation = {
           reservationId: `forge-reservation-${attemptDigest(input).slice(0, 32)}`, kingdomId, personId: input.personId,
           ...native(home, blueprint),
@@ -255,7 +271,7 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
           note('revalidate', 'cold', 'reservation'); return { kind: 'cold' } as const;
         }
         const found = eligibility(state, r.reservation.personId, now, kingdom.layoutRevision);
-        if (found.kind !== 'eligible') { note('revalidate', found.kind, found.reason); return { kind: found.kind } as const; }
+        if (found.kind !== 'eligible') { note('revalidate', found.kind, found.reason); return { kind: found.kind, privateMessage: privateCause(found.reason) } as const; }
         // A changed deed, a moderation decision or another night invalidates the reservation itself.
         if (found.home.id !== r.homeId) { note('revalidate', 'cold', 'home'); return { kind: 'cold' } as const; }
         if (found.rights.revision !== r.rightsRevision || found.rights.safetyIdentifier !== r.reservation.safetyIdentifier) { note('revalidate', 'held', 'rights'); return { kind: 'held' } as const; }
@@ -269,7 +285,10 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
       if (!options || !gate || !live(lease)) { note('commit', 'cold', !options ? 'unconfigured' : !gate ? 'ungated' : 'closed'); return { kind: 'cold' }; }
       // The judges' own audited approval of this run, read before the writer: placement needs both that evidence and
       // the kingdom's commit. A model-approved event or an API key alone never attaches anything.
-      const approval = await options.approvals.approved(input.key, input.attachment.runId).catch(() => null);
+      const draft = ForgeDraftSchema.safeParse(input.attachment.draft);
+      if (!draft.success) return { kind: 'held' };
+      const approval = await options.approvals.approved(input.key, input.attachment.runId,
+        { draftDigest: forgeDraftDigest(draft.data), homeDigest: input.expectedHomeDigest }).catch(() => null);
       if (!approval || !TokenSchema.safeParse(approval).success) { note('commit', 'held', 'gates'); return { kind: 'held' }; }
       return holding<Committed>(async kingdom => {
         const state = kingdom.privateState, now = kingdom.databaseNow(), prior = attemptStatus(state, input);
@@ -281,7 +300,7 @@ export function createForgeAuthority(binding: ForgeAuthorityBinding, options: Re
           note('commit', 'cold', 'reservation'); return { kind: 'cold' } as const;
         }
         const found = eligibility(state, r.reservation.personId, now, kingdom.layoutRevision);
-        if (found.kind !== 'eligible') { note('commit', found.kind, found.reason); return { kind: found.kind } as const; }
+        if (found.kind !== 'eligible') { note('commit', found.kind, found.reason); return { kind: found.kind, privateMessage: privateCause(found.reason) } as const; }
         const home = found.home;
         // Compare-and-set on the exact home the judges saw. A stale candidate leaves the home untouched.
         if (home.id !== r.homeId || home.revision !== input.expectedRevision || home.digest !== input.expectedHomeDigest

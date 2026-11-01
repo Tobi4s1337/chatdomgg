@@ -114,3 +114,15 @@ it as a page or tab; forge-wish never edits the panel.
   the choice at the reveal and kept pieces are `needs:` lines with the patch written out.
 - One-line route registrations in `apps/realm/src/main.ts` or `server.ts` and the `CHATDOM_FORGE_TARGET` proxy
   setting in `apps/web/vite.config.ts` are small additive edits this lane makes itself and lists in progress.
+
+## 7. Private landed-piece explanation (FW10, additive)
+
+The round notes allow new optional shared fields. The existing committed arm of `RealmReceipt` now has
+`message?: string`. The Forge bridge sends it only through `toOwner`, after an actual durable commit, so the
+maker can hear what a closest piece shares with the wish and why it was adapted. It is absent from the public
+attachment, ritual, outbox and ledger. Existing consumers remain compatible; play may display this optional
+private receipt line in its own receipt surface. No new public outcome or changed export is required.
+
+The web proxy reads `CHATDOM_FORGE_TARGET` (default unchanged). A standalone `src/forge-wish-bench/index.html`
+build entry renders authored pieces through the production voxel material for visual review. It has no product
+navigation, authority, citizens or successful-wish claim.

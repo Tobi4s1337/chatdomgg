@@ -48,13 +48,18 @@ Unknown writes remain errors requiring recovery; they never become inferred refu
 shared with the trusted coordinator. It creates mode-0600 files under a mode-0700 newly created directory, syncs
 the file, atomically links each immutable key/run file, and syncs the directory before returning. Matching retries
 are idempotent; changed retries fail. Receipts hash the stored audit. No HTTP/browser audit writer is provided.
-Approved records require the current policy and two registered independent judges at each of the words and
-rendered-result gates; malformed/incomplete/held/refused safety records yield no receipt. Safety disagreement
-holds; quality never vetoes. Image records retain both bounded quality reads and their deterministically
+Approved records require the current policy at independent words and rendered-result gates. Each gate keeps
+one complete confident primary safety read, or the two registered independent reads actually made;
+malformed/incomplete/held/refused safety records yield no receipt. Safety disagreement
+holds; quality never vetoes. Image records retain actual bounded quality reads and their deterministically
 recomputed score with the policy version. Refusal/hold/cold audits store only bounded outcome metadata and
 validated quality summaries, stripping arbitrary provider records. No words, names, people, original message IDs or home
 geometry enter this store. Registered policy questions are imported from the pure Codex policy module to prevent
 drift; this does not import or invoke providers.
+The approval binds the exact selected draft and full home digest. The realm supplies both expected hashes
+before commit; a title, plaque, plan or host substitution has no receipt. Quiet retries retain only the selected
+result's full evidence, with discarded outcome/quality summaries kept privately. Normal runs above five calls
+cannot authorize; explicitly softened runs have an absolute seven-call ceiling.
 
 Focused evidence: `pnpm exec vitest run apps/realm/src/wiring`, `pnpm exec eslint apps/realm/src/wiring`,
 `pnpm typecheck`. The command-port tests use the actual `DurableKingdom` registry/queue and reducer with an

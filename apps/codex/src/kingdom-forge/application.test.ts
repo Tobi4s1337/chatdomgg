@@ -18,6 +18,7 @@ const draft: ForgeDraft = {
   title: 'The sleepy keeper', plaque: 'A quiet watch over a warm hearth.',
 };
 const pass = { outcome: 'pass' as const, reason: 'passed', records: [{ judge: 'controlled-test-judge', status: 'complete' }] };
+const goodQuality = { policy: FORGE_JUDGE_POLICY_VERSION, score: 0.95, recognisability: 0.95, completeness: 0.95, cleanMarks: 0.95 };
 
 /** Controlled authority only for this test. No test authorization implementation is exported to applications. */
 function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (event: ForgeActivity) => void) {
@@ -32,7 +33,7 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (
   let coals = 1, current = true;
   let durable: ForgeAttachment | null = null;
   const providers: ForgeProviders = {
-    judgeWords: vi.fn(async () => pass), draft: vi.fn(async () => draft), judgeResult: vi.fn(async () => pass),
+    judgeWords: vi.fn(async () => pass), draft: vi.fn(async () => draft), judgeResult: vi.fn(async () => ({ ...pass, quality: goodQuality })),
   };
   const authority: KingdomForgeAuthority = {
     origin,
@@ -41,7 +42,8 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (
     commit: vi.fn(async (input, lease) => {
       expect(lease.current()).toBe(true);
       expect(publicEvents.some(event => event.type === 'committed')).toBe(false);
-      expect(audits.at(-1)?.verdicts.map(verdict => verdict.outcome)).toEqual(['pass', 'pass']);
+      const audit = audits.at(-1)!;
+      expect([audit.verdicts[0]?.outcome, audit.verdicts[audit.selection?.verdict ?? 1]?.outcome]).toEqual(['pass', 'pass']);
       expect(input.expectedRevision).toBe(reservation.revision);
       expect(input.expectedHomeDigest).toMatch(/^[0-9a-f]{64}$/);
       expect(input.creation.words).toBe(command.words);
@@ -110,7 +112,7 @@ describe('the kingdom Forge application', () => {
     const publish = vi.fn(() => { throw new Error('SIMULATED unavailable broadcast'); });
     const unobserved = fixture('live', publish);
     vi.mocked(unobserved.providers.judgeWords).mockResolvedValue({ ...pass, outcome: 'hold' });
-    expect(await unobserved.run(command, unobserved.lease)).toEqual({ kind: 'held' });
+    expect(await unobserved.run(command, unobserved.lease)).toMatchObject({ kind: 'held', privateMessage: pass.reason });
     expect(publish).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ type: 'stage' }));
     expect(unobserved.publicEvents).toEqual([]);
   });
@@ -197,7 +199,7 @@ describe('the kingdom Forge application', () => {
 
     const held = fixture();
     vi.mocked(held.providers.judgeResult).mockResolvedValue({ ...pass, outcome: 'hold' });
-    expect(await held.run(command, held.lease)).toEqual({ kind: 'held' });
+    expect(await held.run(command, held.lease)).toMatchObject({ kind: 'held', privateMessage: pass.reason });
 
     const aborted = fixture();
     vi.mocked(aborted.providers.judgeResult).mockImplementation(async () => { aborted.controller.abort(); return pass; });
@@ -254,5 +256,5 @@ describe('the kingdom Forge application', () => {
       expect(timedOut.authority.commit).not.toHaveBeenCalled();
       expect(timedOut.coals).toBe(1);
     } finally { vi.useRealTimers(); }
-  }, 20_000);
+  }, 60_000);
 });

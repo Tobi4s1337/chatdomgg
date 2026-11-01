@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { CitizenChatCueSchema, PRESENCE_LEASE_MS, type CitizenChatCue, type KingdomId, type PresenceInput } from '@chatdom/shared';
 import { REALM_CASTLE_SLOT, RealmHeraldEnvelopeSchema, RealmHeraldForgeCommandSchema, type KingdomForgeCommand, type KingdomForgeLease, type KingdomForgeOutcome, type RealmHeraldChat, type RealmPrivateMessage } from '@chatdom/shared/realm';
-import { createKingdomForgeApplication } from '../../../codex/src/kingdom-forge/application';
+import { createKingdomForgeApplication, type KingdomForgeResult } from '../../../codex/src/kingdom-forge/application';
 import { createForgeProviders, type ForgeProviders } from '../../../codex/src/providers';
 import { decodeIngressCheckpoint, presenceEpoch, presencePerson, type IngressReply, type RealmIngress } from '../ingress';
 import type { DurableKingdom, DurableRealmServices } from '../persistence';
@@ -116,9 +116,16 @@ export class RealmEveningBridge {
         const started = kingdom.databaseNow();
         if (command.observedAt > started || started - command.observedAt >= PRESENCE_LEASE_MS) return { kind: 'cold' };
         const baseCurrent = () => !this.stopped && !signal.aborted && kingdom.current && (incoming?.current() ?? true);
+        if (!baseCurrent()) return { kind: 'canceled' };
         // Ingress acknowledges durable acceptance before the writer drains its inbox. Wait for actual
         // committed chat evidence, rather than racing a stream/home decision against queued Herald input.
         if (!await this.witnessed(kingdom, command, baseCurrent)) return { kind: 'cold' };
+        if (!baseCurrent()) return { kind: 'canceled' };
+        if (kingdom.privateState.stream.sessionId === null || kingdom.privateState.stream.liveUntil <= kingdom.databaseNow()) {
+          const offline: KingdomForgeResult = { kind: 'cold', privateMessage: 'The forge fire rests while the stream is offline. Bring your wish when the kingdom wakes; your coal stays yours.' };
+          this.privateOutcome(kingdom, command, offline);
+          return offline;
+        }
         const sessionId = kingdom.privateState.stream.sessionId;
         const current = () => {
           const at = kingdom.databaseNow(), state = kingdom.privateState;
@@ -306,11 +313,17 @@ export class RealmEveningBridge {
     return false;
   }
 
-  private privateOutcome(kingdom: DurableKingdom, command: KingdomForgeCommand, outcome: KingdomForgeOutcome): void {
-    if (outcome.kind === 'committed' || outcome.kind === 'already-committed' || outcome.kind === 'canceled') return;
+  private privateOutcome(kingdom: DurableKingdom, command: KingdomForgeCommand, outcome: KingdomForgeResult): void {
+    if (outcome.kind === 'committed') {
+      if (outcome.privateMessage) kingdom.toOwner(command.personId, { type: 'receipt', receipt: { version: 1,
+        id: `forge:${digest(command.messageId).slice(0, 48)}`, status: 'committed', writerEpoch: kingdom.writerEpoch,
+        sequence: kingdom.sequence, message: outcome.privateMessage } });
+      return;
+    }
+    if (outcome.kind === 'already-committed' || outcome.kind === 'canceled') return;
     const status = outcome.kind === 'refused' ? 'refused' : outcome.kind === 'held' ? 'held' : 'unavailable';
-    const message = outcome.kind === 'refused' ? outcome.message : outcome.kind === 'held'
-      ? 'Your wish waits privately at the Forge.' : 'The forge is cold tonight. Your home is unchanged.';
+    const message = outcome.privateMessage ?? (outcome.kind === 'refused' ? outcome.message : outcome.kind === 'held'
+      ? 'Your wish waits privately at the Forge.' : 'The forge is cold tonight. Your home is unchanged.');
     const reply: RealmPrivateMessage = { type: 'receipt', receipt: { version: 1, id: `forge:${digest(command.messageId).slice(0, 48)}`, status, message } };
     kingdom.toOwner(command.personId, reply);
   }

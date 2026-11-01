@@ -60,7 +60,7 @@ export function findForgeSockets(home:VoxelBlueprint,hostProfile:ForgeHostProfil
       }
       if(!ok||high-low>20||result.some(s=>Math.hypot(x-(s.origin[0]+16),z-(s.origin[2]+16))<22))continue;
       const targetX=sx*(castle?(kind==='chimney'?.82:kind==='lantern'?.66:.18):(kind==='chimney'?.68:kind==='lantern'?.72:.25)),targetZ=sz*(castle?(kind==='lantern'?.65:.82):(kind==='lantern'?.8:.5));
-      const rx=kind==='chimney'?12:kind==='lantern'?4:7,rz=kind==='chimney'?10:4;
+      const rx=kind==='chimney'?12:kind==='lantern'?6:7,rz=kind==='chimney'?10:4;
       let crown=high;for(let Z=Math.max(0,z-rz);Z<Math.min(sz,z+rz);Z++)for(let X=Math.max(0,x-rx);X<Math.min(sx,x+rx);X++)crown=Math.max(crown,heights[X+sx*Z]!+1);
       if(crown-high>24)continue;
       candidates.push({x,z,supports,low,high,crown,score:Math.hypot(x-targetX,z-targetZ)+(high-low)*.5+(crown-high)});
@@ -75,7 +75,9 @@ export function findForgeSockets(home:VoxelBlueprint,hostProfile:ForgeHostProfil
     if(z<0||z+13>sz||![MAT.plaster,MAT.cream,MAT.timber,MAT.bark,MAT.brick].includes(cell(x,y,z) as typeof MAT.plaster))continue;
     if(home.windows.some(w=>w.facing==='south'&&Math.abs(z+1-w.centre[2])<16&&Math.abs(x-w.centre[0])<w.width/2+4&&Math.abs(y-w.centre[1])<w.height/2+8))continue;
     if(!cell(x-1,y,z)||!cell(x,y-1,z)||!cell(x-1,y-1,z))continue;
-    let clear=true;for(let X=x-4;X<x+4&&clear;X++)for(let Y=y-3;Y<y+14&&clear;Y++)for(let Z=z+1;Z<z+13;Z++)if(cell(X,Y,Z)){clear=false;break;}
+    // A local cavity can be the inside of a door: the entire +Z sightline
+    // must reach the lot edge, not just clear the bracket's first 13 cells.
+    let clear=true;for(let X=x-4;X<x+4&&clear;X++)for(let Y=y-3;Y<y+14&&clear;Y++)for(let Z=z+1;Z<sz;Z++)if(cell(X,Y,Z)){clear=false;break;}
     if(!clear)continue;
     const old=result.findIndex(s=>s.kind==='lantern');if(old>=0)result.splice(old,1);
     result.push({id:'front-lantern',kind:'lantern',profile:'wall',origin:[x-16,y-5,z+1],supports:[[x-1,y-1,z],[x,y,z]],hostId:home.id,hostFingerprint:fingerprint,clearanceHeight:0});break outer;

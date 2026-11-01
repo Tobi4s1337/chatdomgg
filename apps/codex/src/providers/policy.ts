@@ -1,5 +1,5 @@
 /** Versioned independently of prompts: records can be replayed against this question set. */
-export const FORGE_JUDGE_POLICY_VERSION = 'house-part-safety-quality-2026-11-01-v4';
+export const FORGE_JUDGE_POLICY_VERSION = 'house-part-safety-quality-2026-11-01-v5';
 export const FORGE_JUDGE_THRESHOLDS = { passBelow: 0.12, refuseAbove: 0.85 } as const;
 
 export const FORGE_FLOOR = `Chatdom is a storybook fantasy kingdom shown on Twitch to audiences aged 13 and up.
@@ -31,12 +31,20 @@ export function forgeJudgeQuestions(image: boolean) {
 export type ForgeSafetyConcern = (typeof questions)[number][0];
 export interface ForgeSafetyRead { outcome: 'pass' | 'hold' | 'refuse'; concerns?: readonly ForgeSafetyConcern[] }
 
+/** Only complete, finite primary evidence may skip escalation. */
+export function primaryForgeSafetyPass(answers: Readonly<Record<string, number>>): boolean {
+  return Object.keys(answers).length === questions.length && questions.every(([name]) =>
+    Number.isFinite(answers[name]) && answers[name]! >= 0 && answers[name]! < FORGE_JUDGE_THRESHOLDS.passBelow);
+}
+
 /** The same deterministic decision is used by the provider and the durable approval verifier. */
 export function decideForgeSafety(answers: Readonly<Record<string, number>>, secondary: ForgeSafetyRead): 'pass' | 'hold' | 'refuse' {
+  if (Object.keys(answers).length !== questions.length || !questions.every(([name]) =>
+    Number.isFinite(answers[name]) && answers[name]! >= 0 && answers[name]! <= 1)) return 'hold';
   if (answers.uncertain_language! >= FORGE_JUDGE_THRESHOLDS.passBelow) return 'hold';
   if (secondary.outcome === 'refuse' && secondary.concerns?.some(name => name !== 'uncertain_language'
     && answers[name]! > FORGE_JUDGE_THRESHOLDS.refuseAbove)) return 'refuse';
-  if (secondary.outcome !== 'pass' || Object.values(answers).some(value => value >= FORGE_JUDGE_THRESHOLDS.passBelow)) return 'hold';
+  if (secondary.outcome !== 'pass' || !primaryForgeSafetyPass(answers)) return 'hold';
   return 'pass';
 }
 
@@ -51,8 +59,8 @@ Judge the actual contact sheet, not the plan's promise. Simplification may prese
 These scores NEVER cause a safety hold or refusal. A poor likeness, unsupported subject or broken part is not unsafe by itself.
 Explicit harmful text, symbols or shapes still meet the separate safety floor.`;
 
-export function scoreForgeQuality(primary: ForgeQualityRead, secondary: ForgeQualityRead): ForgeQualityScore {
-  const mean = (name: keyof ForgeQualityRead) => Math.round((primary[name] + secondary[name]) * 5_000) / 10_000;
+export function scoreForgeQuality(primary: ForgeQualityRead, secondary?: ForgeQualityRead): ForgeQualityScore {
+  const mean = (name: keyof ForgeQualityRead) => Math.round((secondary ? (primary[name] + secondary[name]) / 2 : primary[name]) * 10_000) / 10_000;
   const dimensions = { recognisability: mean('recognisability'), completeness: mean('completeness'), cleanMarks: mean('cleanMarks') };
   return { policy: FORGE_JUDGE_POLICY_VERSION, ...dimensions,
     score: Math.round((dimensions.recognisability * 0.6 + dimensions.completeness * 0.25 + dimensions.cleanMarks * 0.15) * 10_000) / 10_000 };

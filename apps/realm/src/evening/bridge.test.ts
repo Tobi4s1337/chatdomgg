@@ -9,7 +9,7 @@ import { REALM_CASTLE_SLOT, REALM_NO_HOME_SLOT, type KingdomForgeCommand, type R
 import { createRealmState } from '@chatdom/world/realm';
 import { REFERENCE_WORLD } from '@chatdom/world/realm-reference';
 import type { ForgeProviders, JudgeVerdict } from '../../../codex/src/providers';
-import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions } from '../../../codex/src/providers/policy';
+import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions, scoreForgeQuality } from '../../../codex/src/providers/policy';
 import { createDurableRealmServices, type DurableRepository, type RealmOutboxRow } from '../persistence';
 import type { RealmOutboxStore } from '../outbox';
 import { IngressGate, presenceTransition } from '../ingress';
@@ -20,8 +20,10 @@ const cleanups: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); });
 
 function pass(image: boolean): JudgeVerdict {
-  const base = { backend: 'codex-cli', status: 'complete', policy: FORGE_JUDGE_POLICY_VERSION, evidenceHash: (image ? 'b' : 'a').repeat(64) };
-  return { outcome: 'pass', reason: 'SIMULATED controlled approval', records: [
+  const quality = { recognisability: 0.95, completeness: 0.95, cleanMarks: 0.95 };
+  const base = { backend: 'codex-cli', status: 'complete', policy: FORGE_JUDGE_POLICY_VERSION, evidenceHash: (image ? 'b' : 'a').repeat(64),
+    ...(image ? { quality, qualityStatus: 'complete' } : {}) };
+  return { outcome: 'pass', reason: 'controlled approval', ...(image ? { quality: scoreForgeQuality(quality, quality) } : {}), records: [
     { ...base, judge: 'gpt-6-luna', model: 'gpt-6-luna', probabilitySource: 'model-self-estimate', thresholds: FORGE_JUDGE_THRESHOLDS,
       answers: Object.fromEntries(forgeJudgeQuestions(image).map(({ name }) => [name, 0.01])) },
     { ...base, judge: 'gpt-6.1-terra', model: 'gpt-6.1-terra', outcome: 'pass' },
@@ -94,7 +96,8 @@ async function fixture(royal = false) {
   const transient: RealmTransientMessage[] = [], delivered: unknown[] = [];
   hold.kingdom.bindTransient(message => transient.push(message), () => {});
   hold.kingdom.subscribe(message => delivered.push(message));
-  return { bridge, command, providers, repository, state: () => state, facts, rows, transient, delivered, ingress, kingdom: hold.kingdom, castle };
+  const privateReply = vi.spyOn(hold.kingdom, 'toOwner');
+  return { bridge, command, providers, repository, state: () => state, facts, rows, transient, delivered, ingress, kingdom: hold.kingdom, castle, privateReply };
 }
 
 it('uses one held writer and real coordinator; stages are transient, audited attachments survive in the durable outbox, and retries never spend twice', async () => {
@@ -112,11 +115,47 @@ it('uses one held writer and real coordinator; stages are transient, audited att
   expect(firstStage?.type).toBe('forge');
   if (firstStage?.type === 'forge') expect(f.rows[0]?.message).toMatchObject({ type: 'forge', event: { activityId: firstStage.event.activityId } });
   expect(f.delivered).toHaveLength(1);
+  expect(f.privateReply).toHaveBeenCalledExactlyOnceWith(personId, expect.objectContaining({ type: 'receipt', receipt: expect.objectContaining({ status: 'committed', message: expect.stringContaining('Your home now carries') }) }));
   expect(f.kingdom.publicCheckpoint().current).toContainEqual(expect.objectContaining({ type: 'home', attachments: [expect.objectContaining({ slot: 7 })] }));
   const publicBytes = JSON.stringify([f.rows, f.transient, f.delivered]);
   expect(publicBytes).not.toContain(f.command.words); expect(publicBytes).not.toContain(f.command.messageId);
   expect(await f.bridge.run(f.command)).toEqual({ kind: 'already-committed' });
   expect(f.providers.judgeWords).toHaveBeenCalledTimes(1); expect(f.state().coals[personId]).toBe(0);
+  expect(f.privateReply).toHaveBeenCalledTimes(1);
+});
+
+it('sends the closest-shape explanation only to the maker after a real durable commit', async () => {
+  const f = await fixture();
+  const draft = await f.providers.draft({ words: f.command.words, family: 'hearth', availableSockets: [] });
+  f.providers.draftCandidate = vi.fn(async () => ({ draft, interpretation: 'closest' as const, shared: 'family' as const }));
+  expect(await f.bridge.run(f.command)).toMatchObject({ kind: 'committed' });
+  expect(f.privateReply).toHaveBeenCalledWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'committed', message: expect.stringContaining('The closest I can make') }) }));
+  expect(JSON.stringify([f.rows, f.transient, f.delivered])).not.toContain('closest');
+  expect(f.state().coals[personId]).toBe(0);
+});
+
+it('waits for accepted online/chat ingress to drain before deciding whether the fire is out', async () => {
+  const f = await fixture(), live = f.kingdom.privateState;
+  const state = vi.spyOn(f.kingdom, 'privateState', 'get').mockReturnValue(
+    { ...live, stream: { sessionId: null, startedAt: 0, liveUntil: 0 } });
+  const loadIngress = f.kingdom.loadIngress.bind(f.kingdom);
+  vi.spyOn(f.kingdom, 'loadIngress').mockImplementation(async () => {
+    const committed = await loadIngress(); state.mockRestore(); return committed;
+  });
+  expect(await f.bridge.run(f.command)).toMatchObject({ kind: 'committed' });
+  expect(f.kingdom.loadIngress).toHaveBeenCalled();
+  expect(f.privateReply).toHaveBeenCalledExactlyOnceWith(personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'committed' }) }));
+  expect(f.state().coals[personId]).toBe(0);
+});
+
+it('explains a fresh offline wish privately without a model call or coal spent', async () => {
+  const f = await fixture(true);
+  expect(await f.bridge.run(f.command)).toMatchObject({ kind: 'cold', privateMessage: expect.stringContaining('stream is offline') });
+  expect(f.privateReply).toHaveBeenCalledExactlyOnceWith(f.command.personId, expect.objectContaining({ receipt: expect.objectContaining({ status: 'unavailable', message: expect.stringContaining('stream is offline') }) }));
+  expect(f.providers.judgeWords).not.toHaveBeenCalled(); expect(f.providers.draft).not.toHaveBeenCalled();
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toEqual([]);
+  expect(f.transient).toEqual([]); expect(f.rows).toEqual([]);
+  expect(f.state().coals[f.command.personId] ?? 0).toBe(0);
 });
 
 it('revokes pending provider work on authenticated cleanup and keeps unauthenticated cleanup from canceling it', async () => {

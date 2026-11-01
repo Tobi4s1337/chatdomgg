@@ -33,6 +33,9 @@ The transaction stores both `committedAt` and provenance `firstForgedAt` as its 
 
 Bind `record` to a private audit sink and `publish` to a public observation sink. The audit contains the existing
 providers' bounded judge evidence, without the original wish, identity, whole house or raw provider errors.
+It records candidate attempts, actual model calls and the selected result index. Discarded results keep only
+bounded outcome/quality summaries; the selected draft and schema-ordered full home digest bind the approval
+to exactly what may land. A quiet retry cannot substitute an unchecked title, plaque or plan under the same run.
 Judgment `approved` is a model-gate result, not a durable placement. Stage events have only an opaque activity ID
 and stage. Only a successful authority commit releases the approved draft, slot and safe provenance. Refusals,
 holds and errors return privately. If the listener fails, or cancellation arrives after commit, the durable
@@ -41,6 +44,9 @@ outbox/snapshot must recover the attachment without replaying the ceremony or ch
 The returned function yields a private outcome. A Herald sink can `await application(command, lease)` and route
 that outcome privately; it must not broadcast it. A duplicate kingdom/message key produces no second model run
 or public ceremony. Shared protocol promotion and public snapshot/replay wiring belong to main.
+After a durable commit, an optional private line describes the actual motif and any closest-shape adaptation.
+It uses finite host-authored descriptions rather than raw model prose or original wish text. Service outages,
+safety holds and authority prerequisite failures return their private causes without a quality refusal beat.
 
 The focused test uses controlled providers/authority and real assembly/contact-sheet rendering. It establishes
 ordering, idempotency, privacy projection and no commit for failed/stale runs. It does not establish durable realm

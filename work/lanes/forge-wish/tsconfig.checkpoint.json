@@ -2,6 +2,12 @@
   "extends": "../../../tsconfig.json",
   "include": [
     "../../../apps/codex/src/**/*.ts",
-    "../../../apps/realm/src/wiring/**/*.ts"
+    "../../../apps/realm/src/wiring/**/*.ts",
+    "../../../apps/realm/src/evening/bridge.ts",
+    "../../../apps/realm/src/evening/bridge.test.ts",
+    "../../../packages/forge/src/**/*.ts",
+    "../../../packages/content/src/forge-motifs/**/*.ts",
+    "../../../apps/web/src/forge-wish-bench/**/*.ts",
+    "../../../apps/web/vite.config.ts"
   ]
 }

@@ -1,11 +1,12 @@
 import type { KingdomId } from '@chatdom/shared';
 import type { ForgeAttempt, KingdomForgeAuthority } from '@chatdom/shared/realm';
 import type { ForgeWriteGate } from './gate';
+import type { ForgeCandidateBinding } from '../../../codex/src/kingdom-forge/candidate';
 
 /** Trusted private durable judge evidence, written by the coordinator's audit sink before commit. */
 export interface RealmForgeApprovals {
-  /** Return a durable receipt ONLY after both independent judges passed the words AND rendered result of this run. */
-  approved(key: string, runId: string): Promise<string | null>;
+  /** Both independent gates must pass; bind the selected draft and full host digest before authorizing. */
+  approved(key: string, runId: string, expected: ForgeCandidateBinding): Promise<string | null>;
 }
 export interface RealmForgeOptions {
   readonly approvals: RealmForgeApprovals;

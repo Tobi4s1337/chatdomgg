@@ -1,4 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createCastle, createHearthHome } from '@chatdom/content';
 import { assembleForge, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
 import { WORLD_FIXTURE_KINGDOM as kingdomId, WORLD_FIXTURE_PERSON as personId } from '@chatdom/shared/world-fixtures';
@@ -11,6 +14,12 @@ import { createDurableRealmServices, RealmCommitUncertainError, type DurableRepo
 import type { RealmOutboxStore } from '../outbox';
 import { createForgeAuthority, forgeHomeDigest, forgeMessageKey } from './forge';
 import { ForgeWriteGate } from './gate';
+import { FileForgeApprovals } from './approvals';
+import type { RealmForgeApprovals } from './types';
+import { bindForgeCandidate } from '../../../codex/src/kingdom-forge/candidate';
+import { createForgeProviders } from '../../../codex/src/providers';
+import { forgeJudgeQuestions } from '../../../codex/src/providers/policy';
+import { renderForgeContactSheet } from '../../../codex/src/contact-sheet';
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0)) await close(); });
@@ -69,7 +78,7 @@ async function fixture(options: { coal?: number; installed?: boolean; anvils?: n
   const retained = await services.retain(kingdomId); cleanup.push(() => retained.release());
   vi.spyOn(retained.kingdom, 'databaseNow').mockImplementation(() => now);
   if (options.castle) await retained.kingdom.execute('simulated:install-castle', { type: 'castle.installNative', castle: home as RealmOwnedCastle }, 'allocation');
-  const approvals = { approved: vi.fn(async () => 'simulated-judge-receipt' as string | null) };
+  const approvals = { approved: vi.fn<RealmForgeApprovals['approved']>(async () => 'simulated-judge-receipt' as string | null) };
   const authority = createForgeAuthority({ kingdomId, origin: 'simulated', retain: () => services.retain(kingdomId) },
     { approvals, gate, ...(options.anvils ? { anvils: options.anvils } : {}) });
   let number = 0;
@@ -119,7 +128,7 @@ it('shares one retained writer; ignores slot hints, reserves without spending, a
 
 it('fails closed for missing gate, room origin, coal, real ownership, rights, moderation and offline stream', async () => {
   const ungated = await fixture({ installed: false }); expect(await ungated.authority.reserve(ungated.wish(), caller().lease)).toEqual({ kind: 'cold' });
-  const empty = await fixture({ coal: 0 }); expect(await empty.authority.reserve(empty.wish(), caller().lease)).toEqual({ kind: 'held' });
+  const empty = await fixture({ coal: 0 }); expect(await empty.authority.reserve(empty.wish(), caller().lease)).toMatchObject({ kind: 'held', privateMessage: expect.stringContaining('scuttle is empty') });
   const f = await fixture(), initial = f.state();
   for (const [state, kind] of [
     [{ ...initial, homes: {} }, 'cold'], [{ ...initial, rights: {} }, 'cold'],
@@ -127,7 +136,9 @@ it('fails closed for missing gate, room origin, coal, real ownership, rights, mo
     [{ ...initial, stream: { sessionId: null, startedAt: 0, liveUntil: 0 } }, 'cold'],
   ] as const) {
     f.replace(state); await f.kingdom.execute(`refresh-${kind}-${Object.keys(state.homes).length}-${Object.keys(state.rights).length}-${state.stream.sessionId}`, { type: 'forge.release', attempt: { key: 'unused', attemptId: 'unused' } }, 'forge');
-    expect(await f.authority.reserve(f.wish(), caller().lease)).toEqual({ kind });
+    const answer = await f.authority.reserve(f.wish(), caller().lease);
+    expect(answer).toMatchObject({ kind, privateMessage: expect.any(String) });
+    if (state.stream.sessionId === null) expect(answer).toMatchObject({ privateMessage: expect.stringContaining('stream is offline') });
   }
   const otherOrigin = createForgeAuthority({ kingdomId, origin: 'live', retain: () => f.services.retain(kingdomId) }, { approvals: f.approvals, gate: f.gate });
   expect(await otherOrigin.reserve(f.wish(), caller().lease)).toEqual({ kind: 'cold' }); expect(f.facts).toHaveLength(0);
@@ -147,11 +158,44 @@ it('requires audited approval and verifies the exact current host, socket, kit, 
   expect(f.state().coals[personId]).toBe(2); expect(f.state().attachments).toEqual({});
 });
 
+it('binds the real private approval to the selected draft and host before spending coal', async () => {
+  const f = await fixture(), attempt = f.wish(), lease = caller().lease, reservation = await f.reserve(attempt, lease);
+  const input = commitInput(attempt, reservation, 'bound-selected-run');
+  const directory = await mkdtemp(join(tmpdir(), 'chatdom-selected-forge-'));
+  cleanup.push(() => rm(directory, { recursive: true, force: true }));
+  const approvals = new FileForgeApprovals(directory), quality = { recognisability: 0.9, completeness: 0.9, cleanMarks: 0.9 };
+  const providers = createForgeProviders({ runCodex: async ({ image }) => JSON.stringify({
+    answers: forgeJudgeQuestions(Boolean(image)).map(({ name }) => ({ type: 'predicate', name, probability: 0.01 })), ...(image ? { quality } : {}),
+  }) });
+  const socket = findForgeSockets(reservation.home).find(socket => socket.kind === input.attachment.draft.plan.kind)!;
+  const piece = assembleForge(input.attachment.draft.plan, forgeStyleKit(reservation.family), socket);
+  const words = await providers.judgeWords({ words: input.creation.words, safetyIdentifier: reservation.safetyIdentifier });
+  const result = await providers.judgeResult({ wish: input.creation.words, draft: input.attachment.draft, safetyIdentifier: reservation.safetyIdentifier,
+    contactSheet: renderForgeContactSheet(piece.blueprint, { home: reservation.home, origin: socket.origin }) });
+  await approvals.record({ key: attempt.key, runId: input.attachment.runId, at: Date.now(), judgment: 'approved',
+    verdicts: [words, result].map(({ outcome, records, quality }) => ({ outcome, records, ...(quality ? { quality } : {}) })),
+    candidate: bindForgeCandidate(input.attachment.draft, reservation.home) });
+  f.approvals.approved.mockImplementation((key, id, expected) => approvals.approved(key, id, expected));
+  for (const draft of [
+    { ...input.attachment.draft, title: 'An unjudged retry title' },
+    { ...input.attachment.draft, plaque: 'An unjudged retry plaque.' },
+    { ...input.attachment.draft, plan: { ...input.attachment.draft.plan, motif: 'sleeping-fox' as const } },
+  ]) {
+    expect(await f.authority.commit({ ...input, attachment: { ...input.attachment, draft } }, lease)).toEqual({ kind: 'held' });
+    expect(f.state().coals[personId]).toBe(2);
+    expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toEqual([]);
+  }
+  expect(await f.authority.commit(input, lease)).toMatchObject({ kind: 'committed' });
+  expect(f.state().coals[personId]).toBe(1);
+  expect(f.facts.filter(fact => fact.body.type === 'forge.commitApproved')).toHaveLength(1);
+  expect(JSON.stringify(f.facts)).not.toContain('unjudged retry');
+});
+
 it('isolates competing attempts; release retains coal and a released message remains terminal', async () => {
   const f = await fixture({ anvils: 1 }), wish = f.wish(), other = { ...wish, attemptId: 'other-attempt' };
   await f.reserve(wish);
   expect(await f.authority.reserve(other, caller().lease)).toEqual({ kind: 'held' });
-  expect(await f.authority.reserve(f.wish(), caller().lease)).toEqual({ kind: 'held' });
+  expect(await f.authority.reserve(f.wish(), caller().lease)).toMatchObject({ kind: 'held', privateMessage: expect.stringContaining('already have a wish') });
   await f.authority.release(other); expect(await f.authority.status(wish)).toEqual({ kind: 'reserved' });
   await f.authority.release(wish); expect(await f.authority.status(wish)).toEqual({ kind: 'released' });
   expect(f.state().coals[personId]).toBe(2); expect(await f.authority.reserve(wish, caller().lease)).toEqual({ kind: 'cold' });
@@ -195,13 +239,13 @@ it('returns the current owned home on revalidation and atomically retains displa
   expect(f.state().attachments['simulated-first']?.attached).toBe(false);
   expect(f.state().attachments['simulated-second']?.attached).toBe(true);
   expect(f.state().coals[personId]).toBe(0);
-  expect(await f.authority.reserve({ ...f.wish(), personId: PersonIdSchema.parse('990000009') }, lease)).toEqual({ kind: 'cold' });
+  expect(await f.authority.reserve({ ...f.wish(), personId: PersonIdSchema.parse('990000009') }, lease)).toMatchObject({ kind: 'cold', privateMessage: expect.stringContaining('own home') });
 });
 
 
 it('forges onto the real native keep after evidenced qualification and replays without inventing a street deed', async () => {
   const f = await fixture({ castle: true, coal: 0 }), wish = f.wish(), lease = caller().lease;
-  expect(await f.authority.reserve(wish, lease)).toEqual({ kind: 'held' });
+  expect(await f.authority.reserve(wish, lease)).toMatchObject({ kind: 'held', privateMessage: expect.stringContaining('scuttle is empty') });
   expect(f.state().homes).toEqual({}); expect(f.state().coals[f.ownerId]).toBe(0);
   const from = f.state().stream.startedAt;
   const credit = { type: 'coal.creditQualifiedNight' as const, personId: f.ownerId, streamSessionId: 'simulated-night', qualificationReceipt: 'simulated:actual-intervals' };

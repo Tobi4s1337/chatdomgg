@@ -73,6 +73,8 @@ function renderView(asset: VoxelAsset, min: Vector, max: Vector, view: View, wid
     const delta = direction.map(d => d === 0 ? Infinity : Math.abs(1 / d));
     const crossing = origin.map((o, axis) => direction[axis] === 0 ? Infinity : (cells[axis]! + (steps[axis]! > 0 ? 1 : 0) - o) / direction[axis]!);
     for (let step = 0; step < maxSteps; step++) {
+      // Grazing rays can cross the last grid plane before the floating-point far distance.
+      if (cells.some((n, axis) => n < 0 || n >= asset.size[axis]!)) break;
       const material = asset.voxels[cells[0]! + cells[1]! * stride[1]! + cells[2]! * stride[2]!]!;
       if (material !== 0) {
         const base = palette.get(material)!;
@@ -128,7 +130,7 @@ function distanceTile(street: Uint8Array): Uint8Array {
 const FONT: Readonly<Record<string, string>> = {
   A: '010101111101101', B: '110101110101110', C: '011100100100011', D: '110101101101110',
   E: '111100110100111', F: '111100110100100', G: '011100101101011', H: '101101111101101',
-  I: '111010010010111', K: '101101110101101', L: '100100100100111', N: '101111111111101', O: '010101101101010',
+  I: '111010010010111', M: '101111111101101', K: '101101110101101', L: '100100100100111', N: '101111111111101', O: '010101101101010',
   P: '110101110100100', R: '110101110101101', S: '011100010001110', T: '111010010010010',
   U: '101101101101111', W: '101101111111101', X: '101101010101101', '6': '011100111101111',
   '4': '101101111001001',
@@ -163,37 +165,101 @@ function pngChunk(type: string, data: Uint8Array): Buffer {
   return bytes;
 }
 
-/** Trusted CPU raster only: flat palette views plus labelled face-lit geometry; no browser input or GPU. */
-export function renderForgeContactSheet(input: VoxelBlueprint): string {
-  const blueprint = VoxelBlueprintSchema.parse(input);
-  const writes = blueprint.boxes.reduce((sum, box) => sum + box.to.reduce((volume, n, axis) => volume * (n - box.from[axis]!), 1), 0);
-  if (writes > MAX_RASTER_WRITES) throw new RangeError('Forge contact sheet exceeds the raster work budget.');
-  const asset = rasterizeBlueprint(blueprint);
+export interface ForgeContactSheetContext {
+  home: VoxelBlueprint;
+  /** Position of the piece's local origin in the home's voxel coordinates. */
+  origin: readonly [number, number, number];
+}
+
+function checkWrites(blueprint: VoxelBlueprint): number {
+  return blueprint.boxes.reduce((sum, box) => sum + box.to.reduce((volume, n, axis) => volume * (n - box.from[axis]!), 1), 0);
+}
+
+/** Compose final solid cells, never applying the part's air cuts to the home. */
+function placedAsset(part: VoxelAsset, context: ForgeContactSheetContext, remainingWrites: number): VoxelAsset {
+  const home = VoxelBlueprintSchema.parse(context.home);
+  if (checkWrites(home) > remainingWrites) throw new RangeError('Forge contact sheet exceeds the raster work budget.');
+  if (context.origin.length !== 3 || !context.origin.every(Number.isSafeInteger)) throw new RangeError('Invalid Forge contact sheet origin.');
+  const low = context.origin.map(n => Math.min(0, n));
+  const size = home.size.map((n, i) => Math.max(n, context.origin[i]! + part.size[i]!) - low[i]!) as [number, number, number];
+  // The trusted castle host contract permits 32 million cells; street homes are much smaller.
+  if (size.some(n => n <= 0 || n > 512) || size.reduce((a, b) => a * b, 1) > 32 * 1024 * 1024) throw new RangeError('Forge contact sheet exceeds the composition budget.');
+  const host = rasterizeBlueprint(home);
+  const voxels = new Uint16Array(size[0] * size[1] * size[2]);
+  const copy = (source: VoxelAsset, offset: readonly number[]) => {
+    for (let z = 0; z < source.size[2]; z++) for (let y = 0; y < source.size[1]; y++) for (let x = 0; x < source.size[0]; x++) {
+      const value = source.voxels[x + source.size[0] * (y + source.size[1] * z)]!;
+      if (value) voxels[(x + offset[0]!) + size[0] * ((y + offset[1]!) + size[1] * (z + offset[2]!))] = value;
+    }
+  };
+  copy(host, low.map(n => -n));
+  copy(part, context.origin.map((n, i) => n - low[i]!));
+  return { id: 'forge-contact-composition', revision: 0, lattice: part.lattice, size, voxels };
+}
+
+function solidBounds(asset: VoxelAsset): [Vector, Vector] {
   const min: [number, number, number] = [...asset.size], max: [number, number, number] = [0, 0, 0];
   for (let z = 0; z < asset.size[2]; z++) for (let y = 0; y < asset.size[1]; y++) for (let x = 0; x < asset.size[0]; x++) {
     const material = asset.voxels[x + asset.size[0] * (y + asset.size[1] * z)]!;
-    if (material === 0) continue;
+    if (!material) continue;
     if (!palette.has(material)) throw new Error(`Unknown Forge contact sheet material: ${material}.`);
-    min[0] = Math.min(min[0]!, x); min[1] = Math.min(min[1]!, y); min[2] = Math.min(min[2]!, z);
-    max[0] = Math.max(max[0]!, x + 1); max[1] = Math.max(max[1]!, y + 1); max[2] = Math.max(max[2]!, z + 1);
+    min[0] = Math.min(min[0], x); min[1] = Math.min(min[1], y); min[2] = Math.min(min[2], z);
+    max[0] = Math.max(max[0], x + 1); max[1] = Math.max(max[1], y + 1); max[2] = Math.max(max[2], z + 1);
   }
   if (max[0] === 0) throw new Error('Forge contact sheet requires solid voxels.');
-  const pixels = canvas(WIDTH, HEIGHT);
-  for (const [i, view] of VIEWS.entries()) {
-    const x = i % 3 * 256, y = Math.floor(i / 3) * 224;
-    const tile = renderView(asset, min, max, view);
-    label(pixels, view.name, x + 12, y + 8);
-    paste(pixels, tile, 232, 184, x + 12, y + 28);
-    if (view.name === 'STREET') paste(pixels, distanceTile(tile), 64, 64, 696, 448);
+  return [min, max];
+}
+
+/** Trusted bounded CPU raster. With context, show the complete part and its actual placement. */
+export function renderForgeContactSheet(input: VoxelBlueprint, context?: ForgeContactSheetContext): string {
+  const blueprint = VoxelBlueprintSchema.parse(input);
+  const writes = checkWrites(blueprint);
+  if (writes > MAX_RASTER_WRITES) throw new RangeError('Forge contact sheet exceeds the raster work budget.');
+  const asset = rasterizeBlueprint(blueprint);
+  const [min, max] = solidBounds(asset);
+  const height = context ? 944 : HEIGHT;
+  const pixels = canvas(WIDTH, height);
+  if (context) {
+    const placed = placedAsset(asset, context, MAX_RASTER_WRITES - writes);
+    const [placedMin, placedMax] = solidBounds(placed);
+    label(pixels, 'PIECE LEFT FRONT', 16, 10);
+    paste(pixels, renderView(asset, min, max, HERO, 360, 306, true), 360, 306, 12, 28);
+    label(pixels, 'PIECE FRONT', 400, 10);
+    paste(pixels, renderView(asset, min, max, VIEWS[1]!, 360, 306, true), 360, 306, 396, 28);
+    label(pixels, 'ON HOME', 16, 350);
+    // Look from the side of the home carrying the piece, including front-wall sockets.
+    const [homeMin, homeMax] = solidBounds(rasterizeBlueprint(context.home));
+    const sx = context.origin[0] + (min[0] + max[0]) / 2 < (homeMin[0] + homeMax[0]) / 2 ? -1 : 1;
+    const wallHeight = context.origin[1] + (min[1] + max[1]) / 2 < (homeMin[1] + homeMax[1]) / 2;
+    const sz = wallHeight ? 1 : context.origin[2] + (min[2] + max[2]) / 2 < (homeMin[2] + homeMax[2]) / 2 ? -1 : 1;
+    const homeView: View = wallHeight
+      ? { name: 'ON HOME', right: [1, 0, 0], up: [0, 0.98, -0.2], camera: [0, 0.2, 0.98] }
+      : { name: 'ON HOME', right: [sz * a, 0, -sx * a], up: [-sx * b, 2 * b, -sz * b], camera: [sx * c, c, sz * c] };
+    paste(pixels, renderView(placed, placedMin, placedMax, homeView, 736, 420, true), 736, 420, 16, 370);
+    // Keep the diagnostic angles, plus the underside: a larger front view must not hide other marks.
+    const diagnostics: readonly View[] = [...VIEWS, { name: 'BOTTOM', right: [1, 0, 0], up: [0, 0, 1], camera: [0, -1, 0] }];
+    for (const [i, view] of diagnostics.entries()) {
+      const x = i * 108;
+      label(pixels, view.name, x + 8, 806);
+      paste(pixels, renderView(asset, min, max, view, 108, 112, true), 108, 112, x, 824);
+    }
+  } else {
+    for (const [i, view] of VIEWS.entries()) {
+      const x = i % 3 * 256, y = Math.floor(i / 3) * 224;
+      const tile = renderView(asset, min, max, view);
+      label(pixels, view.name, x + 12, y + 8);
+      paste(pixels, tile, 232, 184, x + 12, y + 28);
+      if (view.name === 'STREET') paste(pixels, distanceTile(tile), 64, 64, 696, 448);
+    }
+    label(pixels, 'DISTANCE 64PX', 584, 472);
+    label(pixels, HERO.name, 16, 520);
+    paste(pixels, renderView(asset, min, max, HERO, 736, 256, true), 736, 256, 16, 540);
   }
-  label(pixels, 'DISTANCE 64PX', 584, 472);
-  label(pixels, HERO.name, 16, 520);
-  paste(pixels, renderView(asset, min, max, HERO, 736, 256, true), 736, 256, 16, 540);
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(WIDTH, 0); header.writeUInt32BE(HEIGHT, 4);
+  header.writeUInt32BE(WIDTH, 0); header.writeUInt32BE(height, 4);
   header[8] = 8; header[9] = 2; // Eight-bit RGB; no interlace or palette indirection.
-  const rows = Buffer.alloc(HEIGHT * (1 + WIDTH * 3));
-  for (let y = 0; y < HEIGHT; y++) rows.set(pixels.subarray(y * WIDTH * 3, (y + 1) * WIDTH * 3), y * (1 + WIDTH * 3) + 1);
+  const rows = Buffer.alloc(height * (1 + WIDTH * 3));
+  for (let y = 0; y < height; y++) rows.set(pixels.subarray(y * WIDTH * 3, (y + 1) * WIDTH * 3), y * (1 + WIDTH * 3) + 1);
   const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(rows)), pngChunk('IEND', new Uint8Array())]);
   return `data:image/png;base64,${png.toString('base64')}`;
 }

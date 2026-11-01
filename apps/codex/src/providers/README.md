@@ -1,29 +1,47 @@
 # Forge model providers
 
 `createForgeProviders()` supplies the independent word gate, Codex draft, and result gate. The host orders
-these, assembles the actual grammar plan, renders the six-angle contact sheet, and persists private records
+these, assembles the actual grammar plan, renders shaded isolated views and the actual home placement, and persists private records
 before releasing an approval. A provider verdict never mints or publishes a part. The result gate sees the
 original wish alongside the actual image, title and plaque. Safety and quality are separate outputs.
 
 The current policy refuses only when the independent reads agree on the same safety-floor concern. A single
 confident objection, different objections or uncertainty holds privately; neither read can refuse alone.
 Subject recognition, completeness and incidental stray marks produce bounded quality scores, never safety
-holds or refusals. Both image reads record those dimensions. Their mean is combined as 60% recognition,
+holds or refusals. Every actual image read records those dimensions. A single read, or the mean of two actual reads, is combined as 60% recognition,
 25% completeness and 15% clean marks, rounded deterministically to four decimal places. This is a versioned
 selection score, not a calibrated safety probability or a visual acceptance claim. Missing/malformed quality
 scores become zero without changing safety. Explicit harmful text, symbols and shapes still meet the floor.
 The private realm audit retains scores and policy even when a wish is held or refused; no score enters a
 public event. The receipt verifier recomputes the same safety rule and quality aggregate before authorizing.
 
-FW10 remains open: quiet result retries, explicit softening, fairer lit contact sheets, call escalation, the
-walk wish box and real-wish evidence have not landed in this checkpoint. A safe low-quality candidate currently
-continues through the existing approval path. The fixed twenty lane-authored wishes are in `../fixtures/`.
+FW10 providers expose optional `draftCandidate(input)` alongside the compatible `draft(input)` method.
+Its strict result is `{draft, interpretation: 'as-wished' | 'closest', shared: 'subject' | 'family' | 'slot' | 'mood' | 'colour'}`.
+The model chooses an authored catalogue motif and must mark an unsupported subject `closest`; the title and
+plaque describe the actual motif, never pretend an absent subject exists. An `as-wished` result must share
+`subject`. No freeform private cause is accepted: the host derives its warm private message from these enums.
+Metadata is a model assertion, not visual proof; the independent result quality score still measures faithfulness.
+
+All three provider inputs accept an optional shared `budget: ForgeCallBudget`. `createForgeCallBudget()` starts
+at five calls; `increaseLimit(7)` explicitly allows a softened wish up to seven. The host owns this decision;
+providers never raise the ceiling. Every runner invocation spends one call after input validation and cancellation
+checks, including failed or malformed model attempts. Exhaustion throws `ForgeCallBudgetError` with code
+`FORGE_CALL_BUDGET` before another runner starts. The same ledger spans both gates, drafts and quiet retries.
 
 All model work uses the authenticated local Codex CLI. No `OPENAI_API_KEY`, direct API call or paid-key
-fallback is used. Each gate starts separate, ephemeral Luna and Terra runs, independent of each other and of
-the drafting context. Luna answers the fixed versioned questions with explicit self-estimates, not calibrated
-Decisions endpoint probabilities. Terra returns an independent verdict. Missing, invalid or unsure checks
-hold privately or leave the forge cold; neither authentication configuration nor a drafted plan is approval.
+fallback is used. Each gate starts one fresh, ephemeral Luna run, independent of the drafting context. Complete probabilities
+strictly below the pass threshold pass immediately. Otherwise it escalates to a fresh Terra run, without giving
+Terra the primary answer. A malformed or unavailable primary cannot pass even if Terra passes. A refusal
+requires the same floor concern from both reads. The deterministic `primaryForgeSafetyPass` and
+`decideForgeSafety` exports let the receipt verifier replay policy v5. Records contain exactly the actual calls:
+one Luna record on a confident pass or primary transport failure, otherwise Luna and Terra attempt records. Each retains backend, model,
+policy and evidence hash; complete Luna records add thresholds, self-estimated answers and probability source;
+Terra records add outcome and concerns. Image records add raw bounded quality and its validity status.
+No skipped model is recorded as if it ran. Luna answers the fixed versioned questions with explicit self-estimates, not calibrated
+Decisions endpoint probabilities. Terra returns an independent verdict. A transport failure or timeout in
+either required read throws `ForgeProviderColdError` with its actual attempt records. A failed primary read
+stops immediately without spending a Terra call. Completed malformed
+or uncertain safety outputs hold privately; neither authentication configuration nor a drafted plan is approval.
 Records name the actual `codex-cli` backend and model; they never claim the moderation endpoint ran.
 
 Drafting uses Terra at medium reasoning and the shared strict `ForgeDraftSchema`. Each run ignores user

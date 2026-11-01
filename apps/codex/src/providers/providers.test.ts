@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createForgeProviders, ForgeProviderColdError } from './index';
+import { createForgeProviders, ForgeProviderColdError, createForgeCallBudget } from './index';
 import { FORGE_JUDGE_POLICY_VERSION, forgeJudgeQuestions } from './policy';
 import type { CodexDraftRunner } from './codex-cli';
 import type { ForgeDraft, ForgeHouseSocket } from '../../../../packages/shared/src/index';
@@ -26,11 +26,11 @@ describe('independent Forge CLI judges', () => {
     vi.stubGlobal('fetch', http);
     const runCodex = cliMock();
     expect((await createForgeProviders({ runCodex }).judgeWords({ words: wish, safetyIdentifier })).outcome).toBe('pass');
-    expect(runCodex).toHaveBeenCalledTimes(2);
+    expect(runCodex).toHaveBeenCalledTimes(1);
     expect(http).not.toHaveBeenCalled();
   });
 
-  it('starts both models in parallel with independent schemas, no identity or shared answers', async () => {
+  it('escalates sequentially with independent schemas, no identity or shared answers', async () => {
     const started: string[] = [];
     let release: (() => void) | undefined;
     const gate = new Promise<void>(resolve => { release = resolve; });
@@ -43,13 +43,14 @@ describe('independent Forge CLI judges', () => {
       expect(signal).toBeInstanceOf(AbortSignal);
       expect(schema).toMatchObject({ type: 'object', additionalProperties: false });
       await gate;
-      return JSON.stringify(model === 'gpt-6-luna' ? luna() : { outcome: 'pass' });
+      return JSON.stringify(model === 'gpt-6-luna' ? luna(false, { hate: 0.4 }) : { outcome: 'pass' });
     });
     const pending = createForgeProviders({ runCodex }).judgeWords({ words: wish, safetyIdentifier });
-    expect(started).toEqual(['gpt-6-luna', 'gpt-6.1-terra']);
+    expect(started).toEqual(['gpt-6-luna']);
     release!();
     const verdict = await pending;
-    expect(verdict.outcome).toBe('pass');
+    expect(verdict.outcome).toBe('hold');
+    expect(started).toEqual(['gpt-6-luna', 'gpt-6.1-terra']);
     expect(verdict.records).toHaveLength(2);
     expect(verdict.records).toEqual(expect.arrayContaining([
       expect.objectContaining({ backend: 'codex-cli', model: 'gpt-6-luna', policy: FORGE_JUDGE_POLICY_VERSION, probabilitySource: 'model-self-estimate' }),
@@ -88,28 +89,51 @@ describe('independent Forge CLI judges', () => {
     }
   });
 
-  it('makes the Forge cold if Luna cannot answer and retains both attempt records', async () => {
-    const runCodex: CodexDraftRunner = async ({ model }) => { if (model === 'gpt-6-luna') throw new Error('private diagnostics'); return '{"outcome":"pass"}'; };
-    await expect(createForgeProviders({ runCodex }).judgeWords({ words: wish, safetyIdentifier })).rejects.toMatchObject({ code: 'FORGE_COLD', records: [expect.objectContaining({ status: 'unavailable' }), expect.objectContaining({ status: 'complete' })] });
+  it('makes the Forge cold immediately if Luna cannot answer and retains only its actual attempt record', async () => {
+    const runCodex = vi.fn<CodexDraftRunner>(async () => { throw new Error('private diagnostics'); });
+    await expect(createForgeProviders({ runCodex }).judgeWords({ words: wish, safetyIdentifier })).rejects.toMatchObject({ code: 'FORGE_COLD', records: [expect.objectContaining({ model: 'gpt-6-luna', status: 'unavailable' })] });
+    expect(runCodex).toHaveBeenCalledTimes(1);
   });
 
-  it('holds if the independent Terra gate disappears', async () => {
-    const runCodex: CodexDraftRunner = async ({ model }) => { if (model === 'gpt-6.1-terra') throw new Error('unavailable'); return JSON.stringify(luna()); };
-    expect((await createForgeProviders({ runCodex }).judgeWords({ words: wish, safetyIdentifier })).outcome).toBe('hold');
+  it('leaves the Forge cold if the required independent Terra gate disappears', async () => {
+    const runCodex: CodexDraftRunner = async ({ model }) => { if (model === 'gpt-6.1-terra') throw new Error('unavailable'); return JSON.stringify(luna(false, { hate: 0.4 })); };
+    await expect(createForgeProviders({ runCodex }).judgeWords({ words: wish, safetyIdentifier })).rejects.toMatchObject({
+      code: 'FORGE_COLD', records: [
+        expect.objectContaining({ model: 'gpt-6-luna', status: 'complete', answers: expect.objectContaining({ hate: 0.4 }) }),
+        expect.objectContaining({ model: 'gpt-6.1-terra', status: 'unavailable' }),
+      ],
+    });
   });
 
-  it.each(['hold', 'refuse'] as const)('holds an independent Terra %s when Luna passes', async outcome => {
-    expect((await createForgeProviders({ runCodex: cliMock(luna(), { outcome, concerns: ['hate'] }) }).judgeWords({ words: wish, safetyIdentifier })).outcome).toBe('hold');
+  it('leaves the Forge cold when required Terra times out after a completed uncertain primary read', async () => {
+    let secondarySignal: AbortSignal | undefined;
+    const runCodex: CodexDraftRunner = async ({ model, signal }) => {
+      if (model === 'gpt-6-luna') return JSON.stringify(luna(false, { uncertain_language: 0.4 }));
+      secondarySignal = signal;
+      return new Promise<string>(() => {});
+    };
+    const pending = createForgeProviders({ runCodex, judgeTimeoutMs: 5 }).judgeWords({ words: wish, safetyIdentifier });
+    await expect(pending).rejects.toMatchObject({
+      name: 'ForgeProviderColdError', code: 'FORGE_COLD', records: [
+        expect.objectContaining({ model: 'gpt-6-luna', status: 'complete', answers: expect.objectContaining({ uncertain_language: 0.4 }) }),
+        expect.objectContaining({ model: 'gpt-6.1-terra', status: 'unavailable' }),
+      ],
+    });
+    expect(secondarySignal?.aborted).toBe(true);
   });
 
-  it('reviews the original wish, composed display text and actual contact sheet in both fresh runs', async () => {
+  it.each(['hold', 'refuse'] as const)('holds an independent Terra %s when Luna is uncertain', async outcome => {
+    expect((await createForgeProviders({ runCodex: cliMock(luna(false, { hate: 0.4 }), { outcome, concerns: ['hate'] }) }).judgeWords({ words: wish, safetyIdentifier })).outcome).toBe('hold');
+  });
+
+  it('reviews the original wish, composed display text and actual contact sheet outside the draft context', async () => {
     const runCodex = vi.fn<CodexDraftRunner>(async ({ model, image }) => JSON.stringify(model === undefined ? draft : model === 'gpt-6-luna' ? luna(Boolean(image)) : { outcome: 'pass' }));
     const providers = createForgeProviders({ runCodex });
     await providers.judgeWords({ words: wish, safetyIdentifier });
     await providers.draft({ words: 'planner-secret-context', family: 'hearth', availableSockets: [socket] });
     expect((await providers.judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier })).outcome).toBe('pass');
-    expect(runCodex).toHaveBeenCalledTimes(5);
-    for (const [input] of runCodex.mock.calls.slice(3)) {
+    expect(runCodex).toHaveBeenCalledTimes(3);
+    for (const [input] of runCodex.mock.calls.slice(2)) {
       expect(input.image).toBe(sheet);
       expect(input.prompt).toContain(JSON.stringify(wish).slice(1, -1));
       expect(input.prompt).toContain(`${draft.title}\\n${draft.plaque}`);
@@ -167,7 +191,7 @@ describe('independent Forge CLI judges', () => {
   });
 
   it.each([[], ['broken_part'], ['hate', 'hate'], ['unfaithful_subject']].map(concerns => ({ concerns })))('holds invalid or quality-only secondary refusal concerns $concerns', async ({ concerns }) => {
-    const providers = createForgeProviders({ runCodex: cliMock(luna(true), { outcome: 'refuse', concerns, quality }) });
+    const providers = createForgeProviders({ runCodex: cliMock(luna(true, { hate: 0.4 }), { outcome: 'refuse', concerns, quality }) });
     expect((await providers.judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier })).outcome).toBe('hold');
   });
 
@@ -180,14 +204,14 @@ describe('independent Forge CLI judges', () => {
   });
 
   it.each([{}, { outcome: 'maybe' }, { outcome: ['pass'] }, { outcome: null }, { outcome: 'pass', explanation: 'private evidence' }])('holds a malformed Terra answer', async secondary => {
-    expect((await createForgeProviders({ runCodex: cliMock(luna(), secondary) }).judgeWords({ words: wish, safetyIdentifier })).outcome).toBe('hold');
+    expect((await createForgeProviders({ runCodex: cliMock(luna(false, { hate: 0.4 }), secondary) }).judgeWords({ words: wish, safetyIdentifier })).outcome).toBe('hold');
   });
 
   it('bounds a stalled runner even when it ignores abort', async () => {
     const signals: AbortSignal[] = [];
     const runCodex: CodexDraftRunner = async ({ signal }) => { signals.push(signal); return new Promise(() => {}); };
     await expect(createForgeProviders({ runCodex, judgeTimeoutMs: 5 }).judgeWords({ words: wish, safetyIdentifier })).rejects.toBeInstanceOf(ForgeProviderColdError);
-    expect(signals).toHaveLength(2);
+    expect(signals).toHaveLength(1);
     expect(signals.every(signal => signal.aborted)).toBe(true);
   });
 
@@ -235,6 +259,48 @@ describe('independent Forge CLI judges', () => {
 });
 
 describe('Codex draft adapter', () => {
+  it('returns explicit supported or closest metadata with only enum-derived private causes', async () => {
+    const candidate = { draft, interpretation: 'closest', shared: 'mood' };
+    const runCodex = vi.fn<CodexDraftRunner>(async () => JSON.stringify(candidate));
+    const result = await createForgeProviders({ runCodex }).draftCandidate!({ words: 'a tiny teapot', family: 'hearth', availableSockets: [socket] });
+    expect(result).toEqual(candidate);
+    expect(runCodex.mock.calls[0]![0].schema).toMatchObject({ additionalProperties: false, required: ['draft', 'interpretation', 'shared'] });
+    expect(runCodex.mock.calls[0]![0].prompt).toContain('Never fabricate an exact-title or plaque');
+    for (const output of [{ ...candidate, reason: 'private explanation' }, { ...candidate, interpretation: 'exact' },
+      { ...candidate, interpretation: 'as-wished', shared: 'colour' }]) {
+      await expect(createForgeProviders({ runCodex: async () => JSON.stringify(output) }).draftCandidate!({ words: wish, family: 'hearth', availableSockets: [socket] })).rejects.toBeDefined();
+    }
+  });
+
+  it('shares the ledger across all provider stages and prevents an eighth runner call', async () => {
+    const budget = createForgeCallBudget();
+    const runCodex = vi.fn<CodexDraftRunner>(async ({ model, image }) => JSON.stringify(model ? luna(Boolean(image)) : draft));
+    const providers = createForgeProviders({ runCodex });
+    await providers.judgeWords({ words: wish, safetyIdentifier, budget });
+    await providers.draft({ words: wish, family: 'hearth', availableSockets: [socket], budget });
+    const result = await providers.judgeResult({ wish, draft, contactSheet: sheet, safetyIdentifier, budget });
+    expect(result.records).toHaveLength(1);
+    expect(result.quality).toMatchObject({ recognisability: 0.9, completeness: 1, cleanMarks: 1, score: 0.94 });
+    expect(budget.calls).toBe(3);
+    for (let i = 0; i < 2; i++) await providers.judgeWords({ words: wish, safetyIdentifier, budget });
+    await expect(providers.judgeWords({ words: wish, safetyIdentifier, budget })).rejects.toMatchObject({ code: 'FORGE_CALL_BUDGET' });
+    expect(runCodex).toHaveBeenCalledTimes(5);
+    budget.increaseLimit(7);
+    for (let i = 0; i < 2; i++) await providers.judgeWords({ words: wish, safetyIdentifier, budget });
+    await expect(providers.draft({ words: wish, family: 'hearth', availableSockets: [socket], budget })).rejects.toMatchObject({ code: 'FORGE_CALL_BUDGET' });
+    expect(runCodex).toHaveBeenCalledTimes(7);
+  });
+
+  it('does not spend calls on invalid inputs or cancellation', async () => {
+    const budget = createForgeCallBudget(); const runCodex = cliMock();
+    const providers = createForgeProviders({ runCodex });
+    await expect(providers.draft({ words: wish, family: 'hearth', availableSockets: [], budget })).rejects.toBeDefined();
+    await expect(providers.judgeWords({ words: wish, safetyIdentifier: 'bad', budget })).rejects.toBeDefined();
+    await expect(providers.judgeResult({ wish, draft, contactSheet: 'bad', safetyIdentifier, budget })).rejects.toBeDefined();
+    await expect(providers.draft({ words: wish, family: 'hearth', availableSockets: [socket], budget, signal: AbortSignal.abort() })).rejects.toBeDefined();
+    expect(budget.calls).toBe(0); expect(runCodex).not.toHaveBeenCalled();
+  });
+
   it('passes a strict shared schema and no citizen identity to the default draft model', async () => {
     const runner = vi.fn<CodexDraftRunner>(async () => JSON.stringify(draft));
     const result = await createForgeProviders({ runCodex: runner }).draft({ words: 'a sleeping dragon', family: 'hearth', availableSockets: [socket] });

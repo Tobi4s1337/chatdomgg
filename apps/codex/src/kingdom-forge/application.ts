@@ -6,6 +6,8 @@ import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, homeFingerp
 import { z } from 'zod';
 import { runForge } from '../run';
 import type { ForgeProviders } from '../providers';
+import { forgeDeliveryMessage } from '../wish-decision';
+import { bindForgeCandidate } from './candidate';
 import type {
   CommittedForgeAttachment, ForgeActivity, ForgeAttachment, ForgeAttempt, ForgeReservation,
   KingdomForgeAudit, KingdomForgeAuthority, KingdomForgeCommand, KingdomForgeLease, KingdomForgeOutcome,
@@ -50,6 +52,14 @@ export interface KingdomForgeOptions {
   readonly now?: () => number;
 }
 
+/** Internal private reply extension; never added to an attachment or public activity. */
+export type KingdomForgeResult = KingdomForgeOutcome & { readonly privateMessage?: string };
+function privateAuthorityResult<T extends { readonly kind: string }>(result: T): T & { readonly privateMessage?: string } {
+  if ('privateMessage' in result && typeof result.privateMessage === 'string' && result.privateMessage.length <= 240)
+    return { ...result, privateMessage: result.privateMessage };
+  return result;
+}
+
 /** Gates make a candidate; only the realm authority can turn that candidate into an owned attachment. */
 export function createKingdomForgeApplication(options: KingdomForgeOptions) {
   const now = options.now ?? Date.now;
@@ -57,7 +67,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
     try { options.publish(event); return true; } catch { return false; }
   };
 
-  return async (input: KingdomForgeCommand, incoming: KingdomForgeLease): Promise<KingdomForgeOutcome> => {
+  return async (input: KingdomForgeCommand, incoming: KingdomForgeLease): Promise<KingdomForgeResult> => {
     const parsed = CommandSchema.safeParse(input);
     if (!parsed.success) return { kind: 'held' };
     const command = parsed.data, authority = options.authority;
@@ -86,14 +96,14 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
       if (!lease.current()) abort.abort();
       signal.throwIfAborted();
     };
-    const execute = async (): Promise<KingdomForgeOutcome> => {
+    const execute = async (): Promise<KingdomForgeResult> => {
       try {
         const reserved = await bounded(() => authority.reserve({
           ...attempt, kingdomId: command.kingdomId, personId: command.personId, messageId: command.messageId,
           slot: command.slot, observedAt: command.observedAt,
         }, lease), AUTHORITY_WAIT_MS, () => abort.abort(), signal);
         checkCurrent();
-        if (reserved.kind !== 'reserved') return reserved;
+        if (reserved.kind !== 'reserved') return privateAuthorityResult(reserved);
         // Detach the authority's snapshot; later mutation cannot silently change what the judges inspected.
         reservation = structuredClone(reserved.reservation);
         if (reservation.kingdomId !== command.kingdomId || reservation.personId !== command.personId
@@ -108,7 +118,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         timer = setTimeout(() => abort.abort(), Math.max(1, reservation.expiresAt - now())); timer.unref?.();
         let approved: Extract<ForgeRunEvent, { type: 'approved' }> | undefined;
         let stopped: Extract<ForgeRunEvent, { type: 'stopped' }> | undefined;
-        await bounded(() => runForge(request, options.providers, event => {
+        const selection = await bounded(() => runForge(request, options.providers, event => {
           checkCurrent();
           if (event.type === 'stage') {
             if (publish({ type: 'stage', activityId, stage: event.stage })) staged = true;
@@ -119,20 +129,25 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
           checkCurrent();
           await bounded(() => options.record({
             key: attempt.key, runId: entry.id, at: entry.at, judgment: entry.outcome,
-            verdicts: entry.verdicts.map(({ outcome, records, quality }) => ({ outcome, records, ...(quality ? { quality } : {}) })),
+            // Only the chosen candidate's full gate evidence can authorize the attachment. Other attempts
+            // retain bounded quality/outcome summaries, never failed-draft text or arbitrary provider records.
+            verdicts: entry.verdicts.map(({ outcome, records, quality }, index) => ({ outcome,
+              records: index === 0 || index === entry.selection?.verdict ? records : [], ...(quality ? { quality } : {}) })),
+            ...(entry.selection ? { selection: entry.selection } : {}), attempts: entry.attempts, modelCalls: entry.modelCalls,
+            ...(entry.outcome === 'approved' && entry.draft ? { candidate: bindForgeCandidate(entry.draft, request.home) } : {}),
           }), AUDIT_WAIT_MS, () => abort.abort(), signal);
           checkCurrent();
         }, signal, { safetyIdentifier: reservation!.safetyIdentifier }), RUN_WAIT_MS, () => abort.abort(), signal);
         checkCurrent();
         const approval = approved;
         if (!approval) return stopped?.outcome === 'refuse' ? {kind:'refused',message:stopped.message}
-          : { kind: stopped?.outcome === 'hold' ? 'held' : 'cold' };
+          : { kind: stopped?.outcome === 'hold' ? 'held' : 'cold', ...(stopped ? { privateMessage: stopped.message } : {}) };
         if (approval.hostFingerprint !== fingerprint) return { kind: 'held' };
 
         const reservationId = reservation.reservationId;
         const renewed = await bounded(() => authority.revalidate(attempt, reservationId, lease), AUTHORITY_WAIT_MS, () => abort.abort(), signal);
         checkCurrent();
-        if (renewed.kind !== 'current') return renewed;
+        if (renewed.kind !== 'current') return privateAuthorityResult(renewed);
         if (renewed.native.revision !== reservation.revision || renewed.native.slot !== reservation.slot
           || renewed.native.family !== request.family || (renewed.native.hostProfile ?? 'street-home') !== (request.hostProfile ?? 'street-home')
           || digest(renewed.native.home) !== homeDigest
@@ -154,13 +169,14 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
         const result = await bounded(() => authority.commit({ ...attempt, reservationId,
           expectedRevision, expectedHomeDigest: homeDigest, attachment: structuredClone(attachment), creation:{words:request.words} }, lease),
           AUTHORITY_WAIT_MS, () => abort.abort(), signal);
-        if (result.kind !== 'committed') return result;
+        if (result.kind !== 'committed') return privateAuthorityResult(result);
         // A cancellation after the transaction cannot undo a durable attachment. Its outbox/snapshot survives.
         committed = true;
         if (!Number.isSafeInteger(result.committedAt) || result.committedAt < 0) throw new Error('Invalid commit receipt');
         const publication: CommittedForgeAttachment = { ...attachment, committedAt: result.committedAt,
           provenance: { ...attachment.provenance, firstForgedAt: result.committedAt } };
         return { kind: 'committed', attachment: publication,
+          privateMessage: forgeDeliveryMessage(approval.draft, selection),
           published: lease.current() && publish({ type: 'committed', activityId, attachment: structuredClone(publication) }) };
       } catch {
         return { kind: incoming.signal.aborted || !incoming.current() ? 'canceled' : 'cold' };
