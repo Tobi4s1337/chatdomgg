@@ -450,7 +450,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const windowFrame=options.potential?.windowPreview??frame;
     const lightKey=`${windowFrame?.epoch}:${windowFrame?.sequence}:${windowFrame?.windows.filter(w=>w.present).map(w=>w.slot).join(',')}`;
     if(windowFrame&&lightKey!==lastLightFrameKey){windows.setFrame(buildHidden?{...windowFrame,windows:windowFrame.windows.filter(w=>w.slot!==simulation.firstSlot)}:windowFrame);lastLightFrameKey=lightKey;lastField=-Infinity;}
-    if(ownSimulation&&frame){const person=frame.windows.find(w=>w.slot===simulation.firstSlot);if(person?.present&&time>=3&&time<9)crowd.receiveChat({version:1,id:'simulated-evening',kingdomId:frame.kingdomId,epoch:frame.epoch,origin:'simulated',slot:simulation.firstSlot,asOf:simulation.epochMs+3000,expiresAt:simulation.epochMs+9000,parts:[{kind:'text',text:'Evening, everyone! 🌿'}]});}
+    // The wide wave leads into the street at 8–12s; let its speaker greet us as
+    // we join the lantern procession, before the doorway's homecoming answers.
+    if(ownSimulation&&frame){const person=frame.windows.find(w=>w.slot===simulation.firstSlot);if(person?.present&&time>=6&&time<16)crowd.receiveChat({version:1,id:'simulated-evening',kingdomId:frame.kingdomId,epoch:frame.epoch,origin:'simulated',slot:simulation.firstSlot,asOf:simulation.epochMs+6000,expiresAt:simulation.epochMs+16000,parts:[{kind:'text',text:'Evening, everyone! 🌿'}]});}
     const arrival=crowd.subject(simulation.firstSlot);
     if(ownSimulation&&frame&&arrival?.homeLitAtMs&&presentationMs-arrival.homeLitAtMs<6000)crowd.receiveChat({version:1,id:'simulated-home',kingdomId:frame.kingdomId,epoch:frame.epoch,origin:'simulated',slot:simulation.firstSlot,asOf:Math.ceil(arrival.homeLitAtMs),expiresAt:Math.ceil(arrival.homeLitAtMs+6000),parts:[{kind:'text',text:'Home, at last. ✨'}]});
     windows.update(fixedTime?(autoCamera?0:1):dt,hour,presentationMs);
