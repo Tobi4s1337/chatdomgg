@@ -211,20 +211,58 @@ it('holds compatibility locks for the full lifetime of every new capture', async
   await probe();
 });
 
-it('cleans stale partial records and PID-reused tickets without signalling their PID', async () => {
-  const queue = path + '.queue';
+it('cleans abandoned ticket records, partial writes and leases without process IDs', async () => {
+  const queue = path + '.queue-v2';
   await mkdir(queue);
-  // A live, unrelated test PID with an impossible starttime must not reserve slots.
-  const stale = { sequence: 1, pid: process.pid, start: '0', priority: 'main', active: true };
-  await writeFile(join(queue, 'stale.json'), JSON.stringify(stale));
-  await writeFile(join(queue, `${process.pid}-0.json.tmp`), '{');
+  const stale = { sequence: 1, priority: 'main', active: true };
+  await writeFile(join(queue, 'dead.json'), JSON.stringify(stale));
+  await writeFile(join(queue, 'partial.json.tmp'), '{');
+  await writeFile(join(queue, 'partial.json.live'), '');
+  await writeFile(join(queue, 'lease-only.json.live'), '');
   const client = start(); await client.waitFor('CLIENT_READY');
   const names = await readdir(queue);
-  expect(names).not.toContain('stale.json');
-  expect(names).not.toContain(`${process.pid}-0.json.tmp`);
-  expect(names.filter(name => name.endsWith('.json'))).toHaveLength(1);
-  const entry = JSON.parse(await readFile(join(queue, names[0]!), 'utf8')) as { active: boolean };
+  expect(names).not.toContain('dead.json');
+  expect(names).not.toContain('dead.json.live');
+  expect(names).not.toContain('partial.json.tmp');
+  expect(names).not.toContain('partial.json.live');
+  expect(names).not.toContain('lease-only.json.live');
+  const records = names.filter(name => name.endsWith('.json'));
+  expect(records).toHaveLength(1);
+  const entry = JSON.parse(await readFile(join(queue, records[0]!), 'utf8')) as { active: boolean; pid?: number };
   expect(entry.active).toBe(true);
+  expect(entry.pid).toBeUndefined();
+});
+
+it('honours a live ticket lease without PID metadata until its owner closes the lease', async () => {
+  const queue = path + '.queue-v2';
+  await mkdir(queue);
+  const owner = runClient(`
+    import { openSync, closeSync, writeFileSync } from 'node:fs';
+    import { spawnSync } from 'node:child_process';
+    const fd = openSync(${JSON.stringify(queue + '/opaque.json.live')}, 'a');
+    const result = spawnSync('flock', ['--exclusive', '--nonblock', '3'], { stdio: ['ignore', 'ignore', 'inherit', fd] });
+    if (result.status !== 0) process.exit(2);
+    writeFileSync(${JSON.stringify(queue + '/opaque.json')}, JSON.stringify({ sequence: 1, priority: 'main', active: true }));
+    process.stdout.write('LEASE_READY\\n');
+    process.stdin.resume(); process.stdin.once('end', () => closeSync(fd));
+  `);
+  await owner.waitFor('LEASE_READY');
+  const queued = start(); await queued.waitFor('queued for a main slot');
+  await delay(150);
+  expect(queued.output()).not.toContain('CLIENT_READY');
+  expect(await readdir(queue)).toContain('opaque.json');
+  owner.child.stdin.end(); await owner.closed;
+  await queued.waitFor('CLIENT_READY');
+  expect(await readdir(queue)).not.toContain('opaque.json');
+});
+
+it('uses a separate registry namespace without touching prior PID-registry tickets', async () => {
+  const oldQueue = path + '.queue';
+  await mkdir(oldQueue);
+  await writeFile(join(oldQueue, 'prior.json'), 'unreadable prior-version record');
+  const client = start(); await client.waitFor('CLIENT_READY');
+  expect(await readFile(join(oldQueue, 'prior.json'), 'utf8')).toBe('unreadable prior-version record');
+  expect((await readdir(path + '.queue-v2')).filter(name => name.endsWith('.json'))).toHaveLength(1);
 });
 
 });
