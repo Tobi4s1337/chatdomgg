@@ -9,6 +9,12 @@ supplied and synced. Open main-owned needs are verified moderator observation, d
 undo, attendance wording, and the incoming banner/guest procession and fire gathering
 details below. Earlier request sections are retained as handoff history.
 
+**Current capture need:** the live real-service capture60166 is waiting before startup.
+With three v2 tickets all inactive, nonblocking shared probes show exclusive holders on
+both legacy compatibility files. Main/capture owners need to inspect and finish/cancel
+their own obsolete legacy jobs; this lane must not signal an unknown process or unlink a
+lock. Exact observations are in `capture-queue-observation.md`. Keep60166, not duplicates.
+
 ## Decisions
 
 - All current dock presses are royal acts and therefore broadcaster-only (ChatDom principle 7;

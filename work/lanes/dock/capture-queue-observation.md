@@ -1,5 +1,30 @@
 # Capture queue observation — resumed DK10
 
+## Current compatibility wait — 2026-11-01 17:51
+
+The capture owner freshly polled60166 and confirmed it remains live and queued, before
+any service/browser startup. A read-only v2 registry snapshot showed three waiting tickets
+(sequences5,6,8; lane/main/lane), all `active:false`.
+
+To distinguish a full v2 queue from legacy compatibility exclusion, the lane opened each
+existing legacy file read-only and made one nonblocking shared `flock` probe through an
+inherited descriptor, then closed its descriptors immediately. Both probes returned1:
+
+- `/tmp/chatdom-capture.lock.priority`: blocked by an exclusive holder.
+- `/tmp/chatdom-capture.lock`: blocked by an exclusive holder.
+
+No browser/server was launched for these probes. No file or registry entry was rewritten
+or unlinked, and no foreign process was signalled. This establishes exclusive holders on
+the compatibility files; it does not identify who owns them.
+
+**needs: main/capture owners inspect their own legacy capture handles.** Finish or cancel
+obsolete jobs through the handles they own and confirm terminal cleanup. The v2 queue is
+correctly preserving exclusion while those holders exist. Do not unlink shared lock files,
+remove another ticket, bypass the compatibility locks or guess a namespace-local PID.
+This lane retains its same live60166 job and keeps DK10 active.
+
+## Original liveness diagnosis and fix
+
 **Resolved in main's `d53d9eb`, now merged.** The shared helper uses random ticket leases
 held by kernel advisory locks, and no longer compares namespace-local PIDs. The old
 lane-owned capture41052 was cancelled and confirmed exit130 specifically for that helper
