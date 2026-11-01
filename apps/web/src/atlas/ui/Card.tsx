@@ -67,7 +67,7 @@ export function Card(props: {
   onCleanup(() => window.removeEventListener('keydown', onKey));
 
   return (
-    <section class="atlas-card" aria-labelledby="atlas-card-title" data-tier={props.settler.tier}>
+    <section class="atlas-card atlas-card-with-actions" aria-labelledby="atlas-card-title" data-tier={props.settler.tier}>
       <button ref={(element) => (closeButton = element)} class="atlas-card-close" type="button" on:click={() => props.onClose()} aria-label="Close card">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" /></svg>
       </button>
@@ -79,6 +79,7 @@ export function Card(props: {
           <Show when={showLogin()}><p class="atlas-card-login">{props.settler.login}</p></Show>
         </div>
       </header>
+      <div class="atlas-card-scroll" tabindex="0" aria-label="Holding details">
       <dl class="atlas-card-facts">
         <div><dt>Holding</dt><dd>{TIER_NAMES[props.settler.tierRank]} <span class="atlas-quiet">· {formatCount(minimum())}+ average viewers</span></dd></div>
         <Show when={region()}>
@@ -126,6 +127,8 @@ export function Card(props: {
         Survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} (UTC). Draft land: this holding may still move before the first edition.
       </p>
       <Show when={missing()}>{(text) => <p class="atlas-card-missing">{text()}</p>}</Show>
+      </div>
+      <footer class="atlas-card-footer">
       <Show when={door()}>
         {(holding) => (
           <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} on:click={(event) => enter(event, holding())}>
@@ -138,6 +141,7 @@ export function Card(props: {
         <Show when={url()}>{(href) => <WatchLink href={href()} />}</Show>
         <Show when={props.login}>{(login) => <ShareButton path={`/map/${login()}`} title={`${props.name} on the Atlas of Kingdoms`} />}</Show>
       </div>
+      </footer>
     </section>
   );
 }

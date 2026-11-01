@@ -39,6 +39,13 @@ export function Search(props: {
   let retry: ReturnType<typeof setTimeout> | undefined;
   let controller: AbortController | null = null;
   let lastSeed = 0;
+  let selectionFrame: number | undefined;
+  const [pressed, setPressed] = createSignal<string | null>(null);
+  const cancelSelection = () => {
+    if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+    selectionFrame = undefined;
+    setPressed(null);
+  };
   const [text, setText] = createSignal('');
   const [phase, setPhase] = createSignal<Phase>({ kind: 'idle' });
   const [showSearching, setShowSearching] = createSignal(false);
@@ -51,6 +58,7 @@ export function Search(props: {
   };
 
   const ask = (query: string) => {
+    cancelSelection();
     controller?.abort();
     clearTimeout(quiet);
     clearTimeout(retry);
@@ -81,6 +89,7 @@ export function Search(props: {
   };
 
   const onInput = (value: string) => {
+    cancelSelection();
     setText(value);
     controller?.abort();
     controller = null;
@@ -91,9 +100,18 @@ export function Search(props: {
   };
 
   const choose = (result: SearchResult | undefined) => {
-    if (!result) return;
-    setOpen(false);
-    props.onChoose(result);
+    if (!result || selectionFrame !== undefined) return;
+    setPressed(result.channel.id);
+    // Paint the real row's pressed wax before selection relays out a dense still or reads a region.
+    // Both frames belong to this search and are cancelled if its query, focus or owner changes.
+    selectionFrame = requestAnimationFrame(() => {
+      selectionFrame = requestAnimationFrame(() => {
+        selectionFrame = undefined;
+        setOpen(false);
+        setPressed(null);
+        props.onChoose(result);
+      });
+    });
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -110,6 +128,7 @@ export function Search(props: {
       if (current.kind === 'results' && current.query === text() && list.length) choose(list[active()]);
       else ask(text());
     } else if (event.key === 'Escape') {
+      cancelSelection();
       // The search is the top surface while its list is open: Escape belongs to it, not to a card beneath.
       event.stopPropagation();
       event.preventDefault();
@@ -130,6 +149,7 @@ export function Search(props: {
   };
   onMount(() => (props.keyboardRoot ?? window).addEventListener('keydown', onWindowKey as EventListener));
   onCleanup(() => {
+    cancelSelection();
     (props.keyboardRoot ?? window).removeEventListener('keydown', onWindowKey as EventListener);
     clearTimeout(timer);
     clearTimeout(quiet);
@@ -164,7 +184,7 @@ export function Search(props: {
       on:focusout={(event) => {
         // Leaving the search (a tap on the map, Tab onwards) folds the list away; the text stays for later.
         const next = event.relatedTarget as Node | null;
-        if (!next || !wrapper?.contains(next)) setOpen(false);
+        if (!next || !wrapper?.contains(next)) { cancelSelection(); setOpen(false); }
       }}
     >
       <label class="atlas-search-field">
@@ -216,6 +236,7 @@ export function Search(props: {
                       aria-selected={i() === active()}
                       class="atlas-search-result"
                       data-place={result.channel.place}
+                      data-atlas-press={pressed() === result.channel.id ? 'true' : undefined}
                       on:pointerenter={() => setActive(i())}
                       on:pointerdown={(event) => event.preventDefault()}
                       on:click={() => choose(result)}

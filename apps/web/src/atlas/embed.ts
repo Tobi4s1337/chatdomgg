@@ -2,6 +2,8 @@ import type { AtlasGateHost } from '../raid-gate/ports';
 
 export type AtlasMode = 'hero' | 'explore' | 'gate';
 export type AtlasTarget = { login: string } | { channelId: string };
+/** Mount owned footer content; its cleanup runs on hero mode or disposal. Never called for a hero. */
+export type AtlasFooterSlot = (element: HTMLElement) => void | (() => void);
 export interface AtlasMountOptions {
   mode: AtlasMode;
   focus?: AtlasTarget | null;
@@ -9,6 +11,7 @@ export interface AtlasMountOptions {
   onExplore?: (view: AtlasView) => void;
   base?: string;
   signal?: AbortSignal;
+  slots?: { footer?: AtlasFooterSlot };
 }
 export interface AtlasView { x: number; y: number; scale: number; selected: string | null; mapId: string }
 export type AtlasReadyState = 'map' | 'still' | 'failed';

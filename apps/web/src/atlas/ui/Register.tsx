@@ -249,7 +249,7 @@ export function WaitingCard(props: {
     props.onEnter(holding);
   };
   return (
-    <section class="atlas-card" aria-labelledby="atlas-card-title" data-kind="waiting">
+    <section class="atlas-card atlas-card-with-actions" aria-labelledby="atlas-card-title" data-kind="waiting">
       <CloseButton ref={close} onClose={props.onClose} />
       <header class="atlas-card-head">
         <ChannelFaceSeal channelId={props.face.id} name={props.face.name} portrait={card()?.channel.id === props.face.id ? card()?.portrait : null} />
@@ -261,6 +261,7 @@ export function WaitingCard(props: {
           </Show>
         </div>
       </header>
+      <div class="atlas-card-scroll" tabindex="0" aria-label="Holding details">
       <dl class="atlas-card-facts">
         <Show when={land()}>
           {(name) => <div><dt>{props.onAir ? 'Pencilled in' : 'Realm'}</dt><dd>{name()}</dd></div>}
@@ -283,6 +284,8 @@ export function WaitingCard(props: {
       <p class="atlas-card-note">
         Pencilled into the realm of its language and game. This place stays the same until the channel claims land.
       </p>
+      </div>
+      <footer class="atlas-card-footer">
       <Show when={door()}>{(holding) => (
         <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} on:click={(event) => enter(event, holding())}>
           Enter the land <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
@@ -294,6 +297,7 @@ export function WaitingCard(props: {
         </Show>
         <Show when={props.face.login}>{(login) => <ShareButton path={`/map/${login()}`} title={`${props.face.name} on the Atlas of Kingdoms`} />}</Show>
       </div>
+      </footer>
     </section>
   );
 }

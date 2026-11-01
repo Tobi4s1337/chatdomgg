@@ -1,4 +1,4 @@
-import { batch, createEffect, createMemo, createSignal, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, createUniqueId, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import './atlas.css';
 import { render } from 'solid-js/web';
 import type { AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, AtlasTarget } from './embed';
@@ -22,7 +22,10 @@ import { Cartouche, Compass, Controls, Notice, ScaleBar } from './ui/chrome';
 import { formatMoment, watchUrl } from './ui/format';
 import { CardHistory } from './ui/history';
 import { LegendBody } from './ui/Legend';
-import { DabCard, LiveSeal, type LiveSummary } from './ui/Live';
+import { SurveySeal } from './ui/SurveySeal';
+import { FooterSlot } from './ui/FooterSlot';
+import { AtlasMaterialSound } from './ui/material-sound';
+import { DabCard, type LiveSummary } from './ui/Live';
 import { RoadCard, WaitingCard, type RegisterState } from './ui/Register';
 import { formatRoute, parseRoute, type AtlasRoute } from './ui/route';
 import { Search } from './ui/Search';
@@ -98,6 +101,16 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   const [mode, setMode] = createSignal(props.options.mode);
   const ownsUrl = props.options.routing === 'url' && props.options.mode === 'explore';
   const [activated, setActivated] = createSignal(ownsUrl);
+  const materialSound = new AtlasMaterialSound();
+  const [muted, setMuted] = createSignal(false);
+  const mute = () => { const next = !muted(); setMuted(next); materialSound.setMuted(next); if (!next) materialSound.play('press'); };
+  const soundFor = (target: EventTarget | null) => {
+    if (mode() === 'hero' || !visible() || !(target instanceof Element)) return;
+    const fitting = target.closest('button,a,[role="option"]');
+    if (!fitting || fitting.matches(':disabled,.atlas-sound-toggle') || !root?.contains(fitting)) return;
+    materialSound.play(fitting.matches('.atlas-key-toggle') ? 'shutter' : fitting.matches('.atlas-survey-button,.atlas-search-result,.atlas-door') ? 'wax' : 'press');
+  };
+  const onMaterialPointer = (event: PointerEvent) => { if (event.isPrimary && event.button === 0) soundFor(event.target); };
   let disposed = false;
   let liveWait: ReturnType<typeof setTimeout> | undefined;
   let backdropTimer: ReturnType<typeof setTimeout> | undefined;
@@ -141,6 +154,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   const [minScale, setMinScale] = createSignal(0);
   const [distance, setDistance] = createSignal<Distance>('world');
   const [keyOpen, setKeyOpen] = createSignal(false);
+  const keyBodyId = createUniqueId();
   const [notice, setNotice] = createSignal<NoticeState | null>(null);
   const [phone, setPhone] = createSignal(false);
   const [names, setNames] = createSignal<NamesState>('loading');
@@ -190,7 +204,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       const cartouche = root?.querySelector('.atlas-cartouche')?.getBoundingClientRect();
       return { left: 0, right: 0, top: cartouche ? Math.round(cartouche.bottom - (root?.getBoundingClientRect().top ?? 0)) + 4 : 76, bottom: 60 };
     }
-    if (size.width >= 1100) return { left: 370, right: 0, top: 0, bottom: 0 };
+    if (size.width >= 1100 && anyOpen()) return { left: 390, right: 0, top: 0, bottom: 0 };
     return { left: 0, right: 0, top: 0, bottom: 0 };
   };
 
@@ -254,10 +268,12 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   };
 
   const onKey = (event: KeyboardEvent) => {
+    if (!event.repeat && (event.key === 'Enter' || event.key === ' ')) soundFor(event.target);
     // The open key is the top surface on a phone when no card is showing; the card handles its own Escape.
     if (event.key === 'Escape' && keyOpen() && !anyOpen()) {
+      materialSound.play('shutter');
       setKeyOpen(false);
-      host?.focus({ preventScroll: true });
+      root?.querySelector<HTMLButtonElement>('.atlas-key-toggle')?.focus({ preventScroll: true });
     }
   };
 
@@ -388,7 +404,10 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     setNotice({ text: 'That channel is no longer drawn on this map.' });
   };
 
-  const openSearchResult = (result: SearchResult) => void openFace(result.channel, result.position);
+  const openSearchResult = (result: SearchResult) => {
+    if (mode() !== 'hero' && visible()) materialSound.play('wax');
+    void openFace(result.channel, result.position);
+  };
 
   /** Whether a search result is on air in the frame shown now (its holding's class, or its pencil flag). */
   const onAirResult = (result: SearchResult): boolean => {
@@ -764,6 +783,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   const pause = () => {
     const paused = !inViewport || document.hidden;
     setVisible(!paused);
+    materialSound.setMuted(paused || mode() === 'hero' || muted());
     view?.setPaused(paused);
   };
   const currentView = () => ({ ...(view?.cameraState() ?? { x: 0, y: 0, scale: 1 }), selected: selected()?.id ?? waiting()?.id ?? null, mapId: loaded()?.world.id ?? '' });
@@ -799,6 +819,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     if (disposed) return;
     if (next === 'hero') { clearCards(); setKeyOpen(false); setActivated(false); }
     setMode(next);
+    materialSound.setMuted(next === 'hero' || !visible() || muted());
     view?.setHero(next === 'hero');
     view?.setInteraction(next !== 'hero', ownsUrl || activated());
   } });
@@ -812,6 +833,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     resizeObserver = new ResizeObserver(measure);
     resizeObserver.observe(root!);
     root?.addEventListener('keydown', onKey);
+    root?.addEventListener('pointerdown', onMaterialPointer, { capture: true });
     if (ownsUrl) {
       window.addEventListener('popstate', onPop);
       const route = parseRoute(window.location.pathname);
@@ -832,6 +854,8 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     disposed = true;
     cardGeneration++;
     root?.removeEventListener('keydown', onKey);
+    root?.removeEventListener('pointerdown', onMaterialPointer, { capture: true });
+    materialSound.dispose();
     document.removeEventListener('visibilitychange', pause);
     if (ownsUrl) { window.removeEventListener('popstate', onPop); delete window.__chatdomAtlas; }
     resizeObserver?.disconnect();
@@ -914,6 +938,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
           {(holdings) => (
           <Still
             world={world()!}
+            compactChrome
             geo={geo()!}
             store={holdings}
             paint={(liveTick(), paint)}
@@ -943,22 +968,21 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       <Show when={mode() !== 'hero' && world() ? world() : null}>
         {(w) => (
           <>
-            <Cartouche world={w()}>
-              <Show when={live()}>{(summary) => <LiveSeal summary={summary()} />}</Show>
+            <Cartouche world={w()} seal={<SurveySeal world={w()} summary={live()} still={state() === 'still'} />}>
               <Show when={drawn()}>
                 <Search keyboardRoot={root!} source={SOURCE} world={w()} onAir={onAirResult} onChoose={openSearchResult} />
               </Show>
             </Cartouche>
             <Show when={!phone()}><Compass size={92} /></Show>
             <Show when={phone()}><Compass size={46} /></Show>
-            <aside class="atlas-key" data-open={keyOpen() ? 'true' : 'false'} aria-label="Key">
-              <button type="button" class="atlas-key-toggle" aria-expanded={!phone() || keyOpen()} on:click={() => setKeyOpen(!keyOpen())}>
+            <aside class="atlas-key" data-atlas-chrome="key" data-open={keyOpen() ? 'true' : 'false'} aria-label="Key">
+              <button type="button" class="atlas-key-toggle" aria-expanded={!phone() || keyOpen()} aria-controls={keyBodyId} on:click={() => setKeyOpen(!keyOpen())}>
                 Key
                 <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 7.5L6 4.5l3 3" /></svg>
               </button>
-              <div class="atlas-key-body"><LegendBody world={w()} /></div>
+              <div class="atlas-key-body" id={keyBodyId}><LegendBody world={w()} /></div>
             </aside>
-            <div class="atlas-bottom">
+            <div class="atlas-bottom" data-atlas-chrome="navigation">
               <ScaleBar scale={scale()} distance={distance()} />
               <Show when={state() !== 'still'}>
                 <Controls
@@ -971,7 +995,11 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
                   canZoomOut={scale() > minScale() * 1.001}
                 />
               </Show>
+              <button type="button" class="atlas-sound-toggle" aria-label={muted() ? 'Unmute map sounds' : 'Mute map sounds'} aria-pressed={muted()} on:click={mute}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" /><Show when={muted()} fallback={<path d="M16 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14" />}><path d="m17 9 5 6m0-6-5 6" /></Show></svg>
+              </button>
             </div>
+            <Show when={mode() === 'explore' ? props.options.slots?.footer : null} keyed>{mount => <FooterSlot mount={mount} />}</Show>
             <Show when={context() === 'lost'}>
               <p class="atlas-redraw" role="status">Redrawing the map…</p>
             </Show>

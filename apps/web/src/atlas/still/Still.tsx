@@ -28,6 +28,8 @@ const WASH_REPAINT_MIN_MS = 1_000;
 
 export interface StillProps {
   world: PreviewWorld;
+  /** The shared scene owns one dated survey seal instead of duplicating the long ribbon. */
+  compactChrome?: boolean;
   geo: Geography;
   store: SettlerStore;
   /** Live paint of the current frame, or null (no frame yet / unavailable). */
@@ -600,7 +602,10 @@ export function Still(props: StillProps): JSX.Element {
         </For>
       </div>
       <div class="atlas-still-banner">
-      <Show when={ribbon()}>
+      <Show when={props.compactChrome && (land()?.missing ?? 0) > 0}>
+        <aside class="atlas-notice" role="status" data-still-warning="missing-land">Some land could not be drawn; this still is incomplete. Reload to try again.</aside>
+      </Show>
+      <Show when={!props.compactChrome && ribbon()}>
         {(text) => (
           <aside class="atlas-still-ribbon" aria-label="About this still">
             <svg class="atlas-still-tail" data-side="left" viewBox="0 0 24 40" preserveAspectRatio="none" aria-hidden="true"><path d="M23.5 0.5H0.5l8 19.5-8 19.5h23" /></svg>

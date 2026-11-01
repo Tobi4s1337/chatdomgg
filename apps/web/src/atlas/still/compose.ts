@@ -121,8 +121,7 @@ export function stillPixelRatio(devicePixelRatio: number): number {
 
 /** Screen kept clear for the Atlas's panels, exactly as the moving map's opening view keeps it (index.tsx). */
 export function stillInsets(view: Viewport): Insets {
-  if (view.width < 720) return { left: 0, right: 0, top: 76, bottom: 60 };
-  if (view.width >= 1100) return { left: 370, right: 0, top: 0, bottom: 0 };
+  if (view.width < 720) return { left: 0, right: 0, top: 124, bottom: 60 };
   return NO_INSETS;
 }
 

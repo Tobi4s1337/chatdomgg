@@ -143,3 +143,29 @@ Body: one AtlasRaid (packages/shared/src/atlas-raids.ts), version 1
 | front-door (sign-in) and main | A session authority that calls the Atlas service's private endpoints for hide and unhide (`POST /v1/channels/<id>/hide`, `/unhide`) and for a sign-in claim, with the verified broadcaster ID | The card shows no hide button; AM13 waits on it |
 | main | The founded-record producer, so a founding claims its land | Claims by raid only |
 | operator | After the merge: rebuild and restart the live Atlas service with the Twitch env file and the ingest listener, re-import for the new names, adopt the founded edition. Runbook in this folder | The live map keeps the old code |
+
+## Atlas footer slot clarification — 2 Nov, AM10 carved UI
+
+The existing `slots.footer` reference now has an additive, framework-free type in
+`apps/web/src/atlas/embed.ts`:
+
+```ts
+export type AtlasFooterSlot = (element: HTMLElement) => void | (() => void);
+// AtlasMountOptions gains:
+slots?: { footer?: AtlasFooterSlot };
+```
+
+Atlas calls it once when explore chrome mounts. The returned cleanup runs before
+switching to hero or disposing, and the host content is removed. Switching back
+to explore mounts a fresh slot. Hero never mounts a footer. The callback owns its
+content, listeners and How it works presentation; it must return their cleanup.
+Without a supplied footer, Atlas shows only its dated survey seal and its one-line
+explanation. No legal, auth or content API is changed. Existing embed callers keep
+working unchanged.
+
+Atlas currently reads the material/type tokens from `@chatdom/ui/kit.css`. Its
+local cartouche, five-symbol key, survey seal and icon control fittings can move
+into the shared kit once front-door reviews them. The newer Twitch mark, Watch,
+site footer and How it works exports exist on front-door's branch but are not yet
+in the Atlas checkout's shared package; the Atlas keeps words-only Watch links
+until main adopts those exports. No official mark is copied or redrawn here.
