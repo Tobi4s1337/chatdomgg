@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { createNativeForgeHost, findForgeSockets, forgeStyleKit, homeFingerprint } from '@chatdom/forge';
 import { GrowthSceneFrameSchema, KingdomIdSchema, PersonIdSchema } from '@chatdom/shared';
 import type { RealmCommitGuard } from '../persistence/postgres-repository';
-import type { RealmFact, RealmOwnedAttachment, RealmOwnedHome, RealmPrivateState } from '@chatdom/shared/realm';
+import type { RealmFact, RealmForgeReservation, RealmOwnedAttachment, RealmOwnedHome, RealmPrivateState } from '@chatdom/shared/realm';
 import { generateSettlementPlan } from '@chatdom/world';
 import { createRealmState, decideRealm } from '@chatdom/world/realm';
 import { forgeHomeDigest } from '../wiring/forge';
@@ -62,6 +62,25 @@ it('leaves a custom-built home intact even when its name and native-looking revi
   if (decision.kind !== 'accepted') throw new Error(decision.reason);
   expect(await verifyNativeGrowth(tx, decision.fact, edited)).toBe('conflict');
   expect(edited.homes[home.id]).toBe(custom);
+});
+
+it('waits for an active Forge wish and allows growth when that reservation expires', async () => {
+  const { state, home, plot, tx, context } = fixture();
+  const planned = planNativeHomeGrowth(state, home.id, plot);
+  if (planned.kind !== 'ready') throw new Error(planned.reason);
+  const record: RealmForgeReservation = { attempt: { key: 'SIMULATED-wish', attemptId: 'SIMULATED-attempt' }, homeId: home.id,
+    streamSessionId: 'SIMULATED-stream', homeDigest: home.digest, rightsRevision: 1, reservation: {
+      reservationId: 'SIMULATED-reservation', kingdomId: state.kingdomId, personId: home.ownerId, safetyIdentifier: 'SIMULATED-safety',
+      expiresAt: 100, slot: home.slot, revision: home.revision, family: home.family, home: home.blueprint, attribution: home.attribution,
+    } };
+  const shaping = { ...state, reservations: { [record.attempt.key]: record } };
+  expect(planNativeHomeGrowth(shaping, home.id, plot)).toEqual({ kind: 'held', reason: 'active-forge' });
+  expect(planNativeHomeGrowth(shaping, home.id, plot, 99)).toEqual({ kind: 'held', reason: 'active-forge' });
+  expect(planNativeHomeGrowth(shaping, home.id, plot, 100)).toEqual(planned);
+  const decision = decideRealm(state, planned.command, context);
+  if (decision.kind !== 'accepted') throw new Error(decision.reason);
+  expect(await verifyNativeGrowth(tx, decision.fact, shaping)).toBe('conflict');
+  expect(await verifyNativeGrowth(tx, { ...decision.fact, committedAt: 100 }, shaping)).toBe('ok');
 });
 
 it('refits an existing forged part with its identity, words, plan and provenance preserved', async () => {

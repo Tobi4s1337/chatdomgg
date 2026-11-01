@@ -10,7 +10,7 @@ import { forgeHomeDigest } from '../wiring/forge';
 
 type NativeGrowth = Extract<RealmDomainCommand, { type: 'home.growNative' }>;
 type Plan = { readonly kind: 'ready'; readonly command: NativeGrowth }
-  | { readonly kind: 'held'; readonly reason: 'no-home' | 'unearned' | 'custom-home' | 'unsafe-part' | 'invalid-deed' };
+  | { readonly kind: 'held'; readonly reason: 'no-home' | 'unearned' | 'custom-home' | 'unsafe-part' | 'invalid-deed' | 'active-forge' };
 interface InstalledDeed {
   readonly receipt: string; readonly person_id: string; readonly kingdom_id: string; readonly origin: string;
   readonly layout_revision: string; readonly plot_id: string; readonly slot: number; readonly status: string; readonly placement: string;
@@ -30,7 +30,7 @@ function native(placement: SettlementHome, tier: HomeTier) {
 }
 
 /** Pure candidate from current earned state and immutable deed geometry. Custom bytes never get replaced. */
-export function planNativeHomeGrowth(state: RealmPrivateState, homeId: string, placement: SettlementHome): Plan {
+export function planNativeHomeGrowth(state: RealmPrivateState, homeId: string, placement: SettlementHome, now = state.growth?.asOf ?? 0): Plan {
   const home = Object.hasOwn(state.homes, homeId) ? state.homes[homeId] : undefined;
   if (!home) return { kind: 'held', reason: 'no-home' };
   const earned = state.growth?.citizens[home.ownerId]?.home;
@@ -49,6 +49,9 @@ export function planNativeHomeGrowth(state: RealmPrivateState, homeId: string, p
     if (!fromTier) return { kind: 'held', reason: 'custom-home' };
     if (HomeTierSchema.options.indexOf(fromTier) < HomeTierSchema.options.indexOf(placement.tier)) return { kind: 'held', reason: 'invalid-deed' };
     if (HomeTierSchema.options.indexOf(tier.data) <= HomeTierSchema.options.indexOf(fromTier)) return { kind: 'held', reason: 'unearned' };
+    if (Object.values(state.reservations).some(record => record.homeId === homeId && record.reservation.expiresAt > now)) {
+      return { kind: 'held', reason: 'active-forge' };
+    }
     const target = native(placement, tier.data), attachments: NativeGrowth['attachments'][number][] = [];
     const fitted: Record<string, string> = {}, existing = Object.values(home.attachments);
     if (new Set(existing).size !== existing.length) return { kind: 'held', reason: 'unsafe-part' };
@@ -92,7 +95,7 @@ export const verifyNativeGrowth: RealmCommitGuard = async (tx, fact, prior) => {
   const deed = (await tx.query<InstalledDeed>(`SELECT ${deedColumns} FROM realm_deeds WHERE receipt = $1 FOR UPDATE`, [home.allocationReceipt])).rows[0];
   const placement = deed && deedPlacement(deed, prior, home);
   if (!placement) return 'conflict';
-  const expected = planNativeHomeGrowth(prior, home.id, placement);
+  const expected = planNativeHomeGrowth(prior, home.id, placement, fact.committedAt);
   return expected.kind === 'ready' && canonicalJson(expected.command) === canonicalJson(fact.body) ? 'ok' : 'conflict';
 };
 
@@ -101,13 +104,17 @@ export function createNativeHomeGrowth(options: { readonly db: Pick<RealmDatabas
   return {
     attach(kingdom: DurableKingdom): () => void {
       let stopped = false, running = false;
-      let examined: Pick<RealmPrivateState, 'growth' | 'homes' | 'attachments'> | null = null, retry = false;
+      let examined: Pick<RealmPrivateState, 'growth' | 'homes' | 'attachments' | 'reservations'> | null = null, retry = false;
+      let retryAt: number | null = null;
       const reconcile = async () => {
         if (stopped || running || !kingdom.current) return;
         const snapshot = kingdom.privateState;
-        if (!retry && examined && examined.growth === snapshot.growth && examined.homes === snapshot.homes && examined.attachments === snapshot.attachments) return;
+        if (!retry && examined && examined.growth === snapshot.growth && examined.homes === snapshot.homes
+          && examined.attachments === snapshot.attachments && examined.reservations === snapshot.reservations
+          && (retryAt === null || kingdom.databaseNow() < retryAt)) return;
         running = true;
         retry = false;
+        retryAt = null;
         try {
           const deeds = (await options.db.query<InstalledDeed>(
             `SELECT ${deedColumns} FROM realm_deeds WHERE kingdom_id = $1 AND origin = $2 AND status = 'installed'`,
@@ -117,8 +124,15 @@ export function createNativeHomeGrowth(options: { readonly db: Pick<RealmDatabas
             const state = kingdom.privateState, home = Object.hasOwn(state.homes, deed.plot_id) ? state.homes[deed.plot_id] : undefined;
             const placement = home && deedPlacement(deed, state, home);
             if (!home || !placement) continue;
-            const plan = planNativeHomeGrowth(state, home.id, placement);
-            if (plan.kind !== 'ready') continue;
+            const now = kingdom.databaseNow(), plan = planNativeHomeGrowth(state, home.id, placement, now);
+            if (plan.kind !== 'ready') {
+              if (plan.reason === 'active-forge') for (const record of Object.values(state.reservations)) {
+                if (record.homeId === home.id && record.reservation.expiresAt > now) {
+                  retryAt = Math.min(retryAt ?? Infinity, record.reservation.expiresAt);
+                }
+              }
+              continue;
+            }
             const outcome = await kingdom.execute(`growth:native:${digestOf(plan.command)}`, plan.command, 'allocation', { current: () => !stopped && kingdom.current });
             if (outcome.status !== 'committed') {
               retry = true;
