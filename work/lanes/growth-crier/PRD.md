@@ -7,7 +7,7 @@ Every task is done when focused tests, typecheck, lint and relevant build pass; 
 ## Tasks
 
 - [x] **GCR01 — Witnessed growth becomes warm short lines** · evidence: focused tests and simulated transcript
-- [ ] **GCR02 — Quiet windows batch without duplicate claims** · evidence: clock-driven batching and reconnect tests
+- [x] **GCR02 — Quiet windows batch without duplicate claims** · evidence: clock-driven batching and reconnect tests
 
 ## Backlog
 
