@@ -1,35 +1,21 @@
 import { z } from 'zod';
 import { TokenSchema } from '@chatdom/shared';
+import { ACTIONS, DockStateSchema as RealmDockStateSchema, DockOutcomeSchema as RealmDockOutcomeSchema } from '@chatdom/shared/realm';
 
-export const ACTIONS = ['gate-open', 'gate-close', 'fire-light', 'raid-welcome', 'citizen-crown', 'citizen-knight', 'moment-play', 'undo'] as const;
-const id = TokenSchema;
-const person = z.string().regex(/^[1-9][0-9]{0,31}$/);
-const label = z.string().min(1).max(200);
-export const DockActionSchema = z.strictObject({ id, kingdomId: person, kind: z.enum(ACTIONS), targetId: id.optional(), expectedRevision: id });
-export type DockAction = z.infer<typeof DockActionSchema>;
-export const DockStateSchema = z.strictObject({
-  kingdom: z.strictObject({ id: person, name: label }),
-  principal: z.strictObject({ role: z.enum(['broadcaster', 'moderator']), displayName: label }),
-  town: z.strictObject({ gate: z.enum(['open', 'closed']), fire: z.enum(['lit', 'unlit']), presenceLabel: label, growthLabel: label, comingLabel: label }),
-  raids: z.array(z.strictObject({ id, name: label })).max(100),
-  citizens: z.array(z.strictObject({ id, name: label })).max(1000),
-  moments: z.array(z.strictObject({ id, name: label, available: z.boolean(), reason: z.string().max(200) })).max(100),
-  capabilities: z.array(z.strictObject({ kind: z.enum(ACTIONS), allowed: z.boolean(), reason: z.string().max(200) })).max(8),
-  revision: id,
-  /** Receipt IDs the realm currently permits this broadcaster to undo. Omitted by older bridges. */
-  undoable: z.array(z.strictObject({ id, kind: z.enum(ACTIONS.filter(kind => kind !== 'undo')), label })).max(20).optional(),
+// Main owns the frozen action and witness boundary. These are direct re-exports.
+export { ACTIONS, DockActionSchema, DockWitnessSchema, type DockAction, type DockWitness } from '@chatdom/shared/realm';
+
+// Optional API presentation hints remain compatible with the frozen realm status.
+// Main may adopt this additive field; older bridges omit it and decide undo atomically.
+export const DockStateSchema = RealmDockStateSchema.extend({
+  undoable: z.array(z.strictObject({ id: TokenSchema, kind: z.enum(ACTIONS.filter(kind => kind !== 'undo')),
+    label: z.string().min(1).max(200) })).max(20).optional(),
 });
 export type DockState = z.infer<typeof DockStateSchema>;
-export const DockWitnessSchema = z.strictObject({ actionId: id, kingdomId: person, origin: z.enum(['live', 'simulated']), streamEventId: id });
-export type DockWitness = z.infer<typeof DockWitnessSchema>;
-export const DockOutcomeSchema = z.strictObject({ status: z.enum(['accepted', 'refused', 'unknown', 'unavailable']), message: label,
-  receipt: id.optional(), witness: DockWitnessSchema.optional(),
-  state: DockStateSchema.optional() }).refine(value => value.status !== 'accepted' || (!!value.receipt && !!value.witness), 'Accepted requires a delivery receipt and stream witness');
+export const DockOutcomeSchema = RealmDockOutcomeSchema.safeExtend({ state: DockStateSchema.optional() });
 export type DockOutcome = z.infer<typeof DockOutcomeSchema>;
-
-/** Status replies are private to the authenticated session and never contain the session handle. */
 export type DockStatusReply = {
   version: 1; status: 'ready' | 'anonymous' | 'forbidden' | 'unavailable'; mode: 'LIVE' | 'SIMULATED';
   message: string; signInUrl: string;
-} & ( { status: 'ready'; csrfToken: string } & DockState | { status: 'anonymous' | 'forbidden' | 'unavailable' } );
+} & ({ status: 'ready'; csrfToken: string } & DockState | { status: 'anonymous' | 'forbidden' | 'unavailable' });
 export type DockActionReply = { version: 1 } & DockOutcome;

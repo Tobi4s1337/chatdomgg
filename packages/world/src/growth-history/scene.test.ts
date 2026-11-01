@@ -27,7 +27,8 @@ describe('simulated growth scene projections', () => {
     });
     const earnedHome = history.facts.flatMap(fact => fact.milestones).find(item => item.kind === 'home-grown' && item.to === 'house');
     expect(earnedHome).toBeDefined();
-    expect(frames.some(frame => frame.homes.some(home => home.plotId === earnedHome!.plotId && home.stage === 'house'))).toBe(true);
+    if (!earnedHome || earnedHome.kind !== 'home-grown') throw new Error('The private seed must retain its earned home transition');
+    expect(frames.some(frame => frame.homes.some(home => home.plotId === earnedHome.plotId && home.stage === 'house'))).toBe(true);
     expect(allBeats.some(beat => beat.kind === 'home-grown')).toBe(false);
     expect(allBeats.some(beat => beat.kind === 'civic-levelled' && beat.to >= 2)).toBe(true);
     expect(history.facts.some(fact => fact.milestones.length > 1)).toBe(true); // simultaneous private milestones survive
