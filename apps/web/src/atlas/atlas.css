@@ -230,3 +230,93 @@
 .atlas-card-flag path:first-child { stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; fill: none; }
 .atlas-card-flag path:last-child { fill: var(--vermilion); fill-opacity: 0.2; stroke: var(--ink-soft); stroke-width: 1.1; stroke-linejoin: round; }
 .atlas[data-layout='phone'] .atlas-live { margin-top: 5px !important; padding-top: 5px; font-size: 11.5px; }
+
+/* ── Search: a slip ruled into the cartouche, its findings on a sheet hung beneath ────────────── */
+.atlas { --cartouche-pad-x: 22px; --cartouche-pad-bottom: 16px; }
+.atlas[data-layout='phone'] { --cartouche-pad-x: 14px; --cartouche-pad-bottom: 9px; }
+.atlas-search { position: relative; margin: 11px -4px 0; padding-top: 11px; border-top: 1px solid var(--ink-faint); text-align: left; }
+.atlas-search-field { position: relative; display: flex; align-items: center; height: 40px; padding: 0 10px 0 36px; cursor: text;
+  background: rgba(255, 252, 242, 0.72); border: 1px solid rgba(59, 47, 37, 0.42); border-radius: 2px;
+  box-shadow: inset 0 1px 3px rgba(59, 47, 37, 0.14); transition: border-color 120ms, box-shadow 120ms; }
+.atlas-search-field:focus-within { border-color: var(--ink); box-shadow: inset 0 1px 3px rgba(59, 47, 37, 0.14), 0 0 0 2px rgba(47, 93, 115, 0.55); }
+.atlas-search-field > svg { position: absolute; left: 11px; top: 50%; width: 17px; height: 17px; margin-top: -8.5px; fill: none; stroke: var(--ink-soft); stroke-width: 1.7; stroke-linecap: round; }
+.atlas-search-field input { flex: 1; min-width: 0; height: 100%; border: 0; padding: 0; background: none; outline: none; color: var(--ink); font: 400 16px/1 var(--serif); }
+.atlas-search-field input::placeholder { color: var(--ink-soft); opacity: 0.85; font: italic 400 16px/1 var(--display); }
+.atlas-search-field input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; cursor: pointer;
+  background: linear-gradient(45deg, transparent 44%, var(--ink-soft) 44% 56%, transparent 56%), linear-gradient(-45deg, transparent 44%, var(--ink-soft) 44% 56%, transparent 56%); }
+.atlas-search-key { flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-left: 6px; font: 400 12px/1 var(--serif); color: var(--ink-soft); border: 1px solid var(--ink-faint); border-radius: 2px; }
+.atlas[data-layout='phone'] .atlas-search { margin-top: 7px; padding-top: 8px; }
+.atlas[data-layout='phone'] .atlas-search-key { display: none; }
+
+.atlas-search-panel {
+  position: absolute; z-index: 5; left: calc(-1 * var(--cartouche-pad-x) - 1px + 4px); right: calc(-1 * var(--cartouche-pad-x) - 1px + 4px);
+  top: calc(100% + var(--cartouche-pad-bottom) + 8px); max-height: min(560px, 64vh); display: flex; flex-direction: column; overflow: hidden; padding: 6px 0;
+  background: linear-gradient(180deg, rgba(255, 252, 242, 0.55), rgba(255, 252, 242, 0) 60%), var(--paper-light);
+  border: 1px solid rgba(59, 47, 37, 0.55);
+  box-shadow: inset 0 0 0 3px var(--paper-light), inset 0 0 0 4px rgba(59, 47, 37, 0.22), 0 14px 32px -16px rgba(59, 47, 37, 0.6);
+  animation: atlas-card-in 160ms ease-out both;
+}
+.atlas-search-list { list-style: none; margin: 0; padding: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--ink-faint) transparent; }
+.atlas-search-result { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: center; padding: 7px 14px 7px 12px; cursor: pointer; border-left: 3px solid transparent; }
+.atlas-search-result + .atlas-search-result { border-top: 1px solid rgba(59, 47, 37, 0.1); }
+.atlas-search-result[aria-selected='true'] { background: rgba(59, 47, 37, 0.07); border-left-color: var(--ink); }
+.atlas-search-result > :first-child { justify-self: center; }
+.atlas-search-text { display: flex; flex-direction: column; min-width: 0; }
+.atlas-search-name { font: 400 18px/1.15 var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+.atlas-search-login { font: 400 13px/1 var(--serif); }
+.atlas-search-place { font-size: 12.5px; line-height: 1.3; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.atlas-search-air { color: var(--vermilion); }
+.atlas-search-more { flex: none; margin: 4px 14px 2px !important; padding-top: 6px; border-top: 1px solid var(--ink-faint); font-size: 12px; font-style: italic; color: var(--ink-soft); }
+.atlas-search-state { margin: 0; padding: 8px 16px 10px; font-size: 14px; line-height: 1.4; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.atlas-search-state .atlas-quiet { font-size: 12.5px; }
+.atlas-search-quill { width: 64px; height: 10px; margin-right: 6px; vertical-align: -1px; fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 150; stroke-dashoffset: 150; animation: atlas-ink-short 1.6s ease-in-out infinite; }
+@keyframes atlas-ink-short { 0% { stroke-dashoffset: 150; opacity: 1; } 70% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+.atlas-search-away, .atlas-link-button { color: var(--ink); font: italic 400 15px/1.2 var(--display); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; background: none; border: 0; padding: 0; cursor: pointer; }
+.atlas-search-retry { border: 1px solid var(--ink); background: none; padding: 6px 12px; cursor: pointer; border-radius: 2px; }
+
+/* ── Marks in lists: arms, a pencil flag, a dotted ring ──────────────────────────────────────── */
+.atlas-place-flag { flex: none; }
+.atlas-place-flag path:first-child { stroke: var(--ink); stroke-width: 1.8; stroke-linecap: round; fill: none; }
+.atlas-place-flag path:last-child { fill: rgba(95, 90, 82, 0.16); stroke: #5f5a52; stroke-width: 1.2; stroke-linejoin: round; }
+.atlas-place-flag[data-on-air='true'] path:last-child { fill: var(--vermilion); fill-opacity: 0.32; stroke: var(--ink-soft); }
+.atlas-place-unseen { flex: none; }
+.atlas-place-unseen circle { fill: none; stroke: var(--ink-soft); stroke-width: 1.4; stroke-dasharray: 2.2 3; }
+
+/* ── The register on a card: last stream, roads, sources ─────────────────────────────────────── */
+.atlas-register-wait { margin-top: 12px !important; font: italic 400 14px/1.3 var(--display); color: var(--ink-soft); }
+.atlas-register-stream { margin-top: 10px; }
+.atlas-register-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 3px; font: italic 400 14px/1.3 var(--serif); color: var(--ink); unicode-bidi: plaintext; }
+.atlas-roads { margin-top: 12px; padding-top: 9px; border-top: 1px solid var(--ink-faint); }
+.atlas-roads h3 { margin: 0 0 4px; font: 400 12.5px/1.3 var(--caps); letter-spacing: 0.1em; text-transform: lowercase; color: var(--ink-soft); }
+.atlas-roads h3 .atlas-quiet { letter-spacing: 0.04em; }
+.atlas-road-list { list-style: none; margin: 0; padding: 0; }
+.atlas-road { display: grid; grid-template-columns: 30px 1fr 14px; gap: 10px; align-items: center; width: 100%; padding: 6px 4px; border: 0; background: none; text-align: left; cursor: pointer; border-radius: 2px; }
+.atlas-road-list li + li .atlas-road { border-top: 1px solid rgba(59, 47, 37, 0.1); }
+.atlas-road:hover { background: rgba(59, 47, 37, 0.06); }
+.atlas-road > :first-child { justify-self: center; }
+.atlas-road-text { display: flex; flex-direction: column; min-width: 0; }
+.atlas-road-name { font: 400 16.5px/1.2 var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+.atlas-road-tally { font-size: 12.5px; line-height: 1.3; color: var(--ink-soft); }
+.atlas-road-go { width: 14px; height: 14px; fill: none; stroke: var(--ink-soft); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.atlas-roads-empty { font-size: 13.5px; line-height: 1.4; color: var(--ink-soft); font-style: italic; }
+.atlas-roads-source { margin-top: 6px !important; font-size: 12px; line-height: 1.38; color: var(--ink-soft); }
+
+/* ── Card actions: Watch first, then sharing ─────────────────────────────────────────────────── */
+.atlas-card-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.atlas-card-actions .atlas-watch, .atlas-card-actions .atlas-button { margin-top: 0; }
+.atlas-share { display: flex; flex-direction: column; gap: 6px; }
+.atlas-button-quiet { width: 100%; min-height: 40px; background: none; color: var(--ink) !important; box-shadow: inset 0 0 0 1px rgba(59, 47, 37, 0.55); font-size: 15px; }
+.atlas-button-quiet:hover { background: rgba(59, 47, 37, 0.06); }
+.atlas-button-quiet svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.atlas-share-manual { font-size: 12.5px; color: var(--ink-soft); }
+.atlas-share-url { color: var(--ink); user-select: all; overflow-wrap: anywhere; }
+
+/* ── Road card: two ends joined by an ink road ───────────────────────────────────────────────── */
+.atlas-road-head { padding-right: 30px; }
+.atlas-road-ends { display: flex; align-items: center; gap: 6px; margin: 10px 0 8px; }
+.atlas-road-ink { flex: 1; height: 24px; fill: none; stroke: var(--ink); stroke-width: 1.8; stroke-dasharray: 6 4; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.atlas-road-head h2 { font-size: 23px; }
+.atlas-road-and { font-style: italic; color: var(--ink-soft); font-size: 18px; }
+.atlas-road-open { margin-top: 10px; padding-top: 4px; border-top: 1px solid var(--ink-faint); }
+.atlas-road-open .atlas-road + .atlas-road { border-top: 1px solid rgba(59, 47, 37, 0.1); }
+.atlas[data-layout='phone'] .atlas-road-head h2 { font-size: 21px; }

@@ -10,6 +10,7 @@ import { PREVIEW_KIND, PreviewIdSchema, PreviewWorldSchema, ServedNamesSchema, t
 import { previewDir, readPreviewManifest, readPreviewNames } from './preview/store';
 import { layout, readCurrent, readManifest } from './store/revisions';
 import { LIVE_FILES, liveRoot, liveTargetDir, readLiveManifest, readLiveState } from './live/store';
+import { loadDirectory, type Directory, type DirectoryRefusal, type Lookup } from './directory/directory';
 
 /**
  * The Atlas data service. It serves a fixed set of routes below /map-data from the current revision and nothing
@@ -48,6 +49,18 @@ const LIVE_HEARTBEAT_MS = 20_000;
 /** Open event streams this process will hold; beyond it a reader falls back to its 60 s reconcile. */
 export const MAX_LIVE_STREAMS = 4_000;
 const MAX_CACHED_FRAMES = 12;
+const PREVIEW_ID = 'pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}';
+const ID = '[1-9][0-9]{0,31}';
+const LOGIN = '[a-z0-9_]{1,25}';
+const DIRECTORY_SEARCH = new RegExp(`^/map-data/v1/preview/(${PREVIEW_ID})/search$`);
+const DIRECTORY_CARD = new RegExp(`^/map-data/v1/preview/(${PREVIEW_ID})/card/(?:(${ID})|login/(${LOGIN})|dab/([a-f0-9]{16}))$`);
+const DIRECTORY_ROAD = new RegExp(`^/map-data/v1/preview/(${PREVIEW_ID})/road/(?:(${ID})/(${ID})|login/(${LOGIN})/(${LOGIN}))$`);
+/** Registers held in memory at once: the current preview and one a tab may still be pinned to. */
+const MAX_DIRECTORIES = 2;
+/** A request waits this long for a register still being read before it is told to come back. */
+const DIRECTORY_WAIT_MS = 6_000;
+/** A register that failed to build is not tried again for this long (no retry storm on a broken file). */
+const DIRECTORY_RETRY_MS = 30_000;
 /** A served names projection is rebuilt at least this often, and whenever a name in it goes stale or the withheld list changes. */
 const NAMES_REBUILD_MS = 60_000;
 
@@ -277,6 +290,66 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     return body;
   }
 
+  /**
+   * The register of each preview (search, cards, roads), read once in the background from the preview's own revision
+   * and kept for the two most recent previews. Answers are projected per request through the withheld list.
+   */
+  const directories = new Map<string, { promise: Promise<Directory>; failedAt: number | null }>();
+  function directory(id: string): Promise<Directory> | null {
+    if (!PreviewIdSchema.safeParse(id).success || !existsSync(previewDir(dataDir, id))) {
+      directories.delete(id);
+      return null;
+    }
+    const held = directories.get(id);
+    if (held && (held.failedAt === null || now() - held.failedAt < DIRECTORY_RETRY_MS)) {
+      directories.delete(id);
+      directories.set(id, held);
+      return held.promise;
+    }
+    const slot: { promise: Promise<Directory>; failedAt: number | null } = { promise: Promise.resolve(null as never), failedAt: null };
+    const started = Date.now();
+    slot.promise = loadDirectory(dataDir, id).then((built) => {
+      log(`register of ${id}: ${built.size} named channels from ${built.revision} in ${Date.now() - started} ms`);
+      return built;
+    }, (error: unknown) => {
+      slot.failedAt = now();
+      const message = error instanceof Error ? error.message : String(error);
+      log(`register of ${id} failed: ${message.slice(0, 200)}`);
+      throw error;
+    });
+    slot.promise.catch(() => undefined);
+    directories.set(id, slot);
+    while (directories.size > MAX_DIRECTORIES) directories.delete(directories.keys().next().value!);
+    return slot.promise;
+  }
+
+  /**
+   * Answers a register request. Without a readable withheld list nothing is answered (it could name a withheld
+   * channel). A register still being read after a few seconds says so with a retry time, never a partial answer.
+   */
+  function answerDirectory(res: ServerResponse, id: string, head: boolean, ask: (register: Directory, withheld: ReadonlySet<string>, at: number) => unknown | DirectoryRefusal): void {
+    const pending = directory(id);
+    if (!pending) return send(res, 404, JSON.stringify({ error: 'not-found' }), {}, head);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const waited = new Promise<'warming'>((resolve) => {
+      timer = setTimeout(() => resolve('warming'), DIRECTORY_WAIT_MS);
+    });
+    void Promise.race([pending, waited]).then((register) => {
+      clearTimeout(timer);
+      if (res.writableEnded) return;
+      if (register === 'warming') return send(res, 503, JSON.stringify({ error: 'warming' }), { 'retry-after': '5' }, head);
+      const list = withheld.current();
+      if (list.error) return send(res, 503, JSON.stringify({ error: 'names-unavailable' }), { 'retry-after': '60' }, head);
+      const answer = ask(register, list.ids, now());
+      if (answer === 'not-found') return send(res, 404, JSON.stringify({ error: 'not-found' }), {}, head);
+      if (answer === 'empty' || answer === 'too-long') return send(res, 400, JSON.stringify({ error: `query-${answer}` }), {}, head);
+      return send(res, 200, JSON.stringify(answer), { vary: 'accept-encoding' }, head);
+    }, () => {
+      clearTimeout(timer);
+      if (!res.writableEnded) send(res, 503, JSON.stringify({ error: 'register-unavailable' }), { 'retry-after': '30' }, head);
+    });
+  }
+
   /** Open event streams by land, each with the pointer it was last sent. One timer serves them all, only while any are open. */
   const streams = new Map<string, Map<ServerResponse, string>>();
   let streamCount = 0;
@@ -367,6 +440,8 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
     }
     if (path === `${ROUTE_PREFIX}/v1/preview`) {
       if (!state?.preview) return send(res, 503, JSON.stringify({ error: 'no-preview' }), { 'retry-after': '60' }, head);
+      // A reader is about to open this preview: start reading its register so the first search does not wait.
+      void directory(previewIdFor(state.survey.revision, state.survey.asOf))?.catch(() => undefined);
       return send(res, 200, state.preview, { etag: `"${state.survey.revision}"` }, head);
     }
     const namesMatch = PREVIEW_NAMES.exec(path);
@@ -387,6 +462,22 @@ export function createAtlasService(dataDir: string, log: (line: string) => void 
         'content-length': String((gzip ? names.gzip : names.body).byteLength),
       });
       return void res.end(head ? undefined : gzip ? names.gzip : names.body);
+    }
+    const searchMatch = DIRECTORY_SEARCH.exec(path);
+    if (searchMatch) {
+      const params = new URLSearchParams(query >= 0 ? url.slice(query + 1) : '');
+      const q = params.get('q') ?? '';
+      return answerDirectory(res, searchMatch[1]!, head, (register, ids, at) => register.search(q, ids, at));
+    }
+    const cardMatch = DIRECTORY_CARD.exec(path);
+    if (cardMatch) {
+      const lookup: Lookup = cardMatch[2] ? { id: cardMatch[2] } : cardMatch[3] ? { login: cardMatch[3] } : { dab: cardMatch[4]! };
+      return answerDirectory(res, cardMatch[1]!, head, (register, ids, at) => register.card(lookup, ids, at));
+    }
+    const roadMatch = DIRECTORY_ROAD.exec(path);
+    if (roadMatch) {
+      const [a, b]: [Lookup, Lookup] = roadMatch[2] ? [{ id: roadMatch[2] }, { id: roadMatch[3]! }] : [{ login: roadMatch[4]! }, { login: roadMatch[5]! }];
+      return answerDirectory(res, roadMatch[1]!, head, (register, ids, at) => register.road(a, b, ids, at));
     }
     const livePointerMatch = LIVE_POINTER.exec(path);
     if (livePointerMatch) {

@@ -220,7 +220,8 @@ async function recovery(browser) {
   await still(page);
   const pick = async () => (await marks(page)).find((mark) => mark.x > 420 && mark.x < 1000 && mark.y > 120 && mark.y < 780);
 
-  // Reload with a card open: its entry has no card any more, so the first Back must leave the map.
+  // Reload with a card open (R22): a card with a route reopens from it, and Back then closes it onto the map; a card
+  // without one (a lapsed name) cannot reopen, so the page steps over its stale entry and the first Back leaves.
   await page.goto('about:blank');
   await page.goto(`${base}/map`);
   await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 240_000 });
@@ -228,12 +229,22 @@ async function recovery(browser) {
   let chosen = await pick();
   await page.mouse.click(chosen.x, chosen.y);
   await page.locator('.atlas-card').waitFor();
+  const routed = new URL(page.url()).pathname !== '/map';
+  const heading = (await page.locator('.atlas-card h2').textContent())?.trim();
   await page.reload();
   await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 240_000 });
-  // The page steps over the stale entry by itself; give it a moment (a page that does not, fails the check below).
-  await page.waitForFunction(() => window.history.state?.chatdomAtlas === undefined, null, { timeout: 5_000 }).catch(() => undefined);
+  if (routed) {
+    await page.locator('.atlas-card').waitFor({ timeout: 30_000 }).catch(() => undefined);
+    const again = (await page.locator('.atlas-card h2').textContent().catch(() => null))?.trim();
+    check('recovery: a reload on a card’s route reopens that card', again === heading, { heading, again });
+    await page.goBack();
+    await page.locator('.atlas-card').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => undefined);
+    check('recovery: Back after the reload closes the card onto the map', new URL(page.url()).pathname === '/map' && (await page.locator('.atlas-card').count()) === 0, { url: page.url() });
+  } else {
+    await page.waitForFunction(() => window.history.state?.chatdomAtlas === undefined, null, { timeout: 5_000 }).catch(() => undefined);
+  }
   await page.goBack();
-  check('recovery: after a reload on a card entry, the first Back leaves the map', page.url() === 'about:blank', { url: page.url() });
+  check('recovery: after a reload on a card entry, the next Back leaves the map', page.url() === 'about:blank', { url: page.url(), routed });
   await page.goForward();
   await page.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 240_000 });
   await still(page);

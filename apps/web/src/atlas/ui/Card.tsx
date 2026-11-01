@@ -1,11 +1,13 @@
 import { createEffect, onCleanup, Show } from 'solid-js';
 import { blazon, shieldDesign } from '../heraldry';
+import type { CardReply, CardRoad } from '../data/directory';
 import type { Settler } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatTime, TIER_NAMES, watchUrl } from './format';
 import { LIVE_CLASS_NAMES } from './live-line';
 import { ShieldIcon } from './marks';
 import { genesisPreviewPath } from '../../genesis/channels';
+import { RegisterFacts, ShareButton, WatchLink, type RegisterState } from './Register';
 
 export type NamesState = 'loading' | 'ready' | 'failed';
 
@@ -24,7 +26,11 @@ export function Card(props: {
   world: PreviewWorld;
   /** What the live frame shown says of this holding, or null before any frame was taken. */
   live: { liveClass: number; startedAt: number | null; asOf: number } | null;
+  /** This holding's register entry: its last stream and strongest roads. */
+  register: RegisterState<CardReply>;
   onClose: () => void;
+  onRoad: (road: CardRoad) => void;
+  onRetry: () => void;
 }) {
   let closeButton: HTMLButtonElement | undefined;
   const region = () => props.world.regions[props.settler.region];
@@ -62,7 +68,7 @@ export function Card(props: {
         </Show>
         <div class="atlas-card-names">
           <p class="atlas-card-status">Mapped holding · not yet founded</p>
-          <h2 id="atlas-card-title" classList={{ 'atlas-card-unnamed': props.name === null }}>{title()}</h2>
+          <h2 id="atlas-card-title" dir="auto" classList={{ 'atlas-card-unnamed': props.name === null }}>{title()}</h2>
           <Show when={showLogin()}><p class="atlas-card-login">{props.settler.login}</p></Show>
         </div>
       </header>
@@ -102,20 +108,22 @@ export function Card(props: {
         <Show when={props.settler.game}><div><dt>Most streamed</dt><dd>{props.settler.game}</dd></div></Show>
         <div><dt>Arms</dt><dd class="atlas-blazon">{arms()}</dd></div>
       </dl>
+      <RegisterFacts
+        state={props.register}
+        world={props.world}
+        onAirNow={props.live ? props.live.liveClass > 0 : null}
+        onRoad={props.onRoad}
+        onRetry={props.onRetry}
+      />
       <p class="atlas-card-note">
         Survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} (UTC). Draft land: this holding may still move before the first edition.
       </p>
       <Show when={missing()}>{(text) => <p class="atlas-card-missing">{text()}</p>}</Show>
       <Show when={genesisPreviewPath(props.settler.id)}>{href => <a class="atlas-watch" href={href()}>See this kingdom’s land <span aria-hidden="true">↗</span></a>}</Show>
-      <Show when={url()}>
-        {(href) => (
-          <a class="atlas-watch" href={href()} target="_blank" rel="noopener noreferrer">
-            Watch on Twitch
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3h7v7M13 3L4 12" /></svg>
-            <span class="atlas-visually-hidden"> (opens twitch.tv in a new tab)</span>
-          </a>
-        )}
-      </Show>
+      <div class="atlas-card-actions">
+        <Show when={url()}>{(href) => <WatchLink href={href()} />}</Show>
+        <Show when={props.login}>{(login) => <ShareButton path={`/map/${login()}`} title={`${props.name} on the Atlas of Kingdoms`} />}</Show>
+      </div>
     </section>
   );
 }

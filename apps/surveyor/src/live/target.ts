@@ -24,6 +24,8 @@ export interface LiveTarget {
   ids: readonly string[];
   /** Holding tier rank per ordinal: 0 capital … 3 village. */
   tierRank: Uint8Array;
+  /** Realm index per ordinal. */
+  realmOf: Uint16Array;
   ordinalOf: ReadonlyMap<string, number>;
   /** The realm a channel without land belongs to: its language's land, then its family of games (Spec 01 R4/R5). */
   realmFor(channel: { id: string; language: string; categories: readonly { gameId: string; minutes: number }[] }): number;
@@ -111,6 +113,7 @@ export async function loadLiveTarget(dataDir: string, previewId: string): Promis
   return {
     previewId: id, world, worldSha256, edition, alignment, ids: all.ids,
     tierRank: Uint8Array.from(all.tier),
+    realmOf: Uint16Array.from(all.realm),
     ordinalOf: new Map(all.ids.map((kingdomId, ordinal) => [kingdomId, ordinal])),
     realmFor: realmResolver(world),
   };

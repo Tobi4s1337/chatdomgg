@@ -41,3 +41,42 @@ follow-up: A05 inspect motion on a real GPU laptop and phone; SwiftShader cannot
 2026-10-31 handoff correction: one stream-first 1920×1080 viewed capture per visual change; implement feature-local durable adapters against existing ports, recording only actual missing authority/contract seams. Raid road may proceed independently; seeded channel holding entry waits only on the frozen spec 39 Genesis recipe/entry resolver.
 2026-10-31 main needs: A19 must publish/resolve actual holdings for Genesis targets 63920635 (The_AGGman, avg16 coastal hamlet), 4363967 (PinkKittyRose, avg139.98 river town), 154972160 (MashaD4, avg852.12 mountain city). The served revision obs-20261030T054103Z-e0cf3c8bdd77 contains none of these IDs in head or any of40 regional chunks; source fixtures use newer obs-20261030T163224Z-8fff6dfa7def. Refresh from the real captured data and include small-channel dabs below the old25-viewer candidate floor without minting population. Main provides public read-only /kingdom/<numeric-id> for these three, with adopted-world precedence. Card links use genesisPreviewPath; actual holding entry stays incomplete until these marks exist. Add stable holding selection/return instead of pretending a query parameter already selects a holding. Raid-road work remains independent.
 A03 — Completed: ported the reviewed, uncommitted A03 from the lane/atlas worktree (its A04 live and A05 motion work left there untouched) and closed the three open review cases: hidden outranks gone (gone and withheld on the same night, gone then withheld by a night or by the moderation pass between surveys); the ledger accepts only gone → hidden and refuses every other second tombstone. Delivered: taxonomy families-1 (proposed), the variety-1 Crossroads, realm-threshold-1, the Wilds, Outer Isles, the hex-1 hamlet lattice, immutable editions with a hash-chained ledger and heads, and founding gates with the Ed25519 founder authorization. Real data: imports obs-20261030T162623Z-6d3443af9151 and obs-20261030T163224Z-8fff6dfa7def; atlas:check OK, with the preview rebuilt byte for byte. Rehearsal: 36,881 holdings, 135 realms, 585,915 free slots; one night settled 133 (29 by raid, 0 deferred), 0 moved, every earlier address held. found ed-0/ed-I were refused (24.7 h, proposal taxonomy, no key, no authorization) and both refusals were logged; no editions/ directory exists. Shots: shots/atlas-a03/atlas{,-realms,-clusters}@1440x900 and @390x844, plus atlas-legend@1440x900 (Atlas-local capture against this worktree's survey on 5198) and the repo shots at shots/atlas/. verify: typecheck, lint and build green; on a load-58 host, 11 out-of-lane and A02 heavy tests timed out but pass with a longer timeout. needs: the founder key ceremony (ATLAS_FOUNDER_PUBLIC_KEY), the founder's review of families-1, and main's founded-record producer seam. — 2026-10-30
+
+A06 find a real channel and read its public card. Assigned to this lane on 2026-10-31 even though the handoff deferred search; built to R13, R16–R17 and R22, with no handoff scope touched.
+- What it does: `atlas:serve` now keeps a register per survey preview (apps/surveyor/src/directory). It reads the preview's own hash-checked channels and raid-pairs files, lands holdings from the preview, and assigns realms with the preview's resolver. It answers search, card (by ID, login or dab hash) and road (by IDs or logins).
+- Rules: one projection at request time applies to search, cards and roads alike.
+  - Gone, gambling and withheld channels all come back as plain not-found.
+  - An unreadable withheld list fails closed with 503 names-unavailable.
+  - Names and logins remain available between survey refreshes; stream titles expire a day after the channel was last live.
+  - Raid counterparts below the sweep floor stay unnamed and unseen.
+- Web:
+  - A Unicode search combobox sits in the cartouche on both the moving map and the still. Keys: / focuses, arrows move, Enter opens, Escape folds then clears. Each state has its own words, including warming with an automatic retry, and nothing found with a link to Twitch's search.
+  - Cards gain the last stream, the strongest three roads with their window and coverage, Watch, and Share. A named channel without land opens a waiting card. A chosen pencil flag is named by its dab hash, which resolves A04's "card API to name dabs".
+  - A road card inks a dashed arc between its two ends and frames them.
+  - Routes `/map/<login>` and `/map/road/<a>/<b>` work. Line and season routes are reserved and open the map with their own notice; a lone word is a login. Reload, Forward and shared links restore the card, and R9's single card entry still holds.
+- Real data: obs-20261031T133817Z, freshly imported read-only from the collector.
+  - The register holds 379,950 named channels and builds in 5.1 s; the service sits at about 370 MiB RSS.
+  - "kai" returns KaiCenat first. KaiCenat's card shows 2 roads, the strongest to Chrisnxtdoor (36,108 travellers). xQc's card shows GTA V at 24,419 viewers.
+  - "ｓｈｒｏｕｄ" (typed full-width) finds shroud.
+- Checks:
+  - Typecheck and lint pass on the Atlas and surveyor folders.
+  - Tests pass: 754/754 across apps/web/src/atlas and apps/surveyor/src, including the new directory (surveyor), data/directory, ui/route and ui/history suites.
+  - The web build passes after a frozen-lockfile relink: this worktree's node_modules lacked the @chatdom/voxel link that packages/world now declares.
+  - register-shots.mjs: 20/20.
+  - atlas-checks.mjs: 39/40 on the full run. The one failure was the recovery check, which still expected a reload to drop the card. I updated it to R22's reopen behaviour, and the recovery set now passes 5/5.
+- Shots, all viewed:
+  - stream-first shots/atlas/register-search, register-card and register-road @1920x1080
+  - register-link and register-none @390x844
+  - register-still and register-unknown @1440x900
+- Fixed after looking: the search footer was clipped against the key; the list now scrolls and the footer always sits inside the panel.
+- Decision: search, card and road replies are lane-local wire types, validated strictly in the client; packages/shared is unchanged. Main may promote them if the panel or stream view needs them.
+- Doubts:
+  - "Reading who is on air…" stays in captures because no live producer runs here. That predates this task.
+  - The still shows the road card but no arc.
+  - Avatars are left out on purpose, so the page makes no third-party image requests.
+- needs:
+  - Content labels are still not collected, so the mature rule cannot apply yet; replies and the cartouche say so.
+  - Search and card motion want a real-GPU look at /map.
+2026-10-31 15:16 founder direction (applies to every task from here): it still feels like a prototype; where is the magic? the picture now comes before new systems. every visual you land must have craft: warm emissive light that will bloom, particles where they belong (embers, sparks, smoke that curls, dust in light), movement (wind, flags, water, people), composed in frame with foreground and life, nothing empty. simulated things carry one small corner chip 'SIMULATED', never a long banner. judge every capture by: would chat gasp? if not, it isn't done.
+
+2026-11-01 A06 integration recheck: names stay available between imports, consistent with main's always-name projection; withheld, gone and gambling channels remain gated and stream titles still expire. Current name projection and register, route and history tests pass (47/47); directory tests pass again after removing obsolete road lookup arguments (8/8); focused Atlas/surveyor lint passes. The Atlas-door entry seam remains integration work for waiting and route-opened cards. Existing A06 screenshots above remain the visual evidence; no new capture was run in this recheck.

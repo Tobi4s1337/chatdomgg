@@ -131,41 +131,41 @@ export class PreviewError extends Error {
 }
 
 // ── Strict validation ─────────────────────────────────────────────────────────────────────────────────────────
-type Check = (value: unknown, path: string) => void;
-const fail = (path: string, what: string): never => {
+export type Check = (value: unknown, path: string) => void;
+export const fail = (path: string, what: string): never => {
   throw new PreviewError('invalid', `${path}: expected ${what}`);
 };
-const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+export const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-function strict(value: unknown, path: string, shape: Record<string, Check>): Record<string, unknown> {
+export function strict(value: unknown, path: string, shape: Record<string, Check>): Record<string, unknown> {
   if (!isObject(value)) return fail(path, 'an object');
   for (const key of Object.keys(value)) if (!Object.hasOwn(shape, key)) fail(`${path}.${key}`, 'no such field');
   for (const [key, check] of Object.entries(shape)) check(value[key], `${path}.${key}`);
   return value;
 }
-const int = (min = -2_000_000_000, max = 2_000_000_000): Check => (value, path) => {
+export const int = (min = -2_000_000_000, max = 2_000_000_000): Check => (value, path) => {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) fail(path, `an integer ${min}…${max}`);
 };
 const num: Check = (value, path) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) fail(path, 'a finite number');
 };
-const epoch = int(0, 8_640_000_000_000_000);
-const text = (max: number, pattern?: RegExp): Check => (value, path) => {
+export const epoch = int(0, 8_640_000_000_000_000);
+export const text = (max: number, pattern?: RegExp): Check => (value, path) => {
   if (typeof value !== 'string' || value.length === 0 || value.length > max || (pattern && !pattern.test(value))) fail(path, `text up to ${max}`);
 };
-const literal = (expected: unknown): Check => (value, path) => {
+export const literal = (expected: unknown): Check => (value, path) => {
   if (value !== expected) fail(path, JSON.stringify(expected));
 };
-const nullable = (check: Check): Check => (value, path) => {
+export const nullable = (check: Check): Check => (value, path) => {
   if (value !== null) check(value, path);
 };
-const oneOf = (options: readonly string[]): Check => (value, path) => {
+export const oneOf = (options: readonly string[]): Check => (value, path) => {
   if (typeof value !== 'string' || !options.includes(value)) fail(path, `one of ${options.join(', ')}`);
 };
 const positive: Check = (value, path) => {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) fail(path, 'a positive number');
 };
-const array = (item: Check, max: number, min = 0): Check => (value, path) => {
+export const array = (item: Check, max: number, min = 0): Check => (value, path) => {
   if (!Array.isArray(value) || value.length > max || value.length < min) return fail(path, `an array of ${min}…${max}`);
   value.forEach((entry, i) => item(entry, `${path}[${i}]`));
 };
@@ -177,16 +177,16 @@ const ints = (max: number, lo = -2_000_000_000, hi = 2_000_000_000): Check => (v
     if (typeof v !== 'number' || !Number.isInteger(v) || v < lo || v > hi) fail(`${path}[${i}]`, 'an integer');
   }
 };
-const shape = (fields: Record<string, Check>): Check => (value, path) => void strict(value, path, fields);
+export const shape = (fields: Record<string, Check>): Check => (value, path) => void strict(value, path, fields);
 
 const SHA = /^[a-f0-9]{64}$/;
-const PREVIEW_ID = /^pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$/;
-const REVISION = /^obs-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$/;
+export const PREVIEW_ID = /^pv-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$/;
+export const REVISION = /^obs-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$/;
 const MAX = 1_000_000;
 
 const fileRef = shape({ path: text(64, /^[a-z0-9-]+\.json$/), sha256: text(64, SHA), bytes: int(0), records: int(0) });
 
-const CHANNEL_ID = /^[1-9][0-9]{0,31}$/;
+export const CHANNEL_ID = /^[1-9][0-9]{0,31}$/;
 const settlerColumns: Check = (value, path) => {
   const columns = strict(value, path, {
     ids: array(text(32, CHANNEL_ID), MAX),
