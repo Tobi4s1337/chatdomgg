@@ -77,13 +77,13 @@ const rampSpeed = (t: number, t0: number, t1: number, v0: number, v1: number) =>
 
 /**
  * Where the train is at any instant of its life, as a pure function of the frame. It stands, pulls away and runs
- * at one lap per `lapMs`; after the end it slows to a festival crawl, whistles at `away` and steams off, faster.
+ * at one lap per `lapMs` (never faster than `topSpeed`); after the end it slows to a festival crawl, whistles at `away` and steams off, faster.
  */
 class Timeline {
   readonly pace: number;
   readonly endAt: number;
   constructor(loopLength: number, frame: TrainFrame) {
-    this.pace = loopLength / TRAIN_BEAT.lapMs;
+    this.pace = Math.min(loopLength / TRAIN_BEAT.lapMs, TRAIN_BEAT.topSpeed);
     this.endAt = frame.closingT === null ? Infinity : frame.t - frame.closingT;
   }
   private run = (t: number) => rampDistance(t, ROLL, TRAIN_BEAT.arrive, 0, this.pace);
@@ -114,7 +114,7 @@ class Timeline {
  * One prepared part drawn many times with the kingdom clay. The geometry is a clone of the host's prepared mesh
  * (which stays the host's), carrying its own per-instance dissolve: the clay's `aLodFade` dither.
  */
-class Pool {
+export class Pool {
   readonly mesh: THREE.InstancedMesh;
   private readonly fades: THREE.InstancedBufferAttribute;
   count = 0;
@@ -186,7 +186,7 @@ const LANTERN: Record<TrainVariant, readonly THREE.Color[]> = {
   festival: ['#ffcf73', '#ffad5a', '#ffe4b0'].map(c => new THREE.Color(c)),
   golden: ['#ffe199', '#fff0c8', '#ffd27c'].map(c => new THREE.Color(c)),
 };
-const HEADLAMP = new THREE.Color('#fff2d2'), FIREBOX = new THREE.Color('#ff8436'), LEAD_EMPTY = new THREE.Color('#c4652a'), LEAD_FULL = new THREE.Color('#ffd86e');
+const HEADLAMP = new THREE.Color('#ffdca0'), FIREBOX = new THREE.Color('#ff8436'), LEAD_EMPTY = new THREE.Color('#c4652a'), LEAD_FULL = new THREE.Color('#ffd86e');
 
 type CarKind = 'loco' | 'tender' | 'wagon' | 'carriage';
 interface CarSpec { readonly kind: CarKind; readonly cells: number; readonly pivot: Cells; readonly half: number }
@@ -384,7 +384,7 @@ export function createTrainLayer(root: THREE.Group, host: SpectacleLayerHost): T
         place(pool(set.loco, 1), m, car.pivot, car.pivot, LOCO_CELLS.pivot, 0, 'z', carFade);
         drawLoco(set, m, s, carFade, frame.progress, t);
         focus = cellPoint(m, car.pivot, [car.pivot[0], 10, car.pivot[2]]);
-        light(m, car.pivot, LOCO_CELLS.headlamp, [0.6, 1, 2], 6, HEADLAMP, 0.32, carFade);
+        light(m, car.pivot, LOCO_CELLS.headlamp, [0.6, 1, 2], 3.6, HEADLAMP, 0.26, carFade);
         light(m, car.pivot, LOCO_CELLS.firebox, [0.4, 2, 3], 4, colour.copy(FIREBOX).multiplyScalar(flicker(91)), 0.3, carFade);
       } else if (car.kind === 'tender') {
         place(pool(set.tender, 1), m, car.pivot, car.pivot, TENDER_CELLS.pivot, 0, 'z', carFade);

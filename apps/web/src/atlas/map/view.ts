@@ -15,6 +15,7 @@ import { INK, PAPER_DEEP } from './theme';
 import { TILE_BUDGET_BYTES } from './tile-plan';
 import { TileFarm, TileLayer } from './tiles';
 import { WashLayer } from './wash';
+import type { MapLayer } from '../road/layer';
 
 export interface MapEvents {
   /** The map has drawn its first complete view (land, holdings and type). Called once. */
@@ -95,6 +96,9 @@ export class MapView {
   /** The coasts as drawn, shared with the live layer's pencil places. */
   readonly rings: Ring[];
   private live: LivePaint | null = null;
+  /** A presentation drawn with this camera (the raid road); its parts sit under and over the holdings' marks. */
+  private layer: MapLayer | null = null;
+  private readonly root = new Container();
   private liveVersion = -1;
   private liveDue = Infinity;
   private backgroundLoading = false;
@@ -147,10 +151,9 @@ export class MapView {
       tap: (x, y, type) => this.tap(x, y, type),
       doubleTap: (x, y) => this.zoomBy(2, x, y),
     });
-    const root = new Container();
     // The wash lies on the land and under the margin, the neatline and every mark and name.
-    root.addChild(this.tiles.container, this.wash.sprite, this.frame, this.overlay.container);
-    app.stage.addChild(root);
+    this.root.addChild(this.tiles.container, this.wash.sprite, this.frame, this.overlay.container);
+    app.stage.addChild(this.root);
     host.appendChild(app.canvas);
     app.canvas.setAttribute('aria-hidden', 'true');
     this.observer = new ResizeObserver(() => this.resize());
@@ -267,6 +270,40 @@ export class MapView {
   }
 
   /** Lay the live layer over the land (or take it away). Its frames redraw the map through its version. */
+  /**
+   * Draw a presentation with the map's own camera: its `under` part between the land and the holdings' marks, its
+   * `over` part above every mark and name. One layer at a time; null removes it.
+   */
+  attachLayer(layer: MapLayer | null): void {
+    if (this.layer === layer) return;
+    if (this.layer) {
+      this.root.removeChild(this.layer.under);
+      this.root.removeChild(this.layer.over);
+    }
+    this.layer = layer;
+    if (layer) {
+      this.root.addChildAt(layer.under, this.root.getChildIndex(this.overlay.container));
+      this.root.addChild(layer.over);
+    }
+    this.dirty = true;
+  }
+
+  /** Put the camera exactly here, now (a director's shot), ending any flight or gesture glide. */
+  setCamera(state: CameraState): void {
+    this.motion = null;
+    this.place(state);
+  }
+
+  /** Where a world point is on screen in CSS px, with the camera as it is now. */
+  screenOf(x: number, y: number): { x: number; y: number } {
+    return this.camera.worldToScreen(x, y, this.view);
+  }
+
+  /** The drawn view's size in CSS px. */
+  viewport(): Viewport {
+    return { ...this.view };
+  }
+
   setLive(live: LivePaint | null): void {
     this.live = live;
     this.liveVersion = -1;
@@ -370,6 +407,7 @@ export class MapView {
       }
       if (now >= this.liveDue) this.dirty = true;
     }
+    if (this.layer?.animating) this.dirty = true;
     if (!moving && !this.dirty && this.tiles.complete && !this.overlay.animating) return;
     this.dirty = false;
     this.draw(now);
@@ -388,6 +426,7 @@ export class MapView {
     this.drawFrame();
     this.overlay.reduceMotion = reduceMotion();
     this.overlay.update(this.camera, this.view, { selected: this.selected, hovered: this.hovered }, now);
+    this.layer?.update(this.camera, this.view, now);
     if (this.live) {
       this.wash.paint(this.app.renderer, this.camera, this.view, this.data.store, this.live, this.live.time());
       const next = this.live.nextChange();

@@ -84,6 +84,64 @@ camera has drawn it, the layer falls back to the town's front (castle crown towa
 confetti (the aurora is three ribbons outside that budget), 2 balloons. Towns merge cheers every 10 s, capitals
 every 20 s. One veil sphere and three curtain meshes per view, created once and reused.
 
+## Incoming raid
+
+A raid (`kind: 'raid'`, `Twitch.md` §9, Spec 20 R8) wakes the Raid Gate and a caravan rolls in under the raider's
+banner. The realm commits one transient fact per raid (`displayUntil` = cause + 60 s); the controller plays it once
+(`raidKey` remembered for the session, `seq` watermark for replays), never from a reset snapshot or a `recovered`
+fact, and never as current state. Pure timings and poses live in `raid-beat.ts` (`RAID_BEAT`), the voxel parts in
+`raid-art.ts`, the drawing in `raid-view.ts`.
+
+**Size.** Twitch's viewer count only sizes the column, on a gently convex log curve (`raidUnits`): 1–3 is one
+treasured wagon, 10 two, 50 three, 140 four, 1,000 six, 10,000 nine, twelve at most (from about 70,000). The lead
+wagon carries the great standard and tribute; then covered wagons (a cream tilt banded in the raider's colour) and
+open tribute wagons (crates, sacks and a brass-bound chest) in turn. Nobody rides: no figures, no names on the
+wagons, nothing invented.
+
+**Whose banner.** The raider's arms are its Atlas arms (`shieldDesign(channelId)`), woven into cloth: the shield's
+partition, line and charges sampled onto the banner's cells (3×3 supersampled), each tincture one of the kingdom's
+fabric dyes, with a swallowtail. A channel without a kingdom here (`founded: false`) rides in under the same real
+name and arms; nothing is forged for it. The pony saddles and the wagons' sideboards take the arms' colour.
+
+**Words.** Over the standard's crossbar: title `‹name› rides in`, line `A raid of 140` (`A raid of one`,
+`A raid of 10,000`), detail `Raiders who chat are our guests tonight`. The frame carries `SIMULATED` from a
+simulated feed exactly as every other moment (the stream and bench show it).
+
+| ms from the raid | What happens |
+|---|---|
+| 0–900 | the gate gathers out of the air: two braziers either side of the road, the standard's pole beside it |
+| 300 | the horn calls from the gate |
+| 450–1,300 | the braziers catch and flare high (1.55×), settling to a steady blaze by 2,600; embers rise |
+| 900–2,300 | the furled standard is hoisted up its pole to the crossbar (7 m) |
+| 2,250 / 2,300–3,500 | cloth cue; the standard unrolls from the crossbar and swings once |
+| 2,600–3,400 | the credit plate fades in over the crossbar |
+| 3,400 | the lead wagon gathers out of the gate's light (1.4 s) and rolls in; cart-roll; a festival drum under five or more wagons |
+| + 3,600 each | the next wagon; up to four rolls are heard however long the column |
+| each wagon | about 52 s: in along the gift road to the market and on up the castle road (1.6–3 m/s, whatever covers the road), its lantern lighting the street, thinning away over the last 4.5 m |
+| last wagon + 6,000 + 2,500 (≥ 14,000) | the plate fades (1 s) and the director hands the camera back |
+| hold + 3,500 | farewell horn (−600); the braziers sink to embers, the gate thins away over 1.4 s |
+
+A raid of 3 holds the gate 14 s; 140 holds 22.7 s; 10,000 holds 40.7 s (its column takes 35 s to pass the gate);
+twelve wagons take 51.5 s. The stage profile is rank 5, town-wide: people turn to the gate, the lamps hush before the
+lead wagon and the crowd cheers as it comes through.
+
+**Shot.** While a raid holds the gate, `shotFor('gate')` stands over the road 13 m inside the town (16 m in a
+portrait picture), on the side away from the standard and 7.2 m up — above the lead standard's 5.5 m, so the column
+passes under the shot, not through it — looking back at the gate. Five candidates, each through the host's
+`validatePose`; with none legal, the gift gate shot as before.
+
+**One gate at a time; no merging.** A raid that arrives while another holds the gate waits until that gate has gone
+to sleep and the caravan before it has left the road, so at most two caravans are ever on it; it takes its turn on
+the stage like any beat. Raids are never merged: each is its own visit under its own banner. At most four wait; a
+raid that could not begin before its `displayUntil` is not played late (counted as expired). A gift cart drives the
+same road, so a cart waits until the last wagon is off it; parcels from the sky do not wait.
+
+**Caps** (`RAID_LIMITS`, `RAID_VIEW_LIMITS`): 12 wagons a caravan, 2 caravans drawn, 4 raids waiting, 4 rolls. The
+view draws everything instanced from parts meshed once in `prepare()`, posed from the frame alone: per part at most
+24 wagons, 96 wheels and legs, 144 tribute pieces, 1,400 dye cells per tincture; 96 flame cores, 40 glows and 40
+light pools. Pools are created on first use and reused; everything is released on `dispose()`. Arms are cached for
+the last 8 raiders.
+
 ## Bench
 
 - `/-/twitch-moments?stage=stream&rung=skyfire` — the cheer over the stream's own picture of Willowmere at dusk

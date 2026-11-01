@@ -51,7 +51,7 @@ import type { AmbienceTarget } from './ambience/types';
 import { createArrivalDirector, type ArrivalAttention } from './arrival-director';
 import { createShoreDressing } from './shore-dressing';
 import { createKingdomMoments } from './moments';
-import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
+import { skyLitEnvironment, type ScreenCaption, type TwitchMomentFeed } from '../twitch-moments';
 import { createWaterSurface } from '../places/water/surface';
 import { deriveWaterReaches } from '../../../../packages/world/src/places/water/reaches';
 
@@ -424,7 +424,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       crowd.clear();arrivalDirector?.clear();frame=undefined;
       lastLightFrameKey='';lastField=-Infinity;
     }
-    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);
+    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=skyLitEnvironment(getEnvironment(hour),moments?.glow());
     // Only the hot casting carries this local fire treatment. The receiving
     // house, ordinary dusk and walking retain their accepted lighting.
     const stageHeat=!walkSelected&&!capturePose?Math.max(forgeCameraDirected?(realmForge?.heat??0):0,forge.status().open?forge.heat:0):0;
@@ -441,7 +441,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     const feet=walkerSlots(walk ? walk.poses : observed?.poses??[]);
     crowd.watchForge(!!realmForge?.active()||forge.status().busy,presentationMs,[0,layout.market.elevation,8]);
     const night=THREE.MathUtils.smoothstep(Math.abs(((hour%24)+24)%24-12),4.2,6.5);
-    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet,forgeFlight.reaction(now)):[];
+    const citizens=loaded?crowd.update(presentationMs,time,camera,build.session?new Set([simulation.firstSlot]):undefined,feet,forgeFlight.reaction(now),moments?.crowd()??null):[];
     const lightFrame=loaded?crowd.lightFrame(presentationMs):frame;
     if(lightFrame)build.setFrame(lightFrame);
     // Potential land may show an anonymous night painting, independently of its empty
@@ -593,7 +593,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       const kingdomId=options.founded?.kingdomId??options.kingdomId;
       if(!kingdomId||options.founded&&options.momentFeed.origin!==options.founded.origin)throw new Error('Moments need this kingdom and its actual source');
       const castleKeep=installed?installed.forgeHosts.find(h=>h.slot===65534):castleBuildings.find(h=>h.id===layout.castle.beaconModuleId);
-      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal}));
+      moments=own(createKingdomMoments({scene,camera,canvas,target,plan:layout,houses,...(castleKeep?{castleKeep}:{}),pool,material:clay,registry,kingdomId,feed:options.momentFeed,sound:sound.moments,ground:landHeight,kit:options.forgeFamily==='tide'?'tide':'hearth',signal:abort.signal}));
       // Optional future spectacles prepare on their four bounded worker lanes after the citizens. The gate
       // opens on the world drawing; a failed moment view detaches itself and reports failure in inspect().
       void moments.ready.catch(()=>{});
