@@ -1,0 +1,2 @@
+2026-11-01 10:03 lane opened: LT10 the real channel answers (cheer, hype train, raid, a home for everyone who speaks).
+next: LT10 lane opened; implement and prove the live Twitch event paths and home allocation.
