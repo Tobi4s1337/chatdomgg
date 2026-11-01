@@ -331,6 +331,107 @@ capacity is **not** room capacity. Larger physical populations require interest-
 under an explicit authority contract; do not manufacture walkers for every chatter. Real people remain
 real people and a few plainly identified keepers remain the only townsfolk.
 
+### Main-owned adoption core: physical page boundary (2026-11-01)
+
+The first migration core is `packages/world/src/grand-adoption/pages.ts`, behind the existing shared
+`CollisionWorld` interface. This is an internal implementation seam, **not** a second public manifest,
+an adopted grand realm, or a change to today's scene/compiler. Its local index exports are awaiting
+main's review; no current realm or renderer consumes it yet.
+
+Prior art remains the existing [grand streaming study](../references/grand-world-streaming.md) and
+[voxel walking study](../references/walking-voxel-worlds.md). Reinspection of the referenced MIT
+`webgpu-voxel-engine/src/world/chunk-manager.ts:56–74,302–325` confirms independent bounded pools and
+stale-job rejection, but also missing-neighbour-as-air rendering. We retain the bounds/revision idea;
+physical unknown space must remain solid. No upstream code is copied into this core.
+
+**Data model.** `PhysicalCollisionPage` has an integer XYZ page coordinate, the installed collision
+revision, and already resolved world-space solid boxes clipped to that page. A page is **16 m cubed**,
+matching a 32³ terrain source chunk, while contained build/Forge geometry keeps its original precision.
+The page grid uses the settlement's existing world frame, including negative coordinates. Empty loaded
+pages mean known air; omitted pages mean unknown solid space, at every height. Solids are immutable
+copies and exactly repeated boxes are deduplicated. The constructor rejects duplicate page addresses,
+mixed revisions, nonfinite/inverted boxes and boxes crossing their declared page boundary. A producer
+must split a crossing solid without changing its occupied volume; it must resolve ordered writes,
+air carves and placement transforms **before** handing solids to this dispatcher.
+
+**The important separation.** This dispatcher owns unknown-space barriers once. Its input cannot be
+a union of independently compiled `CollisionWorld`s: those worlds include their own exterior walls.
+The eventual page compiler must reuse the existing ordered-write/material/cardinal-transform rules
+as raw interior-solid production, then partition those solids. The focused test extracts interiors
+from one existing compiler over its complete known region; that is test setup, not the proposed
+large-world production compiler. Terrain generation and rendering remain grand-lane ownership.
+
+**Hot query.** Floor-divide query minima and ceil-divide maxima by 16 to address half-open page ranges.
+Check the entire page count before enumerating; then inspect only addressed pages, emit their actual
+intersecting solids or full missing-page barriers, and sort by all six box coordinates. Input ordering
+cannot affect motion. An exact maximum on a page edge does not include the neighbouring unknown page.
+Degenerate queries return no intersection; malformed queries throw. Oversized queries return one
+conservative box covering the query before unbounded enumeration or scanning can happen. This follows
+the current founded collision query's conservative overload convention.
+
+**Initial implementation bounds and budgets.** Each immutable working set admits at most **4,096 pages**
+and **65,536 input solids**; a query visits at most **64 pages** and examines at most **8,192 solids**.
+Those are local guards, not new wire contracts or kingdom population limits. The current dispatcher
+scans each addressed page's solids; it is intentionally not a claim that the movement hot path now
+meets a frame budget. Target page-query p95 **≤0.25 ms** within the existing movement budget; measure
+the doorway/dense-house route before integration, and add a page-local broadphase when needed without
+changing page ownership or unknown-space semantics. Large route queries must divide their work;
+they must not interpret the conservative overload box as empty land.
+
+The maximum solids contain **3 MiB of numeric coordinates** before JavaScript object/array/map overhead;
+installation also owns a copy while the producer input still exists. These are not measured heap bytes.
+Reserve a **16 MiB laptop / 8 MiB phone** physical working-set target inside the existing decoded-terrain
+budget, account for both installed and preparing revisions, and measure actual allocation before making
+an adoption claim. No network messages or per-frame network work are introduced. Future page transport
+shares the scene/manifest and pending-request bounds above; it must not serialize this JavaScript shape
+as an unreviewed public protocol. Installation/compilation runs while preparing a revision, never in a
+movement query or render-LOD change.
+
+**Atomic installation and identity still required.** Creating a new dispatcher cannot mutate the old
+one. All pages share its revision; the existing `stepPlayer` refuses a world whose revision differs
+from the walker/input. The caller still owns preparation, registered interactions, the installed-world
+acknowledgement, rollback and floor/route/recovery pins. Revision numbers alone do not verify a recipe,
+page's provenance, or identical server/client coverage. This core deliberately does not mint authority.
+
+Inspection of the current grand producers found a full `GrandLandSeed` and generated typed arrays,
+but no validated immutable public recipe/compiler binding yet. Main must freeze that producer seam
+before extending `RealmFoundedManifest`/scene validation. The root scene hash must bind the exact
+landscape recipe or baked-artifact hash, generator/physics identities, and coordinate frame together
+with the existing settlement geometry. Persistent adoption/checkpoint/replay and reconnect must verify
+the same chain. Exclude generation timing (`stats.millis`) and disposable render caches from source
+identity. Do not hash only the 32-bit noise seed, silently modify the v1 scene allowlist, or compare
+HOME ownership digests to founded geometry digests.
+
+**Preserving one kingdom.** The current grand seat says `settlement metres + offset = land metres`.
+For live adoption, applying its inverse to the landscape keeps existing scene placements, doors,
+plot slots, fitted parts, Forge targets, walkers and replay coordinates unchanged. A render-only seat
+translation is not permission to rewrite those records. Grade around exact adopted support first;
+preserve scene/land-interface identities and light slots. Once the recipe and raw interior page
+compiler are frozen, main can install verified sparse coverage, then connect the same landscape to
+walk and stream consumers under their existing revision handshake. This replaces the surroundings
+of the real realm rather than creating another realm with copied homes.
+
+**Focused proof.** One invariant test, `grand-adoption/pages.test.ts`, uses the existing voxel compiler
+to resolve a wall and its ordered door carve. Server/client dispatchers receive reversed page/solid
+order; existing movement crosses the actual doorway at X=0 with identical states, the adjoining wall
+blocks, and missing land at X=16 stops the whole body. It also checks negative and exact half-open edges,
+huge-query bounded fallback, mixed/duplicate/misplaced-page rejection, immutable preparation of the
+successor, stale-revision movement hold, resumed walking after matching installation, and copied input
+geometry. This does not demonstrate networked page installation, ground sampling, migration of a
+persisted citizen record, or a real-GPU/frame target.
+
+Core check evidence: `pnpm exec vitest run packages/world/src/grand-adoption/pages.test.ts` passes
+**1 test**; scoped ESLint passes. The repository typecheck reports no adoption-core diagnostic but
+is currently blocked by `growth-history/scene.test.ts:30` accessing `plotId` on the civic milestone
+variant; that separate owner's file was not changed here. No capture, service or Git command was run.
+
+**Handoff.** Main owns the reviewed export and public identity/adoption extension after the producer
+exists. The grand builder supplies versioned reproducible land artifacts and support-preserving frame
+data; the physics builder extracts raw compiled interiors, spatially indexes them and supplies identical
+verified page sets on both ends. Integration then proves a real saved home/Forge part, door, citizen and
+growth receipt survive a landscape adoption and reconnect. Artisans continue existing terrain/composition
+work against the same immutable seat; this core requests no new visual surface.
+
 ## Build partitions and review evidence
 
 The existing grand lane implements both tasks; do not reopen other lanes for this architecture.
