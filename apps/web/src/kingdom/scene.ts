@@ -51,7 +51,7 @@ import type { AmbienceTarget } from './ambience/types';
 import { createArrivalDirector, type ArrivalAttention } from './arrival-director';
 import { createShoreDressing } from './shore-dressing';
 import { createKingdomMoments } from './moments';
-import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
+import { skyLitEnvironment, type ScreenCaption, type TwitchMomentFeed } from '../twitch-moments';
 import { createWaterSurface } from '../places/water/surface';
 import { deriveWaterReaches } from '../../../../packages/world/src/places/water/reaches';
 
@@ -424,7 +424,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       crowd.clear();arrivalDirector?.clear();frame=undefined;
       lastLightFrameKey='';lastField=-Infinity;
     }
-    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);
+    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=skyLitEnvironment(getEnvironment(hour),moments?.glow());
     // Only the hot casting carries this local fire treatment. The receiving
     // house, ordinary dusk and walking retain their accepted lighting.
     const stageHeat=!walkSelected&&!capturePose?Math.max(forgeCameraDirected?(realmForge?.heat??0):0,forge.status().open?forge.heat:0):0;

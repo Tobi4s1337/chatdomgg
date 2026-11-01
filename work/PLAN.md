@@ -330,66 +330,45 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Outcome: the evening’s first moment.** Forge is ACCEPTED/CLOSED. Chat lights its own window
-immediately; the stream first sees the wave across town, then follows people home with lanterns.
-One visible change per turn, matched stream before/after. Preserve accepted dusk exposure, warm
-pools, castle/beacon, sparse grey-violet chimney smoke, groves/land and AS10 citizens.
+**Outcome: the real channel answers, with the team’s moments on stream.** The window wave and
+Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo street fill and warm pools, castle/beacon,
+sparse grey-violet chimney smoke, sculpted land/groves and AS10 citizens. No new systems or rework
+of accepted pictures. Merge good runtime checkpoints promptly; one visible change per turn.
 
-**Curtain alarm withdrawn by Tobias:** Chrome’s screen was asleep, delivering zero animation
-frames even on a blank page. The stream opens normally; no renderer regression established.
-Keep 8bc5d99’s real loading-step text and `window.__chatdomStream.loading`; no readiness bypass.
-The goal is active again. Do not continue speculative gate investigation.
+**Latest working slice: sky-to-town lighting and stream credits.** Applied the sky lane’s existing
+seam: the kingdom retains the moment view’s `SkyGlow`, `scene.ts` grades its materials through
+`skyLitEnvironment`, and the production stream mounts `SkyCaptions` via `onMomentCaptions`.
+No active glow leaves the ordinary dusk grade unchanged. The existing realm spectator already
+passes `createRoomMomentFeed` into `SceneOptions.momentFeed`; no new feed contract was needed.
+Root viewed native1920×1080 `shots/magic/sky-stream-wiring-{before,after,pair}.png` (before LEFT):
+the town and castle now take the moment’s light beneath the same aurora. These are the stream
+bench’s real kingdom scene/mount, SIMULATED Herald ingest, frozen at3.6s, preparation ready,
+no page errors. They demonstrate the lighting seam, not production caption delivery or a real
+channel event. Typecheck, scoped lint, nine focused tests and web build pass. Capture resources
+are closed/released. The aurora’s evenly spaced streaks remain a visual weakness for the sky lane.
 
-**Arrival picture:** d2ab9f4 holds the automatic town view0–8s, enters the street8–12s,
-returns wide24–36s. Fresh live arrivals hold wide8s; lights and walkers never wait. SIMULATED
-starting seam begins at0 and keeps dusk. Windows use witnessed presence (1a10d43); physical
-arrival still drives door lanterns and smoke. `shots/magic/arrival-wide-first-pair.png` is viewed:
-old close TOP, town-wide AFTER below;1920×1080/time6/hour19.5/high,121 walkers/windows.
+**Team handoff:** raid-road and sky-moments have uncommitted runtime work, no new runtime commits
+ahead of main at this check. Sky SM10 is already merged; its missing lighting/credit mount is now
+installed. Raid-road’s RR10 stages the gate, Atlas road and arrival, but still needs its visual
+checkpoint; its WIP uses SIMULATED presence, not a live raid feed. The new dragon also remains
+on the sky worktree. Both lanes received a request to checkpoint green slices and send exact
+scene/director `needs:` patches (terrain/crowd hooks may follow). Do not copy their WIP wholesale.
+`lane/live-twitch` owns Herald → realm ingress → public moment facts, live labels, Twitch CLI
+mock commands, and homes/windows beyond twelve speakers. It has the existing feed seam and
+must ask main for any separate raid gate mount. Root has NOT claimed this live path complete.
+Read-only entry and first room-watch requests through5190 returned LIVE and closed promptly;
+they do not prove event delivery or establish home capacity. No Twitch write was made.
 
-**Latest change:** Showcase now leads with the LIVE stream, then “The evening begins”
-(SIMULATED), then the walk. The opening’s link is
-`/stream?source=simulated&tier=town&hour=19.5&seam=starting`, with NO fixed time so it plays.
-Other entries remain available. Root viewed `shots/magic/showcase-evening-pair.png`
-(1440×900 before LEFT) and `showcase-evening-mobile.png` (390×844): clear source labels,
-readable actions, no horizontal overflow. Typecheck, scoped lint, web builds and DOM link smoke
-pass. Actual realm stream href remains correct. All capture resources released; no active job.
-
-**Arrival dialogue:** aadb529 retimed the SIMULATED greeting to6–16s (ten-second limit), so
-Juniper greets the camera on its approach before the doorway’s “Home, at last.” Root viewed
-native `arrival-street-greeting-pair.png`, world12.5/high/calm,208 walkers/windows, settled/open,
-one Juniper greeting above the walking person. Three focused tests, typecheck/lint/build pass.
-
-**Full staging rehearsal completed:** `shots/magic/arrival-continuous-rehearsal-320.mp4` runs
-0–24s (last sample23.8), actual running scene/director,120 sampled frames, no capture/seek
-resets, no cuts or errors. Root inspected EVERY sampled frame in four chronological sheets
-`arrival-continuous-rehearsal-all-{1,2,3,4}.png`: clear wave, unobstructed street glide8–12s,
-Juniper reaches the glowing doorway and the home caption appears14.2–20s. This precedes only
-the latest greeting retime, which the native pair verifies.320×180 uses the reduced renderer;
-this demonstrates staging, NOT1080p colour or real-GPU smoothness. Do not shrink native speech
-bubbles based on their footprint at320px. No further long SwiftShader film is needed for timing.
-GPU request remains1920×1080 first25s of
-`/stream?source=simulated&tier=town&hour=19.5&seam=starting` (default calm).
-The first evening is now reachable from Showcase for the GPU recording. Do not repeat the
-software film or keep polishing accepted light/Forge while awaiting that taste check.
-**Next available picture:** judge the existing coastal Genesis holding from the Atlas and
-integrate its producer’s already-authored visible pieces if a mount is missing; team owns the
-content. Keep the full three-kingdom/card/passport/raid picture objective; no new systems.
-
-**Earlier fixes to preserve:** d29f742 lets the opening scene own its continuous wave/street
-lens instead of an independent Show shutter/Calm dip; viewed native pair
-`arrival-continuous-pair.png` (old shut endpoint LEFT). a21dc78 builds SIMULATED Starting at0,
-avoiding full-town ghost light before arrival (`arrival-first-ready-pair.png`, before TOP).
-a851636 gives one newly lit visible window its public name (`arrival-named-wave-pair.png`).
-Queue targeted captures once up to20min; never unlink locks or kill other holders. No active
-capture job or observer waiting for real chat. Real-GPU taste is pending, not a gate regression.
-
-**Team:** prior mainaadb529; prior merges7b56cb3 card sharing and f62bc9f aurora. Fresh narrow
-scan found no runtime checkpoint on picture-land/trees, effects, avatar, card/passport, Genesis,
-raid-road or sky, including all Genesis content and passport branches. Raid-road8543a25 only registers scope; code already on main. Sky’s wiring
-patch is not proof of live cheer hookup. Genesis, card/passport, raid journey and sky stay with
-the team. Pinkkitty keeper/sound/doorway mounts remain producer seams.
+**Accepted opening:** windows use witnessed presence immediately; physical arrival drives the door
+lantern/smoke. The scene holds wide0–8s, glides into the street8–12s, returns wide24–36s, without
+an independent director shutter. Greeting6–16s hands over to “Home, at last.” The viewed native
+wave pairs and `arrival-street-greeting-pair.png` remain in `shots/magic/`. Root watched all120
+sampled frames of `arrival-continuous-rehearsal-320.mp4` (0–24s): staging proof, not1080p colour or
+GPU smoothness. No repeat long SwiftShader film. Showcase’s “The evening begins” opens
+`/stream?source=simulated&tier=town&hour=19.5&seam=starting` without fixed time. The curtain alarm
+was withdrawn (sleeping Chrome); keep real loading-step text, no readiness bypass.
 
 **Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
-`../conductor/state/services.log`; own processes only; capture ports via capture-ports.mjs.
-No observer waiting for real chat. Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a
-and parked land6f60ae2. No software-renderer timing claims; no doc-only commits.
+`../conductor/state/services.log`. Capture ports via `capture-ports.mjs`; choose a free allowed
+port, queue main once up to20min, one still/short clip per lease, release in finally. No waiting
+observer. Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.
