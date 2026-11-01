@@ -36,6 +36,46 @@ route threw. Now:
 - Bell Court's fourth lamp moved down the east side so the whole round fits the lamplighter's 24 m, and lamp placement
   ignores the notional links that cross the paved square.
 
+## The crossing and its banks (session 3)
+
+Main wired the seat's `crossing`, so the generic footbridge beside the hall is gone and the hall is the river's one
+way over. What remained was the hall's two ends: its bank line is drawn about two metres above the levee crest, so
+the closed far pavilion stood on a sheer pale block over a meadow falling three metres away, and the town end's
+flanks showed the same blank stone either side of the landing.
+
+- `packages/content/src/genesis-kingdoms/pinkkitty/abutment/` wraps each abutment in a battered revetment, in the
+  hall's own frame: a stepped apron at about 1 in 3 (a cell out every three down) under a cream band at the bank
+  line, in limestone with the odd grey and cream stone, founded a metre under the ground the host measures for each
+  four-cell block. A first pass at 1 in 6 with buttresses (`s2-hero`) still stood as a pale prow with notched blocks
+  on its flank; the buttresses went and the apron got gentler.
+- At the far end the apron alone still followed the ground down into the hollow at the levee's foot and ended in a
+  coursed point (`s3-hero`, `s3-farbank`). Bridges meet ground like this on an approach bank, so the far end now
+  has one: turf in half-metre blocks, 1.5 m under the bank line at the wall and falling a block per block outward
+  (the meadow's own terraces are half-metre bands), tapering off toward the river along the flanks. Stone shows
+  from the bank line down to the turf.
+- The far end becomes a balcony over the far meadow: a parapet with a darkStone coping and roses, and a quoined pier
+  at each corner with an iron fire basket, so the far end is lit from the far bank as the landing lights the town side.
+- A border of the kingdom's roses on the far meadow at the bank's toe, each where the ground lies flat enough to stand one.
+- `capture.mjs` gains the `crossing` (from downstream on the water) and `farbank` poses, finds PinkKittyRose's holding in
+  the survey and zooms the Atlas in on it until its mark is drawn (a 140-viewer town is not drawn at the opening view),
+  and requeues for the shared lock every four minutes (see Doubts).
+
+Evidence (this folder; SwiftShader, 1920×1080, the real kingdom route):
+
+- `s4-before-after-hero.png`: main's `shots/genesis/4363967@1920x1080.png` (the generic potential town) beside
+  `s4-hero@1920x1080.png`, the river town from its hero view.
+- `gp10-hero-crop.png` (before) and `s4-hero-crop.png` (after), the same crop of the hero: the hall before this session (sheer far abutment, dark footing,
+  the generic footbridge beside it) and after (revetment, balcony, approach bank, roses; no footbridge).
+- `s3-crossing@1920x1080.png`: the three arches over the water, the far apron stepping down, the landing on the right.
+  Taken before the approach bank went in.
+- `s2-tavern@1920x1080.png`: the Lantern and Oar's dressed retaining wall, now seen: coursed ashlar, pilasters and
+  trailing roses read as masonry. Accepted.
+- `s4-atlas-card@1920x1080.png` and `s4-atlas-door@1920x1080.png`: the holding's card in Retro & Speedruns, and
+  "See this kingdom's land" opening the kingdom at its hero view.
+- `s4-compare@1920x1080.png`: labels covered. The_AGGman's harbour hamlet, PinkKittyRose's river town, MashaD4's mountain
+  city (from their lanes' latest shots) and Willowmere's evening stream view. The river hall over its levee river, the
+  red-roofed hearth homes and Crown Hill's castle make this one recognisable without its name.
+
 ## Sound
 
 The river land's sound is the Genesis biome adapter (`packages/audio/src/genesis-biomes`) on this kingdom's own
@@ -44,6 +84,15 @@ recipe and landscape. Its offline renders of PinkKittyRose's river valley (`rive
 that folder's README. It is not mounted in the kingdom route yet; see `needs:` in progress.
 
 ## Doubts
+
+- The far approach bank is turf in quarter-metre steps with the odd tussock. In the hero it reads as a green earthwork.
+  Up close it may still read as terraced: the final far-bank still (`--views farbank --tag s5`) was stopped by the host's
+  capture guard at 10 min while main waited, so the finer bank has only been seen in the hero.
+- The host's capture guard measures a lane's hold from when the lock's supervisor process started, so time spent
+  queueing counts as holding: two single stills were stopped the instant they got the lock (after 10 and 27 minutes in
+  the queue). `capture.mjs` now requeues every four minutes to stay clear of that; the guard itself is the conductor's.
+- The Atlas card's arms (drawn by the Atlas from the channel id: per pale Gules and Argent, three suns) differ from the
+  kingdom's own crest (drawn from the profile colours). That is two lanes' heraldry meeting at the door.
 
 - SwiftShader only: the dusk light, lanterns and glass need a real-GPU look at
   `/kingdom/4363967` at 1920×1080 (hero view and the pose in `capture.mjs` `tavern`).

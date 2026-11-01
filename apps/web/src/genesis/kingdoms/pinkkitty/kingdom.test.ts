@@ -93,6 +93,27 @@ describe('PinkKittyRose, a river town of its own', () => {
     expect(createGenesisWaterContent(k.plan, { crossing: true }).some(prop => /bridge/.test(prop.blueprint.id))).toBe(false);
   });
 
+  it('wraps both abutments down to their ground and lights the far balcony', async () => {
+    const k = await kingdom(), hall = kinds(k, /^genesis-river-hall-/)[0]!;
+    const ends = kinds(k, /^genesis-pinkkitty-abutment-/);
+    expect(ends.map(prop => prop.blueprint.id.split('-')[3]).sort()).toEqual(['far', 'near']);
+    for (const end of ends) {
+      // Turned with the hall, and founded under the lowest ground it covers.
+      expect(end.yaw).toBeCloseTo(hall.yaw, 9);
+      expect(end.position[1]).toBeLessThan(hall.position[1] + 32 * .125);
+    }
+    // The far balcony's two corner baskets burn at its height, above the far meadow and clear of the water.
+    const bank = hall.position[1] + 32 * .125, land = k.plan.genesisSurface!.terrainCore;
+    const balcony = k.seat!.braziers.filter(fire => Math.abs(fire.position[1] - (bank + 16 * .125)) < .01);
+    expect(balcony).toHaveLength(2);
+    for (const fire of balcony) {
+      const water = sampleLandWater(land as never, fire.position[0], fire.position[2]);
+      expect(!water || water.shoreDistance >= 0).toBe(true);
+    }
+    // A rose border at the balcony's foot, out on the far meadow beyond the hall's far end.
+    expect(kinds(k, /rose-bush/).filter(prop => prop.position[0] < hall.position[0] - 1).length).toBeGreaterThanOrEqual(4);
+  });
+
   it('gives the recipe’s keepers the places the town built, with work at dusk and never a presence', async () => {
     const k = await kingdom(), keepers = k.keepers!;
     expect(keepers.map(item => item.proposal.keeper)).toEqual(k.recipe.soul.keepers.filter(keeper => keepers.some(item => item.proposal.keeper.placeId === keeper.placeId)));

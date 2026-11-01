@@ -90,7 +90,7 @@ function flags(b: Boxes, x0: number, x1: number, y: number, z0: number, z1: numb
  * and a brass rim, holding a bed of coals heaped to an ember crown level with the rim. Returns the flame base, the
  * centre of the open mouth, which is air over the embers.
  */
-function cresset(b: Boxes, cx: number, y: number, cz: number): Vec3 {
+export function cresset(b: Boxes, cx: number, y: number, cz: number): Vec3 {
   b.add(cx - 1, y, cz - 1, cx + 1, y + 2, cz + 1, MAT.darkStone);
   b.add(cx - 2, y + 1, cz - 2, cx + 2, y + 2, cz + 2, MAT.brass);
   b.add(cx - 3, y + 2, cz - 3, cx + 3, y + 3, cz + 3, MAT.darkStone);
@@ -145,7 +145,7 @@ function pier(b: Boxes, x0: number, z0: number, base: number, top: number, plint
  * across and two to four high, with a smaller lump on one shoulder so no bush reads as a cube, crowned with three
  * blooms (mostly pink, now and then violet or cream) and one more opening on the bush's sunny flank.
  */
-function roses(b: Boxes, x0: number, x1: number, z0: number, z1: number, y: number, seed: number): void {
+export function roses(b: Boxes, x0: number, x1: number, z0: number, z1: number, y: number, seed: number): void {
   const bloomOf = (r: number) => (r < 0.14 ? MAT.fabricViolet : r < 0.24 ? MAT.cream : MAT.petal);
   for (let gx = x0; gx < x1; gx += 4) for (let gz = z0; gz < z1; gz += 4) {
     const r = (salt: number) => hash(gx, gz, y + salt * 131, seed);
