@@ -352,21 +352,31 @@ missed/lease expired: instant first arrival remains weak. Twitch CLI exits99 eve
 fixture generation; HTTP proof is NOT CLI-command proof. Owned smoke schema
 `main_live_smoke_20261101` remains; owned5172/5173 services stopped, no live event injected.
 
-**Native ownership latency fix:** `founded/provider.ts` now reuses the standing scene for
+**Native ownership latency9b1c4f8 (pushed):** `founded/provider.ts` now reuses the standing scene for
 additive native-home claims only after actual blueprint hash validation, unchanged prior
 homes/castle/attachments and exact adopted layout checks. Public home binding validation
 remains; custom geometry still rebuilds. Same2.1MB bytes/world; measured three claims
 3702/3424/2927ms →6/1/2ms. Provider tests2/2, typecheck/scoped lint/realm build pass. End-to-end
 HTTP speedup is not yet measured; cold scene/lease work is unchanged.
 
-**Real services:** managed2cdb14d picked up; health ready and actual raid subscription enabled,
-no real spectacle observed. User is approving `bits:read`/`channel:read:hype_train` now; consent
-helper owns5195 temporarily and Forge will return itself—DO NOT chase/restart5195. Re-check
-coverage after consent; do not start another authorize helper. Real events/picture UNPROVEN.
-Raid picture attempts both terminated/cleaned: dev import failed, then built preview met
-persistent entry503 although writer was healthy/fully delivered. No raid or frame produced.
-Helper `dragon_stream_capture` now owns one bounded BACKEND-ONLY guard diagnostic in isolated
-`main-live-twitch`: safe mismatch counts/revisions, no browser/lease/capture. No retry film.
+**Real services:** consent completed; read-only `check-auth` confirms `bits:read`,
+`channel:read:hype_train` and all five chat scopes for tobi4s_. Forge5195 is back. Main115bf29
+adds bits/hype to Herald's minute grant watcher (previously only chat/chatters); 61 focused
+tests, typecheck/lint and Herald/Realm builds pass. Await managed restart, then verify running
+5194 coverage for bits.use and all three v2 hype events. Raid already enabled; actual new
+real events/picture remain UNPROVEN. Do not start another authorize helper.
+Raid picture attempts terminated/cleaned (dev import failure, then persistent built-preview
+entry503); no raid/frame produced. Backend-only diagnostic completed/cleaned: prepared=true,
+manifest=false, current/origin/world/layout/collision all match, but private owned17/public
+home views0. Sol helper `first_home_latency` completed the publication fix on main:
+`projectRealmFact(home.installAllocated)` lacked an allowlisted home row. Existing bases are
+correctly unpublished, not restart loss. Add real home publication plus fenced/idempotent
+legacy outbox repair in repository.load; never seed projections from private bases or bypass
+manifest checks. Four focused unit tests and three real Postgres cases pass, including 17-home
+legacy repair, idempotence, stale-writer refusal and preserving later builds/Forge. Fresh random
+harness schema torn down; live/smoke schema untouched. Typecheck/lint and Realm build pass.
+Next: restart the owned smoke runtime and confirm entry200 before one raid still. No capture
+active/queued.
 
 **Sky32b0197 / main33fb2e9:** actual drawn terrain now supplies lair, train ring and bunting;
 dragon circles castle and contributes fire/sky light. Root viewed native1920×1080

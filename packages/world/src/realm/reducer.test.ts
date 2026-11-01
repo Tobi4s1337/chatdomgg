@@ -15,7 +15,9 @@ it('one owned, qualified night reserves and spends once; replay preserves privat
   };
   const home={id:'plot:1',ownerId:personId,slot:0,allocationReceipt:'allocation:1',layoutRevision:'founded:1',revision:'home:1',digest:'a'.repeat(64),family:'hearth' as const,blueprint:VOXEL_FIXTURE,attribution:{makerName:'Juniper',kingdomName:'Emberwick',approvalId:'names:1'},attachments:{}};
   expect(decide({type:'home.installAllocated',home},'forge').kind).toBe('rejected');
-  commit({type:'home.installAllocated',home},'allocation');
+  const installed = commit({type:'home.installAllocated',home},'allocation');
+  expect(installed.public).toEqual([{ type: 'home', plotId: home.id, revision: home.revision, assetHash: home.digest, attachments: [] }]);
+  expect(JSON.stringify(installed.public)).not.toMatch(/ownerId|allocationReceipt|blueprint|attribution|makerName|approvalId/);
   commit({type:'citizen.rights',personId,rights:{revision:1,forge:true,build:true,blocked:false,safetyIdentifier:'opaque-safety'}},'moderation');
   commit({type:'stream.observe',sessionId:'night:1',startedAt:1000,liveUntil:2_000_000},'presence');
   const credit={type:'coal.creditQualifiedNight' as const,personId,streamSessionId:'night:1',qualificationReceipt:'qualified:1'};
