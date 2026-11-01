@@ -57,7 +57,11 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
     if (!state.playing) stopClock();
   };
   const replay = createReplay(options.binding, show);
-  const onSeek = () => { options.sound('seek'); replay.pause(); try { replay.seek(Number(seek.value)); } catch { /* The unavailable state is already displayed. */ } };
+  const onSeek = () => {
+    const requested = Number(seek.value);
+    options.sound('seek'); replay.pause();
+    try { replay.seek(requested); } catch { /* The unavailable state is already displayed. */ }
+  };
   const onPlay = () => {
     options.sound('play');
     if (replay.state().playing) { replay.pause(); return; }

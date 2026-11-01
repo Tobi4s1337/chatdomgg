@@ -32,6 +32,7 @@ try {
     const page = await browser.newPage({ viewport: { width, height }, reducedMotion: 'reduce' });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
+    page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     await page.goto(`${base}src/chronicle/bench.html`);
     await page.waitForFunction(() => window.__chatdomReady === true || window.__chronicleError === true, null, { timeout: 240000 });
@@ -45,13 +46,13 @@ try {
     const firstPixels = await pixels();
     await page.keyboard.press('End'); await draw();
     const lastPixels = await pixels();
-    if (firstPixels === lastPixels) throw new Error('The world image did not change when seeking to the latest entry');
     const end = await slider.getAttribute('aria-valuetext');
     await page.screenshot({ path: resolve(evidence, `chronicle-latest@${width}x${height}.png`) });
     await page.keyboard.press('Home'); await draw();
     const first = await slider.getAttribute('aria-valuetext');
     if (!first || !end || first === end) throw new Error('Keyboard did not change the selected night');
     await page.screenshot({ path: resolve(evidence, `chronicle-first@${width}x${height}.png`) });
+    if (firstPixels === lastPixels) throw new Error('The world image did not change when seeking to the latest entry; first and latest screenshots were saved for diagnosis');
     const marketIndex = await page.evaluate(() => window.__chronicleHistory.snapshots.findIndex(snapshot => snapshot.focus === 'market'));
     if (marketIndex < 1) throw new Error('Market construction snapshot is missing');
     const marketCheck = await page.evaluate(index => {

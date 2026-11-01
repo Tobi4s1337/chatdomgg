@@ -20,6 +20,7 @@ let server, browser, release;
 async function ready(page, base) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
+  page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   await page.goto(`${base}src/chronicle/bench.html`);
   await page.waitForFunction(() => window.__chatdomReady === true || window.__chronicleError === true, null, { timeout: 240_000 });
