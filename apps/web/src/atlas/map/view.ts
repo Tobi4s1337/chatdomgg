@@ -11,7 +11,7 @@ import { markedTiers, Overlay } from './overlay';
 import type { Stamp } from './paint';
 import { pyramidFor } from './pyramid';
 import { paintSceneFor } from './scene';
-import { INK, PAPER_DEEP } from './theme';
+import { INK, PAPER, PAPER_DEEP } from './theme';
 import { TILE_BUDGET_BYTES } from './tile-plan';
 import { TileFarm, TileLayer } from './tiles';
 import { WashLayer } from './wash';
@@ -92,6 +92,9 @@ export class MapView {
   private readonly wash: WashLayer;
   private readonly gestures: Gestures;
   private readonly frame = new Graphics();
+  /** The chosen road, inked under the marks between its two ends (world units), or null. */
+  private road: { ax: number; ay: number; bx: number; by: number } | null = null;
+  private readonly roadInk = new Graphics();
   /** The coasts as drawn, shared with the live layer's pencil places. */
   readonly rings: Ring[];
   private live: LivePaint | null = null;
@@ -149,7 +152,7 @@ export class MapView {
     });
     const root = new Container();
     // The wash lies on the land and under the margin, the neatline and every mark and name.
-    root.addChild(this.tiles.container, this.wash.sprite, this.frame, this.overlay.container);
+    root.addChild(this.tiles.container, this.wash.sprite, this.frame, this.roadInk, this.overlay.container);
     app.stage.addChild(root);
     host.appendChild(app.canvas);
     app.canvas.setAttribute('aria-hidden', 'true');
@@ -264,6 +267,23 @@ export class MapView {
     const at = (k: number) => ({ x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k, scale: from.scale });
     this.motion = { plan: { duration, from, to, at: (ms) => (ms >= duration ? { ...to } : at(easeOut(ms / duration))) }, start: performance.now(), space: 'camera' };
     this.dirty = true;
+  }
+
+  /**
+   * Ink a chosen road between two points (or clear it). With `frame`, fly so both ends sit in the free area with room
+   * around them, no closer than kingdom distance; a road whose ends are far apart opens out to show them both.
+   */
+  setRoad(road: { ax: number; ay: number; bx: number; by: number } | null, frame = false): void {
+    this.road = road;
+    this.dirty = true;
+    if (!road || !frame) return;
+    const insets = this.insets();
+    const width = Math.max(120, this.view.width - insets.left - insets.right);
+    const height = Math.max(120, this.view.height - insets.top - insets.bottom);
+    const dx = Math.abs(road.bx - road.ax);
+    const dy = Math.abs(road.by - road.ay);
+    const fit = Math.min(width / Math.max(1e-6, dx * 1.6), height / Math.max(1e-6, dy * 1.6));
+    this.flyTo((road.ax + road.bx) / 2, (road.ay + road.by) / 2, Math.min(DISTANCE_STOP.kingdom, fit));
   }
 
   /** Lay the live layer over the land (or take it away). Its frames redraw the map through its version. */
@@ -386,6 +406,7 @@ export class MapView {
       this.events.tilesFailed(this.failedTiles);
     }
     this.drawFrame();
+    this.drawRoad();
     this.overlay.reduceMotion = reduceMotion();
     this.overlay.update(this.camera, this.view, { selected: this.selected, hovered: this.hovered }, now);
     if (this.live) {
@@ -426,6 +447,61 @@ export class MapView {
     if (c.x < W) g.rect(c.x, Math.max(0, a.y), W - c.x, Math.min(H, c.y) - Math.max(0, a.y)).fill(outside);
     g.rect(a.x, a.y, c.x - a.x, c.y - a.y).stroke({ color: INK, width: 1.6, alpha: 0.85 });
     g.rect(a.x - 5, a.y - 5, c.x - a.x + 10, c.y - a.y + 10).stroke({ color: INK, width: 0.8, alpha: 0.7 });
+  }
+
+  /**
+   * The chosen road: a hand-drawn dashed ink arc under the marks, on a pale paper bed so it reads over any wash. The arc
+   * bows to one side fixed by the ends' order, so the same road is drawn the same way from either end.
+   */
+  private drawRoad(): void {
+    const g = this.roadInk;
+    g.clear();
+    const road = this.road;
+    if (!road) return;
+    const a = this.camera.worldToScreen(road.ax, road.ay, this.view);
+    const b = this.camera.worldToScreen(road.bx, road.by, this.view);
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (length < 4) return;
+    const [p, q] = road.ax < road.bx || (road.ax === road.bx && road.ay <= road.by) ? [a, b] : [b, a];
+    const bow = Math.min(90, length * 0.16);
+    const cx = (p.x + q.x) / 2 + ((q.y - p.y) / length) * bow;
+    const cy = (p.y + q.y) / 2 - ((q.x - p.x) / length) * bow;
+    const steps = Math.max(12, Math.ceil(length / 4));
+    const points: { x: number; y: number }[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const u = 1 - t;
+      points.push({ x: u * u * p.x + 2 * u * t * cx + t * t * q.x, y: u * u * p.y + 2 * u * t * cy + t * t * q.y });
+    }
+    g.moveTo(points[0]!.x, points[0]!.y);
+    for (const point of points.slice(1)) g.lineTo(point.x, point.y);
+    g.stroke({ color: PAPER, width: 7, alpha: 0.55, cap: 'round', join: 'round' });
+    // Dashes of ink 10 px long with 6 px gaps, measured along the curve.
+    const dash = 10;
+    const gap = 6;
+    let drawing = true;
+    let left = dash;
+    g.moveTo(points[0]!.x, points[0]!.y);
+    for (let i = 1; i < points.length; i++) {
+      let from = points[i - 1]!;
+      const to = points[i]!;
+      let segment = Math.hypot(to.x - from.x, to.y - from.y);
+      while (segment > 0) {
+        const take = Math.min(left, segment);
+        const k = take / segment;
+        const next = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
+        if (drawing) g.lineTo(next.x, next.y);
+        else g.moveTo(next.x, next.y);
+        segment -= take;
+        left -= take;
+        from = next;
+        if (left <= 1e-6) {
+          drawing = !drawing;
+          left = drawing ? dash : gap;
+        }
+      }
+    }
+    g.stroke({ color: INK, width: 2.4, alpha: 0.88, cap: 'round', join: 'round' });
   }
 
   private visibleRegions(): Set<number> {

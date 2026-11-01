@@ -610,3 +610,65 @@ content-label collection expansion or production migration is inferred from a gr
 - **2026-10-31 — Current handoff: raid road and entry/return.** The stream is the stage and Atlas supports the observed raid journey: factual raid road/caravan, destination entry and return to the retained source. A01–A02 were accepted; A03 has accepted scope with open edge cases, and A04–A05 retain their recorded implementation and review evidence without a blanket acceptance claim. A channel holding must also lead to its own seeded kingdom at biome size: consume the frozen Genesis recipe and entry resolver from spec 39 once available, never invent founded history. Only that task waits on the contract; raid roads can proceed. For this handoff defer unrelated search/discovery, replay, personal overlays, seasons and general cartography work; earlier rules still describe the wider vision and are not erased. Atlas consumes the existing Gate and world coordinator seams; the lane implements feature-local adapters against existing ports; main owns cross-surface authority and any shared contract. Do not invent arrival, raid observations or stamps. SIMULATED fixtures remain visibly labelled.
 
 - **2026-10-31 — Current handoff verification and ownership.** For each visual change inspect one stream-first 1920×1080 capture; use typecheck and affected tests for the step. This supersedes the older per-task capture matrix for this handoff. The lane implements feature-local durable adapters and runtime behavior against existing ports; main owns shared contracts and cross-surface authority and integration bindings. Report only actual missing authority or contract seams.
+
+- **2026-10-31 — A06 find a channel and read its card.** Assigned to this lane on 2026-10-31 although the current
+  handoff deferred search; built to R13, R16–R17 and R22 as written, and it touches no handoff task's scope.
+  - **The register.** `atlas:serve` builds one register per survey preview from that preview's own observation
+    revision (`apps/surveyor/src/directory`): the hash-checked `channels.ndjson` and `raid-pairs.ndjson`, the preview's
+    land for holdings, and its realm resolver for channels without land. It answers
+    `/map-data/v1/preview/<pv>/search?q=`, `card/<id>`, `card/login/<login>`, `card/dab/<hash>`, `road/<id>/<id>` and
+    `road/login/<a>/<b>`. The first read of `/v1/preview` warms it; a read before it is ready waits up to 6 s, then
+    answers 503 `warming` with `retry-after`. At most two previews are kept. On real data (obs-20261031T133817Z,
+    381,796 channels) it builds in about 5 s, a search answers in about 0.1 s, and the service holds about 370 MiB.
+  - **One projection for search, cards and roads.** Everything goes through the same rules at request time.
+    - The canonical gate (gone, gambling, withheld) makes a channel not-found. That reply is the same as for a
+      channel that never existed, so a hidden channel cannot be detected.
+    - An unreadable withheld list fails closed: 503 `names-unavailable`, and the page says names are held back.
+    - Names remain available between survey refreshes, matching the served map names; stream titles still expire a
+      day after the channel was last live. Withholding removes a channel immediately from all register replies.
+    - A raid counterpart below the sweep floor is `unseen`: an unnamed dotted ring, never a general channel and
+      never on the land.
+    - Content labels are still not collected. Replies say `contentLabels: 'not-collected'` and the cartouche says
+      so; no mature rule is invented.
+  - **Search.** Search keys use NFKD, strip marks and format characters, lowercase, NFC and collapse separators, so
+    accents, full-width and ligature forms are found when typed plainly. A query is at most 50 code points.
+    - Ranking: exact, then prefix, then word start, then contains; ties go to the larger average audience.
+    - A one-code-point query matches inside a word only in Han, Kana or Hangul.
+    - Up to 8 named, observed results, plus `more`.
+    - The field is a combobox in the cartouche: `/` focuses it, arrows move, Enter opens, Escape folds then
+      clears. It debounces for 170 ms and shows "searching" only after 280 ms.
+    - Every state has its own words: nothing found (with a link to Twitch's own search), warming (retries
+      itself), held back, too long, and unreachable (with "Search again").
+  - **Cards.** A mapped card adds the last stream (category, viewers, title; "Streaming" only when the frame on
+    screen has it on air), the strongest three roads, and the total.
+    - Roads are ranked by raids, then travellers, then recency. Each shows its window and the raid watch's coverage
+      ("missing here, not denied").
+    - Every card has Watch on Twitch and Share. Share uses the share sheet on touch and copies the link elsewhere;
+      if both fail, the link is shown to copy by hand.
+    - A named channel without land opens a waiting card and flies to its realm.
+    - A chosen pencil flag is named through `card/dab/<hash>`. This closes A04's "card API to name dabs". Hover
+      still shows no name, so moving the pointer never sends a register request.
+    - Avatars are not shown, so the page makes no third-party image request; the arms stand in.
+  - **Roads.** A road card shows both ends, the tally each way and both ends' cards. When both ends are drawn, the
+    map inks a dashed arc between them on a paper bed and frames them, no closer than kingdom distance. The still
+    shows the road card without the arc.
+  - **Routes.** `/map/<login>` opens a channel and `/map/road/<a>/<b>` a road.
+    - `line/<id>` and `season/<n>` are reserved; for now they open the map with their own notice.
+    - A lone `road`, `line`, `season` or `atlas` is a login.
+    - Anything else opens `/map` with a notice. A login the survey does not name says so and offers to search for it.
+    - The card's history entry carries its URL. A reload adopts it and reopens the card. Forward after Back reopens
+      it. A shared link puts `/map` beneath the card, so Back stays on the Atlas.
+    - R9's single card entry stands: a road opened from a card replaces it, and Back closes to the map with the view
+      from before the first card.
+  - **Seam.** The search, card and road replies are lane-local wire types, like the names projection: zod on the
+    service and strict validators in `apps/web/src/atlas/data/directory.ts`. `packages/shared` is unchanged. Main may
+    promote them if a second consumer (panel, stream view) needs them.
+  - **Evidence.**
+    - `apps/web/src/atlas/checks/register-shots.mjs`: 20 checks in real Chrome covering search, Enter to card, card
+      address, roads, road address, Back, a cold shared link on a phone, no results, `/map/line/` as a login, an
+      unknown route, a full-width query, and search to card on the still without WebGL. Shots:
+      `shots/atlas/register-*`.
+    - `atlas-checks.mjs` recovery now expects a reload on a card's route to reopen that card; Back closes it, and the
+      next Back leaves.
+    - Tests: surveyor `directory.test.ts` and web `data/directory.test.ts`, `ui/route.test.ts` and
+      `ui/history.test.ts`.

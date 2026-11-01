@@ -10,13 +10,26 @@ class FakeHistory implements HistoryLike {
   get state(): unknown {
     return this.entries[this.index];
   }
-  pushState(data: unknown): void {
+  urls: string[] = ['/map'];
+  pushState(data: unknown, _unused: string, url?: string): void {
     this.entries = this.entries.slice(0, this.index + 1);
+    this.urls = this.urls.slice(0, this.index + 1);
     this.entries.push(structuredClone(data));
+    this.urls.push(url ?? this.urls[this.index]!);
     this.index++;
   }
-  replaceState(data: unknown): void {
+  replaceState(data: unknown, _unused: string, url?: string): void {
     this.entries[this.index] = structuredClone(data);
+    if (url !== undefined) this.urls[this.index] = url;
+  }
+  get url(): string {
+    return this.urls[this.index]!;
+  }
+  /** The user presses the browser's Forward button. */
+  userForward(): void {
+    if (this.index >= this.entries.length - 1) return;
+    this.index++;
+    this.popstate();
   }
   back(): void {
     if (this.index === 0) return;
@@ -97,21 +110,49 @@ describe('CardHistory', () => {
     expect(card.popped()).toBe(false);
   });
 
-  it('steps quietly over a card entry left by a reload, so the first Back leaves the map', () => {
+  it('names the open card in the address bar and returns to /map when it closes', () => {
+    const { history, card } = rig();
+    card.opened('41', before, '/map/sodapoppin');
+    expect(history.url).toBe('/map/sodapoppin');
+    card.opened('42', before, '/map/road/sodapoppin/xqc');
+    expect(history.url).toBe('/map/road/sodapoppin/xqc');
+    expect(history.entries).toHaveLength(2);
+    card.closed();
+    history.flush();
+    expect(history.url).toBe('/map');
+  });
+
+  it('reopens the card of a reload from its entry; if it cannot, closing steps back over it', () => {
     const { history, card, pop } = rig();
-    card.opened('a', before);
+    card.opened('a', before, '/map/a_channel');
     // The page reloads on the card's entry: a new CardHistory over the same history, with no card open.
     const restored: unknown[] = [];
     const fresh = new CardHistory(history, (view) => restored.push(view));
     pop.handler = () => fresh.popped();
-    fresh.resume();
+    expect(fresh.resume()).toMatchObject({ id: 'a', view: before });
+    expect(fresh.isOpen).toBe(true);
+    // Back closes the reopened card and returns to the view saved before it first opened.
+    history.userBack();
+    expect(restored).toEqual([before]);
+    expect(history.url).toBe('/map');
+    // Forward onto the card's entry is not the card's own popstate: the page adopts it and reopens the card.
+    history.userForward();
+    expect(fresh.adopt()).toMatchObject({ id: 'a' });
+    fresh.closed();
     history.flush();
     expect(history.index).toBe(0);
-    expect(restored).toEqual([]);
-    expect(fresh.isOpen).toBe(false);
-    // Nothing more to step over, and a later Back is the page's own.
-    fresh.resume();
-    expect(history.pending).toEqual([]);
     expect(fresh.popped()).toBe(false);
+  });
+
+  it('a shared link to a card puts the map beneath it, so Back stays on the Atlas', () => {
+    const { history, card, restored } = rig();
+    history.replaceState(null, '', '/map/sodapoppin');
+    card.arrived();
+    expect(history.url).toBe('/map');
+    card.opened('41', before, '/map/sodapoppin');
+    expect(history.urls).toEqual(['/map', '/map/sodapoppin']);
+    history.userBack();
+    expect(restored).toEqual([before]);
+    expect(history.url).toBe('/map');
   });
 });

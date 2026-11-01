@@ -74,7 +74,7 @@ The first visible result is A02. A task blocked by a future shared seam records 
   implement ancestor tile fallback and seam-free sharpening. Test cancel/blur/resize, delayed/failed tiles,
   context loss and the WebGL-free still/search fallback. Inspect both standard sizes in motion. R7, R9–R10.
 
-- deferred: **A06 — Find a real channel and read its public card** · evidence: Unicode/search/card flow + shots.
+- [x] **A06 — Find a real channel and read its public card** · evidence: Unicode/search/card flow + shots (register-shots.mjs, Spec 01 A06 decision).
   Implement bounded Unicode search and mapped/waiting cards using real observation metadata, strongest roads,
   availability-aware actions and source dates. Complete route parsing/restoration for channel and selected road.
   Apply hidden/unknown/mature/excluded and raw-content-expiry rules consistently across search and cards; unknown
@@ -160,7 +160,7 @@ any task above. There are no invented future features to implement from this lis
   shield and wash rules of `map/overlay.ts` and `map/wash.ts` so the still needs no Pixi; `still/parity.test.ts`
   guards drift. Moving those rules (and the tile farm) into Pixi-free modules both import would remove the copy.
 - **2026-10-30 (A05) — Still notice and ribbon.** Closed in A05: the notice hangs from the ribbon's banner at every
-  width. Search joins the still's DOM path in A06.
+  width. Search joins the still's DOM path in A06 (done: the search sits in the cartouche on both paths).
 - **2026-10-30 (A05) — Real-device motion check.** SwiftShader proves positions, states and holes, not frame time.
   Wheel/trackpad glide, pinch, flick coast and the 0.42–2.6 s flights want a look on a real GPU laptop and phone.
 
