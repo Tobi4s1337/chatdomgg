@@ -9,7 +9,7 @@ import { createHumpbackBridge } from '../../../../packages/content/src/places/wa
 const CELL = 0.125;
 
 /** Authored water structures placed on the same sampled ground as the Genesis landscape. */
-export function createGenesisWaterContent(plan: SettlementPlan): WindowHouse[] {
+export function createGenesisWaterContent(plan: SettlementPlan, options: { readonly crossing?: boolean } = {}): WindowHouse[] {
   const land = plan.genesisSurface;
   if (!land) return [];
   const turn = land.coast.oceanToward;
@@ -49,7 +49,8 @@ export function createGenesisWaterContent(plan: SettlementPlan): WindowHouse[] {
   // The bridge spans local X while the river runs roughly along local Z.
   // Choose the sampled river section nearest town and only mount where its
   // actual bed and both landing heights fit the authored bridge's frame.
-  const stream = land.terrainCore.streams.find(item => item.id === 'river');
+  // A seat with its own crossing (PinkKittyRose's river hall) keeps the river to that one way over.
+  const stream = options.crossing ? undefined : land.terrainCore.streams.find(item => item.id === 'river');
   if (stream) {
     const inverse = ((4 - turn) % 4) as CardinalTurn;
     const candidates = stream.points.slice(0, -1).flatMap((point, index) => {

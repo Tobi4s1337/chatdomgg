@@ -132,7 +132,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       for(const prop of marketProps)props.push({...prop,position:[prop.position[0]+centre[0],prop.position[1],prop.position[2]+centre[2]-10]});
     }else props.push(...marketProps);
   }
-  if(options.potential)props.push(...createGenesisWaterContent(layout));
+  if(options.potential)props.push(...createGenesisWaterContent(layout,{crossing:options.potential.seat?.crossing}));
   const potentialSeat=installed?undefined:options.potential?.seat;
   const {buildings:castleBuildings,beaconPosition}=potentialSeat??createCastleContent(layout.castle,options.potential?.style);
   const simulatedCourt=installed?undefined:potentialSeat??createCastleCourtContent(layout.castle,options.potential?.style);

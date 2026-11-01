@@ -11,6 +11,7 @@ import { createGenesisWindowPreview } from './window-preview';
 import { createGenesisSeatContent } from './seat-content';
 import { genesisKingdomComposer } from './kingdom-composer';
 import { composeMashaKingdom, MASHA_ID } from './kingdoms/masha';
+import { GENESIS_KINGDOMS } from './kingdoms';
 import './preview.css';
 
 type View = { potential: PotentialKingdomView; name: string; feed: PresenceFeed; category: string; average: number; landscape: string; lore: string };
@@ -41,17 +42,21 @@ export default function GenesisPreview() {
     }
     const unavailable = RealmApiErrorSchema.safeParse(body);
     if (response.status !== 404 || !unavailable.success) throw new Error(unavailable.success ? unavailable.data.message : 'The adopted-land service is unavailable. Its outage cannot generate a replacement world.');
-    const recipe = compileChannelGenesis({ ...observed, profileColours: [...channel.palette], evidence: {
-      kind: 'observed', sourceId: 'atlas-20261030-helix-20261031', asOf: Date.parse(PROFILE_CAPTURED_AT),
-    } });
-    const selected = recipe.landscapes.find(item => item.character === choice.character)!;
+    const facts = { ...observed, profileColours: [...channel.palette], evidence: {
+      kind: 'observed' as const, sourceId: 'atlas-20261030-helix-20261031', asOf: Date.parse(PROFILE_CAPTURED_AT),
+    } };
+    const own = await (await GENESIS_KINGDOMS[id]?.())?.composeGenesisKingdom({ facts, character: choice.character });
+    if (abort.signal.aborted) return;
+    const recipe = own?.recipe ?? compileChannelGenesis(facts);
+    const selected = own?.landscape ?? recipe.landscapes.find(item => item.character === choice.character)!;
     const mountain = id === MASHA_ID ? composeMashaKingdom(recipe, selected) : undefined;
     const landscape = mountain?.landscape ?? selected;
-    const proposed = mountain?.plan ?? compileGenesisSettlement(recipe, landscape.id);
-    const composed = mountain ?? genesisKingdomComposer(id)?.compose({ recipe, landscape, plan: proposed });
+    const proposed = own?.plan ?? mountain?.plan ?? compileGenesisSettlement(recipe, landscape.id);
+    const composed = own ?? mountain ?? genesisKingdomComposer(id)?.compose({ recipe, landscape, plan: proposed });
     const plan = composed?.plan ?? proposed;
-    if (mountain && !new URLSearchParams(location.search).has('hour')) {
-      const address = new URL(location.href); address.searchParams.set('hour', String(mountain.hour)); history.replaceState(history.state, '', address);
+    const openingHour = own?.hour ?? mountain?.hour;
+    if (openingHour !== undefined && !new URLSearchParams(location.search).has('hour')) {
+      const address = new URL(location.href); address.searchParams.set('hour', String(openingHour)); history.replaceState(history.state, '', address);
     }
     const centreX = (plan.bounds.minX + plan.bounds.maxX) / 2;
     const centreZ = (plan.bounds.minZ + plan.bounds.maxZ) / 2;
@@ -80,7 +85,7 @@ export default function GenesisPreview() {
     if (!abort.signal.aborted) setView({ potential: { plan, size: recipe.size.tier, style: mountain?.style ?? recipe.identity.styleFamily,
       ...(seat ? { seat } : {}),
       camera: composed?.camera ?? { eye, target, fov: 50 }, windowPreview: createGenesisWindowPreview(id, plan.homes, recipe.evidence.asOf) }, name: channel.name, feed, category: observed.categories[0]!.name,
-      average: observed.audience.averageViewers!, landscape: choice.character.replaceAll('-', ' '), lore: channel.lore });
+      average: observed.audience.averageViewers!, landscape: choice.character.replaceAll('-', ' '), lore: own?.lore ?? channel.lore });
   }
   return <Show when={view()} fallback={<div class="genesis-wait"><p>CHATDOM · THE LAND BEYOND THE MAP</p><h1>{error() ? 'The road needs a moment.' : 'Unfolding the land…'}</h1><p>{error() ?? 'Reading this channel’s own seed.'}</p><a href="/map">Return to the Atlas</a></div>}>{current => <>
     <Kingdom kingdomName={current().name} potential={current().potential} presenceFeed={current().feed} />
