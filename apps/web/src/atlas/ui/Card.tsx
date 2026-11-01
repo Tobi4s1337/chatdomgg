@@ -5,6 +5,7 @@ import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatTime, TIER_NAMES, watchUrl } from './format';
 import { LIVE_CLASS_NAMES } from './live-line';
 import { ShieldIcon } from './marks';
+import { doorHolding, type DoorHolding } from '../data/holding';
 import { genesisPreviewPath } from '../../genesis/channels';
 
 export type NamesState = 'loading' | 'ready' | 'failed';
@@ -25,6 +26,8 @@ export function Card(props: {
   /** What the live frame shown says of this holding, or null before any frame was taken. */
   live: { liveClass: number; startedAt: number | null; asOf: number } | null;
   onClose: () => void;
+  /** Go through the door into the holding's land; the Atlas plays the hand-off, then the page changes. */
+  onEnter?: (holding: DoorHolding) => void;
 }) {
   let closeButton: HTMLButtonElement | undefined;
   const region = () => props.world.regions[props.settler.region];
@@ -33,6 +36,13 @@ export function Card(props: {
   const url = () => (props.login ? watchUrl(props.login) : null);
   const showLogin = () => props.name !== null && props.login !== null && props.name.toLowerCase() !== props.login;
   const title = () => props.name ?? `Unnamed ${TIER_NAMES[props.settler.tierRank]!.toLowerCase()}`;
+  // A named, shown holding has a door. Reading the name keeps it in step with a refreshed or expired name.
+  const door = () => (props.name !== null && props.login !== null ? doorHolding(props.settler, props.world) : null);
+  const enter = (event: MouseEvent, holding: DoorHolding) => {
+    if (!props.onEnter || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    props.onEnter(holding);
+  };
   const missing = () => {
     if (props.name !== null) return null;
     if (props.names === 'loading') return 'Reading the names of this survey…';
@@ -106,7 +116,25 @@ export function Card(props: {
         Survey of {formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt)} (UTC). Draft land: this holding may still move before the first edition.
       </p>
       <Show when={missing()}>{(text) => <p class="atlas-card-missing">{text()}</p>}</Show>
-      <Show when={genesisPreviewPath(props.settler.id)}>{href => <a class="atlas-watch" href={href()}>See this kingdom’s land <span aria-hidden="true">↗</span></a>}</Show>
+      <Show when={door()} fallback={
+        // The three authored kingdoms open from their own recorded facts, so their door stands even while the
+        // survey's name for them has lapsed; it is a plain link, with no hand-over of a name the map no longer shows.
+        <Show when={genesisPreviewPath(props.settler.id)}>
+          {(href) => (
+            <a class="atlas-watch atlas-door" href={href()}>
+              Enter the land
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
+            </a>
+          )}
+        </Show>
+      }>
+        {(holding) => (
+          <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} onClick={(event) => enter(event, holding())}>
+            Enter the land
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
+          </a>
+        )}
+      </Show>
       <Show when={url()}>
         {(href) => (
           <a class="atlas-watch" href={href()} target="_blank" rel="noopener noreferrer">

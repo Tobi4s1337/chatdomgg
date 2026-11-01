@@ -10,6 +10,8 @@ import type { CameraState } from './map/motion';
 import { MapView, type MapStats } from './map/view';
 import { Still } from './still/Still';
 import { Card, type NamesState } from './ui/Card';
+import { DoorCartouche } from './ui/Door';
+import { handOffHolding, holdingPlace, type DoorHolding } from './data/holding';
 import { Cartouche, Compass, Controls, Notice, ScaleBar } from './ui/chrome';
 import { formatMoment } from './ui/format';
 import { CardHistory } from './ui/history';
@@ -185,6 +187,26 @@ export default function Atlas() {
     opening(settler.id);
     view?.select(settler, true);
   };
+
+  // Through the door (Atlas.md §7.3): the seal stamps at once, the map glides into the holding while the parchment
+  // rises over it, and the kingdom page opens on the same parchment. The holding goes ahead so the page need not
+  // walk the survey again.
+  const [entering, setEntering] = createSignal<DoorHolding | null>(null);
+  let enterTimer: ReturnType<typeof setTimeout> | undefined;
+  const enter = (holding: DoorHolding) => {
+    if (entering()) return;
+    handOffHolding(sessionStore(), holding);
+    setEntering(holding);
+    const settler = selected();
+    if (view && settler) view.flyTo(settler.x, settler.y, MAX_SCALE);
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    enterTimer = setTimeout(() => location.assign(`/kingdom/${encodeURIComponent(holding.id)}`), reduce ? 60 : 720);
+  };
+  onCleanup(() => clearTimeout(enterTimer));
+  // Back from the kingdom restores this page from the cache with the door still up: lift it.
+  const onShow = (event: PageTransitionEvent) => { if (event.persisted) setEntering(null); };
+  window.addEventListener('pageshow', onShow);
+  onCleanup(() => window.removeEventListener('pageshow', onShow));
 
   const chooseDab = (dab: Dab) => {
     setSelected(null);
@@ -599,6 +621,7 @@ export default function Atlas() {
                   world={w()}
                   live={(liveTick(), paint?.frame ? { liveClass: paint.liveClass(settler()), startedAt: paint.startedAt(settler()), asOf: paint.frame.asOf } : null)}
                   onClose={closeCard}
+                  onEnter={enter}
                 />
               )}
             </Show>
@@ -606,6 +629,13 @@ export default function Atlas() {
               <DabCard dab={selectedDab()!} world={w()} geo={geo()!} asOf={live()?.status.frameAsOf ?? null} onClose={closeCard} />
             </Show>
             <Show when={!stillShown() && notice()}>{(current) => noticeView(current())}</Show>
+            <Show when={entering()}>
+              {(holding) => (
+                <DoorCartouche id={holding().id} name={holding().name} phase="stamp"
+                  subtitle={holdingPlace(holding())}
+                  steps={[{ text: 'The gate is opened', done: true }, { text: 'The road leads down into the land', done: false }]} />
+              )}
+            </Show>
           </>
         )}
       </Show>
