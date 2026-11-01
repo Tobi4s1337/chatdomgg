@@ -58,6 +58,14 @@ describe('Chronicle replay', () => {
     replay.play(); replay.step(); expect(replay.state()).toMatchObject({ index: 1, playing: false });
     replay.dispose(); replay.dispose(); expect(binding.clear).toHaveBeenCalledTimes(1); expect(binding.dispose).toHaveBeenCalledTimes(1);
   });
+  it('always disposes the host when clearing on close fails', () => {
+    const { replay, binding } = setup();
+    replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a')] });
+    binding.clear.mockImplementationOnce(() => { throw new Error('clear failed'); });
+    expect(() => replay.dispose()).toThrow('clear failed');
+    expect(binding.dispose).toHaveBeenCalledTimes(1);
+    replay.dispose(); expect(binding.dispose).toHaveBeenCalledTimes(1);
+  });
   it('reports unavailable and clears the scene if the engine cannot apply a revision', () => {
     const { replay, binding } = setup(); replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a'), snapshot(2, 'b')] });
     binding.replace.mockImplementationOnce(() => { throw new Error('missing revision'); });

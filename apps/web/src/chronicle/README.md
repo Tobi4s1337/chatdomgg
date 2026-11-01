@@ -1,6 +1,6 @@
 # Chronicle consumer
 
-`mountChronicle` accepts an ordered, complete `History` and a host-owned `ReplayBinding`. `replace` must atomically replace the isolated replay presentation from the supplied snapshot, including backward seeks; it must not deliver historical beats to live feeds. `clear` removes the replay, and `dispose` restores or reveals the live presentation without touching its movement, chat or state. Host integration and export wiring belong to main. Invalid histories or unavailable scene revisions show an unavailable state rather than a stale success.
+`mountChronicle` accepts an ordered, complete `History` and a host-owned `ReplayBinding`. `replace` must atomically replace the isolated replay presentation from the supplied snapshot, including backward seeks; it must not deliver historical beats to live feeds. `clear` removes the replay, and `dispose` restores or reveals the live presentation without touching its movement, chat or state. The close callback receives any cleanup error so the host can restore live presentation or report the failure. Host integration and export wiring belong to main. Invalid histories or unavailable scene revisions show an unavailable state rather than a stale success.
 
 `bench.html` is a local SIMULATED demonstration. Its home and market construction revisions are explicit fixture facts; no qualification stage is treated as proof of construction. The fixed generated castle, streets, other civic sites and other homes are scenery, not a historical reconstruction. It makes no endpoint or persistent record.
 

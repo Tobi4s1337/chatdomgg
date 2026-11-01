@@ -94,6 +94,27 @@ async function accessibility(browser, base, width, height) {
     await slider.focus(); await page.keyboard.press('Escape');
     assert(await page.getByText('The Chronicle is closed.').isVisible(), 'Escape did not close the Chronicle');
     assert(await page.locator('#chronicle-test-opener').evaluate(element => element === document.activeElement), 'Close did not restore host focus');
+    const recovery = await page.evaluate(async () => {
+      const { mountChronicle } = await import('/src/chronicle/view.ts');
+      const opener = document.querySelector('#chronicle-test-opener');
+      const results = [];
+      for (const failure of ['clear', 'dispose']) {
+        opener.focus();
+        const host = document.createElement('div'); document.body.append(host);
+        let closed = false, reported = false, disposed = false;
+        const view = mountChronicle(host, { history: window.__chronicleHistory,
+          binding: { replace() {}, clear() { if (failure === 'clear') throw new Error('clear failed'); },
+            dispose() { disposed = true; if (failure === 'dispose') throw new Error('dispose failed'); } },
+          sound() { throw new Error('sound failed'); }, onClose(error) { closed = true; reported = error instanceof Error; } });
+        const input = host.querySelector('input'); input.value = '1'; input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        const advanced = view.replay.state().status === 'ready' && view.replay.state().index === 1;
+        const button = host.querySelector('.chronicle-close'); button.focus(); button.click();
+        results.push(advanced && closed && reported && disposed && !host.hasChildNodes() && document.activeElement === opener);
+        host.remove();
+      }
+      return results.every(Boolean);
+    });
+    assert(recovery, 'Host sound or cleanup failure prevented controls, close, error reporting or focus restoration');
     if (errors.length) throw new Error(errors.join('\n'));
     console.log(`${width}x${height}: readable bounds, labels, keyboard, pause/resume, empty/unavailable, Escape and focus restoration passed with reduced motion`);
   } finally { await context.close(); }
