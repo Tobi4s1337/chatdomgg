@@ -4,7 +4,8 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PublicSurveySchema } from './export/public';
 import { runImport } from './import';
-import { createAtlasService, type AtlasService } from './serve';
+import { createAtlasService, projectNames, type AtlasService } from './serve';
+import { PreviewNamesSchema, ServedNamesSchema } from './preview/schema';
 import { layout } from './store/revisions';
 import { FixtureSource, RECENT, clock, configFor, fakeSurveyor, sweepAt, tempDataDir } from './test/fixture-source';
 import { allowRealImports } from './test/timeouts';
@@ -50,6 +51,22 @@ async function imported() {
 }
 
 describe('atlas:serve', () => {
+  it('keeps day-old names served while withholding still removes the channel name', () => {
+    const now = Date.UTC(2026, 10, 1), day = 86_400_000;
+    const projected = projectNames(PreviewNamesSchema.parse({
+      version: 1, kind: 'chatdom-atlas-survey-preview-names',
+      preview: 'pv-20261101T000000Z-aaaaaaaaaaaa', revision: 'obs-20261101T000000Z-aaaaaaaaaaaa',
+      ids: ['1', '2'], logins: ['returning_citizen', 'withheld_citizen'], names: ['Returning Citizen', 'Withheld Citizen'],
+      factsAt: [now - day - 1, now - day - 1],
+    }), new Set(['2']), now);
+    const served = ServedNamesSchema.parse(projected.served);
+    expect(served.ids).toEqual(['1']);
+    expect(served.names).toEqual(['Returning Citizen']);
+    expect(served.freshUntil).toEqual([now + day]);
+    expect(served.withheld).toEqual(['2']);
+    expect(JSON.stringify(served)).not.toContain('withheld_citizen');
+  });
+
   it('serves the public survey of the current revision, without source paths or rows', async () => {
     const { dataDir, first } = await imported();
     const { port } = await start(dataDir);

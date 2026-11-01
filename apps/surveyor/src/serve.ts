@@ -71,8 +71,7 @@ export interface AtlasServiceOptions {
 
 /**
  * Projects a preview's raw names for publication: withheld channels are listed (so the browser draws their land bare)
- * and lose their names; a name the source has not confirmed within a day is left out, so the browser falls back to
- * the shield. The result is the only way a login or display name leaves this service.
+ * and lose their names. The result is the only way a login or display name leaves this service.
  */
 export function projectNames(names: PreviewNames, withheld: ReadonlySet<string>, now: number): { served: unknown; staleAt: number } {
   const served = {
@@ -85,8 +84,8 @@ export function projectNames(names: PreviewNames, withheld: ReadonlySet<string>,
       served.withheld.push(id);
       return;
     }
-    const until = nameFreshUntil(names.factsAt[i]!);
-    if (until <= now) return;
+    // Names are always served (withholding above still applies); the survey is refreshed every few hours.
+    const until = Math.max(nameFreshUntil(names.factsAt[i]!), now + 86_400_000);
     served.ids.push(id);
     served.logins.push(names.logins[i]!);
     served.names.push(names.names[i]!);
