@@ -18,11 +18,12 @@ it('frames one witnessed arrival through its real window, ignores heartbeats and
   expect(sample(at)).toBeUndefined(); // Opening a stream does not replay historical arrivals.
   const since = at + 1_000;
   observe({ ...frame, sequence: 2, asOf: since, windows: [{ slot, present: true, publicName: 'Juniper', since }] });
-  expect(sample(since + 1_000)).toMatchObject({ slot, phase: 'walking', subject: { homeLit: false } });
+  expect(sample(since + 1_000)).toBeUndefined(); // The window wave owns the wide view first.
+  expect(sample(since + 8_000)).toMatchObject({ slot, phase: 'walking', subject: { homeLit: false } });
   observe({ ...frame, sequence: 3, asOf: since + 2_000, windows: [...frame.windows,
     { slot: otherSlot, present: true, publicName: null, since: since + 2_000 }] });
   director.chat(otherSlot, since + 2_000);
-  expect(sample(since + 2_000)?.slot).toBe(slot); // A busy shot neither hops nor queues.
+  expect(sample(since + 8_001)?.slot).toBe(slot); // A busy shot neither hops nor queues.
   const home = motion.sample(since + 35_000).find(person => person.slot === slot)!;
   expect(home.homeLit).toBe(true);
   const litAt = home.homeLitAtMs!;
@@ -58,7 +59,8 @@ it('frames one witnessed arrival through its real window, ignores heartbeats and
   const returnedAt = offlineAt + 10_000;
   observe({ ...frame, sequence: 3, asOf: returnedAt, streamLive: true, connection: 'fresh',
     windows: [{ slot, present: true, publicName: 'Juniper', since: returnedAt }] });
-  expect(sample(returnedAt)?.phase).toBe('walking');
+  expect(sample(returnedAt)).toBeUndefined();
+  expect(sample(returnedAt + 8_000)?.phase).toBe('walking');
   director.cancel();
   observe({ ...frame, sequence: 4, asOf: returnedAt + 1 });
   expect(sample(returnedAt + 1)).toBeUndefined();

@@ -55,6 +55,7 @@ export default function StreamView() {
   const [safe, setSafe] = createSignal<SafeArea | null>(params.safe);
   const [phase, setPhase] = createSignal<StreamPhase>('waking');
   const [progress, setProgress] = createSignal(0);
+  const [loading, setLoading] = createSignal('Opening the kingdom');
   const [label, setLabel] = createSignal(params.source === 'simulated' ? 'SIMULATED' : 'CONNECTING');
   const [fonts, setFonts] = createSignal(false);
   const [scale, setScale] = createSignal(1);
@@ -93,7 +94,9 @@ export default function StreamView() {
 
   const mount = createSceneMount({
     host: () => lens,
-    settings: () => ({ directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time, camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin, onWalkers: setWalkers }),
+    // Build the opening's light fields with nobody home yet. Rewinding a fully
+    // inhabited town after loading leaves its warm ground light behind for a beat.
+    settings: () => ({ directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin, onWalkers: setWalkers }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
@@ -109,7 +112,7 @@ export default function StreamView() {
       if (next === 'ready') { attempts = 0; director.start(); } else director.stop();
       if (next === 'failed') scheduleRetry();
     },
-    onProgress: (_text, fraction) => setProgress(fraction),
+    onProgress: (text, fraction) => { setLoading(text); setProgress(fraction); },
     // A remounted real source starts unconfirmed: nothing seen before hiding is presented as fresh.
     onSource: setLabel,
     onNames: next => {
@@ -123,6 +126,9 @@ export default function StreamView() {
 
   function publishDebug(scene: KingdomScene | undefined): void {
     if (!scene) { setArrival(null); delete window.__chatdomKingdom; return; }
+    // The labelled opening starts with the first speaker, rather than an already-full town.
+    // Real sources always keep their witnessed history; a fixed capture stays fixed.
+    if (params.source === 'simulated' && seam() === 'starting' && params.time === null) scene.play();
     window.__chatdomKingdom = {
       stats: scene.debug,
       inspect: scene.inspect,
@@ -191,6 +197,7 @@ export default function StreamView() {
     window.__chatdomStream = {
       stats: mount.stats,
       get phase() { return phase(); },
+      get loading() { return loading(); },
       get layout() { return layout(); },
       get source() { return mark().kind; },
       hold: (on: boolean) => director.hold(on),
@@ -290,7 +297,7 @@ export default function StreamView() {
         </Match>
         <Match when={true}>
           <h2>{kingdomName()}</h2>
-          <p>The lamps are being lit</p>
+          <p>{loading()}</p>
           <div class="stream-progress"><i style={{ transform: `scaleX(${Math.max(.04, progress())})` }} /></div>
         </Match>
       </Switch>

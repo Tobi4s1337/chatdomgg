@@ -104,7 +104,7 @@ describe('lighting a window from the panel', () => {
 
       const home = adapter.get().home;
       if (home.kind !== 'citizen') throw new Error(`expected a citizen's home, got ${home.kind}`);
-      expect(home.displayName).toBe(choice === 'named' ? 'Wrenfeather' : null);
+      expect(home.displayName).toBe(choice === 'named' ? 'Wren Tarnwalker' : null);
       // A second request while lit changes nothing.
       adapter.requestLight(choice === 'named' ? 'unnamed' : 'named');
       expect(adapter.get().light).toMatchObject({ kind: 'lit', choice });

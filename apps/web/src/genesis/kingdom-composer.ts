@@ -26,7 +26,7 @@ export interface GenesisKingdomComposer {
 
 /** Each finished Genesis kingdom lives in `./kingdoms/<name>/index.ts` and exports `kingdom`. */
 const modules = import.meta.glob<{ kingdom: GenesisKingdomComposer }>('./kingdoms/*/index.ts', { eager: true });
-const composers = Object.values(modules).map(module => module.kingdom);
+const composers = Object.values(modules).map(module => module.kingdom).filter((composer): composer is GenesisKingdomComposer => !!composer);
 
 export function genesisKingdomComposer(broadcasterId: string): GenesisKingdomComposer | undefined {
   return composers.find(composer => composer.broadcasterId === broadcasterId);

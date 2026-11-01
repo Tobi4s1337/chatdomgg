@@ -19,7 +19,11 @@ export type PanelCue =
   /** The kingdom counted a tap: one small glass note over the wood. */
   | 'counted'
   /** Not now, not available, closed without using Bits: a muffled low knock with no ring. */
-  | 'dull';
+  | 'dull'
+  /** A leaf of the passport turned: stiffer paper lifting, a sweep through the air, a soft landing on the leaves below. */
+  | 'leaf'
+  /** The book's leather cover closing over the card, or the card laid back on top: a low pat of hide and board. */
+  | 'cover';
 
 export interface PanelSound {
   muted(): boolean;
@@ -140,6 +144,30 @@ export function createPanelSound(): PanelSound {
       cues.tap(at);
       partial('sine', 1568 * vary(0.005), at + 0.07, 0.05, 0.22, master!);
       partial('sine', 1568 * 2.76, at + 0.07, 0.01, 0.06, master!);
+    },
+    leaf(at) {
+      // Rag paper is stiffer than parchment: a crisp lift, a long airy sweep that falls in pitch, and the leaf settling.
+      const sweep = 0.28 * vary(0.15);
+      breath(at, 0.03, 'highpass', 5600 * vary(0.1), 0.8, 0.06);
+      const air = breath(at + 0.02, sweep, 'bandpass', 2600 * vary(0.2), 0.9, 0.0001, gain => {
+        gain.setValueAtTime(0.0001, at + 0.02);
+        gain.linearRampToValueAtTime(0.07 * vary(0.2), at + 0.02 + sweep * 0.35);
+        gain.linearRampToValueAtTime(0.0001, at + 0.02 + sweep);
+      });
+      air.frequency.exponentialRampToValueAtTime(900, at + 0.02 + sweep);
+      const land = at + 0.02 + sweep * 0.92;
+      partial('triangle', 180 * vary(0.08), land, 0.05, 0.02, master!);
+      breath(land, 0.06, 'lowpass', 1400, 0.6, 0.05);
+    },
+    cover(at) {
+      // A hide-bound board meeting the desk: a low pat, a little leather creak above it, nothing that rings.
+      const muffled = context!.createBiquadFilter();
+      muffled.type = 'lowpass'; muffled.frequency.value = 760; muffled.Q.value = 0.5;
+      muffled.connect(master!);
+      breath(at, 0.12, 'bandpass', 1900 * vary(0.15), 1.6, 0.03);
+      partial('triangle', 118 * vary(0.05), at + 0.09, 0.2, 0.06, muffled);
+      partial('sine', 236 * vary(0.05), at + 0.09, 0.06, 0.03, muffled);
+      breath(at + 0.09, 0.08, 'lowpass', 600, 0.5, 0.06);
     },
     dull(at) {
       // Knuckles on a shut door through cloth: low, short, nothing rings.

@@ -34,6 +34,9 @@ export interface CitizenSample {
   readonly time?: number;
   /** Head rotation relative to the body's heading, in radians. */
   readonly lookYaw?: number;
+  /** Render-only head inclination, in radians. */
+  readonly lookPitch?: number;
+  readonly waveWeight?: number;
   /** Standing rise onto the toes, from 0 to 1. Ease this value at the call site. */
   readonly tiptoe?: number;
 }
@@ -134,14 +137,15 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     const toeLift = toeForward * Math.sin(toeAngle) - ankleHeight * (1 - Math.cos(toeAngle));
     const toeShift = toeForward * (1 - Math.cos(toeAngle)) + ankleHeight * Math.sin(toeAngle);
     // Slight counterrotation and opposing arms make the small silhouette read at street scale.
-    const wave = sample.gesture === 'wave';
+    const wave = sample.gesture === 'wave' ? Math.max(0, Math.min(1, sample.waveWeight ?? 1)) : 0;
+    const waveAngle = sample.waveWeight === undefined ? 1.75 : 2.65;
     const gestureTime = sample.time ?? 0;
     const sitAngle = -Math.PI / 2 * seated;
     const breath = Math.sin(gestureTime * 1.7) * .012 * seated;
     const rotations: Partial<Record<AvatarBoneId, readonly [number, number, number]>> = {
       chest: [breath, -stride * .055, stride * .025],
-      head: [sample.gesture === 'nod' ? .14 + .12 * Math.sin(gestureTime * 6) : 0, (sample.lookYaw ?? 0) + stride * .035, -stride * .025],
-      upperArmLeft: [-stride * .30 - seated * .18, 0, .06 + seated * .08], upperArmRight: [wave ? -.18 : stride * .30 - seated * .18, 0, wave ? 1.75 + .22 * Math.sin(gestureTime * 8) : -.06 - seated * .08],
+      head: [Math.max(-.65, Math.min(.65, sample.lookPitch ?? 0)) + (sample.gesture === 'nod' ? .14 + .12 * Math.sin(gestureTime * 6) : 0), (sample.lookYaw ?? 0) + stride * .035, -stride * .025],
+      upperArmLeft: [-stride * .30 - seated * .18, 0, .06 + seated * .08], upperArmRight: [(stride * .30 - seated * .18) * (1 - wave) - .18 * wave, 0, (-.06 - seated * .08) * (1 - wave) + (waveAngle + .22 * Math.sin(gestureTime * 8)) * wave],
       thighLeft: [sitAngle + stride * .42, 0, 0], thighRight: [sitAngle - stride * .42, 0, 0],
       shinLeft: [-sitAngle + Math.max(0, stride) * .38, 0, 0], shinRight: [-sitAngle + Math.max(0, -stride) * .38, 0, 0],
       footLeft: [-stride * .42 - Math.max(0, stride) * .38 + toeAngle, 0, 0],
@@ -207,7 +211,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
         transition.last = now;
         const look = looks.get(sample.look);
         if (!look) throw new Error(`Unknown citizen look ${sample.look}.`);
-        if (![...sample.position, sample.heading, sample.distance, sample.moving, sample.opacity ?? 1, sample.lookYaw ?? 0, sample.time ?? 0, sample.tiptoe ?? 0].every(Number.isFinite)) throw new Error(`Invalid citizen sample ${sample.id}.`);
+        if (![...sample.position, sample.heading, sample.distance, sample.moving, sample.opacity ?? 1, sample.lookYaw ?? 0, sample.lookPitch ?? 0, sample.waveWeight ?? 1, sample.time ?? 0, sample.tiptoe ?? 0].every(Number.isFinite)) throw new Error(`Invalid citizen sample ${sample.id}.`);
         if (camera) {
           citizenBounds.center.set(sample.position[0], sample.position[1] + .75, sample.position[2]);
           if (!frustum.intersectsSphere(citizenBounds)) continue;

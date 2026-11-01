@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
 import { CELL } from './banner';
+import { createViewer } from './viewer';
 import {
   BASKET_CELLS, BEAST_SCALE, BODY_CELLS, BOW_CELLS, HEAD_CELLS, KITE_CELLS, LEG_CELLS, MANE_CELLS, TAIL_CELLS, WING_INNER_CELLS, WING_OUTER_CELLS,
   basketBlueprint, beastParts, bowBlueprint, kiteBlueprint, threadBlueprint, type BowColour, type ThreadColour,
@@ -31,8 +32,11 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 // ---------------------------------------------------------------- the Hearthbeast's pass
 
-/** Wingspan 16 m at full scale; it flies 10–16 m over the highest roof, entering and leaving this far past the town. */
-const BEAST = { beyond: 34, above: 12, aboveMin: 10, aboveMax: 16, maxLive: 2 } as const;
+/**
+ * Wingspan 16 m at full scale; it flies 10–16 m over the highest roof, entering and leaving this far past the town;
+ * seen from a camera, its pass comes no nearer than `near` metres.
+ */
+const BEAST = { beyond: 34, above: 12, aboveMin: 10, aboveMax: 16, maxLive: 2, near: 45 } as const;
 /** Wing angles (rad, + up): held glide, top of the upstroke, bottom of the downstroke. */
 const WING = { glide: 0.14, up: 1.0, down: -0.7, upstroke: 460, downstroke: 300, recover: 660 } as const;
 
@@ -129,6 +133,7 @@ export function createSkyFlightLayer(root: THREE.Group, host: SpectacleLayerHost
   const layer = new THREE.Group();
   layer.name = 'sky-flight';
   root.add(layer);
+  const viewer = createViewer(layer);
   const { places } = host;
   let disposed = false, applies = 0;
   // Every part is authored once per layer; frames only place them.
@@ -292,9 +297,25 @@ export function createSkyFlightLayer(root: THREE.Group, host: SpectacleLayerHost
     // Lean the pass toward the cheerer's home so the head turn reads; bow it gently one way so the beast banks.
     const lean = target ? Math.max(-0.35 * radius, Math.min(0.35 * radius, tb.subVectors(target, centre).dot(across) * 0.45)) : 0;
     const bowed = (hash01(frame.seed, 23) - 0.5) * 0.6 * radius, reach = radius + BEAST.beyond;
-    const p0 = centre.clone().addScaledVector(dir, -reach).addScaledVector(across, lean + bowed);
-    const p2 = centre.clone().addScaledVector(dir, reach).addScaledVector(across, lean + bowed);
-    const p1 = centre.clone().addScaledVector(across, lean);
+    let p0 = centre.clone().addScaledVector(dir, -reach).addScaledVector(across, lean + bowed);
+    let p2 = centre.clone().addScaledVector(dir, reach).addScaledVector(across, lean + bowed);
+    let p1 = centre.clone().addScaledVector(across, lean);
+    // Seen from a camera (the stream's views stand at the town's edge): the pass is laid across that view instead, in
+    // from beyond the far roofs, sweeping broadside across the picture a third of the way out from the camera, and
+    // away behind the town again, so the wings read at a glance on a 1080p stream.
+    const eye = viewer.held(frame.id);
+    if (eye) {
+      const toward = tb.set(eye.x - centre.x, 0, eye.z - centre.z), d = toward.length();
+      if (d > radius * 0.3) {
+        toward.divideScalar(d);
+        const side = hash01(frame.seed, 24) < 0.5 ? 1 : -1, sweep = new THREE.Vector3(toward.z * side, 0, -toward.x * side);
+        const out = Math.max(BEAST.near, d * 0.3), half = Math.max(reach, (d - out) * 0.9);
+        const swing = target ? Math.max(-0.25 * half, Math.min(0.25 * half, tc.subVectors(target, centre).dot(sweep) * 0.3)) : 0;
+        p1 = centre.clone().addScaledVector(toward, d - out).addScaledVector(sweep, swing);
+        p0 = centre.clone().addScaledVector(toward, -radius * 0.4).addScaledVector(sweep, -half);
+        p2 = centre.clone().addScaledVector(toward, d * 0.15).addScaledVector(sweep, half);
+      }
+    }
     const c = p1.clone().multiplyScalar(2).sub(tc.addVectors(p0, p2).multiplyScalar(0.5));
     const f: Flight = { p0, c, p2, cruise, target, closest: HB.overhead };
     if (!target) return f;
@@ -604,6 +625,7 @@ export function createSkyFlightLayer(root: THREE.Group, host: SpectacleLayerHost
         if (beast.root.visible) { live.add(frame.id); focusBeast = beast.root.position.clone(); }
       }
       for (const [id, beast] of [...beasts]) if (!live.has(id)) { layer.remove(beast.root); beasts.delete(id); }
+      viewer.release(new Set(passes.map(frame => frame.id)));
 
       // Kites: every beat's own leader has a reserved seat; the oldest beat's flock takes the rest of the sky and
       // a later one fills whatever is left.
@@ -652,6 +674,7 @@ export function createSkyFlightLayer(root: THREE.Group, host: SpectacleLayerHost
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      viewer.dispose();
       root.remove(layer);
       for (const p of pools.values()) {
         // Hand the shared buffers back untouched: only this pool's own fade attribute is released.

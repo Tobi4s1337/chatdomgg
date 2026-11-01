@@ -330,66 +330,60 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Order:** picture only, one obvious same-view before/after per turn. Merge good checkpoints first;
-medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
-beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
+**Outcome: the evening’s first moment.** Forge is ACCEPTED/CLOSED. Chat lights its own window
+immediately; the stream first sees the wave across town, then follows people home with lanterns.
+One visible change per turn, matched stream before/after. Preserve accepted dusk exposure, warm
+pools, castle/beacon, sparse grey-violet chimney smoke, groves/land and AS10 citizens.
 
-**Current:** Forge audience wraps the open apron as well as the west side; paths avoid hearth/anvil.
-Existing citizens, normal walking, facing and barrel remain. The earlier empty rehearsal skipped planning:
-the supplied neighbours need time to arrive, not a routing repair or invented bodies. New pair uses the
-same120s SIMULATED planning lead-in for both sides, then pour9/world157,1920×1080:
-`shots/magic/forge-apron-pair.png`, viewed: the pour reads encircled. Fast actual planning can still
-outpace distant walkers. Next picture fix: too much hillside above the smithy; near spectators crop below.
-Three citizen integration tests, typecheck/scoped lint/build pass. EL11 in spec48/effects-library PRD hands
-the team a flowing recorded-path wake and warm landing burst; main owns adoption. Accepted home smoke stays.
+**Curtain alarm withdrawn by Tobias:** Chrome’s screen was asleep, delivering zero animation
+frames even on a blank page. The stream opens normally; no renderer regression established.
+Keep 8bc5d99’s real loading-step text and `window.__chatdomStream.loading`; no readiness bypass.
+The goal is active again. Do not continue speculative gate investigation.
 
-9ddf895 shares the receiving-home camera between room and SIM, then settles with the facade beneath the
-gift. `forge-landing-pair.png` and forward-stepped sequence sheet viewed; not a continuous-motion signoff.
-Room rotated-socket/desktop/phone/settle test passes. Next: the flight and landing need their own light beat.
+**Arrival picture:** d2ab9f4 holds the automatic town view0–8s, enters the street8–12s,
+returns wide24–36s. Fresh live arrivals hold wide8s; lights and walkers never wait. SIMULATED
+starting seam begins at0 and keeps dusk. Windows use witnessed presence (1a10d43); physical
+arrival still drives door lanterns and smoke. `shots/magic/arrival-wide-first-pair.png` is viewed:
+old close TOP, town-wide AFTER below;1920×1080/time6/hour19.5/high,121 walkers/windows.
 
-Forge art checkpoint: merged Anvil Hero AH04 bd938eb and Forge panel FL02 9fd035f.
-The dragon now has a clearer head and stack; AH06 in spec25/PRD gives the team its next whole art outcome:
-one sleeping head on two distinct paws, readable on a whole house from the stream and up close.
-`shots/magic/forge-sculpt-pair.png` viewed at1920×1080. An attempted wake still read as dashes and
-was reverted. Existing b2251ee recorded-history flight effects remain; real/SIM histories stay independent.
-The sculpture still needs a sleeping silhouette. No Forge visual signoff or new systems. Team now owns
-the three Genesis kingdoms, panel portraits/passport, raid journey and cheer/hype spectacles; merge checkpoints.
+**Latest change:** retimed the existing SIMULATED greeting from3–9s to6–16s, within the
+frozen ten-second speech limit. The wave-first camera had arrived after the greeting expired.
+Now Juniper says “Evening, everyone!” while we enter the lantern street; the later actual
+arrival cue replaces it with “Home, at last.” No live speech lifetime or identity remapping.
+Root viewed `shots/magic/arrival-street-greeting-{before,after,pair}.png`, native1920×1080,
+world12.5s/high/calm,208 walkers/windows, settled/open; after has one Juniper greeting over the
+walking person. Typecheck, scoped lint, three director/arrival tests and production build pass.
+No browser errors, and all captures/servers/leases released. Main source stayed frozen for pair.
 
-AS11 09f0267 merged (ebde8de). Builder reachable from `/showcase` at `/-/avatar-builder`,
-SIMULATED with browser-local saves. Real saved/equip/entitlement authority remains pending; no shared
-v2 freeze. Additive local earned recipe accepted in avatar-style/contract-proposal.md; rig/sockets stay.
-`shots/magic/avatar-builder-main.png` viewed at1440×900; hair click changes portrait, Save says
-“Saved in this preview.”63 focused tests/typecheck/lint/build passed; after copy fix7 builder tests/lint.
-Lane next: show a clear continuation hint when colour controls sit below the options sheet's fold;
-older earned ribbon marks must remain wearable as tenure grows (already in lane log).
+**Full staging rehearsal completed:** `shots/magic/arrival-continuous-rehearsal-320.mp4` runs
+0–24s (last sample23.8), actual running scene/director,120 sampled frames, no capture/seek
+resets, no cuts or errors. Root inspected EVERY sampled frame in four chronological sheets
+`arrival-continuous-rehearsal-all-{1,2,3,4}.png`: clear wave, unobstructed street glide8–12s,
+Juniper reaches the glowing doorway and the home caption appears14.2–20s. This precedes only
+the latest greeting retime, which the native pair verifies.320×180 uses the reduced renderer;
+this demonstrates staging, NOT1080p colour or real-GPU smoothness. Do not shrink native speech
+bubbles based on their footprint at320px. No further long SwiftShader film is needed for timing.
+GPU request remains1920×1080 first25s of
+`/stream?source=simulated&tier=town&hour=19.5&seam=starting` (default calm).
+**Next useful visible integration:** keep Showcase current: add a clearly SIMULATED door to
+this evening opening beside its existing live stream entry (Tobias’s standing Showcase brief).
+No new systems; do not keep polishing accepted light/Forge while awaiting the GPU taste check.
 
-**Live grove closed:**743effc uses existing producer enrichment/normal scene adoption, not browser
-geometry substitution.260 fixture IDs/roots stay; homes/other fixtures and native pin untouched. Public
-LIVE manifest now784da96e…f7c2d327, collision9, unchanged layout43cffdb6;15 forms replace3. Actual
-resting realm `shots/magic/founded-grove-pair.png` viewed at1920×1080 HIGH.0 citizens/windows is the
-observed offline state, not a simulated crowd. Source ready/curtain open/no browser errors; captures
-released. Generated groves f424fac also retain existing sites and accepted736ee93 distant air.
+**Earlier fixes to preserve:** d29f742 lets the opening scene own its continuous wave/street
+lens instead of an independent Show shutter/Calm dip; viewed native pair
+`arrival-continuous-pair.png` (old shut endpoint LEFT). a21dc78 builds SIMULATED Starting at0,
+avoiding full-town ghost light before arrival (`arrival-first-ready-pair.png`, before TOP).
+a851636 gives one newly lit visible window its public name (`arrival-named-wave-pair.png`).
+Queue targeted captures once up to20min; never unlink locks or kill other holders. No active
+capture job or observer waiting for real chat. Real-GPU taste is pending, not a gate regression.
 
-**Citizens/roads:**AS10 e2a9100 uses sharp painted recipes in kingdom/stream/observed/self walkers and
-card painter. Six stable presence look IDs, render-local shoulders±4, two thin cloth capes; no shared rig
-change. Live card/panel portrait delivery still needs host binding. Goggled deep-skin eyes need contrast;
-ankle joins need a motion look. Reference/spec49/PRD81eab8f; A/B/C rejected.95e403b stages32 late
-SIMULATED neighbours at16–23.75s; first Juniper/live timings unchanged. `road-homecoming-pair.png`
-viewed at19.5/time25:104→115 walking/240 supplied. Everyday market experiment rejected/reverted:
-`market-visitors-pair.png` at70s had no clear gain; roofs screen the square. Next road-life pass must read
-on open foreground routes. Never fake live traffic or replace actual observations with rehearsal data.
+**Team:** prior maind29f742; prior merges7b56cb3 card sharing and f62bc9f aurora. Fresh narrow
+scan found no runtime checkpoint on picture-land/trees, effects, avatar, card/passport, Genesis,
+raid-road or sky, including all Genesis content and passport branches. Raid-road8543a25 only registers scope; code already on main. Sky’s wiring
+patch is not proof of live cheer hookup. Genesis, card/passport, raid journey and sky stay with
+the team. Pinkkitty keeper/sound/doorway mounts remain producer seams.
 
-**Picture carried:**975af2f/44de84b sculpted land consistent across render/light/contact/collision;
-9f843d7 ridge haze. Keep layout43cffdb6; kingdom-land6f60ae2 is parked v2. Forge64efb0f16 present
-spectators still left-heavy; pour02c3494/cameraf0112c6 stay. Market be6ab51 cart/wares. Effects d535804
-flight now mounted (above); other emitters remain unmounted. Accepted home smoke stays. Harbour a6fcf9a
-potential `/kingdom/63920635` seat needs real royal glass anchor before live adoption. River/mountain
-seats remain. Keepers7eff5d8/sound1ed6865 additive/unmounted; emote40aeb18 glass clips. Some passport/
-gate/moments/Atlas host bindings absent. City stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a stays.
-
-**Operations:**managed5190web/5196API/5197realm/5195Forge/5194herald; affected-code restarts only,
-all on.env. Latest grove reload was delayed, then adopted normally. Logs ONLY `../conductor/state/services.log`.
-No journals/other services. Captures serial, hard deadlines/finally; no open observer waiting for chat.
-For warmed behaviour views use640×360 HIGH,≤1s seeks, then1920 and settle; separate browsers avoid
-software-renderer accumulation. Do not repeat ineffective far-lantern HDR/scale/halo or idle retunes,
-or44m approaches that lost34 warm homes for3 visible walkers. Presence leases7c71b38, lantern fadesbc9a54c.
+**Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
+`../conductor/state/services.log`; own processes only; capture ports via capture-ports.mjs.
+No observer waiting for real chat. Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a
+and parked land6f60ae2. No software-renderer timing claims; no doc-only commits.

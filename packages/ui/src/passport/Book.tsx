@@ -30,6 +30,8 @@ export interface PassportBookProps {
    * raid's road name where it began; the book's own records still name every kingdom they carry.
    */
   readonly places?: ReadonlyMap<string, string>;
+  /** Told after every turn the reader makes, with the direction and the view turned to (0 is the closed cover). */
+  readonly onTurn?: (turn: { readonly dir: 'next' | 'prev'; readonly view: number }) => void;
   readonly class?: string;
 }
 
@@ -69,8 +71,10 @@ export function PassportBook(props: PassportBookProps): JSX.Element {
   const go = (target: number) => {
     const clamped = Math.max(0, Math.min(views().length - 1, target));
     if (clamped === at()) return;
-    setTurn({ dir: clamped > at() ? 'next' : 'prev', n: (turn()?.n ?? 0) + 1 });
+    const dir = clamped > at() ? 'next' : 'prev';
+    setTurn({ dir, n: (turn()?.n ?? 0) + 1 });
     setView(clamped);
+    props.onTurn?.({ dir, view: clamped });
   };
   const onKey = (event: KeyboardEvent) => {
     if (event.altKey || event.ctrlKey || event.metaKey) return;

@@ -34,7 +34,7 @@
 .cfg-slot i { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 38% 32%, #fbe6b3, #c69a5c 55%, #6a4c2b); box-shadow: 0 1px 2px #000a, inset 0 -1px 0 #5a3d1f; transition: transform .18s cubic-bezier(.3, .7, .4, 1); }
 .cfg-lever[aria-checked='true'] .cfg-slot { background: linear-gradient(#5a3418, #b8742e); box-shadow: inset 0 1px 3px #000a, inset 0 0 8px #ffb35a66, 0 1px 0 #fff3d488; }
 .cfg-lever[aria-checked='true'] .cfg-slot i { transform: translateX(20px); }
-.cfg-lever-words { font: 400 11px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .07em; }
+.cfg-lever-words { font: 400 12px/1 'IM Fell English SC', Georgia, serif; letter-spacing: .07em; }
 .cfg-lever[aria-checked='true'] .cfg-lever-words { color: #2e1e13; }
 .cfg-lever:active .cfg-slot i { filter: brightness(.92); }
 .cfg-lever:disabled { cursor: default; opacity: .45; }
