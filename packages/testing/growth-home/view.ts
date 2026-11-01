@@ -1,0 +1,11 @@
+import { createKingdomScene } from '../../../apps/web/src/kingdom/scene';
+const data = await (await fetch('/fixture.json')).json();
+const side = new URLSearchParams(location.search).get('side') === 'after' ? 'after' : 'before';
+const plot = data.plot;
+const scene = await createKingdomScene(document.querySelector('canvas')!, { founded:data[side], seed:'willowmere', tier:'hamlet', hour:19.5, time:30, camera:'hero', source:'simulated', onProgress:()=>{}, onNames:()=>{}, onSource:()=>{}, onError:(e)=>{throw Error(e)} });
+const [x,y,z] = plot.position;
+const direction = plot.rotation === 0 ? 1 : -1;
+scene.pose([x+16,y+12,z+direction*28],[x,y+3,z],38);
+const captureWindow = window as typeof window & { __scene: typeof scene & { stats: typeof scene.debug }; __chatdomReady: boolean };
+captureWindow.__scene = { ...scene, stats: scene.debug };
+captureWindow.__chatdomReady = true;

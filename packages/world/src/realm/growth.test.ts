@@ -54,7 +54,6 @@ it('commits witnessed growth with its source fact, counts quiet citizens once, a
     expect(growth?.frame.homes[0]?.qualifiedDays).toBe(day);
     if (day === 7) {
       expect(growth?.frame.beats).toEqual([
-        { kind: 'home-grown', sourceSeq: crossing.fact.seq, at: crossing.fact.committedAt, plotId: home.id, from: 'hut', to: 'cottage', qualifiedDays: 7 },
         { kind: 'streak-reached', sourceSeq: crossing.fact.seq, at: crossing.fact.committedAt, plotId: home.id, days: 7 },
         { kind: 'civic-levelled', sourceSeq: crossing.fact.seq, at: crossing.fact.committedAt, place: 'tavern', from: 1, to: 2 },
       ]);

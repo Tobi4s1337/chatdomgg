@@ -350,17 +350,23 @@ restore quietly; only new delivered beats celebrate. Typecheck/scoped lint/Realm
 core/ingress/outbox19, binding/feed3 and existing browser23 tests pass. Two real Postgres cases pass: growth
 retry/recovery/legacy replay and global three-home allocation. Newly added SQL in Vitest needs
 `--no-fsModuleCache` (its persistent transformed glob cached the old migration list); migration0009 is additive.
-**Next main slice:** apply earned native-home geometry/asset revisions, preserve custom builds/Forge,
-and mount the lane's ceremony; no enlarged house or watched Chronicle claimed yet. Follow-tenure pieces,
-earned channel-point/keepsake ledger and historical world/replay binding remain next consumer seams.
+**Native geometry170e73d:** retained writer reconciles earned stages with no browser; exact native
+bytes only, never custom builds. The fenced deed guard replans source/target and refits every Forge part;
+identity/provenance remain. Active Forge reservations postpone growth until release/expiry. Idle state skips
+SQL/planning. `home-grown` is now a geometry-commit beat; qualification alone cannot announce a housewarming.
+Root viewed native1920×1080 before/after and pair in `work/evidence/growth-home/`: the rear wing is obvious,
+front door stable. Staged SIMULATED founded-renderer images, NOT live stream delivery or a ceremony.
+Typecheck/scoped lint/Realm build and focused native/realm/binding tests pass. Capture run finished/cleaned.
+**Next main slice:** mount the producer's scaffold/storey/chimney/neighbours ceremony and smooth the asset
+handoff; inspect the actual stream path. New deeds still inherit standing native tiers: starter/tent policy
+must be applied for new claims without reducing existing homes. Follow-tenure pieces, custom-build depth,
+earned channel-point/keepsake ledger and historical world/replay binding remain consumer seams.
 Specs51–55 cover civic craft, earned card shelf, crier, Chronicle and seeded history; each owns its folder.
 Existing `growth` lane owns home ceremony/growing quarter; no runtime checkpoint delivered yet.
 Brief0034 is in the conductor briefs; requested old depth-progression document absent from this repo.
 
-**Recent merges:** growth PRD1207db1, raid-road unnamed-holding fix87b79a8, Aggman harbour
-strandf027d66/1e33a90. Focused22tests, typecheck/scoped lint/web build pass. Root viewed native
-`work/evidence/genesis-aggman/after-hero@1920x1080.png` and `before-after-shingle.png`.
-Shingle connects shore; still too regular/cobbled. Follow-up in lane progress; berth-margin WIP untouched.
+**Recent merges:** growth PRD1207db1, raid-road87b79a8, Aggman harbourf027d66/1e33a90.
+Viewed harbour pair; shingle still too regular/cobbled, follow-up with lane; berth-margin WIP untouched.
 
 **Real services confirmed:** Herald5194 healthy, all13 EventSub subscriptions enabled, including
 bits.use and three v2 hype events; source LIVE, channel currently offline. Realm5197 ready200;
@@ -369,8 +375,8 @@ Main115bf29 fixes minute grant refresh; a14221c regression covers consent added 
 No actual new cheer/hype event observed, and no real-event picture claimed.
 Live-Twitch2cdb14d connects Herald→durable ingress→moment/dragon clock→stream; isolated signed-fixture
 HTTP rehearsal proved16speakers/16homes/windows,17th4735ms. Twitch CLI exits99: fixtures are NOT CLI proof.
-Native additive binding9b1c4f8 reuses scene (claims3702/3424/2927ms→6/1/2ms); cold/end-to-end speedup
-not measured. Adopted plan240plots, not unlimited. Owned smoke schema `main_live_smoke_20261101` remains;
+Native additive binding9b1c4f8 reuses scenes; cold/end-to-end latency still weak. Adopted plan240plots.
+Owned smoke schema `main_live_smoke_20261101` remains;
 owned5172/5173 stopped. c0a0a14 publishes allocated homes and fenced/idempotent legacy outbox recovery;
 focused units and3realPostgres cases pass. Its owned17-home restart/entry200 still needs a check.
 

@@ -86,3 +86,8 @@ The ceremony is scaffolding, a settling storey, a catching chimney and neighbour
   expose `growthFeed`; `SceneOptions.growthFeed` carries it to the visual consumer. Bootstrap beats are quiet.
   Physical home upgrades, ceremonies, civic meshes and Chronicle playback still require their rendering/application
   work; the entitlement alone must never be presented as an already enlarged house.
+- 2026-11-01: Native host upgrades now use allocation-only `home.growNative` on the retained room writer.
+  The transaction guard regenerates exact source/target native bytes from the installed deed and refits every
+  attached part; custom houses are preserved. Active Forge reservations hold growth until release/expiry.
+  Public `home-grown` now follows the actual geometry commit, not eligibility. `GrowthHomeView.stage` remains
+  an entitlement: consumers must use published home geometry for the built house, including in the Chronicle.

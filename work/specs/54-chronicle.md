@@ -45,6 +45,8 @@ No owned world scene edits, paid unlocks, production deployment, fake live data,
 
 ## Decisions
 
+- **2026-11-01 — Entitlement and construction.** `GrowthHomeView.stage` is earned capacity. Reconstruct the built home from published home geometry/asset revisions; a public `home-grown` beat now marks that actual commit. A qualification snapshot alone must not turn an eligible tier into an already constructed house.
+
 - **2026-11-01 — Read seam first.** Main owns production authority and binding; this lane may build and demonstrate its complete consumer against an explicitly simulated adapter while the required integration contract is absent.
 
 - **2026-11-01 — Integration checkpoint.** Produce a small green checkpoint early. Main merges it before the whole part is finished. Validate feed origin against its LIVE/SIMULATED label; never replay a recent tail as fresh live credit. One focused test for the changed behaviour; capture only the view being judged.

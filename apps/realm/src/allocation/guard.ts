@@ -1,6 +1,7 @@
 import { canonicalJson } from '../persistence/codec';
 import { HomeTierSchema } from '@chatdom/shared';
 import type { RealmCommitGuard } from '../persistence/postgres-repository';
+import { verifyNativeGrowth } from '../growth';
 
 const RECEIPT = /^deed:[a-f0-9]{64}$/;
 
@@ -11,6 +12,7 @@ const RECEIPT = /^deed:[a-f0-9]{64}$/;
  * Lock order: the writer already holds its kingdom row; this takes the one deed row.
  */
 export const verifyAllocation: RealmCommitGuard = async (tx, fact, prior) => {
+  if (fact.body.type === 'home.growNative') return verifyNativeGrowth(tx, fact, prior);
   if (fact.body.type === 'growth.bindHome') {
     const command = fact.body, home = prior.homes[command.homeId];
     if (!home || command.evidenceReceipt !== home.allocationReceipt || !RECEIPT.test(command.evidenceReceipt)) return 'conflict';
