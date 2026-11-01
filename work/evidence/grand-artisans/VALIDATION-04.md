@@ -37,3 +37,14 @@ Both were last confirmed queued under the canonical scheduler; keep/poll them.
 Candidate-review-03.json identifies the frozen disposable source, which MUST NOT be
 recreated while22597 is live. Its web build passed. It is an independent SIMULATED
 land renderer, not a hosted native kingdom.
+
+## Later looked checkpoint713a05b
+
+Final94 lane tests in14 files, TypeScript, scoped lint and web build all pass; see
+REVIEW-05.md and *review-05.txt logs. Corrected bank8 and four final geography heroes
+were looked at. The follow-up actual harbour22597 reached ready but its120s screenshot
+readback timed out. It showed25 regions /24L0+1L1,1.80M resident quads and6.83M pass
+triangles at1.296M pixels. A capture-only RAF-freeze experiment13399 ended143, no pixels;
+it was removed after source inspection showed software mode is already on-demand.
+No current actual-candidate capture remains live and no new actual-land acceptance is
+claimed. The next complete fixed bench queue45448 uses the immutable713 snapshot.

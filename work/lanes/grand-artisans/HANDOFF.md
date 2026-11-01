@@ -1,3 +1,50 @@
+# Current handoff — looked checkpoint713a05b
+
+All current world/app kit source is committed and checked. Latest source713a05b retains
+cherry staggered boughs, exact-root-supported willow bank study and four differing
+curved macro compositions. Root looked all new geography heroes and bank8 desktop/phone
+views; cherry4 are looked and byte-identical across review04/05. REVIEW-05.md is the
+current judgement: useful retained directions, not final whole-land/hosted acceptance.
+94 lane tests, repository typecheck, scoped ESLint and web build pass. Three node
+capture/process-ownership regressions pass. Main-owned lint and partial broad failures
+remain exact recorded needs; do not claim pnpm verify green. GA10 remains UNCHECKED.
+
+LIVE PARENT CAPTURE45448 runs review-fixed.json (208 cases) from immutable
+/tmp/grand-artisans-review-713a05b to shots/grand-artisans/fixed-713a05b. One still per
+normal canonical lease; source/image manifests make it resumable. Poll this handle.
+Do NOT edit/delete that snapshot. Its copied review/model/content/config source is at
+713a05b; node_modules are symlinked, pnpm lockfile is copied. fixed-review-snapshot.json
+records it. This frozen bench can continue while source kits are improved elsewhere.
+Never treat a child/parent missing handle as still live. Never touch foreign services,
+locks, registries or processes. No compatibility env now; main's scheduler is repaired.
+
+TERMINAL:10372 exit0, all16 review05 cases captured and looked.22597 actual harbour
+reached ready, then screenshot120s timeout, exit1; it reported25 regions,24 atL0,1 atL1,
+1.80M resident quads,6.83M triangles across passes,1.296M pixels. These are software
+diagnostics, NOT FPS.13399 tried a capture-only RAF freeze after ready and ended143
+without pixels. Source inspection shows software engine is already on-demand; that
+hypothesis was unhelpful and its unproven injection was removed before this handoff.
+Do not repeat these readback attempts without a concrete renderer/readback change.
+The previous actual accepted still is still the75bfdb5 labelled harbour evidence, not
+a new acceptance of current whole land. Actual moving/native proof is missing.
+
+No current actual-candidate capture remains live. /tmp/grand-artisans-candidate-review-03
+is frozen older713-precomposition source from d454 + range, fingerprinted in its
+manifest; it may be recreated under a NEW name when needed. Old /tmp/grand-artisans-
+candidate is75bfdb5. All source workers are idle; no pending production changes from
+children. Two pre-sync recovery stashes remain, intentionally not dropped.
+
+Next Ralph turn: sync newer main after checking status (normal merge main; only owned
+conflicts), keep45448 polling; personally judge newly arriving fixed views. Main has
+newer merges than our d175db5 sync, including old artisan checkpoint43a9a93. Continue
+actual producer needs and visual misses: far cliff cuts in macro studies, smaller phone
+bank detail, real terrain shore access, all fixed views and moving production LOD/shadow
+review. Native producer/host still belongs to builder/main; adoption-current-seam.md
+and exact producer patches remain the handoff, never an excuse to replace identities.
+GA10/whole native landscapes are still open; do not tick or write LANE COMPLETE.
+
+---
+
 # Latest state after range checkpoint dea2a0a
 
 Committed source: d454d03 (five species/crops/approaches/supports/AABB cache), d07eb1c

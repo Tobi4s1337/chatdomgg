@@ -1,0 +1,1170 @@
+[
+  {
+    "kit": "tree",
+    "species": "gold",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "gold",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "gold",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "gold",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "gold",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "gold",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "gold",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "gold",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "pine",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "pine",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "pine",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "pine",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "pine",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "pine",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "pine",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "pine",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "teal",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "teal",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "teal",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "teal",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "teal",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "teal",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "teal",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "teal",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "birch",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "willow",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "willow",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "willow",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "willow",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "willow",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "willow",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "tree",
+    "species": "willow",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "tree",
+    "species": "willow",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "gold",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "gold",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "gold",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "gold",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "gold",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "gold",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "gold",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "gold",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "pine",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "pine",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "pine",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "pine",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "pine",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "pine",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "pine",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "pine",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "cherry",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "cherry",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "cherry",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "cherry",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "cherry",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "cherry",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "cherry",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "cherry",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "teal",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "teal",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "teal",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "teal",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "teal",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "teal",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "teal",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "teal",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "birch",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "birch",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "birch",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "birch",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "birch",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "birch",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "birch",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "birch",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "willow",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "willow",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "willow",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "willow",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "willow",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "willow",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "forest",
+    "species": "willow",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "forest",
+    "species": "willow",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "geology",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "geology",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "geology",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "geology",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "geology",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "geology",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "geology",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "geology",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "water",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "water",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "water",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "water",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "water",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "water",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "water",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "water",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "fields",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "fields",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "fields",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "fields",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "fields",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "fields",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "fields",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "fields",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "windmill",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "windmill",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "windmill",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "windmill",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "windmill",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "windmill",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "windmill",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "windmill",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "ship",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "ship",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "ship",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "ship",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "ship",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "ship",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "ship",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "ship",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "lighthouse",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "harbour",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "harbour",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "harbour",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "harbour",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "harbour",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "harbour",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "harbour",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "harbour",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "citadel",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "citadel",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "citadel",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "citadel",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "citadel",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "citadel",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "citadel",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "citadel",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "walls",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "walls",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "walls",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "walls",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "walls",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "walls",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "walls",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "walls",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "willow-bank",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "willow-bank",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "willow-bank",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "willow-bank",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "willow-bank",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "willow-bank",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "willow-bank",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "willow-bank",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "tobi4s_",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "tobi4s_",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "tobi4s_",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "tobi4s_",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "tobi4s_",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "tobi4s_",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "tobi4s_",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "tobi4s_",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose",
+    "view": "dusk",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4",
+    "view": "hero",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4",
+    "view": "hero",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4",
+    "view": "street",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4",
+    "view": "street",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4",
+    "view": "coast",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4",
+    "view": "coast",
+    "size": "390x844"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4",
+    "view": "dusk",
+    "size": "1440x900"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4",
+    "view": "dusk",
+    "size": "390x844"
+  }
+]
