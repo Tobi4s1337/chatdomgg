@@ -1,5 +1,23 @@
 # DK10 checkpoint verification
 
+## Checkpoint revalidation — 2026-11-01
+
+The preceding goal turn made progress: merge `286df74`, final checks and checkpoint
+`f9765e6`. This is the first subsequent unchanged-blocker audit, not another feature task.
+`main` remains `76ed4a5`; `HEAD..main` contains zero commits, and `f9765e6` is not an
+ancestor of main. The worktree was clean before this audit.
+
+`pnpm exec eslint scripts/public/look.mjs` terminated with exit 1 and reproduced the two
+recorded undefined globals. Source inspection confirms realm status still requires the
+kingdom's broadcaster identity; the renderer's `begin()` rejects undo through its default
+branch. No watched action clips exist under this lane's evidence directory. The recorded
+end state is therefore incomplete, even though the dock's own checks passed.
+
+No capture or service was started, and no passing checks were repeated. The lint process
+is terminal. Main owns the missing authority/presentation behavior and integration of the
+checkpoint. Stay within the user's checkpoint scope; keep DK10 unticked and the goal active
+pending an external change. This is not a verified wait on a running job.
+
 ## Current checkpoint — 2026-11-01
 
 Dock UI/API implementation and nine individually captured, inspected SIMULATED UI stills
