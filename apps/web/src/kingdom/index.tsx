@@ -1,3 +1,4 @@
+import { createDockConnection } from '../stream/dock-connection';
 import { createSignal, For, Index, onCleanup, onMount, Show } from 'solid-js';
 import { createKingdomScene, type CameraName, type NameLabel, type PotentialKingdomView } from './scene';
 import type { RealmFoundedScene } from '@chatdom/world';
@@ -37,6 +38,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
   let canvas!:HTMLCanvasElement,engine:Awaited<ReturnType<typeof createKingdomScene>>|undefined,unmounted=false,openingFrame=0;
   const [buildSession,setBuildSession]=createSignal<KingdomBuildSession|null>(null),[housewarming,setHousewarming]=createSignal<string|null>(null);
   const construction=new AbortController();
+  const dock=props.founded?.origin==='live'?createDockConnection(props.founded.kingdomId):undefined;
   let unsubscribeChat:(()=>void)|undefined;
   const [forgeStatus,setForgeStatus]=createSignal<ForgeStatus|null>(null);
   const [anvilVisit,setAnvilVisit]=createSignal<{leave:()=>void}|null>(null);
@@ -74,7 +76,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
     const testWindow=window as Window & {__chatdomReady?:boolean;__chatdomKingdom?:unknown};
     testWindow.__chatdomReady=false;
     document.body.classList.add('kingdom-page');
-    void createKingdomScene(canvas,{...(props.potential?{potential:props.potential,nativeStyle:props.potential.style}:{}),...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.growthFeed?{growthFeed:props.growthFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:props.potential?.plan.config.seed??query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(!props.potential&&(realm==='hearth'||realm==='grove')?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
+    void createKingdomScene(canvas,{...(dock?{dockFeed:dock}:{}),...(props.potential?{potential:props.potential,nativeStyle:props.potential.style}:{}),...(props.founded?{founded:props.founded}:{}),...(props.presenceFeed?{presenceFeed:props.presenceFeed}:{}),...(props.growthFeed?{growthFeed:props.growthFeed}:{}),...(props.forgeFeed?{forgeFeed:props.forgeFeed}:{}),...(props.momentFeed?{momentFeed:props.momentFeed}:{}),...(props.walkerFeed?{walkerFeed:props.walkerFeed}:{}),onWalkers:setWalkers,signal:construction.signal,tier,...presentation,seed:props.potential?.plan.config.seed??query.get('seed')??realmName.toLowerCase(),realmName,forgeFamily:realmFamily,...(!props.potential&&(realm==='hearth'||realm==='grove')?{nativeStyle:realmFamily}:{}),hour:initialHour,time:initialTime,camera:view(),source:query.get('source')==='herald'?'herald':'simulated',presenceOrigin:query.get('presenceOrigin')==='simulated'?'simulated':'live',
       onForge:setForgeStatus,onReady:()=>{if(!unmounted&&!error()){testWindow.__chatdomReady=true;setReady(true);}},onProgress:(text,fraction)=>{setPhase(text);setProgress(fraction);},onNames:setNames,onSpeech:setSpeech,onMomentCaptions:setMomentCaptions,onBuild:setBuildSession,onHousewarming:setHousewarming,onSource:setSource,onError:message=>{setError(message||'The kingdom renderer did not give a reason.');setReady(false);(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;},
     }).then(instance=>{
       if(unmounted){instance.dispose();return;}engine=instance;
@@ -98,7 +100,7 @@ export default function Kingdom(props:{potential?:PotentialKingdomView;founded?:
       if(!props.founded&&!props.potential&&query.get('forge')==='1')instance.forge.open();
     }).catch(cause=>{console.error('Kingdom construction failed',cause);if(!unmounted)setError(`Could not draw the kingdom: ${realmEntryFailureMessage(cause)}`);});
   });
-  onCleanup(()=>{unmounted=true;document.removeEventListener('keydown',unlockWithWalk);cancelAnimationFrame(openingFrame);construction.abort();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
+  onCleanup(()=>{unmounted=true;document.removeEventListener('keydown',unlockWithWalk);cancelAnimationFrame(openingFrame);construction.abort();dock?.dispose();unsubscribeChat?.();unsubscribeChat=undefined;engine?.dispose();delete window.__chatdomWalk;(window as Window & {__chatdomReady?:boolean}).__chatdomReady=false;document.body.classList.remove('kingdom-page');});
   function tap(action:()=>void){if(!engine)return;if(!sound())unlockSound();action();}
   function chooseHour(value:number){setHour(value);tap(()=>engine!.setHour(value));}
   function chooseView(value:CameraName){setWalking(false);setView(value);tap(()=>engine!.setCamera(value));}
