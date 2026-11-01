@@ -40,7 +40,8 @@ describe('Chronicle replay', () => {
     expect(() => replay.load({ label: 'LIVE', snapshots: [snapshot(1, 'a')] })).toThrow(/provenance/);
     expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
     expect(() => replay.load({ label: 'SIMULATED', snapshots: [snapshot(2, 'b'), snapshot(1, 'a')] })).toThrow(/ordered/);
-    replay.load({ label: 'SIMULATED', snapshots: [] }); expect(replay.state().status).toBe('empty');
-    replay.load(null); expect(replay.state().status).toBe('unavailable'); expect(binding.clear).toHaveBeenCalledTimes(4);
+    replay.load({ label: 'SIMULATED', snapshots: [] }); expect(replay.state()).toEqual({ status: 'empty', label: 'SIMULATED', playing: false });
+    replay.load({ label: 'LIVE', snapshots: [] }); expect(replay.state()).toEqual({ status: 'empty', label: 'LIVE', playing: false });
+    replay.load(null); expect(replay.state().status).toBe('unavailable'); expect(binding.clear).toHaveBeenCalledTimes(5);
   });
 });

@@ -89,8 +89,10 @@ async function accessibility(browser, base, width, height) {
     assert(await page.getByText('There are no recorded nights to read yet.').isVisible(), 'Empty history state is missing');
     assert(await page.getByText('SIMULATED', { exact: false }).isVisible(), 'Empty simulated history lost its label');
     assert(await page.getByRole('button', { name: 'Play', exact: true }).isDisabled(), 'Empty history allowed playback');
+    assert(await slider.getAttribute('aria-valuetext') === null && await slider.inputValue() === '0', 'Empty history retained a stale accessible night');
     await page.evaluate(() => window.__chronicle.load(null));
     assert(await page.getByText('The Chronicle is unavailable right now.').isVisible(), 'Unavailable history state is missing');
+    assert(await slider.getAttribute('aria-valuetext') === null, 'Unavailable history retained a stale accessible night');
     await page.evaluate(() => window.__chronicle.load(window.__chronicleHistory));
     await slider.focus(); await page.keyboard.press('Escape');
     assert(await page.getByText('The Chronicle is closed.').isVisible(), 'Escape did not close the Chronicle');

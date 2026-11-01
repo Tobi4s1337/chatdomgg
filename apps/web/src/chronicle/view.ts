@@ -7,6 +7,8 @@ export interface ChronicleViewOptions {
   readonly history: History | null;
   readonly onClose: () => void;
   readonly simulationNote?: string;
+  /** Provenance of any host scene still visible when history is unavailable. */
+  readonly presentationLabel?: History['label'];
   /** Host UI sound, shared with the rest of the kingdom. */
   readonly sound: (action: 'seek' | 'play' | 'close') => void;
 }
@@ -33,8 +35,12 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
   const describeDate = (at: number) => new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(at);
   const show = (state: ReplayState) => {
     if (state.status !== 'ready') {
-      stopClock(); origin.textContent = options.history?.label === 'SIMULATED' ? 'SIMULATED · A local history' : '';
-      note.textContent = options.history?.label === 'SIMULATED' ? options.simulationNote ?? '' : ''; date.textContent = '';
+      stopClock();
+      const simulatedHistory = state.status === 'empty' && state.label === 'SIMULATED';
+      const simulatedScene = options.presentationLabel === 'SIMULATED';
+      origin.textContent = simulatedHistory ? 'SIMULATED · A local history' : simulatedScene ? 'SIMULATED · Scene' : '';
+      note.textContent = simulatedHistory || simulatedScene ? options.simulationNote ?? '' : ''; date.textContent = '';
+      seek.value = '0'; seek.max = '0'; seek.removeAttribute('aria-valuetext');
       caption.textContent = state.status === 'empty' ? 'There are no recorded nights to read yet.' : 'The Chronicle is unavailable right now.';
       status.textContent = state.status === 'empty' ? 'No recorded nights' : 'History unavailable';
       play.disabled = true; seek.disabled = true; play.textContent = 'Play'; return;

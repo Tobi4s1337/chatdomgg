@@ -23,7 +23,8 @@ export interface ReplayBinding {
 }
 
 export type ReplayState =
-  | { readonly status: 'unavailable' | 'empty'; readonly playing: false }
+  | { readonly status: 'unavailable'; readonly playing: false }
+  | { readonly status: 'empty'; readonly label: History['label']; readonly playing: false }
   | { readonly status: 'ready'; readonly label: History['label']; readonly index: number; readonly count: number;
       readonly snapshot: HistoricalSnapshot; readonly playing: boolean };
 
@@ -47,7 +48,7 @@ export function createReplay(binding: ReplayBinding, onChange: (state: ReplaySta
   const assertOpen = () => { if (disposed) throw new Error('Chronicle is closed.'); };
   const state = (): ReplayState => history ? history.snapshots.length
     ? { status: 'ready', label: history.label, index, count: history.snapshots.length, snapshot: history.snapshots[index]!, playing }
-    : { status: 'empty', playing: false } : { status: 'unavailable', playing: false };
+    : { status: 'empty', label: history.label, playing: false } : { status: 'unavailable', playing: false };
   const emit = () => onChange(state());
   const apply = (snapshot: HistoricalSnapshot) => {
     try { binding.replace(snapshot); } catch (error) {
