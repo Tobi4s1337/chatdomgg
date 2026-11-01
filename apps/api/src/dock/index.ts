@@ -1,3 +1,4 @@
+import { dockRealmAddress, handleDockPresentation } from './presentation';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Pool } from 'pg';
 import type { RealmAuthConfig } from '../realm-auth/config';
@@ -20,11 +21,8 @@ function statusBase(config: RealmAuthConfig, status: string, message: string) {
   return { version: 1, status, mode: config.mode === 'live' ? 'LIVE' : 'SIMULATED', message, signInUrl: SIGN_IN };
 }
 function bridge(config: RealmAuthConfig): DockBackend | null {
-  const address = process.env.DOCK_REALM_URL;
-  if (!address || !config.internalSecret) return null;
-  let base: URL;
-  try { base = new URL(address); } catch { return null; }
-  if (base.username || base.password || base.search || base.hash || (base.protocol !== 'https:' && !(base.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname)))) return null;
+  const base = dockRealmAddress();
+  if (!base || !config.internalSecret) return null;
   const call = async (path: string, body: unknown) => {
     const url = new URL(path, base);
     const response = await fetch(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000), headers: { 'content-type': 'application/json', authorization: `Bearer ${config.internalSecret}` }, body: JSON.stringify(body) });
@@ -59,6 +57,7 @@ async function body(req: IncomingMessage): Promise<unknown> {
 }
 /** Returns false for routes outside the dock. */
 export async function handleDock(req: IncomingMessage, res: ServerResponse, options: Options): Promise<boolean> {
+  if (await handleDockPresentation(req, res, options)) return true;
   const url = new URL(req.url ?? '/', 'http://api.invalid');
   if (url.pathname !== '/api/dock/status' && url.pathname !== '/api/dock/actions') return false;
   const { config, pool } = options;

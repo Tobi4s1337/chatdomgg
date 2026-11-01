@@ -178,3 +178,31 @@ app and keep `/api/**` on the existing API. The API mount is the one added line 
 owned Unix socket and intercepted browser requests because the permitted TCP capture ports
 were occupied. It releases the shared capture lock between individual captures. No services
 on 5190–5199 were touched. Production routing/deployment is main's responsibility.
+
+## Main boundary supplied — 2026-11-01
+
+`@chatdom/shared/realm` now owns `DockActionSchema`, `DockStateSchema`, `DockOutcomeSchema`,
+`RealmDockStatusRequestSchema`, `RealmDockActionRequestSchema`, `RealmDockPresentationSchema`,
+`RealmDockStageStateSchema` and `RealmDockWitnessRequestSchema`. The API file re-exports them.
+`apps/realm/src/dock/` implements the retained-writer command/status service and the private
+`/internal/dock/{status,action,witness}` routes plus `/internal/dock/presentations/:kingdomId`.
+Migration `0010_realm_dock` stores heads, idempotent presses and presentation receipts. No second writer.
+
+The same-origin web build serves `/dock` and `/dock/`; no extra hosting service is needed.
+`DOCK_REALM_URL` remains an explicit override; otherwise the API uses root `CHATDOM_REALM_TARGET`.
+The existing `REALM_INTERNAL_SECRET` authenticates the API bridge. Workspace frozen install includes the dock.
+
+The live stream consumes `/api/dock/presentations?kingdom=<id>`. Public OBS viewers display committed
+acts and quiet lasting-state checkpoints. A broadcaster-signed-in stream receives a per-connection
+presentation capability; only its actual visible draw can POST `/api/dock/witness` with session CSRF.
+The realm rechecks that session, origin, capability and exact delivered event. No presenter means
+`unknown`, never fabricated success. Keep the stream view signed in while demonstrating receipts;
+an anonymous OBS source alone cannot confirm them. Source SIMULATED rehearsals must stay labelled.
+
+Scene ports live in `kingdom/dock-acts.ts`, `dock-visuals.ts` and `stream/dock-presenter.ts`; main mounts
+supported gate/plaza sites, real public citizen slots, crowd/light/camera effects and quiet checkpoint
+restoration. Hidden replacements cannot witness. A missing target/site yields no receipt. The eligible
+moment currently offered is the harmless dusk change; no unearned dragon or arbitrary Forge showcase.
+Moderator observation still requires an independently verified moderator-ID source. Undo state restores,
+but its directed visual receipt remains unavailable until the restored subject is identified. These are
+remaining integration needs, not permission to invent targets, authority or a success reply.
