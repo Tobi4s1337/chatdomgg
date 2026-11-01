@@ -2,3 +2,5 @@ export { RealmPanelService, panelPledgeBand, type RealmPanelOptions, type PanelD
 export { mountRealmPanelRoutes, REALM_PANEL_ROUTES } from './http';
 
 export { personPrivacy, setPersonQuiet, forgetPerson, type RealmForgetAuthority } from './privacy';
+
+export { RealmPanelGifts } from './gifts';

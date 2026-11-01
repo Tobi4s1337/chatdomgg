@@ -6,6 +6,7 @@ import { extensionKey } from '../public/panel/token';
 import { createTwitchUsers, type TwitchUsers } from '../public/panel/twitch-users';
 import { verifyViewerToken } from './token';
 import { PanelPictures, validWebp } from './pictures';
+import { createPanelGifts, type PanelGiftRoute } from './gifts';
 
 interface PanelServices {
   realmOrigin: string;
@@ -14,6 +15,7 @@ interface PanelServices {
   pictures: PanelPictures;
   users: TwitchUsers;
   fetch?: typeof fetch;
+  gifts?: ReturnType<typeof createPanelGifts>;
 }
 const PREFIX = '/api/panel/v1/';
 const ID = /^[1-9][0-9]{0,31}$/;
@@ -42,7 +44,21 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
     if (!response.ok) throw new Error('realm unavailable');
     return response.json() as Promise<Record<string, unknown>>;
   };
-  return async (request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void> => {
+  const gifts = services.gifts ?? createPanelGifts({ extensionId: options.extension?.clientId ?? '', extensionSecret: options.extension?.secret ?? '',
+    ...(env.TWITCH_EXTENSION_CLIENT_SECRET ? { extensionClientSecret: env.TWITCH_EXTENSION_CLIENT_SECRET } : {}),
+    ...(env.PANEL_BITS_EVENTSUB_SECRET ? { webhookSecret: env.PANEL_BITS_EVENTSUB_SECRET } : {}), realm });
+  // Supplied services are an explicitly owned test/embedding composition; the production door owns its worker.
+  const stopGifts = supplied ? () => {} : gifts.startReconciliation();
+  const handler = async (request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void> => {
+    if (pathname === `${PREFIX}bits-webhook`) {
+      if (request.method !== 'POST' || request.headers.origin) { response.writeHead(403, HEADERS).end(); return; }
+      const chunks: Buffer[] = []; let size = 0;
+      for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 64 * 1024) { response.writeHead(413, HEADERS).end(); return; } chunks.push(chunk); }
+      const headers = Object.fromEntries(Object.entries(request.headers).map(([name, value]) => [name, typeof value === 'string' ? value : undefined]));
+      const answer = await gifts.webhook(Buffer.concat(chunks), headers);
+      response.writeHead(answer.http, { ...HEADERS, 'content-type': answer.contentType === 'text/plain' ? 'text/plain; charset=utf-8' : HEADERS['content-type'] })
+        .end(answer.contentType === 'text/plain' ? String(answer.body) : JSON.stringify(answer.body)); return;
+    }
     if ([`${PREFIX}reading`, `${PREFIX}passport`].includes(pathname)) {
       if (key && request.method !== 'OPTIONS') { try { await verifyViewerToken(request.headers.authorization ?? null, key); } catch { response.writeHead(401, HEADERS).end(JSON.stringify({ version: 1, status: 'unauthenticated' })); return; } }
       return reader(request, response, pathname);
@@ -69,12 +85,21 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
       return;
     }
     if (typeof origin === 'string' && !allowed.has(origin)) { send(403, { version: 1, status: 'refused' }); return; }
-    if (!['kingdom', 'light', 'presence', 'pledge', 'picture', 'privacy', 'quiet', 'forget'].some(name => pathname === PREFIX + name)) { send(404, { status: 'refused' }); return; }
+    const giftRoute = (['gifts', 'gift-intent', 'gift-receipt', 'gift-status', 'gift-cancel', 'gift-resolve', 'gift-choices'] as const).find(name => pathname === PREFIX + name);
+    if (!giftRoute && !['kingdom', 'light', 'presence', 'pledge', 'picture', 'privacy', 'quiet', 'forget'].some(name => pathname === PREFIX + name)) { send(404, { status: 'refused' }); return; }
     if (request.method !== (pathname === `${PREFIX}picture` ? 'GET' : 'POST')) { send(405, { status: 'refused' }); return; }
     if (!key) { send(503, { version: 1, status: 'unavailable', message: 'TWITCH_EXTENSION_CLIENT_ID and TWITCH_EXTENSION_SECRET are required.' }); return; }
     let viewer;
     try { viewer = await verifyViewerToken(request.headers.authorization ?? null, key); }
     catch { send(401, { version: 1, status: 'unauthenticated' }); return; }
+    if (giftRoute) {
+      if (viewer.kind !== 'shared') { send(403, { version: 1, status: 'refused' }); return; }
+      const chunks: Buffer[] = []; let size = 0;
+      for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 28 * 1024) { send(413, { version: 1, status: 'refused' }); return; } chunks.push(chunk); }
+      try { const answer = await gifts.handle(giftRoute as PanelGiftRoute, viewer, JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); send(answer.http, answer.body); }
+      catch { send(400, { version: 1, status: 'refused' }); }
+      return;
+    }
     if (pathname === `${PREFIX}picture`) {
       const painting = await services.pictures.read(viewer.channelId);
       if (!painting) { send(404, { status: 'unavailable' }); return; }
@@ -106,7 +131,9 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
         const fact = state.moment as { body?: { kind?: string }; occurredAt?: number } | null;
         const words: Record<string, string> = { raid: 'Guests are arriving at the gate', fireworks: 'Fireworks over the kingdom', feast: 'The kingdom gathers for a feast', battle: 'The kingdom stands together', bell: 'The bell rings over the square', parade: 'A parade crosses the square', train: 'The Hype Train is arriving' };
         const event = state.publicEvent as { type?: string; at?: number } | null;
-        const moment = event?.type === 'home' ? 'A home is raised' : event?.type === 'forge' ? 'A new piece leaves the Forge' : fact?.body?.kind ? words[fact.body.kind] ?? null : null;
+        const gift = state.giftMoment as { line?: string; committedAt?: number } | null;
+        const moment = gift && typeof gift.line === 'string' && typeof gift.committedAt === 'number' && gift.committedAt >= (event?.at ?? 0)
+          ? gift.line : event?.type === 'home' ? 'A home is raised' : event?.type === 'forge' ? 'A new piece leaves the Forge' : fact?.body?.kind ? words[fact.body.kind] ?? null : null;
         send(200, { version: 1, status: state.status, stream: state.stream ?? 'resting', lights: state.lights ?? null, moment, picture, pledges: state.pledges ?? null }); return;
       }
       if (viewer.kind !== 'shared') { send(403, { version: 1, status: 'refused' }); return; }
@@ -143,4 +170,5 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
       send(200, { ...claim, ...(pathname.endsWith('/presence') ? { status: 'accepted' } : {}), lit: presence.lit === true, stream: presence.stream ?? 'live' });
     } catch { send(503, { version: 1, status: 'unavailable', message: 'The kingdom is out of reach. Try again shortly.' }); }
   };
+  return Object.assign(handler, { dispose: stopGifts });
 }

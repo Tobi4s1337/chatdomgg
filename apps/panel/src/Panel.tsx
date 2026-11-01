@@ -4,6 +4,7 @@ import { selectAdapter } from './adapters/select';
 import { CardSheet, PassportCorner } from './card/CardSheet';
 import { PanelPassport } from './passport/PanelPassport';
 import { createPanelSound } from './sound';
+import { GiftShelf } from './gifts/GiftShelf';
 import type { Home, PanelAdapter, PanelSnapshot, PassportSource, Privacy } from './model';
 import './panel.css';
 import './places.css';
@@ -62,7 +63,17 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   const [tab, setTab] = createSignal<Tab>('kingdom');
   const [page, setPage] = createSignal<'card' | 'passport' | 'privacy' | null>(null);
   const [failed, setFailed] = createSignal(false);
-  const unsubscribe = adapter.subscribe(next => { if (next.privacy?.kind === 'forgotten' && page() !== 'privacy') setPage(null); if (snap().light.kind === 'pending' && next.light.kind === 'lit') sound.play('kindle'); setSnap(next); });
+  const unsubscribe = adapter.subscribe(next => {
+    if (next.privacy?.kind === 'forgotten' && page() !== 'privacy') setPage(null);
+    if (snap().light.kind === 'pending' && next.light.kind === 'lit') sound.play('kindle');
+    const before = snap().gifts, after = next.gifts;
+    if (after?.kind === 'open' && (before?.kind !== 'open' || before.request.kind !== after.request.kind)) {
+      if (after.request.kind === 'confirming' || after.request.kind === 'pending') sound.play('pending');
+      else if (after.request.kind === 'delivered') sound.play('counted');
+      else if (after.request.kind === 'cancelled') sound.play('dull');
+    }
+    setSnap(next);
+  });
   const pictureUrl = createMemo(() => { const picture = snap().picture; return picture.kind === 'still' ? picture.url : null; });
   createEffect(() => { void pictureUrl(); setFailed(false); });
   const card = () => cardOf(snap().home);
@@ -149,7 +160,11 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
               </div>
             </section>
           </Match>
-          <Match when={tab() === 'gifts'}><section class="cw-gifts"><div class="cw-gift-mark" aria-hidden="true">✧</div><h2>Gifts</h2><p>Gifts open when the channel turns them on.</p></section></Match>
+          <Match when={tab() === 'gifts'}><GiftShelf shelf={snap().gifts ?? { kind: 'closed', reason: 'Gifts open when the channel turns them on.' }}
+            onMore={() => { sound.play('page'); adapter.moreGiftChoices?.(); }} onResolve={intentId => { sound.gesture(); sound.play('tap'); adapter.resolveGiftIntent?.(intentId); }}
+            onUse={sku => { sound.gesture(); sound.play('tap'); adapter.requestProduct(sku); }}
+            onTarget={plotId => { sound.gesture(); sound.play('tap'); adapter.chooseGiftTarget?.(plotId); }}
+            onCancelChoice={() => { sound.play('page'); adapter.cancelGiftChoice?.(); }} onReset={() => { sound.play('page'); adapter.resetGift?.(); }} /></Match>
         </Switch>
       </Show>
     </main>

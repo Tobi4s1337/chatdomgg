@@ -1,5 +1,6 @@
 // Verified panel transport. Tokens stay in request headers and memory only.
 import { PANEL_ROUTES, readPanelReading, type PanelCardWire, type PanelReading } from '../../../api/src/public/panel/contracts';
+import { createGiftTransport } from '../gifts/transport';
 import type { HelperBridge, HelperStatus } from '../helper';
 import { passportExtensionTransport } from '../passport/transport';
 import { ALL_SECTIONS, type CitizenCard, type Connection, type Home, type Light, type PanelAdapter, type PanelSnapshot, type PassportSource, type Picture, type Privacy } from '../model';
@@ -139,11 +140,12 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     if (!light && status.shared && currentReading()?.viewer.kind === 'newcomer') return { kind: 'ready' };
     return light ?? lightFor(status);
   };
+  const gifts = createGiftTransport({ helper, backend, fetch: send, visible, live: () => kingdom?.stream === 'live' && !kingdomLost, onChange: () => refresh() });
   const snapshotFor = (): PanelSnapshot => {
     const status = helper.status(), current = currentReading(), realm = current?.kingdom ?? null;
     const connection = kingdomLost ? kingdomAt ? { kind: 'lost' as const, asOf: timeWords(kingdomAt) } : { kind: 'kingdom-unavailable' as const } : connectionFor(status, patient, reading, Boolean(backend));
     return {
-      source: { kind: 'production', label: null }, connection, ...(shared() ? { privacy } : {}),
+      source: { kind: 'production', label: null }, connection, gifts: gifts.get(), ...(shared() ? { privacy } : {}),
       kingdom: realm ? { name: realm.name, tier: realm.tier, motto: realm.motto } : null,
       stream: kingdom?.stream ?? 'unknown', kingdomLights: kingdom?.lights ?? null, moment: kingdom?.moment ?? null,
       picture, light: currentLight(),
@@ -191,6 +193,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       readingTimer = setTimeout(() => void read(), READING_REFRESH_MS);
       void observe();
       if (shared() && privacy.kind === 'loading') void readPrivacy();
+      void gifts.refresh();
     } catch {
       if (version !== epoch || !visible()) return;
       reading = { kind: 'failed', last: reading.kind === 'read' ? reading : reading.kind === 'failed' ? reading.last : null };
@@ -259,7 +262,8 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       if (parsed.picture) await loadPicture(parsed.picture, version);
       else if (pictureUrl) { URL.revokeObjectURL(pictureUrl); pictureUrl = null; pictureRevision = null; picture = { kind: 'unavailable', reason: 'No painting has arrived yet.' }; }
       void observe();
-    } catch { if (version === epoch && visible()) { kingdomLost = true; clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; } }
+      void gifts.refresh();
+    } catch { if (version === epoch && visible()) { kingdomLost = true; void gifts.refresh(); clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; } }
     finally {
       if (version === epoch) { kingdomBusy = false; if (visible()) kingdomTimer = setTimeout(() => void poll(), KINGDOM_REFRESH_MS); }
     }
@@ -315,6 +319,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     refresh();
   };
   const stop = () => {
+    gifts.suspend();
     epoch++; presenceGeneration++; if (privacy.kind === 'pending') privacy = { kind: 'unavailable' }; clearTimeout(readingTimer); clearTimeout(kingdomTimer); clearTimeout(presenceTimer);
     for (const controller of requests) controller.abort(); requests.clear();
     readingBusy = false; readingAgain = false; kingdomBusy = false; actionBusy = false; presenceBusy = false; presenceSent = false; queued = null;
@@ -331,10 +336,11 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       if (!nowVisible || (wasShared && !shared())) stop();
       else if (!shared() && light?.kind !== 'pending') { claimed = null; light = null; presenceSent = false; }
     }
-    if (wasShared && !shared()) { reading = { kind: 'none' }; claimed = null; light = null; privacy = { kind: 'loading' }; }
+    if (wasShared && !shared()) { gifts.clearIdentity(); reading = { kind: 'none' }; claimed = null; light = null; privacy = { kind: 'loading' }; }
     const pending = queued;
     if (tokenChanged && nowVisible) {
       // An identity change invalidates old personal readings and in-flight replies.
+      gifts.clearIdentity();
       if (!pending) stop();
       else { for (const controller of requests) controller.abort(); epoch++; readingBusy = false; kingdomBusy = false; presenceBusy = false; }
       reading = { kind: 'none' };
@@ -345,6 +351,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     if (pending && shared() && nowVisible && (authorization !== undefined ? authorization !== pending.authorization : token !== pending.token)) void claim();
     else if (pending && tokenChanged && !shared()) { queued = null; light = { kind: 'refused' }; }
     else if (nowActive && !wasActive) void observe();
+    if (nowVisible) void gifts.refresh();
     lastToken = token; lastAuthorization = authorization; wasVisible = nowVisible; wasActive = nowActive; wasShared = shared();
     refresh();
   };
@@ -367,9 +374,14 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     requestPrivacy() { if (shared() && visible() && !forgotten) { privacy = { kind: 'loading' }; refresh(); void readPrivacy(); } },
     requestQuiet(quiet) { void changePrivacy('quiet', quiet); },
     requestForget() { void changePrivacy('forget'); },
-    requestAct() {}, requestProduct() {},
+    requestAct() {}, requestProduct(sku) { gifts.requestProduct(sku); },
+    chooseGiftTarget(plotId) { gifts.chooseGiftTarget(plotId); },
+    resolveGiftIntent(intentId) { gifts.resolveGiftIntent(intentId); },
+    moreGiftChoices() { gifts.moreGiftChoices(); },
+    cancelGiftChoice() { gifts.cancelGiftChoice(); },
+    resetGift() { gifts.resetGift(); },
     dispose() {
-      disposed = true; stop(); clearTimeout(timer); unsubscribe(); listeners.clear();
+      disposed = true; stop(); gifts.dispose(); clearTimeout(timer); unsubscribe(); listeners.clear();
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', changed);
       if (pictureUrl) URL.revokeObjectURL(pictureUrl);
     },

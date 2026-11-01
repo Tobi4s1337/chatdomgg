@@ -1,3 +1,4 @@
+import type { PanelGiftShelf } from '../../../packages/shared/src/panel';
 import type { PassportDisclosureView, PassportTransport } from '@chatdom/ui/passport';
 
 // The panel's local view model. It describes only what the panel may show and why;
@@ -342,6 +343,7 @@ export type Privacy =
   | { readonly kind: 'forgotten'; readonly erased: readonly string[] };
 
 export interface PanelSnapshot {
+  readonly gifts?: PanelGiftShelf;
   readonly privacy?: Privacy;
   readonly source: SourceMark;
   readonly connection: Connection;
@@ -379,5 +381,10 @@ export interface PanelAdapter {
   requestAct(option: string): void;
   /** Ask Twitch to confirm Bits for a shelf product. Gesture only; nothing is granted here. */
   requestProduct(sku: string): void;
+  chooseGiftTarget?(plotId: string): void;
+  resolveGiftIntent?(intentId: string): void;
+  moreGiftChoices?(): void;
+  cancelGiftChoice?(): void;
+  resetGift?(): void;
   dispose(): void;
 }

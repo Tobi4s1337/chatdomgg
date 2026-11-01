@@ -26,6 +26,7 @@ async function start() {
     fetch: async (url, init) => {
       const path = new URL(String(url)).pathname, body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       requests.push({ path, body });
+      if (path.endsWith('/gift-status') || path.endsWith('/gift-resolve')) return new Response(JSON.stringify({ version: 1, status: 'pending' }));
       if (path.endsWith('/forget')) return new Response(JSON.stringify({ version: 1, status: 'unavailable' }), { status: 503 });
       if (path.endsWith('/privacy') || path.endsWith('/quiet')) return new Response(JSON.stringify({ version: 1, status: path.slice(path.lastIndexOf('/') + 1), quiet: body.quiet ?? false, projection: 'pending', forgetAvailable: false }));
       const answer = path.endsWith('/claim') ? { version: 1, status: 'deed' } : path.endsWith('/presence') ? { version: 1, status: 'presence', lit: true, stream: 'live', held: false }
@@ -68,6 +69,17 @@ describe('verified panel door', () => {
       expect((await call(route, await token({ user_id: undefined }), body)).status).toBe(403);
     }
     expect(requests).toHaveLength(3);
+  });
+  it('mounts gift recovery using only JWT identity and refuses selected subjects', async () => {
+    const { call, requests } = await start(), jwt = await token(), intentId = '11111111-1111-4111-8111-111111111111';
+    expect(await (await call('gift-status', jwt, { intentId })).json()).toMatchObject({ status: 'pending' });
+    expect(requests.at(-1)).toEqual({ path: '/internal/realm/panel/gift-status', body: { kingdomId: '1234', personId: '5678', intentId } });
+    expect((await call('gift-status', jwt, { intentId, personId: '9999' })).status).toBe(400);
+    const paymentRef = '22222222-2222-4222-8222-222222222222';
+    expect(await (await call('gift-resolve', jwt, { paymentRef, intentId })).json()).toMatchObject({ status: 'pending' });
+    expect(requests.at(-1)).toEqual({ path: '/internal/realm/panel/gift-resolve', body: { kingdomId: '1234', personId: '5678', paymentRef, intentId } });
+    expect((await call('gift-resolve', await token({ user_id: undefined }), { paymentRef, intentId })).status).toBe(403);
+    expect(requests).toHaveLength(2);
   });
   it('refuses unshared, logged-out, forged, expired and external tokens before any realm write', async () => {
     const { call, requests } = await start();

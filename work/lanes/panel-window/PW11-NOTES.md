@@ -66,14 +66,13 @@ chatdom-pc-lease --wait 3 --max 10 -- node \
   apps/panel/scripts/pw11-capture.mjs
 ```
 
-Capture result and looked-at screenshot paths are recorded below before the checkpoint is committed.
+Capture status and paths are recorded below.
 
-The RTX 5080 Chrome was connected. Three bounded lease attempts (waits 1, 3 and 1 minute) all returned exit 75:
-`another lane holds the GPU lease`. Under the Ralph repeated-failure rule this iteration stops. No PW11 screenshot was
-taken or looked at, and the visual changes are not approved. The capture script passed syntax/lint checks only; its
-runtime path remains unverified. There was no tunnel-down fallback. PW11 stays unchecked; next iteration proceeds to
-PW12 under the explicitly requested skip rule. The full-erase authority remains an independent blocker even once GPU
-access returns.
+The previous turn ended after three short busy-lease returns (waits 1, 3 and 1 minute). Tobias corrected that
+procedure: use `--wait 30` and batch captures, while continuing useful work. A busy shared lease is not a PW11 blocker.
+The current batch is `apps/panel/scripts/pw12-capture.mjs`, including PW11's street/privacy sequence. Its first
+`--wait 30` invocation returned exit 3 immediately because GPU Chrome was disconnected, so no lease job remained live.
+Visual acceptance remains unproven. Full erasure and stream projection are separate core-owned integration needs.
 
 `PW11-NEEDS.patch` passes `patch --dry-run -p1`; the proposed new modules received syntax/transpile checks only. It is
 unapplied, not runtime evidence. The accompanying `PW11-NEEDS.md` names the remaining parser/reply composition,

@@ -14,6 +14,8 @@ import { RealmRecoveryError } from '../../persistence/database';
 import { decodeIngressCheckpoint, presencePerson } from '../codec';
 import { IngressGate, INGRESS_SECRET_MIN } from '../gate';
 import { personPrivacy, setPersonQuiet, forgetPerson, type RealmForgetAuthority, type PersonPrivacy } from './privacy';
+import type { RealmPanelGifts, PanelGiftReply } from './gifts';
+import type { PanelGiftFact } from '../../../../../packages/shared/src/panel';
 
 const KingdomRequest = z.strictObject({ kingdomId: KingdomIdSchema });
 const PersonRequest = KingdomRequest.extend({ personId: PersonIdSchema });
@@ -35,6 +37,7 @@ export type PanelClaimResult =
   | { readonly version: 1; readonly status: 'guest'; readonly reason: 'three-homes' | 'kingdom-full' }
   | { readonly version: 1; readonly status: 'castle' | 'unfounded' | 'held' };
 export interface PanelKingdomResult {
+  readonly giftMoment: PanelGiftFact | null;
   readonly version: 1; readonly status: 'kingdom'; readonly kingdomId: KingdomId;
   readonly stream: 'live' | 'resting'; readonly lights: number; readonly presence: KingdomPresenceFrame | null;
   readonly moment: TwitchMomentFact | null; readonly revision: string; readonly manifest: RealmFoundedManifest | null;
@@ -46,7 +49,7 @@ export type PanelPublicEvent = { readonly at: number; readonly cursor: number } 
   | { readonly type: 'home'; readonly plotId: string }
   | { readonly type: 'forge'; readonly activityId: string }
   | { readonly type: 'moment'; readonly fact: TwitchMomentFact });
-export type PanelDoorBody = PanelClaimResult | PanelKingdomResult
+export type PanelDoorBody = PanelClaimResult | PanelKingdomResult | PanelGiftReply['body']
   | ({ readonly version: 1; readonly status: 'privacy' | 'quiet' } & PersonPrivacy)
   | { readonly version: 1; readonly status: 'forgotten'; readonly operationId: string; readonly erased: readonly string[]; readonly retained: readonly string[] }
   | { readonly version: 1; readonly status: 'pending'; readonly operationId: string }
@@ -56,6 +59,7 @@ export type PanelDoorBody = PanelClaimResult | PanelKingdomResult
   | { readonly version: 1; readonly status: 'refused' | 'unavailable'; readonly message: string };
 export interface PanelDoorReply { readonly http: 200 | 400 | 401 | 503; readonly body: PanelDoorBody }
 export interface RealmPanelOptions {
+  readonly gifts?: RealmPanelGifts;
   readonly forgetAuthority?: RealmForgetAuthority;
   readonly db: Pick<RealmDatabase, 'query'>;
   readonly origin: 'live' | 'simulated';
@@ -77,6 +81,21 @@ export class RealmPanelService {
     this.gate = new IngressGate(options.secret ? { panel: options.secret } : {}, options.origin);
   }
   authenticate(authorization: string): boolean { return this.gate.authenticate(authorization) === 'panel'; }
+
+  private async gift(authorization: string, raw: unknown, method: 'gifts' | 'intent' | 'status' | 'cancel' | 'resolve' | 'choices' | 'evidence' | 'reconcile' | 'inbox' | 'drain'): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    return this.options.gifts ? this.options.gifts[method](raw) : unavailable();
+  }
+  gifts(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'gifts'); }
+  giftIntent(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'intent'); }
+  giftStatus(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'status'); }
+  giftCancel(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'cancel'); }
+  giftEvidence(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'evidence'); }
+  giftReconcile(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'reconcile'); }
+  giftInbox(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'inbox'); }
+  giftDrain(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'drain'); }
+  giftChoices(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'choices'); }
+  giftResolve(authorization: string, raw: unknown) { return this.gift(authorization, raw, 'resolve'); }
 
   async claim(authorization: string, raw: unknown): Promise<PanelDoorReply> {
     if (!this.authenticate(authorization)) return unauthorized();
@@ -232,7 +251,8 @@ export class RealmPanelService {
         }
         this.assertCurrent(kingdom);
         const now = kingdom.databaseNow(), stream = kingdom.privateState.stream;
-        return ok({ version: 1, status: 'kingdom', kingdomId, pledges, manifest,
+        const giftMoment = await this.options.gifts?.latest(kingdomId) ?? null;
+        return ok({ version: 1, status: 'kingdom', kingdomId, pledges, manifest, giftMoment,
           stream: stream.sessionId && stream.liveUntil > now ? 'live' : 'resting',
           // These are the committed public windows, never extension connections or local client counts.
           lights: presence?.windows.filter(window => window.present).length ?? 0, presence, moment,

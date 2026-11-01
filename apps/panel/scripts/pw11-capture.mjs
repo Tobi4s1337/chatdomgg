@@ -97,7 +97,15 @@ async function pcShot(url, path) {
     { timeout: 100_000 }, error => error ? reject(new Error('chatdom-pc shot failed.')) : resolve()));
 }
 try {
-  for (const port of [5182, 5183, 5184, 5191, 5192]) await checkFree(port);
+  for (const port of [5191, 5192]) await checkFree(port);
+  const available = [];
+  for (let port = 5170; port <= 5186 && available.length < 3; port++) {
+    if (port === 5172) continue;
+    try { await checkFree(port); available.push(port); } catch { /* Another lane owns this port. */ }
+  }
+  if (available.length < 3) throw new Error('Three free lane ports are required between 5170 and 5186.');
+  const [webPort, panelPort, muxPort] = available;
+  console.info(`PW11 services: web ${webPort}, panel ${panelPort}, mux ${muxPort}.`);
   const person2 = await secondUser();
   const people = [env.PANEL_TEST_USER, person2];
   if (people.some(id => !/^\d+$/.test(id)) || new Set(people).size !== 2) throw new Error('Two distinct real Twitch user IDs are required.');
@@ -106,22 +114,22 @@ try {
   await writeFile(secretFile, env.TWITCH_EXTENSION_SECRET, { mode: 0o600 });
   const vars = { ...env, PANEL_GATEWAY_PORT: '5191', PUBLIC_REALM_TARGET: 'http://127.0.0.1:5172',
     CHATDOM_API_TARGET: 'http://127.0.0.1:5191', CHATDOM_REALM_TARGET: 'http://127.0.0.1:5172',
-    VITE_CHATDOM_ORIGIN: 'http://localhost:5192', PANEL_UPSTREAM: 'http://127.0.0.1:5184', PANEL_HARNESS_PORT: '5192', PANEL_HARNESS_SECRET_FILE: secretFile };
+    VITE_CHATDOM_ORIGIN: 'http://localhost:5192', PANEL_UPSTREAM: `http://127.0.0.1:${muxPort}`, PANEL_HARNESS_PORT: '5192', PANEL_HARNESS_SECRET_FILE: secretFile };
   const gateway = await start([join(root, 'apps/api/src/panel/serve.mjs')], root, vars, join(secretDir, 'gateway.log'));
   await ready('http://127.0.0.1:5191/api/panel/v1/kingdom', gateway);
-  const web = await start([join(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '5182', '--strictPort'], join(root, 'apps/web'), vars, join(secretDir, 'web.log'));
-  await ready('http://127.0.0.1:5182/-/panel-painter', web);
-  const panel = await start([join(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', '5183', '--strictPort', '--base', '/panel/'], join(root, 'apps/panel'), vars, join(secretDir, 'panel.log'));
-  await ready('http://127.0.0.1:5183/panel/panel.html', panel);
+  const web = await start([join(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(webPort), '--strictPort'], join(root, 'apps/web'), vars, join(secretDir, 'web.log'));
+  await ready(`http://127.0.0.1:${webPort}/-/panel-painter`, web);
+  const panel = await start([join(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(panelPort), '--strictPort', '--base', '/panel/'], join(root, 'apps/panel'), vars, join(secretDir, 'panel.log'));
+  await ready(`http://127.0.0.1:${panelPort}/panel/panel.html`, panel);
   proxy = createHttpServer((req, res) => {
-    const port = req.url?.startsWith('/panel/') ? 5183 : 5182;
+    const port = req.url?.startsWith('/panel/') ? panelPort : webPort;
     const upstream = proxyRequest({ hostname: '127.0.0.1', port, path: req.url, method: req.method, headers: { ...req.headers, host: `127.0.0.1:${port}` } }, response => {
       res.writeHead(response.statusCode ?? 502, response.headers); response.pipe(res);
     });
     upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
     req.pipe(upstream);
   });
-  await new Promise((resolve, reject) => { proxy.once('error', reject); proxy.listen(5184, '127.0.0.1', resolve); });
+  await new Promise((resolve, reject) => { proxy.once('error', reject); proxy.listen(muxPort, '127.0.0.1', resolve); });
   const harness = await start([join(root, 'apps/panel/scripts/pw10-harness.mjs')], root, vars, join(secretDir, 'harness.log'));
   await ready('http://127.0.0.1:5192/-/panel-painter', operator);
 

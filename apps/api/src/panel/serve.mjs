@@ -22,5 +22,5 @@ const handler = createPanelHttp({ authority, origin, extension: { clientId: proc
 const server = createServer((req, res) => { const url = new URL(req.url || '/', publicOrigin); void handler(req, res, url.pathname).catch(() => { if (!res.headersSent) res.writeHead(503).end(); else res.destroy(); }); });
 await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
 console.info(`Panel lane gateway on 127.0.0.1:${port}`);
-const stop = () => { server.closeAllConnections(); server.close(() => { void pool.end(); }); };
+const stop = () => { handler.dispose(); server.closeAllConnections(); server.close(() => { void pool.end(); }); };
 process.once('SIGTERM', stop); process.once('SIGINT', stop);

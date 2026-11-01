@@ -309,4 +309,28 @@ describe('verified panel transport', () => {
     expect(adapter.get().privacy).toEqual({ kind: 'ready', quiet: false, projection: 'pending', forgetAvailable: false });
   });
 
+  it('publishes the real transport shelf and delivery through the production adapter', async () => {
+    const helper = standIn({ ...AUTHORIZED, bits: true }), server = backend();
+    let complete: ((tx: import('../helper').HelperTransaction) => void) | undefined;
+    let delivered = false;
+    const useBits = vi.fn(() => true);
+    const bridge: HelperBridge = { ...helper.bridge, getProducts: async () => [{ sku: 'kitesa', cost: { amount: '245', type: 'bits' } }], useBits,
+      onGiftTransaction: listener => { complete = listener; return () => { complete = undefined; }; } };
+    const send: typeof fetch = (url, init) => {
+      const path = String(url).split('/').pop();
+      if (path === 'gifts') return Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'gifts', stream: 'live', offers: [{ sku: 'kitesa', giftId: 'kites', title: 'Kites', what: 'Kites cross the sky.', target: 'none', durationMs: 1000 }], friends: [] })));
+      if (path === 'gift-intent') return Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'intent', intentId: 'intent', sku: 'kitesa' })));
+      if (path === 'gift-receipt') return Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'pending' })));
+      if (path === 'gift-status') return Promise.resolve(new Response(JSON.stringify(delivered ? { version: 1, status: 'delivered', fact: { version: 1, type: 'panel.gift', line: 'Kites cross the sky.' } } : { version: 1, status: 'pending' })));
+      return server.send(url, init);
+    };
+    const adapter = track(createProductionAdapter(bridge, { backend: BACKEND, fetch: send })); await settle();
+    expect(adapter.get().gifts).toMatchObject({ kind: 'open', offers: [{ sku: 'kitesa', bits: 245 }], request: { kind: 'idle' } });
+    adapter.requestProduct('kitesa'); await settle(); expect(useBits).toHaveBeenCalledWith('kitesa');
+    complete?.({ initiator: 'current_user', product: { sku: 'kitesa' }, transactionReceipt: 'receipt' }); await settle();
+    expect(adapter.get().gifts).toMatchObject({ request: { kind: 'pending' } });
+    delivered = true; await vi.advanceTimersByTimeAsync(5_000);
+    expect(adapter.get().gifts).toMatchObject({ request: { kind: 'delivered', line: 'Kites cross the sky.' } });
+  });
+
 });

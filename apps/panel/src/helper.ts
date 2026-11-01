@@ -8,11 +8,19 @@
 export interface HelperAuthorized { channelId: string; clientId: string; token: string; helixToken: string; userId: string }
 interface HelperViewer { readonly isLinked: boolean; readonly role: string; onChanged(callback: () => void): void }
 interface HelperContext { theme?: 'light' | 'dark'; mode?: 'viewer' | 'dashboard' | 'config'; isPaused?: boolean }
+export interface HelperProduct { readonly sku: string; readonly cost: { readonly amount: number | string; readonly type?: string }; readonly expiration?: string | null; readonly isBroadcast?: boolean }
+export interface HelperTransaction { readonly initiator?: string; readonly product?: { readonly sku?: string }; readonly transactionReceipt?: string }
 /** The part of `window.Twitch.ext` the panel uses. */
 export interface HelperExt {
   onAuthorized(callback: (auth: HelperAuthorized) => void): void;
   onContext(callback: (context: HelperContext, changed: readonly string[]) => void): void;
   onVisibilityChanged?(callback: (visible: boolean) => void): void;
+  readonly bits?: {
+    getProducts(): Promise<readonly HelperProduct[]>;
+    useBits(sku: string): void;
+    onTransactionComplete(callback: (transaction: HelperTransaction) => void): void;
+    onTransactionCancelled(callback: () => void): void;
+  };
   readonly viewer?: HelperViewer;
   readonly actions?: { requestIdShare(): void };
   readonly features?: { readonly isBitsEnabled?: boolean; onChanged?(callback: (changed: readonly string[]) => void): void };
@@ -39,6 +47,10 @@ export interface HelperBridge {
   authorization?(): number;
   /** Asks Twitch to share the viewer's identity. Only meaningful from a gesture. */
   requestIdShare(): boolean;
+  getProducts?(): Promise<readonly HelperProduct[]>;
+  useBits?(sku: string): boolean;
+  onGiftTransaction?(listener: (transaction: HelperTransaction) => void): () => void;
+  onGiftCancelled?(listener: () => void): () => void;
 }
 
 function findHelper(): HelperExt | undefined {
@@ -53,11 +65,15 @@ function findHelper(): HelperExt | undefined {
  */
 export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
   const listeners = new Set<(status: HelperStatus) => void>();
+  const transactions = new Set<(transaction: HelperTransaction) => void>();
+  const cancellations = new Set<() => void>();
   let current: HelperStatus = ext ? { kind: 'waiting' } : { kind: 'absent' };
   let token: string | null = null;
   let visible = true, playing = false, authorization = 0;
   const emit = (next: HelperStatus) => { current = next; for (const listener of listeners) listener(next); };
   if (ext) {
+    ext.bits?.onTransactionComplete(transaction => { for (const listener of transactions) listener(transaction); });
+    ext.bits?.onTransactionCancelled(() => { for (const listener of cancellations) listener(); });
     let last: HelperAuthorized | undefined;
     const read = () => {
       if (!last) return;
@@ -80,6 +96,12 @@ export function bridgeHelper(ext: HelperExt | undefined): HelperBridge {
     visible: () => visible,
     active: () => visible && playing,
     authorization: () => authorization,
+    ...(ext?.bits ? {
+      getProducts: () => ext.bits!.getProducts(),
+      useBits: (sku: string) => { try { ext.bits!.useBits(sku); return true; } catch { return false; } },
+    } : {}),
+    onGiftTransaction(listener) { transactions.add(listener); return () => transactions.delete(listener); },
+    onGiftCancelled(listener) { cancellations.add(listener); return () => cancellations.delete(listener); },
     requestIdShare() {
       if (!ext?.actions || current.kind !== 'authorized' || !current.loggedIn) return false;
       try { ext.actions.requestIdShare(); return true; } catch { return false; }
