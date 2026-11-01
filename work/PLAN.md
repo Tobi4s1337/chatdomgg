@@ -334,14 +334,18 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
 beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current:** Forge landing composition now shares one home/roof fit between room and SIM. Contact frames
-the receiving house; a finite settle retains its facade below the gift. Dusk light/effects/materials stay.
-Room integration test (rotated socket, desktop/phone fit, stable settle), typecheck/scoped lint/build pass.
-Evidence: `shots/magic/forge-landing-pair.png` at1920×1080, same seed/hour/kingdom49/ritual19;
-`forge-landing-sequence-sheet.jpg` samples a forward-stepped0→21s rehearsal; both viewed. Contact
-shows the home; the gift remains small at stream size. This is not a continuous-motion signoff.
-Next: the rehearsal smithy stays empty throughout the pour despite240 supplied citizens. Fix actual
-gathering before pose polish, then strengthen the flight/landing effects. No audience may be invented.
+**Current:** Forge audience wraps the open apron as well as the west side; paths avoid hearth/anvil.
+Existing citizens, normal walking, facing and barrel remain. The earlier empty rehearsal skipped planning:
+the supplied neighbours need time to arrive, not a routing repair or invented bodies. New pair uses the
+same120s SIMULATED planning lead-in for both sides, then pour9/world157,1920×1080:
+`shots/magic/forge-apron-pair.png`, viewed: the pour reads encircled. Fast actual planning can still
+outpace distant walkers. Next picture fix: too much hillside above the smithy; near spectators crop below.
+Three citizen integration tests, typecheck/scoped lint/build pass. EL11 in spec48/effects-library PRD hands
+the team a flowing recorded-path wake and warm landing burst; main owns adoption. Accepted home smoke stays.
+
+9ddf895 shares the receiving-home camera between room and SIM, then settles with the facade beneath the
+gift. `forge-landing-pair.png` and forward-stepped sequence sheet viewed; not a continuous-motion signoff.
+Room rotated-socket/desktop/phone/settle test passes. Next: the flight and landing need their own light beat.
 
 Forge art checkpoint: merged Anvil Hero AH04 bd938eb and Forge panel FL02 9fd035f.
 The dragon now has a clearer head and stack; AH06 in spec25/PRD gives the team its next whole art outcome:
