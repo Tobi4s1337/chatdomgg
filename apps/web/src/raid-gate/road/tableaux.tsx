@@ -2,11 +2,11 @@ import { For, Show, type JSX } from 'solid-js';
 import { armsOf, dress, Gate, Ground, ramp, Walker } from './procession';
 
 /**
- * The raid road's two gate tableaux, staged over each kingdom's own valley until the kingdom host has a gate anchor
- * in the world (spec 23 RG10 decision): the party gathering at the leaving kingdom's Raid Gate and setting out through
- * it, and the same party arriving at the destination's gate to its monarch and its gift. Every figure stands for a
- * person the authority counted (the viewer, the opted-in walkers as a count, the monarch, a host with a real offer);
- * a large party draws at most `COLUMN` and says how many more there are.
+ * The raid road's two gate tableaux. The leaving kingdom's party gathers at its Raid Gate and sets out through it,
+ * staged over the kingdom's own valley until the kingdom scene can stand the party at its gate (the gate-party mount
+ * main owes, see progress `needs:`). Every figure stands for a person the authority counted (the viewer, the opted-in
+ * walkers as a count, the monarch); a large party draws at most `COLUMN` and says how many more there are. At the far
+ * end the guests arrive in the destination's world itself, so its tableau carries only the words.
  */
 
 export const COLUMN = 9;
@@ -19,16 +19,18 @@ const STRIDE = 48;
 
 export type Words = Readonly<{ eyebrow: string; title: string; line: string }>;
 
-function Stage(props: { label: string; words: Words; simulated: boolean; children: JSX.Element; class?: string; reveal: number }) {
+function Stage(props: { label: string; words: Words; simulated: boolean; children?: JSX.Element; class?: string; reveal: number }) {
   return <section class={`rr-stage ${props.class ?? ''}`} aria-label={props.label} style={{ '--reveal': String(props.reveal) }}>
     <header class="rr-words" aria-live="polite">
       <p class="rr-eyebrow">{props.words.eyebrow}</p>
       <h2 class="rr-title">{props.words.title}</h2>
       <p class="rr-line">{props.words.line}</p>
     </header>
-    <div class="rr-scene" aria-hidden="true">
-      <svg viewBox="0 0 1400 360" preserveAspectRatio="xMinYMax meet">{props.children}</svg>
-    </div>
+    <Show when={props.children}>
+      <div class="rr-scene" aria-hidden="true">
+        <svg viewBox="0 0 1400 360" preserveAspectRatio="xMinYMax meet">{props.children}</svg>
+      </div>
+    </Show>
     <Show when={props.simulated}><p class="rr-chip"><span class="rg-pip" />SIMULATED</p></Show>
   </section>;
 }
@@ -93,50 +95,18 @@ export function Gathering(props: GatheringProps) {
 }
 
 export type ArrivalProps = Readonly<{
-  hostId: string; hostName: string; monarchName: string;
-  homeId: string;
-  /** Everyone of the party who arrived and still stands here, this viewer included. */
-  party: number;
-  /** A host who brought this viewer a gift, if one did; 0…1 how far the gift has been given. */
-  giver: string | null;
-  gift: number;
-  /** Seconds since the welcome began, and the presentation clock. */
-  elapsed: number;
-  time: number;
+  hostName: string;
   words: Words;
   simulated: boolean;
-  /** 0…1: the tableau appearing as the destination's drawing wakes. */
+  /** 0…1: the words appearing as the destination's world wakes. */
   reveal: number;
 }>;
 
-/** The same party, under the same banner and pennants, walking in to the destination's gate, its monarch and its gift. */
+/**
+ * The welcome's words over the destination's own gate. The guests themselves arrive in the world: the kingdom's raid
+ * arrival wakes its gate under the leaving kingdom's banner, lights the braziers and brings the caravan in through it
+ * (`arrival-feed.ts`), so nothing here draws a figure.
+ */
 export function Arrival(props: ArrivalProps) {
-  const home = () => armsOf(props.homeId);
-  const host = () => armsOf(props.hostId);
-  const drawn = () => Math.min(COLUMN, Math.max(1, props.party));
-  const more = () => props.party - drawn();
-  const you = () => (drawn() > 1 ? 1 : 0);
-  const place = (index: number) => {
-    const target = spot(index) - 40;
-    const walked = Math.max(0, (props.elapsed + 0.9 - index * 0.12) * WALK_SPEED * 0.85);
-    const x = Math.min(target, -90 - index * 68 + walked);
-    return { x, phase: x < target ? walked / STRIDE : undefined };
-  };
-  const lit = () => 0.7 + 0.3 * ramp(0, 2, props.elapsed);
-  return <Stage class="rr-arrival" label={`${props.hostName} welcomes the guests`} words={props.words} simulated={props.simulated} reveal={props.reveal}>
-    <Ground gate={GATE_X} warmth={lit()} />
-    <Gate x={GATE_X} arms={host()} kingdomId={props.hostId} name={props.hostName} lit={lit()} unfurl={1} time={props.time} />
-    <Walker x={MOUTH - 4} facing="left" cloak={host().field} trim={host().second} skin="#d7a27a" hair="#2a1c12" crown time={props.time} seed={77} />
-    <Show when={props.giver}>
-      <Walker x={MOUTH - 54} facing="left" cloak={host().second} trim={host().field} skin="#c58c64" hair="#3b2617" gift={0.4 + props.gift * 0.6} time={props.time} seed={78} />
-    </Show>
-    <For each={Array.from({ length: drawn() }, (_, index) => index)}>{index => {
-      const where = () => place(index);
-      return <Walker x={where().x} phase={where().phase} facing="right" {...dress(home(), index)}
-        pennant={index === 0 ? undefined : dress(home(), index).pennant} standard={index === 0 ? home() : undefined} torch={index !== 0}
-        you={index === you()} time={props.time} seed={index} />;
-    }}</For>
-    <Gate x={GATE_X} arms={host()} kingdomId={props.hostId} name={props.hostName} lit={lit()} unfurl={1} time={props.time} front />
-    <Show when={more() > 0}><text class="rr-more" x={spot(drawn() - 1) - 84} y="270" text-anchor="end">and {more().toLocaleString('en')} more</text></Show>
-  </Stage>;
+  return <Stage class="rr-arrival" label={`${props.hostName} welcomes the guests`} words={props.words} simulated={props.simulated} reveal={props.reveal} />;
 }
