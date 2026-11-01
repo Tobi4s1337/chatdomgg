@@ -1,0 +1,82 @@
+[
+  {
+    "kit": "composition",
+    "channel": "tobi4s_"
+  },
+  {
+    "kit": "composition",
+    "channel": "the_aggman"
+  },
+  {
+    "kit": "composition",
+    "channel": "pinkkittyrose"
+  },
+  {
+    "kit": "composition",
+    "channel": "mashad4"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "size": "1440x900",
+    "view": "hero"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "size": "1440x900",
+    "view": "street"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "size": "390x844",
+    "view": "hero"
+  },
+  {
+    "kit": "tree",
+    "species": "cherry",
+    "size": "390x844",
+    "view": "street"
+  },
+  {
+    "kit": "willow-bank",
+    "size": "1440x900",
+    "view": "hero"
+  },
+  {
+    "kit": "willow-bank",
+    "size": "1440x900",
+    "view": "street"
+  },
+  {
+    "kit": "willow-bank",
+    "size": "1440x900",
+    "view": "coast"
+  },
+  {
+    "kit": "willow-bank",
+    "size": "1440x900",
+    "view": "dusk"
+  },
+  {
+    "kit": "willow-bank",
+    "size": "390x844",
+    "view": "hero"
+  },
+  {
+    "kit": "willow-bank",
+    "size": "390x844",
+    "view": "street"
+  },
+  {
+    "kit": "willow-bank",
+    "size": "390x844",
+    "view": "coast"
+  },
+  {
+    "kit": "willow-bank",
+    "size": "390x844",
+    "view": "dusk"
+  }
+]

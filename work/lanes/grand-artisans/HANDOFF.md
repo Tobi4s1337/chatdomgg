@@ -1,3 +1,52 @@
+# Latest state after range checkpoint dea2a0a
+
+Committed source: d454d03 (five species/crops/approaches/supports/AABB cache), d07eb1c
+(resumable immutable capture records), dea2a0a (complete connected range/foothills).
+Progress lines point at these. GA10 is still first/only and UNCHECKED. Never push/main.
+
+UNCOMMITTED source: composition curved topology rewrite (earlier two similar/board
+versions rejected), cherry staggered open boughs (hero/street desktop/phone looked and
+retained), explicit willow-bank fixture plus exact occupied root support repair and
+regression. Final forest tests11/lint pass. Root app review adds willow-bank alias.
+No source-edit agent remains active. Keep current model source frozen during new jobs.
+
+Live PARENT captures as last polled:22597 is actual frozen builder-candidate harbour,
+10372 is review-geography.json to shots/grand-artisans/review-05. Each still has its own
+normal canonical lease. No compatibility env is needed. Poll these handles; no orphan
+PID assumptions. Neither has produced pixels yet. Current capture-server supervisor is
+pipe-owned, tested against caller SIGTERM and an independent live sentinel; only owned
+process groups are killed. Port pressure releases a lease before waiting for an allowed
+port; shared services/locks/queue are untouched.
+
+Terminals:97569 exit0 (all six grove desktop heroes and six phone individual heroes,
+four old composition heroes, range2; ALL looked by root, see REVIEW-03.md).95612 exit1
+correctly rejected a changed-source bank dusk still; preceding3 bank frames were old
+source before exact-root repair and are NOT accepted.43950 exit143 without pixels;
+2816 default30s screenshot timeout after readiness, no pixels. No actual new orbit
+acceptance. Parent22597 uses nearer harbour, bounded120s screenshot and15s phase stats
+now. The frozen /tmp/grand-artisans-candidate-review-03 web build passed and fingerprint
+is candidate-review-03.json; DO NOT recreate it while22597 lives. Old /tmp/grand-artisans-
+candidate remains the75bfdb5 snapshot, unused.
+
+93 lane tests and repo typecheck passed before final root guard; final forest11 tests
+and lint pass independently. Three node harness tests pass (records and owned process
+lifetime). Full repo build + updated frozen candidate web build passed. Main-owned
+repo lint has2 unchanged undefined globals; exact needs patch applies and corrected
+text passes real ESLint. Broad test78910 deliberately stopped exit130 after multiple
+unchanged outside-scope failures; full-tests-review-02.txt is PARTIAL. No pnpm verify
+pass. VALIDATION-04.md is current evidence. Broad raw logs have trailing whitespace
+normalised only. Do not rerun full suite merely to rediscover known main failures.
+
+Next: look at latest curved composition and exact-root bank pictures, repair actual
+visual misses, checkpoint coherent looked kits. Native producer/host is still main/
+builder need (adoption-current-seam.md); no authoritative live adoption claim. All
+remaining fixed desktop/mobile views and real moving LOD/shadow/native proof remain
+required; do not tick GA10 for isolated studies. Before next Ralph turn sync newer main
+only once current source/captures are safely accounted for; several newer main commits
+exist. Two pre-sync recovery stashes remain; do not drop blindly.
+
+---
+
 # Current continuation — 2026-11-01
 
 Latest looked source checkpoint d454d03 follows requested clean checkpoint75bfdb5 /

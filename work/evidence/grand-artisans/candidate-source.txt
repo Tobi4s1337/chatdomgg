@@ -1,4 +1,4 @@
-Disposable candidate: /tmp/grand-artisans-candidate
+Disposable candidate: /tmp/grand-artisans-candidate-review-03
 Builder sources copied read-only from /root/chatdomgg-harness/worktrees/grand-kingdom
 Artisans source overlaid from /root/chatdomgg-harness/worktrees/grand-artisans
 Patches: adoption.patch, adoption-sites.needs.patch

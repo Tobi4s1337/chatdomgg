@@ -1,5 +1,7 @@
-import { spawn } from 'node:child_process';
+import { spawnLeasedProcess } from './process-lease.mjs';
 import { createServer } from 'node:net';
+import { acquireArtisanCapture } from './capture-lease.mjs';
+import { setTimeout as pause } from 'node:timers/promises';
 import { CAPTURE_PORTS } from '../../../packages/testing/capture-ports.mjs';
 
 async function available(port) {
@@ -15,15 +17,14 @@ export async function startCaptureServer(cwd = process.cwd()) {
   const failures = [];
   for (const port of CAPTURE_PORTS) {
     if (!await available(port)) continue;
-    const child = spawn('pnpm', ['--filter', '@chatdom/web', 'exec', 'vite', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    const child = spawnLeasedProcess(['pnpm','--filter','@chatdom/web','exec','vite','--host','127.0.0.1','--port',String(port),'--strictPort'],{cwd});
+    child.stdin.on('error',()=>{});
     let log = '', exited = false;
     const closed = new Promise(resolve => child.once('close', () => { exited = true; resolve(); }));
     child.stdout.on('data', chunk => { log += chunk; });
     child.stderr.on('data', chunk => { log += chunk; });
     const stop = async () => {
-      if (!exited && child.pid) {
-        try { process.kill(-child.pid, 'SIGTERM'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
-      }
+      if (!exited) child.stdin.end();
       await closed;
     };
     try {
@@ -35,6 +36,7 @@ export async function startCaptureServer(cwd = process.cwd()) {
         child.once('exit', code => { clearTimeout(timer); reject(new Error(`Vite exited ${code}`)); });
         data();
       });
+      console.log(`[capture] owned Vite ready on ${port}`);
       return { port, stop };
     } catch (error) {
       await stop(); failures.push(`${port}: ${error.message}\n${log}`);
@@ -42,5 +44,25 @@ export async function startCaptureServer(cwd = process.cwd()) {
       if (!/port.*(already in use|in use)|EADDRINUSE/i.test(log)) break;
     }
   }
-  throw new Error(`Unable to start capture Vite.\n${failures.join('\n') || 'No capture ports available.'}`);
+  const error=new Error(`Unable to start capture Vite.\n${failures.join('\n') || 'No capture ports available.'}`);
+  if (!failures.length) error.code='CAPTURE_PORTS_BUSY';
+  throw error;
+}
+
+/** Port pressure is not a failed still and must not retain a capture slot while idle. */
+export async function leaseCaptureServer(cwd) {
+  while(true) {
+    const release=await acquireArtisanCapture();
+    try {return {server:await startCaptureServer(cwd),release};}
+    catch(error) {
+      await release();
+      if(error.code!=='CAPTURE_PORTS_BUSY') throw error;
+      console.log('[capture] allowed ports busy; lease released while waiting for a free port');
+      let free=false;
+      while(!free) {
+        await pause(1000);
+        for(const port of CAPTURE_PORTS) if(await available(port)) {free=true;break;}
+      }
+    }
+  }
 }

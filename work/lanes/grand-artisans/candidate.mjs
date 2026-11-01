@@ -3,10 +3,11 @@ import { cp, mkdir, symlink, access, writeFile, readdir, rm } from 'node:fs/prom
 import { resolve, basename } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const source = resolve('../grand-kingdom');
-const destination = '/tmp/grand-artisans-candidate';
+const destination = resolve(process.env.ARTISAN_CANDIDATE ?? '/tmp/grand-artisans-candidate');
+if (!/^\/tmp\/grand-artisans-candidate(?:-[a-z0-9-]+)?$/.test(destination)) throw new Error('Candidate destination must be a dedicated /tmp/grand-artisans-candidate[-name] folder');
 await rm(destination,{recursive:true,force:true});
 await mkdir(destination,{recursive:true});
-for(const name of ['apps','packages','scripts','package.json','pnpm-workspace.yaml','tsconfig.json','vitest.config.ts']) {
+for(const name of ['apps','packages','scripts','package.json','pnpm-lock.yaml','pnpm-workspace.yaml','tsconfig.json','vitest.config.ts']) {
   await cp(resolve(source,name),resolve(destination,name),{recursive:true,force:true,filter:path=>
     !basename(path).startsWith('.env') &&
     !['node_modules','dist','.vite','shots','.git'].includes(basename(path)) &&

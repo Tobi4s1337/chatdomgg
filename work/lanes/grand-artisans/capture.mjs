@@ -1,7 +1,6 @@
 /** Parent-owned resumable art reviews: one still per canonical capture lease. */
-import { acquireArtisanCapture } from './capture-lease.mjs';
 import { chromium } from '@playwright/test';
-import { startCaptureServer } from './capture-server.mjs';
+import { leaseCaptureServer } from './capture-server.mjs';
 import { canResume, readCaptureRecords, publishCaptureRecord } from './capture-records.mjs';
 import { appendFile, mkdir, readFile, readdir, rename } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
@@ -60,11 +59,10 @@ for (const input of tasks) {
     console.log(`[capture] resume: ${prior.path}`); continue;
   }
   console.log(`[capture] queued still: ${basename}`);
-  const release = await acquireArtisanCapture(); let browser, server;
+  const {release,server}=await leaseCaptureServer(cwd); let browser;
   try {
     // Source can change while a ticket waits. Identify what the browser actually reads.
     const capturedSourceHash = await fingerprint(cwd,kit);
-    server = await startCaptureServer(cwd);
     browser = await chromium.launch({channel:'chrome',headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--no-sandbox']});
     const [width,height] = size.split('x').map(Number);
     const page = await browser.newPage({viewport:{width,height},deviceScaleFactor:1});

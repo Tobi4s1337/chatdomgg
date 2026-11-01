@@ -1,23 +1,28 @@
 /** Actual builder renderer in a disposable adoption candidate; one still/short orbit per lock. */
-import { acquireArtisanCapture } from './capture-lease.mjs';
 import { chromium } from '@playwright/test';
-import { startCaptureServer } from './capture-server.mjs';
+import { leaseCaptureServer } from './capture-server.mjs';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
-const directory='shots/grand-artisans/in-land'; await mkdir(directory,{recursive:true});
+const directory=process.env.ARTISAN_OUTPUT ?? 'shots/grand-artisans/in-land'; await mkdir(directory,{recursive:true});
 const channels=(process.env.ARTISAN_CHANNELS ?? 'tobi4s_,the_aggman,pinkkittyrose,mashad4').split(',');
 const views=(process.env.ARTISAN_VIEWS ?? 'orbit,castle,harbour,fields,summit,mere').split(',');
 const sizes=(process.env.ARTISAN_SIZES ?? '1440x900').split(',');
 const stats=[];
 for(const channel of channels) for(const view of views) for(const size of sizes) {
-  const release=await acquireArtisanCapture(); let server,browser;
+  const {release,server}=await leaseCaptureServer(process.env.ARTISAN_REVIEW_CWD ?? '/tmp/grand-artisans-candidate'); let browser;
   try {
-    server=await startCaptureServer('/tmp/grand-artisans-candidate');
     browser=await chromium.launch({channel:'chrome',headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist','--no-sandbox']});
     const [width,height]=size.split('x').map(Number),page=await browser.newPage({viewport:{width,height},deviceScaleFactor:1});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     const hour=process.env.ARTISAN_HOUR ?? '17.6';
     await page.goto(`http://127.0.0.1:${server.port}/-/grand?channel=${channel}&view=${view}&hour=${hour}&tier=software&capture=1&t=0&still=1`,{waitUntil:'domcontentloaded'});
-    await page.waitForFunction(()=>window.__chatdomReady===true,undefined,{timeout:360000});
+    const deadline=Date.now()+360000;
+    while(true) {
+      try {await page.waitForFunction(()=>window.__chatdomReady===true,undefined,{timeout:15000});break;}
+      catch(error) {
+        if(error.name!=='TimeoutError' || Date.now()>=deadline) throw error;
+        console.log(JSON.stringify({phase:'waiting-for-land',channel,view,stats:await page.evaluate(()=>window.__chatdomGrand?.stats())}));
+      }
+    }
     if(errors.length)throw new Error(errors.join('\n'));
     // Clean builder captures hide its chrome. Keep the independent study's status visible.
     await page.evaluate(()=>{
@@ -26,8 +31,9 @@ for(const channel of channels) for(const view of views) for(const size of sizes)
       document.body.appendChild(label);
     });
     const path=`${directory}/${channel}-${view}-hour${hour}@${size}.png`;
-    await page.screenshot({path});
     const result=await page.evaluate(()=>window.__chatdomGrand.stats());
+    console.log(JSON.stringify({phase:'ready-before-still',channel,view,size,stats:result}));
+    await page.screenshot({path,timeout:120000});
     const record={path,...result,capturedAt:new Date().toISOString()};stats.push(record);
     await appendFile(`${directory}/capture-log.jsonl`,JSON.stringify(record)+'\n');console.log(JSON.stringify(record));
   }finally{
