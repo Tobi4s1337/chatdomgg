@@ -6,6 +6,30 @@ and keeps going on its fallback. Every ask below has a fallback; pier uses it un
 both. Section 1 is what pier provides; sections 2 to 4 are what pier asks for; section 5 is the small realm hooks pier
 writes itself; section 6 lists the other lanes that touch this one.
 
+## PI10 physical pier checkpoint — 2 November 2026
+
+The fallback site is now implemented in `apps/realm/src/fishing/site.ts`. It reads only the adopted plan's
+lake, actual drawn water and founded ground. It checks the dry approach, roads, civic reservations, full head
+and casting water, then refuses if any existing piece obstructs that fixed site. Obstructions never move it.
+`FishingPierSite` is an additive shared type; `root` is the dry-end centre at physical ground height and
+`deckY` is the separate timber datum. `walk` is in metres; content factory coordinates are build cells.
+Grand-world's anchor has not landed in this checkout; there is one fallback, never a second competing anchor.
+
+The founded assembler now imports `pierFurnishings` and adds the section 5c placement call. The new content
+reuses the places-water deck modules and merges furnishings into their collision blueprints. The source kit
+is unchanged. Its scenery gateway is lifted one metre locally, extending its posts so a walking body clears
+the board over a half-metre terrain step. IDs start with `pier:lake:`. No prior placement is edited.
+
+The only web entry hook is `lanePaths['/-/pier']` in `apps/web/src/main.tsx`. This is an isolated review
+surface, with a hash-verified read-only copy of founded geometry. Its warm glass panes and light-field
+contribution run there. **The production kingdom layer is not mounted yet.** There is no completed
+`mountPierLayer(host)` to request at this checkpoint; section 3's eventual mount ask still applies once
+the fishing layer exists. Static timber renders through the ordinary founded placements already.
+
+No room channel, fishing intent, public feed, clock mapping, bag or tool registration is added yet. This
+checkpoint does not change any existing API in sections 1–6. No other lane's SEAMS file is present here;
+there is no additional cross-lane contract change to write into another scope.
+
 ## 1. The items API (pier provides; gather, forge-wish, play, raid-show and panel-window call it)
 
 Owner: pier. Every thing a person owns has one record: what it is, where it came from (who, where, when) and where it

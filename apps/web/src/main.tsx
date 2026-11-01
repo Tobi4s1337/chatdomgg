@@ -15,6 +15,7 @@ const atlas = import.meta.glob<{ default: Component }>('./atlas/index.tsx');
 const loadAtlas = atlas['./atlas/index.tsx'];
 const laneViews = import.meta.glob<{ default: Component }>(['../../panel/src/Panel.tsx', './stream/index.tsx', './avatar-bench/index.tsx', './forge-bench/index.tsx', './audio-bench/index.tsx', './template-bench/index.tsx', './citizen-behaviour-bench/index.tsx', './forge-ritual-bench/index.tsx', './forge-refusal-bench/index.tsx', './citizen-card/index.tsx', './twitch-moments-bench/index.tsx', './campfire/index.tsx', './tavern/index.tsx', './raid-gate/index.tsx', './emotes/index.tsx', './passport/index.tsx', './grand/index.tsx']);
 const lanePaths: Record<string, string> = {
+  '/-/pier': (laneViews['./fishing/index.tsx'] = () => import('./fishing/index'), './fishing/index.tsx'),
   '/-/soul': (laneViews['./soul/index.tsx'] = () => import('./soul/index'), './soul/index.tsx'),
   '/-/passport':'./passport/index.tsx', '/-/grand':'./grand/index.tsx',
   '/-/citizen-card':'./citizen-card/index.tsx', '/-/twitch-moments':'./twitch-moments-bench/index.tsx', '/-/campfire':'./campfire/index.tsx',

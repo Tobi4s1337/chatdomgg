@@ -15,3 +15,4 @@ export * from './citizen-look';
 export * from './forge';
 export * from './growth';
 export * from './items';
+export * from './fishing';
