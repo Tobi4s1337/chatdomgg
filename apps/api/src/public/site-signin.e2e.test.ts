@@ -98,15 +98,15 @@ describe.skipIf(!enabled)('signing in from the front door', () => {
     await expect.poll(() => page.locator('[data-seal="in"]').count()).toBe(3);
     expect(await page.locator('[data-seal="out"]').count()).toBe(0);
     // The development provider names its people; the seal says who is signed in once the session reply carries it.
-    await expect.poll(() => page.locator('.site-top .seal-who-label').textContent()).toBe('Signed in with Twitch');
-    expect(await page.locator('.site-top .seal-walk').getAttribute('href')).toBe('/map');
+    await expect.poll(() => page.locator('.site-top .cd-signin-who-label').textContent()).toBe('Signed in with Twitch');
+    expect(await page.locator('.site-top .cd-signin-walk').getAttribute('href')).toBe('/map');
 
     // Signing out turns the seals back, says so, and the session is gone.
     // In the header the wax opens the card with the way out.
-    await page.locator('.site-top button.seal-wax').click();
-    await page.locator('.site-top .seal-out').click();
+    await page.locator('.site-top button.cd-signin-wax').click();
+    await page.locator('.site-top .cd-signin-out').click();
     await page.locator('[data-seal="out"]').first().waitFor();
-    await expect.poll(() => page.locator('[data-site-notice-words]').textContent()).toContain('You have signed out');
+    await expect.poll(() => page.locator('[data-cd-notice-words]').textContent()).toContain('You have signed out');
     const session = await page.evaluate(async () => (await fetch('/api/realm/session', { cache: 'no-store' })).json() as Promise<{ status: string }>);
     expect(session.status).toBe('anonymous');
     await context.close();
@@ -141,7 +141,7 @@ describe.skipIf(!enabled)('signing in from the front door', () => {
     await page.waitForURL(url => url.pathname.endsWith('/simulated-oidc/authorize'));
     await page.locator('button[name="decision"][value="deny"]').click();
     await page.waitForURL(url => url.origin === base && url.pathname === '/terms');
-    await expect.poll(() => page.locator('[data-site-notice-words]').textContent()).toContain('turned back');
+    await expect.poll(() => page.locator('[data-cd-notice-words]').textContent()).toContain('turned back');
     expect(new URL(page.url()).search).toBe('');
     expect(await page.locator('[data-seal="out"]').count()).toBeGreaterThan(0);
     await context.close();

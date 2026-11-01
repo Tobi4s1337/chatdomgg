@@ -124,7 +124,7 @@ ElevenLabs appears only in the design documents. No speech provider runs on the 
 - sessionStorage: `chatdom:realm:v1:[endpoint,kingdom,resumeScope]` (reconnect seat token, cleared at sign-out);
   `chatdom:reference-scope:*`; `chatdom.atlas.preview.v1`; `chatdom.door.v1` (passes the opened holding to the
   kingdom page); `chatdom:return-view:v1` (where you were before sign-in; read once on return; 15 minutes;
-  `apps/web/src/site/return-view.ts`).
+  `packages/ui/src/site/return-view.ts`).
 - localStorage: `chatdom:forge:<practice key>:<seed>:<slot>` (placed practice Forge pieces),
   `chatdom:build:...:<plot>:<owner>` (build draft), `chatdom-panel-muted`.
 - IndexedDB `chatdom-grand-lands`: cache of generated lands, 6 kept.

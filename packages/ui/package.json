@@ -7,7 +7,11 @@
     ".": "./src/index.ts",
     "./kit.css": "./src/kit.css",
     "./passport": "./src/passport/index.ts",
-    "./growth-card": "./src/growth-card/index.ts"
+    "./growth-card": "./src/growth-card/index.ts",
+    "./site": "./src/site/index.ts",
+    "./site.css": "./src/site/site.css",
+    "./fonts.css": "./src/fonts.css",
+    "./names": "./src/names.ts"
   },
   "dependencies": {
     "solid-js": "1.9.18"

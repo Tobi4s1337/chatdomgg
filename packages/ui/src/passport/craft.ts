@@ -1,6 +1,6 @@
 /**
  * The passport's pure craft: types, deterministic ink, crest geometry, dates, the page model, the drawn marks, the
- * share composition and the SIMULATED fixtures. No DOM, CSS or JSX, so a server (the share image) can draw the same
+ * share composition and the illustrative fixtures. No DOM, CSS or JSX, so a server (the share image) can draw the same
  * book from the same rules.
  */
 export type * from './types';

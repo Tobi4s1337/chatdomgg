@@ -2,9 +2,10 @@ import { inkHash, inkStream } from './ink';
 import type { BondView, GiftView, KeepsakeView, KingdomView, PageView, PassportCollection, PersonView, StampView, VisiblePassportView, VisitView } from './types';
 
 /**
- * Three illustrative books, SIMULATED end to end: invented citizens and invented kingdoms, `origin: 'simulated'`,
+ * Three illustrative books, staged end to end: invented citizens and invented kingdoms, `origin: 'simulated'`,
  * deterministic from fixed seeds. They exist so the book can be seen empty, lightly travelled and well travelled
- * before a real authority supplies one. Every surface that shows them says SIMULATED; nothing here is evidence.
+ * on benches and in tests before a real authority supplies one. Public pages show real books or nothing, so these
+ * never stand in for one there; nothing here is evidence.
  */
 export type PassportFixtureName = 'none' | 'few' | 'many';
 export const PASSPORT_FIXTURE_NAMES: readonly PassportFixtureName[] = ['none', 'few', 'many'];
@@ -163,13 +164,13 @@ const fixture = (name: PassportFixtureName) => {
   return book;
 };
 
-/** The book as a reader first receives it: holder, revision and the first page of every collection. SIMULATED. */
+/** The book as a reader first receives it: holder, revision and the first page of every collection. Illustrative. */
 export function simulatedPassport(name: PassportFixtureName): VisiblePassportView {
   return fixture(name).book;
 }
 
 /**
- * The next page of one collection after `cursor`, as the same revision of the same SIMULATED book. Cursors it never
+ * The next page of one collection after `cursor`, as the same revision of the same illustrative book. Cursors it never
  * issued (malformed, out of range, or in range but off a page boundary) return null: a fixture never invents a page.
  */
 export function simulatedPassportPage<K extends PassportCollection>(name: PassportFixtureName, collection: K, cursor: string): PageView<CollectionItem<K>> | null {

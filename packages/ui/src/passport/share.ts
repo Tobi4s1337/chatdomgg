@@ -76,14 +76,13 @@ const journeyWords = (stamp: StampView) => stamp.kind === 'raid'
 
 /** The image in words: who, what the spread shows and when it was written. No totals, because the image has none. */
 export function shareAlt(spread: ShareSpread): string {
-  const sim = spread.origin === 'simulated' ? ' SIMULATED: an illustrative passport, not a live one.' : '';
   const written = ` Written as of ${longDate(spread.asOf)}.`;
   if (spread.stamps.length === 0) {
-    return `The passport of ${spread.holder.name}, open on its flyleaf with room for the first journey.${written}${sim}`;
+    return `The passport of ${spread.holder.name}, open on its flyleaf with room for the first journey.${written}`;
   }
   const latest = spread.stamps.map(journeyWords).join('; ');
   const further = spread.moreStamps ? ' Older journeys are further back in the book.' : '';
-  return `The passport of ${spread.holder.name}, open on its latest journeys: ${latest}.${further}${written}${sim}`;
+  return `The passport of ${spread.holder.name}, open on its latest journeys: ${latest}.${further}${written}`;
 }
 
 /** A name's length class: long names step down a size instead of being cut. */
@@ -169,9 +168,6 @@ export function composePassportShare(book: VisiblePassportView, options: ShareOp
   for (const stamp of book.stamps.items) places.set(stamp.kingdom.kingdomId, stamp.kingdom.name);
   const title = `The passport of ${spread.holder.name}`;
   const alt = shareAlt(spread);
-  const simulated = spread.origin === 'simulated'
-    ? '<p class="sim" role="note"><b>SIMULATED</b><span>an illustrative passport</span></p>'
-    : '';
   const motes = MOTES.map(([x, y, r, o]) => `<i style="left:${x}px;top:${y}px;width:${r * 2}px;height:${r * 2}px;opacity:${o}"></i>`).join('');
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">`
     // The picture fetches nothing and runs nothing: fonts and marks are inline, and the policy says so.
@@ -183,7 +179,7 @@ export function composePassportShare(book: VisiblePassportView, options: ShareOp
     + `<div class="book"><div class="case"><div class="spread">${flyleaf(spread)}${journeys(spread, places)}</div>`
     + `<span class="ribbon" aria-hidden="true"></span></div></div><div class="motes" aria-hidden="true">${motes}</div>`
     + `<p class="mark"><span class="mark-word">Chatdom</span><span class="mark-site">${escapeMarkup(options.site ?? 'chatdom.gg')}</span></p>`
-    + `${simulated}</main></body></html>`;
+    + '</main></body></html>';
   return { html, title, alt, spread };
 }
 
@@ -288,8 +284,4 @@ bdi{unicode-bidi:isolate}
 p.mark{position:absolute;right:30px;bottom:14px;display:flex;align-items:baseline;gap:12px;color:#e4c27a;text-shadow:0 1px 2px #000a}
 .mark-word{font:22px/1 'IM Fell English SC',Georgia,serif;letter-spacing:.12em}
 .mark-site{font:italic 16px/1 Alegreya,Georgia,serif;color:#d6bf98}
-.sim{position:absolute;left:22px;bottom:11px;display:flex;align-items:baseline;gap:8px;padding:6px 12px 7px;border-radius:5px;
-  background:linear-gradient(180deg,#a1402a,#7a2c1c);box-shadow:inset 0 1px 0 #ffd0b040,0 2px 6px #0008;color:#fbe9d6}
-.sim b{font:16px/1 'IM Fell English SC',Georgia,serif;letter-spacing:.1em}
-.sim span{font:italic 15px/1 Alegreya,Georgia,serif;color:#f4d8c0}
 `;

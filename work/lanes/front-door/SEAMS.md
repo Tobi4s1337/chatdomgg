@@ -98,7 +98,7 @@ contracts):
   the browser leaves for `/api/realm/auth/start` and read once on the way back; a view older than 15 minutes is
   ignored. The sign-in service returns only to the paths its rule accepts (`/`, `/map`, `/map/<login>`, one-word
   paths); a page it refuses (`/how-it-works`) comes back to `/`, and the front page carries the visitor on to the
-  stored path. Code: `apps/web/src/site/return-view.ts`.
+  stored path. Code: `packages/ui/src/site/return-view.ts` (exported from `@chatdom/ui/site`).
 - **The sign-in seal and the Twitch mark** are for chatdom.io pages only. **No Glitch inside the Twitch panel
   extension** (Extensions Guidelines 4.3: no Twitch name, branding, logo or Glitch in extension content).
   panel-window: the panel's footer links to `/privacy`, `/terms` and `/imprint` without the mark or the Twitch line.
@@ -106,10 +106,51 @@ contracts):
 - **The session name.** The seal shows the Twitch name once the session reply carries one (an optional `name`, asked
   of main); until then it says "Signed in with Twitch".
 
-**Heads-up: the kit stops printing SIMULATED** (decision 25). `ProvenanceSeal`, `provenanceLines` and the passport
-and growth-card helpers keep their API but will not print the word. front-door lists every capture and test that
-reads the word before changing it and writes the list here, so each owner can update their own checks in their own
-lane. Benches stay benches: unlabelled, and not reachable on the public origin.
+**Landed in FD11** (the final names; every earlier export keeps its name and API):
+
+| Piece | Import | Notes |
+|---|---|---|
+| Fonts for every script | `import '@chatdom/ui/fonts.css'` | Self-hosted, OFL, split by `unicode-range`: Latin (IM Fell English, Alegreya with its Latin-ext, Cyrillic, Greek and Vietnamese cuts) plus `Chatdom Arabic`, `Hebrew`, `Devanagari`, `Thai`, `JP`, `KR`, `TC`, `SC` (Noto). A Latin page fetches only Latin files. `--cd-face-name` is the name stack; `:lang(ja\|ko\|zh-Hant\|zh-Hans)` reorders the CJK faces. `kit.css`'s three faces now fall back to the same world faces when `fonts.css` is loaded. The sheet is ~400 KB (114 KB gzipped) and fetches no face until a character needs it; where first paint matters and the page's own words are Latin, load it after paint (`void import('@chatdom/ui/fonts.css')`, as the site does). |
+| Name helpers | `@chatdom/ui/names` (also from `@chatdom/ui`) | `applyName(el, text, hint?)` (text, `dir="auto"`, `lang`, `.cd-name`), `nameAttributes`, `nameLang(text, hint?)` (hint: the channel's broadcast language), `nameDirection`, and for canvases `nameFont(px, { text, lang })` plus `await loadNameFaces(texts)` before drawing. CSS: `.cd-name` (wraps anywhere, isolated), `.cd-name-line` (one line, ellipsis, marks never clipped). |
+| Sign-in seal | `mountSignInSeal(el, opts)` / `startSignInSeals()` from `@chatdom/ui/site`; Solid `<SignInSeal />` from `@chatdom/ui` | Options: `size` (`header` compact, `large`), `returnPath`, `view: () => ReturnView` (read just before leaving), `signInHref`, `way(kingdom)`. One shared session reading per page; signing out anywhere turns every seal back. |
+| Twitch mark | `createTwitchMark(label?)`, `twitchMark()`; Solid `<TwitchMark />` | The official Glitch on its clear-space plate in the brass bezel. |
+| Watch on Twitch | `createWatchOnTwitch(login)`, `watchOnTwitch()`; Solid `<WatchOnTwitch login="…" />` | Opens `https://www.twitch.tv/<login>` in a new tab; refuses anything that is not a login. Sizes `small` (cards) and `large`. |
+| Site footer | `createSiteFooter(opts)`, `siteFooter()`; Solid `<SiteFooter />` | Imprint · Impressum, Privacy, Terms, How it works, The Atlas, the Twitch line, the operator, and a quiet "Signed in with Twitch as … · Sign out" line on chatdom.io. Options: `current`, `base` (absolute links), `external`, `twitch: false`, `compact`. |
+| How it works sheet | `createHowItWorks(opts)`, `howItWorksSheet()`; Solid `<HowItWorksSheet />` | The same four pictures and words as `/how-it-works`, what we never collect, the privacy link. Stacks in a container under 640 px wide when the host sets `container-type: inline-size`. |
+| Return-view helper | `rememberReturnView`, `takeReturnView`, `RETURN_VIEW_KEY` from `@chatdom/ui/site` | Unchanged contract (above); moved from the site into the kit. |
+| Type scale, icons | `--cd-size-label`, `-note`, `-small`, `-body`, `-lead`, `-title`, `-heading`, `-display` in `kit.css`; `iconSvg(name)` / Solid `<Icon name />` | Icons: door, atlas, card, panel, home, search, watch, chat, live, crown, sign-out, external, arrow-right, arrow-down, close; 20 px grid, 1.8 px round stroke, `currentColor`. |
+
+Styles: `import '@chatdom/ui/kit.css'; import '@chatdom/ui/fonts.css'; import '@chatdom/ui/site.css';`.
+
+**Recipe for atlas-map** (in its own files):
+- Seal: in the Atlas chrome, `<SignInSeal size="header" returnPath={location.pathname} view={() => ({ path: location.pathname, view: atlasView() })} way={() => null} />`, where `atlasView()` is the view handle's state (position, zoom, open card). On the way back, `takeReturnView()` once at start and hand `.view` to the handle. `announceSignInOutcome()` shows the `?signin=` notice and takes only that word out of the address.
+- Cards: `<WatchOnTwitch login={channel.login} size="small" />` for "Watch on Twitch"; never the Glitch anywhere else.
+- Footer: `<SiteFooter current="map" />` where the Atlas has a foot (or under its ledger), so the legal links and the Twitch line are one tap away.
+- How it works: link to `/how-it-works`, or mount `<HowItWorksSheet title="A map of all of Twitch" heading={3} />` in a carved tab with `container-type: inline-size` on its host.
+- Names on the map: `await loadNameFaces(visibleNames)` before a label pass, then `ctx.font = nameFont(px, { text, lang: nameLang(text, channel.language) })`, `ctx.direction = nameDirection(text)`.
+
+**Recipe for panel-window** (in its own files):
+- Fonts: `import '@chatdom/ui/fonts.css'` (it bundles every face as a file, so the panel's zip carries them; a panel that shows only Latin names fetches only Latin ones). Mind the zip: the faces are ~13 MB in ~440 files, almost all CJK slices, so check the bundle against Twitch's upload limit before Hosted Test. Use `var(--cd-face-name)` or `applyName()` for every Twitch name.
+- Footer links: `<SiteFooter base="https://chatdom.io" external twitch={false} compact />`: the legal links only, absolute, opening in a new tab, with no Twitch mark or Twitch line (Extensions Guidelines 4.3).
+
+**Heads-up: the kit stopped printing SIMULATED** (decision 25), in FD11. `ProvenanceSeal`, `provenanceLines` and
+`PROVENANCE_WORDS` keep their names and types. A staged state (`'simulated'`) presses no line and the seal element
+stays in place `hidden` (same role, `data-provenance` and `data-practice`); with the owner's own `detail` it presses
+those words instead. Practice content under a real feed adds no line (a `detail` becomes the feed line's note).
+`provenanceFromSource('SIMULATED')` still reads the renderer's staged source word. The passport and citizen share
+pictures and alt text, and the growth card, no longer carry the chip or sentence. Readers that will now differ, each
+for its owner to update in its own lane:
+
+- `packages/testing/kingdom-live.mjs:69`, `kingdom-wave.mjs:31`, `kingdom-checks.mjs:67`, `kingdom-integration.mjs:44,55`, `shots.mjs:73`, `kingdom-walk.mjs:124,132` (shared captures): expect SIMULATED in `.source-ribbon`; the staged seal is now hidden and empty.
+- `apps/web/src/kingdom/lights/capture.mjs:109`, `apps/web/src/walk/capture-town.mjs:153`, `apps/web/src/build-tools/capture.mjs:354-356` (kingdom, walk, build tools): read or append to the ribbon; the build-tools clearance check now passes trivially.
+- `apps/herald/scripts/shots.mjs:224,286` (herald): expects SIMULATED in the ribbon.
+- `apps/panel/scripts/capture-fixture.mjs:71` (panel-window): expects SIMULATED.
+- `apps/web/src/growth/capture.mjs:101` (growth): the seal now reads the owner's words only.
+- `apps/web/src/avatar-builder` `.ab-seal` (avatar): hidden in panel mode; the owner's words show on the page.
+- `apps/api/src/passport/share.test.ts:242`, `apps/web/src/citizen-card/share.test.ts:43,77` (raid-show, citizen card): expect `<b>SIMULATED</b>` or SIMULATED in the alt text.
+- `apps/web/src/passport/card-capture.mjs:99`, `apps/web/src/citizen-card/capture.mjs:98`: share pictures lose the corner chip.
+- `apps/web/src/growth-card/render-check.mjs:12,36`, `capture.mjs:37,64` (growth card): expect the SIMULATED chip.
+- Not the kit's: `apps/panel/src/passport/PanelPassport.tsx:71`, `apps/web/src/passport/CardPassport.tsx:111` and `apps/web/src/stream/index.tsx` print their own labels; their owners remove them under decision 25.
 
 ## 4. The public origin (front-door owns the gate)
 
@@ -122,3 +163,29 @@ lane. Benches stay benches: unlabelled, and not reachable on the public origin.
 - One setting, `PUBLIC_INDEXING=closed|open` (default `closed`), controls `X-Robots-Tag`, `robots.txt` and the
   sitemap. Traefik's own noindex middleware is removed by Tobias once this is deployed.
 - The live gateway is restarted only by Tobias or main.
+
+## Atlas footer slot clarification — 2 Nov, AM10 carved UI
+
+The existing `slots.footer` reference now has an additive, framework-free type in
+`apps/web/src/atlas/embed.ts`:
+
+```ts
+export type AtlasFooterSlot = (element: HTMLElement) => void | (() => void);
+// AtlasMountOptions gains:
+slots?: { footer?: AtlasFooterSlot };
+```
+
+Atlas calls it once when explore chrome mounts. The returned cleanup runs before
+switching to hero or disposing, and the host content is removed. Switching back
+to explore mounts a fresh slot. Hero never mounts a footer. The callback owns its
+content, listeners and How it works presentation; it must return their cleanup.
+Without a supplied footer, Atlas shows only its dated survey seal and its one-line
+explanation. No legal, auth or content API is changed. Existing embed callers keep
+working unchanged.
+
+Atlas currently reads the material/type tokens from `@chatdom/ui/kit.css`. Its
+local cartouche, five-symbol key, survey seal and icon control fittings can move
+into the shared kit once front-door reviews them. The newer Twitch mark, Watch,
+site footer and How it works exports exist on front-door's branch but are not yet
+in the Atlas checkout's shared package; the Atlas keeps words-only Watch links
+until main adopts those exports. No official mark is copied or redrawn here.

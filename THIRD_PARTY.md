@@ -83,4 +83,27 @@ The parser, palette matching, placement tool and lantern-cottage review fixture 
 
 | Source | Version/license | Treatment |
 |---|---|---|
-| [Twitch Glitch logo](https://brand.twitch.com/) | Brand kit, Logo Usage Guidelines v3.0 (14 Dec 2023) · trademark of Twitch Interactive, Inc. | `apps/web/src/site/twitch/glitch_flat_purple.svg`, unaltered, used only on the chatdom.io sign-in seal under Twitch's Trademark Guidelines and Developer Services Agreement; never in the panel extension. Rules followed: `work/lanes/front-door/twitch-brand.md`. |
+| [Twitch Glitch logo](https://brand.twitch.com/) | Brand kit, Logo Usage Guidelines v3.0 (14 Dec 2023) · trademark of Twitch Interactive, Inc. | `packages/ui/src/site/twitch/glitch_flat_purple.svg` (the kit), unaltered, used only on chatdom.io, on the sign-in seal and on "Watch on Twitch" links to a channel, under Twitch's Trademark Guidelines and Developer Services Agreement; never in the panel extension. Rules followed: `work/lanes/front-door/twitch-brand.md`. |
+
+## Name faces
+
+Display names in every script are drawn from fonts served by Chatdom itself, declared in `packages/ui/src/fonts.css`.
+`packages/ui/src/fonts/build.mjs` pins each npm package's version and tarball integrity, copies only the 400 normal
+WOFF2 slices used (CJK: numbered slices only) and narrows each slice's `unicode-range` to its own script. The font
+data is unchanged. Each package's licence text sits beside its files.
+
+| Family in our CSS | Font and authors | Source | Files and licence |
+|---|---|---|---|
+| `Alegreya` (extra subsets) | Alegreya variable Roman and Italic: Latin Extended, Cyrillic, Cyrillic Extended, Greek, Greek Extended, Vietnamese. The Alegreya Project Authors (Huerta Tipográfica) | [@fontsource-variable/alegreya](https://www.npmjs.com/package/@fontsource-variable/alegreya) 5.3.0 | `packages/ui/src/fonts/alegreya-*-wght-{normal,italic}.woff2`; SIL OFL 1.1, `OFL-Alegreya-fontsource.txt` |
+| `Chatdom Arabic` | Noto Naskh Arabic, The Noto Project Authors (Google) | [@fontsource/noto-naskh-arabic](https://www.npmjs.com/package/@fontsource/noto-naskh-arabic) 5.3.0 | `packages/ui/src/fonts/world/arabic/`; SIL OFL 1.1, `OFL.txt` |
+| `Chatdom Hebrew` | Noto Serif Hebrew, The Noto Project Authors (Google) | [@fontsource/noto-serif-hebrew](https://www.npmjs.com/package/@fontsource/noto-serif-hebrew) 5.3.0 | `packages/ui/src/fonts/world/hebrew/`; SIL OFL 1.1, `OFL.txt` |
+| `Chatdom Devanagari` | Noto Serif Devanagari, The Noto Project Authors (Google) | [@fontsource/noto-serif-devanagari](https://www.npmjs.com/package/@fontsource/noto-serif-devanagari) 5.3.0 | `packages/ui/src/fonts/world/devanagari/`; SIL OFL 1.1, `OFL.txt` |
+| `Chatdom Thai` | Noto Serif Thai, The Noto Project Authors (Google) | [@fontsource/noto-serif-thai](https://www.npmjs.com/package/@fontsource/noto-serif-thai) 5.3.0 | `packages/ui/src/fonts/world/thai/`; SIL OFL 1.1, `OFL.txt` |
+| `Chatdom JP` | Noto Serif JP (Noto Serif CJK), Google with Adobe | [@fontsource/noto-serif-jp](https://www.npmjs.com/package/@fontsource/noto-serif-jp) 5.3.1 | `packages/ui/src/fonts/world/jp/`; SIL OFL 1.1, `OFL.txt` |
+| `Chatdom KR` | Noto Serif KR (Noto Serif CJK), Google with Adobe | [@fontsource/noto-serif-kr](https://www.npmjs.com/package/@fontsource/noto-serif-kr) 5.3.1 | `packages/ui/src/fonts/world/kr/`; SIL OFL 1.1, `OFL.txt` |
+| `Chatdom TC` | Noto Serif TC (Noto Serif CJK), Google with Adobe | [@fontsource/noto-serif-tc](https://www.npmjs.com/package/@fontsource/noto-serif-tc) 5.3.1 | `packages/ui/src/fonts/world/tc/`; SIL OFL 1.1, `OFL.txt` |
+| `Chatdom SC` | Noto Serif SC (Noto Serif CJK), Google with Adobe | [@fontsource/noto-serif-sc](https://www.npmjs.com/package/@fontsource/noto-serif-sc) 5.3.1 | `packages/ui/src/fonts/world/sc/`; SIL OFL 1.1, `OFL.txt` |
+
+The Noto fonts are Google's Noto families as packaged by [Fontsource](https://fontsource.org). Our family names
+differ from the fonts' own names, so they never clash with installed copies. None of these licences declares a
+Reserved Font Name, and we serve the files exactly as Fontsource publishes them.

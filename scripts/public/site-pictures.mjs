@@ -1,5 +1,6 @@
 // The story page's pictures: real engine captures, cropped to their slot and encoded as WebP at the widths the page
-// asks for. Run it again after a re-shoot; it overwrites apps/web/src/site/img/ and prints each file's size.
+// asks for. Run it again after a re-shoot; it overwrites apps/web/src/site/img/ (and the How it works pictures in the
+// kit, packages/ui/src/site/img/) and prints each file's size.
 //
 //   node scripts/public/site-pictures.mjs [--only <id>]
 //
@@ -12,6 +13,8 @@ import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '../..');
 const out = join(root, 'apps/web/src/site/img');
+/** The How it works pictures belong to the kit, which draws the sheet on the front page and on the Atlas. */
+const kitOut = join(root, 'packages/ui/src/site/img');
 const gpu = join(root, 'work/evidence/front-door/fd10/gpu');
 const stills = '/srv/chatdom-stills/site/img';
 const evidence = join(root, 'work/evidence');
@@ -40,12 +43,13 @@ const PICTURES = [
 
 const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : null;
 mkdirSync(out, { recursive: true });
+mkdirSync(kitOut, { recursive: true });
 let total = 0;
 for (const picture of PICTURES) {
   if (only && picture.id !== only) continue;
   const [x, y, w, h] = picture.crop;
   for (const width of picture.widths) {
-    const file = join(out, `${picture.id}-${width}.webp`);
+    const file = join(picture.id.startsWith('hiw-') ? kitOut : out, `${picture.id}-${width}.webp`);
     execFileSync('nice', ['-n', '10', 'ffmpeg', '-loglevel', 'error', '-y', '-i', picture.src,
       '-vf', `crop=${w}:${h}:${x}:${y},scale=${width}:-2:flags=lanczos`,
       '-c:v', 'libwebp', '-quality', String(picture.quality), '-compression_level', '6', '-preset', 'picture', file]);

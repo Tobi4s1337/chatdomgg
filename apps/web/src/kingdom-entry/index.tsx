@@ -2,7 +2,11 @@ import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import Kingdom from '../kingdom';
 import { RealmEntryError, realmEntryFailureMessage, realmSignInUrl } from '../realm/adapters/entry';
+import { SignInSeal } from '@chatdom/ui';
 import type { KingdomEntryConnection, KingdomEntrySource } from './types';
+import '@chatdom/ui/kit.css';
+import '@chatdom/ui/fonts.css';
+import '@chatdom/ui/site.css';
 import './entry.css';
 
 export type { KingdomEntryConnection, KingdomEntrySource } from './types';
@@ -65,12 +69,13 @@ export default function KingdomEntry(props: { open: KingdomEntrySource }) {
   return <div class="kingdom-entry">
     <div ref={element => { host = element; }} />
     <Show when={state() !== 'connected'}>
-      <div class="kingdom-gate kingdom-entry-gate" role="status" aria-live="polite">
+      <div class="kingdom-gate kingdom-entry-gate cd-kit" role="status" aria-live="polite">
         <svg viewBox="0 0 80 80" aria-hidden="true"><path d="M17 70V25l12-12h22l12 12v45M26 70V31a14 14 0 0 1 28 0v39M12 70h56M31 13V7h6v6m6 0V7h6v6" /></svg>
         <h2>{state() === 'unauthenticated' ? 'Your place is waiting.' : state() === 'refused' ? 'The gate could not open.' : 'Finding your way home'}</h2>
         <p>{message() ?? (state() === 'refused' ? 'Your visit could not be confirmed. Try the gate again.' : 'The street is getting ready for you.')}</p>
-        <Show when={state() === 'unauthenticated'}><a class="kingdom-entry-signin" href={signInUrl}>Sign in with Twitch</a></Show>
-        <Show when={state() === 'refused'}><button type="button" onClick={() => { void open(); }}>Try the gate again</button></Show>
+        {/* The kit's seal, with the gate's own return address; signed in, the gate opens by itself. */}
+        <Show when={state() === 'unauthenticated'}><div class="kingdom-entry-ways"><SignInSeal size="large" signInHref={signInUrl} way={() => null} /></div></Show>
+        <Show when={state() === 'refused'}><button class="kingdom-entry-again" type="button" onClick={() => { void open(); }}>Try the gate again</button></Show>
       </div>
     </Show>
     <Show when={notice()}>{text => <aside class="kingdom-entry-notice" aria-label="About this kingdom">{text()}</aside>}</Show>
