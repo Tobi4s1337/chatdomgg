@@ -62,6 +62,10 @@ export type RealmDomainCommand =
   | { readonly type: 'castle.installNative'; readonly castle: RealmOwnedCastle }
   | { readonly type: 'home.replaceApproved'; readonly homeId: string; readonly expectedRevision: string; readonly home: RealmOwnedHome; readonly approvalReceipt: string;
       readonly attachments: readonly { readonly id: string; readonly placement: Pick<ForgeAttachment, 'hostId' | 'hostFingerprint' | 'socketId' | 'origin'> | null }[] }
+  /** Authored native geometry only: an earned tier, never permission to overwrite a citizen's custom build. */
+  | { readonly type: 'home.growNative'; readonly homeId: string; readonly expectedRevision: string; readonly fromTier: HomeTier;
+      readonly tier: HomeTier; readonly home: RealmOwnedHome; readonly approvalReceipt: string;
+      readonly attachments: readonly { readonly id: string; readonly placement: Pick<ForgeAttachment, 'hostId' | 'hostFingerprint' | 'socketId' | 'origin'> }[] }
   | { readonly type: 'coal.creditQualifiedNight'; readonly personId: PersonId; readonly streamSessionId: string; readonly qualificationReceipt: string }
   | { readonly type: 'presence.confirmInterval'; readonly personId: PersonId; readonly streamSessionId: string; readonly from: number; readonly through: number; readonly evidenceReceipt: string }
   | { readonly type: 'forge.reserve'; readonly record: RealmForgeReservation }

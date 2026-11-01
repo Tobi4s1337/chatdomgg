@@ -6,7 +6,7 @@ import { growRealmFact } from './growth';
 
 const capability: Record<RealmDomainCommand['type'], RealmCapability> = {
   'stream.observe': 'presence', 'citizen.rights': 'moderation', 'home.installAllocated': 'allocation', 'castle.installNative': 'allocation',
-  'home.replaceApproved': 'publication', 'coal.creditQualifiedNight': 'presence',
+  'home.replaceApproved': 'publication', 'home.growNative': 'allocation', 'coal.creditQualifiedNight': 'presence',
   'presence.confirmInterval': 'presence',
   'growth.bindHome': 'allocation',
   'forge.reserve': 'forge', 'forge.release': 'forge', 'forge.commitApproved': 'forge',
@@ -52,10 +52,20 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
         || Object.keys(h.attachments).length > 0 || Object.hasOwn(h, 'allocationReceipt')) return reject('conflict');
       break;
     }
-    case 'home.replaceApproved': {
+    case 'home.replaceApproved':
+    case 'home.growNative': {
       const h = own(s.homes, c.homeId);
       const rights = h ? own(s.rights, h.ownerId) : undefined;
-      if (!rights?.build || rights.blocked) return reject('forbidden');
+      if (c.type === 'home.replaceApproved' && (!rights?.build || rights.blocked)) return reject('forbidden');
+      if (c.type === 'home.growNative') {
+        const earned = h && s.growth ? own(s.growth.citizens, h.ownerId)?.home : undefined;
+        const from = HomeTierSchema.safeParse(c.fromTier), to = HomeTierSchema.safeParse(c.tier);
+        if (!from.success || !to.success || !earned || earned.plotId !== c.homeId || earned.stage === 'tent'
+          || HomeTierSchema.options.indexOf(to.data) <= HomeTierSchema.options.indexOf(from.data)
+          || HomeTierSchema.options.indexOf(to.data) > HomeTierSchema.options.indexOf(earned.stage)) return reject('forbidden');
+        if (c.home.family !== h?.family || JSON.stringify(c.home.attribution) !== JSON.stringify(h?.attribution)
+          || c.attachments.some(item => !item.placement)) return reject('conflict');
+      }
       if (!h || Object.hasOwn(c.home, 'moduleId') || h.revision !== c.expectedRevision || c.home.revision === h.revision || !c.approvalReceipt
         || c.home.id !== h.id || c.home.ownerId !== h.ownerId || c.home.slot !== h.slot
         || c.home.allocationReceipt !== h.allocationReceipt || c.home.layoutRevision !== h.layoutRevision
@@ -64,6 +74,10 @@ export function decideRealm(s: RealmPrivateState, c: RealmDomainCommand, ctx: Re
       if(c.attachments.length!==existing.length || new Set(c.attachments.map(a=>a.id)).size!==existing.length) return reject('conflict');
       for(const item of c.attachments){
         if(!existing.includes(item.id))return reject('conflict');
+        if(c.type==='home.growNative'){
+          const part=own(s.attachments,item.id);
+          if(!part?.attached||part.homeId!==c.homeId||part.ownerId!==h.ownerId)return reject('conflict');
+        }
         if(item.placement){
           if(item.placement.hostId!==c.home.blueprint.id || fitted[item.placement.socketId])return reject('conflict');
           fitted[item.placement.socketId]=item.id;
@@ -159,7 +173,8 @@ function applyRealmDomainFact(s: RealmPrivateState, f: RealmFact): RealmPrivateS
     case 'castle.installNative': return { ...next, castle: c.castle };
     case 'home.installAllocated': return { ...next, homes: { ...s.homes, [c.home.id]: c.home } };
     case 'growth.bindHome': return next;
-    case 'home.replaceApproved': {
+    case 'home.replaceApproved':
+    case 'home.growNative': {
       const attachments = {...s.attachments};
       for(const disposition of c.attachments){
         const prior=attachments[disposition.id]!;
@@ -212,9 +227,16 @@ function applyRealmDomainFact(s: RealmPrivateState, f: RealmFact): RealmPrivateS
 /** Public allowlist. A raw fact includes private ownership/words; it is never a broadcast payload. */
 export function projectRealmFact(s: RealmPrivateState, f: RealmFact, prior?: RealmPrivateState): readonly RealmPublicMessage[] {
   const messages = projectRealmDomainFact(s, f);
+  if (f.body.type === 'home.growNative' && s.growth) {
+    const command = f.body, citizen = own(s.growth.citizens, command.home.ownerId);
+    return [...messages, { type: 'growth', frame: projectGrowthScene({ ...s.growth, sequence: f.seq, asOf: f.committedAt },
+      [{ kind: 'home-grown', sourceSeq: f.seq, at: f.committedAt, personId: command.home.ownerId,
+        plotId: command.homeId, from: command.fromTier, to: command.tier, qualifiedDays: citizen?.qualifiedDays ?? 0 }]) }];
+  }
   if (!s.growth || s.growth.sequence !== f.seq) return messages;
   // Legacy callers have no before-state to prove a crossing. They get current progress, never a fresh ceremony.
-  const milestones = prior ? growRealmFact(prior, s, f).milestones : [];
+  // Entitlement is witnessed here; the home ceremony waits until native geometry actually commits above.
+  const milestones = prior ? growRealmFact(prior, s, f).milestones.filter(milestone => milestone.kind !== 'home-grown') : [];
   return [...messages, { type: 'growth', frame: projectGrowthScene(s.growth, milestones) }];
 }
 
@@ -223,6 +245,6 @@ function projectRealmDomainFact(s: RealmPrivateState, f: RealmFact): readonly Re
   if (c.type === 'home.installAllocated') return [{ type: 'home', plotId: c.home.id, revision: c.home.revision, assetHash: c.home.digest, attachments: [] }];
   if (c.type === 'forge.commitApproved') return [{ type: 'forge', event: { type: 'committed', activityId: c.attempt.attemptId, attachment: s.attachments[c.attachment.id]!.attachment } }];
   if (c.type === 'castle.installNative') return [{ type: 'castle', moduleId: c.castle.moduleId, revision: c.castle.revision, assetHash: c.castle.digest, attachments: [] }];
-  if (c.type === 'home.replaceApproved') return [{ type: 'home', plotId: c.homeId, revision: c.home.revision, assetHash: c.home.digest,attachments:Object.values(c.home.attachments).map(id=>s.attachments[id]!.attachment) }];
+  if (c.type === 'home.replaceApproved' || c.type === 'home.growNative') return [{ type: 'home', plotId: c.homeId, revision: c.home.revision, assetHash: c.home.digest,attachments:Object.values(c.home.attachments).map(id=>s.attachments[id]!.attachment) }];
   return [];
 }
