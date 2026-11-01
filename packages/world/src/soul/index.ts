@@ -62,6 +62,8 @@ export const DEFAULT_SOUL_TOPOLOGY: SoulTopology = {
   harbour: true,
 };
 
+export const SOUL_DUSK_HOUR = 18.75;
+
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const clamp = (x: number) => Math.max(0, Math.min(1, x));
@@ -183,7 +185,7 @@ function keeper(role: SoulRole, route: readonly SoulPoint[], hour: number, bell:
       if (candidate < 16 * 3600) departure = candidate;
       work = 'trimming lamps'; carrying = 'lantern';
     }
-    if (seconds >= 17 * 3600) { departure = 17 * 3600; work = 'lighting lamps'; carrying = 'lantern'; }
+    if (seconds >= SOUL_DUSK_HOUR * 3600) { departure = SOUL_DUSK_HOUR * 3600; work = 'lighting lamps'; carrying = 'lantern'; }
   }
   const trip = departure < 0 ? { progress: 0, moving: false, returning: false, active: false } : tripAt(route, seconds - departure);
   const pose = pathAt(route, trip.progress);
@@ -231,7 +233,7 @@ function soulAtWithWeather(config: SoulConfig, epochMs: number, cachedWeather?: 
   const roles: SoulRole[] = ['baker', 'lamplighter', 'smith', ...(hasHarbour ? ['harbour-master' as const] : [])];
   const keepers = roles.flatMap(role => { const route = topology.routes[role]; return route?.length ? [keeper(role, route, hour, bell, config.population)] : []; });
   const lampRoute = topology.routes.lamplighter;
-  const lamps = topology.lamps.map(l => ({ position: l.position, lit: !!lampRoute?.length && routeLengths(lampRoute).some(length => length > 0) && (hour >= 17 ? (hour - 17) * 3600 >= arrivalSeconds(lampRoute, l.routeProgress) : hour < 5) }));
+  const lamps = topology.lamps.map(l => ({ position: l.position, lit: !!lampRoute?.length && routeLengths(lampRoute).some(length => length > 0) && (hour >= SOUL_DUSK_HOUR ? (hour - SOUL_DUSK_HOUR) * 3600 >= arrivalSeconds(lampRoute, l.routeProgress) : hour < 5) }));
   const baker = keepers.find(k => k.role === 'baker');
   const weather = cachedWeather ?? { ...atmosphere(config, epochMs), ...accumulated(config, epochMs) };
   return { epochMs, hour, season, weather, daylight, night: 1 - daylight, keepers, lamps, chimneySmoke: baker ? smooth((hour - 3.5) / .5) * (1 - smooth((hour - 7) / 1)) : 0, breadCart: { position: baker?.position ?? [0, 0, 0], visible: !!baker?.visible && baker.activity === 'delivering bread' }, shipBell: bell };

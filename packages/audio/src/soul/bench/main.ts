@@ -4,7 +4,7 @@ import type { SoulProfile } from '../index';
 
 Object.assign(window, { renderSoulCase: async (biome: SoulBiome, hour: number, profile: SoulProfile, duration = 8, presence = 12, duck = false) => {
   const epoch = Date.UTC(2026, 6, 15, hour);
-  const { buffer, inspection } = await renderSoulAudio({ duration, sampleRate: 24000, frame: t => ({ frame: soulAt({ seed: 42, biome, population: 12 }, epoch + t * 1000), biome, profile, presence }), ...(duck ? { at: [{ t: 1, run: (audio: import('../index').SoulAudio) => audio.duck({ depthDb: 12, seconds: 5 }) }] } : {}) });
+  const { buffer, inspection } = await renderSoulAudio({ duration, sampleRate: 24000, fps: 10, frame: t => ({ frame: soulAt({ seed: 42, biome, population: 12 }, epoch + t * 1000), biome, profile, presence }), ...(duck ? { at: [{ t: 1, run: (audio: import('../index').SoulAudio) => audio.duck({ depthDb: 12, seconds: 5 }) }] } : {}) });
   const channels = [buffer.getChannelData(0), buffer.getChannelData(1)];
   let peak = 0, sum = 0; for (const c of channels) for (const x of c) { peak = Math.max(peak, Math.abs(x)); sum += x * x; }
   let middle = 0; for (const c of channels) for (let i = 2 * buffer.sampleRate; i < 5 * buffer.sampleRate; i++) middle += c[i]! ** 2;
@@ -18,13 +18,13 @@ Object.assign(window, { renderSoulCase: async (biome: SoulBiome, hour: number, p
 } });
 Object.assign(window, { renderSoulStall: async () => {
   const epoch = Date.UTC(2026, 6, 15, 12), biome = 'woodland' as const;
-  const { buffer, inspection } = await renderSoulAudio({ duration: 8, sampleRate: 24000, frame: t => t < 3 ? { frame: soulAt({ seed: 42, biome, population: 10 }, epoch + t * 1000), biome, presence: 10 } : null });
+  const { buffer, inspection } = await renderSoulAudio({ duration: 8, sampleRate: 24000, fps: 10, frame: t => t < 3 ? { frame: soulAt({ seed: 42, biome, population: 10 }, epoch + t * 1000), biome, presence: 10 } : null });
   const rms = (start: number, end: number) => { const c = buffer.getChannelData(0); let sum = 0; for (let i = start * buffer.sampleRate; i < end * buffer.sampleRate; i++) sum += c[i]! ** 2; return Math.sqrt(sum / ((end - start) * buffer.sampleRate)); };
   return { before: rms(1, 3), after: rms(6, 8), inspection };
 } });
 Object.assign(window, { renderSoulLifecycle: async () => {
   const epoch = Date.UTC(2026, 6, 15, 12), biome = 'coastal' as const;
-  const { buffer, inspection } = await renderSoulAudio({ duration: 12, sampleRate: 24000,
+  const { buffer, inspection } = await renderSoulAudio({ duration: 12, sampleRate: 24000, fps: 10,
     frame: t => ({ frame: soulAt({ seed: 42, biome, population: 10 }, epoch + (t >= 8 ? t + 86400 : t) * 1000), biome, presence: 10 }),
     at: [{ t: 3, run: audio => audio.setMuted(true) }, { t: 6, run: audio => audio.setMuted(false) }],
   });

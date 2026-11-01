@@ -15,3 +15,4 @@ Captures: take the shared capture lock for one still or one short clip at a time
 - [ ] **SO10 — The kingdom alive between streams, whole.** Keepers with routines, weather and seasons, a soundscape and music per biome and hour, in every kingdom down to the hamlet; a dawn-to-night day of one kingdom seen and heard.
 
 ## Backlog
+- Main: settle the capture supervisor's pending retry promise on queue cancellation; clean bounded waits currently print Node's unsettled-await warning.
