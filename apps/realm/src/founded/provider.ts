@@ -1,6 +1,7 @@
 import { VoxelBlueprintSchema, type KingdomId, type Vec3 } from '@chatdom/shared';
 import type { CollisionWorld, RealmBootstrap, RealmFoundedManifest, RealmPrivateState } from '@chatdom/shared/realm';
 import type { RealmFoundedScene, SettlementPlan } from '@chatdom/world';
+import { createFoundedInteractionRegistry, interactionTargetId } from '@chatdom/world/interactions';
 import type { DurableKingdomOptions } from '../persistence/kingdom';
 import { foundedSpawnAnchors } from './anchors';
 import { compileFoundedScene, sampleFoundedTerrain } from './collision';
@@ -32,6 +33,27 @@ export function createFoundedWorld(scene: RealmFoundedScene): FoundedWorld {
       return anchor;
     } };
   return { scene, world, anchors, options };
+}
+
+/** Bind only committed deeds to the actual installed, collision-checked outside door threshold. */
+function withOwnedDoorSpawns(physical: FoundedWorld, state: RealmPrivateState): FoundedWorld {
+  const doors = new Map<string, Vec3>();
+  const homes = Object.values(state.homes).filter(home => home.layoutRevision === physical.scene.layoutRevision);
+  if (homes.length) {
+    const registry = createFoundedInteractionRegistry(physical.scene, physical.world);
+    for (const home of homes) {
+      const door = registry.get(interactionTargetId.homeDoor(home.id));
+      if (door?.target.kind === 'home-door' && door.target.plotId === home.id) doors.set(home.ownerId, door.target.approach);
+    }
+  }
+  const fallback: DurableKingdomOptions['spawn'] = (_principal, arrival) => {
+    const anchor = physical.anchors[arrival];
+    if (!anchor) throw new Error('The founded arrival anchor capacity is exhausted.');
+    return anchor;
+  };
+  return { ...physical, options: { ...physical.options, spawn: (principal, arrival) =>
+    principal.kingdomId === state.kingdomId && principal.origin === state.origin
+      ? doors.get(principal.personId) ?? fallback(principal, arrival) : fallback(principal, arrival) } };
 }
 
 /** Durable artifact and collision-revision authority; implemented by FileFoundedStore below. */
@@ -78,7 +100,7 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
       if (build) {
         const latest = await source.currentLayout(kingdomId);
         if (!latest || latest.revision !== head.revision) throw new Error('The adopted layout changed during founded world preparation.');
-        const prepared: FoundedPreparedWorld = { ...cached.prepared, build,
+        const prepared: FoundedPreparedWorld = { ...withOwnedDoorSpawns(cached.prepared, state), build,
           manifestFor: checkpoint => foundedCheckpointMatches(build, checkpoint) ? build.manifest : null };
         staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, prepared });
         return prepared;
@@ -96,7 +118,7 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
     // A public home metadata change can retain identical geometry. Keep the exact current collision object so
     // its stable revision does not cause a false physical adoption or reset occupied walkers.
     const active = current.get(kingdomId), physical = active?.build.geometryDigest === build.geometryDigest ? active : createFoundedWorld(scene);
-    const prepared: FoundedPreparedWorld = { ...physical, scene, build,
+    const prepared: FoundedPreparedWorld = { ...withOwnedDoorSpawns({ ...physical, scene }, state), scene, build,
       manifestFor: checkpoint => foundedCheckpointMatches(build, checkpoint) ? build.manifest : null };
     // Recheck layout head after asynchronous preparation. Caller still checks held writer/poses at adoption.
     const latest = await source.currentLayout(kingdomId);
