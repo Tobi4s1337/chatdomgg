@@ -44,15 +44,18 @@ export function composeMashaKingdom(recipe: DeepReadonly<ChannelKingdomRecipe>, 
   const city = compileMashaCity(styled, landscape);
   const frame = mashaFrame(landscape.coast.oceanToward);
   const seat = createMashaSeat(styled, selected, city);
-  // From the shore road below Bell Court, looking up the stair to the keep, the pass and the crown of peaks.
+  // From the river meadows below Bell Court, looking up the stair to the keep, the pass and the crown of peaks: the
+  // court, the inn and the arms in the lower third, the terraces in the middle, the keep and the pass above them.
   const [kx, kz] = city.keep.local;
-  const eyeXZ = frame.world(kx + 70, kz + 560), targetXZ = frame.world(kx + 10, kz - 60);
-  const camera = { eye: [eyeXZ[0], 92, eyeXZ[1]] as Vec3, target: [targetXZ[0], city.keep.height + 30, targetXZ[1]] as Vec3, fov: 46 };
+  const eyeXZ = frame.world(kx + 70, kz + 680), targetXZ = frame.world(kx + 10, kz - 60);
+  const camera = { eye: [eyeXZ[0], 100, eyeXZ[1]] as Vec3, target: [targetXZ[0], city.keep.height + 26, targetXZ[1]] as Vec3, fov: 46 };
   const sound = { recipe: { ...recipe, landscapes: recipe.landscapes.map(item => item.id === selected.id ? landscape : item) } as unknown as DeepReadonly<ChannelKingdomRecipe>, landscapeId: selected.id };
   // Approved emote derivatives arrive through the monarch's review; none exists for this channel yet.
   const emoteArt = composeGenesisEmoteArt(styled, selected, []);
+  // Tansy keeps The Copper Kettle from its door; Pip starts the lamp round at the foot of the Crown Stair.
   const market = city.plan.nodes.find(node => node.id === city.plan.market.nodeId)!.position;
-  const keepers = proposeGenesisKeepers(styled, selected).map(proposal => ({ proposal, site: market }));
+  const innDoor = city.plan.nodes.find(node => node.id === 'masha:inn')!.position;
+  const keepers = proposeGenesisKeepers(styled, selected).map(proposal => ({ proposal, site: proposal.keeper.role === 'innkeeper' ? innDoor : market }));
   return { plan: city.plan, landscape, style: roofs.family, seat, camera, hour: 18.9,
     caption: 'Five hundred and twelve homes on terraces beneath the keep, and a road up to the pass.', sound, emoteArt, keepers };
 }

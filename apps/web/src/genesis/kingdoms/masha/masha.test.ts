@@ -129,7 +129,7 @@ describe("MashaD4's kingdom", () => {
     expect(kingdom.camera.eye[1]).toBeGreaterThan(plan.market.elevation);
   });
 
-  it('stands the crown tower on the levelled pass and the cathedral site beside Bell Court, on their own ground', () => {
+  it('stands the crown tower on the levelled pass, and the cathedral site and The Copper Kettle beside Bell Court, on their own ground', () => {
     const cell = VOXEL_METRES.build;
     const grounded = (name: string, placed: { origin: Vec3; turn: CardinalTurn; piece: LandmarkPiece }) => {
       for (const footing of placed.piece.footings) {
@@ -143,6 +143,7 @@ describe("MashaD4's kingdom", () => {
     };
     grounded('crown tower', kingdom.seat.crownTower);
     grounded('cathedral site', kingdom.seat.cathedralSite);
+    grounded('Copper Kettle', kingdom.seat.inn);
     expect(Math.abs(kingdom.seat.crownTower.origin[1] - landscape.mountainPass.saddle[1])).toBeLessThan(.25);
     // The watch fire in the pass is the kingdom's beacon, and the only fire the seat adds beyond the keep's court.
     expect(kingdom.seat.beaconPosition).toEqual(kingdom.seat.crownTower.watchFire);
@@ -151,6 +152,17 @@ describe("MashaD4's kingdom", () => {
     const market = plan.nodes.find(node => node.id === plan.market.nodeId)!.position;
     const centre = [reserve.boundary.reduce((a, p) => a + p[0], 0) / 4, reserve.boundary.reduce((a, p) => a + p[1], 0) / 4];
     expect(Math.hypot(centre[0]! - market[0], centre[1]! - market[2])).toBeLessThan(40);
+    // The Copper Kettle stands on its own yard at Bell Court's corner, its door to the south like the city's homes.
+    const yard = plan.courts.find(court => court.id === 'masha:inn:yard')!;
+    const inn = kingdom.seat.inn;
+    expect(inn.turn).toBe(mashaFrame(landscape.coast.oceanToward).turn);
+    const innCentre = transformCardinalPoint(inn.origin, inn.turn, [inn.piece.blueprint.size[0] * cell / 2, 0, inn.piece.blueprint.size[2] * cell / 2]);
+    const [minX, maxX] = [Math.min(...yard.boundary.map(p => p[0])), Math.max(...yard.boundary.map(p => p[0]))];
+    const [minZ, maxZ] = [Math.min(...yard.boundary.map(p => p[1])), Math.max(...yard.boundary.map(p => p[1]))];
+    expect(innCentre[0]).toBeGreaterThan(minX); expect(innCentre[0]).toBeLessThan(maxX);
+    expect(innCentre[2]).toBeGreaterThan(minZ); expect(innCentre[2]).toBeLessThan(maxZ);
+    expect(Math.hypot(innCentre[0] - market[0], innCentre[2] - market[2])).toBeLessThan(40);
+    expect(kingdom.seat.props.some(prop => prop.blueprint === inn.piece.blueprint)).toBe(true);
   });
 
   it('composes honest emote absence, the recipe\'s own keepers and its sound on the drawn land', () => {
@@ -160,6 +172,8 @@ describe("MashaD4's kingdom", () => {
     expect(kingdom.emoteArt.absences.length).toBeGreaterThan(0);
     expect(kingdom.emoteArt.absences.every(absence => absence.reason === 'none-approved')).toBe(true);
     expect(kingdom.keepers.map(item => item.proposal.keeper.role).sort()).toEqual(['innkeeper', 'lamplighter']);
+    const tansy = kingdom.keepers.find(item => item.proposal.keeper.role === 'innkeeper')!;
+    expect(tansy.site).toEqual(plan.nodes.find(node => node.id === 'masha:inn')!.position);
     for (const { proposal } of kingdom.keepers) expect(proposal.presence).toEqual({ carriesPresenceLight: false, counted: false, twitchChat: 'never', citizen: false });
     const sound = describeGenesisSoundscape(kingdom.sound.recipe, kingdom.sound.landscapeId);
     expect(sound.character).toBe('mountain-pass');

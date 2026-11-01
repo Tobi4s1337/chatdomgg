@@ -12,6 +12,6 @@ Boundaries: shared contracts in `packages/shared`, engines, shaders, package man
 Work in checkpoints: if a session ends before the part is done, leave everything building and working, write `next: <id> <what is done, what remains>` and carry on next session. For visual changes, show a before/after of the same view. Hand main exact `needs:` for any seam outside scope and keep going.
 
 ## Tasks
-- [ ] **GM10 — MashaD4, a kingdom of its own.** Land, landmarks, crest and banners, emote art, keepers, sound and its own dusk light at its own size, captured from its hero view and the Atlas door with a before/after against `shots/genesis/154972160@1920x1080.png`.
+- [x] **GM10 — MashaD4, a kingdom of its own.** Land, landmarks, crest and banners, emote art, keepers, sound and its own dusk light at its own size, captured from its hero view and the Atlas door with a before/after against `shots/genesis/154972160@1920x1080.png`.
 
 ## Backlog

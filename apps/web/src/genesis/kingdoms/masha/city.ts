@@ -70,6 +70,8 @@ export interface MashaCityLayout {
   readonly passTerrace: { readonly centre: Vec3; readonly boundary: readonly XZ[] };
   /** Land held for the cathedral its people may raise, beside Bell Court; `front` is the way its west front faces. */
   readonly cathedral: { readonly centre: Vec3; readonly boundary: readonly XZ[]; readonly front: XZ };
+  /** The Copper Kettle's yard on Bell Court's south-east corner; the inn's door faces south. */
+  readonly inn: { readonly centre: Vec3; readonly boundary: readonly XZ[] };
 }
 
 export function compileMashaCity(recipe: DeepReadonly<ChannelKingdomRecipe>, landscape: DeepReadonly<GenesisLandscape>): MashaCityLayout {
@@ -287,6 +289,12 @@ export function compileMashaCity(recipe: DeepReadonly<ChannelKingdomRecipe>, lan
   const cathedral = { x: reserveX, z: marketZ, y: half(ground(reserveX, marketZ)), boundary: [[-16, -12], [16, -12], [16, 12], [-16, 12]].map(([x, z]) => world(reserveX + x!, marketZ + z!)) };
   const reserveBox = pointBounds(cathedral.boundary);
   if (homes.some(home => overlap(home.lot, reserveBox, 2)) || !clearOfRoads(reserveBox) || !dry(reserveX, marketZ, 20)) throw new Error('The cathedral reserve needs clear, dry ground beside Bell Court.');
+  // The Copper Kettle's yard on Bell Court's south-east corner (the land's levelled `inn-yard`): the inn stands on it
+  // with its door to the south, like every home in the city, greeting the road up from the shore.
+  const innX = kx + MASHA_LAND.innYard.east, innZ = marketZ + MASHA_LAND.innYard.south;
+  const inn = { x: innX, z: innZ, y: half(ground(innX, innZ)), boundary: [[-10, -9], [10, -9], [10, 11], [-10, 11]].map(([x, z]) => world(innX + x!, innZ + z!)) };
+  const innBox = pointBounds(inn.boundary);
+  if (homes.some(home => overlap(home.lot, innBox, 2)) || overlap(innBox, pointBounds(market.boundary)) || overlap(innBox, reserveBox) || !clearOfRoads(innBox) || !dry(innX, innZ, 20)) throw new Error('The Copper Kettle needs its own clear, dry yard on Bell Court.');
   // Landings never climb on the way down, even where a terrace's lane is graded a little above the one before.
   let landing = keepHeight;
   const stairStops = [{ z: kz + 24, y: keepHeight }, ...lanes.map(lane => { const p = crossing(lane); landing = Math.min(landing, p.y); return { z: p.z, y: landing }; }), { z: marketZ - 12, y: Math.min(landing, marketHeight) }];
@@ -346,11 +354,13 @@ export function compileMashaCity(recipe: DeepReadonly<ChannelKingdomRecipe>, lan
   courts.push({ id: 'masha:pass:terrace', nodeId: passTop.id, elevation: passHeight, boundary: passBoundary });
   const cathedralNode = addNode('masha:cathedral', position(cathedral.x + 16, cathedral.y, cathedral.z), 'court');
   courts.push({ id: 'masha:cathedral:reserve', nodeId: cathedralNode.id, elevation: cathedral.y, boundary: cathedral.boundary });
+  const innNode = addNode('masha:inn', position(inn.x, inn.y, inn.z + 11), 'court');
+  courts.push({ id: 'masha:inn:yard', nodeId: innNode.id, elevation: inn.y, boundary: inn.boundary });
 
   // The detailed ground covers the city: every lot, the keep, Bell Court and every street but the Pass Road, which
   // leaves it for the mountainside. The bounds are exactly the box, so the view's ground never depends on the lots.
   const box = pointBounds([world(kx - halfWidth, kz - 40), world(kx + halfWidth, kz + south)]);
-  const extent: XZ[] = [[castle.bounds.minX, castle.bounds.minZ], [castle.bounds.maxX, castle.bounds.maxZ], ...market.boundary, ...cathedral.boundary];
+  const extent: XZ[] = [[castle.bounds.minX, castle.bounds.minZ], [castle.bounds.maxX, castle.bounds.maxZ], ...market.boundary, ...cathedral.boundary, ...inn.boundary];
   for (const home of homes) extent.push([home.lot.minX, home.lot.minZ], [home.lot.maxX, home.lot.maxZ]);
   for (const road of streets) if (road.id !== 'masha:pass') for (const p of road.points) extent.push([p[0], p[2]]);
   const reach = pointBounds(extent);
@@ -363,5 +373,6 @@ export function compileMashaCity(recipe: DeepReadonly<ChannelKingdomRecipe>, lan
     plan, keep: { local: [kx, kz], height: keepHeight }, terraces, stair, passRoad,
     passTerrace: { centre: position(sx, passHeight, sz + 6), boundary: passBoundary },
     cathedral: { centre: position(cathedral.x, cathedral.y, cathedral.z), boundary: cathedral.boundary, front: frame.world(1, 0) },
+    inn: { centre: position(inn.x, inn.y, inn.z), boundary: inn.boundary },
   };
 }

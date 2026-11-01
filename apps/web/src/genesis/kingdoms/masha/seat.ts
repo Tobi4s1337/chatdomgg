@@ -4,6 +4,7 @@ import { terrainHeight, transformCardinalPoint, type CardinalTurn, type XZ } fro
 import type { ChannelKingdomRecipe, DeepReadonly, GenesisLandscape } from '@chatdom/world/genesis';
 import { composeGenesisHeraldry, GENESIS_CREST, GENESIS_STANDARD } from '../../../../../../packages/content/src/genesis-heraldry';
 import { createKeeperLampPost, KEEPER_PROP_ANCHORS } from '../../../../../../packages/content/src/genesis-keepers/props';
+import { COPPER_KETTLE_SIZE, createCopperKettle } from '../../../../../../packages/content/src/genesis-kingdoms/masha/inn/inn';
 import { createCastleContent, createCastleCourtContent } from '../../../kingdom/castle-content';
 import type { Dressing } from '../../../kingdom/settlement-content';
 import type { GenesisSeatContent } from '../../seat-content';
@@ -19,6 +20,7 @@ type Toward = keyof typeof TOWARD;
 export interface MashaSeat extends GenesisSeatContent {
   readonly crownTower: { readonly origin: Vec3; readonly turn: CardinalTurn; readonly piece: LandmarkPiece; readonly watchFire: Vec3 };
   readonly cathedralSite: { readonly origin: Vec3; readonly turn: CardinalTurn; readonly piece: LandmarkPiece };
+  readonly inn: { readonly origin: Vec3; readonly turn: CardinalTurn; readonly piece: LandmarkPiece };
 }
 
 /**
@@ -29,6 +31,8 @@ export interface MashaSeat extends GenesisSeatContent {
  *   the horns at dusk.
  * - The cathedral site fronts Bell Court from the west: the land held and set out for the cathedral the city's
  *   people may raise, never a building.
+ * - The Copper Kettle, Tansy's inn, stands on its yard at Bell Court's south-east corner, its door and kettle sign to
+ *   the south like every home in the city. Its lanterns hang unlit and its door stays shut until a keeper keeps it.
  * - The channel's arms are proposed, never approved branding: two standards at the foot of the Crown Stair and the
  *   crest monument beside it, all in the colours the profile snapped to (`composeGenesisHeraldry`).
  * - Pip the lamplighter's lamp posts stand at every landing of the Crown Stair. They are unlit: a lamp burns only when
@@ -87,6 +91,11 @@ export function createMashaSeat(recipe: DeepReadonly<ChannelKingdomRecipe>, sele
   const cathedralSite = seatOn(cathedral.piece, CATHEDRAL_SITE_AXIS, [reserve.centre[0], reserve.centre[2]], 'east');
   props.push(dress(cathedral.piece.blueprint, cathedralSite), ...cathedral.piece.parts.map(part => ({ blueprint: part.blueprint, position: cathedralSite.world(part.offset), yaw: cathedralSite.turn * Math.PI / 2 })));
 
+  // The Copper Kettle: the blueprint's middle on the yard's middle, its door to the south.
+  const kettle = createCopperKettle({ style });
+  const innSite = seatOn(kettle, { x: COPPER_KETTLE_SIZE[0] / 2, z: COPPER_KETTLE_SIZE[2] / 2 }, [city.inn.centre[0], city.inn.centre[2]], 'south');
+  props.push(dress(kettle.blueprint, innSite), ...kettle.parts.map(part => ({ blueprint: part.blueprint, position: innSite.world(part.offset), yaw: innSite.turn * Math.PI / 2 })));
+
   // The arms at the foot of the stair: two standards either side of it and the crest monument to its west, facing
   // the square and the road in.
   const heraldry = composeGenesisHeraldry(recipe, selected);
@@ -117,5 +126,6 @@ export function createMashaSeat(recipe: DeepReadonly<ChannelKingdomRecipe>, sele
     buildings: castle.buildings, props, braziers, beaconPosition: watchFire,
     crownTower: { origin: towerSite.origin, turn: towerSite.turn, piece: tower.piece, watchFire },
     cathedralSite: { origin: cathedralSite.origin, turn: cathedralSite.turn, piece: cathedral.piece },
+    inn: { origin: innSite.origin, turn: innSite.turn, piece: kettle },
   };
 }

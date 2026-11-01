@@ -8,6 +8,7 @@
 // errors, and stops only what it started. Output: shots/genesis/masha/<view>[-tag]@<w>x<h>.png.
 import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { URLSearchParams } from 'node:url';
 import { createServer } from 'vite';
 import { CAPTURE_PORTS } from '../../../../../../packages/testing/capture-ports.mjs';
 import { acquireCaptureLock } from '../../../../../../packages/testing/capture-lock.mjs';
@@ -56,13 +57,37 @@ try {
     if (view === 'atlas') {
       await tab.goto(`${base}/map?${params}`);
       await tab.waitForFunction(() => window.__chatdomReady === true, null, { timeout: 600_000 });
-      // The door: MashaD4's own mark, opened to its card with the way into its land.
-      const mark = await tab.evaluate(id => window.__chatdomAtlas?.marks(5000).find(item => item.id === id) ?? null, ID);
-      if (!mark) throw new Error('MashaD4 is not drawn on the Atlas in this view.');
+      // The door: MashaD4's own mark, opened to its card with the way into its land. A city is not drawn at the
+      // whole-map distance, so find its holding in the survey and zoom in about it until its shield is drawn.
       const canvas = await tab.locator('canvas').first().boundingBox();
+      const holding = await tab.evaluate(async id => {
+        const read = async url => (await fetch(url)).json();
+        const pointer = await read('/map-data/v1/preview');
+        const world = await read(`/map-data/v1/preview/${pointer.id}/world.json`);
+        const find = columns => { const i = columns.ids.indexOf(id); return i < 0 ? null : { x: columns.x[i] / world.coordScale, y: columns.y[i] / world.coordScale }; };
+        let found = find(world.head);
+        for (const region of world.regions) {
+          if (found) break;
+          found = find((await read(`/map-data/v1/preview/${world.id}/${region.chunk.path}`)).settlers);
+        }
+        return found;
+      }, ID);
+      if (!holding) throw new Error('MashaD4 is not in the current survey.');
+      const drawn = () => tab.evaluate(id => window.__chatdomAtlas?.marks(5000).find(item => item.id === id) ?? null, ID);
+      let mark = await drawn();
+      for (let step = 0; !mark && step < 16; step++) {
+        const camera = await tab.evaluate(() => window.__chatdomAtlas?.stats()?.camera ?? null);
+        if (!camera) throw new Error('The Atlas camera is not readable.');
+        const at = { x: (holding.x - camera.x) * camera.scale + canvas.width / 2, y: (holding.y - camera.y) * camera.scale + canvas.height / 2 };
+        await tab.mouse.move(canvas.x + at.x, canvas.y + at.y);
+        await tab.mouse.wheel(0, -240);
+        await tab.waitForTimeout(1200);
+        mark = await drawn();
+      }
+      if (!mark) throw new Error('MashaD4 is not drawn on the Atlas, even close in.');
       await tab.mouse.click((canvas?.x ?? 0) + mark.x, (canvas?.y ?? 0) + mark.y);
-      await tab.locator('a.atlas-watch').waitFor({ timeout: 60_000 });
-      report[`${width}x${height}`] = { mark, door: await tab.locator('a.atlas-watch').getAttribute('href') };
+      await tab.locator('a.atlas-watch[href^="/kingdom/"]').waitFor({ timeout: 60_000 });
+      report[`${width}x${height}`] = { mark, door: await tab.locator('a.atlas-watch[href^="/kingdom/"]').getAttribute('href') };
       await tab.waitForTimeout(1500);
     } else {
       await tab.goto(`${base}/kingdom/${ID}?${params}`);
