@@ -48,7 +48,8 @@ describe('citizen card facts', () => {
     expect(followFact(document.tenure).value).toBe('30 Aug 2024');
     expect(subscriptionFact(document.tenure).value).toBe('14 months, Tier 1');
     expect(wren.portraitLook).toBe(SITTER_LOOK);
-    expect(wren.worn).toEqual(SITTER_WORN.map(offer => ({ name: offer.name, story: offer.story })));
+    expect(wren.worn).toEqual(SITTER_WORN.map(offer => ({ name: offer.name, story: offer.story, travel: offer.piece.family === 'scarf' || offer.piece.family === 'pin' })));
+    expect(wren.worn?.filter(piece => piece.travel).map(piece => piece.name)).toEqual(['A sprig of salt lavender', 'Raid scarf: Emberfold']);
     // Their passport is the craft's `many` book, held by this very person, and its roads begin at a home the card shows.
     const authorities = simulatedPassportAuthorities('many', { signedIn: true, travelsHidden: false });
     expect(simulatedPassport('many').holder.personId).toBe(document.key.personId);

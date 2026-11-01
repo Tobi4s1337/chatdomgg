@@ -1,6 +1,6 @@
 import { MAT } from '../../../materials';
 import type { AggmanPiece, Livery } from '../piece';
-import { layCoil, setPut, IRON, ROPE } from './gear';
+import { layCoil, IRON, ROPE } from './gear';
 import { Grid, noise, ring } from './grid';
 
 /** A square slab of `size` cells at (x0, z0) with its corners cut by `cut`, so round things read faceted. */

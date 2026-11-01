@@ -10,6 +10,7 @@ import { BENCH_EMOTE, BENCH_EMOTE_EFFECT } from './bench-emote';
 import { createMomentStage, type MomentStage } from './stage';
 import { createRelayPath, type RelayPath } from './relay-path';
 import { BENCH_KINGDOM, benchPerson, createBenchSimulation, type BenchCitizen, type BenchDelivery, type BenchSimulation } from './simulation';
+import StreamSkyBench from './stream-sky';
 import './style.css';
 
 /** The scrubber's reach: long enough for a full gift cart, Skyfire's aurora or the dragon's waking and fall. */
@@ -36,7 +37,12 @@ const HYPE: ReadonlySet<Scenario> = new Set(['train', 'closing', 'dragon', 'batt
 
 const DECREE = { kind: 'poll-create', title: 'Where shall the new well be dug?', choices: ['By the old bridge', 'In the market square', 'Up on Heather Hill'], durationSeconds: 180 } as const;
 
+/** `?stage=stream` shows the sky moments over the stream's own picture of the real town; otherwise the bench hamlet. */
 export default function TwitchMomentsBench() {
+  return new URLSearchParams(location.search).get('stage') === 'stream' ? <StreamSkyBench /> : <HamletBench />;
+}
+
+function HamletBench() {
   const query = new URLSearchParams(location.search);
   const live = query.get('mode') === 'live', clean = query.get('clean') === '1';
   const scenario: Scenario = SCENARIOS.find(s => s === query.get('scenario')) ?? 'neighbours';

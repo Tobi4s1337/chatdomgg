@@ -39,8 +39,8 @@ export interface CitizenShareFact {
 export interface CitizenShareHome {
   readonly name: string;
   readonly street: string;
-  /** The home's tier in words, e.g. "A cottage". */
-  readonly tier: string;
+  /** The home's tier in words, e.g. "A cottage", or null when the house authority has not said. */
+  readonly tier: string | null;
 }
 
 export interface CitizenSharePortrait {
@@ -133,7 +133,7 @@ export function citizenShareAlt(card: CitizenShareCard): string {
   parts.push(`The citizen card of ${card.name}${standing}, of ${card.kingdom.name}.`);
   const portrait = acceptedPortrait(card.portrait);
   parts.push(portrait ? `Their painted portrait: ${sentence(portrait.alt)}` : `The arms of ${card.kingdom.name} hang where a portrait would be.`);
-  parts.push(card.home ? `Home: ${card.home.name}, ${card.home.street} (${card.home.tier.replace(/^A /, 'a ')}).` : `Not settled in ${card.kingdom.name} yet.`);
+  parts.push(card.home ? `Home: ${card.home.name}, ${card.home.street}${card.home.tier ? ` (${card.home.tier.replace(/^A /, 'a ')})` : ''}.` : `Not settled in ${card.kingdom.name} yet.`);
   for (const fact of card.tenure.slice(0, CITIZEN_SHARE_FACTS)) parts.push(`${fact.label}: ${fact.value ?? 'not known yet'}.`);
   const worn = card.worn.slice(0, CITIZEN_SHARE_WORN);
   if (worn.length) parts.push(`Earned and worn: ${worn.map(piece => piece.story ? `${piece.name} (${piece.story})` : piece.name).join('; ')}.`);
@@ -230,7 +230,7 @@ function plaque(card: CitizenShareCard): string {
     + '</li>').join('');
   const home = card.home
     ? `<li class="fact home" data-length="${lengthOf(`${card.home.name}, ${card.home.street}`, 26, 44)}">${mark('home')}<span class="label">Home</span><strong class="value">${bdi(card.home.name)}<span class="street">, ${bdi(card.home.street)}</span></strong>`
-      + `<span class="note">${bdi(card.home.tier)}</span></li>`
+      + (card.home.tier ? `<span class="note">${bdi(card.home.tier)}</span>` : '') + '</li>'
     : `<li class="fact home">${mark('home')}<span class="label">Home</span><strong class="value unknown">Not settled in ${bdi(card.kingdom.name)} yet</strong></li>`;
   const worn = card.worn.slice(0, CITIZEN_SHARE_WORN);
   const pieces = worn.length

@@ -51,7 +51,7 @@ import type { AmbienceTarget } from './ambience/types';
 import { createArrivalDirector, type ArrivalAttention } from './arrival-director';
 import { createShoreDressing } from './shore-dressing';
 import { createKingdomMoments } from './moments';
-import type { ScreenCaption, TwitchMomentFeed } from '../twitch-moments';
+import { skyLitEnvironment, type ScreenCaption, type TwitchMomentFeed } from '../twitch-moments';
 import { createWaterSurface } from '../places/water/surface';
 import { deriveWaterReaches } from '../../../../packages/world/src/places/water/reaches';
 
@@ -396,8 +396,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   function labels(){const names:NameLabel[]=[];for(const s of [...windows.getSources(),...build.getSources()]){
     if(!s.name||s.strength<.1)continue;const p=new THREE.Vector3(...s.position),to=camera.position.clone().sub(p);
     const royalPicture=s.slot===65534&&(camName==='window'||arrivalShot?.slot===65534&&arrivalShot.phase==='window');
+    // The stream's wide opening still belongs to a person. Its single name plate
+    // may reach a newly lit, visible window; ordinary close labels stay local.
+    const wideArrival=camName==='hero'&&!arrivalCameraDirected&&!forgeCameraDirected&&(options.directArrivals||autoCamera&&time<=8)&&'arrivalAgeSeconds' in s&&s.arrivalAgeSeconds<7;
     if('arrivalAgeSeconds' in s&&s.arrivalAgeSeconds>7&&to.length()>6&&!royalPicture)continue;
-    if(to.length()>(royalPicture?90:32)||to.dot(new THREE.Vector3(...s.normal))<2)continue;
+    if(to.length()>(royalPicture?90:wideArrival?240:32)||to.dot(new THREE.Vector3(...s.normal))<2)continue;
     if(windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],s.position))continue;
     p.y+=royalPicture ? .45 : 1.1+('arrivalAgeSeconds' in s ? .22*(1-Math.exp(-s.arrivalAgeSeconds*2)):0);p.project(camera);if(p.z>1||p.z<0||Math.abs(p.x)>.91||Math.abs(p.y)>.88)continue;
     names.push({name:s.name,slot:s.slot,...('arrivalAgeSeconds' in s?{arrivalAgeSeconds:s.arrivalAgeSeconds}:{}),x:(p.x+1)*canvas.clientWidth/2,y:(1-p.y)*canvas.clientHeight/2});
@@ -421,7 +424,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       crowd.clear();arrivalDirector?.clear();frame=undefined;
       lastLightFrameKey='';lastField=-Infinity;
     }
-    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);
+    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=skyLitEnvironment(getEnvironment(hour),moments?.glow());
     // Only the hot casting carries this local fire treatment. The receiving
     // house, ordinary dusk and walking retain their accepted lighting.
     const stageHeat=!walkSelected&&!capturePose?Math.max(forgeCameraDirected?(realmForge?.heat??0):0,forge.status().open?forge.heat:0):0;
@@ -443,10 +446,13 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(lightFrame)build.setFrame(lightFrame);
     // Potential land may show an anonymous night painting, independently of its empty
     // presence feed. Never pass those preview lights to citizens, build or the room.
-    const windowFrame=options.potential?.windowPreview??lightFrame;
+    // A witnessed chat arrival lights its home immediately; walking home is the next beat.
+    const windowFrame=options.potential?.windowPreview??frame;
     const lightKey=`${windowFrame?.epoch}:${windowFrame?.sequence}:${windowFrame?.windows.filter(w=>w.present).map(w=>w.slot).join(',')}`;
     if(windowFrame&&lightKey!==lastLightFrameKey){windows.setFrame(buildHidden?{...windowFrame,windows:windowFrame.windows.filter(w=>w.slot!==simulation.firstSlot)}:windowFrame);lastLightFrameKey=lightKey;lastField=-Infinity;}
-    if(ownSimulation&&frame){const person=frame.windows.find(w=>w.slot===simulation.firstSlot);if(person?.present&&time>=3&&time<9)crowd.receiveChat({version:1,id:'simulated-evening',kingdomId:frame.kingdomId,epoch:frame.epoch,origin:'simulated',slot:simulation.firstSlot,asOf:simulation.epochMs+3000,expiresAt:simulation.epochMs+9000,parts:[{kind:'text',text:'Evening, everyone! 🌿'}]});}
+    // The wide wave leads into the street at 8–12s; let its speaker greet us as
+    // we join the lantern procession, before the doorway's homecoming answers.
+    if(ownSimulation&&frame){const person=frame.windows.find(w=>w.slot===simulation.firstSlot);if(person?.present&&time>=6&&time<16)crowd.receiveChat({version:1,id:'simulated-evening',kingdomId:frame.kingdomId,epoch:frame.epoch,origin:'simulated',slot:simulation.firstSlot,asOf:simulation.epochMs+6000,expiresAt:simulation.epochMs+16000,parts:[{kind:'text',text:'Evening, everyone! 🌿'}]});}
     const arrival=crowd.subject(simulation.firstSlot);
     if(ownSimulation&&frame&&arrival?.homeLitAtMs&&presentationMs-arrival.homeLitAtMs<6000)crowd.receiveChat({version:1,id:'simulated-home',kingdomId:frame.kingdomId,epoch:frame.epoch,origin:'simulated',slot:simulation.firstSlot,asOf:Math.ceil(arrival.homeLitAtMs),expiresAt:Math.ceil(arrival.homeLitAtMs+6000),parts:[{kind:'text',text:'Home, at last. ✨'}]});
     windows.update(fixedTime?(autoCamera?0:1):dt,hour,presentationMs);
@@ -457,15 +463,15 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(loaded&&beacon>.9&&!beaconCue){sound.cue('beacon');beaconCue=true;}
     if(walking){const self=walk!.poses.find(p=>p.self);if(self)target.set(self.x,self.y+1,self.z);}
     else if(autoCamera){
-      // Rise inside the street before withdrawing over the opposite roofs.
-      const subject=crowd.subject(focusSlot),pull=THREE.MathUtils.smootherstep(time,18,36);
+      // First witness the town lighting up, then enter its lantern street, then rise back.
+      const subject=crowd.subject(focusSlot),pull=1-THREE.MathUtils.smootherstep(time,8,12)+THREE.MathUtils.smootherstep(time,24,36);
       if(subject){const p=new THREE.Vector3(...subject.position);camera.position.copy(citizenEye);target.copy(p).add(new THREE.Vector3(0,1.05,0));}
       else {camera.position.copy(homeEye);target.copy(homeTarget);}
       camera.position.lerp(heroEye,pull);target.lerp(heroTarget,pull);
     }
     else if(camName==='citizen'){const person=crowd.subject(focusSlot);const p=person?new THREE.Vector3(...person.position):focal.clone();camera.position.copy(citizenEye);target.copy(p).add(new THREE.Vector3(0,1.05,0));}
     else if(camName==='window'){camera.position.copy(homeEye);target.copy(homeTarget);}else{camera.position.copy(heroEye);target.copy(heroTarget);}
-    const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,THREE.MathUtils.smootherstep(time,18,36)):camName==='citizen'?48:camName==='window'?homeFov:heroFov;
+    const wantedFov=autoCamera?THREE.MathUtils.lerp(48,heroFov,(1-THREE.MathUtils.smootherstep(time,8,12)+THREE.MathUtils.smootherstep(time,24,36))):camName==='citizen'?48:camName==='window'?homeFov:heroFov;
     if(!walking&&Math.abs(camera.fov-wantedFov)>.001){camera.fov=wantedFov;camera.updateProjectionMatrix();}
     if(!installed){build.update(now,dt,hour,target);forge.update(now,target,!!build.session);}
     const forgeDirected=forgeCameraDirected=realmForge?.update(now,!walking&&!build.session&&!capturePose)??false;
@@ -580,7 +586,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   // remain pending even while the scene draws. The first fully loaded render
   // opens the gate; background light readiness is reported independently.
   try {await Promise.all(tasks);
-    if(disposed)throw new Error('Scene closed while loading');await crowd.prepare();if(!installed){await build.prepare();await forge.prepare();}if(options.walkerFeed&&options.founded){const next=await createObservedWalkers(scene,camera,canvas,pool,crowd.material,options.founded,options.walkerFeed,createFoundedInteractionRegistry(options.founded,compileFoundedScene(options.founded)));if(disposed){next.dispose();throw new Error('Scene closed while preparing walkers');}observed=next;}if(disposed)throw new Error('Scene closed while preparing citizens');
+    if(disposed)throw new Error('Scene closed while loading');
+    options.onProgress('Welcoming the citizens',1);await crowd.prepare();
+    if(!installed){options.onProgress('Remembering your home',1);await build.prepare();options.onProgress('Remembering your forged gifts',1);await forge.prepare();}if(options.walkerFeed&&options.founded){const next=await createObservedWalkers(scene,camera,canvas,pool,crowd.material,options.founded,options.walkerFeed,createFoundedInteractionRegistry(options.founded,compileFoundedScene(options.founded)));if(disposed){next.dispose();throw new Error('Scene closed while preparing walkers');}observed=next;}if(disposed)throw new Error('Scene closed while preparing citizens');
     if(options.momentFeed){
       const kingdomId=options.founded?.kingdomId??options.kingdomId;
       if(!kingdomId||options.founded&&options.momentFeed.origin!==options.founded.origin)throw new Error('Moments need this kingdom and its actual source');

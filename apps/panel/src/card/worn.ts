@@ -18,6 +18,14 @@ export interface WornRecord {
 
 const FOUNDER: Pair = ['#e3b955', '#6a4c2b'];
 
+/**
+ * A piece that remembers a journey: the scarf knitted on a raid's road, or a keepsake pin from a kingdom reached. Its
+ * name and story are travel, so the card names it only while the passport itself is open to read.
+ */
+export function remembersTravel(piece: WornPiece): boolean {
+  return piece.family === 'scarf' || (piece.family === 'pin' && piece.shape !== 'founder' && piece.shape !== 'forged');
+}
+
 export function wornPiece(record: WornRecord): WornPiece {
   const { key: id, name, story, piece } = record;
   switch (piece.family) {

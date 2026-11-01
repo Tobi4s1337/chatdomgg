@@ -2,10 +2,11 @@ import { For, Match, Show, Switch, createEffect, createSignal, createUniqueId, o
 import { Dynamic } from 'solid-js/web';
 import type { CitizenKey } from '@chatdom/shared';
 import type { CardAssetRef, CitizenCardDocument } from '../../../api/src/citizen-card/contracts';
-import type { CardHost, CardLight, CardLoad, CardWorn } from './host';
+import { disclosedWorn, type CardHost, type CardLight, type CardLoad, type CardWorn } from './host';
 import { PaintedCrest, WaxSeal } from './Crest';
 import { BrassCorner, Flourish, Mark, type MarkName } from './marks';
 import { followFact, nameStyle, showLogin, standing, subscriptionFact, type Fact } from './format';
+import { ShareShelf } from './ShareShelf';
 import './plaque.css';
 
 export type CardMode = 'dialog' | 'page';
@@ -80,11 +81,13 @@ export function CitizenCard(props: CitizenCardProps): JSX.Element {
 
   const worn = () => {
     const current = view();
-    return current.status === 'ready' && props.worn && sameKey(props.worn.key, current.document.key) && props.worn.pieces.length ? props.worn.pieces : null;
+    if (current.status !== 'ready' || !props.worn || !sameKey(props.worn.key, current.document.key)) return null;
+    const pieces = disclosedWorn(props.worn.pieces, current.document.passport);
+    return pieces.length ? pieces : null;
   };
   const body = () => <CardBody view={view()} mode={props.mode} host={props.host} worn={worn()} onRetry={retry} />;
   return <Show when={view().status !== 'idle'}>
-    <Show when={props.mode === 'dialog'} fallback={<PageFrame light={props.light ?? 'dusk'} view={view()} beneath={props.beneath}>{body()}</PageFrame>}>
+    <Show when={props.mode === 'dialog'} fallback={<PageFrame light={props.light ?? 'dusk'} view={view()} host={props.host} beneath={props.beneath}>{body()}</PageFrame>}>
       <Dialog host={props.host} light={props.light ?? 'dusk'} view={view()}>{body()}</Dialog>
     </Show>
   </Show>;
@@ -132,8 +135,14 @@ function Dialog(props: { host: CardHost; light: CardLight; view: View; children:
   </div>;
 }
 
-function PageFrame(props: { light: CardLight; view: View; beneath: ((document: CitizenCardDocument) => JSX.Element) | undefined; children: JSX.Element }) {
+function PageFrame(props: { light: CardLight; view: View; host: CardHost; beneath: ((document: CitizenCardDocument) => JSX.Element) | undefined; children: JSX.Element }) {
   const ready = () => props.view.status === 'ready' ? props.view.document : null;
+  // Asked of the host for the document actually shown, so a replaced or withdrawn card never keeps the last links.
+  const share = () => {
+    const document = ready();
+    const links = document ? props.host.share?.(document) ?? null : null;
+    return document && links ? { document, links } : null;
+  };
   const beneath = () => {
     const document = ready();
     return document && props.beneath ? { document, draw: props.beneath } : null;
@@ -145,6 +154,7 @@ function PageFrame(props: { light: CardLight; view: View; beneath: ((document: C
     </header>
     <main class="cc-page-main">
       <div class="cc-page-card">{props.children}</div>
+      <Show when={share()} keyed>{s => <ShareShelf document={s.document} links={s.links} host={props.host} />}</Show>
       {/* Keyed by the document: a new subject lays its own things beneath, never the last one's. */}
       <Show when={beneath()} keyed>{b => <div class="cc-page-beneath">
         <span class="cc-page-thread" aria-hidden="true" />

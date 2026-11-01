@@ -330,53 +330,53 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Order:** picture only. Finish the whole Forge from chat words to warm roof settle, then the
-chat-arrival window wave and lantern homecoming. One visible beat per turn with a looked-at pair.
-Team owns Genesis, panel/passport, raid journey and sky moments; medium routine helpers.
+**Outcome: the real channel answers, with the team’s moments on stream.** The window wave and
+Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo street fill and warm pools, castle/beacon,
+sparse grey-violet chimney smoke, sculpted land/groves and AS10 citizens. No new systems or rework
+of accepted pictures. Merge good runtime checkpoints promptly; one visible change per turn.
 
-**Main:** pushed5f4dc8b holds the gift's hearth heat through early landing, easing to native colours
-by the end. Root viewed `shots/magic/forge-warm-settle-pair.png` and its close pair: blue-grey to
-peach-gold, solid facets retained. d545d0e neighbours turn/look up and up to3 stationary eligible
-people wave; walkers retain routes. No more tiny pose iterations. Landing/contact warmth is accepted.
+**Latest merge: Aggman GA10 (3a6916a).** Harbour composition, inn, Last Lantern lighthouse,
+working quay, boats/geese and checked channel emote statue/glass/vane are on main. Added its
+`GENESIS_KINGDOMS` registry entry so `/kingdom/63920635` uses the authored19.6 opening hour and
+lore without a query override. Root viewed the lane’s committed native1920×1080 hero and quay
+stills and `work/evidence/genesis-aggman/before-after-hero.png`: the hamlet now gathers at a
+recognisable working harbour in its own colours. Typecheck, scoped lint, eighteen focused tests
+and web build pass. These are producer route captures, not a fresh post-merge capture. Keepers
+and sound are composed data but still unmounted. The current Atlas survey lacks this holding,
+so the Atlas door is NOT demonstrated; do not invent a mark. The quay’s drawn-up boats still
+need a shingle margin rather than grass beneath them; next visual detail for the lane.
 
-**Latest accepted flight camera:** `home-shot.ts` retains original target centreY-2 and blends
-view elevation+.32 at launch to+.03 by progress.2. Launch stays above the smithy; the warm treasure
-then silhouettes against peach/lilac sky, with a substantial band of lit streets below. Receive and
-landing remain unchanged. Root viewed `shots/magic/forge-sky-flight-pair.png`, full after1920×1080
-and same-pixel close pair. This is visibly clearer than the hillside backdrop. Head/paws are still
-indistinct at stream distance; do not call the whole Forge finished from this frame.
+**Previous seam (4ab8d36):** the kingdom retains `SkyGlow`, grades materials through
+`skyLitEnvironment`, and the stream mounts `SkyCaptions`. The realm spectator already passes
+`createRoomMomentFeed` into `SceneOptions.momentFeed`; no new feed contract. Viewed native
+`shots/magic/sky-stream-wiring-pair.png` (before LEFT): the town takes the aurora’s light.
+SIMULATED Herald ingest through the real scene/mount at3.6s, preparation ready, no errors;
+lighting proof, not production caption delivery or a real cheer. Nine focused tests passed.
+Idle dusk stays unchanged. Aurora streaks remain too regular; sky lane has that follow-up.
 
-The steeper negative-angle version was REJECTED for excessive underside/lost town, preserved only
-in temporary `chatdom-rejected-sky-flight.png`. The current after/pairs now show the accepted balanced
-version. Baseline is accepted forge-treasure-after, same SIMULATED ritual17.3/world47.3/hour19.5/HIGH.
-One launch/cruise guard test plus existing heat test, typecheck/scoped lint and web build passed.
-Immutable accepted build: temporary `chatdom-forge-flight-sky-balanced`; private
-`../worktrees/main-forge-settle-warmth` has the same camera/test backup. Main is authoritative.
+**Team handoff:** raid-road and sky-moments still have uncommitted runtime work; no new runtime
+checkpoint on either branch. Other requested picture/card/Genesis branches had no new runtime commit
+beyond Aggman GA10 at this check. Sky SM10 is already merged; its missing lighting/credit mount is now
+installed. Raid-road’s RR10 stages the gate, Atlas road and arrival, but still needs its visual
+checkpoint; its WIP uses SIMULATED presence, not a live raid feed. The new dragon also remains
+on the sky worktree. Both lanes received a request to checkpoint green slices and send exact
+scene/director `needs:` patches (terrain/crowd hooks may follow). Do not copy their WIP wholesale.
+`lane/live-twitch` owns Herald → realm ingress → public moment facts, live labels, Twitch CLI
+mock commands, and homes/windows beyond twelve speakers. It has the existing feed seam and
+must ask main for any separate raid gate mount. Root has NOT claimed this live path complete.
+Read-only entry and first room-watch requests through5190 returned LIVE and closed promptly;
+they do not prove event delivery or establish home capacity. No Twitch write was made.
 
-**Capture:**67563 completed exit0, actual active flight/world47.3/HIGH, settled fields, no browser
-errors or forbidden Forge POST, cleanup confirmed. No root capture remains. Earlier97267 queued out;
-27893 was cancelled on pause. GPU availability question unanswered. Next: review the whole moving
-Forge with its real planning runway; preserve this flight angle and accepted landing framing.
+**Accepted opening:** windows use witnessed presence immediately; physical arrival drives the door
+lantern/smoke. The scene holds wide0–8s, glides into the street8–12s, returns wide24–36s, without
+an independent director shutter. Greeting6–16s hands over to “Home, at last.” The viewed native
+wave pairs and `arrival-street-greeting-pair.png` remain in `shots/magic/`. Root watched all120
+sampled frames of `arrival-continuous-rehearsal-320.mp4` (0–24s): staging proof, not1080p colour or
+GPU smoothness. No repeat long SwiftShader film. Showcase’s “The evening begins” opens
+`/stream?source=simulated&tier=town&hour=19.5&seam=starting` without fixed time. The curtain alarm
+was withdrawn (sleeping Chrome); keep real loading-step text, no readiness bypass.
 
-**Whole-sequence verdict:** root reviewed the existing eight-phase `forge-whole-phase-sheet.png`
-and warm landing pair; NOT a fresh continuous motion/audio review or real-chat wish. Fire has focus,
-warm landing reads; flight wake remains dotted and sleeping head/paws weak (AH06/spec25 sculpt;
-EL11/spec48 wake/library burst). Live public judging/drafting stages ALREADY trigger gathering before
-approval. Instant fixture lacks that planning runway; never fake citizens or add a delay from it.
-Still need the whole moving sequence reviewed before calling Forge finished or advancing to arrivals.
-
-**Preserve:**9a8dba4 rotated physical-foot contact;489d3a8 SIM actual-pose host/noop stage sink;
-d6e3c1b warm flight;9be5870 local fire;3a84d28 ring32 ordinary routes;9ddf895 home receive/settle.
-Older forge-contact-after/pair show REJECTED offset wall flash. Authored dragon muzzle local−X is
-intentional profile; no missing slot rotation found. Keep accepted exposure/street pools/castle/beacon,
-sparse smoke/stable lights, terraced land/lilac groves, AS10 citizens and homecomings.
-
-**Team:** fresh recon found no new committed runtime checkpoints. Masha GM10 cbf8bf2 is already
-merged via5ea162a; root viewed hero/inn,28 focused tests and checks passed. Next taste remains a warm
-readable inn doorway. CP10 card721aaab merged f14e348; share/Wren facts unfinished. Raid/sky scope
-notes are not runtime checkpoints. Merge good committed work; never take dirty lane trees.
-
-**Operations:** services5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
-`../conductor/state/services.log`; own processes only; never unlink capture locks. No observer waiting
-for real chat; real Forge only when Tobias announces live. Preserve city stash
-7c6f1f9d324042998fff71e4d5ea7863ea46cf0a; park land6f60ae2. Software shots prove no GPU timing.
+**Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
+`../conductor/state/services.log`. Capture ports via `capture-ports.mjs`; choose a free allowed
+port, queue main once up to20min, one still/short clip per lease, release in finally. No waiting
+observer. Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.

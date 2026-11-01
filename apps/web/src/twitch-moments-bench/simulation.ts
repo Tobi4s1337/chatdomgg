@@ -1,4 +1,4 @@
-import { KingdomIdSchema, PersonIdSchema, type PersonId } from '@chatdom/shared';
+import { KingdomIdSchema, PersonIdSchema, type KingdomId, type PersonId } from '@chatdom/shared';
 import { createTwitchMomentIngest, type CitizenDisclosure, type IngestStatus, type TwitchMomentIngest } from '../../../herald/src/twitch-moments';
 import { createLocalProviderTransport, eventSubFrame } from '../../../herald/src/twitch-moments/local-transport';
 import { createMemoryMomentRecords } from '../../../herald/src/twitch-moments/memory';
@@ -7,6 +7,7 @@ import { createSimulatedBattleAuthority, type BattleOutcome } from './battle-aut
 
 /** A simulated channel ID: not a real Twitch account, labelled SIMULATED wherever it is shown. */
 export const BENCH_KINGDOM = KingdomIdSchema.parse('424242');
+const BENCH_HAMLET = BENCH_KINGDOM;
 /** The simulated chat reader the notification subscription is conditioned on. */
 const BENCH_READER = PersonIdSchema.parse('90999');
 
@@ -27,7 +28,9 @@ export type BenchDelivery = 'subscribe' | 'repeat' | 'late' | 'wrong-channel' | 
  * whenever a reader is authorized; `channel.subscription.end` reports lapses. Nothing forges a browser success.
  */
 export function createBenchSimulation(citizens: readonly BenchCitizen[], clock: { now(): number },
-  options: { battle: 'simulated' | 'unbound'; outcome: () => BattleOutcome } = { battle: 'simulated', outcome: () => 'victory' }) {
+  options: { battle: 'simulated' | 'unbound'; outcome: () => BattleOutcome; kingdomId?: KingdomId } = { battle: 'simulated', outcome: () => 'victory' }) {
+  // The channel the frames are addressed to: the bench hamlet's, or the fixture kingdom a real scene renders.
+  const BENCH_KINGDOM = options.kingdomId ?? BENCH_HAMLET;
   const records = createMemoryMomentRecords(clock), local = createLocalProviderTransport();
   // The realm's battle authority is SIMULATED here; with 'unbound' no battle can be requested at all.
   const authority = options.battle === 'simulated'

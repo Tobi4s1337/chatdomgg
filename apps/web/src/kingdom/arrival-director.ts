@@ -4,6 +4,7 @@ import type { CitizenMotionSample } from '@chatdom/world';
 const RECENT_ARRIVAL_MS = 5_000;
 const MAX_ATTENTION_MS = 40_000;
 const WINDOW_HOLD_MS = 6_000;
+const WAVE_HOLD_MS = 8_000;
 
 export interface ArrivalAttention {
   readonly slot: number;
@@ -69,6 +70,9 @@ export function createArrivalDirector() {
     sample(nowMs: number, subjectForSlot: (slot: number) => CitizenMotionSample | undefined): ArrivalAttention | undefined {
       expire(nowMs);
       if (!selected) return;
+      // Let the town show the new windows before following one person home.
+      // This delays only the lens, never the witnessed light or the citizen.
+      if (selected.trigger === 'arrival' && nowMs - selected.selectedAtMs < WAVE_HOLD_MS) return;
       const subject = subjectForSlot(selected.slot);
       if (!subject || subject.slot !== selected.slot || subject.state === 'leaving') { cancel(); return; }
       const window = subject.homeLit && subject.homeLitAtMs !== null && Number.isFinite(subject.homeLitAtMs) && subject.homeLitAtMs <= nowMs;
