@@ -28,6 +28,15 @@ export type ReplayState =
   | { readonly status: 'ready'; readonly label: History['label']; readonly index: number; readonly count: number;
       readonly snapshot: HistoricalSnapshot; readonly playing: boolean };
 
+/** Validated snapshots are owned by the replay, including nested frame data. */
+function freezeSnapshot<T>(value: T): T {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) freezeSnapshot(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
 /** Validate the entire history before it can affect the engine; never infer it from a frame's recent beats. */
 export function validateHistory(input: History): History {
   if (input.label !== 'LIVE' && input.label !== 'SIMULATED') throw new Error('History provenance is missing.');
@@ -40,7 +49,7 @@ export function validateHistory(input: History): History {
     previous = frame;
     return { frame, homes: item.homes.map(home => ({ ...home })), worldRevision: item.worldRevision, caption: item.caption, ...(item.focus ? { focus: item.focus } : {}) };
   });
-  return { label: input.label, snapshots };
+  return freezeSnapshot({ label: input.label, snapshots });
 }
 
 export function createReplay(binding: ReplayBinding, onChange: (state: ReplayState) => void = () => {}) {

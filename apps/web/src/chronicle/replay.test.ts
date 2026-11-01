@@ -18,6 +18,19 @@ describe('Chronicle replay', () => {
     expect(binding.replace.mock.calls.map(([s]) => s.homes[0].assetRevision)).toEqual(['tent', 'hut', 'tent', 'hut']);
     expect(replay.state()).toMatchObject({ status: 'ready', label: 'SIMULATED', index: 1, snapshot: { caption: 'Night 2' } });
   });
+  it('owns immutable historical snapshots after loading', () => {
+    const { replay, binding } = setup(), first = snapshot(1, 'tent');
+    replay.load({ label: 'SIMULATED', snapshots: [first, snapshot(2, 'hut')] });
+    first.frame.homes[0]!.qualifiedDays = 99;
+    const displayed = replay.state();
+    expect(displayed.status).toBe('ready');
+    if (displayed.status !== 'ready') throw new Error('Expected a recorded night');
+    expect(displayed.snapshot.frame.homes[0]!.qualifiedDays).toBe(3);
+    expect(Object.isFrozen(displayed.snapshot.frame.homes[0])).toBe(true);
+    expect(() => { displayed.snapshot.frame.civic.market = 9; }).toThrow();
+    replay.seek(1); replay.seek(0);
+    expect(binding.replace.mock.calls.at(-1)![0].frame.civic.market).toBe(1);
+  });
   it('preserves a selected scene focus while validating history', () => {
     const market = { ...snapshot(1, 'a'), focus: 'market' as const };
     expect(validateHistory({ label: 'SIMULATED', snapshots: [market] }).snapshots[0]?.focus).toBe('market');
