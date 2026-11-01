@@ -1,0 +1,107 @@
+import { describe, expect, it } from 'vitest';
+import { classify } from './routes';
+
+/** Classifies a URL the way the public server does: through WHATWG URL parsing first. */
+const at = (path: string) => {
+  const url = new URL(path, 'http://public.invalid');
+  return classify(url.pathname, url.search);
+};
+
+describe('the public origin route table', () => {
+  it('answers health on /healthz only', () => {
+    expect(classify('/healthz', '')).toEqual({ kind: 'health' });
+    expect(classify('/healthz/', '')).toEqual({ kind: 'file' });
+    expect(classify('/api/healthz', '')).toEqual({ kind: 'not-found', api: true });
+  });
+
+  it('sends the sign-in routes to auth', () => {
+    for (const path of [
+      '/api/realm/session', '/api/realm/ticket', '/api/realm/signout', '/api/realm/auth/start', '/api/realm/auth/callback',
+      '/api/realm/simulated-oidc/authorize', '/api/realm/simulated-oidc/.well-known/openid-configuration',
+    ]) expect(classify(path, ''), path).toEqual({ kind: 'auth' });
+    for (const path of ['/api/realm/session/extra', '/api/realm/auth/other', '/api/realm/auth', '/api/realm/sessions']) {
+      expect(classify(path, ''), path).toEqual({ kind: 'not-found', api: true });
+    }
+  });
+
+  it('sends the realm routes and its live data to the realm', () => {
+    for (const path of [
+      '/api/realm/founded/1001', '/api/realm/entry/1001', '/api/realm/watch/1001', '/api/realm/watch/1001/stream',
+      '/live-realm-data', '/live-realm-data/', '/live-realm-data/matchmake/joinOrCreate/kingdom',
+    ]) expect(classify(path, ''), path).toEqual({ kind: 'realm' });
+    // A realm verb with nothing after it names no kingdom.
+    expect(classify('/api/realm/founded/', '')).toEqual({ kind: 'not-found', api: true });
+    expect(classify('/api/realm/entry', '')).toEqual({ kind: 'not-found', api: true });
+    expect(classify('/live-realm-datax', '')).toEqual({ kind: 'file' });
+  });
+
+  it('sends the panel backend, the door data and the optional services where they belong', () => {
+    expect(classify('/api/panel/v1/reading', '')).toEqual({ kind: 'panel' });
+    expect(classify('/api/panel/v1/passport', '')).toEqual({ kind: 'panel' });
+    expect(classify('/api/panel', '')).toEqual({ kind: 'not-found', api: true });
+    expect(classify('/api/public/door', '')).toEqual({ kind: 'door-data' });
+    expect(classify('/api/public/door/x', '')).toEqual({ kind: 'not-found', api: true });
+    expect(classify('/presence-data/1001', '')).toEqual({ kind: 'optional', service: 'herald' });
+    expect(classify('/map-data/tiles', '')).toEqual({ kind: 'optional', service: 'map' });
+    expect(classify('/forge-data/spells', '')).toEqual({ kind: 'optional', service: 'forge' });
+  });
+
+  it('never publishes the internal service doors', () => {
+    for (const path of ['/internal', '/internal/', '/internal/revoke', '/internal/realm/session']) {
+      expect(classify(path, ''), path).toEqual({ kind: 'not-found', api: true });
+    }
+    // Only the exact door is internal; a look-alike name is just a file that will not exist.
+    expect(classify('/internals', '')).toEqual({ kind: 'file' });
+  });
+
+  it('answers every unknown API path as a 404', () => {
+    for (const path of ['/api/', '/api/anything', '/api/realm/', '/api/realm/unknown/1', '/api/internal/revoke']) {
+      expect(classify(path, ''), path).toEqual({ kind: 'not-found', api: true });
+    }
+  });
+
+  it('shows the front door at the bare origin, also when a sign-in outcome returns there', () => {
+    expect(classify('/', '')).toEqual({ kind: 'door' });
+    expect(classify('/', '?')).toEqual({ kind: 'door' });
+    expect(classify('/', '?signin=ok')).toEqual({ kind: 'door' });
+    expect(classify('/', '?signin=denied&signin=again')).toEqual({ kind: 'door' });
+  });
+
+  it('opens the app itself when the bare origin carries any other query', () => {
+    expect(classify('/', '?walk=1&kingdom=1001')).toEqual({ kind: 'page' });
+    expect(classify('/', '?forge=1')).toEqual({ kind: 'page' });
+    expect(classify('/', '?signin=ok&kingdom=1001')).toEqual({ kind: 'page' });
+  });
+
+  it('serves the listed product pages and nothing that merely looks like one', () => {
+    for (const path of ['/showcase', '/stream', '/panel', '/map', '/map/tobi4s_', '/kingdom/1001', '/-/avatar-builder']) {
+      expect(classify(path, ''), path).toEqual({ kind: 'page' });
+    }
+    for (const path of ['/showcase/', '/map/Tobi4s', '/map/a-b', '/map/abcdefghijklmnopqrstuvwxyz', '/kingdom/0', '/kingdom/01', '/kingdom/abc', '/kingdom/1001/x', '/bench', '/-/other']) {
+      expect(classify(path, ''), path).toEqual({ kind: 'file' });
+    }
+  });
+
+  it('leaves everything else to the built files', () => {
+    expect(classify('/assets/index-AbCdEf12.js', '')).toEqual({ kind: 'file' });
+    expect(classify('/door/assets/door-AbCdEf12.css', '')).toEqual({ kind: 'file' });
+    expect(classify('/favicon.ico', '')).toEqual({ kind: 'file' });
+  });
+
+  it('resolves traversal attempts before routing, so none reaches past the build or into a service door', () => {
+    // URL parsing collapses dot segments (plain and percent-encoded) before the route table sees the path.
+    expect(at('/assets/../../../etc/passwd')).toEqual({ kind: 'file' });
+    expect(new URL('/assets/../../../etc/passwd', 'http://public.invalid').pathname).toBe('/etc/passwd');
+    expect(new URL('/%2e%2e/%2e%2e/etc/passwd', 'http://public.invalid').pathname).toBe('/etc/passwd');
+    // Dotting out of a public route into an internal one lands on the internal route, which is refused.
+    expect(at('/api/realm/watch/1/../../../../internal/revoke')).toEqual({ kind: 'not-found', api: true });
+    expect(at('/live-realm-data/../internal')).toEqual({ kind: 'not-found', api: true });
+    // An encoded slash stays one literal segment: still a file lookup that the build index cannot satisfy.
+    const encoded = new URL('/assets/..%2f..%2fetc%2fpasswd', 'http://public.invalid');
+    expect(encoded.pathname).toBe('/assets/..%2f..%2fetc%2fpasswd');
+    expect(classify(encoded.pathname, encoded.search)).toEqual({ kind: 'file' });
+    for (const path of ['/assets/../../../etc/passwd', '/%2e%2e/secret', '/a/./b/../../../x']) {
+      expect(new URL(path, 'http://public.invalid').pathname.split('/')).not.toContain('..');
+    }
+  });
+});

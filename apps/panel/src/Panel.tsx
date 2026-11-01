@@ -11,7 +11,7 @@ import { PanelPassport } from './passport/PanelPassport';
 import { createPanelSound, type PanelCue } from './sound';
 import { ActSlip } from './ui/act';
 import { BackGlyph, BellGlyph, ForgeGlyph, HomeGlyph, PanelDefs, Seal, Shutters, TavernGlyph, TonightGlyph, WindowGlyph } from './ui/art';
-import { ForgeSheet, RaisingMeter, TavernSheet } from './ui/places';
+import { ForgeSheet, RaisingMeter, TavernSheet, WalkIn } from './ui/places';
 import { ShelfSheet } from './ui/shelf';
 import './panel.css';
 import './places.css';
@@ -34,7 +34,7 @@ type Readable = Extract<PassportSource, { kind: 'readable' }>;
 
 /** The viewer's card and passport, when the home card authority supplied a card. */
 function cardOf(home: Home): { card: CitizenCard; passport: PassportSource } | null {
-  return (home.kind === 'citizen' || home.kind === 'guest') && home.card ? { card: home.card, passport: home.passport } : null;
+  return (home.kind === 'citizen' || home.kind === 'guest' || home.kind === 'known') && home.card ? { card: home.card, passport: home.passport } : null;
 }
 
 const DRAWERS: readonly { id: Exclude<Drawer, 'light' | 'shelf'>; label: string; glyph: () => JSX.Element }[] = [
@@ -166,6 +166,8 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
       : lightEl)?.focus());
   };
   const choose = (choice: LightChoice) => { sound.play('tap'); adapter.requestLight(choice); close(); };
+  // Twitch's own prompt answers; the card opens when the kingdom's next reading names the viewer.
+  const share = () => { sound.play('tap'); adapter.requestIdentity?.(); };
   // The tapped button gives way to the kingdom's answer; focus waits on the act, where the answer is read out.
   const act = (option: string) => { sound.play('tap'); adapter.requestAct(option); queueMicrotask(() => actEl?.focus()); };
   const useProduct = (sku: string) => { sound.play('tap'); adapter.requestProduct(sku); };
@@ -251,7 +253,7 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
         <h1 class="cp-name" title={kingdomName().length > 26 ? kingdomName() : undefined}>{kingdomName()}</h1>
         <p class="cp-motto">{motto()}</p>
       </div>
-      <Show when={snap().source.kind === 'simulated'} fallback={<span class="cp-tag quiet">{snap().connection.kind === 'knocking' ? 'Connecting' : 'Not connected'}</span>}>
+      <Show when={snap().source.kind === 'simulated'} fallback={<Show when={snap().connection.kind !== 'connected'}><span class="cp-tag quiet">{snap().connection.kind === 'knocking' ? 'Connecting' : snap().connection.kind === 'lost' ? 'Out of reach' : 'Not connected'}</span></Show>}>
         <span class="cp-tag simulated" title={snap().source.kind === 'simulated' ? (snap().source as { detail: string }).detail : undefined}>Simulated</span>
       </Show>
       <button type="button" class="cp-sound" aria-label="Panel sounds" aria-pressed={!muted()} title={muted() ? 'Sounds off: tap to hear the panel' : 'Sounds on: tap to silence the panel'} onClick={toggleSound}>
@@ -262,7 +264,7 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
     <main class="cp-main" aria-hidden={drawer() || book() !== 'shut' ? 'true' : undefined} inert={drawer() || book() !== 'shut' ? true : undefined}>
       <PictureFrame picture={snap().picture} connection={snap().connection} embedded={embedded} ref={element => { pictureEl = element; }} />
       <LightAction snap={snap()} kindling={kindling()} portrait={cardOf(snap().home)?.card.portrait ?? null} ref={element => { lightEl = element; }} onChoose={event => open('light', event.currentTarget)}
-        onHome={snap().sections.home ? event => open('home', event.currentTarget) : null} />
+        onHome={snap().sections.home ? event => open('home', event.currentTarget) : null} onShare={share} />
       <Show when={snap().act} fallback={<Show when={snap().sections.night}><TonightSlip snap={snap()} /></Show>}>{current =>
         <div class="cp-act-wrap" ref={element => { actEl = element; }} tabindex="-1">
           <ActSlip snap={snap()} act={current()} onAct={act} onLight={event => open('light', event.currentTarget)} />
@@ -282,7 +284,7 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
         <div class="cp-drawer-page" tabindex="-1">
           <Switch>
             <Match when={current() === 'light'}><LightChoiceSheet snap={snap()} onChoose={choose} /></Match>
-            <Match when={current() === 'home'}><HomeSheet snap={snap()} passport={reading()?.state() ?? null} onLight={event => open('light', event.currentTarget)} /></Match>
+            <Match when={current() === 'home'}><HomeSheet snap={snap()} passport={reading()?.state() ?? null} onLight={event => open('light', event.currentTarget)} onShare={share} /></Match>
             <Match when={current() === 'tonight'}><TonightSheet snap={snap()} onShelf={event => open('shelf', event.currentTarget)} /></Match>
             <Match when={current() === 'tavern'}><TavernSheet snap={snap()} empty={reason => <Empty text={reason} detail="When it does, its tables and who sits at them show here." />} /></Match>
             <Match when={current() === 'forge'}><ForgeSheet snap={snap()} empty={reason => <Empty text={reason} detail="When it does, its fire, its anvils and your coals show here." />} /></Match>
@@ -379,6 +381,7 @@ function ClosedShutters(props: { connection: Connection }) {
       case 'knocking': return { title: 'Knocking at the gate', body: 'Waiting for Twitch to open the panel.' };
       case 'no-answer': return { title: 'Twitch has not answered', body: 'The panel could not reach Twitch. Reload to knock again.' };
       case 'lost': return { title: 'The kingdom is out of reach', body: `Nothing has arrived since ${props.connection.asOf}.` };
+      case 'connected': return { title: 'The shutters are closed', body: 'The kingdom’s picture is not painted for the panel yet. Walk in to see its streets lit.' };
       default: return { title: 'The shutters are closed', body: 'Twitch is connected, but this kingdom is not sharing its picture with the panel yet.' };
     }
   };
@@ -419,19 +422,58 @@ function Plate(props: { class: string; classList?: Record<string, boolean>; onHo
   </Dynamic>;
 }
 
-function LightAction(props: { snap: PanelSnapshot; kindling: boolean; portrait: CardPortrait | null; ref: (element: HTMLElement) => void; onChoose: Click; onHome: Click | null }) {
+/**
+ * While no panel light service exists, the plate under the picture is the way to the viewer's own card: their card
+ * when the kingdom has read it, or Twitch's share prompt when that is all that stands between them and it.
+ */
+function CardCall(props: { snap: PanelSnapshot; onHome: Click | null; onShare: () => void }) {
+  const found = () => cardOf(props.snap.home);
+  const ask = () => props.snap.home.kind === 'unknown' && props.snap.home.ask === 'share';
+  const homeWords = () => {
+    const home = props.snap.home;
+    if (home.kind === 'citizen') return `${found()?.card.home?.name ?? 'Your home'} · ${home.street}`;
+    if (home.kind === 'guest') return `A guest in ${props.snap.kingdom?.name ?? 'this kingdom'}`;
+    return found()?.card.standing ?? '';
+  };
+  return <Switch>
+    <Match when={found() && props.onHome ? props.onHome : null}>{onHome =>
+      <Plate class="cp-light-button card" onHome={onHome()} portrait={found()?.card.portrait ?? null}>
+        <CardGlyph />
+        <span class="cp-light-words"><strong>Your citizen card</strong><small>{homeWords()}</small></span>
+      </Plate>}
+    </Match>
+    <Match when={ask()}>
+      <button type="button" class="cp-light-button card" onClick={() => props.onShare()}>
+        <CardGlyph />
+        <span class="cp-light-words"><strong>See your citizen card</strong><small>Twitch asks you first. Only you see it.</small></span>
+      </button>
+    </Match>
+  </Switch>;
+}
+
+function CardGlyph() {
+  return <svg class="cp-window cp-card-glyph" viewBox="0 0 32 32" aria-hidden="true">
+    <rect x="5.5" y="7.5" width="21" height="17" rx="2" />
+    <circle cx="12" cy="14" r="2.6" /><path d="M8.5 20.5c.9-2.4 2.1-3.4 3.5-3.4s2.6 1 3.5 3.4M18 13h5M18 16.5h5M18 20h3.5" />
+  </svg>;
+}
+
+function LightAction(props: { snap: PanelSnapshot; kindling: boolean; portrait: CardPortrait | null; ref: (element: HTMLElement) => void; onChoose: Click; onHome: Click | null; onShare: () => void }) {
   const light = () => props.snap.light;
   const home = () => props.snap.home;
   const homeName = () => { const h = home(); return h.kind === 'citizen' || h.kind === 'guest' ? h.displayName : null; };
   const street = () => { const h = home(); return h.kind === 'citizen' ? h.street : null; };
   const lit = () => light().kind === 'lit' ? light() as Lit : null;
-  return <div class="cp-light" data-state={light().kind} ref={props.ref} tabindex="-1">
+  const carded = () => light().kind === 'unavailable' && props.snap.source.kind === 'production'
+    && (cardOf(props.snap.home) !== null || (props.snap.home.kind === 'unknown' && props.snap.home.ask === 'share'));
+  return <div class="cp-light" data-state={carded() ? 'card' : light().kind} ref={props.ref} tabindex="-1">
     <Switch fallback={<Show when={lightNote(props.snap)}>{note =>
       <div class="cp-light-note" role={light().kind === 'pending' ? 'status' : undefined} classList={{ ember: note().glyph === 'ember' }}>
         <WindowGlyph lit={false} pending={note().glyph === 'pending'} ember={note().glyph === 'ember'} />
         <span class="cp-light-words"><strong>{note().title}</strong><small>{note().detail}</small></span>
       </div>}
     </Show>}>
+      <Match when={carded()}><CardCall snap={props.snap} onHome={props.onHome} onShare={props.onShare} /></Match>
       <Match when={light().kind === 'unshared'}>
         <button type="button" class="cp-light-button" onClick={props.onChoose}>
           <WindowGlyph lit={false} />
@@ -515,21 +557,31 @@ function windowWords(snap: PanelSnapshot): string {
   }
 }
 
-function HomeSheet(props: { snap: PanelSnapshot; passport: PassportReadState | null; onLight: Click }) {
+function HomeSheet(props: { snap: PanelSnapshot; passport: PassportReadState | null; onLight: Click; onShare: () => void }) {
   const home = () => props.snap.home;
   const card = () => cardOf(home())?.card ?? null;
   const simulated = () => props.snap.source.kind === 'simulated';
   const citizen = () => home().kind === 'citizen' ? home() as Extract<Home, { kind: 'citizen' }> : null;
   const guest = () => home().kind === 'guest' ? home() as Extract<Home, { kind: 'guest' }> : null;
+  const known = () => home().kind === 'known' ? home() as Extract<Home, { kind: 'known' }> : null;
   const canLight = () => props.snap.light.kind === 'unshared' || props.snap.light.kind === 'refused';
+  const ask = () => home().kind === 'unknown' && (home() as { ask?: 'share' }).ask === 'share';
   return <Switch fallback={
-    <Empty text={(home() as { reason: string }).reason} detail={canLight() ? 'Chat still counts: speaking in chat lights your window on stream.' : undefined}>
-      <Show when={canLight()}><button type="button" class="cp-inline-action" onClick={props.onLight}>Light your window</button></Show>
+    <Empty text={(home() as { reason: string }).reason} detail={ask() ? 'Twitch asks you first. Chatdom reads only your public name, and only for your card.' : canLight() ? 'Chat still counts: speaking in chat lights your window on stream.' : undefined}>
+      <Show when={ask()}><button type="button" class="cp-inline-action" onClick={() => props.onShare()}>Show my card</button></Show>
+      <Show when={!ask() && canLight()}><button type="button" class="cp-inline-action" onClick={props.onLight}>Light your window</button></Show>
     </Empty>}>
     <Match when={card() && citizen() ? { h: citizen()!, card: card()! } : null}>{found =>
       <CardSheet card={found().card} street={found().h.street} place={found().h.place} window={windowWords(props.snap)} passport={props.passport} simulated={simulated()}
         homePicture={found().h.picture.kind === 'still' ? { url: (found().h.picture as Still).url, alt: (found().h.picture as Still).alt } : null}>
         <History items={found().h.history} label="Earned here" />
+      </CardSheet>}
+    </Match>
+    <Match when={card() && known() ? { k: known()!, card: card()! } : null}>{found =>
+      <CardSheet card={found().card} street={null} place={null} window={windowWords(props.snap)} passport={props.passport} simulated={simulated()} homePicture={null}
+        noHome={`No home in ${props.snap.kingdom?.name ?? 'this kingdom'} yet`}>
+        <p class="cp-body">{found().k.note}</p>
+        <WalkIn entry={props.snap.entry} kingdom={props.snap.kingdom?.name ?? 'the kingdom'} />
       </CardSheet>}
     </Match>
     <Match when={card() && guest() ? { g: guest()!, card: card()! } : null}>{found =>
