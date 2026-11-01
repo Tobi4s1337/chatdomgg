@@ -334,17 +334,21 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 medium helpers for routine work. Preserve exposure34ac89a, indigo0896044, street warmth96f2d08,
 beacon/pools/gold frame, smoke7c16789 and castle lighta1dac83/32633a8. No new system lanes.
 
-**Current:** Forge art checkpoint: merged Anvil Hero AH04 bd938eb and Forge panel FL02 9fd035f.
+**Current:** Forge landing composition now shares one home/roof fit between room and SIM. Contact frames
+the receiving house; a finite settle retains its facade below the gift. Dusk light/effects/materials stay.
+Room integration test (rotated socket, desktop/phone fit, stable settle), typecheck/scoped lint/build pass.
+Evidence: `shots/magic/forge-landing-pair.png` at1920×1080, same seed/hour/kingdom49/ritual19;
+`forge-landing-sequence-sheet.jpg` samples a forward-stepped0→21s rehearsal; both viewed. Contact
+shows the home; the gift remains small at stream size. This is not a continuous-motion signoff.
+Next: the rehearsal smithy stays empty throughout the pour despite240 supplied citizens. Fix actual
+gathering before pose polish, then strengthen the flight/landing effects. No audience may be invented.
+
+Forge art checkpoint: merged Anvil Hero AH04 bd938eb and Forge panel FL02 9fd035f.
 The dragon now has a clearer head and stack; AH06 in spec25/PRD gives the team its next whole art outcome:
 one sleeping head on two distinct paws, readable on a whole house from the stream and up close.
-Final same-view evidence: `shots/magic/forge-sculpt-pair.png`,1920×1080 SIM flight/time17.3, viewed.
-Also viewed `forge-current-{words,pour,landed}.png` phase samples at640×360: roof/smoke read,
-but these seeks do not prove gathering/transitions. Next capture must run the current sequence continuously.
-Typecheck/scoped lint/61 focused tests/web build pass. An attempted continuous wake still read as spaced
-dashes and was reverted, not shipped. Existing b2251ee recorded-history flight effects remain: real and
-SIM channels are independent; reduced motion clears them. Accepted lighting/pour/home smoke stay.
-Next: judge the current whole ceremony, lift flight/landing direction and the uneven watcher ring;
-the sculpture still needs a sleeping silhouette. No Forge visual signoff or new systems. Team now owns
+`shots/magic/forge-sculpt-pair.png` viewed at1920×1080. An attempted wake still read as dashes and
+was reverted. Existing b2251ee recorded-history flight effects remain; real/SIM histories stay independent.
+The sculpture still needs a sleeping silhouette. No Forge visual signoff or new systems. Team now owns
 the three Genesis kingdoms, panel portraits/passport, raid journey and cheer/hype spectacles; merge checkpoints.
 
 AS11 09f0267 merged (ebde8de). Builder reachable from `/showcase` at `/-/avatar-builder`,

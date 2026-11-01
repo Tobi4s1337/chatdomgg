@@ -12,6 +12,7 @@ import { createForgeEmitters } from '../emitters';
 import { createForgePresentation, type ForgePresentation } from '../presentation';
 import { createForgeRitualView } from '../ritual-view';
 import { createLandingMaterial } from './landing-light';
+import { forgeHomeShot } from '../home-shot';
 
 export interface RealmForgeSceneOptions {
   onFlight?: import('../presentation/stage').ForgePresentationOptions['onFlight'];
@@ -224,18 +225,9 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
         // Receive it as a house first. Then a slow, finite move gives the gift
         // its own portrait, with the eaves still identifying whose roof it is.
         const roof = casting.bounds.clone().translate(new THREE.Vector3(...casting.attachment.origin).multiplyScalar(VOXEL_METRES.build));
-        const centre = roof.getCenter(new THREE.Vector3());
-        const roofPortrait = roof.clone().expandByVector(new THREE.Vector3(1.7, 1.05, 1.35));
-        roofPortrait.min.y = Math.min(roofPortrait.min.y, casting.homeBounds.max.y * .53);
-        // Leave air above the muzzle for its first curls of smoke.
-        roofPortrait.max.y += 1.1;
-        roofPortrait.min.x = Math.min(roofPortrait.min.x, centre.x - 2.8);
-        roofPortrait.max.x = Math.max(roofPortrait.max.x, centre.x + 2.8);
-        const portrait = fit(roofPortrait, homePosition, casting.home.yaw, new THREE.Vector3(-.16, .12, 1));
         const age = casting.landedAt === null ? 0 : (now - casting.landedAt) / 1000;
-        const settle = THREE.MathUtils.smootherstep(age, .65, 2.8);
-        target.copy(home.target).lerp(portrait.target, settle);
-        offset.copy(home.offset).lerp(portrait.offset, settle);
+        const shot = forgeHomeShot(buildBounds(casting.home.blueprint), roof, homePosition, casting.home.yaw, width, height, age);
+        target.copy(shot.target); offset.copy(shot.offset);
       }
     }
     if (width < 640 && casting && frame?.phase !== 'flight' && frame?.phase !== 'landed') offset.multiplyScalar(1.22);
