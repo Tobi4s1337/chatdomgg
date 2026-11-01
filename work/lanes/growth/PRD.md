@@ -19,7 +19,7 @@ commits. Preserve your ceremony work; no replacement progression model. Key a be
 so a repeated frame does not repeat a housewarming. Tent is an entitlement until the camp asset is supplied; don't call
 a hut a tent. Main will mount `apps/web/src/growth/index.tsx` at `/-/growth` on its first checkpoint. Send exact scene
 ports as `needs:`; build the owned visual sequence while main provides them. No full-suite screenshot matrix.
-- [ ] **GR10 — Growth over time, whole.** One home grows hut → hall on its lot with a warm moment at each step; the town around it grows a new quarter at its growth edge with lit homes; captured as one sequence plus before/after stills (close and wide).
+- [x] **GR10 — Growth over time, whole.** One home grows hut → hall on its lot with a warm moment at each step; the town around it grows a new quarter at its growth edge with lit homes; captured as one sequence plus before/after stills (close and wide).
 
 Next content checkpoint inside GR10: a Hearth hut/cottage pair unmistakable from across the street, in the
 same light and at the same camera. The cottage must gain a full second storey, a higher and clearly different

@@ -1,0 +1,42 @@
+/* Growth over time: the stage fills the frame; the words sit low and left like a chronicler's line under a picture. */
+.growth { position: fixed; inset: 0; overflow: hidden; background: #1d2230; color: var(--cd-cream); }
+.growth-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* Only enough evening at the foot of the picture to keep the words legible; no panel behind them. */
+.growth-shade { position: absolute; inset: auto 0 0 0; height: 38%; pointer-events: none;
+  background: linear-gradient(to top, rgb(16 12 18 / .62), rgb(16 12 18 / .26) 46%, transparent); }
+
+.growth-caption { position: absolute; left: clamp(22px, 5.2vw, 104px); bottom: clamp(28px, 7.4vh, 92px); margin: 0;
+  max-width: min(980px, 76vw); transition: opacity .35s linear; pointer-events: none; }
+.growth-kicker { margin: 0; font: 400 clamp(13px, 1.05vw, 20px)/1 var(--cd-face-label); letter-spacing: .16em; text-transform: uppercase;
+  color: var(--cd-brass-hi); text-shadow: 0 1px 2px rgb(20 10 4 / .85), 0 0 14px rgb(232 160 70 / .25); }
+.growth-rule { display: flex; align-items: center; gap: 9px; width: clamp(150px, 15vw, 270px); margin: clamp(8px, .8vw, 13px) 0 clamp(7px, .7vw, 12px); }
+.growth-rule::before, .growth-rule::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--cd-brass) 20%, var(--cd-brass) 80%, transparent); opacity: .85; }
+.growth-rule span { width: 7px; height: 7px; transform: rotate(45deg); border: 1px solid var(--cd-brass-hi); background: var(--cd-wood);
+  box-shadow: 0 0 10px rgb(240 180 90 / .55); }
+.growth-line { margin: 0; font: italic 400 clamp(22px, 2.35vw, 46px)/1.16 var(--cd-face-story); color: #fbecd0; letter-spacing: -.005em;
+  text-shadow: 0 2px 3px rgb(18 10 6 / .9), 0 0 24px rgb(18 10 6 / .55); text-wrap: balance; }
+.growth-note { margin: clamp(8px, .7vw, 12px) 0 0; font: 400 clamp(14px, 1.08vw, 21px)/1.3 var(--cd-face-body); color: var(--cd-cream-soft);
+  text-shadow: 0 1px 2px rgb(18 10 6 / .9); }
+
+.growth-seal { position: absolute; right: clamp(16px, 2.4vw, 44px); top: clamp(14px, 2.2vw, 40px); }
+
+.growth-loading { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px; text-align: center; padding: 24px;
+  background: radial-gradient(ellipse at 50% 42%, #353548, #1b1c28 70%); }
+.growth-loading .growth-line { font-size: clamp(20px, 2vw, 32px); }
+.growth-candle { width: min(320px, 70vw); height: 2px; margin-top: 10px; background: rgb(201 159 91 / .22); }
+.growth-candle span { display: block; height: 100%; background: linear-gradient(90deg, var(--cd-brass-lo), var(--cd-brass-hi)); box-shadow: 0 0 12px #f2b45f; transition: width .3s ease-out; }
+.growth-failed { background: rgb(20 18 26 / .94); }
+
+.growth-again { position: absolute; right: clamp(22px, 5.2vw, 104px); bottom: clamp(28px, 7.4vh, 92px); padding: 10px 18px 11px;
+  font: 400 var(--cd-type-lead)/1 var(--cd-face-label); letter-spacing: .08em; color: var(--cd-ink); cursor: pointer;
+  background: linear-gradient(var(--cd-parch-hi), var(--cd-parch-lo)); border: 1px solid var(--cd-brass-lo); border-radius: 3px;
+  box-shadow: 0 2px 0 var(--cd-wood-edge), 0 6px 18px rgb(0 0 0 / .4); }
+.growth-again:focus-visible { outline: var(--cd-focus-width) solid var(--cd-focus); outline-offset: var(--cd-focus-offset); }
+
+@media (max-width: 600px) {
+  .growth-caption { left: 20px; right: 20px; bottom: 30px; max-width: none; }
+  .growth-line { font-size: 23px; }
+  .growth-seal { right: 12px; top: 12px; }
+  .growth-again { right: 20px; bottom: auto; top: 76px; }
+}
+@media (prefers-reduced-motion: reduce) { .growth-caption, .growth-candle span { transition: none; } }
