@@ -1,0 +1,89 @@
+import * as THREE from 'three';
+import { expect, it } from 'vitest';
+import { MATERIALS } from '@chatdom/content';
+import { createVoxelMaterial } from '@chatdom/render';
+import { createWalkerFigures, createWalkerSplit, FIGURE_HEAD_TOP_M, FIGURE_VARYINGS, nearestWalkers, walkerFigureGeometry, WALKER_DETAIL_BLEND_MS } from './walker-figures';
+
+const walker = (id: string, z: number, self = false) => ({ id, x: 0, y: 0, z, ...(self ? { self } : {}) });
+const eye = { x: 0, y: 1.6, z: 0 };
+
+it('splits the nearest 64 walkers into full detail and keeps you in full however far the camera is', () => {
+  const crowd = Array.from({ length: 100 }, (_, i) => walker(`w${String(i).padStart(3, '0')}`, 1 + i));
+  const { full, simple } = nearestWalkers([...crowd].reverse(), eye);
+  expect(full.map(pose => pose.id)).toEqual(crowd.slice(0, 64).map(pose => pose.id));
+  expect(simple).toHaveLength(36);
+  const me = walker('me', 500, true);
+  expect(nearestWalkers([...crowd, me], eye).full[0]).toBe(me);
+  expect(nearestWalkers([...crowd, { ...walker('lost', 0), x: NaN }], eye).simple.some(pose => pose.id === 'lost')).toBe(false);
+});
+
+it('never flickers a walker at the 64th place between full and simple', () => {
+  const split = createWalkerSplit();
+  const crowd = Array.from({ length: 63 }, (_, i) => walker(`a${String(i).padStart(2, '0')}`, 1 + i * .2));
+  // Two walkers at the boundary trade places by a few centimetres every frame.
+  const levels: string[] = [];
+  for (let frame = 0; frame < 120; frame++) {
+    const wobble = frame % 2 ? .05 : -.05;
+    const { full } = split.split([...crowd, walker('edge-1', 20 + wobble), walker('edge-2', 20 - wobble)], eye, frame * 16);
+    levels.push(full.filter(item => item.opacity === 1).map(item => item.pose.id).filter(id => id.startsWith('edge')).join());
+  }
+  expect(new Set(levels.slice(1)).size).toBe(1);
+  // A walker who is clearly nearer does take the place, with a crossfade rather than a swap.
+  const later = split.split([...crowd, walker('edge-1', 20), walker('edge-2', 20), walker('close', 2)], eye, 120 * 16);
+  const leaving = [...later.full, ...later.simple].filter(item => item.pose.id === levels[1]);
+  expect(leaving).toHaveLength(2);
+  expect(leaving[0]!.opacity + leaving[1]!.opacity).toBeCloseTo(1, 9);
+  let settled = later;
+  for (let t = 1; t * 16 <= WALKER_DETAIL_BLEND_MS + 32; t++) settled = split.split([...crowd, walker('edge-1', 20), walker('edge-2', 20), walker('close', 2)], eye, (120 + t) * 16);
+  expect(settled.full).toHaveLength(64);
+  expect(settled.full.some(item => item.pose.id === 'close')).toBe(true);
+  expect(settled.simple.map(item => item.pose.id).sort()).toEqual(['edge-1', 'edge-2']);
+});
+
+it('draws every simple figure in one instanced draw, feet on the datum, easing in and out', () => {
+  const scene = new THREE.Scene(), lighting = createVoxelMaterial(MATERIALS, 'avatar');
+  const figures = createWalkerFigures(scene, lighting, 16);
+  try {
+    const meshes = () => scene.children.filter(child => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh[];
+    expect(meshes()).toHaveLength(1);
+    const many = Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, position: [i, 3, 0] as const, heading: 0, distance: i, speed: 1.2 }));
+    figures.update(many, 0);
+    expect(figures.count).toBe(0);
+    figures.update(many, 60);
+    // Grown past its first capacity, still a single mesh.
+    expect(meshes()).toHaveLength(1);
+    expect(figures.count).toBe(40);
+    const fade = meshes()[0]!.geometry.getAttribute('aLodFade');
+    expect(fade.getX(0)).toBeGreaterThan(0); expect(fade.getX(0)).toBeLessThan(1);
+    figures.update(many, 200);
+    expect(fade.getX(0)).toBe(1);
+    const matrix = new THREE.Matrix4(); meshes()[0]!.getMatrixAt(5, matrix);
+    expect(new THREE.Vector3().setFromMatrixPosition(matrix).toArray()).toEqual([5, 3, 0]);
+    expect(figures.heads.get('f5')!.y).toBeCloseTo(3 + FIGURE_HEAD_TOP_M + .08, 9);
+    // Leaving figures fade out rather than vanish.
+    figures.update([], 216);
+    expect(figures.count).toBe(40);
+    for (let t = 300; t <= 700; t += 100) figures.update([], t);
+    expect(figures.count).toBe(0);
+    // Each person keeps one muted tunic.
+    figures.update(many.slice(0, 2), 800); figures.update(many.slice(0, 2), 900);
+    const tint = meshes()[0]!.geometry.getAttribute('aTint');
+    const first = [tint.getX(0), tint.getY(0), tint.getZ(0)];
+    figures.update(many.slice(0, 2), 1000);
+    expect([tint.getX(0), tint.getY(0), tint.getZ(0)]).toEqual(first);
+    expect(Math.max(...first)).toBeLessThan(.6);
+  } finally { figures.dispose(); lighting.dispose(); }
+});
+
+it('stands on its soles and feeds every input the kingdom paint shader reads', () => {
+  const geometry = walkerFigureGeometry();
+  geometry.computeBoundingBox();
+  expect(geometry.boundingBox!.min.y).toBe(0);
+  expect(geometry.boundingBox!.max.y).toBeCloseTo(FIGURE_HEAD_TOP_M, 6);
+  for (const name of ['position', 'normal', 'aPaint', 'aOcclusion', 'aFaceUv', 'aEdges', 'aTangentU', 'aTangentV', 'aPaintAlpha', 'aLimb', 'aTintMask']) expect(geometry.getAttribute(name)).toBeDefined();
+  const lighting = createVoxelMaterial(MATERIALS, 'avatar'), scene = new THREE.Scene();
+  const figures = createWalkerFigures(scene, lighting);
+  const material = (scene.children[0] as THREE.InstancedMesh).material as THREE.ShaderMaterial;
+  for (const name of FIGURE_VARYINGS) expect(material.vertexShader).toMatch(new RegExp(`out [^;]*\\b${name}\\b`));
+  figures.dispose(); lighting.dispose(); geometry.dispose();
+});

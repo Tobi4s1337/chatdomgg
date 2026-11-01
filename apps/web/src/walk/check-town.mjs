@@ -1,4 +1,4 @@
-// Full-town CPU diagnostic. No browser, preview listener or capture slot; all identities are SIMULATED.
+// Full-town CPU diagnostic. No browser, preview listener or capture slot; all identities are test-only.
 import { createServer } from 'vite';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
@@ -11,7 +11,7 @@ try {
   ]);
   const start = Date.now(), fixture = createSimulatedTownWalkFixture();
   const preparedMs = Date.now() - start;
-  console.log(`SIMULATED native town compiled: ${fixture.scene.placements.length} placements, ${preparedMs} ms`);
+  console.log(`Test native town compiled: ${fixture.scene.placements.length} placements, ${preparedMs} ms`);
   assert.ok(fixture.scene.placements.length > 50 && fixture.scene.placements.some(p => p.plotId));
   const players = fixture.spawns.map(([x, y, z]) => ({ x, y, z, vx: 0, vy: 0, vz: 0, grounded: true, yaw: 0, distance: 0, collisionRevision: fixture.world.revision }));
   assert.equal(new Set(players.map(p => `${p.x}:${p.z}`)).size, 3);
@@ -22,6 +22,6 @@ try {
     assert.ok(supported(player, fixture.world), 'Native town body lost ground support');
   }
   for (const player of players) { assert.ok(player.distance > 1.5); assert.equal(player.vx, 0); assert.equal(player.vz, 0); }
-  console.log(JSON.stringify({ source: 'SIMULATED', knownWorld: 'full native founded collision', preparedMs, elapsedMs: Date.now() - start,
+  console.log(JSON.stringify({ source: 'dev test town', knownWorld: 'full native founded collision', preparedMs, elapsedMs: Date.now() - start,
     players: players.map(({ x, y, z, distance }) => ({ x, y, z, distance })), limitation: fixture.limitation }, null, 2));
 } finally { await loader.close(); }

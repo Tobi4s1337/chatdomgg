@@ -1,172 +1,212 @@
 import * as THREE from 'three';
-import { expect, it } from 'vitest';
+import { afterEach, expect, it } from 'vitest';
 import { MATERIALS } from '@chatdom/content';
 import { createVoxelMaterial } from '@chatdom/render';
-import { KingdomIdSchema } from '@chatdom/shared';
+import { KingdomIdSchema, type KingdomPresenceFrame } from '@chatdom/shared';
 import { generateSettlementPlan } from '@chatdom/world';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
-import { createKingdomCitizens } from './citizen-scene';
+import { createKingdomCitizens, homeSpeechAnchor, segmentHitsBox } from './citizen-scene';
+import { walkerSlots } from './observed-walkers';
+import type { WalkerPresentation } from './walker-presentation';
+import { subscribeSpeech, type SpeechFrame } from '../walk/labels/bus';
+import { joinSpeech, peopleFromLabels } from '../walk/labels/model';
+import { createLabelStage, BUBBLE_TAIL_PX } from '../walk/labels/stage';
+import { labelLimits } from '../walk/labels/density';
 
-it('keeps real present neighbours seated at the royal fire until its authoritative state ends', () => {
+const kingdomId = KingdomIdSchema.parse('129634568');
+const cleanups: (() => void)[] = [];
+afterEach(() => { for (const cleanup of cleanups.splice(0)) cleanup(); });
+
+function town(seed: string, present: number, since: (index: number) => number, asOf: number) {
   const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
-  const layout = generateSettlementPlan({ seed: 'fire-gathering', tier: 'hamlet', firstYear: 2025, year: 2026 });
+  const layout = generateSettlementPlan({ seed, tier: 'hamlet', firstYear: 2025, year: 2026 });
   const citizens = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
-  const kingdomId = KingdomIdSchema.parse('129634568'), now = 1_000_000;
-  const windows = layout.homes.slice(0, 8).map(home => ({ slot: home.slot, present: true, publicName: `SIMULATED ${home.slot}`, since: now - 600_000 }));
-  const frame = { version: 1 as const, kingdomId, epoch: 'SIMULATED-fire', sequence: 1, asOf: now,
-    origin: 'simulated' as const, streamLive: true, connection: 'fresh' as const, windows };
-  try {
-    citizens.applyFrame(frame);
-    const destination = citizens.motion.destinationsForSlot(windows[0]!.slot).find(item => item.nodeId === 'forge:watch:3')!;
-    expect(destination).toBeDefined();
-    const anchor = [destination.position[0] - 3, destination.position[1], destination.position[2]] as const;
-    citizens.gatherFire(true, now, anchor);
-    citizens.update(now, 0);
-    let seated = citizens.update(now + 180_000, 180).filter(sample => sample.posture === 'seated');
-    expect(seated.length).toBeGreaterThan(0);
-    expect(seated.length).toBeLessThanOrEqual(8);
-    for (const sample of seated) {
-      expect(windows.some(window => window.slot === sample.slot && window.present)).toBe(true);
-      expect(sample.goalReached).toBe(true);
-      expect(sample.speed).toBe(0);
-      expect(sample.heading).toBeCloseTo(Math.atan2(anchor[0] - sample.position[0], anchor[2] - sample.position[2]), 9);
-    }
-    seated = citizens.update(now + 240_000, 240).filter(sample => sample.posture === 'seated');
-    expect(seated.length).toBeGreaterThan(0);
-    citizens.gatherFire(false, now + 240_001, anchor);
-    expect(citizens.update(now + 240_001, 240).some(sample => sample.posture === 'seated')).toBe(false);
-    citizens.applyFrame({ ...frame, sequence: 2, asOf: now + 240_002, windows: windows.map(window => ({ ...window, present: false, publicName: null })) });
-    citizens.gatherFire(true, now + 240_002, anchor);
-    expect(citizens.update(now + 240_002, 240).some(sample => sample.posture === 'seated')).toBe(false);
-  } finally { citizens.dispose(); clay.dispose(); }
-});
-
-it('keeps the citizen name once when their home tag and speech are both visible', async () => {
-  const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
-  const layout = generateSettlementPlan({ seed: 'speech-name', tier: 'hamlet', firstYear: 2025, year: 2026 });
-  const citizens = createKingdomCitizens(scene, layout, { submit: async () => ({ kind: 'asset', chunks: [] }) } as unknown as VoxelWorkerPool, clay);
-  try {
-    await citizens.prepare();
-    const kingdomId = KingdomIdSchema.parse('129634568'), slot = layout.homes[0]!.slot, now = 200_000;
-    citizens.applyFrame({ version: 1, kingdomId, epoch: 'SIMULATED-name-test', sequence: 1, asOf: now,
-      origin: 'simulated', streamLive: false, connection: 'offline',
-      windows: [{ slot, present: true, publicName: 'SIMULATED Juniper', since: 0 }] });
-    const person = citizens.update(now, 0)[0]!;
-    const camera = new THREE.PerspectiveCamera(60, 1, .1, 100);
-    camera.position.set(person.position[0], person.position[1] + 2, person.position[2] + 6);
-    camera.lookAt(person.position[0], person.position[1] + 1.9, person.position[2]); camera.updateMatrixWorld();
-    const parts = [{ kind: 'text' as const, text: 'Home, at last!' }];
-    expect(citizens.receiveChat({ version: 1, id: 'SIMULATED-line', kingdomId, epoch: 'SIMULATED-name-test',
-      origin: 'simulated', slot, asOf: now, expiresAt: now + 10_000, parts })).toBe(true);
-    expect(citizens.speechLabels(camera, 900, 900, now)[0]?.name).toBe('SIMULATED Juniper');
-    expect(citizens.speechLabels(camera, 900, 900, now, new Set([slot]))[0]).toMatchObject({ name: null, parts });
-    expect(citizens.speechLabels(camera, 900, 900, now, new Set())[0]?.name).toBe('SIMULATED Juniper');
-  } finally { citizens.dispose(); clay.dispose(); }
-});
-
-it('continues forge walks across a scene rebuild only under the current presence authority', () => {
-  const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
-  const layout = generateSettlementPlan({ seed: 'forge-checkpoint', tier: 'hamlet', firstYear: 2025, year: 2026 });
-  const kingdomId = KingdomIdSchema.parse('129634568'), slot = layout.homes[0]!.slot, now = 200_000;
-  const frame = { version: 1 as const, kingdomId, epoch: 'SIMULATED-checkpoint', sequence: 1, asOf: now,
-    origin: 'simulated' as const, streamLive: true, connection: 'fresh' as const,
-    windows: [{ slot, present: true, publicName: 'SIMULATED Juniper', since: 0 }] };
-  const first = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
-  first.applyFrame(frame);
-  first.watchForge(true, now, [0, 9, 8]);
-  first.update(now, 0);
-  const checkpoint = first.checkpoint()!;
-  expect(checkpoint.watchers.size).toBe(1);
-  const expected = first.motion.sample(now + 5_000);
-  // The candidate warms independently before the visible renderer releases its motion.
-  const restored = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
-  restored.applyFrame({ ...frame, sequence: 2, asOf: now + 1_000 });
-  first.dispose();
-  restored.restoreCheckpoint(checkpoint);
-  restored.watchForge(false, now + 1_000, [0, 9, 8]);
-  restored.update(now + 1_000, 0);
-  expect(restored.checkpoint()!.watchers).toEqual(checkpoint.watchers);
-  restored.watchForge(true, now + 1_100, [0, 9, 8]);
-  restored.update(now + 1_100, 0);
-  expect(restored.motion.sample(now + 5_000)).toEqual(expected);
-  restored.dispose();
-  const beforeAbsence = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay);
-  beforeAbsence.applyFrame(frame);
-  const absentCheckpoint = beforeAbsence.checkpoint()!;
-  beforeAbsence.dispose();
-  const absent = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, absentCheckpoint);
-  absent.applyFrame({ ...frame, sequence: 2, asOf: now + 1_000, streamLive: false, connection: 'offline', windows: [{ ...frame.windows[0]!, present: false, publicName: null }] });
-  expect(absent.motion.sample(now + 5_000)).toEqual([]);
-  absent.dispose(); clay.dispose();
-});
-
-it('walks the existing rehearsal neighbours around both sides of the anvil, including the installed barrel', () => {
-  // Same graph/config as the hash-verified adopted rehearsal; no cached file or
-  // invented square residents. The nearest doors begin tens of metres away.
-  const layout = generateSettlementPlan({ seed: 'willowmere', tier: 'town', firstYear: 2022, year: 2026 });
-  const scene = new THREE.Scene(), clay = createVoxelMaterial(MATERIALS, 'build');
-  const barrel = { position: [-8, 9, 1.125] as const, height: 11 / 8 };
-  let citizens = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, undefined, barrel);
-  const now = 1_000_000, kingdomId = KingdomIdSchema.parse('129634568');
-  const nodes = new Map(layout.nodes.map(node => [node.id, node.position]));
-  const distance = (plot: typeof layout.homes[number]) => { const door = nodes.get(`${plot.id}:front`) ?? plot.position; return Math.hypot(door[0], door[2] - 10); };
-  const homes = layout.homes.filter(home => home.slot !== 2).sort((a, b) => distance(a) - distance(b)).slice(0, 70);
-  let frame = { version: 1 as const, kingdomId, epoch: 'SIMULATED-rehearsal', sequence: 1, asOf: now,
-    origin: 'simulated' as const, streamLive: false, connection: 'offline' as const,
-    windows: homes.map(home => ({ slot: home.slot, present: true, publicName: 'SIMULATED neighbour', since: now - 600_000 })) };
+  cleanups.push(() => { citizens.dispose(); clay.dispose(); });
+  const windows = layout.homes.slice(0, present).map((home, index) => ({ slot: home.slot, present: true, publicName: `Neighbour ${home.slot}`, since: since(index) }));
+  const frame: KingdomPresenceFrame = { version: 1, kingdomId, epoch: 'presence-1', sequence: 1, asOf, origin: 'live', streamLive: true, connection: 'fresh', windows };
   citizens.applyFrame(frame);
-  const arrivedCounts: number[] = [];
-  try {
-    for (const ms of [0, 2_000, 13_000, 31_000, 38_000, 62_000, 64_000, 72_000, 124_000, 125_000, 132_000]) {
-      if (ms === 2_000) {
-        frame = { ...frame, sequence: 2, asOf: now + ms, windows: [...frame.windows,
-          { slot: 2, present: true, publicName: 'SIMULATED maker', since: now + ms }] };
-        citizens.applyFrame(frame);
-      }
-      if (ms === 124_000) {
-        const checkpoint = citizens.checkpoint()!;
-        citizens.dispose();
-        citizens = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, checkpoint, barrel);
-        citizens.applyFrame(frame);
-        citizens.watchForge(false, now + ms, [0, 9, 8]);
-        citizens.update(now + ms, ms / 1000);
-      }
-      citizens.watchForge(ms >= 38_000, now + ms, [0, 9, 8]);
-      const samples = citizens.update(now + ms, ms / 1000), watchers = citizens.checkpoint()!.watchers;
-      const arrived = samples.filter(sample => watchers.get(sample.slot) === sample.goalNodeId && sample.goalReached);
-      if ([38_000, 62_000, 64_000, 72_000, 132_000].includes(ms)) arrivedCounts.push(arrived.length);
-      for (const sample of arrived) {
-        expect(frame.windows.some(window => window.slot === sample.slot && window.present)).toBe(true);
-        expect(sample.homeLit).toBe(true);
-        expect(sample.heading).toBeCloseTo(Math.atan2(-sample.position[0], 8 - sample.position[2]), 9);
-        expect(sample.speed).toBe(0);
-      }
-      if (ms === 38_000) {
-        expect(watchers.size).toBe(32);
-        expect(new Set(watchers.values()).size).toBe(32);
-        expect(samples.filter(sample => watchers.has(sample.slot)).every(sample => !sample.goalReached && sample.position[1] < 10)).toBe(true);
-      }
-      if (ms === 132_000) {
-        expect(arrived.length).toBeGreaterThanOrEqual(20);
-        expect(arrived.length).toBeLessThanOrEqual(32);
-        for(let index=0;index<arrived.length;index++)for(const other of arrived.slice(index+1)){
-          const person=arrived[index]!;
-          expect(Math.hypot(person.position[0]-other.position[0],person.position[2]-other.position[2])).toBeGreaterThanOrEqual(1);
-        }
-        const side = (sample: typeof arrived[number]) => sample.position[0] * 12 - (sample.position[2] - 8) * 4.8;
-        expect(arrived.some(sample => side(sample) > 26)).toBe(true);
-        expect(arrived.some(sample => side(sample) < -26)).toBe(true);
-        const raised = arrived.find(sample => sample.goalNodeId === 'forge:watch:14')!;
-        expect(raised.position).toEqual([-8, 9 + barrel.height, 1.125]);
-        expect(citizens.subject(raised.slot)?.position).toEqual(raised.position);
-        const ground = citizens.motion.sample(now + ms).find(sample => sample.slot === raised.slot)!;
-        expect(ground.position[1]).toBe(9);
-        expect(raised.distance).toBe(ground.distance);
-      }
-    }
-    // The old 72s still was necessarily early: accepted goals were not arrivals.
-    expect(arrivedCounts.slice(0,3)).toEqual([0,0,0]);
-    expect(arrivedCounts[3]).toBeGreaterThan(0);
-    expect(arrivedCounts[4]).toBeGreaterThanOrEqual(20);
-  } finally { citizens.dispose(); clay.dispose(); }
-});
+  return { scene, layout, citizens, frame, windows };
+}
+/** The probe learns its canvas from the renderer on the first draw; a test stands in for that draw. */
+function drawInto(scene: THREE.Scene, width = 1440, height = 900) {
+  const canvas = { clientWidth: width, clientHeight: height } as HTMLCanvasElement;
+  const probe = scene.getObjectByName('speech-canvas-probe')!;
+  (probe.onBeforeRender as (renderer: unknown) => void)({ domElement: canvas });
+  const frames: SpeechFrame[] = [];
+  cleanups.push(subscribeSpeech((source, frame) => { if (source === canvas) frames.push(frame); }));
+  return { canvas, frames };
+}
+const walkerAt = (slot: number, x: number, y: number, z: number, speed = 1): WalkerPresentation =>
+  ({ id: `walker-${slot}`, name: `Walker ${slot}`, look: 'dusk', homeSlot: slot, x, y, z, yaw: 0, distance: x, speed, self: false });
+const lanternCount = (scene: THREE.Scene) => Math.max(...scene.children.filter(child => child instanceof THREE.InstancedMesh).map(mesh => (mesh as THREE.InstancedMesh).count));
+
+it('gives bodies only to walkers: chat-only people are their lit window, standing unseen at their own door', () => {
+  const now = 1_000_000;
+  const { scene, citizens, layout, windows } = town('only-walkers', 8, index => index === 7 ? now : now - 600_000, now);
+  const walkerSlot = windows[0]!.slot;
+  const feet = walkerSlots([walkerAt(walkerSlot, 2, 0, 3)]);
+  const camera = new THREE.PerspectiveCamera(60, 1.6, .1, 500); camera.position.set(0, 20, 30); camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
+  const samples = citizens.update(now, 0, camera, new Set(), feet);
+  expect(samples.map(sample => sample.slot).sort((a, b) => a - b)).toEqual(windows.map(window => window.slot).sort((a, b) => a - b));
+  // Nothing is meshed or drawn for chat-only people: no renderer, no shadow, no lantern.
+  expect(scene.children.filter(child => child instanceof THREE.InstancedMesh).every(mesh => (mesh as THREE.InstancedMesh).count === 0)).toBe(true);
+  citizens.drawLanterns(0, 1, camera, new Map());
+  expect(lanternCount(scene)).toBe(0);
+  // Each chat-only person is an unseen subject at their own door, already home: an arrival shot frames the window.
+  for (const window of windows.slice(1)) {
+    const subject = citizens.subject(window.slot)!;
+    const door = citizens.motion.routeForSlot(window.slot)!.points.at(-1)!;
+    expect(subject).toMatchObject({ position: door, opacity: 0, speed: 0, state: 'home', homeLit: true, homeLitAtMs: window.since });
+  }
+  // The walker is where their body is, and seen.
+  expect(citizens.subject(walkerSlot)).toMatchObject({ position: [2, 0, 3], opacity: 1, state: 'walking', homeLit: true });
+  // The walker carries a lantern from their own drawn hand; nobody else does.
+  citizens.drawLanterns(0, 1, camera, new Map([[`walker-${walkerSlot}`, new THREE.Matrix4().makeTranslation(2.3, 1, 3)]]));
+  expect(lanternCount(scene)).toBe(1);
+  // Windows light from presence, the moment someone arrives: no unseen walk home delays it.
+  const light = citizens.lightFrame(now)!;
+  expect(light.windows.filter(window => window.present).map(window => window.slot)).toHaveLength(8);
+  expect(light.windows.find(window => window.slot === windows[7]!.slot)).toMatchObject({ present: true, since: now });
+  // Gathering calls move nobody: there are no chat-only bodies to gather.
+  citizens.watchForge(true, now, [0, layout.market.elevation, 8]);
+  citizens.gatherFire(true, now, [0, layout.market.elevation, 0]);
+  citizens.update(now + 120_000, 120, camera, new Set(), feet);
+  for (const window of windows.slice(1)) expect(citizens.subject(window.slot)!.position).toEqual(citizens.motion.routeForSlot(window.slot)!.points.at(-1));
+  expect(citizens.checkpoint()!.watchers.size).toBe(0);
+  // Someone who arrives later lights at their own moment.
+  // The presentation clock can trail the projection; someone arrives at their own moment, not before.
+  const late = { slot: layout.homes[8]!.slot, present: true, publicName: 'Late', since: now + 130_000 };
+  citizens.applyFrame({ version: 1, kingdomId, epoch: 'presence-1', sequence: 2, asOf: now + 130_000, origin: 'live', streamLive: true, connection: 'fresh', windows: [...windows, late] });
+  citizens.update(now + 129_000, 129, camera, new Set(), feet);
+  expect(citizens.subject(late.slot)).toBeUndefined();
+  citizens.update(now + 130_000, 130, camera, new Set(), feet);
+  expect(citizens.subject(late.slot)).toMatchObject({ homeLitAtMs: now + 130_000, opacity: 0 });
+}, 30_000);
+
+it('places a walker’s bubble on the projected head and a chat-only bubble above the door, every frame of a camera move', () => {
+  const now = 2_000_000;
+  const { scene, citizens, windows } = town('per-frame-bubbles', 3, () => now - 60_000, now);
+  const { frames } = drawInto(scene);
+  const walkerSlot = windows[0]!.slot, homeSlot = windows[1]!.slot;
+  const anchor = homeSpeechAnchor(citizens.motion.routeForSlot(homeSlot)!)!;
+  const parts = [{ kind: 'text' as const, text: 'Lovely night for it.' }];
+  for (const slot of [walkerSlot, homeSlot]) expect(citizens.receiveChat({ version: 1, id: `line-${slot}`, kingdomId, origin: 'live', epoch: 'presence-1', slot,
+    asOf: now, expiresAt: now + 9_000, parts })).toBe(true);
+  // The walker strolls along the street in front of the home while the camera orbits and dollies in, re-aimed
+  // every frame. Their drawn head is wherever the renderer put it this frame.
+  const route = citizens.motion.routeForSlot(homeSlot)!;
+  const out = new THREE.Vector3(-Math.sin(route.homeHeading), 0, -Math.cos(route.homeHeading)), right = new THREE.Vector3(out.z, 0, -out.x);
+  const camera = new THREE.PerspectiveCamera(55, 1440 / 900, .1, 500);
+  const stage = createLabelStage(), projected = new THREE.Vector3();
+  const sizes = { width: 160, height: 54 };
+  let lastWalkerX: number | undefined, moved = 0;
+  for (let frame = 0; frame < 48; frame++) {
+    const t = frame / 47, angle = -.5 + t;
+    const feet = new THREE.Vector3(...anchor).addScaledVector(right, 3.5 + Math.sin(frame / 9)).addScaledVector(out, 1.5 + frame * .02);
+    const walker = walkerAt(walkerSlot, feet.x, anchor[1] - 2.7, feet.z);
+    const head = new THREE.Vector3(walker.x, walker.y + 1.95, walker.z);
+    const target = new THREE.Vector3(...anchor).add(head).multiplyScalar(.5);
+    const radius = 12 - 3 * t;
+    camera.position.copy(target).addScaledVector(out, radius * Math.cos(angle)).addScaledVector(right, radius * Math.sin(angle)).add(new THREE.Vector3(0, 2.5 + t, 0));
+    camera.lookAt(target); camera.updateMatrixWorld();
+    const atMs = now + frame * 16;
+    citizens.update(atMs, atMs / 1000, camera, new Set(), walkerSlots([walker]));
+    citizens.drawLanterns(atMs / 1000, 1, camera, new Map());
+    // The host's name label for the walker, projected from the same head with the same camera this frame.
+    projected.copy(head).project(camera);
+    const label = { id: walker.id, slot: walkerSlot, name: walker.name, self: false, distance: head.distanceTo(camera.position),
+      x: (projected.x + 1) * 720, y: (1 - projected.y) * 450 };
+    const speech = frames.at(-1)!;
+    const people = joinSpeech(peopleFromLabels([label], []), speech);
+    const staged = new Map(stage.frame({ people, viewport: { width: 1440, height: 900 }, limits: labelLimits(), reducedMotion: true, now: atMs, size: () => sizes })
+      .map(item => [item.id, item]));
+    const bubble = staged.get(`walker:${walker.id}`)!;
+    expect(bubble.person.speech).toEqual(parts);
+    // Tail tip on the head, this frame: the same camera, no older projection.
+    expect(bubble.left + sizes.width / 2).toBeCloseTo(label.x, 6);
+    expect(bubble.top + sizes.height + BUBBLE_TAIL_PX).toBeCloseTo(label.y, 6);
+    const home = staged.get(`home:${homeSlot}`)!;
+    projected.set(...anchor).project(camera);
+    expect(home.left + sizes.width / 2).toBeCloseTo((projected.x + 1) * 720, 6);
+    expect(home.top + sizes.height + BUBBLE_TAIL_PX).toBeCloseTo((1 - projected.y) * 450, 6);
+    expect(home.person.home).toBe(true);
+    if (frame > 12) { expect(bubble.shown).toBe(true); expect(home.shown).toBe(true); }
+    if (lastWalkerX !== undefined && Math.abs(lastWalkerX - label.x) > .5) moved++;
+    lastWalkerX = label.x;
+  }
+  expect(moved).toBeGreaterThan(40);
+}, 30_000);
+
+it('keeps a line up long enough to read, never shorter than the server allows, and drops it at once when removed', () => {
+  const now = 3_000_000;
+  const { scene, citizens, windows } = town('reading-time', 2, () => now - 60_000, now);
+  const { frames } = drawInto(scene);
+  // From above the two homes, both doors are in front of the eye.
+  const camera = new THREE.PerspectiveCamera(55, 1.6, .1, 500);
+  const [a, b] = windows.map(window => homeSpeechAnchor(citizens.motion.routeForSlot(window.slot)!)!);
+  const middle = new THREE.Vector3(...a!).add(new THREE.Vector3(...b!)).multiplyScalar(.5);
+  camera.position.copy(middle).add(new THREE.Vector3(0, 18, 4)); camera.lookAt(middle); camera.updateMatrixWorld();
+  expect(Math.max(camera.position.distanceTo(new THREE.Vector3(...a!)), camera.position.distanceTo(new THREE.Vector3(...b!)))).toBeLessThan(40);
+  const live = (atMs: number) => { citizens.update(atMs, 0, camera); citizens.drawLanterns(0, 1, camera); return frames.at(-1)!.speech.map(line => line.slot); };
+  const long = 'a'.repeat(150), short = 'Hi!';
+  citizens.receiveChat({ version: 1, id: 'long', kingdomId, origin: 'live', epoch: 'presence-1', slot: windows[0]!.slot, asOf: now, expiresAt: now + 3_000, parts: [{ kind: 'text', text: long }] });
+  citizens.receiveChat({ version: 1, id: 'short', kingdomId, origin: 'live', epoch: 'presence-1', slot: windows[1]!.slot, asOf: now, expiresAt: now + 9_000, parts: [{ kind: 'text', text: short }] });
+  expect(live(now)).toHaveLength(2);
+  expect(live(now + 5_000)).toEqual([windows[0]!.slot, windows[1]!.slot]);
+  // The short line goes with its server expiry; the long one stays its reading time (2.5 s + 60 ms a character).
+  expect(live(now + 9_000)).toEqual([windows[0]!.slot]);
+  expect(live(now + 11_499)).toEqual([windows[0]!.slot]);
+  expect(live(now + 11_500)).toEqual([]);
+  // A moderator's removal is immediate.
+  citizens.receiveChat({ version: 1, id: 'removed', kingdomId, origin: 'live', epoch: 'presence-1', slot: windows[1]!.slot, asOf: now + 12_000, expiresAt: now + 20_000, parts: [{ kind: 'text', text: short }] });
+  expect(live(now + 12_000)).toHaveLength(1);
+  citizens.clearChat(['removed']);
+  expect(live(now + 12_016)).toEqual([]);
+}, 30_000);
+
+it('does not repeat a name its home plate already shows, and hides a home bubble behind a wall', () => {
+  const now = 4_000_000;
+  const { scene, citizens, windows, layout } = town('home-name', 1, () => now - 60_000, now);
+  const { frames } = drawInto(scene);
+  const slot = windows[0]!.slot;
+  citizens.receiveChat({ version: 1, id: 'line', kingdomId, origin: 'live', epoch: 'presence-1', slot, asOf: now, expiresAt: now + 9_000, parts: [{ kind: 'text', text: 'Home, at last!' }] });
+  const route = citizens.motion.routeForSlot(slot)!, anchor = homeSpeechAnchor(route)!;
+  const outX = -Math.sin(route.homeHeading), outZ = -Math.cos(route.homeHeading);
+  const camera = new THREE.PerspectiveCamera(55, 1.6, .1, 500);
+  const look = (x: number, y: number, z: number) => { camera.position.set(x, y, z); camera.lookAt(...anchor); camera.updateMatrixWorld(); citizens.update(now, 0, camera); citizens.drawLanterns(0, 1, camera); return frames.at(-1)!.speech[0]!; };
+  // From the street in front of the door.
+  expect(look(anchor[0] + outX * 8, anchor[1], anchor[2] + outZ * 8)).toMatchObject({ from: 'home', name: 'Neighbour ' + slot, visibility: 1 });
+  citizens.speechLabels(camera, 1440, 900, now, new Set([slot]));
+  expect(look(anchor[0] + outX * 8, anchor[1], anchor[2] + outZ * 8).name).toBeNull();
+  // From behind the house, its own walls stand in the way.
+  expect(look(anchor[0] - outX * 14, anchor[1] - 1, anchor[2] - outZ * 14).visibility).toBe(0);
+  // The host's 80 ms path is quiet: speech goes out every frame on the bus instead.
+  expect(citizens.speechLabels(camera, 1440, 900, now)).toEqual([]);
+  expect(layout.homes.length).toBeGreaterThan(0);
+}, 30_000);
+
+it('tests a sight line against a box', () => {
+  expect(segmentHitsBox([-5, 1, 0], [5, 1, 0], [-1, 0, -1], [1, 2, 1])).toBe(true);
+  expect(segmentHitsBox([-5, 3, 0], [5, 3, 0], [-1, 0, -1], [1, 2, 1])).toBe(false);
+  expect(segmentHitsBox([-5, 1, 0], [-2, 1, 0], [-1, 0, -1], [1, 2, 1])).toBe(false);
+  expect(segmentHitsBox([0, 5, 0], [0, -5, 0], [-1, 0, -1], [1, 2, 1])).toBe(true);
+}, 30_000);
+
+it('carries looks across a scene rebuild only under the current presence authority', () => {
+  const now = 5_000_000;
+  const { scene, citizens, frame, layout } = town('checkpoint', 1, () => now - 60_000, now);
+  const clay = createVoxelMaterial(MATERIALS, 'build');
+  cleanups.push(() => clay.dispose());
+  citizens.applyFrame({ ...frame, sequence: 2, windows: frame.windows.map(window => ({ ...window, look: 'tide' })) });
+  const checkpoint = citizens.checkpoint()!;
+  expect(checkpoint.watchers.size).toBe(0);
+  const restored = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, checkpoint);
+  cleanups.push(() => restored.dispose());
+  restored.applyFrame({ ...frame, sequence: 3, asOf: frame.asOf + 1_000 });
+  expect(restored.checkpoint()!.looks.get(frame.windows[0]!.slot)).toBe('tide');
+  expect(restored.motion).toBe(checkpoint.motion);
+  const stranger = createKingdomCitizens(scene, layout, {} as VoxelWorkerPool, clay, false, citizens.checkpoint()!);
+  cleanups.push(() => stranger.dispose());
+  stranger.applyFrame({ ...frame, epoch: 'presence-2', sequence: 1, asOf: frame.asOf + 2_000 });
+  expect(stranger.checkpoint()!.looks.size).toBe(0);
+}, 30_000);

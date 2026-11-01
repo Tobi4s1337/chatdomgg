@@ -172,6 +172,31 @@ What play guarantees: the ledger opens on Esc, or on the unlock that Esc causes,
 `order`; Esc closes the top panel first, then the ledger; keyboard, mouse and touch all work; the stream view never
 shows the ledger or HUD pieces unless a piece asks for `mode === 'stream'`.
 
+### B1a. Additions for gather and pier (landed in `slots.ts`, additive; PL10, 2026-11-01)
+
+Shapes as gather's SEAMS §1 and pier's SEAMS §2 asked, with these decisions:
+- `PlayContext.requestInput(reason)`: the newest lease hears keys (physical `code`, down and up, no repeats) and
+  captured-mouse movement; the walk is held while any lease lives. Escape is never delivered and, while a lease is
+  active, the unlock Escape causes does not open the ledger (the interaction owner stands you up first). Presses of the
+  captured mouse arrive through `onPointer(0, 0, buttons)`.
+- `PlayContext.hideSelf(reason)`: your body is drawn at opacity 0 for your own camera while any hide lives.
+- `registerPlace`: play answers `tavern` and `campfire-seat` interactions with the registered openers (before the
+  page's own places) and, while your feet are in one of the place's zones, limits the walk camera (`maxDistance`,
+  `tilt` as pitch below the horizon, eased in). `seeThrough` meshes become world boxes: a solid wholly inside one
+  never pulls the boom in.
+- `HudRegion` gains `bottom-centre`, kept above the phone's thumb band.
+- `registerActionBinding`: listed on the controls page; the person's code is stored in `settings.actionKeys[id]`;
+  `actionCode(settings, binding)` is the effective code, and play's own keys always win (a clash leaves it unbound).
+- `registerHeldTool` / `equipTool(id | null)` / `equippedTool()`: while captured, the primary button goes to the tool
+  in hand (`press` / `release`), the secondary to `cancel`; `update(dt)` runs each frame; the tool is paused (and
+  `cancel`led) while the ledger, an arrival step or a seated game holds the walk. `ToolContext.room` is the walking
+  room's own channel. `ToolContext.hand()` and `observedWalkerHand(id)` are the citizen renderer's right-hand grip
+  (`gripRight`). The clock passed to `press` / `release` is the page's `performance.now()`: the realm client has no
+  shared room clock today. `holdPose` shows as the extended-arm (pointing) gesture until the body has cast, hold and
+  reel poses (an ask of PL11).
+- `registerWorldPrompt`: asked five times a second with your pose; the nearest prompt is shown by the HUD with your
+  use key, and the use key (or a click with nothing in hand) uses it, unless a realm interaction target is highlighted.
+
 ### B2. The look (play provides to panel-window, front-door, atlas-map, raid-show, forge-wish)
 
 ```ts

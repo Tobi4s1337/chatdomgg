@@ -11,13 +11,13 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
 ## Status
 
 - **Reference court bound.** `/-/realm` runs this controller on `connectReferenceRealm`'s real room client,
-  renders its actual poses, and fades the local body in first person. The scene remains explicitly SIMULATED.
+  renders its actual poses, and fades the local body in first person. It is a dev-only court, never reachable as if it were a kingdom.
   `window.__chatdomWalk` exposes the controller there; the existing `__chatdomRealm.setInput` reference smoke
   hook shares the same single client tick. This reference is separate from the kingdom binding below.
 
 - **Bound to the kingdom.** The actual town renderer supplies `createKingdomWalk` with the checked founded
   manifest, room client and complete collision revision. The current practice entry is
-  `http://127.0.0.1:5190/?walk=1&source=simulated&hour=19.5`; its provenance is visibly SIMULATED.
+  `http://127.0.0.1:5190/?walk=1&source=simulated&hour=19.5`; it is a dev-only practice room (decision 25: no SIMULATED labels, and never reachable as if real).
 - **Camera collision.** The boom and near plane sweep the same immutable collision revision used by the room
   and predictor. The camera root stays below the body's crown under a tight ceiling.
 - **Prediction and collision revisions (WC06).** The realm client takes a revision source, holds prediction
@@ -30,19 +30,20 @@ Spec: `work/specs/35-walk-controller.md`. Lane: `work/lanes/walk-controller/`.
 | Export | File | What it does |
 |---|---|---|
 | `createWalkController(options)` | `index.ts` | Lifecycle: input, realm tick, camera, takeover |
-| `createWalkKeys(keyboard, page?)` | `input/keyboard.ts` | WASD/arrows, Shift, one jump per Space press, release on blur, hidden page, chat focus, context menu and Cmd |
+| `createWalkKeys(keyboard, page?, bindings?)` | `input/keyboard.ts` | The person's bindings (WASD by default; arrows always), Shift, one jump per Space press, release on blur, hidden page, chat focus, context menu and Cmd |
 | `isEditableTarget(t)`, `isKeyboardControl(t)` | `input/keyboard.ts` | Fields keep every key; a keyboard-focused control keeps Space and arrows |
-| `createWalkPointer(surface, keyboard)` | `input/pointer.ts` | Mouse/pen drag orbit after 8 px, wheel with line/page modes, swallows only the click that ended a drag; no drags while locked |
-| `createWalkLook(surface, doc, keyboard, clock?)` | `input/look.ts` | Optional mouse look: a real pointer click locks, Escape/blur/menu frees; R8 delta filter; one refused request → quiet drag fallback |
-| `filterLookDelta(dx, dy, sinceLockMs)`, `LOOK` | `input/look.ts` | The R8 filter itself (120 ms settle, >250 px discarded, ±100 px clamp) and the look constants |
+| `createWalkPointer(surface, keyboard)` | `input/pointer.ts` | Pen drag orbit after 8 px (the mouse only where the page cannot lock), wheel with line/page modes, swallows only the click that ended a drag |
+| `createWalkLook(surface, doc, keyboard, options?)` | `input/look.ts` | The always-captured mouse: raw pointer lock on a real click, cooldown, leases, fullscreen with keyboard lock, `onLetGo` (see "The captured mouse") |
+| `createSpikeFilter()`, `LOOK` | `input/look.ts` | The flick-keeping warp filter and the look constants |
 | `createWalkTouch(surface, keyboard)` | `input/touch.ts` | Phone: floating left-thumb stick (push past the rim to sprint), one-finger orbit, two-finger pinch zoom |
 | `stickRegion(x, y, w, h)`, `stickIntent(dx, dy)`, `TOUCH` | `input/touch.ts` | Which part of the surface is the stick, thumb offset to intent, and the touch constants |
-| `createWalkHud(container, onJump, onLook?)`, `restingStick(w, h)` | `input/hud.ts` | The mouse-look plaque, the phone stick and the jump button, drawn in the given container |
+| `createWalkHud(container, onJump)`, `restingStick(w, h)` | `input/hud.ts` | The phone stick and the jump button, drawn in the given container (the captured mouse needs no plaque) |
 | `thumbSlots(w, h)`, `THUMB` | `input/hud.ts` | The phone thumb map: resting stick, Jump, and the slot reserved for the interaction owner's touch action |
 | `isClickPress(dx, dy, ms)`, `CLICK_SLOP_PX`, `CLICK_MS` | `input/pointer.ts` | The click-versus-drag rule for the interaction owner (under 8 px and under 300 ms) |
 | `walkDirection(forward, right, heading)` | `input/direction.ts` | Camera-relative intent to world-relative signed bytes; diagonals never faster |
 | `facingByte(moveX, moveZ)`, `headingFromByte(yaw)` | `input/direction.ts` | Yaw byte for the actual walk direction, and back to renderer radians |
-| `createShoulderRig(heading)`, `shoulderPose(...)` | `camera/shoulder.ts` | Shoulder framing with `filmOffset`, continuous wheel to first person, auto-follow, time-based easing |
+| `createShoulderRig(heading)`, `shoulderPose(...)` | `camera/shoulder.ts` | Shoulder framing with `filmOffset`, wheel zoom in third person, `setPerson` (V) with an eased boom swing, `setFovScale`, auto-follow, time-based easing |
+| `fovScaleFor(degrees)` | `camera/shoulder.ts` | The field-of-view setting (horizontal degrees at 16:10, 74 by default) as a scale on the framing's lens |
 | `SHOULDER` | `camera/shoulder.ts` | The chosen framing and feel constants |
 | `selfFade(eyeToHead, pulledIn)` | `camera/shoulder.ts` | Local citizen opacity: first-person fade, starting further out when a solid pulled the boom in |
 | `clearBoom(world, anchor, at, wish)` | `camera/occlusion.ts` | Sweeps eye + near plane along the boom from the head; how far the camera may stand |
@@ -110,10 +111,11 @@ dropped or closed connection lets go of held keys, a pending jump, the stick, an
 | Input | Owner while walking | Never |
 |---|---|---|
 | W A S D, arrows, Shift, Space | walking (physical codes, so AZERTY/Dvorak keep the shape) | in a text field, select or contenteditable; with Ctrl/Cmd/Alt; during IME composition; Space/arrows on a keyboard-focused control (its focus ring is showing) |
-| Mouse look control | a trusted pointer click acquires lock; Escape releases | no keyboard acquisition, automatic retries or re-lock on resume |
-| Escape | frees a mouse-look cursor (the browser does too) | never `preventDefault`ed or stopped: menus, Forge, build and interactions (Stand/Leave) all still receive it |
+| The mouse | a trusted left click on the world captures it (pointer lock, raw input where offered); while captured, a left click is "use" | keyboard acquisition, automatic retries, re-lock on resume |
+| Escape | captured: the browser frees the mouse and the play layer opens the ledger; free: opens or closes the ledger | never `preventDefault`ed when another owner (a place view, a seat, a Forge dialog) already took it |
+| V, P, F (rebindable) | the play layer: first/third person, the ledger, fullscreen | in a text field or with Ctrl/Cmd/Alt |
 | E | the interaction owner | walking never reads it, on keyboard or touch |
-| Left mouse/pen on the world | drag orbit once it travels 8 px; a shorter, quicker press stays a click (`isClickPress`) | while locked; the click that ended a drag is swallowed, nothing else |
+| Pen on the world (and the mouse only where pointer lock does not exist) | drag orbit once it travels 8 px; a shorter, quicker press stays a click (`isClickPress`) | a desktop mouse with pointer lock: it never drag-orbits |
 | Wheel on the world | boom distance, line/page modes, ±240 px per event | over UI: the listener is on the world surface only |
 | Touch on the world | lower-left (`stickRegion`: x < 46 %, y > 34 %) is the stick; elsewhere one finger orbits, two pinch | taps (< 8 px) stay clicks; UI above the surface keeps its own touches |
 | Jump button | a tap jumps on touch-down; keyboard activation also jumps | never takes focus from the world |
@@ -121,13 +123,34 @@ dropped or closed connection lets go of held keys, a pending jump, the stick, an
 Everything held or pending is cleared on window blur, a hidden page, a native context menu, `release()`, a
 dropped connection and `dispose()`. A mouse released outside the window ends its drag on the next move.
 
-**Mouse look.** Free cursor by default. A real pointer click on the labelled **Mouse look** control makes one
-standard pointer-lock request. V and keyboard-generated button clicks never acquire it. Locked movement ignores
-the first 120 ms, discards any event with either axis over 250 px, clamps the rest to ±100 px and gathers them
-until the next frame; it turns 0.0024 rad per pixel at any window size. A refusal is handled once and the quiet
-control reads **Drag to look**; ordinary drag orbit continues. A later deliberate click may ask again. There is
-no raw-movement retry and no logging/retry loop. Escape, blur and `release()` free the cursor immediately;
-`resume()` never captures it. A fast flick only discards the warp, without changing mode.
+### The captured mouse
+
+Walking is a game: the mouse is always captured (decision 2). `input/look.ts` owns the lock and nothing else asks
+for it.
+
+- **Capture.** A trusted left press on the world asks for pointer lock with `unadjustedMovement` (raw input, no OS
+  acceleration). A `NotSupportedError` (or a synchronous throw) is retried once, immediately, without the option.
+  Three refusals in a row mark the page `unavailable`; only then does the mouse fall back to drag orbit.
+- **Chrome** answers with a promise and refuses a re-lock for about a second after a user exit: that window is the
+  `cooldown` state, and the next click after it captures again. **Safari** returns no promise and answers only
+  with `pointerlockchange` or `pointerlockerror`; both are handled the same way. **Firefox** ignores
+  `unadjustedMovement` and keeps OS acceleration; that is accepted, not retried.
+- **Flicks survive.** `createSpikeFilter` keeps every event of a real fast turn (traces of 400 to 900 px per event
+  at 60 to 1000 Hz pass whole) and drops only an isolated warp: an event of 160 px or more that is over six times
+  both neighbours, or that flips sign in the middle of steady motion. A big event is held for its next neighbour or
+  24 ms at most, so a flick is at worst one frame late and never lost. Nothing is clamped.
+- **Letting go.** The browser spends Escape on the lock and may never deliver the keydown. The lock's own
+  `pointerlockchange` is the signal: `onLetGo('browser')` fires, keys and sticks clear, and the play layer opens the
+  ledger. Blur and a hidden page release the same way.
+- **Fullscreen** (`F`, or the ledger) also takes the Keyboard Lock where the browser has it (Chromium), so Ctrl+W,
+  Ctrl+T and Ctrl+N stay inside the game, Ctrl and Cmd shortcuts are swallowed except in a text field, Escape is
+  heard by the page (it releases the mouse into the ledger) and a held Escape leaves fullscreen, as the browser
+  shows. Without fullscreen there is no keyboard lock.
+- **Leases.** Any panel that needs a free cursor takes `look.lease(reason)` and releases it when done; while one is
+  held a click does not capture. The play layer's ledger, arrival steps and HUD slots use this through
+  `PlayContext.requestCursor`.
+- **Settings.** Sensitivity multiplies 0.0024 rad per pixel; invert Y flips the pitch of locked look, drag and swipe.
+  Both read live from the play settings.
 
 **Phone.** The stick appears under the thumb wherever it lands in the stick region (kept a whole ring inside
 the edges), with a 16 % dead zone; pushing past 1.3 × the 52 px rim sprints and lights the ring. A finger
@@ -145,11 +168,12 @@ tap on the world itself stays a click for target selection. Re-read the slot on 
 may cover the left 46 % below 34 % of the height while walking: the kingdom's own bottom bar and any toast
 belong above that band or are hidden while walking (integrator).
 
-**Escape order.** While mouse look holds the cursor, the browser itself spends Escape on freeing it, and it may
+**Escape order.** While the mouse is captured, the browser itself spends Escape on freeing it, and it may
 not deliver that keydown to the page at all. If one does arrive while `document.pointerLockElement` is still
 the world surface (it clears only on the following `pointerlockchange`, whatever order the listeners run in),
-it means "give me my cursor": the interaction owner should not also stand the citizen up with it. With a free cursor Escape passes straight
-through to whoever owns it.
+it means "give me my cursor": the interaction owner should not also stand the citizen up with it, and the ledger
+opens from the lock change. With a free cursor Escape goes to whoever owns it first; if nobody took it, it opens
+or closes the ledger.
 
 ## Integration recipe (integrator)
 
@@ -254,13 +278,13 @@ interface RealmClient {
   return nothing is replayed: the next due input simply carries what is held then.
 
 `realm-predict.test.ts` checks all of this against the real room, uWS transport and SDK clients.
-`realm-check.mjs` repeats it in two real browsers on the SIMULATED court (a diagnostic, not kingdom acceptance):
+`realm-check.mjs` repeats it in two real browsers on the dev court (a diagnostic, not kingdom acceptance):
 
 ```sh
 node apps/web/src/walk/realm-check.mjs [--realm-port 5188] [--web-port 5189] [--out shots/walk/wc06]
 ```
 
-It starts the actual `KingdomRoom` with the SIMULATED reference services (memory only) on the realm port, so it
+It starts the actual `KingdomRoom` with the dev reference services (memory only) on the realm port, so it
 can publish revision 2 with a wall like an authority, and a vite dev server for `/-/realm` on the web port; Chrome
 maps the page's `:5191` to the realm port. It stops both when done and writes `route.json` beside the shots.
 
@@ -377,11 +401,16 @@ node apps/web/src/walk/capture-review.mjs --view motion --clip
 node apps/web/src/walk/capture-review.mjs --view wardrobe
 node apps/web/src/walk/capture-review.mjs --view selector --width 390 --height 844
 node apps/web/src/walk/capture-review.mjs --view labels --offline
+node apps/web/src/walk/capture-review.mjs --view bubbles --offline
 node apps/web/src/walk/capture-review.mjs --view wardrobe --offline --width 390 --height 844
 node apps/web/src/walk/capture-review.mjs --view motion --trajectory turns --detail --clip --offline
 ```
 
-These labelled SIMULATED benches review the component only. No browser-local chat, wardrobe or gesture is
+`--view bubbles` draws 16 frames of a camera move with active chat (`labels/motion.html`, a small dusk street drawn
+by a real three.js camera), reads every fully shown label's tip back against the anchor projected that frame, fails
+above 1 px, and writes the frames, a contact sheet and the per-frame measurements.
+
+These dev-only benches review the component only. No browser-local chat, wardrobe or gesture is
 presented as server truth.
 
 `--offline` builds the same component entry and routes its static bytes inside Chrome, without a network
@@ -396,7 +425,7 @@ clock. Height discontinuities reset contact history: exact contact with the king
 terrain remains a main-owned seam. The optional consumer patch in the lane records includes the audio binding.
 
 `node apps/web/src/walk/check-town.mjs` is a CPU-only diagnostic: it compiles the complete native founded
-collision and moves three SIMULATED bodies forward, backward and to rest, checking support and solid clearance.
+collision and moves three test bodies forward, backward and to rest, checking support and solid clearance.
 It opens no listener, browser or capture slot. The full compile can take roughly 83 seconds on this host.
 
 `capture-town.mjs` prepares one actual-town still or a three-second real-time clip with three real SDK
@@ -411,7 +440,7 @@ node apps/web/src/walk/capture-town.mjs --offline
 
 This new runner is linted but has **not yet completed runtime verification**. The ordinary mode requires two safe
 ports; offline mode compiles the town page and needs only one safe port for its actual memory-only realm server.
-It labels the identities SIMULATED, hashes the adopted native scene, uses its full collision compiler, checks
+It keeps the test identities inside its memory-only room, hashes the adopted native scene, uses its full collision compiler, checks
 keyboard movement and both peer connections, and takes the shared lock for one output. It cannot establish
 real sign-in, owned-door spawning, saved wardrobe or network gestures. Those acceptance checks still require
 main's authority and projection seams, plus actual town and stream captures at the prescribed sizes.

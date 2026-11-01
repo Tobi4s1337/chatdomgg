@@ -1,0 +1,600 @@
+diff --git a/packages/audio/src/engine.ts b/packages/audio/src/engine.ts
+index c455a401..8933e2dc 100644
+--- a/packages/audio/src/engine.ts
++++ b/packages/audio/src/engine.ts
+@@ -2,10 +2,14 @@ import { resolveFamily } from './families';
+ import { masterLevel, Mix } from './mix';
+ import { Mixer, noiseBuffer } from './mixer';
+ import { phraseDelay, phraseFamily, type KingdomPhrase, type KingdomPhraseOptions } from './phrase';
++import { DEFAULT_GROUPS, normalizeGroups } from './play-mix';
+ import { fetchSample, SampleBank, type SampleBankReport, type SampleLoader } from './samples';
+-import type { AudioCue, AudioCueOptions, AudioSettings, KingdomAudio, KingdomAudioState } from './types';
++import {
++  AUDIO_GROUPS, type AudioCue, type AudioCueOptions, type AudioGroup, type AudioSettings, type AudioSettingsPatch, type KingdomAudio,
++  type KingdomAudioState,
++} from './types';
+ 
+-const DEFAULTS: AudioSettings = { muted: false, volume: 0.65 };
++const DEFAULTS: AudioSettings = { muted: false, volume: 0.65, groups: DEFAULT_GROUPS };
+ /** How long an unlock waits for the browser before answering false. A later resume still makes the sound ready. */
+ const UNLOCK_WAIT_MS = 2500;
+ 
+@@ -29,6 +33,7 @@ export interface KingdomAudioInspection {
+ const inspections = new WeakMap<KingdomAudio, () => KingdomAudioInspection>();
+ const phrasePlayers = new WeakMap<KingdomAudio, (phrase: KingdomPhrase, options: KingdomPhraseOptions) => boolean>();
+ const hosts = new WeakMap<KingdomAudio, () => Readonly<{ context: AudioContext; destination: AudioNode }> | null>();
++const groupHosts = new WeakMap<KingdomAudio, (group: AudioGroup) => Readonly<{ context: AudioContext; destination: AudioNode }> | null>();
+ 
+ /** The existing graph only; never creates or resumes an AudioContext. */
+ export function kingdomAudioHost(audio: KingdomAudio): Readonly<{ context: AudioContext; destination: AudioNode }> | null {
+@@ -37,6 +42,18 @@ export function kingdomAudioHost(audio: KingdomAudio): Readonly<{ context: Audio
+   return host();
+ }
+ 
++/**
++ * Like `kingdomAudioHost`, but the destination follows one volume group of the settings ledger as well as the master
++ * (and mute): a hosted world layer (the Forge, ambience beds, Twitch moments) passes `world`, a spoken line `voice`.
++ * The same node is returned for a group for as long as the context lives. Never creates or resumes a context.
++ */
++export function kingdomAudioGroupHost(audio: KingdomAudio, group: AudioGroup): Readonly<{ context: AudioContext; destination: AudioNode }> | null {
++  const host = groupHosts.get(audio);
++  if (!host) throw new TypeError('kingdom audio: not an instance created by createKingdomAudio');
++  if (!AUDIO_GROUPS.includes(group)) throw new TypeError(`kingdom audio: unknown volume group ${String(group)}`);
++  return host(group);
++}
++
+ /** Diagnostics for the bench and checks. Not part of what consumers need to play sound. */
+ export function inspectKingdomAudio(audio: KingdomAudio): KingdomAudioInspection {
+   const inspect = inspections.get(audio);
+@@ -61,7 +78,7 @@ function defaultContext(): AudioContext | undefined {
+   return Context ? new Context({ latencyHint: 'interactive' }) : undefined;
+ }
+ 
+-export function normalizeSettings(current: AudioSettings, next: Partial<AudioSettings>): AudioSettings {
++export function normalizeSettings(current: AudioSettings, next: AudioSettingsPatch): AudioSettings {
+   const result = { ...current };
+   if (next.muted !== undefined) {
+     if (typeof next.muted !== 'boolean') throw new TypeError('kingdom audio: muted must be a boolean');
+@@ -71,6 +88,7 @@ export function normalizeSettings(current: AudioSettings, next: Partial<AudioSet
+     if (typeof next.volume !== 'number' || !Number.isFinite(next.volume)) throw new RangeError('kingdom audio: volume must be a finite number');
+     result.volume = Math.min(1, Math.max(0, next.volume));
+   }
++  result.groups = normalizeGroups(current.groups ?? DEFAULT_GROUPS, next.groups);
+   return result;
+ }
+ 
+@@ -79,7 +97,7 @@ export function normalizeSettings(current: AudioSettings, next: Partial<AudioSet
+  * resume has resolved and the context is actually running; a browser suspension or interruption afterwards reads
+  * `suspended` and stops every voice, so nothing replays when it comes back.
+  */
+-export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: AudioEngineDeps = {}): KingdomAudio {
++export function createAudioEngine(initial: AudioSettingsPatch = {}, deps: AudioEngineDeps = {}): KingdomAudio {
+   const random = deps.random ?? Math.random;
+   const samples = new SampleBank(deps.loadSample ?? fetchSample);
+   let settings = normalizeSettings(DEFAULTS, initial);
+@@ -114,7 +132,7 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
+     try { created = (deps.createContext ?? defaultContext)(); } catch { created = undefined; }
+     if (!created) { status = 'unavailable'; return undefined; }
+     context = created; resumed = false; inFlight = 0;
+-    mixer = new Mixer(created, new Mix(created, settings, random), { noise: noiseBuffer(created, random), samples, random });
++    mixer = new Mixer(created, new Mix(created, settings, random), { noise: noiseBuffer(created, random), samples, random }, settings.groups);
+     created.addEventListener('statechange', onStateChange);
+     return created;
+   }
+@@ -179,7 +197,7 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
+     return status === 'ready' && !!context && !!mixer && context.state === 'running' && masterLevel(settings) > 0;
+   }
+ 
+-  function cue(kind: AudioCue, options: AudioCueOptions = {}): boolean {
++  function cue<K extends AudioCue>(kind: K, options: AudioCueOptions<K> = {}): boolean {
+     const family = resolveFamily(kind, options);
+     return audible() && mixer!.play(family, options);
+   }
+@@ -193,7 +211,7 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
+     return mixer!.play(family, place, delay);
+   }
+ 
+-  function setSettings(next: Partial<AudioSettings>): void {
++  function setSettings(next: AudioSettingsPatch): void {
+     const previous = settings;
+     settings = normalizeSettings(settings, next);
+     if (status === 'disposed' || !context || !mixer) return;
+@@ -223,6 +241,8 @@ export function createAudioEngine(initial: Partial<AudioSettings> = {}, deps: Au
+   const audio: KingdomAudio = { unlock, cue, setSettings, getState, dispose };
+   hosts.set(audio, () => status !== 'disposed' && context && context.state !== 'closed' && mixer
+     ? { context, destination: mixer.hostDestination } : null);
++  groupHosts.set(audio, group => status !== 'disposed' && context && context.state !== 'closed' && mixer
++    ? { context, destination: mixer.groupDestination(group) } : null);
+   phrasePlayers.set(audio, phrase);
+   inspections.set(audio, () => ({
+     contextState: context?.state ?? null,
+diff --git a/packages/audio/src/families.ts b/packages/audio/src/families.ts
+index 7e4334d8..78a76550 100644
+--- a/packages/audio/src/families.ts
++++ b/packages/audio/src/families.ts
+@@ -2,9 +2,12 @@ import { CASTLE_BEACON } from './cues/beacon';
+ import { BRASS_CONTROL, PARCHMENT_CONTROL, WOOD_CONTROL } from './cues/control';
+ import { WINDOW_LIGHT } from './cues/light';
+ import { SURFACES, type MaterialCue } from './cues/materials';
++import { GROUND_STEPS } from './cues/steps';
+ import { STREET_WAVE } from './cues/wave';
+ import type { SampleId } from './samples';
+-import { AUDIO_CONTROL_SURFACES, AUDIO_CUES, AUDIO_MATERIALS, type AudioCue, type AudioCueOptions } from './types';
++import {
++  AUDIO_CONTROL_SURFACES, AUDIO_CUES, AUDIO_MATERIALS, STEP_GROUNDS, STEP_SURFACES, type AudioCue, type AudioCueOptions, type AudioGroup,
++} from './types';
+ import type { VoiceGraph } from './voice';
+ 
+ /**
+@@ -21,6 +24,8 @@ export interface CueFamily {
+   samples: readonly SampleId[];
+   /** Family fader in dB on the voice input; 0 when the cue's own layer gains already set its level. */
+   fader?: number;
++  /** The settings group whose volume it follows. Omitted: `interface` for controls, `world` for everything else. */
++  group?: AudioGroup;
+   /** Set for consumer phrases: the most layers and seconds one may schedule. Built-in families are bounded by design. */
+   bounds?: { sources: number; seconds: number };
+   build(voice: VoiceGraph, variation: number): void;
+@@ -38,6 +43,7 @@ const FAMILIES: Partial<Record<string, Omit<CueFamily, 'key'>>> = {
+   beacon: { tier: 'beacon', ...CASTLE_BEACON },
+   ...Object.fromEntries(Object.entries(MATERIAL_TIERS).flatMap(([cue, tier]) => AUDIO_MATERIALS.map(material =>
+     [`${cue}:${material}`, { tier, ...SURFACES[material][cue as MaterialCue] }]))),
++  ...Object.fromEntries(STEP_GROUNDS.map(ground => [`step:${ground}`, { tier: 'step', ...GROUND_STEPS[ground] }])),
+ };
+ 
+ /** Cue families that are finished and audible in this build, as `cue` or `cue:surface`. */
+@@ -48,8 +54,11 @@ const MATERIAL_CUES = new Set<AudioCue>(Object.keys(MATERIAL_TIERS) as MaterialC
+ /** Resolves a call to its family. Unknown values and families that are not finished yet throw, never fake success. */
+ export function resolveFamily(kind: AudioCue, options: AudioCueOptions): CueFamily {
+   if (!AUDIO_CUES.includes(kind)) throw new TypeError(`kingdom audio: unknown cue ${String(kind)}`);
+-  if (options.material !== undefined && !AUDIO_MATERIALS.includes(options.material)) {
+-    throw new TypeError(`kingdom audio: unknown material ${String(options.material)}`);
++  const material = options.material;
++  if (material !== undefined && !(AUDIO_MATERIALS as readonly string[]).includes(material)) {
++    // Grounds (grass, sand, shallows…) are only walked on: a building cue never plays one.
++    if (!STEP_SURFACES.includes(material)) throw new TypeError(`kingdom audio: unknown material ${String(material)}`);
++    if (kind !== 'step') throw new TypeError(`kingdom audio: ${material} is ground to walk on; ${kind} takes a building material`);
+   }
+   if (options.ui !== undefined && !AUDIO_CONTROL_SURFACES.includes(options.ui)) {
+     throw new TypeError(`kingdom audio: unknown control surface ${String(options.ui)}`);
+diff --git a/packages/audio/src/index.ts b/packages/audio/src/index.ts
+index 4fed5244..ee7eda68 100644
+--- a/packages/audio/src/index.ts
++++ b/packages/audio/src/index.ts
+@@ -1,21 +1,27 @@
+ import { createAudioEngine } from './engine';
+-import type { AudioSettings, KingdomAudio } from './types';
++import type { AudioSettingsPatch, KingdomAudio } from './types';
+ 
+ export type {
+-  AudioControlSurface, AudioCue, AudioCueOptions, AudioMaterial, AudioSettings, KingdomAudio, KingdomAudioState,
++  AudioControlSurface, AudioCue, AudioCueOptions, AudioGroup, AudioGroupVolumes, AudioMaterial, AudioSettings, AudioSettingsPatch,
++  KingdomAudio, KingdomAudioState, StepGround, StepSurface,
+ } from './types';
+-export { AUDIO_CONTROL_SURFACES, AUDIO_CUES, AUDIO_MATERIALS } from './types';
++export { AUDIO_CONTROL_SURFACES, AUDIO_CUES, AUDIO_GROUPS, AUDIO_MATERIALS, STEP_GROUNDS, STEP_SURFACES } from './types';
++export { stepSurfaceOf } from './cues/steps';
++export { DEFAULT_GROUPS } from './play-mix';
++export { OTHERS_GAIN, OTHERS_STEP_LIMIT } from './mixer';
+ export { FINISHED_FAMILIES } from './families';
+-export { inspectKingdomAudio, kingdomAudioHost, playKingdomPhrase, type KingdomAudioInspection } from './engine';
++export {
++  inspectKingdomAudio, kingdomAudioGroupHost, kingdomAudioHost, playKingdomPhrase, type KingdomAudioInspection,
++} from './engine';
+ export { createForgeAudio, type ForgeAudio } from './forge';
+ export { PHRASE_LIMITS, type KingdomPhrase, type KingdomPhraseOptions, type PhraseVoice } from './phrase';
+ export { noteHz, type PaletteNote } from './palette';
+ 
+ /**
+  * The kingdom's sound. Creating it makes no context and no sound; the first `unlock()` from a user gesture does.
+- * Defaults: `{ muted: false, volume: 0.65 }`, status `locked`.
++ * Defaults: `{ muted: false, volume: 0.65, groups: { world: 1, voice: 1, interface: 1 } }`, status `locked`.
+  */
+-export function createKingdomAudio(settings?: Partial<AudioSettings>): KingdomAudio {
++export function createKingdomAudio(settings?: AudioSettingsPatch): KingdomAudio {
+   return createAudioEngine(settings);
+ }
+ export { renderKingdomAudio, type OfflineRender, type ScriptStep } from './offline';
+diff --git a/packages/audio/src/mixer.ts b/packages/audio/src/mixer.ts
+index d6b24a26..798b3d12 100644
+--- a/packages/audio/src/mixer.ts
++++ b/packages/audio/src/mixer.ts
+@@ -1,6 +1,7 @@
+ import type { CueFamily, MixTier } from './families';
+ import { masterLevel, RAMP_SECONDS, type Mix } from './mix';
+-import type { AudioCueOptions, AudioSettings } from './types';
++import { DEFAULT_GROUPS, familyGroup, groupLevel } from './play-mix';
++import type { AudioCueOptions, AudioGroup, AudioGroupVolumes, AudioSettings } from './types';
+ import { VoiceGraph, type Kit } from './voice';
+ 
+ /** Hard bounds for one instance, counting every foley and synthesis layer. */
+@@ -11,7 +12,7 @@ export const MAX_SOURCES = 64;
+  * How far each tier may fill the whole mix (voices and source nodes, counted after admitting the new cue). The
+  * room above a tier is reserved for the tiers above it: nothing below the beacon can take the mix past 40 sources,
+  * so the castle beacon (18) and a control press (up to 6) always fit, and the beacon stops at 58 so a control
+- * still answers during it. Footsteps (2–4 sources each) and building cues (2–6) sit lowest.
++ * still answers during it. Footsteps (2–5 sources each) and building cues (2–6) sit lowest.
+  */
+ export const TIER_LIMITS: Readonly<Record<MixTier, { voices: number; sources: number }>> = {
+   control: { voices: MAX_VOICES, sources: MAX_SOURCES },
+@@ -49,11 +50,22 @@ export const DISTANCE_REFERENCE = 8;
+  * below 1.2 kHz: about 7.7 kHz at 8 m and 3.6 kHz at 24 m. Far footsteps become dull as well as quiet.
+  */
+ export const AIR_REFERENCE = 6;
++/** Someone else's sound (`others`) plays 6 dB under your own at the same distance. */
++export const OTHERS_GAIN = 0.5;
++/**
++ * The share of the footstep tier other walkers' steps may hold: 5 voices and 18 sources of its 8 and 28. Your own
++ * footsteps (at most two ringing at a run, 4 sources each) always fit beside them without replacing anything, and
++ * a step of yours may still fade any of theirs when the mix is full.
++ */
++export const OTHERS_STEP_LIMIT = { voices: 5, sources: 18 } as const;
+ 
+ interface LiveVoice {
+   tier: MixTier;
+   /** Placement gain, used to choose which footsteps a nearer one may replace. */
+   gain: number;
++  group: AudioGroup;
++  /** Someone else's sound: quieter, and the first to give way. */
++  others: boolean;
+   sources: number;
+   remaining: number;
+   graph: VoiceGraph;
+@@ -86,16 +98,39 @@ export class Mixer {
+   private readonly voices = new Set<LiveVoice>();
+   private readonly lastVariation = new Map<string, number>();
+   private readonly lastAt = new Map<string, { at: number; gain: number }>();
++  /** Persistent group inputs for hosted layers, made on first request. */
++  private readonly hosts = new Map<AudioGroup, GainNode>();
+ 
+-  constructor(private readonly context: BaseAudioContext, private readonly mix: Mix, private readonly kit: Kit) {}
++  constructor(private readonly context: BaseAudioContext, private readonly mix: Mix, private readonly kit: Kit,
++    private groups: Readonly<AudioGroupVolumes> = DEFAULT_GROUPS) {}
++
++  /**
++   * A stable input to the master that follows one volume group, for a hosted layer (the Forge, ambience beds, a
++   * spoken line) that makes its own nodes on this context. Made once per group; it lives until the mixer closes.
++   */
++  groupDestination(group: AudioGroup): AudioNode {
++    let node = this.hosts.get(group);
++    if (!node) {
++      node = this.context.createGain();
++      node.gain.value = groupLevel(this.groups[group]);
++      node.connect(this.mix.master);
++      this.hosts.set(group, node);
++    }
++    return node;
++  }
+ 
+   /** Plays one cue (or a consumer's phrase) `delay` seconds from now. False when held back; never queued. */
+   play(family: CueFamily, options: AudioCueOptions, delay = 0): boolean {
+     const place = placement(options);
+     if (!place || !this.kit.samples.has(family.samples)) return false;
+     const context = this.context, now = context.currentTime;
+-    const last = this.lastAt.get(family.key);
+-    if (last && now - last.at < COALESCE_SECONDS && place.gain < last.gain * NEARER) return false;
++    const group = familyGroup(family), level = groupLevel(this.groups[group]);
++    if (level === 0) return false;
++    // Someone else's sound is quieter and coalesces only with other people's, never with yours.
++    const others = options.others === true, gain = others ? place.gain * OTHERS_GAIN : place.gain;
++    const recent = others ? `${family.key}|others` : family.key;
++    const last = this.lastAt.get(recent);
++    if (last && now - last.at < COALESCE_SECONDS && gain < last.gain * NEARER) return false;
+ 
+     const input = context.createGain();
+     input.gain.value = 10 ** ((family.fader ?? 0) / 20);
+@@ -110,10 +145,10 @@ export class Mixer {
+       throw new RangeError(`kingdom audio: ${family.key} uses ${sources} sources over ${(graph.end - graph.t).toFixed(2)} s; `
+         + `a phrase may use at most ${bounds.sources} over ${bounds.seconds} s`);
+     }
+-    if (!this.admit(family.tier, sources, place.gain)) { discard(); return false; }
++    if (!this.admit(family.tier, sources, gain, others)) { discard(); return false; }
+ 
+     const distance = context.createGain(), panner = context.createStereoPanner(), send = context.createGain();
+-    distance.gain.value = place.gain; panner.pan.value = place.pan; send.gain.value = graph.room;
++    distance.gain.value = gain * level; panner.pan.value = place.pan; send.gain.value = graph.room;
+     const output: AudioNode[] = [input, distance, panner, send];
+     input.connect(distance);
+     if (place.air === undefined) distance.connect(panner);
+@@ -126,14 +161,14 @@ export class Mixer {
+     if (graph.room > 0) { panner.connect(send); send.connect(this.mix.room); }
+ 
+     const voice: LiveVoice = {
+-      tier: family.tier, gain: place.gain, sources, remaining: sources, graph, distance, output, stopped: false, fading: false,
++      tier: family.tier, gain, group, others, sources, remaining: sources, graph, distance, output, stopped: false, fading: false,
+     };
+     for (const { node } of graph.scheduled) {
+       node.onended = () => { if (--voice.remaining === 0) this.release(voice); };
+     }
+     graph.start();
+     this.voices.add(voice);
+-    this.lastAt.set(family.key, { at: now, gain: place.gain });
++    this.lastAt.set(recent, { at: now, gain });
+     this.lastVariation.set(family.key, variation);
+     return true;
+   }
+@@ -144,12 +179,32 @@ export class Mixer {
+    * neither a voice nor the room's tail.
+    */
+   applySettings(previous: Readonly<AudioSettings>, next: Readonly<AudioSettings>): void {
++    if (next.groups) this.applyGroups(next.groups);
+     this.mix.rampMaster(next);
+     if (masterLevel(next) > 0 || masterLevel(previous) === 0) return;
+     for (const voice of this.voices) this.fade(voice, RAMP_SECONDS);
+     this.mix.renew(RAMP_SECONDS);
+   }
+ 
++  /**
++   * New group volumes: every voice still ringing in a changed group, and that group's hosted input, moves to its new
++   * level over 30 ms from wherever it is now. Voices already fading out are left to finish their fade.
++   */
++  applyGroups(next: Readonly<AudioGroupVolumes>): void {
++    const previous = this.groups;
++    this.groups = next;
++    const now = this.context.currentTime;
++    const ramp = (param: AudioParam, value: number) => {
++      param.cancelScheduledValues(now);
++      param.setValueAtTime(param.value, now);
++      param.linearRampToValueAtTime(value, now + RAMP_SECONDS);
++    };
++    for (const voice of this.voices) {
++      if (!voice.stopped && previous[voice.group] !== next[voice.group]) ramp(voice.distance.gain, voice.gain * groupLevel(next[voice.group]));
++    }
++    for (const [group, node] of this.hosts) if (previous[group] !== next[group]) ramp(node.gain, groupLevel(next[group]));
++  }
++
+   /**
+    * The browser or device stopped rendering (suspension, interruption). Every voice stops at once and the mix front
+    * is replaced, so when it runs again the output starts from silence: no voice, no room tail, no backlog.
+@@ -163,6 +218,8 @@ export class Mixer {
+   close(): void {
+     this.stopAll();
+     for (const voice of [...this.voices]) this.release(voice);
++    for (const node of this.hosts.values()) node.disconnect();
++    this.hosts.clear();
+     this.mix.close();
+   }
+ 
+@@ -194,9 +251,9 @@ export class Mixer {
+    * the ceremony, beacon and control ceilings. Footsteps already fading out (or about to) are left out of the step
+    * and build ceilings only, within the fade allowance.
+    */
+-  private fits(tier: MixTier, sources: number, leaving: ReadonlySet<LiveVoice> = new Set()): boolean {
++  private fits(tier: MixTier, sources: number, leaving: ReadonlySet<LiveVoice> = new Set(), others = false): boolean {
+     const limit = TIER_LIMITS[tier], allowance = FADE_ALLOWANCE[tier];
+-    let voices = 0, counted = 0, all = 0, fadingVoices = 0, fadingSources = 0;
++    let voices = 0, counted = 0, all = 0, fadingVoices = 0, fadingSources = 0, theirVoices = 0, theirSources = 0;
+     for (const voice of this.voices) {
+       all += voice.remaining;
+       if (allowance && voice.tier === 'step' && (voice.fading || leaving.has(voice))) {
+@@ -204,23 +261,32 @@ export class Mixer {
+         continue;
+       }
+       voices++; counted += voice.remaining;
++      if (voice.others && voice.tier === 'step') { theirVoices++; theirSources += voice.remaining; }
+     }
++    // Other walkers' steps stay inside their share of the footstep tier.
++    if (others && tier === 'step'
++      && (theirVoices + 1 > OTHERS_STEP_LIMIT.voices || theirSources + sources > OTHERS_STEP_LIMIT.sources)) return false;
+     return voices + 1 <= limit.voices && counted + sources <= limit.sources
+       && fadingVoices <= (allowance?.voices ?? 0) && fadingSources <= (allowance?.sources ?? 0)
+       && this.voices.size + 1 <= MAX_VOICES && all + sources <= MAX_SOURCES;
+   }
+ 
+-  /** Admits a cue; when the mix is full, footsteps give way to building and to much nearer footsteps. */
+-  private admit(tier: MixTier, sources: number, gain: number): boolean {
+-    if (this.fits(tier, sources)) return true;
++  /**
++   * Admits a cue; when the mix is full, footsteps give way to building and to much nearer footsteps. Other people's
++   * footsteps give way first, and to any sound of yours; theirs only ever replace theirs.
++   */
++  private admit(tier: MixTier, sources: number, gain: number, others = false): boolean {
++    if (this.fits(tier, sources, undefined, others)) return true;
+     if (!FADE_ALLOWANCE[tier]) return false;
+     const quieter = [...this.voices]
+-      .filter(voice => voice.tier === 'step' && !voice.stopped && (tier === 'build' || voice.gain * NEARER <= gain))
+-      .sort((a, b) => a.gain - b.gain);
++      .filter(voice => voice.tier === 'step' && !voice.stopped && (others
++        ? voice.others && (tier === 'build' || voice.gain * NEARER <= gain)
++        : tier === 'build' || voice.others || voice.gain * NEARER <= gain))
++      .sort((a, b) => Number(b.others) - Number(a.others) || a.gain - b.gain);
+     const leaving = new Set<LiveVoice>();
+     for (const voice of quieter) {
+       leaving.add(voice);
+-      if (this.fits(tier, sources, leaving)) {
++      if (this.fits(tier, sources, leaving, others)) {
+         for (const replaced of leaving) { replaced.fading = true; this.fade(replaced, STEP_FADE_SECONDS); }
+         return true;
+       }
+diff --git a/packages/audio/src/offline.ts b/packages/audio/src/offline.ts
+index a662f9c9..6041c0fe 100644
+--- a/packages/audio/src/offline.ts
++++ b/packages/audio/src/offline.ts
+@@ -3,7 +3,7 @@ import { masterLevel, Mix } from './mix';
+ import { Mixer, noiseBuffer } from './mixer';
+ import { phraseDelay, phraseFamily, type KingdomPhrase, type KingdomPhraseOptions } from './phrase';
+ import { fetchSample, SampleBank, type SampleLoader } from './samples';
+-import type { AudioCue, AudioCueOptions, AudioSettings } from './types';
++import type { AudioCue, AudioCueOptions, AudioSettingsPatch } from './types';
+ import { normalizeSettings } from './engine';
+ 
+ /**
+@@ -14,7 +14,7 @@ import { normalizeSettings } from './engine';
+ export type ScriptStep =
+   | { at: number; cue: AudioCue; options?: AudioCueOptions }
+   | { at: number; phrase: KingdomPhrase; options?: KingdomPhraseOptions }
+-  | { at: number; settings: Partial<AudioSettings> }
++  | { at: number; settings: AudioSettingsPatch }
+   | { at: number; interrupt: true };
+ 
+ export interface OfflineRender {
+@@ -28,7 +28,7 @@ export interface OfflineRender {
+  * OfflineAudioContext. The render suspends at each step's time, so budgets and cleanup run in render time.
+  */
+ export async function renderKingdomAudio(script: readonly ScriptStep[], options: {
+-  duration: number; sampleRate?: number; settings?: Partial<AudioSettings>; random?: () => number; loadSample?: SampleLoader;
++  duration: number; sampleRate?: number; settings?: AudioSettingsPatch; random?: () => number; loadSample?: SampleLoader;
+ }): Promise<OfflineRender> {
+   const sampleRate = options.sampleRate ?? 48000, random = options.random ?? Math.random;
+   const context = new OfflineAudioContext(2, Math.ceil(options.duration * sampleRate), sampleRate);
+@@ -36,7 +36,7 @@ export async function renderKingdomAudio(script: readonly ScriptStep[], options:
+   await samples.load(context);
+   let settings = normalizeSettings({ muted: false, volume: 0.65 }, options.settings ?? {});
+   const mix = new Mix(context, settings, random);
+-  const mixer = new Mixer(context, mix, { noise: noiseBuffer(context, random), samples, random });
++  const mixer = new Mixer(context, mix, { noise: noiseBuffer(context, random), samples, random }, settings.groups);
+   const played: OfflineRender['played'] = [];
+ 
+   const quantum = 128 / sampleRate, groups = new Map<number, ScriptStep[]>();
+diff --git a/packages/audio/src/phrase.ts b/packages/audio/src/phrase.ts
+index fa64ad23..9f357332 100644
+--- a/packages/audio/src/phrase.ts
++++ b/packages/audio/src/phrase.ts
+@@ -1,4 +1,5 @@
+ import type { CueFamily } from './families';
++import { AUDIO_GROUPS, type AudioGroup } from './types';
+ import type { VoiceGraph } from './voice';
+ 
+ /**
+@@ -15,6 +16,8 @@ export interface KingdomPhrase {
+    * 40 sources. `beacon` is for a kingdom-wide moment and may reach 58; controls always keep room above both.
+    */
+   tier?: 'ceremony' | 'beacon';
++  /** The volume group it follows: `world` (the default) for the land and its moments, `voice` for a spoken line. */
++  group?: AudioGroup;
+   /** How many authored variations `build` knows; never the same one twice in a row. Default 1, at most 8. */
+   variations?: number;
+   /**
+@@ -48,12 +51,14 @@ export function phraseFamily(phrase: KingdomPhrase): CueFamily {
+   if (typeof phrase.build !== 'function') throw new TypeError(`kingdom audio: phrase ${phrase.key} has no build`);
+   const tier = phrase.tier ?? 'ceremony';
+   if (!TIERS.has(tier)) throw new TypeError(`kingdom audio: phrase tier must be ceremony or beacon, not ${String(tier)}`);
++  const group = phrase.group ?? 'world';
++  if (!AUDIO_GROUPS.includes(group)) throw new TypeError(`kingdom audio: phrase group must be world, voice or interface, not ${String(group)}`);
+   const variations = phrase.variations ?? 1;
+   if (!Number.isInteger(variations) || variations < 1 || variations > 8) {
+     throw new RangeError(`kingdom audio: phrase ${phrase.key} needs 1 to 8 variations`);
+   }
+   return {
+-    key: `phrase:${phrase.key}`, tier, variations, samples: [],
++    key: `phrase:${phrase.key}`, tier, group, variations, samples: [],
+     bounds: { sources: PHRASE_LIMITS.sources, seconds: PHRASE_LIMITS.seconds },
+     build: (voice, variation) => phrase.build(voice, variation),
+   };
+diff --git a/packages/audio/src/types.ts b/packages/audio/src/types.ts
+index 0294dc6a..792d1604 100644
+--- a/packages/audio/src/types.ts
++++ b/packages/audio/src/types.ts
+@@ -1,13 +1,46 @@
+ export type AudioCue = 'wood' | 'light' | 'wave' | 'beacon'
+   | 'step' | 'place' | 'remove' | 'material';
+ export type AudioMaterial = 'wood' | 'stone' | 'earth' | 'metal' | 'glass' | 'fabric';
++/**
++ * Ground a foot meets outdoors beyond the six building materials, named as the land paints it: lawn grass, taller
++ * meadow grass, loose gravel, cobbled setts, timber boards out of doors (bridges, docks, jetties), sand, snow,
++ * ankle-deep water at a shore or ford, and bare rock. Only `step` takes them.
++ */
++export type StepGround = 'grass' | 'meadow' | 'gravel' | 'cobble' | 'plank' | 'sand' | 'snow' | 'shallows' | 'rock';
++/** Everything a `step` can land on: the land's grounds plus the six materials as floors (earth paths, flagstones…). */
++export type StepSurface = AudioMaterial | StepGround;
+ export type AudioControlSurface = 'wood' | 'brass' | 'parchment';
+-export interface AudioSettings { muted: boolean; volume: number }
+-export interface AudioCueOptions {
+-  material?: AudioMaterial;
++/**
++ * The settings ledger's volume groups under the master. `world`: footsteps, building, the light ceremonies, the
++ * beacon, ambience and every phrase unless it says otherwise. `voice`: spoken lines (a phrase with `group: 'voice'`).
++ * `interface`: the carved controls (`wood` with any `ui`).
++ */
++export type AudioGroup = 'world' | 'voice' | 'interface';
++export type AudioGroupVolumes = Record<AudioGroup, number>;
++export interface AudioSettings {
++  muted: boolean;
++  volume: number;
++  /** Per-group volume, each [0, 1], all 1 by default. Heard as volume², like the master. */
++  groups?: Readonly<AudioGroupVolumes>;
++}
++/** What `setSettings` accepts: any field, and any subset of the groups. */
++export type AudioSettingsPatch = Partial<Omit<AudioSettings, 'groups'>> & { groups?: Readonly<Partial<AudioGroupVolumes>> };
++/**
++ * `material` is a step surface for `step` and a building material for `place`, `remove` and `material`. Called
++ * with a literal cue (`audio.cue('place', …)`) the type allows only what that cue can play; called with a cue held in
++ * an `AudioCue` variable it allows every step surface, and a ground passed to a building cue throws a TypeError.
++ */
++export interface AudioCueOptions<K extends AudioCue = AudioCue> {
++  material?: K extends 'step' ? StepSurface : AudioMaterial;
+   ui?: AudioControlSurface; // used only by the legacy wood/control family
+   pan?: number; // listener-relative [-1, 1]
+   distance?: number; // listener-relative metres
++  /**
++   * Someone else's sound, such as the steps of a walker near you: 6 dB quieter than your own at the same distance,
++   * never coalesced with yours, and the first to give way. Footsteps of others also share a smaller part of the
++   * footstep budget, so your own steps always have room.
++   */
++  others?: boolean;
+ }
+ export interface KingdomAudioState {
+   status: 'locked' | 'ready' | 'suspended' | 'unavailable' | 'disposed';
+@@ -15,8 +48,8 @@ export interface KingdomAudioState {
+ }
+ export interface KingdomAudio {
+   unlock(): Promise<boolean>; // true only if the live context is running
+-  cue(kind: AudioCue, options?: AudioCueOptions): boolean; // true if scheduled for audible playback
+-  setSettings(settings: Partial<AudioSettings>): void;
++  cue<K extends AudioCue>(kind: K, options?: AudioCueOptions<K>): boolean; // true if scheduled for audible playback
++  setSettings(settings: AudioSettingsPatch): void;
+   getState(): KingdomAudioState; // current snapshot, not mutable internal objects
+   dispose(): void;
+ }
+@@ -24,3 +57,10 @@ export interface KingdomAudio {
+ export const AUDIO_CUES: readonly AudioCue[] = ['wood', 'light', 'wave', 'beacon', 'step', 'place', 'remove', 'material'];
+ export const AUDIO_MATERIALS: readonly AudioMaterial[] = ['wood', 'stone', 'earth', 'metal', 'glass', 'fabric'];
+ export const AUDIO_CONTROL_SURFACES: readonly AudioControlSurface[] = ['wood', 'brass', 'parchment'];
++export const STEP_GROUNDS: readonly StepGround[] = ['grass', 'meadow', 'gravel', 'cobble', 'plank', 'sand', 'snow', 'shallows', 'rock'];
++/** Every surface `step` plays: the land's grounds in the order the land names them, then the indoor floors. */
++export const STEP_SURFACES: readonly StepSurface[] = [
++  'grass', 'meadow', 'earth', 'gravel', 'cobble', 'stone', 'plank', 'sand', 'snow', 'shallows', 'rock',
++  'wood', 'fabric', 'glass', 'metal',
++];
++export const AUDIO_GROUPS: readonly AudioGroup[] = ['world', 'voice', 'interface'];
+diff --git a/packages/audio/src/play-mix.ts b/packages/audio/src/play-mix.ts
+new file mode 100644
+index 00000000..94af9ddb
+--- /dev/null
++++ b/packages/audio/src/play-mix.ts
+@@ -0,0 +1,35 @@
++import type { CueFamily } from './families';
++import { AUDIO_GROUPS, type AudioGroup, type AudioGroupVolumes } from './types';
++
++/**
++ * The settings ledger's volume groups (world, voice, interface) under the kingdom's master. Each group is a fader in
++ * [0, 1] heard as volume², the same law as the master, so "half" sounds like half on every slider. A change ramps
++ * over the master's 30 ms on every voice still ringing in that group and on the group's hosted layers, so a slider
++ * drag never clicks. With every group at 1 (the default) nothing in the mix changes.
++ */
++
++export const DEFAULT_GROUPS: Readonly<AudioGroupVolumes> = Object.freeze({ world: 1, voice: 1, interface: 1 });
++
++/** The gain a group volume becomes. */
++export function groupLevel(volume: number): number {
++  return volume * volume;
++}
++
++/** Merges a partial group patch into the current groups. Unknown groups throw; non-finite volumes throw; the rest clamp. */
++export function normalizeGroups(current: Readonly<AudioGroupVolumes>, next: Readonly<Partial<AudioGroupVolumes>> | undefined): Readonly<AudioGroupVolumes> {
++  const result: AudioGroupVolumes = { ...current };
++  if (next === undefined) return Object.freeze(result);
++  if (!next || typeof next !== 'object') throw new TypeError('kingdom audio: groups must be an object of volumes');
++  for (const [group, volume] of Object.entries(next)) {
++    if (!AUDIO_GROUPS.includes(group as AudioGroup)) throw new TypeError(`kingdom audio: unknown volume group ${group}`);
++    if (volume === undefined) continue;
++    if (typeof volume !== 'number' || !Number.isFinite(volume)) throw new RangeError(`kingdom audio: the ${group} volume must be a finite number`);
++    result[group as AudioGroup] = Math.min(1, Math.max(0, volume));
++  }
++  return Object.freeze(result);
++}
++
++/** Which group a family follows: its own, else `interface` for the carved controls and `world` for everything else. */
++export function familyGroup(family: Pick<CueFamily, 'group' | 'tier'>): AudioGroup {
++  return family.group ?? (family.tier === 'control' ? 'interface' : 'world');
++}

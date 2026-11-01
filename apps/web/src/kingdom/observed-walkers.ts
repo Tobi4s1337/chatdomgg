@@ -9,6 +9,7 @@ import { createCitizenRenderer, createDefaultCitizenLooks } from '../citizens';
 import type { RealmWalkerPose } from '../realm/client';
 import type { WalkerLabel } from './walk-scene';
 import { presentWalkers, type WalkerPresentation } from './walker-presentation';
+import { createWalkerFigures, createWalkerSplit } from './walker-figures';
 
 export type WalkerSlots = ReadonlyMap<number, WalkerPresentation>;
 
@@ -64,25 +65,31 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
   pool: VoxelWorkerPool, material: VoxelRenderState, manifest: WalkerScene, feed: RealmWalkerFeed, registry: InteractionRegistry) {
   const looks = createDefaultCitizenLooks(), known = new Set(looks.map(look => look.id));
   const people = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks, capacity: 300, pool });
+  // The nearest walkers in full, the rest as simple figures, crossfading at the boundary.
+  const split = createWalkerSplit(), figures = createWalkerFigures(scene, material);
   const track = createObservedWalkerTrack(manifest);
   let poses: readonly WalkerPresentation[] = [];
-  const off = feed.subscribe(frame => track.receive(frame, performance.now()), () => { track.clear(); poses = []; people.update([]); });
-  const point = new THREE.Vector3();
+  const off = feed.subscribe(frame => track.receive(frame, performance.now()), () => { track.clear(); split.clear(); poses = []; people.update([]); figures.update([]); });
+  const point = new THREE.Vector3(), eye = new THREE.Vector3();
   return {
     get poses() { return poses; },
     get grips() { return people.grips; },
     get heads() { return people.heads; },
     frame(now: number) { poses = presentWalkers(track.sample(now), track.seats, registry); return poses; },
     draw(now: number, visible = true) {
-      people.update((visible ? poses : []).filter(pose => known.has(pose.look)).map(pose => ({ id: pose.id, look: pose.look,
+      const drawn = (visible ? poses : []).filter(pose => known.has(pose.look));
+      const { full, simple } = split.split(drawn, eye.setFromMatrixPosition(camera.matrixWorld), now);
+      people.update(full.map(({ pose, opacity }) => ({ id: pose.id, look: pose.look,
         position: [pose.x, pose.y, pose.z] as const, heading: pose.yaw * Math.PI * 2 / 256,
-        distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed,
+        distance: pose.distance, moving: Math.min(1, pose.speed / 1.2), speed: pose.speed, opacity,
         ...(pose.posture ? { posture: pose.posture } : {}), time: now / 1000 })), camera);
+      figures.update(simple.map(({ pose, opacity }) => ({ id: pose.id, position: [pose.x, pose.y, pose.z] as const,
+        heading: pose.yaw * Math.PI * 2 / 256, distance: pose.distance, speed: pose.posture ? 0 : pose.speed, opacity })), now);
     },
     labels(): WalkerLabel[] {
       const labels: WalkerLabel[] = [];
       for (const pose of poses) {
-        const head = people.heads.get(pose.id);
+        const head = people.heads.get(pose.id) ?? figures.heads.get(pose.id);
         if (!head) continue;
         const distance = head.distanceTo(camera.position);
         if (distance > 40) continue;
@@ -94,6 +101,6 @@ export async function createObservedWalkers(scene: THREE.Scene, camera: THREE.Ca
       }
       return labels;
     },
-    dispose() { off(); track.clear(); poses = []; people.dispose(); },
+    dispose() { off(); track.clear(); split.clear(); poses = []; people.dispose(); figures.dispose(); },
   };
 }
