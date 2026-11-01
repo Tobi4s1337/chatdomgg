@@ -22,6 +22,7 @@ let authenticated = !['anonymous', 'declined', 'expired'].includes(scenario);
 let scope = 'simulated-session-scope-one';
 let undoable = [];
 let town = { gate: scenario === 'close' ? 'open' : 'closed', fire: 'unlit', presenceLabel: 'A few lights are gathering', growthLabel: 'A new home is taking shape.', comingLabel: 'Visitors are on the road.' };
+let priorTown;
 function state() { return { kingdom: { id: '129634568', name: 'Willowmere' }, principal: { role: scenario === 'moderator' ? 'moderator' : 'broadcaster', displayName: 'Tobias' }, town, raids: scenario === 'empty' ? [] : [{ id: 'raid1', name: 'Hollowbrook' }], citizens: scenario === 'empty' ? [] : [{ id: 'citizen1', name: 'Robin' }], moments: scenario === 'empty' ? [] : [{ id: 'sky', name: 'Skyfire', available: true, reason: '' }], capabilities: kinds.map(kind => ({ kind, allowed: scenario !== 'moderator', reason: scenario === 'moderator' ? 'Only the monarch can do this.' : '' })), revision: String(revision), undoable }; }
 const base = { version: 1, mode: 'SIMULATED', signInUrl: '/api/realm/auth/start?returnTo=%2Fdock' };
 let handleDock, apiRunner;
@@ -70,6 +71,8 @@ const server = createServer(async (req, res) => {
     await new Promise(resolve => setTimeout(resolve, scenario === 'pending' ? 3500 : 650));
     if (scenario === 'ambiguous') { res.destroy(); return; }
     if (scenario === 'refused' || scenario === 'unknown') { res.writeHead(scenario === 'refused' ? 409 : 503).end(JSON.stringify({ version: 1, status: scenario, message: `SIMULATED rehearsal ${scenario}; no stream is connected.` })); return; }
+    if (action.kind === 'undo') { if (!priorTown) { res.writeHead(409).end(JSON.stringify({ version: 1, status: 'refused', message: 'SIMULATED: no act to undo.' })); return; } town = priorTown; priorTown = undefined; }
+    else priorTown = { ...town };
     if (action.kind === 'gate-open') town = { ...town, gate: 'open' };
     if (action.kind === 'gate-close') town = { ...town, gate: 'closed' };
     if (action.kind === 'fire-light') town = { ...town, fire: 'lit' };
@@ -153,6 +156,7 @@ try {
           await page.getByText('SIMULATED rehearsal acknowledged: undo', { exact: false }).waitFor();
           await page.reload(); await page.waitForFunction(() => window.__chatdomReady === true);
           if (await page.getByRole('button', { name: /Undo opening the gate/ }).count()) throw Error('Undone act remained available after reload');
+          if (!await page.getByRole('button', { name: /Open the gate/ }).isEnabled()) throw Error('Undo did not restore the original gate state');
         }
         else if (await page.getByRole('button', { name: /Undo opening the gate/ }).count()) throw Error('Previous session undo leaked into new session');
       }

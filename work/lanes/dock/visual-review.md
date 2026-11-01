@@ -27,3 +27,27 @@ Visual doubts: the small dock is dense at318px and requires vertical scrolling t
 undo. This is acceptable for the current target list, but real long public names and the
 long dusk-moment title must be checked in the integrated scene capture. Fire gathering,
 incoming banners/guests and directed undo are still main-owned stream fidelity needs.
+
+## Session, permission and recovery views — 2026-11-01
+
+Viewed each with `view_image` after capture:
+
+- `anonymous-390x844-viewport.png` and `signout-390x844-viewport.png`: neutral sign-in
+  masthead, clear Twitch action and a readable sign-out confirmation, without an erroneous
+  connection alarm.
+- `moderator-390x844-viewport.png`: identified the original low-contrast disabled text,
+  replaced whole-button opacity with restrained dark controls and readable explanations,
+  then inspected the fresh capture. Mutations remain disabled. The role is a fixture;
+  this is not proof that the real realm has verified a moderator grant.
+- `unknown-390x844-viewport.png`: the uncertainty notice is prominent above town facts;
+  actions remain disabled after reload and the harness observes exactly one POST. Fresh
+  disabled text remains readable after the contrast correction.
+- `undo-390x844-viewport.png`: a simulated accepted receipt survives reload, undo restores
+  the closed gate and another reload removes the stale undo control. Fixed a fixture
+  history defect before retaining this capture. This proves UI recovery, not realm undo.
+- `real-unavailable-318x900-viewport.png`: the actual API handler with a simulated session
+  lookup and no service bridge produces a clear out-of-reach message, retry and sign-out.
+  It neither contacts a running host service nor fabricates a connected kingdom.
+
+All these stills are visibly SIMULATED. Browser errors/overflow assertions pass. Real
+sign-in/stream receipts and watched clips remain outstanding.
