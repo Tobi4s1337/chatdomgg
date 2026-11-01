@@ -18,6 +18,16 @@ describe('Chronicle replay', () => {
     expect(binding.replace.mock.calls.map(([s]) => s.homes[0].assetRevision)).toEqual(['tent', 'hut', 'tent', 'hut']);
     expect(replay.state()).toMatchObject({ status: 'ready', label: 'SIMULATED', index: 1, snapshot: { caption: 'Night 2' } });
   });
+  it('validates a large recorded settlement even when home revisions arrive in a different order', () => {
+    const recorded = snapshot(1, 'hut');
+    const home = recorded.frame.homes[0]!;
+    recorded.frame.homes = Array.from({ length: 20000 }, (_, index) => ({ ...home, plotId: `plot:${index}` }));
+    const homes = recorded.frame.homes.map(view => ({ plotId: view.plotId, assetRevision: 'hut' })).reverse();
+    const validated = validateHistory({ label: 'SIMULATED', snapshots: [{ ...recorded, homes }] });
+    expect(validated.snapshots[0]!.homes).toHaveLength(20000);
+    homes[0] = { plotId: 'not-in-frame', assetRevision: 'hut' };
+    expect(() => validateHistory({ label: 'SIMULATED', snapshots: [{ ...recorded, homes }] })).toThrow(/complete scene/);
+  });
   it('strips the recent presentation tail before applying historical snapshots', () => {
     const { replay, binding } = setup(), recorded = snapshot(1, 'hut');
     recorded.frame.beats.push({ kind: 'home-grown', sourceSeq: 1, at: 1000, plotId: 'plot', from: 'tent', to: 'hut', qualifiedDays: 3 });

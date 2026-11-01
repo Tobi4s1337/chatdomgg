@@ -1,18 +1,14 @@
-import { spawn, execFile } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { chromium } from '@playwright/test';
-import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
-import { assertCapturePort } from '../../../../packages/testing/capture-ports.mjs';
+import { startChroniclePreview } from './preview.mjs';
 
 // Local verification only. The recording is evidence of a SIMULATED fixture, not a product video.
-const root = resolve(import.meta.dirname, '../../../..');
-const web = resolve(root, 'apps/web');
 const evidence = resolve(import.meta.dirname, 'evidence');
 const rawDir = resolve(evidence, 'watch-raw');
 const output = resolve(evidence, 'chronicle-simulated-30s.webm');
-const port = assertCapturePort(5171);
 const run = promisify(execFile);
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 let server, browser, release;
@@ -134,15 +130,8 @@ async function record(browser, base) {
 }
 
 try {
-  release = await acquireCaptureLock();
-  server = spawn(process.execPath, [resolve(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: web, stdio: ['ignore', 'pipe', 'pipe'] });
-  const base = await new Promise((accept, reject) => {
-    const timeout = globalThis.setTimeout(() => reject(new Error('Vite did not start')), 30_000);
-    let output = '';
-    const data = chunk => { output += chunk; const match = output.match(/Local:\s*(https?:\/\/127\.0\.0\.1:\d+\/)/); if (match) { globalThis.clearTimeout(timeout); accept(match[1]); } };
-    server.stdout.on('data', data); server.stderr.on('data', data);
-    server.once('exit', code => { globalThis.clearTimeout(timeout); reject(new Error(`Vite exited ${code}: ${output}`)); });
-  });
+  let base;
+  ({ server, base, release } = await startChroniclePreview());
   await mkdir(evidence, { recursive: true });
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   for (const [width, height] of [[1440, 900], [390, 844]]) await accessibility(browser, base, width, height);

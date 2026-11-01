@@ -1,31 +1,14 @@
-import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { chromium } from '@playwright/test';
-import { acquireCaptureLock } from '../../../../packages/testing/capture-lock.mjs';
-import { assertCapturePort } from '../../../../packages/testing/capture-ports.mjs';
+import { startChroniclePreview } from './preview.mjs';
 
-const root = resolve(import.meta.dirname, '../../../..');
-const web = resolve(root, 'apps/web');
 const evidence = resolve(import.meta.dirname, 'evidence');
-const port = assertCapturePort(5171);
 let base;
 let server, browser, release;
 try {
-  release = await acquireCaptureLock();
-  server = spawn(process.execPath, [resolve(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: web, stdio: ['ignore', 'pipe', 'pipe'] });
-  await new Promise((accept, reject) => {
-    const timeout = setTimeout(() => reject(new Error('Vite did not start')), 30000);
-    let output = '';
-    const data = chunk => {
-      output += chunk;
-      const match = output.match(/Local:\s*(https?:\/\/127\.0\.0\.1:\d+\/)/);
-      if (match) { base = match[1]; globalThis.clearTimeout(timeout); accept(); }
-    };
-    server.stdout.on('data', data); server.stderr.on('data', data);
-    server.once('exit', code => { globalThis.clearTimeout(timeout); reject(new Error(`Vite exited ${code}: ${output}`)); });
-  });
+  ({ server, base, release } = await startChroniclePreview());
   await mkdir(evidence, { recursive: true });
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   for (const [width, height] of [[1440, 900], [390, 844]]) {

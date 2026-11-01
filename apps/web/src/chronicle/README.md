@@ -6,4 +6,4 @@
 
 Main still needs a durable, versioned history contract with ordering, timestamps, provenance, redaction and complete world snapshots or deterministic reconstruction; authoritative bindings for home geometry, civic places, castle and streets; and a live/replay isolation and restoration port. Current `GrowthSceneFrame` is a bounded current projection, not that history.
 
-To capture the local bench, run `node apps/web/src/chronicle/capture.mjs` from the workspace root. It reserves port 5171 through the capture helper and holds the shared capture lock and uses SwiftShader. This bench is not a production route.
+To capture the local bench, run `node apps/web/src/chronicle/capture.mjs` from the workspace root. It selects a free permitted capture port, holds the shared capture lock only while running, waits safely if the host is full, and uses SwiftShader. This bench is not a production route.
