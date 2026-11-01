@@ -12,6 +12,8 @@ import type { CameraState } from './map/motion';
 import { MapView, type MapStats } from './map/view';
 import { Still } from './still/Still';
 import { Card, type NamesState } from './ui/Card';
+import { DoorCartouche } from './ui/Door';
+import { handOffHolding, holdingPlace, type DoorHolding } from './data/holding';
 import { Cartouche, Compass, Controls, Notice, ScaleBar } from './ui/chrome';
 import { formatMoment } from './ui/format';
 import { CardHistory } from './ui/history';
@@ -255,7 +257,24 @@ export default function Atlas() {
     }
   };
 
-  /** Choose a pencil flag; its register entry names it when the survey has seen it within a day. */
+  // The hand-off carries only the currently served public projection.
+  const [entering, setEntering] = createSignal<DoorHolding | null>(null);
+  let enterTimer: ReturnType<typeof setTimeout> | undefined;
+  const enter = (holding: DoorHolding) => {
+    if (entering()) return;
+    handOffHolding(sessionStore(), holding);
+    setEntering(holding);
+    const settler = selected();
+    if (view && settler) view.flyTo(settler.x, settler.y, MAX_SCALE);
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    enterTimer = setTimeout(() => location.assign(`/kingdom/${encodeURIComponent(holding.id)}`), reduce ? 60 : 720);
+  };
+  onCleanup(() => clearTimeout(enterTimer));
+  const onShow = (event: PageTransitionEvent) => { if (event.persisted) setEntering(null); };
+  window.addEventListener('pageshow', onShow);
+  onCleanup(() => window.removeEventListener('pageshow', onShow));
+
+  /** Choose a pencil flag and read its public register entry. */
   const chooseDab = (dab: Dab, fly = false, face?: ChannelFace) => {
     clearCards();
     setSelectedDab(dab);
@@ -832,6 +851,7 @@ export default function Atlas() {
                   onClose={closeCard}
                   onRoad={(next) => openCardRoad(settler(), next)}
                   onRetry={() => readRegister({ id: settler().id }, settler().id)}
+                  onEnter={enter}
                 />
               )}
             </Show>
@@ -852,6 +872,7 @@ export default function Atlas() {
                       live={{ startedAt: dab().startedAt, asOf: live()?.status.frameAsOf ?? dab().startedAt }}
                       onAir={true}
                       onClose={closeCard}
+                      onEnter={enter}
                       onRoad={(next) => openCardRoad(known().reply.channel, next)}
                       onRetry={() => readRegister({ dab: dab().hash }, `dab:${dab().hash}`)}
                     />
@@ -868,6 +889,7 @@ export default function Atlas() {
                   live={(liveTick(), paint?.frame ? { startedAt: null, asOf: paint.frame.asOf } : null)}
                   onAir={false}
                   onClose={closeCard}
+                  onEnter={enter}
                   onRoad={(next) => openCardRoad(face(), next)}
                   onRetry={() => readRegister({ id: face().id }, `waiting:${face().id}`)}
                 />
@@ -885,6 +907,13 @@ export default function Atlas() {
               )}
             </Show>
             <Show when={!stillShown() && notice()}>{(current) => noticeView(current())}</Show>
+            <Show when={entering()}>
+              {(holding) => (
+                <DoorCartouche id={holding().id} name={holding().name} phase="stamp"
+                  subtitle={holdingPlace(holding())}
+                  steps={[{ text: 'The gate is opened', done: true }, { text: 'The road leads down into the land', done: false }]} />
+              )}
+            </Show>
           </>
         )}
       </Show>

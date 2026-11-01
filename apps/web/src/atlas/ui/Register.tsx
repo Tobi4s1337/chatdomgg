@@ -1,5 +1,6 @@
 import { createEffect, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from 'solid-js';
 import type { CardReply, CardRoad, ChannelFace, DirectoryError, RoadReply, RoadTally } from '../data/directory';
+import { waitingDoorHolding, type DoorHolding } from '../data/holding';
 import type { PreviewWorld } from '../data/preview';
 import { formatCount, formatDayRange, formatMoment, formatTime, TIER_NAMES, watchUrl } from './format';
 import { ShieldIcon } from './marks';
@@ -228,6 +229,7 @@ export function WaitingCard(props: {
   /** The pencil flag's start when it is live in the frame shown, else null; `asOf` is that frame's sweep. */
   live: { startedAt: number | null; asOf: number } | null;
   onAir: boolean;
+  onEnter: (holding: DoorHolding) => void;
   onClose: () => void;
   onRoad: (road: CardRoad) => void;
   onRetry: () => void;
@@ -236,6 +238,12 @@ export function WaitingCard(props: {
   const card = () => (props.state.status === 'ready' ? props.state.reply : null);
   const url = () => (props.face.login ? watchUrl(props.face.login) : null);
   const land = () => faceLand(props.face, props.world);
+  const door = () => { const c = card(); return c && c.channel.id === props.face.id ? waitingDoorHolding(c, props.world) : null; };
+  const enter = (event: MouseEvent, holding: DoorHolding) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    props.onEnter(holding);
+  };
   return (
     <section class="atlas-card" aria-labelledby="atlas-card-title" data-kind="waiting">
       <CloseButton ref={close} onClose={props.onClose} />
@@ -272,6 +280,11 @@ export function WaitingCard(props: {
         A channel below {formatCount(props.world.tiers.minAverage.village)} average viewers holds no land in a survey preview. While it is
         live it is pencilled in near the realm of its language and game, at a place drawn from its channel ID.
       </p>
+      <Show when={door()}>{(holding) => (
+        <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} onClick={(event) => enter(event, holding())}>
+          Enter the land <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
+        </a>
+      )}</Show>
       <div class="atlas-card-actions">
         <Show when={url()}>
           {(href) => <WatchLink href={href()} />}
