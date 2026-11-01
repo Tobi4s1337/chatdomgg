@@ -72,4 +72,12 @@ No camera, grade, post-processing, presence authority, shared schema, persistent
 
 ## Decisions
 
+- 2026-11-01: EL11 is a Forge art pass on the existing event inputs, not a new protocol or system.
+  Main has mounted flight in kingdom/stream (b2251ee), with actual posed piece history and separate real/SIM
+  clocks. The point-only trail and a joined-glint experiment remain too sparse at stream distance. A bounded
+  world-space ribbon is allowed for a coherent wake; retain depth occlusion, reduced-motion behavior and
+  phone degradation. Landing uses the existing supplied burst contact/time. Keep other emitters unchanged;
+  do not replace the accepted home smoke. Main owns runtime adoption. EL11 needs one real-scale before/after
+  and scoped checks, superseding the old full screenshot matrix for this task.
+
 - 2026-10-31: Freeze the private factory above as the narrow integration seam; main owns adapters and existing emitters. Prior reference studies suffice for this lane; implement ideas independently.

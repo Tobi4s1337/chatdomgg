@@ -27,14 +27,21 @@ function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): 
     return inside && !plan.reservations.some(({ lot }) => x >= lot.minX - .6 && x <= lot.maxX + .6 && z >= lot.minZ - .6 && z <= lot.maxZ + .6);
   };
   const nodes = [...plan.nodes], streets = [...plan.streets], activeStreetIds = [...plan.activeStreetIds];
-  // Staggered arcs face the anvil from the north and west, clear of the workshop.
+  // The back row uses the open west side; the other arc wraps the workshop's
+  // front apron. A second row on the same west side hid half the audience.
   const standingPoints = [[-3.4, 8], [-3.6, 6.1], [-3.7, 4.1], [-3.2, 2.1], [-1.8, .6], [.2, .5],
-    [-5.2, 9.3], [-5.5, 7.1], [-5.8, 5], [-5.5, 2.9], [-4.3, .7], [-2.7, -.8], [-.5, -.8], [-.5, 2], [-.8, 3.8], [1, -1]];
+    [-3.6, 10.4], [-1.8, 12], [.6, 12.7], [2.8, 12.2], [4.5, 11.6], [5.8, 10.9], [7.3, 11.3], [-5.5, 5], [-.8, 3.8], [6.2, 13]];
   const installedBarrel = barrel && insideMarket(barrel.position[0], barrel.position[2]);
   if (installedBarrel) standingPoints[14] = [barrel.position[0], barrel.position[2]];
   const addPath = (from: string, to: string) => {
     const start = nodes.find(node => node.id === from)?.position, end = nodes.find(node => node.id === to)?.position;
-    if (!start || !end || !Array.from({ length: 21 }, (_, i) => insideMarket(start[0] + (end[0] - start[0]) * i / 20, start[2] + (end[2] - start[2]) * i / 20)).every(Boolean)) return;
+    if (!start || !end || !Array.from({ length: 21 }, (_, i) => {
+      const x = start[0] + (end[0] - start[0]) * i / 20, z = start[2] + (end[2] - start[2]) * i / 20;
+      // Never cut diagonally through the installed hearth, awning or anvil.
+      const workshop = x > -.65 && x < 9.2 && z > 1.45 && z < 9.9;
+      const anvil = x > -1.4 && x < 1.4 && z > 6.7 && z < 9.3;
+      return insideMarket(x, z) && !workshop && !anvil;
+    }).every(Boolean)) return;
     const id = `${from}:${to}:path`;
     if (streets.some(edge => edge.id === id)) return;
     streets.push({ id, from, to, kind: 'lane', name: 'Market', points: [start, end], width: 1.4, verge: 0 });
@@ -57,8 +64,8 @@ function forgeStandingPlan(plan: SettlementPlan, barrel?: ForgeAudienceBarrel): 
   for (let index = 0; index < 5; index++) addPath(watch(index), watch(index + 6));
   addPath(watch(5), watch(12));
   addPath(watch(3), watch(13));
-  addPath(watch(5), watch(15));
-  addPath(watch(installedBarrel ? 10 : 2), watch(14));
+  addPath(watch(11), watch(15));
+  addPath(watch(2), watch(14));
   return { ...plan, nodes, streets, activeStreetIds };
 }
 

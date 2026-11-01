@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { MATERIALS, type StyleKey } from '@chatdom/content';
-import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, forgeTitle, planLocalForge, forgeRitualFrame, createForgeRefusalGate, homeFingerprint, type AssembledForge } from '@chatdom/forge';
+import { assembleForge, checkForge, findForgeSockets, forgeStyleKit, forgeTitle, planLocalForge, forgeRitualFrame, createForgeRefusalGate, homeFingerprint, FORGE_STAGE_TIMING, type AssembledForge } from '@chatdom/forge';
 import { ForgePlacementSchema, type ForgePlacement, type ForgePhase, type ForgeRitualFrame, type Vec3, type HousePartPlan } from '@chatdom/shared';
 import { geometryFromChunks, type VoxelRenderState, type WindowHouse } from '@chatdom/render';
 import type { VoxelWorkerPool } from '@chatdom/voxel';
 import { buildBounds } from '../build/composition';
+import { forgeHomeShot } from './home-shot';
 import { createForgeRitualView } from './ritual-view';
 import { createForgeEmitters } from './emitters';
 import { createForgeRefusalPresentation, FORGE_MOOD_CAPTION_CLASS, FORGE_MOOD_DURATION } from './refusal';
@@ -16,6 +17,7 @@ import type { createKingdomSound } from '../kingdom/sound';
 export interface ForgeStatus {open:boolean;busy:boolean;phase:ForgePhase|'idle'|'preparing'|'refusal';title:string;message:string;privateError:string|null;maker:string|null;placed:number;kept:number;family:StyleKey;plaque:string|null;runtime:'codex'|'fixture'}
 interface Options {onFlight?:(frame:ForgeRitualFrame|null,position:Vec3|null)=>void;scene:THREE.Scene;camera:THREE.PerspectiveCamera;canvas:HTMLCanvasElement;pool:VoxelWorkerPool;material:VoxelRenderState;anvil:THREE.Vector3;home:()=>WindowHouse;source:'simulated'|'herald';seed:string;kingdomName:string;family:StyleKey;sound:ReturnType<typeof createKingdomSound>;onStatus?:(status:ForgeStatus)=>void;onArrival?:(home:WindowHouse)=>void;registerShadow?:(mesh:THREE.Mesh)=>()=>void}
 type Placed={mesh:THREE.Mesh;result:AssembledForge;receipt:ForgePlacement;emitter:THREE.Vector3;unshadow?:()=>void};
+const LANDED_START=FORGE_STAGE_TIMING.find(([phase])=>phase==='landed')![1];
 export function createKingdomForge(options:Options){
   const pieceMaterial=new THREE.ShaderMaterial({glslVersion:options.material.material.glslVersion,uniforms:options.material.material.uniforms,vertexShader:options.material.material.vertexShader,fragmentShader:options.material.material.fragmentShader.replace('vec3 colour=base*edge*light*ao;','vec3 colour=base*edge*(light+vec3(.32,.25,.17))*ao;if(vMaterial==14u)colour+=vec3(1.6,.65,.12)*uNight;')});
   const view=createForgeRitualView(options.scene,{...options.material,material:pieceMaterial}),emitters=createForgeEmitters(options.scene),refusals=createForgeRefusalGate();
@@ -128,14 +130,14 @@ export function createKingdomForge(options:Options){
     const stageEye=stageTarget.clone().add(backward.multiplyScalar(fit+.6));
     let look=stageTarget,eye=stageEye;
     if(!preparing&&current&&frame&&(frame.phase==='flight'||frame.phase==='landed')){
-      const centre=current.bounds.getCenter(new THREE.Vector3()).applyAxisAngle(new THREE.Vector3(0,1,0),current.home.yaw).add(current.destination);
-      // Read the sleeping face and its nose-smoke, then let the warm doorway
-      // and neighbouring eaves frame it. Hold this shot until the maker leaves.
-      const homeEye=centre.clone().add(new THREE.Vector3(current.result.plan.kind==='lantern'?4.2:-4.5,current.result.plan.kind==='lantern'?1.8:2.6,6.4).applyAxisAngle(new THREE.Vector3(0,1,0),current.home.yaw));
+      const roof=current.bounds.clone().translate(new THREE.Vector3(...current.result.socket.origin).multiplyScalar(.125));
+      const homeShot=forgeHomeShot(buildBounds(current.home.blueprint),roof,new THREE.Vector3(...current.home.position),current.home.yaw,
+        options.canvas.clientWidth,options.canvas.clientHeight,Math.max(0,frame.elapsed-LANDED_START));
+      const homeEye=homeShot.target.clone().add(homeShot.offset);
       if(frame.phase==='flight'){
         const t=THREE.MathUtils.smootherstep(frame.phaseProgress,0,1),world=view.piece.localToWorld(current.bounds.getCenter(new THREE.Vector3()));
-        look=stageTarget.clone().lerp(world,Math.min(1,t*4));eye=look.clone().add(stageEye.clone().sub(stageTarget).lerp(homeEye.clone().sub(centre),t));
-      }else{look=centre;eye=homeEye;}
+        look=stageTarget.clone().lerp(world,Math.min(1,t*4)).lerp(homeShot.target,t);eye=look.clone().add(stageEye.clone().sub(stageTarget).lerp(homeShot.offset,t));
+      }else{look=homeShot.target;eye=homeEye;}
     }
     if(portrait)eye=look.clone().add(eye.clone().sub(look).multiplyScalar(1.22));
     options.camera.position.copy(eye);target.copy(look);options.camera.fov=43;
