@@ -206,3 +206,30 @@ moment currently offered is the harmless dusk change; no unearned dragon or arbi
 Moderator observation still requires an independently verified moderator-ID source. Undo state restores,
 but its directed visual receipt remains unavailable until the restored subject is identified. These are
 remaining integration needs, not permission to invent targets, authority or a success reply.
+
+## Dock follow-up against the supplied boundary — 2026-11-01
+
+The lane has exercised `apps/realm/src/dock/service.test.ts` with `REALM_DATABASE_TESTS=1`
+against a random isolated Postgres schema: both tests pass, including durable unknown →
+presenter witness → accepted retrieval and reopening/revocation. This proves storage and
+authority, not drawn pixels. UI recovery accepts the exact `receipt:dock:<48 hex>` format.
+
+**needs: main-owned moderator observation.** `RealmDockService.status()` currently admits
+only `principal.personId === kingdomId`. Supply a current independently verified moderator
+grant for read access; retain broadcaster-only capabilities for every royal act. The dock
+already accepts `principal.role: 'moderator'`, displays the role, and disables every mutation.
+Neither query parameters, browser role claims nor a fixture may establish that grant.
+
+**needs: main-owned directed undo presentation.** `undoOf` alone identifies an earlier
+event, but its target/kind is absent from the current undo event. Have the realm resolve the
+stored original presentation in the same transaction and publish enough approved subject
+and restored state for the scene to display the reversal and witness it. A current stage
+checkpoint may restore state silently; it must not be counted as the visible undo ceremony.
+If the restored subject is no longer public/installed, keep the receipt unknown/refused.
+
+For cross-device undo recovery, adopt the optional `undoable` state extension already
+implemented in `apps/api/src/dock/contracts.ts` into shared and the realm snapshot:
+`[{ id: 'receipt:' + head.undo.eventId, kind: original.kind, label: approvedLabel }]`, only
+while the original act is witnessed and `head.undo.until > now`. An empty list explicitly
+denies undo. Existing same-session reload already recovers the accepted receipt locally;
+the realm remains responsible for atomic authorization and expiry.

@@ -44,6 +44,13 @@ describe('dock recovery', () => {
     bindRecovery(memory, session);
     expect(readRecovery(memory, session, '12').receipt).toBe('dock:receipt.1');
   });
+  it('restores the witnessed receipt format emitted by the realm after a reload', () => {
+    const memory = storage();
+    const receipt = `receipt:dock:${'a'.repeat(48)}`;
+    bindRecovery(memory, session);
+    expect(writeRecovery(memory, session, '12', { uncertain: '', receipt })).toBe(true);
+    expect(readRecovery(memory, session, '12').receipt).toBe(receipt);
+  });
   it('opens the requested kingdom even when browser storage is blocked', () => {
     const memory = storage();
     memory.setItem = () => { throw new Error('blocked'); };

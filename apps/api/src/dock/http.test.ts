@@ -104,3 +104,23 @@ it('rejects undo lists that cannot represent an authorized original receipt', ()
   expect(DockStateSchema.safeParse({ ...state, undoable: [{ id: 'receipt:1', kind: 'undo', label: 'Undo' }] }).success).toBe(false);
   expect(DockStateSchema.safeParse({ ...state, undoable: Array.from({ length: 21 }, (_, i) => ({ id: `receipt:${i}`, kind: 'gate-open', label: 'Gate' })) }).success).toBe(false);
 });
+
+it('returns unavailable over HTTP when the realm witness response exceeds its byte budget', async () => {
+  vi.stubEnv('DOCK_REALM_URL', 'http://127.0.0.1:5197');
+  const configSecret = config.internalSecret;
+  Object.assign(config, { internalSecret: 'test-service-secret-that-is-long-enough' });
+  const cancelled = vi.fn();
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(5000)); }, cancel: cancelled }),
+    { headers: { 'content-type': 'application/json' } })));
+  try {
+    const f = await fixture({ status: async () => state, action: async () => ({ status: 'refused', message: 'No.' }) });
+    const result = await f.call('POST', '/api/dock/witness', { kingdomId: '42', streamEventId: 'event:1', presenterToken: 'p'.repeat(43) });
+    expect(result.code).toBe(503);
+    expect(result.body.status).toBe('unavailable');
+    expect(cancelled).toHaveBeenCalledOnce();
+  } finally {
+    if (configSecret === undefined) delete (config as { internalSecret?: string }).internalSecret;
+    else Object.assign(config, { internalSecret: configSecret });
+    vi.unstubAllGlobals(); vi.unstubAllEnvs();
+  }
+});

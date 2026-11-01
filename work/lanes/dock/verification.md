@@ -139,3 +139,22 @@ Main's realm/presentation implementation is still in flight; only its shared bou
 committed here. Required next work is unchanged: sync the implementation, exercise real
 session/authority and undo across that seam, inspect the UI at target sizes, and show every
 required act beside the real stream in looked-at stills and watched clips. DK10 is unchecked.
+
+## Supplied realm boundary checkpoint — 2026-11-01
+
+Synced `96b544d` (real retained-writer service and API presentation bridge), then `d53d9eb`
+(cross-sandbox capture liveness correction). The obsolete capture41052 was explicitly
+cancelled and confirmed exit130 before its replacement; the new handle is agent-owned23423.
+
+Passed: 29 focused dock API/recovery/shared tests; scoped API+dock TypeScript and ESLint;
+API and dock builds; `git diff --check`. Witness responses now enforce their byte budget
+while reading, with a real Unix-socket HTTP regression verifying cancellation and503.
+
+Also passed both realm dock tests with `REALM_DATABASE_TESTS=1`, loading main's existing
+ignored environment in-process without copying or printing credentials. The test owns a
+random isolated schema and drops it. It demonstrates fenced storage, independently checked
+presenter receipts, durable idempotency/reopening and revocation; it does not prove pixels.
+
+The scene renderer is still main's uncommitted integration work. Current moderator source,
+directed undo presentation and cross-device receipt metadata requests are in `needs.md`.
+DK10 remains unchecked. No real-Twitch writes or main-branch edits were performed.
