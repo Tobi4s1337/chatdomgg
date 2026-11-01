@@ -103,7 +103,7 @@ export default function StreamView() {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
       return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId,
-        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, growthFeed: connection.growthFeed, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
+        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, growthFeed: connection.growthFeed, growthCeremonies: connection.growthCeremonies, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
         realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed,
         activate: () => { connection.activate(); setKingdomName(connection.kingdomName); }, dispose: connection.dispose };
     } } : {}),
@@ -135,6 +135,7 @@ export default function StreamView() {
       stats: scene.debug,
       inspect: scene.inspect,
       pose: scene.pose,
+      seekGrowthCeremony: scene.seekGrowthCeremony,
       seek: (time: number, view?: Shot) => scene.seek(time, view),
       hour: (value: number) => { hour = value; scene.setHour(value); },
       capture: (time: number) => scene.capture(time),

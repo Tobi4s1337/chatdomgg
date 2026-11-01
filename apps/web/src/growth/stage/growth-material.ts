@@ -41,7 +41,7 @@ export function createGrowthMaterial(state: VoxelRenderState): GrowthMaterial {
   let fragmentShader = inject(base.fragmentShader, FRAGMENT_ANCHOR, FRAGMENT_CUT, 'fragment');
   fragmentShader = inject(fragmentShader, OUTPUT_ANCHOR, OUTPUT_GLOW, 'output');
   fragmentShader = fragmentShader.replace('void main(){', `${FRAGMENT_DECLARATIONS}void main(){`);
-  const own = { uGrow: { value: new THREE.Vector2(-1e6, 1e6) }, uGrowGlow: { value: 0 }, uGrowRing: { value: new THREE.Vector4() } };
+  const own = { uGrow: { value: new THREE.Vector2(-1e6, 1e6) }, uGrowGlow: { value: 0 }, uGrowRing: { value: new THREE.Vector4(0, 0, 0, 0) } };
   // Shared uniform objects keep the environment, light volumes and shadows in step with the kingdom material.
   const material = new THREE.ShaderMaterial({ glslVersion: base.glslVersion, uniforms: { ...base.uniforms, ...own }, defines: { ...base.defines },
     vertexShader, fragmentShader, alphaToCoverage: base.alphaToCoverage, side: base.side });

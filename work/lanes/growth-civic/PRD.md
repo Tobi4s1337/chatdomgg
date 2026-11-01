@@ -6,7 +6,7 @@ Every task is done when focused tests, typecheck, lint and relevant build pass; 
 
 ## Tasks
 
-- [ ] **GC01 — All five places grow visibly** · evidence: one viewed engine comparison and focused test
+- [x] **GC01 — All five places grow visibly** · evidence: one viewed engine comparison and focused test
 - [ ] **GC02 — Attach and replace levels safely** · evidence: adapter lifecycle tests and viewed mounted fixture
 
 ## Backlog
