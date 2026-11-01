@@ -5,6 +5,7 @@ import { RaidObservationSchema, RAID_BEAT_WINDOW_MS, type RaidObservation } from
 import { correlateObservedRaid, recordObservedRaid, RaidObservationConflict } from '../../../api/src/raid-gate/observed-raid';
 import { createRaidGateTransaction, serializable, type SqlClient, type SqlPool } from '../../../api/src/raid-gate/postgres-repository';
 import type { AtlasRoadIngress, RaidObservationReceipt } from '../../../api/src/raid-gate/ports';
+import { queueRaidWelcome } from './crier';
 
 const OWN = new AbortController().signal;
 const COLUMNS = 'origin, sequence::text AS sequence, event_id, raid_id, kingdom_id, direction, from_kingdom_id, to_kingdom_id, occurred_ms::text AS occurred_ms, received_ms::text AS received_ms, action_request_id, observation, raid';
@@ -106,6 +107,7 @@ export class RaidObservationLedger {
         observation.from.kingdomId, observation.to.kingdomId, observation.occurredAt, observation.receivedAt, actionRequestId, JSON.stringify(observation), JSON.stringify(raid)]);
       const beat = observation.direction === 'outgoing' ? 'none' : this.options.clock() >= observation.occurredAt + RAID_BEAT_WINDOW_MS ? 'expired' : 'pending';
       await client.query('INSERT INTO realm_raid_observation_effects (origin, event_id, beat_state) VALUES ($1,$2,$3)', [observation.origin, observation.id, beat]);
+      await queueRaidWelcome(client, observation);
       let gate: RaidObservationReceipt | null = null;
       if (actionRequestId !== null) {
         try {

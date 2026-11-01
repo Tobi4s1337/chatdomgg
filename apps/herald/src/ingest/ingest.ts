@@ -70,6 +70,8 @@ export interface IngestCounters {
   commandCleanups: number;
   commandRefused: number;
   commandExpired: number;
+  /** The designated bot's own chat is not viewer activity, speech or game input. */
+  ignoredBotChat: number;
 }
 
 /** One chat act's timing, numbers only: when Twitch stamped it, when it reached us and when its frame went out. */
@@ -141,6 +143,7 @@ export class ChatIngest {
   readonly #options: IngestOptions;
   readonly #now: () => number;
   readonly #forge: ForgeCommandHandoff | null;
+  readonly #botUserId: string | null;
   readonly #deliveries = new TtlMap<string, true>(DEDUPE_TTL_MS, DEDUPE_CAPACITY);
   readonly #messages = new TtlMap<string, true>(DEDUPE_TTL_MS, DEDUPE_CAPACITY);
   readonly #deleted = new TtlMap<string, true>(DEDUPE_TTL_MS, TOMBSTONE_CAPACITY);
@@ -152,7 +155,7 @@ export class ChatIngest {
     deliveries: 0, duplicateDeliveries: 0, duplicateMessages: 0, malformed: 0, unverified: 0, notCovered: 0, future: 0,
     expired: 0, preStart: 0, tombstoned: 0, sharedChatGuests: 0, canceled: 0, pendingOverflow: 0, chatSubmitted: 0,
     deletes: 0, userClears: 0, roomClears: 0, streamChanges: 0, notLive: 0, revocations: 0, authorizationRevokes: 0,
-    spectacles: 0, strikes: 0, raids: 0, raidRefused: 0, commands: 0, commandCleanups: 0, commandRefused: 0, commandExpired: 0,
+    spectacles: 0, strikes: 0, raids: 0, raidRefused: 0, commands: 0, commandCleanups: 0, commandRefused: 0, commandExpired: 0, ignoredBotChat: 0,
   };
   #roomClearedAt = -1;
   #lastChatAt: number | null = null;
@@ -163,6 +166,8 @@ export class ChatIngest {
     this.#options = options;
     this.#now = options.now ?? Date.now;
     this.kingdomId = KingdomIdSchema.parse(options.source.kingdomId);
+    const readers = [...new Set(options.plans.filter(plan => plan.type === 'channel.chat.message').map(plan => plan.condition.user_id))];
+    this.#botUserId = readers.length === 1 && readers[0] && readers[0] !== this.kingdomId ? readers[0] : null;
     this.startedAt = this.#now();
     this.#forge = options.forge ? new ForgeCommandHandoff(options.source, options.forge, this.#now) : null;
   }
@@ -322,6 +327,7 @@ export class ChatIngest {
       return;
     }
     const event = parsed.data;
+    if (event.chatter_user_id === this.#botUserId) { this.#counters.ignoredBotChat++; return; }
     const pendingCommand = this.#pendingCommands.get(event.message_id);
     if (pendingCommand || this.#messages.has(event.message_id, receivedAt)) {
       this.#counters.duplicateMessages++;

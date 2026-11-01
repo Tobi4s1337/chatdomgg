@@ -12,6 +12,7 @@ Spec: `work/specs/23-raid-gate.md`. This folder is the browser side; the server 
 | Application: gate status, preview, join, leave, read-action, close, start, Twitch cancel, reconcile | `apps/api/src/raid-gate/application.ts` | Real. Travel, passport and gift ops answer `denied: unavailable` until their task lands |
 | Witnessed departure: `ingestRaid`, `recover` | `apps/api/src/raid-gate/application.ts` | Server-only; lands a correlated raid once and hands it to the Atlas road ingestion |
 | Verified raid evidence and recovery | `apps/realm/src/raid-gate/{observations,http}.ts` | Mounted on the existing realm listener; immutable history, roads and pennants, with current incoming beats through the existing moment authority |
+| Raid welcome and crier setting | `apps/realm/src/raid-gate/crier.ts`, `apps/herald/src/raid-gate/crier.ts` | Witnessed job, irreversible claim, bot-only source-channel send and distinct sent/refused/unknown receipts; real sending operationally disabled until the authorized live run |
 | Outbox for Twitch writes and the road handoff | `apps/api/src/raid-gate/repository.ts` | `queued` sendable, `claimed` reconcile-only, `settled` |
 | Durable repository over the realm schema | `apps/api/src/raid-gate/postgres-repository.ts`, `0011_realm_raid_gate.sql` | Serializable CAS; every row passes its strict reader |
 | Session principal from realm-auth's cookie | `apps/api/src/raid-gate/session.ts` | Role derived on the server: monarch by Twitch identity, citizen by deed, otherwise guest |
@@ -133,6 +134,24 @@ The longer contract each port honours:
 
 The route stays unbound until (1)–(7) exist. It shows the honest "The gate is shut here" state and offers no
 action it cannot perform.
+
+## Incoming welcome (RS10)
+
+`herald mock` now uses a recording-only crier through the real realm claim/receipt protocol. Its private `/health`
+includes the bounded recorded lines. The CLI-to-Postgres test in
+`apps/realm/src/raid-gate/crier-flow.integration.test.ts` triggers a signed raid into `129634568`, asserts one welcome
+with its raid key, then restarts services and confirms no replay while roads and pennants remain. Run gated database
+checks with `REALM_DATABASE_TESTS=1` and `--no-fsModuleCache` after adding migrations.
+
+The realm requires an explicit `REALM_PUBLIC_ORIGIN` to mount private crier routes. Live Herald additionally needs
+`HERALD_RAID_CRIER_ENABLED=1`, fresh bot/broadcaster grants and tobi4s_'s exact channel identity. It never sends as
+the broadcaster or to another shared-chat channel. Keep real writes disabled until the authorized RS13 session.
+Unknown outcomes never repost; only receipts retry. A welcome URL remains an invitation, never proof of arrival.
+
+The broadcaster's authenticated setting route works on the standalone API. The public gateway needs front-door's
+exact additive dispatch patch in `work/lanes/raid-show/SEAMS.md`; its route allowlist alone is not a handler. Apply
+`0011c_realm_raid_crier.sql` before deploying bundles that carry it. Guest entry and raid stamp authority remain
+separate RS10 work; sending a line awards neither.
 
 ## The raid road (RR10)
 

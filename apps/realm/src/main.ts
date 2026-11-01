@@ -19,6 +19,8 @@ import { realmListenHost, realmListenPort } from './listen-port';
 import { ownRealmShutdown } from './lifecycle';
 import { mountRaidShowRoutes } from './raid-gate/http';
 import { mountChatCommandRoute, realmChatCommands } from './raid-gate/chat-commands';
+import { RaidCrierAuthority } from './raid-gate/crier';
+import { mountRaidCrierRoutes } from './raid-gate/crier-http';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -95,12 +97,14 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   const { server, transport } = boot.createServer({ mountIngress: app => { mountEveningRoutes(app, evening); mountRealmDockRoutes(app, dock); } });
   const raidShow = mountRaidShowRoutes(transport.app, { pool, origin, credentials, clock: Date.now, moment: observation => boot.ingress.moments.acceptMoment(observation) });
   const chatCommands = mountChatCommandRoute(transport.app, { registry: realmChatCommands, origin, credentials, clock: Date.now });
+  const raidCrier = process.env.REALM_PUBLIC_ORIGIN ? mountRaidCrierRoutes(transport.app, { origin, credentials, authority: new RaidCrierAuthority({ pool, origin, publicOrigin: process.env.REALM_PUBLIC_ORIGIN, clock: Date.now }) }) : null;
   mountEntryRoutes(transport.app, boot.founded, origin, names);
   mountRealmWatchRoutes(transport.app, boot);
   ownRealmShutdown(server, transport, async () => {
     dock.stop();
     await raidShow.close();
     await chatCommands.close();
+    await raidCrier?.close();
     try { await evening.stop(); }
     finally { try { await boot.stop(); } finally { await pool.end(); } }
   });
@@ -108,7 +112,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     await boot.readiness.start();
     await releasePort();
     await server.listen(port, host);
-  } catch (error) { dock.stop(); await raidShow.close(); await chatCommands.close(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
+  } catch (error) { dock.stop(); await raidShow.close(); await chatCommands.close(); await raidCrier?.close(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
     + (boot.ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);

@@ -44,6 +44,8 @@ export interface MockDoorOptions {
   readonly host?: string;
   readonly print?: (line: string) => void;
   readonly now?: () => number;
+  /** Recording-only crier diagnostics, never a live chat writer. */
+  readonly crier?: () => unknown;
 }
 
 export interface MockDoor {
@@ -79,7 +81,7 @@ export async function startMockDoor(options: MockDoorOptions): Promise<MockDoor>
   });
   async function handle(request: IncomingMessage, response: ServerResponse) {
     if (request.method === 'GET' && request.url === '/health') {
-      return reply(response, 200, { origin: 'simulated', kingdomId, door: counts, ingest: ingest.health().counters, source: source.health(), realm: options.realm.health() });
+      return reply(response, 200, { origin: 'simulated', kingdomId, door: counts, ingest: ingest.health().counters, source: source.health(), realm: options.realm.health(), ...(options.crier ? { crier: options.crier() } : {}) });
     }
     if (request.method !== 'POST' || request.url !== '/eventsub') return reply(response, 404, { error: 'not found' });
     const body = await readBody(request);
@@ -155,8 +157,14 @@ export function toFrame(payload: unknown, messageId: string, at: number, plans: 
   };
 }
 
-/** The CLI's v1 cheer and train shapes, mapped onto what production subscribes to. Anything else passes through. */
+/** CLI cheer/train compatibility and canonical raid logins; all other payloads pass through. */
 export function adaptCliEvent(type: string, version: string, event: Record<string, unknown>): { type: string; version: string; event: unknown } {
+  // CLI 1.1.24 emits mixed-case placeholder logins. Only this simulated adapter canonicalizes them;
+  // production keeps its strict lowercase Twitch-login reader. Display names and IDs remain unchanged.
+  if (type === 'channel.raid' && version === '1') return { type, version, event: { ...event,
+    from_broadcaster_user_login: typeof event.from_broadcaster_user_login === 'string' ? event.from_broadcaster_user_login.toLowerCase() : event.from_broadcaster_user_login,
+    to_broadcaster_user_login: typeof event.to_broadcaster_user_login === 'string' ? event.to_broadcaster_user_login.toLowerCase() : event.to_broadcaster_user_login,
+  } };
   if (type === 'channel.cheer' && version === '1') {
     const anonymous = event.is_anonymous === true;
     return { type: 'channel.bits.use', version: '1', event: {

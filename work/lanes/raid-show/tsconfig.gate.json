@@ -2,6 +2,7 @@
   "extends": "../../../tsconfig.json",
   "include": [
     "../../../apps/api/src/raid-gate/**/*.ts",
+    "../../../apps/api/src/main.ts",
     "../../../apps/realm/src/raid-gate/**/*.ts",
     "../../../apps/realm/src/main.ts",
     "../../../packages/shared/src/chat-commands*.ts"
