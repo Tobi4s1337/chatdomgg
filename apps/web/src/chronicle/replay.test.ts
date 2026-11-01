@@ -97,6 +97,21 @@ describe('Chronicle replay', () => {
     expect(() => replay.load({ label: 'SIMULATED', snapshots: [] })).toThrow();
     expect(changes).toHaveBeenLastCalledWith({ status: 'unavailable', playing: false });
   });
+  it('preserves invalid-history and cleanup errors together', () => {
+    const { replay, binding } = setup();
+    replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a')] });
+    binding.clear.mockImplementationOnce(() => { throw new Error('clear failed'); });
+    try {
+      replay.load({ label: 'LIVE', snapshots: [snapshot(1, 'a')] });
+      throw new Error('Expected invalid history to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AggregateError);
+      const errors = (error as AggregateError).errors as Error[];
+      expect(errors[0]?.message).toMatch(/provenance/);
+      expect(errors[1]?.message).toBe('clear failed');
+    }
+    expect(replay.state()).toEqual({ status: 'unavailable', playing: false });
+  });
   it('clears unavailable, empty, invalid or mismatched histories rather than retaining a stale view', () => {
     const { replay, binding } = setup(); replay.load({ label: 'SIMULATED', snapshots: [snapshot(1, 'a')] });
     expect(() => replay.load({ label: 'LIVE', snapshots: [snapshot(1, 'a')] })).toThrow(/provenance/);
