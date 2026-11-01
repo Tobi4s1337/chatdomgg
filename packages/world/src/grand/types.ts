@@ -20,6 +20,8 @@ export interface GrandLandSeed {
   readonly biome: GenesisBiome;
   readonly tier: GenesisTier;
   readonly character: GrandCharacter;
+  /** Minimum columns required by an installed settlement; rounded up to a streaming region. */
+  readonly minSize?: number;
 }
 
 export type TreeSpecies =

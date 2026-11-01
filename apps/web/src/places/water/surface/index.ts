@@ -5,3 +5,4 @@ export { groundAt, waterAt, type WaterAt, type WaterGround } from './coverage';
 export { mirrorCamera } from './mirror';
 export { CONTACT_CAP } from './shader';
 export { FLOW_PERIOD, waterPhases } from './phases';
+export { type WaterRaster } from './raster';

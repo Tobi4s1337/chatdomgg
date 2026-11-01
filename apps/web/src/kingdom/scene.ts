@@ -18,6 +18,7 @@ import type { KingdomId, KingdomPresenceFrame, Vec3, VoxelBlueprint, PresenceFee
 import { CitizenChatCueSchema, PRESENCE_LEASE_MS } from '@chatdom/shared';
 import { createSimulatedPresence, createHeraldPresence } from './presence-feed';
 import { loadTerrain } from './terrain-client';
+import { prepareHostedGrandLand, createHostedGrandMaterial, type HostedGrandLand } from './grand-land';
 import { TERRAIN_SURFACE_BOUNDS_PADDING } from './terrain-worker';
 import { createLightField } from './light-field';
 import { createKingdomSound } from './sound';
@@ -100,6 +101,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   if(options.founded?.origin==='live'&&!options.presenceFeed)throw new Error('A live kingdom needs its room-backed public presence');
   const generated=options.founded?.plan??options.potential?.plan??generateSettlementPlan({seed:options.seed,tier:options.tier,firstYear:options.firstYear??(options.tier==='hamlet'?2025:2022),year:options.year??2026});
   const layout=!options.founded&&!options.potential&&options.nativeStyle?{...generated,homes:generated.homes.map(h=>({...h,style:options.nativeStyle!}))}:generated;
+  const useGrandLand=!!options.founded;
+  let grandLand:HostedGrandLand|undefined;
   const renderer=own(new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'}));
   renderer.debug.onShaderError=(gl,program,vertex,fragment)=>{console.error('Kingdom shader failed',{vertex:gl.getShaderInfoLog(vertex),fragment:gl.getShaderInfoLog(fragment),link:gl.getProgramInfoLog(program)});throw new Error('A kingdom shader could not compile');};
   renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
@@ -390,7 +393,9 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   }
   // Distant hills use 20 m cells on both sizes; the grounded 1 m collar stays
   // exact. One surface/sampler keeps groves grounded across viewport changes.
-  const {geometry:horizonGeometry,sampleHeight:landHeight}=createHorizonSurface(layout,{farStep:20,distantRelief:false,sampleTerrain:(x,z)=>terrainHeight(layout,x,z)});earlyCleanups.push(()=>horizonGeometry.dispose());
+  const horizonSurface=useGrandLand?{geometry:new THREE.BufferGeometry(),sampleHeight:(x:number,z:number)=>terrainHeight(layout,x,z)}:createHorizonSurface(layout,{farStep:20,distantRelief:false,sampleTerrain:(x,z)=>terrainHeight(layout,x,z)});
+  const horizonGeometry=horizonSurface.geometry,landHeight=(x:number,z:number)=>grandLand?.height(x,z)??horizonSurface.sampleHeight(x,z);
+  earlyCleanups.push(()=>horizonGeometry.dispose());
   const coverInput={ground:landHeight,
     waterKeepOut:(x:number,z:number,margin:number)=>Math.hypot((x-layout.lake.x)/(layout.lake.radiusX+margin),(z-layout.lake.z)/(layout.lake.radiusZ+margin))<1.19,
     occupied:content,keepClear:[{x:0,z:8,radius:7}]};
@@ -461,7 +466,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     float course=vWorld.y*.72+.45*sin(vWorld.x*.13+vWorld.z*.09)+1.1*sin((vWorld.x-vWorld.z)*.027);
     rock*=.88+.16*fract(sin(floor(course)*12.9898)*43758.5453);
     base=mix(base,rock,exposed);
-    n=normalize(mix(n,faceNormal*sign(dot(faceNormal,n)),exposed*.6));`)),vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);sunShadows.register(horizon);
+    n=normalize(mix(n,faceNormal*sign(dot(faceNormal,n)),exposed*.6));`)),vertexShader:`out vec3 vWorld;out vec3 vNormal;out float vAo;out float vSky;out float vLodFade;flat out uint vMaterial;void main(){vec4 world=modelMatrix*vec4(position,1.);vWorld=world.xyz;vNormal=normalize(mat3(modelMatrix)*normal);vAo=1.;vSky=1.;vLodFade=1.;vMaterial=1u;gl_Position=projectionMatrix*viewMatrix*world;}`}));const horizon=new THREE.Mesh(horizonGeometry,horizonMaterial);horizon.visible=!useGrandLand;scene.add(horizon);sunShadows.bindReceiver(horizonMaterial);if(!useGrandLand)sunShadows.register(horizon);
   // The v1 lake has no body record. Its terrain carves the shoreline within this
   // envelope; the supplied height grid clips the surface to the actual bed.
   const landform=layout.landform;
@@ -475,8 +480,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   })():undefined;
   const bodies=landform.version===2?[...landform.waters,...(ocean?[ocean]:[])]:[{...landform.lake,id:'lake',radiusX:landform.lake.radiusX*1.3,radiusZ:landform.lake.radiusZ*1.3,depth:Math.max(0,landform.lake.level+2.8)}];
   let waterQuality:'reduced'|'full'=canvas.clientWidth<600?'reduced':'full';
-  const water=own(createWaterSurface({bodies,reaches:landform.version===2?deriveWaterReaches(landform):[],ground:{data:heightData,width:heightWidth,height:heightDepth,origin:heightOrigin,step:1},quality:waterQuality,...(layout.genesisSurface?{outsideGroundHeight:-8}:{})}));
-  scene.add(water.root);
+  let water=own(createWaterSurface({bodies,reaches:landform.version===2?deriveWaterReaches(landform):[],ground:{data:heightData,width:heightWidth,height:heightDepth,origin:heightOrigin,step:1},quality:waterQuality,...(layout.genesisSurface?{outsideGroundHeight:-8}:{})}));
+  water.root.visible=!useGrandLand;scene.add(water.root);
   let waterFrame=0;
   const shore=own(createShoreDressing({scene,pool,clay,plan:layout,occupied:content,signal:abort.signal,registry,style:options.nativeStyle??options.forgeFamily??layout.homes[0]?.style??'hearth'}));
   function labels(){const names:NameLabel[]=[];for(const s of [...windows.getSources(),...build.getSources()]){
@@ -499,7 +504,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const listenerRight=new THREE.Vector3();
   let forgeShade=0;
   function render(now:number){
-    if(disposed)return;try {const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
+    if(disposed)return;try {grandLand?.update(now);const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&debug.ready&&!fixedTime)time+=dt;
     if(ownSimulation)simulation.advance(time);
     // A transport retry does not revoke a still-valid presence lease or send everyone home again.
@@ -643,7 +648,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     // Fixed evidence frames have no animation between seeks. Keep the public
     // feed/watchdog alive, but don't burn SwiftShader CPU redrawing identical
     // pixels while a capture waits on fonts, a field worker or the filesystem.
-    const renderKey=[dockCameraDirected?now:0,poseRevision,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
+    const renderKey=[dockCameraDirected?now:0,poseRevision,forge.renderRevision,build.renderRevision,loaded,time,hour,camName,geometryBuilds,grandLand?.revision??0,fieldUploads,frame?.epoch,frame?.sequence,canvas.width,canvas.height].join(':');
     if((loaded&&(!fixedTime||!!walk))||renderKey!==lastRenderedKey){renderPhase='drawing';renderStartedAt=performance.now();water.reflect({renderer,scene,camera,frame:++waterFrame,exclusions:atmosphere.reflectionExclusions});post.render(dt);renderCompletedAt=performance.now();renderPhase='drawn';lastRenderedKey=renderKey;if(dockVisible){dockActs?.drawn();if(dockVisuals?.finished())dockActs?.finish();}}
     // The gate covers loading the place, not background light refinement. The
     // full scene and presence windows have drawn; independently scheduled light
@@ -674,14 +679,29 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   if(growth)tasks.push(growth.ready);
   tasks.push(dressing.ready);
   tasks.push(shore.prepare());
-  tasks.push(loadTerrain(layout,()=>{}, {signal:abort.signal}).then(({chunks,origin})=>{
+  if(useGrandLand){
+    tasks.push(prepareHostedGrandLand({scene,camera,renderer,plan:layout,kingdomId:String(options.founded!.kingdomId),signal:abort.signal,
+      materialFactory:palette=>{const material=createHostedGrandMaterial(palette,ground);sunShadows.bindReceiver(material.material);return material;},
+      register:mesh=>sunShadows.register(mesh),
+      onProgress:fraction=>options.onProgress('Raising the wider kingdom',.7+.25*fraction),
+      onError:error=>failLight(error.message),
+    }).then(async land=>{
+      if(disposed){land.dispose();return;}
+      grandLand=land;
+      camera.far=Math.max(camera.far,land.bounds.getSize(new THREE.Vector3()).length()+camera.position.length());camera.updateProjectionMatrix();
+      const replacement=own(createWaterSurface({bodies:[],reaches:[],ground:land.water.ground,raster:{levels:land.water.levels,seaLevel:land.water.seaLevel},quality:waterQuality}));
+      water.root.removeFromParent();water.dispose();water=replacement;scene.add(water.root);
+      poseRevision++;
+      await land.ready;
+    }));
+  }else tasks.push(loadTerrain(layout,()=>{}, {signal:abort.signal}).then(({chunks,origin})=>{
     if(disposed)return;
     for(const tile of terrainBatches(chunks)){
       const geometry=geometryFromChunks(tile,'terrain');geometry.boundingBox!.expandByScalar(TERRAIN_SURFACE_BOUNDS_PADDING);geometry.boundingSphere=geometry.boundingBox!.getBoundingSphere(new THREE.Sphere());geometries.push(geometry);
       const mesh=new THREE.Mesh(geometry,ground.material);mesh.position.set(...origin);scene.add(mesh);sunShadows.register(mesh);meshes.push(mesh);geometryBuilds++;
     }
   }));
-  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
+  function dispose(){if(disposed)return;const checkpoint=options.founded&&crowd.checkpoint();if(checkpoint)citizenHandoff={at:Date.now(),checkpoint};disposed=true;loaded=false;debug.ready=false;cancelAnimationFrame(raf);walkGeneration++;walk?.dispose();walk=undefined;observed?.dispose();observed=undefined;options.onWalkers?.([]);abort.abort();grandLand?.dispose();observer.disconnect();unsubscribe();field.dispose();farField.dispose();beaconField.dispose();growth?.dispose();unsubscribeDockState?.();dockPresenter?.dispose();dockActs?.dispose();dockVisuals?.dispose();realmForge?.dispose();forge.dispose();forgeFlight.dispose();build.dispose();crowd.dispose();homeLife.dispose();royalLife.dispose();forgeFire.dispose();forgeHearth.dispose();forgeBreath.dispose();shore.dispose();moments?.dispose();options.onMomentCaptions?.([]);pool.dispose();sunShadows.dispose();windows.dispose();atmosphere.dispose();sound.dispose();geometries.forEach(g=>g.dispose());clay.dispose();ground.dispose();canopy.dispose();floraMaterial.dispose();horizonGeometry.dispose();horizonMaterial.dispose();water.dispose();post.dispose();for(const mesh of meshes)if(mesh instanceof THREE.InstancedMesh)mesh.dispose();renderer.dispose();scene.clear();canvas.removeEventListener('webglcontextlost',contextLost);options.signal?.removeEventListener('abort',dispose);}
   function contextLost(event:Event){event.preventDefault();dispose();options.onError('The kingdom lost its rendering context');}
   canvas.addEventListener('webglcontextlost',contextLost);options.signal?.addEventListener('abort',dispose,{once:true});
   if(options.signal?.aborted)dispose();
@@ -723,7 +743,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     walkSelected:()=>walkSelected,
     selectWalk(selected:boolean){walkSelected=selected&&!!walk;if(walkSelected){capturePose=null;autoCamera=false;}else walk?.controller.release();instancesDirty=true;},
     seekGrowthCeremony(seconds:number|null){growth?.seek(seconds);},
-    inspect:()=>({dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
+    inspect:()=>({land:grandLand?{identity:grandLand.identity,...grandLand.stats}:null,dock:{active:dockActive,presenting:dockVisuals?.active()??false,received:dockReceived,witnessed:dockWitnessed,sites:{gate:dockGate,plaza:dockPlaza,simulated:simulatedDockSites,failure:dockSiteFailure}},growth:growth?.inspect(),water:water.diagnostics(),moments:moments?.metrics(),build:'progressive-light-v1',ambience:ambienceTarget,loaded,renderPhase,renderStartedAt,renderCompletedAt,dressing:{...dressing.stats(),counts:coverPlan.report.counts},presence:{kingdomId:frame?.kingdomId??options.kingdomId??null,focusSlot,connection:frame?.connection??null},fields:{local:field.stats,kingdom:farField.stats,beacon:beaconField.stats},uploadedBytes:{local:nearBytes,kingdom:farBytes,beacon:beaconBytes}}),subject:()=>crowd.subject(focusSlot),receiveChat:(input:unknown)=>{
       if(!crowd.receiveChat(input))return false;
       const cue=CitizenChatCueSchema.parse(input),at=Date.now();
       if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);

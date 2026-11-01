@@ -5,6 +5,7 @@ import type { XZ } from '@chatdom/world';
 import type { WaterReach } from '../../../../../../packages/world/src/places/water/reaches';
 import { assertGround, basinDistance, waterAt, type WaterAt, type WaterGround } from './coverage';
 import { basinGeometry, reachGeometry } from './geometry';
+import { assertRaster, rasterGeometry, rasterGround, rasterSamples, rasterWaterAt, type WaterRaster } from './raster';
 import { FLOW_PERIOD, waterPhases } from './phases';
 import { PILLAR_CAP, selectPillars, type PillarSelection, type WaterLightSource } from './pillars';
 import { createPlanarReflection, type PlanarReflectionOptions, type ReflectionDiagnostics, type ReflectionFrame, type ReflectionReport } from './reflection';
@@ -29,6 +30,8 @@ export interface WaterSurfaceOptions {
   readonly reaches: readonly WaterReach[];
   /** The caller's ground heights; the bed under water. Read, never owned. */
   readonly ground: WaterGround;
+  /** Optional native terrain water levels, in the same grid as ground. */
+  readonly raster?: WaterRaster;
   /** Bed height outside the sampled ground grid; defaults to an occluding height. */
   readonly outsideGroundHeight?: number;
   readonly contacts?: readonly WaterContact[];
@@ -70,9 +73,10 @@ interface PlaneSample { readonly id: string; readonly x: number; readonly y: num
 export function createWaterSurface(options: WaterSurfaceOptions) {
   const { bodies, reaches, ground } = options;
   assertGround(ground);
+  if (options.raster) assertRaster(options.raster, ground);
   const outsideGroundHeight = options.outsideGroundHeight ?? 1e4;
   if (!Number.isFinite(outsideGroundHeight)) throw new RangeError('Outside ground height must be finite');
-  if (!bodies.length && !reaches.length) throw new RangeError('Water needs at least one supplied basin or course');
+  if (!options.raster && !bodies.length && !reaches.length) throw new RangeError('Water needs at least one supplied basin or course');
   for (const body of bodies) {
     if (![body.x, body.z, body.radiusX, body.radiusZ, body.level].every(Number.isFinite) || !(body.radiusX > 0 && body.radiusZ > 0))
       throw new RangeError(`Water body ${body.id} is not a finite outline`);
@@ -81,7 +85,8 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
   let quality = options.quality;
   if (quality !== 'full' && quality !== 'reduced') throw new RangeError(`Unknown water quality "${String(quality)}"`);
 
-  const heights = new THREE.DataTexture(ground.data, ground.width, ground.height, THREE.RedFormat, THREE.FloatType);
+  const shaderGround = options.raster ? rasterGround(ground) : ground;
+  const heights = new THREE.DataTexture(shaderGround.data, shaderGround.width, shaderGround.height, THREE.RedFormat, THREE.FloatType);
   heights.minFilter = heights.magFilter = THREE.NearestFilter;
   heights.generateMipmaps = false; heights.needsUpdate = true;
   const reflection = createPlanarReflection(options.reflection);
@@ -90,9 +95,9 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
   const v4 = (n: number) => Array.from({ length: n }, () => new THREE.Vector4());
   const shared = {
     uHeight: { value: heights }, uOrigin: { value: new THREE.Vector2(...ground.origin) },
-    uSize: { value: new THREE.Vector2(ground.width, ground.height) }, uStep: { value: ground.step },
+    uSize: { value: new THREE.Vector2(shaderGround.width, shaderGround.height) }, uStep: { value: ground.step },
     uOutsideGroundHeight: { value: outsideGroundHeight },
-    uBasins: { value: v4(BASIN_CAP) }, uBasinLevels: { value: new Array<number>(BASIN_CAP).fill(-1e6) }, uBasinCount: { value: bodies.length },
+    uBasins: { value: v4(BASIN_CAP) }, uBasinLevels: { value: new Array<number>(BASIN_CAP).fill(-1e6) }, uBasinCount: { value: options.raster ? 0 : bodies.length },
     uWind: { value: new THREE.Vector3() }, uFlowPhase: { value: new THREE.Vector2() },
     uFlowOffset0: { value: new THREE.Vector2() }, uFlowOffset1: { value: new THREE.Vector2() }, uFlowPeriod: { value: FLOW_PERIOD },
     uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uGlow: { value: new THREE.Color() },
@@ -123,14 +128,18 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
     materials.push(made);
     return made;
   };
-  const courseMaterial = reaches.length ? material(1, { uBasin: { value: new THREE.Vector4() }, uFeather: { value: 0 }, uWindAmp: { value: 0.45 } }) : null;
-  for (const body of bodies) {
+  const courseMaterial = !options.raster && reaches.length ? material(1, { uBasin: { value: new THREE.Vector4() }, uFeather: { value: 0 }, uWindAmp: { value: 0.45 } }) : null;
+  if (options.raster) {
+    const mesh = new THREE.Mesh(rasterGeometry(options.raster, ground), material(1, { uBasin: { value: new THREE.Vector4() }, uFeather: { value: 0 }, uWindAmp: { value: 1 } }));
+    mesh.name = 'water:raster'; meshes.push(mesh);
+  }
+  for (const body of options.raster ? [] : bodies) {
     const mesh = new THREE.Mesh(basinGeometry(body), material(0, {
       uBasin: { value: new THREE.Vector4(body.x, body.z, body.radiusX, body.radiusZ) }, uFeather: { value: 0.75 }, uWindAmp: { value: 1 },
     }));
     mesh.name = `water:${body.id}`; meshes.push(mesh);
   }
-  for (const reach of reaches) {
+  for (const reach of options.raster ? [] : reaches) {
     const mesh = new THREE.Mesh(reachGeometry(reach), courseMaterial!);
     mesh.name = `water:${reach.id}`; meshes.push(mesh);
   }
@@ -139,7 +148,8 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
 
   // Samples that decide which plane the one reflection pass serves: area-weighted points of every water.
   const samples: PlaneSample[] = [];
-  for (const body of bodies) {
+  if (options.raster) samples.push(...rasterSamples(options.raster, ground));
+  for (const body of options.raster ? [] : bodies) {
     const n = 7;
     for (let i = 0; i < n; i++) for (let k = 0; k < n; k++) {
       const u = (i + 0.5) / n * 2 - 1, v = (k + 0.5) / n * 2 - 1;
@@ -147,12 +157,12 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
       samples.push({ id: body.id, x: body.x + u * body.radiusX, y: body.level, z: body.z + v * body.radiusZ, weight: (4 * body.radiusX * body.radiusZ) / (n * n) });
     }
   }
-  for (const reach of reaches) reach.points.forEach((point, i) => {
+  for (const reach of options.raster ? [] : reaches) reach.points.forEach((point, i) => {
     const next = reach.points[Math.min(i + 1, reach.points.length - 1)]!, prev = reach.points[Math.max(i - 1, 0)]!;
     samples.push({ id: reach.id, x: point.position[0], y: point.level, z: point.position[1], weight: point.width * (next.s - prev.s) / 2 });
   });
 
-  const query = (x: number, z: number): WaterAt | null => waterAt(bodies, reaches, ground, x, z);
+  const query = (x: number, z: number): WaterAt | null => options.raster ? rasterWaterAt(options.raster, ground, x, z) : waterAt(bodies, reaches, ground, x, z);
   const viewProjection = new THREE.Matrix4(), eye = new THREE.Vector3(), probe = new THREE.Vector4();
   let plane: { id: string; level: number } | null = null;
   let selection: PillarSelection = { pillars: [], considered: 0, rejected: { dark: 0, below: 0, offView: 0, dry: 0, facing: 0 }, dropped: 0 };
@@ -257,7 +267,7 @@ export function createWaterSurface(options: WaterSurfaceOptions) {
         quality, reflection: reflection.diagnostics, plane,
         pillars: { cap: PILLAR_CAP, drawn: selection.pillars.length, considered: selection.considered, dropped: selection.dropped, rejected: selection.rejected },
         contacts: { cap: CONTACT_CAP, count: contactCount },
-        bytes: { ground: ground.width * ground.height * 4, reflection: reflection.diagnostics.targetBytes },
+        bytes: { ground: shaderGround.width * shaderGround.height * 4, reflection: reflection.diagnostics.targetBytes },
         meshes: meshes.length, triangles,
       };
     },
