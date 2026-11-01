@@ -150,7 +150,24 @@ export function createKingdomForge(options:Options){
     try{const work=await make(receipt.plan,receipt.kitId.replace('-native','') as StyleKey);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;install(work);current=work;view.setPiece(work.geometry,work.bounds,work.destination);fixed=21;options.sound.cue('wood');}
     catch{privateError='This piece is kept safely. The house still needs a clear socket for it.';}finally{preparing=false;publishStatus();}
   }
-  return {prepare,submit,update,status,refit,setEnvironment:view.setEnvironment,captureAudio:()=>{if(options.source!=='simulated')throw new Error('Offline audio is only available in the local simulation.');return renderForgeRitualAudio();},get renderRevision(){return open||placed.size?(fixed??now)+revision:revision;},get placements(){return [...placed.values()].map(p=>p.receipt);},
+  function castingHeat(){
+    if(!open||preparing||!current||current.committed||!view.root.visible)return 0;
+    const frame=forgeRitualFrame(current.id,elapsed());
+    return frame.phase==='pour'||frame.phase==='strike'?1:frame.phase==='seal'?.85:frame.phase==='cool'?1-frame.phaseProgress:0;
+  }
+  return {prepare,submit,update,status,refit,setEnvironment:view.setEnvironment,
+    get heat(){return castingHeat();},
+    sources():readonly {position:Vec3;normal:Vec3;strength:number}[]{
+      const strength=castingHeat();
+      if(strength<=0)return [];
+      // Match the room-fed casting: the metal lights the actual paving and faces,
+      // rather than glowing only in the post stack.
+      return [
+        {position:[options.anvil.x,options.anvil.y+1.88,options.anvil.z],normal:[0,1,0],strength},
+        {position:[options.anvil.x-.5,options.anvil.y+1.73,options.anvil.z-.4],normal:[-1,0,0],strength},
+      ];
+    },
+    captureAudio:()=>{if(options.source!=='simulated')throw new Error('Offline audio is only available in the local simulation.');return renderForgeRitualAudio();},get renderRevision(){return open||placed.size?(fixed??now)+revision:revision;},get placements(){return [...placed.values()].map(p=>p.receipt);},
     open(){if(options.source!=='simulated')return;clearStale();open=true;options.sound.unlock();options.sound.cue('wood');publishStatus();},
     close(){if(now<refusalUntil||preparing||current&&!current.committed)return;open=false;options.camera.clearViewOffset();publishStatus();},
     seek(seconds:number){if(options.source!=='simulated'||!current)return;fixed=Math.max(0,seconds);revision++;},

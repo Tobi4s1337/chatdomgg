@@ -408,6 +408,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   let renderPhase:'preparing'|'drawing'|'drawn'='preparing',renderStartedAt=0,renderCompletedAt=0;
   let lastAmbience=-Infinity,ambienceTarget:AmbienceTarget={wind:0,water:0,waterPan:0};
   const listenerRight=new THREE.Vector3();
+  let forgeShade=0;
   function render(now:number){
     if(disposed)return;try {const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&debug.ready&&!fixedTime)time+=dt;
@@ -420,7 +421,17 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       crowd.clear();arrivalDirector?.clear();frame=undefined;
       lastLightFrameKey='';lastField=-Infinity;
     }
-    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);clay.setEnvironment(grade);ground.setEnvironment(grade);forge.setEnvironment(grade);realmForge?.setEnvironment(grade);crowd.material.setEnvironment({...grade,ambientIntensity:Math.max(.65,grade.ambientIntensity)});
+    hour+=Math.min(1,dt*4)*(targetHour-hour);if(Math.abs(targetHour-hour)<.001)hour=targetHour;const grade=getEnvironment(hour);
+    // Only the hot casting carries this local fire treatment. The receiving
+    // house, ordinary dusk and walking retain their accepted lighting.
+    const stageHeat=!walkSelected&&!capturePose?Math.max(forgeCameraDirected?(realmForge?.heat??0):0,forge.status().open?forge.heat:0):0;
+    forgeShade+=(stageHeat*grade.night-forgeShade)*Math.min(1,dt*3);
+    for(const state of [clay,ground]){
+      state.material.uniforms.uSmithyPower!.value=forgeShade;
+      state.material.uniforms.uSmithyOrigin!.value.set(0,layout.market.elevation+2.3,8);
+    }
+    clay.setEnvironment(grade);ground.setEnvironment(grade);forge.setEnvironment(grade);realmForge?.setEnvironment(grade);
+    crowd.material.setEnvironment({...grade,ambientIntensity:Math.max(.65,grade.ambientIntensity)});
     const presentationMs=ownSimulation?simulation.epochMs+time*1000:Date.now();
     const walking=walk?.frame(now,walkSelected&&!capturePose&&!build.session&&!build.housewarming&&!forge.status().open)??false;
     observed?.frame(now);
@@ -511,7 +522,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     ]});
     dressing.hideLot(buildHidden?simulation.firstSlot:null);
     dressing.update({time,walkers:(walk?.poses??observed?.poses??[]).map(p=>[p.x,p.y,p.z] as Vec3)});
-    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...(realmForge?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
+    if(now-lastField>240){lastField=now;const lightFocus=forgeDirected&&realmForge?realmForge.focusPoint:target;const centre:Vec3=[lightFocus.x,terrainHeight(layout,lightFocus.x,lightFocus.z),lightFocus.z];const sources=[...windows.getSources(),...build.getSources(),...homeLife.sources(),...royalLife.sources(),...forgeFire.sources(),...forgeHearth.sources(),...crowd.sources(),...forge.sources(),...(realmForge?.sources()??[])];field.update(centre,sources);farField.update(centre,sources);beaconField.update(beaconPosition,[{position:beaconPosition,strength:beacon,normal:[0,1,0]},...windows.getSources().filter(source=>source.slot===65534),...royalLife.sources()]);}
     const people=walk??observed;
     if(people)options.onWalkers?.(people.labels().filter(label=>{
       const person=people.poses.find(p=>p.id===label.id);

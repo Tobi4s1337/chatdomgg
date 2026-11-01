@@ -96,8 +96,8 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
   const material = createVoxelMaterial(MATERIALS, 'avatar');
   // Moving people receive open-sky fill; per-part baked cavities must not turn
   // darker skin into a silhouette before a nearby window lights.
-  material.material.fragmentShader = material.material.fragmentShader.replace('float sky=mix(.24,1.,vSky);', 'float sky=mix(.72,1.,vSky);').replace('vec3 colour=base*edge*light*ao;', 'vec3 colour=base*edge*(light+vec3(.4,.32,.25))*ao;');
-  for (const key of ['uLight','uLightOrigin','uLightExtent','uFarLight','uFarOrigin','uFarExtent','uFarCell','uBeaconLight','uBeaconOrigin','uBeaconExtent','uBeaconCell']) material.material.uniforms[key] = clay.material.uniforms[key]!;
+  material.material.fragmentShader = material.material.fragmentShader.replace('float sky=mix(.24,1.,vSky);', 'float sky=mix(.72,1.,vSky);').replace('vec3 colour=base*edge*light*ao;', 'vec3 colour=base*edge*(light+vec3(.4,.32,.25)*(1.-.85*smithyInfluence))*ao;');
+  for (const key of ['uSmithyPower','uSmithyOrigin','uLight','uLightOrigin','uLightExtent','uFarLight','uFarOrigin','uFarExtent','uFarCell','uBeaconLight','uBeaconOrigin','uBeaconExtent','uBeaconCell']) material.material.uniforms[key] = clay.material.uniforms[key]!;
   const lanterns = createWalkerLanterns(scene, capacity);
   const looks = createDefaultCitizenLooks();
   const knownLooks = new Set(looks.map(look => look.id)), suppliedLooks = new Map<number, string>();

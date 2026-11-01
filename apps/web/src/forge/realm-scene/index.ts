@@ -306,6 +306,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     setEnvironment: view.setEnvironment,
     active: () => !!(stages.size || preparing || current),
     get focusPoint() { return focusPoint; },
+    get heat() { return castingHeat; },
     sources(): readonly { position: Vec3; normal: Vec3; strength: number }[] {
       // The approved casting is luminous while it pours and cools, not only when
       // it lands. Feed the same occluded field used by paving and moving faces.
