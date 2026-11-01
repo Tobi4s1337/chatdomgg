@@ -13,6 +13,7 @@ import type { WalkerLabel } from '../kingdom/walk-scene';
 import type { ArrivalAttention } from '../kingdom/arrival-director';
 import './stream.css';
 import './speech.css';
+import { PeopleLabels, peopleFromLabels, measureReservedElements } from '../walk/labels/index';
 
 type SourceKind = 'simulated' | 'connecting' | 'live' | 'resting' | 'lost';
 interface SourceMark { kind: SourceKind; title: string; note: string }
@@ -74,6 +75,8 @@ export default function StreamView() {
   const [arrival, setArrival] = createSignal<Pick<ArrivalAttention, 'slot' | 'phase'> | null>(null);
   const stageSafe = () => layout() === 'stage' ? safe() : null;
   const named = () => kingdomName() !== 'Kingdom';
+  let peopleLabelsRoot: HTMLElement | null = null;
+  const peopleHud = () => peopleLabelsRoot ? measureReservedElements(peopleLabelsRoot, [...picture.querySelectorAll('.stream-name,.stream-mark,.stream-inscription,.sky-caption,.stream-seam')]) : [];
   let hour = params.hour, picture!: HTMLDivElement, lens!: HTMLDivElement, holder: HTMLDivElement | undefined, retryTimer = 0, attempts = 0, obsVisible = true;
 
   const plan = () => planNight({ layout: layout(), mood: mood(), seam: layout() === 'stage' ? seam() : null, camera: params.camera, hour: params.hour });
@@ -249,16 +252,8 @@ export default function StreamView() {
     <div class="stream-picture" ref={element => { picture = element; }}>
       <div class="stream-lens" ref={element => { lens = element; }}>
         <SkyCaptions captions={momentCaptions()} />
-        <div class="stream-speech citizen-speech"><For each={speech()}>{label =>
-          <div class="citizen-bubble" style={{ left: `${label.x}px`, top: `${label.y}px` }}>
-            <Show when={label.name}><small>{label.name}</small></Show>
-            <p><For each={label.parts}>{part => part.kind === 'text' ? part.text :
-              <img src={`https://static-cdn.jtvnw.net/emoticons/v2/${encodeURIComponent(part.id)}/default/dark/1.0`} alt={part.alt} />}</For></p>
-          </div>
-        }</For></div>
+        <PeopleLabels class="stream-people-labels" people={peopleFromLabels(walkers(), speech())} reserved={peopleHud()} onRoot={root => { peopleLabelsRoot = root; }} />
         <div class="stream-names" aria-live="polite">
-          <For each={walkers()}>{walker => <span class="stream-walker-name" data-walker={walker.id}
-            style={{ left: `${walker.x}px`, top: `${walker.y}px` }}>{walker.name}</span>}</For>
           <Show when={shownName()}>{name =>
             <div class="stream-name" classList={{ shown: !!climaxName() }}
               style={{ left: `${Math.min(Math.max(name().x, 70), picture.clientWidth - 70)}px`, top: `${Math.max(name().y, 46)}px` }}>

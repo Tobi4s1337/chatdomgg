@@ -15,11 +15,12 @@ import { createRealmCitizens } from './evening/citizens';
 import { createRealmCastle } from './evening/castle';
 import { attachEveningInteractions } from './evening/interactions';
 import { createServer as createPortReservation } from 'node:net';
-import { realmListenPort } from './listen-port';
+import { realmListenHost, realmListenPort } from './listen-port';
 import { ownRealmShutdown } from './lifecycle';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
+const host = realmListenHost(process.env);
 
 try {
   await serve();
@@ -36,7 +37,7 @@ async function serve() {
   const reservation = createPortReservation();
   await new Promise<void>((resolve, reject) => {
     reservation.once('error', () => reject(new Error(`Realm port ${port} is already in use; choose a free REALM_PORT.`)));
-    reservation.listen({ port, host: '0.0.0.0', exclusive: true }, resolve);
+    reservation.listen({ port, host, exclusive: true }, resolve);
   });
   let held = true;
   const release = async () => { if (held) { held = false; await new Promise<void>(resolve => reservation.close(() => resolve())); } };
@@ -99,7 +100,7 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   try {
     await boot.readiness.start();
     await releasePort();
-    await server.listen(port, '0.0.0.0');
+    await server.listen(port, host);
   } catch (error) { dock.stop(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
     + (boot.ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
@@ -114,6 +115,6 @@ async function serveMemoryReference(releasePort: () => Promise<void>, port: numb
     response.writeHeader('Access-Control-Allow-Origin', '*').writeHeader('Cache-Control', 'no-store').writeHeader('Content-Type', 'application/json').end(JSON.stringify(services.issue()));
   });
   await releasePort();
-  await server.listen(port, '0.0.0.0');
+  await server.listen(port, host);
   console.info(`SIMULATED realm reference on ${port}: memory only, nothing is saved`);
 }

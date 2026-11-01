@@ -13,7 +13,8 @@
     "./forge-ornaments": "./src/forge-ornaments/index.ts",
     "./anvil-hero": "./src/anvil-hero/index.ts",
     "./genesis-landmarks": "./src/genesis-landmarks/index.ts",
-    "./growth-civic": "./src/growth-civic/index.ts"
+    "./growth-civic": "./src/growth-civic/index.ts",
+    "./growth-homes": "./src/growth-homes/index.ts"
   },
   "dependencies": {
     "@chatdom/shared": "workspace:*"
