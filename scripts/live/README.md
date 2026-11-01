@@ -64,7 +64,7 @@ Twitch CLI writes the payloads; it is never asked to send anything to Twitch.
   4. The battle ends in victory, or retreat if the crowd doesn't win.
   5. The train ends.
 - **How you know it reached the kingdom:** one line per step, ending with `victory · N strikes from M fighters`.
-- **For a still:** `--stop-at active` leaves the dragon circling.
+- **For a still:** `--stop-at active` leaves the dragon circling for the fight's three minutes; `stills.mjs hype` uses it.
 
 ### A raid wakes the Raid Gate and the guests arrive
 
@@ -96,19 +96,18 @@ Herald also drops a repeated `Twitch-Eventsub-Message-Id`; `--again` above shows
 
 Reads the managed LIVE realm (default `http://127.0.0.1:5197`, or `CHATDOM_LIVE_REALM`) and prints every **LIVE** moment fact for kingdom 129634568 as it lands, with its delay after Twitch. Cheer, start a Hype Train or raid on twitch.tv/tobi4s_ to see it.
 
-- **Grants:** Bits and Hype Train need the broadcaster to grant `bits:read` and `channel:read:hype_train` once. Run `pnpm --filter @chatdom/herald authorize -- --role broadcaster`, then `provision:source`. Raids need no grant.
+- **Grants:** Bits and Hype Train need the broadcaster's `bits:read` and `channel:read:hype_train`; both are granted on tobi4s_ (`pnpm --filter @chatdom/herald check:auth` lists every capability as available). If they are ever withdrawn, run `pnpm --filter @chatdom/herald authorize -- --role broadcaster`, then `provision:source`. Raids need no grant.
+- **Before going live:** `check:auth` should end `Every Herald read capability is authorized.` Herald's conduit then carries `channel.bits.use`, `channel.hype_train.begin/progress/end` (v2), `channel.raid` and the chat types for 129634568, all enabled.
+- **What you should see on stream:** the same presentations as on the bench, labelled LIVE instead of SIMULATED, a few seconds after the cheer, train or raid lands on Twitch.
 - **Labels:** SIMULATED acts never appear here.
 
 ### Stills
 
 `node scripts/live/stills.mjs [homes] [raid] [cheer] [hype]` captures one 1920×1080 still per moment on the stream view while firing it, into `work/evidence/live-twitch/`. Each still holds the shared capture lock only for its own page.
 
-## Known limit: dozens of brand-new speakers in one burst
+## Many brand-new speakers at once
 
-Settling a home makes the realm re-assemble, validate and hash the whole founded scene on the kingdom's writer.
+A first-time speaker claims a home already standing in the approved scene, so the town is not rebuilt for each of them.
 
-- **In one burst:** with 40 first-time speakers 100 ms apart, the work queues behind itself. The last of them waited about 85 s for a home, so the first windows had already gone out by then.
-- **Paced:** at one new speaker every 2.5 s it holds: 40 homes in 154 s, then 40 of 40 windows lit within 9 s of the second round.
-- **Cold open:** opening the 240-plot town blocks the process for about 14 s while it builds the terrain. With 40 settled homes that outlasts the writer lease, and the kingdom stays "still preparing". Until main's fix lands, restart the bench with `--fresh` and settle the homes again with `chatters.mjs`.
-
-Both are in the founded scene code, and are reported to main with the profile in `work/lanes/live-twitch/progress.txt`.
+- **In one burst:** 40 first-time speakers 150 ms apart all have a home 13.4 s after the first message, and 40 of 40 windows light within 4.1 s of their next message.
+- **Cold open:** the kingdom with those homes reopens and serves its watch 13 s after the bench starts, with no lost writer lease.

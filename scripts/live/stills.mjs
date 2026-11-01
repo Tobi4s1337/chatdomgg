@@ -1,3 +1,4 @@
+/* global performance */
 // One still per moment on the stream view (1920×1080), fired through the real path while the page watches.
 //   node scripts/live/stills.mjs [homes] [raid] [cheer] [hype]      (default: all four, in that order)
 // Each still holds the shared capture lock only for its own page; stills land in work/evidence/live-twitch/.
@@ -16,8 +17,9 @@ const MOMENTS = {
   homes: { command: ['chatters.mjs', '--count', '40', '--pace', '150'], cue: /windows lit at once/, after: 1_500, query: '&camera=window' },
   raid: { command: ['raid.mjs', '--viewers', '140'], cue: /reached kingdom/, after: 7_500 },
   cheer: { command: ['cheer.mjs', '--bits', '5000'], cue: /reached kingdom/, after: 5_000 },
-  // The dragon's shot is the summoning: it wakes over the lair and takes the sky before the fight begins.
-  hype: { command: ['hype.mjs', '--level', '5', '--fighters', '16'], cue: /the dragon is summoned/, after: 6_000 },
+  // The dragon's shot is the fight: the train stops climbing once the battle is active, so the dragon is still over the
+  // town when a software-rendered 1080p frame lands (most of a minute), inside the director's battle focus.
+  hype: { command: ['hype.mjs', '--level', '5', '--fighters', '16', '--stop-at', 'active'], cue: /stopped at active/, after: 1_500 },
 };
 const chosen = process.argv.slice(2).filter(name => name in MOMENTS);
 mkdirSync(OUT, { recursive: true });

@@ -1,5 +1,6 @@
+/* global AbortSignal, Buffer */
 // The SIMULATED live-Twitch bench: a private realm, Herald's EventSub door and the web client, side by side with
-// (never instead of) the running services on 5191–5197.
+// (never instead of) the running services on 5190–5197.
 //
 //   node --env-file=<file with DATABASE_URL> scripts/live/bench.mjs up       build, migrate, adopt, start, stay up
 //        … up --fresh                                                        first drop the bench's own schema and scenes

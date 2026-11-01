@@ -1,3 +1,4 @@
+/* global performance */
 // SIMULATED chatters speak; every one of them settles a home and lights its window, far beyond the old 12.
 //   node scripts/live/chatters.mjs [--count 40] [--pace 2500]
 // --pace is the gap between first-time speakers in ms (people arriving in chat). Settling a home re-prepares the

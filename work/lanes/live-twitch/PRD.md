@@ -18,7 +18,7 @@ Work in checkpoints: if a session ends before the part is done, leave everything
 Captures: take the shared capture lock for one still or one short clip at a time and release it in between, so main can capture between your frames; never hold it for a whole series.
 
 ## Tasks
-- [ ] **LT10 — The real channel answers, whole.** Cheer → the sky at its rung, hype train → the dragon, raid → the Raid Gate wakes and the guests arrive, everyone who speaks gets a home window; all LIVE-labelled, proven herald → realm → stream view with the Twitch CLI mocks, a still of each moment on the stream view, and one command per moment in `scripts/live/` with its README.
+- [x] **LT10 — The real channel answers, whole.** Cheer → the sky at its rung, hype train → the dragon, raid → the Raid Gate wakes and the guests arrive, everyone who speaks gets a home window; all LIVE-labelled, proven herald → realm → stream view with the Twitch CLI mocks, a still of each moment on the stream view, and one command per moment in `scripts/live/` with its README.
 - [ ] **LT11 — Every Twitch event shapes the kingdom, and it keeps your place between streams, whole.** Follow → a new home on the edge of town; sub → your banner and your tenure street; channel points and polls → the community shapes the kingdom together (a choice the town makes, visible in the world); the channel going live opens the gate and calls people back with a welcome back, everyone's home still where they left it. Real on tobi4s_ where Twitch allows it, Twitch CLI mock otherwise, labelled LIVE or SIMULATED; each one captured on the stream view, with one command per event added to `scripts/live/`.
 
 ## Backlog

@@ -1,3 +1,4 @@
+/* global AbortController, AbortSignal, TextDecoder, clearTimeout, performance */
 // Shared pieces of the live-Twitch commands: where the bench is, how a delivery is signed like Twitch signs it,
 // how the Twitch CLI writes a payload, and how to watch the kingdom's public stream for what arrived.
 import { execFileSync } from 'node:child_process';
@@ -187,7 +188,7 @@ export async function watchFor(match, { realm = `http://127.0.0.1:${BENCH.realmP
     }
     throw new Error('the kingdom watch closed');
   } catch (error) {
-    if (controller.signal.aborted) throw new Error(`nothing reached the kingdom within ${Math.round(timeoutMs / 1000)} s`);
+    if (controller.signal.aborted) throw new Error(`nothing reached the kingdom within ${Math.round(timeoutMs / 1000)} s`, { cause: error });
     throw error;
   } finally { clearTimeout(timer); controller.abort(); }
 }

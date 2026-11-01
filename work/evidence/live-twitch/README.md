@@ -16,7 +16,7 @@ The managed services on 5190–5197 were never touched.
 |---|---|---|
 | Raid wakes the Raid Gate | `raid@1920x1080.png` | `node scripts/live/raid.mjs --viewers 140` |
 | Cheer at its rung (5,000 Bits → Skyfire) | `cheer@1920x1080.png` | `node scripts/live/cheer.mjs --bits 5000` |
-| Hype train brings the dragon | `hype@1920x1080.png` (no dragon drawn on this branch: see below) | `node scripts/live/hype.mjs --level 5 --fighters 16` |
+| Hype train brings the dragon (the fight active, the dragon over the town, the festival bunting strung across it) | `hype@1920x1080.png` | `node scripts/live/hype.mjs --level 5 --fighters 16 --stop-at active` |
 | Everyone who speaks gets a window (stage held on its window shot, `&camera=window`) | `homes@1920x1080.png` | `node scripts/live/chatters.mjs --count 40` |
 
 `node scripts/live/stills.mjs [homes] [raid] [cheer] [hype]` reproduces them under the shared capture lock. Every still carries the stream view's SIMULATED mark.
@@ -41,14 +41,20 @@ The renderer's own count agrees with the watch. On the stream view, `activeWindo
 - **Battle shots cued too late.** The battle's first 9 s focus window had already passed when a software-rendered 1080p frame landed. The hype still now cues on the summoning, and a still's command ends cleanly if the screenshot fails.
 - **Bench left processes behind.** `bench.mjs` now ends every process it started on any exit path, including a failed `stream.online`.
 
-## Sent to main (exact patch or report)
+## Fixed in the realm with main's code absorbed
 
-- **Finished battles stay "current" in the public checkpoint** (`apps/realm/src/outbox/projection.ts`, main's). The projection only ever adds `current: true` moment facts. A victory (published `current: false`) and a new train taking the slot never remove the last occupant, so a stream view that reconnects after a victory is restored into a fight that is over, and old trains pile up. The patch and its test are in `work/lanes/live-twitch/needs-public-moment-slots.patch`. The test fails on main's file and passes with the patch, and the typecheck is clean.
-- **The 40-home kingdom does not cold-open.** On `bench.mjs up` without `--fresh` (40 settled homes), the first watch got 503 "still preparing" for 240 s. The realm log shows `opened … at fact 433` → `writer authority closed …: lease deadline passed` → repeated `opened … at fact 434`. The founded-scene build blocks the event loop past the 15 s writer lease (CPU profile earlier: terrain 14.1 s in one stretch). This is in main's founded scene code.
-- **New homes are slow** (founded scene code): each one re-assembles, validates and hashes the whole scene. 40 new speakers 100 ms apart: the last waited about 85 s. Paced at 2.5 s: 138–154 s for 40.
+- **Finished battles stayed "current" in the public checkpoint** (`apps/realm/src/outbox/projection.ts`). The projection only ever added `current: true` moment facts, so a stream view that reconnected after a victory was restored into a fight that was over, and old trains piled up. The Hype Train and the battle now each hold one slot, as in the records: a new occupant replaces the last and a finished one leaves (`projection-moments.test.ts`).
+- **A fresh kingdom never delivered anything** (`apps/realm/src/outbox/dispatcher.ts`). Earned growth (fcc3de4) commits a `growth` frame as a kingdom's first outbox row, and the store, projection and web observer all read it, but the dispatcher refused it as "not a public message". Delivery held on row 1 forever and the watch answered 503. The dispatcher now delivers growth frames for its own kingdom and still holds on anything else (`dispatcher.test.ts`, which fails without the fix).
+- **Cold open and new homes** (main's 9b1c4f8 and c0a0a14, measured here): 40 first-time speakers 150 ms apart all have a home 13.4 s after the first message (it was about 85 s for the last), 40 of 40 windows lit 4.1 s into their next round. The kingdom with those homes reopens and serves its watch 13 s after `bench.mjs up`, with no lost writer lease (it was 503 for 240 s).
+- **Re-checked on the merged code:** cheer 5,000 → moment in 349 ms, raid 286 ms, both retries deduplicated; `retry.mjs` → `202 accepted`, then `202 duplicate`.
+
+## LIVE on twitch.tv/tobi4s_
+
+- **Grants:** `check:auth` (2026-11-01 12:59 UTC) shows `bits:read` and `channel:read:hype_train` granted, and every Herald read capability available, including cheers and hype trains.
+- **Subscriptions:** Herald's conduit carries `channel.bits.use` v1, `channel.hype_train.begin/progress/end` v2, `channel.raid` v1, `stream.online/offline` and the chat types for 129634568, all `enabled` (Helix, read only).
+- **Still to watch on a real stream:** a real cheer, Hype Train or incoming raid on tobi4s_ reaching the stream view labelled LIVE. Nothing here can make one: a cheer needs a viewer's Bits, and a raid needs another channel. `node scripts/live/live-watch.mjs` prints each LIVE fact with its delay after Twitch.
 
 ## Not proven here
 
-- **LIVE delivery of Bits and Hype Train from twitch.tv/tobi4s_.** It needs the broadcaster to grant `bits:read` and `channel:read:hype_train`. Main's `check-auth` shows both are missing. `live-watch.mjs` is the command to watch it once they're granted. Raids need no grant.
-- **The dragon on the stream view.** The realm summons it, fights it and ends it (above), but this branch's kingdom host still returns no lair anchor (`places.lair()` is `null`). Main's seam 32b0197 (merged as 33fb2e9) supplies it and doesn't apply cleanly here without the rest of main. Re-shoot after the lane absorbs main: `node scripts/live/stills.mjs hype`.
+- **The director's dragon shot.** The dragon flies over the town in the hero shot. In software rendering a 1080p frame lands after the director's 9 s battle focus has passed, so the still never shows the closer battle framing. Check it on a real GPU.
 - **Frame timing.** Real-GPU frame timing is not measured here (SwiftShader).
