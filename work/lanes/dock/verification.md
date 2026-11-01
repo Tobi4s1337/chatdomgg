@@ -69,3 +69,32 @@ claim or replacing the required live stream demonstration with HTTP fixture rece
 presentation seam in the realm/shared/kingdom/stream modules. This is the **second consecutive
 goal-turn audit** of the same main-owned dependency. Independent UI/API defects were fixed;
 the final-state requirements remain unchanged. There is no later lane task to move to.
+
+## Third blocking-condition audit — 2026-11-01 16:27
+
+The previous turn was progress: it committed direct named actions and real-ID/witness fixes.
+This turn revalidated the same external dependency before making a blocked-status claim:
+
+- The worktree is clean on `lane/dock`; `git rev-list --count HEAD..main` returns `0`.
+- Searching `apps/realm`, `packages/shared`, `apps/web/src/kingdom` and
+  `apps/web/src/stream` finds no `/internal/dock/*`, `RealmDock` or dock action/status seam.
+- The adapter still calls the absent `/internal/dock/status` and `/internal/dock/action`.
+  Its no-backend path explicitly returns unavailable.
+- A secret-safe environment check reports `dockRealmBridgeConfigured:false`; the worktree
+  has no `.env` file. No credential or URL values were printed.
+- `pnpm-lock.yaml` still has no `apps/dock` importer.
+- Evidence contains the harness and its README only: no screenshots or clips. The prior
+  three capture processes already terminated before Chrome; no capture process is waiting.
+
+Completion remains unproven for every real gate wake/goodnight, fire gathering, raid welcome,
+crown/knight ceremony and chosen moment on stream. Actual Twitch sign-in, verified moderator
+access, gentle/undo semantics at the realm, dock-beside-stream stills and watched clips are
+also not demonstrated. Fixture receipts, API tests and successful builds do not prove them.
+
+Implementing the missing authoritative state, command lifecycle and stream rendering would
+cross the explicitly excluded realm/shared/kingdom/stream scope. There is no later task and
+no remaining independent implementation identified that resolves this dependency. `needs.md`
+holds the exact contract and proposed shared request patch for main. The goal is therefore
+blocked after three consecutive goal turns, rather than marked complete or left in a retry
+loop. Resume DK10 after main supplies the seam and workspace importer; then verify real
+sign-in/authority, capture and inspect the UI, and demonstrate each real stream act.
