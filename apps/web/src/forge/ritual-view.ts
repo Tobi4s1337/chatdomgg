@@ -89,7 +89,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     const clusters=['ᚠᚨᛃ','ᚱᛉᚷ','ᛗᛚᚲ','ᚢᛈᛇ','ᛟᛒᚹ','ᚺᛋᚦ','ᚲᚾᛖ','ᛃᚷᛏ'];
     clusters.forEach((glyphs,i)=>{const sprite=makeText(glyphs,'#e9c78e');sprite.userData.angle=i*Math.PI*2/clusters.length;wordsGroup.add(sprite);});
   }
-  function setPiece(geometry: THREE.BufferGeometry, bounds: THREE.Box3, landing?: THREE.Vector3) {
+  function setPiece(geometry: THREE.BufferGeometry, bounds: THREE.Box3, landing?: THREE.Vector3, landingYaw = 0) {
     presentation?.dispose(); presentation=undefined; presenting=false;
     piece.geometry = geometry; pieceBounds = bounds.clone();
     piece.rotation.set(0, 0, 0); piece.scale.set(1, 1, 1);
@@ -125,10 +125,10 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     const anvil=root.localToWorld(new THREE.Vector3(0,1.43,0));
     // The shared effect captures the real landing pose before it brings a clone to the anvil.
     const destination=landing??anvil;
-    piece.position.copy(root.worldToLocal(destination.clone()));piece.updateWorldMatrix(true,false);
+    piece.position.copy(root.worldToLocal(destination.clone()));piece.rotation.y=landingYaw;piece.updateWorldMatrix(true,false);
     // The host reports its final posed flight; suppress the legacy guessed trail here.
     presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:destination.toArray(),piece,onFlight:onFlight??(()=>{})});
-    piece.position.copy(castingPosition);piece.updateWorldMatrix(true,false);
+    piece.position.copy(castingPosition);piece.rotation.y=0;piece.updateWorldMatrix(true,false);
   }
   /** The room's external casting owns its effects; it still heats this same physical stage. */
   function updateAnvil(frame: ForgeRitualFrame | null, shaping = false) {

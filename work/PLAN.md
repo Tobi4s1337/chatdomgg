@@ -334,23 +334,27 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 Main stays on the Forge. Team owns the three Genesis kingdoms, panel portraits/passport, raid journey
 and sky moments. Merge good checkpoints quickly; no new systems/contracts or system lanes.
 
-**Landing checkpoint, NOT visually accepted yet:**the first contact pair was effectively identical.
-It revealed that SIM updated the shared presentation only for words/blueprint, and its final manual
-flight callback dropped the socket. Flight/landed now update the presentation, the actual posed callback
-supplies the validated socket, and the SIM arc meets it at shared CONTACT (.9/18.65s). A noop stage sink
-suppresses its guessed legacy trail; the host still reports the real pose after its override. Do not
-pass the shared flight recorder into the SIM view: its reset would clear the host's recorded history.
+**Landing, still awaiting aligned visual signoff:**489d3a8 made the contact burst visible, but the
+looked-at `forge-contact-offset-rejected.png` placed its circle on the neighbouring wall. SIM had captured
+the presentation before applying the home's yaw; sparks also used the mesh origin rather than its
+physical foot. The correction captures the rotated landing pose and reports the rotated physical foot
+for both SIM and room effects. The existing test now covers an offset mesh under a rotated parent.
+12 focused tests, typecheck, scoped lint and web build pass. The amber HDR pulse/pour/hammer are unchanged.
 
-Roof contact now uses a brief, broader amber HDR pulse through the existing flash/post stack; hammer
-and pour retain their treatment. Existing library sparks emit at the socket rather than the crown.
-12 focused presentation/adapter tests, typecheck, scoped lint and web build pass. The corrected AFTER
-frame is pending a bounded background capture lease; no visual signoff until root views it.
-Capture helper `grove_wide_capture` owns session54545: re-poll it, never restart just on observation timeout. Baseline
-`shots/magic/forge-contact-before.png` is ritual18.85/world48.85,1920×1080 HIGH,SIMULATED. The first
-weak after/pair is rejected evidence, not the corrected picture. Both waited for fields settled, but
-reported unsettled again before the screenshot. Preserve the before; replace after/pair only once the
-corrected job succeeds, then judge the full frame and same-pixel close crop. Never infer a good picture
-from the tests or the new HDR numbers.
+Capture helper `grove_wide_capture` owns aligned AFTER-only session63596, last confirmed live and queued:
+re-poll that job, never restart just on observation timeout. It has15m queue/10m render limits. Preserve
+`shots/magic/forge-contact-before.png` (ritual18.85/world48.85,1920×1080 HIGH,SIMULATED); only replace
+after/pair once the aligned job succeeds, then root must view full frame and same-pixel close crop.
+The earlier unwired and offset afters are rejected, not visual signoff. Both previous frames waited for
+fields settled but reported unsettled again before screenshot. Never infer a good picture from tests.
+SIM runs shared flight/landed effects, meets shared CONTACT(.9/18.65s), then reports its actual manual
+pose. Keep the noop stage sink: passing the shared recorder into SIM view would clear its history.
+
+**Prepared next, not on main:**Terra medium made private neighbour look-up/turn/wave overlays in
+`../worktrees/main-forge-neighbours`, branch `work/forge-neighbours`, four uncommitted web files. Existing
+people only; walking feet/routes/presence stay authoritative. Active cues retain exact frame time;
+stationary render roots turn, heads track, a few wave at landing. Earlier typecheck passed; after the
+last timing/turn adjustment it was stopped to spare capture CPU. Review/check and capture next turn.
 
 **Flight/ring:**d6e3c1b follows the warm, solid gift before introducing its actual home; material heat
 is isolated per piece and cools after touchdown. `forge-treasure-pair.png` viewed; old camera lost the

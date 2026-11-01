@@ -74,7 +74,7 @@ export function createKingdomForge(options:Options){
       if(fixture)plan=planLocalForge(words);else{const home=options.home().blueprint,approved=await requestForgeRun({words,family,home},stage=>{waitingStage=stage;publishStatus();},runAbort.signal);
         if(disposed)return false;if(approved.hostFingerprint!==homeFingerprint(options.home().blueprint))throw new Error('Your house changed while the smith was working. Your previous pieces are safe.');plan=approved.draft.plan;approval={runId:approved.runId,title:approved.draft.title,plaque:approved.draft.plaque};}
       const work=await make(plan,family);work.approval=approval;pendingReceipt=receiptFor(work);save();
-      if(current&&!current.committed)current.geometry.dispose();current=work;view.setPiece(work.geometry,work.bounds,work.destination);start=now-(fixture?0:3000);lastPhase='';preparing=false;publishStatus();return true;
+      if(current&&!current.committed)current.geometry.dispose();current=work;view.setPiece(work.geometry,work.bounds,work.destination,work.home.yaw);start=now-(fixture?0:3000);lastPhase='';preparing=false;publishStatus();return true;
     }catch(error){if(disposed||runAbort.signal.aborted)return false;preparing=false;if(current?.committed)current=null;privateError=error instanceof Error?error.message:'The forge needs another wish.';
       // No request words, name, ID or reason enter the public soot beat.
       if(fixture||error instanceof ForgeRunStopped&&error.outcome==='refuse'){const beat=refusals.beat(now);if(beat?.kind==='refusal'){refusalUntil=now+FORGE_MOOD_DURATION*1000;moodStarted=now;mood.play(beat);playForgeSound(options.sound,'refusal');}}publishStatus();return false;
@@ -109,7 +109,7 @@ export function createKingdomForge(options:Options){
       }
       if(open&&!hidden&&!preparing&&(frame.phase==='flight'||frame.phase==='landed')&&options.onFlight){
         const reduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if(reduced)options.onFlight(null,null);else{view.piece.updateWorldMatrix(true,false);const at=current.bounds.getCenter(new THREE.Vector3()).setY(current.bounds.max.y+.15).applyMatrix4(view.piece.matrixWorld);options.onFlight(frame,[at.x,at.y,at.z],current.destination.toArray());}
+        if(reduced)options.onFlight(null,null);else{view.piece.updateWorldMatrix(true,false);const at=current.bounds.getCenter(new THREE.Vector3()).setY(current.bounds.max.y+.15).applyMatrix4(view.piece.matrixWorld);const contact=current.bounds.getCenter(new THREE.Vector3()).setY(current.bounds.min.y).applyAxisAngle(new THREE.Vector3(0,1,0),current.home.yaw).add(current.destination);options.onFlight(frame,[at.x,at.y,at.z],contact.toArray());}
       }
       if(frame.phase==='landed'&&!current.committed){try{install(current);options.onArrival?.(current.home);}catch(error){privateError=String(error);current.geometry.dispose();current=null;}view.piece.visible=false;}
       if(frame.phase==='landed')view.piece.visible=false;
@@ -153,7 +153,7 @@ export function createKingdomForge(options:Options){
   async function refit(){
     if(preparing||current&&!current.committed)return;const receipt=[...kept.values()].at(-1);if(!receipt)return;
     preparing=true;privateError=null;publishStatus();
-    try{const work=await make(receipt.plan,receipt.kitId.replace('-native','') as StyleKey);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;install(work);current=work;view.setPiece(work.geometry,work.bounds,work.destination);fixed=21;options.sound.cue('wood');}
+    try{const work=await make(receipt.plan,receipt.kitId.replace('-native','') as StyleKey);work.id=receipt.id;work.approval=receipt.approval;if(receipt.provenance)work.provenance=receipt.provenance;install(work);current=work;view.setPiece(work.geometry,work.bounds,work.destination,work.home.yaw);fixed=21;options.sound.cue('wood');}
     catch{privateError='This piece is kept safely. The house still needs a clear socket for it.';}finally{preparing=false;publishStatus();}
   }
   function castingHeat(){
