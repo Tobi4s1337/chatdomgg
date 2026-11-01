@@ -11,7 +11,7 @@ export interface DoorHolding {
   readonly id: string;
   readonly login: string;
   readonly name: string;
-  /** When the survey stops vouching for the name: after it the name is no longer shown, here as on the map. */
+  /** Expiry of this served name projection. On expiry the door reloads the current projection. */
   readonly freshUntil: number;
   readonly tier: Settler['tier'];
   /** Average viewers over the survey's observed window, never the live count. */
@@ -95,7 +95,7 @@ export function handOffHolding(storage: StorageLike | null, holding: DoorHolding
   try { storage?.setItem(DOOR_KEY, JSON.stringify(holding)); } catch { /* private mode: the page reads the survey */ }
 }
 
-/** The holding the Atlas card handed over for this channel, while its name is still fresh. */
+/** The holding handed over for this channel while its served projection is fresh; otherwise reread the Atlas. */
 export function takeHandOff(storage: StorageLike | null, id: string, now = Date.now()): DoorHolding | null {
   try {
     const raw = storage?.getItem(DOOR_KEY);

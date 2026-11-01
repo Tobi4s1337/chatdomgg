@@ -1,4 +1,4 @@
-import { ChannelGenesisFactsSchema, GENESIS_ATLAS_REALMS, type ChannelGenesisFacts, type ChannelKingdomRecipe, type DeepReadonly, type GenesisAtlasRealm, type GenesisLandscape } from '@chatdom/world/genesis';
+import { ChannelGenesisFactsSchema, compileChannelGenesis, GENESIS_ATLAS_REALMS, type ChannelGenesisFacts, type ChannelKingdomRecipe, type DeepReadonly, type GenesisAtlasRealm, type GenesisLandscape } from '@chatdom/world/genesis';
 import type { DoorHolding } from '../atlas/data/holding';
 
 /**
@@ -10,16 +10,24 @@ export function holdingFacts(holding: DoorHolding): ChannelGenesisFacts {
   const realm: GenesisAtlasRealm | undefined = holding.realm.kind === 'family'
     ? (GENESIS_ATLAS_REALMS as readonly string[]).includes(holding.realm.family ?? '') ? holding.realm.family as GenesisAtlasRealm : undefined
     : (GENESIS_ATLAS_REALMS as readonly string[]).includes(holding.realm.kind) ? holding.realm.kind as GenesisAtlasRealm : undefined;
-  const windowMinutes = Math.max(1, Math.round(holding.survey.windowHours * 60));
   return ChannelGenesisFactsSchema.parse({
     version: 1, broadcasterId: holding.id,
     evidence: { kind: 'observed', sourceId: holding.survey.revision, asOf: holding.survey.asOf },
     audience: { averageViewers: holding.average, followers: null, windowHours: holding.survey.windowHours },
-    // The projection names the dominant game but not its minutes; as the only category its order is all it decides,
-    // so it is recorded against the survey's whole window, which is an upper bound and claims nothing finer.
-    categories: holding.game ? [{ categoryId: holding.game.id ?? `atlas-game:${slug(holding.game.name)}`, name: holding.game.name, observedMinutes: windowMinutes }] : [],
+    // The survey exposes no category durations, so no measured category facts can be recorded.
+    categories: [],
     profileColours: [], approvedEmotes: [], approvedDescription: null, oldestFollowYear: null,
     ...(realm ? { atlasRealm: realm } : {}),
+  });
+}
+
+/** Compile a visual proposal using the survey's dominant game as a ranking hint only. The compiler's
+ * duration field is an internal ordering sentinel here: it is never returned or persisted as evidence. */
+export function compileHoldingGenesis(holding: DoorHolding): DeepReadonly<ChannelKingdomRecipe> {
+  const facts = holdingFacts(holding);
+  return compileChannelGenesis({
+    ...facts,
+    categories: holding.game ? [{ categoryId: holding.game.id ?? `atlas-game:${slug(holding.game.name)}`, name: holding.game.name, observedMinutes: 1 }] : [],
   });
 }
 

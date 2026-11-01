@@ -16,7 +16,7 @@ import { createGenesisSeatContent } from './seat-content';
 import { genesisKingdomComposer } from './kingdom-composer';
 import { composeMashaKingdom, MASHA_ID } from './kingdoms/masha';
 import { GENESIS_KINGDOMS } from './kingdoms';
-import { chooseLandscape, holdingFacts } from './holding-facts';
+import { chooseLandscape, compileHoldingGenesis } from './holding-facts';
 import { composeGeneratedKingdom } from './generated/compose';
 import { RaidRide } from './raid-ride';
 import './preview.css';
@@ -178,7 +178,7 @@ export default function GenesisPreview() {
   async function composeFromHolding(holding: DoorHolding) {
     step('The land is drawn from the channel’s own seed');
     await nextFrame();
-    const recipe = compileChannelGenesis(holdingFacts(holding));
+    const recipe = compileHoldingGenesis(holding);
     const landscape = chooseLandscape(recipe);
     step(`${capitalise(SIZE_NAMES[recipe.size.tier])} streets are laid out`);
     await nextFrame();

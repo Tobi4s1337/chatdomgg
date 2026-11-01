@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { terrainHeight } from '@chatdom/world';
-import { compileChannelGenesis, GENESIS_ATLAS_REALMS, type GenesisAtlasRealm } from '@chatdom/world/genesis';
+import { GENESIS_ATLAS_REALMS, type GenesisAtlasRealm } from '@chatdom/world/genesis';
 import type { DoorHolding } from '../../atlas/data/holding';
-import { chooseLandscape, holdingFacts } from '../holding-facts';
+import { chooseLandscape, compileHoldingGenesis } from '../holding-facts';
 import { atlasArmsTargets, composeGeneratedKingdom } from './compose';
 import { chooseKingdomKit } from './kit-choice';
 
@@ -19,7 +19,7 @@ describe('a generated kingdom', () => {
     for (let i = 0; i < 18; i++) {
       const realm = GENESIS_ATLAS_REALMS[i % GENESIS_ATLAS_REALMS.length]!;
       const average = [12, 31, 140, 900][i % 4]!;
-      const recipe = compileChannelGenesis(holdingFacts(holding(String(40_000_017 + i * 104_729), average, realm)));
+      const recipe = compileHoldingGenesis(holding(String(40_000_017 + i * 104_729), average, realm));
       for (const landscape of recipe.landscapes) {
         const kingdom = composeGeneratedKingdom(recipe, landscape);
         const { sites, seat, camera, plan } = kingdom;
@@ -43,7 +43,7 @@ describe('a generated kingdom', () => {
   }, 300_000);
 
   it('is the same kingdom every time for a channel', () => {
-    const recipe = compileChannelGenesis(holdingFacts(holding('91233457', 260, 'just-chatting', 'Just Chatting')));
+    const recipe = compileHoldingGenesis(holding('91233457', 260, 'just-chatting', 'Just Chatting'));
     const landscape = chooseLandscape(recipe);
     const a = composeGeneratedKingdom(recipe, landscape), b = composeGeneratedKingdom(recipe, landscape);
     expect(JSON.stringify({ seat: a.seat, camera: a.camera, hour: a.hour, lore: a.lore })).toBe(JSON.stringify({ seat: b.seat, camera: b.camera, hour: b.hour, lore: b.lore }));
@@ -52,13 +52,13 @@ describe('a generated kingdom', () => {
   it('flies the holding’s Atlas arms', () => {
     const targets = atlasArmsTargets('91233457');
     expect(targets.length).toBeGreaterThanOrEqual(2);
-    const recipe = compileChannelGenesis(holdingFacts(holding('91233457', 260, 'just-chatting', 'Just Chatting')));
+    const recipe = compileHoldingGenesis(holding('91233457', 260, 'just-chatting', 'Just Chatting'));
     const kingdom = composeGeneratedKingdom(recipe, chooseLandscape(recipe));
     expect(kingdom.heraldry.treatment.kind).toBe('snapped');
     // Two channels of one realm and size do not wear the same colours.
-    const other = compileChannelGenesis(holdingFacts(holding('55501231', 260, 'just-chatting', 'Just Chatting')));
+    const other = compileHoldingGenesis(holding('55501231', 260, 'just-chatting', 'Just Chatting'));
     const colours = new Set([kingdom, ...Array.from({ length: 6 }, (_, i) => {
-      const r = compileChannelGenesis(holdingFacts(holding(String(55_501_231 + i * 7_717), 260, 'just-chatting', 'Just Chatting')));
+      const r = compileHoldingGenesis(holding(String(55_501_231 + i * 7_717), 260, 'just-chatting', 'Just Chatting'));
       return composeGeneratedKingdom(r, chooseLandscape(r));
     })].map(item => `${item.heraldry.colours.field}/${item.heraldry.colours.charge}`));
     expect(other.kingdomId).not.toBe(recipe.kingdomId);
@@ -68,7 +68,7 @@ describe('a generated kingdom', () => {
     const kits = new Map<string, Set<string>>(), mixed = new Set<string>();
     for (let i = 0; i < 90; i++) {
       const realm = GENESIS_ATLAS_REALMS[i % GENESIS_ATLAS_REALMS.length]!;
-      const recipe = compileChannelGenesis(holdingFacts(holding(String(70_000_003 + i * 15_485_863 % 900_000_000), [30, 120, 700][i % 3]!, realm)));
+      const recipe = compileHoldingGenesis(holding(String(70_000_003 + i * 15_485_863 % 900_000_000), [30, 120, 700][i % 3]!, realm));
       for (const landscape of recipe.landscapes) {
         const kit = chooseKingdomKit(recipe, landscape, atlasArmsTargets(String(recipe.kingdomId)));
         kits.set(landscape.character, (kits.get(landscape.character) ?? new Set()).add(kit.primary));
@@ -82,7 +82,7 @@ describe('a generated kingdom', () => {
 
   it('builds the town in its kit, the outer lanes in the second one', () => {
     for (let i = 0; i < 40; i++) {
-      const recipe = compileChannelGenesis(holdingFacts(holding(String(80_000_011 + i * 7_919), 700, 'mmo')));
+      const recipe = compileHoldingGenesis(holding(String(80_000_011 + i * 7_919), 700, 'mmo'));
       const landscape = chooseLandscape(recipe);
       const kit = chooseKingdomKit(recipe, landscape, atlasArmsTargets(String(recipe.kingdomId)));
       if (!kit.secondary) continue;
@@ -100,7 +100,7 @@ describe('a generated kingdom', () => {
     const found = new Map<string, number>();
     const games: [GenesisAtlasRealm, string][] = [['roleplay', 'Grand Theft Auto V'], ['shooters', 'Valorant'], ['cozy', 'Stardew Valley']];
     for (const [realm, game] of games) for (let i = 0; i < 6; i++) {
-      const recipe = compileChannelGenesis(holdingFacts(holding(String(90_000_007 + i * 104_723), 140, realm, game)));
+      const recipe = compileHoldingGenesis(holding(String(90_000_007 + i * 104_723), 140, realm, game));
       const kingdom = composeGeneratedKingdom(recipe, chooseLandscape(recipe));
       for (const piece of kingdom.sites.skyline) {
         found.set(piece.kind, (found.get(piece.kind) ?? 0) + 1);
