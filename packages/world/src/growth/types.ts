@@ -1,4 +1,4 @@
-import type { GrowthCivicPlace, GrowthHomeStage, HomeTier, KingdomId, PersonId } from '@chatdom/shared';
+import type { GrowthCivicPlace, GrowthHomeStage, GrowthPrivateCitizen, GrowthPrivateState, HomeTier, KingdomId, PersonId } from '@chatdom/shared';
 export type { GrowthCivicPlace, GrowthHomeStage, GrowthHomeView } from '@chatdom/shared';
 
 interface GrowthMilestoneEvidence { readonly sourceSeq: number; readonly at: number }
@@ -9,31 +9,10 @@ export type GrowthMilestone = GrowthMilestoneEvidence & (
   | { readonly kind: 'streak-reached'; readonly personId: PersonId; readonly days: number }
 );
 
-export interface GrowthCitizen {
-  readonly qualifiedDays: number;
-  readonly lastQualifiedOrdinal: number | null;
-  readonly streak: number;
-  readonly bestStreak: number;
-  readonly home: { readonly plotId: string; readonly stage: GrowthHomeStage } | null;
-}
+export type GrowthCitizen = GrowthPrivateCitizen;
 
 /** Private durable projection. No chat text, open presence leases or unbounded receipt collection. */
-export interface GrowthState {
-  readonly version: 1;
-  readonly policyVersion: 1;
-  readonly kingdomId: KingdomId;
-  readonly origin: 'live' | 'simulated';
-  readonly sequence: number;
-  readonly asOf: number;
-  readonly session: { readonly id: string; readonly startedAt: number } | null;
-  readonly day: { readonly index: number; readonly ordinal: number; readonly qualified: boolean } | null;
-  readonly citizens: Readonly<Record<string, GrowthCitizen>>;
-  readonly civic: {
-    readonly qualifiedDays: number;
-    readonly personDays: number;
-    readonly levels: Readonly<Record<GrowthCivicPlace, number>>;
-  };
-}
+export type GrowthState = GrowthPrivateState;
 
 /** Trusted committed observations only, never a browser command or an unverified Herald payload. */
 export interface GrowthObservationBase {

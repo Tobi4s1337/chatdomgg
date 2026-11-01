@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EpochMsSchema, KingdomIdSchema, TokenSchema, UIntSchema } from './identity';
+import { EpochMsSchema, KingdomIdSchema, TokenSchema, UIntSchema, type KingdomId } from './identity';
 import { HomeTierSchema } from './voxel';
 
 /** Tent is an arrival entitlement, not a new voxel lattice or a purchasable tier. */
@@ -64,6 +64,28 @@ export const GrowthSceneFrameSchema = z.strictObject({
   }
 });
 export type GrowthSceneFrame = z.infer<typeof GrowthSceneFrameSchema>;
+
+/** Private reducer snapshot only. Never publish this, even when a citizen has disclosed their name. */
+export interface GrowthPrivateCitizen {
+  readonly qualifiedDays: number;
+  readonly lastQualifiedOrdinal: number | null;
+  readonly streak: number;
+  readonly bestStreak: number;
+  readonly home: { readonly plotId: string; readonly stage: GrowthHomeStage } | null;
+}
+export interface GrowthPrivateState {
+  readonly version: 1;
+  readonly policyVersion: 1;
+  readonly kingdomId: KingdomId;
+  readonly origin: 'live' | 'simulated';
+  readonly sequence: number;
+  readonly asOf: number;
+  readonly session: { readonly id: string; readonly startedAt: number } | null;
+  readonly day: { readonly index: number; readonly ordinal: number; readonly qualified: boolean } | null;
+  readonly citizens: Readonly<Record<string, GrowthPrivateCitizen>>;
+  readonly civic: { readonly qualifiedDays: number; readonly personDays: number;
+    readonly levels: Readonly<Record<GrowthCivicPlace, number>> };
+}
 
 export interface GrowthSceneFeed {
   readonly label: 'LIVE' | 'SIMULATED';

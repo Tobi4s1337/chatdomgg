@@ -5,6 +5,7 @@ import { MOMENT_CURRENT_LIMIT, type TwitchMomentFact } from '@chatdom/shared/twi
 export type RealmPublicHome = Extract<RealmPublicMessage, { type: 'home' }>;
 export type RealmPublicCastle = Extract<RealmPublicMessage, { type: 'castle' }>;
 export type RealmPublicPresence = Extract<RealmPublicMessage, { type: 'presence' }>;
+export type RealmPublicGrowth = Extract<RealmPublicMessage, { type: 'growth' }>;
 
 /** The delivered public prefix a projection starts from: what rows at or below `cursor` left standing. */
 export interface PublicPrefix {
@@ -12,6 +13,7 @@ export interface PublicPrefix {
   readonly presence: RealmPublicPresence | null;
   readonly castle?: RealmPublicCastle | null;
   readonly castleBase?: RealmPublicCastle | null;
+  readonly growth?: RealmPublicGrowth | null;
   readonly moments?: { readonly throughSeq: number; readonly facts: readonly TwitchMomentFact[] };
   readonly cursor: number;
   readonly sequence: number;
@@ -30,6 +32,7 @@ export class PublicProjection {
   private castleBase: RealmPublicCastle | null;
   private castle: RealmPublicCastle | null;
   private presence: Extract<RealmPublicMessage, { type: 'presence' }> | null;
+  private growth: RealmPublicGrowth | null;
   private momentThrough = 0;
   private readonly moments = new Map<string, TwitchMomentFact>();
   /** The newest outbox row folded in. */
@@ -45,6 +48,7 @@ export class PublicProjection {
     for (const home of initial.homes) { this.bases.set(home.plotId, home); this.homes.set(home.plotId, home); }
     this.cursor = initial.cursor;
     this.presence = initial.presence;
+    this.growth = initial.growth ?? null;
     this.momentThrough = initial.moments?.throughSeq ?? 0;
     for (const fact of initial.moments?.facts ?? []) this.rememberMoment(fact);
   }
@@ -78,6 +82,7 @@ export class PublicProjection {
         else { this.bases.set(row.plotId, published); this.homes.set(row.plotId, published); }
       }
       if (row.message.type === 'presence' && (!this.presence || row.message.frame.sequence > this.presence.frame.sequence)) this.presence = row.message;
+      if (row.message.type === 'growth' && (!this.growth || row.message.frame.sequence > this.growth.frame.sequence)) this.growth = row.message;
       if (row.message.type === 'moment') {
         this.momentThrough = Math.max(this.momentThrough, row.message.fact.seq);
         if (row.message.current) this.rememberMoment(row.message.fact);
@@ -92,6 +97,7 @@ export class PublicProjection {
     const current: RealmPublicMessage[] = this.momentThrough > 0
       ? [{ type: 'moments.current', throughSeq: this.momentThrough, facts: [...this.moments.values()] }] : [];
     if (this.presence) current.push(this.presence);
+    if (this.growth) current.push({ type: 'growth', frame: { ...this.growth.frame, beats: [] } });
     if (this.castle) current.push(this.castle);
     for (const plot of [...this.homes.keys()].sort()) current.push(this.homes.get(plot)!);
     return current;

@@ -104,7 +104,7 @@ export default function StreamView() {
       const connection = await spectator(signal, revision, unavailable);
       setKingdomName(connection.kingdomName);
       return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId,
-        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
+        presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, growthFeed: connection.growthFeed, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
         realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed, dispose: connection.dispose };
     } } : {}),
     onPhase: next => {

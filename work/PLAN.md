@@ -342,16 +342,22 @@ per date, marathon one day; offline dates do not break streaks. Tent→hut3, cot
 hall180; only third-night hut is founder-specified, other values are versioned v1 balance. Installed
 homes retain their tier; bootstrap invents no attendance or ceremony. Civic v1 levels have day gates
 and a size-neutral pace; person-days retained. No paid inputs, no message-count rewards.
-**Not live yet:** core/read contract does not persist growth or replace owned geometry. Next main slice:
-project trusted committed room facts into durable growth snapshots/milestones in the room transaction,
-then publish the read feed and mount the lane's ceremony. Preserve built houses/Forge attachments.
-Global three-home allocation, follow-tenure pieces, earned channel-point ledger/keepsake issuance and
-historical world/replay binding remain main-owned follow-on seams; no invented inventory or history.
+**Durable source now wired:** realm source facts also reduce growth in their fenced transaction; public
+frames share the outbox/watch. Allocation-only `growth.bindHome` verifies the immutable installed deed/tier;
+interrupted bindings recover without voiding a home. Legacy snapshots replay original facts once, not counters.
+Walking/spectator connections expose `growthFeed`, passed into `SceneOptions`. Bootstrap/late subscribers
+restore quietly; only new delivered beats celebrate. Typecheck/scoped lint/Realm+web builds pass; focused
+core/ingress/outbox19, binding/feed3 and existing browser23 tests pass. Two real Postgres cases pass: growth
+retry/recovery/legacy replay and global three-home allocation. Newly added SQL in Vitest needs
+`--no-fsModuleCache` (its persistent transformed glob cached the old migration list); migration0009 is additive.
+**Next main slice:** apply earned native-home geometry/asset revisions, preserve custom builds/Forge,
+and mount the lane's ceremony; no enlarged house or watched Chronicle claimed yet. Follow-tenure pieces,
+earned channel-point/keepsake ledger and historical world/replay binding remain next consumer seams.
 Specs51–55 cover civic craft, earned card shelf, crier, Chronicle and seeded history; each owns its folder.
 Existing `growth` lane owns home ceremony/growing quarter; no runtime checkpoint delivered yet.
 Brief0034 is in the conductor briefs; requested old depth-progression document absent from this repo.
 
-**Merges this turn:** growth PRD1207db1, raid-road unnamed-holding fix87b79a8, Aggman harbour
+**Recent merges:** growth PRD1207db1, raid-road unnamed-holding fix87b79a8, Aggman harbour
 strandf027d66/1e33a90. Focused22tests, typecheck/scoped lint/web build pass. Root viewed native
 `work/evidence/genesis-aggman/after-hero@1920x1080.png` and `before-after-shingle.png`.
 Shingle connects shore; still too regular/cobbled. Follow-up in lane progress; berth-margin WIP untouched.

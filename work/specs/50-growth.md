@@ -79,3 +79,10 @@ The ceremony is scaffolding, a settling storey, a catching chimney and neighbour
 
 - 2026-11-01: Freeze the first read consumer and small pure model now. Durable room integration remains main's
   next core slice; no live growth, keepsake issuance or Chronicle recording is claimed by this contract.
+- 2026-11-01: Room facts now also reduce the private growth snapshot, with public growth rows in the same
+  fenced transaction/outbox. `growth.bindHome` is allocation-only and checks the installed immutable deed's tier
+  in the transaction; it grants no attendance and changes no geometry. Interrupted bindings recover separately
+  without voiding a home. Legacy snapshots replay their original evidence once. Walking and stream connections
+  expose `growthFeed`; `SceneOptions.growthFeed` carries it to the visual consumer. Bootstrap beats are quiet.
+  Physical home upgrades, ceremonies, civic meshes and Chronicle playback still require their rendering/application
+  work; the entitlement alone must never be presented as an already enlarged house.
