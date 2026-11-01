@@ -47,7 +47,9 @@ export function validateHistory(input: History): History {
     if (previous && (frame.kingdomId !== previous.kingdomId || frame.sequence <= previous.sequence || frame.asOf < previous.asOf)) throw new Error('History must be ordered within one kingdom.');
     if (item.focus !== undefined && item.focus !== 'home' && item.focus !== 'market' || !item.worldRevision.trim() || !item.caption.trim() || item.homes.some(home => !home.plotId.trim() || !home.assetRevision.trim()) || new Set(item.homes.map(home => home.plotId)).size !== item.homes.length || item.homes.length !== frame.homes.length || item.homes.some(home => !frame.homes.some(view => view.plotId === home.plotId))) throw new Error('History needs complete scene revisions and a factual caption.');
     previous = frame;
-    return { frame, homes: item.homes.map(home => ({ ...home })), worldRevision: item.worldRevision, caption: item.caption, ...(item.focus ? { focus: item.focus } : {}) };
+    // A room frame's recent beats are presentation tail, not a historical fact log.
+    // Never hand them to a replay binding where they could become live ceremonies.
+    return { frame: { ...frame, beats: [] }, homes: item.homes.map(home => ({ ...home })), worldRevision: item.worldRevision, caption: item.caption, ...(item.focus ? { focus: item.focus } : {}) };
   });
   return freezeSnapshot({ label: input.label, snapshots });
 }

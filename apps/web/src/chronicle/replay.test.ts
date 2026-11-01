@@ -18,6 +18,13 @@ describe('Chronicle replay', () => {
     expect(binding.replace.mock.calls.map(([s]) => s.homes[0].assetRevision)).toEqual(['tent', 'hut', 'tent', 'hut']);
     expect(replay.state()).toMatchObject({ status: 'ready', label: 'SIMULATED', index: 1, snapshot: { caption: 'Night 2' } });
   });
+  it('strips the recent presentation tail before applying historical snapshots', () => {
+    const { replay, binding } = setup(), recorded = snapshot(1, 'hut');
+    recorded.frame.beats.push({ kind: 'home-grown', sourceSeq: 1, at: 1000, plotId: 'plot', from: 'tent', to: 'hut', qualifiedDays: 3 });
+    replay.load({ label: 'SIMULATED', snapshots: [recorded] });
+    expect(binding.replace.mock.calls[0]![0].frame.beats).toEqual([]);
+    expect(recorded.frame.beats).toHaveLength(1);
+  });
   it('owns immutable historical snapshots after loading', () => {
     const { replay, binding } = setup(), first = snapshot(1, 'tent');
     replay.load({ label: 'SIMULATED', snapshots: [first, snapshot(2, 'hut')] });
