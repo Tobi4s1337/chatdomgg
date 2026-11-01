@@ -16,6 +16,13 @@ describe('soul weather surfaces', () => {
       scene.traverse(object => { if (object instanceof THREE.InstancedMesh) instances.push(object); });
       const lamps = instances.filter(object => object.count === 64);
       expect(lamps).toHaveLength(2);
+      const textures=new Set<THREE.Texture>();
+      scene.traverse(object=>{if(object instanceof THREE.Mesh || object instanceof THREE.Sprite){
+        const owned=Array.isArray(object.material)?object.material:[object.material];
+        for(const material of owned)if('map' in material && material.map instanceof THREE.Texture)textures.add(material.map);
+      }});
+      const releaseTexture=vi.fn();
+      textures.forEach(texture=>texture.addEventListener('dispose',releaseTexture));
       const release = vi.fn();
       instances.forEach(object => object.addEventListener('dispose', release));
       for (let i = 0; i < 20; i++) picture.update(frame, i / 60);
@@ -24,6 +31,8 @@ describe('soul weather surfaces', () => {
       picture.dispose();
       expect(scene.children).toHaveLength(0);
       expect(release).toHaveBeenCalledTimes(instances.length);
+      expect(textures.size).toBeGreaterThan(0);
+      expect(releaseTexture).toHaveBeenCalledTimes(textures.size);
       expect(() => createSoulPresentation(scene, { topology: { ...topology, lamps: [...topology.lamps, topology.lamps[0]!] } })).toThrow(RangeError);
     } finally { vi.unstubAllGlobals(); }
   });

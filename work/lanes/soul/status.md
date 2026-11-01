@@ -1,30 +1,29 @@
 # SO10 current checkpoint
 
-The only PRD task remains open. Stay on `lane/soul`; no main writes or pushes. Main was merged cleanly in `70cf816`. The smooth-weather correction is committed in `79f3158`; inspected dusk/partial audio and refreshed integration handoff are in `d91c927`. Earlier owned-module and correction commits remain in history.
+Current instruction: **no new sub-scopes; land and verify the existing checkpoint**. Stay on `lane/soul`; never push or write main. Main merged cleanly in `51db20a` this iteration; the verified source and handoff checkpoint is `068a770`. The only PRD task remains open; no LANE COMPLETE.
 
-## What is real
+## Working source
 
-World, audio, presentation, host and review modules exist under their three soul folders. Keepers follow authored routes at 0.55m/s, dusk lamps switch on actual visits at 18:45, offline weather follows deterministic history, audio shares the existing unlocked master, and the host owns only its resources. The review is explicitly SIMULATED and uses authored Hearth homes, not real viewer identities.
+World/audio/presentation modules and the simulated review are implemented. Dynamic witnessed ship-arrival snapshots now reach the host without remounting, with consumption/deduplication through temporary gaps, overlapping arrivals, mute, mount and seeks. The exact main proposal forwards an arrival callback, preserves main's director/live dusk and adds no shared contracts.
 
-The animation sampler now smoothly interpolates deterministic minute weather anchors rather than stepping. Fifteen focused tests pass. Whole workspace typecheck, lint and build passed after syncing and refreshing workspace dependency links with the frozen lockfile. Exact commands and limitations: `work/evidence/soul/verification-2026-11-01.txt`. The previous broad test attempt had outside-scope failures (`repository-check.txt`); do not claim pnpm verify green.
+Review homes now use the existing voxel rasterizer and mesher, preserving ordered cuts. A single owned module worker prepares three families serially and transfers the buffers; pending work settles on disposal or failure. Exposed surfaces merge by palette, with baked AO/sky shading; roof snow follows actual upward faces and peak caps follow seasonal cover. The haze is feathered and its texture is released. Rain smoothstep bounds and first-light instance culling are corrected. The review shows an opening state until a meaningful frame and exposes scene-cost counters to capture metadata.
 
-## Looks and listens
+## Verification
 
-First-look stills and `second-look/dusk@1440x900.png` were opened with view_image. The new dusk camera and civic pools read, but the ground horizon remained a hard polygon edge. Source now extends ground past the fog range and matches sky to fog colour. This builds but still needs a fresh look. Phone and stream need current captures too.
+Final typecheck, lint and workspace build pass. Six focused files, **25 soul tests pass**. The built worker bundle passed two real CPU worker-thread messages and transfers (`work/evidence/soul/built-worker-check.json`). Full details: `work/evidence/soul/checkpoint-2026-11-01.md`.
 
-Partial actual browser-rendered listens and per-case measurements are in `work/evidence/soul/audio/`; its README is authoritative about which cases completed. All valid cases carry a matching build fingerprint. Do not use old /tmp WAVs without the matching JSON. No complete final matrix/gallery or subjective listening is claimed. `evidence.mjs` now rejects missing, stale or mixed-build stills before publishing a gallery.
+Full repository `pnpm test` was attempted with a four-minute bound; it reported outside-scope Twitch-moments and light-field timeouts and ended 124 before completion. Do not claim pnpm verify green. No outside tests/configurations were edited.
 
-Three consecutive bounded still queue waits timed out before a browser launched. The Ralph retry limit was reached for this iteration. Do not retry again in this iteration; leave the shared lock alone. Capture guard notes in progress.txt describe older interrupted series commands and must remain. All current tools take exactly one still or clip per invocation and close their browser/server before release.
+## Evidence still outstanding
 
-## Integration needs
+The most recent inspected still is `work/evidence/soul/second-look/dusk@1440x900.png` from an older intermediate build. New geometry, haze/snow, horizon and loading presentation still need fresh desktop, phone and stream looks. No visual completion is claimed. The final gallery rejects stale/mixed still builds.
 
-`needs-main.md` and refreshed `main-soul.patch` are an exact dry-run-checked proposal against this sync, not applied/live-tested code. New dock/growth imports, props and light sources are preserved. Civic emitters feed existing lighting and water reflections; walking audio uses the walker position; cue ducking follows cue time.
+Seven matching audio clips are retained and linked in `work/evidence/soul/audio/README.md`. Remaining biome/hour/stream/hamlet clips, lifecycle/stall/duck browser checks, full finalization/loudness and subjective listening remain open.
 
-Main must bind real civic bakery/forge/quay/lamp anchors and navigable local routes. It must coordinate an authoritative continuous kingdom clock with the director’s go-live dusk transition; do not force wall-clock sky and undo the vision. The proposal accepts `soulClock`, with fixed simulated evidence override only. Never invent bindings or use a citizen home as a civic bakery. Real walk/stream and packed-shader compilation/look remain unproven.
+Both the first missing audio case and corrected dusk still timed out after ten minutes in the shared FIFO queue this iteration, before a browser/server started. Their processes are terminal. Capture tools retain their ticket for a bounded ten minutes without a browser and acquire only for **one still or short clip**, release between. Preserve older capture-guard notes. No owned servers/browser processes remain.
 
-## Next iteration
+## Main-owned completion seam
 
-1. Ralph sync from main; resolve only scope. Check whether the main integration seam landed.
-2. Capture corrected dusk first, then phone and stream, then all other named day stills. One invocation/lease each. Inspect every result. Current web dist is built, but rebuild after source/main changes.
-3. Finish remaining audio cases and lifecycle/stall/duck checks individually; finalize and analyze only the complete same-build matrix. Then generate the evidence gallery after all stills are current and looked at.
-4. Demonstrate the actual main-owned walk and stream before ticking SO10. Keep the PRD box open until then; no LANE COMPLETE.
+`needs-main.md` and `main-soul.patch` apply-check cleanly to this sync. They remain a proposal, not applied/live-tested code. Main must bind real bakery/forge/quay/lamp anchors and connected routes, coordinate a continuous absolute kingdom clock with the director's live dusk, supply witnessed arrivals, and demonstrate the real walk/stream and packed-voxel weather shader. Never invent these bindings or count the isolated review as a live kingdom.
+
+The remaining order is to integrate that seam and finish its required captures/listens, without opening further sub-scopes. The requirement-by-requirement completion audit is `completion-audit.md`. Tick SO10 and write LANE COMPLETE only when the whole end state is demonstrated.
