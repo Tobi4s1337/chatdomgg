@@ -1,10 +1,10 @@
-import type { KingdomId, Vec3 } from '@chatdom/shared';
+import { VoxelBlueprintSchema, type KingdomId, type Vec3 } from '@chatdom/shared';
 import type { CollisionWorld, RealmBootstrap, RealmFoundedManifest, RealmPrivateState } from '@chatdom/shared/realm';
 import type { RealmFoundedScene, SettlementPlan } from '@chatdom/world';
 import type { DurableKingdomOptions } from '../persistence/kingdom';
 import { foundedSpawnAnchors } from './anchors';
 import { compileFoundedScene, sampleFoundedTerrain } from './collision';
-import { canonicalSceneJson } from './codec';
+import { assetHashOf, canonicalSceneJson } from './codec';
 import { loadAdoptedPlan, type FoundedLayoutSource } from './load';
 import type { NativeTown } from './native';
 import { enrichNativePictureGroves } from './picture-groves';
@@ -70,6 +70,20 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
     const cached = staged.get(kingdomId), head = await source.currentLayout(kingdomId);
     if (cached && cached.homes === state.homes && cached.castle === state.castle && cached.attachments === state.attachments
       && head?.revision === cached.prepared.scene.layoutRevision) return cached.prepared;
+    // First chat claims a native home already standing here. Rebind its public ownership only after checking
+    // the actual blueprint against that placement's immutable asset; no geometry or scene bytes change.
+    if (cached && head?.revision === cached.prepared.scene.layoutRevision && state.kingdomId === kingdomId
+      && state.origin === source.origin && cached.castle === state.castle && cached.attachments === state.attachments) {
+      const build = await claimNativeHomes(cached.prepared.build, cached.homes, state.homes);
+      if (build) {
+        const latest = await source.currentLayout(kingdomId);
+        if (!latest || latest.revision !== head.revision) throw new Error('The adopted layout changed during founded world preparation.');
+        const prepared: FoundedPreparedWorld = { ...cached.prepared, build,
+          manifestFor: checkpoint => foundedCheckpointMatches(build, checkpoint) ? build.manifest : null };
+        staged.delete(kingdomId); staged.set(kingdomId, { homes: state.homes, castle: state.castle, attachments: state.attachments, prepared });
+        return prepared;
+      }
+    }
     const adopted = await loadAdoptedPlan(source, kingdomId, state), native = await store.native(kingdomId, adopted.plan, source.origin);
     // Add reviewed public furnishings around installed stalls without regenerating the pinned town. These
     // solids use the same immutable scene, digest and room adoption as homes; never a browser-only overlay.
@@ -111,6 +125,24 @@ export function createFoundedWorldLoader(source: FoundedLayoutSource, store: Fou
       return foundedWorldAdoption(next, () => publish(kingdomId, next));
     } };
   }, current: kingdomId => current.get(kingdomId) };
+}
+
+/** Only additive native ownership qualifies. Edits, removals, attachments and layout changes still assemble. */
+async function claimNativeHomes(build: FoundedSceneBuild, before: RealmPrivateState['homes'], after: RealmPrivateState['homes']): Promise<FoundedSceneBuild | null> {
+  if (Object.entries(before).some(([id, home]) => after[id] !== home)) return null;
+  const added = Object.entries(after).filter(([id]) => !Object.hasOwn(before, id));
+  if (!added.length) return null;
+  const claims = new Map<string, FoundedHomeBinding>();
+  for (const [id, home] of added) {
+    const plot = build.scene.plan.homes.find(plot => plot.id === id), binding = build.homes.find(home => home.plotId === id);
+    const placement = build.scene.placements.find(piece => piece.id === `home:${id}` && piece.plotId === id);
+    if (home.id !== id || !plot || home.slot !== plot.slot || binding?.source !== 'native' || !placement
+      || Object.keys(home.attachments).length || home.blueprint.kind !== 'home' || !VoxelBlueprintSchema.safeParse(home.blueprint).success
+      || await assetHashOf(home.blueprint) !== placement.assetHash) return null;
+    claims.set(id, { plotId: id, source: 'owned', revision: home.revision, digest: home.digest, attachments: [] });
+  }
+  return { ...build, homes: build.homes.map(home => claims.get(home.plotId) ?? home),
+    counts: { ...build.counts, ownedHomes: build.counts.ownedHomes + claims.size } };
 }
 
 /** Public checkpoint identity is separate from committed private sequence. Native plots have no owned view. */

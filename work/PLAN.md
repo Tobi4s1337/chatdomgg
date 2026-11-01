@@ -335,7 +335,7 @@ Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo fill/warm pools, castl
 sparse grey-violet smoke, sculpted land/groves and AS10 citizens. No new systems beyond live
 wiring; merge good runtime checkpoints, one visible change per turn, look before accepting.
 
-**Live-Twitch checkpoint:** preserved producer snapshot in `../worktrees/main-live-twitch`
+**Live-Twitch2cdb14d (merged/pushed):** preserved producer snapshot in `../worktrees/main-live-twitch`
 (`integrate/live-twitch-checkpoint`); producer WIP untouched. Main03a50f1 froze private
 observation/strike evidence; public raid body now freezes with producer/renderer consumers.
 Bits, v2 Hype Train, incoming raid → Herald durable outbox → authenticated realm ingress →
@@ -352,11 +352,21 @@ missed/lease expired: instant first arrival remains weak. Twitch CLI exits99 eve
 fixture generation; HTTP proof is NOT CLI-command proof. Owned smoke schema
 `main_live_smoke_20261101` remains; owned5172/5173 services stopped, no live event injected.
 
-**Real grant checked:** chat/chatters/stream work; tobi4s_ lacks `bits:read` and
-`channel:read:hype_train`. After merge: Herald authorize broadcaster helper, preserving all
-existing grants, then check-auth. Raid needs no extra grant. Real cheer/hype/raid/Forge and
-production raid picture remain UNPROVEN. No observer waits for the user. Next: complete
-checkpoint merge, check managed pickup; user consent for missing scopes, then one real event.
+**Native ownership latency fix:** `founded/provider.ts` now reuses the standing scene for
+additive native-home claims only after actual blueprint hash validation, unchanged prior
+homes/castle/attachments and exact adopted layout checks. Public home binding validation
+remains; custom geometry still rebuilds. Same2.1MB bytes/world; measured three claims
+3702/3424/2927ms →6/1/2ms. Provider tests2/2, typecheck/scoped lint/realm build pass. End-to-end
+HTTP speedup is not yet measured; cold scene/lease work is unchanged.
+
+**Real services:** managed2cdb14d picked up; health ready and actual raid subscription enabled,
+no real spectacle observed. User is approving `bits:read`/`channel:read:hype_train` now; consent
+helper owns5195 temporarily and Forge will return itself—DO NOT chase/restart5195. Re-check
+coverage after consent; do not start another authorize helper. Real events/picture UNPROVEN.
+Raid picture attempts both terminated/cleaned: dev import failed, then built preview met
+persistent entry503 although writer was healthy/fully delivered. No raid or frame produced.
+Helper `dragon_stream_capture` now owns one bounded BACKEND-ONLY guard diagnostic in isolated
+`main-live-twitch`: safe mismatch counts/revisions, no browser/lease/capture. No retry film.
 
 **Sky32b0197 / main33fb2e9:** actual drawn terrain now supplies lair, train ring and bunting;
 dragon circles castle and contributes fire/sky light. Root viewed native1920×1080
