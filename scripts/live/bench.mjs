@@ -16,7 +16,7 @@
 // repository. Postgres schema: live_twitch_bench. Nothing here prints DATABASE_URL or a secret.
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
@@ -46,7 +46,7 @@ async function up() {
   const dir = stateDir();
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const previous = readState();
-  if (previous?.supervisor && alive(previous.supervisor)) fail('the bench is already running; run `bench.mjs down` first.');
+  if (recordedSupervisor(previous)) fail('the bench is already running; run `bench.mjs down` first.');
   const secrets = previous?.secrets ?? {
     ingress: randomBytes(32).toString('hex'), door: randomBytes(24).toString('hex'), evidence: randomBytes(32).toString('hex'),
   };
@@ -121,7 +121,8 @@ async function up() {
   pids.web = start('web', join(ROOT, 'node_modules/.bin/vite'), ['preview', '--outDir', join(buildRoot, 'web'), '--port', String(BENCH.webPort), '--strictPort', '--host', '127.0.0.1'], env({
     CHATDOM_REALM_TARGET: `http://127.0.0.1:${BENCH.realmPort}`, CHATDOM_API_TARGET: 'http://127.0.0.1:9',
   }), join(ROOT, 'apps/web'));
-  writeFileSync(join(dir, 'state.json'), JSON.stringify({ secrets, schema, supervisor: process.pid, pids, startedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+  writeFileSync(join(dir, 'state.json'), JSON.stringify({ secrets, schema, supervisor: process.pid,
+    supervisorIdentity: processIdentity(process.pid), pids, startedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
   let stopping = false;
   const stopAll = (why) => {
     if (stopping) return;
@@ -201,7 +202,7 @@ function start(name, command, args, env, cwd = ROOT) {
 
 function down() {
   const state = readState();
-  if (!state?.supervisor || !alive(state.supervisor)) { console.info('bench: nothing recorded as running'); return; }
+  if (!recordedSupervisor(state)) { console.info('bench: no matching supervisor in this process namespace; stop it from its owning session.'); return; }
   // The supervisor stops its own three processes and exits.
   process.kill(state.supervisor, 'SIGTERM');
   console.info(`  asked the bench (${state.supervisor}) to stop`);
@@ -211,7 +212,16 @@ async function status() {
   console.info(JSON.stringify(await health(), null, 2));
 }
 
-function alive(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
+/** A PID alone is unsafe across tool-session namespaces and process reuse. Never signal an unmatched process. */
+function processIdentity(pid) {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return `${readlinkSync(`/proc/${pid}/ns/pid`)}:${stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19]}`;
+  } catch { return null; }
+}
+function recordedSupervisor(state) {
+  return !!state?.supervisorIdentity && processIdentity(state.supervisor) === state.supervisorIdentity;
+}
 async function listening(port) {
   try { await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(800) }); return true; } catch (error) {
     return !/ECONNREFUSED/.test(String(error?.cause?.code ?? error?.cause ?? ''));

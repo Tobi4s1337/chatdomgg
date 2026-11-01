@@ -88,7 +88,7 @@ export interface SceneOptions {/** Read-only isolated history; never hands citiz
 export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
-  let disposed=false,raf=0,loaded=false,forgeCameraDirected=false,lastFrame=performance.now(),time=options.time??30,hour=options.hour,targetHour=hour,camName=options.camera;
+  let disposed=false,raf=0,renderHolds=0,loaded=false,forgeCameraDirected=false,lastFrame=performance.now(),time=options.time??30,hour=options.hour,targetHour=hour,camName=options.camera;
   let capturePose:{eye:Vec3;target:Vec3;fov:number}|null=null;
   let poseRevision=0;
   // A public feed uses the wall clock even when a capture URL carries a fixture time.
@@ -508,7 +508,7 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   const listenerRight=new THREE.Vector3();
   let forgeShade=0;
   function render(now:number){
-    if(disposed)return;try {const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
+    if(disposed||renderHolds>0)return;try {const dt=Math.max(0,(now-lastFrame)/1000);lastFrame=now;
     if(loaded&&debug.ready&&!fixedTime)time+=dt;
     if(ownSimulation)simulation.advance(time);
     // A transport retry does not revoke a still-valid presence lease or send everyone home again.
@@ -731,6 +731,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   loaded=true;lastFrame=performance.now();options.onProgress('The gate is opening',1);
   function detachWalk(){walkGeneration++;walkSelected=false;walk?.dispose();walk=undefined;options.onWalkers?.([]);camera.clearViewOffset();camera.filmOffset=0;camera.updateProjectionMatrix();instancesDirty=true;}
   return {layout,debug,sound,build,forge,forgeDirecting:()=>forgeCameraDirected,momentDirecting:()=>forgeCameraDirected||arrivalCameraDirected||momentCameraDirected||growthCameraDirected||dockCameraDirected,
+    /** A full-screen native replay owns the renderer budget; live subscriptions and authority remain connected. */
+    suspendRendering(){
+      renderHolds++;cancelAnimationFrame(raf);let released=false;
+      return ()=>{if(released)return;released=true;renderHolds--;if(!disposed&&renderHolds===0){lastFrame=performance.now();raf=requestAnimationFrame(render);}};
+    },
     activateDock,
     async attachWalk(binding:KingdomWalkBinding){
       if(disposed)throw new Error('The kingdom has closed');

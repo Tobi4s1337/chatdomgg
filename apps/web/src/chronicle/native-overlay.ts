@@ -11,7 +11,7 @@ export interface NativeChronicleOptions {
   readonly kingdomId: string;
   readonly host?: HTMLElement;
   /** Retained live engine; used only to suspend local controls/dock and share UI sound. */
-  readonly liveEngine?: Pick<Engine, 'selectWalk' | 'walkSelected' | 'activateDock' | 'inspect' | 'sound'>;
+  readonly liveEngine?: Pick<Engine, 'selectWalk' | 'walkSelected' | 'activateDock' | 'inspect' | 'sound' | 'suspendRendering'>;
   readonly onOpen?: () => void;
   readonly onClose?: (error?: unknown) => void;
 }
@@ -31,6 +31,7 @@ export function openDurableChronicle(options: NativeChronicleOptions) {
   let view: ReturnType<typeof mountChronicle> | undefined, data: DurableChronicle | undefined;
   let requestedRevision = '', sceneError: unknown;
   const liveWalk = options.liveEngine?.walkSelected() ?? false, liveDock = options.liveEngine?.inspect().dock.active ?? false;
+  const resumeLive = options.liveEngine?.suspendRendering();
   const ownSound = options.liveEngine ? undefined : createKingdomSound(), audio = options.liveEngine?.sound ?? ownSound!;
   const sound = () => { void audio.unlock().catch(() => {}); audio.cue('wood'); };
   const clear = () => { active?.engine.dispose(); active?.canvas.remove(); active = undefined; root.dataset.ready = 'false'; root.dataset.worldRevision = ''; };
@@ -38,7 +39,7 @@ export function openDurableChronicle(options: NativeChronicleOptions) {
     if (closed) return; closed = true; abort.abort(); clearInterval(lightStatus);
     try { view?.dispose(); } catch (failure) { error ??= failure; }
     for (const engine of pending) engine.dispose(); pending.clear(); clear(); root.remove(); ownSound?.dispose();
-    options.liveEngine?.selectWalk(liveWalk); options.liveEngine?.activateDock(liveDock);
+    options.liveEngine?.selectWalk(liveWalk); options.liveEngine?.activateDock(liveDock); resumeLive?.();
     try { options.onClose?.(error); } finally { if (previousFocus?.isConnected) previousFocus.focus(); }
   };
   const trap = (event: KeyboardEvent) => {
@@ -78,7 +79,7 @@ export function openDurableChronicle(options: NativeChronicleOptions) {
               hour: 17.8, time: 30, camera: selected ? 'window' : 'hero', ...(selected ? { focusSlot: selected.slot } : {}),
               source: world.scene.origin === 'simulated' ? 'simulated' : 'herald', presenceOrigin: world.scene.origin,
               presenceFeed: unrecordedPresence(world.scene.kingdomId, world.scene.origin, snapshot.frame.asOf),
-              signal: signal ?? abort.signal, onProgress: () => {}, onNames: () => {}, onSource: () => {}, onError: message => {
+              signal: signal ?? abort.signal, onProgress: text => { if (!signal?.aborted && !closed) root.dataset.stage = text; }, onNames: () => {}, onSource: () => {}, onError: message => {
                 candidateError = new Error(message);
                 if (!signal?.aborted && !closed) {
                   sceneError = candidateError;

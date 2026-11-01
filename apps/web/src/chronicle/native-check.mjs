@@ -13,7 +13,8 @@ if (!url || !['desktop', 'phone', 'record'].includes(mode)) throw new Error('Pas
 const benchEnv = args.includes('--bench-env') ? value('--bench-env') : undefined;
 if (benchEnv && !benchEnv.startsWith('/tmp/chatdom-winddown-live.')) throw new Error('Only the owned winddown capture harness may be resumed.');
 const evidence = resolve('work/evidence/chronicle-native'), run = promisify(execFile);
-let release, bench, browser, deadline;
+let release, bench, browser, deadline, page;
+const problems = [];
 const stop = async () => {
   await browser?.close().catch(() => {}); browser = undefined;
   if (bench && bench.exitCode === null && bench.signalCode === null) {
@@ -41,13 +42,14 @@ try {
       await new Promise(resolveWait => globalThis.setTimeout(resolveWait, 250));
     }
   }
+  console.log('[chronicle] owned harness ready; opening actual product route');
   await mkdir(evidence, { recursive: true });
   browser = await chromium.launch({ channel: 'chrome', headless: true,
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const width = mode === 'phone' ? 390 : 1440, height = mode === 'phone' ? 844 : 900;
   const raw = resolve(evidence, 'raw');
   const context = await browser.newContext({ viewport: { width, height }, reducedMotion: 'reduce', ...(mode === 'record' ? { recordVideo: { dir: raw, size: { width, height } } } : {}) });
-  const page = await context.newPage(), problems = [];
+  page = await context.newPage();
   page.on('pageerror', error => problems.push(error.message));
   page.on('console', message => { if (message.type() === 'error') problems.push(message.text().slice(0, 400)); });
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -55,6 +57,7 @@ try {
   if (!new URL(url).searchParams.has('chronicle') && !(await overlay.count())) await page.getByRole('button', { name: 'Chronicle', exact: true }).click({ timeout: 180_000 });
   await page.waitForSelector('.chronicle-native[data-ready="true"][data-loading="false"]', { timeout: 180_000 });
   await page.waitForSelector('.chronicle-native[data-settled="true"]', { timeout: 120_000 });
+  console.log('[chronicle] native historical scene drawn with settled lighting');
   const slider = page.getByRole('slider', { name: 'Travel through the nights' });
   const entries = Number(await slider.getAttribute('max')) + 1;
   if (entries < 2) throw new Error(`The native history has only ${entries} recorded night.`);
@@ -64,7 +67,7 @@ try {
     const video = page.video();
     // Show a real home construction within the short evidence clip rather than only quiet early nights.
     const start = Math.max(0, Math.min(25, entries - 10));
-    await slider.evaluate((element, index) => { element.value = String(index); element.dispatchEvent(new Event('input', { bubbles: true })); }, start);
+    await slider.evaluate((element, index) => { element.value = String(index); element.dispatchEvent(new globalThis.Event('input', { bubbles: true })); }, start);
     await page.waitForFunction(index => document.querySelector('.chronicle-track input')?.value === String(index) && document.querySelector('.chronicle-native')?.dataset.loading === 'false', start, { polling: 250, timeout: 120_000 });
     await page.waitForSelector('.chronicle-native[data-settled="true"]', { timeout: 120_000 });
     const clipFirst = await slider.getAttribute('aria-valuetext');
@@ -94,4 +97,12 @@ try {
     await context.close(); console.log(`Captured and checked native ${mode}: ${file}`);
   }
   if (problems.length) throw new Error(problems.join('\n'));
+} catch (error) {
+  if (page && !page.isClosed()) {
+    const state = await page.evaluate(() => ({ overlay: document.querySelector('.chronicle-native')?.dataset,
+      caption: document.querySelector('.chronicle-caption')?.textContent, loading: document.querySelector('.chronicle-native-loading')?.textContent,
+      slider: document.querySelector('.chronicle-track input')?.getAttribute('aria-valuetext'), live: window.__chatdomKingdom?.debug })).catch(() => null);
+    await writeFile(resolve(evidence, `${mode}-failure.json`), JSON.stringify({ message: error.message, state, problems }, null, 2));
+  }
+  throw error;
 } finally { globalThis.clearTimeout(deadline); await stop(); await release?.(); }
