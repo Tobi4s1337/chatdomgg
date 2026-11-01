@@ -1,0 +1,23 @@
+{
+  "before": 0.012232153851656534,
+  "muted": 0,
+  "resumed": 0.013195827057633783,
+  "afterSeek": 0.015089904783667575,
+  "inspection": {
+    "voices": 1,
+    "sources": 1,
+    "peakVoices": 6,
+    "peakSources": 10,
+    "played": {
+      "lute": 5,
+      "strings": 3,
+      "woodwind": 2,
+      "rigging": 1,
+      "drip": 1,
+      "forge": 1
+    },
+    "muted": false,
+    "profile": "walk"
+  },
+  "buildFingerprint": "0684b0bfe20f85505be29b1b36511c0e30ff69914e0118779eba64612900665f"
+}
