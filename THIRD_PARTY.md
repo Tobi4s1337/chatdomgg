@@ -78,3 +78,9 @@ The fallback palette in `packages/vox-import/src/palette.ts` is adapted from eph
 commit `3bff8feaa7d94a6237f2c07dc4ca3c3d268ef06c`, under MIT, copyright (c) 2026 ephtracy.
 The full notice is retained in [packages/vox-import/THIRD_PARTY.md](packages/vox-import/THIRD_PARTY.md).
 The parser, palette matching, placement tool and lantern-cottage review fixture are authored in this repository.
+
+## Twitch marks
+
+| Source | Version/license | Treatment |
+|---|---|---|
+| [Twitch Glitch logo](https://brand.twitch.com/) | Brand kit, Logo Usage Guidelines v3.0 (14 Dec 2023) · trademark of Twitch Interactive, Inc. | `apps/web/src/site/twitch/glitch_flat_purple.svg`, unaltered, used only on the chatdom.io sign-in seal under Twitch's Trademark Guidelines and Developer Services Agreement; never in the panel extension. Rules followed: `work/lanes/front-door/twitch-brand.md`. |

@@ -26,8 +26,8 @@ beforeAll(async () => {
   await put('assets/index-AbCdEf12.js.br', brotliCompressSync(SCRIPT));
   await put('assets/index-AbCdEf12.js.gz', gzipSync(SCRIPT));
   await put('assets/logo.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>');
-  await put('door/assets/door-Qr5tUv78.css', 'body{margin:0}');
-  await put('door/index.html', '<!doctype html><title>Door</title>');
+  await put('site/assets/site-Qr5tUv78.css', 'body{margin:0}');
+  await put('site/index.html', '<!doctype html><title>Door</title>');
   // A sibling that came out larger than its original is never offered.
   await put('tiny.txt', 'hi');
   await put('tiny.txt.gz', gzipSync('hi'));
@@ -70,8 +70,8 @@ function get(path: string, headers: OutgoingHttpHeaders = {}, method = 'GET') {
 describe('indexBuild', () => {
   it('lists every built file by its URL path, and only files inside the build', () => {
     expect([...files.keys()].sort()).toEqual([
-      '/archive.gz', '/assets/index-AbCdEf12.js', '/assets/logo.svg', '/data/blob.unknownext', '/door/assets/door-Qr5tUv78.css',
-      '/door/index.html', '/index.html', '/models/Tower.GLB', '/tiny.txt',
+      '/archive.gz', '/assets/index-AbCdEf12.js', '/assets/logo.svg', '/data/blob.unknownext', '/index.html',
+      '/models/Tower.GLB', '/site/assets/site-Qr5tUv78.css', '/site/index.html', '/tiny.txt',
     ]);
     // A symlink out of the build is not followed, and no lookup can climb out of it.
     expect(files.get('/escape.txt')).toBeUndefined();
@@ -82,7 +82,7 @@ describe('indexBuild', () => {
 
   it('marks only content-hashed assets as immutable', () => {
     expect(files.get('/assets/index-AbCdEf12.js')?.immutable).toBe(true);
-    expect(files.get('/door/assets/door-Qr5tUv78.css')?.immutable).toBe(true);
+    expect(files.get('/site/assets/site-Qr5tUv78.css')?.immutable).toBe(true);
     expect(files.get('/assets/logo.svg')?.immutable).toBe(false);
     expect(files.get('/index.html')?.immutable).toBe(false);
     expect(files.get('/tiny.txt')?.immutable).toBe(false);
@@ -96,7 +96,7 @@ describe('indexBuild', () => {
   it('knows the content type of each file by extension, whatever its case', () => {
     expect(files.get('/index.html')?.type).toBe('text/html; charset=utf-8');
     expect(files.get('/assets/index-AbCdEf12.js')?.type).toBe('text/javascript; charset=utf-8');
-    expect(files.get('/door/assets/door-Qr5tUv78.css')?.type).toBe('text/css; charset=utf-8');
+    expect(files.get('/site/assets/site-Qr5tUv78.css')?.type).toBe('text/css; charset=utf-8');
     expect(files.get('/assets/logo.svg')?.type).toBe('image/svg+xml');
     expect(files.get('/models/Tower.GLB')?.type).toBe('model/gltf-binary');
     expect(files.get('/data/blob.unknownext')?.type).toBe('application/octet-stream');

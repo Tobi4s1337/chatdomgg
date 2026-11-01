@@ -88,6 +88,24 @@ and a note here, and front-door answers in its next session.
 | site footer | every public page | "Imprint · Impressum", "Privacy", "Terms", "How it works", and "Live from Twitch. Chatdom is not affiliated with or endorsed by Twitch." |
 | How it works sheet | the Atlas's carved tab | The same four pictures as `/how-it-works`. |
 
+**Landed in FD10** (on chatdom.io's own pages; FD11 moves them into `packages/ui` without changing these
+contracts):
+
+- **The return-view key.** `sessionStorage['chatdom:return-view:v1']` holds
+  `{ path, at, section?, scrollY?, view? }`: `path` is a plain path on our origin, `at` the time it was written (ms),
+  `section` the id of the section in view, `scrollY` a scroll position, and `view` an object a view handle gives
+  (the Atlas's position, zoom and open card), stored as given and handed back untouched. It is written just before
+  the browser leaves for `/api/realm/auth/start` and read once on the way back; a view older than 15 minutes is
+  ignored. The sign-in service returns only to the paths its rule accepts (`/`, `/map`, `/map/<login>`, one-word
+  paths); a page it refuses (`/how-it-works`) comes back to `/`, and the front page carries the visitor on to the
+  stored path. Code: `apps/web/src/site/return-view.ts`.
+- **The sign-in seal and the Twitch mark** are for chatdom.io pages only. **No Glitch inside the Twitch panel
+  extension** (Extensions Guidelines 4.3: no Twitch name, branding, logo or Glitch in extension content).
+  panel-window: the panel's footer links to `/privacy`, `/terms` and `/imprint` without the mark or the Twitch line.
+  Details in `twitch-brand.md`.
+- **The session name.** The seal shows the Twitch name once the session reply carries one (an optional `name`, asked
+  of main); until then it says "Signed in with Twitch".
+
 **Heads-up: the kit stops printing SIMULATED** (decision 25). `ProvenanceSeal`, `provenanceLines` and the passport
 and growth-card helpers keep their API but will not print the word. front-door lists every capture and test that
 reads the word before changing it and writes the list here, so each owner can update their own checks in their own
