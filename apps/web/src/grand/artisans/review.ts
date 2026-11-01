@@ -114,6 +114,7 @@ const requestedLod = Math.max(0, Math.min(3, Number(params.get('lod') ?? 0) || 0
 const dusk = view === 'dusk' || Number(params.get('hour') ?? 17) >= 19;
 
 const names: Record<string, readonly [string, string, string[]]> = {
+  'willow-bank': ['forest', 'createRiparianGrove', [seed]],
   forest: ['forest', 'createForest', [seed, species]], tree: ['forest', 'createTree', [species, seed]],
   geology: ['geology', 'createGeologyReview', [seed]], water: ['geology', 'createWatercourse', [seed]],
   fields: ['fields', 'createFields', [seed]], windmill: ['fields', 'createWindmill', [seed]],

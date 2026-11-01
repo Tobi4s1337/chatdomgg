@@ -1,4 +1,4 @@
-import { KitBuilder, random, type ArtisanKit, type Point } from '../kit';
+import { CLAY, KitBuilder, random, type ArtisanKit, type Point } from '../kit';
 
 /** Shapes and placements are presentation data on the grand 0.5 m grid. */
 export type ForestSpecies = 'gold' | 'pine' | 'cherry' | 'teal' | 'birch' | 'willow';
@@ -151,15 +151,17 @@ export function createTree(species: ForestSpecies, seedKey: string, scale = 1): 
     branch([0, 0, 0], [shoulder, 9, 0], 1);
     branch([shoulder, 9, 0], [lean, 19, 0], 1);
   } else if (species === 'cherry') {
-    top = 20;
-    // Overlapping low, wide flowering boughs, with visible scallops underneath.
+    top = 21;
+    // Blossom boughs overlap at their shoulders but rise on differing levels;
+    // the lower open wedges show the dark forks and avoid one flat pink slab.
     const shoulder = Math.round(lean / 2);
-    puff(lean, 15.5, 0, 3.1, 2.5, 3.0);
+    puff(lean, 15.9, 0, 2.8, 2.3, 2.7);
+    const tiers = [-1.1, 2.0, -0.2, 2.8];
     for (let i = 0; i < 4; i++) {
-      const a = twist + i * Math.PI / 2 + (rng() - 0.5) * 0.35;
-      const r = 4.1 + rng() * 1.3, x = lean + Math.cos(a) * r, z = Math.sin(a) * r;
-      const y = 14 + rng() * 2;
-      puff(x, y, z, 3.7 + rng() * 0.5, 2.3 + rng() * 0.3, 3.2 + rng() * 0.5);
+      const a = twist + i * Math.PI / 2 + (rng() - 0.5) * 0.45;
+      const r = 4.0 + rng() * 1.5, x = lean + Math.cos(a) * r, z = Math.sin(a) * r;
+      const y = 14.3 + tiers[i]! + (rng() - 0.5) * 0.8;
+      puff(x, y, z, 3.5 + rng() * 0.5, 2.4 + rng() * 0.35, 3.0 + rng() * 0.5);
       branch([shoulder, 8, 0], [Math.round(x), Math.round(y - 1), Math.round(z)], 0);
     }
     branch([0, 0, 0], [shoulder, 8, 0], 1);
@@ -281,4 +283,81 @@ export function createForest(seedKey: string, species: ForestSpecies, extent: nu
     builder.add(shrub.toKit(`shrub-${i}`, 1, 3), [x, Math.round(sample.groundY), z]);
   }
   return builder.finish(`forest-${species}-${seedKey}`, anchors);
+}
+
+
+/** A bounded art-review bank, in source cells. Not canonical land or a water simulation. */
+export function riparianReviewSurface(seedKey: string): (x: number, z: number) => { readonly water: boolean; readonly groundY: number; readonly waterDistance: number } {
+  const rng = random(`${seedKey}:review-bank`), phase = rng() * Math.PI * 2;
+  return (x, z) => {
+    const centre = 5 * Math.sin(z / 19 + phase) + 2 * Math.sin(z / 9 + phase * 0.7);
+    const distance = Math.abs(x - centre), bank = distance - 7;
+    if (bank <= 0) return { water: true, groundY: 0, waterDistance: 0 };
+    // Bank top rises in half-metre steps as it leaves the water plane.
+    return { water: false, groundY: 1 + Math.min(4, Math.floor(bank / 2)), waterDistance: bank };
+  };
+}
+
+/** The same sampled, dry and fully supported roots used by the review fixture. */
+export function planRiparianReviewTrees(seedKey: string): readonly ForestTree[] {
+  const surface = riparianReviewSurface(seedKey);
+  return planForest(seedKey, 'willow', {
+    radius: 55, density: 30, clearings: [],
+    sample: (x, z) => {
+      const point = surface(x, z);
+      return point.water ? null : { groundY: point.groundY, slope: 0.5, waterDistance: point.waterDistance, reserved: false };
+    },
+    // A cheap initial rejection reduces exact base-footprint tests below.
+    canPlace: (x, z) => {
+      const base = surface(x, z);
+      return [[0, 0], [3, 0], [-3, 0], [0, 3], [0, -3]].every(([dx, dz]) => {
+        const point = surface(x + dx!, z + dz!);
+        return !point.water && point.groundY === base.groundY;
+      });
+    },
+  }).filter(tree => {
+    // Test every actual occupied ground cell, including scaled buttresses and
+    // corners. Leaves may overhang the water; roots cannot float or get wet.
+    const shape = createTree('willow', tree.seedKey, tree.scale);
+    for (const box of shape.boxes) {
+      if (box.min[1] > 0 || box.min[1] + box.size[1] <= 0) continue;
+      for (let x = box.min[0]; x < box.min[0] + box.size[0]; x++) for (let z = box.min[2]; z < box.min[2] + box.size[2]; z++) {
+        const point = surface(tree.x + x, tree.z + z);
+        if (point.water || point.groundY !== tree.y) return false;
+      }
+    }
+    return true;
+  });
+}
+
+/** Standalone review fixture only; water and ground are sampled from the same bank. */
+export function createRiparianGrove(seedKey: string): ArtisanKit {
+  const surface = riparianReviewSurface(seedKey), builder = new KitBuilder();
+  const radius = 62;
+  // Group adjacent equal columns so the fixture stays bounded and mesher-friendly.
+  for (let z = -radius; z <= radius; z++) {
+    let start = -radius;
+    let previous = surface(start, z);
+    for (let x = -radius + 1; x <= radius + 1; x++) {
+      const next = x <= radius ? surface(x, z) : null;
+      if (next && next.water === previous.water && next.groundY === previous.groundY) continue;
+      if (previous.water) {
+        // Water is an explicit visible sheet, distinct from the earth below it.
+        builder.box(start, -2, z, x - start, 2, 1, CLAY.earth);
+        builder.box(start, 0, z, x - start, 1, 1, CLAY.water);
+      } else {
+        builder.box(start, -2, z, x - start, previous.groundY + 1, 1, CLAY.earth);
+        builder.box(start, previous.groundY - 1, z, x - start, 1, 1, CLAY.grass);
+      }
+      start = x;
+      if (next) previous = next;
+    }
+  }
+  const trees = planRiparianReviewTrees(seedKey);
+  const anchors: Record<string, Point> = { water: [0, 1, 0] };
+  trees.forEach((tree, i) => {
+    builder.add(createTree('willow', tree.seedKey, tree.scale), [tree.x, tree.y, tree.z]);
+    anchors[`tree-${i}`] = [tree.x, tree.y, tree.z];
+  });
+  return builder.finish(`riparian-willow-${seedKey}`, anchors);
 }

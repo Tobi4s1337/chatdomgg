@@ -1,0 +1,105 @@
+
+ RUN  v5.0.5 /root/chatdomgg-harness/worktrees/grand-artisans
+
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > preserves half-open rotated boxes at negative coordinates 28ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > will not propose a structure without explicit clearance and supported terrain 890ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > GK10 composition uses known reserve masks and refuses occupied sites 195ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > connects added footing columns to the sampled terrain 189ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > supports the mill stoop itself and rejects a wet entrance 793ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > fills only columns under the lighthouse octagonal footing 425ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects water blocked under a ship bowsprit at rotation 0 541ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects water blocked under a ship bowsprit at rotation 1 992ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > only proposes separate lighthouse and ships where their whole supports fit 972ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > fits a grounded quay on an uneven seabed at cardinal turn 0 920ms
+ ✓ packages/world/src/grand/artisans/composition/composition.test.ts > authored channel compositions > selects by full broadcaster identity and rejects unknown identities 19ms
+ ✓ packages/world/src/grand/artisans/composition/composition.test.ts > authored channel compositions > grounds native home origins in tobi4s_ and retains fixed review anchors 6213ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > fits a grounded quay on an uneven seabed at cardinal turn 1 554ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > fits a grounded quay on an uneven seabed at cardinal turn 2 619ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > fits a grounded quay on an uneven seabed at cardinal turn 3 317ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects terrain poking through the low landing step at turn 0 733ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects terrain poking through the low landing step at turn 1 654ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects terrain poking through the low landing step at turn 2 773ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects terrain poking through the low landing step at turn 3 428ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > mounts quay, headland light and near-pier ships independently 116ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects a wet shore join 545ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects a tall shore bank 503ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects terrain through the deck 547ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects unknown water beneath a pier 463ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects an unknown seabed 388ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects an obstructed deep-water berth 486ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > searches nearby shore without moving an unverified quay 38ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > fits connected complete modules on a shortfalse shore 1721ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > fits connected complete modules on a shorttrue shore 1549ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > finds a pier-first run when the first landing position is blocked 75ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > allows a shallow landward pier root but requires connected water under its outer half 486ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects a two-cell island and builds supported stairs to a low dry bank 315ms
+ ✓ packages/world/src/grand/artisans/composition/composition.test.ts > authored channel compositions > grounds native home origins in The_AGGman and retains fixed review anchors 12490ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > requires boundary-connected deep seawater beneath a quay and next to its berths 68ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > finds a bounded adjacent orientation for a straight coast 1477ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > does not place accepted pieces on top of one another 162ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > rejects seabed supports deeper than the 64-cell limit 1323ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > keeps variants and rotations deterministic while respecting envelope bounds 284ms
+ ✓ packages/world/src/grand/artisans/adoption/adoption.test.ts > artisan adoption seam > adapts every builder species to its own supported palette IDs and exact bounds 291ms
+ ✓ packages/world/src/grand/artisans/geology/geology.test.ts > geology dressing > lays snow on high ledges but leaves steep faces and buried rock exposed 11ms
+ ✓ packages/world/src/grand/artisans/geology/geology.test.ts > geology dressing > binds the same material in a cached sampler and its columns 4ms
+ ✓ packages/world/src/grand/artisans/geology/geology.test.ts > geology dressing > builds a continuous seeded spine with unequal peaks 130ms
+ ✓ packages/world/src/grand/artisans/composition/composition.test.ts > authored channel compositions > grounds native home origins in PinkKittyRose and retains fixed review anchors 3170ms
+ ✓ packages/world/src/grand/artisans/geology/geology.test.ts > geology dressing > uses world anchored, slowly warped strata at negative and chunk-edge coordinates 3258ms
+ ✓ packages/world/src/grand/artisans/geology/geology.test.ts > watercourse study > widens downhill and keeps adjacent reaches connected 15ms
+ ✓ packages/world/src/grand/artisans/geology/geology.test.ts > watercourse study > keeps fall, receiving pool and outlet explicit in its review anchors 822ms
+ ✓ packages/world/src/grand/artisans/composition/composition.test.ts > authored channel compositions > grounds native home origins in MashaD4 and retains fixed review anchors 4171ms
+ ✓ packages/world/src/grand/artisans/forest/index.test.ts > forest grammar > makes deterministic, seeded, distinct silhouettes rooted at the terrain 729ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > keeps valid integer boxes and deterministic, independently seeded silhouettes 1735ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > exports a bounded quay whose piles connect tide bed and pier deck 47ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > joins the raised cap to sampled dry land with supported treads and a flush apron 2ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > rejects floating, submerged, obstructed, disconnected or steep stair routes 18ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > seats the stair against every back-edge column with offset -4 13ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > seats the stair against every back-edge column with offset -2 0ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > seats the stair against every back-edge column with offset 0 10ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > seats the stair against every back-edge column with offset 2 4ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > seats the stair against every back-edge column with offset 4 9ms
+ ✓ packages/world/src/grand/artisans/forest/index.test.ts > forest grammar > reports conservative bounds for multiple shapes and scales 897ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > retains the same ordered review assembly when its parts are placed independently 217ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > makes an independently grounded frontage section with a flush 16-cell shore join 25ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > makes an independently grounded pier section with a flush 16-cell shore join 17ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > makes an independently grounded landing section with a flush 16-cell shore join 13ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > joins neighbouring frontages continuously with shore offset -4 15ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > joins neighbouring frontages continuously with shore offset -2 4ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > joins neighbouring frontages continuously with shore offset 0 23ms
+ ✓ packages/world/src/grand/artisans/forest/index.test.ts > forest grammar > connects every emitted tree voxel to its ground root through faces 783ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > joins neighbouring frontages continuously with shore offset 2 3ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > joins neighbouring frontages continuously with shore offset 4 1ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > carries the pier deck into its piles and the landing down to tide level 14ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > places the hull across the tide and carries its masts from the deck 1ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > face-connects every ship voxel for both sail palettes without extending its footprint 662ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > ties the quay, piers and landing to the waterline and foundations 13ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > keeps the lighthouse entry clear through to its room, over a solid floor 114ms
+ ✓ packages/world/src/grand/artisans/forest/index.test.ts > forest grammar > keeps crown envelopes clear of reserved clearings and respects terrain samples 45ms
+ ✓ packages/world/src/grand/artisans/forest/index.test.ts > forest grammar > bounds work inputs and spaces dense candidates without overlaps 666ms
+ ✓ packages/world/src/grand/artisans/harbour/index.test.ts > grand harbour kit > connects the lighthouse lintel, jambs and whole tower without changing its footprint or anchors 949ms
+ ✓ packages/world/src/grand/artisans/forest/index.test.ts > forest grammar > supplies visible trees in every default review forest, including a riparian willow fixture 1630ms
+ ✓ packages/world/src/grand/artisans/forest/index.test.ts > forest grammar > does not move trees when undergrowth is built 24ms
+ ✓ packages/world/src/grand/artisans/fields/fields.test.ts > grand fields > makes four dry parcels around continuous lanes, with all three crops 96ms
+ ✓ packages/world/src/grand/artisans/fields/fields.test.ts > grand fields > keeps lanes and every hedge gate clear of planted geometry 553ms
+ ✓ packages/world/src/grand/artisans/fields/fields.test.ts > grand fields > accepts individual fitted plots and rejects undersized or fractional bounds 11ms
+ ✓ packages/world/src/grand/artisans/fields/fields.test.ts > grand fields > is repeatable per full seed and varies parcel boundaries 235ms
+ ✓ packages/world/src/grand/artisans/fields/fields.test.ts > grand fields > leaves a supported entrance and an unfilled ground-floor room 42ms
+ ✓ packages/world/src/grand/artisans/fields/fields.test.ts > grand fields > forms a grounded mill with a hub and four framed sail quadrants 55ms
+ ✓ packages/world/src/grand/artisans/forest/extents-sweep.test.ts > contains diverse generated trees inside their spacing envelope 2085ms
+ ✓ packages/world/src/grand/artisans/forest/root-audit.test.ts > audits actual occupied base footprints against the bank 1481ms
+ ✓ packages/world/src/grand/artisans/citadel/index.test.ts > grand citadel dressing > is deterministic, bounded and retains a strong central peak 284ms
+ ✓ packages/world/src/grand/artisans/citadel/index.test.ts > grand citadel dressing > leaves a clear entry beneath the gate lintel 103ms
+ ✓ packages/world/src/grand/artisans/forest/variation.test.ts > varies each tree species with placement seed without changing coordinates on repeat 668ms
+ ✓ packages/world/src/grand/artisans/forest/riparian.test.ts > makes a meandering water strip with graded, sampled dry-bank willow bases 464ms
+ ✓ packages/world/src/grand/artisans/citadel/wall-hash.test.ts > preserves the complete ordered wall geometry and anchors for all four proof seeds 40ms
+ ✓ packages/world/src/grand/artisans/fields/mill-hash.test.ts > keeps the ordered mill geometry and anchors unchanged across the field-only pass 11ms
+ ✓ apps/web/src/grand/artisans/occlusion.test.ts > artisan bench corner occlusion > darkens creases, treating two occupied sides as closed even with an empty corner 3ms
+ ✓ apps/web/src/grand/artisans/occlusion.test.ts > artisan bench corner occlusion > flips a saddle toward the less biased diagonal and preserves a flat face 0ms
+
+ Test Files  14 passed (14)
+      Tests  94 passed (94)
+   Start at  19:17:35
+   Duration  38.02s (tests 98%, import 1%)
+
+    Isolate  14 workers spawned · ~515ms startup each (spawn + environment, per file)
+             at least ~3.09s faster with isolate: false — reuses workers across files instead of one per file
