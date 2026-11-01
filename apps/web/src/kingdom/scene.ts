@@ -443,7 +443,8 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(lightFrame)build.setFrame(lightFrame);
     // Potential land may show an anonymous night painting, independently of its empty
     // presence feed. Never pass those preview lights to citizens, build or the room.
-    const windowFrame=options.potential?.windowPreview??lightFrame;
+    // A witnessed chat arrival lights its home immediately; walking home is the next beat.
+    const windowFrame=options.potential?.windowPreview??frame;
     const lightKey=`${windowFrame?.epoch}:${windowFrame?.sequence}:${windowFrame?.windows.filter(w=>w.present).map(w=>w.slot).join(',')}`;
     if(windowFrame&&lightKey!==lastLightFrameKey){windows.setFrame(buildHidden?{...windowFrame,windows:windowFrame.windows.filter(w=>w.slot!==simulation.firstSlot)}:windowFrame);lastLightFrameKey=lightKey;lastField=-Infinity;}
     if(ownSimulation&&frame){const person=frame.windows.find(w=>w.slot===simulation.firstSlot);if(person?.present&&time>=3&&time<9)crowd.receiveChat({version:1,id:'simulated-evening',kingdomId:frame.kingdomId,epoch:frame.epoch,origin:'simulated',slot:simulation.firstSlot,asOf:simulation.epochMs+3000,expiresAt:simulation.epochMs+9000,parts:[{kind:'text',text:'Evening, everyone! 🌿'}]});}

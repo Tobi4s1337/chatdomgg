@@ -330,48 +330,53 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Order:** Tobias accepted and CLOSED the Forge for now. Finish/commit the current crucible change,
-then stop Forge work. The next whole outcome is the evening's first moment: chat arrives, each
-speaker's own window lights in a wave across the dusk town on the stream view, then those people
-walk home down the streets carrying lanterns. Warm and alive, at the accepted Forge bar. Main owns
-the path; one visible change per turn with a matched stream-view before/after. Merge good checkpoints.
-No new systems/contracts/system lanes. Medium routine helpers; keep reads tight.
+**Order:** the Forge is ACCEPTED and CLOSED by Tobias; leave it alone. Main's whole next outcome is
+chat arriving: each speaker's window lights in a wave across the dusk town on the stream view,
+then people come home down the streets carrying lanterns. Warm, alive, at the accepted Forge bar.
+One visible change per turn with a matched stream-view before/after; merge good team checkpoints.
+No new systems/contracts/system lanes; medium routine helpers and tight reads.
 
-**Latest accepted change:** local Forge previews now run the EXISTING shared ritual through pour,
-seal, strike and cool as well as words/blueprint/flight/landing. Previously the middle used the older
-rising mesh, missing the crucible stream. Duplicate legacy hammer/stamp are hidden. Root viewed
-`shots/magic/forge-crucible-pair.png`, full after1920×1080 and close pair: suspended crucible,
-visible molten stream and contact sparks now read. Same SIMULATED pour9/world157/hour19.5/HIGH as
-baseline forge-ring-depth-after.12 existing presentation/heat tests, typecheck, scoped lint and
-web build passed. After capture49270 exit0, settled fields/no browser errors or Forge POST/cleanup.
-The molten grid and stage angle are not invitations to another pass: the Forge is accepted; leave it.
+**Latest accepted step:** `kingdom/scene.ts` now renders windows from the witnessed presence `frame`,
+instead of `crowd.lightFrame()` which masks EVERY home until its citizen reaches the door. This was
+hiding the early chat wave. Keep the arrival-gated `lightFrame` for home-life, beacon and existing
+walking/homecoming cues. No feed timing, shader, exposure, ground-light or movement changes.
+The attempted shader-only bloom boost was REVERTED; do not resume it from a temporary build.
 
-**Keep Forge:**c807642 flight gift against peach/lilac sky with lit streets below;5f4dc8b heat held
-through early landing;d545d0e neighbours look up/wave;9a8dba4 rotated physical-foot contact;
-489d3a8 SIM actual-pose host/noop stage sink;9be5870 local fire;3a84d28 ring32 ordinary routes;
-9ddf895 receive/settle. Keep the warm gift, roof burst/sparks, neighbours and existing landing camera.
-No continuous whole-take approval claim: the server recording hit its deadline before the flight.
-`shots/magic/forge-partial-c807642-SIMULATED.mp4` is128 stepped8fps frames0–15.875s BEFORE this
-adapter fix, with 12/half-second sheets root viewed. No flight/landing/audio/performance evidence.
-Film24396 terminal143; lease released, browser cleanup not independently confirmed. No root captures
-remain. Do not repeat expensive720p software films; lean lower-resolution motion checks plus1080stills.
+Root viewed `shots/magic/window-chat-wave-pair.png`, full after1920×1080 and same-pixel close pair:
+at the SAME SIMULATED world4.5/hero/hour19.5/HIGH, active windows go0→56; the left road's homes
+now wake in warm light above the lantern walkers. Clearly visible at a glance; accepted.
+26 presence/feed/arrival-director tests, typecheck, scoped lint and web build pass. Capture50264
+exit0, both fields settled/curtain open/no browser errors or forbidden Forge requests, owned cleanup
+confirmed. No root capture remains. Frozen before temporary `chatdom-forge-full-stages`, accepted
+after `chatdom-window-chat-wave`. Earlier45456 was cancelled QUEUED, exit130/no browser/image;
+`chatdom-window-wave-pop` is a discarded shader experiment, not current source.
 
-**Arrival starting points:** `presence-feed.ts` schedules first arrival1s, distance-ordered wave2–8s;
-render presence-lights fades700ms. Follow actual scene/citizen arrival handling, not the separate
-lights/simulated-evening replay helper. Existing SIM stream fixture:
-`/stream?source=simulated&seed=willowmere&tier=town&hour=19.5&time=0&layout=stage`;
-`window.__chatdomKingdom.play()` resets/plays, `seek(seconds,camera?)` fixes time. Existing evidence:
-`shots/magic/lantern-arrival-before-after@3840x1080.png`, `lantern-homecoming@1920x1080.png`,
-`road-homecoming-pair.png`. Preserve the accepted wide dusk exposure, street indigo/warm lantern
-pools, castle/beacon, sparse grey-violet chimney smoke, stable lights, land/groves and AS10 citizens.
-Judge the stream-wide wave first, then the street homecoming. No fresh runtime checkpoints at recon.
+**Next visible beat:** judge the WAVE IN MOTION, then the camera handoff into the lantern street.
+The still proves the early glow, not that the directed whole evening is done. Use lean640-motion
+checks plus1920stills; do not repeat expensive720p software films. Exact wide fixture:
+`/stream?source=simulated&seed=willowmere&tier=town&layout=stage&mood=calm&camera=hero&hour=19.5&time=0&quality=high`;
+`window.__chatdomKingdom.seek(4.5,'hero')` pins the looked-at frame. Stream exposes seek/capture/hold,
+NOT play; **Let them in** is on the ordinary kingdom route. Its engine.play starts0 but the existing
+auto-camera starts close and withdraws toward hero18–36s, the opposite order to the new brief.
+Stream SIM without time starts30s; explicit time holds its camera. Realm arrival-director may cut
+to walking immediately (1.2s blend), with the window shot waiting for physical arrival. Preserve
+honest historical-snapshot/reconnect handling; no fake replay of old real arrivals.
 
-**Team:** anvil-hero and effects-library clean branches/worktrees fast-forwarded to c807642 so main's
-existing AH06/EL11 tasks are present. This does not reopen the accepted Forge or hand off new work.
-Team owns Genesis, panel/passport, raid journey and sky moments. Masha GM10 merged via5ea162a;
-CP10 viaf14e348. Merge committed checkpoints, never dirty lane trees. Preserve city stash
-7c6f1f9d324042998fff71e4d5ea7863ea46cf0a; park land6f60ae2.
+**Keep:** accepted wide dusk exposure/indigo fill/warm street pools, castle/beacon, sparse grey-violet
+smoke, stable lights, land/groves, AS10 citizens and thin capes. Home-life still starts the door lantern
+and chimney smoke on physical arrival. Preserve the warm Forge gift/flight framing/neighbours/roof
+burst/settle;0c9f23d completed the preview crucible adapter. The partial c807642 movie0–15.875s is
+BEFORE that adapter and is not a full-take claim. No further Forge passes/tasks from main.
+
+**Team checkpoint merged/pushed:**2255345 includes PinkKittyRose7344f08 GP10: levee tavern/steps,
+keeper fixtures and route-opening fix. Root viewed lane GP10 hero/tavern shots; committed-code
+kingdom/tavern/steps26tests and typecheck passed on main (not just dirty lane). The tavern still
+needs its warm doorway/place-light mount; keeper/sound mounting and dressed-wall/Atlas capture are
+recorded producer seams, not reasons to hold the checkpoint. Team owns Genesis, panel/passport,
+raid journey and sky moments. Masha GM10 via5ea162a;CP10 viaf14e348. Never merge dirty lane trees.
+Anvil/effects worktrees were brought to c807642 before the Forge was closed; no new work assigned.
 
 **Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
-`../conductor/state/services.log`; own processes only; never unlink capture locks. Real Forge only
-when Tobias announces live; no observer waiting for real chat. GPU availability question unanswered.
+`../conductor/state/services.log`; own processes only; never unlink capture locks. No observer waiting
+for real chat. GPU availability question unanswered. Preserve city stash
+7c6f1f9d324042998fff71e4d5ea7863ea46cf0a; park land6f60ae2. No timing claims from software rendering.
