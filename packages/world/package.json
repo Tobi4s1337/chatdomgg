@@ -14,7 +14,8 @@
     "./interactions": "./src/interactions/index.ts",
     "./founded-collision": "./src/founded-world/collision.ts",
     "./founded-scene": "./src/founded-world/validate.ts",
-    "./founded-codec": "./src/founded-world/codec.ts"
+    "./founded-codec": "./src/founded-world/codec.ts",
+    "./growth-history": "./src/growth-history/index.ts"
   },
   "dependencies": {
     "@chatdom/shared": "workspace:*",
