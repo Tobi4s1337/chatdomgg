@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { terrainHeight } from '../layout';
 import { polygonDistance } from '../settlement/geometry';
+import { settlementTerrainHeight } from '../settlement/terrain';
 import type { XZ } from '../settlement/types';
 import { foundKingdomTown, LOTS_PER_QUARTER, MARKET_HEART_RADIUS, MARKET_SITE_SIZE, TOWN_STREETS, TownCapacityError } from './generator';
 import { foundKingdomGeography, reservedByGeography } from './geography';
@@ -27,14 +28,42 @@ describe('the founded kingdom town', () => {
     expect(audit(plan).failures).toEqual([]);
     expect(plan.bounds.maxX - plan.bounds.minX).toBeLessThanOrEqual(512);
     expect(plan.bounds.maxZ - plan.bounds.minZ).toBeLessThanOrEqual(512);
-    // The graded town stays within what the terrain skin can follow: each 1 m patch corner within 1.75 m of the
-    // 0.5 m column it is drawn from (Crown Road's cut beside the castle's level compound is the tight spot).
+    // The generator's graded town stays within what the terrain skin can follow: each 1 m patch corner within
+    // 1.75 m of its 0.5 m column. The adopted picture-land layer deliberately adds cliffs outside town supports.
     let steep = 0;
     for (let z = plan.bounds.minZ; z < plan.bounds.maxZ; z++) for (let x = plan.bounds.minX; x < plan.bounds.maxX; x++) {
-      const column = terrainHeight(plan, x + .25, z + .25);
-      if ([[0, 0], [0, 1], [1, 1], [1, 0]].some(([dx, dz]) => Math.abs(terrainHeight(plan, x + dx!, z + dz!) - column) > 1.75)) steep++;
+      const column = settlementTerrainHeight(plan, x + .25, z + .25);
+      if ([[0, 0], [0, 1], [1, 1], [1, 0]].some(([dx, dz]) => Math.abs(settlementTerrainHeight(plan, x + dx!, z + dz!) - column) > 1.75)) steep++;
     }
     expect(steep).toBe(0);
+
+    // Adoption keeps supports on that graded surface. Sample future lot corners/centres, market boundary/centre,
+    // and active road vertices/verge edges, checking their metre-patch corners against the actual column sample.
+    const supports = new Map<string, XZ>();
+    const support = (x: number, z: number) => { const p: XZ = [Math.floor(x), Math.floor(z)]; supports.set(p.join(','), p); };
+    for (const { lot } of plan.reservations) {
+      for (const x of [lot.minX, lot.maxX]) for (const z of [lot.minZ, lot.maxZ]) support(x, z);
+      support((lot.minX + lot.maxX) / 2, (lot.minZ + lot.maxZ) / 2);
+    }
+    for (const [x, z] of [...plan.market.boundary, centroid(plan.market.boundary)]) support(x, z);
+    const active = new Set(plan.activeStreetIds);
+    for (const edge of plan.streets) if (active.has(edge.id)) edge.points.forEach((p, k) => {
+      const a = edge.points[Math.max(0, k - 1)]!, b = edge.points[Math.min(edge.points.length - 1, k + 1)]!;
+      const length = Math.hypot(b[0] - a[0], b[2] - a[2]), half = edge.width / 2 + edge.verge;
+      for (const across of [-half, 0, half]) support(p[0] + (b[2] - a[2]) / length * across, p[2] - (b[0] - a[0]) / length * across);
+    });
+    let movedSupports = 0, steepSupports = 0;
+    for (const [x, z] of supports.values()) {
+      const column = terrainHeight(plan, x + .25, z + .25);
+      const corners = [[0, 0], [0, 1], [1, 1], [1, 0]].map(([dx, dz]) => {
+        const px = x + dx!, pz = z + dz!, height = terrainHeight(plan, px, pz);
+        if (height !== settlementTerrainHeight(plan, px, pz)) movedSupports++;
+        return height;
+      });
+      if (corners.some(height => Math.abs(height - column) > 1.75)) steepSupports++;
+    }
+    expect(movedSupports).toBe(0);
+    expect(steepSupports).toBe(0);
 
     // Founded once: a hamlet is the town's exact prefix and a later year only appends a quarter.
     const hamlet = foundKingdomTown({ seed, tier: 'hamlet', firstYear: 2025, year: 2026 }, geography).plan;
