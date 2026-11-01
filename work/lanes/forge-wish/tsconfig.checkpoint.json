@@ -1,0 +1,7 @@
+{
+  "extends": "../../../tsconfig.json",
+  "include": [
+    "../../../apps/codex/src/**/*.ts",
+    "../../../apps/realm/src/wiring/**/*.ts"
+  ]
+}

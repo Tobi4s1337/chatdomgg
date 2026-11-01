@@ -17,4 +17,23 @@ describe('the host owns the complete Forge run',()=>{
  const held=setup();vi.mocked(held.providers.judgeResult).mockResolvedValue({...pass,outcome:'hold'});await runForge(request,held.providers,held.emit,held.record);expect(held.events.some(e=>e.type==='approved')).toBe(false);
  const cold=setup();vi.mocked(cold.providers.judgeWords).mockRejectedValue(new Error('offline'));await runForge(request,cold.providers,cold.emit,cold.record);expect(cold.events.at(-1)).toMatchObject({type:'stopped',outcome:'cold'});
  });
+ it('records a low quality score without turning a safety pass into a stopped event',async()=>{
+  const s=setup(),quality={policy:'fw10-test',score:0.1,recognisability:0.1,completeness:0.2,cleanMarks:0};
+  vi.mocked(s.providers.judgeResult).mockResolvedValue({...pass,quality});
+  await runForge(request,s.providers,s.emit,s.record);
+  expect(s.events.filter(e=>e.type==='stopped')).toEqual([]);
+  expect(s.events.at(-1)).toMatchObject({type:'approved'});
+  expect(s.records).toHaveLength(1);
+  expect(s.records[0]).toMatchObject({outcome:'approved',verdicts:[pass,{...pass,quality}]});
+ });
+ it.each(['hold','refuse'] as const)('never approves a safety %s at either gate',async(outcome)=>{
+  for(const gate of ['judgeWords','judgeResult'] as const){
+   const s=setup();vi.mocked(s.providers[gate]).mockResolvedValue({...pass,outcome,reason:'private safety reason'});
+   await runForge(request,s.providers,s.emit,s.record);
+   expect(s.events.filter(e=>e.type==='approved')).toEqual([]);
+   expect(s.events.at(-1)).toMatchObject({type:'stopped',outcome,message:'private safety reason'});
+   expect(s.records).toHaveLength(1);expect(s.records[0]?.outcome).toBe(outcome);
+   if(gate==='judgeWords')expect(s.providers.draft).not.toHaveBeenCalled();
+  }
+ });
 });

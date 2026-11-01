@@ -119,7 +119,7 @@ export function createKingdomForgeApplication(options: KingdomForgeOptions) {
           checkCurrent();
           await bounded(() => options.record({
             key: attempt.key, runId: entry.id, at: entry.at, judgment: entry.outcome,
-            verdicts: entry.verdicts.map(({ outcome, records }) => ({ outcome, records })),
+            verdicts: entry.verdicts.map(({ outcome, records, quality }) => ({ outcome, records, ...(quality ? { quality } : {}) })),
           }), AUDIT_WAIT_MS, () => abort.abort(), signal);
           checkCurrent();
         }, signal, { safetyIdentifier: reservation!.safetyIdentifier }), RUN_WAIT_MS, () => abort.abort(), signal);

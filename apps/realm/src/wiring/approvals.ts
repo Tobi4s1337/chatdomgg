@@ -4,19 +4,24 @@ import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import { TokenSchema } from '@chatdom/shared';
 import type { KingdomForgeAudit } from '../../../codex/src/kingdom-forge/ports';
-import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions } from '../../../codex/src/providers/policy';
+import { FORGE_JUDGE_POLICY_VERSION, FORGE_JUDGE_THRESHOLDS, forgeJudgeQuestions, decideForgeSafety,
+  scoreForgeQuality } from '../../../codex/src/providers/policy';
 import { canonicalJson } from '../persistence/codec';
 import type { RealmForgeApprovals } from './types';
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+const qualityRead = { recognisability: z.number().finite().min(0).max(1), completeness: z.number().finite().min(0).max(1), cleanMarks: z.number().finite().min(0).max(1) };
+const QualityReadSchema = z.strictObject(qualityRead);
+const QualityScoreSchema = z.strictObject({ ...qualityRead, score: z.number().finite().min(0).max(1), policy: z.literal(FORGE_JUDGE_POLICY_VERSION) });
 const AuditSchema = z.strictObject({
   key: z.string().regex(/^forge-chat-[a-f0-9]{64}$/), runId: TokenSchema,
   at: z.number().int().nonnegative().safe(), judgment: z.enum(['approved', 'hold', 'refuse', 'cold']),
-  verdicts: z.array(z.strictObject({ outcome: z.enum(['pass', 'hold', 'refuse']), records: z.array(z.unknown()).max(4) })).max(3),
+  verdicts: z.array(z.strictObject({ outcome: z.enum(['pass', 'hold', 'refuse']), records: z.array(z.unknown()).max(4), quality: QualityScoreSchema.optional() })).max(3),
 });
 const base = {
   backend: z.literal('codex-cli'), policy: z.literal(FORGE_JUDGE_POLICY_VERSION),
   evidenceHash: z.string().regex(/^[a-f0-9]{64}$/), status: z.literal('complete'),
+  quality: QualityReadSchema.optional(), qualityStatus: z.enum(['complete', 'invalid']).optional(),
 };
 const PrimarySchema = z.strictObject({ ...base, judge: z.literal('gpt-6-luna'), model: z.literal('gpt-6-luna'),
   probabilitySource: z.literal('model-self-estimate'),
@@ -24,11 +29,11 @@ const PrimarySchema = z.strictObject({ ...base, judge: z.literal('gpt-6-luna'), 
   answers: z.record(z.string(), z.number().finite().min(0).max(1)),
 });
 const SecondarySchema = z.strictObject({ ...base, judge: z.literal('gpt-6.1-terra'), model: z.literal('gpt-6.1-terra'),
-  outcome: z.literal('pass'), imageUncertaintyCleared: z.literal(true).optional(),
+  outcome: z.literal('pass'), concerns: z.array(z.string()).max(0).optional(),
 });
 
 /** Check the actual registered independent judges at BOTH coordinator gates, without retaining provider text. */
-function approvedAudit(audit: KingdomForgeAudit): boolean {
+function approvedAudit(audit: z.infer<typeof AuditSchema>): boolean {
   if (audit.judgment !== 'approved' || audit.verdicts.length !== 2) return false;
   return audit.verdicts.every((verdict, index) => {
     if (verdict.outcome !== 'pass' || verdict.records.length !== 2) return false;
@@ -36,10 +41,14 @@ function approvedAudit(audit: KingdomForgeAudit): boolean {
     if (!primary.success || !secondary.success || primary.data.evidenceHash !== secondary.data.evidenceHash) return false;
     const answers = primary.data.answers, questions = forgeJudgeQuestions(index === 1);
     if (Object.keys(answers).length !== questions.length || !questions.every(({ name }) => Object.hasOwn(answers, name))) return false;
-    if (answers.uncertain_language! >= FORGE_JUDGE_THRESHOLDS.passBelow) return false;
-    if (Object.values(answers).some(value => value > FORGE_JUDGE_THRESHOLDS.refuseAbove)) return false;
-    const uncertain = Object.values(answers).some(value => value >= FORGE_JUDGE_THRESHOLDS.passBelow);
-    return uncertain ? index === 1 && secondary.data.imageUncertaintyCleared === true : secondary.data.imageUncertaintyCleared === undefined;
+    if (decideForgeSafety(answers, { outcome: secondary.data.outcome }) !== 'pass') return false;
+    if (index === 0) return !verdict.quality && !primary.data.quality && !secondary.data.quality
+      && !primary.data.qualityStatus && !secondary.data.qualityStatus;
+    if (!primary.data.quality || !secondary.data.quality || !primary.data.qualityStatus || !secondary.data.qualityStatus || !verdict.quality) return false;
+    // Invalid quality reads score zero conservatively; quality can never veto a safety approval.
+    for (const read of [primary.data, secondary.data]) if (read.qualityStatus === 'invalid'
+      && Object.values(read.quality!).some(value => value !== 0)) return false;
+    return canonicalJson(verdict.quality) === canonicalJson(scoreForgeQuality(primary.data.quality, secondary.data.quality));
   });
 }
 
@@ -60,7 +69,7 @@ export class FileForgeApprovals implements RealmForgeApprovals {
     // Refusals/holds carry no approval receipt. Keep only bounded outcome codes, never arbitrary provider records.
     // Approved records must contain the complete, allowlisted two-judge evidence; malformed approval is a hold.
     if (parsed.judgment === 'approved' && !approvedAudit(parsed)) throw new Error('The Forge approval lacks both independent judge gates');
-    const audit = parsed.judgment === 'approved' ? parsed : { ...parsed, verdicts: parsed.verdicts.map(verdict => ({ outcome: verdict.outcome, records: [] })) };
+    const audit = parsed.judgment === 'approved' ? parsed : { ...parsed, verdicts: parsed.verdicts.map(verdict => ({ outcome: verdict.outcome, records: [], ...(verdict.quality ? { quality: verdict.quality } : {}) })) };
     const bytes = canonicalJson(audit), path = this.path(audit.key, audit.runId);
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const temporary = join(this.directory, `.pending-${randomUUID()}`);

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createCastleModule, createHome } from '@chatdom/content';
 import { KingdomIdSchema, PersonIdSchema, type ForgeDraft } from '@chatdom/shared';
 import type { ForgeProviders } from '../providers';
+import { FORGE_JUDGE_POLICY_VERSION } from '../providers/policy';
 import { createKingdomForgeApplication } from './application';
 import type {
   ForgeActivity, ForgeAttachment, ForgeReservation, KingdomForgeAudit, KingdomForgeAuthority, KingdomForgeCommand,
@@ -60,6 +61,18 @@ function fixture(origin: KingdomForgeAuthority['origin'] = 'live', onPublish?: (
 }
 
 describe('the kingdom Forge application', () => {
+  it('keeps quality scores in the private audit and charges once for a safe delivered piece', async () => {
+    const f = fixture(), quality = { policy: FORGE_JUDGE_POLICY_VERSION, score: 0.1, recognisability: 0, completeness: 0.4, cleanMarks: 0 };
+    vi.mocked(f.providers.judgeResult).mockResolvedValue({ ...pass, quality });
+    expect(await f.run(command, f.lease)).toMatchObject({ kind: 'committed' });
+    expect(f.audits[0]?.verdicts[1]?.quality).toEqual(quality);
+    expect(JSON.stringify(f.publicEvents)).not.toContain('recognisability');
+    expect(f.publicEvents.filter(event => event.type === 'committed')).toHaveLength(1);
+    expect(f.coals).toBe(0);
+    expect(await f.run(command, f.lease)).toEqual({ kind: 'already-committed' });
+    expect(f.authority.commit).toHaveBeenCalledTimes(1);
+    expect(f.coals).toBe(0);
+  });
   it.each(['refused', 'held', 'canceled'] as const)('ends a staged %s run privately before reservation cleanup finishes', async kind => {
     const f = fixture();
     vi.mocked(f.providers.judgeWords).mockImplementation(async () => {

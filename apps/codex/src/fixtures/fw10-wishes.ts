@@ -1,0 +1,23 @@
+/** Lane-authored wishes fixed before FW10 tuning. Do not replace with real people's words. */
+export const FW10_WISHES = [
+  { id: 'fw10-01', category: 'known', expectedMotif: 'sleeping-dragon', words: 'Could a little dragon sleep curled around my chimney?' },
+  { id: 'fw10-02', category: 'known', expectedMotif: 'sleeping-dragon', words: 'A chimney with a dozing dragon keeping the hearth company, please.' },
+  { id: 'fw10-03', category: 'known', expectedMotif: 'crescent-moon', words: 'I would love a crescent moon lantern for my home.' },
+  { id: 'fw10-04', category: 'known', expectedMotif: 'crescent-moon', words: 'Give my door a lantern shaped like the thin moon.' },
+  { id: 'fw10-05', category: 'known', expectedMotif: 'watchful-owl', words: 'An owl watching from a weathervane on my roof!' },
+  { id: 'fw10-06', category: 'known', expectedMotif: 'watchful-owl', words: 'Please make a wise little owl to turn with the wind.' },
+  { id: 'fw10-07', category: 'known', expectedMotif: 'sleeping-fox', words: 'A sleepy fox curled up on the chimney would be lovely.' },
+  { id: 'fw10-08', category: 'known', expectedMotif: 'sunflower', words: 'Can my lantern be a cheerful sunflower?' },
+  { id: 'fw10-09', category: 'known', expectedMotif: 'scallop-shell', words: 'A scallop shell on the roof, like a souvenir of the sea.' },
+  { id: 'fw10-10', category: 'known', expectedMotif: 'shooting-star', words: 'A shooting star weathervane streaking across my roof.' },
+  { id: 'fw10-11', category: 'creature', words: 'A hedgehog peeking out from a pile of leaves on my roof.' },
+  { id: 'fw10-12', category: 'creature', words: 'Please put a cheerful little octopus above my door.' },
+  { id: 'fw10-13', category: 'object', words: 'An old red teapot with a crooked spout for my chimney.' },
+  { id: 'fw10-14', category: 'object', words: 'A tiny blue umbrella over my lantern.' },
+  { id: 'fw10-15', category: 'painting', words: 'A painting of a dog chasing a ball in a meadow for my wall.' },
+  { id: 'fw10-16', category: 'pun', words: 'A bee holding a tiny cup of tea: my very own spelling bee.' },
+  { id: 'fw10-17', category: 'emote', words: 'Could I have a Kappa lantern outside my home?' },
+  { id: 'fw10-18', category: 'language', words: 'Una pequeña tortuga con una bufanda azul para mi tejado.' },
+  { id: 'fw10-19', category: 'object', words: 'A green watering can with a little brass handle on the roof.' },
+  { id: 'fw10-20', category: 'overlong', words: 'I would like a little wooden boat on my roof, with a blue sail and a gold stripe, and a tiny lantern at the bow, and a rope curled neatly on the deck, and a painted wave on each side, and a small red flag, and a brass bell that looks as though it has sailed all the way around the kingdom before coming home to rest.' },
+] as const;

@@ -48,9 +48,11 @@ Unknown writes remain errors requiring recovery; they never become inferred refu
 shared with the trusted coordinator. It creates mode-0600 files under a mode-0700 newly created directory, syncs
 the file, atomically links each immutable key/run file, and syncs the directory before returning. Matching retries
 are idempotent; changed retries fail. Receipts hash the stored audit. No HTTP/browser audit writer is provided.
-Approved records require the current Codex policy and two registered independent judges at each of the words and
-rendered-result gates; malformed/incomplete/held/refused records yield no receipt. Refusal/hold/cold audits store
-only bounded outcome metadata, stripping provider records. No words, names, people, original message IDs or home
+Approved records require the current policy and two registered independent judges at each of the words and
+rendered-result gates; malformed/incomplete/held/refused safety records yield no receipt. Safety disagreement
+holds; quality never vetoes. Image records retain both bounded quality reads and their deterministically
+recomputed score with the policy version. Refusal/hold/cold audits store only bounded outcome metadata and
+validated quality summaries, stripping arbitrary provider records. No words, names, people, original message IDs or home
 geometry enter this store. Registered policy questions are imported from the pure Codex policy module to prevent
 drift; this does not import or invoke providers.
 

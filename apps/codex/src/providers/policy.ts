@@ -1,5 +1,5 @@
 /** Versioned independently of prompts: records can be replayed against this question set. */
-export const FORGE_JUDGE_POLICY_VERSION = 'house-part-floor-codex-cli-2026-10-30-v3';
+export const FORGE_JUDGE_POLICY_VERSION = 'house-part-safety-quality-2026-11-01-v4';
 export const FORGE_JUDGE_THRESHOLDS = { passBelow: 0.12, refuseAbove: 0.85 } as const;
 
 export const FORGE_FLOOR = `Chatdom is a storybook fantasy kingdom shown on Twitch to audiences aged 13 and up.
@@ -24,9 +24,36 @@ const questions = [
 ] as const;
 
 export function forgeJudgeQuestions(image: boolean) {
-  return [...questions, ...(image ? [
-    ['unreadable_marks', 'Does any view contain readable letters, numbers or logos whose meaning is not fully represented by the composed text, or concealed marks you cannot confidently read?'],
-    ['broken_part', 'Does the contact sheet show a broken, floating, obscene or unrecognizable object, or an object unlike its declared chimney, lantern or weathervane slot?'],
-    ['unfaithful_subject', 'Does the rendered subject fail to be visibly recognizable as the subject of the original wish, or substitute an unrelated motif? Compare the actual contact sheet with the original wish, not just the plan enums or the title. A tasteful authored interpretation may simplify shapes and materials, but must preserve the requested subject. If the authored kit cannot represent the wish, an unrelated allowed motif is still a mismatch and must not pass.'],
-  ] as const : [])].map(([name, instructions]) => ({ type: 'predicate' as const, name, instructions: `${FORGE_FLOOR}\n${instructions}` }));
+  return questions.map(([name, instructions]) => ({ type: 'predicate' as const, name,
+    instructions: `${FORGE_FLOOR}\n${instructions}${image ? '\nInspect every supplied view, visible mark and the composed display text. Incidental stray voxels, poor subject recognition and broken geometry are quality questions, never floor breaches by themselves.' : ''}` }));
+}
+
+export type ForgeSafetyConcern = (typeof questions)[number][0];
+export interface ForgeSafetyRead { outcome: 'pass' | 'hold' | 'refuse'; concerns?: readonly ForgeSafetyConcern[] }
+
+/** The same deterministic decision is used by the provider and the durable approval verifier. */
+export function decideForgeSafety(answers: Readonly<Record<string, number>>, secondary: ForgeSafetyRead): 'pass' | 'hold' | 'refuse' {
+  if (answers.uncertain_language! >= FORGE_JUDGE_THRESHOLDS.passBelow) return 'hold';
+  if (secondary.outcome === 'refuse' && secondary.concerns?.some(name => name !== 'uncertain_language'
+    && answers[name]! > FORGE_JUDGE_THRESHOLDS.refuseAbove)) return 'refuse';
+  if (secondary.outcome !== 'pass' || Object.values(answers).some(value => value >= FORGE_JUDGE_THRESHOLDS.passBelow)) return 'hold';
+  return 'pass';
+}
+
+export const FORGE_QUALITY_DIMENSIONS = ['recognisability', 'completeness', 'cleanMarks'] as const;
+export type ForgeQualityRead = Record<(typeof FORGE_QUALITY_DIMENSIONS)[number], number>;
+export interface ForgeQualityScore extends ForgeQualityRead { policy: string; score: number }
+export const FORGE_QUALITY_INSTRUCTIONS = `Score quality separately from safety, from 0 (not at all) to 1 (clearly).
+recognisability: does the visible piece read as the original wish's subject, rather than merely its title or plan enum?
+completeness: is the piece whole, supported and readable as its declared house slot?
+cleanMarks: is it free of stray voxels and incidental unreadable marks?
+Judge the actual contact sheet, not the plan's promise. Simplification may preserve a subject. An unrelated motif scores low.
+These scores NEVER cause a safety hold or refusal. A poor likeness, unsupported subject or broken part is not unsafe by itself.
+Explicit harmful text, symbols or shapes still meet the separate safety floor.`;
+
+export function scoreForgeQuality(primary: ForgeQualityRead, secondary: ForgeQualityRead): ForgeQualityScore {
+  const mean = (name: keyof ForgeQualityRead) => Math.round((primary[name] + secondary[name]) * 5_000) / 10_000;
+  const dimensions = { recognisability: mean('recognisability'), completeness: mean('completeness'), cleanMarks: mean('cleanMarks') };
+  return { policy: FORGE_JUDGE_POLICY_VERSION, ...dimensions,
+    score: Math.round((dimensions.recognisability * 0.6 + dimensions.completeness * 0.25 + dimensions.cleanMarks * 0.15) * 10_000) / 10_000 };
 }
