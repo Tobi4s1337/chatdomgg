@@ -94,6 +94,17 @@ async function accessibility(browser, base, width, height) {
     assert(Number(pointerFirst) < Number(pointerLast) && firstPixels !== lastPixels, 'Pointer seeking did not advance the recorded world');
     await page.mouse.click(track.x + 4, track.y + track.height / 2);
     assert(await slider.inputValue() === pointerFirst && await page.evaluate(() => window.__chronicleRenderPixels()) === firstPixels, 'Pointer seeking backward did not restore the recorded world');
+    const marketCheck = await page.evaluate(() => {
+      const history = window.__chronicleHistory, replay = window.__chronicle;
+      const index = history.snapshots.findIndex(snapshot => snapshot.focus === 'market');
+      if (index < 1) return false;
+      const before = { ...history.snapshots[index - 1], focus: 'market' }, after = { ...history.snapshots[index], focus: 'market' };
+      replay.load({ label: history.label, snapshots: [before, after] });
+      const first = window.__chronicleRenderPixels(); replay.seek(1); const grown = window.__chronicleRenderPixels();
+      replay.seek(0); const restored = window.__chronicleRenderPixels(); replay.load(history);
+      return first !== grown && first === restored;
+    });
+    assert(marketCheck, 'Market forward/backward rendering did not replace and restore construction');
     await page.evaluate(() => window.__chronicle.load({ label: 'SIMULATED', snapshots: [] }));
     assert(await page.getByText('There are no recorded nights to read yet.').isVisible(), 'Empty history state is missing');
     assert(await page.getByText('SIMULATED', { exact: false }).isVisible(), 'Empty simulated history lost its label');

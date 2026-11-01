@@ -82,13 +82,27 @@ export async function createSimulatedScene(canvas: HTMLCanvasElement, options: {
     const { plot, pose } = selectPlot(stage), marketView = marketPose(stage), history = simulatedHistory(stage.layout, plot);
     const variants = new Map<string, THREE.Mesh>();
     const revisions = new Map(stage.layout.homes.filter(home => home.id !== plot.id).map(home => [home.id, createNativeForgeHost(home).blueprint.id]));
-    for (const [index, tier] of TIERS.entries()) {
-      if (options.signal.aborted) throw new DOMException('Chronicle closed while loading.', 'AbortError');
-      const native = createNativeForgeHost({ ...plot, tier });
-      const meshGeometry = await stage.mesh(native.blueprint); geometry.push(meshGeometry);
+    // Submit all eight authored assets to the stage's worker pool together. Wait for every job
+    // even on failure, so all returned geometries are owned and can be disposed on the error path.
+    const natives = TIERS.map(tier => createNativeForgeHost({ ...plot, tier }));
+    const marketAssets = placeMarketContent(stage.layout.market).filter((_, index) => index === 2 || index === 3 || index === 4);
+    if (options.signal.aborted) throw new DOMException('Chronicle closed while loading.', 'AbortError');
+    let completed = 0;
+    const jobs = [...natives.map(native => native.blueprint), ...marketAssets.map(asset => asset.blueprint)];
+    const results = await Promise.allSettled(jobs.map(async blueprint => {
+      const result = await stage.mesh(blueprint); geometry.push(result);
+      options.onProgress(.8 + .2 * ++completed / jobs.length);
+      return result;
+    }));
+    const failed = results.find(result => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+    if (options.signal.aborted) throw new DOMException('Chronicle closed while loading.', 'AbortError');
+    const meshes = results.map(result => { if (result.status === 'rejected') throw result.reason; return result.value; });
+    for (const [index, native] of natives.entries()) {
+      const meshGeometry = meshes[index]!;
       const mesh = new THREE.Mesh(meshGeometry, stage.material);
       mesh.position.set(...native.position); mesh.rotation.y = native.yaw; mesh.visible = false;
-      stage.parent.add(mesh); variants.set(native.blueprint.id, mesh); options.onProgress(.8 + (index + 1) * .025);
+      stage.parent.add(mesh); variants.set(native.blueprint.id, mesh);
     }
     if (options.signal.aborted) throw new DOMException('Chronicle closed while loading.', 'AbortError');
     const installed = createNativeForgeHost(plot).blueprint.id;
@@ -99,14 +113,7 @@ export async function createSimulatedScene(canvas: HTMLCanvasElement, options: {
     const original = originalInstance(stage, house, originalGeometry);
     // The original stage contains the entire authored market. Level one retains its well and first stall;
     // the recorded level-two construction installs the second stall, cart and stores at their real anchors.
-    const marketAssets = placeMarketContent(stage.layout.market).filter((_, index) => index === 2 || index === 3 || index === 4);
-    const marketInstances: ReturnType<typeof originalInstance>[] = [];
-    for (const [index, asset] of marketAssets.entries()) {
-      if (options.signal.aborted) throw new DOMException('Chronicle closed while loading.', 'AbortError');
-      const reference = await stage.mesh(asset.blueprint); geometry.push(reference);
-      marketInstances.push(originalInstance(stage, asset, reference));
-      options.onProgress(.925 + (index + 1) * .025);
-    }
+    const marketInstances = marketAssets.map((asset, index) => originalInstance(stage, asset, meshes[natives.length + index]!));
     stage.setPose(pose);
     let disposed = false;
     const restore = () => {
