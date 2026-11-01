@@ -362,9 +362,12 @@ HTTP speedup is not yet measured; cold scene/lease work is unchanged.
 **Real services:** consent completed; read-only `check-auth` confirms `bits:read`,
 `channel:read:hype_train` and all five chat scopes for tobi4s_. Forge5195 is back. Main115bf29
 adds bits/hype to Herald's minute grant watcher (previously only chat/chatters); 61 focused
-tests, typecheck/lint and Herald/Realm builds pass. Await managed restart, then verify running
-5194 coverage for bits.use and all three v2 hype events. Raid already enabled; actual new
-real events/picture remain UNPROVEN. Do not start another authorize helper.
+tests, typecheck/lint and Herald/Realm builds pass. Managed restart completed: running5194
+reports healthy/available, ready conduit/attached shard, all13 subscriptions enabled, including
+bits.use and all three v2 hype events. Log:4 created,0 stale removed. New consent regression
+and existing no-chat/reconnect checks pass; old raid-era exact-count expectations corrected.
+Realm delivery queued during accompanying cold Realm restart; re-check drain. No actual new
+real events/picture observed yet. Do not start another authorize helper.
 Raid picture attempts terminated/cleaned (dev import failure, then persistent built-preview
 entry503); no raid/frame produced. Backend-only diagnostic completed/cleaned: prepared=true,
 manifest=false, current/origin/world/layout/collision all match, but private owned17/public
