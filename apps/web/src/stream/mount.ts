@@ -8,19 +8,33 @@ type SceneSettings = Omit<SceneOptions, 'signal' | 'onProgress' | 'onNames' | 'o
 export interface PreparedStreamScene {
   settings: Partial<SceneSettings>;
   chatFeed?: RealmChatFeed;
+  /** Transfer shared live feeds only when this scene becomes visible. */
+  activate?(): void;
   dispose(reason?: 'scene-revision'): void;
 }
 
-/** What a review can ask of the mount: how many scenes were built and how many still hold a GPU context. */
+/** A ready scene may keep one replacement GPU context warm until its first loaded draw. */
 export interface SceneMountStats { mounts: number; alive: number; disposed: number; cancelled: number }
 
-interface Entry { canvas: HTMLCanvasElement; controller: AbortController; scene?: KingdomScene; prepared?: PreparedStreamScene; offChat?: (() => void) | undefined; frame: number }
+interface Entry {
+  canvas: HTMLCanvasElement;
+  controller: AbortController;
+  scene?: KingdomScene;
+  prepared?: PreparedStreamScene;
+  offChat?: (() => void) | undefined;
+  frame: number;
+  timeout?: ReturnType<typeof setTimeout>;
+  ready: boolean;
+  released: boolean;
+  publications: Map<string, () => void>;
+}
+
+const REPLACEMENT_TIMEOUT_MS = 60_000;
 
 /**
- * One kingdom scene per stream mount, and only while someone can see it. Each mount
- * gets a fresh canvas; unmounting cancels construction through the scene's own abort
- * signal, disposes the instance and gives its WebGL context back, so a hidden OBS
- * source keeps no renderer, worker pool, light field or feed subscription alive.
+ * A visible kingdom keeps drawing while one replacement prepares behind it. Only
+ * a loaded draw transfers the canvas, labels and director to that replacement.
+ * Hiding aborts both scenes and returns their WebGL contexts immediately.
  */
 export function createSceneMount(hooks: {
   host(): HTMLElement;
@@ -37,18 +51,28 @@ export function createSceneMount(hooks: {
   onDirecting?(directing: boolean): void;
 }) {
   const stats: SceneMountStats = { mounts: 0, alive: 0, disposed: 0, cancelled: 0 };
-  let current: Entry | undefined;
+  let current: Entry | undefined, pending: Entry | undefined, failed = false;
+  const owns = (entry: Entry) => !entry.released && (current === entry || pending === entry);
+  const visible = (entry: Entry) => !entry.released && current === entry;
+
+  function publish(entry: Entry, key: string, action: () => void): void {
+    if (!owns(entry)) return;
+    if (visible(entry)) action();
+    else entry.publications.set(key, action);
+  }
 
   function release(entry: Entry, reason?: 'scene-revision'): void {
+    if (entry.released) return;
+    entry.released = true;
     cancelAnimationFrame(entry.frame);
+    clearTimeout(entry.timeout);
     if (!entry.scene) stats.cancelled++;
     entry.offChat?.();
-    hooks.onSpeech?.([]);
+    entry.publications.clear();
     entry.prepared?.dispose(reason);
     entry.controller.abort(reason);
     entry.scene?.dispose();
-    // The renderer has already let go of its resources and listeners. Losing the
-    // context now returns it to the browser instead of waiting for collection.
+    // Explicitly return the renderer's context instead of waiting for collection.
     const gl = entry.canvas.getContext('webgl2');
     gl?.getExtension('WEBGL_lose_context')?.loseContext();
     entry.canvas.remove();
@@ -57,66 +81,146 @@ export function createSceneMount(hooks: {
   }
 
   function unmount(phase: Exclude<StreamPhase, 'waking' | 'ready'>): void {
-    const entry = current;
-    current = undefined;
-    if (entry) { hooks.onScene(undefined); hooks.onNames([]); release(entry); }
+    const old = current, warming = pending;
+    current = pending = undefined;
+    failed = phase === 'failed';
+    if (warming) release(warming);
+    if (old) release(old);
+    hooks.onScene(undefined);
+    hooks.onNames([]);
+    hooks.onSpeech?.([]);
+    hooks.onDirecting?.(false);
     hooks.onPhase(phase);
   }
 
-  function mount(): void {
-    if (current) return;
+  function fail(entry: Entry): void {
+    if (!owns(entry)) return;
+    if (pending !== entry) { unmount('failed'); return; }
+    pending = undefined;
+    release(entry, 'scene-revision');
+    // The old picture stays on screen, but a failed refresh must not claim to be
+    // current. StreamView's existing failed-state timer calls mount() to retry.
+    failed = true;
+    hooks.onPhase('failed');
+  }
+
+  function activate(entry: Entry): void {
+    const old = current;
+    const citizens = old?.scene?.captureCitizens();
+    if (old?.scene) entry.scene!.handoffView(old.scene.captureView());
+    current = entry;
+    pending = undefined;
+    clearTimeout(entry.timeout);
+    entry.canvas.style.visibility = '';
+    // No frame can occur between revealing the loaded canvas and retiring the old one.
+    if (old) release(old, 'scene-revision');
+    entry.scene!.restoreCitizens(citizens);
+    hooks.onSpeech?.([]);
+    for (const action of entry.publications.values()) action();
+    entry.publications.clear();
+    entry.prepared?.activate?.();
+    hooks.onScene(entry.scene);
+    if (failed) { failed = false; hooks.onPhase('ready'); }
+    hooks.onDirecting?.(entry.scene!.momentDirecting());
+  }
+
+  function revise(entry: Entry): void {
+    if (!owns(entry)) return;
+    if (current?.ready) {
+      // Either watch may witness a newer revision while the candidate is loading.
+      // Its predecessor is fully released before another context can be created.
+      if (pending) { const old = pending; pending = undefined; release(old, 'scene-revision'); }
+      begin(true);
+    } else {
+      const old = current;
+      current = undefined;
+      if (old) release(old, 'scene-revision');
+      begin(false);
+    }
+  }
+
+  function begin(replacement: boolean): void {
     const canvas = document.createElement('canvas');
     canvas.className = 'stream-canvas';
     canvas.setAttribute('aria-hidden', 'true');
+    if (replacement) canvas.style.visibility = 'hidden';
     hooks.host().append(canvas);
-    const entry: Entry = { canvas, controller: new AbortController(), frame: 0 };
-    current = entry;
+    const entry: Entry = { canvas, controller: new AbortController(), frame: 0, ready: false, released: false, publications: new Map() };
+    if (replacement) {
+      pending = entry;
+      entry.timeout = setTimeout(() => fail(entry), REPLACEMENT_TIMEOUT_MS);
+    } else {
+      current = entry;
+      failed = false;
+      hooks.onPhase('waking');
+    }
     stats.mounts++;
     stats.alive++;
-    hooks.onPhase('waking');
-    const own = () => current === entry;
-    const prepare = hooks.prepare?.(entry.controller.signal, () => {
-      if (!own()) return;
-      current = undefined; hooks.onScene(undefined); hooks.onNames([]); release(entry, 'scene-revision'); mount();
-    }, () => { if (own()) unmount('failed'); });
-    void Promise.resolve(prepare).then(prepared => {
-      if (!own()) { prepared?.dispose(); throw new DOMException('Stream was cancelled', 'AbortError'); }
+    // Defer prepare so even a synchronous throw or revision belongs to this entry.
+    void Promise.resolve().then(() => {
+      if (!owns(entry)) throw new DOMException('Stream was cancelled', 'AbortError');
+      return hooks.prepare?.(entry.controller.signal, () => revise(entry), () => fail(entry));
+    }).then(prepared => {
+      if (!owns(entry)) { prepared?.dispose(entry.controller.signal.reason === 'scene-revision' ? 'scene-revision' : undefined); throw new DOMException('Stream was cancelled', 'AbortError'); }
       if (prepared) entry.prepared = prepared;
+      if (visible(entry)) prepared?.activate?.();
+      if (!owns(entry)) throw new DOMException('Stream was cancelled', 'AbortError');
+      const settings = { ...hooks.settings(), ...prepared?.settings };
+      const prior = replacement ? current?.scene : undefined;
       return createKingdomScene(canvas, {
-        ...hooks.settings(),
-        ...prepared?.settings,
+        ...settings,
+        ...(prior ? { initialView: prior.captureView(), camera: prior.debug.camera, hour: prior.debug.hour, time: settings.time === null ? null : prior.debug.time } : {}),
+        // These labels also originate in SceneOptions; a warming scene cannot
+        // move live plates or captions belonging to the visible kingdom.
+        onArrival: value => publish(entry, 'arrival', () => settings.onArrival?.(value)),
+        onWalkers: value => publish(entry, 'walkers', () => settings.onWalkers?.(value)),
+        onMomentCaptions: value => publish(entry, 'captions', () => settings.onMomentCaptions?.(value)),
+        onReady: () => publish(entry, 'ready', () => settings.onReady?.()),
+        onForge: value => publish(entry, 'forge', () => settings.onForge?.(value)),
+        onBuild: value => publish(entry, 'build', () => settings.onBuild?.(value)),
+        onHousewarming: value => publish(entry, 'housewarming', () => settings.onHousewarming?.(value)),
         signal: entry.controller.signal,
-        onProgress: (text, fraction) => { if (own()) hooks.onProgress(text, fraction); },
-        onNames: names => { if (own()) hooks.onNames(names); },
-        onSpeech: labels => { if (own()) hooks.onSpeech?.(labels); },
-        onSource: label => { if (own()) hooks.onSource(label); },
-        onError: () => { if (own()) unmount('failed'); },
+        onProgress: (text, fraction) => { if (visible(entry)) hooks.onProgress(text, fraction); },
+        onNames: names => publish(entry, 'names', () => hooks.onNames(names)),
+        onSpeech: labels => publish(entry, 'speech', () => hooks.onSpeech?.(labels)),
+        onSource: label => publish(entry, 'source', () => hooks.onSource(label)),
+        onError: () => fail(entry),
       });
     }).then(scene => {
-      if (!own()) { scene.dispose(); return; }
+      if (!owns(entry)) { scene.dispose(); return; }
       entry.scene = scene;
       entry.offChat = entry.prepared?.chatFeed?.subscribe(message => {
-        if (!own()) return;
+        if (!visible(entry)) return;
         if (message.type === 'chat') scene.receiveChat(message.cue);
         else if (message.type === 'chat.remove') scene.clearChat(message.cueIds);
         else { scene.clearChat(); hooks.onSpeech?.([]); }
       });
-      hooks.onScene(scene);
-      // Ready means the renderer drew the loaded town with light from every field.
-      let ready = false, directing = false;
+      if (visible(entry)) hooks.onScene(scene);
+      let directing = false;
       const opened = () => {
-        if (!own()) return;
-        if (!ready && scene.debug.ready) { ready = true; hooks.onPhase('ready'); }
-        const next = scene.momentDirecting();
-        if (next !== directing) { directing = next; hooks.onDirecting?.(next); }
+        if (!owns(entry)) return;
+        if (!entry.ready && scene.debug.ready) {
+          entry.ready = true;
+          if (pending === entry) { directing = scene.momentDirecting(); activate(entry); }
+          else hooks.onPhase('ready');
+        }
+        if (visible(entry)) {
+          const next = scene.momentDirecting();
+          if (next !== directing) { directing = next; hooks.onDirecting?.(next); }
+        }
         entry.frame = requestAnimationFrame(opened);
       };
       entry.frame = requestAnimationFrame(opened);
     }).catch((cause: unknown) => {
-      if (!own()) return;
+      if (!owns(entry)) return;
       console.error('The stream kingdom could not open', cause);
-      unmount('failed');
+      fail(entry);
     });
+  }
+
+  function mount(): void {
+    if (pending || current && !failed) return;
+    begin(!!current?.ready);
   }
 
   return { stats, mount, unmount, get scene() { return current?.scene; } };

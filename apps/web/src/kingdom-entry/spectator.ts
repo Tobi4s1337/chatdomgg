@@ -9,21 +9,22 @@ import { createRoomMomentFeed } from '../realm/adapters/moments';
 import { createRoomPresenceFeed } from '../realm/adapters/presence';
 import { createRoomGrowthFeed } from '../realm/adapters/growth';
 import { createRoomChatFeed } from '../realm/adapters/chat';
-import { createRealmForgeFeed } from '../realm/adapters/forge-feed';
+import { createRealmForgeFeed, deferRealmForgeFeed } from '../realm/adapters/forge-feed';
 
 /** One read-only stream view owns this closure; a scene replacement keeps only witnessed Forge work. */
 export function createRealmSpectatorSource(options: { kingdomId: KingdomId; fetcher?: RealmFetch; source?: (path: string) => WatchEventSource }) {
   const kingdomId = KingdomIdSchema.parse(options.kingdomId), forgeFeed = createRealmForgeFeed();
   return async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
     signal.throwIfAborted();
-    let observer: RealmObserver | undefined, disposed = false;
-    const watch = createRealmWatch({ kingdomId, signal, revision, unavailable() { observer?.unavailable(); forgeFeed.unavailable(); unavailable(); },
+    let observer: RealmObserver | undefined, disposed = false, active = false;
+    const sceneForgeFeed = deferRealmForgeFeed(forgeFeed);
+    const watch = createRealmWatch({ kingdomId, signal, revision, unavailable() { observer?.unavailable(); if (active) forgeFeed.unavailable(); unavailable(); },
       ...(options.source ? { source: options.source } : {}) });
     let offForge: (() => void) | undefined, chatFeed: ReturnType<typeof createRoomChatFeed> | undefined;
     const dispose = (reason?: 'scene-revision') => {
       if (disposed) return;
       disposed = true; signal.removeEventListener('abort', aborted);
-      offForge?.(); if (reason !== 'scene-revision') forgeFeed.unavailable();
+      sceneForgeFeed.dispose(); offForge?.(); if (active && reason !== 'scene-revision') forgeFeed.unavailable();
       chatFeed?.dispose(); observer?.dispose(); watch.dispose();
     };
     const aborted = () => dispose(signal.reason === 'scene-revision' ? 'scene-revision' : undefined);
@@ -43,10 +44,13 @@ export function createRealmSpectatorSource(options: { kingdomId: KingdomId; fetc
       signal.throwIfAborted();
       observer = observeRealm(watch.room, { kingdomId, origin: manifest.origin, layoutRevision: manifest.layoutRevision, collisionRevision: manifest.collisionRevision });
       chatFeed = createRoomChatFeed(watch.room, observer);
-      offForge = forgeFeed.bind(observer);
       await ready(observer, signal);
       signal.throwIfAborted();
-      return { scene, manifest, kingdomName: info.name, presenceFeed: createRoomPresenceFeed(observer, manifest.origin), growthFeed: createRoomGrowthFeed(observer, manifest.origin), walkerFeed: watch.walkerFeed, chatFeed, forgeFeed, momentFeed: createRoomMomentFeed(observer, manifest.origin), dispose };
+      const activate = () => {
+        if (active || disposed) return;
+        active = true; offForge = forgeFeed.bind(observer!); sceneForgeFeed.activate();
+      };
+      return { scene, manifest, kingdomName: info.name, presenceFeed: createRoomPresenceFeed(observer, manifest.origin, Date.now, true), growthFeed: createRoomGrowthFeed(observer, manifest.origin), walkerFeed: watch.walkerFeed, chatFeed, forgeFeed: sceneForgeFeed, momentFeed: createRoomMomentFeed(observer, manifest.origin), activate, dispose };
     } catch (error) { dispose(); throw error; }
   };
 }

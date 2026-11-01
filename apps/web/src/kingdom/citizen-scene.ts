@@ -159,6 +159,12 @@ export function createKingdomCitizens(scene: THREE.Scene, layout: SettlementPlan
       for (const window of next.windows) if (window.look !== undefined) suppliedLooks.set(window.slot, window.look);
       frame = next; motion.applyFrame(next);
     },
+    /** Called only after the outgoing renderer has stopped advancing its motion. */
+    restoreCheckpoint(saved:CitizenSceneCheckpoint|undefined) {
+      if(!saved)return;
+      pendingCheckpoint=saved;
+      if(frame)this.applyFrame(frame);
+    },
     checkpoint(): CitizenSceneCheckpoint | undefined {
       if (!frame) return undefined;
       return { used: false, revision: layout.revision, seed: layout.config.seed, castleHome, barrelKey, watcherArrivals: new Map(watcherArrivals), frame, motion,

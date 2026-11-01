@@ -9,6 +9,30 @@ export interface RealmForgeFeed {
   settled(attachmentId: string): void;
 }
 
+/** A warming renderer must not consume or settle the visible renderer's ritual. */
+export function deferRealmForgeFeed(feed: RealmForgeFeed): RealmForgeFeed & { activate(): void; dispose(): void } {
+  const listeners = new Map<ForgeObservationHandlers, (() => void) | undefined>();
+  let active = false, disposed = false;
+  return {
+    subscribe(handlers) {
+      if (disposed) return () => {};
+      listeners.set(handlers, active ? feed.subscribe(handlers) : undefined);
+      return () => { listeners.get(handlers)?.(); listeners.delete(handlers); };
+    },
+    settled(id) { if (active && !disposed) feed.settled(id); },
+    activate() {
+      if (active || disposed) return;
+      active = true;
+      for (const handlers of listeners.keys()) listeners.set(handlers, feed.subscribe(handlers));
+    },
+    dispose() {
+      disposed = true;
+      for (const off of listeners.values()) off?.();
+      listeners.clear();
+    },
+  };
+}
+
 type Stage = Extract<ForgeActivity, { type: 'stage' }>['stage'];
 const STAGES: readonly Stage[] = ['judging-words', 'drafting', 'assembling', 'judging-piece'];
 const ENDED = STAGES.length, COMMITTED = ENDED + 1;

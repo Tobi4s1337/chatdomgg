@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KingdomIdSchema } from '@chatdom/shared';
 import type { CommittedForgeAttachment, ForgeActivity } from '@chatdom/shared/realm';
-import { createRealmForgeFeed } from './forge-feed';
+import { createRealmForgeFeed, deferRealmForgeFeed } from './forge-feed';
 import type { RealmObserver, RealmObserverListener, RealmObserverSnapshot, RealmObserverStatus } from './observer';
 
 const part = (id: string): CommittedForgeAttachment => ({
@@ -121,4 +121,21 @@ describe('entry-owned live Forge handoff', () => {
     expect(late).not.toHaveBeenCalled(); expect(restored.mock.calls[0]?.[0]).toEqual([part('real')]);
     feed.unavailable();
   });
+});
+
+// Preparing new streets must not acknowledge an in-flight gift before the canvas swap.
+it('keeps hidden renderer subscriptions and acknowledgements inert until promotion', () => {
+  const room = observed(), feed = createRealmForgeFeed(), pending = deferRealmForgeFeed(feed);
+  const off = feed.bind(room.observer), hidden = vi.fn(), visible = vi.fn();
+  feed.subscribe({ committed: visible }); pending.subscribe({ committed: hidden });
+  const gift = part('warming');
+  room.emit(commit(gift)); pending.settled(gift.id);
+  expect(visible).toHaveBeenCalledOnce(); expect(hidden).not.toHaveBeenCalled();
+  const cancelled = deferRealmForgeFeed(feed); cancelled.dispose(); cancelled.activate();
+  pending.activate();
+  expect(hidden).toHaveBeenCalledExactlyOnceWith(gift, gift.runId);
+  pending.settled(gift.id); pending.dispose();
+  const late = vi.fn(); feed.subscribe({ committed: late });
+  expect(late).not.toHaveBeenCalled();
+  off(); feed.unavailable();
 });

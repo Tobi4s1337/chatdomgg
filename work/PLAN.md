@@ -330,64 +330,55 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Outcome: growth you can see.** Homes and civic places grow through witnessed days, ceremonies,
-card keepsakes and a scrubbable engine Chronicle. Forge/window wave ACCEPTED/CLOSED. Preserve dusk
-exposure, indigo fill/warm pools, castle/beacon, sparse grey-violet smoke, land/groves and AS10 citizens.
-One visible change per turn; same-view before/after; merge good checkpoints promptly.
+**Outcome: growth you can see.** Homes, civic places, earned card shelves and a scrubbable engine Chronicle.
+Forge/window wave ACCEPTED/CLOSED. Preserve dusk exposure, indigo fill/warm pools, castle/beacon,
+sparse grey-violet smoke, land/groves and AS10 citizens. One visible change/turn, same-view before/after.
 
-**Growth first consumer:** spec50, `packages/shared/src/growth.ts`, `@chatdom/world/growth`.
-Pure ordered evidence → qualified stream-days, tier/streak/civic progress and milestone proposals;
-public projector strips private identity. Ten confirmed minutes/day; UTC session-start date, one credit
-per date, marathon one day; offline dates do not break streaks. Tent→hut3, cottage7, house30, manor90,
-hall180; only third-night hut is founder-specified, other values are versioned v1 balance. Installed
-homes retain their tier; bootstrap invents no attendance or ceremony. Civic v1 levels have day gates
-and a size-neutral pace; person-days retained. No paid inputs, no message-count rewards.
-**Durable source now wired:** realm source facts also reduce growth in their fenced transaction; public
-frames share the outbox/watch. Allocation-only `growth.bindHome` verifies the immutable installed deed/tier;
-interrupted bindings recover without voiding a home. Legacy snapshots replay original facts once, not counters.
-Walking/spectator connections expose `growthFeed`, passed into `SceneOptions`. Bootstrap/late subscribers
-restore quietly; only new delivered beats celebrate. Typecheck/scoped lint/Realm+web builds pass; focused
-core/ingress/outbox19, binding/feed3 and existing browser23 tests pass. Two real Postgres cases pass: growth
-retry/recovery/legacy replay and global three-home allocation. Newly added SQL in Vitest needs
-`--no-fsModuleCache` (its persistent transformed glob cached the old migration list); migration0009 is additive.
-**Native geometry170e73d:** retained writer reconciles earned stages with no browser; exact native
-bytes only, never custom builds. The fenced deed guard replans source/target and refits every Forge part;
-identity/provenance remain. Active Forge reservations postpone growth until release/expiry. Idle state skips
-SQL/planning. `home-grown` is now a geometry-commit beat; qualification alone cannot announce a housewarming.
-Root viewed native1920×1080 before/after and pair in `work/evidence/growth-home/`: the rear wing is obvious,
-front door stable. Staged SIMULATED founded-renderer images, NOT live stream delivery or a ceremony.
-Typecheck/scoped lint/Realm build and focused native/realm/binding tests pass. Capture run finished/cleaned.
-**Next main slice:** mount the producer's scaffold/storey/chimney/neighbours ceremony and smooth the asset
-handoff; inspect the actual stream path. New deeds still inherit standing native tiers: starter/tent policy
-must be applied for new claims without reducing existing homes. Follow-tenure pieces, custom-build depth,
-earned channel-point/keepsake ledger and historical world/replay binding remain consumer seams.
-Specs51–55 cover civic craft, earned card shelf, crier, Chronicle and seeded history; each owns its folder.
-Existing `growth` lane owns home ceremony/growing quarter; no runtime checkpoint delivered yet.
-Brief0034 is in the conductor briefs; requested old depth-progression document absent from this repo.
+**Growth core:** spec50, shared growth schemas and `@chatdom/world/growth`. Ten confirmed minutes credit
+one UTC session-start date; reconnects/marathons add no days. Offline dates do not break streaks;
+best streak stays. Tent→hut3, cottage7, house30, manor90, hall180 (only hut3 founder-specified;
+others versioned v1 balance). Installed homes keep their floor. Civic levels use size-neutral day gates,
+retaining person-days. No paid inputs, message-count rewards or invented bootstrap attendance.
+Room stream/confirmed-presence facts reduce growth in the fenced transaction; public frames use its
+outbox/watch. `growth.bindHome` verifies installed deed/tier; legacy snapshots replay original facts once.
+Migration0009 additive; new-SQL Vitest needs `--no-fsModuleCache` (persistent transformed glob).
+Two real Postgres cases passed for growth retry/replay and the global three-home bound.
 
-**Recent merges:** growth PRD1207db1, raid-road87b79a8, Aggman harbourf027d66/1e33a90.
-Viewed harbour pair; shingle still too regular/cobbled, follow-up with lane; berth-margin WIP untouched.
+**Native homes170e73d/0c6440c:** retained writer applies earned authored geometry without a browser.
+Only exact native bytes grow; custom builds remain. Guard replans under deed lock and refits all Forge
+parts, preserving identity/provenance; active Forge reservations postpone growth until release/expiry.
+`home-grown` celebrates geometry commit, never eligibility alone. Viewed1920×1080 hut/cottage pair in
+`work/evidence/growth-home/`: obvious rear wing, stable door. SIMULATED founded renderer, not a ceremony.
+**Stream handoff:** old town now keeps drawing while at most one hidden replacement warms; swap only
+after its loaded draw. Camera blends into the continuing director; crowd motion transfers after old stops.
+Hidden renderer cannot consume/settle the visible Forge feed or publish labels. Revision keeps only the
+original presence lease, never extends it. Timeout/failure/hiding release owned resources; retries remain.
+Focused mount/Forge/crowd/observer/lease tests, scoped lint, typecheck and web build pass.
+Before/after capture helper: `packages/testing/growth-handoff.mjs`; staged SIMULATED actual stream revision.
 
-**Real services confirmed:** Herald5194 healthy, all13 EventSub subscriptions enabled, including
-bits.use and three v2 hype events; source LIVE, channel currently offline. Realm5197 ready200;
-Herald pending0/faultnull, delivery drained. New grants survive; no reauthorization helper needed.
-Main115bf29 fixes minute grant refresh; a14221c regression covers consent added after chat works.
-No actual new cheer/hype event observed, and no real-event picture claimed.
-Live-Twitch2cdb14d connects Herald→durable ingress→moment/dragon clock→stream; isolated signed-fixture
-HTTP rehearsal proved16speakers/16homes/windows,17th4735ms. Twitch CLI exits99: fixtures are NOT CLI proof.
-Native additive binding9b1c4f8 reuses scenes; cold/end-to-end latency still weak. Adopted plan240plots.
-Owned smoke schema `main_live_smoke_20261101` remains;
-owned5172/5173 stopped. c0a0a14 publishes allocated homes and fenced/idempotent legacy outbox recovery;
-focused units and3realPostgres cases pass. Its owned17-home restart/entry200 still needs a check.
+**Next:** mount GR10 scaffold/storey/chimney/neighbours on the delivered geometry beat and inspect it on
+stream. New deeds still inherit standing native tiers: apply starter/tent policy without reducing existing
+homes. Follow-tenure pieces, custom-build depth, earned keepsake ledger and historical replay are open.
+Growth lane owns `apps/web/src/growth/**` (WIP preserved, no runtime checkpoint yet). Specs51–55 own civic
+craft, card shelf, crier, Chronicle and seeded history independently. Feeds already reach walking/stream
+SceneOptions; bootstrap is quiet. Brief0034 exists in conductor briefs; old depth-progression file absent.
 
-**Other picture handoffs:** sky32b0197/main33fb2e9 uses drawn terrain; viewed `shots/magic/dragon-stream-pair.png`.
-Dragon small/dark: next near warm-rim-lit pass across castle. Raid-road RR10 participant journey is merged;
-AS10 guest/gate mount needs still open in its progress; production incoming raid is distinct from that bench.
-Aggman/PinkKittyRose authored identity/harbour/crossing accepted; keeper/sound mounts remain, and current
-Atlas survey lacks Aggman63920635 (never fabricate a holding). Keep those explicit follow-ups.
+**Checkpoint integration:** live-twitch LT10 and raid-road RR10 reviewed with focused tests and existing
+1920×1080 evidence; incoming raid now uses destination momentFeed rather than an SVG arrival. Dragon
+restoration retains bounded pending strikes before replaying normal battle/cadence checks. Next pictures:
+AS10 departure gate party instead of paper figures; dragon larger/warm-rimmed in closer battle framing.
+Real Twitch cheer/train/raid remains unproved; CLI exits99, signed fixture fallback is explicit SIMULATED.
+Prior merges: growth PRD1207db1, raid-road87b79a8, Aggman harbourf027d66/1e33a90. Berth-margin WIP untouched.
 
-**Opening/services:** `/stream?source=simulated&tier=town&hour=19.5&seam=starting`; window immediate,
-wide0–8s/street8–12s/return24–36s; lantern/smoke at physical arrival. Curtain alarm was sleeping Chrome.
-Managed5190web/5196API/5197realm/5195Forge/5194Herald. Logs ONLY `../conductor/state/services.log`.
-No root capture active/queued. Main queues once20min, one still/short clip per lease, cleanup in finally.
-Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.
+**Live services:** Herald5194 healthy, all13 subscriptions enabled (bits.use + three hype v2), pending0,
+faultnull; realm5197 ready200. Channel offline at check; no reauthorization or waiting observer needed.
+Managed5190web/5196API/5197realm/5195Forge/5194Herald; logs ONLY `../conductor/state/services.log`.
+Native additive binding reuses adopted240-plot scene; cold new-deed latency remains weak. Owned smoke
+schema `main_live_smoke_20261101` remains; owned5172/5173 stopped; no duplicate live writer.
+
+**Picture handoffs:** sky uses drawn terrain; groves/land accepted. Aggman/PinkKittyRose harbour/crossing
+accepted; keeper/sound mounts open. Current Atlas survey lacks Aggman63920635: never fabricate a holding.
+Opening `/stream?source=simulated&tier=town&hour=19.5&seam=starting`: window immediate, wide0–8s,
+street8–12s, return24–36s; lantern/smoke on arrival. Original curtain alarm was sleeping Chrome.
+Capture queues once20min, one still/short clip per lease, cleanup in finally. Preserve stash
+7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.

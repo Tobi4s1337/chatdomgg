@@ -102,10 +102,10 @@ export default function StreamView() {
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
-      setKingdomName(connection.kingdomName);
       return { settings: { founded: connection.scene, kingdomId: connection.manifest.kingdomId,
         presenceOrigin: connection.manifest.origin, presenceFeed: connection.presenceFeed, growthFeed: connection.growthFeed, forgeFeed: connection.forgeFeed, momentFeed: connection.momentFeed, walkerFeed: connection.walkerFeed,
-        realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed, dispose: connection.dispose };
+        realmName: connection.kingdomName, source: 'herald' as const }, chatFeed: connection.chatFeed,
+        activate: () => { connection.activate(); setKingdomName(connection.kingdomName); }, dispose: connection.dispose };
     } } : {}),
     onPhase: next => {
       setPhase(next);

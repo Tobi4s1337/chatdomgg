@@ -73,7 +73,8 @@ let citizenHandoff: { at: number; checkpoint: CitizenSceneCheckpoint } | undefin
 export type CameraName='hero'|'window'|'citizen';
 export interface NameLabel {name:string;x:number;y:number;slot:number;arrivalAgeSeconds?:number}
 export interface PotentialKingdomView {seat?:GenesisSeatContent;plan:SettlementPlan;size:string;style:'hearth'|'tide'|'grove';camera:{eye:Vec3;target:Vec3;fov:number};/** Local SIMULATED lighting only; never crowd presence or a deed. */windowPreview?:KingdomPresenceFrame}
-export interface SceneOptions {growthFeed?:GrowthSceneFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
+export interface SceneView {eye:Vec3;target:Vec3;fov:number}
+export interface SceneOptions {initialView?:SceneView;growthFeed?:GrowthSceneFeed;potential?:PotentialKingdomView;momentFeed?:TwitchMomentFeed;onMomentCaptions?:(captions:readonly ScreenCaption[])=>void;directArrivals?:boolean;onArrival?:(shot:Pick<ArrivalAttention,'slot'|'phase'>|null)=>void;founded?:RealmFoundedScene;presenceFeed?:PresenceFeed;forgeFeed?:RealmForgeFeed;walkerFeed?:RealmWalkerFeed;onWalkers?:(labels:readonly WalkerLabel[])=>void;realmName?:string;forgeFamily?:'hearth'|'tide'|'grove';nativeStyle?:'hearth'|'tide'|'grove';tier:KingdomTier;seed:string;firstYear?:number;year?:number;kingdomId?:KingdomId;focusSlot?:number;hour:number;time:number|null;camera:CameraName;source:'simulated'|'herald';presenceOrigin?:KingdomPresenceFrame['origin'];signal?:AbortSignal;onReady?:()=>void;onForge?:(status:ForgeStatus)=>void;onProgress:(text:string,fraction:number)=>void;onNames:(names:NameLabel[])=>void;onSpeech?:(labels:SpeechLabel[])=>void;onBuild?:(session:KingdomBuildSession|null)=>void;onHousewarming?:(name:string|null)=>void;onSource:(state:string)=>void;onError:(message:string)=>void}
 export interface KingdomDebug {post?:ReturnType<ReturnType<typeof createPostStack>['diagnostics']>;citizens:number;walking:number;ready:boolean;lightingReady:boolean;workers:number;homes:number;activeWindows:number;geometryBuilds:number;fieldUploads:number;drawCalls:number;triangles:number;time:number;hour:number;camera:CameraName;fieldBytes:number;source:string;fieldSettled:boolean;shadowUpdates:number;shadowDrawCalls:number;shadowTriangles:number;shadowBytes:number;shadowEnabled:boolean;windowFieldVisited:number;beaconFieldVisited:number}
 
 export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneOptions) {
@@ -97,6 +98,14 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   renderer.debug.onShaderError=(gl,program,vertex,fragment)=>{console.error('Kingdom shader failed',{vertex:gl.getShaderInfoLog(vertex),fragment:gl.getShaderInfoLog(fragment),link:gl.getProgramInfoLog(program)});throw new Error('A kingdom shader could not compile');};
   renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(43,1,.15,2200),atmosphere=own(createAtmosphere(scene));
+  let handoffPose: {view:SceneView;rotation:THREE.Quaternion;elapsed:number}|undefined;
+  function startHandoff(view:SceneView){
+    if(![...view.eye,...view.target,view.fov].every(Number.isFinite)||view.fov<10||view.fov>100||Math.hypot(...view.eye.map((v,i)=>v-view.target[i]!))<.01)throw new Error('Scene handoff needs a finite camera view');
+    const copy:SceneView={eye:[...view.eye],target:[...view.target],fov:view.fov};
+    const matrix=new THREE.Matrix4().lookAt(new THREE.Vector3(...copy.eye),new THREE.Vector3(...copy.target),camera.up);
+    handoffPose={view:copy,rotation:new THREE.Quaternion().setFromRotationMatrix(matrix),elapsed:0};poseRevision++;
+  }
+  if(options.initialView)startHandoff(options.initialView);
   const post=own(createPostStack(renderer,scene,camera,{quality:canvas.clientWidth<600?'low':'high',toneMapping:'aces',fog:'material'}));
   const registry=options.founded?.materials??MATERIALS;
   const clay=own(createVoxelMaterial(registry,'build')),ground=own(createVoxelMaterial(registry,'terrain'));
@@ -504,7 +513,17 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
     if(nextArrival!==arrivalKey){arrivalKey=nextArrival;options.onArrival?.(arrivalShot?{slot:arrivalShot.slot,phase:arrivalShot.phase}:null);}
     if(capturePose){camera.position.set(...capturePose.eye);target.set(...capturePose.target);if(camera.fov!==capturePose.fov){camera.fov=capturePose.fov;camera.updateProjectionMatrix();}}
     momentCameraDirected=loaded&&!!moments?.update(presentationMs,frame,!walking&&!build.session&&!capturePose&&!forgeDirected&&!arrivalCameraDirected);
-    if(!walking&&!forgeDirected&&!momentCameraDirected)camera.lookAt(target);camera.updateMatrixWorld();forgeFlight.update();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);crowd.drawLanterns(time,night,camera,walk?.grips??observed?.grips);updateInstances(fixedTime&&autoCamera?time*1000:now);
+    if(!walking&&!forgeDirected&&!momentCameraDirected)camera.lookAt(target);
+    if(handoffPose&&!walking&&!capturePose){
+      // Preserve the outgoing lens, then yield smoothly to the production director.
+      if(loaded)handoffPose.elapsed+=dt;
+      const blend=THREE.MathUtils.smoothstep(handoffPose.elapsed,0,1);
+      camera.position.lerp(new THREE.Vector3(...handoffPose.view.eye),1-blend);
+      camera.quaternion.slerp(handoffPose.rotation,1-blend);
+      camera.fov=THREE.MathUtils.lerp(handoffPose.view.fov,camera.fov,blend);camera.updateProjectionMatrix();
+      if(blend===1)handoffPose=undefined;
+    }
+    camera.updateMatrixWorld();forgeFlight.update();walk?.interact(now);walk?.draw(now);observed?.draw(now,!walk);crowd.drawLanterns(time,night,camera,walk?.grips??observed?.grips);updateInstances(fixedTime&&autoCamera?time*1000:now);
     canopy.sync();canopy.setWind(time,[0.8,0.6],0.8);
     homeLife.update(presentationMs,time,lightFrame,hour,camera);royalLife.update(time,frame,hour);
     forgeFire.update(time,frame,hour);forgeHearth.update(time,frame,hour);
@@ -622,6 +641,18 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
       if(cue.asOf<=at&&at-cue.asOf<=5000&&cue.expiresAt>at)arrivalDirector?.chat(cue.slot,at);
       return true;
     },clearChat:(cueIds?:readonly string[])=>crowd.clearChat(cueIds),
+    captureCitizens:()=>crowd.checkpoint(),
+    restoreCitizens(checkpoint:CitizenSceneCheckpoint|undefined){citizenHandoff=undefined;crowd.restoreCheckpoint(checkpoint);instancesDirty=true;},
+    captureView():SceneView{
+      const direction=camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(16).add(camera.position);
+      return {eye:camera.position.toArray() as Vec3,target:direction.toArray() as Vec3,fov:camera.fov};
+    },
+    handoffView(view:SceneView){
+      startHandoff(view);
+      camera.position.set(...view.eye);camera.lookAt(new THREE.Vector3(...view.target));camera.fov=view.fov;camera.updateProjectionMatrix();camera.updateMatrixWorld();
+      // Promotion must show this lens immediately, rather than the candidate's last warm-up frame.
+      if(loaded){post.render(0);lastField=-Infinity;instancesDirty=true;}
+    },
     setHour(value:number){targetHour=value;sound.cue('wood');},
     setCamera(value:CameraName){arrivalDirector?.cancel();walkSelected=false;walk?.controller.release();capturePose=null;poseRevision++;camName=value;autoCamera=false;lastField=-Infinity;sound.cue('wood');},
     /** Evidence framing only. Null returns control to the current production camera. */
