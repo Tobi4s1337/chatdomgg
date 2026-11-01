@@ -59,6 +59,8 @@ export function Card(props: {
     queueMicrotask(() => closeButton?.focus({ preventScroll: true }));
   });
   const onKey = (event: KeyboardEvent) => {
+    const map = closeButton?.closest('[data-chatdom-atlas]');
+    if (map && event.target instanceof Node && !map.contains(event.target)) return;
     if (event.key === 'Escape') props.onClose();
   };
   window.addEventListener('keydown', onKey);
@@ -66,7 +68,7 @@ export function Card(props: {
 
   return (
     <section class="atlas-card" aria-labelledby="atlas-card-title" data-tier={props.settler.tier}>
-      <button ref={(element) => (closeButton = element)} class="atlas-card-close" type="button" onClick={() => props.onClose()} aria-label="Close card">
+      <button ref={(element) => (closeButton = element)} class="atlas-card-close" type="button" on:click={() => props.onClose()} aria-label="Close card">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" /></svg>
       </button>
       <header class="atlas-card-head">
@@ -129,7 +131,7 @@ export function Card(props: {
       <Show when={missing()}>{(text) => <p class="atlas-card-missing">{text()}</p>}</Show>
       <Show when={door()}>
         {(holding) => (
-          <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} onClick={(event) => enter(event, holding())}>
+          <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} on:click={(event) => enter(event, holding())}>
             Enter the land
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 14V7a5 5 0 0 1 10 0v7M3 14h10M8 9v2" /></svg>
           </a>

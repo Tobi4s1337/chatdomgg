@@ -215,7 +215,7 @@ function MarkButton(props: { mark: StillMark; z: number; selected: boolean; pixe
       aria-pressed={props.selected}
       aria-label={m().label}
       style={{ left: `${m().box.x}px`, top: `${m().box.y}px`, width: `${m().box.w}px`, height: `${m().box.h}px`, 'z-index': props.z }}
-      onClick={() => props.onSelect(m().settler)}
+      on:click={() => props.onSelect(m().settler)}
     >
       <Ring r={m().ring.r} x={dx(m().ring.x)} y={dy(m().ring.y)} />
       {/* Keyed: a stamp redrawn at another size is a new sprite. */}
@@ -261,6 +261,7 @@ export function Still(props: StillProps): JSX.Element {
   let readyFired = false;
   let washTimer: ReturnType<typeof setTimeout> | undefined;
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  let fontTimer: ReturnType<typeof setTimeout> | undefined;
   let versionTimer: ReturnType<typeof setInterval> | undefined;
   let idleHandle: number | undefined;
   let chunksStarted = false;
@@ -535,7 +536,8 @@ export function Still(props: StillProps): JSX.Element {
     onCleanup(() => observer.disconnect());
     if ('fonts' in document) {
       const all = Promise.all(FACES.map((face) => document.fonts.load(face, 'Atlas Кириллица'))).then(() => undefined, () => undefined);
-      void Promise.race([all, new Promise<void>((resolve) => setTimeout(resolve, FONT_GRACE_MS))]).then(() => {
+      void Promise.race([all, new Promise<void>((resolve) => { fontTimer = setTimeout(resolve, FONT_GRACE_MS); })]).then(() => {
+        clearTimeout(fontTimer);
         if (!disposed) setFontsIn(true);
       });
     } else setFontsIn(true);
@@ -549,6 +551,7 @@ export function Still(props: StillProps): JSX.Element {
     disposed = true;
     generation++;
     clearTimeout(washTimer);
+    clearTimeout(fontTimer);
     clearTimeout(resizeTimer);
     clearInterval(versionTimer);
     cancelIdle(idleHandle);

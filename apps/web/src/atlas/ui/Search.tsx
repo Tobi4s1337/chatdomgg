@@ -23,6 +23,7 @@ const QUIET_MS = 280;
  * list and then clears.
  */
 export function Search(props: {
+  keyboardRoot?: HTMLElement;
   source: PreviewSource;
   world: PreviewWorld;
   /** Whether a result is on air in the live frame shown now. */
@@ -123,9 +124,9 @@ export function Search(props: {
     input?.focus();
     input?.select();
   };
-  onMount(() => window.addEventListener('keydown', onWindowKey));
+  onMount(() => (props.keyboardRoot ?? window).addEventListener('keydown', onWindowKey as EventListener));
   onCleanup(() => {
-    window.removeEventListener('keydown', onWindowKey);
+    (props.keyboardRoot ?? window).removeEventListener('keydown', onWindowKey as EventListener);
     clearTimeout(timer);
     clearTimeout(quiet);
     clearTimeout(retry);
@@ -157,7 +158,7 @@ export function Search(props: {
       class="atlas-search"
       data-open={open() ? 'true' : 'false'}
       data-phase={phase().kind === 'results' ? (results().length ? 'results' : 'none') : phase().kind === 'failed' ? (phase() as { reason: string }).reason : phase().kind}
-      onFocusOut={(event) => {
+      on:focusout={(event) => {
         // Leaving the search (a tap on the map, Tab onwards) folds the list away; the text stays for later.
         const next = event.relatedTarget as Node | null;
         if (!next || !wrapper?.contains(next)) setOpen(false);
@@ -183,9 +184,9 @@ export function Search(props: {
           aria-controls="atlas-search-results"
           aria-activedescendant={open() && results().length ? `atlas-search-result-${active()}` : undefined}
           value={text()}
-          onInput={(event) => onInput(event.currentTarget.value)}
-          onKeyDown={onKeyDown}
-          onFocus={() => {
+          on:input={(event) => onInput(event.currentTarget.value)}
+          on:keydown={onKeyDown}
+          on:focus={() => {
             if (text().trim() && phase().kind !== 'idle') setOpen(true);
           }}
         />
@@ -212,9 +213,9 @@ export function Search(props: {
                       aria-selected={i() === active()}
                       class="atlas-search-result"
                       data-place={result.channel.place}
-                      onPointerEnter={() => setActive(i())}
-                      onPointerDown={(event) => event.preventDefault()}
-                      onClick={() => choose(result)}
+                      on:pointerenter={() => setActive(i())}
+                      on:pointerdown={(event) => event.preventDefault()}
+                      on:click={() => choose(result)}
                     >
                       <PlaceMark face={result.channel} onAir={props.onAir(result)} size={26} />
                       <span class="atlas-search-text">
@@ -260,7 +261,7 @@ export function Search(props: {
                   </Match>
                   <Match when={true}>
                     <p>The register could not be read just now. The map is unchanged.</p>
-                    <button type="button" class="atlas-search-retry" onClick={() => ask(text())}>Search again</button>
+                    <button type="button" class="atlas-search-retry" on:click={() => ask(text())}>Search again</button>
                   </Match>
                 </Switch>
               </div>

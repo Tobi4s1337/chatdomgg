@@ -57,7 +57,7 @@ export function Controls(props: {
 }) {
   return (
     <div class="atlas-controls" role="group" aria-label="Map view">
-      <button type="button" onClick={() => props.onZoomIn()} disabled={!props.canZoomIn} aria-label="Zoom in" title="Zoom in (+)"><Icon d="M12 5v14M5 12h14" /></button>
+      <button type="button" on:click={() => props.onZoomIn()} disabled={!props.canZoomIn} aria-label="Zoom in" title="Zoom in (+)"><Icon d="M12 5v14M5 12h14" /></button>
       <div class="atlas-ladder" role="group" aria-label="Distance">
         <For each={[...DISTANCES].reverse()}>
           {(distance) => (
@@ -68,15 +68,15 @@ export function Controls(props: {
               aria-pressed={props.distance === distance}
               aria-label={`${DISTANCE_LABELS[distance]} distance`}
               title={`${DISTANCE_LABELS[distance]} (${DISTANCES.indexOf(distance) + 1})`}
-              onClick={() => props.onDistance(distance)}
+              on:click={() => props.onDistance(distance)}
             >
               <span aria-hidden="true" />
             </button>
           )}
         </For>
       </div>
-      <button type="button" onClick={() => props.onZoomOut()} disabled={!props.canZoomOut} aria-label="Zoom out" title="Zoom out (−)"><Icon d="M5 12h14" /></button>
-      <button type="button" onClick={() => props.onHome()} aria-label="Show the whole map" title="Whole map (0)"><Icon d="M4 11.5L12 5l8 6.5M6.5 10v8.5h11V10M10 18.5v-5h4v5" /></button>
+      <button type="button" on:click={() => props.onZoomOut()} disabled={!props.canZoomOut} aria-label="Zoom out" title="Zoom out (−)"><Icon d="M5 12h14" /></button>
+      <button type="button" on:click={() => props.onHome()} aria-label="Show the whole map" title="Whole map (0)"><Icon d="M4 11.5L12 5l8 6.5M6.5 10v8.5h11V10M10 18.5v-5h4v5" /></button>
     </div>
   );
 }
@@ -100,8 +100,8 @@ export function Notice(props: { children: unknown; action?: { label: string; run
   return (
     <div class="atlas-notice" role="status">
       <span>{props.children as string}</span>
-      <Show when={props.action}>{(action) => <button type="button" onClick={() => action().run()}>{action().label}</button>}</Show>
-      <Show when={props.onDismiss}>{(dismiss) => <button type="button" class="atlas-notice-x" aria-label="Dismiss" onClick={() => dismiss()()}>×</button>}</Show>
+      <Show when={props.action}>{(action) => <button type="button" on:click={() => action().run()}>{action().label}</button>}</Show>
+      <Show when={props.onDismiss}>{(dismiss) => <button type="button" class="atlas-notice-x" aria-label="Dismiss" on:click={() => dismiss()()}>×</button>}</Show>
     </div>
   );
 }

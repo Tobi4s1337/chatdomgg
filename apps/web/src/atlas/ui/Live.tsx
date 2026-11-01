@@ -30,13 +30,15 @@ export function DabCard(props: { dab: Dab; world: PreviewWorld; geo: Geography; 
     queueMicrotask(() => closeButton?.focus({ preventScroll: true }));
   });
   const onKey = (event: KeyboardEvent) => {
+    const map = closeButton?.closest('[data-chatdom-atlas]');
+    if (map && event.target instanceof Node && !map.contains(event.target)) return;
     if (event.key === 'Escape') props.onClose();
   };
   window.addEventListener('keydown', onKey);
   onCleanup(() => window.removeEventListener('keydown', onKey));
   return (
     <section class="atlas-card" aria-labelledby="atlas-card-title" data-kind="dab">
-      <button ref={(element) => (closeButton = element)} class="atlas-card-close" type="button" onClick={() => props.onClose()} aria-label="Close card">
+      <button ref={(element) => (closeButton = element)} class="atlas-card-close" type="button" on:click={() => props.onClose()} aria-label="Close card">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" /></svg>
       </button>
       <header class="atlas-card-head">
