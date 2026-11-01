@@ -130,7 +130,7 @@ the frame drawn is the one a GPU would show at that instant. Every still carries
 
 ## Integration review, 2026-11-01
 
-All nine existing LT11 stills were inspected together in `/tmp/live-twitch-review-contact.png`. The decree still is
+All nine existing LT11 stills were inspected together in a temporary review contact sheet. The decree still is
 only the opening/loading screen and is **rejected as evidence**. The poll still is a distant town view and does not
 demonstrate the board. The other stills show the actual scene; the subscriber's missing banner remains the explicit
 anchor limitation above. These existing captures predate the integration review; no new capture or live Twitch act
@@ -141,3 +141,12 @@ Regressions cover redemption retry/rollback, reordered and reconciled nights, ol
 binding in citizen installation, and a maximum-epoch 4,096-entry grove restored through both public projection and
 browser controller within the 288 KiB outbound budget. The renderer's fixed first-512 planting selection remains a
 large-town visual limitation; record/transport coverage does not demonstrate every home's planting on screen.
+
+
+## Fresh integrated native still — 2026-11-01
+
+`homecoming-native-reviewed@1920x1080.png` was captured and viewed from the actual native stream surface after the committed-presence ordering fix `0f103bc`. The data and UI are explicitly SIMULATED, on an isolated durable `winddown_round_*` schema with its own ports and private `/tmp` build outputs. A fresh signed mock chat produced public homecoming seq17 in155ms; the exact public cause, mock delivery IDs, actual renderer readiness and source provenance are recorded in the adjacent JSON.
+
+The image shows an actual street with four native homes, a lit central cottage, and the Willowmere/SIMULATED labels. It does **not** show the homecoming caption or neighbor-relight, so it demonstrates rendered integration after the event rather than the signature beat's timing. The runtime controller did receive the exact homecoming. No clock, actor or camera was forced; a capture-only RAF gate preserved the next actually completed native frame for SwiftShader's screenshot.
+
+The helper exited0 and released its browser, three owned services and shared capture lock. Realm5198, web5199 and signed mock door5182 were independently bind-probed closed. No managed service, managed build output or live Twitch write was used. Detailed diagnosis and focused regression evidence: `work/reviews/live-homecoming-ordering-2026-11-01.md`.

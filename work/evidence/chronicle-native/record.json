@@ -1,0 +1,19 @@
+{
+  "url": "http://127.0.0.1:5199/stream?source=realm&kingdom=129634568&chronicle=1",
+  "entries": 43,
+  "first": "October 14, 2026; entry 26 of 43",
+  "end": "October 15, 2026; entry 27 of 43",
+  "file": "work/evidence/chronicle-native/chronicle-durable-simulated-30s.webm",
+  "problems": [],
+  "unavailableContext": [
+    "Dock API is absent from this isolated realm-only harness."
+  ],
+  "audio": "Playwright capture has no audio; sound is not verified.",
+  "review": "Before trimming, controls advanced entry 26 to27. All 60 sampled frames of the encoded 30-second tail hold entry 27; no geometry or tier change is shown. The next bridge revision remained in preparation. This is a failed watchability demonstration.",
+  "contactSheets": [
+    "work/evidence/chronicle-native/chronicle-durable-30s-01.png",
+    "work/evidence/chronicle-native/chronicle-durable-30s-02.png",
+    "work/evidence/chronicle-native/chronicle-durable-30s-03.png"
+  ],
+  "firstEncodedFrame": "work/evidence/chronicle-native/chronicle-durable-first@1440x900.png"
+}

@@ -1,0 +1,889 @@
+{
+  "sourceSnapshot": "isolated final build snapshot",
+  "sourceCommit": "f9c4f5c",
+  "origin": "simulated",
+  "kingdomId": "990100001",
+  "sourcePlanHash": "273f8463acb0a36cc5384c2450e54b624e9dbea2a57da07b7fab9a8d3b482de6",
+  "adoptedHomes": 240,
+  "adoptedQuarters": 5,
+  "layoutRevision": "settlement:2:43cffdb6",
+  "collisionRevision": 1,
+  "assets": 101,
+  "placements": 1197,
+  "observedCitizens": 2,
+  "native": true,
+  "authority": "retained writer",
+  "browserStarted": true,
+  "scenario": "close",
+  "format": "still",
+  "action": {
+    "id": "25bbfc9a-876e-4e3c-8d41-89b8a8a6cd80",
+    "kingdomId": "990100001",
+    "kind": "gate-close",
+    "expectedRevision": "dock:15bd52edf17b4bdbeac37e3a1d747f6ea99badfcc1e3186cb6331774d529c9e2"
+  },
+  "initialOutcome": {
+    "version": 1,
+    "status": "unknown",
+    "message": "The act is committed. Check the stream; presentation has not been confirmed."
+  },
+  "presentation": {
+    "version": 1,
+    "id": "dock:e77fede2d50f5576ef25c2f9fb24623737612e15661fbcf0",
+    "actionId": "25bbfc9a-876e-4e3c-8d41-89b8a8a6cd80",
+    "kingdomId": "990100001",
+    "origin": "simulated",
+    "kind": "gate-close",
+    "occurredAt": 1793565312125,
+    "expiresAt": 1793565372125,
+    "gate": "closed",
+    "fire": "unlit"
+  },
+  "committedAt": 1793565312125,
+  "witnessedAt": 1793565322291,
+  "witnessReplies": [
+    {
+      "at": 1793565322321,
+      "http": 200,
+      "kingdomId": "990100001",
+      "streamEventId": "dock:e77fede2d50f5576ef25c2f9fb24623737612e15661fbcf0",
+      "body": {
+        "status": "witnessed"
+      },
+      "elapsedMs": 16199
+    }
+  ],
+  "samples": [
+    {
+      "elapsedMs": 7856,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 8115,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 8369,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 8626,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 8884,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 9140,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 9397,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 9654,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 9912,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 10165,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 10422,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 10679,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 10931,
+      "dock": {
+        "active": true,
+        "presenting": false,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 11187,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 11442,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 11695,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 11954,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 12210,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 12464,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 12718,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 12976,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 13233,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 13489,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 13744,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 14000,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 14254,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 14508,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 14771,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 15027,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 15280,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 15533,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 15787,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    },
+    {
+      "elapsedMs": 16042,
+      "dock": {
+        "active": true,
+        "presenting": true,
+        "received": 1,
+        "witnessed": 0,
+        "sites": {
+          "gate": [
+            0,
+            20,
+            -36
+          ],
+          "plaza": [
+            4,
+            9,
+            13
+          ],
+          "simulated": false,
+          "failure": null
+        }
+      }
+    }
+  ],
+  "publicStatus": {
+    "status": "ready",
+    "gate": "closed",
+    "undoable": [
+      {
+        "id": "receipt:dock:e77fede2d50f5576ef25c2f9fb24623737612e15661fbcf0",
+        "kind": "gate-close",
+        "label": "gate close"
+      }
+    ]
+  },
+  "drawn": {
+    "active": true,
+    "presenting": true,
+    "received": 1,
+    "witnessed": 1,
+    "sites": {
+      "gate": [
+        0,
+        20,
+        -36
+      ],
+      "plaza": [
+        4,
+        9,
+        13
+      ],
+      "simulated": false,
+      "failure": null
+    }
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+  ],
+  "pageErrors": [],
+  "exactReceipt": "receipt:dock:e77fede2d50f5576ef25c2f9fb24623737612e15661fbcf0",
+  "heldFrame": {
+    "held": false,
+    "dock": {
+      "active": true,
+      "presenting": true,
+      "received": 1,
+      "witnessed": 1,
+      "sites": {
+        "gate": [
+          0,
+          20,
+          -36
+        ],
+        "plaza": [
+          4,
+          9,
+          13
+        ],
+        "simulated": false,
+        "failure": null
+      }
+    }
+  },
+  "sourceRefreshFailures": 0,
+  "screenshot": "native-gate-close-UNCONFIRMED@1920x1080.png",
+  "drawConfirmed": true,
+  "visualFrameReady": false,
+  "visualReview": {
+    "reviewed": true,
+    "nativeTownVisible": true,
+    "gateCeremonyReadable": false,
+    "sourceMark": "SIMULATED",
+    "note": "Real SIMULATED ingress remained fresh. The stream debug facade did not expose the existing scene suspendRendering method, so the screenshot settled on the wide shot after the gate act ended."
+  }
+}

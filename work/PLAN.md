@@ -328,61 +328,54 @@ techniques in available source and current primary documentation at each freeze.
 already settled: no royal coals, no subscriber vote weight, no night Atlas, no public video creation, no paid map
 position, no creature Forge, no real crowd without real people. Do not reopen them by accident.
 
-## 10. Takeover handoff — build paused, 2026-11-01
+## 10. Final lane landing and takeover — 2026-11-01
 
-**Tobias is taking over.** No agents, captures or new work should restart automatically. The whole
-vision remains the target; this pause does not mark it achieved. Forge/window-wave/look are
-ACCEPTED/CLOSED. Preserve them. Every lane head, next seam and preserved dirty checkout is in
-[the lane register](HANDOFF-LANES.md); ancestry counts include merges, not just new feature work.
+**Tobias takes over after this round.** No lane workers or captures should restart automatically.
+Accepted Forge/window-wave/light/avatar appearance remains closed. Every lane, its branch/checkpoint,
+preserved dirty work and concrete next step is in [HANDOFF-LANES.md](HANDOFF-LANES.md).
+Merged ancestry is not a claim that the whole lane is finished.
 
-**On main:** real realm/session entry, live Herald/Twitch ingress, Forge and window/homecoming
-consumers; native earned Emberfold-v2 home publication; growth-civic content/adapter; crier/history/
-Chronicle consumers; dock command/status/witness and ordinary scene acts; walking labels/head anchors/
-gait audio; Soul producers; public gateway/front door/panel zip; GK10/GK11 standalone landscape and
-latest artisan checkpoints. These parts are merged, but the outstanding host joins below are real.
-Growth-civic authored lane is fully merged and can retire. Never retrofit a home at the same tier;
-custom geometry and fitted Forge parts survive the next earned publication.
+**Newly on main:** the 53-file live-Twitch checkpoint (follow settlement, sub/tenure, channel points,
+polls, going-live welcome and restart/retry fencing; `0f103bc` fixes homecoming ordering after source loss); Atlas search/card/road APIs and mapped holdings
+opening generated kingdoms; the latest grand castle/town and artisan content; interaction home/place
+runtime salvaged from the dirty lane. Own-door spawn and same-world adoption now use checked committed
+geometry, and entering a home requires its current installed private revision.
 
-**Atlas fixes:** `e066d39` installs Pixi's CSP shim at the only public Pixi renderer entry, logs original
-mount failures, retries once on a fresh renderer and falls back to the selected still. Public CSP
-retains `script-src 'self' 'wasm-unsafe-eval'`. Emitted shader/uniform overrides were checked.
-`9ace174` implements Tobias's newest decision: Atlas names are always served, with `freshUntil` at least 24h after serving;
-withholding remains unchanged. The Surveyor is refreshed every few hours. This overrides the older
-one-day names-expiry rule. Walking's observed-head fixture and public-capture globals are fixed in wrap-up.
+**Main-owned joins:** four collision/hash-bearing civic sites (tavern, market, court, bridge) with
+native glow/water; directed dock undo, honest attendance/current targets, original witnessed raids and
+lasting fire gathering (native authenticated draw/SQL receipt confirmed; readable act-frame acceptance remains open); the uncached realm clock and actual supported smith on the current citizen rig.
+Soul uses explicit woodland/UTC presentation defaults until persisted Genesis biome/zone and actual
+bakery/lamps/quay/ship producers exist. The accepted Forge is preserved; no compatible physical civic
+upgrade exists, so five-place civic completion remains open.
 
-**Grand adoption is NOT on main.** Complete candidate: local branch `wip/grand-land-adoption`,
-commit `5dcc56d`, clean worktree listed by `git worktree list`. It hosts terrain in the existing
-scene/renderer/RAF, preserves exact native floor and placements, and adds native raster water.
-Actual 1080p stream stayed at “Raising the wider kingdom” for 300s. No fix is proven. Before/failure
-frames and limits are in that branch's `work/evidence/grand-adoption-wip/README.md`. The CPU diagnostic
-used the actual plan but a different kingdom identity; its 85s result is not an identical reproduction.
-The named main stash is retained as a backup. Other people's older stashes and lane edits are untouched.
+**Chronicle:** ordered digested durable facts reconstruct complete native scene revisions, with public
+redaction and bounded reads. The founded kingdom and stream can open isolated read-only replay;
+closing restores live controls/rendering. An isolated SIMULATED 42-night record contains three guarded
+home constructions and no purchased credit. Historical lights/chat were not retained and are never
+invented. The native 30-second recording was reviewed through its frames: only one night advanced before the next
+full-world rebuild occupied the clip. CH02 stays open; retain renderer/mesh caches across revisions before
+claiming watchable playback. The old bench is not evidence for this join.
 
-**The remaining main-owned seams:**
-- **Soul:** bind `SoulSceneBinding` to actual supported civic routes/lamps/bakery/quay/forge, a continuous
-  authoritative kingdom clock coordinated with the director, and witnessed arrivals. The proposal is
-  `work/lanes/soul/main-soul.patch`; native weather shader and actual walk/stream remain unproved.
-- **Dock:** verified moderators may observe, only the broadcaster acts; directed undo and honest
-  attendance wording remain. Incoming raid guests/banners and lasting fire gathering need real scene
-  presentation and receipt proof. See `work/lanes/dock/needs.md`; never offer arbitrary dragon spawning.
-- **Walking:** fixture correction is applied/tested. Approved saved looks/earned tools, authenticated
-  gestures, owned-door spawn, matching render/physical terrain, deterministic soft-push and guest speech
-  remain in `work/lanes/walking-together/needs.md`. The optional ports are not authority integration.
-- **Growth/memory:** cleared civic anchors and production renderer/light/water attachment; trusted earned
-  shelf/crier send-and-ack; public Chronicle history plus isolated replay/restoration. Public Chronicle
-  remains unavailable; its SIMULATED bench is not the historical live kingdom. Cottage-v2 new still failed.
+**Grand adoption stays OFF main.** Candidate `wip/grand-land-adoption` at `52bb8cc` keeps the native
+floor and hosts streamed terrain in its renderer. Deferring hidden post/reflection draws reduced exact
+numeric-target readiness from over 300 seconds to about 56 seconds; the loaded screenshot still timed
+out. No visual or real-GPU acceptance. Reconcile latest stable reserved seating/recipe, obtain a truly
+loaded stream frame, then walk/Forge/moment checks on that same floor before adopting. Standalone
+`/-/grand?channel=tobi4s_&hour=19.5&view=hero` is publicly allowed (`b8b3c0d`) for Tobias's own rebuild.
 
-**What I would pick up first:** confirm Atlas on the real GPU, then reproduce the grand load stall using
-numeric kingdomId 129634568 and expose loading progress before the final scene owner is published.
-Distinguish worker queues, staged installation, shadows and rendering; do not bypass exact floor/readiness
-or substitute a backdrop. Keep the current live kingdom until the joined stream actually opens.
+**Still real gaps:** verified moderator IDs and identified raid guests for the dock; approved saved
+looks/tools, authenticated gestures and deterministic neighbour soft-push for walking; trusted public
+citizen/share-image subject and travel disclosure adapters for card/passport (the panel JWT endpoint
+exists, its travel collections are empty); fitted interiors/table host. Realm-server's dirty checkout
+contains unresolved merge conflicts and is preserved untouched. Other incomplete content/fixture
+batches are precisely recorded in the register, not silently labelled done.
 
-**Operations/evidence:** managed 5190 web, 5196 API, 5197 realm, 5195 Forge, 5194 Herald left running;
-logs ONLY `../conductor/state/services.log`. Same-epoch opening renewal is on main; managed cold opening
-succeeded after restart. All main-owned captures/diagnostics/temporary servers ended; test session revoked.
-`pnpm public:build`, `pnpm public:start`, `pnpm panel:zip`; see `deploy/public/README.md` and
-`EXTENSION-STEPS.md`. No deploy, DNS/Twitch configuration or Extension registration performed. Complete
-public build is required after a web-only build to restore the front door. Final check results and
-limitations: `work/evidence/one-kingdom/README.md`. Final typecheck, full lint, 193 Surveyor tests,
-38 focused integration tests, the workspace build and complete public build/panel zip passed. No full-suite screenshot matrix or GPU
-performance claim.
+**Operations:** managed 5190/5194–5197 services and production data were not restarted or moved.
+All rehearsals use owned ports, isolated schemas and temporary bundles; the final signed homecoming arrived in155ms
+and its native still was viewed (caption/neighbor-relight timing remains unproved). Final workspace/public builds
+are checked in a separate snapshot. Credentials and `.env` remain ignored. Logs only
+`../conductor/state/services.log`. No deploy, DNS, Twitch writes or Extension registration.
+
+**First pickup:** eliminate native Chronicle rebuild stalls and finish Dock proof gaps, then obtain a real-GPU loaded grand
+frame; for product completeness bind the trusted citizen/passport subject before adding share routes.
+Current evidence and exact check results: [lane landing](evidence/lane-landing/README.md).

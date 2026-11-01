@@ -1,0 +1,37 @@
+{
+  "sourceSnapshot": "isolated final build snapshot",
+  "sourceCommit": "f9c4f5c",
+  "origin": "simulated",
+  "kingdomId": "990100001",
+  "sourcePlanHash": "273f8463acb0a36cc5384c2450e54b624e9dbea2a57da07b7fab9a8d3b482de6",
+  "adoptedHomes": 240,
+  "adoptedQuarters": 5,
+  "layoutRevision": "settlement:2:43cffdb6",
+  "collisionRevision": 1,
+  "assets": 101,
+  "placements": 1197,
+  "observedCitizens": 2,
+  "native": true,
+  "authority": "retained writer",
+  "browserStarted": true,
+  "dock": {
+    "active": true,
+    "presenting": false,
+    "received": 0,
+    "witnessed": 0,
+    "sites": {
+      "gate": [
+        0,
+        20,
+        -36
+      ],
+      "plaza": [
+        4,
+        9,
+        13
+      ],
+      "simulated": false,
+      "failure": null
+    }
+  }
+}

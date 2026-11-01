@@ -1,113 +1,119 @@
 # Lane handoff register
 
-Build paused at Tobias’s request on 2026-11-01. Checkpoint snapshot taken before the final Atlas names and handoff commits, from the branch, ahead-count and worktree inventories. Later checkpoint notes have not been re-reviewed. Lane notes are read from each branch's `work/lanes/<lane>/progress.txt`; `../worktrees/<lane>/` identifies the sibling checkout when one exists. An ahead count records ancestry relative to the snapshot base, not a count of unmerged feature work: merge commits may account for it. `0` means the snapshot reports no commits ahead, not that the task is complete. See the lane PRD and progress file for full evidence.
+Reviewed landing round, 2026-11-01. Every original lane has a disposition below. **Merged checkpoint does not mean its whole vision is finished.** Accepted Forge/window-wave/light/avatar appearance stays closed. No lane worker was started. Main commits all authority and composition joins; the host retains the live services.
 
-| Lane / branch | Head | Ahead | Latest checkpoint / state and next action |
-|---|---|---:|---|
-| anvil-hero | `c807642` | 0 | AH06 landed. Forge accepted/closed by Tobias; preserve the current look. Older silhouette criticisms are historical, not a new task. |
-| anvil-hero-w2 | `1e55f31` | 0 | Secondary worker instructed to finish only its current task and park; return work to primary lane. |
-| atlas | `5016549` | 0 | Atlas visual/live lane remains open; content labels unavailable and /map motion awaits real-GPU review. |
-| atlas-door | `2ab4874` | 4 | AD10 camera accepted; next card/door, raid and random sheet captures need fresh survey names. |
-| atlas-w2 | `47cf3bc` | 0 | A03 complete; key ceremony, founder review of taxonomy and main founded-record producer remain. |
-| atlas-w3 | `6b090e9` | 0 | No lane progress note in this checkout; head is an integration-queue merge. Inspect lane PRD before resuming. |
-| avatar-style | `f14087e` | 0 | AS11 builder/earned pieces checkpoint; preserve older earned ribbon marks on tenure updates, then improve deep-skin eye readability. |
-| build-templates | `88631ad` | 2 | BT01/02 accepted and mounted; lane parked after current task. |
-| build-tools | `c7d52b7` | 0 | BT03 accepted; BT04 remains uncommitted producer work; retain controller and input behavior. |
-| campfire | `d93d474` | 9 | Fire game set aside; parked, preserve finished work and do not merge half-done changes. |
-| campfire-w2 | `06bcddc` | 7 | CF02 rules authored; remaining untracked files need review and main merge/done-check. Park after current task. |
-| card-passport | `104a52f` | 0 | CP10 share flow complete in lane; main still owns public share route/host binding and fresh shelf wording evidence. |
-| chronicle | `1b346d1` | 0 | CH02 phone checks and focused checks passed; continuous 30s recording review still pending, plus durable ordered history and authoritative scene bindings. |
-| citizen-card | `29b94da` | 2 | CC01 checks/captures passed; real-GPU lighting doubt remains; parked. |
-| civic-props | `66a7ea8` | 0 | CP03 heraldry props checkpoint; consult lane progress/PRD for remaining composition and review. |
-| crowd-behaviour | `837aeb5` | 0 | CB03 witnessed chat cue behavior checkpoint; consult lane progress/PRD for remaining integration/review. |
-| dock | `74f2bd6` | 0 | DK10 authored surface merged; moderator/undo/attendance/procession/fire joins and real stream proof remain. Public-script lint fixed in wrap-up. |
-| effects-library | `c807642` | 0 | EL11 mounted. Forge accepted/closed; keep parked. Main owns actual-history adapter/camera joins. |
-| emotes | `ac85f2a` | 0 | E08/E09 work recorded; finish cue timestamp bounds and safe scheduled source reconciliation per lane notes. |
-| first-look-polish | `4c9bb5a` | 0 | FL02 Forge panel checkpoint; consult lane notes for remaining visual/integration work. |
-| first-look-polish-w2 | `6b090e9` | 0 | Main requests closer idle Forge camera framing for phone; camera call-site belongs to integrator. |
-| forge-pieces | `4e0354d` | 2 | FP03 review parked; next visual task is readable watchful-owl eyes/beak without bypassing a confident judge rejection. |
-| forge-refusals | `04761d2` | 2 | FF02 refusal beat complete/tested; consult PRD for acceptance/remaining integration. |
-| forge-ritual | `851dc64` | 0 | FR03 landed; Forge accepted/closed. Earlier listening/capture notes are historical; do not reopen accepted work. |
-| genesis-aggman | `b5796bb` | 0 | Head is a merge of growth; no branch-local lane progress found. Check genesis/growth PRDs before resuming. |
-| genesis-emote-art | `887faa7` | 0 | Lane marked complete; soften central stained-glass emission while retaining emote features; actual mount is main-owned. |
-| genesis-heraldry | `f0ea0d5` | 0 | Heraldry generator checkpoint; use lane progress/PRD for remaining capture and composition. |
-| genesis-keepers | `f41c7e0` | 0 | GK10 review reports typecheck/test failures from missing ferryman role and placeholder act; finish role and rerun. |
-| genesis-landmarks | `e8a2b67` | 0 | GL03 proposals exist; placement unvalidated; reframe river capture and inspect mountain scene. |
-| genesis-masha | `5ea162a` | 0 | GM10 mountain city checkpoint; consult lane progress for remaining captures/integration. |
-| genesis-pinkkitty | `54ddebf` | 0 | GP10 needs unfounded-land label restored; size test exceeded Vitest duration. |
-| genesis-sound | `8545c0c` | 0 | Main must mount soundscape on kingdom audio host and update it per rendered frame/visibility/profile. |
-| grand-artisans | `adac9ac` | 4 | GA10 kit/material checkpoint; remaining views/orbit and native producer integration. |
-| grand-kingdom | `a6f92ae` | 0 | GK10 producer plus GK11 merge; GK11 pipeline hook is not adopted, sizing and paved material dependencies remain. Main adoption is separate. |
-| grand-kingdom-w2 | `3183120` | 0 | Branch head predates GK11 merge; inventory showed dirty GK11 work in its checkout. Producer settlement/worker/layer hook and sizing remain the join. |
-| ground-dressing | `c7a5af0` | 0 | GD03 merged; bind tree collision proxies/elder seat only after durable founded placement authority. |
-| ground-dressing-w2 | `13a11a6` | 0 | Head is realm identity/fenced-loading commit; no lane-specific progress note found. Review PRD before resuming. |
-| growth | `a052c61` | 2 | GR10 Emberfold v2 content, exports and earned version-aware native publication are on main. Uncommitted presentation/capture work remains in the lane; new cottage still not visually accepted. |
-| growth-card | `f6ccc08` | 0 | GCA02 keepsake disclosure checkpoint; check lane progress for remaining task. |
-| growth-civic | `e872286` | 0 | Fully merged per takeover instruction; retire this lane. |
-| growth-crier | `abd21c7` | 0 | GCR02 witnessed growth batching checkpoint; consult PRD for remaining integration. |
-| growth-history | `9c5b1be` | 0 | GH02 safe simulated scene projection checkpoint; consult PRD for remaining integration. |
-| herald | `8d2b3ef` | 0 | Lane complete and parked. |
-| home-interiors | `6b090e9` | 0 | Queue merge head; lane progress only records park-after-current-task policy. |
-| homes-hearth | `a088e76` | 0 | HH04 accepted; main integrated verify and collection evidence passed. |
-| homes-tide | `e0d6438` | 0 | HT03 manor/hall family checkpoint; use lane progress/PRD for remaining checks. |
-| integrator | `8c1a92d` | 0 | No lane progress note found; head is Forge engraving fix. |
-| interactions | `3eb261f` | 0 | IN03 interaction controller checkpoint; consult PRD for remaining mount/review. |
-| kingdom-land | `fc4dee3` | 0 | LD04 main merge; soften bright red route scar with worn earth center and irregular green verge. |
-| kingdom-land-w2 | `13a11a6` | 0 | Head is realm identity/fenced-loading commit; lane notes say parked. |
-| kingdom-light | `1b44498` | 0 | KL04 sunlit-floor gap fix; consult PRD for any remaining review. |
-| kingdom-light-w2 | `e3e8cae` | 0 | KL04 duplicate branch checkpoint; consult lane ownership before resuming. |
-| kingdom-light-w3 | `375f980` | 0 | Queue merge head; no branch-local progress note found. |
-| live-twitch | `c1f2eb7` | 0 | Capture guard stopped long series; resume with one still/short clip per lock, then inspect latest progress. |
-| panel-stream | `d094e7a` | 0 | PS06 simulated config/live-config and interaction checkpoint; stream-show name timing passed isolated rerun. |
-| passport | `f6fc95b` | 0 | P04 passport stamp/share picture checkpoint; consult PRD for public route integration. |
-| picture-land | `a175e51` | 0 | PL03 producer v2 and seven looked-at iterations complete; review lane notes for next task. |
-| picture-trees | `008a130` | 0 | PT10 tree family complete; verify sculpt tests and before/after stream view as recorded. |
-| places-high | `477c33a` | 0 | PH01 actual-renderer place bench checkpoint; consult PRD for review/integration. |
-| places-high-w2 | `6b090e9` | 0 | Queue merge head; park-after-current-task note. |
-| places-high-w3 | `6b090e9` | 0 | Queue merge head; no branch-local progress note found. |
-| places-water | `9254915` | 0 | PW01 boats/boathouse exports; file review, captures, focused tests and root validation remain. |
-| places-water-w2 | `6b090e9` | 0 | Queue merge head; park-after-current-task note. |
-| raid-gate | `9c41703` | 0 | RG10 gift policy/welcome flow checkpoint; consult PRD for remaining proof/integration. |
-| raid-road | `2056fed` | 0 | Head is main merge; no lane progress note found. |
-| realm-server | `a4664ce` | 0 | RS06 flood threshold corrected; focused checks pass; full verify hit unrelated Herald issue, isolated rerun pending. |
-| realm-server-w2 | `02a1242` | 0 | Main merge head; one-worker policy says secondary worker parks after current task. |
-| realm-server-world | `e0ef054` | 0 | FW02 collision compiler/adapter checkpoint; consult PRD for remaining integration. |
-| realm-wiring | `a1cb0ad` | 0 | RW05 parked WIP in evidence patch; not ticked. Reconcile with main's current authority and needs before resuming. |
-| sky-moments | `ac41f47` | 0 | Dragon settled in dusk town; no branch-local progress note found. |
-| soul | `2af7d75` | 0 | SO10 checkpoint; blocked on civic/topology binding and authoritative clock, plus real walk/stream demonstration. |
-| sound | `74c002c` | 0 | Lane complete and parked. |
-| street-props | `a088e76` | 0 | SP03 accepted; integrated verify and collection/join evidence passed. |
-| tavern-tables | `908f772` | 2 | TT02 runtime/durable host checkpoint; main must review runtime and supply realm package/Postgres adapter. |
-| tavern-tables-w2 | `2101711` | 0 | Handoff docs checkpoint; park-after-current-task policy. |
-| try-it | `e68485c` | 0 | TI10 gateway/panel checkpoint; capture guard stopped long capture series; resume individually. |
-| twitch-moments | `6bcfcdd` | 0 | TM10 composed support path verified through ingest, durable delivery and room feed; consult PRD for remaining product proof. |
-| twitch-moments-w2 | `bc9d2ab` | 0 | Handoff docs checkpoint; park-after-current-task policy. |
-| vox-import | `3d41bec` | 4 | VI03 phone fit sheet hides object; collapse file details after selection and preserve visible object/Insert action. |
-| walk-controller | `faa57bb` | 0 | WC06 prediction checkpoint; needs realm-wiring revision collision source and WC05 grounded step-ease binding; main test has unrelated x+44/30 failure. |
-| walk-controller-w2 | `295cfaa` | 0 | Branch merge head; secondary worker parks after current task. |
-| walking-together | `c851a59` | 3 | WT10 consumer patch is on main; observed-head fixture correction applied and tested in wrap-up. Approved outfits/tools, gestures, own door, terrain/soft-push and guest speech remain main-owned; motion proof incomplete. |
-| wardrobe-body | `dc7927b` | 0 | WB02 visual set completed in later lane note, but branch still has outstanding capes fit review/contrast doubts; check latest PRD before tick. |
-| wardrobe-body-w2 | `4da2c7c` | 3 | Merge head; duplicate WB02 note says visual done-check incomplete. Resolve against primary lane before resuming. |
+Lane names mean branch `lane/<name>` and checkout `../worktrees/<name>/` unless marked ref-only. The later inventory gives actual refs, ancestry and preserved dirty paths. Ahead counts include merge/parking history; they are not feature counts. Unfinished dirty work is preserved, not reset or hidden in a stash.
 
-## Remaining named seams
+## Dispositions and next concrete actions
 
-- **Soul:** civic/clock topology binding and authoritative clock are main-owned; lane's last checkpoint is blocked until those exist.
-- **Dock:** main-owned integration fixes/authority presentation and actual stream proof are outstanding; lane's latest checkpoint is blocked.
-- **Walking together:** the observed-head fixture patch is applied and tested. Supply approved outfits/tools, gestures, own door, terrain/soft-push and guest speech before native-town motion proof.
-- **Grand kingdom:** the GK10 producer is on `../worktrees/grand-kingdom/`; GK11 changes are merged there at the branch head, while `../worktrees/grand-kingdom-w2/` has its own earlier head and dirty work per inventory. Producer pipeline dependencies (settlement-aware worker, post-raise seating, reserve clearing, sites/focus, cache identity, layer lifecycle, size and paved material) remain unjoined; kingdom-scene adoption remains main-owned.
-- **Growth civic:** fully merged; retire branch `lane/growth-civic`. The content/adapter is not actual site installation: cleared tavern/bridge anchors and production scene binding remain main-owned.
-- **Unready grand adoption:** local branch `wip/grand-land-adoption` at `5dcc56d` preserves the complete main-owned hosted terrain/water candidate and actual failed frame. It is not merged into main. See that branch’s `work/evidence/grand-adoption-wip/README.md`. The browser stayed loading for 300s; no fix is proven. A CPU run used a different kingdom identity and cannot certify the actual render.
+| Lane | Current ref / tree | Disposition and precise next step |
+|---|---|---|
+| anvil-hero | `c807642`, clean | **FINISHED / CLOSED**. Tobias accepted Forge; keep accepted look. Do not reopen historical silhouette notes. |
+| anvil-hero-w2 | `1e55f31`, 1 progress-only edit | **PARKED duplicate**. Preserve progress note; do not resume secondary work. Primary Forge lane is closed. |
+| atlas | `8d4d867`, ancestor, 0 dirty entries | **MERGED / A06 FINISHED**. `8d4d867` is on main via `61f8830`; names stay served without weakening withholding and search/cards/roads are publicly proxied. The mapped-card/Enter path was viewed this round. Next unfinished outcome: ingest witnessed raids into persistent Atlas roads with duplicate/gap/restart coverage, then prove raid entry/return through the Gate host. |
+| atlas-door | `fd0499d`, ancestor, clean | **MERGED CHECKPOINT**: `fd0499d` merged as `b27682b`; AD10 camera accepted and the mapped MOTHER v3 door is integrated with generated-kingdom stills verified. Next: produce the remaining AD10 card/door, raid, and random-sheet captures using fresh survey names; verify actual survey data on those captures. |
+| atlas-w2 | `47cf3bc`, ancestor, 1 progress-only edit | **MERGED CHECKPOINT / PARKED duplicate**. Next only if primary Atlas resumes: implement A16 observed raid-road semantics; this worker remains parked. |
+| atlas-w3 | `6b090e9`, ancestor, 1 progress-only edit | **MERGED CHECKPOINT / RETIRED duplicate** (queue merge head, no worker-owned task). No next task; retain the lane PRD as history. |
+| avatar-style | `f14087e`, clean | **FINISHED / ACCEPTED**. Preserve the accepted avatar appearance; do not reopen aesthetic review. Any future functional change must retain earned ribbon marks on tenure updates. |
+| build-templates | `88631ad`, 2 unique commits, clean | **PARKED** after accepted BT01/02. Next: none until Tobias reopens this lane; preserve mounted work. |
+| build-tools | `c7d52b7`, ancestor, clean | **MERGED CHECKPOINT**. Next: finish BT04 producer work on main-owned integration; retain controller/input behavior and verify producer handoff. |
+| campfire | `d93d474`, 9 unique commits, 2 dirty docs | **PARKED / DO NOT MERGE HALF-DONE**. Fire game was set aside; preserve completed work. Next: none; Spec 45 passport supersedes active goal. |
+| campfire-w2 | `06bcddc`, 7 unique commits, clean | **PARKED duplicate**. CF02 rules exist; no merge until primary owner reviews a concrete finished task. Next: none while campfire is set aside. |
+| card-passport | `104a52f`, ancestor, clean | **PARTIAL / MAIN BINDING MISSING**. CP10 lane share flow is not a production public share. Next: bind an actual trusted citizen subject and disclosure projection, then implement the production public host/PNG handler and capture it. No production share completion is present. |
+| chronicle | `1b346d1`, ancestor, clean | **MERGED / NATIVE JOIN LANDED**. `06e6a11` supplies ordered, digested durable history; `69cee8f` opens full historical native geometry from the actual kingdom and stream with cancellable backward seeks. A 42-night isolated SIMULATED record now contains three real guarded home constructions. The full encoded 30-second span was reviewed via all 60 half-second frames: it holds entry 27 while a new world prepares; control state advanced 26→27 before trimming. CH02 remains unchecked. Next: retain the renderer/mesh cache across revisions, replace changed immutable placements and prove backward restoration without stalling. Historical chat/lights were not recorded and are never invented. |
+| citizen-card | `29b94da`, clean | **PARTIAL / PARKED** after CC01 checkpoint. `/-/citizen-card` is a SIMULATED CitizenCardBench, and `/-/citizens/share.png` exists only in capture.mjs; no production subject resolver, CardHost load/share, CardPassport mount, or PNG/passport-share HTTP route exists. Next: bind trusted subject plus disclosure projection and production host/PNG handler; do not add fake completion routes. |
+| civic-props | `66a7ea8`, ancestor, 4 dirty entries | **PARTIAL / LEFT IN BRANCH**. Dirty `square.ts`/`review.ts` add CP04 market-square scaffolding and review helpers; they do not yet complete the full furnishing batch. Next: finish CP04's eight notices/seats/lantern models and fixtures, inspect the complete set, then CP05 full-count validation and scene review. |
+| crowd-behaviour | `837aeb5`, ancestor, 1 dirty progress entry | **MERGED CHECKPOINT**: CB03 witnessed chat cue behavior is on main. Next: finish CB04's authored crowd/integration seam; explicitly pass per-step cues and replace the lifetime speech-to-nod behavior in main's citizen scene, then inspect reset/settle behavior and recapture the nine-person/240-slot routines. |
+| dock | `74f2bd6`, ancestor, clean | **MERGED / AUTHORITY AND PRESENTATION JOIN LANDED**. `26edce7` and `69cee8f` carry directed undo, actual presence eligibility/attendance, reserved broadcaster presentation capacity, original witnessed raid data and lasting fire gathering. Real Postgres authority tests passed. Isolated signed-in native delivery/draw is confirmed: HTTP witness, SQL timestamp and matching public receipt. The initial API reply honestly stayed unknown; SwiftShader witness was roughly ten seconds late. The captured frame is post-ceremony, so visual act acceptance is still open. `32db7e2` exposes the existing native render hold for the next properly held frame; it was absent from the captured snapshot. Still missing: verified moderator IDs and identified raid-guest presence; public credit/names confer no authority. Gate close currently directs its braziers/ceremony, not physical gate swing/collision. Fire expiry/undo needs its own visible real-time scenario; public API retry after a revision change still needs reconciliation. |
+| effects-library | `c807642`, ancestor, clean | **FINISHED / CLOSED**. Forge accepted; leave parked. Main owns actual-history/camera joins. |
+| emotes | `ac85f2a`, ancestor, clean | **MERGED CHECKPOINT**. Next: bound cue timestamps and reconcile scheduled sources safely in primary emotes work. |
+| first-look-polish | `4c9bb5a`, ancestor, clean | **MERGED / PARKED**. The accepted avatar, Forge, window wave and dusk exposure supersede this lane's historical hairstyle/lighting requests. No aesthetic task should restart from those stale notes. Only reopen a concrete visible regression requested by Tobias. |
+| first-look-polish-w2 | `6b090e9`, ancestor, 1 progress edit | **PARKED duplicate / integrator seam**. Next: main adjusts idle Forge camera framing on phone at the camera call-site; no lane restart. |
+| forge-pieces | `4e0354d`, 2 unique commits, clean | **PARKED / ACCEPTED checkpoint preserved**. No next art task; keep the accepted Forge look and judge behavior closed. Do not reopen old rejected designs. |
+| forge-refusals | `04761d2`, 2 unique commits, clean | **MERGED CHECKPOINT**. Next: complete FF03 by capturing and inspecting the detached public refusal beat at each standard viewing distance, then run its focused checks; this is a bounded proof task, not a request to alter the accepted Forge look. Keep private refusal reasons private. |
+| forge-ritual | `851dc64`, ancestor, clean | **FINISHED / CLOSED**. Tobias accepted Forge; do not reopen earlier listening/capture notes. |
+| genesis-aggman | `b5796bb` ref, no live worktree/progress | **RETIRED / PARKED duplicate**: ref points at growth merge, no branch-local implementation. Next: none; any mountain-city/Genesis task belongs to its existing primary lane, not this stale ref. |
+| genesis-emote-art | `887faa7`, ancestor, clean | **MERGED CHECKPOINT**. Next: main softens stained-glass emission while preserving emote features and mounts the result; no lane-side mount. |
+| genesis-heraldry | `f0ea0d5`, ancestor, clean | **MERGED CHECKPOINT**. Next: run the lane's remaining composition capture against the generator and record the result. |
+| genesis-keepers | `f41c7e0`, ancestor, clean | **MERGED / AUTHORED KEEPERS FINISHED**. Latest GK10 note supersedes the failed review: ferryman and lamplighter acts are complete, with 193 focused tests recorded. Main still needs to mount KeeperProposal at real KeeperPlaceSite fixtures, bind actual per-place attendance excluding keepers, and deliver navigated visits/Voice speech. Soul's current generic smith/clock host is not that full content mount. |
+| genesis-landmarks | `e8a2b67`, ancestor, clean | **MERGED CHECKPOINT**. Next: validate landmark placement by reframing the river capture and inspecting the mountain scene. |
+| genesis-masha | `5ea162a`, ancestor, clean | **MERGED CHECKPOINT**. Next: complete GM11: inspect final mountain-city stills and hand off the keeper/mountain composition to main; retain the current mountain-city checkpoint. |
+| genesis-pinkkitty | `54ddebf`, ancestor, 1 progress edit | **MERGED CHECKPOINT**. Next: broaden and break the narrow green approach into the meadow (the prior technical unfounded-land label was intentionally removed); keep the SIMULATED chip and own lore. |
+| genesis-sound | `8545c0c`, ancestor, clean | **MERGED PRODUCER / PARTIAL HOST BINDING**. Soul now shares the real sound host and clock on main. Actual per-Genesis biome/zone/profile data is still missing from that binding; next supply that trusted profile and update the soundscape from the rendered listener/visibility, rather than claiming the woodland fallback is channel-specific. |
+| grand-artisans | `70818b7`, ancestor, clean | **MERGED CHECKPOINT**: GA10 kit/material work merged. Next: capture remaining views/orbit and integrate a native producer; current branch itself has no unmerged source. |
+| grand-kingdom | `a6f92ae`, ancestor, 1 progress edit | **MERGED STANDALONE CHECKPOINT / NATIVE ADOPTION OPEN**. GK10/GK11 and latest growth-stable seating are on main, including W2 `3e5061f` via `00e888e`; /-/grand is publicly allowed by `b8b3c0d`. The separate hosted candidate is not adopted. Next: reconcile its exact native floor with the latest reserved settlement/recipe and obtain a genuinely loaded native stream/walk/Forge frame. |
+| grand-kingdom-w2 | `3e5061f`, ancestor, clean | **MERGED / CLEAN TREE**. The apparently dirty castle/town work was already committed through `3e5061f` (including GK11 `988889e`) and is now merged as `00e888e`. No dirty castle edits were dropped. Next work belongs to the main grand-adoption join, not another duplicate worker. |
+| ground-dressing | `c7a5af0`, ancestor, clean | **MERGED CHECKPOINT**. Next: bind tree collision proxies and elder seat only after durable founded-placement authority exists. |
+| ground-dressing-w2 | `13a11a6`, ancestor, 1 progress edit | **RETIRED duplicate** (head is shared realm identity/fenced-loading change). Next: none; no lane-specific task in this worktree. |
+| growth | `ee06317`, merged via `cb14dbf`, clean | **MERGED / GR10 AUTHORED SEQUENCE FINISHED**. Reviewed full hut-to-hall sequence and same-plot street pair: second storey and roofline read clearly. Fixed and tested bootstrap history tails without swallowing owed physical publication (15 focused tests). Main native geometry, deeds, doors and fitted parts remain unchanged. The newly merged standalone presentation is SIMULATED evidence, not proof that native Chronicle playback has reached its speed/bar; that remains open. |
+| growth-card | `f6ccc08`, ancestor, clean | **FINISHED / RETIRE**. GCA01/GCA02 are complete; focused tests and viewed home/shelf captures are recorded. Next: main supplies trusted citizen-to-home and disclosed earned-record adapters and package wiring; never infer the subject from a plot ID. |
+| growth-civic | `e872286`, no worktree, ancestor | **FINISHED / RETIRE LANE**. All authored content is merged. Main `1cef1d3` installs collision/hash-bearing tavern, market, court and bridge sites at fixed mature footprints; `69cee8f` adds their light/water presentation. The accepted Forge has no compatible physical upgrade kit: its expansion/ceremony stays explicitly open; do not claim all five physical sites complete. |
+| growth-crier | `abd21c7`, ancestor, clean | **MERGED CHECKPOINT**. Next: complete GCR03 batching against main's witnessed growth source and test duplicate/out-of-order observations. |
+| growth-history | `9c5b1be`, ancestor, clean | **MERGED / REUSED BY NATIVE CHRONICLE**. The safe projection is on main and the isolated 42-night fixture now seeds actual durable facts/publications rather than a separate picture bench. Next: view the continuous native recording and judge seek cost; the production kingdom is not seeded. |
+| herald | `8d2b3ef`, ancestor, 1 progress edit | **FINISHED / PARKED LANE**. Real person-bound ingress is on main and the managed service remains owned by the host. This round merges additional follow/sub/redemption/poll/going-live runtime from live-twitch. Do not restart Herald or create a competing EventSub consumer; new approved LIVE-event observation is operational evidence still to collect. |
+| home-interiors | `6b090e9`, ancestor, 2 dirty entries | **PARTIAL / PARKED AFTER CURRENT TASK**. Actual dirty `types.ts` is presentation-only (`HomeInterior`, anchors/lights/views, explicit companion); no fitter, furnishing, occupancy/path validator, or tests exist. Next if resumed: implement HI01 fitter against an actual Hearth cottage blueprint and add occupancy/path validation plus focused tests/capture; types alone cannot furnish a home. |
+| homes-hearth | `a088e76`, ancestor, 1 progress entry | **FINISHED checkpoint / PARKED**. HH04 accepted and integrated checks passed. Next backlog only if reopened: add carved timber king-post/truss to broad blank front gable within existing wall envelope, preserving anchors/footprint/Forge slots. |
+| homes-tide | `e0d6438`, ancestor, 1 progress entry | **MERGED CHECKPOINT / PARKED**. Next if reopened: validate and capture coherent walkable Tide neighborhood for HT04. |
+| integrator | `8c1a92d`, ancestor, clean | **RETIRED queue ref** (Forge engraving fix is already in main; no lane progress). Next: none. |
+| interactions | `3a8eb6c`, ancestor, 14 dirty entries | **MERGED SOURCE / PRESERVED FIXTURES**. `3a8eb6c` (merge `e32ae42`) salvages the completed authority/controller/lifecycle source. `87e354a` binds actual private ownership/revisions to installed geometry, invalidates same-scene home changes and refuses mismatches. Remaining 14 dirty entries are simulated fixtures/capture/docs, left untouched until reconciled with current APIs. Exact fitted interior topology/painted furnishing and missing table/place producers remain open. |
+| kingdom-land | `fc4dee3`, ancestor, clean | **MERGED / SUPERSEDED PICTURE CHECKPOINT**. Current accepted sculpted land, groves and dusk exposure win over historical route-scar notes. No new cosmetic task in this round. |
+| kingdom-land-w2 | `13a11a6`, ancestor, 1 progress edit | **RETIRED duplicate** (shared realm identity/fenced-loading head). Next: none. |
+| kingdom-light | `1b44498`, ancestor, 1 PRD edit | **FINISHED / CLOSED**. Window-wave/light work accepted; keep closed. Do not resume KL06/07 or add fake citizen lights. |
+| kingdom-light-w2 | `e3e8cae`, ancestor, 1 progress edit | **FINISHED / CLOSED duplicate**. Preserve accepted window-wave state; no duplicate task. |
+| kingdom-light-w3 | `375f980`, ancestor, clean | **FINISHED / RETIRED queue head**. Accepted light work is closed; no task. |
+| live-twitch | `25a1844`, ancestor, 11 dirty entries | **MERGED / RUNTIME CHECKPOINT LANDED**. All 53 reviewed runtime/source entries were committed as `25a1844` and merged by `0f1c72f`: follow settlement, sub/tenure, channel-point retries, polls, going-live welcome, reconciliation and restart fencing. Isolated signed chat initially reached homecoming in 80 ms. A later fresh-chat rehearsal exposed the real post-source-loss ordering bug; main `0f103bc` now publishes only after committed approved presence, with durable retry/fence/redaction regressions (24 tests). The final corrected-path public homecoming arrived in155ms. Main viewed `work/evidence/live-twitch/homecoming-native-reviewed@1920x1080.png`: real native street and a warm cottage, fresh SIMULATED presence; no caption/neighbor-relight timing is claimed. All capture resources are stopped. Not yet demonstrated: decree/poll-board stream visuals, native-home cloth banner anchor, bounded view-based grove selection, approved LIVE events on tobi4s_. Eleven excluded capture/helper/evidence entries remain in the lane, not another runtime checkpoint. |
+| panel-stream | `d094e7a`, ancestor, 1 progress entry | **MERGED CHECKPOINT**. Next: real-GPU OBS timing/sound review when hardware is available; simulated save/hide/review remain explicitly unavailable. |
+| passport | `f6fc95b`, ancestor, clean | **PARTIAL / MAIN BINDING MISSING**. P04 stamp/share picture is not production public sharing. Next: supply trusted subject and disclosed earned-record projection, mount the passport in the production public host, add the PNG/HTTP handler, then capture the route. Panel JWT reading/passport adapters are mounted but travel collections are hardcoded empty with `hidden:false`, so they do not provide real travel disclosure authority. |
+| picture-land | `a175e51`, ancestor, clean | **MERGED / ACCEPTED PICTURE PRESERVED**. Sculpted terrain already appears in the stream. PL04 retrospective wording does not require another look pass. Distinct remaining integration is grand-native land adoption, tracked separately. |
+| picture-trees | `008a130`, ancestor, clean | **MERGED / ACCEPTED GROVES PRESERVED**. Trees already occupy the native planting sites. No repeated visual matrix needed for the accepted grove; future grand placement must use its authoritative terrain and collision. |
+| places-high | `477c33a`, ancestor, clean | **MERGED CHECKPOINT**. Next: complete PH02 by authoring the worn stair, open door, well, plinth, bench and parapet modules, then inspect them in the actual-renderer place bench. |
+| places-high-w2 | `6b090e9`, ancestor, 1 progress entry | **RETIRED duplicate** queue head. Next: none; primary places-high owns the place bench review. |
+| places-high-w3 | `6b090e9`, ancestor, 1 progress entry | **RETIRED duplicate** queue head. Next: none. |
+| places-water | `9254915`, ancestor, clean | **MERGED CHECKPOINT**. Next: review exported boats/boathouse files, inspect captures, run focused tests and root validation. |
+| places-water-w2 | `6b090e9`, ancestor, 1 progress entry | **RETIRED duplicate** queue head. Next: none; primary places-water owns remaining validation. |
+| raid-gate | `9c41703`, ancestor, clean | **MERGED CHECKPOINT**. Next: complete RG11 raid-arrival proof through the current Gate host, covering duplicate gift delivery and reconnect without replaying the welcome; retain RG10 policy. |
+| raid-road | `2056fed`, main merge, no worktree | **MERGED CHECKPOINT / RETIRED**. Next: none; no branch-local progress or remaining task in this duplicate row. |
+| realm-server | `a4664ce`, ancestor, 65 dirty entries, unresolved `UU` paths | **LEFT IN BRANCH; ROOT OWNED, DO NOT TOUCH**. Actual worktree mixes server lifecycle/room, ingress/outbox and walking-controller composition with unresolved conflict markers; this is not safe to classify as a ready merge. Next: main owner resolves each `UU` against current authority/room code, preserving its own staged and unstaged edits, then resumes RS08 exactly-300-walker transport and RS09 kill/reacquire/retry. |
+| realm-server-w2 | `02a1242`, ancestor, 1 progress edit | **RETIRED duplicate**. Next: none; primary/root owns remaining RS work. |
+| realm-server-world | `e0ef054`, ancestor, 1 progress edit | **MERGED CHECKPOINT**. FW02 compiler/adapter was superseded by main implementation and fixes; next: complete FW03 founded safe-world resolution, then FW04 genuine deeds/checked bytes, against main resolver. |
+| realm-wiring | `a1cb0ad`, ancestor, 7 dirty entries | **LEFT IN BRANCH; ROOT OWNED**. RW05 is an unticked patch/evidence bundle; current main has moved session/founded authority seams, so applying it wholesale risks stale authority and duplicate room adapters. Next: main reviews `work/lanes/realm-wiring/evidence/` against current authority and extracts only still-missing real room bindings before any patch application. |
+| sky-moments | `ac41f47`, no current worktree | **MERGED CHECKPOINT / PARKED**. Dragon settled in dusk town; no branch-local progress. Next: none until a visual scene task is explicitly reopened. |
+| soul | `2af7d75`, ancestor, clean lane tree | **MERGED / CLOCK AND SUPPORTED SITE JOIN LANDED**. `06e6a11` exposes the uncached realm clock; `69cee8f` binds monotonic presentation time and the actual collision-supported smith site using the current citizen rig/audio host. Woodland/UTC are explicit fallback presentation defaults. Bakery/lamplighter/quay routes, witnessed ships, persisted Genesis biome/zone and native weather-material binding remain absent; do not fabricate them. |
+| sound | `74c002c`, ancestor, 1 progress entry | **FINISHED / PARKED**. Lane marked complete. Next: none unless a visibly broken sound cue is identified. |
+| street-props | `a088e76`, ancestor, 1 progress entry | **FINISHED CHECKPOINT / PARKED**. SP03 accepted; integrated verification/evidence passed. Next: none unless visibly broken. |
+| tavern-tables | `908f772`, 2 unique commits, clean | **PARTIAL / LEFT IN BRANCH**. TT02 runtime/durable host exists. Next: main reviews runtime and supplies realm-package/Postgres adapter; then verify durable table state through actual realm host. |
+| tavern-tables-w2 | `2101711`, ancestor, 4 dirty entries | **PARKED duplicate**. Handoff docs/spec and web/game untracked contents are not a separate accepted implementation. Next: primary TT02 lane reviews any concrete W2 contribution before selective adoption; do not merge duplicate paths wholesale. |
+| try-it | `abb88eb`, clean; branch-only TI10 evidence | **PRODUCT SOURCE MERGED / EVIDENCE RETAINED ON BRANCH**. Public gateway, front door, build/start instructions and panel zip/steps are already on main; the extra `0019ecf` checkpoint records evidence rather than another runtime feature. Final workspace/public build and panel hosted-asset checks passed this round. Next actual acceptance: panel with a real viewer card and first-time visitor minute; extension registration/deploy stays with Tobias. No redundant merge was made solely for a parking/evidence note. |
+| twitch-moments | `6bcfcdd`, ancestor, clean | **MERGED CHECKPOINT**. TM10 support path is integrated through ingest/durable delivery/room feed. Next: complete TM11 product proof: demonstrate cart/parcel readability and the composed path with the real Postgres writer; then bind crowd/hush presentation and add cheer/hype source only through approved realm contracts. |
+| twitch-moments-w2 | `bc9d2ab`, ancestor, 5 dirty entries | **KEEP W2 SOURCE OUT; BENCH ONLY IF ADAPTED**. Dirty API/Herald/web moment code duplicates paths now occupied by main's richer ingest/delivery/controller and has obsolete contracts; merging would shadow newer idempotency, authority and live feed behavior. Its untracked visual bench/stage is the only plausible salvage. Next: rewire bench to import main's current simulation/feed/controller types and prove its visual fixture independently; leave duplicate apps/api, Herald and web runtime code untouched. |
+| vox-import | `3d41bec`, clean; branch-only parking/follow-up notes | **VI02 SOURCE MERGED / PHONE POLISH OPEN**. The unique commits record VI02 parking and VI03 follow-up, not an unmerged implementation. Existing phone fit sheet can hide the selected object. Next: collapse file details after selection while keeping the object and Insert action visible, then inspect that phone view. No unused second importer was added. |
+| walk-controller | `faa57bb`, ancestor, clean | **MERGED / ACCEPTED WALK PRESERVED**. No movement-look redesign in this round. Native own-door/adoption and home-authority seams are now bound (`cd8fc2c`, `87e354a`). Next unresolved functional work is the lane's acknowledged high-refresh reconciliation bound and deterministic terrain-neighbour inputs; reproduce its current focused regression before changing a tolerance. The historical x+44/30 assertion is not evidence of a fresh failure. |
+| walk-controller-w2 | `295cfaa`, ancestor, clean | **RETIRED duplicate**. Next: none; primary walk-controller/main owns remaining bindings. |
+| walking-together | `c851a59`, 3 unique commits, clean; own-door `cd8fc2c` is on main | **MERGED CONSUMER / OWN-DOOR JOIN FINISHED**. Existing WT10 consumer/fixture is on main. `cd8fc2c` selects supported committed own-door spawns and updates geometry on matching same-world adoption; `87e354a` provides revision-correct entry. Next: join trusted saved looks/earned tools and authenticated gestures, then deterministic tick-stamped neighbour soft-push and witnessed guest speech. Optional consumer ports do not supply those producers. |
+| wardrobe-body | `dc7927b`, ancestor, clean | **MERGED / SUPERSEDED BY ACCEPTED AVATAR STYLE**. Preserve the reference-based AS10/AS11 body, hair and clothes already used throughout the kingdom. Historical WB02 visual sheet requests are not a new appearance brief. Only retain functional cape-fit issues if reproduced in the current rig. |
+| wardrobe-body-w2 | `4da2c7c`, 3 unique commits, clean | **PARKED DUPLICATE**. Its three unique commits are historical integration/parking notes rather than a new accepted wardrobe implementation. No automatic task; the current accepted avatar style wins. |
 
-Accepted Forge/window-wave/light work stays closed. Older producer art requests in rows above do not override Tobias’s acceptance. All next actions are handoff context; no worker is being restarted by this document.
+## Main-owned joins landed this round
 
-## Preserved uncommitted lane work
+- Live Twitch `25a1844` → `0f1c72f`; Atlas A06 `8d4d867` → `61f8830`; Atlas-door `fd0499d` → `b27682b`; grand-artisans `70818b7` → `9a17930`; grand W2 `3e5061f` → `00e888e`; interactions `3a8eb6c` → `e32ae42`.
+- `cd8fc2c` own-door/adoption; `87e354a` committed installed home entry; `06e6a11` durable history/clock; `1cef1d3` physical civic sites; `26edce7` directed dock acts; `69cee8f` native Chronicle, Soul keeper/site/audio, civic light/water and stream/kingdom hosts.
+- Atlas mapped MOTHERv3 → `/kingdom/848110685` was inspected from real Surveyor data: both the card and generated kingdom are legible. The town remains sparse with broad roads; this is not proof of the complete ten-channel variety sheet.
+- Public `/-/grand` and its channel/hour/view query are allowed by `b8b3c0d`; this exposes the standalone grand view, **not native adoption**. Public CSP remains strict.
+- Card/passport audit: JWT-backed panel reading is mounted, but production public subject/disclosure, card host and PNG sharing are missing. Empty travel arrays and the SIMULATED citizen-card bench do not count as those authorities.
 
-These edits were left untouched. Counts are `git status --short` entries, not file or feature counts; an untracked directory is one entry. Progress-only edits are preserved too.
+## Grand adoption: explicitly left off main
 
-| Lane worktree | Status entries | First paths |
+`wip/grand-land-adoption` is preserved at `52bb8cc`. Its loading fix defers expensive hidden post/reflection draws while terrain installs. The exact numeric kingdom `129634568` now reached native readiness in approximately 56 seconds (previously over 300 seconds), with 16 exact physical regions and 38 displayed. A loaded screenshot still timed out, even with RAF held after readiness; no visual acceptance, native walk/Forge/moment acceptance, or performance claim is made.
+
+Next: reconcile the candidate with the newly merged stable reserved settlement/recipe, then inspect a truly loaded native stream frame and exercise walking/Forge/moments on that same floor. A real-GPU diagnosis may distinguish compositor pressure from remaining rendering cost. Preserve its untracked machine-local capture helper and named backup stash. The branch contains `work/evidence/grand-adoption-wip/diagnosis-2026-11-01.md` and exact-target reports. Find its checkout with `git worktree list`; no managed service was changed.
+
+## Preserved uncommitted work
+
+Fresh status-entry counts below replace the earlier preserved table. An untracked directory counts as one entry. Source checkpoints salvaged above were committed on their own lane branches; the listed remainder is untouched. In particular, **realm-server contains an unresolved worktree merge**; main has no such merge. Do not reset/abort it automatically.
+
+| Branch / checkout | Entries | First preserved paths |
 |---|---:|---|
 | `lane/anvil-hero-w2` / `../worktrees/anvil-hero-w2` | 1 | `work/lanes/anvil-hero/progress.txt` |
-| `lane/atlas` / `../worktrees/atlas` | 21 | `apps/surveyor/src/live/target.ts`, `apps/surveyor/src/serve.ts`, `apps/web/src/atlas/atlas.css`, `apps/web/src/atlas/checks/atlas-checks.mjs`, `apps/web/src/atlas/data/preview.ts`, `apps/web/src/atlas/index.tsx`, `apps/web/src/atlas/map/view.ts`, `apps/web/src/atlas/ui/Card.tsx` |
 | `lane/atlas-w2` / `../worktrees/atlas-w2` | 1 | `work/lanes/atlas/progress.txt` |
 | `lane/atlas-w3` / `../worktrees/atlas-w3` | 1 | `work/lanes/atlas/progress.txt` |
 | `lane/campfire` / `../worktrees/campfire` | 2 | `work/lanes/campfire/PRD.md`, `work/lanes/campfire/progress.txt` |
@@ -116,17 +122,15 @@ These edits were left untouched. Counts are `git status --short` entries, not fi
 | `lane/first-look-polish-w2` / `../worktrees/first-look-polish-w2` | 1 | `work/lanes/first-look-polish/progress.txt` |
 | `lane/genesis-pinkkitty` / `../worktrees/genesis-pinkkitty` | 1 | `work/lanes/genesis-pinkkitty/progress.txt` |
 | `lane/grand-kingdom` / `../worktrees/grand-kingdom` | 1 | `work/lanes/grand-kingdom/progress.txt` |
-| `lane/grand-kingdom-w2` / `../worktrees/grand-kingdom-w2` | 13 | `apps/web/src/grand/kingdom/attach.ts`, `apps/web/src/grand/kingdom/mount.ts`, `packages/world/src/grand/kingdom/frame.ts`, `packages/world/src/grand/kingdom/grade.ts`, `packages/world/src/grand/kingdom/index.ts`, `packages/world/src/grand/kingdom/kingdom.test.ts`, `packages/world/src/grand/kingdom/seat.ts`, `packages/world/src/grand/kingdom/types.ts` |
 | `lane/ground-dressing-w2` / `../worktrees/ground-dressing-w2` | 1 | `work/lanes/ground-dressing/progress.txt` |
-| `lane/growth` / `../worktrees/growth` | 7 | `apps/web/src/growth/capture.mjs`, `apps/web/src/growth/growth.test.ts`, `apps/web/src/growth/town.ts`, `work/lanes/growth/progress.txt`, `work/evidence/growth/cottage-street@1920x1080.png`, `work/evidence/growth/hut-cottage-street-pair.png`, `work/evidence/growth/hut-street@1920x1080.png` |
 | `lane/herald` / `../worktrees/herald` | 1 | `work/lanes/herald/progress.txt` |
 | `lane/home-interiors` / `../worktrees/home-interiors` | 2 | `work/lanes/home-interiors/progress.txt`, `packages/content/src/home-interiors/` |
 | `lane/homes-hearth` / `../worktrees/homes-hearth` | 1 | `work/lanes/homes-hearth/progress.txt` |
 | `lane/homes-tide` / `../worktrees/homes-tide` | 1 | `work/lanes/homes-tide/progress.txt` |
-| `lane/interactions` / `../worktrees/interactions` | 34 | `apps/realm/src/interactions/authority.ts`, `apps/realm/src/interactions/index.ts`, `apps/realm/src/interactions/interactions.test.ts`, `apps/realm/src/interactions/ports.ts`, `apps/web/src/interactions/README.md`, `apps/web/src/interactions/bench/court.ts`, `apps/web/src/interactions/bench/main.tsx`, `apps/web/src/interactions/bench/room.ts` |
+| `lane/interactions` / `../worktrees/interactions` | 14 | `apps/web/src/interactions/README.md`, `apps/web/src/interactions/bench/court.ts`, `apps/web/src/interactions/bench/main.tsx`, `apps/web/src/interactions/bench/room.ts`, `apps/web/src/interactions/bench/stage.ts`, `apps/web/src/interactions/capture.mjs`, `apps/web/src/interactions/view.ts`, `packages/world/src/interactions/ids.ts` |
 | `lane/kingdom-land-w2` / `../worktrees/kingdom-land-w2` | 1 | `work/lanes/kingdom-land/progress.txt` |
 | `lane/kingdom-light` / `../worktrees/kingdom-light` | 1 | `work/lanes/kingdom-light/PRD.md` |
-| `lane/live-twitch` / `../worktrees/live-twitch` | 53 | `apps/herald/src/auth/auth.test.ts`, `apps/herald/src/auth/grants.ts`, `apps/herald/src/cli/report.ts`, `apps/herald/src/ingest/ingest.test.ts`, `apps/herald/src/ingest/ingest.ts`, `apps/herald/src/ingest/spectacles.test.ts`, `apps/herald/src/ingest/spectacles.ts`, `apps/herald/src/ingest/subscriptions.ts` |
+| `lane/live-twitch` / `../worktrees/live-twitch` | 11 | `scripts/live/bench.mjs`, `scripts/live/stills.mjs`, `work/evidence/live-twitch/bell@1920x1080.png`, `work/evidence/live-twitch/decree@1920x1080.png`, `work/evidence/live-twitch/festival@1920x1080.png`, `work/evidence/live-twitch/follow@1920x1080.png`, `work/evidence/live-twitch/homecoming@1920x1080.png`, `work/evidence/live-twitch/online@1920x1080.png` |
 | `lane/panel-stream` / `../worktrees/panel-stream` | 1 | `work/lanes/panel-stream/progress.txt` |
 | `lane/places-high-w2` / `../worktrees/places-high-w2` | 1 | `work/lanes/places-high/progress.txt` |
 | `lane/places-high-w3` / `../worktrees/places-high-w3` | 1 | `work/lanes/places-high/progress.txt` |
@@ -138,5 +142,15 @@ These edits were left untouched. Counts are `git status --short` entries, not fi
 | `lane/sound` / `../worktrees/sound` | 1 | `work/lanes/sound/progress.txt` |
 | `lane/street-props` / `../worktrees/street-props` | 1 | `work/lanes/street-props/progress.txt` |
 | `lane/tavern-tables-w2` / `../worktrees/tavern-tables-w2` | 4 | `work/lanes/tavern-tables/progress.txt`, `work/specs/22-tavern-tables.md`, `apps/web/src/tavern/`, `packages/games/` |
-| `lane/try-it` / `../worktrees/try-it` | 3 | `work/lanes/try-it/PRD.md`, `work/lanes/try-it/progress.txt`, `work/evidence/try-it/` |
 | `lane/twitch-moments-w2` / `../worktrees/twitch-moments-w2` | 5 | `work/lanes/twitch-moments/progress.txt`, `apps/api/`, `apps/herald/src/twitch-moments/`, `apps/web/src/twitch-moments-bench/`, `apps/web/src/twitch-moments/` |
+
+## Not merged and why
+
+- Civic-props CP04: incomplete furnishing set; home-interiors: types only, no fitter or path validation. Both remain intact in their worktrees.
+- Interactions: finished runtime source was salvaged; the remaining simulated fixture/capture changes are unfinished. Realm-wiring RW05's preserved patch predates current durable approval/authority and cannot be applied wholesale.
+- Twitch-moments W2 contains duplicate older API/Herald/web runtime contracts that would shadow the newer path. Leave it untouched; any visual bench salvage must import current producers first.
+- Realm-server's dirty conflict state needs deliberate per-file resolution against current main, then its lifecycle/300-walker checks; it is not a ready checkpoint.
+- Campfire was explicitly set aside. Tavern tables still need the actual durable room/Postgres host. Vox-import's phone sheet still hides the selected object. These are not quietly marked finished.
+- Several unique branch commits are parking/integration notes; source ancestry is not evidence of an unmerged feature. Do not create pointless merge commits for those notes.
+
+Every row is a handoff decision, not an instruction to launch another worker. Accepted appearance remains closed. Final screenshots, recording review, check results and honest limits are in `work/evidence/lane-landing/README.md`.

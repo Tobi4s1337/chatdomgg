@@ -31,13 +31,16 @@ fact was changed by this work.
 - Focused civic suite: 4/4 passing, including real doorway/bridge standing clearance, stable plots/poses,
   content-hash change across levels, civic-only provider invalidation, and unavailable-site diagnostics.
 - Bridge/growth-civic content suites: 59/59 passing, including deeper-water envelopes and full walking clearance.
-- Scoped ESLint: passed.
+- Typecheck and scoped ESLint: passed.
 - Read-only proposed assembly against actual public Willowmere plan `settlement:2:43cffdb6`, numeric kingdom
   `129634568`, 240 homes: passed. Level one to four changes four civic assets and no home placements. The accepted
   workshop and hearth hashes are unchanged. Exact receipt and poses are in
   `work/evidence/growth-civic-sites/willowmere-readonly-assembly.json`. This checked proposed geometry against the
   real public plan; it did not load or alter a live private database or publish a manifest.
-- Visual capture and final integration typecheck are owned by main and its capture/client workers.
+- Existing founded-scene suite: 10/10 passed with a 30-second timeout (25.5 seconds total). The two full
+  composition cases now have explicit 30-second budgets, matching the existing owned-keep composition test;
+  the larger complete scene takes over five seconds on this host. No assertions were weakened.
+- Visual capture is owned by main and its capture/client workers.
 
 ## Still open
 
