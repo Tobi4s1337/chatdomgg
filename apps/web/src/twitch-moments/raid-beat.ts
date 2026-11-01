@@ -6,7 +6,7 @@ import type { StageProfile } from './stage-beat';
 /**
  * An incoming raid (Twitch.md §9, Spec 20 R8): the gate wakes under the raider's banner and a caravan rolls in
  * through it, sized by the log of Twitch's own viewer count. It is a visit, never an invented crowd: the wagons
- * carry tribute and the raider's colours, and nobody rides them. Pure: every pose and cue is a function of the
+ * carry lanterns and the raider's colours, and nobody rides them. Pure: every pose and cue is a function of the
  * beat and the kingdom time, so a raid looks and sounds the same at any frame interval.
  */
 
@@ -22,7 +22,7 @@ export const RAID_BEAT = {
   hoist: [900, 2300] as const,
   unfurl: [2300, 3500] as const,
   cloth: 2250,
-  /** The lead wagon comes through the gate; each next one follows `pitch` later. */
+  /** The lead wagon comes through the gate. Pitch and travel are defaults for legacy frames. */
   arrive: 3400,
   pitch: 3600,
   /** How long one wagon takes from the gate, through the market and up the castle road until it is gone. */
@@ -45,6 +45,40 @@ export const RAID_BEAT = {
 /** Hard caps: wagons in one caravan, caravans on the road at once, raids waiting their turn, and rolling cues. */
 export const RAID_LIMITS = { units: 12, caravans: 2, queued: 4, rolls: 4 } as const;
 
+export interface RaidScaleProfile {
+  /** Ms between wagons entering the gate; spacing remains generous at every size. */
+  readonly pitch: number;
+  /** Ms for one wagon to travel the supplied road. */
+  readonly travel: number;
+  /** Ms until an entering wagon has cleared the gate shot. */
+  readonly pass: number;
+}
+
+/**
+ * Scale is authored in log space, with bounded work rather than invented people. From first wagon to last
+ * clearing the gate, 10,000 viewers takes 58 seconds and 70,000 takes 74. The shot includes the gate waking
+ * and a final welcome; the remaining road journey ends within 120 seconds of the original provider start.
+ * That presentation lifetime is separate from the controller's unchanged 60-second admission window.
+ */
+export function raidScaleProfile(viewers: number): RaidScaleProfile {
+  const anchors = [
+    { viewers: 3, pitch: 3600, travel: 52_000, pass: 6000 },
+    { viewers: 140, pitch: 4800, travel: 52_000, pass: 8000 },
+    { viewers: 10_000, pitch: 6250, travel: 50_000, pass: 8000 },
+    { viewers: 70_000, pitch: 6000, travel: 46_000, pass: 8000 },
+  ] as const;
+  const count = Number.isNaN(viewers) ? 1 : Math.max(1, Math.min(70_000, viewers));
+  for (let i = 1; i < anchors.length; i++) {
+    const a = anchors[i - 1]!, b = anchors[i]!;
+    if (count > b.viewers) continue;
+    const t = Math.max(0, (Math.log(count) - Math.log(a.viewers)) / (Math.log(b.viewers) - Math.log(a.viewers)));
+    const mix = (first: number, last: number) => Math.round(first + (last - first) * t);
+    return { pitch: mix(a.pitch, b.pitch), travel: mix(a.travel, b.travel), pass: mix(a.pass, b.pass) };
+  }
+  const last = anchors[anchors.length - 1]!;
+  return { pitch: last.pitch, travel: last.travel, pass: last.pass };
+}
+
 /**
  * Wagons for a raid of `viewers`, on a gently convex log curve: a raid of 3 is one treasured wagon, 50 is three,
  * 140 four, 1,000 six, 10,000 nine; twelve is the longest column (from about 70,000).
@@ -59,7 +93,7 @@ export function raidUnits(viewers: number): number {
 export function raidLine(viewers: number): string {
   return viewers === 1 ? 'A raid of one' : `A raid of ${viewers.toLocaleString('en-US')}`;
 }
-export const RAID_DETAIL = 'Raiders who chat are our guests tonight';
+export const RAID_DETAIL = 'The gate is open to visitors';
 
 export interface RaidBeat {
   readonly kind: 'raid';
@@ -71,6 +105,7 @@ export interface RaidBeat {
   readonly founded: boolean;
   readonly viewers: number;
   readonly units: number;
+  readonly timing: RaidScaleProfile;
   readonly seed: number;
   readonly startAt: number;
   /** When the director hands the camera back: the column is through the gate. */
@@ -82,13 +117,13 @@ export interface RaidBeat {
 }
 
 export function planRaid(id: string, body: MomentBodyOf<'raid'>, startAt: number, name: (n: string) => string): RaidBeat {
-  const b = RAID_BEAT, units = raidUnits(body.viewers);
-  const lastThrough = b.arrive + (units - 1) * b.pitch + b.pass;
+  const b = RAID_BEAT, units = raidUnits(body.viewers), timing = raidScaleProfile(body.viewers);
+  const lastThrough = b.arrive + (units - 1) * timing.pitch + timing.pass;
   const holdUntil = startAt + Math.max(b.minHold, lastThrough + b.holdAfter);
   const sleepAt = holdUntil + b.sleep;
-  const endAt = Math.max(sleepAt + b.sleepFade, startAt + b.arrive + (units - 1) * b.pitch + b.travel) + 200;
+  const endAt = Math.max(sleepAt + b.sleepFade, startAt + b.arrive + (units - 1) * timing.pitch + timing.travel) + 200;
   return { kind: 'raid', id, raidKey: body.raidKey, name: name(body.from.displayName), kingdomId: body.from.kingdomId, founded: body.founded,
-    viewers: body.viewers, units, seed: seedOf(body.raidKey), startAt, holdUntil, sleepAt, endAt };
+    viewers: body.viewers, units, timing, seed: seedOf(body.raidKey), startAt, holdUntil, sleepAt, endAt };
 }
 
 /** What the view draws for one raid: times are ms into the beat, so the view never reads the kingdom clock. */
@@ -101,6 +136,7 @@ export interface RaidFrame {
   readonly founded: boolean;
   readonly viewers: number;
   readonly units: number;
+  readonly timing: RaidScaleProfile;
   readonly seed: number;
   /** Ms into the beat when the shot is handed back and when the gate goes to sleep. */
   readonly hold: number;
@@ -109,7 +145,7 @@ export interface RaidFrame {
 
 export const raidFrame = (beat: RaidBeat, atMs: number): RaidFrame => ({
   id: beat.id, key: beat.raidKey, t: atMs - beat.startAt, from: { kingdomId: beat.kingdomId, name: beat.name }, founded: beat.founded,
-  viewers: beat.viewers, units: beat.units, seed: beat.seed, hold: beat.holdUntil - beat.startAt, sleep: beat.sleepAt - beat.startAt,
+  viewers: beat.viewers, units: beat.units, timing: beat.timing, seed: beat.seed, hold: beat.holdUntil - beat.startAt, sleep: beat.sleepAt - beat.startAt,
 });
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -135,7 +171,7 @@ export function raidCues(beat: RaidBeat): AudioCueFrame[] {
     { id: `${beat.id}:cloth`, cue: 'cloth-unfurl', atMs: at(b.cloth), gain: 0.85 },
   ];
   const step = Math.max(1, Math.ceil(beat.units / RAID_LIMITS.rolls));
-  for (let i = 0; i < beat.units; i += step) cues.push({ id: `${beat.id}:roll:${i}`, cue: 'cart-roll', atMs: at(b.arrive + i * b.pitch), gain: i === 0 ? 0.95 : 0.7 });
+  for (let i = 0; i < beat.units; i += step) cues.push({ id: `${beat.id}:roll:${i}`, cue: 'cart-roll', atMs: at(b.arrive + i * beat.timing.pitch), gain: i === 0 ? 0.95 : 0.7 });
   if (beat.units >= 5) cues.push({ id: `${beat.id}:drum`, cue: 'festival-drum', atMs: at(b.arrive + 500), gain: 0.65 });
   cues.push({ id: `${beat.id}:farewell`, cue: 'horn', atMs: beat.sleepAt - 600, gain: 0.45 });
   return cues;
@@ -179,9 +215,10 @@ export function gatePose(t: number, sleep: number): GatePose {
 }
 
 /** One wagon's clock: ms since it entered the gate, or null before it enters or once it has gone. */
-export function wagonElapsed(frame: Pick<RaidFrame, 't'>, index: number): number | null {
-  const elapsed = frame.t - RAID_BEAT.arrive - index * RAID_BEAT.pitch;
-  return elapsed < 0 || elapsed >= RAID_BEAT.travel ? null : elapsed;
+export function wagonElapsed(frame: Pick<RaidFrame, 't'> & { readonly timing?: RaidScaleProfile }, index: number): number | null {
+  const timing = frame.timing ?? RAID_BEAT;
+  const elapsed = frame.t - RAID_BEAT.arrive - index * timing.pitch;
+  return elapsed < 0 || elapsed >= timing.travel ? null : elapsed;
 }
 
 /**
@@ -189,14 +226,14 @@ export function wagonElapsed(frame: Pick<RaidFrame, 't'>, index: number): number
  * chosen so a wagon covers the whole road in its travel time (within a walking-to-trotting range), entering a
  * little outside the gate line and thinning away over its last stretch, whichever of road or time ends first.
  */
-export function wagonPose(elapsed: number, length: number): { distance: number; speed: number; presence: number } {
+export function wagonPose(elapsed: number, length: number, timing: Pick<RaidScaleProfile, 'travel'> = RAID_BEAT): { distance: number; speed: number; presence: number } {
   const b = RAID_BEAT, start = -3;
-  const speed = Math.min(3, Math.max(1.6, (length - start) / ((b.travel - b.vanish * 0.5) / 1000)));
-  const distance = start + speed * elapsed / 1000;
-  const presence = smooth(0, b.emerge, elapsed) * (1 - smooth(b.travel - b.vanish, b.travel, elapsed)) * (1 - smooth(length - 4.5, length - 0.5, distance));
+  const speed = Math.min(3, Math.max(1.6, (length - start) / ((timing.travel - b.vanish * 0.5) / 1000)));
+  const distance = Math.min(Math.max(start, length - 0.5), start + speed * Math.max(0, elapsed) / 1000);
+  const presence = smooth(0, b.emerge, elapsed) * (1 - smooth(timing.travel - b.vanish, timing.travel, elapsed)) * (1 - smooth(length - 4.5, length - 0.5, distance));
   return { distance, speed, presence };
 }
 
-/** The wagon's place in the column: the lead carries the great standard, then covered wagons and tribute in turn. */
-export type WagonKind = 'lead' | 'covered' | 'tribute';
-export const wagonKind = (index: number): WagonKind => (index === 0 ? 'lead' : index % 2 === 1 ? 'covered' : 'tribute');
+/** The lead carries the great standard, followed by covered wagons and lantern wagons in turn. */
+export type WagonKind = 'lead' | 'covered' | 'lantern';
+export const wagonKind = (index: number): WagonKind => (index === 0 ? 'lead' : index % 2 === 1 ? 'covered' : 'lantern');

@@ -20,7 +20,7 @@ import type { WagonKind } from './raid-beat';
  * - Raid wagon: the gift cart's frame (bed, sideboards, axles, shafts) in plain timber and brass, its sideboard
  *   panels in the raider's colour; a pole at the front with a crossbar for the banner (tall on the lead wagon) and
  *   a lantern on an arm. The covered wagon carries a cream canvas tilt banded in the raider's colour.
- * - Tribute: a crate, a sack and a brass-bound chest that ride on the open wagons.
+ * - Festival fittings: lantern racks, rolled cloth and bundled banners on the open wagons.
  * - The gate: a brazier on a stone plinth, and a tall standard pole on a footing with a crossbar and a gilt finial.
  */
 
@@ -202,10 +202,17 @@ export const RAID_WAGON_CELLS = {
 export function raidWagonBlueprint(kit: BannerKit, kind: WagonKind, colour: Colour): VoxelBlueprint {
   const wood = MAT.timber, dark = MAT.bark, iron = MAT.darkStone, dye = TINCTURE_MAT[colour], boxes: Box[] = [];
   boxes.push(box(0, 4, 0, 18, 5, 12, wood));
+  // Long rim and short exposed plank seams give the bed a built, rather than slab-like, edge.
+  for (const z of [0, 11]) boxes.push(box(0, 4, z, 18, 5, z + 1, dark));
+  for (const x of [4, 9, 14]) boxes.push(box(x, 4, 1, x + 1, 5, 11, MAT.bark));
   // Sideboards and end boards: a plain rail over a panel in the raider's colour, broken by dark posts.
   for (const z of [0, 11]) {
     boxes.push(box(0, 5, z, 18, 8, z + 1, wood), box(0, 6, z, 18, 8, z + 1, dye));
-    for (const x of [0, 6, 12, 17]) boxes.push(box(x, 5, z, x + 1, 9, z + 1, dark));
+    boxes.push(box(1, 8, z, 17, 9, z + 1, wood));
+    for (const x of [0, 6, 12, 17]) {
+      boxes.push(box(x, 5, z, x + 1, 9, z + 1, dark));
+      boxes.push(box(x, 7, z, x + 1, 8, z + 1, MAT.brass));
+    }
   }
   for (const x of [0, 17]) boxes.push(box(x, 5, 1, x + 1, 8, 11, wood), box(x, 6, 1, x + 1, 8, 11, dye));
   if (kind !== 'covered') for (const x of [0, 17]) for (const z of [0, 11]) boxes.push(box(x, 9, z, x + 1, 10, z + 1, MAT.brass));
@@ -213,12 +220,23 @@ export function raidWagonBlueprint(kit: BannerKit, kind: WagonKind, colour: Colo
   for (const z of [2, 9]) boxes.push(box(18, 5, z, 25, 6, z + 1, wood), box(24, 5, z, 26, 6, z + 1, MAT.brass));
   boxes.push(box(18, 4, 2, 19, 5, 10, dark));
   if (kind === 'covered') {
-    // The tilt: cream canvas on hoops, three bands of the raider's colour, dark openings front and back.
+    // A thin canvas shell follows the curved hoops; the ends stay open into the wagon.
+    // Coloured seams wrap over the crown, and the timber ribs remain visible at each opening.
     for (let z = 0; z < 12; z++) {
       const top = TILT[z]!;
-      for (const x of [1, 16]) boxes.push(box(x, 8, z, x + 1, top - 1, z + 1, MAT.hairBlack), box(x, top - 1, z, x + 1, top, z + 1, dark));
-      boxes.push(box(2, 8, z, 16, top, z + 1, MAT.cream));
-      for (const [a, b] of [[4, 5], [8, 10], [13, 14]] as const) boxes.push(box(a, 8, z, b, top, z + 1, dye));
+      const underside = Math.min(top, TILT[Math.max(0, z - 1)]!, TILT[Math.min(11, z + 1)]!) - 1;
+      boxes.push(box(1, underside, z, 17, top, z + 1, MAT.cream));
+      for (const x of [4, 9, 14]) boxes.push(box(x, underside, z, x + 1, top, z + 1, dye));
+      for (const x of [1, 16]) boxes.push(box(x, top - 2, z, x + 1, top, z + 1, wood));
+    }
+    for (const x of [1, 16]) for (const z of [0, 11]) {
+      boxes.push(box(x, 8, z, x + 1, TILT[z]! - 1, z + 1, wood));
+      boxes.push(box(x, 8, z, x + 1, 9, z + 1, MAT.brass));
+    }
+    // Canvas skirts hang at the sides, leaving a walk-through opening at both ends.
+    for (const z of [0, 11]) {
+      boxes.push(box(2, 8, z, 16, TILT[z]! - 1, z + 1, MAT.cream));
+      for (const x of [4, 9, 14]) boxes.push(box(x, 8, z, x + 1, TILT[z]! - 1, z + 1, dye));
     }
   }
   // The banner pole, its crossbar and finial: tall for the lead's standard, shorter for a pennant.
@@ -241,57 +259,61 @@ function shifted(id: string, kit: BannerKit, boxes: Box[]): VoxelBlueprint {
   return blueprint(id, kit, size, moved);
 }
 /** Where a raid wagon's cell (0, 0, 0) landed in its blueprint, so the view can place the pivot. */
-export const RAID_WAGON_ORIGIN: Readonly<Record<WagonKind, readonly [number, number, number]>> = { lead: [0, 0, 1], covered: [0, 0, 0], tribute: [0, 0, 0] };
+export const RAID_WAGON_ORIGIN: Readonly<Record<WagonKind, readonly [number, number, number]>> = { lead: [0, 0, 1], covered: [0, 0, 0], lantern: [0, 0, 0] };
 
 /** A pony in the raider's colour: the gift pony with the saddle cloth dyed. */
 export const raidPonyBlueprint = (kit: BannerKit, colour: Colour) => ponyBlueprint(kit, { material: TINCTURE_MAT[colour], tag: `raid-${colour}` });
 
-export type TributeKind = 'crate' | 'sack' | 'chest';
-/** Tribute sizes in cells; each pivots at its bottom centre. */
-export const TRIBUTE_CELLS: Readonly<Record<TributeKind, readonly [number, number, number]>> = { crate: [5, 4, 5], sack: [4, 5, 4], chest: [6, 5, 4] };
+export type AdornmentKind = 'lantern-rack' | 'banner-bundle' | 'cloth-roll';
+/** Fittings pivot at their bottom centre, in build cells. */
+export const ADORNMENT_CELLS: Readonly<Record<AdornmentKind, readonly [number, number, number]>> = {
+  'lantern-rack': [7, 11, 5], 'banner-bundle': [5, 10, 5], 'cloth-roll': [6, 3, 4],
+};
 
-export function tributeBlueprint(kit: BannerKit, kind: TributeKind): VoxelBlueprint {
+export function adornmentBlueprint(kit: BannerKit, kind: AdornmentKind): VoxelBlueprint {
   const boxes: Box[] = [];
-  if (kind === 'crate') {
-    boxes.push(box(0, 0, 0, 5, 4, 5, MAT.timber));
-    for (const [x, z] of [[0, 0], [4, 0], [0, 4], [4, 4]] as const) boxes.push(box(x, 0, z, x + 1, 4, z + 1, MAT.bark), box(x, 3, z, x + 1, 4, z + 1, MAT.brass));
-    boxes.push(box(1, 2, 0, 4, 3, 5, MAT.bark), box(0, 2, 1, 5, 3, 4, MAT.bark));
-  } else if (kind === 'sack') {
-    boxes.push(box(0, 0, 0, 4, 2, 4, MAT.plaster), box(0, 2, 1, 4, 3, 3, MAT.plaster), box(1, 2, 0, 3, 3, 4, MAT.plaster));
-    boxes.push(box(1, 3, 1, 3, 4, 3, MAT.bark), box(1, 4, 1, 3, 5, 3, MAT.plaster));
+  if (kind === 'lantern-rack') {
+    // A small timber trestle carrying two framed, warm-coloured lanterns.
+    boxes.push(box(0, 0, 0, 7, 1, 5, MAT.bark), box(1, 1, 2, 2, 10, 3, MAT.timber), box(5, 1, 2, 6, 10, 3, MAT.timber));
+    boxes.push(box(0, 9, 2, 7, 10, 3, MAT.timber), box(0, 10, 2, 7, 11, 3, MAT.brass));
+    for (const x of [1, 4]) {
+      boxes.push(box(x, 3, 1, x + 2, 4, 4, MAT.darkStone), box(x, 7, 1, x + 2, 8, 4, MAT.brass));
+      boxes.push(box(x, 4, 2, x + 2, 7, 3, MAT.fabricGold));
+      for (const z of [1, 3]) boxes.push(box(x, 4, z, x + 1, 7, z + 1, MAT.darkStone));
+    }
+  } else if (kind === 'banner-bundle') {
+    // Furled flags with visible poles and three restrained festival dyes.
+    boxes.push(box(0, 0, 0, 5, 1, 5, MAT.bark));
+    for (const [x, z, dye, height] of [[1, 1, MAT.fabricRed, 8], [3, 1, MAT.fabricBlue, 10], [2, 3, MAT.fabricGold, 9]] as const) {
+      boxes.push(box(x, 1, z, x + 1, height, z + 1, MAT.timber));
+      boxes.push(box(x, 3, z, x + 1, height - 1, z + 1, dye));
+      boxes.push(box(x, 2, z, x + 1, 3, z + 1, MAT.brass), box(x, height - 1, z, x + 1, height, z + 1, MAT.brass));
+    }
   } else {
-    boxes.push(box(0, 0, 0, 6, 3, 4, MAT.bark), box(0, 3, 0, 6, 4, 4, MAT.timber), box(1, 4, 0, 5, 5, 4, MAT.timber));
-    for (const x of [1, 4]) boxes.push(box(x, 0, 0, x + 1, 5, 4, MAT.brass));
-    boxes.push(box(2, 2, 0, 4, 3, 1, MAT.goldLeaf), box(2, 2, 3, 4, 3, 4, MAT.goldLeaf));
+    // One canvas roll with tucked ends and two binding bands.
+    boxes.push(box(0, 0, 1, 6, 3, 3, MAT.cream), box(0, 1, 0, 6, 2, 4, MAT.cream));
+    for (const x of [1, 4]) boxes.push(box(x, 0, 1, x + 1, 3, 3, MAT.fabricRed), box(x, 1, 0, x + 1, 2, 4, MAT.fabricRed));
+    boxes.push(box(0, 1, 1, 1, 2, 3, MAT.fabricGold), box(5, 1, 1, 6, 2, 3, MAT.fabricGold));
   }
-  return blueprint(`moment-raid-${kind}-${kit}`, kit, [...TRIBUTE_CELLS[kind]] as [number, number, number], boxes);
+  return blueprint(`moment-raid-${kind}-${kit}`, kit, [...ADORNMENT_CELLS[kind]] as [number, number, number], boxes);
 }
 
-/** One tribute item on a wagon bed: its bottom-centre cell in the wagon's frame and a quarter turn. */
-export interface TributeSeat { readonly kind: TributeKind; readonly at: readonly [number, number, number]; readonly turn: boolean }
-
+export interface AdornmentSeat { readonly kind: AdornmentKind; readonly at: readonly [number, number, number]; readonly turn: boolean }
 const hashOf = (seed: number, salt: number) => { let h = Math.imul(seed ^ Math.imul(salt + 1, 0x9e3779b1), 0x85ebca6b) >>> 0; h ^= h >>> 13; return Math.imul(h, 0xc2b2ae35) >>> 0; };
 
-/**
- * What a wagon carries, fixed by the raid and its place in the column. The lead carries the brass-bound chest under
- * the standard with crates round it; a tribute wagon a pile of crates and sacks; a covered wagon nothing outside.
- */
-export function tributeOf(kind: WagonKind, seed: number, index: number): TributeSeat[] {
+/** The lead bears its festival lamps; the following open wagon varies its cloth and standards deterministically. */
+export function adornmentsOf(kind: WagonKind, seed: number, index: number): AdornmentSeat[] {
   if (kind === 'covered') return [];
-  if (kind === 'lead') {
-    return [{ kind: 'chest', at: [12.5, 5, 7], turn: false }, { kind: 'crate', at: [3.5, 5, 3.5], turn: false }, { kind: 'crate', at: [3.5, 5, 8.5], turn: true },
-      { kind: 'sack', at: [8, 5, 2.5], turn: false }, { kind: 'crate', at: [3.5, 9, 6], turn: hashOf(seed, index) % 2 === 0 }];
-  }
-  const floor: TributeSeat[] = [];
-  for (const [x, z] of [[3.5, 3.5], [8.5, 3.5], [13.5, 3.5], [3.5, 8.5], [8.5, 8.5], [13.5, 8.5]] as const) {
-    const h = hashOf(seed, index * 13 + x * 3 + z);
-    floor.push({ kind: h % 3 === 0 ? 'sack' : 'crate', at: [x, 5, z], turn: (h >> 3) % 2 === 0 });
-  }
-  // One or two on top, always resting across two crates below.
-  const top: TributeSeat[] = [{ kind: 'crate', at: [6, 9, 6], turn: false }];
-  if (hashOf(seed, index + 77) % 2 === 0) top.push({ kind: 'chest', at: [11.5, 9, 6], turn: false });
-  // A sack on the floor cannot carry anything: put crates under whatever rides on top.
-  return [...floor.map(s => (top.some(t => Math.abs(t.at[0] - s.at[0]) < 5) ? { ...s, kind: 'crate' as const } : s)), ...top];
+  const turn = (hashOf(seed, index) & 1) === 0;
+  if (kind === 'lead') return [
+    { kind: 'lantern-rack', at: [6, 5, 6], turn: false },
+    { kind: 'banner-bundle', at: [12, 5, 8], turn },
+    { kind: 'cloth-roll', at: [12, 5, 3], turn: false },
+  ];
+  return [
+    { kind: 'lantern-rack', at: [5, 5, 6], turn: false },
+    { kind: 'lantern-rack', at: [13, 5, 6], turn: false },
+  ];
 }
 
 /** A brazier on a stone plinth, 1.25 m high; the fire burns on its coals. Pivot: bottom centre. */
@@ -327,12 +349,12 @@ export function gatePoleBlueprint(kit: BannerKit): VoxelBlueprint {
   return blueprint(`moment-raid-gate-pole-${kit}`, kit, [16, 64, 6], boxes);
 }
 
-/** Every raid part, meshed up front: dyes, wagons and ponies in each colour, tribute, the brazier and the pole. */
+/** Every raid part, meshed up front: dyes, wagons and ponies in each colour, festival fittings, the brazier and the pole. */
 export function raidParts(kit: BannerKit): VoxelBlueprint[] {
   return [
     ...TINCTURE_LIST.map(t => dyeBlueprint(kit, t)),
-    ...COLOURS.flatMap(c => [...(['lead', 'covered', 'tribute'] as const).map(k => raidWagonBlueprint(kit, k, c)), raidPonyBlueprint(kit, c)]),
-    ...(['crate', 'sack', 'chest'] as const).map(k => tributeBlueprint(kit, k)),
+    ...COLOURS.flatMap(c => [...(['lead', 'covered', 'lantern'] as const).map(k => raidWagonBlueprint(kit, k, c)), raidPonyBlueprint(kit, c)]),
+    ...(['lantern-rack', 'banner-bundle', 'cloth-roll'] as const).map(k => adornmentBlueprint(kit, k)),
     brazierBlueprint(kit), gatePoleBlueprint(kit),
   ];
 }

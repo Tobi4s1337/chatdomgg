@@ -6,15 +6,15 @@ import { breeze } from './choreography';
 import { CART_CELLS, PONY_CELLS, ponyLegBlueprint, ponyTailBlueprint, wheelBlueprint } from './gift-art';
 import { Path, type GiftRoute, type PlaceAnchor } from './gift-view';
 import {
-  BRAZIER_CELLS, GATE_CELLS, RAID_WAGON_CELLS, RAID_WAGON_ORIGIN, TRIBUTE_CELLS, bannerRuns, brazierBlueprint, dyeBlueprint, gatePoleBlueprint, raidParts,
-  raidPonyBlueprint, raidWagonBlueprint, raiderArms, tributeBlueprint, tributeOf, type RaiderArms, type Run,
+  BRAZIER_CELLS, GATE_CELLS, RAID_WAGON_CELLS, RAID_WAGON_ORIGIN, ADORNMENT_CELLS, bannerRuns, brazierBlueprint, dyeBlueprint, gatePoleBlueprint, raidParts,
+  raidPonyBlueprint, raidWagonBlueprint, raiderArms, adornmentBlueprint, adornmentsOf, type RaiderArms, type Run,
 } from './raid-art';
 import { Pool } from './train-view';
 import { RAID_BEAT, RAID_LIMITS, gatePose, wagonElapsed, wagonKind, wagonPose, type RaidFrame } from './raid-beat';
 
 /** Hard caps for one view: instances per part, lit cores, glows and light pools on the ground. */
 export const RAID_VIEW_LIMITS = {
-  wagons: RAID_LIMITS.units * RAID_LIMITS.caravans, dye: 1400, tribute: 6 * RAID_LIMITS.units * RAID_LIMITS.caravans, cores: 96, glows: 40, pools: 40, arms: 8,
+  wagons: RAID_LIMITS.units * RAID_LIMITS.caravans, dye: 1400, adornments: 3 * RAID_LIMITS.units * RAID_LIMITS.caravans, cores: 96, glows: 40, pools: 40, arms: 8,
 } as const;
 
 export interface RaidLayerHost {
@@ -286,7 +286,7 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
   function drawWagon(frame: RaidFrame, set: Banners, index: number, line: Path, atMs: number): boolean {
     const elapsed = wagonElapsed(frame, index);
     if (elapsed === null) return false;
-    const pose = wagonPose(elapsed, line.length), fade = pose.presence;
+    const pose = wagonPose(elapsed, line.length, frame.timing), fade = pose.presence;
     if (fade <= 0.01) return false;
     const d = pose.distance, kind = wagonKind(index), colour = set.arms.colour;
     // Level along the chord from the back axle to the pony, so a bend in the street turns the wagon, never snaps it.
@@ -318,12 +318,21 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     m.copy(p).multiply(t.makeTranslation(cells(tx - qx, ty, tz - qz))).multiply(r.makeRotationX(Math.sin(atMs / 1000 * 2.1 + index) * 0.3))
       .multiply(t.makeTranslation(cells(-0.5, -5, -0.5)));
     pool(ponyTailBlueprint(host.kit), capacity).push(m, fade);
-    // The tribute it carries.
-    for (const seat of tributeOf(kind, frame.seed, index)) {
-      const size = TRIBUTE_CELLS[seat.kind];
+    // Festival lamps and cloth are permanent wagon fittings.
+    for (const seat of adornmentsOf(kind, frame.seed, index)) {
+      const size = ADORNMENT_CELLS[seat.kind];
       m.copy(w).multiply(t.makeTranslation(cells(seat.at[0] - px, seat.at[1], seat.at[2] - pz))).multiply(r.makeRotationY(seat.turn ? Math.PI / 2 : 0))
         .multiply(t.makeTranslation(cells(-size[0] / 2, 0, -size[2] / 2)));
-      pool(tributeBlueprint(host.kit, seat.kind), RAID_VIEW_LIMITS.tribute).push(m, fade);
+      pool(adornmentBlueprint(host.kit, seat.kind), RAID_VIEW_LIMITS.adornments).push(m, fade);
+      if (seat.kind === 'lantern-rack') {
+        // The two panes are authored in rack-local cells. Follow the complete fitted transform on bends.
+        for (const x of [2, 5]) {
+          point.copy(cells(x, 5.5, 2.5)).applyMatrix4(m);
+          cores.push(point, 0.105, index, LAMP, 1.5 * fade);
+        }
+        point.copy(cells(3.5, 5.5, 2.5)).applyMatrix4(m);
+        glows.push(point, 1.0, LAMP_GLOW, 0.22 * fade);
+      }
     }
     // The banner faces forward from its crossbar.
     const spec = kind === 'lead' ? RAID_WAGON_CELLS.standard : RAID_WAGON_CELLS.pennant;

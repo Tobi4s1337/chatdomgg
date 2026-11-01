@@ -1,0 +1,8 @@
+{
+  "extends": "../../../tsconfig.json",
+  "include": [
+    "../../../apps/web/src/twitch-moments/raid*.ts",
+    "../../../apps/web/src/raid-gate/incoming.tsx",
+    "../../../apps/web/src/raid-gate/index.tsx"
+  ]
+}

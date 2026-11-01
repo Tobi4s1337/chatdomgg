@@ -4,8 +4,8 @@ import { KingdomIdSchema } from '@chatdom/shared';
 import { shieldDesign } from '../atlas/heraldry/design';
 import type { CameraPose } from './contracts';
 import { createTwitchMoments, type MomentFrame } from './controller';
-import { bannerRuns, raiderArms, tributeOf } from './raid-art';
-import { RAID_BEAT, RAID_DETAIL, RAID_LIMITS, gatePose, raidLine, raidUnits, wagonElapsed, wagonPose } from './raid-beat';
+import { bannerRuns, raiderArms, adornmentsOf } from './raid-art';
+import { RAID_BEAT, RAID_DETAIL, RAID_LIMITS, gatePose, raidLine, raidUnits, raidScaleProfile, wagonElapsed, wagonPose } from './raid-beat';
 import { createTwitchMomentView, type CameraLease, type GiftRoute, type MomentViewHost, type PlaceAnchor } from './view';
 
 const KINGDOM = KingdomIdSchema.parse('424242');
@@ -62,14 +62,15 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(cues).not.toContain('festival-drum');
 
     // The shot holds until the column is through the gate, then the wagons ride on without it.
-    const hold = RAID_BEAT.arrive + 3 * RAID_BEAT.pitch + RAID_BEAT.pass + RAID_BEAT.holdAfter;
+    const timing = raidScaleProfile(140);
+    const hold = RAID_BEAT.arrive + 3 * timing.pitch + timing.pass + RAID_BEAT.holdAfter;
     expect(moments.sample(START + hold - 10).focus).not.toBeNull();
     const after = moments.sample(START + hold + 1500);
     expect(after.focus).toBeNull();
     expect(after.captions).toEqual([]);
     expect(after.raids).toHaveLength(1);
     // And at the end of the road nothing of it remains.
-    const gone = START + RAID_BEAT.arrive + 3 * RAID_BEAT.pitch + RAID_BEAT.travel + 500;
+    const gone = START + RAID_BEAT.arrive + 3 * timing.pitch + timing.travel + 500;
     expect(moments.sample(gone).raids).toEqual([]);
     at(gone);
     expect(moments.currentFacts()).toEqual([]);
@@ -194,10 +195,10 @@ describe('Incoming raid: the gate wakes and a caravan rolls in', () => {
     expect(raiderArms('not-a-channel')).toBeNull();
   });
 
-  it('loads wagons with tribute and nobody riding', () => {
-    expect(tributeOf('covered', 7, 1)).toEqual([]);
-    expect(tributeOf('lead', 7, 0).length).toBeGreaterThan(0);
-    for (let seed = 0; seed < 20; seed++) expect(tributeOf('tribute', seed, 2).length).toBeLessThanOrEqual(8);
+  it('fits wagons with lanterns and cloth and nobody riding', () => {
+    expect(adornmentsOf('covered', 7, 1)).toEqual([]);
+    expect(adornmentsOf('lead', 7, 0).length).toBeGreaterThan(0);
+    for (let seed = 0; seed < 20; seed++) expect(adornmentsOf('lantern', seed, 2).map(seat => seat.kind)).toEqual(['lantern-rack', 'lantern-rack']);
   });
 });
 
@@ -234,8 +235,9 @@ describe('Incoming raid in the view', () => {
     // Played at the frame rate, every cue sounds once near its time.
     for (let t = 600; t <= 3000; t += 100) frameAt(START + t);
     expect(view.stats()['raid.lights']).toBeGreaterThan(4);
-    for (let t = 3100; t < RAID_BEAT.arrive + 4 * RAID_BEAT.pitch; t += 100) frameAt(START + t);
-    const mid = frameAt(START + RAID_BEAT.arrive + 4 * RAID_BEAT.pitch);
+    const timing = raidScaleProfile(1000);
+    for (let t = 3100; t < RAID_BEAT.arrive + 4 * timing.pitch; t += 100) frameAt(START + t);
+    const mid = frameAt(START + RAID_BEAT.arrive + 4 * timing.pitch);
     expect(view.stats()['raid.wagons']).toBeGreaterThanOrEqual(4);
     expect(view.stats()['raid.instances'] as number).toBeGreaterThan(50);
     expect(played).toEqual(expect.arrayContaining(['horn', 'cloth-unfurl', 'cart-roll', 'festival-drum']));
@@ -254,13 +256,13 @@ describe('Incoming raid in the view', () => {
     expect(mid.raids[0]!.units).toBe(6);
 
     // After the hold the camera goes home; the gate sleeps; at the end of the road the layer is empty.
-    const hold = RAID_BEAT.arrive + 5 * RAID_BEAT.pitch + RAID_BEAT.pass + RAID_BEAT.holdAfter;
+    const hold = RAID_BEAT.arrive + 5 * timing.pitch + timing.pass + RAID_BEAT.holdAfter;
     frameAt(START + hold + 2000);
     expect(view.stats().leased).toBe(false);
     expect(camera()).toEqual(prior);
     frameAt(START + hold + RAID_BEAT.sleep + RAID_BEAT.sleepFade + 100);
     expect(view.stats()['raid.gate']).toBe(0);
-    frameAt(START + RAID_BEAT.arrive + 5 * RAID_BEAT.pitch + RAID_BEAT.travel + 400);
+    frameAt(START + RAID_BEAT.arrive + 5 * timing.pitch + timing.travel + 400);
     expect(view.stats()).toMatchObject({ 'raid.caravans': 0, 'raid.wagons': 0, 'raid.instances': 0, 'raid.lights': 0 });
 
     view.dispose();
