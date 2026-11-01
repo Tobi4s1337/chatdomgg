@@ -35,3 +35,20 @@
 .cw-deep .cp-sheet { padding: 8px 13px 35px; }
 .cw-deep .cp-passport-corner { position: sticky; bottom: 0; }
 .cw-sound { margin-left: auto; flex: none; width: 44px; height: 44px; border: 0; background: transparent; color: #d4aa6a; font: 20px Alegreya, Georgia, serif; cursor: pointer; }
+
+.cw-personal-links { display: flex; justify-content: center; gap: 2px; margin-top: 12px; }
+.cw-personal-links .cw-card-link { margin-top: 0; padding-inline: 8px; }
+.cw-privacy { min-height: 100%; }
+.cw-privacy-content { padding: 2px 16px 20px; }
+.cw-privacy h2 { margin: 0 0 8px; font: 400 25px 'IM Fell English', Georgia, serif; }
+.cw-privacy p { margin: 0 0 12px; font: 15px/1.25 Alegreya, Georgia, serif; }
+.cw-privacy-row { width: 100%; min-height: 48px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 4px; border: 0; border-top: 1px solid #b39a72; background: transparent; color: #743b29; text-align: left; font: 700 15px/1.15 Alegreya, Georgia, serif; cursor: pointer; }
+.cw-privacy-row strong { color: #493324; }
+.cw-privacy-row:disabled, .cw-confirm button:disabled { opacity: .55; cursor: wait; }
+.cw-confirm { padding: 12px 0 0; border-top: 1px solid #b39a72; }
+.cw-confirm .cw-primary { width: 100%; }
+.cw-confirm .cw-back { width: 100%; }
+
+.cw-privacy-note { padding: 8px 0; color: #654c37; }
+.cw-privacy-unavailable { border-top: 1px solid #b39a72; padding: 10px 4px; font-size: 15px; }
+.cw-privacy-unavailable p { margin: 4px 0 0; }

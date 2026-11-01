@@ -36,7 +36,7 @@ function backend() {
     if (fail) throw new TypeError('offline');
     const path = new URL(String(input)).pathname;
     if (path.endsWith('/picture')) return new Response(new Blob(['webp'], { type: 'image/webp' }));
-    const body = path.endsWith('/reading') ? reading : path.endsWith('/kingdom') ? kingdom : path.endsWith('/light') ? light : path.endsWith('/pledge') ? { status: 'pledged', band: 'A handful of tents' } : { status: 'accepted', lit: false };
+    const body = path.endsWith('/reading') ? reading : path.endsWith('/kingdom') ? kingdom : path.endsWith('/light') ? light : path.endsWith('/pledge') ? { status: 'pledged', band: 'A handful of tents' } : path.endsWith('/privacy') ? { version: 1, status: 'privacy', quiet: false, projection: 'pending', forgetAvailable: true } : path.endsWith('/quiet') ? { version: 1, status: 'quiet', quiet: JSON.parse(String(init?.body)).quiet, projection: 'pending', forgetAvailable: true } : path.endsWith('/forget') ? { version: 1, status: 'forgotten', erased: ['home', 'presence'] } : { status: 'accepted', lit: false };
     expect(init?.signal?.aborted).toBe(false);
     return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
   });
@@ -81,6 +81,9 @@ describe('verified panel transport', () => {
     for (const [viewer, expected] of cases) {
       const server = backend(); server.reading({ ...READING, viewer });
       const { adapter } = mount(standIn(), server); await settle(); expect(adapter.get().home.kind).toBe(expected);
+      if (viewer.kind === 'anonymous' || viewer.kind === 'unshared') {
+        const hidden = mount(standIn({ ...AUTHORIZED, shared: false }), server); await settle(); expect(hidden.adapter.get().privacy).toBeUndefined();
+      }
     }
   });
 
@@ -224,4 +227,86 @@ describe('verified panel transport', () => {
     expect(calls(server, '/presence')).toHaveLength(0); expect(calls(server, '/light')).toHaveLength(0);
     adapter.requestLight('named'); await settle(); expect(calls(server, '/light')).toHaveLength(1);
   });
+  it('renews each minute, and stops and restarts at every presence gate', async () => {
+    const helper = standIn(), server = backend(); const { adapter } = mount(helper, server); await settle();
+    expect(calls(server, '/presence')).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(60_000); expect(calls(server, '/presence')).toHaveLength(2);
+    helper.playing(false); await vi.advanceTimersByTimeAsync(65_000); expect(calls(server, '/presence')).toHaveLength(2);
+    helper.playing(true); await settle(); expect(calls(server, '/presence')).toHaveLength(3);
+    helper.visible(false); await vi.advanceTimersByTimeAsync(65_000); expect(calls(server, '/presence')).toHaveLength(3);
+    helper.visible(true); await settle(); expect(calls(server, '/presence')).toHaveLength(4);
+    server.kingdom({ ...KINGDOM_STATE, stream: 'resting' }); await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS);
+    await vi.advanceTimersByTimeAsync(65_000); expect(calls(server, '/presence')).toHaveLength(4);
+    server.kingdom(KINGDOM_STATE); await vi.advanceTimersByTimeAsync(KINGDOM_REFRESH_MS); expect(calls(server, '/presence')).toHaveLength(5);
+    helper.viewer({ ...AUTHORIZED, shared: false }); await vi.advanceTimersByTimeAsync(65_000); expect(calls(server, '/presence')).toHaveLength(5);
+    adapter.dispose(); await vi.advanceTimersByTimeAsync(65_000); expect(calls(server, '/presence')).toHaveLength(5);
+  });
+
+  it('handles the future forget-success protocol without reading or observing until a new gesture', async () => {
+    const { server, adapter } = mount(); await settle();
+    expect(adapter.get().privacy).toEqual({ kind: 'ready', quiet: false, projection: 'pending', forgetAvailable: true });
+    adapter.requestQuiet?.(true); expect(adapter.get().privacy).toEqual({ kind: 'pending', quiet: false, projection: 'pending', forgetAvailable: true }); await settle();
+    expect(adapter.get().privacy).toEqual({ kind: 'ready', quiet: true, projection: 'pending', forgetAvailable: true }); expect(adapter.get().home.kind).toBe('citizen');
+    adapter.requestForget?.(); await settle();
+    expect(adapter.get().privacy).toEqual({ kind: 'forgotten', erased: ['home', 'presence'] }); expect(adapter.get().home.kind).toBe('unknown');
+    const reads = calls(server, '/reading').length, presence = calls(server, '/presence').length;
+    await vi.advanceTimersByTimeAsync(120_000); expect(calls(server, '/reading')).toHaveLength(reads); expect(calls(server, '/presence')).toHaveLength(presence);
+    adapter.requestLight('named'); await settle(); expect(calls(server, '/light')).toHaveLength(1); expect(calls(server, '/reading').length).toBeGreaterThan(reads);
+  });
+
+  it('does not claim a privacy change while its response is pending or rejected', async () => {
+    const helper = standIn(), server = backend(); let reject: ((reason: Error) => void) | undefined;
+    const send: typeof fetch = (input, init) => String(input).endsWith('/quiet') ? new Promise((_resolve, fail) => { reject = fail; }) : server.send(input, init);
+    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: send })); await settle();
+    adapter.requestQuiet?.(true); expect(adapter.get().privacy).toEqual({ kind: 'pending', quiet: false, projection: 'pending', forgetAvailable: true });
+    reject?.(new Error('unavailable')); await settle(); expect(adapter.get().privacy).toEqual({ kind: 'unavailable' });
+    adapter.requestPrivacy?.(); await settle(); expect(adapter.get().privacy).toEqual({ kind: 'ready', quiet: false, projection: 'pending', forgetAvailable: true });
+  });
+
+  it('backs off repeated presence failures and leaves no timers after disposal', async () => {
+    const helper = standIn(), server = backend(); let attempts = 0;
+    const send: typeof fetch = (input, init) => {
+      if (String(input).endsWith('/presence')) { attempts++; return Promise.reject(new Error('unavailable')); }
+      return server.send(input, init);
+    };
+    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: send })); await settle();
+    expect(attempts).toBe(1);
+    await vi.advanceTimersByTimeAsync(29_999); expect(attempts).toBe(1);
+    await vi.advanceTimersByTimeAsync(1); expect(attempts).toBe(2);
+    await vi.advanceTimersByTimeAsync(59_999); expect(attempts).toBe(2);
+    await vi.advanceTimersByTimeAsync(1); expect(attempts).toBe(3);
+    adapter.dispose(); const timers = vi.getTimerCount();
+    await vi.advanceTimersByTimeAsync(180_000); expect(attempts).toBe(3); expect(timers).toBe(0);
+  });
+
+  it('does not send forget when erasure is unavailable', async () => {
+    const helper = standIn(), server = backend();
+    const send: typeof fetch = (input, init) => String(input).endsWith('/privacy')
+      ? Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'privacy', quiet: false, projection: 'pending', forgetAvailable: false })))
+      : server.send(input, init);
+    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: send })); await settle();
+    adapter.requestForget?.(); await settle(); expect(calls(server, '/forget')).toHaveLength(0);
+    expect(adapter.get().home.kind).toBe('citizen');
+  });
+
+  it('clears privacy on a shared identity change and ignores the previous identity’s late answer', async () => {
+    const helper = standIn(), server = backend(); let resolveOld: ((response: Response) => void) | undefined, oldReads = 0;
+    const send: typeof fetch = (input, init) => {
+      if (!String(input).endsWith('/privacy')) return server.send(input, init);
+      const headers = init?.headers as Record<string, string>;
+      if (headers.authorization === 'Bearer token-1') {
+        if (++oldReads === 1) return Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'privacy', quiet: true, projection: 'applied', forgetAvailable: true })));
+        return new Promise(resolve => { resolveOld = resolve; });
+      }
+      return Promise.resolve(new Response(JSON.stringify({ version: 1, status: 'privacy', quiet: false, projection: 'pending', forgetAvailable: false })));
+    };
+    const adapter = track(createProductionAdapter(helper.bridge, { backend: BACKEND, fetch: send })); await settle();
+    expect(adapter.get().privacy).toEqual({ kind: 'ready', quiet: true, projection: 'applied', forgetAvailable: true });
+    adapter.requestPrivacy?.(); await settle();
+    helper.authorize('token-2'); expect(adapter.get().privacy?.kind).toBe('loading'); await settle();
+    expect(adapter.get().privacy).toEqual({ kind: 'ready', quiet: false, projection: 'pending', forgetAvailable: false });
+    resolveOld?.(new Response(JSON.stringify({ version: 1, status: 'privacy', quiet: true, projection: 'applied', forgetAvailable: true }))); await settle();
+    expect(adapter.get().privacy).toEqual({ kind: 'ready', quiet: false, projection: 'pending', forgetAvailable: false });
+  });
+
 });

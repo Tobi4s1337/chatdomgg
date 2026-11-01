@@ -3,6 +3,7 @@ import type { PanelDoorReply, RealmPanelService } from './service';
 
 type App = uWebSocketsTransport['app'];
 export const REALM_PANEL_ROUTES = {
+  privacy: '/internal/realm/panel/privacy', quiet: '/internal/realm/panel/quiet', forget: '/internal/realm/panel/forget',
   claim: '/internal/realm/panel/claim', pledge: '/internal/realm/panel/pledge',
   kingdom: '/internal/realm/panel/kingdom', presence: '/internal/realm/panel/presence', scene: '/internal/realm/panel/scene/:kingdomId',
 } as const;
@@ -11,7 +12,7 @@ const LIMIT = 4_096;
 
 /** Internal service routes only: bounded JSON, a bearer gate before buffering, and no browser CORS. */
 export function mountRealmPanelRoutes(app: App, panel: RealmPanelService): void {
-  for (const method of ['claim', 'pledge', 'kingdom', 'presence'] as const) app.post(REALM_PANEL_ROUTES[method], (res, req) => {
+  for (const method of ['claim', 'pledge', 'kingdom', 'presence', 'privacy', 'quiet', 'forget'] as const) app.post(REALM_PANEL_ROUTES[method], (res, req) => {
     const authorization = req.getHeader('authorization');
     let aborted = false, finished = false, bytes = 0;
     const chunks: Buffer[] = [];

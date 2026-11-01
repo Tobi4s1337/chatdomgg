@@ -4,7 +4,7 @@ import { selectAdapter } from './adapters/select';
 import { CardSheet, PassportCorner } from './card/CardSheet';
 import { PanelPassport } from './passport/PanelPassport';
 import { createPanelSound } from './sound';
-import type { Home, PanelAdapter, PanelSnapshot, PassportSource } from './model';
+import type { Home, PanelAdapter, PanelSnapshot, PassportSource, Privacy } from './model';
 import './panel.css';
 import './places.css';
 import './window.css';
@@ -14,6 +14,45 @@ type Reading = PanelSnapshot & { readonly kingdomLights?: number | null; readonl
 const cardOf = (home: Home) => (home.kind === 'citizen' || home.kind === 'guest' || home.kind === 'known') && home.card
   ? { card: home.card, passport: home.passport } : null;
 
+function PrivacySettings(props: { privacy: Privacy | undefined; onClose: () => void; onRetry: () => void; onQuiet: (quiet: boolean) => void; onForget: () => void }) {
+  const [confirmForget, setConfirmForget] = createSignal(false);
+  const settings = () => {
+    const privacy = props.privacy;
+    return privacy?.kind === 'ready' || privacy?.kind === 'pending' ? privacy : null;
+  };
+  const status = () => {
+    const privacy = props.privacy;
+    if (privacy?.kind === 'forgotten') return `Forgotten: ${privacy.erased.join(', ')}.`;
+    if (privacy?.kind === 'loading') return 'Opening your settings…';
+    return 'Your settings are out of reach. Please try again later.';
+  };
+  return <div class="cw-privacy">
+    <button class="cw-back" onClick={props.onClose}>‹ Back to You</button>
+    <div class="cw-privacy-content">
+      <h2>Your privacy</h2>
+      <Show when={settings()} fallback={<>
+        <p role="status">{status()}</p>
+        <Show when={props.privacy?.kind === 'unavailable'}><button class="cw-privacy-row" onClick={props.onRetry}>Try again <span>›</span></button></Show>
+      </>}>
+        {privacy => <>
+          <p>Your card and home stay yours. This setting concerns your name on stream.</p>
+          <button class="cw-privacy-row" disabled={privacy().kind === 'pending'} aria-pressed={privacy().quiet} onClick={() => { if (privacy().kind === 'ready') props.onQuiet(!privacy().quiet); }}>
+            <span>Keep my name off the stream</span><strong>{privacy().kind === 'pending' ? 'Saving…' : privacy().quiet ? 'On' : 'Off'}</strong>
+          </button>
+          <Show when={privacy().kind === 'ready' && privacy().projection === 'pending'}><p class="cw-privacy-note" role="status">{privacy().quiet ? 'Preference saved; stream update pending.' : 'Stream name hiding is not connected yet.'}</p></Show>
+          <Show when={privacy().forgetAvailable === true} fallback={<div class="cw-privacy-unavailable"><strong>Forget me</strong><p>Forgetting is not connected yet.</p></div>}>
+            <Show when={!confirmForget()} fallback={<div class="cw-confirm">
+              <p>Forget your Twitch-derived records across Chatdom’s kingdoms? You can take your place again later.</p>
+              <button class="cw-primary" disabled={privacy().kind === 'pending'} onClick={props.onForget}>Yes, forget me</button>
+              <button class="cw-back" onClick={() => setConfirmForget(false)}>Keep my records</button>
+            </div>}><button class="cw-privacy-row" disabled={privacy().kind === 'pending'} onClick={() => setConfirmForget(true)}>Forget me <span>›</span></button></Show>
+          </Show>
+        </>}
+      </Show>
+    </div>
+  </div>;
+}
+
 export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolean; onReady?: () => void }) {
   const adapter = props.adapter ?? selectAdapter();
   const sound = createPanelSound();
@@ -21,9 +60,9 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   const unlistenSound = sound.subscribe(setMuted);
   const [snap, setSnap] = createSignal<Reading>(adapter.get());
   const [tab, setTab] = createSignal<Tab>('kingdom');
-  const [page, setPage] = createSignal<'card' | 'passport' | null>(null);
+  const [page, setPage] = createSignal<'card' | 'passport' | 'privacy' | null>(null);
   const [failed, setFailed] = createSignal(false);
-  const unsubscribe = adapter.subscribe(next => { if (snap().light.kind === 'pending' && next.light.kind === 'lit') sound.play('kindle'); setSnap(next); });
+  const unsubscribe = adapter.subscribe(next => { if (next.privacy?.kind === 'forgotten' && page() !== 'privacy') setPage(null); if (snap().light.kind === 'pending' && next.light.kind === 'lit') sound.play('kindle'); setSnap(next); });
   const pictureUrl = createMemo(() => { const picture = snap().picture; return picture.kind === 'still' ? picture.url : null; });
   createEffect(() => { void pictureUrl(); setFailed(false); });
   const card = () => cardOf(snap().home);
@@ -76,14 +115,15 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
   return <div class="cp-frame" classList={{ embedded: props.embedded }} ref={element => { frame = element; }}><div class="cp cw" data-chatdom-panel data-light={snap().light.kind} data-connection={snap().connection.kind} data-view={tab()} data-ready="true">
     <header class="cw-head"><span class="cw-mark" aria-hidden="true">✦</span><h1>{snap().kingdom?.name ?? 'The kingdom'}</h1><button class="cw-sound" type="button" aria-label={muted() ? 'Turn panel sound on' : 'Mute panel sound'} aria-pressed={!muted()} onClick={() => { sound.setMuted(!muted()); if (!muted()) { sound.gesture(); sound.play('tap'); } }}>{muted() ? '♪̸' : '♪'}</button></header>
     <main class="cw-main">
-      <Show when={!page()} fallback={<section class="cw-deep" aria-label={page() === 'card' ? 'Your citizen card' : 'Your passport'}>
-        <Show when={page() === 'card'} fallback={<Show when={source()}>{value => <PanelPassport transport={value().transport} places={value().places} simulated={false} {...(reading() ? { reading: reading()! } : {})} onClose={() => setPage('card')} backLabel="Your card" />}</Show>}>
+      <Show when={!page()} fallback={<section class="cw-deep" aria-label={page() === 'card' ? 'Your citizen card' : page() === 'privacy' ? 'Your privacy' : 'Your passport'}>
+        <Show when={page() !== 'privacy'} fallback={<PrivacySettings privacy={snap().privacy} onClose={closeCard} onRetry={() => adapter.requestPrivacy?.()} onQuiet={quiet => adapter.requestQuiet?.(quiet)} onForget={() => adapter.requestForget?.()} />}>
+          <Show when={page() === 'card'} fallback={<Show when={source()}>{value => <PanelPassport transport={value().transport} places={value().places} simulated={false} {...(reading() ? { reading: reading()! } : {})} onClose={() => setPage('card')} backLabel="Your card" />}</Show>}>
           <button class="cw-back" onClick={closeCard}>‹ <span>Back to You</span></button>
           <Show when={card()}>{found => <>
             <CardSheet card={found().card} street={snap().home.kind === 'citizen' ? (snap().home as Extract<Home, { kind: 'citizen' }>).street : null} place={snap().home.kind === 'citizen' ? (snap().home as Extract<Home, { kind: 'citizen' }>).place : null} homePicture={null} window={lightWords() ?? 'Your window'} passport={reading()?.state() ?? null} simulated={false} />
             <Show when={reading()}><PassportCorner private={reading()?.state().kind === 'hidden'} onTurn={() => setPage('passport')} /></Show>
           </>}</Show>
-        </Show>
+        </Show></Show>
       </section>}>
         <Switch>
           <Match when={tab() === 'kingdom'}>
@@ -103,7 +143,10 @@ export default function Panel(props: { adapter?: PanelAdapter; embedded?: boolea
               <Show when={canPlace()} fallback={<p class="cw-status" role="status">{lightWords() ?? 'Your place is waiting'}</p>}><button class="cw-primary" onClick={place}>Take your place</button></Show>
               <Show when={homeLine()}><p class="cw-home">{homeLine()}</p></Show>
               <Show when={snap().light.kind === 'unfounded'}><p class="cw-home">Tell {snap().kingdom?.name ?? 'the streamer'} their kingdom is waiting</p></Show>
+              <div class="cw-personal-links">
+              <Show when={snap().privacy && snap().privacy?.kind !== 'forgotten'}><button class="cw-card-link cw-settings-link" onClick={() => setPage('privacy')}>Your privacy <span>›</span></button></Show>
               <Show when={card()}><button ref={element => { cardButton = element; }} class="cw-card-link" onClick={() => { sound.gesture(); sound.play('page'); setPage('card'); }}>Your citizen card <span>›</span></button></Show>
+              </div>
             </section>
           </Match>
           <Match when={tab() === 'gifts'}><section class="cw-gifts"><div class="cw-gift-mark" aria-hidden="true">✧</div><h2>Gifts</h2><p>Gifts open when the channel turns them on.</p></section></Match>

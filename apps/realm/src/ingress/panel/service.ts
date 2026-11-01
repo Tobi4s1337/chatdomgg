@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { KingdomIdSchema, PersonIdSchema, TokenSchema, type HomeTier, type KingdomId, type KingdomPresenceFrame, type PersonId } from '@chatdom/shared';
 import { projectPresence } from '@chatdom/world';
@@ -12,9 +13,12 @@ import type { DurableKingdom, DurableRealmServices, RealmDatabase } from '../../
 import { RealmRecoveryError } from '../../persistence/database';
 import { decodeIngressCheckpoint, presencePerson } from '../codec';
 import { IngressGate, INGRESS_SECRET_MIN } from '../gate';
+import { personPrivacy, setPersonQuiet, forgetPerson, type RealmForgetAuthority, type PersonPrivacy } from './privacy';
 
 const KingdomRequest = z.strictObject({ kingdomId: KingdomIdSchema });
 const PersonRequest = KingdomRequest.extend({ personId: PersonIdSchema });
+const QuietRequest = PersonRequest.extend({ quiet: z.boolean() });
+const ForgetRequest = PersonRequest.extend({ confirm: z.literal(true) });
 const ClaimRequest = PersonRequest.extend({ name: z.string().min(1).max(64) });
 const NOW_MS = 'floor(extract(epoch FROM clock_timestamp()) * 1000)::bigint';
 
@@ -43,12 +47,16 @@ export type PanelPublicEvent = { readonly at: number; readonly cursor: number } 
   | { readonly type: 'forge'; readonly activityId: string }
   | { readonly type: 'moment'; readonly fact: TwitchMomentFact });
 export type PanelDoorBody = PanelClaimResult | PanelKingdomResult
+  | ({ readonly version: 1; readonly status: 'privacy' | 'quiet' } & PersonPrivacy)
+  | { readonly version: 1; readonly status: 'forgotten'; readonly operationId: string; readonly erased: readonly string[]; readonly retained: readonly string[] }
+  | { readonly version: 1; readonly status: 'pending'; readonly operationId: string }
   | { readonly version: 1; readonly status: 'unfounded'; readonly pledges: PanelPledgeBand }
   | { readonly version: 1; readonly status: 'pledged'; readonly band: PanelPledgeBand }
   | { readonly version: 1; readonly status: 'presence'; readonly lit: boolean; readonly stream: 'live' | 'resting'; readonly held: boolean }
   | { readonly version: 1; readonly status: 'refused' | 'unavailable'; readonly message: string };
 export interface PanelDoorReply { readonly http: 200 | 400 | 401 | 503; readonly body: PanelDoorBody }
 export interface RealmPanelOptions {
+  readonly forgetAuthority?: RealmForgetAuthority;
   readonly db: Pick<RealmDatabase, 'query'>;
   readonly origin: 'live' | 'simulated';
   readonly secret: string | undefined;
@@ -128,6 +136,36 @@ export class RealmPanelService {
     } catch { return unavailable(); }
   }
 
+  async privacy(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    const request = PersonRequest.safeParse(raw);
+    if (!request.success) return invalid();
+    try { return ok({ version: 1, status: 'privacy', ...await personPrivacy(this.options.db, this.options.origin, request.data.personId, !!this.options.forgetAuthority) }); }
+    catch { return unavailable(); }
+  }
+
+  async quiet(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    const request = QuietRequest.safeParse(raw);
+    if (!request.success) return invalid();
+    try {
+      await setPersonQuiet(this.options.db, this.options.origin, request.data.personId, request.data.quiet);
+      return ok({ version: 1, status: 'quiet', ...await personPrivacy(this.options.db, this.options.origin, request.data.personId, !!this.options.forgetAuthority) });
+    } catch { return unavailable(); }
+  }
+
+  async forget(authorization: string, raw: unknown): Promise<PanelDoorReply> {
+    if (!this.authenticate(authorization)) return unauthorized();
+    const request = ForgetRequest.safeParse(raw);
+    if (!request.success) return invalid();
+    try {
+      const answer = await forgetPerson(this.options.forgetAuthority, { personId: request.data.personId,
+        requestedFromKingdomId: request.data.kingdomId, origin: this.options.origin, requestId: randomUUID() });
+      if (answer.status === 'unavailable') return { http: 503, body: { version: 1, status: 'unavailable', message: 'Forgetting is not connected yet. Nothing was erased.' } };
+      return answer.status === 'pending' ? ok({ version: 1, status: 'pending', operationId: answer.operationId }) : ok({ version: 1, ...answer });
+    } catch { return unavailable(); }
+  }
+
   async presence(authorization: string, raw: unknown): Promise<PanelDoorReply> {
     if (!this.authenticate(authorization)) return unauthorized();
     const request = PersonRequest.safeParse(raw);
@@ -172,7 +210,8 @@ export class RealmPanelService {
         const checkpoint = await kingdom.preparePublicCheckpoint();
         const prepared = this.options.loader?.current(kingdomId), manifest = prepared?.manifestFor(checkpoint) ?? null;
         if (this.options.loader && (!manifest || kingdom.world !== prepared?.world)) return unavailable();
-        const presence = checkpoint.current.find(message => message.type === 'presence')?.frame ?? null;
+        const committedPresence = checkpoint.current.find(message => message.type === 'presence')?.frame ?? null;
+        const presence = committedPresence ? await this.currentPublicPresence(kingdom, committedPresence) : null;
         const [moments, events] = await Promise.all([
           this.options.db.query<{ message: string }>(`SELECT message FROM realm_outbox
             WHERE kingdom_id = $1 AND kind = 'moment' AND id <= $2 ORDER BY id DESC LIMIT 1`, [kingdomId, checkpoint.throughCursor]),
@@ -214,6 +253,26 @@ export class RealmPanelService {
       const manifest = await this.options.founded.manifest(kingdomId.data, request);
       return await this.options.founded.scene(manifest.sceneHash, request);
     } catch { return unavailable(); }
+  }
+
+  /** Read-time disclosure may remove expired light or a quiet name; it never invents a committed window. */
+  private async currentPublicPresence(kingdom: DurableKingdom, frame: KingdomPresenceFrame): Promise<KingdomPresenceFrame> {
+    const checkpoint = await this.readPresence(kingdom);
+    if (!checkpoint) throw new RealmRecoveryError(kingdom.kingdomId, 'Public presence has no private evidence.');
+    const state = kingdom.privateState;
+    const bindings = Object.values(state.homes).filter(home => home.ownerId !== state.castle?.ownerId).map(home => ({ personId: home.ownerId, slot: home.slot }));
+    if (state.castle) bindings.push({ personId: state.castle.ownerId, slot: REALM_CASTLE_SLOT });
+    const projected = projectPresence(checkpoint.presence, bindings, kingdom.databaseNow(), frame.sequence, frame.epoch);
+    const quiet = new Set((await this.options.db.query<{ person_id: string }>('SELECT person_id FROM realm_panel_privacy WHERE origin = $1 AND quiet = true AND person_id = ANY($2::text[])',
+      [this.options.origin, bindings.map(binding => binding.personId)])).rows.map(row => row.person_id));
+    const quietSlots = new Set(bindings.filter(binding => quiet.has(binding.personId)).map(binding => binding.slot));
+    const bySlot = new Map(projected.windows.map(window => [window.slot, window]));
+    return { ...frame, streamLive: frame.streamLive && projected.streamLive,
+      connection: projected.streamLive ? frame.connection : projected.connection,
+      windows: frame.windows.map(window => {
+        const current = bySlot.get(window.slot), present = window.present && current?.present === true;
+        return { ...window, present, publicName: present && !quietSlots.has(window.slot) && current?.publicName === window.publicName ? window.publicName : null };
+      }) };
   }
 
   private assertCurrent(kingdom: DurableKingdom): void {

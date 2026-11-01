@@ -336,7 +336,13 @@ export const ALL_SECTIONS: Sections = { night: true, home: true, acts: true, she
 /** Where "Walk in" leads: the kingdom's own entry gate, on chatdom.gg, in a new tab. */
 export type Entry = { readonly kind: 'gate'; readonly path: string } | { readonly kind: 'none' };
 
+export type Privacy =
+  | { readonly kind: 'loading' | 'unavailable' }
+  | { readonly kind: 'ready' | 'pending'; readonly quiet: boolean; readonly projection?: 'pending' | 'applied'; readonly forgetAvailable?: boolean }
+  | { readonly kind: 'forgotten'; readonly erased: readonly string[] };
+
 export interface PanelSnapshot {
+  readonly privacy?: Privacy;
   readonly source: SourceMark;
   readonly connection: Connection;
   /** Null when no service has told us which kingdom this channel holds. */
@@ -367,6 +373,9 @@ export interface PanelAdapter {
   /** Ask Twitch to share who the viewer is with Chatdom, so their own card can open. Gesture only. */
   requestIdentity?(): void;
   /** One tap on the crowd act: one command, under chat's limits. Gesture only. */
+  requestPrivacy?(): void;
+  requestQuiet?(quiet: boolean): void;
+  requestForget?(): void;
   requestAct(option: string): void;
   /** Ask Twitch to confirm Bits for a shelf product. Gesture only; nothing is granted here. */
   requestProduct(sku: string): void;

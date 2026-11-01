@@ -161,6 +161,10 @@ describe.runIf(enabled)('panel realm door against isolated development Postgres'
       const reading = await panel.kingdom(authorization, { kingdomId });
       expect(reading).toMatchObject({ body: { status: 'kingdom', lights: 1, stream: 'live', presence: { windows: [{ present: true, publicName: 'SIMULATED Light' }] } } });
       expect(JSON.stringify(reading)).not.toMatch(/personId|rights|leases|receipt|qualification/);
+      expect(await panel.quiet(authorization, { kingdomId, personId, quiet: true })).toMatchObject({ body: { quiet: true, projection: 'pending' } });
+      expect(await panel.kingdom(authorization, { kingdomId })).toMatchObject({ body: { lights: 1, presence: { windows: [{ present: true, publicName: null }] } } });
+      expect((await db.query('SELECT public_name FROM realm_citizen_names WHERE person_id = $1 AND origin = $2', [personId, origin])).rows[0]?.public_name).toBe('SIMULATED Light');
+      expect(await panel.quiet(authorization, { kingdomId, personId, quiet: false })).toMatchObject({ body: { quiet: false } });
       const clock = vi.spyOn(hold.kingdom, 'databaseNow').mockReturnValue(hold.kingdom.databaseNow() + PRESENCE_LEASE_MS + 1);
       try { expect(await panel.presence(authorization, { kingdomId, personId })).toMatchObject({ body: { lit: false, stream: 'live' } }); }
       finally { clock.mockRestore(); }

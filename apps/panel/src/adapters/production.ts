@@ -2,7 +2,7 @@
 import { PANEL_ROUTES, readPanelReading, type PanelCardWire, type PanelReading } from '../../../api/src/public/panel/contracts';
 import type { HelperBridge, HelperStatus } from '../helper';
 import { passportExtensionTransport } from '../passport/transport';
-import { ALL_SECTIONS, type CitizenCard, type Connection, type Home, type Light, type PanelAdapter, type PanelSnapshot, type PassportSource, type Picture } from '../model';
+import { ALL_SECTIONS, type CitizenCard, type Connection, type Home, type Light, type PanelAdapter, type PanelSnapshot, type PassportSource, type Picture, type Privacy } from '../model';
 
 /** After this long without the Helper's answer, the panel says so instead of waiting silently. */
 export const HELPER_PATIENCE_MS = 12_000;
@@ -111,7 +111,9 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   let queued: { token: string | null; authorization: number | undefined } | null = null;
   let readingTimer: ReturnType<typeof setTimeout> | undefined, kingdomTimer: ReturnType<typeof setTimeout> | undefined;
   let retry = RETRY_MS, readingBusy = false, readingAgain = false, kingdomBusy = false, actionBusy = false, presenceBusy = false;
-  let epoch = 0, presenceSent = false;
+  let epoch = 0, presenceGeneration = 0, presenceSent = false, forgotten = false;
+  let privacy: Privacy = { kind: 'loading' };
+  let presenceTimer: ReturnType<typeof setTimeout> | undefined, presenceRetry = RETRY_MS;
   const visible = () => !disposed && helper.visible?.() !== false && (typeof document === 'undefined' || !document.hidden);
   // A bridge without playback evidence cannot send presence.
   const active = () => visible() && helper.active?.() === true;
@@ -128,6 +130,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   const currentLight = (): Light => {
     const status = helper.status();
     if (status.kind !== 'authorized' || !status.loggedIn) return lightFor(status);
+    if (forgotten) return { kind: 'ready' };
     if (!status.shared && light?.kind !== 'pending' && light?.kind !== 'refused') return lightFor(status);
     if (light?.kind === 'pending' || light?.kind === 'held' || light?.kind === 'refused') return light;
     if (kingdomLost) return kingdomAt ? { kind: 'out-of-reach', asOf: timeWords(kingdomAt) } : { kind: 'unavailable', twitch: 'shared' };
@@ -140,12 +143,12 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     const status = helper.status(), current = currentReading(), realm = current?.kingdom ?? null;
     const connection = kingdomLost ? kingdomAt ? { kind: 'lost' as const, asOf: timeWords(kingdomAt) } : { kind: 'kingdom-unavailable' as const } : connectionFor(status, patient, reading, Boolean(backend));
     return {
-      source: { kind: 'production', label: null }, connection,
+      source: { kind: 'production', label: null }, connection, ...(shared() ? { privacy } : {}),
       kingdom: realm ? { name: realm.name, tier: realm.tier, motto: realm.motto } : null,
       stream: kingdom?.stream ?? 'unknown', kingdomLights: kingdom?.lights ?? null, moment: kingdom?.moment ?? null,
       picture, light: currentLight(),
       tonight: { kind: 'unavailable', reason: 'Tonight’s chronicle is not reaching the panel yet.' },
-      home: homeFor(status, reading, passport),
+      home: forgotten ? { kind: 'unknown', reason: 'Your records were forgotten. Take your place to begin again.' } : homeFor(status, reading, passport),
       tavern: { kind: 'unavailable', reason: 'Walk into the kingdom to visit the tavern.' },
       forge: { kind: 'unavailable', reason: 'Walk into the kingdom to visit the forge.' },
       act: null, shelf: { kind: 'hidden' }, entry: realm ? { kind: 'gate', path: realm.walk } : { kind: 'none' }, sections: ALL_SECTIONS,
@@ -153,7 +156,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
   };
   let snapshot = snapshotFor();
   const refresh = () => { if (!disposed) { snapshot = snapshotFor(); for (const listener of listeners) listener(snapshot); } };
-  const request = async <T>(path: string, consume: (response: Response) => Promise<T>, method: 'POST' | 'GET' = 'POST', body: { observe?: boolean } = {}): Promise<T> => {
+  const request = async <T>(path: string, consume: (response: Response) => Promise<T>, method: 'POST' | 'GET' = 'POST', body: Record<string, unknown> = {}): Promise<T> => {
     const token = helper.token();
     if (!backend || !token || !visible()) throw new Error('unavailable');
     const controller = new AbortController(); requests.add(controller);
@@ -170,14 +173,14 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       return result;
     } finally { requests.delete(controller); if (presenceRequest === controller) presenceRequest = undefined; }
   };
-  const json = async (path: string, body?: { observe: boolean }): Promise<unknown> => {
+  const json = async (path: string, body?: Record<string, unknown>): Promise<unknown> => {
     const text = await request(path, response => response.text(), 'POST', body);
     if (text.length > 64 * 1024) throw new Error('unreadable');
     return JSON.parse(text) as unknown;
   };
   const read = async (afterClaim = false) => {
     clearTimeout(readingTimer);
-    if (!backend || !helper.token() || !visible()) return;
+    if (forgotten || !backend || !helper.token() || !visible()) return;
     if (readingBusy) { readingAgain ||= afterClaim; return; }
     readingBusy = true; const version = epoch;
     try {
@@ -187,6 +190,7 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       reading = { kind: 'read', reading: parsed, at: Date.now() }; retry = RETRY_MS;
       readingTimer = setTimeout(() => void read(), READING_REFRESH_MS);
       void observe();
+      if (shared() && privacy.kind === 'loading') void readPrivacy();
     } catch {
       if (version !== epoch || !visible()) return;
       reading = { kind: 'failed', last: reading.kind === 'read' ? reading : reading.kind === 'failed' ? reading.last : null };
@@ -221,22 +225,25 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     else if (lit && ['deed', 'guest', 'castle'].includes(claim)) light = { kind: 'lit', choice: 'named', as: claim === 'deed' ? 'citizen' : claim as 'guest' | 'castle', by: 'realm' };
     else light = { kind: 'unavailable', twitch: 'shared' };
   };
+  const canContinuePresence = () => !forgotten && shared() && active() && kingdom?.status === 'kingdom' && kingdom.stream === 'live' && claimed !== 'held';
   const observe = async () => {
-    if (presenceSent || presenceBusy || actionBusy || !currentReading() || !backend || !shared() || !active() || kingdom?.status !== 'kingdom' || kingdom.stream !== 'live' || claimed === 'held') return;
+    if (forgotten || presenceSent || presenceBusy || actionBusy || !currentReading() || !backend || !shared() || !active() || kingdom?.status !== 'kingdom' || kingdom.stream !== 'live' || claimed === 'held') return;
     const viewer = currentReading()?.viewer.kind;
     if (!['deed', 'guest', 'castle'].includes(claimed ?? '') && !['citizen', 'guest', 'monarch'].includes(viewer ?? '')) return;
-    presenceBusy = true; presenceSent = true; const version = epoch;
+    clearTimeout(presenceTimer);
+    presenceBusy = true; presenceSent = true; const version = epoch, generation = ++presenceGeneration;
     try {
       const answer = await json('/api/panel/v1/presence');
-      if (version !== epoch || !shared() || !active()) return;
+      if (version !== epoch || generation !== presenceGeneration || !shared() || !active()) return;
       if (object(answer) && answer.status === 'held') { confirm('held', false); refresh(); return; }
       if (!object(answer) || answer.status !== 'accepted' || typeof answer.lit !== 'boolean') throw new Error('unreadable');
+      presenceRetry = RETRY_MS;
       if (answer.lit) {
         const claim = claimed ?? (viewer === 'citizen' ? 'deed' : viewer === 'guest' ? 'guest' : viewer === 'monarch' ? 'castle' : null);
         if (claim) confirm(claim, true);
       }
-    } catch { /* Presence has no optimistic outcome. The next open session may retry. */ }
-    finally { if (version === epoch) presenceBusy = false; }
+    } catch { if (version === epoch && generation === presenceGeneration) presenceRetry = Math.min(presenceRetry * 2, READING_REFRESH_MS); }
+    finally { if (version === epoch && generation === presenceGeneration) { presenceBusy = false; if (canContinuePresence()) { presenceTimer = setTimeout(() => { presenceSent = false; void observe(); }, presenceRetry === RETRY_MS ? READING_REFRESH_MS : presenceRetry); } } }
     refresh();
   };
   const poll = async () => {
@@ -248,11 +255,11 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
       if (!parsed) throw new Error('unreadable');
       if (version !== epoch || !visible()) return;
       kingdom = parsed; kingdomLost = false; kingdomAt = Date.now();
-      if (parsed.stream !== 'live') { presenceSent = false; if (light?.kind === 'lit') light = null; }
+      if (parsed.stream !== 'live') { clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; if (light?.kind === 'lit') light = null; }
       if (parsed.picture) await loadPicture(parsed.picture, version);
       else if (pictureUrl) { URL.revokeObjectURL(pictureUrl); pictureUrl = null; pictureRevision = null; picture = { kind: 'unavailable', reason: 'No painting has arrived yet.' }; }
       void observe();
-    } catch { if (version === epoch && visible()) kingdomLost = true; }
+    } catch { if (version === epoch && visible()) { kingdomLost = true; clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; } }
     finally {
       if (version === epoch) { kingdomBusy = false; if (visible()) kingdomTimer = setTimeout(() => void poll(), KINGDOM_REFRESH_MS); }
     }
@@ -263,21 +270,52 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     actionBusy = true; queued = null; const version = epoch;
     light = { kind: 'pending', choice: 'named', step: 'confirming' }; refresh();
     try {
-      const answer = kingdom.status === 'unfounded' ? await json('/api/panel/v1/pledge') : await json('/api/panel/v1/light', { observe: active() });
+      const answer = kingdom.status === 'unfounded' ? await json('/api/panel/v1/pledge') : await json('/api/panel/v1/light', { observe: active() && kingdom.stream === 'live' });
       if (version !== epoch || !shared() || !visible()) return;
       if (object(answer) && answer.status === 'pledged' && words(answer.band, 120)) light = { kind: 'unfounded', pledged: true, band: answer.band };
       else {
         if (!object(answer) || !['deed', 'guest', 'castle', 'unfounded', 'held', 'unavailable'].includes(String(answer.status)) || typeof answer.lit !== 'boolean') throw new Error('unreadable');
         confirm(answer.status as Claim, answer.lit);
-        presenceSent = answer.lit;
+        presenceSent = false;
       }
       void read(true); void poll();
     } catch { if (version === epoch && visible()) light = { kind: 'unavailable', twitch: 'shared' }; }
-    finally { if (version === epoch) actionBusy = false; }
+    finally { if (version === epoch) { actionBusy = false; void observe(); } }
+    refresh();
+  };
+  const readPrivacy = async () => {
+    const version = epoch;
+    try {
+      const answer = await json('/api/panel/v1/privacy');
+      if (version !== epoch || forgotten || !shared()) return;
+      if (!object(answer) || answer.version !== 1 || answer.status !== 'privacy' || typeof answer.quiet !== 'boolean') throw new Error('unreadable');
+      privacy = { kind: 'ready', quiet: answer.quiet, projection: answer.projection === 'applied' ? 'applied' : 'pending', forgetAvailable: answer.forgetAvailable === true };
+    } catch { if (version === epoch && !forgotten) privacy = { kind: 'unavailable' }; }
+    refresh();
+  };
+  const changePrivacy = async (kind: 'quiet' | 'forget', quiet = false) => {
+    if (!shared() || !visible() || forgotten || privacy.kind !== 'ready' || (kind === 'forget' && privacy.forgetAvailable !== true)) return;
+    const previous = privacy;
+    privacy = { ...previous, kind: 'pending' }; refresh();
+    const version = epoch;
+    try {
+      const answer = await json(`/api/panel/v1/${kind}`, kind === 'quiet' ? { quiet } : { confirm: true });
+      if (version !== epoch || !shared()) return;
+      if (!object(answer) || answer.version !== 1) throw new Error('unreadable');
+      if (kind === 'quiet') {
+        if (answer.status !== 'quiet' || typeof answer.quiet !== 'boolean') throw new Error('unreadable');
+        privacy = { kind: 'ready', quiet: answer.quiet, projection: answer.projection === 'applied' ? 'applied' : 'pending', forgetAvailable: answer.forgetAvailable === true };
+      } else {
+        if (answer.status !== 'forgotten' || !Array.isArray(answer.erased) || !answer.erased.every((item: unknown) => words(item, 120))) throw new Error('unreadable');
+        forgotten = true; stop(); reading = { kind: 'none' }; claimed = null; light = null;
+        privacy = { kind: 'forgotten', erased: answer.erased as string[] };
+        void poll();
+      }
+    } catch { if (version === epoch) privacy = { kind: 'unavailable' }; }
     refresh();
   };
   const stop = () => {
-    epoch++; clearTimeout(readingTimer); clearTimeout(kingdomTimer);
+    epoch++; presenceGeneration++; if (privacy.kind === 'pending') privacy = { kind: 'unavailable' }; clearTimeout(readingTimer); clearTimeout(kingdomTimer); clearTimeout(presenceTimer);
     for (const controller of requests) controller.abort(); requests.clear();
     readingBusy = false; readingAgain = false; kingdomBusy = false; actionBusy = false; presenceBusy = false; presenceSent = false; queued = null;
     if (light?.kind === 'pending' || light?.kind === 'lit') light = null;
@@ -287,19 +325,21 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     if (disposed) return;
     const nowVisible = visible(), nowActive = active(), token = helper.token(), authorization = helper.authorization?.();
     const tokenChanged = token !== lastToken || authorization !== lastAuthorization;
-    if (wasActive && !nowActive) { presenceRequest?.abort(); presenceSent = false; }
+    if (wasActive && !nowActive) { clearTimeout(presenceTimer); presenceGeneration++; presenceRequest?.abort(); presenceBusy = false; presenceSent = false; }
     if (!nowVisible || !shared()) {
       // Hiding the view or revoking identity cancels its queued gesture.
       if (!nowVisible || (wasShared && !shared())) stop();
       else if (!shared() && light?.kind !== 'pending') { claimed = null; light = null; presenceSent = false; }
     }
-    if (wasShared && !shared()) { reading = { kind: 'none' }; claimed = null; light = null; }
+    if (wasShared && !shared()) { reading = { kind: 'none' }; claimed = null; light = null; privacy = { kind: 'loading' }; }
     const pending = queued;
     if (tokenChanged && nowVisible) {
       // An identity change invalidates old personal readings and in-flight replies.
       if (!pending) stop();
       else { for (const controller of requests) controller.abort(); epoch++; readingBusy = false; kingdomBusy = false; presenceBusy = false; }
       reading = { kind: 'none' };
+      if (!forgotten) privacy = { kind: 'loading' };
+      claimed = null; if (!pending) light = null;
       void read(); void poll();
     } else if (nowVisible && !wasVisible) { void read(); void poll(); }
     if (pending && shared() && nowVisible && (authorization !== undefined ? authorization !== pending.authorization : token !== pending.token)) void claim();
@@ -318,12 +358,15 @@ export function createProductionAdapter(helper: HelperBridge, options: Productio
     requestLight() {
       const status = helper.status();
       if (!backend || !visible() || status.kind !== 'authorized' || !status.loggedIn || actionBusy || queued || !kingdom) return;
-      if (status.shared) { void claim(); return; }
+      if (status.shared) { forgotten = false; privacy = { kind: 'loading' }; void claim(); return; }
       queued = { token: helper.token(), authorization: helper.authorization?.() };
       light = { kind: 'pending', choice: 'named', step: 'sharing' }; refresh();
       if (!helper.requestIdShare()) { queued = null; light = { kind: 'refused' }; refresh(); }
     },
     requestIdentity() { if (visible() && currentReading()?.viewer.kind === 'unshared') helper.requestIdShare(); },
+    requestPrivacy() { if (shared() && visible() && !forgotten) { privacy = { kind: 'loading' }; refresh(); void readPrivacy(); } },
+    requestQuiet(quiet) { void changePrivacy('quiet', quiet); },
+    requestForget() { void changePrivacy('forget'); },
     requestAct() {}, requestProduct() {},
     dispose() {
       disposed = true; stop(); clearTimeout(timer); unsubscribe(); listeners.clear();

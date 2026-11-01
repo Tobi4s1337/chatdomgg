@@ -26,6 +26,8 @@ async function start() {
     fetch: async (url, init) => {
       const path = new URL(String(url)).pathname, body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       requests.push({ path, body });
+      if (path.endsWith('/forget')) return new Response(JSON.stringify({ version: 1, status: 'unavailable' }), { status: 503 });
+      if (path.endsWith('/privacy') || path.endsWith('/quiet')) return new Response(JSON.stringify({ version: 1, status: path.slice(path.lastIndexOf('/') + 1), quiet: body.quiet ?? false, projection: 'pending', forgetAvailable: false }));
       const answer = path.endsWith('/claim') ? { version: 1, status: 'deed' } : path.endsWith('/presence') ? { version: 1, status: 'presence', lit: true, stream: 'live', held: false }
         : path.endsWith('/ingress') ? { version: 1, status: 'accepted' } : { version: 1, status: 'kingdom', stream: 'live', lights: 1, moment: null };
       return new Response(JSON.stringify(answer), { status: path.endsWith('/ingress') ? 202 : 200 });
@@ -49,6 +51,23 @@ describe('verified panel door', () => {
     expect(requests.find(r => r.path.endsWith('/claim'))?.body).toEqual({ kingdomId: '1234', personId: '5678', name: 'Wren' });
     expect(requests.find(r => r.path.endsWith('/ingress'))?.body).toMatchObject({ version: 1, observation: { kingdomId: '1234', source: 'panel', people: [{ personId: '5678', disclosure: 'named', displayName: 'Wren' }] } });
     expect((await call('light', await token(), { channelId: '9999', personId: '9999' })).status).toBe(400);
+  });
+  it('uses the verified subject for privacy and quiet, and refuses unconfirmed or unavailable erasure', async () => {
+    const { call, requests } = await start(), jwt = await token();
+    expect(await (await call('privacy', jwt)).json()).toMatchObject({ status: 'privacy', quiet: false, projection: 'pending', forgetAvailable: false });
+    expect(requests.at(-1)).toEqual({ path: '/internal/realm/panel/privacy', body: { kingdomId: '1234', personId: '5678' } });
+    expect(await (await call('quiet', jwt, { quiet: true })).json()).toMatchObject({ status: 'quiet', quiet: true });
+    expect(requests.at(-1)?.body).toEqual({ quiet: true, kingdomId: '1234', personId: '5678' });
+    for (const [route, body] of [['privacy', { personId: '9999' }], ['quiet', { quiet: true, personId: '9999' }], ['quiet', { quiet: 'true' }], ['forget', {}], ['forget', { confirm: false }], ['forget', { confirm: true, personId: '9999' }]] as const) {
+      expect((await call(route, jwt, body)).status).toBe(400);
+    }
+    expect(requests).toHaveLength(2);
+    expect((await call('forget', jwt, { confirm: true })).status).toBe(503);
+    expect(requests.at(-1)).toEqual({ path: '/internal/realm/panel/forget', body: { confirm: true, kingdomId: '1234', personId: '5678' } });
+    for (const [route, body] of [['privacy', {}], ['quiet', { quiet: true }], ['forget', { confirm: true }]] as const) {
+      expect((await call(route, await token({ user_id: undefined }), body)).status).toBe(403);
+    }
+    expect(requests).toHaveLength(3);
   });
   it('refuses unshared, logged-out, forged, expired and external tokens before any realm write', async () => {
     const { call, requests } = await start();

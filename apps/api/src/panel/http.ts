@@ -69,7 +69,7 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
       return;
     }
     if (typeof origin === 'string' && !allowed.has(origin)) { send(403, { version: 1, status: 'refused' }); return; }
-    if (!['kingdom', 'light', 'presence', 'pledge', 'picture'].some(name => pathname === PREFIX + name)) { send(404, { status: 'refused' }); return; }
+    if (!['kingdom', 'light', 'presence', 'pledge', 'picture', 'privacy', 'quiet', 'forget'].some(name => pathname === PREFIX + name)) { send(404, { status: 'refused' }); return; }
     if (request.method !== (pathname === `${PREFIX}picture` ? 'GET' : 'POST')) { send(405, { status: 'refused' }); return; }
     if (!key) { send(503, { version: 1, status: 'unavailable', message: 'TWITCH_EXTENSION_CLIENT_ID and TWITCH_EXTENSION_SECRET are required.' }); return; }
     let viewer;
@@ -83,11 +83,17 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
     const chunks: Buffer[] = []; let size = 0;
     for await (const chunk of request as AsyncIterable<Buffer>) { size += chunk.length; if (size > 2048) { send(413, { status: 'refused' }); return; } chunks.push(chunk); }
     let observe = true;
+    let privacyBody: { quiet: boolean } | { confirm: true } | Record<string, never> = {};
     try {
       const body: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error();
       const entries = Object.entries(body);
-      if (entries.length && !(pathname === `${PREFIX}light` && entries.length === 1 && entries[0]![0] === 'observe' && typeof entries[0]![1] === 'boolean')) throw new Error();
+      const lightBody = pathname === `${PREFIX}light` && entries.length === 1 && entries[0]![0] === 'observe' && typeof entries[0]![1] === 'boolean';
+      const quietBody = pathname === `${PREFIX}quiet` && entries.length === 1 && entries[0]![0] === 'quiet' && typeof entries[0]![1] === 'boolean';
+      const forgetBody = pathname === `${PREFIX}forget` && entries.length === 1 && entries[0]![0] === 'confirm' && entries[0]![1] === true;
+      if (entries.length ? !lightBody && !quietBody && !forgetBody : pathname === `${PREFIX}quiet` || pathname === `${PREFIX}forget`) throw new Error();
+      if (quietBody) privacyBody = { quiet: entries[0]![1] as boolean };
+      if (forgetBody) privacyBody = { confirm: true };
       if ('observe' in body) observe = body.observe as boolean;
     }
     catch { send(400, { version: 1, status: 'refused' }); return; }
@@ -104,6 +110,12 @@ export function createPanelHttp(options: PanelHttpOptions, supplied?: PanelServi
         send(200, { version: 1, status: state.status, stream: state.stream ?? 'resting', lights: state.lights ?? null, moment, picture, pledges: state.pledges ?? null }); return;
       }
       if (viewer.kind !== 'shared') { send(403, { version: 1, status: 'refused' }); return; }
+      if (['privacy', 'quiet', 'forget'].some(name => pathname === PREFIX + name)) {
+        const name = pathname.slice(PREFIX.length);
+        // A linked viewer can only read or change their own privacy; no Helix lookup is necessary.
+        const answer = await realm(`/internal/realm/panel/${name}`, { ...privacyBody, kingdomId: viewer.channelId, personId: viewer.personId });
+        send(200, answer); return;
+      }
       if (pathname === `${PREFIX}pledge`) {
         send(200, await realm('/internal/realm/panel/pledge', { kingdomId: viewer.channelId, personId: viewer.personId })); return;
       }
