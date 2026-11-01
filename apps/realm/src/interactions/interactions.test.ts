@@ -3,7 +3,8 @@ import { KingdomIdSchema, PersonIdSchema, type PersonId, type Vec3 } from '@chat
 import { RealmIntentSchema, type CollisionWorld, type PlayerState, type RealmInteractionLease, type RealmPrincipal, type RealmPrivateMessage, type RealmReceipt, type RealmTransientMessage, type SolidBox } from '@chatdom/shared/realm';
 import type { RealmIntentContext } from '../ports';
 import { createInteractionRegistry, interactionTargetId, type InteractionPlacement } from '../../../../packages/world/src/interactions';
-import { createInteractionAuthority, type InteractionAdmission, type InteractionHosts, type InteractionReleaseCause } from '.';
+import { campfirePlacement, tavernPlacement } from '../../../../packages/world/src/interactions/places';
+import { composeInteractionHosts, createInteractionAuthority, type CampfireSeatHost, type InteractionAdmission, type InteractionHosts, type InteractionReleaseCause, type TableSeatHost } from '.';
 
 /*
  * One court, authored once: a fire with two logs, the anvil, someone else's home door and a wall that hides the
@@ -52,10 +53,11 @@ type Admit = NonNullable<InteractionHosts['admit']>;
 const KINGDOM = KingdomIdSchema.parse('5001');
 const GRACE = 20_000;
 
-function court() {
+function court(options: { readonly placements?: readonly InteractionPlacement[]; readonly hosts?: InteractionHosts } = {}) {
+  const placements = options.placements ?? [COURT, INN];
   let now = 1_000;
   let world = worldOf(1, SOLIDS);
-  let registry = createInteractionRegistry({ layoutRevision: 'founded-1', world, placements: [COURT, INN] });
+  let registry = createInteractionRegistry({ layoutRevision: 'founded-1', world, placements });
   const walkers = new Map<string, PlayerState>();
   const walking = new Map<string, boolean>();
   const banned = new Set<PersonId>();
@@ -73,7 +75,7 @@ function court() {
     rights: { current: async () => { if (rightsGate) await rightsGate; return true; }, permitted: person => !banned.has(person) },
     homes: { ownedPlotId: person => deeds.get(person) ?? null },
     zones: { zoneOf: (_, feet) => inTavern(feet) },
-    hosts: {
+    hosts: options.hosts ?? {
       admit: request => { admissions.asked++; return admit ? admit(request) : Promise.resolve({ admitted: false, reason: 'unavailable' }); },
       released: (lease, why) => { released.push({ lease, why }); },
     },
@@ -128,7 +130,7 @@ function court() {
     admissions, setAdmit: (next: Admit | null) => { admit = next; },
     advance: (ms: number) => { now += ms; return now; }, get now() { return now; },
     holdRights: () => { let open!: () => void; rightsGate = new Promise(resolve => { open = resolve; }); return () => { rightsGate = null; open(); }; },
-    revise: (solids: readonly SolidBox[]) => { world = worldOf(world.revision + 1, solids); registry = createInteractionRegistry({ layoutRevision: `founded-${world.revision}`, world, placements: [COURT, INN] }); for (const w of walkers.values()) w.collisionRevision = world.revision; authority.adoptRegistry(); },
+    revise: (solids: readonly SolidBox[]) => { world = worldOf(world.revision + 1, solids); registry = createInteractionRegistry({ layoutRevision: `founded-${world.revision}`, world, placements }); for (const w of walkers.values()) w.collisionRevision = world.revision; authority.adoptRegistry(); },
   };
 }
 
@@ -496,5 +498,135 @@ describe('the fire court: one log, two people, one room deciding', () => {
       ] },
     ] });
     expect(inside.records[0]).toMatchObject({ target: { position: [20, 1, 19], approach: [20, 0, 19.5] }, rest: [20, 0, 17], leadsTo: 'street' });
+  });
+});
+
+describe('the fire and the table through their own hosts', () => {
+  it('keeps a public market bench independent of campfire admission', async () => {
+    let asked = 0;
+    const id = interactionTargetId.benchSeat('market:rest:v1:0', 'left');
+    const placement: InteractionPlacement = { source: 'market:rest:v1:0', origin: [0, 0, 0], turn: 0, cell: 1,
+      anchors: [{ id, kind: 'bench-seat', zone: 'street', position: [-7, .4, 0], approach: [-7, 0, .8], rest: [-7, 0, 0], facing: Math.PI, reach: 2 }] };
+    const room = court({ placements: [placement], hosts: composeInteractionHosts({ campfire: {
+      admit: async () => { asked++; return { admitted: false, reason: 'refused' }; },
+    } }) });
+    const ash = room.person('1001', [-7, 0, .8]);
+    expect(await ash.act(id, 'sit')).toMatchObject({ status: 'applied', state: { mode: 'seated', targetId: id } });
+    expect(asked).toBe(0);
+    expect(await ash.act(id, 'stand')).toMatchObject({ status: 'applied', state: { mode: 'standing' } });
+    expect(room.occupants()).toEqual([]);
+    room.authority.dispose();
+  });
+
+  /*
+   * The campfire clearing and the tavern layout author their seats in their own frames; the room registers them
+   * from those authored points (places.ts) and asks each host through its own seam (hosts.ts). The clearing sits
+   * a quarter turn round at x −20: seat 0 is the Magistrate's chair and is never a walk-up seat.
+   */
+  // The clearing's ring as `campfireArrangement` authors it: hips on the floor, headings toward the fire, and each
+  // approved route ending in the corridor between the sitter's feet and the hearth.
+  const ROUTES: Record<number, readonly (readonly [number, number])[]> = { 0: [[0, -1.1]], 1: [[-1.5, 2.6], [0, 1]], 2: [[1, 0]] };
+  const FIRE = campfirePlacement({ site: 'glade', origin: [-20, 0, 0], turn: 1, seatTop: .45, source: 'campfire:glade@6',
+    approach: seat => ROUTES[seat] ?? [], seats: [
+      { seat: 0, kind: 'magistrate', hip: [0, -1.7], heading: 0 },
+      { seat: 1, kind: 'player', hip: [0, 1.6], heading: Math.PI },
+      { seat: 2, kind: 'player', hip: [1.6, 0], heading: -Math.PI / 2 },
+    ] });
+  const TAVERN = tavernPlacement({ tavern: 'inn', origin: [11, 0, 0], turn: 0, source: 'tavern:inn@snug', seats: [
+    { key: 'long:a', tableId: 'long', position: [0, .45, 0], facing: Math.PI, approach: [0, 0, .8] },
+    { key: 'long:b', tableId: 'long', position: [2, .45, 0], facing: Math.PI, approach: [2, 0, .8] },
+    // A bench by the hearth is for resting, not a table's game seat: no `tavern` target.
+    { key: 'hearth:bench-1', tableId: null, position: [4, .45, 0], facing: 0, approach: [4, 0, .8] },
+  ] });
+  const LOG_1 = 'fire:glade:seat:1', LOG_2 = 'fire:glade:seat:2', CHAIR = 'tavern:long:seat:a';
+
+  it('registers the authored seats once, routes each claim to its own host and tells it the exact lease', async () => {
+    // The fire's own rule: log 2 is held by tonight's match; any other log is a social seat.
+    const fire = { asked: [] as number[], cancelled: 0, seated: [] as number[], released: [] as [number, number, InteractionReleaseCause][] };
+    const campfire: CampfireSeatHost = {
+      admit: async ({ seat }) => {
+        fire.asked.push(seat);
+        return seat === 2 ? { admitted: false, reason: 'refused' } : { admitted: true, cancel: () => { fire.cancelled++; }, seated: s => { fire.seated.push(s.generation); } };
+      },
+      released: (seat, why) => { fire.released.push([seat.place.seat, seat.generation, why]); },
+    };
+    const room = court({ placements: [FIRE, TAVERN], hosts: composeInteractionHosts({ campfire }) });
+    const registry = createInteractionRegistry({ layoutRevision: 'founded-1', world: worldOf(1, SOLIDS), placements: [FIRE, TAVERN] });
+    expect(registry.records.map(r => r.target.id)).toEqual([LOG_1, LOG_2, CHAIR, 'tavern:long:seat:b']);
+    // A quarter turn: local +Z faces world +X; the look lands on the log at the clearing's seat height, the rest is the
+    // floor under the hips (the sole datum the rig sits on), and the Magistrate's chair is nobody's walk-up seat.
+    const log = registry.get(LOG_1)!;
+    expect(log.target.position[0]).toBeCloseTo(-18.4); expect(log.target.position[1]).toBeCloseTo(.45);
+    expect(log.target.approach[0]).toBeCloseTo(-19); expect(log.rest).toEqual([-18.4, 0, 0]);
+    expect(log.facing).toBeCloseTo(-Math.PI / 2);
+    expect(registry.get(CHAIR)).toMatchObject({ zone: 'tavern:inn', rest: [11, 0, 0], target: { position: [11, .45, 0], approach: [11, 0, .8] } });
+
+    const ash = room.person('1001', [...log.target.approach]);
+    const two = registry.get(LOG_2)!.target.approach;
+    const bram = room.person('1002', [two[0], two[1], two[2]]);
+    // The log the match holds is refused with the fire's own words; nothing is held, nothing moved.
+    expect(await bram.act(LOG_2, 'sit')).toMatchObject({ status: 'refused', message: 'That log is kept for the game at the fire.' });
+    expect(room.occupants()).toEqual([]);
+    // A social log: the fire says yes, the room seats, and only then does the fire learn the exact generation.
+    expect(await ash.act(LOG_1, 'sit')).toMatchObject({ status: 'applied', state: { mode: 'seated', targetId: LOG_1 } });
+    const generation = room.authority.seats().seats[0]!.generation;
+    expect(fire.seated).toEqual([generation]);
+    expect(fire.asked).toEqual([2, 1]);
+    // Sitting socially grants nothing else: no table, no host beyond the fire's own seat seam was ever asked.
+    expect(await ash.act(LOG_1, 'stand')).toMatchObject({ status: 'applied', state: { mode: 'standing' } });
+    expect(fire.released).toEqual([[1, generation, 'stand']]);
+    expect(fire.cancelled).toBe(1);
+
+    // Moderation at the fire: the supervisor hears it in the same turn the lease ends.
+    await ash.act(LOG_1, 'sit');
+    room.banned.add(ash.personId);
+    room.authority.revoke(ash.personId);
+    expect(fire.seated).toHaveLength(2);
+    expect(fire.released.at(-1)).toEqual([1, fire.seated[1], 'revoked']);
+    expect(room.occupants()).toEqual([]);
+    expect(room.walking.get(ash.walkerId)).toBe(true);
+
+    // No table host is installed: the chair is honestly unavailable and no table opens.
+    const cara = room.person('1003', [11, 0, .9]);
+    expect(await cara.act(CHAIR, 'tavern')).toMatchObject({ status: 'unavailable', message: 'The table is not open right now. Nothing has changed.' });
+    expect(cara.state().mode).toBe('standing');
+  });
+
+  it('lets the table host end its own guest by generation and treats a failing host as not now', async () => {
+    let authority: ReturnType<typeof court>['authority'] | null = null;
+    const table = { cancelled: 0, ended: [] as boolean[], released: [] as [string, InteractionReleaseCause][] };
+    let mode: 'admit' | 'decline' | 'throw' = 'admit';
+    const tavern: TableSeatHost = {
+      admit: async ({ table: id, seat }) => {
+        if (mode === 'throw') throw new Error('trestle offline');
+        if (mode === 'decline') return { admitted: false, reason: 'refused' };
+        expect([id, seat]).toEqual(['long', 'a']);
+        // The host keeps the generation it admitted, then later closes that guest's place itself.
+        return { admitted: true, cancel: () => { table.cancelled++; }, seated: s => { queueMicrotask(() => { table.ended.push(authority!.endSeat(s)); }); } };
+      },
+      released: (seat, why) => { table.released.push([`${seat.place.table}:${seat.place.seat}`, why]); },
+    };
+    const room = court({ placements: [FIRE, TAVERN], hosts: composeInteractionHosts({ tavern }) });
+    authority = room.authority;
+    const ash = room.person('1001', [11, 0, .9]);
+    // Without a campfire host, a log is a social seat and nobody is asked.
+    const one = room.person('1002', [-17.8, 0, 0]);
+    expect(await one.act(LOG_1, 'sit')).toMatchObject({ status: 'applied' });
+
+    expect(await ash.act(CHAIR, 'tavern')).toMatchObject({ status: 'applied', state: { mode: 'seated', targetId: CHAIR } });
+    await Promise.resolve();
+    expect(table.ended).toEqual([true]);
+    expect(ash.state()).toMatchObject({ mode: 'standing', targetId: null });
+    expect(table.released).toEqual([['long:a', 'host-ended']]);
+    expect(table.cancelled).toBe(1);
+    expect(room.walking.get(ash.walkerId)).toBe(true);
+    // A stale callback with the same generation changes nothing more.
+    expect(room.authority.endSeat({ targetId: CHAIR, generation: 1 })).toBe(false);
+
+    mode = 'decline';
+    expect(await ash.act(CHAIR, 'tavern')).toMatchObject({ status: 'unavailable', message: 'The table did not take a new guest just now.' });
+    mode = 'throw';
+    expect(await ash.act(CHAIR, 'tavern')).toMatchObject({ status: 'unavailable', message: 'The table is not open right now. Nothing has changed.' });
+    expect(room.occupants()).toEqual([[LOG_1, one.walkerId, 'occupied']]);
   });
 });

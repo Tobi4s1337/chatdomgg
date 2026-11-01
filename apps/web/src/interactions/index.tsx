@@ -16,5 +16,6 @@ export function mountInteractionController(options: Omit<InteractionControllerOp
   return createInteractionController({ ...rest, prompt: onUse => mountInteractionPrompt(host, { onUse, ...(coarse === undefined ? {} : { coarse }) }) });
 }
 export { interactionSound, type InteractionSoundBus } from './feedback';
+export { AnvilVisit, composeInteractionPlaces, createAnvilPlace, createSeatPlace, createTablePlace, watchAnvil, type AnvilHome, type AnvilPlaceOptions, type AnvilState, type HomeInteriorPort, type PlaceOpener, type PlaceShot, type PlaceStage, type TableViewPort } from './places';
 export { PENDING, QUIET, SEATED, VERB } from './copy';
 export type { GamepadLike, InteractIntent, InteractionCamera, InteractionCueKind, InteractionFeedback, InteractionInbound, InteractionMessage, InteractionPlaces, InteractionRealm, InteractionView, LookFrame, PointerRay, SeatsMessage } from './ports';

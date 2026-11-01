@@ -28,6 +28,11 @@ export interface InteractionRights {
 /** The installed deed. Plot of the home this person owns at the room's current layout, else null. */
 export interface InteractionHomes {
   ownedPlotId(personId: PersonId): string | null;
+  /**
+   * The installed home revision on this plot right now (`RealmOwnedHome.revision`). When given, a door derived from
+   * another revision is refused ("Your home has just changed"); the registry is rebuilt for the new one.
+   */
+  revisionOf?(plotId: string): string | null;
 }
 /**
  * The zone a standing body is in, from the existing tavern threshold/zone flow (spec 22). Interior zones are this
@@ -41,8 +46,14 @@ export interface InteractionZones {
  * Existing match host for tavern chairs (spec 22) and the campfire's voice/admission supervisor (spec 21).
  * Admission is acquired before the synchronous seat mutation and cancelled if the seat is refused; `released`
  * is called in the same turn a lease ends. These stay typed in-process hooks; absence makes `tavern` unavailable.
+ * `composeInteractionHosts` (./hosts.ts) builds this from the two producers' own seat seams.
  */
 export interface InteractionHosts {
+  /**
+   * Seat kinds whose host decides before the claim. A tavern chair always needs its table host; a campfire log
+   * asks its host only when listed here (the fire's own rule for logs a match holds). Default: tavern only.
+   */
+  readonly decides?: readonly ('campfire-seat' | 'tavern-seat')[];
   /**
    * `signal` aborts when the room stops waiting (moderation, leave, writer loss); the host should stop admitting.
    * An admission that resolves after the abort is cancelled by the room and never seats anyone.
@@ -51,7 +62,11 @@ export interface InteractionHosts {
   released?(lease: RealmInteractionLease, why: InteractionReleaseCause): void;
 }
 export type InteractionAdmission =
-  | { readonly admitted: true; readonly cancel: () => void }
+  | {
+    readonly admitted: true; readonly cancel: () => void;
+    /** The claim landed: the exact seat and generation the host may later end with `endSeat`. Never before. */
+    readonly seated?: (seat: { readonly targetId: string; readonly generation: number }) => void;
+  }
   | { readonly admitted: false; readonly reason: 'refused' | 'unavailable' };
 /**
  * Why a lease ended. `replaced`: the same person sat elsewhere from a newer window. `host-ended`: its host closed it

@@ -61,6 +61,8 @@ export interface InteractionControllerDebug {
   seats: InteractionSnapshot['seats'];
   /** The place view this controller holds the camera for, if any. */
   held: { targetId: string; action: RealmInteractionAction } | null;
+  /** The home whose interior presentation is open because the room says you are inside it. */
+  home: string | null;
   /** Use (key, tap, click or button) → pending prompt in the DOM, in ms. Local only, not the room. */
   localResponse: number | null;
   /** Last pick from a click or tap: the target it meant and whether it was used. */
@@ -93,7 +95,8 @@ export function createInteractionController(options: InteractionControllerOption
   let disposed = false;
   const pads = new Map<number, boolean[]>();
   let press: { id: number; x: number; y: number; at: number } | null = null;
-  const debug: InteractionControllerDebug = { focus: null, action: null, prompt: null, self: { mode: 'standing', targetId: null }, seats: [], held: null, localResponse: null, pick: null };
+  const debug: InteractionControllerDebug = { focus: null, action: null, prompt: null, self: { mode: 'standing', targetId: null }, seats: [], held: null, home: null, localResponse: null, pick: null };
+  let home: { readonly plotId: string; readonly view: { close(): void } | null } | null = null;
 
   const prompt = options.prompt(() => { use(); });
 
@@ -109,8 +112,24 @@ export function createInteractionController(options: InteractionControllerOption
     if (camera.owner === 'released') camera.resume();
     debug.held = null;
   }
+  /**
+   * The home's interior presentation follows the room's word only: open while the self state says you are at home on
+   * that plot (including after a reload), closed on the way out, on a disconnect and on dispose. It holds no camera.
+   */
+  function reconcileHome(snapshot: InteractionSnapshot): void {
+    const plotId = !disposed && snapshot.connected && snapshot.self.mode === 'interior' ? snapshot.self.plotId : null;
+    if (home?.plotId === plotId) return;
+    home?.view?.close();
+    home = null;
+    if (plotId) {
+      const door = last?.records.find(record => record.target.kind === 'home-door' && record.target.plotId === plotId) ?? null;
+      home = { plotId, view: options.places?.home?.({ plotId, door }) ?? null };
+    }
+    debug.home = home?.plotId ?? null;
+  }
   /** A seat's view lasts exactly as long as the room says you sit there; anything else (stand, revoke, host end) lets go. */
   function reconcile(snapshot: InteractionSnapshot): void {
+    reconcileHome(snapshot);
     if (!held) return;
     if (!snapshot.connected) { releaseHeld(); return; }
     if ((held.action === 'sit' || held.action === 'tavern') && !(snapshot.self.mode === 'seated' && snapshot.self.targetId === held.targetId)) releaseHeld();
@@ -188,8 +207,10 @@ export function createInteractionController(options: InteractionControllerOption
     if (event.repeat || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || isTypingTarget(event.target)) return;
     // An Escape something else already handled (a Forge dialog, a menu) is theirs.
     if (event.code === 'Escape') { if (!event.defaultPrevented && leave()) event.preventDefault(); return; }
-    // Walking away from a seat gets you up: the first step asks the room to stand.
-    if (LEAVE_CODES.has(event.code) && !isOtherControl(event.target) && active() && session.snapshot().self.mode === 'seated' && session.snapshot().phase.kind === 'idle') leave();
+    // Walking away from a seat gets you up: the first step asks the room to stand. At the anvil it closes the visit.
+    if (!LEAVE_CODES.has(event.code) || isOtherControl(event.target)) return;
+    if (held?.action === 'forge') { leave(); return; }
+    if (active() && session.snapshot().self.mode === 'seated' && session.snapshot().phase.kind === 'idle') leave();
   };
   // Leaving the tab lets go of what was pending; an accepted seat or open Forge stays (alt-tab to copy a line).
   // A pending stand stays: the seat's view is already gone and the room's answer is only awaited.
@@ -242,7 +263,7 @@ export function createInteractionController(options: InteractionControllerOption
       const now = pad.buttons.map(button => button.pressed);
       pads.set(index, now);
       if (now[GAMEPAD_USE] && !was[GAMEPAD_USE]) use();
-      if (now[GAMEPAD_LEAVE] && !was[GAMEPAD_LEAVE] && active()) leave();
+      if (now[GAMEPAD_LEAVE] && !was[GAMEPAD_LEAVE] && (active() || held?.action === 'forge')) leave();
     }
   }
 
@@ -250,6 +271,7 @@ export function createInteractionController(options: InteractionControllerOption
     frame(frame) {
       if (disposed) return;
       last = frame;
+      held?.view?.frame?.(frame.now);
       session.tick(frame.now);
       pollPads();
       const snapshot = session.snapshot();
@@ -268,6 +290,7 @@ export function createInteractionController(options: InteractionControllerOption
       if (disposed) return;
       releaseHeld();
       disposed = true;
+      reconcileHome(session.snapshot());
       stopKey(); stopAccepted(); stopSession();
       keyboard.removeEventListener('keydown', keydown);
       keyboard.removeEventListener('blur', letGo);
