@@ -22,7 +22,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.goto(`${base}src/chronicle/bench.html`);
+  await page.goto(`${base}src/chronicle/bench.html`, { waitUntil: 'commit', timeout: 120_000 });
   await page.waitForFunction(() => window.__chatdomReady === true || window.__chronicleError === true, null, { timeout: 240000 });
   if (await page.evaluate(() => window.__chronicleError === true)) throw new Error(`Chronicle failed to open: ${errors.join('\n')}`);
   await page.waitForFunction(() => window.__chronicleLightingReady(), null, { timeout: 120000 });
@@ -36,7 +36,9 @@ try {
   await page.keyboard.press('End'); await draw();
   const lastText = await slider.getAttribute('aria-valuetext'), lastPixels = await pixels();
   if (!firstText || !lastText || firstText === lastText || firstPixels === lastPixels) throw new Error('Forward seek did not change the accessible night and world image');
-  if (view === 'first') { await page.keyboard.press('Home'); await draw(); }
+  await page.keyboard.press('Home'); await draw();
+  if (await slider.getAttribute('aria-valuetext') !== firstText || await pixels() !== firstPixels) throw new Error('Backward seek did not restore the first night and world image');
+  if (view === 'latest') { await page.keyboard.press('End'); await draw(); }
   if (view === 'market') {
     const marketIndex = await page.evaluate(() => window.__chronicleHistory.snapshots.findIndex(snapshot => snapshot.focus === 'market'));
     if (marketIndex < 1) throw new Error('Market construction snapshot is missing');
@@ -55,8 +57,8 @@ try {
   if (await page.evaluate(() => document.documentElement.scrollWidth > document.defaultView.innerWidth)) throw new Error('Horizontal overflow');
   if (errors.length) throw new Error(errors.join('\n'));
   const path = resolve(evidence, `chronicle-${view}@${width}x${height}.png`);
-  await page.screenshot({ path });
-  console.log(`Captured ${path}; forward seek changed the accessible night and world image`);
+  await page.screenshot({ path, timeout: 120_000 });
+  console.log(`Captured ${path}; forward and backward seeking changed and restored the accessible night and world image`);
 } catch (error) {
   failure = error;
 } finally {

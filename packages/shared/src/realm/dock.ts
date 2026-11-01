@@ -16,6 +16,7 @@ export const DockStateSchema = z.strictObject({
   moments: z.array(z.strictObject({ id, name: label, available: z.boolean(), reason: z.string().max(200) })).max(100),
   capabilities: z.array(z.strictObject({ kind: z.enum(ACTIONS), allowed: z.boolean(), reason: z.string().max(200) })).max(8),
   revision: id,
+  undoable: z.array(z.strictObject({ id, kind: z.enum(ACTIONS.filter(kind => kind !== 'undo')), label })).max(20).optional(),
 });
 export type DockState = z.infer<typeof DockStateSchema>;
 export const DockWitnessSchema = z.strictObject({ actionId: id, kingdomId: person, origin: z.enum(['live', 'simulated']), streamEventId: id });
@@ -58,3 +59,12 @@ export const REALM_DOCK_ROUTES = {
   status: '/internal/dock/status', action: '/internal/dock/action',
   presentations: '/internal/dock/presentations/:kingdomId', witness: '/internal/dock/witness',
 } as const;
+
+/** Current lasting royal presentation, never a request to replay a ceremony or issue a witness. */
+export const RealmDockStageStateSchema = z.strictObject({
+  version: z.literal(1), kingdomId: KingdomIdSchema, origin: z.enum(['live', 'simulated']),
+  asOf: EpochMsSchema, revision: id, gate: z.enum(['open', 'closed']), fire: z.enum(['lit', 'unlit']), fireUntil: EpochMsSchema,
+  honours: z.array(z.strictObject({ id, name: label, slot: z.number().int().min(0).max(65535),
+    kind: z.enum(['citizen-crown', 'citizen-knight']), expiresAt: EpochMsSchema })).max(1000),
+});
+export type RealmDockStageState = z.infer<typeof RealmDockStageStateSchema>;

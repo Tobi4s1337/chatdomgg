@@ -550,11 +550,15 @@ export function createTwitchMomentView(host: MomentViewHost) {
         const centre = new THREE.Vector3(...sky.centre), den = new THREE.Vector3(...lair.position);
         const out = den.clone().sub(centre).setY(0).normalize(), target = at ?? den.clone().add(new THREE.Vector3(0, 5, 0));
         const fov = portrait ? 66 : 54;
-        // At its lair the dragon is watched from the slope between the castle and the hills; aloft, from the far
-        // side of the town, seen over the roofs as it comes.
+        // At its lair the dragon is watched from behind its shoulder, three-quarters on, looking past it at what it
+        // wakes to: the castle lit on its hill and the town's glow beyond. Aloft, from the far side of the town, seen
+        // over the roofs as it comes.
+        const toward = den.clone().addScaledVector(out, -30).add(new THREE.Vector3(0, 9, 0));
         const near = function* () {
-          for (const reach of [42, 54, 32]) for (const rise of [10, 16]) for (const turn of [0, 0.4, -0.4, 0.8, -0.8]) {
-            yield [den.clone().addScaledVector(turned(out, turn), -reach).add(new THREE.Vector3(0, rise, 0)), target, fov] as const;
+          // Aimed between the dragon and the castle, so both stand in the picture.
+          const aim = at ? at.clone().lerp(toward, 0.4) : toward;
+          for (const reach of [36, 46, 28]) for (const rise of [9, 14]) for (const turn of [0.55, -0.55, 0.35, -0.35, 0.85, -0.85]) {
+            yield [den.clone().addScaledVector(turned(out, turn), reach).add(new THREE.Vector3(0, rise, 0)), aim, fov] as const;
           }
         };
         const far = function* () {

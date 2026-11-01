@@ -12,9 +12,10 @@ export const CAPTURE_LOCK_PATH = '/tmp/chatdom-capture.lock';
 // mutex protects the FIFO registry; it is never held for the capture itself.
 const supervisorSource = `
   import { spawn } from 'node:child_process';
+  import { randomUUID } from 'node:crypto';
   import { openSync, closeSync, mkdirSync, readdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs';
   const path = process.argv[1], priority = process.argv[2];
-  const directory = path + '.queue';
+  const directory = path + '.queue-v2';
   let child, descriptors = new Set(), retry, ticket;
   let stopping = false;
   const open = name => { const fd = openSync(name, 'a'); descriptors.add(fd); return fd; };
@@ -45,18 +46,12 @@ const supervisorSource = `
       else reject(new Error('flock exited with code ' + code));
     });
   });
-  // Linux starttime protects stale cleanup against PID reuse. Never signal a PID.
-  const identity = pid => {
-    try {
-      const raw = readFileSync('/proc/' + pid + '/stat', 'utf8');
-      const fields = raw.slice(raw.lastIndexOf(')') + 2).split(' ');
-      return fields[0] === 'Z' ? undefined : fields[19];
-    } catch (error) {
-      if (error.code === 'ENOENT' || error.code === 'ESRCH') return undefined;
-      throw error;
-    }
+  // UUID ticket leases use the same host advisory-lock namespace as captures.
+  // /proc PIDs are not comparable across execution sessions on this host.
+  const remove = name => {
+    try { unlinkSync(directory + '/' + name); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
   };
-  const self = identity(process.pid);
   const write = entry => {
     const temporary = directory + '/' + ticket + '.tmp';
     writeFileSync(temporary, JSON.stringify(entry));
@@ -65,24 +60,36 @@ const supervisorSource = `
   try {
     mkdirSync(directory, { recursive: true });
     while (!stopping) {
-      const mutex = open(path + '.queue-mutex');
+      const mutex = open(path + '.queue-v2-mutex');
       if (await lock('--exclusive', mutex)) {
         try {
           const entries = [];
           const names = readdirSync(directory);
-          for (const name of names.filter(name => name.endsWith('.tmp'))) {
-            const match = /^(\\d+)-(\\d+)\\.json\\.tmp$/.exec(name);
-            if (match && identity(match[1]) !== match[2]) unlinkSync(directory + '/' + name);
+          const tickets = new Set(names.map(name => name.replace(/\\.(?:live|tmp)$/, '')).filter(name => name.endsWith('.json')));
+          for (const name of tickets) {
+            const lease = open(directory + '/' + name + '.live');
+            try {
+              if (await lock('--exclusive', lease)) {
+                // No living owner holds this unique lease. Registration and
+                // cleanup share the mutex, so its inode can now be removed.
+                remove(name);
+                remove(name + '.tmp');
+                remove(name + '.live');
+              } else if (!stopping) {
+                const entry = JSON.parse(readFileSync(directory + '/' + name, 'utf8'));
+                entries.push({ ...entry, name });
+              }
+            } finally { close(lease); }
+            if (stopping) break;
           }
-          for (const name of names.filter(name => name.endsWith('.json'))) {
-            const entry = JSON.parse(readFileSync(directory + '/' + name, 'utf8'));
-            if (identity(entry.pid) !== entry.start) unlinkSync(directory + '/' + name);
-            else entries.push({ ...entry, name });
-          }
+          if (stopping) break;
           if (!ticket) {
             const sequence = Math.max(0, ...entries.map(entry => entry.sequence)) + 1;
-            ticket = process.pid + '-' + self + '.json';
-            const entry = { sequence, pid: process.pid, start: self, priority, active: false };
+            ticket = randomUUID() + '.json';
+            const lease = open(directory + '/' + ticket + '.live');
+            if (!await lock('--exclusive', lease)) throw new Error('Could not reserve capture ticket lease');
+            if (stopping) break;
+            const entry = { sequence, priority, active: false };
             write(entry);
             entries.push({ ...entry, name: ticket });
             process.stdout.write('queued\\n');
@@ -136,6 +143,9 @@ async function checkoutPriority() {
  * One slot is reserved for main and two for lanes, FIFO within each class.
  * Main never waits for a lane; lanes never wait for main. Older exclusive guards
  * remain safe: shared compatibility locks prevent any overlap with them.
+ * Prior PID-registry guards also hold shared locks and cannot be counted by this
+ * version. Allow those captures to finish before mixing queue versions; the
+ * three-capture capacity guarantee applies to guards using this registry.
  * Priority defaults to this checkout's branch; CHATDOM_CAPTURE_PRIORITY overrides
  * that default and the explicit option overrides the environment (for tests).
  * @param {{ path?: string, signal?: AbortSignal, priority?: 'main' | 'lane' }} [options]

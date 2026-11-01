@@ -19,7 +19,7 @@ async function ready(page, base) {
   page.on('pageerror', error => errors.push(error.message));
   page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-  await page.goto(`${base}src/chronicle/bench.html`);
+  await page.goto(`${base}src/chronicle/bench.html`, { waitUntil: 'commit', timeout: 120_000 });
   await page.waitForFunction(() => window.__chatdomReady === true || window.__chronicleError === true, null, { timeout: 240_000 });
   if (await page.evaluate(() => window.__chronicleError === true)) throw new Error(`Chronicle failed to open: ${errors.join('\n')}`);
   await page.waitForFunction(() => window.__chronicleLightingReady(), null, { timeout: 120_000 });
@@ -52,18 +52,20 @@ async function accessibility(browser, base, width, height) {
     const slider = page.getByRole('slider', { name: 'Travel through the nights' });
     const caption = page.locator('.chronicle-caption');
     assert(await panel.isVisible() && await caption.isVisible(), 'Chronicle or its fact is not visible');
+    assert(await close.evaluate(element => element === document.activeElement), 'Opening Chronicle did not move focus into its controls');
     assert(await page.locator('.chronicle-fact').getAttribute('aria-live') === 'polite', 'Fact changes are not announced politely');
     const sizes = await page.evaluate(() => {
       const panel = document.querySelector('.chronicle').getBoundingClientRect();
       const caption = document.querySelector('.chronicle-caption');
       const seek = document.querySelector('.chronicle-track input').getBoundingClientRect();
       const close = document.querySelector('.chronicle-close').getBoundingClientRect();
+      const play = document.querySelector('.chronicle-play').getBoundingClientRect();
       return { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom,
         overflow: document.documentElement.scrollWidth > window.innerWidth,
-        font: Number.parseFloat(window.getComputedStyle(caption).fontSize), seekHeight: seek.height, closeWidth: close.width, closeHeight: close.height };
+        font: Number.parseFloat(window.getComputedStyle(caption).fontSize), seekHeight: seek.height, closeWidth: close.width, closeHeight: close.height, playWidth: play.width, playHeight: play.height };
     });
     assert(!sizes.overflow && sizes.left >= 0 && sizes.top >= 0 && sizes.right <= width && sizes.bottom <= height, `Chronicle is clipped or overflows at ${width}x${height}: ${JSON.stringify(sizes)}`);
-    assert(sizes.font >= 18 && sizes.seekHeight >= 44 && sizes.closeWidth >= 44 && sizes.closeHeight >= 44, `Text or touch targets are too small at ${width}x${height}: ${JSON.stringify(sizes)}`);
+    assert(sizes.font >= 18 && sizes.seekHeight >= 44 && sizes.closeWidth >= 44 && sizes.closeHeight >= 44 && sizes.playWidth >= 44 && sizes.playHeight >= 44, `Text or touch targets are too small at ${width}x${height}: ${JSON.stringify(sizes)}`);
     assert((await slider.getAttribute('aria-valuetext'))?.includes('entry 1 of'), 'Slider has no understandable current entry');
     await close.focus(); await page.keyboard.press('Tab');
     assert(await play.evaluate(element => element === document.activeElement), 'Keyboard does not reach Play after Close');
@@ -83,6 +85,15 @@ async function accessibility(browser, base, width, height) {
     await page.keyboard.press('Home'); const first = await slider.getAttribute('aria-valuetext');
     await page.keyboard.press('End'); const last = await slider.getAttribute('aria-valuetext');
     assert(first && last && first !== last, 'Keyboard seeking did not change the accessible night');
+    const track = await slider.boundingBox();
+    assert(track && track.width > 40, 'Timeline has no usable pointer target');
+    await page.mouse.click(track.x + 4, track.y + track.height / 2);
+    const pointerFirst = await slider.inputValue(), firstPixels = await page.evaluate(() => window.__chronicleRenderPixels());
+    await page.mouse.click(track.x + track.width - 4, track.y + track.height / 2);
+    const pointerLast = await slider.inputValue(), lastPixels = await page.evaluate(() => window.__chronicleRenderPixels());
+    assert(Number(pointerFirst) < Number(pointerLast) && firstPixels !== lastPixels, 'Pointer seeking did not advance the recorded world');
+    await page.mouse.click(track.x + 4, track.y + track.height / 2);
+    assert(await slider.inputValue() === pointerFirst && await page.evaluate(() => window.__chronicleRenderPixels()) === firstPixels, 'Pointer seeking backward did not restore the recorded world');
     await page.evaluate(() => window.__chronicle.load({ label: 'SIMULATED', snapshots: [] }));
     assert(await page.getByText('There are no recorded nights to read yet.').isVisible(), 'Empty history state is missing');
     assert(await page.getByText('SIMULATED', { exact: false }).isVisible(), 'Empty simulated history lost its label');
@@ -113,6 +124,20 @@ async function accessibility(browser, base, width, height) {
         results.push(advanced && closed && reported && disposed && !host.hasChildNodes() && document.activeElement === opener);
         host.remove();
       }
+      const host = document.createElement('div'); document.body.append(host);
+      const first = window.__chronicleHistory.snapshots[0];
+      const mixed = mountChronicle(host, { history: { label: 'LIVE', snapshots: [{ ...first, frame: { ...first.frame, origin: 'live' } }] },
+        presentationLabel: 'SIMULATED', simulationNote: 'Simulated scene', binding: { replace() {}, clear() {}, dispose() {} }, sound() {}, onClose() {} });
+      results.push(host.querySelector('.chronicle-origin').textContent.includes('SIMULATED') && host.querySelector('.chronicle-note').textContent === 'Simulated scene');
+      mixed.dispose(); host.remove();
+      opener.focus();
+      const immediate = document.createElement('div'); document.body.append(immediate);
+      let closedImmediately = false;
+      mountChronicle(immediate, { history: window.__chronicleHistory, binding: { replace() {}, clear() {}, dispose() {} }, sound() {}, onClose() { closedImmediately = true; } });
+      const focusedOnOpen = document.activeElement === immediate.querySelector('.chronicle-close');
+      document.activeElement.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      results.push(focusedOnOpen && closedImmediately && document.activeElement === opener && !immediate.hasChildNodes());
+      immediate.remove();
       return results.every(Boolean);
     });
     assert(recovery, 'Host sound or cleanup failure prevented controls, close, error reporting or focus restoration');

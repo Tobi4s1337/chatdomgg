@@ -1,5 +1,8 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import '@chatdom/ui/kit.css';
 import { createKingdomAudio } from '@chatdom/audio';
+import { REALM_AUTH_ROUTES, RealmSessionReplySchema, RealmSignoutReplySchema, type RealmSessionReply } from '@chatdom/shared/realm';
+import { bindRecovery, chooseKingdom, clearRecovery, migrateLegacy, readRecovery, sameScope, writeRecovery } from './recovery';
 import { DockOutcomeSchema, DockStateSchema, type DockAction, type DockOutcome, type DockState } from '../../api/src/dock/contracts';
 
 type Kind = DockAction['kind'];
@@ -16,6 +19,11 @@ export function App() {
   const sound = createKingdomAudio({ volume: 0.2 });
   const [muted, setMuted] = createSignal(false);
   const [status, setStatus] = createSignal<Status>();
+  const [session, setSession] = createSignal<RealmSessionReply>();
+  const [sessionError, setSessionError] = createSignal(false);
+  const [expired, setExpired] = createSignal(false);
+  const [storageReady, setStorageReady] = createSignal(false);
+  const [signingOut, setSigningOut] = createSignal(false);
   const [loading, setLoading] = createSignal(true);
   const [connected, setConnected] = createSignal(false);
   const [pending, setPending] = createSignal<{ kind: Kind; target?: string }>();
@@ -23,63 +31,124 @@ export function App() {
   const [raidPage, setRaidPage] = createSignal(0);
   const [citizenPage, setCitizenPage] = createSignal(0);
   const [momentPage, setMomentPage] = createSignal(0);
+  const [undoPage, setUndoPage] = createSignal(0);
   const [receipt, setReceipt] = createSignal('');
-  const [uncertain, setUncertain] = createSignal(sessionStorage.getItem('chatdom-dock-uncertain') ?? '');
+  const [uncertain, setUncertain] = createSignal('');
   let alive = true;
   let timer: ReturnType<typeof setInterval> | undefined;
+  let cadenceTimer: ReturnType<typeof setTimeout> | undefined;
   let reading = false;
   let generation = 0;
   const params = new URLSearchParams(location.search);
-  const requestedKingdom = params.get('kingdom');
-  if (requestedKingdom && /^[1-9][0-9]{0,31}$/.test(requestedKingdom)) sessionStorage.setItem('chatdom-dock-kingdom', requestedKingdom);
-  const kingdom = requestedKingdom ?? sessionStorage.getItem('chatdom-dock-kingdom');
+  // Access to the storage property itself can throw in privacy-restricted browsers.
+  const storage: Storage = (() => {
+    try { return window.sessionStorage; } catch {
+      const fail = (): never => { throw new Error('Storage unavailable'); };
+      return { get length() { return fail(); }, clear: fail, getItem: fail, key: fail, removeItem: fail, setItem: fail };
+    }
+  })();
+  const kingdom = chooseKingdom(storage, params.get('kingdom'));
   const query = new URLSearchParams();
   if (kingdom) query.set('kingdom', kingdom);
   async function refresh() {
     if (reading || pending()) return;
     reading = true;
     const started = generation;
+    let checkingSession = true;
     try {
+      const sessionResponse = await fetch(REALM_AUTH_ROUTES.session, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' } });
+      if (!sessionResponse.ok) throw new Error('Session unavailable');
+      const identity = RealmSessionReplySchema.parse(await sessionResponse.json());
+      if (!alive || started !== generation) return;
+      const previous = session();
+      if (previous?.status === 'authenticated' && (identity.status !== 'authenticated' || previous.resumeScope !== identity.resumeScope)) { setStatus(undefined); setConnected(false); setReceipt(''); setUncertain(''); }
+      setSession(identity); setSessionError(false); checkingSession = false;
+      if (identity.status === 'anonymous') {
+        clearRecovery(storage); setStorageReady(false); setReceipt(''); setUncertain(''); setStatus(undefined); setConnected(false); return;
+      }
+      if (identity.expiresAt <= Date.now()) { setExpired(true); setSession({ version: 1, status: 'anonymous' }); clearRecovery(storage); setStorageReady(false); setStatus(undefined); setReceipt(''); setUncertain(''); setConnected(false); return; }
+      setStorageReady(bindRecovery(storage, identity.resumeScope));
       const response = await fetch(`/api/dock/status${query.size ? `?${query}` : ''}`, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' } });
       const value = await response.json() as Status;
       if (value.version !== 1 || !['ready', 'anonymous', 'forbidden', 'unavailable'].includes(value.status) || !['LIVE', 'SIMULATED'].includes(value.mode) || typeof value.message !== 'string' || value.signInUrl !== '/api/realm/auth/start?returnTo=%2Fdock') throw new Error('Invalid status');
-      if (value.status === 'ready') { const { kingdom, principal, town, raids, citizens, moments, capabilities, revision } = value; if (typeof value.csrfToken !== 'string' || !DockStateSchema.safeParse({ kingdom, principal, town, raids, citizens, moments, capabilities, revision }).success) throw new Error('Invalid state'); }
+      if (value.status === 'ready') { const { kingdom, principal, town, raids, citizens, moments, capabilities, revision, undoable } = value; if (typeof value.csrfToken !== 'string' || !DockStateSchema.safeParse({ kingdom, principal, town, raids, citizens, moments, capabilities, revision, ...(undoable === undefined ? {} : { undoable }) }).success) throw new Error('Invalid state'); }
       if (!alive || started !== generation) return;
+      if (value.status === 'anonymous') { setExpired(true); setSession({ version: 1, status: 'anonymous' }); clearRecovery(storage); setStorageReady(false); setReceipt(''); setUncertain(''); setStatus(undefined); setConnected(false); return; }
       setStatus(value); setConnected(value.status !== 'unavailable');
+      if (value.status === 'ready') {
+        const ok = migrateLegacy(storage, identity.resumeScope, value.kingdom.id);
+        setStorageReady(storageReady() && ok);
+        const recovery = readRecovery(storage, identity.resumeScope, value.kingdom.id);
+        setUncertain(recovery.uncertain); setReceipt(recovery.receipt);
+      }
     } catch {
-      if (alive && started === generation) setConnected(false);
+      if (alive && started === generation) { setConnected(false); if (checkingSession) setSessionError(true); }
     } finally { reading = false; if (alive) setLoading(false); }
   }
   onMount(() => { void (async () => { await refresh(); await document.fonts.ready; window.__chatdomReady = true; })(); timer = setInterval(() => void refresh(), 10000); });
-  onCleanup(() => { sound.dispose(); alive = false; if (timer) clearInterval(timer); });
+  onCleanup(() => { sound.dispose(); alive = false; if (timer) clearInterval(timer); if (cadenceTimer) clearTimeout(cadenceTimer); });
   const ready = () => { const current = status(); return current?.status === 'ready' ? current : undefined; };
   const capability = (kind: Kind) => ready()?.capabilities.find(item => item.kind === kind);
-  const can = (kind: Kind) => connected() && !pending() && !uncertain() && ready()?.principal.role === 'broadcaster' && capability(kind)?.allowed === true;
+  const can = (kind: Kind) => connected() && session()?.status === 'authenticated' && storageReady() && !signingOut() && !pending() && !uncertain() && ready()?.principal.role === 'broadcaster' && capability(kind)?.allowed === true;
   async function act(kind: Kind, targetId?: string) {
     const state = ready();
-    if (!state || !can(kind) || (['raid-welcome', 'citizen-crown', 'citizen-knight', 'moment-play'].includes(kind) && !targetId)) return;
+    const identity = session();
+    if (!state || identity?.status !== 'authenticated' || !can(kind) || (['raid-welcome', 'citizen-crown', 'citizen-knight', 'moment-play'].includes(kind) && !targetId)) return;
     void sound.unlock().then(() => sound.cue('wood', { ui: 'brass' }));
     generation++;
+    const actionGeneration = generation;
+    if (cadenceTimer) clearTimeout(cadenceTimer);
     const actionId = crypto.randomUUID();
-    sessionStorage.setItem('chatdom-dock-uncertain', actionId);
+    if (!writeRecovery(storage, identity.resumeScope, state.kingdom.id, { uncertain: actionId, receipt: receipt() })) { setStorageReady(false); setNotice({ text: 'This browser cannot save action recovery. Allow session storage before sending an act.', error: true }); return; }
     setPending({ kind, ...(targetId ? { target: targetId } : {}) }); setNotice(undefined);
     try {
-      const response = await fetch('/api/dock/actions', { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000), headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': state.csrfToken }, body: JSON.stringify({ id: actionId, kingdomId: state.kingdom.id, kind, ...(targetId ? { targetId } : {}), expectedRevision: state.revision }) });
+      const response = await fetch('/api/dock/actions', { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000), headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': identity.csrfToken }, body: JSON.stringify({ id: actionId, kingdomId: state.kingdom.id, kind, ...(targetId ? { targetId } : {}), expectedRevision: state.revision }) });
       const raw = await response.json() as Reply;
       const { version, ...outcome } = raw;
       if (version !== 1) throw new Error('Invalid reply');
       const result = DockOutcomeSchema.parse(outcome);
-      if (!alive) return;
+      const check = await fetch(REALM_AUTH_ROUTES.session, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' } });
+      if (!check.ok) throw new Error('Session unavailable');
+      const confirmed = RealmSessionReplySchema.parse(await check.json());
+      if (!alive || !sameScope(session(), identity.resumeScope)) return;
+      if (!sameScope(confirmed, identity.resumeScope)) { setStatus(undefined); setConnected(false); setSession(confirmed); return; }
       sound.cue(result.status === 'accepted' ? 'light' : 'wood', { ui: 'wood' });
       if (result.status === 'unknown') setUncertain(actionId);
-      else { sessionStorage.removeItem('chatdom-dock-uncertain'); setUncertain(''); }
+      else setUncertain('');
       setNotice({ text: result.message, error: result.status !== 'accepted' });
       if (result.state) setStatus({ ...state, ...result.state });
-      if (result.status === 'accepted') setReceipt(kind === 'undo' ? '' : result.receipt ?? '');
+      const nextReceipt = result.status === 'accepted' ? (kind === 'undo' ? '' : result.receipt ?? '') : (kind === 'undo' && result.status === 'refused' ? '' : receipt());
+      if (result.status === 'accepted' || (kind === 'undo' && result.status === 'refused')) setReceipt(nextReceipt);
+      if (!writeRecovery(storage, identity.resumeScope, state.kingdom.id, { uncertain: result.status === 'unknown' ? actionId : '', receipt: nextReceipt })) { setStorageReady(false); setUncertain(actionId); }
       if (result.status === 'unavailable') setConnected(false);
     } catch {
-      if (alive) { sound.cue('wood', { ui: 'wood' }); setUncertain(actionId); setConnected(false); setNotice({ text: 'The reply was lost. This action may have reached the kingdom; check its state before trying again.', error: true }); }
-    } finally { if (alive) { setPending(undefined); void refresh(); } }
+      if (alive && sameScope(session(), identity.resumeScope)) { sound.cue('wood', { ui: 'wood' }); setUncertain(actionId); setConnected(false); setNotice({ text: 'The reply was lost. This action may have reached the kingdom; check its state before trying again.', error: true }); }
+    } finally {
+      if (alive) {
+        setPending(undefined);
+        await refresh();
+        if (alive && generation === actionGeneration) {
+          cadenceTimer = setTimeout(() => { cadenceTimer = undefined; void refresh(); }, 2200);
+        }
+      }
+    }
+  }
+  async function signOut() {
+    const identity = session();
+    if (identity?.status !== 'authenticated' || pending() || signingOut()) return;
+    generation++; setSigningOut(true);
+    try {
+      const response = await fetch(REALM_AUTH_ROUTES.signout, { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json', 'X-CSRF-Token': identity.csrfToken } });
+      if (!response.ok || !RealmSignoutReplySchema.safeParse(await response.json()).success) throw new Error('Sign-out unavailable');
+      clearRecovery(storage); setSession({ version: 1, status: 'anonymous' }); setStatus(undefined); setConnected(false); setReceipt(''); setUncertain(''); setStorageReady(false);
+      setNotice({ text: 'You signed out of the throne.', error: false });
+    } catch { setNotice({ text: 'Sign-out could not be confirmed. Try again when the connection returns.', error: true }); }
+    finally { setSigningOut(false); }
+  }
+  function checkedStream() {
+    const identity = session(), state = ready();
+    if (identity?.status !== 'authenticated' || !state || !writeRecovery(storage, identity.resumeScope, state.kingdom.id, { uncertain: '', receipt: receipt() })) { setStorageReady(false); return; }
+    setUncertain('');
   }
   const pageStart = (page: number, length: number) => Math.min(page * 3, Math.max(0, Math.ceil(length / 3) - 1) * 3);
   const Action = (props: { kind: Kind; title: string; detail: string; target?: string; unavailable?: boolean }) => {
@@ -99,16 +168,21 @@ export function App() {
     </nav></Show>;
   };
   return <main class="dock"><div class="frame">
-    <header class="masthead"><span class="crest" aria-hidden="true"><Insignia kind="throne" /></span><div><div class="eyebrow">Chatdom · The throne</div><h1>{ready()?.kingdom.name ?? 'Your kingdom'}</h1><div class="statusline"><span classList={{ dot: true, live: connected() && !!ready() }} />{loading() ? 'Finding your kingdom…' : !connected() ? 'Connection unavailable' : ready() ? `${ready()!.principal.displayName} · ${ready()!.principal.role === 'broadcaster' ? 'Monarch' : 'Moderator'}` : 'The throne'}</div></div></header>
+    <header class="masthead"><span class="crest" aria-hidden="true"><Insignia kind="throne" /></span><div><div class="eyebrow">Chatdom · The throne</div><h1>{ready()?.kingdom.name ?? 'Your kingdom'}</h1><div class="statusline"><span classList={{ dot: true, live: connected() && !!ready() }} />{loading() ? 'Finding your kingdom…' : session()?.status === 'anonymous' ? 'Sign in with Twitch' : !connected() ? 'Connection unavailable' : ready() ? `${ready()!.principal.displayName} · ${ready()!.principal.role === 'broadcaster' ? 'Monarch' : 'Moderator'}` : 'The throne'}</div></div></header>
     <Show when={status()?.mode === 'SIMULATED' || params.get('rehearsal') === '1'}><div class="notice"><strong>SIMULATED</strong> · Rehearsal data, not a live kingdom.</div></Show>
     <Show when={loading()}><div class="paper summary" role="status"><h2>Opening the throne</h2><p>Finding your kingdom and checking your place in it.</p></div></Show>
-    <Show when={!loading() && !connected()}><div class="paper summary" role="status"><h2>The kingdom is out of reach</h2><p>{status()?.status === 'unavailable' ? status()?.message : 'We couldn’t connect to the dock. Your controls will return when the connection does.'}</p><button class="retry" type="button" onClick={() => void refresh()}>Try again</button></div></Show>
-    <Show when={connected() && status()?.status === 'anonymous'}><div class="paper summary"><h2>Take your place</h2><p>Sign in with Twitch to open your kingdom’s throne.</p><a class="paper-link" href={status()?.signInUrl}>Sign in with Twitch →</a></div></Show>
+    <Show when={!loading() && session()?.status !== 'anonymous' && !connected()}><div class="paper summary" role="status"><h2>The kingdom is out of reach</h2><p>{status()?.status === 'unavailable' ? status()?.message : 'We couldn’t connect to the dock. Your controls will return when the connection does.'}</p><button class="retry" type="button" onClick={() => void refresh()}>Try again</button></div></Show>
+    <Show when={!loading() && session()?.status === 'anonymous'}><div class="paper summary"><h2>Take your place</h2><p>{expired() ? 'Your sign-in expired. Please try again.' : ({ expired: 'Your sign-in expired. Please try again.', declined: 'Twitch sign-in was declined. You can try again when ready.', refused: 'Sign-in could not be completed. Please try again.', unavailable: 'Sign-in is unavailable right now. Please try again shortly.' } as Record<string, string>)[params.get('signin') ?? ''] ?? 'Sign in with Twitch to open your kingdom’s throne.'}</p><a class="paper-link" href="/api/realm/auth/start?returnTo=%2Fdock">Sign in with Twitch →</a></div></Show>
     <Show when={connected() && status()?.status === 'forbidden'}><div class="paper summary"><h2>This throne belongs to another kingdom</h2><p>{status()?.message || 'Only the broadcaster and their moderators can enter this dock.'}</p><button class="retry" type="button" onClick={() => void refresh()}>Try again</button> <a class="paper-link" href={status()?.signInUrl}>Sign in with Twitch</a></div></Show>
+    <Show when={sessionError()}><div class="notice error" role="status">Sign-in could not be checked. Try again when the connection returns.</div></Show>
     <Show when={notice()}>{item => <div classList={{ notice: true, error: item().error }} role="status" aria-live="polite">{item().text}</div>}</Show>
-    <Show when={uncertain()}><div class="notice error" role="status">An action may have reached the kingdom. Check the stream before sending another.<br /><button class="retry" type="button" onClick={() => { sessionStorage.removeItem('chatdom-dock-uncertain'); setUncertain(''); }}>I checked the stream</button></div></Show>
+    <Show when={session()?.status === 'authenticated' && !storageReady() && connected()}><div class="notice error">Action recovery is unavailable in this browser. Enable session storage and retry.</div></Show>
+    <Show when={uncertain()}><div class="notice error" role="status">An action may have reached the kingdom. Check the stream before sending another.<br /><button class="retry" type="button" onClick={checkedStream}>I checked the stream</button></div></Show>
     <Show when={connected() && ready()}>{state => <>
-      <div class="paper summary"><div class="section-label">Around the kingdom</div><h2>{state().town.presenceLabel}</h2><p>{state().town.growthLabel}<br />{state().town.comingLabel}</p></div>
+      <div class="paper summary"><div class="section-label">Around the kingdom</div>
+        <div class="town-facts"><div><span class="fact-icon"><Insignia kind="gate-open" /></span><span>Gate <strong>{state().town.gate}</strong></span></div><div><span class="fact-icon"><Insignia kind="fire-light" /></span><span>Fire <strong>{state().town.fire === 'lit' ? 'lit' : 'unlit'}</strong></span></div></div>
+        <div class="town-lines"><p><span>Here</span>{state().town.presenceLabel}</p><p><span>Growing</span>{state().town.growthLabel}</p><p><span>Coming</span>{state().town.comingLabel}</p></div>
+      </div>
       <Show when={state().principal.role === 'moderator'}><div class="notice">You’re here as a moderator. Royal acts belong to the monarch.</div></Show>
       <section class="section"><h2 class="section-heading section-label">The kingdom</h2>
         <Action kind={state().town.gate === 'open' ? 'gate-close' : 'gate-open'} title={state().town.gate === 'open' ? 'Close the gate' : 'Open the gate'} detail={state().town.gate === 'open' ? 'Send the kingdom a goodnight' : 'Wake the town and gather everyone'} />
@@ -141,8 +215,21 @@ export function App() {
           <Pages label="Moments" page={momentPage()} count={state().moments.length} change={setMomentPage} />
         </Show>
       </section>
-      <Show when={capability('undo')?.allowed && receipt()}><section class="section"><Action kind="undo" title="Undo last act" detail="Return the kingdom to its previous state" target={receipt()} /></section></Show>
+      <section class="section"><h2 class="section-heading section-label">Undo an act</h2>
+        <Show when={capability('undo')?.allowed} fallback={<p class="empty">Undo unavailable: {capability('undo')?.reason || 'The kingdom has not offered an undo.'}</p>}>
+          <Show when={state().undoable !== undefined} fallback={<Show when={receipt()} fallback={<p class="empty">There is no recent act to undo in this session.</p>}><Action kind="undo" title="Undo last act" detail="Return the kingdom to its previous state" target={receipt()} /></Show>}>
+            <Show when={state().undoable?.length} fallback={<p class="empty">There are no acts available to undo just now.</p>}>
+              <For each={(state().undoable ?? []).slice(pageStart(undoPage(), state().undoable?.length ?? 0), pageStart(undoPage(), state().undoable?.length ?? 0) + 3).map(item => item.id)}>{id =>
+                <Action kind="undo" title={`Undo ${state().undoable?.find(item => item.id === id)?.label ?? ''}`} detail="Return the kingdom to its previous state" target={id} />
+              }</For>
+              <Pages label="Acts to undo" page={undoPage()} count={state().undoable?.length ?? 0} change={setUndoPage} />
+            </Show>
+          </Show>
+        </Show>
+      </section>
     </>}</Show>
+    <Show when={session()?.status === 'authenticated' && !!kingdom}><button class="signout" type="button" disabled={!!pending() || signingOut()} onClick={() => { try { storage.removeItem('chatdom-dock-kingdom'); } catch { /* continue to the default kingdom */ } location.assign('/dock'); }}>Open your own kingdom</button></Show>
+    <Show when={session()?.status === 'authenticated'}><button class="signout" type="button" disabled={!!pending() || signingOut()} onClick={() => void signOut()}>{signingOut() ? 'Signing out…' : 'Sign out'}</button></Show>
     <footer class="foot"><span>The kingdom carries on, even while you’re away.</span><button class="sound-toggle" type="button" aria-pressed={!muted()} onClick={() => { const next = !muted(); setMuted(next); sound.setSettings({ muted: next }); if (!next) void sound.unlock().then(() => sound.cue('wood', { ui: 'brass' })); }}>{muted() ? 'Sound off' : 'Sound on'}</button></footer>
   </div></main>;
 }

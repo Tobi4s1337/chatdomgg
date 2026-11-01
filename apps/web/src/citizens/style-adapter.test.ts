@@ -107,7 +107,7 @@ describe('painted citizen runtime adapter', () => {
     const scene = new THREE.Scene(), lighting = createVoxelMaterial(MATERIALS, 'avatar');
     const lightingDisposed = vi.fn(); lighting.material.addEventListener('dispose', lightingDisposed);
     const renderer = await createCitizenRenderer(scene, { registry: MATERIALS, material: lighting, looks: [legacy, look], capacity: 2, pool });
-    renderer.update([sample('old-person', 'legacy'), sample('new-person', 'new')]);
+    renderer.update([sample('old-person', 'legacy'), sample('new-person', 'new')], undefined, 0);
     const oldGrip = new THREE.Vector3().setFromMatrixPosition(renderer.grips.get('old-person')!);
     const newGrip = new THREE.Vector3().setFromMatrixPosition(renderer.grips.get('new-person')!);
     expect(oldGrip.x - newGrip.x).toBeCloseTo(VOXEL_METRES.avatar, 8);
@@ -119,9 +119,13 @@ describe('painted citizen runtime adapter', () => {
     expect(cloth.count).toBe(1); expect(cloth.geometry.getAttribute('position').count).toBe(77);
     const mesh = scene.getObjectByName('Citizen new head solid') as THREE.InstancedMesh;
     const initial = new THREE.Matrix4(); mesh.getMatrixAt(0, initial);
-    renderer.update([{ ...sample('new-person', 'new'), distance: .45, moving: 1, gesture: 'wave', time: 1, opacity: .4 }]);
+    for (let frame = 1; frame <= 10; frame++) {
+      const distance = .045 * frame;
+      renderer.update([{ ...sample('new-person', 'new'), position: [0, 0, distance], distance, moving: 1, speed: .45, gesture: 'wave', time: frame / 10, opacity: .4 }], undefined, frame * 100);
+    }
     expect(renderer.grips.has('old-person')).toBe(false);
-    expect(new THREE.Vector3().setFromMatrixPosition(renderer.grips.get('new-person')!).distanceTo(newGrip)).toBeGreaterThan(.1);
+    const relativeGrip = new THREE.Vector3().setFromMatrixPosition(renderer.grips.get('new-person')!).sub(new THREE.Vector3(0, 0, .45));
+    expect(relativeGrip.distanceTo(newGrip)).toBeGreaterThan(.1);
     expect(mesh.geometry.getAttribute('aLodFade').getX(0)).toBeCloseTo(.4);
     const walked = new THREE.Matrix4(); mesh.getMatrixAt(0, walked);
     expect(walked.equals(initial)).toBe(false);

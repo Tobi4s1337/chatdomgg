@@ -12,7 +12,7 @@ try {
   const scene = await createSimulatedScene(canvas, { signal: abort.signal, onProgress: fraction => { loading.textContent = `SIMULATED · Opening the Chronicle ${Math.round(fraction * 100)}%`; } });
   const audio = createKingdomAudio();
   const view = mountChronicle(root, { binding: scene.binding, history: scene.history,
-    presentationLabel: 'SIMULATED', sound: action => { void audio.unlock().then(ready => { if (ready) audio.cue('wood', { ui: action === 'seek' ? 'parchment' : action === 'close' ? 'brass' : 'wood' }); }); }, simulationNote: 'Castle, streets, other civic places and other homes stay as generated in this local record.', onClose: cleanupError => {
+    presentationLabel: 'SIMULATED', sound: action => { void audio.unlock().then(ready => { if (ready) audio.cue('wood', { ui: action === 'seek' ? 'parchment' : action === 'close' ? 'brass' : 'wood' }); }).catch(() => { /* Audio is optional; a rejected unlock must not break the Chronicle. */ }); }, simulationNote: 'Castle, streets, other civic places and other homes stay as generated in this local record.', onClose: cleanupError => {
     if (cleanupError) console.error('Chronicle scene cleanup failed', cleanupError);
     cancelAnimationFrame(raf); canvas.hidden = true; closed.hidden = false; window.setTimeout(() => audio.dispose(), 1500);
   } });

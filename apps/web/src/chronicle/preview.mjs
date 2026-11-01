@@ -13,7 +13,7 @@ async function portFree(port) {
   return new Promise((resolveResult, reject) => {
     const probe = createServer();
     probe.once('error', error => {
-      if (error.code === 'EADDRINUSE' || error.code === 'EACCES') resolveResult(false);
+      if (error.code === 'EADDRINUSE') resolveResult(false);
       else reject(error);
     });
     probe.listen(assertCapturePort(port), '127.0.0.1', () => probe.close(() => resolveResult(true)));

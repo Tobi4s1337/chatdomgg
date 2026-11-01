@@ -7,7 +7,7 @@
 .chronicle-origin { color: #873d25; margin: 13px 2px 0; }
 .chronicle-close, .chronicle-play { font: 700 15px Georgia, serif; cursor: pointer; color: #fff0c9; border: 1px solid #b7834b; background: #643b26; box-shadow: inset 0 0 0 2px #442718, 0 2px 0 #3e261b; }
 .chronicle-close { width: 44px; height: 44px; font: 24px/1 Georgia, serif; }
-.chronicle-play { min-width: 78px; min-height: 43px; padding: 8px 13px; }
+.chronicle-play { min-width: 78px; min-height: 44px; padding: 8px 13px; }
 .chronicle button:hover:not(:disabled) { background: #805034; }
 .chronicle button:active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 0 0 2px #442718; }
 .chronicle button:focus-visible, .chronicle input:focus-visible { outline: 3px solid #9b4328; outline-offset: 3px; }

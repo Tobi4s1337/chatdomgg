@@ -136,18 +136,28 @@ describe('the realm client predicts with the room', () => {
     const rig = createShoulderRig(Math.PI / 2);
     const camera = new THREE.PerspectiveCamera(50, 1440 / 900, .15, 2200);
     const east = { ...EAST, buttons: 0 };
-    await drive(client, 350, east, 3);
+    // Wait for an actual fixed step and its acknowledgement; wall-clock warmup can
+    // expire before transport starts when the host is busy.
+    const startX = client.predicted.x;
+    const readyBy = performance.now() + 8000;
+    while (handle.lastProcessed === 0 || Math.abs(client.predicted.x - startX) < .1) {
+      if (performance.now() > readyBy) throw new Error('The moving walker did not receive an acknowledgement');
+      client.tick(performance.now(), east); await pause(3);
+    }
     // Deliberately perturb only test-local prediction. Subsequent real reliable inputs carry no extra position,
     // so the room's acknowledged state must correct this drift through the production SDK reconciler.
     (client.predicted as PlayerState).x += .24;
     let prior: { now: number; x: number; exact: number; cameraX: number } | undefined;
     let corrected = false, framesBetweenSteps = 0, maxRenderDelta = 0;
+    // The artificial local mutation is itself visible to the interpolator. Do not
+    // mistake that invented displacement for an authoritative correction.
+    const injectedAt = performance.now();
     await drive(client, 850, east, 3, (now, poses) => {
       const self = poses.find(p => p.self)!;
       const dt = prior ? (now - prior.now) / 1000 : 0;
       rig.update(dt, Math.PI / 2, self.speed, true);
       rig.apply(camera, [self.x, self.y, self.z], 1440 / 900, null, self.y);
-      if (prior) {
+      if (prior && now - injectedAt >= handle.stepMs!) {
         const dx = self.x - prior.x;
         maxRenderDelta = Math.max(maxRenderDelta, Math.abs(dx));
         // Following the same rendered anchor must add neither a 30 Hz hold/jump nor an extra camera spring.

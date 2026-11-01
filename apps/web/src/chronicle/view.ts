@@ -1,4 +1,5 @@
 import { createReplay, type History, type ReplayBinding, type ReplayState } from './replay';
+import { provenance } from './provenance';
 import './view.css';
 
 export interface ChronicleViewOptions {
@@ -35,19 +36,16 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
   const stopClock = () => { if (timer !== undefined) clearInterval(timer); timer = undefined; };
   const describeDate = (at: number) => new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(at);
   const show = (state: ReplayState) => {
+    const source = provenance(state, options.presentationLabel, options.simulationNote);
+    origin.textContent = source.origin; note.textContent = source.note;
     if (state.status !== 'ready') {
       stopClock();
-      const simulatedHistory = state.status === 'empty' && state.label === 'SIMULATED';
-      const simulatedScene = options.presentationLabel === 'SIMULATED';
-      origin.textContent = simulatedHistory ? 'SIMULATED · A local history' : simulatedScene ? 'SIMULATED · Scene' : '';
-      note.textContent = simulatedHistory || simulatedScene ? options.simulationNote ?? '' : ''; date.textContent = '';
+      date.textContent = '';
       seek.value = '0'; seek.max = '0'; seek.removeAttribute('aria-valuetext');
       caption.textContent = state.status === 'empty' ? 'There are no recorded nights to read yet.' : 'The Chronicle is unavailable right now.';
       status.textContent = state.status === 'empty' ? 'No recorded nights' : 'History unavailable';
       play.disabled = true; seek.disabled = true; play.textContent = 'Play'; return;
     }
-    origin.textContent = state.label === 'SIMULATED' ? 'SIMULATED · A local history' : 'Recorded history';
-    note.textContent = state.label === 'SIMULATED' ? options.simulationNote ?? '' : '';
     date.textContent = describeDate(state.snapshot.frame.asOf);
     caption.textContent = state.snapshot.caption;
     seek.disabled = false; seek.max = String(state.count - 1); seek.value = String(state.index);
@@ -96,5 +94,6 @@ export function mountChronicle(root: HTMLElement, options: ChronicleViewOptions)
   root.addEventListener('keydown', onKeyDown);
   seek.addEventListener('input', onSeek); play.addEventListener('click', onPlay); close.addEventListener('click', onClose);
   try { replay.load(options.history); } catch { /* Validation already presents the unavailable state. */ }
+  close.focus();
   return { replay, dispose: () => dispose() };
 }
