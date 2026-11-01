@@ -172,3 +172,21 @@ sessions have a neutral sign-in masthead; controls refresh authoritatively after
 cadence instead of waiting for the next ten-second poll. These are functional/source-reviewed
 checkpoints, not a completed visual review. Capture23423 is still live and queued under the
 new helper, owned by the evidence agent. No screenshot or clip is claimed yet.
+
+## Integration rehearsal preparation — 2026-11-01
+
+Prepared `work/evidence/dock/integration-capture.mjs` and `integration.mjs`. They remain
+explicitly opt-in and runtime UNVERIFIED. The wrapper queues without a deadline, then
+supervises one owned worker with a post-admission deadline. It creates/removes only its
+random schema and temporary directory, and waits for owned browser/service shutdown
+before release. The actual realm uses an owned Unix socket; actual API, simulated OIDC
+and integrated web `/dock` + `/stream` share one exclusive IPv4 loopback5171 listener.
+It proxies genuine SSE/binary responses, sends no fabricated witness and presses no act.
+Both scripts pass `node --check`; runtime, cleanup and visuals need execution and review.
+
+Capture23423 is still live and queued in `/root/dock_evidence`'s tool scope. Resume that
+agent and poll that same handle; do not replace it for silence. No image or clip exists yet.
+After its ready390 capture: inspect it, capture remaining UI states one at a time, validate
+the integration bench, then seed normalized simulated citizen/raid observations through
+real ingress and demonstrate each dock act beside the actual stream. Moderator authority,
+directed undo and attendance-label needs remain in `needs.md`. Task and goal stay active.
