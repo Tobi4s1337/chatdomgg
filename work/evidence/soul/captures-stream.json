@@ -1,0 +1,138 @@
+[
+  {
+    "name": "stream",
+    "path": "/-/soul?seed=42&hour=19.5&weather=clear&date=2026-06-20&biome=coastal&view=stream",
+    "file": "stream@1920x1080.png",
+    "width": 1920,
+    "height": 1080,
+    "buildFingerprint": "fb7afa516c75020bdf71bf5831238426fc2687e1927ca3a5ec672bc246d6c91b",
+    "leaseMs": 21196,
+    "frame": {
+      "epochMs": 1781983800000,
+      "hour": 19.5,
+      "season": "spring",
+      "weather": {
+        "temperature": 22.904431647720575,
+        "cloud": 0,
+        "rain": 0,
+        "snow": 0,
+        "wind": 0.6438630427487432,
+        "fog": 0.017253200164435177,
+        "wetness": 0.5111736855679772,
+        "snowCover": 0
+      },
+      "daylight": 0.15625,
+      "night": 0.84375,
+      "keepers": [
+        {
+          "id": "baker",
+          "role": "baker",
+          "label": "Baker",
+          "activity": "keeping their place",
+          "position": [
+            -8,
+            0,
+            1
+          ],
+          "heading": 3.141592653589793,
+          "moving": false,
+          "visible": false,
+          "progress": 0,
+          "light": false
+        },
+        {
+          "id": "lamplighter",
+          "role": "lamplighter",
+          "label": "Lamplighter",
+          "activity": "keeping their place",
+          "position": [
+            -8,
+            0,
+            1
+          ],
+          "heading": 3.141592653589793,
+          "moving": false,
+          "visible": false,
+          "progress": 0,
+          "light": false
+        },
+        {
+          "id": "smith",
+          "role": "smith",
+          "label": "Smith",
+          "activity": "keeping their place",
+          "position": [
+            2,
+            0,
+            1
+          ],
+          "heading": 3.141592653589793,
+          "moving": false,
+          "visible": false,
+          "progress": 0,
+          "light": false
+        },
+        {
+          "id": "harbour-master",
+          "role": "harbour-master",
+          "label": "Harbour master",
+          "activity": "keeping their place",
+          "position": [
+            6,
+            0,
+            6
+          ],
+          "heading": 3.141592653589793,
+          "moving": false,
+          "visible": false,
+          "progress": 0,
+          "light": false
+        }
+      ],
+      "lamps": [
+        {
+          "position": [
+            -5,
+            0,
+            0
+          ],
+          "lit": true
+        },
+        {
+          "position": [
+            1,
+            0,
+            0
+          ],
+          "lit": true
+        },
+        {
+          "position": [
+            6,
+            0,
+            2
+          ],
+          "lit": true
+        }
+      ],
+      "chimneySmoke": 0,
+      "breadCart": {
+        "position": [
+          -8,
+          0,
+          1
+        ],
+        "visible": false
+      },
+      "shipBell": false
+    },
+    "scene": {
+      "calls": 53,
+      "triangles": 108282,
+      "points": 630,
+      "geometries": 17,
+      "textures": 2
+    },
+    "overflow": false
+  }
+]
