@@ -12,6 +12,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parseEnv } from 'node:util';
 
 const root = resolve(import.meta.dirname, '../..');
 const server = join(root, 'apps/api/dist/public.mjs');
@@ -24,7 +25,10 @@ const missing = listed.filter(path => !existsSync(path));
 if (missing.length) { console.error(`PUBLIC_ENV_FILE names ${missing.length} file(s) that do not exist.`); process.exit(1); }
 const envFiles = listed.length ? listed : [join(root, 'deploy/public/.env')].filter(path => existsSync(path));
 const envArgs = envFiles.map(path => `--env-file=${path}`);
-const ownRealm = !process.env.PUBLIC_REALM_TARGET?.trim() && !envFiles.some(path => /^PUBLIC_REALM_TARGET=\S/m.test(readFileSync(path, 'utf8')));
+// Match Node's --env-file precedence and dotenv syntax (including export, quotes and whitespace).
+// The parent environment wins; among files, the last supplied value wins.
+const effectiveEnv = { ...Object.assign({}, ...envFiles.map(path => parseEnv(readFileSync(path, 'utf8')))), ...process.env };
+const ownRealm = !effectiveEnv.PUBLIC_REALM_TARGET?.trim();
 if (ownRealm && !process.argv.includes('--no-migrate')) {
   const migrated = spawnSync(process.execPath, [...envArgs, join(root, 'apps/realm/scripts/migrate.mjs')], { cwd: root, stdio: 'inherit' });
   if (migrated.status !== 0) { console.error('The realm schema could not be migrated; not starting.'); process.exit(1); }

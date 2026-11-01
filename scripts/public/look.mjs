@@ -21,11 +21,18 @@ const ready = option('--ready', 'flag');
 const timeout = Number(option('--timeout', '90000'));
 const helper = option('--helper');
 if (!url || !width || !height) throw new Error('Pass --url and --size WxH');
+if (!Number.isFinite(timeout) || timeout < 1 || timeout > 240_000) throw new Error('--timeout must be 1–240000 ms');
 
-const release = await acquireCaptureLock();
-const browser = await chromium.launch({ channel: 'chrome', headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+let release, browser, deadline;
 try {
+  release = await acquireCaptureLock({ signal: AbortSignal.timeout(20 * 60_000) });
+  // A stuck browser cannot retain the pipe-owned capture guard indefinitely.
+  deadline = setTimeout(() => {
+    console.error('Public still exceeded its eight-minute active deadline.');
+    process.exit(124);
+  }, 8 * 60_000);
+  browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 60_000,
+    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   const problems = [];
@@ -41,10 +48,10 @@ try {
   for (const selector of all('--click')) { await page.click(selector, { timeout: 15_000 }); await page.waitForTimeout(between); }
   await page.waitForTimeout(Number(option('--after-ms', '600')));
   await mkdir(dirname(out), { recursive: true });
-  await page.screenshot({ path: out });
+  await page.screenshot({ path: out, timeout: 120_000 });
   console.log(`wrote ${out}`);
   for (const line of problems) console.log(line);
 } finally {
-  await browser.close();
-  await release();
+  try { await browser?.close(); }
+  finally { clearTimeout(deadline); await release?.(); }
 }

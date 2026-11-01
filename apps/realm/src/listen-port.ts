@@ -1,3 +1,12 @@
+import { isIP } from 'node:net';
+
+/** The public supervisor binds its child to loopback; managed realms retain their explicit/default address. */
+export function realmListenHost(env: Readonly<Record<string, string | undefined>>): string {
+  const host = env.REALM_HOST ?? '0.0.0.0';
+  if (!isIP(host)) throw new Error('REALM_HOST must be a literal IP listen address.');
+  return host;
+}
+
 /** The local preview and realm must agree without a second, implicit port override. */
 export function realmListenPort(env: Readonly<Record<string, string | undefined>>): number {
   let configured = env.REALM_PORT;
