@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { CitizenChatCueSchema, KingdomIdSchema, PresenceInputSchema, type CitizenChatCue, type KingdomId, type PresenceInput } from '@chatdom/shared';
 import { digestOf } from '../persistence/codec';
 import type { IngressService } from './transition';
-import { RealmSupportObservationSchema, type RealmSupportObservation } from '@chatdom/shared/realm';
+import { RealmMomentObservationSchema, RealmStrikeSchema, RealmSupportObservationSchema, type RealmMomentObservation, type RealmStrike,
+  type RealmSupportObservation } from '@chatdom/shared/realm';
 
 /** A service credential must carry at least this much secret. Shorter configuration is refused at startup. */
 export const INGRESS_SECRET_MIN = 32;
@@ -53,15 +54,21 @@ export interface AdmittedObservation {
 /** Witnessed speech for the room's transient channel. It is relayed, never stored. */
 export interface AdmittedCue { readonly kind: 'cue'; readonly service: 'herald'; readonly kingdomId: KingdomId; readonly cue: CitizenChatCue }
 export interface AdmittedSupport { readonly kind: 'support'; readonly service: 'herald'; readonly observation: RealmSupportObservation }
+/** Bits, Hype Train and raid evidence; durable through its own moment record transaction. */
+export interface AdmittedMoment { readonly kind: 'moment'; readonly service: 'herald'; readonly observation: RealmMomentObservation }
+/** A witnessed `!strike` for the dragon battle. Transient: never stored. */
+export interface AdmittedStrike { readonly kind: 'strike'; readonly service: 'herald'; readonly strike: RealmStrike }
 
 export type Admission =
-  | { readonly ok: true; readonly admitted: AdmittedObservation | AdmittedCue | AdmittedSupport }
+  | { readonly ok: true; readonly admitted: AdmittedObservation | AdmittedCue | AdmittedSupport | AdmittedMoment | AdmittedStrike }
   | { readonly ok: false; readonly status: 'unauthenticated' | 'refused'; readonly message: string };
 
 const EnvelopeSchema = z.union([
   z.strictObject({ version: z.literal(1), observation: z.unknown() }),
   z.strictObject({ version: z.literal(1), cue: z.unknown() }),
   z.strictObject({ version: z.literal(1), support: z.unknown() }),
+  z.strictObject({ version: z.literal(1), moment: z.unknown() }),
+  z.strictObject({ version: z.literal(1), strike: z.unknown() }),
 ]);
 
 /**
@@ -97,6 +104,18 @@ export class IngressGate {
       const support = RealmSupportObservationSchema.safeParse(envelope.data.support);
       if (!support.success || support.data.origin !== this.origin) return { ok: false, status: 'refused', message: 'Support evidence is invalid or belongs to another origin.' };
       return { ok: true, admitted: { kind: 'support', service, observation: support.data } };
+    }
+    if ('moment' in envelope.data) {
+      if (service !== 'herald') return { ok: false, status: 'refused', message: 'Only Herald reports spectacles.' };
+      const moment = RealmMomentObservationSchema.safeParse(envelope.data.moment);
+      if (!moment.success || moment.data.origin !== this.origin) return { ok: false, status: 'refused', message: 'Spectacle evidence is invalid or belongs to another origin.' };
+      return { ok: true, admitted: { kind: 'moment', service, observation: moment.data } };
+    }
+    if ('strike' in envelope.data) {
+      if (service !== 'herald') return { ok: false, status: 'refused', message: 'Only Herald relays strikes.' };
+      const strike = RealmStrikeSchema.safeParse(envelope.data.strike);
+      if (!strike.success || strike.data.origin !== this.origin) return { ok: false, status: 'refused', message: 'The strike is malformed or belongs to another origin.' };
+      return { ok: true, admitted: { kind: 'strike', service, strike: strike.data } };
     }
     if ('cue' in envelope.data) {
       if (service !== 'herald') return { ok: false, status: 'refused', message: 'Only Herald relays witnessed speech.' };

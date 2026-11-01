@@ -330,68 +330,58 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Outcome: the real channel answers, with the team’s moments on stream.** The window wave and
-Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo street fill/warm pools, castle/beacon,
-sparse grey-violet smoke, sculpted land/groves and AS10 citizens. No new systems or rework of
-accepted pictures. Merge good runtime checkpoints promptly; one visible change per turn.
+**Outcome: the real channel answers, with the team’s moments on stream.** Window wave and
+Forge are ACCEPTED/CLOSED. Preserve dusk exposure, indigo fill/warm pools, castle/beacon,
+sparse grey-violet smoke, sculpted land/groves and AS10 citizens. No new systems beyond live
+wiring; merge good runtime checkpoints, one visible change per turn, look before accepting.
 
-**Current checkpoint: dragon/train scene integration.** The sky lane's scoped runtime is
-snapshotted in `../worktrees/main-sky-dragon` (`integrate/sky-dragon`); producer WIP is intact.
-The real scene now supplies its drawn `landHeight` to `festivalPlacesOf`: a lair beyond the
-castle, a terrain-following train ring clear of lots/water and market bunting. Previously the
-host returned null for lair/track, so even a delivered hype event could not draw them. The
-dragon circles the castle and contributes its fire/sky light through the existing grade;
-existing camera arbitration, crowd and captions remain. Typecheck/scoped lint/web build pass;
-focused scene/festival tests pass, including the mesh-error queue bound. No live-event or
-visual acceptance yet. Terra capture helper `dragon_stream_capture` owns live session91423:
-matching1920×1080 held-wide before/after, SIMULATED hype at33s, queue priority main, separate
-one-still leases. Before is rendering on free5171; poll that same helper/handle, no duplicate.
-Its first attempt57861 ended before any browser (5198 occupied); cleanup completed. Do not
-change candidate render files or hot-reload the take. Expected `shots/magic/dragon-stream-*.png`.
+**Live-Twitch checkpoint:** preserved producer snapshot in `../worktrees/main-live-twitch`
+(`integrate/live-twitch-checkpoint`); producer WIP untouched. Main03a50f1 froze private
+observation/strike evidence; public raid body now freezes with producer/renderer consumers.
+Bits, v2 Hype Train, incoming raid → Herald durable outbox → authenticated realm ingress →
+moment facts/realm-owned dragon clock → existing public stream feed. Raid uses existing
+staged gate/road/camera ports; no new exterior-trail system blocks it. Fixed script lint and
+obsolete LIVE5191 default (5197 now). Typecheck/scoped lint/build and134 focused tests pass.
 
-**Raid-road RR10 (`a0024e2`, merged `a689199`):** SIMULATED rehearsal at
-`/-/raid-gate?bench=simulated&road=1`, observed MashaD4 → PinkKittyRose, departure → Atlas torch
-road → destination welcome/gift. This is not the OBS mount; keep participant board out of OBS.
-25 focused tests/lint/type/build passed. No successful after-welcome still yet; old diagnostic
-capture77301 was cancelled on the goal pause and owned preview5170 released. No repeat queued.
-Next lane picture detail: AS10 citizens in actual gate lighting instead of foreground paper
-SVG figures. Incoming raid renderer may stage its visible gate on the existing connected
-`placeAnchor('gate')`/`giftRoute`; no new exterior-trail system blocks that checkpoint.
+Isolated Postgres SIMULATED signed-fixture HTTP smoke: cheer321ms, hype257ms, summon314ms,
+raid312ms; dragon advanced to active on realm clock.16 speakers →16 durable homes and16 lit
+windows;17th new home4735ms. Local Herald capacity12/unplaced4 does NOT cap room allocation:
+evidence crosses before local projection. Correction to prior capacity needs. Adopted plan
+has240 plots; no unlimited-capacity claim. Cold batch settlement took99s, first cold watch
+missed/lease expired: instant first arrival remains weak. Twitch CLI exits99 even for offline
+fixture generation; HTTP proof is NOT CLI-command proof. Owned smoke schema
+`main_live_smoke_20261101` remains; owned5172/5173 services stopped, no live event injected.
 
-**Genesis:** PinkKittyRose GP10 (`5eb78b6`) dresses the river-hall revetments, balcony/fire
-baskets, approach and roses. Viewed producer1920×1080 hero/Atlas-card images and
-`shots/magic/pinkkitty-crossing-pair.png`;17 tests/typecheck/lint/build passed. Its green approach
-still reads as a pedestal; lane's next detail is broadening/breaking it into the meadow. Keep
-own lore/small SIMULATED chip, never restore technical “Unfounded land” copy. Aggman's accepted
-harbour/inn/lighthouse/boats remain; keeper/sound mounts and Atlas/kingdom crest agreement await.
+**Real grant checked:** chat/chatters/stream work; tobi4s_ lacks `bits:read` and
+`channel:read:hype_train`. After merge: Herald authorize broadcaster helper, preserving all
+existing grants, then check-auth. Raid needs no extra grant. Real cheer/hype/raid/Forge and
+production raid picture remain UNPROVEN. No observer waits for the user. Next: complete
+checkpoint merge, check managed pickup; user consent for missing scopes, then one real event.
 
-**Accepted moment seams:** 4ab8d36 connects sky glow to town grading and stream credits;
-5151440 connects `CrowdCall` to visible present citizens, excluding reserved/socket walkers and
-Forge audience and preserving Forge reaction priority. Viewed native
-`shots/magic/sky-stream-wiring-pair.png` and `moment-crowd-pair.png`: town takes the aurora light,
-one citizen turns and raises a lantern. SIMULATED real scene/mount evidence, not live Twitch or
-whole-crowd composition. Aurora streaks remain too regular (sky lane has the follow-up).
-c1c2ddb merged Aggman’s harbour/checked emote art and own19.6 hour/lore; its keepers/sound are
-unmounted and real holding missing from current Atlas survey. Never invent a map mark.
+**Sky32b0197 / main33fb2e9:** actual drawn terrain now supplies lair, train ring and bunting;
+dragon circles castle and contributes fire/sky light. Root viewed native1920×1080
+`shots/magic/dragon-stream-after.png` and matching pair: seam works, held-wide dragon is
+small/dark. Sky lane next: one nearer warm rim-lit pass across castle, preserve town exposure.
+SIMULATED stills, not real hype/motion proof. Capture92805 finished/cleaned;91423 expired20min
+without a frame. Pure HYPE pipeline settled49ms; static pair kept all data steps while
+avoiding140 intermediate SwiftShader RAF draws. No capture active or queued.
 
-**Live wiring:** main03a50f1 freezes the lane's proposed private `RealmMomentObservation`
-(bits/hype/raid) and transient `RealmStrike`: strict provider IDs, explicit origin, no raw chat.
-Two contract tests incl hype bounds, scoped lint and main typecheck passed; pushed. Public
-raid body freezes with its coherent producer/renderer checkpoint, not ahead of exhaustive
-consumers. Existing `createRoomMomentFeed` → `SceneOptions.momentFeed`, anchors and camera lease
-suffice; lane notified. Its runtime is still WIP. Producer next: durable home-slot expansion
-and matching scene revision BEFORE publishing presence for otherwise-unplaced speakers;
-current source still records capacityHits. No actual live home count inferred from old twelve.
-Also fix mock toolkit's obsolete LIVE5191 default to5197; keep mock realm isolated. Real
-cheer/hype/raid and expanded capacity remain UNPROVEN. No observer waiting for the user.
+**Raid-road a0024e2 / maina689199:** `/-/raid-gate?bench=simulated&road=1`, observed
+MashaD4 → PinkKittyRose departure/Atlas torch road/welcome rehearsal.25 focused tests/lint/
+type/build passed; no successful welcome after-frame. Old77301 cancelled/preview released.
+Participant board stays out of OBS. Lane next detail: AS10 people in gate light, replacing
+paper SVG figures. Public incoming raid renderer is distinct from this participant rehearsal.
 
-**Opening:** `/stream?source=simulated&tier=town&hour=19.5&seam=starting` (Showcase), no fixed time.
-Immediate witnessed window light; wide0–8s, street glide8–12s, return24–36s; greeting6–16s then
-homecoming. Door lantern/smoke follow physical arrival. Viewed native wave/greeting pairs and
-all120 frames of the reduced0–24s rehearsal in `shots/magic/`; no repeat long SwiftShader film.
-Curtain alarm was sleeping Chrome; keep real loading-step text, no readiness bypass.
+**Other merges:** Aggman harbour3a6916a/mainc1c2ddb and PinkKittyRose crossing5eb78b6/main2354488
+accepted from viewed producer stills. Next details: shingle below Aggman's boats; break river
+approach into meadow. Keeper/sound mounts and Atlas crest agreement await. Never restore
+technical “Unfounded land” copy or fabricate a missing Atlas holding. Existing sky/crowd/
+caption seams4ab8d36,5151440 accepted; aurora comb needs broader irregular curtains.
 
-**Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
-`../conductor/state/services.log`. Capture ports via `capture-ports.mjs`; choose a free allowed
-port, queue main once up to20min, one still/short clip per lease, cleanup in finally. No waiting
-observer. Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.
+**Opening:** `/stream?source=simulated&tier=town&hour=19.5&seam=starting`, no fixed time.
+Immediate named window light; wide0–8s, street8–12s, return24–36s; lantern/smoke at physical
+arrival. Viewed wave pairs/reduced rehearsal in `shots/magic/`. Curtain alarm was sleeping
+Chrome; preserve real loading text, no readiness bypass. Services:5190web/5196API/5197realm/
+5195Forge/5194herald. Logs ONLY `../conductor/state/services.log`. Capture ports via helper;
+queue main once20min, one still/short clip per lease, cleanup owned resources in finally.
+Preserve stash7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.

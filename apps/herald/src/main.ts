@@ -16,6 +16,8 @@ import { startPresenceServer } from './source/server';
 import { playScenario, SCENARIO_NOTES, SCENARIOS, SIMULATED_KINGDOM, type ScenarioName } from './source/simulation';
 import { PresenceSource } from './source/source';
 import { configuredRealmDelivery } from './realm-delivery/config';
+import { RealmDelivery } from './realm-delivery/delivery';
+import { startMockDoor } from './mock/door';
 
 const USAGE = [
   'Usage: herald <command>',
@@ -30,6 +32,9 @@ const USAGE = [
   '                                          SIMULATED presence through the same path on 127.0.0.1:$HERALD_PORT (5194);',
   '                                          --bindings keeps its slots in a scratch table to show a restart',
   '  check-source                            verify the source path end to end on a private port (SIMULATED)',
+  '  mock --kingdom <id> --port <port>       SIMULATED EventSub webhook door for Twitch CLI: verified deliveries go',
+  '                                          through ingest to $HERALD_REALM_URL, signed with $HERALD_MOCK_SECRET;',
+  '                                          the outbox lives in $HERALD_REALM_OUTBOX_DIR (never the repository)',
 ];
 
 /** Runs until SIGINT/SIGTERM, then stops everything it started. */
@@ -120,6 +125,20 @@ export async function main(argv: readonly string[]): Promise<number> {
       if (realm) print('  signed Realm delivery configured; normalized evidence durable, speech and wishes transient');
       return await untilSignal(async () => { await handle.stop(); await realm?.close(); });
     } catch (error) { await realm?.close(); throw error; }
+  }
+
+  if (command === 'mock') {
+    const kingdom = KingdomIdSchema.safeParse(option(rest, '--kingdom')), port = Number(option(rest, '--port'));
+    const url = process.env.HERALD_REALM_URL?.trim(), secret = process.env.HERALD_MOCK_SECRET ?? '', directory = process.env.HERALD_REALM_OUTBOX_DIR?.trim();
+    if (!kingdom.success || !Number.isInteger(port) || port < 1024 || port > 65_535 || !url || !directory) {
+      process.stderr.write('herald mock: needs --kingdom <id>, --port <port>, HERALD_REALM_URL, HERALD_REALM_OUTBOX_DIR and HERALD_MOCK_SECRET\n');
+      return 2;
+    }
+    const realm = await RealmDelivery.open({ url, secret: process.env.REALM_INGRESS_HERALD_SECRET ?? '', directory, repositoryRoot: repositoryRoot(), origin: 'simulated' });
+    try {
+      const door = await startMockDoor({ kingdomId: kingdom.data, secret, realm, port, print });
+      return await untilSignal(async () => { await door.stop(); await realm.close(); });
+    } catch (error) { await realm.close(); throw error; }
   }
 
   if (command === 'replay') {

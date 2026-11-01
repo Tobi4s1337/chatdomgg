@@ -1,7 +1,10 @@
 import { type EventSubAdmin, type EventSubSubscription, isTwitchFailure, matchesRequest, type SubscriptionRequest } from '@chatdom/twitch';
 import type { Capability } from '../auth/grants';
 
-/** The eight v1 subscriptions Herald reads (Spec 03 R5). Nothing else is ever created. */
+/**
+ * The subscriptions Herald reads (Spec 03 R5, plus the town's spectacles from Spec 20). Nothing else is ever
+ * created. Only chat and its cleanup are required for publishing; the spectacles follow their own grants.
+ */
 export const HERALD_EVENT_TYPES = [
   'channel.chat.message',
   'channel.chat.notification',
@@ -11,7 +14,15 @@ export const HERALD_EVENT_TYPES = [
   'stream.online',
   'stream.offline',
   'user.authorization.revoke',
+  'channel.bits.use',
+  'channel.hype_train.begin',
+  'channel.hype_train.progress',
+  'channel.hype_train.end',
+  'channel.raid',
 ] as const;
+/** Spectacle evidence: delivered durably to the realm, never required for chat to publish. */
+export const SPECTACLE_EVENT_TYPES: ReadonlySet<HeraldEventType> = new Set(['channel.bits.use', 'channel.hype_train.begin',
+  'channel.hype_train.progress', 'channel.hype_train.end', 'channel.raid']);
 export type HeraldEventType = (typeof HERALD_EVENT_TYPES)[number];
 
 export interface SubscriptionPlan extends SubscriptionRequest {
@@ -43,6 +54,12 @@ export function planSubscriptions(ids: PlanIds): SubscriptionPlan[] {
     { type: 'stream.online', version: '1', condition: stream, capability: 'stream', required: false },
     { type: 'stream.offline', version: '1', condition: stream, capability: 'stream', required: false },
     { type: 'user.authorization.revoke', version: '1', condition: { client_id: ids.clientId }, capability: 'revocation', required: true },
+    { type: 'channel.bits.use', version: '1', condition: stream, capability: 'bits', required: false },
+    { type: 'channel.hype_train.begin', version: '2', condition: stream, capability: 'hype', required: false },
+    { type: 'channel.hype_train.progress', version: '2', condition: stream, capability: 'hype', required: false },
+    { type: 'channel.hype_train.end', version: '2', condition: stream, capability: 'hype', required: false },
+    // Incoming raids need no grant: the app token may read any channel's raids.
+    { type: 'channel.raid', version: '1', condition: { to_broadcaster_user_id: ids.broadcasterId }, capability: 'stream', required: false },
   ];
 }
 
