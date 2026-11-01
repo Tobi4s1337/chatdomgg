@@ -29,6 +29,11 @@ export function createForgeExtension(k: CivicKit, level: number): Boxes['list'] 
   b.add(15, 4, 10, 17, 5, 12, MAT.forgeCopper);
 
   if (stage >= 2) {
+    // Paired masonry piers rise beyond the original hearth's protected envelope.
+    for (const x of [15, 44]) {
+      b.add(x, 0, 8, x + 5, 26, 13, k.stone);
+      b.add(x, 24, 7, x + 5, 27, 14, k.base);
+    }
     // Paired brick cheeks extend the hearth's mass, with hand-laid cap stones.
     for (const x of [15, 44]) {
       b.add(x, 4, 8, x + 5, 12, 17, MAT.brick);
@@ -38,6 +43,10 @@ export function createForgeExtension(k: CivicKit, level: number): Boxes['list'] 
     }
   }
   if (stage >= 3) {
+    // An open smithy roof bridges the hearth above its reserved dragon envelope.
+    for (const x of [15, 44]) b.add(x, 27, 8, x + 5, 39, 13, k.trim);
+    b.add(14, 37, 7, 50, 39, 15, k.trim);
+    for (let i = 0; i < 7; i++) b.add(12 + i, 39 + i, 5, 52 - i, 40 + i, 19, k.roof);
     // A stout working bench to the right: top, legs, iron plate and a hammer.
     b.add(50, 8, 12, 62, 10, 23, k.trim);
     for (const x of [51, 59]) for (const z of [13, 20]) b.add(x, 0, z, x + 2, 8, z + 2, k.trim);
@@ -52,6 +61,12 @@ export function createForgeExtension(k: CivicKit, level: number): Boxes['list'] 
     b.add(48, 14, 9, 50, 15, 10, MAT.forgeCopper);
   }
   if (stage >= 4) {
+    // The tall side chimney and hanging smith's standard give the mature forge its own skyline.
+    b.add(49, 0, 3, 57, 43, 9, MAT.brick);
+    b.add(48, 41, 2, 58, 44, 10, k.stone);
+    b.add(50, 44, 4, 56, 48, 8, k.base);
+    b.add(10, 29, 13, 20, 37, 14, k.field);
+    b.add(13, 31, 14, 17, 35, 15, k.charge);
     // An open coal bin and the copper-rimmed water trough that serves the smith.
     b.add(3, 0, 10, 13, 2, 21, k.trim);
     b.add(3, 2, 10, 4, 8, 21, k.trim);

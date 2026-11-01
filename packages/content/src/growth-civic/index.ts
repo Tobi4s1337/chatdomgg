@@ -85,6 +85,12 @@ function tavern(b: Boxes, k: CivicKit, stage: number): void {
   const roofY = stage >= 2 ? 40 : 22;
   for (let i = 0; i < 10; i++) b.add(7 + i, roofY + i, 1, 57 - i, roofY + i + 1, 24, k.roof);
   if (stage >= 3) {
+    // A projecting central dormer makes the new upper room legible above the eaves.
+    b.add(24, 39, 18, 40, 49, 24, k.wall);
+    for (let i = 0; i < 6; i++) b.add(22 + i, 49 + i, 17, 42 - i, 50 + i, 25, k.roof);
+    b.add(27, 41, 23, 37, 48, 25, k.trim);
+    b.add(28, 42, 24, 36, 47, 25, MAT.glass);
+    b.add(31, 42, 24, 32, 47, 25, k.trim);
     lantern(b, k, 21, 17, 24); lantern(b, k, 39, 17, 24);
     b.add(44, 20, 23, 53, 22, 30, k.trim);
     b.add(45, 15, 28, 52, 20, 30, k.field);
@@ -93,6 +99,14 @@ function tavern(b: Boxes, k: CivicKit, stage: number): void {
     b.add(12, 3, 25, 25, 5, 31, k.trim); b.add(39, 3, 25, 52, 5, 31, k.trim);
     for (const x of [13, 22, 40, 49]) b.add(x, 0, 26, x + 2, 3, 30, k.trim);
     b.add(27, 0, 24, 37, 2, 30, k.stone);
+    // A high open porch leaves the doorway and its approach unobstructed.
+    for (const x of [8, 53]) {
+      b.add(x, 0, 27, x + 3, 21, 30, k.trim);
+      b.add(x - 1, 19, 26, x + 4, 21, 31, k.base);
+    }
+    for (let x = 8; x < 56; x += 6)
+      b.add(x, 21, 24, Math.min(x + 6, 56), 23, 31, (x / 6 | 0) % 2 ? k.field : k.charge);
+    b.add(9, 19, 30, 55, 21, 31, k.field);
   }
 }
 function forge(b: Boxes, k: CivicKit, stage: number): void {
@@ -116,7 +130,17 @@ function court(b: Boxes, k: CivicKit, stage: number): void {
     b.add(30, 19, 14, 34, 23, 18, MAT.waterbed);
   }
   if (stage >= 4) {
-    for (const x of [14, 46]) { b.add(x, 2, 3, x + 4, 10, 7, k.base); lantern(b, k, x, 10, 3); }
+    for (const x of [14, 46]) { b.add(x, 2, 9, x + 4, 10, 13, k.base); lantern(b, k, x, 10, 9); }
+    // A ceremonial open-backed arcade frames the fountain without filling the court.
+    for (const x of [13, 47]) {
+      b.add(x, 2, 3, x + 4, 28, 7, k.stone);
+      b.add(x - 1, 26, 2, x + 5, 29, 8, k.base);
+    }
+    b.add(13, 28, 3, 51, 31, 7, k.stone);
+    b.add(16, 31, 3, 48, 33, 7, k.base);
+    for (const x of [17, 27, 37, 47]) b.add(x, 33, 3, x + 4, 36, 7, k.stone);
+    b.add(26, 19, 7, 38, 28, 8, k.field);
+    b.add(30, 22, 8, 34, 26, 9, k.charge);
   }
 }
 function lantern(b: Boxes, k: CivicKit, x: number, y: number, z: number): void {
@@ -178,6 +202,7 @@ export function growthCivicLights(place: GrowthCivicPlace, level: number, bridge
   if (place === 'tavern') {
     const lights: CivicGrowthLight[] = [15, 41].map(x => ({ kind: 'window', centre: [x + 4, 13, 24] }));
     if (stage >= 2) lights.push(...[17, 39].map(x => ({ kind: 'window' as const, centre: [x + 4, 31, 24] as const })));
+    if (stage >= 3) lights.push({ kind: 'window', centre: [32, 44, 25] });
     if (stage >= 3) lights.push(...[21, 39].map(x => ({ kind: 'lantern' as const, centre: [x + 2, 20, 26] as const })));
     return lights;
   }
@@ -186,7 +211,7 @@ export function growthCivicLights(place: GrowthCivicPlace, level: number, bridge
     return BRIDGE_POSTS.slice(0, stage * 2).map(([x, z]) => ({ kind: 'lantern',
       centre: [x + 2, Math.max(...[0, 1, 2, 3].map(dx => humpbackDeckTop(x + dx, bridgeSite.water, bridgeSite.bank))) + 18, z + 2] }));
   }
-  if (place === 'castle-court' && stage >= 4) return [14, 46].map(x => ({ kind: 'lantern', centre: [x + 2, 13, 5] }));
+  if (place === 'castle-court' && stage >= 4) return [14, 46].map(x => ({ kind: 'lantern', centre: [x + 2, 13, 11] }));
   if (place === 'forge') return [{ kind: 'hearth', centre: FORGE_EXTENSION_FLAME }];
   return [];
 }
