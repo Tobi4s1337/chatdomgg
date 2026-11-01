@@ -396,8 +396,11 @@ export async function createKingdomScene(canvas:HTMLCanvasElement,options:SceneO
   function labels(){const names:NameLabel[]=[];for(const s of [...windows.getSources(),...build.getSources()]){
     if(!s.name||s.strength<.1)continue;const p=new THREE.Vector3(...s.position),to=camera.position.clone().sub(p);
     const royalPicture=s.slot===65534&&(camName==='window'||arrivalShot?.slot===65534&&arrivalShot.phase==='window');
+    // The stream's wide opening still belongs to a person. Its single name plate
+    // may reach a newly lit, visible window; ordinary close labels stay local.
+    const wideArrival=camName==='hero'&&!arrivalCameraDirected&&!forgeCameraDirected&&(options.directArrivals||autoCamera&&time<=8)&&'arrivalAgeSeconds' in s&&s.arrivalAgeSeconds<7;
     if('arrivalAgeSeconds' in s&&s.arrivalAgeSeconds>7&&to.length()>6&&!royalPicture)continue;
-    if(to.length()>(royalPicture?90:32)||to.dot(new THREE.Vector3(...s.normal))<2)continue;
+    if(to.length()>(royalPicture?90:wideArrival?240:32)||to.dot(new THREE.Vector3(...s.normal))<2)continue;
     if(windowOccluded(nearBlockers,[camera.position.x,camera.position.y,camera.position.z],s.position))continue;
     p.y+=royalPicture ? .45 : 1.1+('arrivalAgeSeconds' in s ? .22*(1-Math.exp(-s.arrivalAgeSeconds*2)):0);p.project(camera);if(p.z>1||p.z<0||Math.abs(p.x)>.91||Math.abs(p.y)>.88)continue;
     names.push({name:s.name,slot:s.slot,...('arrivalAgeSeconds' in s?{arrivalAgeSeconds:s.arrivalAgeSeconds}:{}),x:(p.x+1)*canvas.clientWidth/2,y:(1-p.y)*canvas.clientHeight/2});

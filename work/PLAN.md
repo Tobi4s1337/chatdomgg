@@ -330,47 +330,41 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**First: stream gate regression, NOT FIXED YET.** Tobias's RTX Chrome on
-`/stream?source=simulated&tier=town&hour=19.5` reaches full progress but stays waking with
-`__chatdomReady=false` and a dim town behind the curtain. Fix before the window-wave comparison.
-Goal explicitly resumed. Forge remains ACCEPTED/CLOSED; preserve its picture and behaviour.
+**Outcome: the evening’s first moment.** Forge is ACCEPTED/CLOSED. Chat lights its own window
+immediately; the stream first sees the wave across town, then follows people home with lanterns.
+One visible change per turn, matched stream before/after. Preserve accepted dusk exposure, warm
+pools, castle/beacon, sparse grey-violet chimney smoke, groves/land and AS10 citizens.
 
-**Proven / unknown:** d2ab9f4's `scene.play()` in publishDebug runs only for SIMULATED
-`seam=starting` without a fixed time; it does NOT run on the failing bare stream URL.
-The served5190 scene bundle contains `ready: loaded && renderCompletedAt>0`, not the old
-light-field/shader-completion gate. Stream mount waits for the scene promise, then polls debug.ready.
-Progress reaching1 counts the asset jobs, not completion of the remaining initialization.
-The subsequent awaits are scene tasks → citizen preparation → saved home → saved Forge parts.
-This setup chain predates d2ab9f4 (blame3d3ffc75), but the actual pending await and the hang's
-introduction are NOT established. Do not claim the curtain fixed or attribute it from guesses.
+**Curtain alarm withdrawn by Tobias:** Chrome’s screen was asleep, delivering zero animation
+frames even on a blank page. The stream opens normally; no renderer regression established.
+Keep 8bc5d99’s real loading-step text and `window.__chatdomStream.loading`; no readiness bypass.
+The goal is active again. Do not continue speculative gate investigation.
 
-**Diagnostic change:** stream now displays the real loading-step text and exposes
-`window.__chatdomStream.loading`. Scene reports “Welcoming the citizens”, “Remembering your home”,
-“Remembering your forged gifts”, then “The gate is opening”. This replaces the uninformative
-permanent “The lamps are being lit” line; it does NOT bypass readiness or add a timeout.
-Five stream-parameter tests, typecheck, scoped lint and production build passed.
-A console-data question is pending with Tobias: stream.stats, scene.stats and scene.inspect().
-If scene is absent, the factory has not returned; the new loading text narrows the await.
-If present, use loaded/renderPhase/renderCompletedAt/ready to distinguish drawing from handoff.
+**Arrival picture:** d2ab9f4 holds the automatic town view0–8s, enters the street8–12s,
+returns wide24–36s. Fresh live arrivals hold wide8s; lights and walkers never wait. SIMULATED
+starting seam begins at0 and keeps dusk. Windows use witnessed presence (1a10d43); physical
+arrival still drives door lanterns and smoke. `shots/magic/arrival-wide-first-pair.png` is viewed:
+old close TOP, town-wide AFTER below;1920×1080/time6/hour19.5/high,121 walkers/windows.
 
-**Runtime constraint:** both a120-second and a2-second host probe failed to acquire the priority
-gate, despite the team series being stopped. Direct nonblocking flock checks also found both
-capture locks occupied. No browser started; no probe remains queued. Do not unlink locks or kill
-unowned processes. Remote Playwright requires unavailable approval; do not retry that tool.
-Get actual GPU console data or a host slot rather than making speculative readiness changes.
+**This turn:** viewed seven640×360 storyboard samples1.2–28s in
+`shots/magic/arrival-handoff-storyboard.png`:1→25→121→208→225→240 windows; broad wave then
+warm Juniper homecoming. These are settled stills, NOT a watched film. Wide opening felt
+anonymous: recent publicly named windows may now carry the stream’s one name plate out to240m,
+with existing facing/occlusion/privacy checks; close and old labels remain local. Root viewed
+`shots/magic/arrival-named-wave-after.png` and `-pair.png` at1920×1080/time6: Rowan clearly
+belongs to the glowing window. Before TOP, after BOTTOM; light/composition unchanged.
+Typecheck, scoped lint, nine arrival/presence-light tests and production build pass. No browser
+errors or forbidden requests. Both serial capture jobs released browser/server/lease.
+**Next:** judge actual wave-to-street motion and its timing, not more fixed stills. The wide
+wave reads most strongly on the left road; people remain tiny until the descent. Opening to view:
+`/stream?source=simulated&tier=town&hour=19.5&seam=starting`. Use ONE capture(time) per offline
+sample, never dozens of resets. Queue once for up to20min; never unlink locks.
 
-**Then evening's first moment:** d2ab9f4 holds the automatic town view0–8s, enters the street8–12s,
-returns wide24–36s. Live fresh arrivals wait8s for a close lens; windows/citizens never wait.
-The SIMULATED starting stream starts at0 and holds chosen dusk. Full before/after still pending:
-`shots/magic/arrival-wide-first-before.png` is valid at6s (121 walkers/windows); no after/pair exists.
-Capture only the missing after with ONE `capture(6)`; never49 intermediate resets. Judge it,
-then the whole wave/homecoming in lean motion. Keep windows from raw witnessed presence frame
-(1a10d43), while arrival-gated lightFrame still drives door lanterns, smoke and homecoming cues.
-Keep accepted dusk exposure, warm pools, castle/beacon, sparse smoke, groves/land and AS10 citizens.
-
-**Team:** last merges7b56cb3 card sharing and f62bc9f aurora. No fresh runtime checkpoint at last
-scan. Sky's producer wiring patch is not proof of a newly wired live cheer. Genesis, card/passport,
-raid journey and sky moments stay with the team. Pinkkitty keeper/sound/doorway mounts remain seams.
+**Team:** latest main8bc5d99; prior merges7b56cb3 card sharing and f62bc9f aurora. Fresh narrow
+scan found no runtime checkpoint on picture-land/trees, effects, avatar, card/passport, Genesis,
+raid-road or sky. Raid-road8543a25 only registers scope; code already on main. Sky’s wiring
+patch is not proof of live cheer hookup. Genesis, card/passport, raid journey and sky stay with
+the team. Pinkkitty keeper/sound/doorway mounts remain producer seams.
 
 **Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
 `../conductor/state/services.log`; own processes only; capture ports via capture-ports.mjs.
