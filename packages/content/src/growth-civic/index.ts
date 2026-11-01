@@ -136,6 +136,33 @@ function bridge(b: Boxes, k: CivicKit, stage: number, site: CivicBridgeSite): vo
     b.add(x + 1, y + 2, z + 1, x + 3, y + 11, z + 3, k.trim);
     lantern(b, k, x, y + 11, z);
   }
+  if (stage >= 4) {
+    // Paired standards rise on the parapets either side of the crown's existing arms.
+    // Their cloth stays outside the full width of the walk and the span remains untouched.
+    for (const z of [0, 28]) for (const x of [54, 86]) {
+      const heights = [0, 1, 2, 3].map(dx => humpbackDeckTop(x + dx, site.water, site.bank) + 4);
+      const y = Math.max(...heights);
+      heights.forEach((height, dx) => b.add(x + dx, height, z, x + dx + 1, y + 2, z + 4, k.stone));
+      b.add(x, y + 2, z, x + 4, y + 4, z + 4, k.base);
+      b.add(x + 1, y + 4, z + 1, x + 3, y + 25, z + 3, k.trim);
+      b.add(x, y + 24, z, x + 4, y + 26, z + 4, k.band);
+      // Hearth finishes in a gabled finial; Tide carries a forked masthead.
+      if (k.style === 'hearth') {
+        b.add(x + 1, y + 26, z + 1, x + 3, y + 29, z + 3, k.roof);
+        b.add(x + 1, y + 29, z + 1, x + 3, y + 30, z + 3, MAT.brass);
+      } else {
+        b.add(x, y + 26, z + 1, x + 1, y + 30, z + 3, k.trim);
+        b.add(x + 3, y + 26, z + 1, x + 4, y + 30, z + 3, k.trim);
+        b.add(x + 1, y + 27, z + 1, x + 3, y + 28, z + 3, MAT.brass);
+      }
+      const left = x === 54, a = left ? x - 9 : x + 3, c = left ? x + 1 : x + 13;
+      b.add(a, y + 22, z + 1, c, y + 24, z + 3, k.trim);
+      b.add(a, y + 13, z + 1, c, y + 22, z + 3, k.field);
+      // A split tail and a simple light-shaped charge make the cloth readable at a distance.
+      b.add(left ? a : a + 2, y + 11, z + 1, left ? c - 2 : c, y + 13, z + 3, k.field);
+      b.add(a + 4, y + 16, z, a + 6, y + 20, z + 4, k.charge);
+    }
+  }
 }
 
 /** Local build-cell centres for public civic light. These are not citizen presence windows.
