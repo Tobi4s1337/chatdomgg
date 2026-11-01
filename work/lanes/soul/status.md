@@ -1,6 +1,6 @@
 # SO10 current checkpoint
 
-Current instruction: **no new sub-scopes; land and verify the existing checkpoint**. Stay on `lane/soul`; never push or write main. Main merged cleanly in `51db20a` this iteration. The only PRD task remains open; no LANE COMPLETE.
+Current instruction: **no new sub-scopes; land and verify the existing checkpoint**. Stay on `lane/soul`; never push or write main. Main merged cleanly in `51db20a` this iteration; the verified source and handoff checkpoint is `068a770`. The only PRD task remains open; no LANE COMPLETE.
 
 ## Working source
 
