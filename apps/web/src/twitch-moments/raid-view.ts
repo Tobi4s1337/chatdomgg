@@ -374,20 +374,16 @@ export function createRaidLayer(root: THREE.Group, host: RaidLayerHost) {
     /** The gate while a raid holds it: where the shot is composed from and the caption hangs. */
     gate: (): RaidGateSite | null => gate?.site ?? null,
     captionPoint: (): THREE.Vector3 | null => gate?.caption.clone() ?? null,
-    /**
-     * Shot candidates for the gate, best first: from over the road a dozen metres inside the town, on the side away
-     * from the standard, looking back at the gate as the column comes on toward the viewer. The eye stands higher
-     * than the lead wagon's standard (5.5 m), so the column passes under the shot rather than through it.
-     */
+    /** Look in from outside the gate, along the actual road, so the town welcomes the column behind the gate. */
     *shots(portrait: boolean): Generator<readonly [THREE.Vector3, THREE.Vector3, number]> {
       const here = gate?.site ?? site();
       if (!here) return;
-      const line = path(), target = here.position.clone().addScaledVector(here.facing, 1.2).add(new THREE.Vector3(0, portrait ? 3.6 : 3, 0));
-      const fov = portrait ? 64 : 50, k = portrait ? 1.25 : 1;
-      for (const [ahead, aside, rise] of [[13, -2.4, 7.2], [16, -2, 7.8], [10.5, -2.2, 6.6], [13, 2.4, 7.2], [8, -2, 6.2]] as const) {
-        const spot = line ? line.at(ahead * k) : { position: here.position.clone().addScaledVector(here.facing, ahead * k), tangent: here.facing };
+      const line = path(), target = here.position.clone().addScaledVector(here.facing, 2).add(new THREE.Vector3(0, 3.2, 0));
+      const fov = portrait ? 64 : 50, k = portrait ? 1.65 : 1;
+      for (const [back, aside, rise] of [[18, -3, 8], [21, -2, 9], [16, -3, 7.5], [18, 3, 8], [23, 2, 10]] as const) {
+        const spot = line ? line.at(-back * k) : { position: here.position.clone().addScaledVector(here.facing, -back * k), tangent: here.facing };
         const across = new THREE.Vector3().crossVectors(UP, spot.tangent).normalize();
-        yield [spot.position.clone().addScaledVector(across, aside).add(new THREE.Vector3(0, rise * (portrait ? 1.1 : 1), 0)), target, fov] as const;
+        yield [spot.position.clone().addScaledVector(across, aside).add(new THREE.Vector3(0, rise * (portrait ? 1.15 : 1), 0)), target, fov] as const;
       }
     },
     stats: () => {

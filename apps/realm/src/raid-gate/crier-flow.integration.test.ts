@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { raidWelcomePath } from '../../../api/src/raid-gate/guest-contracts';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -73,7 +74,7 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('simulated Twitch CLI t
       await mock.worker.poll();
       expect(transport.records).toHaveLength(1);
       expect(transport.records[0]!.text).toContain(observation.from.name);
-      expect(transport.records[0]!.text).toContain(`raid=${observed.rows[0].raid_id}`);
+      expect(transport.records[0]!.text).toContain(raidWelcomePath('129634568', observed.rows[0].raid_id));
       expect((await pool.query('select state from realm_raid_crier_jobs')).rows).toEqual([{ state: 'sent' }]);
       const beforeRoads = await (await fetch(`${url}/realm/raid-roads`)).json();
       const beforePennants = await (await fetch(`${url}/realm/raid-pennants/${kingdomId}`)).json();

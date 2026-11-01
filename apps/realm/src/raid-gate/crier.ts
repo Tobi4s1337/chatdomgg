@@ -7,6 +7,7 @@ import {
   type CrierMode, type RaidCrierClaim, type RaidCrierOutcome, type RaidCrierSetting,
 } from '../../../api/src/raid-gate/crier-contracts';
 import { RaidObservationSchema, type RaidObservation } from '../../../api/src/raid-gate/observations';
+import { raidWelcomePath } from '../../../api/src/raid-gate/guest-contracts';
 import { serializable, type SqlClient, type SqlPool } from '../../../api/src/raid-gate/postgres-repository';
 
 const OWN = new AbortController().signal;
@@ -127,7 +128,7 @@ export class RaidCrierAuthority {
       if (!found.rows.length) return null;
       const job = readJob(found.rows[0]);
       if (job.origin !== request.origin || job.kingdom_id !== request.kingdomId || job.state !== 'queued') throw new CrierError('storage', 'The crier selected a different job.');
-      const text = `Welcome, ${job.observation.from.name} and raiders! Walk into the kingdom: ${this.publicOrigin}/?walk=1&kingdom=${request.kingdomId}&raid=${job.raid_id}`;
+      const text = `Welcome, ${job.observation.from.name} and raiders! Walk into the kingdom: ${this.publicOrigin}${raidWelcomePath(request.kingdomId, job.raid_id)}`;
       const parsed = RaidCrierClaimSchema.safeParse({ version: 1, origin: request.origin, claimId: randomUUID(), raidId: job.raid_id,
         kingdomId: request.kingdomId, senderId: request.senderId, expiresAt: Math.min(job.observation.occurredAt + RAID_CRIER_LIFETIME_MS, now + 5_000), text });
       if (!parsed.success) {

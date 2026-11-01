@@ -1,0 +1,20 @@
+@font-face { font-family: 'Raid Fell'; src: url('../../atlas/assets/fonts/im-fell-english-regular.woff2') format('woff2'); font-display: block; }
+@font-face { font-family: 'Raid Fell SC'; src: url('../../atlas/assets/fonts/im-fell-english-sc.woff2') format('woff2'); font-display: block; }
+@font-face { font-family: 'Raid Alegreya'; src: url('../../atlas/assets/fonts/alegreya-roman-latin.woff2') format('woff2'); font-weight: 400 900; font-display: block; }
+.raid-entry-welcome, .raid-entry-choice { box-sizing: border-box; font-family: 'Raid Alegreya', Georgia, serif; }
+.raid-entry-welcome { position: fixed; z-index: 12; top: 20px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); padding: 18px 30px 15px; text-align: center; color: #392a20; border: 1px solid #916c43; background: radial-gradient(ellipse at 20% 10%, #fff7e366, transparent 60%), repeating-linear-gradient(17deg, #8a6a3a08 0 1px, transparent 1px 4px), linear-gradient(#f3e4c4, #ead6ae); box-shadow: inset 0 0 18px #a57c4555, 0 2px 0 #5b3d28, 0 8px 24px #10152066; }
+.raid-entry-welcome p { margin: 0; font-size: 18px; line-height: 1.35; }
+.raid-entry-welcome a { display: inline-flex; align-items: center; gap: 3px; min-height: 44px; margin: 0 0 -10px; color: #71372b; font-size: 14px; text-underline-offset: 3px; }
+.raid-entry-pin { position: absolute; top: -5px; left: calc(50% - 4px); width: 8px; height: 8px; border: 1px solid #70502c; border-radius: 50%; background: #d9b67c; box-shadow: 0 1px 2px #38271888; }
+.raid-entry-choice { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at 50% 40%, #4d4237, #171c24 75%); text-align: center; }
+.raid-entry-choice-board { width: min(100%, 500px); padding: 14px; border: 1px solid #21150e; border-radius: 4px; background: repeating-linear-gradient(92deg, #ffffff08 0 1px, transparent 1px 7px, #00000018 7px 8px, transparent 8px 15px), linear-gradient(#5a4030, #34241b); box-shadow: inset 0 0 0 3px #3a281d, inset 0 0 0 4px #c69a5c88, 0 18px 40px #0b0d1a99; }
+.raid-entry-choice-paper { padding: 36px 30px; color: #392a20; background: radial-gradient(ellipse at 20% 10%, #fff7e366, transparent 60%), repeating-linear-gradient(17deg, #8a6a3a08 0 1px, transparent 1px 4px), linear-gradient(#f3e4c4, #ead6ae); box-shadow: inset 0 0 22px #a57c4566; }
+.raid-entry-choice h1 { margin: 12px 0; color: #392a20; font: 400 clamp(28px, 5vw, 38px)/1.12 'Raid Fell', Georgia, serif; }
+.raid-entry-choice p { margin: 0 auto; max-width: 380px; font-size: 17px; line-height: 1.45; }
+.raid-entry-choice .raid-entry-eyebrow { color: #865a36; font: 13px 'Raid Fell SC', Georgia, serif; letter-spacing: .12em; }
+.raid-entry-choice button { display: block; margin: 24px auto 0; min-height: 46px; padding: 8px 20px; color: #f6e5c5; border: 1px solid #22150e; border-radius: 3px; background: repeating-linear-gradient(91deg, #ffffff08 0 1px, transparent 1px 6px, #0000001a 6px 7px, transparent 7px 12px), linear-gradient(#6a4b36, #4a3324); box-shadow: inset 0 1px 0 #e9c38f40, 0 3px 0 #22160f; cursor: pointer; font: 600 16px 'Raid Alegreya', Georgia, serif; }
+.raid-entry-choice button:hover { filter: brightness(1.1); }
+.raid-entry-choice a { display: inline-flex; align-items: center; min-height: 44px; margin: 8px 0 -12px; color: #71372b; font-size: 15px; text-underline-offset: 4px; }
+.raid-entry-choice button:focus-visible, .raid-entry-choice a:focus-visible, .raid-entry-welcome a:focus-visible { outline: 3px solid #aa6437; outline-offset: 4px; }
+.raid-notice-bench { position: fixed; inset: 0; background: radial-gradient(ellipse at 50% 30%, #474556, #202633 75%); }
+@media (max-width: 600px) { .raid-entry-welcome { top: 12px; padding: 14px 20px 12px; } .raid-entry-welcome p { font-size: 16px; } .raid-entry-choice-paper { padding: 30px 22px; } }

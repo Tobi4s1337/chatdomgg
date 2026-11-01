@@ -21,6 +21,8 @@ import { mountRaidShowRoutes } from './raid-gate/http';
 import { mountChatCommandRoute, realmChatCommands } from './raid-gate/chat-commands';
 import { RaidCrierAuthority } from './raid-gate/crier';
 import { mountRaidCrierRoutes } from './raid-gate/crier-http';
+import { RaidGuestAuthority } from './raid-gate/guests';
+import { createRaidGuestRuntime } from './raid-gate/guest-runtime';
 
 const simulated = process.env.REALM_SIMULATED === '1';
 const storage = process.env.REALM_STORAGE ?? 'postgres';
@@ -75,22 +77,24 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
   }
   const castle = createRealmCastle({ origin, kingdomNames: names, safetyKey: evidenceKey });
   const citizens = createRealmCitizens({ db: pool, origin, kingdomNames: names, castle: castle.observe, evidenceKey });
+  const raidGuests = createRaidGuestRuntime({ authority: new RaidGuestAuthority({ pool, origin, clock: Date.now }), origin, citizens: input => citizens.observe(input), log: line => console.info(line) });
   const boot = createDurableRealmBoot({ pool, origin, verifier, foundedDirectory, ingressCredentials: credentials,
     // The reader serves only this origin's current authority-adopted, public-checkpoint-matching geometry.
     foundedAccess: target => target.origin === origin, log: line => console.info(line),
     repositoryOptions: gate.install({ origin, guards: [castle.guard] }), furnish: citizens.furnish,
     attach: kingdom => {
+      const detachGuests = raidGuests.attach(kingdom);
       const detachEvening = evening.attach(kingdom);
       const detachInteractions = attachEveningInteractions(kingdom, { auth: boot.services.auth,
         scene: () => boot.loader.current(kingdom.kingdomId)?.scene });
-      return () => { detachInteractions(); detachEvening(); };
+      return () => { detachGuests(); detachInteractions(); detachEvening(); };
     },
   });
   citizens.use(boot.allocation, boot.services);
-  boot.ingress.moments.useSettler(citizens);
+  boot.ingress.moments.useSettler(raidGuests.guardSettler(citizens));
   castle.use(boot.allocation, boot.store);
   const evening = new RealmEveningBridge({ origin, ingress: boot.ingress, gate, approvals,
-    beforeObservation: input => citizens.observe(input) });
+    beforeObservation: input => raidGuests.observe(input) });
   evening.use(boot.services);
   const dock = new RealmDockService(pool, origin, process.env.REALM_INTERNAL_SECRET, 1800, names);
   dock.use(boot.services);
@@ -106,13 +110,13 @@ async function serveOwnedPort(releasePort: () => Promise<void>, port: number) {
     await chatCommands.close();
     await raidCrier?.close();
     try { await evening.stop(); }
-    finally { try { await boot.stop(); } finally { await pool.end(); } }
+    finally { try { await boot.stop(); } finally { await raidGuests.close(); await pool.end(); } }
   });
   try {
     await boot.readiness.start();
     await releasePort();
     await server.listen(port, host);
-  } catch (error) { dock.stop(); await raidShow.close(); await chatCommands.close(); await raidCrier?.close(); await evening.stop(); await boot.stop(); await pool.end(); throw error; }
+  } catch (error) { dock.stop(); await raidShow.close(); await chatCommands.close(); await raidCrier?.close(); await evening.stop(); await boot.stop(); await raidGuests.close(); await pool.end(); throw error; }
   console.info(`${simulated ? 'SIMULATED' : 'LIVE'} realm on ${port}: adopted durable Postgres kingdoms in schema "${config.schema}"; `
     + (boot.ingress.gate.configured ? `service ingress at POST ${INGRESS_ROUTE} (${Object.keys(credentials).join(', ')})` : 'service ingress closed (no REALM_INGRESS_*_SECRET)')
     + `; GET ${HEALTH_ROUTE}, GET ${READY_ROUTE}; current approved geometry only`);

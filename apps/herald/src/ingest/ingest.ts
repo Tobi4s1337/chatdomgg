@@ -27,8 +27,9 @@ const PENDING_LIMIT = 2_048;
 /** Recent chat timings kept for the latency summary on health. */
 const TIMING_SAMPLES = 64;
 /**
- * A message stamped up to this far after our own receipt is accepted at its receipt time (it certainly
- * existed by then); further ahead is a clock we cannot trust and is rejected as future.
+ * Presence accepts a message stamped up to this far ahead at its receipt time (it certainly existed by then).
+ * Chat evidence separately retains the original provider time for exact authority windows; further ahead is
+ * a clock we cannot trust and is rejected as future.
  */
 export const CLOCK_SKEW_MS = 5_000;
 
@@ -209,10 +210,10 @@ export class ChatIngest {
     const at = this.#observedAt(frame.meta.at, receivedAt);
     switch (plan.type) {
       case 'channel.chat.notification': return this.#support(frame.event, frame.meta.messageId, at, receivedAt);
-      case 'channel.chat.message': return this.#chat(frame.event, frame.meta.messageId, at, receivedAt);
-      case 'channel.chat.message_delete': return this.#delete(frame.event, frame.meta.messageId, at ?? receivedAt, receivedAt);
-      case 'channel.chat.clear': return this.#roomClear(frame.event, frame.meta.messageId, at ?? receivedAt);
-      case 'channel.chat.clear_user_messages': return this.#userClear(frame.event, frame.meta.messageId, at, receivedAt);
+      case 'channel.chat.message': return this.#chat(frame.event, frame.meta.messageId, at, receivedAt, frame.meta.at);
+      case 'channel.chat.message_delete': return this.#delete(frame.event, frame.meta.messageId, at === null ? receivedAt : frame.meta.at, receivedAt);
+      case 'channel.chat.clear': return this.#roomClear(frame.event, frame.meta.messageId, at ?? receivedAt, at === null ? receivedAt : frame.meta.at);
+      case 'channel.chat.clear_user_messages': return this.#userClear(frame.event, frame.meta.messageId, at, receivedAt, at === null ? receivedAt : frame.meta.at);
       case 'stream.online': return this.#online(frame.event, at, frame.meta.messageId, receivedAt);
       case 'stream.offline': return this.#offline(frame.event, at, frame.meta.messageId, receivedAt);
       case 'user.authorization.revoke': return this.#authorizationRevoke(frame.event);
@@ -320,7 +321,7 @@ export class ChatIngest {
     void this.#options.realm?.moment?.(result.data).catch(() => undefined);
   }
 
-  #chat(raw: unknown, deliveryId: string, at: number | null, receivedAt: number): void | Promise<void> {
+  #chat(raw: unknown, deliveryId: string, at: number | null, receivedAt: number, providerAt: number): void | Promise<void> {
     const parsed = ChatMessageEventSchema.safeParse(raw);
     if (!parsed.success || parsed.data.broadcaster_user_id !== this.kingdomId) {
       this.#counters.malformed++;
@@ -368,7 +369,7 @@ export class ChatIngest {
     }
     let commandWrite: Promise<void> | undefined;
     const sink = this.#options.realm;
-    const command = sink?.command ? chatCommand(raw, this.kingdomId, this.#options.source.origin, at) : null;
+    const command = sink?.command ? chatCommand(raw, this.kingdomId, this.#options.source.origin, providerAt) : null;
     if (command) {
       if (receivedAt - at >= CHAT_COMMAND_MAX_AGE_MS) this.#counters.commandExpired++;
       else {
@@ -382,7 +383,8 @@ export class ChatIngest {
       this.#counters.pendingOverflow++;
       return commandWrite;
     }
-    const observation: Observation = { kind: 'chat', messageId: event.message_id, at, author: { id: event.chatter_user_id, displayName: event.chatter_user_name } };
+    const observation: Observation = { kind: 'chat', messageId: event.message_id, at,
+      ...(providerAt !== at ? { providerAt } : {}), author: { id: event.chatter_user_id, displayName: event.chatter_user_name } };
     const input = this.#input(observation);
     if (!input) return commandWrite;
     const pending: PendingActivity = { authorId: event.chatter_user_id, occurredAt: at, receivedAt, canceled: false };
@@ -437,7 +439,7 @@ export class ChatIngest {
     return this.#commandCleanup(deliveryId, at, parsed.data.target_user_id, parsed.data.message_id);
   }
 
-  #roomClear(raw: unknown, deliveryId: string, at: number): void | Promise<void> {
+  #roomClear(raw: unknown, deliveryId: string, at: number, providerAt: number): void | Promise<void> {
     const parsed = ChatClearEventSchema.safeParse(raw);
     if (!parsed.success || parsed.data.broadcaster_user_id !== this.kingdomId) {
       this.#counters.malformed++;
@@ -449,10 +451,10 @@ export class ChatIngest {
     this.#options.realm?.clear(this.kingdomId);
     this.#forge?.clear();
     for (const pending of this.#pending.values()) pending.canceled = true;
-    return this.#commandCleanup(deliveryId, at, null, null);
+    return this.#commandCleanup(deliveryId, providerAt, null, null);
   }
 
-  #userClear(raw: unknown, deliveryId: string, at: number | null, receivedAt: number): void | Promise<void> {
+  #userClear(raw: unknown, deliveryId: string, at: number | null, receivedAt: number, providerAt: number): void | Promise<void> {
     const parsed = ChatClearUserMessagesEventSchema.safeParse(raw);
     if (!parsed.success || parsed.data.broadcaster_user_id !== this.kingdomId) {
       this.#counters.malformed++;
@@ -467,7 +469,7 @@ export class ChatIngest {
     for (const pending of this.#pending.values()) if (pending.authorId === target) pending.canceled = true;
     // Chatdom's finite protective hold: the window goes dark now and stays dark for ten minutes.
     this.#submit({ kind: 'user_clear', eventId: deliveryId, at: clearedAt, userId: target });
-    return this.#commandCleanup(deliveryId, clearedAt, target, null);
+    return this.#commandCleanup(deliveryId, providerAt, target, null);
   }
 
   /** The night's evidence for the realm: the gate opens when a broadcast starts and rests when it ends. */

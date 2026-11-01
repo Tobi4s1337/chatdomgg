@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RaidObservationSchema } from '../../../api/src/raid-gate/observations';
+import { raidWelcomePath } from '../../../api/src/raid-gate/guest-contracts';
 import { migrateRealmSchema } from '../persistence/migrate';
 import { RaidCrierAuthority } from './crier';
 import { RaidObservationLedger } from './observations';
@@ -64,7 +65,7 @@ describe.runIf(process.env.REALM_DATABASE_TESTS === '1')('durable raid crier on 
     expect(claims).toHaveLength(1);
     const claim = claims[0]!;
     expect(claim).toMatchObject({ raidId: event.raidId, kingdomId: '201', senderId: '999' });
-    expect(claim.text).toContain('Raider'); expect(claim.text).toContain(event.raidId);
+    expect(claim.text).toContain('Raider'); expect(claim.text).toContain(raidWelcomePath('201', event.raidId));
     expect(await authority().claim(request('201'))).toBeNull();
     const receipt = { ...request('201'), claimId: claim.claimId, outcome: { status: 'sent', messageId: 'chat-ack' } };
     expect(await authority().receipt(receipt)).toBe('accepted');

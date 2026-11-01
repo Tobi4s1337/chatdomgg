@@ -25,6 +25,8 @@ export const PresenceInputSchema = z.discriminatedUnion('kind', [
   z.strictObject({ ...common, kind: z.literal('stream'), live: z.boolean(), sessionId: TokenSchema.nullable() }),
   z.strictObject({ ...common, kind: z.literal('observe'), source: PresenceSourceSchema,
     coverage: z.enum(['complete', 'partial', 'activity']), people: z.array(PresencePersonSchema).max(100_000),
+    /** Original verified chat event time when presence clamped tolerated future skew. Never a browser clock. */
+    providerAt: EpochMsSchema.optional(),
   }),
   z.strictObject({ ...common, kind: z.literal('remove'), personId: PersonIdSchema,
     reason: z.enum(['timeout', 'moderated', 'ban', 'forget']), until: EpochMsSchema.nullable(),
@@ -34,6 +36,10 @@ export const PresenceInputSchema = z.discriminatedUnion('kind', [
   if (input.kind === 'source-lost' && new Set(input.sources).size !== input.sources.length) ctx.addIssue({ code: 'custom', message: 'Duplicate lost source' });
   if (input.kind === 'stream' && input.live !== (input.sessionId !== null)) ctx.addIssue({ code: 'custom', message: 'Live streams need a session; offline streams have none' });
   if (input.kind === 'observe') {
+    if (input.providerAt !== undefined && (input.source !== 'chat' || input.people.length !== 1
+      || input.providerAt < input.observedAt || input.providerAt > input.observedAt + 5_000)) {
+      ctx.addIssue({ code: 'custom', path: ['providerAt'], message: 'Only one verified chat may retain its original time within the five-second clock allowance' });
+    }
     if (new Set(input.people.map(p => p.personId)).size !== input.people.length) ctx.addIssue({ code: 'custom', message: 'Duplicate person in observation' });
     if (input.source === 'chatters' && (input.coverage === 'activity' || input.people.some(p => p.disclosure !== 'anonymous'))) ctx.addIssue({ code: 'custom', message: 'Chatters observes unnamed connected people, never public identity' });
     if (input.source !== 'chatters' && input.coverage !== 'activity') ctx.addIssue({ code: 'custom', message: 'Only Chatters supplies a roster snapshot' });

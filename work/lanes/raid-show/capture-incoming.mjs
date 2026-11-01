@@ -8,7 +8,7 @@ import { startCapturePreview, closeCapturePreview } from '../../../packages/test
 import { superviseCapture } from '../../../apps/web/src/twitch-moments-bench/capture-supervisor.mjs';
 
 if (!process.argv.includes('--worker')) {
-  await superviseCapture(process.execPath, [fileURLToPath(import.meta.url), '--worker'], { deadlineMs: 1_200_000 });
+  await superviseCapture(process.execPath, [fileURLToPath(import.meta.url), '--worker', ...process.argv.slice(2)], { deadlineMs: 1_200_000 });
 } else {
   const release = await acquireCaptureLock({ signal: globalThis.AbortSignal.timeout(900_000) });
   const controller = new globalThis.AbortController();
@@ -26,10 +26,17 @@ if (!process.argv.includes('--worker')) {
     if (!base) throw new Error('No free lane preview port in 5170–5186');
     console.log(`[capture] own preview ${base}`);
     browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+    const argument = (name, fallback) => process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : fallback;
+    const size = argument('--size', '1920x1080');
+    if (!/^(1920x1080|1280x720|1440x900|390x844)$/.test(size)) throw new Error('Use a standard stream, web or phone size.');
+    const [width, height] = size.split('x').map(Number);
+    const viewers = Number(argument('--viewers', '140')), at = Number(argument('--at', '12000'));
+    if (![3, 140, 10000, 70000].includes(viewers) || !Number.isFinite(at) || at < 0 || at > 119000) throw new Error('Choose a specified raid scale and a valid beat time.');
+    const route = `/-/raid-gate?incoming=1&viewers=${viewers}&at=${at}`;
+    const page = await browser.newPage({ viewport: { width, height } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(`${base}/-/raid-gate?incoming=1&viewers=140&at=12000`);
+    await page.goto(`${base}${route}`);
     console.log('[capture] incoming page opened');
     try {
       await page.waitForFunction(() => window.__chatdomReady === true || document.querySelector('.raid-show-error'), null, { timeout: 210_000 });
@@ -41,11 +48,15 @@ if (!process.argv.includes('--worker')) {
     if (failure) throw new Error(failure);
     if (errors.length) throw new Error(errors.join('\n'));
     await page.evaluate(() => document.fonts.ready);
-    const out = 'work/evidence/raid-show/caravan-140@1920x1080.png';
+    const file = argument('--out', `caravan-${viewers}@${size}.png`);
+    if (!/^[a-z0-9@.-]+\.png$/.test(file)) throw new Error('Output must be a plain evidence PNG name.');
+    const out = `work/evidence/raid-show/${file}`;
     await mkdir('work/evidence/raid-show', { recursive: true });
-    await page.screenshot({ path: out });
+    // SwiftShader may need more than Playwright's default 30 seconds to flush a completed world frame.
+    // The worker's four-minute deadline still bounds the entire time holding the shared lock.
+    await page.screenshot({ path: out, timeout: 90_000 });
     await writeFile(out.replace('.png', '.json'), JSON.stringify({ renderer: 'SwiftShader', performanceEvidence: false,
-      route: '/-/raid-gate?incoming=1&viewers=140&at=12000', size: [1920, 1080], errors,
+      route, size: [width, height], errors,
       state: await page.evaluate(() => window.__chatdomRaidShow?.inspect()),
     }, null, 2));
     console.log(`Look at ${out}`);
