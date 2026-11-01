@@ -346,35 +346,38 @@ starting seam begins at0 and keeps dusk. Windows use witnessed presence (1a10d43
 arrival still drives door lanterns and smoke. `shots/magic/arrival-wide-first-pair.png` is viewed:
 old close TOP, town-wide AFTER below;1920×1080/time6/hour19.5/high,121 walkers/windows.
 
-**Latest change:** Starting no longer runs an independent tour in either mood. Its plan holds
-hero/open with no cuts; the scene’s existing continuous0–36s wave/street/homecoming movement
-(and real witnessed arrival lens) owns the picture. This removes Show’s doors at8s and Calm’s
-competing dip. Ordinary show/break/window/strip plans retain their tours. One focused timer test
-per mood checks40s without a competing camera/curtain; eight focused tests, typecheck, scoped
-lint and web production build pass.
+**Latest change:** retimed the existing SIMULATED greeting from3–9s to6–16s, within the
+frozen ten-second speech limit. The wave-first camera had arrived after the greeting expired.
+Now Juniper says “Evening, everyone!” while we enter the lantern street; the later actual
+arrival cue replaces it with “Home, at last.” No live speech lifetime or identity remapping.
+Root viewed `shots/magic/arrival-street-greeting-{before,after,pair}.png`, native1920×1080,
+world12.5s/high/calm,208 walkers/windows, settled/open; after has one Juniper greeting over the
+walking person. Typecheck, scoped lint, three director/arrival tests and production build pass.
+No browser errors, and all captures/servers/leases released. Main source stayed frozen for pair.
 
-Root viewed native1920×1080 `shots/magic/arrival-continuous-before.png`, `-after.png`, `-pair.png`
-(before LEFT): same world8.4s,208 active windows and walkers. Before shows the old shutter’s
-closed endpoint (director age8.75s, CSS animation stabilized); after shows the lit town without
-a cut. This is a targeted transition endpoint comparison, NOT proof of whole moving sequence.
-No browser errors; all capture jobs/servers/leases released. Initial probe caught closing state
-before CSS moved and was rejected; final before uses Playwright animation stabilization,
-no DOM/style overrides. Avoid another hundreds-frame SwiftShader take.
-
-**Earlier / next:** a21dc78 constructs SIMULATED Starting at0 instead of preparing a full town
-at30 then rewinding; first-ready ghost pools at empty houses are gone. Native viewed pair:
-`shots/magic/arrival-first-ready-pair.png` (before TOP). a851636 lets one recent public name
-identify its visible lit window in the wide opening; `arrival-named-wave-pair.png` viewed.
-The old `arrival-opening-before-partial.mp4` only covers0–8.4s/SHOW/640×360/5fps and ends at
-shutters; root viewed extracted sequence, not a full-speed GPU take. Earlier
-`arrival-handoff-storyboard.png` shows warm Juniper homecoming at14–20s but is stills.
-**Next judge:** uninterrupted camera descent and homecoming motion now the cut is gone.
+**Full staging rehearsal completed:** `shots/magic/arrival-continuous-rehearsal-320.mp4` runs
+0–24s (last sample23.8), actual running scene/director,120 sampled frames, no capture/seek
+resets, no cuts or errors. Root inspected EVERY sampled frame in four chronological sheets
+`arrival-continuous-rehearsal-all-{1,2,3,4}.png`: clear wave, unobstructed street glide8–12s,
+Juniper reaches the glowing doorway and the home caption appears14.2–20s. This precedes only
+the latest greeting retime, which the native pair verifies.320×180 uses the reduced renderer;
+this demonstrates staging, NOT1080p colour or real-GPU smoothness. Do not shrink native speech
+bubbles based on their footprint at320px. No further long SwiftShader film is needed for timing.
 GPU request remains1920×1080 first25s of
 `/stream?source=simulated&tier=town&hour=19.5&seam=starting` (default calm).
-Do not call whole moment finished from endpoints alone. Queue targeted captures once up to20min;
-never unlink locks or kill other holders. No observer waiting for real chat.
+**Next useful visible integration:** keep Showcase current: add a clearly SIMULATED door to
+this evening opening beside its existing live stream entry (Tobias’s standing Showcase brief).
+No new systems; do not keep polishing accepted light/Forge while awaiting the GPU taste check.
 
-**Team:** prior maina21dc78; prior merges7b56cb3 card sharing and f62bc9f aurora. Fresh narrow
+**Earlier fixes to preserve:** d29f742 lets the opening scene own its continuous wave/street
+lens instead of an independent Show shutter/Calm dip; viewed native pair
+`arrival-continuous-pair.png` (old shut endpoint LEFT). a21dc78 builds SIMULATED Starting at0,
+avoiding full-town ghost light before arrival (`arrival-first-ready-pair.png`, before TOP).
+a851636 gives one newly lit visible window its public name (`arrival-named-wave-pair.png`).
+Queue targeted captures once up to20min; never unlink locks or kill other holders. No active
+capture job or observer waiting for real chat. Real-GPU taste is pending, not a gate regression.
+
+**Team:** prior maind29f742; prior merges7b56cb3 card sharing and f62bc9f aurora. Fresh narrow
 scan found no runtime checkpoint on picture-land/trees, effects, avatar, card/passport, Genesis,
 raid-road or sky, including all Genesis content and passport branches. Raid-road8543a25 only registers scope; code already on main. Sky’s wiring
 patch is not proof of live cheer hookup. Genesis, card/passport, raid journey and sky stay with
