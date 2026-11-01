@@ -2,14 +2,17 @@ import * as THREE from 'three';
 import type { VoxelRenderState } from '@chatdom/render';
 
 /**
- * The kingdom's own voxel material, cut by height per instance so a home can be raised course by course without
- * remeshing: `aGrow` = (floor, top) in world metres. Only the courses between them are drawn, and the newest course
- * carries a warm edge, the way fresh timber catches lantern light. Instances not growing use (-1e6, 1e6).
- * The terrain variant cuts by a ring instead, so new streets spread outward from a quarter's green.
+ * The kingdom's own voxel material, cut by height so a home can be raised course by course without remeshing:
+ * `uGrow` = (floor, top) in world metres. Only the courses between them are drawn, and the newest course carries a
+ * warm edge, the way fresh timber catches lantern light. Each piece being raised gets its own material (and mesh);
+ * they all share one compiled program, and a piece's cut is one uniform rather than a per-instance attribute, so a
+ * single draw raises it with no instancing bookkeeping. The terrain variant cuts by a ring instead, so new streets
+ * spread outward from a quarter's green; the ring stays fully off (w = 0) unless a caller sets one, because a
+ * zero-radius ring with w = 1 would discard everything.
  */
-const VERTEX_DECLARATIONS = 'out float vGrowFloor; out float vGrowTop;\n#ifdef USE_INSTANCING\nin vec2 aGrow;\n#endif\nuniform vec2 uGrow;\n';
+const VERTEX_DECLARATIONS = 'out float vGrowFloor; out float vGrowTop; uniform vec2 uGrow;\n';
 const VERTEX_ANCHOR = 'vWorld=world.xyz;';
-const VERTEX_GROW = 'vWorld=world.xyz;vGrowFloor=uGrow.x;vGrowTop=uGrow.y;\n#ifdef USE_INSTANCING\nvGrowFloor=max(uGrow.x,aGrow.x);vGrowTop=min(uGrow.y,aGrow.y);\n#endif\n';
+const VERTEX_GROW = 'vWorld=world.xyz;vGrowFloor=uGrow.x;vGrowTop=uGrow.y;';
 const FRAGMENT_DECLARATIONS = 'in float vGrowFloor; in float vGrowTop; uniform float uGrowGlow; uniform vec4 uGrowRing;\n';
 const FRAGMENT_ANCHOR = 'float threshold=fract(dot(floor(gl_FragCoord.xy),vec2(.754877666,.569840296)));';
 const FRAGMENT_CUT = `if(vWorld.y<vGrowFloor||vWorld.y>vGrowTop)discard;
@@ -26,7 +29,7 @@ function inject(shader: string, anchor: string, replacement: string, what: strin
 
 export interface GrowthMaterial {
   readonly material: THREE.ShaderMaterial;
-  /** World-space floor and top applied to every draw (instances may narrow it further). */
+  /** World-space floor and top of the courses drawn. */
   setCut(floor: number, top: number): void;
   /** Keep the inside (1) or the outside (-1) of a ring around (x, z); 0 disables. */
   setRing(x: number, z: number, radius: number, keep: -1 | 0 | 1): void;
@@ -53,13 +56,4 @@ export function createGrowthMaterial(state: VoxelRenderState): GrowthMaterial {
     setGlow(value) { own.uGrowGlow.value = value; },
     dispose() { material.dispose(); },
   };
-}
-
-/** Per-instance (floor, top) for an instanced draw with the growth material. */
-export function growAttribute(capacity: number): THREE.InstancedBufferAttribute {
-  const data = new Float32Array(capacity * 2);
-  for (let i = 0; i < capacity; i++) { data[i * 2] = -1e6; data[i * 2 + 1] = 1e6; }
-  const attribute = new THREE.InstancedBufferAttribute(data, 2);
-  attribute.setUsage(THREE.DynamicDrawUsage);
-  return attribute;
 }

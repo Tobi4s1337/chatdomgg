@@ -28,6 +28,8 @@ const REMEMBERED = 1024;
 export function createCeremonyLedger() {
   let kingdomId: string | null = null, sequence = -1;
   const stages = new Map<string, GrowthHomeStage>();
+  /** The highest stage each home has been celebrated (or bootstrapped) at: a housewarming never repeats or goes back. */
+  const celebrated = new Map<string, GrowthHomeStage>();
   const seen = new Set<string>(), order: string[] = [];
   const remember = (key: string) => {
     seen.add(key); order.push(key);
@@ -41,7 +43,6 @@ export function createCeremonyLedger() {
       if (kingdomId !== null && frame.kingdomId !== kingdomId || frame.sequence <= sequence) return { stages, ceremonies: [], accepted: false };
       const bootstrap = kingdomId === null;
       kingdomId = frame.kingdomId; sequence = frame.sequence;
-      const before = new Map(stages);
       for (const home of frame.homes) {
         const known = stages.get(home.plotId);
         if (!known || rank(home.stage) > rank(known)) stages.set(home.plotId, home.stage);
@@ -51,9 +52,14 @@ export function createCeremonyLedger() {
         const key = beatKey(frame.kingdomId, beat);
         if (seen.has(key)) continue;
         remember(key);
+        if (beat.kind === 'home-grown') {
+          // An eligibility frame may already show the earned stage before its geometry commits; the committed beat is
+          // still owed. Only a beat at or below a stage this home was already celebrated at has nothing to celebrate.
+          const floor = celebrated.get(beat.plotId);
+          if (floor !== undefined && rank(beat.to) <= rank(floor)) continue;
+          celebrated.set(beat.plotId, beat.to);
+        }
         if (bootstrap) continue;
-        // A home beat that does not move this home forward from what was already shown has nothing to celebrate.
-        if (beat.kind === 'home-grown' && before.has(beat.plotId) && rank(beat.to) <= rank(before.get(beat.plotId)!)) continue;
         ceremonies.push({ key, beat, frame });
       }
       return { stages, ceremonies, accepted: true };

@@ -61,6 +61,23 @@ describe('the ceremony ledger', () => {
     expect(ledger.accept({ ...regressed, kingdomId: '999', sequence: regressed.sequence + 1 }).accepted).toBe(false);
   });
 
+  it('celebrates the committed geometry even when an eligibility frame already showed the stage', () => {
+    const ledger = createCeremonyLedger();
+    const grown = history.frames.findIndex(frame => frame.beats.some(beat => beat.kind === 'home-grown' && beat.to === 'cottage' && beat.plotId === 'plot:2025:9'));
+    for (const frame of history.frames.slice(0, grown)) ledger.accept(frame);
+    const committed = history.frames[grown]!;
+    // The eligibility frame: the home's stage is already cottage, but no beat has been committed yet.
+    expect(ledger.accept({ ...committed, beats: [] }).accepted).toBe(true);
+    expect(ledger.stage('plot:2025:9')).toBe('cottage');
+    const update = ledger.accept({ ...committed, sequence: committed.sequence + 1 });
+    expect(update.ceremonies.filter(c => c.beat.kind === 'home-grown' && c.beat.plotId === 'plot:2025:9')).toHaveLength(1);
+    // A later beat at the same stage with a new source sequence is not a second housewarming.
+    const beat = committed.beats.find(b => b.kind === 'home-grown' && b.plotId === 'plot:2025:9')!;
+    const again = ledger.accept({ ...committed, sequence: committed.sequence + 2, beats: [{ ...beat, sourceSeq: beat.sourceSeq + 1 }] });
+    expect(again.accepted).toBe(true);
+    expect(again.ceremonies).toEqual([]);
+  });
+
   it('keys a beat by kingdom, source sequence, kind and target', () => {
     const beat = history.frames.flatMap(frame => frame.beats).find(item => item.kind === 'home-grown')!;
     expect(beatKey('41960001', beat)).toBe(`41960001/${beat.sourceSeq}/home-grown/${beat.kind === 'home-grown' ? beat.plotId : ''}`);
