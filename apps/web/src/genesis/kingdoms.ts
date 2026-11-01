@@ -35,4 +35,5 @@ export interface GenesisKingdomComposition {
  */
 export const GENESIS_KINGDOMS: Readonly<Record<string, () => Promise<{ composeGenesisKingdom(input: GenesisKingdomInput): Promise<GenesisKingdomComposition> }>>> = {
   '4363967': () => import('./kingdoms/pinkkitty/index'),
+  '63920635': () => import('./kingdoms/aggman/index'),
 };
