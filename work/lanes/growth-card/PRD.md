@@ -6,8 +6,8 @@ Every task is done when focused tests, typecheck, lint and relevant build pass; 
 
 ## Tasks
 
-- [ ] **GCA01 — Home progress reads clearly on a card** · evidence: focused test and viewed card capture
-- [ ] **GCA02 — Earned shelf integrates without guessing** · evidence: disclosure/empty-state tests and viewed panel capture
+- [x] **GCA01 — Home progress reads clearly on a card** · evidence: focused test and viewed card capture
+- [x] **GCA02 — Earned shelf integrates without guessing** · evidence: disclosure/empty-state tests and viewed panel capture
 
 ## Backlog
 
