@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import type { VoxelRenderState } from '@chatdom/render';
-import type { ForgeRitualFrame, Vec3 } from '@chatdom/shared';
+import type { ForgeRitualFrame } from '@chatdom/shared';
+import { addForgeFlightHeat } from './flight-heat';
 import { createCodexEngraving } from './engraving';
 import { createAnvilHero } from './anvil-hero';
 import { createForgePresentation, type ForgePresentation } from './presentation';
 
 /** The stage owns its decorative resources; the voxel geometry and lighting textures remain with their callers. */
-export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderState, onFlight?: (frame: ForgeRitualFrame | null, position: Vec3 | null) => void) {
+export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderState, onFlight?: import('./presentation/stage').ForgePresentationOptions['onFlight']) {
   const effects = new THREE.Group(); scene.add(effects);
   let presentation: ForgePresentation | undefined, presenting = false;
   const root = new THREE.Group();
@@ -65,6 +66,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     vertexShader: source.vertexShader.replace('out float vLodFade;', 'out float vLodFade; out float vForgeLocalY;').replace('uint face=(aPacked>>18u)&7u;', 'vForgeLocalY=p.y*uScale; uint face=(aPacked>>18u)&7u;'),
     fragmentShader: source.fragmentShader.replace('out vec4 voxelColour;', 'out vec4 voxelColour; in float vForgeLocalY; uniform float uForgeReveal; uniform float uForgeHeat;').replace('void main(){\n      float threshold', 'void main(){\n      if(vForgeLocalY>uForgeReveal) discard;\n      float threshold').replace('gl_FragColor=vec4(colour,1.);', 'colour=mix(colour,vec3(3.1,.78,.08),uForgeHeat*.8);\n      gl_FragColor=vec4(colour,1.);'),
   });
+  const flightHeat=addForgeFlightHeat(ritualMaterial);
   materials.add(ritualMaterial);
   const empty = ownGeometry(new THREE.BufferGeometry());
   const piece = new THREE.Mesh(empty, ritualMaterial); piece.frustumCulled = false; root.add(piece); piece.visible = false;
@@ -87,7 +89,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     const clusters=['ᚠᚨᛃ','ᚱᛉᚷ','ᛗᛚᚲ','ᚢᛈᛇ','ᛟᛒᚹ','ᚺᛋᚦ','ᚲᚾᛖ','ᛃᚷᛏ'];
     clusters.forEach((glyphs,i)=>{const sprite=makeText(glyphs,'#e9c78e');sprite.userData.angle=i*Math.PI*2/clusters.length;wordsGroup.add(sprite);});
   }
-  function setPiece(geometry: THREE.BufferGeometry, bounds: THREE.Box3, landing?: THREE.Vector3) {
+  function setPiece(geometry: THREE.BufferGeometry, bounds: THREE.Box3, landing?: THREE.Vector3, landingYaw = 0) {
     presentation?.dispose(); presentation=undefined; presenting=false;
     piece.geometry = geometry; pieceBounds = bounds.clone();
     piece.rotation.set(0, 0, 0); piece.scale.set(1, 1, 1);
@@ -123,9 +125,10 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     const anvil=root.localToWorld(new THREE.Vector3(0,1.43,0));
     // The shared effect captures the real landing pose before it brings a clone to the anvil.
     const destination=landing??anvil;
-    piece.position.copy(root.worldToLocal(destination.clone()));piece.updateWorldMatrix(true,false);
-    presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:destination.toArray(),piece,...(onFlight ? {onFlight} : {})});
-    piece.position.copy(castingPosition);piece.updateWorldMatrix(true,false);
+    piece.position.copy(root.worldToLocal(destination.clone()));piece.rotation.y=landingYaw;piece.updateWorldMatrix(true,false);
+    // The host reports its final posed flight; suppress the legacy guessed trail here.
+    presentation=createForgePresentation({root:effects,anvil:anvil.toArray(),landing:destination.toArray(),piece,onFlight:onFlight??(()=>{})});
+    piece.position.copy(castingPosition);piece.rotation.y=0;piece.updateWorldMatrix(true,false);
   }
   /** The room's external casting owns its effects; it still heats this same physical stage. */
   function updateAnvil(frame: ForgeRitualFrame | null, shaping = false) {
@@ -136,8 +139,9 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     hero.update({time:orbitTime,heat,shaping});
   }
   function update(frame: ForgeRitualFrame | null, shaping = false) {
-    const early=frame?.phase==='words'||frame?.phase==='blueprint';
-    if(!early&&presenting){presentation?.update(null);piece.position.copy(castingPosition);piece.rotation.set(0,0,0);piece.scale.set(1,1,1);presenting=false;}
+    // Local previews use the same crucible, molten shell, seal and hammer as room castings.
+    const staged=frame!==null;
+    if(!staged&&presenting){presentation?.update(null);piece.position.copy(castingPosition);piece.rotation.set(0,0,0);piece.scale.set(1,1,1);presenting=false;}
     const orbitTime=frame?.elapsed??0;
     const t = frame?.phase==='words'?Math.min(2.99,orbitTime):orbitTime;
     const active = frame !== null;
@@ -157,7 +161,8 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     stamp.visible = active && t >= 11 && t < 15.5 && frame.source === 'simulated';
     piece.visible = active && t >= 5;
     ritualMaterial.uniforms.uForgeReveal!.value = t < 5 ? -1 : t < 11 ? THREE.MathUtils.lerp(pieceBounds.min.y, pieceBounds.max.y + .01, (t - 5) / 6) : pieceBounds.max.y + 1;
-    if(early&&presentation){presentation.update(frame);presenting=true;blueprint.visible=false;wordsGroup.visible=false;}
+    if(staged&&presentation){presentation.update(frame);presenting=true;blueprint.visible=false;wordsGroup.visible=false;hammer.visible=false;stamp.visible=false;}
+    flightHeat.update(frame);
     ritualMaterial.uniforms.uForgeHeat!.value = t < 5 ? 0 : t < 11 ? .55 : t < 12.7 ? 1 : Math.max(0, 1 - (t - 12.7) / 2.8);
   }
   function dispose() { presentation?.dispose();scene.remove(effects);engraving.dispose(); hero.dispose(); scene.remove(root); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); }

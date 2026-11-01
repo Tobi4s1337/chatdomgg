@@ -1,0 +1,156 @@
+/* The citizen card in the panel: a parchment page with a brass-arched portrait window, inked facts and small drawn
+   marks for what was earned. The turned-up corner at its foot shows the oxblood leather of the passport beneath, and
+   turning it lifts the whole page away from the left edge like a leaf. Prefixed `cpc-`. */
+
+.cpc { gap: 10px; }
+
+/* ---------- The face: portrait beside the name ---------- */
+
+.cpc-face { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 11px; align-items: start; }
+.cpc-portrait { margin: 0; display: grid; justify-items: center; gap: 4px; }
+.cpc-arch {
+  position: relative; display: block; width: 104px; height: 126px; overflow: hidden; border-radius: 52px 52px 4px 4px;
+  background: linear-gradient(135deg, #cfaaff, #b089f7 50%, #6a39e0);
+  box-shadow: 0 0 0 1px #3b2614, 0 0 0 3px #c69a5c, 0 0 0 4px #6a4c2b, 0 0 0 5px #24170e, 0 3px 8px 4px #3b241455;
+}
+/* The brass bezel catches the lamp at the top of the arch; the inner lip shades the picture's edge. */
+.cpc-arch::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 0 0 0 1px #fff1c866, inset 0 2px 3px #fff3cf40, inset 0 -6px 12px #2a124a40;
+}
+.cpc-arch img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; transform: scale(1.06); transform-origin: 50% 30%; }
+.cpc-arch-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px 10px 10px; text-align: center;
+  font: italic 400 11.5px/1.25 Alegreya, Georgia, serif; color: #f4ecff; background: linear-gradient(135deg, #8d6fc4, #4b2a8f); }
+.cpc-portrait-note { font: 700 11.5px/1.05 Alegreya, Georgia, serif; letter-spacing: .08em; text-transform: uppercase; color: #7a1d12; }
+
+.cpc-who { min-width: 0; padding-top: 3px; display: flex; flex-direction: column; gap: 2px; }
+.cp .cpc-name { margin: 0; display: flex; align-items: baseline; gap: 5px; font: 400 21px/1.02 'IM Fell English', Georgia, serif; color: #2a190c; overflow-wrap: anywhere; text-wrap: balance; }
+.cp .cpc-name.long { font-size: 17.5px; }
+.cpc-swatch { flex: none; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1px #2a190c; transform: translateY(-2px); }
+.cpc-standing { margin: 1px 0 0; font: 400 12px/1.15 'IM Fell English SC', Georgia, serif; letter-spacing: .07em; color: var(--ink-red); }
+.cpc-flourish { width: 100%; max-width: 132px; height: 8px; margin: 3px 0 2px; fill: none; stroke: #a8885a; stroke-width: 1; }
+.cpc-flourish circle { fill: #a8885a; stroke: none; }
+.cpc-facts { margin: 0; display: grid; gap: 4px; }
+.cpc-facts div { display: grid; gap: 0; }
+.cpc-facts dt { font: 400 11.5px/1.1 'IM Fell English SC', Georgia, serif; letter-spacing: .06em; color: #7b5b3e; }
+.cpc-facts dd { margin: 0; font: 400 15px/1.15 'IM Fell English', Georgia, serif; color: #2e1e13; font-variant-numeric: lining-nums; }
+.cpc-facts dd.unknown { font: italic 400 13px/1.2 Alegreya, Georgia, serif; color: var(--ink-soft); }
+
+/* ---------- Home ---------- */
+
+.cpc-home { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 9px 0 0; border-top: 1px solid #a8885a66; }
+.cpc-home-picture { display: block; width: 76px; height: 56px; border-radius: 2px; overflow: hidden; box-shadow: 0 0 0 1px #20140c, 0 0 0 2px #a98250, 0 0 0 3px #3b2717; }
+.cpc-home-picture img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 42% 60%; }
+.cpc-home-words { min-width: 0; display: grid; gap: 1px; }
+.cpc-home-name { margin: 0; font: 400 16px/1.1 'IM Fell English', Georgia, serif; color: #2e1e13; overflow-wrap: anywhere; }
+.cpc-home-line { margin: 0; font: 400 12px/1.2 'IM Fell English SC', Georgia, serif; letter-spacing: .05em; color: #5a3d22; overflow-wrap: anywhere; }
+.cpc-home-place { margin: 0; font: italic 400 12px/1.25 Alegreya, Georgia, serif; color: var(--ink-soft); }
+.cpc-home-window { margin: 1px 0 0; font: 400 12px/1.2 Alegreya, Georgia, serif; color: #6c4a1c; }
+.cpc-home-window::before { content: ''; display: inline-block; width: 6px; height: 7px; margin-right: 5px; border-radius: 1px; vertical-align: 0;
+  background: linear-gradient(#ffd98c, #f2a648); box-shadow: 0 0 0 1px #6a4c2b, 0 0 5px #ffb75b; }
+.cp[data-light]:not([data-light='lit']) .cpc-home-window::before { background: #3c3a4c; box-shadow: 0 0 0 1px #6a4c2b; }
+.cpc-elsewhere { margin: -3px 0 0; font: italic 400 12px/1.3 Alegreya, Georgia, serif; color: var(--ink-soft); }
+.cpc-elsewhere-name { font-style: normal; color: #3b2a1e; }
+
+/* ---------- Earned, and worn; keepsakes ---------- */
+
+.cpc-worn, .cpc-keepsakes { padding-top: 8px; border-top: 1px solid #a8885a66; }
+.cpc-worn ul, .cpc-keepsakes ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.cpc-worn li, .cpc-keepsakes li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: center; }
+.cpc-mark { width: 30px; height: 30px; filter: drop-shadow(0 1px 0 #fff4d688) drop-shadow(0 1px 1px #3b241466); }
+.cpc-keepsake-arms { justify-self: center; filter: drop-shadow(0 1px 1px #3b241466); }
+.cpc-worn-words { min-width: 0; display: grid; gap: 0; }
+.cpc-worn-words strong { font: 400 14px/1.15 'IM Fell English', Georgia, serif; color: #2e1e13; overflow-wrap: anywhere; }
+.cpc-worn-words small { font: italic 400 12px/1.25 Alegreya, Georgia, serif; color: var(--ink-soft); overflow-wrap: anywhere; }
+
+/* ---------- The corner: the passport waits under the page ---------- */
+
+.cp-drawer[data-card='true'] .cp-drawer-page { padding-bottom: 66px; mask-image: linear-gradient(#000 calc(100% - 58px), transparent calc(100% - 26px)); -webkit-mask-image: linear-gradient(#000 calc(100% - 58px), transparent calc(100% - 26px)); }
+.cpc-corner {
+  position: absolute; z-index: 3; right: 0; bottom: 0; width: 168px; height: 58px; padding: 0; border: 0; cursor: pointer; background: none;
+  display: block; font: inherit; text-align: left; border-radius: 0 0 3px 0; overflow: hidden;
+}
+/* The leather of the book under the page: oxblood, gilt rule, a glimpse of the emblem. */
+.cpc-corner-leather {
+  position: absolute; right: 0; bottom: 0; width: 58px; height: 58px;
+  background: radial-gradient(circle at 70% 75%, #9c3a2a, #6d2117 55%, #3e110b);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  box-shadow: inset 0 0 12px #000a;
+}
+.cpc-corner-leather i { position: absolute; right: 8px; bottom: 8px; width: 34px; height: 34px; border-right: 1px solid #e3b955aa; border-bottom: 1px solid #e3b955aa;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+.cpc-corner-leather i::after { content: ''; position: absolute; right: 7px; bottom: 7px; width: 7px; height: 7px; transform: rotate(45deg); background: #e3b955cc; }
+/* The page's corner, lifted: the back of the parchment, lit at its fold, casting a shadow on the leather. */
+.cpc-corner::before {
+  content: ''; position: absolute; right: 0; bottom: 0; width: 58px; height: 58px; z-index: 1;
+  background: linear-gradient(315deg, transparent 49.2%, #8c6a44 49.6%, #d9c095 52%, #f5e8c8 68%, #e7d3a6);
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  filter: drop-shadow(-2px -1px 2px #3b241477);
+  transition: transform .25s cubic-bezier(.3, .7, .3, 1);
+  transform-origin: 0 0;
+}
+.cpc-corner::after { content: ''; position: absolute; right: 0; bottom: 0; width: 58px; height: 58px; z-index: 0;
+  background: linear-gradient(315deg, #000a, transparent 60%); clip-path: polygon(100% 0, 100% 100%, 0 100%); opacity: .5; }
+.cpc-corner-words { position: absolute; right: 64px; bottom: 9px; display: grid; justify-items: end; gap: 1px; white-space: nowrap; }
+.cpc-corner-words strong { font: 400 15px/1 'IM Fell English', Georgia, serif; color: var(--ink-red); }
+.cpc-corner-words small { font: italic 400 12px/1.1 Alegreya, Georgia, serif; color: var(--ink-soft); }
+.cpc-corner-words small::after { content: ' ›'; font-style: normal; }
+.cpc-corner:hover::before, .cpc-corner:focus-visible::before { transform: scale(1.12); }
+.cpc-corner:active::before { transform: scale(1.2); }
+.cpc-corner:focus-visible { outline: 2px solid var(--ink-red); outline-offset: -3px; }
+
+/* ---------- The turn: the card page lifts from its left edge and swings away over the book ---------- */
+
+.cp-book-layer { position: absolute; inset: 0; z-index: 4; }
+.cp-book-layer[data-book='opening'] { animation: cpc-book-in .5s ease-out both; }
+.cp-book-layer[data-book='closing'] { animation: cpc-book-in .5s ease-in reverse both; }
+@keyframes cpc-book-in { from { filter: brightness(.55); } }
+.cp-drawer[data-book='opening'], .cp-drawer[data-book='closing'] { transform-origin: 0 50%; backface-visibility: hidden; will-change: transform; }
+.cp-drawer[data-book='opening'] { animation: cpc-turn-away .56s cubic-bezier(.42, .02, .28, 1) both; }
+.cp-drawer[data-book='closing'] { animation: cpc-turn-away .52s cubic-bezier(.42, .02, .28, 1) reverse both; }
+.cp-drawer[data-book='opening']::after, .cp-drawer[data-book='closing']::after {
+  content: ''; position: absolute; inset: 0; z-index: 9; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(90deg, #0000, #0000 30%, #2a160b88); animation: cpc-turn-shade .56s ease-in both;
+}
+.cp-drawer[data-book='closing']::after { animation-direction: reverse; }
+@keyframes cpc-turn-away {
+  0% { transform: perspective(820px) rotateY(0deg); }
+  100% { transform: perspective(820px) rotateY(-98deg); }
+}
+@keyframes cpc-turn-shade { from { opacity: 0; } to { opacity: 1; } }
+.cp[data-book='open'] .cp-nav, .cp[data-book='open'] .cp-head { visibility: hidden; }
+
+/* ---------- "There you are": the portrait as a small coin on the lit plate ---------- */
+
+.cp-light-button.has-coin { grid-template-columns: 38px minmax(0, 1fr) 42px; }
+.cp-coin { position: relative; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; justify-self: end;
+  background: linear-gradient(135deg, #cfaaff, #6a39e0);
+  box-shadow: 0 0 0 1px #3b2614, 0 0 0 2.5px #c69a5c, 0 0 0 3.5px #4a3220, 0 2px 4px #0007; }
+.cp-coin img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; transform: scale(1.3); transform-origin: 50% 28%; }
+.cp-coin::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 1px #fff1c866, inset 0 -4px 7px #2a124a44; }
+.cp-light-button.resting .cp-coin img { filter: saturate(.7) brightness(.9); }
+
+@container cp (min-width: 340px) {
+  .cpc-face { grid-template-columns: 128px minmax(0, 1fr); gap: 14px; }
+  .cpc-arch { width: 128px; height: 156px; border-radius: 64px 64px 4px 4px; }
+  .cp .cpc-name { font-size: 25px; }
+  .cp .cpc-name.long { font-size: 20px; }
+  .cpc-standing { font-size: 13.5px; }
+  .cpc-facts dt { font-size: 12.5px; }
+  .cpc-facts dd { font-size: 17px; }
+  .cpc-home-name { font-size: 18px; }
+  .cpc-home-line, .cpc-home-place, .cpc-home-window, .cpc-elsewhere { font-size: 13.5px; }
+  .cpc-worn-words strong { font-size: 15.5px; }
+  .cpc-worn-words small { font-size: 13px; }
+  .cpc-corner { width: 196px; height: 66px; }
+  .cpc-corner-words { right: 72px; bottom: 11px; }
+  .cpc-corner-words strong { font-size: 17px; }
+  .cpc-corner-words small { font-size: 13px; }
+  .cp-drawer[data-card='true'] .cp-drawer-page { padding-bottom: 76px; }
+  .cp-coin { width: 46px; height: 46px; }
+  .cp-light-button.has-coin { grid-template-columns: 38px minmax(0, 1fr) 48px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-drawer[data-book], .cp-book-layer[data-book] { animation: none !important; }
+}

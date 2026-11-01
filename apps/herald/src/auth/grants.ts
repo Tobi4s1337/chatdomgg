@@ -4,12 +4,12 @@
  * never from holding the app secret.
  */
 export const READER_SCOPES = ['user:bot', 'user:read:chat', 'user:write:chat'] as const;
-export const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters'] as const;
+export const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train'] as const;
 export const HERALD_SCOPES: readonly string[] = [...READER_SCOPES, ...BROADCASTER_SCOPES];
 
 export type Role = 'reader' | 'broadcaster';
-export type Capability = 'chat' | 'chatters' | 'stream' | 'revocation';
-export const CAPABILITIES: readonly Capability[] = ['chat', 'chatters', 'stream', 'revocation'];
+export type Capability = 'chat' | 'chatters' | 'stream' | 'revocation' | 'bits' | 'hype';
+export const CAPABILITIES: readonly Capability[] = ['chat', 'chatters', 'stream', 'revocation', 'bits', 'hype'];
 
 export const ROLE_SCOPES: Readonly<Record<Role, readonly string[]>> = { reader: READER_SCOPES, broadcaster: BROADCASTER_SCOPES };
 
@@ -23,6 +23,10 @@ const REQUIREMENTS: Readonly<Record<Capability, ReadonlyArray<{ readonly role: R
   stream: [],
   // user.authorization.revoke is conditioned on the client ID alone.
   revocation: [],
+  // channel.bits.use: cheers and Power-ups, the sky's answer.
+  bits: [{ role: 'broadcaster', scopes: ['bits:read'] }],
+  // channel.hype_train.begin/progress/end v2: the festival train and the dragon.
+  hype: [{ role: 'broadcaster', scopes: ['channel:read:hype_train'] }],
 };
 
 export type AccountState = 'resolved' | 'not_designated' | 'not_found' | 'unchecked';

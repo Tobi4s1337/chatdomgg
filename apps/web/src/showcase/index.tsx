@@ -4,13 +4,14 @@ import { GENESIS_CHANNELS } from '../genesis/channels';
 
 type Place = { number: string; title: string; description: string; status: 'LIVE' | 'SIMULATED' | 'RECORDED' | 'UNAVAILABLE'; href?: string; action?: string };
 const places: Place[] = [
-  { number: '01', title: 'Walk the kingdom', description: 'Enter the real realm and explore its streets as a visitor.', status: 'LIVE', href: '/?walk=1&kingdom=129634568', action: 'Walk in' },
-  { number: '02', title: 'On stream', description: 'See the real realm through its stream-facing camera.', status: 'LIVE', href: '/stream?source=realm&kingdom=129634568', action: 'Watch the realm' },
-  { number: '03', title: 'The Forge', description: 'Try shaping a house piece in the simulated kingdom.', status: 'SIMULATED', href: '/?forge=1', action: 'Visit the Forge' },
-  { number: '04', title: 'The Atlas', description: 'Explore Twitch from the recorded Surveyor snapshot of 30 October.', status: 'RECORDED', href: '/map', action: 'Open the map' },
-  { number: '05', title: 'The panel', description: 'See a simulated night in the panel made for Twitch.', status: 'SIMULATED', href: '/panel?source=simulated', action: 'Open the panel' },
-  { number: '06', title: 'The Chronicle', description: 'The kingdom’s remembered moments have no public page yet.', status: 'UNAVAILABLE' },
-  { number: '07', title: 'Make your citizen', description: 'Find a look that feels like you, with hair, clothes and earned keepsakes.', status: 'SIMULATED', href: '/-/avatar-builder', action: 'Make your citizen' },
+  { number: '01', title: 'On stream', description: 'See the real realm through its stream-facing camera.', status: 'LIVE', href: '/stream?source=realm&kingdom=129634568', action: 'Watch the realm' },
+  { number: '02', title: 'The evening begins', description: 'Watch chat light the town, then follow the lanterns home.', status: 'SIMULATED', href: '/stream?source=simulated&tier=town&hour=19.5&seam=starting', action: 'Watch the homecoming' },
+  { number: '03', title: 'Walk the kingdom', description: 'Enter the real realm and explore its streets as a visitor.', status: 'LIVE', href: '/?walk=1&kingdom=129634568', action: 'Walk in' },
+  { number: '04', title: 'The Forge', description: 'Try shaping a house piece in the simulated kingdom.', status: 'SIMULATED', href: '/?forge=1', action: 'Visit the Forge' },
+  { number: '05', title: 'The Atlas', description: 'Explore Twitch from the recorded Surveyor snapshot of 30 October.', status: 'RECORDED', href: '/map', action: 'Open the map' },
+  { number: '06', title: 'The panel', description: 'See a simulated night in the panel made for Twitch.', status: 'SIMULATED', href: '/panel?source=simulated', action: 'Open the panel' },
+  { number: '07', title: 'The Chronicle', description: 'The kingdom’s remembered moments have no public page yet.', status: 'UNAVAILABLE' },
+  { number: '08', title: 'Make your citizen', description: 'Find a look that feels like you, with hair, clothes and earned keepsakes.', status: 'SIMULATED', href: '/-/avatar-builder', action: 'Make your citizen' },
 ];
 
 const kingdoms = [

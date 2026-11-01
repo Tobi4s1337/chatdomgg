@@ -32,7 +32,7 @@ const v3 = (p: Vec3) => new THREE.Vector3(p[0], p[1], p[2]);
 export const giftBlueprints = giftParts;
 
 /** A polyline sampled by arc length, extended straight past either end so a pony can lead a cart off the map edge. */
-class Path {
+export class Path {
   private readonly points: THREE.Vector3[];
   private readonly lengths: number[] = [0];
   constructor(points: readonly Vec3[]) {

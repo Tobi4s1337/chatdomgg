@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { MAT, MATERIALS } from '@chatdom/content';
 import type { Vec3, VoxelBlueprint } from '@chatdom/shared';
 import { clothCell, type BannerKit } from './banner';
+import { createAuroraCurtains } from './aurora';
+import { createSkyVeil } from './sky-veil';
+import { createViewer } from './viewer';
 import { skyText, type SkyText } from './sky-font';
 import {
   POWER_UP_BEAT, RUNG_RANK, SKY_BEAT, SKY_LIMITS, hash01, type ApprovedEffect, type SkyBeatFrame, type SkyOrigin, type SpectacleLayer,
@@ -20,9 +23,12 @@ import {
  * frames. Both pools share SKY_LIMITS.motes: beats are drawn highest rung first, so a crowded sky thins the small
  * cheers before it ever cuts a name or an emote in half.
  *
- * Facing: images (emotes, the kingdom's star and crest, the name) are drawn on a vertical plane facing "the town's
- * front": the horizontal direction from the castle crown toward the sky's centre, which is where the castle is
- * seen from. Without both places it faces +z.
+ * Facing: images (emotes, the kingdom's star and crest, the name) are drawn on a vertical plane facing the viewer,
+ * and the aurora hangs on the far side of the town from them. The viewer is where the picture is taken from: the
+ * camera that last drew this layer, read when a moment begins and held until the sky is quiet again, so a director
+ * move or a drifting hero view never swings a name mid-word. Before any camera has drawn it, it is "the town's
+ * front": the horizontal direction from the castle crown toward the sky's centre, where the castle is seen from.
+ * Without both places it faces +z.
  */
 
 type RGB = readonly [number, number, number];
@@ -73,20 +79,19 @@ const WARM: RGB = tuple(new THREE.Color('#fff1cf'));
 const KIT_HUES: Record<BannerKit, readonly number[]> = { hearth: [MAT.fabricRed, MAT.fabricGold], tide: [MAT.fabricBlue, MAT.cream] };
 const SHELL_HUES = [MAT.fabricGold, MAT.fabricRed, MAT.fabricBlue, MAT.petal, MAT.cream, MAT.fabricGreen, MAT.fabricViolet, MAT.fabricOrange] as const;
 const CONFETTI = [MAT.fabricRed, MAT.fabricGold, MAT.fabricBlue, MAT.fabricGreen, MAT.petal, MAT.cream, MAT.fabricViolet, MAT.fabricOrange] as const;
-/** Aurora curtains, hem to crown: green and teal low, violet and rose where the light thins. Sampled as a ramp. */
-const AURORA = [
-  [MAT.skinFeyMoss, MAT.fabricGreen, MAT.fabricGreen, MAT.fabricViolet],
-  [MAT.fabricGreen, MAT.fabricGreen, MAT.waterbed, MAT.petal],
-  [MAT.waterbed, MAT.fabricGreen, MAT.fabricViolet, MAT.petal],
-] as const;
 /**
- * A curtain's vertical profile, hem to crown: each layer's share of the strip's height and its light. The hem is
- * thin and bright, the body thins upward into a long faint crown. Every point of a curtain is covered by two
- * neighbouring strips, so these are half the light a single strip would carry.
+ * Aurora curtains, hem to crown: a pale green hem, green and teal in the body, violet and rose where the light thins
+ * at the top. The first curtain is the brightest and greenest; the far ones lean violet.
  */
-const AURORA_LAYERS = [[0.06, 0.2], [0.14, 0.12], [0.2, 0.08], [0.26, 0.045], [0.34, 0.02]] as const;
-/** Strips per curtain at most: three curtains of five layers stay near 800 motes, leaving the name and shells room. */
-const AURORA_STRIPS = 52;
+const auroraPalette = (hem: number, body: number, crown: number, tip: number, lift = 0.1) => {
+  const colour = (id: number) => new THREE.Color().setRGB(...L(id));
+  return { hem: colour(hem).lerp(new THREE.Color(1, 1, 1), lift), body: colour(body), crown: colour(crown), tip: colour(tip) };
+};
+const AURORA_PALETTES = [
+  auroraPalette(MAT.skinFeyMoss, MAT.fabricGreen, MAT.fabricViolet, MAT.petal),
+  auroraPalette(MAT.fabricGreen, MAT.waterbed, MAT.fabricViolet, MAT.petal, 0.06),
+  auroraPalette(MAT.waterbed, MAT.fabricGreen, MAT.fabricViolet, MAT.petal, 0.04),
+] as const;
 
 // ---------------------------------------------------------------- small maths
 
@@ -100,10 +105,6 @@ const mix = (a: RGB, b: RGB, k: number): P3 => [a[0] + (b[0] - a[0]) * k, a[1] +
 const vnoise = (seed: number, x: number) => { const i = Math.floor(x), k = smooth(0, 1, x - i); return rnd(seed, i) * (1 - k) + rnd(seed, i + 1) * k; };
 /** Three octaves of it, 0..1, so a silhouette is irregular at every scale but never jittery. */
 const fbm = (seed: number, x: number) => 0.57 * vnoise(seed, x) + 0.29 * vnoise(seed + 1, x * 2.13 + 7.1) + 0.14 * vnoise(seed + 2, x * 4.37 + 3.3);
-const ramp = (stops: readonly RGB[], u: number): P3 => {
-  const x = clamp01(u) * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(x));
-  return mix(stops[i]!, stops[i + 1]!, x - i);
-};
 /** Cooling from white-gold through orange to a dull red ember, 0..1. */
 const ember = (k: number): P3 => (k < 0.5 ? mix(mix(WARM, L(MAT.goldLeaf), 0.5), L(MAT.fabricOrange), k * 2) : mix(L(MAT.fabricOrange), L(MAT.fabricRed), (k - 0.5) * 2));
 
@@ -114,6 +115,8 @@ class Motes {
   readonly paper: THREE.InstancedMesh;
   lit = 0;
   sheets = 0;
+  /** Every mote's size is multiplied by this: a shell drawn far from the viewer is drawn larger, never more of them. */
+  grain = 1;
   private readonly matrix = new THREE.Matrix4();
   private readonly position = new THREE.Vector3();
   private readonly scale = new THREE.Vector3();
@@ -123,7 +126,7 @@ class Motes {
     this.paper = pooled(geometry, paperMaterial, PAPER_CAP);
   }
   room(): number { return Math.max(0, SKY_LIMITS.motes - this.lit - this.sheets); }
-  begin(): void { this.lit = 0; this.sheets = 0; }
+  begin(): void { this.lit = 0; this.sheets = 0; this.grain = 1; }
   /** One axis-aligned box of light; colours are premultiplied by brightness. Returns false when the sky is full. */
   box(x: number, y: number, z: number, sx: number, sy: number, sz: number, c: RGB, k: number): boolean {
     const r = c[0] * k, g = c[1] * k, b = c[2] * k;
@@ -131,7 +134,8 @@ class Motes {
     if (this.lit >= LIGHT_CAP || this.room() <= 0) return false;
     const i = this.lit++, m = this.light.instanceMatrix.array as Float32Array, o = i * 16, col = this.light.instanceColor!.array as Float32Array;
     m.fill(0, o, o + 16);
-    m[o] = sx; m[o + 5] = sy; m[o + 10] = sz; m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
+    const w = this.grain;
+    m[o] = sx * w; m[o + 5] = sy * w; m[o + 10] = sz * w; m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
     col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b;
     return true;
   }
@@ -143,7 +147,8 @@ class Motes {
     const i = this.lit++, m = this.light.instanceMatrix.array as Float32Array, o = i * 16, col = this.light.instanceColor!.array as Float32Array;
     const cos = Math.cos(yaw), sin = Math.sin(yaw);
     m.fill(0, o, o + 16);
-    m[o] = cos * sx; m[o + 2] = sin * sx; m[o + 5] = sy; m[o + 8] = -sin * sz; m[o + 10] = cos * sz;
+    const w = this.grain;
+    m[o] = cos * sx * w; m[o + 2] = sin * sx * w; m[o + 5] = sy * w; m[o + 8] = -sin * sz * w; m[o + 10] = cos * sz * w;
     m[o + 12] = x; m[o + 13] = y; m[o + 14] = z; m[o + 15] = 1;
     col[i * 3] = r; col[i * 3 + 1] = g; col[i * 3 + 2] = b;
     return true;
@@ -153,7 +158,7 @@ class Motes {
     if (sx <= 0.005) return true;
     if (this.sheets >= PAPER_CAP || this.room() <= 0) return false;
     const i = this.sheets++;
-    this.paper.setMatrixAt(i, this.matrix.compose(this.position.set(p[0], p[1], p[2]), q, this.scale.set(sx, sy, sz)));
+    this.paper.setMatrixAt(i, this.matrix.compose(this.position.set(p[0], p[1], p[2]), q, this.scale.set(sx, sy, sz).multiplyScalar(this.grain)));
     this.paper.setColorAt(i, this.colour.setRGB(c[0] * k, c[1] * k, c[2] * k));
     return true;
   }
@@ -293,6 +298,11 @@ interface Shell {
   readonly image: Pixels | null;
 }
 const RISE_TRAIL = 8;
+/**
+ * Metres per cell of the name in sparks: the name spans up to 1.6 sky radii (at most 120 m) so it reads at a glance on
+ * a 1080p stream from the town's own views, with cells between 0.32 and 2.8 m for very long and very short names.
+ */
+const namePitch = (radius: number, cells: number): number => Math.min(2.8, Math.max(0.32, Math.min(radius * 1.6, 120) / Math.max(1, cells)));
 const UP = new THREE.Vector3(0, 1, 0);
 
 /**
@@ -300,7 +310,7 @@ const UP = new THREE.Vector3(0, 1, 0);
  * festival's closing volley, the celebration's confetti and the bubble's shimmer; every other kind is left to its
  * own layer.
  */
-export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost): SpectacleLayer<readonly SkyBeatFrame[]> & { glow(): { colour: [number, number, number]; strength: number } } {
+export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost): SpectacleLayer<readonly SkyBeatFrame[]> & { glow(): { colour: [number, number, number]; strength: number; night: number } } {
   const group = new THREE.Group();
   group.name = 'sky-light';
   root.add(group);
@@ -310,6 +320,11 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
   const motes = new Motes(geometry, lightMaterial, paperMaterial);
   motes.light.renderOrder = 5;
   group.add(motes.paper, motes.light);
+  const curtains = createAuroraCurtains(group, 3);
+  const veil = createSkyVeil(group);
+  const viewer = createViewer(group);
+  let facing: [number, number] | null = null;
+  let auroraDrawn = false, veilGlow = 0, veilToward: [number, number] = [0, -1], veilColour: [number, number, number] = [0, 0, 0];
 
   const star = kingdomStar(host.kit), crest = kingdomCrest(host.kit);
   /** Rasterized emotes by exact id and revision; a handful at most are live at once. */
@@ -318,7 +333,7 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
   const q = new THREE.Quaternion(), euler = new THREE.Euler();
   const p: P3 = [0, 0, 0], p2: P3 = [0, 0, 0];
   let glowSum = [0, 0, 0], glowWeight = 0, live = 0, columns = 0;
-  let lastGlow: { colour: [number, number, number]; strength: number } = { colour: [0, 0, 0], strength: 0 };
+  let lastGlow: { colour: [number, number, number]; strength: number; night: number } = { colour: [0, 0, 0], strength: 0, night: 0 }, night = 0;
 
   const addGlow = (c: RGB, w: number) => { if (w <= 0) return; glowWeight += w; glowSum = [glowSum[0]! + c[0] * w, glowSum[1]! + c[1] * w, glowSum[2]! + c[2] * w]; };
   const hues = (seed: number, count: number): RGB[] => {
@@ -467,13 +482,15 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
     if (motes.room() < image.cells.length + halo) return drawPeony(s, b);
     const life = s.life, pitch = Math.min(0.7, Math.max(0.36, 10 / image.size)), size = pitch * 0.84, hold = life * 0.58;
     const fall = Math.max(0, b - hold) / 1000, dy = -0.75 * fall * fall, spread = 1 + 0.06 * fall, end = 1 - smooth(life * 0.55, life, b);
+    // Spacing follows the motes' grain (their size already does), so a picture drawn far away is larger, not looser.
+    const g = motes.grain;
     image.cells.forEach((cell, i) => {
       const delay = Math.hypot(cell.x, cell.y) * 28, k = clamp01((b - delay) / 520), e = easeBack(k);
-      const along = cell.x * pitch * e * spread, upward = cell.y * pitch * e;
+      const along = cell.x * pitch * g * e * spread, upward = cell.y * pitch * g * e;
       const heat = 1 - smooth(delay, delay + 340, b), flick = b > hold ? (rnd(s.seed + i, Math.floor(b / 80)) > 0.3 ? 1 : 0.3) : 1;
       motes.box(s.to[0] + st.rx * along, s.to[1] + upward + dy, s.to[2] + st.rz * along, size, size, size, mix(cell.c, WARM, heat * 0.8), smooth(delay, delay + 120, b) * end * flick);
     });
-    const reachR = image.size * pitch * 0.72, haloFade = 1 - smooth(life * 0.2, life * 0.55, b), gold = L(MAT.fabricGold);
+    const reachR = image.size * pitch * g * 0.72, haloFade = 1 - smooth(life * 0.2, life * 0.55, b), gold = L(MAT.fabricGold);
     for (let i = 0; i < halo; i++) {
       const a = (i / halo) * Math.PI * 2 + rnd(s.seed, 9), reach = reachR * (1 - Math.exp(-b / 200)) * (0.9 + 0.2 * rnd(s.seed, 100 + i));
       const lift = Math.sin(a) * reach - 0.6 * (b / 1000) ** 2, side = Math.cos(a) * reach;
@@ -556,18 +573,23 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
     const B = SKY_BEAT['castle-volley'], castle = st.castle;
     if (!castle || f.t > B.end) return false;
     const emote = f.effect ? emoteImage(f.effect) : null, fan = [0, -1, 1, -2, 2, -3, 3] as const;
+    // A castle far across the town from the viewer fires larger, higher, wider-spaced shells, so the volley still
+    // fills the sky over it from the stream's own views.
+    const k = reachOf(castle.crown);
     let drawn = false;
     B.launches.forEach((launch, i) => {
       // Pictures are about 10 m across, so neighbours in the fan stand a picture apart.
-      const lat = fan[i]! * 9.5, c = castle.crown, y = bandY(st, c[1] + 9, c[1] + 30, 0.3 + (0.7 * i) / 6);
+      const lat = fan[i]! * 9.5 * k, c = castle.crown, y = bandY(st, c[1] + 9 * k, c[1] + 30 * k, 0.3 + (0.7 * i) / 6);
       const aim: P3 = [c[0] + st.rx * lat + st.fx * 2, y, c[2] + st.rz * lat + st.fz * 2];
       // Each shell leaves from the wall point nearest its place in the fan; the crown when no walls are supplied.
       const from = castle.walls.reduce<Vec3>((best, w) => (Math.hypot(w[0] - aim[0], w[2] - aim[2]) < Math.hypot(best[0] - aim[0], best[2] - aim[2]) ? w : best), castle.walls[0] ?? c);
       const image = f.effect ? emote : i % 2 === 0 ? star : crest;
+      motes.grain = k;
       drawn = drawShell({
         launch, fuse: B.fuse, life: B.burst, from: [from[0], from[1], from[2]], to: aim, pattern: image ? 'image' : 'peony',
-        hues: hues(f.seed + i * 131, 3), seed: f.seed + i * 11, radius: 6.5, stars: 56, image,
+        hues: hues(f.seed + i * 131, 3), seed: f.seed + i * 11, radius: 6.5 * k, stars: 56, image,
       }, f.t, st) || drawn;
+      motes.grain = 1;
     });
     return drawn;
   }
@@ -607,14 +629,14 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
     if (t < n0 || t > n3 || !f.name.trim()) return false;
     const text = layout(f.name);
     if (!text.cells.length) return false;
-    const pitch = Math.min(0.95, Math.max(0.32, Math.min(radius * 1.6, 70) / Math.max(1, text.width))), size = pitch * 0.8;
+    const pitch = namePitch(radius, text.width), size = pitch * 0.8;
     // The lowest line clears the keep by a few metres, whatever the sky's ceiling.
     const centre: P3 = [at[0], Math.max(at[1], above + (text.height * pitch) / 2), at[2]];
     const gold = mix(L(MAT.fabricGold), WARM, 0.15), cream = mix(L(MAT.cream), WARM, 0.5), last = Math.max(1, text.glyphs - 1);
     text.cells.forEach((cell, i) => {
       const delay = (cell.glyph / last) * 700, ta = n0 + delay * 0.5, tb = n1 + delay;
       if (t < ta) return;
-      const sd = f.seed + i * 17, theta = rnd(sd, 1) * 6.283, cosPhi = rnd(sd, 2) * 2 - 1, sinPhi = Math.sqrt(1 - cosPhi * cosPhi), dist = 6 + rnd(sd, 3) * 10;
+      const sd = f.seed + i * 17, theta = rnd(sd, 1) * 6.283, cosPhi = rnd(sd, 2) * 2 - 1, sinPhi = Math.sqrt(1 - cosPhi * cosPhi), dist = (6 + rnd(sd, 3) * 10) * Math.max(1, pitch);
       const tx = centre[0] + st.rx * cell.x * pitch, ty = centre[1] + cell.y * pitch, tz = centre[2] + st.rz * cell.x * pitch;
       const sx = tx + Math.cos(theta) * sinPhi * dist, sy = ty + cosPhi * dist, sz = tz + Math.sin(theta) * sinPhi * dist, swirl = (rnd(sd, 4) - 0.5) * 3;
       const flight = (kk: number, out: P3): P3 => {
@@ -638,58 +660,58 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
   }
 
   /**
-   * Three curtains of light behind the castle. Each is a band of overlapping strips along a folded path: slow
-   * S-folds bend it toward and away from the town (where the path turns into the line of sight the strips stack
-   * into a bright fold), its hem ripples, its height rises and falls irregularly along its length and fine rays
-   * drift through it. It unrolls from one end and rolls away from the same end; while the name is written the
-   * curtains behind it dip and hush so the sparks stay legible.
+   * Three curtains of light behind the castle, each one continuous shaded ribbon (aurora.ts) laid along a folded
+   * path: slow S-folds bend it toward and away from the town (where the path turns into the line of sight the
+   * ribbon overlaps itself into a bright pleat), its hem ripples, its height rises and falls irregularly along its
+   * length, and the rays drift through it in the shader. It unrolls from one end and rolls away from the same end;
+   * while the name is written the curtains behind it dip and hush so the sparks stay legible. Only one Skyfire's
+   * curtains are drawn at a time (the controller merges cheers into one beat anyway).
    */
   function aurora(f: SkyBeatFrame, sky: NonNullable<Stage['sky']>, st: Stage): boolean {
     const [a0, a1, a2, a3] = SKY_BEAT.skyfire.aurora, [n0, n1, n2, n3] = SKY_BEAT.skyfire.name, t = f.t;
-    if (t < a0 || t > a3) return false;
+    if (t < a0 || t > a3 || auroraDrawn) return false;
+    auroraDrawn = true;
     const unroll = smooth(a0, a1, t), away = smooth(a2, a3, t), back = Math.atan2(-st.fz, -st.fx);
     // The name's reach across the curtains, as an angle about the sky's centre (its half-width, widened for
     // perspective: the name is written nearer the town than the curtains hang).
     const text = f.name.trim() ? layout(f.name) : null, radius = sky.radius;
-    const pitch = text ? Math.min(0.95, Math.max(0.32, Math.min(radius * 1.6, 70) / Math.max(1, text.width))) : 0;
+    const pitch = text ? namePitch(radius, text.width) : 0;
     const hush = text ? smooth(n0, n1, t) * (1 - smooth(n2, n3, t)) : 0, reach = text ? (text.width * pitch * 0.75) / (radius * 0.9) : 0;
-    let drawn = false;
+    const n = curtains.columns, palette = AURORA_PALETTES[0];
+    veilGlow = 0.3 * unroll * (1 - away);
+    veilToward = [Math.cos(back), Math.sin(back)];
+    // The body's green, not the near-white hem: low over the hills it should tint the dusk, not grey it.
+    veilColour = [palette.body.r * 0.55, palette.body.g * 0.55, palette.body.b * 0.55];
     for (let c = 0; c < 3; c++) {
       const sd = f.seed * 7 + 401 + c * 97, drift = t * 0.00011;
       // Wide, behind the castle, the three overlapping: they frame the town from the back.
       const alpha = back + [-0.55, 0.05, 0.6][c]! + (rnd(f.seed, 40 + c) - 0.5) * 0.3, half = 0.88 + 0.14 * c;
-      const rad = radius * (0.78 + 0.15 * c), base = sky.centre[1] + sky.ceiling * (0.58 + 0.06 * c), tall = sky.ceiling * (0.85 + 0.3 * rnd(f.seed, 45 + c));
-      const arc = rad * 2 * half, n = Math.min(AURORA_STRIPS, Math.max(30, Math.round(arc))), width = (arc / n) * 2, forward = rnd(f.seed, 50 + c) < 0.5;
-      const grad = AURORA[c]!.map(L);
-      for (let j = 0; j < n; j++) {
+      const rad = radius * (0.78 + 0.15 * c), base = sky.centre[1] + sky.ceiling * (0.5 + 0.07 * c), tall = sky.ceiling * (1.05 + 0.35 * rnd(f.seed, 45 + c));
+      const forward = rnd(f.seed, 50 + c) < 0.5;
+      const at = (q: number): number => rad + (fbm(sd, q * 3.1 + drift) - 0.5) * radius * 0.22 + Math.sin(q * 12.7 - t * 0.0009 + c * 2.1) * radius * 0.012;
+      curtains.draw(c, (j, out) => {
         const s = j / (n - 1), along = forward ? s : 1 - s;
         // In: the curtain unrolls from one end. Out: it rolls away from the same end it started at.
         const show = clamp01((unroll * 1.25 - along) / 0.25) * (1 - clamp01((away * 1.25 - along) / 0.25));
-        if (show <= 0.01) continue;
-        const a = alpha + (s - 0.5) * 2 * half;
-        const at = (q: number): number => rad + (fbm(sd, q * 3.1 + drift) - 0.5) * 16 + Math.sin(q * 12.7 - t * 0.0009 + c * 2.1) * 1.1;
-        const ring = at(s), x = sky.centre[0] + Math.cos(a) * ring, z = sky.centre[2] + Math.sin(a) * ring;
-        // The strip lies along the curtain: a thin sheet, so where a fold turns into the line of sight it shows
-        // edge-on as a bright ray instead of a lit block.
-        const q = s + 0.5 / n, aq = alpha + (q - 0.5) * 2 * half, rq = at(q);
-        const yaw = Math.atan2(sky.centre[2] + Math.sin(aq) * rq - z, sky.centre[0] + Math.cos(aq) * rq - x);
-        // Behind the name: how centred this strip is in the name's reach, 1 at its heart.
+        const a = alpha + (s - 0.5) * 2 * half, ring = at(s);
+        // Behind the name: how centred this column is in the name's reach, 1 at its heart.
         const off = Math.abs(Math.atan2(Math.sin(a - back), Math.cos(a - back))), behind = hush * (1 - smooth(reach * 0.7, reach * 1.25, off));
-        const taper = Math.sin(Math.PI * s), rise = 0.22 + 0.78 * fbm(sd + 11, s * 4.3 - drift * 1.4);
-        const height = tall * rise * (0.5 + 0.5 * Math.sqrt(taper)) * (1 - 0.5 * behind), visible = height * (0.35 + 0.65 * show);
-        const hem = base + (vnoise(sd + 23, s * 5.9 + drift * 2) - 0.5) * 4 + Math.sin(s * 15.1 - t * 0.0016 + c) * 0.45;
-        const rays = 0.5 + 0.5 * fbm(sd + 31, s * 26 - t * 0.0006), warm = (0.35 + 0.65 * rays) * show * Math.sqrt(taper) * (1 - 0.6 * behind);
-        let y = hem, u = 0;
-        for (const [share, light] of AURORA_LAYERS) {
-          const h = visible * share;
-          drawn = motes.plate(x, y + h / 2, z, width, h * 1.04, 0.35, yaw, ramp(grad, u + share * 0.5 + (rays - 0.5) * 0.12), light * warm) || drawn;
-          y += h; u += share;
-        }
-        columns++;
-      }
-      addGlow(grad[1]!, 0.2 * unroll * (1 - away));
+        const taper = Math.sin(Math.PI * s), rise = 0.3 + 0.7 * fbm(sd + 11, s * 4.3 - drift * 1.4);
+        out.x = sky.centre[0] + Math.cos(a) * ring; out.z = sky.centre[2] + Math.sin(a) * ring;
+        out.y = base + (vnoise(sd + 23, s * 5.9 + drift * 2) - 0.5) * sky.ceiling * 0.14 + (vnoise(sd + 29, s * 17.3 - drift * 3) - 0.5) * sky.ceiling * 0.05 + Math.sin(s * 15.1 - t * 0.0016 + c) * 0.6;
+        out.height = tall * rise * (0.55 + 0.45 * Math.sqrt(taper)) * (1 - 0.5 * behind) * (0.4 + 0.6 * show);
+        out.light = show * Math.sqrt(taper) * (1 - 0.65 * behind);
+      }, AURORA_PALETTES[c]!, t / 1000, f.seed, [1, 0.8, 0.62][c]!);
+      addGlow(tuple(AURORA_PALETTES[c]!.body), 0.2 * unroll * (1 - away));
     }
-    return drawn;
+    return true;
+  }
+
+  /** How much larger to draw a shell at `at` for the viewer to read it: 1 within 110 m of the camera, up to 3 (volley, procession). */
+  function reachOf(at: Readonly<P3>): number {
+    const eye = viewer.held('sky');
+    if (!eye) return 1;
+    return Math.min(3, Math.max(1, Math.hypot(at[0] - eye.x, at[1] - eye.y, at[2] - eye.z) / 110));
   }
 
   /** Twelve shells walking round the castle walls (or the town's ring), on the schedule the sound follows. */
@@ -703,12 +725,16 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
     for (let i = 0; i < B.shells; i++) {
       const launch = Math.round(p0 + ((p1 - p0) * i) / (B.shells - 1)), from = path.at(i / B.shells + offset);
       const ox = hub ? from[0] - hub[0] : 0, oz = hub ? from[2] - hub[2] : 0, ol = Math.hypot(ox, oz) || 1;
-      const to: P3 = [from[0] + (ox / ol) * 2, bandY(st, from[1] + 14, from[1] + 26, rnd(f.seed, 70 + i)), from[2] + (oz / ol) * 2];
+      // Walls far across the town from the viewer get larger, higher shells, so the far side of the walk still reads.
+      const k = reachOf(from);
+      const to: P3 = [from[0] + (ox / ol) * 2, bandY(st, from[1] + 14 * k, from[1] + 26 * k, rnd(f.seed, 70 + i)), from[2] + (oz / ol) * 2];
       const last = i === B.shells - 1, pattern = last ? 'willow' : patterns[(i + Math.floor(rnd(f.seed, 61) * 3)) % 3]!;
+      motes.grain = k;
       drawn = drawShell({
         launch, fuse: B.fuse, life: B.burst, from, to, pattern, hues: hues(f.seed + i * 151, 2 + (i % 2)), seed: f.seed + i * 13,
-        radius: last ? 8 : 6.5, stars: last ? 64 : 56, image: null,
+        radius: (last ? 8 : 6.5) * k, stars: last ? 64 : 56, image: null,
       }, f.t, st) || drawn;
+      motes.grain = 1;
     }
     return drawn;
   }
@@ -776,6 +802,27 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
 
   // ---------------------------------------------------------------- the frame
 
+  /**
+   * How far each beat deepens the dusk toward night, 0..0.55: Skyfire draws the sky down before its aurora like a
+   * theatre dimming and gives it back as the curtains roll away; the castle volley and the Hearthbeast a little;
+   * a spark and the confetti not at all. Every curve is a pure function of the beat's own clock.
+   */
+  function nightOf(f: SkyBeatFrame): number {
+    const t = f.t;
+    if (t < 0) return 0;
+    const span = (depth: number, rise: number, fall: number, end: number) => depth * smooth(0, rise, t) * (1 - smooth(fall, end, t));
+    if (f.kind === 'festival') return span(0.16, 1200, SKY_BEAT['castle-volley'].end - 2600, SKY_BEAT['castle-volley'].end);
+    if (f.kind !== 'cheer') return 0;
+    switch (f.rung) {
+      case 'skyfire': { const [, , a2, a3] = SKY_BEAT.skyfire.aurora; return 0.55 * smooth(150, 2800, t) * (1 - smooth(a2, a3 + 500, t)); }
+      case 'castle-volley': return span(0.16, 1200, SKY_BEAT['castle-volley'].end - 2600, SKY_BEAT['castle-volley'].end);
+      case 'hearthbeast': return span(0.2, 1800, SKY_BEAT.hearthbeast.exit, SKY_BEAT.hearthbeast.end);
+      case 'kites': return span(0.08, 2400, SKY_BEAT.kites.drift[0], SKY_BEAT.kites.drift[1]);
+      case 'street-fireworks': return span(0.07, 900, SKY_BEAT['street-fireworks'].end - 2400, SKY_BEAT['street-fireworks'].end);
+      default: return 0;
+    }
+  }
+
   const rank = (f: SkyBeatFrame) => (f.kind === 'festival' ? RUNG_RANK['castle-volley'] : f.kind === 'cheer' && f.rung ? RUNG_RANK[f.rung] : f.kind === 'confetti' ? 1.5 : -1);
   const handled = (f: SkyBeatFrame) => f.kind === 'confetti' || f.kind === 'bubble' || f.kind === 'festival'
     || (f.kind === 'cheer' && (f.rung === 'spark' || f.rung === 'street-fireworks' || f.rung === 'castle-volley' || f.rung === 'skyfire'));
@@ -793,7 +840,8 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
   function stage(): Stage {
     const places = host.places, sky = places.sky(), castle = places.castle();
     let fx = 0, fz = 1;
-    if (sky && castle) {
+    if (facing) [fx, fz] = facing;
+    else if (sky && castle) {
       const dx = sky.centre[0] - castle.crown[0], dz = sky.centre[2] - castle.crown[2], l = Math.hypot(dx, dz);
       if (l > 1) { fx = dx / l; fz = dz / l; }
     }
@@ -804,23 +852,38 @@ export function createSkyLightLayer(root: THREE.Group, host: SpectacleLayerHost)
     blueprints: () => [],
     apply(frames: readonly SkyBeatFrame[]): void {
       motes.begin();
-      glowSum = [0, 0, 0]; glowWeight = 0; live = 0; columns = 0;
+      glowSum = [0, 0, 0]; glowWeight = 0; live = 0; auroraDrawn = false; veilGlow = 0;
       const beats = frames.filter(handled).sort((a, b) => rank(b) - rank(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).slice(0, SKY_LIMITS.beats);
-      if (beats.length) {
+      if (!beats.length) { facing = null; viewer.release(new Set()); }
+      else {
+        // Held from the moment's first frame until the sky is quiet: the viewer's side of the town.
+        const centre = host.places.sky()?.centre;
+        const eye = viewer.held('sky');
+        if (!facing && eye && centre) {
+          const dx = eye.x - centre[0], dz = eye.z - centre[2], l = Math.hypot(dx, dz);
+          if (l > 1) facing = [dx / l, dz / l];
+        }
         const st = stage();
         for (const f of beats) if (draw(f, st)) live++;
       }
       motes.end();
+      columns = curtains.end() * curtains.columns;
+      night = frames.reduce((deepest, f) => Math.max(deepest, nightOf(f)), 0);
+      // The veil deepens the painted sky a little further than the town's light dims, so the sky is seen to answer.
+      veil.apply(night > 0 || veilGlow > 0 ? { dark: Math.min(0.75, night * 1.3), glow: veilGlow, glowColour: veilColour, glowToward: veilToward } : null);
       const peak = Math.max(glowSum[0]!, glowSum[1]!, glowSum[2]!, 1e-6);
-      lastGlow = { colour: glowWeight > 0 ? [glowSum[0]! / peak, glowSum[1]! / peak, glowSum[2]! / peak] : [0, 0, 0], strength: 0.6 * (1 - Math.exp(-glowWeight * 1.2)) };
+      lastGlow = { colour: glowWeight > 0 ? [glowSum[0]! / peak, glowSum[1]! / peak, glowSum[2]! / peak] : [0, 0, 0], strength: 0.6 * (1 - Math.exp(-glowWeight * 1.2)), night };
     },
-    /** The sky's light right now, for the host to tint the night: a colour (max channel 1) and a strength ≤ 0.6. */
+    /** The sky's light right now, for the host to tint the night: a colour (max channel 1), a strength ≤ 0.6 and how far the sky has deepened (0..0.55). */
     glow: () => lastGlow,
-    stats: () => ({ motes: motes.lit + motes.sheets, beats: live, auroraColumns: columns }),
+    stats: () => ({ motes: motes.lit + motes.sheets, beats: live, auroraColumns: columns, ...veil.stats() }),
     dispose(): void {
       root.remove(group);
       group.clear();
       motes.dispose();
+      viewer.dispose();
+      curtains.dispose();
+      veil.dispose();
       geometry.dispose();
       lightMaterial.dispose();
       paperMaterial.dispose();

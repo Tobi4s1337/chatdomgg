@@ -63,6 +63,8 @@ export const TRAIN_BEAT = {
   arrive: 4200, bunting: [600, 3400] as const,
   /** One lap of the town at the running pace. */
   lapMs: 72_000,
+  /** A festival train's top running pace, metres per ms: round a town's long ring it trundles rather than races. */
+  topSpeed: 0.0085,
   /** A new carriage couples on: it rolls up behind, bumps and rides. */
   couple: 1800,
   /** After the end: the closing fireworks (below level 3), then the train steams away and the bunting comes down. */

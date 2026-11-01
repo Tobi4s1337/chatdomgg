@@ -52,7 +52,7 @@ const variant = <const K extends string, S extends z.ZodRawShape>(kind: K, shape
 const TWITCH_CLIP_URL = /^https:\/\/(?:clips\.twitch\.tv\/[A-Za-z0-9_-]{1,100}|www\.twitch\.tv\/[a-z0-9_]{1,64}\/clip\/[A-Za-z0-9_-]{1,100})$/u;
 
 export const MOMENT_KINDS = ['follow', 'subscription', 'gifts', 'cheer', 'power-up', 'redemption', 'hype', 'battle', 'goal', 'poll',
-  'prediction', 'shared-chat', 'shoutout', 'ad', 'channel', 'office', 'charity', 'clip-still'] as const;
+  'prediction', 'shared-chat', 'shoutout', 'ad', 'channel', 'office', 'charity', 'clip-still', 'raid'] as const;
 export type MomentKind = typeof MOMENT_KINDS[number];
 
 export const TwitchMomentBodySchema = z.discriminatedUnion('kind', [
@@ -86,6 +86,11 @@ export const TwitchMomentBodySchema = z.discriminatedUnion('kind', [
     donation: z.strictObject({ key: TokenSchema, credit: CreditSchema, minorUnits: UIntSchema }).nullable() }),
   variant('clip-still', { clipKey: TokenSchema, title: publicText(1, 140), clipper: PublicNameSchema,
     twitchUrl: z.string().max(200).regex(TWITCH_CLIP_URL), stillKey: TokenSchema }),
+  /**
+   * An incoming raid (`channel.raid` to this kingdom): a visit, never an invented crowd. `viewers` is Twitch's own
+   * count and only sizes the caravan; `founded` says whether the raiding channel has a kingdom of its own here.
+   */
+  variant('raid', { raidKey: TokenSchema, from: ChannelSchema, viewers: UIntSchema.min(1).max(10_000_000), founded: z.boolean() }),
 ]).superRefine((body, ctx) => {
   const issue = (message: string, path: (string | number)[] = []) => ctx.addIssue({ code: 'custom', message, path });
   const unique = (keys: readonly string[], what: string) => { if (new Set(keys).size !== keys.length) issue(`Duplicate ${what}`); };

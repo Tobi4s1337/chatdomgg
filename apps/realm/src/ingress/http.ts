@@ -13,7 +13,8 @@ const STATUS: Record<IngressReply['http'] | 413 | 415, string> = {
 
 /**
  * `POST /internal/realm/ingress` for trusted services, never for browsers: `Authorization: Bearer <service secret>`,
- * JSON `{ version: 1, observation: PresenceInput }`, `{ version: 1, support: RealmSupportObservation }`
+ * JSON `{ version: 1, observation: PresenceInput }`, `{ version: 1, support: RealmSupportObservation }`,
+ * `{ version: 1, moment: RealmMomentObservation }`, `{ version: 1, strike: RealmStrike }` (transient)
  * or `{ version: 1, cue: CitizenChatCue }`. No CORS headers are sent.
  * `202 accepted|duplicate` means the observation is durable; resend on any other answer or a lost reply.
  */

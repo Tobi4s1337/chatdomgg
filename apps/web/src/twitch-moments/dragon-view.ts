@@ -99,7 +99,12 @@ const FLARE: Partial<Body> = { sweep: -0.25, rear: 0.45, tuck: 0, reach: 0.5, he
 // ---------------------------------------------------------------- places and paths
 
 interface Lair { readonly at: THREE.Vector3; readonly facing: THREE.Vector3; readonly yaw: number }
-interface Sky { readonly centre: THREE.Vector3; readonly radius: number; readonly ceiling: number; readonly floor: number }
+/**
+ * The town's sky as the dragon flies it: the hub it circles (the castle's crown when supplied, else the town's middle),
+ * the ring's radius, the circling height `alt` (absolute) and `lift` (its height over the hub, which scales its climbs
+ * and dives), and the dive's `floor`, clear of the roofs and the keep.
+ */
+interface Sky { readonly centre: THREE.Vector3; readonly hub: THREE.Vector3; readonly ring: number; readonly alt: number; readonly lift: number; readonly floor: number }
 interface Puff { readonly t: number; readonly seed: number }
 interface Pose {
   readonly at: THREE.Vector3; readonly yaw: number; readonly pitch: number; readonly roll: number; readonly body: Body;
@@ -127,6 +132,8 @@ const bezier = (p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THR
 };
 
 const A = DRAGON_BEAT.active, ORBIT_RAMP = 5000, OMEGA = TAU / A.orbitMs;
+/** Circling the castle: the ring's least radius (m), its height over the crown per metre of radius, clamped (m). */
+const ORBIT = { min: 55, rise: 0.5, over: [28, 52] as const } as const;
 /** Orbit clock with a gentle start, so the dragon leaves its hover over the town and leans into the circle. */
 const soft = (e: number) => (e <= 0 ? 0 : e < ORBIT_RAMP ? e * e / (2 * ORBIT_RAMP) : e - ORBIT_RAMP / 2);
 /** Swoop and breath offsets along the orbit: lift (share of the ceiling), dive (share of the way to the floor), radius and surge. */
@@ -143,6 +150,33 @@ function attackOffset(kind: 'swoop' | 'breath', t: number) {
     lift: curve(t, [[0, 0], [w - 200, 0.04, 'c2'], [w, 0.04], [w + 1000, -0.05, 'c2'], [end, 0, 'c2']]), dive: 0,
     radius: curve(t, [[w, 0], [w + 1000, -0.1, 'c2'], [end, 0, 'c2']]), surge: curve(t, [[0, 0], [w, -0.03, 'c2'], [end, 0, 'c2']]),
   };
+}
+
+// ---------------------------------------------------------------- the town's light
+
+/** What the dragon does to the town's light: the colour and strength of its fire on the roofs, and the dusk drawn down. */
+export interface DragonGlow { readonly colour: readonly [number, number, number]; readonly strength: number; readonly night: number }
+const NO_GLOW: DragonGlow = { colour: [0, 0, 0], strength: 0, night: 0 };
+/** How far the dusk is drawn down while the dragon is abroad (the town's lamps then read brighter), and its fire's reach. */
+export const DRAGON_LIGHT = { waking: 0.3, abroad: 0.22, fire: 0.5, eyes: 0.08 } as const;
+
+/**
+ * The town under the dragon. As it wakes the dusk is drawn down (the lamps hold, the roofs go cold); while it is
+ * abroad the town stays a shade darker; its breath washes the roofs in its fire, in proportion to the embers in the
+ * air; at a fall or a homecoming the dusk returns. Pure in the frame, the pose and the drawn embers.
+ */
+function dragonGlow(frame: DragonFrame, p: { readonly body: { readonly eyes: number; readonly throat: number } }, look: DragonLook, embers: number): DragonGlow {
+  const S = DRAGON_BEAT.summoning, V = DRAGON_BEAT.victory, R = DRAGON_BEAT.retreat;
+  const night = frame.phase === 'stir' ? 0
+    : frame.phase === 'summoning' ? lerp(DRAGON_LIGHT.waking * ramp(frame.t, 0, S.roar), DRAGON_LIGHT.abroad, ramp(frame.t, S.climb[0], S.climb[1]))
+      : frame.phase === 'active' ? DRAGON_LIGHT.abroad
+        : frame.phase === 'victory' ? DRAGON_LIGHT.abroad * (1 - ramp(frame.t, V.land, V.bow[1] + 1200))
+          : DRAGON_LIGHT.abroad * (1 - ramp(frame.t, R.away[0], R.settle[1]));
+  const fire = DRAGON_LIGHT.fire * Math.min(1, embers / (DRAGON_LIMITS.embers * 0.45)) + DRAGON_LIGHT.fire * 0.35 * clamp(p.body.throat, 0, 1);
+  const eyes = DRAGON_LIGHT.eyes * clamp(p.body.eyes - 1, 0, 0.6) / 0.6;
+  const strength = clamp(fire + eyes, 0, 0.6);
+  const hot = new THREE.Color(look.embers[1] ?? look.eye);
+  return { colour: strength > 0 ? [hot.r, hot.g, hot.b] : [0, 0, 0], strength, night };
 }
 
 // ---------------------------------------------------------------- the rig
@@ -163,7 +197,7 @@ interface Rig {
  * encounter clock, telegraph, flinch and health) and the supplied lair and sky. Nothing is guessed: without the
  * places a phase needs, the dragon is not shown. Breath embers, smoke and dust are bounded instanced cubes.
  */
-export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): SpectacleLayer<DragonFrame | null> & { focus(): THREE.Vector3 | null; head(): THREE.Vector3 | null } {
+export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): SpectacleLayer<DragonFrame | null> & { focus(): THREE.Vector3 | null; head(): THREE.Vector3 | null; glow(): DragonGlow } {
   const layer = new THREE.Group();
   layer.name = 'dragon';
   root.add(layer);
@@ -180,7 +214,7 @@ export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): 
   };
   const embers = pool(emberMaterial, DRAGON_LIMITS.embers, 'dragon-embers'), smoke = pool(smokeMaterial, DRAGON_LIMITS.smoke, 'dragon-smoke'), dust = pool(dustMaterial, DRAGON_LIMITS.dust, 'dragon-dust');
   const SMOKE = [MAT.stone, MAT.limestone, MAT.plaster].map(palette), DUST = [MAT.earth, MAT.limestone, MAT.thatch, MAT.paving].map(palette);
-  let rig: Rig | null = null, focus: THREE.Vector3 | null = null, headAt: THREE.Vector3 | null = null;
+  let rig: Rig | null = null, focus: THREE.Vector3 | null = null, headAt: THREE.Vector3 | null = null, lastGlow: DragonGlow = NO_GLOW;
 
   function build(form: DragonForm): Rig {
     const p = dragonParts(form, host.kit), look = p.look, group = new THREE.Group();
@@ -262,9 +296,19 @@ export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): 
       lair = { at: v3(l.position), facing, yaw: Math.atan2(facing.x, facing.z) };
     }
     if (s && s.radius > 0 && s.ceiling > 0) {
-      // The dive's floor clears the roofs and, when the castle is supplied, its keep with the dragon's own depth.
-      const centre = v3(s.centre), floor = Math.max(centre.y + s.ceiling * 0.45, c ? c.crown[1] + 24 * CELL * scale : -Infinity);
-      sky = { centre, radius: s.radius, ceiling: s.ceiling, floor: Math.min(floor, centre.y + s.ceiling * 0.9) };
+      const centre = v3(s.centre);
+      if (c) {
+        // It circles the castle: near enough that the town looks up at it over its own roofs, high enough to clear the
+        // keep with its whole wingspan, and diving to just over the battlements.
+        const crown = v3(c.crown), hub = new THREE.Vector3(crown.x, centre.y, crown.z);
+        const ring = clamp(0.5 * Math.hypot(crown.x - centre.x, crown.z - centre.z), ORBIT.min, Math.max(ORBIT.min, s.radius * 0.7));
+        const alt = crown.y + clamp(ring * ORBIT.rise, ORBIT.over[0], ORBIT.over[1]), floor = crown.y + 24 * CELL * scale;
+        sky = { centre, hub, ring, alt, lift: alt - centre.y, floor: Math.min(floor, alt - 6) };
+      } else {
+        // The dive's floor clears the roofs.
+        const alt = centre.y + s.ceiling;
+        sky = { centre, hub: centre.clone(), ring: s.radius * 0.7, alt, lift: s.ceiling, floor: Math.min(centre.y + s.ceiling * 0.45, centre.y + s.ceiling * 0.9) };
+      }
     }
     return { lair, sky };
   }
@@ -277,15 +321,15 @@ export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): 
     ({ at: lair.at.clone().addScaledVector(UP, height(b, scale) + breath * 0.25 * CELL * scale), yaw: lair.yaw, pitch: b.rear, roll: 0 });
   /** The orbit point and its unit tangent at encounter clock e, without attacks. */
   function orbitAt(sky: Sky, theta0: number, e: number, health: number, attack: { kind: 'swoop' | 'breath'; start: number } | null = null): THREE.Vector3 {
-    const radius = sky.radius * 0.7, base = sky.centre.y + sky.ceiling * (1 - 0.1 * (1 - health)) + sky.ceiling * 0.035 * Math.sin(e / 9700 * TAU);
+    const radius = sky.ring, base = sky.alt - sky.lift * 0.1 * (1 - health) + sky.lift * 0.035 * Math.sin(e / 9700 * TAU);
     let theta = theta0 - OMEGA * soft(e), r = radius, y = base;
     if (attack) {
       const o = attackOffset(attack.kind, e - attack.start);
-      theta -= o.surge; r += o.radius * radius; y += o.lift * sky.ceiling - o.dive * Math.max(0, base - sky.floor);
+      theta -= o.surge; r += o.radius * radius; y += o.lift * sky.lift - o.dive * Math.max(0, base - sky.floor);
     }
-    return new THREE.Vector3(sky.centre.x + r * Math.cos(theta), y, sky.centre.z + r * Math.sin(theta));
+    return new THREE.Vector3(sky.hub.x + r * Math.cos(theta), y, sky.hub.z + r * Math.sin(theta));
   }
-  const theta0 = (sky: Sky, lair: Lair) => Math.atan2(lair.at.z - sky.centre.z, lair.at.x - sky.centre.x);
+  const theta0 = (sky: Sky, lair: Lair) => Math.atan2(lair.at.z - sky.hub.z, lair.at.x - sky.hub.x);
   /** Where the dragon arrives over the town: the orbit point nearest its lair, and the orbit's heading there. */
   const station = (sky: Sky, lair: Lair) => {
     const th = theta0(sky, lair), at = orbitAt(sky, th, 0, 1);
@@ -297,7 +341,7 @@ export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): 
    * way), keeps its height until it is beyond the roofs, and eases to rest over the lair at `ms`.
    */
   function spiralHome(sky: Sky, lair: Lair, end: number, health: number, ms: number, scale: number): Path {
-    const th = theta0(sky, lair), from = orbitAt(sky, th, end, health), c = sky.centre;
+    const th = theta0(sky, lair), from = orbitAt(sky, th, end, health), c = sky.hub;
     const a0 = Math.atan2(from.z - c.z, from.x - c.x), r0 = Math.hypot(from.x - c.x, from.z - c.z);
     const r1 = Math.hypot(lair.at.x - c.x, lair.at.z - c.z), da = wrap(Math.atan2(lair.at.z - c.z, lair.at.x - c.x) - a0);
     const y1 = lair.at.y + TORSO_CELLS.stand * CELL * scale, orbit = -OMEGA * Math.min(1, end / ORBIT_RAMP);
@@ -568,7 +612,7 @@ export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): 
   function hide(): void {
     if (rig) rig.root.visible = false;
     flush(embers, 0); flush(smoke, 0); flush(dust, 0);
-    focus = null; headAt = null;
+    focus = null; headAt = null; lastGlow = NO_GLOW;
   }
 
   return {
@@ -599,7 +643,10 @@ export function createDragonLayer(root: THREE.Group, host: SpectacleLayerHost): 
       flush(dust, p.dust ? kick(p.dust, lair.at, scale) : 0);
       focus = rig.root.getWorldPosition(new THREE.Vector3());
       headAt = rig.centre.getWorldPosition(new THREE.Vector3());
+      lastGlow = dragonGlow(frame, p, rig.look, embers.count);
     },
+    /** The dragon's light on the town this frame: its fire, and how far its waking draws the dusk down. */
+    glow: () => lastGlow,
     /** The dragon's body in world space, for the director's shot; null while it is not shown. */
     focus: () => focus?.clone() ?? null,
     /** The middle of its head in world space, for a caption; null while it is not shown. */

@@ -10,12 +10,16 @@ const CAPABILITY_LABEL: Readonly<Record<Capability, string>> = {
   chatters: 'chatters sweep',
   stream: 'stream state',
   revocation: 'revocation notices',
+  bits: 'cheers and Power-ups',
+  hype: 'hype trains',
 };
 const CAPABILITY_USE: Readonly<Record<Capability, string>> = {
   chat: 'a message lights its author\'s window; deletes and clears put it out',
   chatters: 'quiet connected people light unnamed windows',
   stream: 'the castle beacon follows the broadcast',
   revocation: 'Herald stops when a grant is withdrawn',
+  bits: 'a cheer lights the sky over the town at its rung',
+  hype: 'the festival train circles the walls; at level 3 the dragon wakes',
 };
 const FILTER = 'pnpm --filter @chatdom/herald';
 

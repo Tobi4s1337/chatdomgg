@@ -24,7 +24,8 @@ const SECRET = 'simulated-client-secret-value-0001';
 const BROADCASTER = { id: '129634568', login: 'tobi4s_', displayName: 'tobi4s_' };
 const READER = { id: '900000001', login: 'herald_reader', displayName: 'HeraldReader' };
 const READER_SCOPES = ['user:read:chat', 'user:bot'];
-const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters'];
+const BROADCASTER_SCOPES = ['channel:bot', 'moderator:read:chatters', 'bits:read', 'channel:read:hype_train'];
+const PLANNED = HERALD_EVENT_TYPES.length;
 const FULL_GRANTS = { [READER.id]: READER_SCOPES, [BROADCASTER.id]: BROADCASTER_SCOPES };
 const KINGDOM = KingdomIdSchema.parse(BROADCASTER.id);
 const SLOTS = presentKingdom({ seed: 'tobi4s_', tier: 'hamlet', firstYear: 2026, year: 2026 }).slots;
@@ -200,16 +201,18 @@ describe('private Forge command handoff', () => {
 });
 
 describe('subscription reconciliation', () => {
-  it('creates exactly the eight planned subscriptions on the configured conduit, once', async () => {
+  it('creates exactly the planned subscriptions on the configured conduit, once', async () => {
     const r = await started();
     const ours = r.eventsub.subscriptions.filter(entry => entry.transport.method === 'conduit' && entry.transport.conduit_id === r.conduitId);
     expect(ours.map(entry => entry.type).sort()).toEqual([...HERALD_EVENT_TYPES].sort());
-    expect(ours.every(entry => entry.version === '1')).toBe(true);
+    expect(ours.every(entry => entry.version === (entry.type.startsWith('channel.hype_train.') ? '2' : '1'))).toBe(true);
+    expect(ours.find(entry => entry.type === 'channel.raid')!.condition).toEqual({ to_broadcaster_user_id: BROADCASTER.id });
+    expect(ours.find(entry => entry.type === 'channel.bits.use')!.condition).toEqual({ broadcaster_user_id: BROADCASTER.id });
     expect(ours.find(entry => entry.type === 'channel.chat.message')!.condition).toEqual({ broadcaster_user_id: BROADCASTER.id, user_id: READER.id });
     expect(ours.find(entry => entry.type === 'user.authorization.revoke')!.condition).toEqual({ client_id: CLIENT_ID });
     await r.runtime.verify();
     await r.runtime.verify();
-    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(8);
+    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(PLANNED);
     expect(r.runtime.health().coverage.every(entry => entry.state === 'enabled')).toBe(true);
     expect(r.source.available).toBe(true);
     // Only the conduit filter is ever used to list; the client's conduits are never enumerated.
@@ -224,6 +227,8 @@ describe('subscription reconciliation', () => {
     expect(coverage).toEqual({
       'channel.chat.message': 'unauthorized', 'channel.chat.notification': 'unauthorized', 'channel.chat.message_delete': 'unauthorized', 'channel.chat.clear': 'unauthorized',
       'channel.chat.clear_user_messages': 'unauthorized', 'stream.online': 'enabled', 'stream.offline': 'enabled', 'user.authorization.revoke': 'enabled',
+      'channel.bits.use': 'unauthorized', 'channel.hype_train.begin': 'unauthorized', 'channel.hype_train.progress': 'unauthorized',
+      'channel.hype_train.end': 'unauthorized', 'channel.raid': 'enabled',
     });
     expect(r.fake.calls.filter(call => call.status === 403)).toEqual([]);
     expect(r.source.available).toBe(false);
@@ -320,7 +325,7 @@ describe('chat into presence', () => {
     await r.settle();
     expect(r.runtime.health().ingest.counters).toMatchObject({ chatSubmitted: 1, duplicateDeliveries: 1, duplicateMessages: 1 });
     expect(r.runtime.health().gaps.count).toBe(0);
-    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(8);
+    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(PLANNED);
   });
 
   it('a message deleted before it arrives never lights', async () => {
@@ -521,7 +526,7 @@ describe('delivery health', () => {
     expect(r.runtime.health().gaps.count).toBe(1);
     expect(r.runtime.health().shard.counters.repairs).toBe(1);
     expect(r.eventsub.shard(r.conduitId)).toMatchObject({ status: 'enabled', sessionId: r.socket().sessionId });
-    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(8);
+    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(PLANNED);
     expect(r.log.join('\n')).toMatch(/events in that gap are lost, not replayed/);
   });
 
@@ -566,7 +571,7 @@ describe('delivery health', () => {
     release();
     await r.until(() => r.source.available);
     expect(r.source.current?.frame.streamLive).toBe(true);
-    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(8);
+    expect(r.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(PLANNED);
   });
 
   it('a silent link is ordinary loss: the watchdog detaches and a fresh session is attached', async () => {
@@ -665,20 +670,20 @@ describe('provision:source', () => {
     expect(p.lines.join('\n')).toMatch(/--create-development-conduit/);
   });
 
-  it('creates one development conduit when asked, records it, attaches shard 0 and reconciles the eight', async () => {
+  it('creates one development conduit when asked, records it, attaches shard 0 and reconciles every plan', async () => {
     vi.useRealTimers();
     const p = provisionRig();
     const first = await p.run(null, true);
     expect(first).toMatchObject({ status: 'complete', created: true });
     expect(p.recorded).toEqual([first.conduitId]);
     expect(p.fake.count('POST', 'api.twitch.tv/helix/eventsub/conduits')).toBe(1);
-    expect(p.eventsub.subscriptions).toHaveLength(8);
+    expect(p.eventsub.subscriptions).toHaveLength(PLANNED);
     expect(p.eventsub.openSockets).toHaveLength(0);
     // Running again reuses the configured conduit and changes nothing.
     const again = await p.run(first.conduitId, true);
     expect(again).toMatchObject({ status: 'complete', created: false, conduitId: first.conduitId });
     expect(p.fake.count('POST', 'api.twitch.tv/helix/eventsub/conduits')).toBe(1);
-    expect(p.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(8);
+    expect(p.fake.count('POST', 'api.twitch.tv/helix/eventsub/subscriptions')).toBe(PLANNED);
     expect(p.fake.count('GET', 'api.twitch.tv/helix/eventsub/conduits')).toBe(0);
   });
 
@@ -689,7 +694,7 @@ describe('provision:source', () => {
     const outcome = await p.run(conduitId, false);
     expect(outcome.status).toBe('incomplete');
     expect(p.eventsub.conduits.get(conduitId)).toHaveLength(1);
-    expect(outcome.coverage.filter(entry => entry.state === 'enabled').map(entry => entry.type).sort()).toEqual(['stream.offline', 'stream.online', 'user.authorization.revoke']);
+    expect(outcome.coverage.filter(entry => entry.state === 'enabled').map(entry => entry.type).sort()).toEqual(['channel.raid', 'stream.offline', 'stream.online', 'user.authorization.revoke']);
     expect(p.lines.join('\n')).toMatch(/channel\.chat\.message\s+not created: its grant is not verified \(run check:auth\)/);
   });
 

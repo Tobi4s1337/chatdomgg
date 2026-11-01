@@ -12,6 +12,20 @@ const Entitlement = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('resub'), tier: Tier, months: UIntSchema.max(1200), gifted: z.boolean().nullable() }),
   z.strictObject({ kind: z.literal('upgrade'), tier: Tier.nullable() }),
 ]);
+const Payer = z.strictObject({ personId: PersonIdSchema, name: Name.nullable() });
+const BitsAct = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('cheer'), bits: UIntSchema.min(1).max(100_000_000) }),
+  z.strictObject({ kind: z.literal('power-up'), effect: z.enum(['emote-balloon', 'message-effect', 'celebration', 'custom']),
+    emoteId: TokenSchema.nullable(), mappingKey: TokenSchema.nullable() }),
+]);
+const HypeUpdate = z.strictObject({
+  trainKey: TokenSchema, sharedSessionKey: TokenSchema.nullable(), phase: z.enum(['begin', 'progress', 'end']),
+  level: UIntSchema.min(1).max(100_000), total: UIntSchema, progress: UIntSchema.nullable(), goal: UIntSchema.nullable(),
+  startedAt: EpochMsSchema, endsAt: EpochMsSchema, golden: z.boolean(), treasure: z.boolean(),
+  allTimeHighLevel: UIntSchema.nullable(), recordVerified: z.boolean(),
+  contributors: z.array(z.strictObject({ personId: PersonIdSchema, name: Name.nullable() })).max(64),
+});
+const RaidSource = z.strictObject({ kingdomId: KingdomIdSchema, login: z.string().regex(/^[a-z0-9_]{1,64}$/u), name: Name });
 export const RealmSupportNoticeSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('entitlement'), personId: PersonIdSchema, act: Entitlement }),
   z.strictObject({ kind: z.literal('recipient'), groupKey: TokenSchema, single: z.boolean(), gifter: Gifter, tier: GiftTier,
@@ -24,3 +38,30 @@ export const RealmSupportObservationSchema = z.strictObject({
   occurredAt: EpochMsSchema, receivedAt: EpochMsSchema, notice: RealmSupportNoticeSchema,
 }).refine(value => value.occurredAt <= value.receivedAt + 5_000, 'Provider time is too far in the future');
 export type RealmSupportObservation = z.infer<typeof RealmSupportObservationSchema>;
+
+/** Private Herald → realm evidence for the town's spectacles: Bits, the Hype Train and incoming raids. */
+export const RealmMomentNoticeSchema = z.discriminatedUnion('kind', [
+  /** `channel.bits.use`: who (or nobody, when anonymous) and the act. No message, total or rank. */
+  z.strictObject({ kind: z.literal('bits'), payer: Payer.nullable(), act: BitsAct }),
+  /** One provider report of a Hype Train (`channel.hype_train.*` v2), already stripped to train state. */
+  z.strictObject({ kind: z.literal('hype'), update: HypeUpdate }),
+  /** `channel.raid` into this kingdom: the raiding channel's public identity and Twitch's viewer count. */
+  z.strictObject({ kind: z.literal('raid'), from: RaidSource, viewers: UIntSchema.min(1).max(10_000_000) }),
+]);
+export type RealmMomentNotice = z.infer<typeof RealmMomentNoticeSchema>;
+/** Durable like support evidence: Herald's outbox resends it under its EventSub message ID until the realm answers. */
+export const RealmMomentObservationSchema = z.strictObject({
+  version: z.literal(1), id: TokenSchema, kingdomId: KingdomIdSchema, origin: z.enum(['live', 'simulated']),
+  occurredAt: EpochMsSchema, receivedAt: EpochMsSchema, notice: RealmMomentNoticeSchema,
+}).refine(value => value.occurredAt <= value.receivedAt + 5_000, 'Provider time is too far in the future');
+export type RealmMomentObservation = z.infer<typeof RealmMomentObservationSchema>;
+
+/**
+ * A chat `!strike` witnessed by Herald, relayed transiently to the realm's dragon battle. Never stored, never retried:
+ * the realm alone decides whether it lands (an active battle, the person's cadence).
+ */
+export const RealmStrikeSchema = z.strictObject({
+  version: z.literal(1), kingdomId: KingdomIdSchema, personId: PersonIdSchema, messageId: TokenSchema,
+  origin: z.enum(['live', 'simulated']), observedAt: EpochMsSchema,
+});
+export type RealmStrike = z.infer<typeof RealmStrikeSchema>;

@@ -17,6 +17,7 @@ import {
   type BattleState, type TrainState,
 } from './hype-beat';
 import { describeAction } from './previews';
+import { RAID_BEAT, RAID_LIMITS, planRaid, raidCaption, raidCues, raidFrame, raidProfile, type RaidBeat, type RaidFrame } from './raid-beat';
 import { mergeSky, seedOf, skyCaption, skyCues, skyFrame, skyHold, skyLength, type SkyBeat } from './sky-beat';
 import { bannerProfile, battleCandidate, giftProfile, skyProfile, stageCues, stageOf, trainCandidate, type StageCandidate, type StageFrame } from './stage-beat';
 import {
@@ -161,6 +162,8 @@ export interface MomentFrame {
    * climax and the crowd answers. Null when nothing is staged or the presentation is hidden.
    */
   readonly stage: StageFrame | null;
+  /** Incoming raids past their start: the gate's wake and the caravan, at most RAID_LIMITS.caravans. */
+  readonly raids: readonly RaidFrame[];
 }
 
 interface BannerBeat {
@@ -170,7 +173,7 @@ interface BannerBeat {
   readonly id: string; readonly slot: number; readonly name: string; readonly line: string; readonly startAt: number; readonly endAt: number;
   readonly newRibbon: boolean;
 }
-type Beat = BannerBeat | GiftBeat | SkyBeat;
+type Beat = BannerBeat | GiftBeat | SkyBeat | RaidBeat;
 interface HomeDress {
   readonly tier: HomeDressFrame['tier']; readonly active: boolean; readonly months: number; readonly founder: boolean;
   /** Kingdom time of a live quiet change, and the cloth's rest before it; restoration has no motion. */
@@ -241,6 +244,8 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
   const celebrated = new Set<string>();
   /** Sky keys already played or merged this session, bounded: a replayed key never fires twice. */
   const skySeen = new Set<string>();
+  /** Raids already welcomed this session, bounded: a raid is one caravan however often its fact is seen. */
+  const raidSeen = new Set<string>();
   let train: TrainState | null = null, battle: BattleState | null = null;
   const inFlightMoments = new Map<string, Promise<ActionAttempt>>();
   let presentation: Presentation = { layout: 'stage', mood: 'show', busy: false, visible: true, safeRects: [], autoOpenKinds: [] };
@@ -258,8 +263,8 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
   /** Current public state. A live change of a known home eases its cloth quietly; restoration simply is. */
   function applyState(fact: TwitchMomentFact, live: boolean): void {
     const body = fact.body;
-    // Cheers and Power-ups are moments, not state: nothing of them lasts in the current view.
-    if (body.kind === 'cheer' || body.kind === 'power-up') return;
+    // Cheers, Power-ups and raids are moments, not state: nothing of them lasts in the current view.
+    if (body.kind === 'cheer' || body.kind === 'power-up' || body.kind === 'raid') return;
     current.set(fact.body.key, fact);
     metrics.peak.current = Math.max(metrics.peak.current, current.size);
     const now = clock.now(), animate = live && now <= body.displayUntil;
@@ -329,10 +334,13 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     if (celebrated.has(body.groupKey)) { metrics.suppressed.coalesced++; return; }
     const startAt = slot(now, now + GIFT_GATHER_MS);
     if (startAt === null) return;
-    const beat = planGiftBeat(`${body.key}@${fact.seq}`, body, startAt, truncate);
+    let beat = planGiftBeat(`${body.key}@${fact.seq}`, body, startAt, truncate);
+    // The cart drives the same road as a raid's caravan: it waits until the last wagon has gone up the castle road.
+    const clear = roadClearAt(now);
+    if (beat.mode === 'cart' && clear > startAt) beat = planGiftBeat(beat.id, body, clear, truncate);
     celebrated.add(body.groupKey);
     if (celebrated.size > CELEBRATED_LIMIT) celebrated.delete(celebrated.values().next().value!);
-    push(beat, beat.mode === 'cart' ? beat.departAt - startAt : Math.min(beat.endAt - startAt, 5200), now);
+    push(beat, beat.mode === 'cart' ? beat.departAt - beat.startAt : Math.min(beat.endAt - beat.startAt, 5200), now);
   }
 
   /** An approved effect exactly as the lookup supplied it: valid, and never simulated geometry in a live kingdom. */
@@ -408,6 +416,31 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     }
   }
 
+  /** When the last caravan on the gift road has gone; -Infinity when the road is clear. */
+  const roadClearAt = (now: number) => Math.max(-Infinity, ...pending(now).filter((b): b is RaidBeat => b.kind === 'raid').map(b => b.endAt));
+
+  /**
+   * One caravan per raid. The gate wakes for one raid at a time: a raid arriving while another holds the gate waits
+   * until that gate has gone to sleep and the caravan before it has left the road (so at most two caravans are ever
+   * on it), and takes its turn on the stage like any beat. Raids are never merged: each is its own visit, under its
+   * own banner. One that could not begin within its display window is not played late.
+   */
+  function scheduleRaid(fact: TwitchMomentFact, body: MomentBodyOf<'raid'>): void {
+    if (raidSeen.has(body.raidKey)) { metrics.suppressed.coalesced++; return; }
+    const now = clock.now();
+    const raids = pending(now).filter((b): b is RaidBeat => b.kind === 'raid').sort((a, b) => a.startAt - b.startAt);
+    if (raids.filter(b => b.startAt > now).length >= RAID_LIMITS.queued) { metrics.suppressed.coalesced++; return; }
+    const last = raids.at(-1), before = raids.at(-2);
+    const earliest = Math.max(now, last ? last.sleepAt + RAID_BEAT.sleepFade : -Infinity, before ? before.endAt : -Infinity);
+    const startAt = slot(now, earliest);
+    if (startAt === null) return;
+    if (startAt > body.displayUntil) { metrics.suppressed.expired++; return; }
+    raidSeen.add(body.raidKey);
+    if (raidSeen.size > CELEBRATED_LIMIT) raidSeen.delete(raidSeen.values().next().value!);
+    const beat = planRaid(`${body.key}@${fact.seq}`, body, startAt, truncate);
+    push(beat, beat.holdUntil - startAt, now);
+  }
+
   function admit(fact: TwitchMomentFact): void {
     const body = fact.body;
     const previous = body.kind === 'subscription' && body.credit?.slot != null ? homes.get(body.credit.slot) : undefined;
@@ -419,6 +452,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     else if (body.kind === 'gifts') scheduleGift(fact, body);
     else if (body.kind === 'cheer') scheduleCheer(fact, body);
     else if (body.kind === 'power-up') schedulePowerUp(fact, body);
+    else if (body.kind === 'raid') scheduleRaid(fact, body);
   }
 
   const originOk = (origin: TwitchMomentFact['origin']) => origin === expectedOrigin || origin === 'recovered';
@@ -564,6 +598,15 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
         }
         continue;
       }
+      if (beat.kind === 'raid') {
+        const words = raidCaption(beat, atMs);
+        if (words) caption(words);
+        if (!focus && atMs < beat.holdUntil && !presentation.busy) {
+          focus = { id: beat.id, subject: { kind: 'place', place: 'gate' }, startAt: beat.startAt, endAt: beat.holdUntil, cut: presentation.mood === 'show', wide: true,
+            follow: null, toward: [] };
+        }
+        continue;
+      }
       if (beat.kind === 'home-banner') {
         const opacity = beat.style === 'unfurl' ? bannerPose(t).caption : flourishPose(t).caption;
         caption({ id: beat.id, at: { kind: 'home', slot: beat.slot }, title: beat.name, line: beat.line, detail: null, opacity });
@@ -582,7 +625,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     if (visible && battle && dragonNow?.key === battle.battleKey) add(dragonCues(battle, atMs));
     if (visible && train && trainNow) add(trainCues(train));
     if (visible && train && dragonNow?.phase === 'stir') add(stirCues(train));
-    for (const beat of live) add(beat.kind === 'home-banner' ? bannerCues(beat) : beat.kind === 'gift' ? giftCues(beat) : skyCues(beat));
+    for (const beat of live) add(beat.kind === 'home-banner' ? bannerCues(beat) : beat.kind === 'gift' ? giftCues(beat) : beat.kind === 'raid' ? raidCues(beat) : skyCues(beat));
     // The train's closing fireworks fly over the castle, credited to nobody.
     const sky = live.filter((b): b is SkyBeat => b.kind === 'sky' && atMs >= b.startAt).slice(0, SKY_LIMITS.beats).map(b => skyFrame(b, atMs));
     if (trainNow?.closingFireworks && train?.endedAt != null && Number.isFinite(train.endedAt)) {
@@ -607,6 +650,8 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
         candidates.push({ beat: beat.id, subject, startAt: beat.startAt, profile });
       } else if (beat.kind === 'home-banner') {
         candidates.push({ beat: beat.id, subject: { kind: 'home', slot: beat.slot }, startAt: beat.startAt, profile: bannerProfile(beat.style) });
+      } else if (beat.kind === 'raid') {
+        candidates.push({ beat: beat.id, subject: { kind: 'place', place: 'gate' }, startAt: beat.startAt, profile: raidProfile(beat) });
       } else {
         const subject: MomentSubject = beat.mode === 'cart' ? { kind: 'place', place: 'market' } : subjectOf(beat.parcels[0]!.to);
         candidates.push({ beat: beat.id, subject, startAt: beat.startAt, profile: giftProfile(beat) });
@@ -614,13 +659,14 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     }
     const present = presence?.connection === 'fresh' ? presence.windows.filter(w => w.present).length : 0;
     const stage = visible ? stageOf(candidates, atMs, present) : null;
+    const raids = live.filter((b): b is RaidBeat => b.kind === 'raid' && atMs >= b.startAt).slice(0, RAID_LIMITS.caravans).map(b => raidFrame(b, atMs));
     if (stage) add(stageCues(stage));
     metrics.peak.captions = Math.max(metrics.peak.captions, captions.length);
     metrics.peak.audio = Math.max(metrics.peak.audio, audio.length);
     metrics.peak.parcels = Math.max(metrics.peak.parcels, parcels.length);
     metrics.peak.sky = Math.max(metrics.peak.sky, sky.length);
     return { atMs, status, label: expectedOrigin === 'simulated' ? 'SIMULATED' : 'LIVE', visible, homes: homeFrames.sort((a, b) => a.slot - b.slot),
-      parcels, carts, captions, audio, focus, sky, train: trainNow, dragon: dragonNow, battle: battleStatus, stage };
+      parcels, carts, captions, audio, focus, sky, train: trainNow, dragon: dragonNow, battle: battleStatus, stage, raids };
   }
 
   /**
@@ -779,7 +825,7 @@ export function createTwitchMoments(options: TwitchMomentsOptions) {
     /** Public current state as received, for inspection; never includes private IDs. */
     currentFacts: (): readonly TwitchMomentFact[] => [...current.values()],
     dispose() {
-      disposed = true; cancelTransient(); current.clear(); homes.clear(); celebrated.clear(); skySeen.clear(); presence = null; inFlight.clear();
+      disposed = true; cancelTransient(); current.clear(); homes.clear(); celebrated.clear(); skySeen.clear(); raidSeen.clear(); presence = null; inFlight.clear();
       inFlightMoments.clear(); train = null; battle = null;
     },
   };

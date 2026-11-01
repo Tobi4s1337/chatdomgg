@@ -1,14 +1,35 @@
-import { Match, Show, Switch, createEffect, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Match, Show, Switch, createEffect, createSignal, createUniqueId, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import type { CitizenKey } from '@chatdom/shared';
 import type { CardAssetRef, CitizenCardDocument } from '../../../api/src/citizen-card/contracts';
-import type { CardHost, CardLight, CardLoad } from './host';
+import { disclosedWorn, type CardHost, type CardLight, type CardLoad, type CardWorn } from './host';
 import { PaintedCrest, WaxSeal } from './Crest';
 import { BrassCorner, Flourish, Mark, type MarkName } from './marks';
 import { followFact, nameStyle, showLogin, standing, subscriptionFact, type Fact } from './format';
+import { ShareShelf } from './ShareShelf';
 import './plaque.css';
 
 export type CardMode = 'dialog' | 'page';
+
+/** The earned pieces one citizen wears, bound to that citizen: shown only on their own card. */
+export interface CardWornFor {
+  readonly key: CitizenKey;
+  readonly pieces: readonly CardWorn[];
+}
+
+export interface CitizenCardProps {
+  mode: CardMode;
+  subject: CitizenKey | null;
+  host: CardHost;
+  light?: CardLight;
+  /** What they wear of what they earned, from the host's look authority. Ignored for anyone but `worn.key`. */
+  worn?: CardWornFor | null;
+  /**
+   * Page mode: what the host lays beneath the plaque for the card's own subject (their passport). Drawn only for a
+   * ready card, from the document actually shown, so nothing is laid under a missing or withdrawn card.
+   */
+  beneath?: ((document: CitizenCardDocument) => JSX.Element) | undefined;
+}
 
 type View =
   | { readonly status: 'idle' }
@@ -22,8 +43,9 @@ const sameKey = (a: CitizenKey, b: CitizenKey) => a.personId === b.personId && a
  * whole: the old document is dropped before the new read starts, and a reply for anyone else is ignored.
  *
  *   <CitizenCard mode="dialog" subject={picked()} host={host} />
+ *   <CitizenCard mode="page" subject={key} host={host} worn={{ key, pieces }} beneath={card => <CardPassport … />} />
  */
-export function CitizenCard(props: { mode: CardMode; subject: CitizenKey | null; host: CardHost; light?: CardLight }): JSX.Element {
+export function CitizenCard(props: CitizenCardProps): JSX.Element {
   const [view, setView] = createSignal<View>({ status: 'idle' });
   let controller: AbortController | undefined;
   let ticket = 0;
@@ -57,9 +79,15 @@ export function CitizenCard(props: { mode: CardMode; subject: CitizenKey | null;
     if (current.status !== 'idle') { props.host.cue?.('press'); read(current.key); }
   };
 
-  const body = () => <CardBody view={view()} mode={props.mode} host={props.host} onRetry={retry} />;
+  const worn = () => {
+    const current = view();
+    if (current.status !== 'ready' || !props.worn || !sameKey(props.worn.key, current.document.key)) return null;
+    const pieces = disclosedWorn(props.worn.pieces, current.document.passport);
+    return pieces.length ? pieces : null;
+  };
+  const body = () => <CardBody view={view()} mode={props.mode} host={props.host} worn={worn()} onRetry={retry} />;
   return <Show when={view().status !== 'idle'}>
-    <Show when={props.mode === 'dialog'} fallback={<PageFrame light={props.light ?? 'dusk'} view={view()}>{body()}</PageFrame>}>
+    <Show when={props.mode === 'dialog'} fallback={<PageFrame light={props.light ?? 'dusk'} view={view()} host={props.host} beneath={props.beneath}>{body()}</PageFrame>}>
       <Dialog host={props.host} light={props.light ?? 'dusk'} view={view()}>{body()}</Dialog>
     </Show>
   </Show>;
@@ -107,14 +135,32 @@ function Dialog(props: { host: CardHost; light: CardLight; view: View; children:
   </div>;
 }
 
-function PageFrame(props: { light: CardLight; view: View; children: JSX.Element }) {
-  const kingdom = () => props.view.status === 'ready' ? props.view.document.kingdomName : null;
-  return <div class="cc-page" data-light={props.light} data-state={props.view.status}>
+function PageFrame(props: { light: CardLight; view: View; host: CardHost; beneath: ((document: CitizenCardDocument) => JSX.Element) | undefined; children: JSX.Element }) {
+  const ready = () => props.view.status === 'ready' ? props.view.document : null;
+  // Asked of the host for the document actually shown, so a replaced or withdrawn card never keeps the last links.
+  const share = () => {
+    const document = ready();
+    const links = document ? props.host.share?.(document) ?? null : null;
+    return document && links ? { document, links } : null;
+  };
+  const beneath = () => {
+    const document = ready();
+    return document && props.beneath ? { document, draw: props.beneath } : null;
+  };
+  return <div class="cc-page" data-light={props.light} data-state={props.view.status} data-beneath={beneath() ? 'true' : undefined}>
     <header class="cc-page-head">
       <span class="cc-page-mark">Chatdom</span>
-      <Show when={kingdom()}>{name => <span class="cc-page-kingdom">A citizen of {name()}</span>}</Show>
+      <Show when={ready()}>{document => <span class="cc-page-kingdom">A citizen of {document().kingdomName}</span>}</Show>
     </header>
-    <main class="cc-page-main">{props.children}</main>
+    <main class="cc-page-main">
+      <div class="cc-page-card">{props.children}</div>
+      <Show when={share()} keyed>{s => <ShareShelf document={s.document} links={s.links} host={props.host} />}</Show>
+      {/* Keyed by the document: a new subject lays its own things beneath, never the last one's. */}
+      <Show when={beneath()} keyed>{b => <div class="cc-page-beneath">
+        <span class="cc-page-thread" aria-hidden="true" />
+        {b.draw(b.document)}
+      </div>}</Show>
+    </main>
     <footer class="cc-page-foot">Every Twitch chat a kingdom, every viewer a citizen with a home.</footer>
     <div class="cc-page-roofs" aria-hidden="true" />
   </div>;
@@ -123,10 +169,10 @@ function PageFrame(props: { light: CardLight; view: View; children: JSX.Element 
 // ---------------------------------------------------------------------------------------------------------------
 // The plaque
 
-function CardBody(props: { view: View; mode: CardMode; host: CardHost; onRetry: () => void }) {
+function CardBody(props: { view: View; mode: CardMode; host: CardHost; worn: readonly CardWorn[] | null; onRetry: () => void }) {
   const ready = () => props.view.status === 'ready' ? props.view.document : null;
   return <Switch>
-    <Match when={ready()}>{document => <Plaque document={document()} mode={props.mode} host={props.host} />}</Match>
+    <Match when={ready()}>{document => <Plaque document={document()} mode={props.mode} host={props.host} worn={props.worn} />}</Match>
     <Match when={props.view.status === 'loading'}>
       <Frame plate="Citizen card"><StateNote id="cc-dialog-state" mark="quill" busy title="Reading the town ledger" text="Finding their page and their portrait." /></Frame>
     </Match>
@@ -169,7 +215,7 @@ function StateNote(props: { id: string; mark: MarkName; title: string; text: str
   </div>;
 }
 
-function Plaque(props: { document: CitizenCardDocument; mode: CardMode; host: CardHost }) {
+function Plaque(props: { document: CitizenCardDocument; mode: CardMode; host: CardHost; worn: readonly CardWorn[] | null }) {
   const d = () => props.document;
   const name = () => nameStyle(d().identity.colour);
   const titleId = props.mode === 'dialog' ? 'cc-dialog-title' : createUniqueId();
@@ -212,7 +258,23 @@ function Plaque(props: { document: CitizenCardDocument; mode: CardMode; host: Ca
       </div>
       <div class="cc-seal-slot"><WaxSeal kingdomId={d().key.kingdomId} size={84} /></div>
     </div>
+    <Show when={props.worn}>{pieces => <Worn pieces={pieces()} heading={props.mode === 'page' ? 'h2' : 'h3'} />}</Show>
   </Frame>;
+}
+
+/** What they wear of what they earned: each piece by name, with the record it remembers. Quiet, under the facts. */
+function Worn(props: { pieces: readonly CardWorn[]; heading: 'h2' | 'h3' }) {
+  const id = createUniqueId();
+  return <section class="cc-worn" aria-labelledby={id}>
+    <Mark name="worn" />
+    <Dynamic component={props.heading} id={id} class="cc-worn-label">Wears, earned</Dynamic>
+    <ul class="cc-worn-list">
+      <For each={props.pieces}>{piece => <li class="cc-worn-piece">
+        <span class="cc-worn-name"><bdi>{piece.name}</bdi></span>
+        <Show when={piece.story}>{story => <span class="cc-worn-story"><bdi>{story()}</bdi></span>}</Show>
+      </li>}</For>
+    </ul>
+  </section>;
 }
 
 function FactRow(props: { mark: MarkName; fact: Fact }) {

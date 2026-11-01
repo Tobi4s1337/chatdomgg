@@ -4,6 +4,7 @@ import { createSceneMount, type KingdomScene, type StreamPhase } from './mount';
 import { parseStreamParams, safeAreaName, SAFE_PRESETS, type SafeArea, type StreamLayout, type StreamMood, type StreamSeam } from './params';
 import { createDirector, planNight, type DirectorState, type Shot } from './director';
 import { Corner, Crest, Flame, StreamDefs } from './fittings';
+import { SkyCaptions, type ScreenCaption } from '../twitch-moments';
 import { createRealmSpectatorSource } from '../kingdom-entry/spectator';
 import type { SpeechLabel } from '../kingdom/citizen-scene';
 import type { WalkerLabel } from '../kingdom/walk-scene';
@@ -55,12 +56,14 @@ export default function StreamView() {
   const [safe, setSafe] = createSignal<SafeArea | null>(params.safe);
   const [phase, setPhase] = createSignal<StreamPhase>('waking');
   const [progress, setProgress] = createSignal(0);
+  const [loading, setLoading] = createSignal('Opening the kingdom');
   const [label, setLabel] = createSignal(params.source === 'simulated' ? 'SIMULATED' : 'CONNECTING');
   const [fonts, setFonts] = createSignal(false);
   const [scale, setScale] = createSignal(1);
   const [names, setNames] = createSignal<NameLabel[]>([]);
   const [speech, setSpeech] = createSignal<SpeechLabel[]>([]);
   const [walkers, setWalkers] = createSignal<readonly WalkerLabel[]>([]);
+  const [momentCaptions, setMomentCaptions] = createSignal<readonly ScreenCaption[]>([]);
   const [kingdomName, setKingdomName] = createSignal(params.kingdomName);
   const mark = () => sourceMark(label());
   // Only a fresh projection may carry a person's name or give a close shot its subject.
@@ -93,7 +96,9 @@ export default function StreamView() {
 
   const mount = createSceneMount({
     host: () => lens,
-    settings: () => ({ directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time, camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin, onWalkers: setWalkers }),
+    // Build the opening's light fields with nobody home yet. Rewinding a fully
+    // inhabited town after loading leaves its warm ground light behind for a beat.
+    settings: () => ({ directArrivals: params.source === 'realm' && layout() === 'stage' && seam() !== 'ending' && params.focusSlot === undefined, onArrival: setArrival, tier: params.tier, seed: params.seed, firstYear: params.firstYear, year: params.year, ...(params.kingdomId ? { kingdomId: params.kingdomId } : {}), ...(params.focusSlot !== undefined ? { focusSlot: params.focusSlot } : {}), hour: director.hour(hour), time: params.time ?? (params.source === 'simulated' && seam() === 'starting' ? 0 : null), camera: director.shot, source: params.source === 'realm' ? 'herald' : params.source, presenceOrigin: params.presenceOrigin, onWalkers: setWalkers, onMomentCaptions: setMomentCaptions }),
     ...(params.source === 'realm' ? { prepare: async (signal: AbortSignal, revision: () => void, unavailable: () => void) => {
       if (!spectator) throw new Error('Choose a founded kingdom to watch.');
       const connection = await spectator(signal, revision, unavailable);
@@ -109,7 +114,7 @@ export default function StreamView() {
       if (next === 'ready') { attempts = 0; director.start(); } else director.stop();
       if (next === 'failed') scheduleRetry();
     },
-    onProgress: (_text, fraction) => setProgress(fraction),
+    onProgress: (text, fraction) => { setLoading(text); setProgress(fraction); },
     // A remounted real source starts unconfirmed: nothing seen before hiding is presented as fresh.
     onSource: setLabel,
     onNames: next => {
@@ -123,6 +128,9 @@ export default function StreamView() {
 
   function publishDebug(scene: KingdomScene | undefined): void {
     if (!scene) { setArrival(null); delete window.__chatdomKingdom; return; }
+    // The labelled opening starts with the first speaker, rather than an already-full town.
+    // Real sources always keep their witnessed history; a fixed capture stays fixed.
+    if (params.source === 'simulated' && seam() === 'starting' && params.time === null) scene.play();
     window.__chatdomKingdom = {
       stats: scene.debug,
       inspect: scene.inspect,
@@ -191,6 +199,7 @@ export default function StreamView() {
     window.__chatdomStream = {
       stats: mount.stats,
       get phase() { return phase(); },
+      get loading() { return loading(); },
       get layout() { return layout(); },
       get source() { return mark().kind; },
       hold: (on: boolean) => director.hold(on),
@@ -232,6 +241,7 @@ export default function StreamView() {
     style={area() ? { left: `${area()![0]}%`, top: `${area()![1]}%`, width: `${area()![2]}%`, height: `${area()![3]}%` } : undefined}>
     <div class="stream-picture" ref={element => { picture = element; }}>
       <div class="stream-lens" ref={element => { lens = element; }}>
+        <SkyCaptions captions={momentCaptions()} />
         <div class="stream-speech citizen-speech"><For each={speech()}>{label =>
           <div class="citizen-bubble" style={{ left: `${label.x}px`, top: `${label.y}px` }}>
             <Show when={label.name}><small>{label.name}</small></Show>
@@ -290,7 +300,7 @@ export default function StreamView() {
         </Match>
         <Match when={true}>
           <h2>{kingdomName()}</h2>
-          <p>The lamps are being lit</p>
+          <p>{loading()}</p>
           <div class="stream-progress"><i style={{ transform: `scaleX(${Math.max(.04, progress())})` }} /></div>
         </Match>
       </Switch>
