@@ -339,13 +339,22 @@ tiptoe and barrel remain; paths avoid workshop/anvil. `shots/magic/forge-ring-de
 crops viewed at1920×1080: roughly22 visible versus11 before, pour unobstructed; foreground feet crop.
 Three citizen tests cover arrivals, spacing, facing, presence/rebuild and barrel; typecheck/lint/build pass.
 
-**Flight next, founder's taste:**the airborne piece reads cold and bulky. Make it freshly forged treasure:
-warm, smaller than a house in frame, ember/spark wake, neighbours looking up, contact burst and roof settle.
-Main owns piece warmth, apparent scale/framing and reactions; effects-library EL11/spec48 owns wake/impact
-using recorded `FlightCue` history and `SparkBurst`. Existing b2251ee histories stay independent for real/SIM;
-never invent trajectory samples. Dashed/point-only wake experiments were rejected. AH06/spec25 owns the
-sleeping dragon silhouette: head on two paws, continuous coil, clear at whole-house distance; keep socket,
-open flue and nose. AH04 bd938eb and carved panel FL02 9fd035f merged. Judge matching flight frame next.
+**Flight, current:**the old director aimed toward home too early and lost the moving gift above frame.
+SIM and room now share a close gift-follow shot, introducing the actual receiving home on final approach.
+Residual body/rim warmth follows the real ritual frame through touchdown, then cools into the kit. Per-piece
+materials retain the shared field but isolate heat; restored/older pieces stay cold. Room landing warmth
+now runs after surface colour declaration (the old insertion referenced it too early).13 focused tests,
+typecheck/lint/build pass, including actual room flight projection and heat/contact continuity.
+`shots/magic/forge-treasure-pair.png` viewed at1920×1080 HIGH, world47.3/flight17.3, busy/zero placements,
+SIMULATED; no browser errors/Forge POST. Before loses the gift; after holds an opaque warm form with roof
+scale. After-only close crop viewed. The overly wide camera and bright gold grid were rejected/reverted.
+This is framing/heat evidence, not an isolated material comparison or full-motion signoff.
+
+**Next Forge outcomes:**the face still lacks a sleeping-dragon read, the wake is dotted, the receiving home
+needs its contact burst and neighbours looking up. Main owns framing/scale/reactions. AH06/spec25 owns
+head on two paws/coil silhouette; preserve socket/flue/nose. EL11/spec48 owns flowing ember wake and warm
+impact from recorded `FlightCue`/`SparkBurst`; never invent trajectory samples. Existing b2251ee real/SIM
+histories stay independent. AH04 bd938eb and carved panel FL02 9fd035f merged. No new contracts/systems.
 
 **Accepted Forge fire9be5870:**local amber bounce through the light field, cooler apron edges and reduced
 citizen studio fill near hot metal. Follows casting heat; ordinary dusk and receiving-home beat retain

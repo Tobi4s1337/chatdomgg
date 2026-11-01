@@ -1,5 +1,21 @@
 import * as THREE from 'three';
 
+/** Follow the gift over the neighbourhood, then introduce its home on the final approach. */
+export function forgeFlightShot(home: THREE.Box3, piece: THREE.Box3, pieceWorld: THREE.Matrix4,
+  position: THREE.Vector3, yaw: number, width: number, height: number, progress: number) {
+  const toHome = new THREE.Matrix4().makeRotationY(yaw).setPosition(position).invert().multiply(pieceWorld);
+  const flying = piece.clone().applyMatrix4(toHome);
+  const receive = forgeHomeShot(home, flying, position, yaw, width, height, 0);
+  const centre = piece.getCenter(new THREE.Vector3()).applyMatrix4(pieceWorld);
+  const size = piece.getSize(new THREE.Vector3());
+  const distance = Math.max(27, size.length() * 2.5 * Math.max(1, height / Math.max(1, width)));
+  const target = centre.add(new THREE.Vector3(0, -2, 0));
+  const offset = new THREE.Vector3(-.3, .32, 1).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(distance);
+  // The receiving home is too distant to share a tight frame at launch. Hold the gift until it is near.
+  const approach = THREE.MathUtils.smootherstep(progress, .65, .95);
+  return { target: target.lerp(receive.target, approach), offset: offset.lerp(receive.offset, approach) };
+}
+
 /** The receiving home stays in the story even when the new roof ornament gets its close-up. */
 export function forgeHomeShot(home: THREE.Box3, roof: THREE.Box3, position: THREE.Vector3, yaw: number,
   width: number, height: number, age: number) {

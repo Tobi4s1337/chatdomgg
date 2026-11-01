@@ -12,7 +12,7 @@ import { createForgeEmitters } from '../emitters';
 import { createForgePresentation, type ForgePresentation } from '../presentation';
 import { createForgeRitualView } from '../ritual-view';
 import { createLandingMaterial } from './landing-light';
-import { forgeHomeShot } from '../home-shot';
+import { forgeHomeShot, forgeFlightShot } from '../home-shot';
 
 export interface RealmForgeSceneOptions {
   onFlight?: import('../presentation/stage').ForgePresentationOptions['onFlight'];
@@ -214,13 +214,11 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
     }
     if (casting && frame && (frame.phase === 'flight' || frame.phase === 'landed')) {
       const homePosition = new THREE.Vector3(...casting.home.position);
-      const home = fit(casting.homeBounds, homePosition, casting.home.yaw, new THREE.Vector3(-.3, .44, 1));
       if (frame.phase === 'flight') {
-        const progress = THREE.MathUtils.smootherstep(frame.phaseProgress, 0, 1);
         casting.mesh.updateWorldMatrix(true, false);
-        target.lerp(casting.mesh.localToWorld(casting.bounds.getCenter(new THREE.Vector3())), Math.min(1, progress * 4));
-        target.lerp(home.target, progress);
-        offset.lerp(home.offset, progress);
+        const shot = forgeFlightShot(casting.homeBounds, casting.bounds, casting.mesh.matrixWorld,
+          homePosition, casting.home.yaw, width, height, frame.phaseProgress);
+        target.copy(shot.target); offset.copy(shot.offset);
       } else {
         // Receive it as a house first. Then a slow, finite move gives the gift
         // its own portrait, with the eaves still identifying whose roof it is.
@@ -271,6 +269,7 @@ export function createRealmForgeScene(options: RealmForgeSceneOptions) {
             options.feed.settled(current.attachment.id);
           }
         }
+        current.light.setFlightFrame(frame);
         current.light.setWarmth(current.landedAt === null ? 0 :
           THREE.MathUtils.smoothstep((now - current.landedAt) / 1000, 0, .35) *
           (1 - THREE.MathUtils.smoothstep((now - current.landedAt) / 1000, 5.5, 8)));

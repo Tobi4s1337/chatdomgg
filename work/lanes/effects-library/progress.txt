@@ -5,3 +5,5 @@ EL10: The whole library in packages/render/src/effects, in two draws (glints; sm
 follow-up: EL10 Review smoke and dust visibility at stream distance and flight trail density on a real GPU; bench evidence shows these effects are very subtle.
 
 taste: EL11 flight should read as a freshly forged treasure with an ember-and-spark wake and a warm contact burst, not cold blue-grey. Keep the smaller-than-house piece readable; main owns piece warmth/apparent scale/camera and the town looking up. Continue existing EL11 outcomes/API.
+
+taste: EL11 current mounted flight shots/magic/forge-treasure-after.png now holds a warm solid gift in frame, but its wake still reads as isolated dashes. A flowing ember wake and contact burst remain the next library checkpoint; main retains the actual-history adapter and camera.

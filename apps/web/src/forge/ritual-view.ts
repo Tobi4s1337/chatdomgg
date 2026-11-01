@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { VoxelRenderState } from '@chatdom/render';
 import type { ForgeRitualFrame, Vec3 } from '@chatdom/shared';
+import { addForgeFlightHeat } from './flight-heat';
 import { createCodexEngraving } from './engraving';
 import { createAnvilHero } from './anvil-hero';
 import { createForgePresentation, type ForgePresentation } from './presentation';
@@ -65,6 +66,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     vertexShader: source.vertexShader.replace('out float vLodFade;', 'out float vLodFade; out float vForgeLocalY;').replace('uint face=(aPacked>>18u)&7u;', 'vForgeLocalY=p.y*uScale; uint face=(aPacked>>18u)&7u;'),
     fragmentShader: source.fragmentShader.replace('out vec4 voxelColour;', 'out vec4 voxelColour; in float vForgeLocalY; uniform float uForgeReveal; uniform float uForgeHeat;').replace('void main(){\n      float threshold', 'void main(){\n      if(vForgeLocalY>uForgeReveal) discard;\n      float threshold').replace('gl_FragColor=vec4(colour,1.);', 'colour=mix(colour,vec3(3.1,.78,.08),uForgeHeat*.8);\n      gl_FragColor=vec4(colour,1.);'),
   });
+  const flightHeat=addForgeFlightHeat(ritualMaterial);
   materials.add(ritualMaterial);
   const empty = ownGeometry(new THREE.BufferGeometry());
   const piece = new THREE.Mesh(empty, ritualMaterial); piece.frustumCulled = false; root.add(piece); piece.visible = false;
@@ -158,6 +160,7 @@ export function createForgeRitualView(scene: THREE.Scene, material: VoxelRenderS
     piece.visible = active && t >= 5;
     ritualMaterial.uniforms.uForgeReveal!.value = t < 5 ? -1 : t < 11 ? THREE.MathUtils.lerp(pieceBounds.min.y, pieceBounds.max.y + .01, (t - 5) / 6) : pieceBounds.max.y + 1;
     if(early&&presentation){presentation.update(frame);presenting=true;blueprint.visible=false;wordsGroup.visible=false;}
+    flightHeat.update(frame);
     ritualMaterial.uniforms.uForgeHeat!.value = t < 5 ? 0 : t < 11 ? .55 : t < 12.7 ? 1 : Math.max(0, 1 - (t - 12.7) / 2.8);
   }
   function dispose() { presentation?.dispose();scene.remove(effects);engraving.dispose(); hero.dispose(); scene.remove(root); geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose()); textures.forEach(t => t.dispose()); }
