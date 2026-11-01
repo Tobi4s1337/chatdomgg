@@ -85,7 +85,8 @@ function paint(g: THREE.BufferGeometry, cut: CapeCut, side: 'outer' | 'inner', t
  */
 export function capeObject(look: CitizenLook, dim = false): THREE.Group | null {
   if (!look.earned.cape) return null;
-  const cut = capeCut(look.earned.cape, dim);
+  // A lapsed subscription dims sub pieces, not a cape earned in a shared moment.
+  const cut = capeCut(look.earned.cape, dim && look.earned.cape.kind !== 'cheer');
   const group = new THREE.Group();
   group.name = 'citizen-cape';
   group.userData.cut = cut;

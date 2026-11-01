@@ -1,0 +1,9 @@
+{
+  "source": "SIMULATED review bench",
+  "view": "motion",
+  "width": 1440,
+  "height": 900,
+  "clip": false,
+  "errors": [],
+  "limitation": "Lane component review only. Production wardrobe and gesture bindings remain main-owned needs."
+}

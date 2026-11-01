@@ -213,6 +213,22 @@ describe('stepPlayer', () => {
     expect(bodyStuck(at(4, 0, 4), w)).toBe(false);
   });
 
+  it('does not jump from stale support after a closing door pushes the walker off a ledge', () => {
+    const boxes = [box([-5, -1, -5], [0, 0, 5]), box([-.3, 0, -2], [0, 3, 2])];
+    const server = world(boxes), client = world(boxes, 1, true);
+    const a = at(.05, 0, 0), b = { ...a };
+    const command = input(127, 0, WALK_BUTTON.jump);
+    stepPlayer(a, command, DT, server);
+    stepPlayer(b, command, DT, client);
+    expect(a).toEqual(b);
+    expect(a.x).toBeGreaterThanOrEqual(R);
+    expect(a.y).toBeLessThan(0);
+    expect(a.vy).toBeLessThan(0);
+    expect(a.grounded).toBe(false);
+    expect(a.vx).toBeCloseTo(10 * DT, 12); // Air acceleration, not ground acceleration.
+    expect(insideAny(a, server)).toBe(false);
+  });
+
   it('never moves on a mismatched collision revision', () => {
     const w = world(tiles(-5, 5, -5, 5), 2);
     const stale = { ...at(0, 0, 0), vx: 4, vy: -3 };

@@ -342,3 +342,36 @@ explicit placement cuts, click-only acquisition/rejection/re-lock, and slab supp
 requires the founder route at 1440×900 and 390×844: walk/stop/reverse, sprint turn, jump, half slab, roof/doorway,
 click lock → Escape → later click re-lock after a fast flick, wheel in/out, menu return. Judge camera calm, cadence
 and foot contact on a real GPU; SwiftShader pixels do not establish high-refresh temporal feel.
+
+## Walking together (WT10)
+
+The lane's `work/lanes/walking-together/needs.md` records the remaining main-owned contracts and an exact
+`integration.patch`. **WT10 is not accepted yet.** Component review is separate from town/stream proof.
+
+- `createWornCitizenLook(id, authorizedRecipe, subLapsed)` in `citizens` compiles the builder's worn recipe,
+  including exact cloth dyes. The authority must supply the authorized recipe and lapse state. It grants no pieces.
+- `CitizenSample.gesture` includes wave, bow, cheer, dance, sit and point. Upper-body actions blend over locomotion;
+  headings take the shortest arc. `posture: 'seated'` remains the authoritative seat path.
+- A bound `WalkControllerOptions.gestures` port has `available()`, `publish(gesture)` and
+  `sample(walkerId, monotonicNowMs)`. The controller mounts the selector only with that port. Pass
+  `controller.gestureFor(pose.id, now)` into the citizen sample after ticking. The transport owns acceptance,
+  expiry, rate limits and sound feedback; do not send a new uncontracted room message from the UI.
+- The local selection ends on expiry, takeover, hidden page, blur or transport loss. Moving or jumping cancels
+  sit/dance, while a walking wave keeps the locomotion. Reset clears a gesture without disposing the selector.
+- `layoutWalkLabels(anchors, viewport, reservedRects)` lays out measured names and speech together. Anchors are
+  actual head projections, labels are centred above them, speech gets priority, and colliding labels yield rather
+  than floating away from the speaker. Use one pass for both walk and stream, with UI safe rectangles.
+
+The `capture-review.mjs` runner acquires the shared lock for exactly one still or one short clip, then closes its
+browser/server and releases it. It picks an allowed free capture port and never touches an existing service:
+
+```
+node apps/web/src/walk/capture-review.mjs --view motion
+node apps/web/src/walk/capture-review.mjs --view motion --width 390 --height 844
+node apps/web/src/walk/capture-review.mjs --view motion --clip
+node apps/web/src/walk/capture-review.mjs --view wardrobe
+node apps/web/src/walk/capture-review.mjs --view selector --width 390 --height 844
+```
+
+These labelled SIMULATED benches review the component only. Actual town evidence must still come from
+`capture.mjs` with real connected clients. No browser-local chat, wardrobe or gesture is presented as server truth.
