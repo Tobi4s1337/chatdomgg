@@ -9,7 +9,7 @@ export interface FootstepSample {
   readonly speed: number;
   readonly timeMs: number;
 }
-type Leg = { contact: THREE.Vector3; swingFrom: THREE.Vector3; current: THREE.Vector3; stance: boolean };
+type Leg = { contact: THREE.Vector3; swingFrom: THREE.Vector3; current: THREE.Vector3; stance: boolean; forcedSwingAt: number | null };
 export interface FootstepState {
   position: THREE.Vector3; distance: number; timeMs: number; phase: number; blend: number;
   direction: THREE.Vector3; legs: [Leg, Leg]; wasMoving: boolean; stopAt: number; stopFirst: number; stopFrom: [THREE.Vector3, THREE.Vector3];
@@ -25,7 +25,7 @@ export function createFootstepState(sample: FootstepSample): FootstepState {
   const left = neutral(sample, -1), right = neutral(sample, 1);
   return { position: new THREE.Vector3(...sample.position), distance: sample.distance, timeMs: sample.timeMs, phase: 0, blend: 0,
     direction: new THREE.Vector3(Math.sin(sample.heading), 0, Math.cos(sample.heading)), wasMoving: false, stopAt: sample.timeMs, stopFirst: 0, stopFrom: [left.clone(), right.clone()],
-    legs: [{ contact: left, swingFrom: left.clone(), current: left.clone(), stance: true }, { contact: right, swingFrom: right.clone(), current: right.clone(), stance: false }] };
+    legs: [{ contact: left, swingFrom: left.clone(), current: left.clone(), stance: true, forcedSwingAt: null }, { contact: right, swingFrom: right.clone(), current: right.clone(), stance: false, forcedSwingAt: null }] };
 }
 /** Step from coherent samples. A discontinuity immediately rebases rather than stretching a leg. */
 export function stepFootsteps(state: FootstepState, sample: FootstepSample): { feet: readonly [THREE.Vector3, THREE.Vector3]; blend: number; stance: readonly [boolean, boolean]; footfalls: readonly { side: 'left' | 'right'; sole: THREE.Vector3 }[] } {
@@ -42,7 +42,11 @@ export function stepFootsteps(state: FootstepState, sample: FootstepSample): { f
     Object.assign(state, fresh);
     return { feet: [fresh.legs[0].contact.clone(), fresh.legs[1].contact.clone()], blend: 0, stance: [true, true], footfalls: [] };
   }
-  if (horizontal > 1e-5) state.direction.set(delta.x / horizontal, 0, delta.z / horizontal);
+  if (horizontal > 1e-5) {
+    // Ease the projected swing target as travel reverses or strafes. Keep the
+    // vector unnormalised while reversing so it can pass smoothly through zero.
+    state.direction.lerp(new THREE.Vector3(delta.x / horizontal, 0, delta.z / horizontal), 1 - Math.exp(-elapsed / .18));
+  }
   const active = sample.moving > .05 && travelled >= 0;
   const cycle = THREE.MathUtils.lerp(CYCLE_WALK, CYCLE_RUN, THREE.MathUtils.clamp((sample.speed - 1.2) / 2.8, 0, 1));
   const stanceShare = STANCE_DISTANCE / cycle;
@@ -67,7 +71,7 @@ export function stepFootsteps(state: FootstepState, sample: FootstepSample): { f
     const phase = (state.phase + i * .5) % 1;
     const oldPhase = (previousPhase + i * .5) % 1;
     const crossedTouchdown = advance > 0 && oldPhase + advance >= 1;
-    const stance = phase < stanceShare;
+    let stance = phase < stanceShare;
     const centre = neutral(sample, side);
     if (!active) {
       // Finish a swing and then step the other foot home; the supporting sole stays fixed.
@@ -75,10 +79,11 @@ export function stepFootsteps(state: FootstepState, sample: FootstepSample): { f
       const t = THREE.MathUtils.clamp((stopElapsed - order * .16) / .16, 0, 1);
       leg.current.copy(state.stopFrom[i]!).lerp(centre, smooth(t));
       leg.current.y += Math.sin(Math.PI * t) * .04;
-      leg.contact.copy(leg.current); leg.swingFrom.copy(leg.current); leg.stance = t === 0 || t === 1;
+      leg.contact.copy(leg.current); leg.swingFrom.copy(leg.current); leg.stance = t === 0 || t === 1; leg.forcedSwingAt = null;
       outputs.push(leg.current.clone()); stances.push(leg.stance); continue;
     }
     if (crossedTouchdown) {
+      leg.forcedSwingAt = null;
       // A coarse frame may skip an entire stance: reconstruct its touchdown on
       // the travelled segment, then carry that world contact into the next swing.
       const fraction = THREE.MathUtils.clamp((1 - oldPhase) / advance, 0, 1);
@@ -90,14 +95,20 @@ export function stepFootsteps(state: FootstepState, sample: FootstepSample): { f
       leg.swingFrom.copy(leg.contact);
       if (state.wasMoving) footfalls.push({ side: i === 0 ? 'left' : 'right', sole: leg.contact.clone().add(new THREE.Vector3(0, -ANKLE_HEIGHT, 0)) });
     }
+    if (leg.forcedSwingAt !== null) stance = false;
+    if (stance && Math.hypot(leg.contact.x - centre.x, leg.contact.z - centre.z) > .235) {
+      // Lift early rather than teleport a planted sole when reach is exhausted.
+      leg.forcedSwingAt = phase;
+      leg.swingFrom.copy(leg.current);
+      stance = false;
+    }
     if (stance) {
       if (!leg.stance && !crossedTouchdown) leg.contact.copy(centre).addScaledVector(state.direction, STANCE_DISTANCE / 2);
-      // A sudden direction change can exhaust reach before scheduled lift-off.
-      if (Math.hypot(leg.contact.x - centre.x, leg.contact.z - centre.z) > .235) leg.contact.copy(centre);
       leg.current.copy(leg.contact); outputs.push(leg.current.clone());
     } else {
       if (leg.stance && !crossedTouchdown) leg.swingFrom.copy(leg.contact);
-      const t = (phase - stanceShare) / (1 - stanceShare);
+      const start = leg.forcedSwingAt ?? stanceShare;
+      const t = Math.max(0, (phase - start) / (1 - start));
       const destination = centre.clone().addScaledVector(state.direction, (1 - phase) * cycle + STANCE_DISTANCE / 2);
       const foot = leg.swingFrom.clone().lerp(destination, smooth(t));
       foot.y += Math.sin(Math.PI * t) * .065;

@@ -51,6 +51,19 @@ export interface AvatarBuilderProps {
 
 type Status = { readonly kind: 'idle' | 'saving' | 'saved' | 'error'; readonly message?: string };
 
+/** Radio groups use one tab stop; arrow keys move focus and select the next choice. */
+function radioKeys(e: KeyboardEvent & { currentTarget: HTMLDivElement }): void {
+  const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+  if (!step || !(e.target instanceof HTMLButtonElement)) return;
+  const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="radio"]'));
+  const index = buttons.indexOf(e.target);
+  if (index < 0 || !buttons.length) return;
+  e.preventDefault();
+  const next = buttons[(index + step + buttons.length) % buttons.length]!;
+  next.focus();
+  next.click();
+}
+
 /** A tile: a small render of the option on your own citizen. */
 function Thumb(props: { painter: ThumbPainter; request: ThumbRequest; alt: string; locked?: boolean }): JSX.Element {
   const [url, setUrl] = createSignal<string | null>(null);
@@ -173,10 +186,11 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
   const tab = () => TABS.find(t => t.id === active())!;
 
   const Tiles = (p: { control: Extract<Control, { kind: 'tiles' }> }) => (
-    <div class="ab-tiles" role="radiogroup" aria-label={p.control.label}>
-      <For each={p.control.options}>{(option: TileOption) => {
+    <div class="ab-tiles" role="radiogroup" aria-label={p.control.label} onKeyDown={radioKeys}>
+      <For each={p.control.options}>{(option: TileOption, index) => {
         const chosen = () => option.selected(look());
         return <button type="button" class="ab-tile" role="radio" aria-checked={chosen()} classList={{ 'ab-chosen': chosen() }}
+          tabIndex={chosen() || (index() === 0 && !p.control.options.some(o => o.selected(look()))) ? 0 : -1}
           onClick={() => { edit(option.apply(look())); sound('brass'); }}>
           <Thumb painter={painter} alt="" request={{ look: option.apply(look()), view: p.control.view, size: tileSize(), dim: dim() }} />
           <span class="ab-tile-name">{option.label}</span>
@@ -189,8 +203,9 @@ export function AvatarBuilder(props: AvatarBuilderProps): JSX.Element {
     const current = () => p.control.get(look());
     const known = () => p.control.groups.some(g => g.swatches.some(s => s.hex === current()));
     return <div class="ab-swatches">
-      <For each={p.control.groups}>{group => <div class="ab-swatch-group" role="radiogroup" aria-label={`${p.control.label}: ${group.label}`}>
-        <For each={group.swatches}>{s => <button type="button" class="ab-swatch" role="radio" aria-checked={current() === s.hex} classList={{ 'ab-chosen': current() === s.hex }}
+      <For each={p.control.groups}>{group => <div class="ab-swatch-group" role="radiogroup" aria-label={`${p.control.label}: ${group.label}`} onKeyDown={radioKeys}>
+        <For each={group.swatches}>{(s, index) => <button type="button" class="ab-swatch" role="radio" aria-checked={current() === s.hex} classList={{ 'ab-chosen': current() === s.hex }}
+          tabIndex={current() === s.hex || (index() === 0 && !group.swatches.some(option => option.hex === current())) ? 0 : -1}
           style={{ '--ab-swatch': s.hex }} title={s.label} aria-label={s.label} onClick={() => { edit(p.control.set(look(), s.hex)); sound('brass'); }} />}</For>
       </div>}</For>
       <label class="ab-any" classList={{ 'ab-chosen': !known() }} title="Any colour">

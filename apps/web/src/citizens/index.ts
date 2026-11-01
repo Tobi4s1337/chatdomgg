@@ -56,7 +56,7 @@ export interface CitizenRendererOptions {
   readonly pool?: VoxelWorkerPool;
 }
 interface Batch { readonly attachment: AvatarAttachmentId; readonly mesh: THREE.InstancedMesh; readonly pivot: THREE.Matrix4; readonly seatedHem: boolean }
-interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined; readonly capePaint?: StyledCitizenLook['capePaint']; readonly rig: typeof AVATAR_RIG }
+interface LookBatch { readonly batches: readonly Batch[]; readonly cape: AvatarCapeBlueprint | undefined; readonly capePaint?: StyledCitizenLook['capePaint']; readonly rig: typeof AVATAR_RIG; readonly headBounds: THREE.Box3 | undefined }
 
 /**
  * Meshed voxel parts share one draw per part/look, not one draw per person.
@@ -87,6 +87,39 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
     const pivot = new THREE.Matrix4().makeTranslation(...pivotCells.map(n => -n * VOXEL_METRES.avatar) as [number, number, number]);
     return { attachment, mesh, pivot, seatedHem };
   }
+  // Union head-attached geometry in head-local metres once per look. Sockets
+  // inherit the head pose; body parts and cloth must not affect this anchor.
+  function headBoundsFor(batches: readonly Batch[]): THREE.Box3 | undefined {
+    const bounds = new THREE.Box3().makeEmpty();
+    for (const batch of batches) {
+      const socket = batch.attachment === 'hat' || batch.attachment === 'face' ? AVATAR_SOCKETS[batch.attachment] : undefined;
+      if (batch.attachment !== 'head' && !socket) continue;
+      const geometry = batch.mesh.geometry;
+      const packed = geometry.getAttribute('aPacked'), material = geometry.getAttribute('aMaterial');
+      let partBounds: THREE.Box3;
+      if (packed && material) {
+        // Legacy voxel meshes store positions in two packed integers; their
+        // geometry bounding box covers whole 32-cell chunks, not the model.
+        partBounds = new THREE.Box3().makeEmpty();
+        for (let i = 0; i < packed.count; i++) {
+          const vertex = packed.getX(i) >>> 0, chunk = material.getX(i) >>> 0;
+          partBounds.expandByPoint(new THREE.Vector3(
+            (vertex & 63) + 32 * ((chunk >>> 16) & 31),
+            ((vertex >>> 6) & 63) + 32 * ((chunk >>> 21) & 31),
+            ((vertex >>> 12) & 63) + 32 * ((chunk >>> 26) & 31),
+          ).multiplyScalar(VOXEL_METRES.avatar));
+        }
+      } else {
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+        partBounds = geometry.boundingBox?.clone() ?? new THREE.Box3().makeEmpty();
+      }
+      if (partBounds.isEmpty()) continue;
+      const transform = batch.pivot.clone();
+      if (socket) transform.premultiply(new THREE.Matrix4().makeTranslation(...socket.offset.map(n => n * VOXEL_METRES.avatar) as [number, number, number]));
+      bounds.union(partBounds.applyMatrix4(transform));
+    }
+    return bounds.isEmpty() ? undefined : bounds;
+  }
   try {
     for (const look of options.looks) {
       if (looks.has(look.id)) throw new Error(`Duplicate citizen look ${look.id}.`);
@@ -97,7 +130,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
           if (!material) { material = createStyledCitizenMaterial(options.material, part.surface); paintedMaterials.set(part.surface, material); }
           batches.push(addBatch(styledCitizenGeometry(part.mesh, part.surface), material, part.attachment, part.pivot, `Citizen ${look.id} ${part.seatedHem ? 'hem' : part.attachment} ${part.surface}`, part.seatedHem));
         }
-        looks.set(look.id, { batches, cape: look.cape, ...(look.capePaint ? { capePaint: look.capePaint } : {}), rig: STYLED_CITIZEN_RIG });
+        looks.set(look.id, { batches, cape: look.cape, ...(look.capePaint ? { capePaint: look.capePaint } : {}), rig: STYLED_CITIZEN_RIG, headBounds: headBoundsFor(batches) });
         continue;
       }
       // Painted-only scenes need no voxel worker. Legacy assets keep their
@@ -110,7 +143,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
         if (!result || result.kind !== 'asset') throw new Error(`Could not mesh avatar part ${blueprint.id}.`);
         batches.push(addBatch(geometryFromChunks(result.chunks, 'avatar'), options.material.material, blueprint.attachment, blueprint.pivot, `Citizen ${look.id} ${blueprint.id}`));
       }
-      looks.set(look.id, { batches, cape: look.cape, rig: AVATAR_RIG });
+      looks.set(look.id, { batches, cape: look.cape, rig: AVATAR_RIG, headBounds: headBoundsFor(batches) });
     }
   } catch (error) {
     for (const geometry of geometries) geometry.dispose();
@@ -126,6 +159,8 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   const scale = new THREE.Vector3(1, 1, 1);
   const poses = new Map<AvatarAttachmentId, THREE.Matrix4>();
   const grips = new Map<string, THREE.Matrix4>();
+  const heads = new Map<string, THREE.Vector3>();
+  const worldHeadBounds = new THREE.Box3();
   const footfalls: CitizenFootfall[] = [];
   const frustum = new THREE.Frustum(), projectionView = new THREE.Matrix4();
   // A generous radius covers the authored body, gait and short cloak as a
@@ -246,12 +281,15 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
   }
   return {
     get grips(): ReadonlyMap<string, THREE.Matrix4> { return grips; },
+    /** Visible head bounds top centre plus 8 cm, in world metres, for this update.
+     * Opacity does not suppress an anchor; callers hide first-person labels themselves. */
+    get heads(): ReadonlyMap<string, THREE.Vector3> { return heads; },
     /** Touchdowns for the most recent update only; consumed synchronously by presentation. */
     get footfalls(): readonly CitizenFootfall[] { return footfalls; },
     update(samples: readonly CitizenSample[], camera?: THREE.Camera, now = performance.now()) {
       if (samples.length > capacity) throw new Error(`Citizen count exceeds capacity ${capacity}.`);
       for (const mesh of meshes) mesh.count = 0;
-      grips.clear(); footfalls.length = 0;
+      grips.clear(); heads.clear(); footfalls.length = 0;
       capes.beginFrame(samples[0]?.time ?? 0);
       if (camera) {
         camera.updateWorldMatrix(true, false);
@@ -292,6 +330,10 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
         transition.footsteps ??= createFootstepState({ position: sample.position, heading: transition.heading, distance: sample.distance, moving: sample.moving, speed: sample.speed ?? sample.moving * 1.2, timeMs: now });
         pose(sample, transition.seated, transition.heading, transition.weights, look.rig, transition.footsteps, now);
         grips.set(sample.id, poses.get('gripRight')!.clone());
+        if (look.headBounds) {
+          worldHeadBounds.copy(look.headBounds).applyMatrix4(poses.get('head')!);
+          heads.set(sample.id, new THREE.Vector3((worldHeadBounds.min.x + worldHeadBounds.max.x) / 2, worldHeadBounds.max.y + .08, (worldHeadBounds.min.z + worldHeadBounds.max.z) / 2));
+        }
         if (look.cape) capes.add({ id: sample.id, heading: transition.heading, distance: sample.distance, speed: (sample.speed ?? sample.moving * 1.2) * (1 - transition.seated), opacity: sample.opacity ?? 1 }, look.cape, poses.get('back')!, look.capePaint);
         for (const batch of look.batches) {
           const attachment = poses.get(batch.attachment);
@@ -317,7 +359,7 @@ export async function createCitizenRenderer(scene: THREE.Scene, options: Citizen
       }
     },
     dispose() {
-      grips.clear(); footfalls.length = 0;
+      grips.clear(); heads.clear(); footfalls.length = 0;
       animationById.clear();
       capes.dispose(); scene.remove(group);
       for (const geometry of geometries) geometry.dispose();

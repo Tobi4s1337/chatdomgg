@@ -231,3 +231,44 @@ it('keeps both rendered soles above ground throughout walking into and out of si
     }
   } finally { renderer.dispose(); material.dispose(); }
 });
+
+it('keeps planted feet and swing continuity when a walker reverses or strafes abruptly', async () => {
+  const scene = new THREE.Scene(), material = createVoxelMaterial(MATERIALS, 'avatar');
+  const look = createStyledCitizenLook('test', PORTRAIT_FIXTURES[0]!.look);
+  const renderer = await createCitizenRenderer(scene, { registry: MATERIALS, material, looks: [look] });
+  let timeMs = 0, x = 0, z = 0, distance = 0;
+  const sample = () => ({ position: [x, 0, z] as const, heading: 0, distance, moving: 1, speed: 2, timeMs });
+  const state = createFootstepState(sample());
+  let previous = stepFootsteps(state, sample()), plantedFrames = 0;
+  const feet = () => (['Left', 'Right'] as const).map(side => {
+    const mesh = scene.getObjectByName(`Citizen test foot${side} solid`) as THREE.InstancedMesh;
+    const matrix = new THREE.Matrix4(); mesh.getMatrixAt(0, matrix);
+    return new THREE.Vector3(side === 'Left' ? -.125 : .125, .0625, 0).applyMatrix4(matrix);
+  });
+  renderer.update([{ ...sample(), id: 'p', look: 'test' }], undefined, timeMs);
+  let rendered = feet();
+  try {
+  for (let frame = 0; frame < 160; frame++) {
+    timeMs += 16; distance += .032;
+    if (frame < 50) z += .032;
+    else if (frame < 100) z -= .032;
+    else x += .032;
+    const current = stepFootsteps(state, sample());
+    renderer.update([{ ...sample(), id: 'p', look: 'test' }], undefined, timeMs);
+    const nextRendered = feet();
+    for (let leg = 0; leg < 2; leg++) {
+      if (frame === 50 || frame === 100) {
+        expect(current.feet[leg]!.distanceTo(previous.feet[leg]!), `frame ${frame}, leg ${leg}`).toBeLessThan(.055);
+        expect(nextRendered[leg]!.distanceTo(rendered[leg]!), `rendered frame ${frame}, leg ${leg}`).toBeLessThan(.055);
+      }
+      if (current.stance[leg] && previous.stance[leg]) {
+        expect(current.feet[leg]!.distanceTo(previous.feet[leg]!)).toBeLessThan(.004);
+        if (frame > 15) expect(nextRendered[leg]!.distanceTo(rendered[leg]!)).toBeLessThan(.004);
+        plantedFrames++;
+      }
+    }
+    previous = current; rendered = nextRendered;
+  }
+  expect(plantedFrames).toBeGreaterThan(40);
+  } finally { renderer.dispose(); material.dispose(); }
+});
