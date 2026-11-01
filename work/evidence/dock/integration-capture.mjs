@@ -60,7 +60,7 @@ try {
   await pool.query(`CREATE SCHEMA "${schema}"`); ownsSchema = true;
   if (stopping) throw Error('Capture cancelled');
   stage = 'start and capture';
-  child = spawn(process.execPath, [fileURLToPath(new URL('./integration.mjs', import.meta.url))], {
+  child = spawn(process.execPath, [fileURLToPath(new URL('./integration.mjs', import.meta.url)), ...process.argv.slice(2)], {
     detached: true, stdio: ['ignore', 'inherit', 'pipe', 'ipc'],
     env: { ...process.env, CHATDOM_DOCK_CAPTURE_SCHEMA: schema, CHATDOM_DOCK_CAPTURE_DIR: dir },
   });
