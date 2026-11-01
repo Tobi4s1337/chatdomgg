@@ -330,53 +330,50 @@ position, no creature Forge, no real crowd without real people. Do not reopen th
 
 ## 10. Current handoff — 2026-11-01
 
-**Order:** the Forge is ACCEPTED and CLOSED by Tobias; leave it alone. Main's whole next outcome is
-chat arriving: each speaker's window lights in a wave across the dusk town on the stream view,
-then people come home down the streets carrying lanterns. Warm, alive, at the accepted Forge bar.
-One visible change per turn with a matched stream-view before/after; merge good team checkpoints.
-No new systems/contracts/system lanes; medium routine helpers and tight reads.
+**Order:** the Forge is ACCEPTED and CLOSED by Tobias. Leave it alone. Main's whole outcome is
+chat arriving: each speaker's window lights immediately, a wave across the dusk town on the stream,
+then lantern homecomings. One visible change per turn with a matched stream before/after.
+Keep the accepted lighting. Merge good team checkpoints; no new systems/contracts/system lanes.
 
-**Latest accepted step:** `kingdom/scene.ts` now renders windows from the witnessed presence `frame`,
-instead of `crowd.lightFrame()` which masks EVERY home until its citizen reaches the door. This was
-hiding the early chat wave. Keep the arrival-gated `lightFrame` for home-life, beacon and existing
-walking/homecoming cues. No feed timing, shader, exposure, ground-light or movement changes.
-The attempted shader-only bloom boost was REVERTED; do not resume it from a temporary build.
+**Current step — code green, visual acceptance PENDING:** the opening lens now holds the town wide
+for the first eight seconds, enters the lantern street over8–12s and returns wide over24–36s in the
+existing automatic sequence. Fresh live arrivals wait8s before taking the close lens; presence,
+windows and citizens are never delayed. Historical snapshots/reconnects are not replayed.
+The stream's starting tour goes town → street → window. Its explicitly SIMULATED opening starts
+at0 rather than the already-filled30s town, and holds the chosen dusk instead of starting in afternoon.
+Ordinary held wide views, light, movement and the accepted Forge are unchanged.
+Preview: `/stream?source=simulated&seam=starting&seed=willowmere&tier=town&hour=19.5`.
 
-Root viewed `shots/magic/window-chat-wave-pair.png`, full after1920×1080 and same-pixel close pair:
-at the SAME SIMULATED world4.5/hero/hour19.5/HIGH, active windows go0→56; the left road's homes
-now wake in warm light above the lantern walkers. Clearly visible at a glance; accepted.
-26 presence/feed/arrival-director tests, typecheck, scoped lint and web build pass. Capture50264
-exit0, both fields settled/curtain open/no browser errors or forbidden Forge requests, owned cleanup
-confirmed. No root capture remains. Frozen before temporary `chatdom-forge-full-stages`, accepted
-after `chatdom-window-chat-wave`. Earlier45456 was cancelled QUEUED, exit130/no browser/image;
-`chatdom-window-wave-pop` is a discarded shader experiment, not current source.
+**Evidence so far:** root viewed `shots/magic/arrival-wide-first-before.png` at1920×1080:
+the old opening at6s is already close in the street, warm and alive, but hides the town-wide arrival.
+121 walkers/121 active windows, ready and settled, no browser errors or Forge requests.
+The two-frame capture timed out before saving AFTER; the shorter after-only attempt then timed out
+in the shared queue. NO after frame/pair exists and this camera change is NOT visually accepted yet.
+All runners have terminated; previews closed, nothing queued. The timed-out two-frame run did not
+log graceful cleanup, so do not invent that assurance. No further capture retry this turn.
+Next: capture ONLY the missing after6s using `capture(6)`, compare/view it with the saved before,
+then judge the whole wave-to-homecoming in lean motion. Do NOT use49 incremental capture resets;
+that unnecessary work made the still capture slow. Source paths: `kingdom/scene.ts`,
+`kingdom/arrival-director.ts`, `stream/director.ts`, `stream/index.tsx` under `apps/web/src`.
+30 focused arrival/card/panel/sky tests, scoped lint, typecheck and web production build passed.
 
-**Next visible beat:** judge the WAVE IN MOTION, then the camera handoff into the lantern street.
-The still proves the early glow, not that the directed whole evening is done. Use lean640-motion
-checks plus1920stills; do not repeat expensive720p software films. Exact wide fixture:
-`/stream?source=simulated&seed=willowmere&tier=town&layout=stage&mood=calm&camera=hero&hour=19.5&time=0&quality=high`;
-`window.__chatdomKingdom.seek(4.5,'hero')` pins the looked-at frame. Stream exposes seek/capture/hold,
-NOT play; **Let them in** is on the ordinary kingdom route. Its engine.play starts0 but the existing
-auto-camera starts close and withdraws toward hero18–36s, the opposite order to the new brief.
-Stream SIM without time starts30s; explicit time holds its camera. Realm arrival-director may cut
-to walking immediately (1.2s blend), with the window shot waiting for physical arrival. Preserve
-honest historical-snapshot/reconnect handling; no fake replay of old real arrivals.
+**Keep the witnessed-light fix (`1a10d43`):** render windows from presence `frame`, NOT
+`crowd.lightFrame()` which masks every home until arrival. Keep arrival-gated lightFrame for
+home-life, beacon and homecoming cues. Door lantern/chimney smoke start at physical arrival.
+Root viewed `shots/magic/window-chat-wave-pair.png`: same world4.5/hero/hour19.5/HIGH,
+0→56 lit homes, clearly visible. That proves early glow, not the complete directed moment.
+Preserve the accepted exposure, indigo fill/warm street pools, castle/beacon, sparse grey-violet
+chimney smoke, stable lights, sculpted land/groves, AS10 citizens and thin capes.
 
-**Keep:** accepted wide dusk exposure/indigo fill/warm street pools, castle/beacon, sparse grey-violet
-smoke, stable lights, land/groves, AS10 citizens and thin capes. Home-life still starts the door lantern
-and chimney smoke on physical arrival. Preserve the warm Forge gift/flight framing/neighbours/roof
-burst/settle;0c9f23d completed the preview crucible adapter. The partial c807642 movie0–15.875s is
-BEFORE that adapter and is not a full-take claim. No further Forge passes/tasks from main.
-
-**Team checkpoint merged/pushed:**2255345 includes PinkKittyRose7344f08 GP10: levee tavern/steps,
-keeper fixtures and route-opening fix. Root viewed lane GP10 hero/tavern shots; committed-code
-kingdom/tavern/steps26tests and typecheck passed on main (not just dirty lane). The tavern still
-needs its warm doorway/place-light mount; keeper/sound mounting and dressed-wall/Atlas capture are
-recorded producer seams, not reasons to hold the checkpoint. Team owns Genesis, panel/passport,
-raid journey and sky moments. Masha GM10 via5ea162a;CP10 viaf14e348. Never merge dirty lane trees.
-Anvil/effects worktrees were brought to c807642 before the Forge was closed; no new work assigned.
+**Team checkpoints merged:** `7b56cb3` card-passport9e329f6 (sharing and new portrait),
+`f62bc9f` sky-momentsbc52c93 (aurora/sky presentation). Root viewed their committed share and
+aurora before/after evidence; no visible blockers. Sky includes a producer wiring patch; merging
+its renderer is not proof of a newly wired live cheer. Other scanned picture/Genesis/avatar lanes
+had no fresh runtime checkpoint. Prior: Pinkkitty GP10 via2255345, Masha GM10 via5ea162a,
+CP10 viaf14e348. Pinkkitty keeper/sound/doorway-light mounting remain producer seams.
+Team owns Genesis, card/passport, raid journey and sky moments. Never merge dirty lane trees.
 
 **Operations:** managed5190web/5196API/5197realm/5195Forge/5194herald. Logs ONLY
-`../conductor/state/services.log`; own processes only; never unlink capture locks. No observer waiting
-for real chat. GPU availability question unanswered. Preserve city stash
-7c6f1f9d324042998fff71e4d5ea7863ea46cf0a; park land6f60ae2. No timing claims from software rendering.
+`../conductor/state/services.log`; own processes only; never unlink capture locks. No observer
+waiting for real chat. No software-renderer timing claims. Preserve city stash
+7c6f1f9d324042998fff71e4d5ea7863ea46cf0a and parked land6f60ae2.

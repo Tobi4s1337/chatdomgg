@@ -43,10 +43,11 @@ export function planNight({ layout, mood, seam, camera, hour }: { layout: Stream
     : held('window');
   const slow = mood === 'calm' ? 1.5 : 1, cut: Cut = mood === 'show' ? 'shutter' : 'dip';
   const tour = (beats: Beat[]): Beat[] => beats.map(beat => ({ ...beat, hold: beat.hold * slow }));
-  // Starting: the sky turns to dusk while chat arrives, from the street to a window to the town.
+  // Starting: see chat light the town before joining the lantern street and its homecoming.
   if (seam === 'starting') return {
-    beats: tour([{ shot: 'citizen', hold: 14 }, { shot: 'window', hold: 10, climax: true }, { shot: 'hero', hold: 20 }]), cut,
-    sky: hour >= 14 && hour <= 22 ? { from: hour - 2, to: hour, seconds: 150 } : null, drift: mood === 'calm',
+    beats: tour([{ shot: 'hero', hold: 8 }, { shot: 'citizen', hold: 14 }, { shot: 'window', hold: 10, climax: true }]), cut,
+    // The opening is dusk already: the people, rather than a changing sun, light the town.
+    sky: null, drift: mood === 'calm',
   };
   // A break tours the night so far: only what the world can show, the town and its lit windows.
   if (seam === 'break') return { beats: tour([{ shot: 'hero', hold: 18 }, { shot: 'window', hold: 12, climax: true }, { shot: 'citizen', hold: 12 }]), cut, sky: null, drift: mood === 'calm' };

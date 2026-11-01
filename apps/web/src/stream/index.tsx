@@ -123,6 +123,9 @@ export default function StreamView() {
 
   function publishDebug(scene: KingdomScene | undefined): void {
     if (!scene) { setArrival(null); delete window.__chatdomKingdom; return; }
+    // The labelled opening starts with the first speaker, rather than an already-full town.
+    // Real sources always keep their witnessed history; a fixed capture stays fixed.
+    if (params.source === 'simulated' && seam() === 'starting' && params.time === null) scene.play();
     window.__chatdomKingdom = {
       stats: scene.debug,
       inspect: scene.inspect,
