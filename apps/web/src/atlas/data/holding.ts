@@ -54,7 +54,7 @@ export function doorHolding(settler: Settler, world: PreviewWorld): DoorHolding 
  * dominant game, so its last live category is deliberately not used as survey evidence. */
 export function waitingDoorHolding(card: CardReply, world: PreviewWorld): DoorHolding | null {
   const face = card.channel;
-  if (card.preview !== world.id || card.revision !== world.revision || face.place !== 'waiting'
+  if (card.average === null || card.preview !== world.id || card.revision !== world.revision || face.place !== 'waiting'
     || !face.name || !face.login || face.freshUntil === null || face.freshUntil <= Date.now()
     || face.region === null || face.realm === null) return null;
   const realm = world.realms[face.realm];

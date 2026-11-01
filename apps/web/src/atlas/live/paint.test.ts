@@ -4,9 +4,9 @@ import {
   ATLAS_SPECTACLE, AtlasManifestSchema, createAtlasAlignment, encodeDabsV1, encodeLiveV2,
   type AtlasAlignment, type AtlasDab, type AtlasLiveSlot, type AtlasManifest, type KingdomId,
 } from '@chatdom/shared';
-import { BASE, columns, CHUNK_ROWS, FakeService, makeChunk, makeNames, makeWorld, publish, sha, type Row } from '../data/fixtures.test-support';
+import { BASE, CHUNK_ROWS, FakeService, makeChunk, makeNames, makeWorld, publish, sha } from '../data/fixtures.test-support';
 import { decodeRings, SettlerStore } from '../data/model';
-import { PREVIEW_LABEL, TIER_CODES, type PreviewChunk, type PreviewWorld } from '../data/preview';
+import { PREVIEW_LABEL, TIER_CODES, type PreviewWorld } from '../data/preview';
 import { LiveFeed, type LiveFrame } from './feed';
 import { BLOOM_MS, chooseSpectacle, DRY_MS, LivePaint, SPECTACLE_PRIORITY } from './paint';
 import { HAMLET_RADIUS, HOLDING_GAP, LandIndex, LATTICE, type RealmCircle } from './pencil';
@@ -318,7 +318,6 @@ describe('LivePaint dab placement', () => {
     const radii = world.tiers.holdingRadius;
     const r = [radii.capital, radii.city, radii.town, radii.village];
     const clearance = HAMLET_RADIUS + LATTICE.shore;
-    const seen = new Set<string>();
     for (const dab of paint.dabs.filter((d) => d.placed)) {
       expect(land.realmAt(dab.x, dab.y)).toBe(dab.realm);
       expect(land.distanceToCoast(dab.x, dab.y, clearance)).toBeGreaterThanOrEqual(clearance);
@@ -326,13 +325,10 @@ describe('LivePaint dab placement', () => {
         const min = HAMLET_RADIUS + r[settler.tierRank]! + HOLDING_GAP - 1e-9;
         expect(Math.hypot(settler.x - dab.x, settler.y - dab.y)).toBeGreaterThanOrEqual(min);
       }
-      const key = `${dab.x.toFixed(6)}:${dab.y.toFixed(6)}`;
-      expect(seen.has(key)).toBe(false);
-      seen.add(key);
     }
   }
 
-  it('places every dab on free land of its own realm, one dab to a slot', () => {
+  it('places every dab on free land of its own realm', () => {
     const { world, store, paint } = setup();
     paint.apply(frameOf(store, { dabs: realmDabs() }));
     expect(paint.dabs).toHaveLength(54);
@@ -377,21 +373,14 @@ describe('LivePaint dab placement', () => {
       .toEqual(before.map(({ hash, x, y, placed }) => ({ hash, x, y, placed })));
   });
 
-  it('places again when a region’s towns and villages arrive, keeping clear of them', () => {
+  it('waits for a region’s complete holdings, then agrees with a browser that loaded them before its frame', () => {
     const world = squareWorld();
     const { store, paint } = setup({ world, chunks: false });
-    paint.apply(frameOf(store, { dabs: dabsIn(1, 40) }));
+    const dabs = dabsIn(1, 40);
+    paint.apply(frameOf(store, { dabs }));
     placeAll(paint);
-    expectWellPlaced(world, store, paint);
-    // A region-0 chunk whose village sits right on the first dab's place.
-    const first = paint.dabs.find((dab) => dab.placed)!;
-    const at = { x: first.x, y: first.y };
-    const rows: Row[] = [
-      { ...CHUNK_ROWS[0]![0]!, x: Math.round(at.x * world.coordScale), y: Math.round(at.y * world.coordScale), realm: 1, tier: 3 },
-      CHUNK_ROWS[0]![1]!,
-    ];
-    const chunk: PreviewChunk = { version: 1, kind: 'chatdom-atlas-survey-preview-region', preview: world.id, region: 0, settlers: columns(rows) };
-    store.addChunk(chunk);
+    expect(paint.dabs.every(dab => !dab.placed)).toBe(true);
+    store.addChunk(makeChunk(world, 0));
     // A region that was never placed is not queued.
     const version = paint.version;
     paint.regionLoaded(3);
@@ -400,10 +389,38 @@ describe('LivePaint dab placement', () => {
     paint.regionLoaded(0);
     expect(paint.work(1_000)).toBe(false);
     expect(paint.version).toBe(version + 1);
-    const moved = paint.dabs.find((dab) => dab.hash === first.hash)!;
-    expect(moved.placed).toBe(true);
-    expect(Math.hypot(moved.x - at.x, moved.y - at.y)).toBeGreaterThan(0);
+    expect(paint.dabs.every(dab => dab.placed)).toBe(true);
     expectWellPlaced(world, store, paint);
+    const complete = setup({ world });
+    complete.paint.apply(frameOf(complete.store, { dabs }));
+    placeAll(complete.paint);
+    expect(paint.dabs).toEqual(complete.paint.dabs);
+    // A duplicate load notification cannot rebuild a frozen occupancy or move its dabs.
+    const placedVersion = paint.version;
+    paint.regionLoaded(0);
+    expect(paint.work(1_000)).toBe(false);
+    expect(paint.version).toBe(placedVersion);
+  });
+
+  it('cannot move an existing channel when colliding dabs arrive, reorder, leave or restart', () => {
+    const { store, paint } = setup();
+    const kept = { realmIndex: 1, channelHash: '0000000000000001', startedAt: T };
+    const added = { realmIndex: 1, channelHash: '0000000000000000', startedAt: T };
+    paint.apply(frameOf(store, { dabs: [kept] }));
+    placeAll(paint);
+    const expected = { ...paint.dabs[0]! };
+    expect(expected.placed).toBe(true);
+    for (const dabs of [[added, kept], [kept, added], [kept]]) {
+      paint.apply(frameOf(store, { dabs }));
+      placeAll(paint);
+      expect(paint.dabs.find(dab => dab.hash === kept.channelHash)).toEqual(expected);
+    }
+    const restarted = setup();
+    restarted.paint.apply(frameOf(restarted.store, { dabs: [added, kept] }));
+    placeAll(restarted.paint);
+    expect(restarted.paint.dabs.find(dab => dab.hash === kept.channelHash)).toEqual(expected);
+    expect(restarted.paint.dabs[0]!.x).toBe(expected.x);
+    expect(restarted.paint.dabs[0]!.y).toBe(expected.y);
   });
 
   it('places the regions in view first', () => {

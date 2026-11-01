@@ -28,7 +28,8 @@ export interface ChannelFace {
   realm: number | null;
 }
 
-export interface SearchResult { channel: ChannelFace; portrait?: ChannelPortrait | null; average: number; language: string }
+export interface PencilPosition { x: number; y: number }
+export interface SearchResult { channel: ChannelFace; portrait?: ChannelPortrait | null; position?: PencilPosition; average: number | null; language: string }
 
 interface Reply { version: 1; preview: string; revision: string; servedAt: number; asOf: number }
 
@@ -37,6 +38,7 @@ export interface SearchReply extends Reply {
   key: string;
   results: SearchResult[];
   more: boolean;
+  unavailable?: 'disabled' | 'limited' | 'upstream';
 }
 
 export interface RoadWindow { from: number; to: number }
@@ -48,12 +50,13 @@ export interface CardReply extends Reply {
   kind: 'chatdom-atlas-card';
   channel: ChannelFace;
   portrait?: ChannelPortrait | null;
-  average: number;
+  position?: PencilPosition;
+  average: number | null;
   language: string;
-  firstSeenAt: number;
-  lastLiveAt: number;
+  firstSeenAt: number | null;
+  lastLiveAt: number | null;
   stream: StreamFacts | null;
-  roads: { window: RoadWindow; total: number; strongest: CardRoad[] };
+  roads: { window: RoadWindow; total: number; strongest: CardRoad[] } | null;
   coverage: Coverage;
 }
 
@@ -129,17 +132,25 @@ const window: Check = shape({ from: epoch, to: epoch });
 const coverage: Check = shape({ raidWatch: shape({ enabled: (v, p) => void (typeof v !== 'boolean' && fail(p, 'a boolean')), watching: uint, liveCandidates: uint }), contentLabels: literal('not-collected') });
 const tally: Check = shape({ raids: int(1, MAX_INT), travellers: uint, lastAt: epoch });
 const language = text(16);
+const position: Check = (value, path) => {
+  if (value === undefined) return;
+  const coordinate: Check = (n, p) => { if (typeof n !== 'number' || !Number.isFinite(n) || Math.abs(n) > 100_000) fail(p, 'a finite map coordinate'); };
+  strict(value, path, { x: coordinate, y: coordinate });
+};
 
 export function validateSearch(value: unknown, preview: string): SearchReply {
   strict(value, 'search', {
     ...reply(preview, 'chatdom-atlas-search'),
     key: text(200),
-    results: array(shape({ channel: face, portrait, average: uint, language }), MAX_RESULTS),
+    results: array(shape({ channel: face, portrait, position, average: nullable(uint), language }), MAX_RESULTS),
     more: (v, p) => void (typeof v !== 'boolean' && fail(p, 'a boolean')),
+    unavailable: (v, p) => { if (v !== undefined) oneOf(['disabled', 'limited', 'upstream'])(v, p); },
   });
   const search = value as SearchReply;
+  if (search.unavailable && search.results.length) fail('search.unavailable', 'only on an empty answer');
   // Search finds named channels only: an unnamed or unseen result would be a reply that broke its own rule.
   search.results.forEach((result, i) => {
+    if (result.position && result.channel.place !== 'waiting') fail(`search.results[${i}].position`, 'only for a channel without a holding');
     checkPortraitAge(result.portrait, search.servedAt, `search.results[${i}].portrait`);
     if (result.channel.name === null || result.channel.place === 'unseen') fail(`search.results[${i}]`, 'a named, observed channel');
   });
@@ -151,10 +162,11 @@ export function validateCard(value: unknown, preview: string): CardReply {
     ...reply(preview, 'chatdom-atlas-card'),
     channel: face,
     portrait,
-    average: uint,
+    position,
+    average: nullable(uint),
     language,
-    firstSeenAt: epoch,
-    lastLiveAt: epoch,
+    firstSeenAt: nullable(epoch),
+    lastLiveAt: nullable(epoch),
     stream: nullable(shape({
       live: (v, p) => void (typeof v !== 'boolean' && fail(p, 'a boolean')),
       game: nullable(text(256)),
@@ -162,10 +174,11 @@ export function validateCard(value: unknown, preview: string): CardReply {
       viewers: nullable(uint),
       startedAt: nullable(epoch),
     })),
-    roads: shape({ window, total: uint, strongest: array(shape({ other: face, sent: uint, received: uint, travellers: uint, lastAt: epoch }), 3) }),
+    roads: nullable(shape({ window, total: uint, strongest: array(shape({ other: face, sent: uint, received: uint, travellers: uint, lastAt: epoch }), 3) })),
     coverage,
   });
   const card = value as CardReply;
+  if (card.position && card.channel.place !== 'waiting') fail('card.position', 'only for a channel without a holding');
   checkPortraitAge(card.portrait, card.servedAt, 'card.portrait');
   if (card.channel.place === 'unseen') fail('card.channel', 'an observed channel');
   return card;
@@ -218,7 +231,8 @@ async function getJson(source: PreviewSource, url: string, signal?: AbortSignal)
       return lost(error);
     }
     if (!response.ok) {
-      if (response.status === 404) throw new DirectoryError('not-found', 'Not in this survey’s public register.');
+      if (response.status === 404) throw new DirectoryError('not-found', 'Not on the map yet.');
+      if (response.status === 503 && /"lookup-disabled"/.test(body)) throw new DirectoryError('not-found', 'Not on the map yet.');
       if (response.status === 400) throw new DirectoryError('bad-query', 'The register cannot search for that.');
       if (response.status === 503 && /"warming"/.test(body)) {
         throw new DirectoryError('warming', 'The register is still being read.', Math.min(30, Math.max(1, Number(response.headers.get('retry-after')) || 5)));
@@ -251,7 +265,7 @@ function base(source: PreviewSource, preview: string): string {
 }
 
 export async function fetchSearch(source: PreviewSource, preview: string, query: string, signal?: AbortSignal): Promise<SearchReply> {
-  const value = await getJson(source, `${base(source, preview)}/search?q=${encodeURIComponent(query.slice(0, 120))}&portraits=1`, signal);
+  const value = await getJson(source, `${base(source, preview)}/search?q=${encodeURIComponent(query.slice(0, 120))}&portraits=1&lookup=1`, signal);
   return checked(validateSearch, value, preview);
 }
 
@@ -269,7 +283,7 @@ function lookupPath(lookup: Lookup): string {
 }
 
 export async function fetchCard(source: PreviewSource, preview: string, lookup: Lookup, signal?: AbortSignal): Promise<CardReply> {
-  const value = await getJson(source, `${base(source, preview)}/card/${lookupPath(lookup)}?portraits=1`, signal);
+  const value = await getJson(source, `${base(source, preview)}/card/${lookupPath(lookup)}?portraits=1&lookup=1`, signal);
   const card = checked(validateCard, value, preview);
   if ('id' in lookup && card.channel.id !== lookup.id) throw new DirectoryError('invalid', 'The card belongs to another channel.');
   if ('login' in lookup && card.channel.login !== lookup.login) throw new DirectoryError('invalid', 'The card belongs to another login.');

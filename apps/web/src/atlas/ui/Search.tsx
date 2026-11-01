@@ -1,7 +1,7 @@
 import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { DirectoryError, fetchSearch, type SearchReply, type SearchResult } from '../data/directory';
 import type { PreviewSource, PreviewWorld } from '../data/preview';
-import { formatCount, formatDayRange, TIER_NAMES } from './format';
+import { formatCount, TIER_NAMES } from './format';
 import { ChannelFaceSeal } from './Face';
 
 type Phase =
@@ -10,8 +10,8 @@ type Phase =
   | { kind: 'results'; query: string; reply: SearchReply }
   | { kind: 'failed'; query: string; reason: DirectoryError['reason'] };
 
-/** A keystroke waits this long for the next before the register is asked. */
-const DEBOUNCE_MS = 170;
+/** Wait for a typing pause so ordinary keystrokes do not spend the external lookup allowance. Enter asks immediately. */
+const DEBOUNCE_MS = 500;
 /** A search answered sooner than this shows no "searching" line at all, so fast answers never flicker. */
 const QUIET_MS = 280;
 
@@ -82,6 +82,10 @@ export function Search(props: {
 
   const onInput = (value: string) => {
     setText(value);
+    controller?.abort();
+    controller = null;
+    clearTimeout(quiet);
+    clearTimeout(retry);
     clearTimeout(timer);
     timer = setTimeout(() => ask(value), DEBOUNCE_MS);
   };
@@ -103,7 +107,7 @@ export function Search(props: {
       clearTimeout(timer);
       const current = phase();
       // Enter before the answer arrives asks now; with an answer it opens the chosen result.
-      if (current.kind === 'results' && current.query === text()) choose(list[active()]);
+      if (current.kind === 'results' && current.query === text() && list.length) choose(list[active()]);
       else ask(text());
     } else if (event.key === 'Escape') {
       // The search is the top surface while its list is open: Escape belongs to it, not to a card beneath.
@@ -143,7 +147,6 @@ export function Search(props: {
     queueMicrotask(() => input?.focus({ preventScroll: true }));
   });
 
-  const survey = () => formatDayRange(props.world.window.firstObservationAt, props.world.window.lastObservationAt);
   const place = (result: SearchResult) => {
     const region = props.world.regions[result.channel.region ?? -1];
     const realm = props.world.realms[result.channel.realm ?? -1];
@@ -227,7 +230,7 @@ export function Search(props: {
                         </span>
                         <span class="atlas-search-place">
                           <Show when={props.onAir(result)}><span class="atlas-search-air">On air · </span></Show>
-                          {place(result)} · {formatCount(result.average)} avg.
+                          {place(result)}<Show when={result.average !== null}> · {formatCount(result.average!)} avg.</Show>
                         </span>
                       </span>
                     </li>
@@ -240,8 +243,11 @@ export function Search(props: {
             </Match>
             <Match when={phase().kind === 'results'}>
               <div class="atlas-search-state" role="status">
-                <p>No channel called “<span dir="auto">{(phase() as { query: string }).query.trim()}</span>” is in the survey of {survey()}.</p>
-                <p class="atlas-quiet">Names are shown only for channels seen live within a day, and the survey sees streams from five viewers up.</p>
+                <p>“<span dir="auto">{(phase() as { query: string }).query.trim()}</span>” is not on the map yet.</p>
+                <Show when={(phase() as { reply: SearchReply }).reply.unavailable === 'limited' || (phase() as { reply: SearchReply }).reply.unavailable === 'upstream'}>
+                  <p class="atlas-quiet">Try again in a moment.</p>
+                  <button type="button" class="atlas-search-retry" on:click={() => ask(text())}>Search again</button>
+                </Show>
                 <a class="atlas-search-away" href={`https://www.twitch.tv/search?term=${encodeURIComponent((phase() as { query: string }).query.trim())}`} target="_blank" rel="noopener noreferrer">
                   Look for it on Twitch<span class="atlas-visually-hidden"> (opens twitch.tv in a new tab)</span>
                 </a>

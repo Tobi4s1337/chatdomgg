@@ -481,9 +481,9 @@ export interface LiveSource {
   liveClass(settler: Settler): number;
   startedAt(settler: Settler): number | null;
   bloom(startedAt: number | null, at?: number): number;
-  readonly dabs: readonly { x: number; y: number; hash: string; startedAt: number }[];
+  readonly dabs: readonly { x: number; y: number; hash: string; startedAt: number; placed: boolean }[];
   dryingWashes(at?: number): Iterable<{ ordinal: number; liveClass: number; x: number; y: number; left: number }>;
-  dryingDabWashes(at?: number): Iterable<{ dab: { x: number; y: number; hash: string }; left: number }>;
+  dryingDabWashes(at?: number): Iterable<{ dab: { x: number; y: number; hash: string; placed: boolean }; left: number }>;
 }
 
 /** One deposit of pigment in screen CSS px: a rimless density stain (variant −1) or a seeded watercolour blot. */
@@ -527,13 +527,13 @@ export function washStains(store: SettlerStore, live: LiveSource, camera: Camera
     }
     for (const dab of live.dabs) {
       if (stains.length >= limit) break;
-      if (!inBox(dab.x, dab.y)) continue;
+      if (!dab.placed || !inBox(dab.x, dab.y)) continue;
       const bloom = live.bloom(dab.startedAt, now);
       if (bloom > 0.01) lay(dab.x, dab.y, 5, bloom, parseInt(dab.hash.slice(0, 4), 16));
     }
   }
   for (const dry of live.dryingWashes(now)) if (inBox(dry.x, dry.y)) lay(dry.x, dry.y, dry.liveClass, dry.left, dry.ordinal);
-  for (const { dab, left } of live.dryingDabWashes(now)) if (inBox(dab.x, dab.y)) lay(dab.x, dab.y, 5, left, parseInt(dab.hash.slice(0, 4), 16));
+  for (const { dab, left } of live.dryingDabWashes(now)) if (dab.placed && inBox(dab.x, dab.y)) lay(dab.x, dab.y, 5, left, parseInt(dab.hash.slice(0, 4), 16));
   return { stains, opacity: DENSITY_CAP + (1 - DENSITY_CAP) * detail };
 }
 

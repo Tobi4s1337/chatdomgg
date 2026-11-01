@@ -90,14 +90,14 @@ export function RegisterFacts(props: {
           <>
             <dl class="atlas-card-facts atlas-register-stream">
               <div>
-                <dt>{props.onAirNow ? 'Streaming' : 'Last stream'}</dt>
-                <Show when={c().stream} fallback={<dd class="atlas-quiet">Not live within the last day; titles are kept only that long.</dd>}>
+                <dt>{props.onAirNow ? 'Streaming' : c().stream?.live ? 'Stream observed' : 'Last stream'}</dt>
+                <Show when={c().stream} fallback={<dd class="atlas-quiet">No recent stream details.</dd>}>
                   {(stream) => (
                     <dd>
                       <span>{stream().game ?? 'No category given'}</span>
                       <Show when={stream().viewers !== null}><span class="atlas-quiet"> · {formatCount(stream().viewers!)} viewers</span></Show>
                       <span class="atlas-quiet">
-                        {stream().live ? ` at the survey of ${formatTime(c().asOf)}` : ` · last live ${formatTime(c().lastLiveAt)}`}
+                        {stream().live ? ` · checked ${formatTime(c().asOf)}` : c().lastLiveAt !== null ? ` · last live ${formatTime(c().lastLiveAt!)}` : ' · offline'}
                       </span>
                       <Show when={stream().title}><span class="atlas-register-title" dir="auto">{stream().title}</span></Show>
                     </dd>
@@ -105,19 +105,20 @@ export function RegisterFacts(props: {
                 </Show>
               </div>
             </dl>
+            <Show when={c().roads} fallback={<p class="atlas-roads-empty">No raid history recorded yet.</p>}>{(roads) => (
             <section class="atlas-roads" aria-labelledby="atlas-roads-title">
               <h3 id="atlas-roads-title">
                 Roads
-                <Show when={c().roads.total > c().roads.strongest.length}>
-                  <span class="atlas-quiet"> · strongest {c().roads.strongest.length} of {formatCount(c().roads.total)}</span>
+                <Show when={roads().total > roads().strongest.length}>
+                  <span class="atlas-quiet"> · strongest {roads().strongest.length} of {formatCount(roads().total)}</span>
                 </Show>
               </h3>
               <Show
-                when={c().roads.strongest.length > 0}
-                fallback={<p class="atlas-roads-empty">No raid to or from this channel was seen between {formatMoment(c().roads.window.from)} and {formatMoment(c().roads.window.to)}.</p>}
+                when={roads().strongest.length > 0}
+                fallback={<p class="atlas-roads-empty">No raid to or from this channel was seen between {formatMoment(roads().window.from)} and {formatMoment(roads().window.to)}.</p>}
               >
                 <ul class="atlas-road-list">
-                  <For each={c().roads.strongest}>
+                  <For each={roads().strongest}>
                     {(road) => (
                       <li>
                         <button type="button" class="atlas-road" on:click={() => props.onRoad(road)} aria-label={`Road with ${faceName(road.other)}: ${roadSummary(road)}`}>
@@ -134,9 +135,10 @@ export function RegisterFacts(props: {
                 </ul>
               </Show>
               <p class="atlas-roads-source">
-                Raids the raid watch saw, {formatDayRange(c().roads.window.from, c().roads.window.to)}, following up to {formatCount(c().coverage.raidWatch.watching)} live channels at a time. A raid it did not watch is missing here, not denied.
+                Raids the raid watch saw, {formatDayRange(roads().window.from, roads().window.to)}, following up to {formatCount(c().coverage.raidWatch.watching)} live channels at a time. A raid it did not watch is missing here, not denied.
               </p>
             </section>
+            )}</Show>
           </>
         )}
       </Match>
@@ -221,9 +223,8 @@ function useCardKeys(key: () => unknown, onClose: () => void): (element: HTMLBut
 }
 
 /**
- * A named channel without land: seen by the survey, but below the village line, or not mapped in this preview. It
- * keeps its name, its last stream and its roads; while it is live it is pencilled in near its realm (the flag on the
- * map), otherwise the map flies to that realm and marks nothing, because no place is its own yet.
+ * A named channel without a holding, pencilled into its language and game realm. A public lookup never grants land;
+ * missing audience and raid history remain unknown.
  */
 export function WaitingCard(props: {
   face: ChannelFace;
@@ -264,8 +265,8 @@ export function WaitingCard(props: {
         <Show when={land()}>
           {(name) => <div><dt>{props.onAir ? 'Pencilled in' : 'Realm'}</dt><dd>{name()}</dd></div>}
         </Show>
-        <Show when={card()}>
-          {(c) => <div><dt>Observed</dt><dd>{formatCount(c().average)} average viewers <span class="atlas-quiet">· land begins at {formatCount(props.world.tiers.minAverage.village)}</span></dd></div>}
+        <Show when={card()?.average !== null && card()}>
+          {(c) => <div><dt>Observed</dt><dd>{formatCount(c().average!)} average viewers <span class="atlas-quiet">· land begins at {formatCount(props.world.tiers.minAverage.village)}</span></dd></div>}
         </Show>
         <Show when={props.live}>
           {(live) => (
@@ -280,8 +281,7 @@ export function WaitingCard(props: {
       </dl>
       <RegisterFacts state={props.state} world={props.world} onAirNow={props.live ? props.onAir : null} onRoad={props.onRoad} onRetry={props.onRetry} />
       <p class="atlas-card-note">
-        A channel below {formatCount(props.world.tiers.minAverage.village)} average viewers holds no land in a survey preview. While it is
-        live it is pencilled in near the realm of its language and game, at a place drawn from its channel ID.
+        Pencilled into the realm of its language and game. This place stays the same until the channel claims land.
       </p>
       <Show when={door()}>{(holding) => (
         <a class="atlas-watch atlas-door" href={`/kingdom/${holding().id}`} on:click={(event) => enter(event, holding())}>

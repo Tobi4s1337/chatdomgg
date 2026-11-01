@@ -268,6 +268,16 @@ describe('washStains', () => {
     expect(washStains(env.store, live({ [HEAD_ROWS[0]!.id]: 1 }), v.camera, LAPTOP, 0).stains).toEqual([]);
     expect(washStains(env.store, live({ [HEAD_ROWS[1]!.id]: 2 }, false), v.camera, LAPTOP, 0).stains).toEqual([]);
   });
+
+  it('never paints the raw hash target before complete land placement, including while drying', () => {
+    const env = setup();
+    const v = stillView(env.geo.bounds, LAPTOP);
+    const dab = { x: 0, y: 0, hash: '0000000000000000', startedAt: 0, placed: false };
+    const source: LiveSource = { ...live({}), dabs: [dab], dryingDabWashes: () => [{ dab, left: 0.5 }] };
+    expect(washStains(env.store, source, v.camera, LAPTOP, 0).stains).toEqual([]);
+    dab.placed = true;
+    expect(washStains(env.store, source, v.camera, LAPTOP, 0).stains.length).toBeGreaterThan(0);
+  });
 });
 
 describe('stillRibbon', () => {

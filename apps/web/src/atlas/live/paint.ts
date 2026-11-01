@@ -2,7 +2,8 @@ import { ATLAS_SPECTACLE } from '@chatdom/shared';
 import type { Settler, SettlerStore } from '../data/model';
 import type { PreviewWorld } from '../data/preview';
 import type { LiveFrame } from './feed';
-import { LandIndex, nearestFreeSlot, Occupancy, pencilTarget, type RealmCircle } from './pencil';
+import { PencilPlaces, pencilTarget, type PencilRegionPlaces } from '../../../../surveyor/src/cartography/pencil-place';
+import type { RealmCircle } from '../../../../surveyor/src/cartography/slots';
 
 /**
  * What the live layer paints, derived from the last coherent frame (Spec 01 R8, Atlas.md §5.1). Pure state with an
@@ -58,8 +59,8 @@ export class LivePaint {
   private readonly drying = new Map<number, Drying>();
   private readonly dryingDabs = new Map<string, Dab & { from: number }>();
   private readonly realmCircles: RealmCircle[];
-  private land: LandIndex | null = null;
-  private readonly placedRegions = new Map<number, number>();
+  private pencil: PencilPlaces | null = null;
+  private readonly pencilRegions = new Map<number, PencilRegionPlaces>();
   private queue: number[] = [];
   dabs: Dab[] = [];
   frame: LiveFrame | null = null;
@@ -126,7 +127,7 @@ export class LivePaint {
       previous.delete(input.channelHash);
       // Back on air while its last flag was still drying: one dab, not a live one over a fading one.
       this.dryingDabs.delete(input.channelHash);
-      // Keep a known place until the region is placed again, so a dab does not hop back to its raw target.
+      // Live membership never changes a provisional point on the same immutable region.
       if (old && old.realm === input.realmIndex) return { ...old, startedAt: input.startedAt };
       const target = pencilTarget(input.channelHash, realm);
       return { hash: input.channelHash, realm: input.realmIndex, region: realm.region, startedAt: input.startedAt, x: target.x, y: target.y, placed: false };
@@ -137,8 +138,7 @@ export class LivePaint {
     this.dabs = dabs;
     this.frame = frame;
     this.liveCount = live;
-    this.placedRegions.clear();
-    this.queue = [...new Set(dabs.map((dab) => dab.region))];
+    this.queue = [...new Set(dabs.filter(dab => !dab.placed).map(dab => dab.region))];
     this.version++;
   }
 
@@ -186,22 +186,31 @@ export class LivePaint {
     return Infinity;
   }
 
-  /** The land index is built once, on first need (it walks every coast). */
-  private landIndex(): LandIndex {
-    this.land ??= new LandIndex(this.rings, this.realmCircles);
-    return this.land;
+  /** One coast index per world and one occupancy index per complete immutable region. */
+  private placesFor(region: number): PencilRegionPlaces | null {
+    const cached = this.pencilRegions.get(region);
+    if (cached) return cached;
+    // Waiting for the chunk avoids both a moving dab and disagreement with server-side search placement.
+    if (!this.store.hasRegion(region) && this.world.regions[region]?.chunk.records !== 0) return null;
+    this.pencil ??= new PencilPlaces(this.world, this.rings);
+    const radii = this.world.tiers.holdingRadius;
+    const r = [radii.capital, radii.city, radii.town, radii.village];
+    const holdings = this.store.all.filter(settler => settler.region === region)
+      .map(settler => ({ x: settler.x, y: settler.y, r: r[settler.tierRank]! }));
+    const places = this.pencil.forRegion(region, holdings);
+    this.pencilRegions.set(region, places);
+    return places;
   }
 
-  /** A region's places were computed without its towns and villages; place again now they are known. */
+  /** A complete region can now be placed once, including its towns, villages and withheld holdings. */
   regionLoaded(region: number): void {
-    if (!this.placedRegions.has(region)) return;
-    this.placedRegions.delete(region);
+    if (this.pencilRegions.has(region) || !this.dabs.some(dab => dab.region === region)) return;
     if (!this.queue.includes(region)) this.queue.unshift(region);
   }
 
   /**
    * Places dabs region by region within a time budget, regions in `first` (those in view) before the rest. Returns
-   * true while work remains. Dabs of one realm take free slots in their canonical order (realm, then hash).
+   * true while work remains. Each dab depends only on its hash, realm and complete permanent holdings.
    */
   work(budgetMs: number, first: ReadonlySet<number> = new Set()): boolean {
     if (!this.queue.length) return false;
@@ -218,25 +227,18 @@ export class LivePaint {
   }
 
   private placeRegion(region: number): void {
-    const land = this.landIndex();
-    const occupancy = new Occupancy();
-    const radii = this.world.tiers.holdingRadius;
-    const r = [radii.capital, radii.city, radii.town, radii.village];
-    for (const settler of this.store.all) if (settler.region === region) occupancy.add(settler.x, settler.y, r[settler.tierRank]!);
-    const taken = new Set<string>();
+    const places = this.placesFor(region);
+    if (!places) return;
     for (const dab of this.dabs) {
-      if (dab.region !== region) continue;
-      const realm = this.realmCircles[dab.realm]!;
-      const slot = nearestFreeSlot(land, occupancy, taken, realm, pencilTarget(dab.hash, realm));
+      if (dab.region !== region || dab.placed) continue;
+      const slot = places.place(dab.hash, dab.realm);
       if (!slot) {
         dab.placed = false;
         continue;
       }
-      taken.add(`${slot.i}:${slot.j}`);
       dab.x = slot.x;
       dab.y = slot.y;
       dab.placed = true;
     }
-    this.placedRegions.set(region, this.store.version);
   }
 }

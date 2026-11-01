@@ -76,6 +76,23 @@ describe('register replies', () => {
     expect(() => validateSearch(search([{ channel: mapped(), portrait: { ...portrait, freshUntil: AT + 2 * 86_400_000 }, average: 1, language: 'en' }]), PREVIEW)).toThrow(/source day/);
   });
 
+  it('accepts a pencil position without inventing audience or raid history', () => {
+    const waiting = mapped({ place: 'waiting', ordinal: null, tier: null });
+    const reply = card({ channel: waiting, position: { x: -213.5, y: 86 }, average: null, firstSeenAt: null, lastLiveAt: null, roads: null });
+    expect(validateCard(reply, PREVIEW)).toMatchObject({ position: { x: -213.5, y: 86 }, average: null, roads: null });
+    expect(validateSearch(search([{ channel: waiting, position: { x: -213.5, y: 86 }, average: null, language: 'en' }]), PREVIEW).results[0]!.average).toBeNull();
+    for (const position of [{ x: Number.POSITIVE_INFINITY, y: 1 }, { x: 0, y: NaN }, { x: 0, y: 1, private: true }]) {
+      expect(() => validateCard({ ...reply, position }, PREVIEW)).toThrow();
+    }
+    expect(() => validateCard(card({ position: { x: 0, y: 1 } }), PREVIEW)).toThrow(/without a holding/);
+  });
+
+  it('permits a bounded lookup availability message only when search is empty', () => {
+    expect(validateSearch({ ...search([]), unavailable: 'limited' }, PREVIEW).unavailable).toBe('limited');
+    expect(() => validateSearch({ ...search([]), unavailable: 'secret' }, PREVIEW)).toThrow();
+    expect(() => validateSearch({ ...search([{ channel: mapped(), average: 1, language: 'en' }]), unavailable: 'disabled' }, PREVIEW)).toThrow(/empty answer/);
+  });
+
   it('accepts a road with one way unseen and refuses a tally with no raid', () => {
     expect(validateRoad(road(), PREVIEW).bToA).toBeNull();
     expect(() => validateRoad(road({ bToA: { raids: 0, travellers: 0, lastAt: AT } }), PREVIEW)).toThrow();
@@ -92,10 +109,10 @@ describe('register reads', () => {
   it('asks the preview’s own search, card and road paths', async () => {
     const s = answering(200, search([]));
     await fetchSearch(s.source, PREVIEW, 'Éloïse café');
-    expect(s.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/search?q=%C3%89lo%C3%AFse%20caf%C3%A9&portraits=1`);
+    expect(s.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/search?q=%C3%89lo%C3%AFse%20caf%C3%A9&portraits=1&lookup=1`);
     const c = answering(200, card());
     await fetchCard(c.source, PREVIEW, { login: 'kaicenat' });
-    expect(c.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/card/login/kaicenat?portraits=1`);
+    expect(c.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/card/login/kaicenat?portraits=1&lookup=1`);
     const r = answering(200, road());
     await fetchRoad(r.source, PREVIEW, { login: 'kaicenat' }, { login: 'chrisnxtdoor' });
     expect(r.urls[0]).toBe(`${BASE}/v1/preview/${PREVIEW}/road/login/kaicenat/chrisnxtdoor`);
@@ -122,6 +139,7 @@ describe('register reads', () => {
       [503, { error: 'warming' }, { 'retry-after': '7' }, 'warming'],
       [503, { error: 'names-unavailable' }, {}, 'refused'],
       [503, { error: 'register-unavailable' }, {}, 'unavailable'],
+      [503, { error: 'lookup-disabled' }, {}, 'not-found'],
       [500, 'oops', {}, 'unavailable'],
       [200, '{not json', {}, 'invalid'],
     ];

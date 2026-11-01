@@ -469,9 +469,10 @@ export function Still(props: StillProps): JSX.Element {
   };
 
   // Small live channels take their pencil places a few milliseconds at a time; their dabs are laid there once placed.
-  createEffect(on(() => [props.paint, props.liveTick] as const, ([paint]) => {
+  const placeDabs = () => {
     cancelIdle(idleHandle);
     idleHandle = undefined;
+    const paint = props.paint;
     if (!paint?.frame) return;
     const step = () => {
       idleHandle = undefined;
@@ -480,7 +481,8 @@ export function Still(props: StillProps): JSX.Element {
       else setWashTick(washTick() + 1);
     };
     idleHandle = idle(step);
-  }));
+  };
+  createEffect(on(() => [props.paint, props.liveTick] as const, placeDabs));
 
   // With a live frame on the still, towns and villages are read after the first view so their washes exist too.
   createEffect(() => {
@@ -503,6 +505,7 @@ export function Still(props: StillProps): JSX.Element {
         }
         if (disposed) return;
         props.paint?.regionLoaded(region.index);
+        placeDabs();
         setWashTick(washTick() + 1);
       }
     })();

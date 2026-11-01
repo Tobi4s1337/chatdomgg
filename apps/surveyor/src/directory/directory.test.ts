@@ -143,7 +143,7 @@ describe('the register of a preview', () => {
     expect(ok(register.search('fixture', withheld, NOW)).results.map((r) => r.channel.id)).not.toContain(VILLAGE);
     expect(register.card({ id: VILLAGE }, withheld, NOW)).toBe('not-found');
     expect(register.card({ login: 'fixture_village' }, withheld, NOW)).toBe('not-found');
-    expect(ok(register.card({ id: CAPITAL }, withheld, NOW)).roads.strongest.map((r) => r.other.id)).not.toContain(VILLAGE);
+    expect(ok(register.card({ id: CAPITAL }, withheld, NOW)).roads!.strongest.map((r) => r.other.id)).not.toContain(VILLAGE);
 
     const later = sweepAt(4) + DAY + 1;
     expect(ok(register.search('fixture', NONE, later)).results.length).toBeGreaterThan(0);
@@ -164,14 +164,14 @@ describe('the register of a preview', () => {
     expect(card.stream).toMatchObject({ live: true, game: 'Just Chatting', title: 'A fixture stream', viewers: 30 });
     expect(card.coverage).toEqual({ raidWatch: { enabled: true, watching: 2, liveCandidates: expect.any(Number) }, contentLabels: 'not-collected' });
     // Gambling and gone counterparts are not roads at all; an unseen target is a road to an unnamed, unplaced channel.
-    expect(card.roads.total).toBe(4);
-    expect(card.roads.strongest.map((r) => [r.other.id, r.sent, r.received])).toEqual([[VILLAGE, 2, 1], [TOWN, 1, 0], [UNSEEN, 1, 0]]);
-    expect(card.roads.strongest[0]!.travellers).toBe(165);
+    expect(card.roads!.total).toBe(4);
+    expect(card.roads!.strongest.map((r) => [r.other.id, r.sent, r.received])).toEqual([[VILLAGE, 2, 1], [TOWN, 1, 0], [UNSEEN, 1, 0]]);
+    expect(card.roads!.strongest[0]!.travellers).toBe(165);
     expect(JSON.stringify(card)).not.toMatch(new RegExp(`${SLOTS}|${GONE}`));
-    expect(card.roads.strongest[2]!.other).toEqual({ id: UNSEEN, login: null, name: null, freshUntil: null, place: 'unseen', ordinal: null, tier: null, region: null, realm: null });
+    expect(card.roads!.strongest[2]!.other).toEqual({ id: UNSEEN, login: null, name: null, freshUntil: null, place: 'unseen', ordinal: null, tier: null, region: null, realm: null });
     const small = ok(register.card({ id: SMALL }, NONE, NOW));
     expect(small.channel).toMatchObject({ place: 'waiting', name: 'Fixture Small', ordinal: null });
-    expect(small.roads.strongest.map((r) => [r.other.id, r.sent, r.received])).toEqual([[CAPITAL, 1, 0]]);
+    expect(small.roads!.strongest.map((r) => [r.other.id, r.sent, r.received])).toEqual([[CAPITAL, 1, 0]]);
 
     // A dab is found by its live hash while named; a holding never is.
     expect(ok(register.card({ dab: dabHash(SMALL) }, NONE, NOW)).channel.login).toBe('fixture_small');

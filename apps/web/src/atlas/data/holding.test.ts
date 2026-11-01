@@ -49,6 +49,7 @@ describe('the door into a holding', () => {
       stream: { game: 'VALORANT' },
     } as unknown as CardReply;
     expect(waitingDoorHolding(card, world)).toMatchObject({ tier: null, x: null, y: null, game: null, average: 7, realm: { family: 'shooters' } });
+    expect(waitingDoorHolding({ ...card, average: null }, world)).toBeNull();
     expect(waitingDoorHolding({ ...card, channel: { ...card.channel, name: null, login: null, freshUntil: null } }, world)).toBeNull();
     expect(waitingDoorHolding({ ...card, channel: { ...card.channel, place: 'unseen' } }, world)).toBeNull();
     expect(waitingDoorHolding({ ...card, revision: 'another-survey' }, world)).toBeNull();

@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import type { AtlasMountOptions, AtlasReadyState, AtlasScene as SceneHandle, AtlasTarget } from './embed';
 import type { HistoryLike } from './ui/history';
 import { adoptPreview, loadPreview, type LoadedPreview } from './data/load';
-import { dabHashOf, DirectoryError, fetchCard, fetchRoad, type CardReply, type CardRoad, type ChannelFace, type Lookup, type RoadReply, type SearchResult } from './data/directory';
+import { dabHashOf, DirectoryError, fetchCard, fetchRoad, type CardReply, type CardRoad, type ChannelFace, type Lookup, type PencilPosition, type RoadReply, type SearchResult } from './data/directory';
 import { decodeRings, geographyOf, labelWorld, SettlerStore, type Geography, type Ring, type Settler } from './data/model';
 import { fetchChunk, fetchNames, type PreviewSource } from './data/preview';
 import { atlasFailureState, mountAtlasWithRetry } from './recovery';
@@ -14,11 +14,12 @@ import { DISTANCE_STOP, MAX_SCALE, type Distance, type Insets, type Viewport } f
 import type { CameraState } from './map/motion';
 import { MapView, type MapStats } from './map/view';
 import { Still } from './still/Still';
+import { stillView } from './still/compose';
 import { Card, type NamesState } from './ui/Card';
 import { DoorCartouche } from './ui/Door';
 import { handOffHolding, holdingPlace, type DoorHolding } from './data/holding';
 import { Cartouche, Compass, Controls, Notice, ScaleBar } from './ui/chrome';
-import { formatMoment } from './ui/format';
+import { formatMoment, watchUrl } from './ui/format';
 import { CardHistory } from './ui/history';
 import { LegendBody } from './ui/Legend';
 import { DabCard, LiveSeal, type LiveSummary } from './ui/Live';
@@ -106,6 +107,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   let resizeObserver: ResizeObserver | undefined;
   let visibilityObserver: IntersectionObserver | undefined;
   let inViewport = true;
+  const [visible, setVisible] = createSignal(!document.hidden);
   const pendingFlights = new Set<() => void>();
   let root: HTMLDivElement | undefined;
   let host: HTMLDivElement | undefined;
@@ -147,12 +149,29 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
   const [namesTick, setNamesTick] = createSignal(0);
   /** A named channel without land and not on air, opened from search, a road or a route. */
   const [waiting, setWaiting] = createSignal<ChannelFace | null>(null);
+  const [waitingPosition, setWaitingPosition] = createSignal<PencilPosition | null>(null);
+  const [waitingScreen, setWaitingScreen] = createSignal<PencilPosition | null>(null);
+  createEffect(() => {
+    const point = waitingPosition();
+    if (!point || !waiting() || !visible()) { setWaitingScreen(null); return; }
+    let frame: number;
+    let projection: ReturnType<typeof stillView> | null = null;
+    const update = () => {
+      const geometry = geo();
+      const moving = state() === 'ready' ? view : null;
+      const size = { width: root?.clientWidth ?? 1, height: root?.clientHeight ?? 1 };
+      if (!moving && geometry && (!projection || projection.view.width !== size.width || projection.view.height !== size.height)) projection = stillView(geometry.bounds, size);
+      const screen = moving?.screenOf(point.x, point.y) ?? projection?.camera.worldToScreen(point.x, point.y, size) ?? null;
+      setWaitingScreen(screen);
+      frame = requestAnimationFrame(update);
+    };
+    update();
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
   /** The open road card and the ends it was asked for. */
   const [road, setRoad] = createSignal<{ ask: RoadAsk; state: RegisterState<RoadReply> } | null>(null);
   /** The open channel card's register entry (stream and roads). */
   const [register, setRegister] = createSignal<RegisterState<CardReply>>({ status: 'loading' });
-  /** Text handed to the search by a route that found nothing. */
-  const [searchSeed, setSearchSeed] = createSignal<{ text: string; at: number } | null>(null);
   let registerController: AbortController | null = null;
   /** Bumped whenever a card opens or closes, so a late register reply never lands on another card. */
   let cardGeneration = 0;
@@ -209,6 +228,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       setSelected(null);
       setSelectedDab(null);
       setWaiting(null);
+      setWaitingPosition(null);
       setRoad(null);
     });
     view?.select(null);
@@ -262,6 +282,11 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     fetchCard(SOURCE, loaded()!.world.id, lookup, controller.signal).then((reply) => {
       if (generation !== cardGeneration) return;
       setRegister({ status: 'ready', reply });
+      if (waiting()?.id === reply.channel.id && reply.position) {
+        setWaitingPosition(reply.position);
+        view?.flyTo(reply.position.x, reply.position.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
+        view?.revealPoint(reply.position);
+      }
       if (reply.channel.login && history.isOpen) history.opened(cardId, view?.cameraState() ?? { x: 0, y: 0, scale: 1 }, urlFor(reply.channel.login));
     }, (error: unknown) => {
       if (generation !== cardGeneration || (error as Error).name === 'AbortError') return;
@@ -319,16 +344,20 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     else if (dab.placed) view?.revealPoint(dab);
   };
 
-  /** A named channel without land and off the air: its card, and the map shows the realm it would be pencilled into. */
-  const openWaiting = (face: ChannelFace) => {
+  /** A named channel without land: its card and stable pencil point, when the register supplies one. */
+  const openWaiting = (face: ChannelFace, position?: PencilPosition) => {
     clearCards();
     setWaiting(face);
+    setWaitingPosition(position ?? null);
     setKeyOpen(false);
     const id = `waiting:${face.id}`;
     opening(id, urlFor(face.login));
     readRegister({ id: face.id }, id);
     const realm = geo()?.realms[face.realm ?? -1];
-    if (realm && view) view.flyTo(realm.x, realm.y, Math.max(view.cameraState().scale, DISTANCE_STOP.continent));
+    if (position && view) {
+      view.flyTo(position.x, position.y, Math.max(view.cameraState().scale, DISTANCE_STOP.realm));
+      view.revealPoint(position);
+    } else if (realm && view) view.flyTo(realm.x, realm.y, Math.max(view.cameraState().scale, DISTANCE_STOP.continent));
   };
 
   /** Where a face is drawn now: its holding (loading its region first), its pencil flag while live, or nowhere. */
@@ -341,24 +370,25 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       if (settler && !settler.withheld) return { settler };
       return null;
     }
+    if (face.region !== null && !holdings.hasRegion(face.region)) await loadChunk(face.region).catch(() => undefined);
     const hash = dabHashOf(face.id);
-    const dab = paint?.dabs.find((candidate) => candidate.hash === hash);
+    const dab = paint?.dabs.find((candidate) => candidate.hash === hash && candidate.placed);
     return dab ? { dab } : null;
   };
 
   /** Open any channel the register named (a search result, a road's end, a route): its holding, its flag, or its waiting card. */
-  const openFace = async (face: ChannelFace) => {
+  const openFace = async (face: ChannelFace, position?: PencilPosition) => {
     const generation = ++cardGeneration;
     const place = await locate(face);
     if (generation !== cardGeneration) return;
     if (place && 'settler' in place) return choose(place.settler, true);
     if (place && 'dab' in place) return chooseDab(place.dab, true, face);
-    if (face.place === 'waiting') return openWaiting(face);
+    if (face.place === 'waiting') return openWaiting(face, position);
     // A holding the map no longer draws (withheld since the register answered) has no card to open.
     setNotice({ text: 'That channel is no longer drawn on this map.' });
   };
 
-  const openSearchResult = (result: SearchResult) => void openFace(result.channel);
+  const openSearchResult = (result: SearchResult) => void openFace(result.channel, result.position);
 
   /** Whether a search result is on air in the frame shown now (its holding's class, or its pencil flag). */
   const onAirResult = (result: SearchResult): boolean => {
@@ -422,16 +452,13 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     if (route.kind === 'channel') {
       try {
         const reply = await fetchCard(SOURCE, loaded()!.world.id, { login: route.login }, controller?.signal);
-        await openFace(reply.channel);
+        await openFace(reply.channel, reply.position);
       } catch (error) {
         if ((error as Error).name === 'AbortError') return;
         if (error instanceof DirectoryError && error.reason === 'not-found') {
-          drop(`No channel called “${route.login}” is on this survey’s map. Names show only for channels seen live within a day.`, {
-            label: 'Search for it',
-            run: () => {
-              setNotice(null);
-              setSearchSeed({ text: route.login, at: Date.now() });
-            },
+          drop(`“${route.login}” is not on the map yet.`, {
+            label: 'Look on Twitch',
+            run: () => { const url = watchUrl(route.login); if (url) window.open(url, '_blank', 'noopener,noreferrer'); },
           });
         } else {
           drop(`The register could not be read, so ${route.login}’s card did not open.`, { label: 'Try again', run: () => { setNotice(null); void applyRoute(route, false); } });
@@ -543,6 +570,7 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
           if (!next && known.status === 'ready') batch(() => {
             setSelectedDab(null);
             setWaiting(known.reply.channel);
+            setWaitingPosition(known.reply.position ?? (dab.placed ? { x: dab.x, y: dab.y } : null));
           });
           else if (!next) closeCard();
           else setSelectedDab(next);
@@ -617,7 +645,10 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
       };
       view?.dispose();
       view = null;
-      loadChunk = async (region) => holdings.addChunk(await fetchChunk(SOURCE, world, region, signal));
+      loadChunk = async (region) => {
+        holdings.addChunk(await fetchChunk(SOURCE, world, region, signal));
+        paint?.regionLoaded(region);
+      };
       if (still) {
         // Without WebGL the Still draws this same revision; it calls `stillReady` once composed.
         stillReady = () => {
@@ -730,7 +761,11 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     setNotice({ text: `A newer survey is ready (observed to ${formatMoment(preview.newer.asOf)}).`, action: { label: 'Open it', run: adoptNewer } });
   };
 
-  const pause = () => view?.setPaused(!inViewport || document.hidden);
+  const pause = () => {
+    const paused = !inViewport || document.hidden;
+    setVisible(!paused);
+    view?.setPaused(paused);
+  };
   const currentView = () => ({ ...(view?.cameraState() ?? { x: 0, y: 0, scale: 1 }), selected: selected()?.id ?? waiting()?.id ?? null, mapId: loaded()?.world.id ?? '' });
   const flyTo = async (target: AtlasTarget, options?: { openCard?: boolean; signal?: AbortSignal }): Promise<boolean> => {
     if (disposed || !loaded() || !controller || options?.signal?.aborted) return false;
@@ -738,11 +773,11 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
     try {
       const reply = await fetchCard(SOURCE, loaded()!.world.id, 'login' in target ? { login: target.login } : { id: target.channelId }, signal);
       if (signal.aborted || disposed) return false;
-      if (options?.openCard !== false && mode() !== 'hero') await openFace(reply.channel);
+      if (options?.openCard !== false && mode() !== 'hero') await openFace(reply.channel, reply.position);
       else {
         const place = await locate(reply.channel);
         if (signal.aborted || disposed) return false;
-        const point = place ? ('settler' in place ? place.settler : place.dab) : geo()?.realms[reply.channel.realm ?? -1];
+        const point = place ? ('settler' in place ? place.settler : place.dab) : reply.position ?? geo()?.realms[reply.channel.realm ?? -1];
         if (!point) return false;
         view?.flyTo(point.x, point.y, DISTANCE_STOP.realm);
       }
@@ -897,13 +932,21 @@ function AtlasScene(props: { options: AtlasMountOptions; ready(state: AtlasReady
         </Show>
       </Show>
 
+      <Show when={waitingScreen()}>{(point) => (
+        <svg data-atlas-pencil-place="true" viewBox="0 0 40 52" width="26" height="34" aria-hidden="true"
+          style={{ position: 'absolute', left: `${point().x}px`, top: `${point().y}px`, transform: 'translate(-30%, -94%)', 'pointer-events': 'none', color: 'var(--ink)', 'z-index': state() === 'ready' ? 2 : 0, overflow: 'visible' }}>
+          <path d="M12 48V8M12.6 9.5c6 1.6 11-1.8 17 .6-2.4 3-2.6 6.4 .4 9.6-6.2-2-11.2 1.4-17.4-.4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          <ellipse cx="12" cy="48" rx="5" ry="2" fill="none" stroke="currentColor" stroke-width="1" opacity=".5" />
+        </svg>
+      )}</Show>
+
       <Show when={mode() !== 'hero' && world() ? world() : null}>
         {(w) => (
           <>
             <Cartouche world={w()}>
               <Show when={live()}>{(summary) => <LiveSeal summary={summary()} />}</Show>
               <Show when={drawn()}>
-                <Search keyboardRoot={root!} source={SOURCE} world={w()} onAir={onAirResult} onChoose={openSearchResult} seed={searchSeed()} />
+                <Search keyboardRoot={root!} source={SOURCE} world={w()} onAir={onAirResult} onChoose={openSearchResult} />
               </Show>
             </Cartouche>
             <Show when={!phone()}><Compass size={92} /></Show>
